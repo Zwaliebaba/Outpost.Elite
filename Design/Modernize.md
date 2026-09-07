@@ -1523,7 +1523,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-a The 6510 port register** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
 | **M6-0-b The replay reaches death and the escape pod** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
 | **M6-0-c The eleven control codes** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
-| **M6-0-d Two fixture faults from M3-b** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
+| **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
 | **M6-0-e Seven routines only ever trapped** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
 | **M6-0-f A coverage instrument** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
 | **M6-0-g Mutants to a stated floor** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
@@ -1807,6 +1807,44 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-d: the two fixture faults, and a drawn sun on both machines for the first time.**
+
+The first M6-0 row built, and the smallest; it was "two one-line fixes" in M3-b's journal and is
+neither. `Where` gains `SUNX`, `LSY2`, `Yx2M1`, `K5`, `K6`, `STP`, `FLAG`, `PLTOG` and `V`, and the
+image gains the cells: `SUNX`, `SUNX+1`, `Yx2M1`, `STP`, `FLAG` and `PLTOG` compared, `K5`, `K6` and
+`V` image-only — `V` because the original uses the pair as a pointer in `LL9`, `TACTICS` and the
+printers and as the sun's counter, and `K5`/`K6` because trying them compared first showed the
+same shape: eight suites differed on them after frames that drew a ship and no planet, the line
+clipper and the escape pod's launch write them as scratch the port keeps in stage results. `LSY2`
+needs no cell — `ball` is one block because `BLINE` indexes across the join — and the image test
+now asserts the join is where the port says (`LSX2 + 256`). The flight-loop fixture's ships get
+line heaps carved down from `LS%` at their blueprints' sizes, with `SLSP` below them, so the arena
+comparison sees the lines a drawn ship writes; `RecordingUniverse::DrawPlanetOrSun` DRAWS, and
+`CompareFrames` no longer traps `PLANET` — so the altitude sweep's "a sun close enough to draw"
+puts a drawn sun into both machines and compares the whole bitmap, which it had never done.
+
+**WHAT THAT FOUND, AND WHAT IT IS.** Three whole-frame comparisons differed on screen once both
+machines drew: a three-pixel column at the left edge of the space view, full height, on the port
+only. Bisected with the machines drawing in isolation from the same state (they agree), with the
+sun skipped on both (they agree), with the game's `SUN` trapped and its inputs watched (identical
+in the frame and in isolation), and with the game's stores to the sun heap logged: `WPLS` was
+erasing the old sun's rows, and its `EDGES` found every row's RIGHT end off the LEFT of the screen
+— the fixture had seeded `SUNX` with a random high byte, 238. On that exit `EDGES` never writes
+`X1`, and `HLOIN2` draws anyway (it drops the carry), so the original's row ran from whatever `X1`
+last held: 96 in the frame, left by the planet's draw, and 0 in isolation, left by a fresh zero
+page. A STALE ZERO-PAGE READ in the original, which the port cannot reproduce — `X1` is a local
+since M2-c — and which no game state reaches: `SUN` writes `SUNX` from `K3` only after it has
+drawn, so the high byte is 0 or 1 and a row's right end cannot land left of the screen. The
+fixture seeds a reachable centre now; `ClipSunRow`'s `ED1` branch carries the sentence. Not a
+port defect and not a re-take under rule 1's second case; it is the kind of thing this row exists
+to find before the oracle goes, and the answer is in writing.
+
+The replay record moves on every checkpoint in the LABEL column and not at all in the STATE
+column — nine new cells widen the label hash, `Game::StateHash` already folded them, and its
+sixteen digests are unmoved to the bit. That is the state column doing the job M5-e-3 built it
+for: rule 1's first case, proven rather than argued. 399 of 399; all 16 checks; the plan's M6-0-d
+row is built.
 
 **2026-09-07 — M5-a-12: `Equipment` examined and refused, and the reason is four encodings.**
 

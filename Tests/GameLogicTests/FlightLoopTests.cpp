@@ -853,15 +853,25 @@ namespace GameLogicTests
      * nowhere on this path.
      */
 
-    /// What `MVEIT` and `LL9` reach that this slice does not build.
+    /*
+     * What `MVEIT` and `LL9` reach through the seam. The planet and the sun are DRAWN, on both
+     * machines, since M6-0-d: this counted the call and `CompareFrames` trapped `PLANET` on the
+     * oracle, so no frame had ever put a drawn body on the bitmap of both -- the sun case of the
+     * altitude sweep was "compared on the whole bitmap" with nothing on it. The explosion is still
+     * counted, because `DOEXP`'s sprite writes land on `XX21` in the oracle's flat memory (§6.108),
+     * which is M6-0-a's.
+     */
     struct RecordingUniverse final : Elite::ShipDrawEffects
     {
+      Universe* universe = nullptr;
       std::uint32_t planets = 0;
       std::uint32_t explosions = 0;
 
       void DrawPlanetOrSun() override
       {
         ++planets;
+        Universe& u = *universe;
+        Elite::DrawPlanetOrSun(u.canvas, u.heaps, u.geometry, u.math, u.clip, u.rng, u.work, u.projection, u.flight.type);
       }
       void DrawExplosion() override
       {
@@ -880,6 +890,7 @@ namespace GameLogicTests
       explicit Frame(std::uint32_t _seed)
       {
         Seed(universe, _seed);
+        outside.universe = &universe;
 
         /*
          * 6502: TRIBCT -- ZERO here, and `Seed` leaves it at 90 (slice 4d-a).
@@ -1035,6 +1046,11 @@ namespace GameLogicTests
 
       const std::uint8_t TYPES[] = {128u, 129u, 3u, 5u, 11u};
 
+      // 6502: SLSP -- the ships' line heaps, carved down from LS% the way `NWSHP` carves them, each
+      // the size its blueprint asks for. They were all at &0C00 until M6-0-d, outside the arena the
+      // frame compares, so the lines a drawn ship wrote were compared nowhere.
+      std::uint16_t nextHeap = Elite::LineHeap::TOP;
+
       for (std::size_t slot = 0; slot < 5u; ++slot)
       {
         universe.bubble.slots[slot] = TYPES[slot];
@@ -1064,11 +1080,16 @@ namespace GameLogicTests
         block.speed = 20u; // speed
         block.state = _state;
         block.ai = 0u;    // no AI, so `TACTICS` is not reached
-        block.heap = Elite::HeapOffset::FromAddress(0x0C00u); // the heap pointer's high byte
+        if (TYPES[slot] < 34u)
+        {
+          nextHeap = static_cast<std::uint16_t>(nextHeap - Elite::BlueprintOf(static_cast<Elite::ShipType>(TYPES[slot]))->heapBytes);
+          block.heap = Elite::HeapOffset::FromAddress(nextHeap);
+        }
         block.energy = 60u;   // energy
       }
 
       universe.bubble.junk = 0u;
+      universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(nextHeap);
     }
 
     /*
@@ -1130,7 +1151,6 @@ namespace GameLogicTests
       }
 
       cpu.AddTrap(_loop.doexp);
-      cpu.AddTrap(_loop.planet);
       cpu.AddTrap(_loop.dovdu19);
       /*
        * `SFS1` IS NOT TRAPPED (M4-a-1). It was, to `SEC` or `CLC` depending on what the port's seam
@@ -1168,9 +1188,10 @@ namespace GameLogicTests
        *
        * `Mirror` does not carry it, and until 2026-09-06 no frame here did: a frame that seeds an
        * explosion cloud runs `DORND` four times, the first on the carry `LL9` was reached with, and
-       * with the fixture's heap pointers outside the arena the seeds it writes are compared nowhere.
-       * The generator's state after the frame is the one place that carry is visible, and the
-       * `cs-ll9-carry-hit` mutant is what found the comparison missing.
+       * with the fixture's heap pointers outside the arena the seeds it wrote were compared nowhere
+       * (they are inside it since M6-0-d, and the heap comparison below sees them). The generator's
+       * state after the frame is the one place that carry is visible, and the `cs-ll9-carry-hit`
+       * mutant is what found the comparison missing.
        */
       for (std::size_t index = 0; index < 4u; ++index)
       {
