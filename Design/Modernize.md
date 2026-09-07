@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->399 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
+(<!--count:tests-->401 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -1526,7 +1526,7 @@ were safe after M6-f, and none of them waited.
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M6-0-a The 6510 port register** ✅ **built 2026-09-07 (§8, four sittings)** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
-| **M6-0-b The replay reaches death and the escape pod** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
+| **M6-0-b The replay reaches death and the escape pod** ✅ **built 2026-09-07 (§8)** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
 | **M6-0-c The eleven control codes** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
 | **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
 | **M6-0-e Seven routines only ever trapped** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
@@ -1812,6 +1812,27 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-b: the replay reaches death and the escape pod.**
+
+Two more scripted flights beside the docked one, each with its own record, and the first record
+does not move — so this is not a re-take at all, and rule 1 is not invoked: the digests that
+existed are the digests that exist. The death flight is the same launch and coast, then full
+speed straight at the planet the launch put dead ahead, until `MA23` runs out of altitude at step
+1,078; the escape flight is the same launch, coast and roll, then the pod pulled at step 102 with
+`ESCP` set. Both run off through `Game::Leave`, so what each record ends on is the docked game
+the ending leaves behind — `ESCAPE`'s Cobra spawned and the arrival flown through; `DEATH`'s
+`RES2` and then `BR1`'s two title screens, which run for real since M6-0-h-2 and are ended here
+by RETURN held through the ramming.
+
+**THE WRECKAGE IS DIGESTED, NOT JUST THE END OF IT.** `DEATH`'s `.D2 JSR M% / DEC LASCT` loop
+paces its sixty-five frames through `Presenter::HoldFlightFrame` and nothing else, so a presenter
+watching that one call sees every frame of the wreckage; the record holds the first, the
+thirty-third and the sixty-fifth, and asserts the count. Sixteen checkpoints for the death, four
+for the pod, twenty-one for the docked flight: forty-one where the acceptance asked for "sixteen-
+plus". §4.10's six are covered — launch, flight, combat, docking, death and the escape pod — and
+death and the pod are compared in composition for the first time, which is what the replay is for
+(R14). 401 of 401; all 16 checks.
 
 **2026-09-07 — M6-0-h-3: `DOKEY` calls `DOCKIT`, and the row closes at five seams.**
 
