@@ -318,7 +318,7 @@ namespace Elite
     // 6502: DEC NOMSL -- one fewer on the rail.
     _universe.commander.missiles = static_cast<std::uint8_t>(_universe.commander.missiles - 1u);
 
-    (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
 
   /*
@@ -480,7 +480,7 @@ namespace Elite
     if ((_universe.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
       AbortMissileLock(_universe, commander.missiles, MISSILE_READY);
-      (void)PlaySoundEffect(_universe.sound, SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
+      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: LDY #sfxboop / JSR NOISE
       _universe.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
 
@@ -532,7 +532,7 @@ namespace Elite
           // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
           // that IS the effect: no drawing is involved.
           _universe.screen.upperBitmapMode = BOMB_BITMAP_MODE;
-          (void)PlaySoundEffect(_universe.sound, SOUND_ENERGY_BOMB, false);
+          (void)PlaySoundEffect(_universe.sound, SoundEffect::EnergyBomb, false);
         }
       }
 
@@ -650,14 +650,14 @@ namespace Elite
      * The `EQUB &2C` is `BIT abs` again, swallowing the `LDY #sfxalas` so that the beam laser's
      * sound survives (§6.79). Sixth time in this port.
      */
-    std::uint8_t sound = SOUND_PULSE_LASER;
+    SoundEffect sound = SoundEffect::PulseLaser;
     if ((fitted & 0x80u) != 0u)
     {
-      sound = (fitted == LASER_POWER_MILITARY) ? SOUND_MILITARY_LASER : SOUND_BEAM_LASER;
+      sound = (fitted == LASER_POWER_MILITARY) ? SoundEffect::MilitaryLaser : SoundEffect::BeamLaser;
     }
     else if (fitted == LASER_POWER_MINING)
     {
-      sound = SOUND_MINING_LASER;
+      sound = SoundEffect::MiningLaser;
     }
 
     /*
@@ -1047,7 +1047,7 @@ namespace Elite
     {
       // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the only way
       // here: a full hold is exactly the carry the capacity test leaves.
-      (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
+      (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, true);
       _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA60
       // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
       return true;
@@ -1082,7 +1082,7 @@ namespace Elite
      * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the `BCS`
      * was taken, so it is SET. Nothing between the two calls touches the flag.
      */
-    (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, true);
     return true;
   }
 
@@ -1139,7 +1139,7 @@ namespace Elite
       // do not touch. `NOISE` hands it straight back when the sound is switched off, so passing
       // `false` here (which the port did until M2-d) changed the carry `LL9` seeds an explosion
       // cloud on, on a silent build (§8).
-      carry = PlaySoundEffect(_universe.sound, SOUND_BEEP, carry).carry;
+      carry = PlaySoundEffect(_universe.sound, SoundEffect::Beep, carry).carry;
       SetMissileTarget(_universe, _universe.commander.missiles,
                        _universe.flight.slot, MISSILE_LOCKED);
     }

@@ -215,7 +215,7 @@ namespace Elite
      * routine above it too (§6.118).
      */
     _status.ecmCountdown = 32u;                    // 6502: LDA #32 / STA ECMA
-    (void)PlaySoundEffect(_sound, SOUND_ECM, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
+    (void)PlaySoundEffect(_sound, SoundEffect::Ecm, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
     ToggleEcmIndicator(_canvas);                   // 6502: and no RTS -- it falls into ECBLB
   }
 
@@ -224,7 +224,7 @@ namespace Elite
     _status.ecmCountdown = 0u;     // 6502: LDA #0 / STA ECMA
     _status.ecmOurs = 0u;          // 6502: STA ECMP
     ToggleEcmIndicator(_canvas);   // 6502: JSR ECBLB
-    StopSoundEffect(_sound, SOUND_ECM); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
+    StopSoundEffect(_sound, SoundEffect::Ecm); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 
   void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,

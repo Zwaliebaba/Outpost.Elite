@@ -119,7 +119,6 @@ namespace Elite
      * is where it belongs.
      */
 
-
     /*
      * `ShowDockingTunnel` WAS HERE, and it is gone because `LAUN` is ported (§6.109).
      *
@@ -139,7 +138,6 @@ namespace Elite
      * where a flight loop that presented would cap itself at one frame in five. That was true and
      * is answered by `Presenter` -- `HoldTitleFrame` before the scan, `ScanKeyboard` for the scan.
      */
-
 
     /*
      * `WaitFrames` WAS HERE AND IS `Presenter`'s SINCE M3-b-3b.

@@ -105,7 +105,6 @@ namespace Elite
   // (slice 3c)". Slice 3c landed; M3-b-1b calls `DrawBall` and `DrawSun` over the universe, and
   // what compares them is the chart's pixels rather than the arguments it asked for.
 
-
   /*
    * 6502: TT123 -- move one coordinate of the crosshairs by a signed step.
    *

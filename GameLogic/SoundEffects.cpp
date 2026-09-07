@@ -158,30 +158,30 @@ namespace Elite
     }
   } // namespace
 
-  NoiseResult PlaySoundEffect(SoundBuffer& _buffer, std::uint8_t _effect, bool _carryIn) noexcept
+  NoiseResult PlaySoundEffect(SoundBuffer& _buffer, SoundEffect _effect, bool _carryIn) noexcept
   {
     // 6502: NOISE -- CLV, then the routine.
-    return MakeNoise(_buffer, _effect, _carryIn, false, 0u, 0u);
+    return MakeNoise(_buffer, static_cast<std::uint8_t>(_effect), _carryIn, false, 0u, 0u);
   }
 
-  NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency,
+  NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, SoundEffect _effect, std::uint8_t _sustain, std::uint8_t _frequency,
                                      bool _carryIn) noexcept
   {
     // 6502: NOISE2 -- BIT SOUR1 / STA XX15 / STX XX15+1 / EQUB &50, into NOISE with V set.
-    return MakeNoise(_buffer, _effect, _carryIn, true, _sustain, _frequency);
+    return MakeNoise(_buffer, static_cast<std::uint8_t>(_effect), _carryIn, true, _sustain, _frequency);
   }
 
   NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept
   {
     // 6502: BEEP -- LDY #sfxbeep / BNE NOISE.
-    return PlaySoundEffect(_buffer, EFFECT_BEEP, _carryIn);
+    return PlaySoundEffect(_buffer, SoundEffect::Beep, _carryIn);
   }
 
-  void StopSoundEffect(SoundBuffer& _buffer, std::uint8_t _effect) noexcept
+  void StopSoundEffect(SoundBuffer& _buffer, SoundEffect _effect) noexcept
   {
     // 6502: NOISEOFF -- LDX #3 / INY / STY XX15+2, then SOUL1: DEX / BMI SOUR1 / LDA SOFLG,X /
     // AND #%00111111 / CMP XX15+2 / BNE SOUL1 / LDA #1 / STA SOCNT,X / RTS.
-    const std::uint8_t effectPlusOne = static_cast<std::uint8_t>(_effect + 1u);
+    const std::uint8_t effectPlusOne = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_effect) + 1u);
     for (int voice = 2; voice >= 0; --voice)
     {
       if ((_buffer.flag[static_cast<std::size_t>(voice)] & FLAG_EFFECT_MASK) == effectPlusOne)

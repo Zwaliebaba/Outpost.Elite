@@ -264,14 +264,6 @@ namespace Elite
   inline constexpr std::size_t KEY_DOCKING_COMPUTER = 44; ///< 6502: KY19 -- "C"
   inline constexpr std::size_t KEY_CANCEL_DOCKING = 23;   ///< 6502: KY20 -- "P"
 
-  /// 6502: the sound effects the flight loop asks for, from the block at the top of the source.
-  inline constexpr std::uint8_t SOUND_PULSE_LASER = 0;     ///< 6502: sfxplas
-  inline constexpr std::uint8_t SOUND_BEAM_LASER = 10;     ///< 6502: sfxblas
-  inline constexpr std::uint8_t SOUND_MILITARY_LASER = 11; ///< 6502: sfxalas
-  inline constexpr std::uint8_t SOUND_MINING_LASER = 12;   ///< 6502: sfxmlas
-  inline constexpr std::uint8_t SOUND_ENERGY_BOMB = 13;    ///< 6502: sfxbomb
-  inline constexpr std::uint8_t SOUND_MISSILE = 4;         ///< 6502: sfxwhosh
-
   /// 6502: the bitmap mode the energy bomb switches the upper half of the screen to.
   inline constexpr std::uint8_t BOMB_BITMAP_MODE = 0xD0;
 
@@ -378,7 +370,6 @@ namespace Elite
 
   // `LoopSpawnEffects` was the adapter that answered `SpawnEffects` out of a universe and its
   // ports. It went with the seam in M3-b-1: the spawn routines take the two objects it held.
-
 
   [[nodiscard]] LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 

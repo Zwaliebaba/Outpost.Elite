@@ -95,10 +95,6 @@ namespace Elite
   /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
   inline constexpr std::uint8_t HYPERSPACE_TUNNEL_STEP = 4;
 
-  /// 6502: sfxhyp1 -- the hyperspace drive engaging, which `HYPNOISE` plays twice: once pitched
-  /// through `NOISE2`, and once more at +128, which is `NOISE`'s "layer it on top" entry.
-  inline constexpr std::uint8_t SOUND_HYPERSPACE = 7;
-
   /// 6502: LDA #&F5 / LDX #240 -- `NOISE2`'s two arguments for the first hyperspace sound. The
   /// low nibble of A is a release length of 5 and the high nibble a sustain volume of 15.
   inline constexpr std::uint8_t HYPERSPACE_SUSTAIN = 0xF5;

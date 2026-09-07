@@ -81,7 +81,7 @@ namespace GameLogicTests
 
       if (_play)
       {
-        (void)Elite::PlaySoundEffect(buffer, _effect, false);
+        (void)Elite::PlaySoundEffect(buffer, static_cast<Elite::SoundEffect>(_effect), false);
       }
 
       std::uint64_t hash = 14695981039346656037ull;

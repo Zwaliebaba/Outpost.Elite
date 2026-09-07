@@ -408,7 +408,7 @@ namespace Elite
 
     if ((occupied | station | _universe.status.midJump) != 0u)
     {
-      (void)PlaySoundEffect(_universe.sound, SOUND_BOOP, false); // 6502: .WA1 LDY #sfxboop / JMP NOISE
+      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: .WA1 LDY #sfxboop / JMP NOISE
       return;
     }
 
@@ -426,7 +426,7 @@ namespace Elite
     {
       if (LargestAxis(_universe.bubble, 0u) < 2u)
       {
-        (void)PlaySoundEffect(_universe.sound, SOUND_BOOP, false);
+        (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false);
         return;
       }
     }
@@ -437,7 +437,7 @@ namespace Elite
     {
       if (LargestAxis(_universe.bubble, 1u) < 2u)
       {
-        (void)PlaySoundEffect(_universe.sound, SOUND_BOOP, false);
+        (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false);
         return;
       }
     }

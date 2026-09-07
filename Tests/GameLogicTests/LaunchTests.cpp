@@ -268,7 +268,9 @@ namespace GameLogicTests
         // 6502: LDY #sfxwhosh / JSR NOISE -- effect 4, once, and its carry is dropped.
         // And the port's, which is the BUFFER since M3-b-2a: `SOFLG` holds the effect plus one
         // with bit 7 set for "new, not yet started", so the flag says which voice took `sfxwhosh`.
-        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(0x80u | (Elite::SOUND_MISSILE + 1u)), universe.sound.flag[2],
+        constexpr std::uint8_t LAUNCH_FLAG =
+          static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Missile) + 1u));
+        Assert::AreEqual<std::uint8_t>(LAUNCH_FLAG, universe.sound.flag[2],
                                        (where + L": and so does the port").c_str());
 
         // 6502: LDA #8 / STA STP -- the step, which is the whole of §6.94's missing writer.
@@ -1142,7 +1144,7 @@ namespace GameLogicTests
        * still trapped, which is why the game's side is a count of ITS hits and not of `NOISE`'s.
        */
       Assert::IsTrue(explosions > 0u, (where + L": the shipped routine explodes").c_str());
-      Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(0x80u | (Elite::SOUND_EXPLOSION + 1u)),
+      Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Explosion) + 1u)),
                                      leaving.universe.sound.flag[2], (where + L": sfxexpl").c_str());
 
       Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.universe.status.laserCount, (where + L": LASCT").c_str());

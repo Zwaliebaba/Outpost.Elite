@@ -92,7 +92,7 @@ namespace Elite
      * a TWO there. Everything that reads `DNOIZ` tests it for non-zero, so the value never matters
      * -- and the port stores the same two, because the byte is in the commander file.
      */
-    if (_key == SOUND_OFF_KEY)
+    if (_key == KEY_SOUND_OFF)
     {
       _universe.soundDisabled = _key;
     }
@@ -105,7 +105,7 @@ namespace Elite
     pass.music = NoteMusicSwitch(_universe, *_options[OPTION_MUTOK], _dockingComputer);
 
     // 6502: CPX #&33 / BNE DK7 / LDA #0 / STA DNOIZ -- and this one DOES load a value.
-    if (_key == SOUND_ON_KEY)
+    if (_key == KEY_SOUND_ON)
     {
       _universe.soundDisabled = 0u;
     }

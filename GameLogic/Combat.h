@@ -23,11 +23,6 @@
 namespace Elite
 {
 
-  /// 6502: sfxhit and sfxexpl -- the two explosions, and they are not the same sound.
-  inline constexpr std::uint8_t SOUND_SHIP_EXPLODING = 2; ///< 6502: sfxhit
-  inline constexpr std::uint8_t SOUND_EXPLOSION = 3;      ///< 6502: sfxexpl
-  inline constexpr std::uint8_t SOUND_BEEP = 5;           ///< 6502: sfxbeep
-
   /// 6502: the three message tokens this file sends that are not arithmetic on a slot number.
   inline constexpr std::uint8_t MESSAGE_RIGHT_ON_COMMANDER = 101; ///< 6502: EXNO2 -- LDA #101
   inline constexpr std::uint8_t MESSAGE_ECM_DESTROYED = 108;      ///< 6502: ou2 -- LDA #108

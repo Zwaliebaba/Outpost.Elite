@@ -491,7 +491,7 @@ namespace Elite
            * of shield than one that gets one.
            */
           MarkAsKilled(_frame.work);
-          const bool heard = PlaySoundEffect(_frame.universe.sound, SOUND_EXPLOSION, false).carry;
+          const bool heard = PlaySoundEffect(_frame.universe.sound, SoundEffect::Explosion, false).carry;
           return TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], MISSILE_DAMAGE, heard)
             ? Tactic::Done
             : Tactic::Fatal;
@@ -963,7 +963,7 @@ namespace Elite
           ShowMessage(_frame.universe.canvas, _frame.ports.printer, _frame.universe.text, _frame.ports.characters.state,
                       _frame.universe.message,
                       MESSAGE_INCOMING_MISSILE, _frame.universe.view);
-          (void)PlaySoundEffect(_frame.universe.sound, SOUND_MISSILE, false);
+          (void)PlaySoundEffect(_frame.universe.sound, SoundEffect::Missile, false);
         }
         return Tactic::Done;
       }
@@ -1020,8 +1020,8 @@ namespace Elite
               return Tactic::Done;
             }
 
-            (void)PlaySoundEffect(_frame.universe.sound, SOUND_HIT_BY_LASER, false);
-            (void)PlaySoundEffect(_frame.universe.sound, SOUND_HIT_BY_LASER_2, false);
+            (void)PlaySoundEffect(_frame.universe.sound, SoundEffect::HitByLaser, false);
+            (void)PlaySoundEffect(_frame.universe.sound, SoundEffect::HitByLaser2, false);
             return Tactic::Done;
           }
         }
