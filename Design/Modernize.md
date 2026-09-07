@@ -48,7 +48,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
-| **M6** | **Detach.** The oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
+| **M6** | **Detach — behind the M6-0 gate.** Eight things the oracle can pin today and nothing will afterwards are closed first (§6 Phase M6); then the oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
 
 Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
 it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
@@ -240,8 +240,11 @@ Three instruments are in place and every slice below leans on them:
   source that must match exactly once, each expected to be caught. `mutate.py --check` runs in CI;
   the run itself works through the portable runner on Linux (`--runner portable`).
 
-What nothing pins: the outer loops and the mode machine in `Main.cpp` (Windows only, no test); the
-presenter (R5, by design); timing (ADR-005 §3, by design). M0 closes the first of those.
+What nothing pins: the presenter (R5, by design); timing (ADR-005 §3, by design); and the things
+M6-0 names — a whole frame with an explosion in it, the escape pod and the death sequence in
+composition, eight control codes, and seven routines that are only ever trapped. The outer loops
+and the mode machine were on this list until M3-c and M4-d moved them into `Game`, which the
+replay drives; the rest is why M6-0 exists.
 
 ---
 
@@ -1493,10 +1496,35 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
+**M6-0 IS A GATE, AND IT EXISTS BECAUSE OF WHAT M6-b MAKES PERMANENT.** A recorded fixture pins
+exactly the calls the tests made while the original was here (R19); a behaviour no test reached
+before M6-b can never again be asked of the original. So the question to settle before M6-a records
+anything is not "is every row built" — every M0–M5 row is — but "is there anything the oracle can
+pin today that nothing will pin afterwards." The assessment of 2026-09-07 (§8) found eight such
+things, and they are the rows below, **ordered by irreversibility**: the ones at the top are the
+ones that can only be done while the interpreter is in the tree. Three were known and parked as
+tasks since M3-b; two are preconditions §4.10 already states and nothing enforces; three are
+instruments M6-a's own acceptance needs and does not have. None of them is a refactor: `GameLogic/`
+changes only where a defect is found, and the replay record moves only under rule 1.
+
+What is NOT in the gate, deliberately: `Frame()`, `Sounds()`, `StateHash()` and `Game` owning its
+`Universe` (task #13, structure, no oracle involved); M1's deferred `LightYearsTenths`, `Laser` and
+`Equipment` types, which ADR-006 §2 parked "for M5, where a type earns its operators" and M5 did not
+build — that is a decision to take, not a gap to close, and it needs no original; M5-a-8 and
+M5-a-9; `modernize-avoid-c-arrays`' hundred sites. All of them are safe after M6-f.
+
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M6-a Coverage review and the recorder** | Every *Port* row of the ledger has a test that calls it (the review is the ledger's last job); the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | The suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
-| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the five mutation units at their M0-d tallies. | 2 |
+| **M6-0-a The 6510 port register** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
+| **M6-0-b The replay reaches death and the escape pod** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
+| **M6-0-c The eleven control codes** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
+| **M6-0-d Two fixture faults from M3-b** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
+| **M6-0-e Seven routines only ever trapped** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
+| **M6-0-f A coverage instrument** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
+| **M6-0-g Mutants to a stated floor** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
+| **M6-0-h The empty seams** | `StartUpEffects` is an abstract class with nothing but a virtual destructor, and `ControlEffects` holds only `RunDockingComputer`, which M4-c-2 made a library routine. Both are still counted. Cheap, and worth doing before M6-a so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 1 |
+| **M6-a Coverage review and the recorder** | **Blocked on M6-0.** Every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
+| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
@@ -1774,6 +1802,45 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0: every M0–M5 row is built, and M6 is not safe to start.**
+
+The owner asked whether anything was still open beside M6, on the ground that M6 removes the
+oracle and so must find no gap. The answer is that "no rows open" and "no gaps" are different
+questions, and the difference is R19: a fixture pins what the tests asked while the original was
+here, so anything the oracle can pin today and no test asks is unpinned for ever after M6-b. Sorted
+by that lens, the tree has eight such things, and they are now the M6-0 rows in §6 — a gate M6-a
+is blocked on, ordered by irreversibility.
+
+**THREE WERE KNOWN AND PARKED.** The 6510 port register (task #11) has been named since M3-b as
+"what unblocks it is a harness slice", and it is the largest single gap in the tree: the oracle's
+flat memory aliases the VIC registers onto `XX21`, so `ShipDrawEffects` is still a seam, `DOEXP`
+is trapped in every composition test, and **no whole-frame comparison with an explosion in it has
+ever been made against the original**. The eleven control codes (task #12) split three ways and
+eight of them are comparable now. And two fixture faults M3-b called one-line fixes — `Where`
+without `SUNX`/`LSY2`, the heaps at `&0C00` — were never made.
+
+**TWO ARE PRECONDITIONS §4.10 ALREADY STATES AND NOTHING ENFORCES.** "The M0-c replay must cover
+launch, flight, combat, docking, death and the escape pod": it covers four of the six. And seven
+routines are only ever trapped — `TRADEMODE`, `NLIN`, `TT67`, `DK4` ported and never compared on
+their own; `WSCAN`, `REDU`, `GTNMEW` not ported — and a trapped routine's fixture records the trap.
+
+**THREE ARE INSTRUMENTS M6-a's OWN ACCEPTANCE NEEDS.** "Every *Port* row has a test that calls it"
+cannot be read off anything: the ledger's ✅ is per label and inconsistent (twelve of thirty-three
+Port rows have none, including the flight loop's sixteen parts, the most-tested code in the tree),
+and a marker-to-test name match over 3,117 markers is noise — the attempt in this assessment
+returned 433 "uncovered" labels, nearly all of them opcodes and sub-labels. Mutants cover eight of
+fifty-two hand-written files, and after M6-b they are the only instrument that says whether a test
+would NOTICE rather than merely what it asked; M6-b's acceptance still counts "five units" from
+before the corpus reached nine files. And `StartUpEffects` is an abstract class with nothing in it
+but a destructor, still counted.
+
+**AND TWO SENTENCES OF THIS PLAN WERE NO LONGER TRUE.** §2.7's "what nothing pins: the outer loops
+and the mode machine in `Main.cpp`" — they are `Game`'s since M3-c and M4-d and the replay drives
+them; the sentence now names M6-0's list instead. And §4.10's coverage requirement, the strongest
+sentence in the document, had no row enforcing it; M6-0-b is that row.
+
+Nothing in `GameLogic/` changed. The rows are the deliverable, and the order is the point.
 
 **2026-09-07 — M5-d: `.clang-tidy` calls itself this repository's single source of truth, and
 nothing in this repository had ever run it.**
