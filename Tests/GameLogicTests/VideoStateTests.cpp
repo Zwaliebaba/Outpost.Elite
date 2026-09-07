@@ -1,8 +1,5 @@
 #include "pch.h"
 
-#include "Cpu6502.h"
-#include "OracleImage.h"
-
 #include "Canvas.h"
 #include "Controls.h"
 #include "LoaderScreen.h"
@@ -16,7 +13,6 @@
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
-using Elite::Testing::OracleImage;
 
 /*
  * The sprite overlay: the registers, the definitions, and the blit (ADR-005 section 1, plan
@@ -24,9 +20,10 @@ using Elite::Testing::OracleImage;
  *
  * WHAT IS AND IS NOT VERIFIED HERE, because the distinction is the whole point of this file.
  *
- * VERIFIED AGAINST THE ORIGINAL: the 448 bytes of `spritp`, compared against the assembler's own
- * output like every other generated table. That is the one part of the sprite overlay that has an
- * oracle at all, and it is checked twice -- here, and by `extract_tables.py --check` in CI.
+ * VERIFIED AGAINST THE ORIGINAL: nothing, since 2026-09-07. The 448 bytes of `spritp` were compared
+ * against the assembler's own output until the oracle comparison of the generated tables was
+ * retired with `TableTests`: the definitions are the port's own data now, edited through
+ * `tools/bitmaps.py`, and there is no original for an edited sprite to match.
  *
  * VERIFIED AS ARITHMETIC: the register model. `ApplyMaskSprites` really does read-modify-write,
  * `ApplyHideAllSprites` really does leave positions alone, `ApplyExplosionSprite` really does set
@@ -86,32 +83,6 @@ namespace GameLogicTests
   TEST_CLASS(TheSpriteDefinitions)
   {
   public:
-    /*
-     * The 448 bytes, against the assembler.
-     *
-     * This is the reason `elite-sprites.asm` was added to `tools/labels.py` at all: ADR-005 section
-     * 1 called it a prerequisite worth doing on its own merits, because it is the only part of the
-     * sprite overlay that CAN be compared against the original.
-     */
-    TEST_METHOD(TheSpriteDefinitionsMatchTheAssembledSPRITE)
-    {
-      const OracleImage& sprites = OracleImage::SpriteInstance();
-      if (!sprites.Available())
-      {
-        Logger::WriteMessage(("SKIPPED -- sprite image absent: " + sprites.Reason()).c_str());
-        return;
-      }
-
-      const std::uint16_t address = sprites.Label("spritp");
-      const Elite::Testing::Cpu6502 cpu = sprites.Fresh();
-
-      for (std::size_t index = 0; index < Elite::SPRITE_DEFINITIONS.size(); ++index)
-      {
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(address + index)], Elite::SPRITE_DEFINITIONS[index],
-                         (L"spritp+" + std::to_wstring(index)).c_str());
-      }
-    }
-
     /*
      * Seven definitions of 64 bytes -- and NOT which of them are multicolour.
      *

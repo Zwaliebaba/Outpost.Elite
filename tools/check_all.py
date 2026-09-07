@@ -38,7 +38,6 @@ CHECKS: list[list[str]] = [
     ["mutate.py", "--check"],
     ["c64_source.py", "--check-all"],
     ["inventory.py", "--strict"],
-    ["extract_tables.py", "--check"],
     ["channel_census.py", "--check"],
 ]
 
