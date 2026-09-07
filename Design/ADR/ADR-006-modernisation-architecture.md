@@ -94,6 +94,13 @@ equipment bytes with the reason):
   type is that byte with the three questions the game asks of it — fitted, beam (bit 7), power
   (the byte without bit 7) — and the five named values. It found the four powers defined in four
   files under four naming schemes, twelve constants for four bytes.
+- **`Equipment` is refused (M5-a-12), for `Options`' reason: the bytes are not one kind of thing.**
+  `ECM`, `BST`, `ESCP`, `GHYP` and `DKCMP` are `0`/`&FF` flags; `ENGY` is a count that multiplies
+  the recharge; `BOMB` is a state machine — `&7F` fitted, shifted left on arming and again every
+  flashing frame until it is gone, the countdown and the fitted flag in one byte; and `OUCH`
+  indexes all of them as cargo-hold slots 17 to 20. A struct of five differently-encoded bytes has
+  no operator to earn, and a flag or enum type would misdescribe two of them. The named bytes on
+  `Commander` stay.
 
 **AND `Colour` DID NOT SURVIVE THE PLAN'S OWN DESCRIPTION EITHER**, which is why it is worth
 recording next to the three. The row asked for "scoped enums with the original values", and the
