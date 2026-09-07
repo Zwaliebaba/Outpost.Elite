@@ -701,10 +701,10 @@
         {
           "id": "ra-blit-per-sprite",
           "file": "GameLogic/Canvas.cpp",
-          "find": "          const std::size_t half = (y >= Canvas::SPACE_VIEW_HEIGHT) ? 1u : 0u;",
+          "find": "          const std::size_t half = (y >= _splitRow) ? 1u : 0u;",
           "replace": "          const std::size_t half = 0u;",
           "expect": "caught",
-          "note": "Deciding a sprite's mode once instead of per screen row. The VIC-II decides it as it scans, which is why a burst that straddles the split is drawn on one side only; pinning the half to the space view's draws the whole thing over the dashboard."
+          "note": "Deciding a sprite's mode once instead of per screen row. The VIC-II decides it as it scans, which is why a burst that straddles the split is drawn on one side only; pinning the half to the space view's draws the whole thing over the dashboard. Re-anchored at Resolution.md RS-0, when `BlitSprite` took the output's split row as a parameter so that one blit serves the canvas and the 640x400 picture."
         }
       ]
     },
@@ -972,8 +972,8 @@
         {
           "id": "pd-pl44-clc",
           "file": "GameLogic/PlanetDraw.cpp",
-          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
-          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
+          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (\u00a76.45).",
+          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (\u00a76.45).",
           "expect": "caught",
           "note": "A circle whose top is above the screen is ON screen -- `BMI PL44` lands on a `CLC`, not on a rejection (plan section 6.45). Would have hidden: a planet vanishing the moment its top edge left the view."
         },

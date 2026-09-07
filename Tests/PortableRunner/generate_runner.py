@@ -60,7 +60,7 @@ def oracle_sources(_repo: Path) -> list[Path]:
 #
 # `Presentation` and `KeyMap` are here by design rather than by accident: slice 2e's shell splits
 # its decisions from its API calls precisely so that the decisions can be tested on a machine with
-# no GPU and no Windows SDK. What is left in Window.cpp, CanvasPresenter.cpp and Main.cpp is
+# no GPU and no Windows SDK. What is left in Window.cpp, ScreenPresenter.cpp and Main.cpp is
 # Direct3D, a message pump and a thread, and those are verified by compiling.
 # `SidSynth` joined them 2026-09-06 (plan section 6.156). It is the 6581 emulation and it has no
 # oracle -- the game never rendered audio, only wrote registers -- so the only thing that can catch

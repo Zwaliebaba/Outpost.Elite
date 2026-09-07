@@ -15,6 +15,7 @@
 #include "Rng.h"
 #include "SoundEffects.h"
 #include "Scanner.h"
+#include "Picture.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
@@ -114,6 +115,29 @@ namespace Elite
   {
     // ---- what the drawing works on ---------------------------------------------------------
     Canvas canvas;
+
+    /*
+     * The 640x400 picture, drawn beside the canvas and presented in its place (Resolution.md §3.4).
+     *
+     * IT IS THE ONE FIELD `HashState` DELIBERATELY WALKS PAST, and that is a decision rather than an
+     * oversight -- `StateHash.cpp` says so where the fold would be. The replay digest exists to
+     * notice a change in what the game DOES; this surface is a function of what the game did,
+     * computed by code the resolution slices go on changing, and folding it would turn every
+     * improvement to the rendering into a re-recording of five replay tables. R10's failure mode at
+     * the scale of the whole game.
+     *
+     * What the digest must still catch is this surface LEAKING into the game -- a twin that rolled
+     * the generator, moved a heap pointer or wrote a canvas byte -- and that is caught twice over:
+     * by construction, because the twins take the surface and const references to their inputs, and
+     * by the replay run with them present and absent for the same digest (Resolution.md §8.4).
+     *
+     * IT IS 107,682 BYTES, which takes a `Universe` from 15 KB to 123 KB -- eight times, measured
+     * rather than estimated. Nothing hot copies one; the oracle's image round trips put two on the
+     * stack beside a 64 KB interpreter, which is 310 KB of a Windows thread's megabyte. Stated
+     * here rather than mitigated, and the number is what a later slice would have to argue with:
+     * the dashboard's index plane is 71,680 of it and would halve at four bits a pixel.
+     */
+    Picture picture;
     DrawWorkspace draw;         ///< 6502: SC(1 0) -- the dashboard's cursor, all M2-c left of it
     MathWorkspace math;         ///< 6502: Q and K2's bottom byte, the two that outlive a call
     GeometryWorkspace geometry; ///< 6502: XX16, XX12, XX2 and XX3 -- `LL9`'s stage results

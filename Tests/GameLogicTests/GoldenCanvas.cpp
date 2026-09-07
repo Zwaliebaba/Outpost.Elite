@@ -7,6 +7,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <vector>
 
 namespace Elite::Testing
@@ -110,24 +111,27 @@ namespace Elite::Testing
     }
   }
 
-  std::string WriteCanvasPng(const Canvas& _canvas, const std::string& _name)
+  std::string WriteIndexedPng(std::span<const std::uint8_t> _indices, int _width, int _height, const std::string& _name)
   {
-    std::array<std::uint8_t, Canvas::WIDTH * Canvas::HEIGHT> indices{};
-    _canvas.Resolve(indices);
+    if (_indices.size() < static_cast<std::size_t>(_width) * _height)
+    {
+      return {};
+    }
 
     std::vector<std::uint8_t> raw;
-    raw.reserve(static_cast<std::size_t>(Canvas::HEIGHT) * (Canvas::WIDTH + 1));
-    for (int y = 0; y < Canvas::HEIGHT; ++y)
+    raw.reserve(static_cast<std::size_t>(_height) * (_width + 1));
+    for (int y = 0; y < _height; ++y)
     {
       raw.push_back(0); // filter: none
-      raw.insert(raw.end(), indices.begin() + y * Canvas::WIDTH, indices.begin() + (y + 1) * Canvas::WIDTH);
+      raw.insert(raw.end(), _indices.begin() + static_cast<std::size_t>(y) * _width,
+                 _indices.begin() + static_cast<std::size_t>(y + 1) * _width);
     }
 
     std::vector<std::uint8_t> png{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
 
     std::vector<std::uint8_t> header;
-    AppendBigEndian(header, Canvas::WIDTH);
-    AppendBigEndian(header, Canvas::HEIGHT);
+    AppendBigEndian(header, _width);
+    AppendBigEndian(header, _height);
     header.push_back(8); // bit depth
     header.push_back(3); // colour type: indexed
     header.push_back(0);
@@ -152,6 +156,21 @@ namespace Elite::Testing
     }
     file.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
     return path.string();
+  }
+
+  std::string WriteCanvasPng(const Canvas& _canvas, const std::string& _name)
+  {
+    std::array<std::uint8_t, Canvas::WIDTH * Canvas::HEIGHT> indices{};
+    _canvas.Resolve(indices);
+    return WriteIndexedPng(indices, Canvas::WIDTH, Canvas::HEIGHT, _name);
+  }
+
+  std::string WritePicturePng(const Picture& _picture, const Canvas& _canvas, const std::string& _name)
+  {
+    // On the heap, because 640x400 is 256,000 bytes and this runs inside a test's frame.
+    std::vector<std::uint8_t> indices(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT, std::uint8_t{0});
+    _picture.Resolve(indices, _canvas);
+    return WriteIndexedPng(indices, Picture::WIDTH, Picture::HEIGHT, _name);
   }
 
   std::string CompareCanvasImages(const Canvas& _expected, const Canvas& _actual, const std::string& _name)

@@ -311,6 +311,23 @@ namespace Elite
     void Resolve(std::span<std::uint8_t> _out) const noexcept;
 
     /*
+     * ONE character cell of that image: eight rows of eight indices, `_stride` apart.
+     *
+     * Public because `Elite::Picture` reads it (Design/Resolution.md section 3.3). Until the 640x400
+     * surface draws a region for itself, that region's pixels are THIS decode doubled -- and the
+     * decode has to be the same one `Resolve` runs, not a second one beside it. Two walks over the
+     * same bytes kept in step by hand is the defect ADR-002 section 4 records, where the port
+     * decoded the bitmap in one mode and hashed it in another and every glyph came out as stripes
+     * with the whole suite green.
+     *
+     * It takes a CELL and not a pixel because everything that decides the decode is per cell: which
+     * block of screen RAM colours it, whether the raster split has put it in multicolour, and which
+     * background register supplies %00. A per-pixel entry point would have to answer all three
+     * again for every pixel.
+     */
+    void ResolveCell(int _cellColumn, int _cellRow, std::uint8_t* _out, int _stride) const noexcept;
+
+    /*
      * The same image with the hardware SPRITES composited over it (ADR-005 section 1).
      *
      * An OVERLOAD rather than a defaulted argument, because the two callers mean different things
@@ -355,6 +372,30 @@ namespace Elite
     std::array<Colour, 2> m_explosionColour = {Colour::Red, Colour::Black};
     bool m_dashboardShown = false;
   };
+
+  /*
+   * The eight hardware sprites, over an image something has already resolved (ADR-005 §1).
+   *
+   * No origin marker on it, and deliberately: it names no label. This is the VIC-II's documented
+   * blit rather than a routine of the game's, which is why ADR-005 §1 records it as the one drawing
+   * in the port with no oracle behind it.
+   *
+   * A free function over an output of a stated size, rather than a step inside `Canvas::Resolve`,
+   * because `Elite::Picture` composites the SAME sprites over its own image at twice the geometry
+   * (Design/Resolution.md §3.3) and a second copy of the blit is a second thing to keep in step.
+   * The canvas calls it with a scale of one and the screen with two.
+   *
+   * `_scale` multiplies the VIC-II's own x/y expand flag rather than replacing it, so an expanded
+   * sprite on the 640x400 surface is four output pixels to a sprite dot and an ordinary one is two.
+   * `_splitRow` is where the raster interrupt reprograms the sprite registers -- the top of the
+   * dashboard in whichever surface's rows.
+   *
+   * `_canvas` supplies the sprite POINTERS, which are screen-RAM bytes, and the two registers the
+   * split rewrites; `_video` supplies the rest. Both surfaces read the same ones, because they are
+   * game state and there is only one game.
+   */
+  void CompositeSprites(std::span<std::uint8_t> _out, int _width, int _height, int _splitRow, int _scale, const Canvas& _canvas,
+                        const VideoState& _video) noexcept;
 
   /*
    * 6502: X1, Y1, X2, Y2 -- a line, as `LOIN` takes it: the first four bytes of `XX15`.
