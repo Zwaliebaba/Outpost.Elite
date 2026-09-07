@@ -197,7 +197,7 @@ namespace Outpost
     (void)_work;
     if (m_ports != nullptr)
     {
-      Elite::RunDockingComputer(m_universe, *m_ports, 0u);
+      Elite::RunDockingComputer(*m_universe, *m_ports, 0u);
     }
   }
 
