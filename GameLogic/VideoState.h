@@ -2,6 +2,7 @@
 
 #include "Colours.h"
 
+#include <array>
 #include <cstdint>
 
 namespace Elite
@@ -128,12 +129,12 @@ namespace Elite
      * It is stored whole here and split only where a register is actually being imitated, which is
      * the presenter's business and not the game's.
      */
-    std::uint16_t x[SPRITE_COUNT] = {};
-    std::uint8_t y[SPRITE_COUNT] = {};
+    std::array<std::uint16_t, SPRITE_COUNT> x = {};
+    std::array<std::uint8_t, SPRITE_COUNT> y = {};
 
     /// 6502: VIC+&27 to VIC+&2E -- each sprite's own colour, which for a multicolour sprite is
     /// only the %10 bit pair; %01 and %11 come from the two shared registers above.
-    Colour colour[SPRITE_COUNT] = {};
+    std::array<Colour, SPRITE_COUNT> colour = {};
   };
 
   /*

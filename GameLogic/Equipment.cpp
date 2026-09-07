@@ -402,13 +402,13 @@ namespace Elite
 
       // The member pointer goes FIRST so the two bytes share its tail rather than each taking a
       // word of their own. Nothing outside this function sees the layout; `item` is still the key.
-      static constexpr Fitting FITTINGS[] = {
+      static constexpr std::array<Fitting, 5> FITTINGS = {{
         {&Commander::escapePod, 7, 0xFF}, // 6502: DEC ESCP
         {&Commander::energyBomb, 8, ENERGY_BOMB_FITTED},
         {&Commander::energyUnit, 9, 1}, // 6502: INC ENGY, from a known zero
         {&Commander::dockingComputer, 10, 0xFF},
         {&Commander::galacticDrive, 11, 0xFF},
-      };
+      }};
 
       for (const Fitting& fitting : FITTINGS)
       {

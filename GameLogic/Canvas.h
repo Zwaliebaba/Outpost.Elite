@@ -340,8 +340,8 @@ namespace Elite
     bool m_spaceViewMulticolour = false;
 
     /// 6502: santana and lotus -- see `SetSpriteMulticolour`. Initialised to what the game holds.
-    std::uint8_t m_spriteMulticolour[2] = {0xFEu, 0xFCu};
-    Colour m_explosionColour[2] = {Colour::Red, Colour::Black};
+    std::array<std::uint8_t, 2> m_spriteMulticolour = {0xFEu, 0xFCu};
+    std::array<Colour, 2> m_explosionColour = {Colour::Red, Colour::Black};
     bool m_dashboardShown = false;
   };
 

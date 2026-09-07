@@ -58,7 +58,6 @@ Checks: >
   -clang-analyzer-optin.core.EnumCastOutOfRange,
   -modernize-use-trailing-return-type,
   -modernize-use-auto,
-  -modernize-avoid-c-arrays,
   -performance-enum-size
 
 # THE EXCLUSIONS, EACH WITH THIS REPOSITORY'S REASON. Slice 5d measured every one of them against

@@ -94,7 +94,7 @@ namespace Elite
      * that DO something rather than steer; with a chart or a market on screen the scan reports them
      * as unheld regardless of the keyboard. `DOKEY`'s six steering keys are deliberately not here.
      */
-    constexpr std::size_t NON_STEERING_KEYS[] = {
+    constexpr std::array<std::size_t, 9> NON_STEERING_KEYS = {
       KEY_ENERGY_BOMB, KEY_ESCAPE_POD, KEY_ARM_MISSILE,      KEY_UNARM_MISSILE,  KEY_FIRE_MISSILE,
       KEY_ECM,         KEY_WARP,       KEY_DOCKING_COMPUTER, KEY_CANCEL_DOCKING,
     };
