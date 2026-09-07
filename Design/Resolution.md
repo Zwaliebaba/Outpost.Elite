@@ -141,11 +141,31 @@ screen is never in a fixture — after M6-b there is nothing to record it agains
 there is nothing either. Its evidence is a different kind (§8): consistency with the canvas,
 properties of the twin arithmetic, and golden hashes of its own.
 
-**Where the sequencing sits.** Modernize.md M6-a is next in that plan and records the fixtures. This
-design does not touch a faithful routine's *behaviour*, but it adds a call site to most of the
-drawing routines, and M6-c renames identifiers in the same files. Doing both at once is two
-patterns in one slice (Modernize.md rule 8). The build order (§10) therefore lands RS-0 to RS-4
-before M6-c or after M6-d, not during, and the plan's Phase 6 row is amended to say so.
+**What this track needs from M6, and it is all already built.** Every prerequisite is in the
+**M6-0 gate**, which closed on 2026-09-07, and four of its eight rows are load-bearing here:
+
+- **M6-0-a** (the 6510 port register) is why `FlightLoopTests` can build `"a ship exploding"` as a
+  whole frame on both machines. That scene is one of the three §8.1 resolves both surfaces over.
+- **M6-0-d** (the two fixture faults) is why `"a sun close enough to draw"` exists at all, and why
+  the flight-loop heaps sit inside the arena. §4.2's sun twin has no shadow test without it.
+- **M6-0-b** (the replay reaching death and the escape pod) is two of the three digests §8.4 runs
+  with the twins present and absent.
+- **M6-0-g** (the mutant floor) is the mechanism §8.5 adds the four twin files to.
+
+**Nothing from M6-a onward is a prerequisite**, and the reason is one sentence: this track never
+asks the original anything. The shadow tests compare the picture against the canvas, the property
+sweeps compare twin arithmetic against the PORT's `PROJ`, `LL28` and `SCAN`, and the goldens hash
+the port's own output. So M6-b retiring the live oracle neither helps nor blocks it, and R19 — a
+fixture pins only what was asked — does not reach it.
+
+**Where the sequencing sits, and the choice is now made.** This design does not touch a faithful
+routine's *behaviour*, but it adds a call site to most of the drawing routines, and M6-c renames
+identifiers and M6-d rewrites comments in those same files. Doing both at once is two patterns in
+one slice (Modernize.md rule 8). The build order (§10) therefore lands RS-0 to RS-4 either side of
+that pair and not during it — and **RS-0 landing on 2026-09-07 settled it as BEFORE**. What that
+costs is stated rather than discovered: M6-c gains the twins' names to rename, and M6-d gains
+almost nothing, because a twin carries `/// 2x of:` instead of `// 6502:` and no assembly-shaped
+comments — RS-0 held the `origin-markers` ratchet at its ceiling for exactly that reason.
 
 ---
 
@@ -644,8 +664,9 @@ path the layout did not see — are what the estimate cannot price.
 **Total: roughly 25 sittings plus the artwork**, about a quarter of the port and a third of the
 modernisation, and the docked re-flow is a third of it — which is ruling 3's price, stated.
 
-**Order against Modernize.md.** RS-0 to RS-4 before M6-c or after M6-d (§2). RS-5 is layout tables
-and touches almost no faithful routine, and may interleave.
+**Order against Modernize.md.** RS-0 to RS-4 run BEFORE M6-c and M6-d, settled by RS-0 landing
+(§2); M6-a and M6-b may go at any time, because this track asks the original nothing. RS-5 is layout
+tables and touches almost no faithful routine, and may interleave with anything.
 
 ---
 
