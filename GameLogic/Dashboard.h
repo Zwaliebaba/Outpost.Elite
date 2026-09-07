@@ -12,6 +12,8 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because Universe.h includes this one
+
 
   /*
    * The dashboard (slice 3d-b).
@@ -253,12 +255,10 @@ namespace Elite
    * side effect surviving a `JSR`, and the reason `SetMissileIndicator` is documented as leaving
    * Y at zero even though nothing in the port needs it to (§6.68).
    */
-  void SetMissileTarget(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking, std::uint8_t _missiles, std::uint8_t _target,
-                        std::uint8_t _colour) noexcept;
+  void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, std::uint8_t _colour) noexcept;
 
   /// 6502: ABORT -- `LDX #&FF` and then straight into `ABORT2`: no target, so the lock is off.
-  void AbortMissileLock(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking, std::uint8_t _missiles,
-                        std::uint8_t _colour) noexcept;
+  void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, std::uint8_t _colour) noexcept;
 
   /// 6502: ECBLB -- toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
   void ToggleEcmIndicator(Canvas& _canvas) noexcept;

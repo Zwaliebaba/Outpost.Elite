@@ -10,6 +10,7 @@
 #include "Scanner.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -801,7 +802,8 @@ namespace GameLogicTests
       const std::uint16_t nomsl = oracle.Label("NOMSL");
 
       Cpu6502 cpu = oracle.Fresh();
-      Elite::Canvas canvas;
+      // 6502: the screen -- the universe's since M5-a-2, because that is what the routine draws into.
+      Elite::Universe lock;
 
       const std::uint8_t COLOURS[] = {Elite::MISSILE_NONE, Elite::MISSILE_LOCKED, Elite::MISSILE_ARMED, Elite::MISSILE_READY};
 
@@ -815,7 +817,7 @@ namespace GameLogicTests
           {
             for (const std::uint8_t target : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{0xFF}})
             {
-              FillScreens(cpu, canvas, at.screen, 0x00u);
+              FillScreens(cpu, lock.canvas, at.screen, 0x00u);
 
               cpu.memory[nomsl] = static_cast<std::uint8_t>(missiles);
               cpu.memory[mstg] = 0x2Au;
@@ -826,25 +828,27 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(viaAbort ? abort : abort2, 2'000);
               Assert::IsTrue(run.completed, L"ABORT returned");
 
-              Elite::Bubble bubble;
-              bubble.missileTarget = 0x2Au;
-              std::uint8_t seeking = 0x2Au;
+              // 6502: MSTG and MSAR -- both are the universe's bytes since M5-a-2, so the fixture
+              // seeds them there rather than in a `Bubble` and a loose byte the routine was handed
+              // a reference to.
+              lock.bubble.missileTarget = 0x2Au;
+              lock.status.missileArmed = 0x2Au;
 
               if (viaAbort)
               {
-                Elite::AbortMissileLock(canvas, bubble, seeking, static_cast<std::uint8_t>(missiles), colour);
+                Elite::AbortMissileLock(lock, static_cast<std::uint8_t>(missiles), colour);
               }
               else
               {
-                Elite::SetMissileTarget(canvas, bubble, seeking, static_cast<std::uint8_t>(missiles), target, colour);
+                Elite::SetMissileTarget(lock, static_cast<std::uint8_t>(missiles), target, colour);
               }
 
               const std::wstring where = Widen(std::string(viaAbort ? "ABORT" : "ABORT2") + "(target " + std::to_string(target) +
                                                ", colour " + std::to_string(colour) + ", NOMSL " + std::to_string(missiles) + ")");
 
-              (void)CompareScreens(cpu, at.screen, canvas, 0x00u, where);
-              Assert::AreEqual(cpu.memory[mstg], bubble.missileTarget, (where + L": MSTG").c_str());
-              Assert::AreEqual(cpu.memory[msar], seeking, (where + L": MSAR").c_str());
+              (void)CompareScreens(cpu, at.screen, lock.canvas, 0x00u, where);
+              Assert::AreEqual(cpu.memory[mstg], lock.bubble.missileTarget, (where + L": MSTG").c_str());
+              Assert::AreEqual(cpu.memory[msar], lock.status.missileArmed, (where + L": MSAR").c_str());
               ++compared;
             }
           }

@@ -350,7 +350,7 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
 `ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
-would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->12 parameters are
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->4 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
 **P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->30 `bool
@@ -1774,6 +1774,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-2: the six stragglers take `Universe&`, which is M3-a's pattern finishing three
+phases late.**
+
+M3-a gave every routine `(Universe&, Ports&)`. Six were missed, and the tell is that each was handed
+a `std::uint8_t&` to a universe field by EVERY caller while not taking the universe:
+`CrosshairsToCurrentSystem` (`QQ9`, `QQ10`), `EnterDockingBay` (`QQ12`), `SetMissileTarget` and
+`AbortMissileLock` (`MSAR`, and `MSTG` and the canvas beside it), `NoteMusicSwitch` and
+`PressPauseKey` (`MUTOKOLD`, `DNOIZ`). **`out-params` 12 → 4.**
+
+**ONLY THE OUT-PARAMETERS FOLDED, and the value inputs stayed.** `EnterDockingBay` still takes
+`_view` and `_countdown` by value, because `DockAtStation` passes its own `_view` at one site and
+`0` at another; `SetMissileTarget` still takes `_missiles`, `_target` and `_colour`, because
+`DashboardTests` sweeps them. Folding an input that varies by caller would have changed which byte
+the routine reads, which is a behaviour change dressed as a tidy-up — the discipline is that a
+parameter goes only when it is provably the same field at every call site.
+
+**Four fixtures converged again, and one of them was drawing into the wrong canvas.**
+`DashboardTests` built an `Elite::Canvas`, an `Elite::Bubble` and a loose `seeking` byte;
+`PauseScreenTests` two loose bytes; `StartUpTests` a `Commander` with two crosshairs, and a
+`portDocked`. All five now seed an `Elite::Universe`, which is what the app hands the routine. The
+canvas is the one worth naming: the fixture filled ITS canvas from the oracle and compared ITS
+canvas back, and once the routine drew into the universe's the comparison was looking at a screen
+nothing had written — `ABORT2(target 0, colour 183): screen differs at offset 10185`. The suite said
+so on the first run, which is the third time in two days that a fixture holding its own copy of a
+byte the app keeps in the universe has been found by a failure rather than by reading.
+
+402 of 402, the replay digest unchanged, all 14 repository checks.
 
 **2026-09-07 — M5-a-1: four out-parameters were a field of the `Universe` the routine already
 took, and one of them was bound to a copy.**

@@ -313,7 +313,7 @@ namespace Elite
     (void)Anger(_universe.bubble, _universe.flight, target, TypeOf(_universe.bubble.slots[target]));
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
-    AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, _universe.commander.missiles, MISSILE_NONE);
+    AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_NONE);
 
     // 6502: DEC NOMSL -- one fewer on the rail.
     _universe.commander.missiles = static_cast<std::uint8_t>(_universe.commander.missiles - 1u);
@@ -479,7 +479,7 @@ namespace Elite
     // key does nothing at all with an empty rail.
     if ((_universe.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
-      AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, commander.missiles, MISSILE_READY);
+      AbortMissileLock(_universe, commander.missiles, MISSILE_READY);
       (void)PlaySoundEffect(_universe.sound, SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
       _universe.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
@@ -1140,7 +1140,7 @@ namespace Elite
       // `false` here (which the port did until M2-d) changed the carry `LL9` seeds an explosion
       // cloud on, on a silent build (§8).
       carry = PlaySoundEffect(_universe.sound, SOUND_BEEP, carry).carry;
-      SetMissileTarget(_universe.canvas, _universe.bubble, _universe.status.missileArmed, _universe.commander.missiles,
+      SetMissileTarget(_universe, _universe.commander.missiles,
                        _universe.flight.slot, MISSILE_LOCKED);
     }
 

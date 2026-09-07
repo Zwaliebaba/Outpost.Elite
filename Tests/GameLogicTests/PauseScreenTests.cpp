@@ -6,6 +6,7 @@
 
 #include "LookupTables.h"
 #include "PauseScreen.h"
+#include "Universe.h"
 
 #include <algorithm>
 #include <array>
@@ -252,10 +253,13 @@ namespace GameLogicTests
              * key stopped working. §6.95's rule, and the failure looked like a port bug for as
              * long as it took to read the trap log.
              */
-            std::uint8_t sound = 0;
-            std::uint8_t mutokOld = ours[Elite::OPTION_MUTOK];
+            // 6502: DNOIZ and MUTOKOLD -- both are the universe's since M5-a-2, so the fixture
+            // seeds them there rather than in two locals the routine was handed references to.
+            Elite::Universe frozen;
+            frozen.soundDisabled = 0;
+            frozen.musicSwitchWas = ours[Elite::OPTION_MUTOK];
             cpu.memory[dnoiz] = 0;
-            cpu.memory[mutokold] = mutokOld;
+            cpu.memory[mutokold] = frozen.musicSwitchWas;
             cpu.memory[autoFlag] = docking;
 
             Elite::OptionBlock block{};
@@ -268,7 +272,7 @@ namespace GameLogicTests
             cpu.x = static_cast<std::uint8_t>(key);
             const Elite::Testing::RunResult run = cpu.CallSubroutine(freeze, 60'000, dk7);
 
-            const Elite::PausePass pass = Elite::PressPauseKey(block, sound, mutokOld, docking, static_cast<std::uint8_t>(key));
+            const Elite::PausePass pass = Elite::PressPauseKey(frozen, block, docking, static_cast<std::uint8_t>(key));
 
             const std::wstring where =
               WidenText("FREEZE key " + std::to_string(key) + " patg " + std::to_string(patg) + " auto " + std::to_string(docking));
@@ -278,8 +282,8 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(damp + byte)], ours[byte],
                                (where + L": DAMP+" + std::to_wstring(byte)).c_str());
             }
-            Assert::AreEqual(cpu.memory[dnoiz], sound, (where + L": DNOIZ").c_str());
-            Assert::AreEqual(cpu.memory[mutokold], mutokOld, (where + L": MUTOKOLD").c_str());
+            Assert::AreEqual(cpu.memory[dnoiz], frozen.soundDisabled, (where + L": DNOIZ").c_str());
+            Assert::AreEqual(cpu.memory[mutokold], frozen.musicSwitchWas, (where + L": MUTOKOLD").c_str());
 
             /*
              * STOPPED AT `DK7`, which is exactly one pass: the toggles and `MUTOKCH` have run and
@@ -303,7 +307,7 @@ namespace GameLogicTests
             Assert::IsTrue(pass.outcome == expected, (where + L": which way it went").c_str());
 
             outcomes.insert(std::to_string(static_cast<int>(pass.outcome)) + "/" + std::to_string(static_cast<int>(pass.music)) + "/" +
-                            std::to_string(pass.delayFrames) + "/" + std::to_string(sound));
+                            std::to_string(pass.delayFrames) + "/" + std::to_string(frozen.soundDisabled));
             ++compared;
           }
         }

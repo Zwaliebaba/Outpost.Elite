@@ -235,7 +235,7 @@ namespace Elite
     }
 
     // 6502: .BAYSTEP JMP BAY -- a tail call, so what a mission returns is what `BAY` returns.
-    return EnterDockingBay(_universe.dockedFlag, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
+    return EnterDockingBay(_universe, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
   }
 
   std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept

@@ -58,7 +58,7 @@ namespace Elite
    * The crosshairs to where the ship is, both coordinates, counting DOWN -- so the loop moves the y
    * first. It reads the COMMANDER, because QQ0 and QQ1 are two of its bytes.
    */
-  void CrosshairsToCurrentSystem(const Commander& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept;
+  void CrosshairsToCurrentSystem(Universe& _universe) noexcept;
 
   /*
    * 6502: jmp -- the other direction, and it is what makes a hyperspace jump arrive.
@@ -253,7 +253,7 @@ namespace Elite
    * game, indistinguishable from the player pressing the status key while docked -- and the docked
    * flag is set to &FF rather than to 1, which is what makes `TT102`'s `BIT QQ12 / BPL` work.
    */
-  [[nodiscard]] ForcedKey EnterDockingBay(std::uint8_t& _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
+  [[nodiscard]] ForcedKey EnterDockingBay(Universe& _universe, std::uint8_t _view, std::uint8_t _countdown,
                                           bool _hyperspaceHeld) noexcept;
 
 } // namespace Elite

@@ -256,15 +256,15 @@ namespace GameLogicTests
             cpu.sp = 0xFD;
             Assert::IsTrue(cpu.CallSubroutine(oracle.Label("ping"), 10'000).completed, L"ping should return");
 
-            Elite::Commander commander;
-            commander.systemX = static_cast<std::uint8_t>(x);
-            commander.systemY = static_cast<std::uint8_t>(y);
-            std::uint8_t crosshairX = 0xAA;
-            std::uint8_t crosshairY = 0xBB;
-            Elite::CrosshairsToCurrentSystem(commander, crosshairX, crosshairY);
+            Elite::Universe pinged;
+            pinged.commander.systemX = static_cast<std::uint8_t>(x);
+            pinged.commander.systemY = static_cast<std::uint8_t>(y);
+            pinged.crosshairX = 0xAA;
+            pinged.crosshairY = 0xBB;
+            Elite::CrosshairsToCurrentSystem(pinged);
 
-            Assert::AreEqual(cpu.memory[qq9], crosshairX, L"ping: the crosshair x");
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(qq9 + 1)], crosshairY, L"ping: the y");
+            Assert::AreEqual(cpu.memory[qq9], pinged.crosshairX, L"ping: the crosshair x");
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(qq9 + 1)], pinged.crosshairY, L"ping: the y");
           }
 
           // 6502: jmp.
@@ -369,9 +369,17 @@ namespace GameLogicTests
         Assert::IsTrue(docked || inSpace, (where + L": one of the two loops should be reached").c_str());
 
         // ---- the port ------------------------------------------------------------------------
+        // 6502: QQ12 -- `BAY` writes the universe's byte since M5-a-2, so the fixture keeps the
+        // scenario there rather than in a local `EnterDockingBay` was handed a reference to.
+        Elite::Universe entering;
+        entering.dockedFlag = item.docked;
         std::uint8_t portDocked = item.docked;
-        const Elite::ForcedKey result = (item.entry == oracle.Label("BAY")) ? Elite::EnterDockingBay(portDocked, 0, 0, false)
+        const Elite::ForcedKey result = (item.entry == oracle.Label("BAY")) ? Elite::EnterDockingBay(entering, 0, 0, false)
                                                                             : Elite::ForceKey(item.key, portDocked, 0, 0, false);
+        if (item.entry == oracle.Label("BAY"))
+        {
+          portDocked = entering.dockedFlag;
+        }
 
         Assert::AreEqual(cpu.memory[qq12], portDocked, (where + L": the docked flag").c_str());
         Assert::AreEqual(static_cast<int>(docked ? Elite::MainLoop::Docked : Elite::MainLoop::InSpace), static_cast<int>(result.loop),
