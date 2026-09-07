@@ -1492,7 +1492,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times) and so is `Laser` (**M5-a-11**, four constant families for four bytes); `Equipment` is refused with the reason in ADR-006 §2 (§8). | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times) and so is `Laser` (**M5-a-11**, four constant families for four bytes); `Equipment` is refused (**M5-a-12**) with the reason in ADR-006 §2 — the bytes are four encodings, and hold slots besides (§8). | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
@@ -1807,6 +1807,28 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-12: `Equipment` examined and refused, and the reason is four encodings.**
+
+The last of M1's deferred types, and the owner's ruling was to refuse it with the reason written
+down. The reason is the same shape as `Options` and `View` in ADR-006 §2: the bytes the plan would
+gather under one type are not one kind of thing. `ECM`, `BST`, `ESCP`, `GHYP` and `DKCMP` are flags
+the game writes as `0` and `&FF` and tests with `BEQ`. `ENGY` is a COUNT — one for the extra unit,
+two for the naval one — that multiplies the recharge. `BOMB` is a STATE MACHINE: `&7F` when fitted,
+shifted left on arming so bit 7 comes up, then shifted left again every frame the screen flashes
+(`ASL BOMB / BMI`) until it is zero and the bomb is gone — the byte is the countdown and the
+fitted flag at once, and `Flight.cpp`'s launch clears it only when bit 7 is set. And all of them
+are ALSO hold slots: `OUCH` damages equipment by indexing the block as cargo slots 17 to 20
+(`Commander::HoldOrFitting`), so a type over these bytes would have to be indexable as the cargo
+hold as well. A `struct Equipment` would be a struct of five differently-encoded bytes with no
+operator to earn, and a scoped enum or a flag type would misdescribe two of them outright. The
+named bytes on `Commander` are the honest form, and the equipment screen's member-pointer table
+walks them as the original's `LDA #&FF / STA` sequence does.
+
+No line of `GameLogic/` changed; the decision is ADR-006 §2's and the M5-a row's. With this, every
+strong type M1 deferred and M5-a named has been built or refused with its reason in writing, and
+the `Options`/`View`/`Message`/`Equipment` refusals share one test: the bytes are not one kind of
+thing.
 
 **2026-09-07 — M5-a-11: `Laser`, and the four powers that lived in four places.**
 
