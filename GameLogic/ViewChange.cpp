@@ -307,7 +307,6 @@ namespace Elite
      * stores the way `SetUpTextScreen` does -- that version is only correct because the half slice
      * 2e left out is the half that observes the value in between (§6.81).
      */
-    _ports.printer.SetCaseFlags(0x80u);
     _universe.text.caseFlags = 0x80u;
     _universe.sentences.sentenceStart = 0x80u;
 
@@ -347,7 +346,6 @@ namespace Elite
     // 6502: .tt66 LDX #1 / STX XC / STX YC / DEX / STX QQ17.
     _universe.text.column = 1u;
     _universe.text.row = 1u;
-    _ports.printer.SetCaseFlags(0u);
     _universe.text.caseFlags = 0u;
   }
 

@@ -225,7 +225,7 @@ namespace GameLogicTests
       explicit PortScreen(std::uint8_t _galaxy = 0)
         : screen(canvas, text),
           characters(screen, universe.sentences),
-          printer(characters, &galaxy),
+          printer(characters, text, &galaxy),
           extended(characters, printer, rng),
           ports{printer,  characters, characters, nulls, sid,
                 extended, nulls,      nulls,      nulls, nulls}
@@ -818,7 +818,8 @@ namespace GameLogicTests
         Elite::ExtendedTextState sentences;
         Elite::CharacterPrinter characters(sink, sentences);
         characters.State().sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::TextState text;
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
         Elite::PrintRangeError(printer);
 
@@ -1135,7 +1136,7 @@ namespace GameLogicTests
             Elite::ExtendedTextState scratchSentences;
             Elite::CharacterPrinter scratchCharacters(scratchScreen, scratchSentences);
             scratchCharacters.State().justify = 0x80;
-            Elite::TokenPrinter scratchPrinter(scratchCharacters);
+            Elite::TokenPrinter scratchPrinter(scratchCharacters, scratchText);
             SystemSeeds naming = seeds;
             Elite::PrintSystemName(scratchPrinter, naming);
             for (std::size_t index = 0; index < scratchCharacters.State().bufferLength; ++index)
@@ -1204,7 +1205,7 @@ namespace GameLogicTests
             Elite::TextPrinter screen(canvas, text);
             Elite::ExtendedTextState sentences;
             Elite::CharacterPrinter characters(screen, sentences);
-            Elite::TokenPrinter printer(characters);
+            Elite::TokenPrinter printer(characters, text);
             printer.SetCaseFlags(static_cast<std::uint8_t>(caseFlags));
 
             ChartView chart;

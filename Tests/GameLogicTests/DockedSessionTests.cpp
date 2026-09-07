@@ -262,7 +262,7 @@ namespace GameLogicTests
     {
       Session()
         : characters(sink, universe.sentences),
-          recursive(characters),
+          recursive(characters, text),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng),
           ports{recursive, characters, sink,  nulls, sid,
@@ -272,7 +272,6 @@ namespace GameLogicTests
         commander = Elite::DefaultCommander();
         name = Elite::DefaultCommanderName();
         recursive.SetValueTokens(&values);
-        recursive.SetCursor(&text);
         shell.cursor = &text;
         shell.printer = &recursive;
         shell.extended = &characters.State();

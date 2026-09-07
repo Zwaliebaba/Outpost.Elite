@@ -1493,7 +1493,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
-| **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the nine printer bytes with 6502 labels into `Universe` and the doubled `QQ17` collapsed (**M5-e-2b**), `StateHash()` library-native beside the label hash (**M5-e-3**). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
+| **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the eight `DTW` bytes into `Universe` (**M5-e-2b**, built) and the doubled `QQ17` collapsed into `TextState` with the token printer bound to it (**M5-e-2c**, built), `StateHash()` library-native beside the label hash (**M5-e-3**). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
@@ -1804,6 +1804,38 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-e-2c: `QQ17` is one byte, and the token printer binds to `TextState`.**
+
+The second of M5-e-2's follow-ons, and the oldest open wart in the text system: `TokenPrinter`
+kept `QQ17` as `m_caseFlags`, `TextState` carried it as `caseFlags` for `CHPR`'s check against 255,
+and `TextPrint.cpp` had said since slice 1c that "every routine that assigns QQ17 has to assign
+both or they drift" — the conversion plan's §6.28 shape, seven sites storing it twice
+(`SetUpTextScreen`, `ClearMessageRows`, `ShowMessage`, `SetUpScreenPixels` twice, `Launch`, the
+market's buy path) and nine storing only the printer's (`TT27`'s tokens 6 and 8, the three bit
+toggles in `TT41`/`TT45`/`TT46`, `SetSentenceCaseAndNewline`, and `MT6`, `MT21` and `MT17` in the
+extended printer). `TokenPrinter` takes a `TextState&` at construction now, as the other two
+printers take theirs, and `m_caseFlags` and the optional `m_cursor` are that one reference:
+`CaseFlags()`/`SetCaseFlags()` stay for the forty-eight callers and read the struct's byte, control
+code 9 moves the column unconditionally rather than when a cursor was set, and the seven paired
+stores are seven single stores of `text.caseFlags`. `MarketScreen`'s dead `savedFlags` pair goes
+with its wart.
+
+**WHAT THE EVIDENCE IS AND IS NOT.** The suite is green at 395 with no oracle comparison moved,
+and the replay record did not move either: the `QQ17` cell read the printer's copy before and the
+one byte now, and they agree at all sixteen checkpoints. That is evidence that no TESTED path had
+let the two drift — not a proof that none could, which is exactly why one byte is right: the nine
+printer-only stores could put the printer's copy at 128 while `CHPR` still read 255 from the
+struct's, and the original has no such state. `TT27` under 255 returns before it stores, so the
+collapse cannot introduce a drift the original lacks. `Universe.text`'s comment already listed
+`QQ17`; the `TextState` and `Tokens.h` comments say whose byte it is now.
+
+The image reads `_universe.text.caseFlags` directly, `Beside` is gone — the primary `ImageCells`
+takes the bare `Elite::Universe` and the fixture's sprite claim as a `bool` — and `Hash(const
+Elite::Universe&)` is the replay's with nothing beside it; `Game::Recursive()` goes with its last
+caller. Twenty-seven suite printers gain a `TextState`, fourteen `SetCursor` calls go, and three
+suites that had never named `TextState` include `TextPrint.h`. 395 of 395; all 16 checks;
+`origin-markers` unmoved at 4,127 (one marker left `Game.h`, one arrived on `TokenPrinter::m_text`).
 
 **2026-09-07 — M5-e-2b: `DTW1`–`DTW8` are the universe's bytes, and the printer binds to them.**
 

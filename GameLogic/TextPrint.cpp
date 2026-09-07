@@ -275,13 +275,11 @@ namespace Elite
     /*
      * 6502: LDX #1 / STX XC / STX YC / DEX / STX QQ17.
      *
-     * QQ17 IS ASSIGNED TWICE HERE because the port keeps one 6502 byte in two places: the token
-     * printer owns it, and `TextState` carries a copy that CHPR reads for the single value 255
-     * ("print nothing"). Every routine that assigns QQ17 has to assign both or they drift, and this
-     * is the first caller outside the token printer that holds both. Section 6.28 of the plan
-     * records why that duplication is worth removing and why doing it here would be the wrong slice.
+     * QQ17 WAS ASSIGNED TWICE HERE until M5-e-2c, because the port kept one 6502 byte in two
+     * places -- the token printer's copy and the `TextState` byte CHPR reads for 255 -- and every
+     * routine that stored it had to store both or they drifted (the conversion plan's §6.28). The
+     * printer binds to `_text` now and there is one byte.
      */
-    _printer.SetCaseFlags(0);
     _text.caseFlags = 0;
 
     _text.column = 1;
@@ -298,7 +296,6 @@ namespace Elite
 
     // 6502: CLYNS2 -- LDA #255 / STA DTW2 / LDA #128 / STA QQ17 / LDA #21 / STA YC / LDA #1 / STA XC.
     _extended.sentenceStart = 0xFF;
-    _printer.SetCaseFlags(SENTENCE_CASE);
     _text.caseFlags = SENTENCE_CASE;
     _text.row = MESSAGE_ROW;
     _text.column = 1;

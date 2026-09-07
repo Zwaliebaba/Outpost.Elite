@@ -2,6 +2,7 @@
 
 #include "OracleImage.h"
 
+#include "TextPrint.h"
 #include "Tokens.h"
 
 #include <cstdint>
@@ -135,7 +136,8 @@ namespace GameLogicTests
 
       CapturingSink sink;
       DeferredValueTokens deferred;
-      TokenPrinter printer(sink, &deferred);
+      Elite::TextState text;
+      TokenPrinter printer(sink, text, &deferred);
       printer.SetCaseFlags(_caseFlags);
       printer.Print(_token);
 
@@ -253,7 +255,8 @@ namespace GameLogicTests
       }
 
       CapturingSink sink;
-      TokenPrinter printer(sink);
+      Elite::TextState text;
+      TokenPrinter printer(sink, text);
       printer.Print(6);
       printer.Print('A');
       printer.Print('B');
@@ -269,7 +272,8 @@ namespace GameLogicTests
     TEST_METHOD(PhraseTokensExpandToSomething)
     {
       CapturingSink sink;
-      TokenPrinter printer(sink);
+      Elite::TextState text;
+      TokenPrinter printer(sink, text);
 
       std::size_t nonEmpty = 0;
       for (std::uint32_t token = 96; token < 128; ++token)

@@ -4,6 +4,7 @@
 
 #include "ExtendedTokens.h"
 #include "Rng.h"
+#include "TextPrint.h"
 #include "Tokens.h"
 #include "Galaxy.h"
 
@@ -543,7 +544,8 @@ namespace GameLogicTests
           Elite::CharacterPrinter characters(screen, sentences);
           SystemNameTokens names;
           names.seeds = seeds;
-          Elite::TokenPrinter recursive(characters, &names);
+          Elite::TextState text;
+          Elite::TokenPrinter recursive(characters, text, &names);
           names.printer = &recursive;
           Elite::Rng rng;
           Elite::ExtendedTokenPrinter printer(characters, recursive, rng);
@@ -590,7 +592,8 @@ namespace GameLogicTests
       Collector screen;
       Elite::ExtendedTextState sentences;
       Elite::CharacterPrinter characters(screen, sentences);
-      Elite::TokenPrinter recursive(characters, nullptr);
+      Elite::TextState text;
+      Elite::TokenPrinter recursive(characters, text, nullptr);
       Elite::ExtendedTokenPrinter printer(characters, recursive, rng);
 
       const SystemSeeds probe = {{11, 22, 33, 44, 55, 66}};
@@ -649,7 +652,8 @@ namespace GameLogicTests
           }
 
           Collector collector;
-          Elite::TokenPrinter printer(collector, nullptr);
+          Elite::TextState text;
+          Elite::TokenPrinter printer(collector, text, nullptr);
           SystemSeeds ours = seeds;
           Elite::PrintSystemName(printer, ours);
 

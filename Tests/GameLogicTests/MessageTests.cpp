@@ -53,7 +53,7 @@ namespace GameLogicTests
       PortText()
         : screen(canvas, text),
           characters(screen, sentences),
-          printer(characters),
+          printer(characters, text),
           extended(characters, printer, rng)
       {
       }

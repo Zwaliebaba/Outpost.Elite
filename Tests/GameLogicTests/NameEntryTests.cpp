@@ -515,9 +515,8 @@ namespace GameLogicTests
         Elite::ExtendedTextState sentences;
         CharacterPrinter characters(sink, sentences);
         characters.State().sentenceStart = 0xFF;
-        TokenPrinter printer(characters);
+        TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
-        printer.SetCursor(&text);
         Elite::Rng rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
 

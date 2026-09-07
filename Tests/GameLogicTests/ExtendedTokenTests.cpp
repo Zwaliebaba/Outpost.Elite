@@ -3,6 +3,7 @@
 #include "OracleImage.h"
 
 #include "ExtendedTokens.h"
+#include "TextPrint.h"
 
 #include <algorithm>
 #include <array>
@@ -149,7 +150,7 @@ namespace GameLogicTests
     {
       explicit PortPrinter(const TextStateBytes& _state, const GeneratorState& _seed = SEED)
         : characters(screen, sentences),
-          recursive(characters, &values),
+          recursive(characters, text, &values),
           printer(characters, recursive, rng)
       {
         rng.SetState(_seed);
@@ -166,6 +167,7 @@ namespace GameLogicTests
       DeferredValues values;
       Elite::ExtendedTextState sentences;
       Elite::CharacterPrinter characters;
+      Elite::TextState text;
       TokenPrinter recursive;
       ExtendedTokenPrinter printer;
     };
