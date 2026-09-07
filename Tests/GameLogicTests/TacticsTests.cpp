@@ -539,15 +539,16 @@ namespace GameLogicTests
      * or make a noise. Running them inside the interpreter would compare a dashboard the fixture
      * does not have, so both sides are trapped and counted and the COUNTS are what agree.
      */
-    struct CountingEffects final : Elite::SpawnChildEffects, Elite::ShipDrawEffects
+    /*
+     * `SpawnChildEffects` AND ITS `spawned` LIST WERE HERE AND ARE NOT ANY MORE (M4-a-1).
+     *
+     * `TACTICS` reaches `SFS1` through `SpawnEscapePod` and `SpawnShipAhead`, which are calls in
+     * `Spawn.cpp` and have been since slice 4a-b -- so the list was never filled and nothing here
+     * ever asserted on it. The seam was inherited because `Ports` carried it, not because this
+     * fixture wanted it.
+     */
+    struct CountingEffects final : Elite::ShipDrawEffects
     {
-      std::vector<std::uint8_t> spawned;
-
-      bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
-      {
-        spawned.push_back(Elite::Byte(_type));
-        return true;
-      }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
     };
@@ -566,7 +567,7 @@ namespace GameLogicTests
       /// The three seams the AI reaches, all counted in one place.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(effects, effects, universe.unused);
+        return universe.PortsWith(effects, universe.unused);
       }
     };
 

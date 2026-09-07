@@ -29,9 +29,9 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 11,
+      "ceiling": 10,
       "slack": 0,
-      "slice": "M3-b-3d: Keyboard lands over KeySource and LineEntryEffects -- two out, one in"
+      "slice": "M4-a-1: SFS1 leaves Ports, which is ten references"
     },
     "main-lines": {
       "ceiling": 256,
@@ -39,14 +39,14 @@
       "slice": "M3-c: Main.cpp is the composition root and the two outer loops, and nothing else"
     },
     "outpost-elite-names": {
-      "ceiling": 71,
+      "ceiling": 69,
       "slack": 0,
-      "slice": "M3-c: the app reaches Elite::Game and the seams it hands it, not the game"
+      "slice": "M4-a-1: FlightSession stops answering SFS1"
     },
     "effects-seams": {
-      "ceiling": 9,
+      "ceiling": 8,
       "slack": 0,
-      "slice": "M3-b-4b: DT3's dispatch is Elite::RunControlCode, not a seam the shell answers"
+      "slice": "M4-a-1: SpawnChildEffects goes -- SPIN and SPIN2 answer a Drop and PerformDrop spawns"
     },
     "out-params": {
       "ceiling": 16,
@@ -69,9 +69,9 @@
       "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 4022,
+      "ceiling": 4026,
       "slack": 0,
-      "slice": "the replay drives Elite::Game: LastOutcome names the answer it carries (rule 4)"
+      "slice": "M4-a-1: Drop names four 6502 things the seam named in one sentence (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

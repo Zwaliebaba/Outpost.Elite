@@ -24,7 +24,8 @@ namespace Elite
    * in the same commit as at least one removal: thirteen before M3-b-2b and thirteen after, TWELVE
    * after M3-b-3a (which removed `SightEffects` and landed no port), twelve after M3-b-3b, where
    * `Presenter` spent that credit and `TradeScreenEffects` went, and ELEVEN after M3-b-3d, which
-   * landed `Keyboard` over the two seams it replaces (§8, 2026-09-06).
+   * landed `Keyboard` over the two seams it replaces (§8, 2026-09-06). TEN after M4-a-1, which
+   * took `SFS1` out of it.
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -35,7 +36,6 @@ namespace Elite
   class TokenPrinter;
   class CharacterPrinter;
   class ShipDrawEffects;
-  class SpawnChildEffects;
   class ExtendedTokenPrinter;
   class StartUpEffects;
   class Keyboard;
@@ -53,7 +53,13 @@ namespace Elite
 
     // ---- the seams the platform answers ------------------------------------------------------
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
-    SpawnChildEffects& loop;  ///< 6502: SFS1, which M4-a's typed stage result is what it waits on
+
+    /*
+     * `SpawnChildEffects& loop` WAS HERE AND IS NOT ANY MORE (M4-a-1), which takes this struct to
+     * TEN. It was `SFS1`, and the typed stage result it was waiting on is `Elite::Drop`: `SPIN` and
+     * `SPIN2` answer what to drop and `PerformDrop` calls `Elite::SpawnChildShip` for real, so the
+     * suite compares an answer instead of a trap's fixed carry (`FlightLoop.h`).
+     */
 
     /*
      * 6502: SID -- the chip, as the game side of the code writes it (M3-b-2b).

@@ -40,7 +40,7 @@ namespace GameLogicTests
     struct Bare
     {
       Bare()
-        : game(universe, nulls, nulls, sid, nulls, nulls, nulls, nulls, controls)
+        : game(universe, nulls, sid, nulls, nulls, nulls, nulls, controls)
       {
       }
 

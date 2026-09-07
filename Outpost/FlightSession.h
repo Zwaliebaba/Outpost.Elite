@@ -69,9 +69,7 @@ namespace Outpost
    * What DOES work is the frame itself: the controls, the stardust, the dashboard, the planet, the
    * ship renderer and all sixteen parts of `M%`.
    */
-  class FlightSession final : public Elite::SpawnChildEffects,
-                              public Elite::ShipDrawEffects,
-                              public Elite::ControlEffects
+  class FlightSession final : public Elite::ShipDrawEffects, public Elite::ControlEffects
   {
   public:
     FlightSession(Window& _window, Elite::Universe& _universe) noexcept;
@@ -110,9 +108,14 @@ namespace Outpost
      */
     void SyncVideoRegisters() noexcept;
 
-    // ---- Elite::SpawnChildEffects ------------------------------------------------------------------
-
-    [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override;
+    /*
+     * `SpawnChild` WAS HERE AND IS NOT ANY MORE (M4-a-1).
+     *
+     * It was one line -- `Elite::SpawnChildShip(...).created` -- over the universe this object
+     * already holds, so it was a seam in front of a routine (§6.73). `SPIN` and `SPIN2` answer an
+     * `Elite::Drop` now and `Elite::PerformDrop` makes the call, which is the same line inside the
+     * library.
+     */
 
     // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
 

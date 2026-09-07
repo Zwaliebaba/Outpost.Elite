@@ -251,7 +251,7 @@ namespace GameLogicTests
           Elite::ExtendedTokenPrinter extended(characters, printer, rng);
           NullSeams nulls;
           Elite::SidWriteLog sid;
-          Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
+          Elite::Ports ports{printer,  characters, sink,  nulls, sid,
                              extended, nulls,      nulls, keys,  nulls};
 
           Elite::SystemDataScreen(universe, ports, data, distance);

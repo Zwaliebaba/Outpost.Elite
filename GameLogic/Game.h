@@ -39,7 +39,7 @@ namespace Elite
    * ONE key and run ONE pass, and how many passes a wall-clock second is worth stays where the
    * clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
    *
-   * THE PLATFORM ARRIVES AS SEVEN REFERENCES AND A `ControlEffects`, which is `Ports` minus the
+   * THE PLATFORM ARRIVES AS SIX REFERENCES AND A `ControlEffects`, which is `Ports` minus the
    * four members that are this library's own: the token printer, the character printer, the sink
    * and the extended printer are built HERE, over the universe, because nothing about them is the
    * platform's. `ControlEffects` is separate because it is not in `Ports` -- `DOCKIT` is passed
@@ -48,8 +48,8 @@ namespace Elite
   class Game
   {
   public:
-    Game(Universe& _universe, ShipDrawEffects& _drawing, SpawnChildEffects& _spawning, SidWriteLog& _sid, StartUpEffects& _start,
-         Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept;
+    Game(Universe& _universe, ShipDrawEffects& _drawing, SidWriteLog& _sid, StartUpEffects& _start, Presenter& _present,
+         Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept;
 
     Game(const Game&) = delete;
     Game& operator=(const Game&) = delete;
@@ -172,12 +172,12 @@ namespace Elite
      * Every byte of game state, in one place (§4.4, slice M3-a) -- and a REFERENCE rather than a
      * member, which §2.1 does not ask for and this slice cannot yet give it.
      *
-     * `Outpost::FlightSession` binds the universe at construction and answers three seams this
+     * `Outpost::FlightSession` binds the universe at construction and answers two seams this
      * object's `Ports` needs, so the two cannot both own it: whichever is built first needs the
-     * other. Two of those three seams are already scheduled to go -- `ShipDrawEffects` when the
-     * emulator models the banking §6.108 found, `SpawnChildEffects` in M4-a -- and what is left of
-     * that class afterwards is `DOCKIT`. When it goes, this becomes a member and the composition
-     * root stops holding any game state at all. Named here rather than discovered later (§8).
+     * other. `SpawnChildEffects` was a third until M4-a-1 removed it, and `ShipDrawEffects` is
+     * scheduled to go when the emulator models the banking §6.108 found -- what is left of that
+     * class afterwards is `DOCKIT`. When it goes, this becomes a member and the composition root
+     * stops holding any game state at all. Named here rather than discovered later (§8).
      */
     Universe& m_universe;
 

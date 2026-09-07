@@ -369,6 +369,13 @@ namespace GameLogicTests
      * ship slots out of it: `SFS1` would fill the bubble on the first case and then start failing,
      * and a routine that ignores its carry would look identical either way.
      *
+     * AND SINCE M4-a-1 THE PORT'S SIDE IS AN ANSWER RATHER THAN A SECOND SET OF CALLS. `PlanItems`
+     * and `PlanDebris` return an `Elite::Drop` -- a type, a count, an AI byte and the carry an
+     * empty drop hands back -- and `Elite::PerformDrop` is what calls `SFS1`. So this compares the
+     * DECISION against the oracle's trapped call sequence with no seam standing in for the bubble,
+     * and the loop itself is compared where a real bubble exists: the frame fixtures below run
+     * `SFS1` untrapped on both machines and `CompareState` walks the slots (§8).
+     *
      * `SPIN2` IS ENTERED WITH A FLAG, not just a value. `STA CNT` sets nothing, so the `BEQ` at the
      * top of its loop reads the caller's Z -- and this sets `cpu.z` from the count on purpose, to
      * match what every real caller has just done with an `AND`. Setting it the other way is the one
@@ -400,16 +407,24 @@ namespace GameLogicTests
        * pulls and stores. `SPIN` hands that flag back to `MA47`, whose second `JSR SPIN` runs on
        * it (M2-d), so the trap ends `SEC` and the seam here answers the same.
        */
-      struct Recorder final : Elite::SpawnChildEffects
+      /*
+       * What the port's answer says the oracle's calls should have been. A `Drop` is `count` calls
+       * of one type with one AI byte, so the sequence it describes is flat -- and that is a claim
+       * about the routines rather than a convenience: neither `SPIN` nor `SPIN2` varies either
+       * across the loop, and a port that did would fail the per-hit comparison below.
+       */
+      const auto CheckDrop = [](const Cpu6502& _cpu, const Elite::Drop& _drop, const std::wstring& _where)
       {
-        std::vector<std::uint8_t> flags;
-        std::vector<std::uint8_t> types;
-        bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
+        Assert::AreEqual<std::size_t>(_cpu.trapHits.size(), _drop.count, (_where + L": how many were spawned").c_str());
+        for (std::size_t hit = 0; hit < _cpu.trapHits.size(); ++hit)
         {
-          flags.push_back(_aiFlag);
-          types.push_back(Elite::Byte(_type));
-          return true;
+          Assert::AreEqual(_cpu.trapHits[hit].a, _drop.aiFlag, (_where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
+          Assert::AreEqual(_cpu.trapHits[hit].x, Elite::Byte(_drop.type), (_where + L": the type of #" + std::to_wstring(hit)).c_str());
         }
+
+        // The trap ends `SEC`, so the oracle's exit carry is `SFS1` succeeding when anything was
+        // spawned and `oh`'s pass-through when nothing was -- which is `PerformDrop`'s two answers.
+        Assert::AreEqual(_cpu.c, _drop.count == 0u ? _drop.carryIfNone : true, (_where + L": the exit carry").c_str());
       };
 
       Cpu6502 cpu = oracle.Fresh();
@@ -434,20 +449,10 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(spin2, 20'000);
           Assert::IsTrue(run.completed, L"SPIN2 returned");
 
-          Recorder effects;
-          const bool exit = Elite::SpawnItems(effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count), carryIn);
+          const Elite::Drop drop = Elite::PlanItems(Elite::TypeOf(type), static_cast<std::uint8_t>(count), carryIn);
 
           const std::wstring where = WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
-
-          Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(), (where + L": how many were spawned").c_str());
-          for (std::size_t hit = 0; hit < cpu.trapHits.size(); ++hit)
-          {
-            Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
-            Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
-          }
-          // `CNT` is `SPIN2`'s loop counter and its own since M2-c-3. How many times it went round
-          // is what the seam above records, spawn for spawn.
-          Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
+          CheckDrop(cpu, drop, where);
 
           placed += static_cast<std::uint32_t>(cpu.trapHits.size());
         }
@@ -491,22 +496,13 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(spin, 20'000);
             Assert::IsTrue(run.completed, L"SPIN returned");
 
-            Recorder effects;
             Elite::Rng rng;
             rng.SetState(bytes);
-            const bool exit = Elite::SpawnDebris(rng, effects, *blueprint, Elite::TypeOf(type), carry);
+            const Elite::Drop drop = Elite::PlanDebris(rng, *blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
-
-            Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(), (where + L": how many were spawned").c_str());
-            for (std::size_t hit = 0; hit < cpu.trapHits.size(); ++hit)
-            {
-              Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
-              Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
-            }
-            // `CNT` is `SPIN2`'s own since M2-c-3; the seam records every spawn it made.
-            Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
+            CheckDrop(cpu, drop, where);
             for (std::size_t byte = 0; byte < bytes.size(); ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
@@ -841,37 +837,21 @@ namespace GameLogicTests
     };
 
     /*
-     * The flight loop's ONE remaining seam, which is `SFS1`.
+     * `RecordingLoop` WAS THE FLIGHT LOOP'S ONE REMAINING SEAM AND IS NOT ANY MORE (M4-a-1).
      *
      * It was the sounds too, and then the music: `startbd` and `stopbd` were counted here against
      * the oracle's trap hits until M3-b-2b, and both machines run the player now -- so whether a
      * tune is playing is `MUPLA`, which `ImageCells` mirrors in and `CompareState` compares out
-     * with everything else the frame touches. `FRS1` and `ANGRY` went the same way in M3-b-1d.
+     * with everything else the frame touches. `FRS1` and `ANGRY` went the same way in M3-b-1d, and
+     * `SFS1` has now gone the same way for the third time in a row: the trap comes OFF, both
+     * machines really spawn, and what is compared is the bubble -- the slot list, the ship blocks,
+     * the line heap, `SLSP` and `RAND` -- rather than two lists of calls.
+     *
+     * THAT IS STRICTLY MORE THAN THE SEAM COULD SAY. The recorder answered `childSucceeds` and the
+     * trap answered `SEC`, so both machines were told the bubble always had room; a frame that
+     * filled it was indistinguishable from one that did not, and `NWSHP`'s allocation was compared
+     * nowhere on this path.
      */
-    struct RecordingLoop final : Elite::SpawnChildEffects
-    {
-      /// The bubble the spawns are recorded beside.
-      Universe& universe;
-
-      explicit RecordingLoop(Universe& _universe) noexcept
-        : universe(_universe)
-      {
-      }
-
-      bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
-      {
-        children.push_back({_aiFlag, Elite::Byte(_type)});
-        return childSucceeds;
-      }
-
-      struct Child
-      {
-        std::uint8_t aiFlag, type;
-      };
-
-      std::vector<Child> children;
-      bool childSucceeds = true;
-    };
 
     /// What `MVEIT` and `LL9` reach that this slice does not build.
     struct RecordingUniverse final : Elite::ShipDrawEffects
@@ -896,7 +876,6 @@ namespace GameLogicTests
                          ///< the heap, the clipper's flag, the projection and the axes were eight
                          ///< members here while `FlightLoop` held references to them
       RecordingUniverse outside;
-      RecordingLoop effects{universe};
 
       explicit Frame(std::uint32_t _seed)
       {
@@ -1153,7 +1132,14 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.doexp);
       cpu.AddTrap(_loop.planet);
       cpu.AddTrap(_loop.dovdu19);
-      cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
+      /*
+       * `SFS1` IS NOT TRAPPED (M4-a-1). It was, to `SEC` or `CLC` depending on what the port's seam
+       * was going to answer, which made "was there room in the bubble" an input to the comparison
+       * rather than a thing the two machines could disagree about. `Elite::PerformDrop` calls
+       * `Elite::SpawnChildShip` now and the oracle runs the real `SFS1`, so a child that fits lands
+       * in both bubbles and one that does not is refused by both -- and `CompareState`, the heap
+       * walk and `RAND` are what say so.
+       */
 
 
       /*
@@ -1215,7 +1201,7 @@ namespace GameLogicTests
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.effects, _frame.universe.unused);
+      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.universe.unused);
       const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(_frame.universe, ports)
                                          : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(_frame.universe, ports)
                                          : (_reach == Reach::Whole) ? Elite::MainFlightLoop(_frame.universe, ports)
@@ -2249,7 +2235,7 @@ namespace GameLogicTests
       frame.universe.view = 0u;
       frame.universe.spaceView = 0u;
 
-      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.effects, frame.universe.unused);
+      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.universe.unused);
 
       std::uint8_t docked = 0xFFu;
       Elite::SystemSeeds selected{};

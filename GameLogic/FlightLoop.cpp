@@ -121,26 +121,41 @@ namespace Elite
     return static_cast<std::uint8_t>(reduced + 1u);
   }
 
-  bool SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count, bool _carryIn) noexcept
+  Drop PlanItems(ShipType _type, std::uint8_t _count, bool _carryIn) noexcept
   {
-    // 6502: .SPIN2 STA CNT, which sets no flags. `CNT` is this loop's counter and its own since
-    // M2-c-3: `SFS1` is a seam and nothing behind it reads the byte.
-    std::uint8_t cnt = _count;
+    // 6502: .SPIN2 STA CNT, which sets no flags, and `LDA #0` is the AI byte every child gets.
+    // `CNT` is `PerformDrop`'s loop counter now; what this answers is the number that goes in it.
+    //
+    // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count,
+    // and `oh` is a bare `RTS`. A count of zero is that branch, and `carryIfNone` is what it hands
+    // back (M2-d).
+    return {_type, _count, 0u, _carryIn};
+  }
 
-    // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count.
-    // `oh` is a bare `RTS`, so a count of zero hands the CALLER'S OWN CARRY straight back (M2-d).
-    if (_count == 0u)
+  bool PerformDrop(Universe& _universe, const Drop& _drop) noexcept
+  {
+    // 6502: .spl BEQ oh -- the test that runs once on entry and never again, because the loop's
+    // back edge is `BNE spl+2`.
+    if (_drop.count == 0u)
     {
-      return _carryIn;
+      return _drop.carryIfNone;
     }
 
-    bool carry = _carryIn;
+    std::uint8_t cnt = _drop.count;
+    bool carry = _drop.carryIfNone;
     for (;;)
     {
-      // 6502: LDA #0 / JSR SFS1 -- and `SFS1` ends `JSR NWSHP` followed by nothing but pulls and
-      // stores, so what it leaves in the carry is `NWSHP`'s: `NW3`'s `CLC` for a full bubble and
-      // `NWL3`'s `SEC` for a ship that was made. That is the seam's `created` (M2-d).
-      carry = _effects.SpawnChild(0u, _type);
+      /*
+       * 6502: LDA #0 / JSR SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
+       *
+       * `SFS1` ends `JSR NWSHP` followed by nothing but pulls and stores, so what it leaves in the
+       * carry is `NWSHP`'s: `NW3`'s `CLC` for a full bubble and `NWL3`'s `SEC` for a ship that was
+       * made (M2-d). Until M4-a-1 this was a seam that answered a fixed boolean, so a full bubble
+       * could not be observed here at all.
+       */
+      carry = SpawnChildShip(_universe.bubble, _universe.work, _universe.rng, _universe.flight.slot, _universe.flight.type,
+                             _drop.aiFlag, _drop.type, _universe.flight.blueprint)
+                .created;
 
       cnt = static_cast<std::uint8_t>(cnt - 1u); // 6502: DEC CNT
       if (cnt == 0u)                             // 6502: BNE spl+2
@@ -150,15 +165,17 @@ namespace Elite
     }
   }
 
-  bool SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept
+  Drop PlanDebris(Rng& _rng, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept
   {
     // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
     // except as a count, so half of all calls do nothing.
     const RngResult roll = _rng.Next(_carryIn);
     if ((roll.value & 0x80u) == 0u)
     {
-      // 6502: BPL oh -- a bare `RTS`, so the carry the caller gets is `DORND`'s own (M2-d).
-      return roll.carry;
+      // 6502: BPL oh -- a bare `RTS`, so the carry the caller gets is `DORND`'s own (M2-d). It is
+      // the same answer as a count of zero and it is spelled the same way, which is not a
+      // coincidence: `oh` is the one label both paths reach.
+      return {_type, 0u, 0u, roll.carry};
     }
 
     /*
@@ -172,7 +189,7 @@ namespace Elite
     const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & _blueprint.cargo & 0x0Fu);
 
     // 6502: and it falls into SPIN2 -- with `DORND`'s carry, which `AND` did not touch.
-    return SpawnItems(_effects, _type, capped, roll.carry);
+    return PlanItems(_type, capped, roll.carry);
   }
 
   bool DrainEnergy(FlightStatus& _status) noexcept
@@ -709,8 +726,7 @@ namespace Elite
     std::uint8_t energy;
   };
 
-  [[nodiscard]] LaserHit ApplyLaserHit(Universe& _universe, Ports& _ports, SpawnChildEffects& _spawn, const Blueprint& _blueprint,
-                                       ShipType _type) noexcept
+  [[nodiscard]] LaserHit ApplyLaserHit(Universe& _universe, Ports& _ports, const Blueprint& _blueprint, ShipType _type) noexcept
   {
     (void)PlayHitSound(_universe.work, _universe.sound); // 6502: LDX #15 / JSR EXNO
 
@@ -777,13 +793,13 @@ namespace Elite
     {
       // Both compares were EQUAL, so both set the carry: the roll below sees it set.
       const RngResult roll = _universe.rng.Next(true);
-      carry = SpawnItems(_spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u), roll.carry);
+      carry = PerformDrop(_universe, PlanItems(ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u), roll.carry));
     }
 
     // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time,
     // and the second on the carry the first left.
-    carry = SpawnDebris(_universe.rng, _spawn, _blueprint, ShipType::AlloyPlate, carry);
-    static_cast<void>(SpawnDebris(_universe.rng, _spawn, _blueprint, ShipType::Canister, carry));
+    carry = PerformDrop(_universe, PlanDebris(_universe.rng, _blueprint, ShipType::AlloyPlate, carry));
+    static_cast<void>(PerformDrop(_universe, PlanDebris(_universe.rng, _blueprint, ShipType::Canister, carry)));
 
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
@@ -1115,7 +1131,7 @@ namespace Elite
           // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
           if (_universe.status.laserPower != 0u)
           {
-            const LaserHit hit = ApplyLaserHit(_universe, _ports, _ports.loop, *_universe.flight.blueprint, type);
+            const LaserHit hit = ApplyLaserHit(_universe, _ports, *_universe.flight.blueprint, type);
             if (hit.stores)
             {
               _universe.work.energy = hit.energy; // 6502: .MA14 STA INWK+35

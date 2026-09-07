@@ -53,17 +53,17 @@ namespace
    *
    * The declaration order is the construction order and it is load-bearing. `Elite::Universe` is
    * here rather than inside `Elite::Game` for one reason, and `Game.h` records it: `FlightSession`
-   * binds the universe at construction and answers three of the seams `Game`'s `Ports` needs, so
-   * whichever of the two is built first needs the other. Two of those three seams are already
-   * scheduled to go, and when they do this member moves across and the composition root stops
-   * holding any game state at all.
+   * binds the universe at construction and answers two of the seams `Game`'s `Ports` needs, so
+   * whichever of the two is built first needs the other. It was three until M4-a-1 took `SFS1`
+   * away; one of the two left is scheduled to go, and when it does this member moves across and
+   * the composition root stops holding any game state at all.
    */
   struct App
   {
     App()
       : shell(window, presenter, universe.canvas, universe.view),
         flight(window, universe),
-        game(universe, flight, flight, audio.Direct(), shell, shell, shell, store, flight)
+        game(universe, flight, audio.Direct(), shell, shell, shell, store, flight)
     {
       // The seams the session and the shell answer that are CALLS needing the seams themselves --
       // `DOCKIT` and the title screen -- so the composition lends the struct back to two of the

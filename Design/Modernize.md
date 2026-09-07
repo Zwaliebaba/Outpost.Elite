@@ -291,7 +291,7 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->11 reference members,
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->10 reference members,
 and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
 `FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
 and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The eleven that
@@ -304,7 +304,7 @@ the rest existed: "the struct is the argument list".
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
-<!--count:outpost-elite-names-->71 distinct `Elite::` names where it reached 205 when M3 opened.
+<!--count:outpost-elite-names-->69 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this does not yet have is `Frame()`, `Sounds()` and `StateHash()`, and one
 thing it did not ask for: `Elite::Universe` is still the composition root's, because
@@ -312,7 +312,7 @@ thing it did not ask for: `Elite::Universe` is still the composition root's, bec
 needs. Two of the three are already scheduled to go, and the member moves across when they do
 (§8, 2026-09-06).
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->9 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->8 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
 `ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -355,7 +355,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,022 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,026 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1447,14 +1447,14 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
 | **M3-b Ports** ✅ **built 2026-09-06 (§8)** | Three of the four port interfaces (`CommanderStore` keeps its name — §4.5); **five seams that turned out to be `GameLogic` reached through the executable**: `TradeScreenEffects`, `TunnelEffects`, `ControlEffects::ScanKeyboard`, `TextEffects` and `ControlCodes`; the null port folded to one class. | Green; `effects-seams` at **nine**, not six. Two more than the row expected and both are named rather than counted away: `TextSink` and `ValueTokens` are the text system's own polymorphism and stay (§4.5). `SpawnChildEffects` needs M4-a's typed stage result and `ShipDrawEffects` needs the emulator to model the 6510 port register, as the row said. `aggregate-refs` 14 → 11, `outpost-elite-names` 205 → 157. | 4 |
-| **M3-c Game** ✅ **built 2026-09-06 (§8)** | `Elite::Game` with `Reset` and three `Step`s; `Perform`, `Leave`, `MissionOf`, the chart draw, the docked pass and the pause pass moved from `Main.cpp`, with the eight bytes of game state that were in no struct and the five text objects. `Advance` SPLIT rather than moved — the count of passes is a `double` and the determinism guard forbids one here. | `main-lines` 1,219 → <!--count:main-lines-->256, under the 300 the row asked for, and `outpost-elite-names` 205 → <!--count:outpost-elite-names-->71. `GameTests` drives the object as `Run` drives it. `Frame`, `Sounds` and `StateHash` are not built and `DockedSessionTests` still owns its own composition (§8). | 4–5 |
+| **M3-c Game** ✅ **built 2026-09-06 (§8)** | `Elite::Game` with `Reset` and three `Step`s; `Perform`, `Leave`, `MissionOf`, the chart draw, the docked pass and the pause pass moved from `Main.cpp`, with the eight bytes of game state that were in no struct and the five text objects. `Advance` SPLIT rather than moved — the count of passes is a `double` and the determinism guard forbids one here. | `main-lines` 1,219 → 256, under the 300 the row asked for, and `outpost-elite-names` 205 → 71. (Both plain rather than marked: an acceptance records what the slice ACHIEVED and a `count:` marker asserts what the tree holds TODAY, so a marker here is dragged wrong by the next slice that moves the number — M4-a-1 is the one that did. The live counts are §3's.) `GameTests` drives the object as `Run` drives it. `Frame`, `Sounds` and `StateHash` are not built and `DockedSessionTests` still owns its own composition (§8). | 4–5 |
 | **M3-d ADR-007** ✅ **built 2026-09-07 (§8)** | State ownership and the replay hash, written from M3-a..c as built — with the three places ADR-006 §4 was wrong, the eight bytes that should be in `Universe` and are not, and what the digest does not cover. ADR-006 §4 amended in place. | Accepted; `Design/ADR/ADR-007-state-ownership.md`. | 1 |
 
 ### Phase M4 — Control flow
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. | `FlightLoopTests` green frame for frame; replay hashes unchanged. | 4 |
+| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
 | **M4-b LL9 stages** | `DrawShip` as the six stages of §4.6 over a `ShipRender` frame. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged. | 4 |
 | **M4-c Decisions** | `TACTICS`, `DOCKIT` and `MLOOP` parts 1–4 return `Decision`s applied by one function; the sixteen `tactics` mutants re-anchored and re-run to zero survivors. | `TacticsTests` green; `mutate.py --unit tactics` at the recorded tally. | 5 |
 | **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
@@ -1751,6 +1751,53 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M4-a-1: `SpawnChildEffects` goes, and the seam that outlived a phase was being
+kept alive by a TRAP rather than by the code.**
+
+M3-b-1's rule was §6.73's: a seam scoped before the routine behind it existed goes when the routine
+exists. `SFS1` has been `Elite::SpawnChildShip` in `Spawn.cpp` since slice 4a-b, and both
+implementations of `SpawnChild` — the app's and the replay port's — were ONE LINE calling it over a
+universe the object already held. It should have gone with the other seven. The M3-b row says why it
+did not and the reason is in the suite: `TheWreckageMatchesSPINAndSPIN2` traps `SFS1` on the oracle
+to `SEC` and let the port's seam answer `true`, so both machines were told the bubble always had
+room. Call the routine for real and the bubble fills at ten slots, the carry flips, and the two are
+no longer comparing the same thing.
+
+**SO THE SEAM WAS A SEAM BECAUSE OF WHAT A SUITE COUNTED, which is §6.73's corollary read from the
+other end.** The fix is M4-a's pattern rather than M3-b's: `PlanItems` and `PlanDebris` ANSWER an
+`Elite::Drop` — a type, a count, an AI byte, and the carry an empty drop hands back — and
+`PerformDrop` runs the loop. `SPIN2` decides a count and nothing else, which is the finding rather
+than a shape imposed on it: every subtlety in that routine's twelve-line comment is about a LOOP,
+and the loop is now the caller's.
+
+**AND THE TRAP CAME OFF WHERE A BUBBLE EXISTS.** The SPIN sweep keeps its trap and compares the
+ANSWER against the oracle's call sequence, which needs no fixture bubble at all. The FRAME fixtures
+untrap `SFS1` entirely: both machines really spawn, and what is compared is the slot list, the ship
+blocks, the whole line heap, `SLSP` and `RAND` — `CompareState` and the walks that were already
+there. That is strictly more than the seam could say. `NWSHP`'s allocation was compared NOWHERE on
+this path before, because the recorder answered `childSucceeds` and the trap answered `SEC`: a frame
+that filled the bubble was indistinguishable from one that did not.
+
+**Three fixtures were carrying the seam without using it**, which is what a `Ports` member costs
+even when nobody reaches it: `TacticsTests::CountingEffects` collected a `spawned` list nothing
+asserted on (the AI reaches `SFS1` through `SpawnEscapePod` and `SpawnShipAhead`, which are calls
+and not seams since 4a-b); `LaunchTests::RecordingLaunch` was a whole class answering "there was
+room" for a launch that spawns no child; and `NullSeams::spawnRoom` was a boolean two fixtures set
+to true so that a kill could drop debris — the answer comes from the slot list now.
+
+**Counts.** `effects-seams` 9 → 8, `aggregate-refs` 11 → 10, `outpost-elite-names` 71 → 69.
+`origin-markers` 4,022 → 4,026, and it ROSE on purpose: `Drop`'s four fields are X, `CNT`, A and
+`oh`'s carry, four 6502 things the seam's one method named in a sentence, and rule 4 wants each of
+them labelled. **The replay digest did not move** — the port's `SpawnChild` and `PerformDrop` make
+the same call in the same order, which is what a refactor is supposed to look like from the outside.
+402 of 402 on the first run, all 14 repository checks.
+
+**One documentation defect found on the way out.** The M3-c acceptance row carried `<!--count:-->`
+markers on `main-lines` and `outpost-elite-names`. An acceptance records what a slice ACHIEVED and a
+`count:` marker asserts what the tree holds TODAY, so the marker drags the history wrong at the next
+slice that moves the number — and this was that slice. Both are plain numbers now; §3's are the live
+ones. The M3-b row above it had it right already.
 
 **2026-09-07 — the replay drives `Elite::Game`, the record is re-taken, and yesterday's
 measurement of it was wrong.**

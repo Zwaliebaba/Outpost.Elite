@@ -50,8 +50,7 @@
 namespace GameLogicTests
 {
 
-  class FlightPort final : public Elite::SpawnChildEffects,
-                           public Elite::ShipDrawEffects,
+  class FlightPort final : public Elite::ShipDrawEffects,
                            public Elite::ControlEffects,
                            public Elite::Presenter,
                            public Elite::Keyboard
@@ -78,7 +77,7 @@ namespace GameLogicTests
      * screen and writes no commander file.
      */
     FlightPort()
-      : game(universe, *this, *this, sidLog, universe.unused, *this, *this, universe.unused, *this)
+      : game(universe, *this, sidLog, universe.unused, *this, *this, universe.unused, *this)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -166,14 +165,9 @@ namespace GameLogicTests
       return FoldBytes(digest, rest);
     }
 
-    // ---- Elite::SpawnChildEffects ------------------------------------------------------------------
-
-    [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
-    {
-      return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.flight.slot, universe.flight.type, _aiFlag,
-                                   _type, universe.flight.blueprint)
-        .created;
-    }
+    // `SpawnChild` WAS ANSWERED HERE AND IS NOT ANY MORE (M4-a-1): it was one call to
+    // `Elite::SpawnChildShip` over this port's own universe, which is exactly what
+    // `Elite::PerformDrop` does inside the library now.
 
     // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
 
