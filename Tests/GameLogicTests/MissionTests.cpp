@@ -42,8 +42,6 @@ namespace GameLogicTests
       std::uint32_t scans = 0;
       std::vector<std::uint8_t> delays;
 
-      void ClearKeyLogger() override {}
-
       /// How many scans answer "pressed" BEFORE the quiet run -- the state `PAUSE`'s first loop
       /// exists for, and the one a script that starts empty cannot reach.
       std::uint32_t held = 0;

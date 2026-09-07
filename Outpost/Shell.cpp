@@ -179,11 +179,6 @@ namespace Outpost
     return m_window.Held(static_cast<std::uint8_t>(_key));
   }
 
-  void GameShell::ClearKeyLogger()
-  {
-    m_window.FlushKeys(); // 6502: ZEKTRAN -- sixty-five bytes of KEYLOOK and `thiskey`
-  }
-
   // ---- the start sequence -------------------------------------------------------------------------
 
   /*

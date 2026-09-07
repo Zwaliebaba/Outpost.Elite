@@ -462,7 +462,6 @@ namespace GameLogicTests
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
       void HoldTitleFrame(std::uint8_t) override {}
-      void ClearKeyLogger() override {}
 
       /*
        * WHICH KEYS ARE DOWN, scripted, because the loop `RDKEY` drives is key-driven and nothing

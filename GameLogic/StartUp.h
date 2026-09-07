@@ -97,13 +97,16 @@ namespace Elite
      */
 
     /*
-     * 6502: ZEKTRAN -- zero the key logger and `thiskey`.
+     * `ClearKeyLogger` WAS A SEAM HERE AND IS NOT ANY MORE (M6-0-h-1).
      *
-     * Sixty-five bytes of KEYLOOK, one per key the game watches. It is keyboard state and belongs
-     * with the key map in the executable. The routine ends in TWO consecutive RTS instructions,
-     * the second of which nothing can reach.
+     * 6502: ZEKTRAN -- zero the key logger and `thiskey`. Sixty-five bytes of KEYLOOK, one per key
+     * the game watches, and the seam said they were "keyboard state that belongs with the key map
+     * in the executable". They are `Universe::keys`, and have been since M3-a; `ScanKeyboard`
+     * already zeroes them for its own `JSR ZEKTRAN`, and the two callers here (`BR1` and `TITLE`)
+     * do the same. The executable answered the seam by flushing the WINDOW's pressed-key list,
+     * which is `FLKB`'s job and is done where the game does `FLKB`. The routine ends in TWO
+     * consecutive RTS instructions, the second of which nothing can reach.
      */
-    virtual void ClearKeyLogger() = 0;
 
     /*
      * `StartTheme` AND `StopTheme` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-2b).

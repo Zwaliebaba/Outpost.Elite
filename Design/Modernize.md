@@ -1529,7 +1529,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-e Seven routines only ever trapped** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
 | **M6-0-f A coverage instrument** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
 | **M6-0-g Mutants to a stated floor** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
-| **M6-0-h The empty seams** | `StartUpEffects` is an abstract class with nothing but a virtual destructor, and `ControlEffects` holds only `RunDockingComputer`, which M4-c-2 made a library routine. Both are still counted. Cheap, and worth doing before M6-a so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 1 |
+| **M6-0-h The two seams that outlived their reason** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** | **Blocked on M6-0.** Every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
 | **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
@@ -1809,6 +1809,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-h-1: `ZEKTRAN` is the library's, and the row was written on a false premise.**
+
+M6-0-h said `StartUpEffects` was "an abstract class with nothing but a virtual destructor". It
+was not: it declared `ClearKeyLogger` and `ShowTitleScreen`, both called from `StartUp.cpp`, and
+the sentence had been true of nothing since M3-b-3d took `ScanTitleKeys` out and left those two.
+The row is corrected in place (three pieces, three sittings) rather than rewritten, because the
+mistake is part of the record: a plan row written from memory of a header, not from the header.
+
+The first piece is the small one. `ZEKTRAN` zeroes the sixty-five bytes of `KEYLOOK`, which are
+`Universe::keys` and have been since M3-a; `ScanKeyboard` already does exactly that for its own
+`JSR ZEKTRAN`, and `BR1` and `TITLE` now do it for theirs. What the executable had answered the
+seam with was `Window::FlushKeys` — the pressed-key list that feeds `NextKey`, which is `FLKB`'s
+list and is flushed where the game does `FLKB` — so the seam was doing a different job on the
+platform from the one it was named for, and taking it out changes nothing the game can see.
+`StartUpTests` stops counting it on both machines and compares it instead: both loggers are
+seeded full before `BR1` and all sixty-five bytes are compared after; `DockingTests`,
+`DockedSessionTests`, `LaunchTests`, `MissionTests` and `NullSeams` drop an override each.
+
+`ShowTitleScreen` is h-2 and is not small: it is a forward to `Elite::ShowTitleShip`, and calling
+that directly means every fixture that drives a `Game` — `GameTests`, `DockedSessionTests`, the
+replay's `FlightPort` — runs the title screen for real on `Reset()`, and a title screen ends only
+on a key, so each of their keyboards has to hold one; the oracle side of `StartUpTests` then runs
+`TITLE` for real too, which M6-0-a-4's matrix makes possible. `ControlEffects` is h-3: the
+`DOKEY` sweep stubs `DOCKIT` on both machines through it, and the direct call means the real
+autopilot over a seeded bubble in place of four scripted answers. 399 of 399; all 16 checks.
 
 **2026-09-07 — M6-0-a-4: `RDKEY` runs on the oracle, and the row closes.**
 

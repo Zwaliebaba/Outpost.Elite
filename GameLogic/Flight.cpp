@@ -316,7 +316,7 @@ namespace Elite
     ResetGame(_universe, _ports);
     _universe.status.titleReset = 0u;
 
-    _ports.start.ClearKeyLogger(); // 6502: JSR ZEKTRAN
+    _universe.keys.fill(0u); // 6502: JSR ZEKTRAN
 
     // 6502: LDA #32 / JSR DOVDU19 -- the title screen's palette on the Master, an RTS here.
 

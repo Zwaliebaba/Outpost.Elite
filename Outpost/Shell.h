@@ -146,7 +146,6 @@ namespace Outpost
 
     // ---- Elite::StartUpEffects --------------------------------------------------------------------
 
-    void ClearKeyLogger() override;
     [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
 
     // ---- Elite::Presenter's four ------------------------------------------------------------------

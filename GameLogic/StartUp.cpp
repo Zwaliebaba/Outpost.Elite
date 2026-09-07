@@ -55,7 +55,7 @@ namespace Elite
   ForcedKey StartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: JSR ZEKTRAN -- the key logger, before anything can be typed at it.
-    _ports.start.ClearKeyLogger();
+    _universe.keys.fill(0u);
 
     // 6502: LDA #3 / JSR DOXC.
     _universe.text.column = TITLE_PROMPT_COLUMN;

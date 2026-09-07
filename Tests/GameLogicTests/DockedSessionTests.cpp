@@ -106,12 +106,8 @@ namespace GameLogicTests
         Note("spin " + std::to_string(_distance));
       }
 
-      // 6502: ZEKTRAN and TITLE. `RESET`, `RES2` and `msblob` were here until M3-b-1e, and
-      // `startat` and `stopat` until M3-b-2b; all five are calls into `GameLogic` now.
-      void ClearKeyLogger() override
-      {
-        Note("zektran");
-      }
+      // 6502: TITLE. `RESET`, `RES2` and `msblob` were here until M3-b-1e, `startat` and `stopat`
+      // until M3-b-2b, and `ZEKTRAN` until M6-0-h-1; all six are the library's now.
       std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _ship, std::uint8_t) override
       {
         Note("title " + std::to_string(_token) + "/" + std::to_string(Elite::Byte(_ship)));
