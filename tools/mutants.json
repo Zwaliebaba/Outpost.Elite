@@ -90,8 +90,8 @@
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (roll.value < 240u || _universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
-          "replace": "if (roll.value < 239u || _universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "find": "if (roll.value < 240u || _frame.universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "replace": "if (roll.value < 239u || _frame.universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
           "expect": "caught",
           "note": "The police roll. Closed by a seed that reads 239 there."
         },
@@ -130,23 +130,23 @@
         {
           "id": "ta-half",
           "file": "GameLogic/Tactics.cpp",
-          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work.energy;",
-          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work.energy;",
+          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < _frame.work.energy;",
+          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < _frame.work.energy;",
           "expect": "caught",
           "note": "TA7's first LSR A -- and its BCC goes to CAPITAL TA3, part SIX, so a ship above half energy skips the missile launch. THIS ONE WAS A DEFECT: the port ran both energy branches into part five. Closed by the fix plus three cases WITH missiles straddling the threshold (plan section 6.153)."
         },
         {
           "id": "ta7-three",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work.energy)",
-          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work.energy)",
+          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= _frame.work.energy)",
+          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= _frame.work.energy)",
           "expect": "caught",
           "note": "TA7's second and third LSR A -- an EIGHTH of the maximum, not a quarter."
         },
         {
           "id": "ta3-ecm",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && _universe.status.ecmCountdown == 0u)",
+          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && _frame.universe.status.ecmCountdown == 0u)",
           "replace": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles)",
           "expect": "caught",
           "note": "ta3's LDA ECMA / BNE TA3 stops a launch. ECMA was zero in every case that reached it; closed by a pirate with missiles and an ECM running."
@@ -170,8 +170,8 @@
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
-          "find": "destroyed = (work.ai == MissileAiFor(1u));",
-          "replace": "destroyed = (work.ai == With(MissileAiFor(1u), AiBit::HasEcm));",
+          "find": "destroyed = (_frame.work.ai == MissileAiFor(1u));",
+          "replace": "destroyed = (_frame.work.ai == With(MissileAiFor(1u), AiBit::HasEcm));",
           "expect": "caught",
           "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
@@ -186,16 +186,16 @@
         {
           "id": "msl-kill",
           "file": "GameLogic/Tactics.cpp",
-          "find": "          return TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, heard);",
-          "replace": "          return TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, heard);",
+          "find": "return TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], MISSILE_DAMAGE, heard)",
+          "replace": "return TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], COLLISION_DAMAGE, heard)",
           "expect": "caught",
           "note": "250 into OOPS when a missile arrives."
         },
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(_universe, _ports, TypeOf(MissileTargetOf(work.ai)));",
-          "replace": "      RecordKill(_universe, _ports, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
+          "find": "RecordKill(_frame.universe, _frame.ports, TypeOf(MissileTargetOf(_frame.work.ai)));",
+          "replace": "RecordKill(_frame.universe, _frame.ports, TypeOf(static_cast<std::uint8_t>(_frame.work.ai & 0x7Fu)));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
