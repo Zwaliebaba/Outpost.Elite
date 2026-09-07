@@ -148,14 +148,13 @@ namespace Elite
 
   void HideAllSprites(VideoState& _video, MemoryMap& _map) noexcept
   {
-    SetMemoryMap(_map, MEMORY_MAP_IO);   // 6502: LDA #%101 / JSR SETL1
-    ApplySpritesEnabled(_video, 0u);     // 6502: LDA #%00000000 / STA VIC+&15
-    SetMemoryMap(_map, MEMORY_MAP_RAM);  // 6502: LDA #%100, and it falls into SETL1
+    SetMemoryMap(_map, MEMORY_MAP_IO);  // 6502: LDA #%101 / JSR SETL1
+    ApplySpritesEnabled(_video, 0u);    // 6502: LDA #%00000000 / STA VIC+&15
+    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: LDA #%100, and it falls into SETL1
   }
 
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video,
-                     MemoryMap& _map) noexcept
+                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map) noexcept
   {
     // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
     DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW);
@@ -184,15 +183,15 @@ namespace Elite
       DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble);
     }
 
-    DrawColourBands(_canvas); // 6502: .nearlyxmas JSR BLUEBAND
+    DrawColourBands(_canvas);     // 6502: .nearlyxmas JSR BLUEBAND
     HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
 
     _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
   }
 
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
-                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
-                         VideoState& _video, MemoryMap& _map, std::uint8_t _view) noexcept
+                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video,
+                         MemoryMap& _map, std::uint8_t _view) noexcept
   {
     /*
      * 6502: LDA #&04 / STA SC / LDA #&60 / STA SC+1 / LDX #24 / .BOL3 LDA #&10 / LDY #31 /
@@ -254,13 +253,13 @@ namespace Elite
       ZeroWholePage(_canvas, page);
     }
 
-    _compass.colour = 0u;        // 6502: LDX #0 / STX COMC
-    _screen.dashboardShown = 0u; // 6502: STX DFLAG
-    _text.column = 1u;           // 6502: INX / STX XC
-    _text.row = 1u;              // 6502: STX YC
+    _compass.pattern = PixelPattern::Blank; // 6502: LDX #0 / STX COMC
+    _screen.dashboardShown = 0u;            // 6502: STX DFLAG
+    _text.column = 1u;                      // 6502: INX / STX XC
+    _text.row = 1u;                         // 6502: STX YC
 
-    DrawColourBands(_canvas);    // 6502: JSR BLUEBAND
-    ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
+    DrawColourBands(_canvas);     // 6502: JSR BLUEBAND
+    ForgetScannerBlips(_bubble);  // 6502: JSR zonkscanners
     HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
 
     // 6502: LDY #31 / LDA #&70 / .BOL5 STA &6004,Y / DEY / BPL BOL5 -- the top row's colour band.
@@ -322,8 +321,8 @@ namespace Elite
     _universe.text.row = 1u;    // 6502: STA YC
 
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
-                      _universe.status, _universe.commander.fuel, _universe.compass, _universe.video,
-                      _universe.memoryMap, _universe.view); // 6502: JSR TTX66K
+                      _universe.status, _universe.commander.fuel, _universe.compass, _universe.video, _universe.memoryMap,
+                      _universe.view); // 6502: JSR TTX66K
 
     // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change
     // and is reprinted, because the screen it was on has just been wiped.
@@ -360,7 +359,7 @@ namespace Elite
     // 6502: LDY QQ11 / BNE LQ -- a chart or a text screen takes the short path.
     if (_universe.view != 0u)
     {
-      _universe.spaceView = _to;  // 6502: .LQ STX VIEW
+      _universe.spaceView = _to;          // 6502: .LQ STX VIEW
       SetUpScreen(_universe, _ports, 0u); // 6502: JSR TT66, with A zero, so it becomes the space view
 
       DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video,
@@ -379,7 +378,7 @@ namespace Elite
       return;
     }
 
-    _universe.spaceView = _to;  // 6502: STX VIEW
+    _universe.spaceView = _to;          // 6502: STX VIEW
     SetUpScreen(_universe, _ports, 0u); // 6502: JSR TT66
 
     // 6502: JSR FLIP -- the dust is MIRRORED rather than replaced, which is why the stars look
@@ -389,8 +388,7 @@ namespace Elite
     // 6502: JSR WPSHPS, and then it falls into SIGHT.
     ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view);
 
-    DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video,
-                    _universe.memoryMap);
+    DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video, _universe.memoryMap);
   }
 
   void Warp(Universe& _universe, Ports& _ports) noexcept

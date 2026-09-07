@@ -55,19 +55,19 @@ namespace Elite
   /// 6502: YELLOW -- four multicolour pixels of colour %10, and the compass's "ahead" colour. It
   /// is also what makes the dot a four-pixel block rather than a dash, because `DOT` branches on
   /// the colour and not on the direction.
-  inline constexpr std::uint8_t COMPASS_AHEAD = 0xAA;
+  inline constexpr PixelPattern COMPASS_AHEAD = PixelPattern::Yellow;
 
   /// 6502: GREEN -- four pixels of %11, and "behind": a two-pixel dash rather than a block.
-  inline constexpr std::uint8_t COMPASS_BEHIND = 0xFF;
+  inline constexpr PixelPattern COMPASS_BEHIND = PixelPattern::Green;
 
   /// 6502: COMX, COMY and COMC -- where the compass dot is and what colour it is. They persist
   /// between frames because that is how it is erased: `COMPAS` draws the OLD dot again before it
   /// works out the new one.
   struct Compass
   {
-    std::uint8_t x = 0;      ///< 6502: COMX
-    std::uint8_t y = 0;      ///< 6502: COMY
-    std::uint8_t colour = 0; ///< 6502: COMC
+    std::uint8_t x = 0;                         ///< 6502: COMX
+    std::uint8_t y = 0;                         ///< 6502: COMY
+    PixelPattern pattern = PixelPattern::Blank; ///< 6502: COMC -- a pattern, which is what `DOT` branches on
   };
 
   /*

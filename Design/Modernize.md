@@ -365,7 +365,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,121 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,122 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1489,7 +1489,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are M5-a-8 and M5-a-9. | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families: `PixelPattern` is built (M5-a-9, 2026-09-07); the palette pairs are M5-a-8. | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07.** | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
@@ -1802,6 +1802,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-9: `COL` is a pixel pattern, and the compass and the dials had been calling one
+a colour since slice 3d.**
+
+The first of the two families M5-a-7 named. `RED`, `YELLOW`, `GREEN` and `WHITE` are four
+multicolour pixels packed in a byte — `%01010101`, `%10101010`, `%11111111`, `%01011010` — and the
+port had them as `std::uint8_t` constants called `DIAL_DANGER`, `DIAL_NORMAL`, `COMPASS_AHEAD` and
+`COMPASS_BEHIND`, a `Compass::colour` field, a `DangerColours` pair and a `DialColours` pair. Every
+consumer ANDs the byte with a mask — `CPIX2` with `CTWOS2`, `DIL` with the block it has just
+shifted, `DIL2` with `CTWOS` — and a byte whose only operation is AND-with-a-mask is a pattern.
+`PixelPattern` is the type: `Red`, `Yellow`, `Green`, `Striped` for the Thargoid's `%01 %01 %10 %10`,
+and `Blank` for the `%00` four times that `DIL` falls through to when `K+1` is zero — which the
+port had been spelling as a literal `0` with no name. `BLUE`, `CYAN` and `MAG` get no enumerator,
+because the original defines all three as `YELLOW`.
+
+**THE ASSESSMENT THAT SCOPED THIS SLICE HAD FILED TWO OF ITS SITES UNDER THE WRONG FAMILY.**
+M5-a-8's task description listed `DangerColours` and `DialColours` among the palette pairs. They are
+`PZW`'s `RED`/`YELLOW` and `DIALS`' `K`/`K+1` — patterns, this slice's — and reading the AND sites
+is what said so. Which is the point of building the types: a name can be filed wrongly and an
+operation cannot.
+
+`PlotDash` and `PlotBlock` take a `PixelPattern`; `SCAN`'s `scacol` read goes through `PatternOf`,
+because every byte is a pattern and the table is the assembler's; the compass field is `pattern`,
+named for what it holds (rule 7). `UniverseImage` gains an `Enumerated` cell for a byte the port
+holds as a scoped enum, and `COMC` is the first to use it. Every site was a rename or a cast at a
+boundary; the replay digest did not move.
+
+395 of 395; all 16 repository checks; `origin-markers` 4,121 → 4,122, rule 4's reason.
 
 **2026-09-07 — M6-0: every M0–M5 row is built, and M6 is not safe to start.**
 

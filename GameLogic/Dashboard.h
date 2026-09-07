@@ -25,8 +25,8 @@ namespace Elite
 
   /// 6502: RED, YELLOW -- four multicolour pixels of one colour each, which is what `COL` is ANDed
   /// with. The dials use only these two; the scanner's own colours are in `SCANNER_COLOUR_TABLE`.
-  inline constexpr std::uint8_t DIAL_DANGER = 0x55; ///< 6502: RED
-  inline constexpr std::uint8_t DIAL_NORMAL = 0xAA; ///< 6502: YELLOW
+  inline constexpr PixelPattern DIAL_DANGER = PixelPattern::Red;    ///< 6502: RED
+  inline constexpr PixelPattern DIAL_NORMAL = PixelPattern::Yellow; ///< 6502: YELLOW
 
   /*
    * 6502: BULBCOL -- what the three indicator bulbs EOR into SCREEN RAM.
@@ -136,8 +136,8 @@ namespace Elite
   /// callers store both -- `DIALS` part 1 as (K, K+1) and part 3 as (K+1, K), the other way round.
   struct DangerColours
   {
-    std::uint8_t a = 0;
-    std::uint8_t x = 0;
+    PixelPattern a = PixelPattern::Blank;
+    PixelPattern x = PixelPattern::Blank;
   };
 
   /*
@@ -172,8 +172,8 @@ namespace Elite
   /// round, which is why the same threshold means the opposite thing for the energy bars.
   struct DialColours
   {
-    std::uint8_t atOrAbove = 0; ///< 6502: K -- drawn when the reading reaches `T1`, or when `K+1` is zero
-    std::uint8_t below = 0;     ///< 6502: K+1 -- drawn under `T1`, unless it is zero
+    PixelPattern atOrAbove = PixelPattern::Blank; ///< 6502: K -- drawn when the reading reaches `T1`, or when `K+1` is blank
+    PixelPattern below = PixelPattern::Blank;     ///< 6502: K+1 -- drawn under `T1`, unless it is blank
   };
 
   void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,

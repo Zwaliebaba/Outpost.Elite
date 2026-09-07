@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstdint>
+#include <type_traits>
 #include <string>
 #include <utility>
 #include <functional>
@@ -34,6 +35,21 @@ namespace GameLogicTests
       std::uint8_t* at = &_byte;
       cell.get = [at]() { return *at; };
       cell.set = [at](std::uint8_t _value) { *at = _value; };
+      return cell;
+    }
+
+    /// A byte the port holds as a scoped enumeration with a fixed underlying type -- `PixelPattern`,
+    /// `Colour` -- which is the same byte to the image and a different type to the compiler.
+    template <typename Enum> Cell Enumerated(const wchar_t* _name, std::uint16_t _address, Enum& _field, CellScope _scope)
+    {
+      static_assert(std::is_enum_v<Enum> && sizeof(Enum) == 1, "one byte, one cell");
+      Cell cell;
+      cell.name = _name;
+      cell.address = _address;
+      cell.scope = _scope;
+      Enum* at = &_field;
+      cell.get = [at]() { return static_cast<std::uint8_t>(*at); };
+      cell.set = [at](std::uint8_t _value) { *at = static_cast<Enum>(_value); };
       return cell;
     }
 
@@ -134,29 +150,30 @@ namespace GameLogicTests
     cells.push_back(Direct(L"QQ11", _at.qq11, _universe.view, CellScope::Compared));
     cells.push_back(Direct(L"EV", _at.ev, _universe.explosions, CellScope::Compared));
     cells.push_back(Direct(L"MCNT", _at.mcnt, _universe.flight.mainLoopCounter, CellScope::Compared));
-    AddressPair(cells, L"XX0", L"XX0+1", _at.xx0, [&_universe]() { return _universe.flight.blueprint->address; },
-                [&_universe](std::uint16_t _address)
-                {
-                  if (const Elite::Blueprint* found = Elite::BlueprintAt(_address))
-                  {
-                    _universe.flight.blueprint = found;
-                  }
-                },
-                CellScope::Compared);
+    AddressPair(
+      cells, L"XX0", L"XX0+1", _at.xx0, [&_universe]() { return _universe.flight.blueprint->address; },
+      [&_universe](std::uint16_t _address)
+      {
+        if (const Elite::Blueprint* found = Elite::BlueprintAt(_address))
+        {
+          _universe.flight.blueprint = found;
+        }
+      },
+      CellScope::Compared);
     cells.push_back(Direct(L"abraxas", _at.abraxas, _universe.screen.colourBank, CellScope::Compared));
     cells.push_back(Direct(L"caravanserai", _at.caravanserai, _universe.screen.bitmapMode, CellScope::Compared));
     cells.push_back(Direct(L"DFLAG", _at.dflag, _universe.screen.dashboardShown, CellScope::Compared));
-    cells.push_back(Direct(L"COMC", _at.comc, _universe.compass.colour, CellScope::Compared));
+    cells.push_back(Enumerated(L"COMC", _at.comc, _universe.compass.pattern, CellScope::Compared));
     cells.push_back(Direct(L"TRIBCT", _at.tribct, _universe.trumbles.count, CellScope::Compared));
     for (std::size_t index = 0; index < _universe.trumbles.velocityX.size(); ++index)
     {
       const std::uint16_t offset = static_cast<std::uint16_t>(index);
-      cells.push_back(Direct(L"TRIBVX", static_cast<std::uint16_t>(_at.tribvx + offset), _universe.trumbles.velocityX[index],
-                             CellScope::Compared));
-      cells.push_back(Direct(L"TRIBVXH", static_cast<std::uint16_t>(_at.tribvxh + offset), _universe.trumbles.velocityXHigh[index],
-                             CellScope::Compared));
-      cells.push_back(Direct(L"TRIBXH", static_cast<std::uint16_t>(_at.tribxh + offset), _universe.trumbles.coordinateXHigh[index],
-                             CellScope::Compared));
+      cells.push_back(
+        Direct(L"TRIBVX", static_cast<std::uint16_t>(_at.tribvx + offset), _universe.trumbles.velocityX[index], CellScope::Compared));
+      cells.push_back(
+        Direct(L"TRIBVXH", static_cast<std::uint16_t>(_at.tribvxh + offset), _universe.trumbles.velocityXHigh[index], CellScope::Compared));
+      cells.push_back(
+        Direct(L"TRIBXH", static_cast<std::uint16_t>(_at.tribxh + offset), _universe.trumbles.coordinateXHigh[index], CellScope::Compared));
     }
 
     /*
@@ -244,8 +261,7 @@ namespace GameLogicTests
     Run(cells, L"SOFLG", _at.soflg, _universe.sound.flag.data(), _universe.sound.flag.size(), CellScope::Compared);
     Run(cells, L"SOCNT", _at.socnt, _universe.sound.counter.data(), _universe.sound.counter.size(), CellScope::Compared);
     Run(cells, L"SOPR", _at.sopr, _universe.sound.priority.data(), _universe.sound.priority.size(), CellScope::Compared);
-    Run(cells, L"SOFRCH", _at.sofrch, _universe.sound.frequencyChange.data(), _universe.sound.frequencyChange.size(),
-        CellScope::Compared);
+    Run(cells, L"SOFRCH", _at.sofrch, _universe.sound.frequencyChange.data(), _universe.sound.frequencyChange.size(), CellScope::Compared);
     Run(cells, L"SOFRQ", _at.sofrq, _universe.sound.frequency.data(), _universe.sound.frequency.size(), CellScope::Compared);
     Run(cells, L"SOCR", _at.socr, _universe.sound.control.data(), _universe.sound.control.size(), CellScope::Compared);
     Run(cells, L"SOATK", _at.soatk, _universe.sound.attack.data(), _universe.sound.attack.size(), CellScope::Compared);
@@ -314,7 +330,7 @@ namespace GameLogicTests
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
       CodecCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),
-                _universe.bubble.blocks[slot], CellScope::Compared);
+                 _universe.bubble.blocks[slot], CellScope::Compared);
     }
     for (std::size_t index = 0; index < _universe.dust.x.size(); ++index)
     {

@@ -71,4 +71,39 @@ namespace Elite
     return static_cast<Colour>(_byte & 0x0Fu);
   }
 
+  /*
+   * 6502: RED, YELLOW, GREEN and WHITE -- the first of the two families above, as its own type
+   * (slice 5a-9).
+   *
+   * FOUR MULTICOLOUR PIXELS PACKED IN A BYTE, and never a colour. `COL` holds one, `CPIX2` ANDs it
+   * with a mask out of `CTWOS2` to light one pixel of it, `DIL` ANDs it with the block it has just
+   * shifted, and `SCAN` reads one out of `scacol` by ship type. Which colour a %01 or %10 pixel
+   * comes out as is the PALETTE's business -- `CellPalette` -- and this type never knows.
+   *
+   * `Blank` is %00 four times: a byte that lights nothing, which is what `DIL` falls through to when
+   * `K+1` is zero. `Striped` is the Thargoid's %01 %01 %10 %10, the one entry `scacol` holds that
+   * is not four of the same pixel. `BLUE`, `CYAN` and `MAG` have no enumerator because the original
+   * defines all three as `YELLOW`.
+   */
+  enum class PixelPattern : std::uint8_t
+  {
+    Blank = 0x00,
+    Red = 0x55,
+    Yellow = 0xAA,
+    Green = 0xFF,
+    Striped = 0x5A,
+  };
+
+  /// The byte a pattern is, for the AND that plots it and the memory image the oracle compares.
+  [[nodiscard]] constexpr std::uint8_t PatternByte(PixelPattern _pattern) noexcept
+  {
+    return static_cast<std::uint8_t>(_pattern);
+  }
+
+  /// Any byte is a pattern -- it is what the mask keeps of it -- so `scacol`'s bytes go through here.
+  [[nodiscard]] constexpr PixelPattern PatternOf(std::uint8_t _byte) noexcept
+  {
+    return static_cast<PixelPattern>(_byte);
+  }
+
 } // namespace Elite

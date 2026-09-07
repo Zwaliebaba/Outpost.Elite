@@ -122,14 +122,15 @@ namespace Elite
     return _distance >= 80u;
   }
 
-  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept
+  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept
   {
     const std::uint16_t cell = static_cast<std::uint16_t>(Canvas::RowOffset(_down) + (_across & 0xF8u)); // 6502: X1, Y1
     const std::uint8_t subRow = static_cast<std::uint8_t>(_down & 0x07u);
     const std::uint8_t index = static_cast<std::uint8_t>(_across & 0x07u);
 
-    // 6502: LDA CTWOS2,X / AND COL -- the aligned mask, narrowed to the colour being drawn.
-    _canvas.ExclusiveOr(static_cast<std::uint16_t>(cell + subRow), static_cast<std::uint8_t>(MULTICOLOUR_MASK_TABLE[index] & _colour));
+    // 6502: LDA CTWOS2,X / AND COL -- the aligned mask, narrowed to the pattern being drawn.
+    _canvas.ExclusiveOr(static_cast<std::uint16_t>(cell + subRow),
+                        static_cast<std::uint8_t>(MULTICOLOUR_MASK_TABLE[index] & PatternByte(_pattern)));
 
     /*
      * 6502: LDA CTWOS2+2,X / BPL CP1.
@@ -142,19 +143,19 @@ namespace Elite
     const std::uint8_t second = MULTICOLOUR_MASK_TABLE[index + 2];
     const std::uint16_t secondCell = ((second & 0x80u) != 0u) ? static_cast<std::uint16_t>(cell + 8u) : cell;
 
-    _canvas.ExclusiveOr(static_cast<std::uint16_t>(secondCell + subRow), static_cast<std::uint8_t>(second & _colour));
+    _canvas.ExclusiveOr(static_cast<std::uint16_t>(secondCell + subRow), static_cast<std::uint8_t>(second & PatternByte(_pattern)));
 
     // 6502: SC(1 0), Y and X as the routine leaves them -- and SC is the WRAPPED cell when the
     // second pixel crossed, because that is the byte the last `STA (SC),Y` wrote through.
     return CellCursor{secondCell, subRow, index};
   }
 
-  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept
+  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept
   {
     // 6502: CPIX4 -- one dash, then DEC Y1 and fall through into CPIX2 for the row above. Y1 is
     // left decremented in the original; no caller reads it (M2-c).
-    (void)PlotDash(_canvas, _across, _down, _colour);
-    return PlotDash(_canvas, _across, static_cast<std::uint8_t>(_down - 1u), _colour);
+    (void)PlotDash(_canvas, _across, _down, _pattern);
+    return PlotDash(_canvas, _across, static_cast<std::uint8_t>(_down - 1u), _pattern);
   }
 
   void DrawHorizontalLine(Canvas& _canvas, std::uint8_t _x1, std::uint8_t _x2, std::uint8_t _row) noexcept

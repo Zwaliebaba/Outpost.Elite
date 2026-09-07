@@ -525,7 +525,7 @@ namespace GameLogicTests
           Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
           cpu.memory[at.comx] = compass.x;
           cpu.memory[at.comy] = compass.y;
-          cpu.memory[at.comc] = compass.colour;
+          cpu.memory[at.comc] = Elite::PatternByte(compass.pattern);
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(wantdials, 400'000);
           Assert::IsTrue(run.completed, L"wantdials returned");
@@ -568,7 +568,7 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[at.dflag], screenState.dashboardShown, (where + L": DFLAG").c_str());
           Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
           Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
-          Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+          Assert::AreEqual(cpu.memory[at.comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
 
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
@@ -689,7 +689,7 @@ namespace GameLogicTests
           Elite::DrawWorkspace draw;
           Elite::TextState textState;
           Elite::ScreenState screenState;
-          Elite::Compass compass{0xC3u, 0x9Cu, 0x55u};
+          Elite::Compass compass{0xC3u, 0x9Cu, Elite::PixelPattern::Red};
           Elite::FlightState flight;
           Elite::FlightStatus status;
           Elite::VideoState video{};
@@ -711,7 +711,7 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[abraxas], screenState.colourBank, (where + L": abraxas").c_str());
           Assert::AreEqual(cpu.memory[caravanserai], screenState.bitmapMode, (where + L": caravanserai").c_str());
           Assert::AreEqual(cpu.memory[dflag], screenState.dashboardShown, (where + L": DFLAG").c_str());
-          Assert::AreEqual(cpu.memory[comc], compass.colour, (where + L": COMC").c_str());
+          Assert::AreEqual(cpu.memory[comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
           Assert::AreEqual(cpu.memory[xc], textState.column, (where + L": XC").c_str());
           Assert::AreEqual(cpu.memory[yc], textState.row, (where + L": YC").c_str());
 

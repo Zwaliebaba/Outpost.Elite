@@ -215,8 +215,8 @@ namespace GameLogicTests
           const Elite::DangerColours colours = Elite::DangerColour(static_cast<std::uint8_t>(counter), static_cast<std::uint8_t>(flash));
 
           const std::wstring where = Widen("PZW(MCNT=" + std::to_string(counter) + ", FLH=" + std::to_string(flash) + ")");
-          Assert::AreEqual(cpu.a, colours.a, (where + L": A").c_str());
-          Assert::AreEqual(cpu.x, colours.x, (where + L": X").c_str());
+          Assert::AreEqual(cpu.a, Elite::PatternByte(colours.a), (where + L": A").c_str());
+          Assert::AreEqual(cpu.x, Elite::PatternByte(colours.x), (where + L": X").c_str());
 
           red += (colours.a == Elite::DIAL_DANGER) ? 1u : 0u;
           yellow += (colours.a == Elite::DIAL_NORMAL) ? 1u : 0u;
@@ -260,10 +260,10 @@ namespace GameLogicTests
       };
 
       const std::uint8_t THRESHOLDS[] = {0, 3, 11, 14, 240, 255};
-      const std::uint8_t COLOURS[][2] = {
+      const Elite::PixelPattern COLOURS[][2] = {
         {Elite::DIAL_NORMAL, Elite::DIAL_DANGER},
         {Elite::DIAL_DANGER, Elite::DIAL_NORMAL},
-        {Elite::DIAL_NORMAL, 0},
+        {Elite::DIAL_NORMAL, Elite::PixelPattern::Blank},
         {Elite::DIAL_NORMAL, Elite::DIAL_NORMAL},
       };
 
@@ -292,8 +292,8 @@ namespace GameLogicTests
               cpu.memory[at.sc] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
               cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
               cpu.memory[at.t1] = threshold;
-              cpu.memory[at.k] = pair[0];
-              cpu.memory[static_cast<std::uint16_t>(at.k + 1)] = pair[1];
+              cpu.memory[at.k] = Elite::PatternByte(pair[0]);
+              cpu.memory[static_cast<std::uint16_t>(at.k + 1)] = Elite::PatternByte(pair[1]);
               cpu.a = static_cast<std::uint8_t>(value);
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(address, 20'000);
@@ -303,7 +303,7 @@ namespace GameLogicTests
               Elite::DrawBar(canvas, draw, static_cast<std::uint8_t>(value), entry.shifts, threshold, Elite::DialColours{pair[0], pair[1]});
 
               const std::wstring where = Widen(std::string(entry.what) + "(" + std::to_string(value) + ", T1=" + std::to_string(threshold) +
-                                               ", K=" + std::to_string(pair[0]) + "/" + std::to_string(pair[1]) + ")");
+                                               ", K=" + std::to_string(Elite::PatternByte(pair[0])) + "/" + std::to_string(Elite::PatternByte(pair[1])) + ")");
 
               drawn += CompareScreens(cpu, at.screen, canvas, 0x3Cu, where);
               // `COL` and `Q` are `DIL`'s own since M2-c -- the colour it picked and the reading it
@@ -714,7 +714,7 @@ namespace GameLogicTests
             Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
             cpu.memory[at.comx] = compass.x;
             cpu.memory[at.comy] = compass.y;
-            cpu.memory[at.comc] = compass.colour;
+            cpu.memory[at.comc] = Elite::PatternByte(compass.pattern);
 
             // `XX12` is scratch that part 3 clears before it reads, so the oracle's starts dirty;
             // the port's four bytes are `DIALS`'s own array since M2-c.
@@ -752,7 +752,7 @@ namespace GameLogicTests
 
             Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
             Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
-            Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+            Assert::AreEqual(cpu.memory[at.comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
             /*
              * `K`, `K+1`, `T1`, `COL` and `XX12` are not compared, and each for the same reason: they
              * are what `DIALS` hands `DIL` and what `DIL` hands itself, values since M2-c and M2-b.
