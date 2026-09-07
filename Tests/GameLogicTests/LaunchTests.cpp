@@ -595,7 +595,6 @@ namespace GameLogicTests
       Universe& universe = _leaving.universe;
       Seed(universe, _seed);
 
-      universe.commander.fuel = universe.fuel;
       universe.message.token = 101u;
       universe.message.column = 9u;
       universe.message.append = 1u;

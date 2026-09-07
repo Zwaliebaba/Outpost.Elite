@@ -135,7 +135,7 @@ namespace GameLogicTests
     {
       return std::wstring(_what) + L" (QQ9=" + std::to_wstring(_view.cursorX) + L" QQ10=" + std::to_wstring(_view.cursorY) + L" QQ0=" +
              std::to_wstring(_view.homeX) + L" QQ1=" + std::to_wstring(_view.homeY) + L" QQ11=" + std::to_wstring(_view.view) + L" QQ14=" +
-             std::to_wstring(_view.fuel) + L")";
+             std::to_wstring(_view.fuel.tenths) + L")";
     }
 
     void SeedChart(Cpu6502& _cpu, const Scratch& _zp, const ChartView& _view)
@@ -145,7 +145,7 @@ namespace GameLogicTests
       _cpu.memory[_zp.qq0] = _view.homeX;
       _cpu.memory[_zp.qq1] = _view.homeY;
       _cpu.memory[_zp.qq11] = _view.view;
-      _cpu.memory[_zp.qq14] = _view.fuel;
+      _cpu.memory[_zp.qq14] = _view.fuel.tenths;
     }
 
     /// What TT66 leaves behind. The charts are compared with it trapped, because clearing the screen
@@ -588,7 +588,7 @@ namespace GameLogicTests
           {
             ChartView chart;
             chart.view = static_cast<std::uint8_t>(view);
-            chart.fuel = static_cast<std::uint8_t>(fuel);
+            chart.fuel.tenths = static_cast<std::uint8_t>(fuel);
             chart.homeX = static_cast<std::uint8_t>(home);
             chart.homeY = static_cast<std::uint8_t>(255u - home);
 
@@ -644,7 +644,7 @@ namespace GameLogicTests
       {
         ChartView chart;
         chart.view = 0x40; // 6502: LDA #64 / JSR TT66
-        chart.fuel = 70;
+        chart.fuel.tenths = 70;
         chart.homeX = 20;
         chart.homeY = 173;
         chart.cursorX = 20;
@@ -710,7 +710,7 @@ namespace GameLogicTests
         {
           ChartView chart;
           chart.view = 0x80; // 6502: LDA #128 / JSR TT66
-          chart.fuel = 70;
+          chart.fuel.tenths = 70;
           chart.homeX = home.first;
           chart.homeY = home.second;
           chart.cursorX = home.first;
@@ -970,7 +970,7 @@ namespace GameLogicTests
                   {
                     ChartView chart;
                     chart.view = static_cast<std::uint8_t>(view);
-                    chart.fuel = static_cast<std::uint8_t>(fuel);
+                    chart.fuel.tenths = static_cast<std::uint8_t>(fuel);
                     chart.homeX = 20;
                     chart.homeY = 173;
                     chart.cursorX = static_cast<std::uint8_t>(cursor);

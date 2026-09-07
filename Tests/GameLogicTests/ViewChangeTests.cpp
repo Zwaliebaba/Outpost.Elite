@@ -557,7 +557,7 @@ namespace GameLogicTests
           video.enabled = 0xA7u;
           map.port = 0xE7u;
 
-          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, READINGS[8], compass, video, map);
+          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, Elite::LightYearsTenths{READINGS[8]}, compass, video, map);
 
           const std::wstring where = WidenText("wantdials(DFLAG " + std::to_string(already) + ", MCNT " + std::to_string(counter) + ")");
 
@@ -703,7 +703,7 @@ namespace GameLogicTests
           textState.column = 0x66u;
           textState.row = 0x77u;
 
-          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, 0u, compass, video, map, view);
+          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, Elite::LightYearsTenths{}, compass, video, map, view);
 
           const std::wstring where = WidenText("TTX66K(QQ11 " + std::to_string(view) + ", DFLAG " + std::to_string(already) + ")");
 

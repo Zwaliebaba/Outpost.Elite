@@ -79,7 +79,7 @@ namespace GameLogicTests
       Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"nothing has pressed COPY");
 
       const Elite::Commander& commander = bare.game.State().commander;
-      Assert::AreEqual<std::uint32_t>(Elite::DefaultCommander().fuel, commander.fuel, L"NA% -- the default commander's fuel");
+      Assert::AreEqual<std::uint32_t>(Elite::DefaultCommander().fuel.tenths, commander.fuel.tenths, L"NA% -- the default commander's fuel");
 
       std::uint32_t priced = 0;
       for (const std::uint8_t price : bare.game.State().market.price)

@@ -366,7 +366,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,130 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,133 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1492,7 +1492,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times); `Laser` and `Equipment` follow under the same ruling (§8). | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
@@ -1807,6 +1807,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-10: `LightYearsTenths`, and the seventy that was defined three times.**
+
+The first of M1's three deferred types, under the owner's ruling of the same day (build fuel and
+the lasers; refuse the equipment bytes with the reason). ADR-006 §2 parked `fuel` at M1 because
+"a type would be arithmetic operators with a name", and the count it gave — twenty-nine sites —
+was the count of READS. Reading the sites again with the type in mind, the byte has exactly three
+arithmetic rules and everything else reads it as a byte: `MA23`'s scoop (`LSR A / ADC QQ14 / CMP
+#70 / BCC / LDA #70` — the amount plus the bit the shift dropped, saturating), the jump's `SEC /
+SBC QQ8 / BCS / LDA #0` (an empty tank rather than a wrapped one, and the carry the tunnel roll
+rotates in), and `TT111`'s two-byte range check. Those are `Scooped`, `Burned` and `Reaches`, each
+written once against the instruction it is; the dial, the fuel circle, the printer and the codec
+read `tenths`, because for them it is a byte. `Burned` returns a `FuelBurn` — the tank and the
+flag — because `hyp` goes on to use the `SBC`'s carry, and a type that dropped it would have moved
+the record.
+
+**THE FINDING IS THE SEVENTY.** `FlightLoop.cpp` had `FUEL_MAXIMUM = 70`, `Flight.h` had
+`ESCAPE_FUEL = 70` and `Equipment.cpp` had `FULL_TANK = 70`, three names for the one `LDA #70` the
+original writes in `NA%`, `nosurviv`, `MA23` and the equipment screen — the `DNOIZ`/`MISSILE_GREEN`
+shape a third time, found by the same route. `Elite::FULL_TANK` is the one definition. And the test
+wrapper carried a `Universe::fuel` beside `commander.fuel` "so the fixtures can name it", written by
+`Seed` and two suites and read by nothing in the library — a second `QQ14` in the M5-e-2 sense, deleted.
+
+`ChartView::fuel`, `DrawDials`, `ShowDashboard`, `SetUpScreenPixels`, `FuelPrice`, `EquipmentPrice`
+and `Refund` take the type; twenty-one suite sites read `.tenths`. The `hyp-fuel-zero` equivalent
+mutant re-anchored to `Burned` (rule 3). 399 of 399, every oracle comparison unmoved and the replay
+record unmoved in both columns; `origin-markers` 4,130 → 4,133 (the three rules' markers, rule 4);
+all 16 checks.
 
 **2026-09-07 — M5-e-3: `Game::StateHash()`, library-native, and the record's second column.**
 

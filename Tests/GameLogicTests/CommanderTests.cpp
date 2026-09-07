@@ -151,7 +151,7 @@ namespace GameLogicTests
       // The values a player would recognise, as a check that the offsets name the right bytes
       // rather than merely being self-consistent.
       Assert::AreEqual<std::uint32_t>(1000u, block.cash.tenths, L"a new commander starts with 100.0 credits");
-      Assert::AreEqual<std::uint32_t>(70u, block.fuel, L"and 7.0 light years of fuel");
+      Assert::AreEqual<std::uint32_t>(70u, block.fuel.tenths, L"and 7.0 light years of fuel");
       Assert::AreEqual<std::uint32_t>(20u, block.systemX, L"at Lave, which is at x = 20");
       Assert::AreEqual<std::uint32_t>(173u, block.systemY, L"and y = 173");
       Assert::AreEqual<std::uint32_t>(0u, block.galaxyNumber, L"in galaxy one, counted from zero");

@@ -53,9 +53,6 @@ namespace Elite
     constexpr std::uint8_t TECH_CAP_TEST = 12;
     constexpr std::uint8_t TECH_CAP_VALUE = 14;
 
-    /// 6502: LDA #70 / SEC / SBC QQ14 / ASL A -- a full tank, and two credits a light year.
-    constexpr std::uint8_t FULL_TANK = 70;
-
     /// 6502: LDA #POW / #POW+128 / #Armlas / #Mlas, from elite-source.asm.
     constexpr std::uint8_t PULSE_POWER = 15;
     constexpr std::uint8_t BEAM_POWER = 128 + PULSE_POWER;
@@ -99,15 +96,16 @@ namespace Elite
     }
   } // namespace
 
-  std::uint16_t FuelPrice(std::uint8_t _fuel) noexcept
+  std::uint16_t FuelPrice(LightYearsTenths _fuel) noexcept
   {
-    // 6502: LDA #70 / SEC / SBC QQ14 / ASL A / STA PRXS -- and the store is into the TABLE, one
-    // byte wide, so a tank emptier than 70 tenths would wrap. It cannot be: QQ14 is capped at 70.
-    const std::uint8_t missing = static_cast<std::uint8_t>(FULL_TANK - _fuel);
+    // 6502: LDA #70 / SEC / SBC QQ14 / ASL A / STA PRXS -- two credits a light year, and the store
+    // is into the TABLE, one byte wide, so a tank emptier than 70 tenths would wrap. It cannot be:
+    // QQ14 is capped at 70.
+    const std::uint8_t missing = static_cast<std::uint8_t>(FULL_TANK.tenths - _fuel.tenths);
     return static_cast<std::uint16_t>(RotateLeft(missing, false).value);
   }
 
-  std::uint16_t EquipmentPrice(std::uint8_t _item, std::uint8_t _fuel) noexcept
+  std::uint16_t EquipmentPrice(std::uint8_t _item, LightYearsTenths _fuel) noexcept
   {
     // 6502: prx -- ASL A / TAY / LDX PRXS,Y / LDA PRXS+1,Y / TAY. Entry 0 is the one EQSHP wrote.
     return (_item == 0) ? FuelPrice(_fuel) : PriceAt(_item);
@@ -166,7 +164,7 @@ namespace Elite
     }
   }
 
-  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept
+  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, LightYearsTenths _fuel) noexcept
   {
     std::uint8_t& mount = _commander.lasers[_view];
     const std::uint8_t existing = mount;
@@ -233,7 +231,7 @@ namespace Elite
         highest = TECH_CAP_VALUE;
       }
 
-      const std::uint8_t fuel = _universe.commander.fuel;
+      const LightYearsTenths fuel = _universe.commander.fuel;
 
       // 6502: EQL1 -- LDX #1 and count up to Q, so the fuel line is item 1 on screen and item 0 in
       // the table.

@@ -226,7 +226,7 @@ namespace Elite
 
       circle.x = at.x;
       circle.y = at.y;
-      circle.radius = _view.fuel;
+      circle.radius = _view.fuel.tenths;
     }
     else
     {
@@ -241,7 +241,7 @@ namespace Elite
       // 6502: LDA QQ19+1 / CLC / ADC #24 -- the circle is drawn against the chart's own origin,
       // which the crosshair above reached through a separate addition.
       circle.y = AddWithCarry(at.y, LONG_RANGE_TOP, false).value;
-      circle.radius = static_cast<std::uint8_t>(_view.fuel >> 2);
+      circle.radius = static_cast<std::uint8_t>(_view.fuel.tenths >> 2);
     }
 
     // 6502: LDX #2 / STX STP -- the circle is walked in steps of two, which is what makes it
@@ -593,7 +593,7 @@ namespace Elite
      * looked at, so a system 25.6 light years away is out of range with a full tank -- and says the
      * same thing it says when the tank is empty.
      */
-    if ((_jump.distance >> 8) != 0 || _view.fuel < static_cast<std::uint8_t>(_jump.distance))
+    if (!_view.fuel.Reaches(_jump.distance))
     {
       PrintRangeError(_printer);
       return JumpOutcome::OutOfRange;

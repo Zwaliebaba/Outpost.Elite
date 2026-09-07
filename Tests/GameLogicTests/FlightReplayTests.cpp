@@ -389,7 +389,7 @@ namespace GameLogicTests
            _port.universe.rng.SetState(state);
          }},
         {L"the fuel",
-         [](FlightPort& _port) { _port.universe.commander.fuel = static_cast<std::uint8_t>(_port.universe.commander.fuel - 1u); }},
+         [](FlightPort& _port) { _port.universe.commander.fuel.tenths = static_cast<std::uint8_t>(_port.universe.commander.fuel.tenths - 1u); }},
         {L"a speck of stardust",
          [](FlightPort& _port) { _port.universe.dust.z[3] = static_cast<std::uint8_t>(_port.universe.dust.z[3] ^ 0x40u); }},
       };

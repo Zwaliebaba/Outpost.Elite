@@ -82,6 +82,15 @@ read as unfinished work:
 - **`Message`.** The same shape: token numbers are indexed into tables and added to, and `MESS`
   reaches them by arithmetic on a base.
 
+**And the three M1 deferred, ruled on 2026-09-07** (build `fuel` and the lasers; refuse the
+equipment bytes with the reason):
+
+- **`LightYearsTenths` is built (M5-a-10).** The deferral's arithmetic-operators-with-a-name worry
+  was about the twenty-nine READS; the byte has three arithmetic RULES — `MA23`'s saturating scoop,
+  the jump's floored burn with its carry, `TT111`'s range check — and the type is those three,
+  written once each, with `tenths` for everything that reads a byte. It found the number seventy
+  defined three times under three names.
+
 **AND `Colour` DID NOT SURVIVE THE PLAN'S OWN DESCRIPTION EITHER**, which is why it is worth
 recording next to the three. The row asked for "scoped enums with the original values", and the
 C64 build's colour constants are not colours: `RED`, `YELLOW`, `GREEN` and `WHITE` are four

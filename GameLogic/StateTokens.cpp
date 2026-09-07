@@ -168,7 +168,7 @@ namespace Elite
 
     // 6502: LDX QQ14 / SEC / JSR pr2 -- the fuel is in tenths of a light year, so it prints with a
     // decimal point in a width of three.
-    PrintByteValue(_sink, m_commander.fuel, true);
+    PrintByteValue(_sink, m_commander.fuel.tenths, true);
 
     PrintThenNewline(m_printer, LIGHT_YEARS_TOKEN);
     m_printer.Print(CASH_LINE_TOKEN);

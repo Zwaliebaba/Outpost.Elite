@@ -168,7 +168,7 @@ namespace Elite
    * time and differ on the first.
    */
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video,
+                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video,
                      MemoryMap& _map) noexcept;
 
   /*
@@ -188,7 +188,7 @@ namespace Elite
    * that get one band of colour cells rather than two.
    */
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
-                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
+                         const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass,
                          VideoState& _video, MemoryMap& _map, std::uint8_t _view) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.

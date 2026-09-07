@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "Canvas.h"
+#include "Commander.h"
 #include "Scanner.h"
 #include "SoundEffects.h"
 #include "ShipDraw.h"
@@ -205,7 +206,7 @@ namespace Elite
    * routine's own array rather than a `GeometryWorkspace` borrowed for the name. `_draw` is `SC`,
    * the cursor the dials advance between them.
    */
-  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel,
                  Compass& _compass, const Bubble& _bubble) noexcept;
 
   /*

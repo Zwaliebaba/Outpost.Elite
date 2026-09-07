@@ -154,7 +154,7 @@ namespace Elite
   }
 
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map) noexcept
+                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map) noexcept
   {
     // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
     DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW);
@@ -190,7 +190,7 @@ namespace Elite
   }
 
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
-                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video,
+                         const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video,
                          MemoryMap& _map, std::uint8_t _view) noexcept
   {
     /*

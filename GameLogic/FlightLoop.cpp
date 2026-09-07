@@ -739,9 +739,6 @@ namespace Elite
     inline constexpr std::uint8_t CABIN_SCOOPING = 224;
     inline constexpr std::uint8_t CABIN_TRUMBLE_DEATH = 240;
 
-    /// 6502: CMP #70 -- a full tank, in tenths of a light year.
-    inline constexpr std::uint8_t FUEL_MAXIMUM = 70;
-
     /// 6502: LDA #192 / JSR FAROF2 -- the station is respawned when the planet is inside this.
     inline constexpr std::uint8_t STATION_SPAWN_RANGE = 192;
 
@@ -1689,9 +1686,7 @@ namespace Elite
       if (commander.fuelScoops != 0u)
       {
         const ShiftResult scooped = RotateRight(_universe.flight.delt4Next, false);
-        const AddResult tank = AddWithCarry(scooped.value, commander.fuel, scooped.carry);
-
-        commander.fuel = (tank.value < FUEL_MAXIMUM) ? tank.value : FUEL_MAXIMUM;
+        commander.fuel = commander.fuel.Scooped(scooped.value, scooped.carry);
 
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_SCOOPS_ON,
                     _universe.view);
