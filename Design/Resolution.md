@@ -748,3 +748,23 @@ window opens at 1280×800 instead of 960×600 and every pixel is two. The twins 
 compiles it, so `ScreenPresenter.cpp`, the eighteen root constants and the shader's `gImageSize`
 have been read by `check_outpost.py` and by nothing else. The Windows CI leg is the first compiler
 to see them.
+
+**And it broke there, which is the rest of this entry.** Five `C2065`s across three files: the
+scripted rename of `Screen` to `Picture` had its rules in the wrong order, so the USES became
+`_picture` and `m_picture` while the DECLARATIONS stayed `_screen` and `m_screen`. Every one of the
+sixteen checks passed on that tree, the suite was green, and the defect was invisible on the leg
+that can see `GameLogic/` because it was entirely inside the leg that cannot.
+
+**So `check_outpost.py` grew a fourth half, and the shape of the argument is the file's own.** It
+already reads `Elite::Name`, a call's arity, `name.member` and a constructor's initialiser list --
+four answers to "what can a Linux runner know about code only MSVC compiles" -- and none of them can
+see a BARE IDENTIFIER that resolves to nothing. `check_bare_identifiers` is the fourth: every
+`m_member` and every `_parameter` the app mentions must be one it declares. It reports all three
+files the compiler did, its self-test plants this exact rename, and it is deliberately conservative
+about what it cannot know (a name declared in the wrong CLASS still compiles and is still the blind
+spot only a compiler closes).
+
+**One thing the failure proved for free.** `ScreenPresenter.cpp` reached line 384 before erroring,
+so its `#include` of the FXC-generated shader headers had resolved -- which means the HLSL compiled,
+and the `uint2 gImageSize` root constants and the pixel shader that reads them are sound. That was
+the part of §7 with no evidence behind it at all.

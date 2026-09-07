@@ -232,7 +232,7 @@ namespace Outpost
 
     /// The 640x400 picture this presents, and the canvas above is what it presents it FROM until
     /// every region draws itself (Resolution.md §3.3). Both, because neither is the other's copy.
-    Elite::Picture* m_screen = nullptr;
+    Elite::Picture* m_picture = nullptr;
 
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
