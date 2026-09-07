@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,107 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,121 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1487,7 +1487,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are M5-a-8 and M5-a-9. | 3 |
-| **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
+| **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
 
@@ -1774,6 +1774,55 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-b: the tables are `constexpr`, and the row's acceptance named a suite that had
+been deleted eight hours earlier.**
+
+**THE ACCEPTANCE HAD TO BE REWRITTEN BEFORE ANY OF IT COULD BE BUILT.** The row read "`TableTests`
+green; one `static_assert` per table against the oracle-checked value", and `TableTests.cpp` is not
+in the tree: `main` retired the oracle comparison of the generated tables this morning, on the
+ground that the tables are the port's own data now and the three pictures among them are EDITED
+through `tools/bitmaps.py` rather than regenerated. So the row asked for a suite that no longer
+exists to stay green, and for assertions "against the oracle-checked value" when nothing checks them
+against the oracle any more. That is §6.73's pattern for the fourth time — a criterion scoped before
+the thing behind it changed — and the criterion is rewritten here rather than quietly met.
+
+**WHAT THE TABLES BECOMING `constexpr` IS ACTUALLY WORTH, stated plainly because it is less than it
+sounds.** `const std::array<std::uint8_t, N>` with a brace initialiser is already
+constant-initialised into read-only data; `constexpr` changes no byte of the program. What it does
+is make that a GUARANTEE the compiler checks rather than an optimisation it happens to perform, and
+it is the precondition for anything reading a table in a constant expression. One line of
+`extract_tables.py` emits it, thirteen files regenerate byte-identical apart from the keyword, and
+the three pictures — which that tool deliberately does not overwrite — take it by hand. `bitmaps.py`
+finds an array by `identifier = {`, so it is unaffected, and the no-op import still changes nothing.
+
+**AND THE ASSERTIONS ARE ABOUT SHAPE, WHICH IS THE HALF A COMPILER CAN HOLD.** The row imagined
+"a known value" per table. A hand-typed `SINE_TABLE[8] == 0x59` would be a worse instrument than the
+byte-for-byte oracle comparison that was just retired, and it would pin nothing anybody could get
+wrong in a generated file. What IS worth pinning is what `LookupTables.h` already claims in prose
+and nothing checks: the font is "96 characters of eight rows"; the sprite sheet is
+`SPRITE_DEFINITION_COUNT * SPRITE_BYTES`; the scanner colours are "sized by what indexes it, which
+is a ship TYPE", so `SHIP_TYPE_COUNT + 1`; `celllook` has one entry per `Canvas::CELL_ROWS`; the
+dashboard's two palettes cover exactly the cells below the raster split; `CTWOS2` is the aligned
+masks PLUS TWO, because the extra pair are the wrapped cases and not padding; the eight per-effect
+sound tables are eight columns of one table with `SOUND_EFFECT_COUNT` rows; `TGINT` is the thirteen
+`DKS3` walks. Every one of those is §6.8's own rule — size a table from what can INDEX it — and
+every one was previously checked by a person reading two files at once.
+
+They live in `GameLogic/LookupTables.cpp`, a translation unit that emits nothing. It is not in the
+header because the constants belong to the code that INDEXES each table, and `LookupTables.h` is
+included by nearly everything: reaching `SHIP_TYPE_COUNT` or `Canvas::CELL_ROWS` from there would
+make the tables depend on the port rather than the other way round. And the assertions read
+`std::tuple_size_v` — the DECLARATION, never the bytes — which is why they hold with the big tables
+still in their own `.cpp` rather than putting 160 KB of initialiser into every translation unit that
+wants a font.
+
+Shortening `SCANNER_COLOUR_TABLE`'s declaration by one entry gives
+`static assertion failed: the scanner has a colour for every ship type and for none`, which is the
+check that they measure something.
+
+`origin-markers` 4,107 → 4,121, rule 4's reason: each assertion names the 6502 label it is about.
+395 of 395; all 15 repository checks; the replay digest unmoved.
 
 **2026-09-07 — M5-c: twenty ledger homes named files the port never built, and ten more names are
 history that must NOT be corrected.**

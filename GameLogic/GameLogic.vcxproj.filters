@@ -415,6 +415,9 @@
     <ClCompile Include="ScreenTables.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
+    <ClCompile Include="LookupTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
     <ClCompile Include="Font.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
