@@ -61,7 +61,6 @@ namespace Elite
 
       // 6502: LDX #0 / STX QQ17 -- and the zero stays in X for the comparison below.
       _text.caseFlags = 0;
-      _printer.SetCaseFlags(0);
 
       _text.column = _message.column; // 6502: LDA messXC / JSR DOXC
 

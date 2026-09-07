@@ -173,20 +173,6 @@ namespace Elite
       m_sid.Clear();
     }
 
-    /*
-     * 6502: QQ17 -- the one byte of game state still living in a printer rather than in `Universe`
-     * (DTW1-8 moved in M5-e-2b). The replay digest reads it beside `State()` so that it hashes the
-     * printer the frames actually drove (M5-e-2); M5-e-2c collapses it and removes this.
-     */
-    [[nodiscard]] TokenPrinter& Recursive() noexcept
-    {
-      return m_recursive;
-    }
-    [[nodiscard]] const TokenPrinter& Recursive() const noexcept
-    {
-      return m_recursive;
-    }
-
     [[nodiscard]] Ports& PortsOf() noexcept
     {
       return m_ports;

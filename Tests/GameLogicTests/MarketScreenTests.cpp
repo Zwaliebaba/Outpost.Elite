@@ -566,7 +566,7 @@ namespace GameLogicTests
         sink.cursor = &text;
         Elite::CharacterPrinter characters(sink, universe.sentences);
         characters.State().sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         /*
@@ -585,7 +585,6 @@ namespace GameLogicTests
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(NAME), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
@@ -824,7 +823,7 @@ namespace GameLogicTests
         sink.cursor = &text;
         Elite::CharacterPrinter characters(sink, universe.sentences);
         characters.State().sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
@@ -835,7 +834,6 @@ namespace GameLogicTests
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
@@ -1079,7 +1077,7 @@ namespace GameLogicTests
         sink.cursor = &text;
         Elite::CharacterPrinter characters(sink, universe.sentences);
         characters.State().sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
@@ -1090,7 +1088,6 @@ namespace GameLogicTests
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys({});
         RecordingEffects effects;
@@ -1334,7 +1331,7 @@ namespace GameLogicTests
         sink.cursor = &text;
         Elite::CharacterPrinter characters(sink, universe.sentences);
         characters.State().sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
@@ -1345,7 +1342,6 @@ namespace GameLogicTests
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys(s.keys);
         RecordingEffects effects;

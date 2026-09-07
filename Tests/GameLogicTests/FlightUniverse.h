@@ -182,7 +182,7 @@ namespace GameLogicTests
      */
     Elite::TextPrinter glyphs{canvas, text, &sound};
     Elite::CharacterPrinter characters{glyphs, sentences};
-    Elite::TokenPrinter printer{characters};
+    Elite::TokenPrinter printer{characters, text};
 
     /*
      * `Codes` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
@@ -230,11 +230,6 @@ namespace GameLogicTests
     /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
     std::uint8_t fuel = 0;
-
-    Universe()
-    {
-      printer.SetCursor(&text);
-    }
 
     /*
      * The seams and the text machinery this fixture answers with, as `Elite::Ports` (M3-a-2).
@@ -479,7 +474,7 @@ namespace GameLogicTests
     static constexpr std::uint16_t IO_PORT = 0x0001;
 
     /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
-    /// which reads cells in table order and never their addresses (`Hash(const Universe&)`).
+    /// which reads cells in table order and never their addresses (`Hash(const Elite::Universe&)`).
     Where() = default;
 
     explicit Where(const OracleImage& _oracle)

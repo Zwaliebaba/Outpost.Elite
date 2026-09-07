@@ -33,8 +33,9 @@ namespace Elite
     std::uint8_t column = 0; ///< 6502: XC
     std::uint8_t row = 0;    ///< 6502: YC
 
-    /// 6502: QQ17 -- the capitalisation state the token printer owns. CHPR only reads it, and only
-    /// to notice the value 255, which means "print nothing at all".
+    /// 6502: QQ17 -- the capitalisation state. The token printer works on it and CHPR reads it for
+    /// the value 255, which means "print nothing at all". ONE byte since M5-e-2c: the printer kept
+    /// a copy until then and every store of QQ17 was two stores (§8).
     std::uint8_t caseFlags = 0;
 
     /*

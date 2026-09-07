@@ -118,7 +118,6 @@ namespace Elite
 
     _universe.text.column = 1;
     _universe.text.row = 1;
-    _ports.printer.SetCaseFlags(0);
     _universe.text.caseFlags = 0;
 
     // 6502: JSR TT163.
@@ -329,14 +328,10 @@ namespace Elite
          * The line is printed AGAIN with printing switched off, purely so that TT151 leaves the
          * price in QQ24. A routine whose job is to print is being called for its arithmetic.
          *
-         * QQ17 lives in two places in this port -- the token printer owns the flags and CHPR reads
-         * a copy to notice the value 255 -- so both are set. That duplication is a wart worth
-         * collapsing when something owns the text state properly; until then, setting one and not
-         * the other prints a line the original suppresses.
+         * QQ17 lived in two places in this port until M5-e-2c -- the token printer's copy and the
+         * byte CHPR reads for 255 -- and this site set both, with a note that setting one and not
+         * the other prints a line the original suppresses. One byte now.
          */
-        const std::uint8_t savedFlags = _ports.printer.CaseFlags();
-        const std::uint8_t savedTextFlags = _universe.text.caseFlags;
-        _ports.printer.SetCaseFlags(PRINTING_OFF);
         _universe.text.caseFlags = PRINTING_OFF;
 
         PrintMarketItem(_ports.printer, _ports.characters, _universe.text, item, _universe.current.economy, _universe.market, false);
@@ -344,9 +339,6 @@ namespace Elite
 
         // 6502: LDA #0 / STA QQ17 -- printing back on, and it is ALL CAPS afterwards rather than
         // whatever it was before.
-        (void)savedFlags;
-        (void)savedTextFlags;
-        _ports.printer.SetCaseFlags(0);
         _universe.text.caseFlags = 0;
 
         // 6502: LDA QQ20,Y / SEC / SBC R / STA QQ20,Y.

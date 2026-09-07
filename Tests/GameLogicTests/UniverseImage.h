@@ -75,19 +75,12 @@ namespace GameLogicTests
   [[nodiscard]] std::vector<Cell> ImageCells(Universe& _universe, const Where& _at);
 
   /*
-   * What the table reads that is NOT in `Elite::Universe`: the token printer (6502: QQ17) and the
-   * fixture's claim on the VIC-II sprite registers. An oracle fixture's cells read the wrapper's
-   * printer, which is what it drove; the replay's must read `Game`'s, which is what IT drove, and
-   * until M5-e-2 they did not: `Hash(universe)` hashed the wrapper's idle printers next to a `Game`
-   * that had printed with its own. DTW1-8 were here too until M5-e-2b moved them into
-   * `Elite::Universe`; M5-e-2c collapses QQ17 and the printer goes the same way.
+   * The table over a bare `Elite::Universe`, which since M5-e-2c is every byte the image reads;
+   * the one thing beside it is the fixture's claim on the VIC-II sprite registers. M5-e-2 found
+   * `Hash(universe)` reading the test wrapper's idle printers for QQ17 and DTW1-8 next to a `Game`
+   * that had printed with its own, and M5-e-2b/2c moved those nine bytes into the universe.
    */
-  struct Beside
-  {
-    Elite::TokenPrinter& recursive;
-    bool spriteRegistersAreOurs = false;
-  };
-  [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, Beside _beside, const Where& _at);
+  [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, bool _spriteRegistersAreOurs, const Where& _at);
 
   /// Port -> 6502 memory, every cell.
   void Materialise(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
@@ -110,12 +103,9 @@ namespace GameLogicTests
   [[nodiscard]] std::uint64_t Hash(const Universe& _universe, const Where& _at);
 
   /// The same, with no oracle to resolve the addresses: the cells are read in table order and
-  /// their addresses are never used. This is the hash a replay stores (slice M0-c).
-  [[nodiscard]] std::uint64_t Hash(const Universe& _universe);
-
-  /// The replay's hash: `Game`'s universe and `Game`'s printers (M5-e-2). Const like the entry
-  /// points above, and cast away inside for the same reason: only the getters run.
-  [[nodiscard]] std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive);
+  /// their addresses are never used. This is the hash a replay stores (slice M0-c), and it takes
+  /// the bare `Elite::Universe` because that is what `Game` owns (M5-e-2).
+  [[nodiscard]] std::uint64_t Hash(const Elite::Universe& _universe);
 
   /*
    * The FNV-1a offset basis and prime, 64-bit. Any stable hash would do; this one is

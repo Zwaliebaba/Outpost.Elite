@@ -600,8 +600,7 @@ namespace GameLogicTests
         text.column = 1;
         text.row = 1;
         Elite::CharacterPrinter characters(sink, universe.sentences);
-        Elite::TokenPrinter recursive(characters);
-        recursive.SetCursor(&text);
+        Elite::TokenPrinter recursive(characters, text);
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, recursive, rng);
 

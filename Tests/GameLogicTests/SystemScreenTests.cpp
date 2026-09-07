@@ -230,9 +230,8 @@ namespace GameLogicTests
           sink.cursor = &text;
           Elite::CharacterPrinter characters(sink, universe.sentences);
           characters.State().sentenceStart = 0xFF;
-          Elite::TokenPrinter printer(characters);
+          Elite::TokenPrinter printer(characters, text);
           printer.SetCaseFlags(0);
-          printer.SetCursor(&text);
 
           universe.commander = Elite::DefaultCommander();
           Elite::Commander& commander = universe.commander;

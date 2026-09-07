@@ -667,7 +667,7 @@ namespace GameLogicTests
           Elite::ExtendedTextState sentences;
           Elite::CharacterPrinter characters(sink, sentences);
           characters.State().sentenceStart = 0xFF;
-          Elite::TokenPrinter printer(characters);
+          Elite::TokenPrinter printer(characters, text);
           printer.SetCaseFlags(0x80);
 
           Elite::PrintMarketScreen(printer, characters, text, static_cast<std::uint8_t>(economy), market, false);

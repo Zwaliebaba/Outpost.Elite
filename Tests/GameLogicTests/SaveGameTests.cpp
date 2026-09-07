@@ -858,8 +858,7 @@ namespace GameLogicTests
 
         Elite::Rng& rng = universe.rng;
         Elite::CharacterPrinter characters(sink, universe.sentences);
-        TokenPrinter recursive(characters);
-        recursive.SetCursor(&text);
+        TokenPrinter recursive(characters, text);
         Elite::SystemSeeds current{};
         Elite::SystemSeeds selected{};
         Elite::StateTokens values(recursive, text, portBlock, portName, current, selected, false);

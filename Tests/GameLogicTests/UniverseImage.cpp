@@ -134,30 +134,20 @@ namespace GameLogicTests
 
   std::vector<Cell> ImageCells(Universe& _universe, const Where& _at)
   {
-    return ImageCells(static_cast<Elite::Universe&>(_universe), Beside{_universe.printer, _universe.spriteRegistersAreOurs}, _at);
+    return ImageCells(static_cast<Elite::Universe&>(_universe), _universe.spriteRegistersAreOurs, _at);
   }
 
-  std::vector<Cell> ImageCells(Elite::Universe& _universe, Beside _beside, const Where& _at)
+  std::vector<Cell> ImageCells(Elite::Universe& _universe, bool _spriteRegistersAreOurs, const Where& _at)
   {
     std::vector<Cell> cells;
     cells.reserve(1200);
     Elite::Universe* universe = &_universe;
-    Elite::TokenPrinter* recursive = &_beside.recursive;
 
     // ---- compared, in the order `CompareState` checked them -----------------------------------------
 
     cells.push_back(Direct(L"XC", _at.xc, _universe.text.column, CellScope::Compared));
     cells.push_back(Direct(L"YC", _at.yc, _universe.text.row, CellScope::Compared));
-    {
-      // 6502: QQ17 -- behind a getter and a setter on the token printer.
-      Cell cell;
-      cell.name = L"QQ17";
-      cell.address = _at.qq17;
-      cell.scope = CellScope::Compared;
-      cell.get = [recursive]() { return recursive->CaseFlags(); };
-      cell.set = [recursive](std::uint8_t _flags) { recursive->SetCaseFlags(_flags); };
-      cells.push_back(std::move(cell));
-    }
+    cells.push_back(Direct(L"QQ17", _at.qq17, _universe.text.caseFlags, CellScope::Compared));
     cells.push_back(Direct(L"DTW1", _at.dtw1, _universe.sentences.lowerCaseBits, CellScope::Compared));
     cells.push_back(Direct(L"DTW2", _at.dtw2, _universe.sentences.sentenceStart, CellScope::Compared));
     cells.push_back(Direct(L"DTW6", _at.dtw6, _universe.sentences.alwaysLower, CellScope::Compared));
@@ -204,7 +194,7 @@ namespace GameLogicTests
      * every other fixture leaves the bytes alone, and so does this table. The nine-bit x is one
      * value on the port's side and a low byte per sprite plus one shared high-bit byte on the game's.
      */
-    if (_beside.spriteRegistersAreOurs)
+    if (_spriteRegistersAreOurs)
     {
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
@@ -533,17 +523,10 @@ namespace GameLogicTests
     return HashCells(ImageCells(const_cast<Universe&>(_universe), _at));
   }
 
-  std::uint64_t Hash(const Universe& _universe)
+  std::uint64_t Hash(const Elite::Universe& _universe)
   {
     const Where unresolved{};
-    return Hash(_universe, unresolved);
-  }
-
-  std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive)
-  {
-    const Where unresolved{};
-    const Beside beside{const_cast<Elite::TokenPrinter&>(_recursive), false};
-    return HashCells(ImageCells(const_cast<Elite::Universe&>(_universe), beside, unresolved));
+    return HashCells(ImageCells(const_cast<Elite::Universe&>(_universe), false, unresolved));
   }
 
   // ---- the two names the suites already use --------------------------------------------------------

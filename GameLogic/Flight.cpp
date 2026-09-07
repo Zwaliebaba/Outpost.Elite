@@ -337,7 +337,6 @@ namespace Elite
     _universe.work.pitchCounter = TITLE_SPIN;
 
     // 6502: INX / STX QQ17 -- 128, which is sentence case, and it is what the prompt prints in.
-    _ports.printer.SetCaseFlags(0x80u);
     _universe.text.caseFlags = 0x80u;
 
     // 6502: LDA TYPE / JSR NWSHP. The slot is kept because `LL9` needs the ship's block in `K%` as
