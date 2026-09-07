@@ -1209,7 +1209,7 @@ namespace GameLogicTests
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::Ports ports = _frame.universe.PortsWith(_frame.universe.unused);
+      Elite::Ports ports = _frame.universe.Ports();
       const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(_frame.universe, ports)
                                          : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(_frame.universe, ports)
                                          : (_reach == Reach::Whole) ? Elite::MainFlightLoop(_frame.universe, ports)
@@ -2231,7 +2231,7 @@ namespace GameLogicTests
       frame.universe.view = 0u;
       frame.universe.spaceView = 0u;
 
-      Elite::Ports ports = frame.universe.PortsWith(frame.universe.unused);
+      Elite::Ports ports = frame.universe.Ports();
 
       frame.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, which is the path that launches
       Elite::SystemSeeds selected{};

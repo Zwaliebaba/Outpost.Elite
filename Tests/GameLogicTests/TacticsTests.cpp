@@ -566,7 +566,7 @@ namespace GameLogicTests
       /// The seams the AI reaches, all answered with nothing in one place.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(universe.unused);
+        return universe.Ports();
       }
     };
 

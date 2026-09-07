@@ -5,6 +5,8 @@
 #include "OracleImage.h"
 
 #include "Commander.h"
+#include "Controls.h"
+#include "LookupTables.h"
 #include "ExtendedTokens.h"
 #include "Rng.h"
 #include "StartUp.h"
@@ -13,6 +15,7 @@
 #include "Tokens.h"
 #include "Galaxy.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string>
@@ -101,16 +104,22 @@ namespace GameLogicTests
      * (§6.73's corollary: a seam is what a suite counts, and the count goes with it).
      */
 
-    /// The port's side: every seam recorded, and the title screen answering from a script.
-    class RecordingStart : public Elite::StartUpEffects, public Elite::Presenter
+    /*
+     * The port's side: the one seam the sequence could still reach, recorded.
+     *
+     * `TITLE` WAS ANSWERED HERE FROM A SCRIPT until M6-0-h-2 and is not any more: `BR1` calls
+     * `Elite::ShowTitleShip` itself, both machines run the title screen for real, and what ends it
+     * is a key held on the oracle's CIA and on `ScriptedKeys` below. The title frames pace through
+     * `HoldTitleFrame`, which is counted.
+     */
+    class RecordingStart : public Elite::Presenter
     {
     public:
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
-      void HoldTitleFrame(std::uint8_t) override {}
-      explicit RecordingStart(std::vector<std::uint8_t> _answers) noexcept
-        : m_answers(std::move(_answers))
+      void HoldTitleFrame(std::uint8_t) override
       {
+        ++titleFrames;
       }
 
       void WaitFrames(std::uint8_t _frames) override
@@ -118,23 +127,8 @@ namespace GameLogicTests
         seams.push_back({"DELAY", _frames, 0, 0});
       }
 
-      std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override
-      {
-        seams.push_back({"TITLE", _token, Elite::Byte(_shipType), _distance});
-        if (m_taken >= m_answers.size())
-        {
-          overran = true;
-          return 0;
-        }
-        return m_answers[m_taken++];
-      }
-
       std::vector<Seam> seams;
-      bool overran = false;
-
-    private:
-      std::vector<std::uint8_t> m_answers;
-      std::size_t m_taken = 0;
+      std::uint32_t titleFrames = 0;
     };
 
     class ScriptedKeys : public Elite::Keyboard
@@ -144,12 +138,30 @@ namespace GameLogicTests
         : m_keys(std::move(_keys))
       {
       }
-      /// 6502: FLKB and the matrix walk. `SilentEffects` answered the first until M3-b-3d and the
-      /// start sequence reaches neither: `TITLE` is a seam here and the disk menu only types.
+      /// 6502: FLKB. `SilentEffects` answered it until M3-b-3d and the disk menu only types.
       void Flush() override {}
-      [[nodiscard]] bool Held(std::size_t) override
+
+      /*
+       * 6502: the matrix walk, which `TITLE` runs once a frame until a key is down (M6-0-h-2).
+       *
+       * One key per title screen, held from that screen's first scan: `titleKeys[0]` ends the
+       * "LOAD NEW COMMANDER" screen and `titleKeys[1]` the "PRESS FIRE OR SPACE" one, and the
+       * last entry stays held for any scan after that. A walk starts at the top of the logger, so
+       * the scan count advances when the top index is asked for.
+       */
+      std::vector<std::uint8_t> titleKeys;
+      [[nodiscard]] bool Held(std::size_t _key) override
       {
-        return false;
+        if (_key + 1u == std::tuple_size_v<Elite::KeyLogger>)
+        {
+          ++m_scans;
+        }
+        if (titleKeys.empty() || m_scans == 0u)
+        {
+          return false;
+        }
+        const std::size_t scan = std::min(m_scans - 1u, titleKeys.size() - 1u);
+        return _key == titleKeys[scan];
       }
 
       [[nodiscard]] std::uint8_t NextKey() override
@@ -171,7 +183,16 @@ namespace GameLogicTests
       std::vector<std::uint8_t> m_keys;
       std::size_t m_taken = 0;
       std::size_t m_extra = 0;
+      std::size_t m_scans = 0;
     };
+
+    /*
+     * 6502: the internal key numbers the scripts hold at the title screens -- matrix positions,
+     * which is what `RDKEY` returns and `BR1` compares against `YINT`. `Y` is `KEY_YES_INTERNAL`
+     * (column 3, row 1, so &40 - 25 = 39); `N` is column 4, row 7; Space is `KEY_SPEED_UP` and
+     * "A" is `KEY_FIRE`. `TRANTABLE` pins all four below.
+     */
+    constexpr std::uint8_t KEY_N_INTERNAL = 25;
 
     struct CountingSink : public Elite::TextSink
     {
@@ -187,8 +208,8 @@ namespace GameLogicTests
     struct Script
     {
       const char* what;
-      bool coldStart;           ///< enter at TT170 rather than at BR1
-      std::uint8_t firstAnswer; ///< what the first title screen returns
+      bool coldStart;        ///< enter at TT170 rather than at BR1
+      std::uint8_t firstKey; ///< the key held at the first title screen, which is what it returns
       std::vector<std::uint8_t> menuKeys;
       std::vector<Seam> expected;
     };
@@ -420,13 +441,21 @@ namespace GameLogicTests
       const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::Byte(Elite::ShipType::CobraMk3), Elite::TITLE_COBRA_DISTANCE};
       const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::Byte(Elite::ShipType::Adder), Elite::TITLE_ADDER_DISTANCE};
 
+      // The keys are matrix positions since M6-0-h-2, because the title screen really scans;
+      // "no key at all" was a script only a stub could answer and is the fire button now, which
+      // is the one key that ends `TITLE` without turning the joystick off.
+      Assert::AreEqual<std::uint8_t>('N', Elite::KEY_TRANSLATION[KEY_N_INTERNAL], L"TRANTABLE: N");
+      Assert::AreEqual<std::uint8_t>('Y', Elite::KEY_TRANSLATION[Elite::KEY_YES_INTERNAL], L"TRANTABLE: Y");
+      Assert::AreEqual<std::uint8_t>(' ', Elite::KEY_TRANSLATION[Elite::KEY_SPEED_UP], L"TRANTABLE: Space");
+      Assert::AreEqual<std::uint8_t>('A', Elite::KEY_TRANSLATION[Elite::KEY_FIRE], L"TRANTABLE: A");
+
       const std::vector<Script> SCRIPTS = {
-        {"N at the prompt", false, 'N', {}, {FIRST, SECOND}},
-        {"a key that is not Y", false, ' ', {}, {FIRST, SECOND}},
-        {"no key at all", false, 0, {}, {FIRST, SECOND}},
+        {"N at the prompt", false, KEY_N_INTERNAL, {}, {FIRST, SECOND}},
+        {"a key that is not Y", false, Elite::KEY_SPEED_UP, {}, {FIRST, SECOND}},
+        {"the fire button", false, Elite::KEY_FIRE, {}, {FIRST, SECOND}},
         {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {FIRST, SECOND}},
         {"Y, toggle the media, then leave", false, Elite::KEY_YES_INTERNAL, {'3', '5'}, {FIRST, SECOND}},
-        {"a cold start", true, 'N', {}, {FIRST, SECOND}},
+        {"a cold start", true, KEY_N_INTERNAL, {}, {FIRST, SECOND}},
         {"a cold start into the menu", true, Elite::KEY_YES_INTERNAL, {'5'}, {FIRST, SECOND}},
       };
 
@@ -464,10 +493,14 @@ namespace GameLogicTests
          */
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
         for (const char* seam :
-             {"DOXC", "DOYC", "MT9", "NLIN4", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SWAPPZERO", "DELAY", "FLKB"})
+             {"DOXC", "DOYC", "MT9", "NLIN4", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SWAPPZERO", "DELAY", "FLKB", "DOVDU19"})
         {
           cpu.AddTrap(oracle.Label(seam));
         }
+
+        // 6502: CIA1 port A, as the previous scan's `STA &DC00` leaves it (M6-0-a-4): the joystick
+        // reads idle, so `TITLE`'s `RDKEY` walks the matrix and finds the key held there.
+        cpu.Io(Cpu6502::CIA1_PORT_A) = 0x7Fu;
 
         // 6502: SID -- every store the music makes, in order, which is what the port's log holds.
         cpu.LogStores(SID_BASE, static_cast<std::uint16_t>(SID_BASE + 0x18));
@@ -533,14 +566,17 @@ namespace GameLogicTests
 
           if (cpu.pc == title)
           {
-            // 6502: JSR TITLE -- the arguments in A, X and Y, the key it ended on in A and X.
+            /*
+             * 6502: JSR TITLE -- the arguments in A, X and Y, recorded; and the routine RUNS since
+             * M6-0-h-2, ending on the key the script holds on the CIA from this screen's first
+             * scan: the script's key at the first screen, Space at the second (M6-0-a-4).
+             */
             seams.push_back({"TITLE", cpu.a, cpu.x, cpu.y});
-            const std::uint8_t answer = (titles == 0) ? script.firstAnswer : 0;
+            const std::uint8_t key = (titles == 0) ? script.firstKey : Elite::KEY_SPEED_UP;
             ++titles;
-            cpu.a = answer;
-            cpu.x = answer;
-            ReturnFromCall();
-            continue;
+            cpu.keysDown.fill(0u);
+            const std::size_t at = 0x40u - key;
+            cpu.HoldKey(static_cast<std::uint8_t>(at >> 3), static_cast<std::uint8_t>(at & 0x07u));
           }
 
           if (cpu.pc == keyRead)
@@ -605,11 +641,12 @@ namespace GameLogicTests
         explosionCount = 0xEE;
         std::uint8_t& dockedFlag = universe.dockedFlag;
 
-        RecordingStart effects({script.firstAnswer, 0});
+        RecordingStart effects;
+        keys.titleKeys = {script.firstKey, Elite::KEY_SPEED_UP};
         Elite::SidWriteLog sid; ///< 6502: SID -- what `startat`, `stopat` and `stopbd` write
         NullSeams nulls;
         Elite::Ports ports{recursive, characters, sink, sid,
-                           extended,  effects,    effects, keys,  store};
+                           extended,  effects, keys, store};
 
         /*
          * 6502: msblob -- the one thing the sequence draws, and a count cannot say so any more
@@ -633,20 +670,42 @@ namespace GameLogicTests
         Assert::IsTrue(inkAfter > inkBefore, (where + L": msblob drew the missile indicators").c_str());
 
         // ---- compare -------------------------------------------------------------------------
-        Assert::IsFalse(effects.overran, (where + L": the port asked for more title screens").c_str());
         Assert::IsFalse(keys.overran, (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(keysTaken, keys.Taken(), (where + L": how many keys the menu read").c_str());
 
-        Assert::AreEqual(
-          script.expected.size(), effects.seams.size(),
-          (where + L": the port's seams are " + Describe(effects.seams) + L", expected " + Describe(script.expected)).c_str());
-        Assert::AreEqual(seams.size(), effects.seams.size(),
-                         (where + L": the game reached " + Describe(seams) + L", the port " + Describe(effects.seams)).c_str());
+        // 6502: the two `JSR TITLE`s, with their arguments, in order -- the shipped routine's own
+        // calls, watched at the label. The port has no seam there to record any more (M6-0-h-2);
+        // what it did at the title is compared below, as state.
+        Assert::AreEqual(script.expected.size(), seams.size(),
+                         (where + L": the game reached " + Describe(seams) + L", expected " + Describe(script.expected)).c_str());
         for (std::size_t index = 0; index < seams.size(); ++index)
         {
-          Assert::IsTrue(
-            seams[index] == effects.seams[index] && seams[index] == script.expected[index],
-            (where + L": seam " + std::to_wstring(index) + L" -- game " + Describe(seams) + L", port " + Describe(effects.seams)).c_str());
+          Assert::IsTrue(seams[index] == script.expected[index],
+                         (where + L": seam " + std::to_wstring(index) + L" -- game " + Describe(seams)).c_str());
+        }
+        Assert::IsTrue(effects.seams.empty(), (where + L": the port reached a seam the sequence has none of: " + Describe(effects.seams)).c_str());
+        Assert::AreEqual<std::uint32_t>(2u, effects.titleFrames, (where + L": one frame per title screen, each ended by a held key").c_str());
+
+        /*
+         * 6502: what the two title screens leave behind, on both machines -- the second screen's
+         * Adder in `TYPE` and `INWK`, the bubble `RESET` and `NWSHP` left, `JSTK` (&FF if the fire
+         * button ended a screen, zero if a key did), and the title loop's own counters.
+         */
+        Assert::AreEqual(cpu.memory[oracle.Label("TYPE")], Elite::Byte(universe.flight.type), (where + L": TYPE").c_str());
+        Assert::AreEqual(cpu.memory[oracle.Label("JSTK")], universe.options.joystick, (where + L": JSTK").c_str());
+        Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], universe.flight.delta, (where + L": DELTA").c_str());
+        Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
+        Assert::AreEqual(cpu.memory[oracle.Label("CNT2")], universe.flight.steerCone, (where + L": CNT2").c_str());
+        Assert::AreEqual(cpu.memory[oracle.Label("QQ11")], universe.view, (where + L": QQ11").c_str());
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("FRIN") + slot)], universe.bubble.slots[slot],
+                           (where + L": FRIN+" + std::to_wstring(slot)).c_str());
+        }
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("INWK") + byte)], universe.work.ToBytes()[byte],
+                           (where + L": INWK+" + std::to_wstring(byte)).c_str());
         }
 
         // 6502: KEYLOOK after ZEKTRAN -- sixty-five bytes, cleared on both machines rather than
@@ -681,7 +740,8 @@ namespace GameLogicTests
         // 6502: LDA #3 / JSR DOXC, which is the port's text.column and not a seam.
         Assert::IsTrue(sawColumn, (where + L": the game should set the prompt column").c_str());
         Assert::AreEqual<std::uint8_t>(Elite::TITLE_PROMPT_COLUMN, firstColumn, (where + L": the column the game set").c_str());
-        Assert::AreEqual<std::uint8_t>(Elite::TITLE_PROMPT_COLUMN, text.column, (where + L": the column the port set").c_str());
+        // The port's column is not compared here any more: the title screens print after `BR1`'s
+        // `LDA #3 / JSR DOXC` and move it, on both machines, and the oracle's `DOXC` is trapped.
 
         // The state the sequence leaves behind, which is what the game then plays.
         /*

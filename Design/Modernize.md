@@ -294,13 +294,13 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->9 reference members,
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->8 reference members,
 and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
 `FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
-and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The nine that
+and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The eight that
 remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b replaces its interfaces
 with four ports without touching a signature again, and three of the four have landed; M4-a-1 took
-`SFS1` out and M6-0-a-3 took `LL9`'s two tail jumps out. `ViewChange.h` said it plainly while
+`SFS1` out, M6-0-a-3 took `LL9`'s two tail jumps out and M6-0-h-2 the title screen. `ViewChange.h` said it plainly while
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
@@ -308,7 +308,7 @@ the rest existed: "the struct is the argument list".
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
-<!--count:outpost-elite-names-->66 distinct `Elite::` names where it reached 205 when M3 opened.
+<!--count:outpost-elite-names-->64 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
 `Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and
@@ -317,7 +317,7 @@ and one thing it did not ask for, which M5-e-2 closed: `Elite::Universe` was the
 until then, because both sessions bound it at construction and `Game` needs both of them at its own.
 The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §4.4 drew.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->7 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->6 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
 `ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most were **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -325,8 +325,9 @@ The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
 times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics`, `FlightLoopEffects`'s `SpawnAhead`
 and `Anger`, and `StartUpEffects`'s `ResetUniverse`, `ResetShip` and `ResetMissileIndicators` are
-gone (M3-b-1a to M3-b-1e); `SpawnChildEffects` went in M4-a-1 and `ShipDrawEffects`, the last of
-the phase-order seams and the one the flat oracle image kept alive (§6.108), in M6-0-a-3. Three methods
+gone (M3-b-1a to M3-b-1e); `SpawnChildEffects` went in M4-a-1, `ShipDrawEffects`, the one the
+flat oracle image kept alive (§6.108), in M6-0-a-3, and `StartUpEffects` — `ZEKTRAN` and then
+`TITLE`, the last two methods of a seam the plan had already written off as empty — in M6-0-h. Three methods
 are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
@@ -1809,6 +1810,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-h-2: `BR1` calls `TITLE`, and the title screen runs on both machines.**
+
+`StartUpEffects` is gone. Its last method was a forward to `Elite::ShowTitleShip`, and `BR1` makes
+that call itself now, which is what `JSR TITLE` is. `Ports` is eight references, `Game` takes four
+and a `ControlEffects`, `GameShell` stops answering it and stops holding `QQ12` for it;
+`effects-seams` 7 → 6, `aggregate-refs` 9 → 8, `outpost-elite-names` 66 → 64.
+
+**A TITLE SCREEN ENDS ONLY ON A KEY, and that is the cost of the call.** Every fixture that drives
+the start sequence runs the title screen for real now and has to end it the way a player does:
+`GameTests` holds Space for exactly as long as `Reset` runs, `DockedSessionTests` for exactly as
+long as `ResetAndStartGame` runs, and `StartUpTests` holds the script's key at the first screen
+and Space at the second — on the port through `ScriptedKeys`, counting scans, and on the oracle
+by pressing the key on the CIA matrix at the label, which M6-0-a-4 made possible. So `TITLE` runs
+on the oracle inside `BR1` for the first time: `RESET`, `NWSHP`, `LL9` drawing a Cobra and then an
+Adder, `MVEIT`, `RDKEY` walking the matrix. The scripts hold matrix positions rather than
+characters now, pinned against `TRANTABLE`; "no key at all" was a script only a stub could answer
+and is "the fire button", the one key that ends a title screen with `JSTK` still set.
+
+**WHAT IS COMPARED CHANGED SHAPE.** The port had nothing left to record a `TITLE` call with, so the
+seam sequence is the oracle's alone — the two `JSR TITLE`s with their arguments, watched at the
+label — and the port's side is state: `TYPE`, `INWK`, `FRIN`, `JSTK`, `DELTA`, `MCNT`, `CNT2` and
+`QQ11` after the second screen, the sixty-five logger bytes, and one title frame per screen. One
+assertion is lost and said so in place: the prompt column the port sets before the first title,
+which the title's own prints move on both machines while the oracle's `DOXC` stays trapped. The
+replay is untouched — it enters at `RESET` and `LAUN`, not at `BR1`. 399 of 399; all 16 checks.
 
 **2026-09-07 — M6-0-h-1: `ZEKTRAN` is the library's, and the row was written on a false premise.**
 

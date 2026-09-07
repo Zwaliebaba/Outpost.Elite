@@ -64,7 +64,7 @@ namespace Elite
     StartTheme(_universe.music, _universe.memoryMap, _ports.sid);
 
     // 6502: LDX #CYL / LDA #6 / LDY #210 / JSR TITLE -- a Cobra Mk III, a long way off.
-    const std::uint8_t answer = _ports.start.ShowTitleScreen(TITLE_LOAD_TOKEN, ShipType::CobraMk3, TITLE_COBRA_DISTANCE);
+    const std::uint8_t answer = ShowTitleShip(_universe, _ports, TITLE_LOAD_TOKEN, ShipType::CobraMk3, TITLE_COBRA_DISTANCE);
 
     /*
      * 6502: CMP #YINT / BNE QU5.
@@ -102,7 +102,7 @@ namespace Elite
     ResetMissileIndicators(_universe.canvas, _universe.commander.missiles);
 
     // 6502: LDA #7 / LDX #ADA / LDY #48 / JSR TITLE -- an Adder, close up. Its key is discarded.
-    (void)_ports.start.ShowTitleScreen(TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);
+    (void)ShowTitleShip(_universe, _ports, TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);
 
     // 6502: JSR stopat -- the only stop both paths reach.
     StopMusic(_universe.music, _universe.sound, _universe.memoryMap, _ports.sid);

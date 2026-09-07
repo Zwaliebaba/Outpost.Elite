@@ -61,7 +61,7 @@ namespace
     App()
       : shell(window, presenter),
         flight(window),
-        game(shell, shell, shell, store, flight)
+        game(shell, shell, store, flight)
     {
       Elite::Universe& universe = game.State(); // the game's since M5-e-2; the sessions take it now
       shell.AttachUniverse(universe);
@@ -70,7 +70,7 @@ namespace
       // `DOCKIT` and the title screen -- so the composition lends the struct back to both.
       flight.AttachPorts(game.PortsOf());
       shell.AttachPorts(game.PortsOf());
-      shell.AttachFlight(flight, universe.dockedFlag);
+      shell.AttachFlight(flight);
       shell.AttachVideo(universe.video); // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachSound(audio, universe.sound, universe.music, game);
     }

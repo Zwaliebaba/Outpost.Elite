@@ -352,7 +352,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::Ports ports = universe.PortsWith(universe.unused, counting);
+        Elite::Ports ports = universe.PortsWith(counting);
         Elite::DrawHyperspaceTunnel(universe, ports);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
@@ -457,7 +457,7 @@ namespace GameLogicTests
      * tunnel as well as everything after it. What remains here is `StartUpEffects` for the
      * routines that still take one; `Launch` no longer does.
      */
-    struct RecordingStart final : Elite::StartUpEffects, Elite::Presenter, Elite::Keyboard
+    struct RecordingStart final : Elite::Presenter, Elite::Keyboard
     {
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
@@ -500,11 +500,6 @@ namespace GameLogicTests
       void Flush() override {}
 
       void WaitFrames(std::uint8_t) override {}
-
-      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
-      {
-        return 0;
-      }
     };
 
     /*
@@ -544,7 +539,7 @@ namespace GameLogicTests
       /// The seams a launch reaches: the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(start, start, start);
+        return universe.PortsWith(start, start);
       }
     };
 
@@ -943,7 +938,7 @@ namespace GameLogicTests
       leaving.universe.view = 1u;
 
       Counting counting;
-      Elite::Ports ports = leaving.universe.PortsWith(leaving.start, counting);
+      Elite::Ports ports = leaving.universe.PortsWith(counting);
 
       leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
@@ -957,7 +952,7 @@ namespace GameLogicTests
       Occupy(flying, 0x4Du);
 
       Counting none;
-      Elite::Ports flyingPorts = flying.universe.PortsWith(flying.start, none);
+      Elite::Ports flyingPorts = flying.universe.PortsWith(none);
 
       flying.universe.dockedFlag = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};

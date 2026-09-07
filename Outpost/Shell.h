@@ -50,7 +50,7 @@ namespace Outpost
    * yet. Three that WERE such comments no longer are: `RESET`, `RES2` and `msblob` are ported, and
    * the shell forwards them to `FlightSession` rather than approximating them (§6.73).
    */
-  class GameShell final : public Elite::Presenter, public Elite::StartUpEffects, public Elite::Keyboard
+  class GameShell final : public Elite::Presenter, public Elite::Keyboard
   {
   public:
     GameShell(Window& _window, CanvasPresenter& _presenter) noexcept
@@ -144,9 +144,8 @@ namespace Outpost
     /// 6502: FLKB -- empty the keyboard buffer.
     void Flush() override;
 
-    // ---- Elite::StartUpEffects --------------------------------------------------------------------
-
-    [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
+    // `Elite::StartUpEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-h-2): `ShowTitleScreen`
+    // was a forward to `Elite::ShowTitleShip`, which `BR1` calls itself now.
 
     // ---- Elite::Presenter's four ------------------------------------------------------------------
 
@@ -186,10 +185,9 @@ namespace Outpost
      * existed). `QQ12` comes with them because `RESET` writes it, and it belongs to the composition
      * root rather than to either half -- the docked dispatch reads it on every key.
      */
-    void AttachFlight(FlightSession& _flight, std::uint8_t& _dockedFlag) noexcept
+    void AttachFlight(FlightSession& _flight) noexcept
     {
       m_flight = &_flight;
-      m_dockedFlag = &_dockedFlag;
     }
 
     /*
@@ -236,7 +234,6 @@ namespace Outpost
 
     FlightSession* m_flight = nullptr;
     Elite::Ports* m_ports = nullptr;
-    std::uint8_t* m_dockedFlag = nullptr;
 
     SoundOutput* m_audio = nullptr;
     Elite::SoundBuffer* m_sound = nullptr;

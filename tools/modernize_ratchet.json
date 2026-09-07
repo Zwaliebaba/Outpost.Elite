@@ -29,9 +29,9 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 9,
+      "ceiling": 8,
       "slack": 0,
-      "slice": "M6-0-a-3: ShipDrawEffects leaves Ports, which is nine references"
+      "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
       "ceiling": 251,
@@ -39,14 +39,14 @@
       "slice": "M5-e-2: the composition root holds no game state, and says so in fewer lines"
     },
     "outpost-elite-names": {
-      "ceiling": 66,
+      "ceiling": 64,
       "slack": 0,
-      "slice": "M6-0-a-3: FlightSession stops answering LL9's two tail jumps"
+      "slice": "M6-0-h-2: GameShell stops answering the title screen"
     },
     "effects-seams": {
-      "ceiling": 7,
+      "ceiling": 6,
       "slack": 0,
-      "slice": "M6-0-a-3: ShipDrawEffects goes -- DrawShip calls PlanetDraw and Explosion itself"
+      "slice": "M6-0-h-2: StartUpEffects goes -- BR1 calls ShowTitleShip itself"
     },
     "out-params": {
       "ceiling": 0,

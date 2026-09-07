@@ -40,9 +40,25 @@ namespace GameLogicTests
     struct Bare
     {
       Bare()
-        : game(nulls, nulls, nulls, nulls, controls)
+        : game(nulls, keys, nulls, controls)
       {
       }
+
+      /*
+       * 6502: TITLE runs inside the cold start since M6-0-h-2, and a title screen ends only on a
+       * key. RETURN is held throughout: it ends both title screens (and is not "Y", so no disk
+       * menu), the flight half does not read it -- the flight keys are `KY1` to `KY7` and `KY12`
+       * to `KY20`, and the dispatch compares `thiskey` against keys RETURN is not -- and the
+       * docked half reads `NextKey`. A death's `BR1` reaches the title too, so a key held only
+       * around `Reset` would leave the flight test below waiting for ever.
+       */
+      struct TitleKey final : NullSeams
+      {
+        bool Held(std::size_t _key) override
+        {
+          return _key == Elite::KEY_CROSSHAIR_FAST;
+        }
+      };
 
       Bare(const Bare&) = delete;
       Bare& operator=(const Bare&) = delete;
@@ -54,6 +70,7 @@ namespace GameLogicTests
       };
 
       NullSeams nulls;
+      TitleKey keys;
       NoAutopilot controls;
       Elite::Game game;
     };

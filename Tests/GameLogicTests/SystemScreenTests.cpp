@@ -251,7 +251,7 @@ namespace GameLogicTests
           NullSeams nulls;
           Elite::SidWriteLog sid;
           Elite::Ports ports{printer,  characters, sink, sid,
-                             extended, nulls,      nulls, keys,  nulls};
+                             extended, nulls, keys, nulls};
 
           Elite::SystemDataScreen(universe, ports, data, distance);
 

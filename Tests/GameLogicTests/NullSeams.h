@@ -41,8 +41,7 @@
 namespace GameLogicTests
 {
 
-  struct NullSeams : Elite::StartUpEffects,
-                     Elite::Keyboard,
+  struct NullSeams : Elite::Keyboard,
                      Elite::Presenter,
                      Elite::CommanderStore
   {
@@ -59,8 +58,9 @@ namespace GameLogicTests
      * bubble, so the answer comes from the ship slots rather than from a boolean here.
      */
 
-    // Elite::StartUpEffects
-    std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
+    // `Elite::StartUpEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-2): its last method was the
+    // title screen, which `BR1` runs for real now -- so a fixture that reaches `BR1` needs a key
+    // held to end it, and this object holds none (`GameTests` says how).
 
     // Elite::Presenter
     void WaitFrames(std::uint8_t) override {}

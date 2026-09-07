@@ -74,7 +74,7 @@ namespace GameLogicTests
      * screen and writes no commander file.
      */
     FlightPort()
-      : game(unused, *this, *this, unused, *this)
+      : game(*this, *this, unused, *this)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
