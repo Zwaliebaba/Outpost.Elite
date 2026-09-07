@@ -1431,7 +1431,9 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"DOCKIT returned");
 
             Elite::Ports ports = universe.Ports();
-            Assert::IsTrue(Elite::RunDockingComputer(universe.universe, ports, universe.slot), L"DOCKIT does not kill anybody");
+            // 6502: DOCKIT reaches no `OOPS` and no `DEATH`, so it answers nothing (M4-c-2). This
+            // line asserted that it returned true, which was a tautology dressed as a check.
+            Elite::RunDockingComputer(universe.universe, ports, universe.slot);
 
             const std::wstring context = WidenText(std::string("DOCKIT: ") + approach.what + (type == 0xE0u ? " (ours)" : " (theirs)") +
                                                    (faces != 0u ? " faces" : " no faces"));

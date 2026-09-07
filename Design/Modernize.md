@@ -1775,6 +1775,30 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-07 — M4-c-2: `DOCKIT`'s answer was a phantom, and the mechanical edit that removed it
+broke the game in a way the oracle caught on the first run.**
+
+`RunDockingComputer` returned "did the player survive" and the answer was ALWAYS yes. Checked
+against the original rather than inferred from the port: `DOCKIT`'s every exit is an `RTS`,
+`JMP GOPL` or `JMP TA151`, and it reaches no `OOPS` and no `DEATH` — so there is no path on which it
+could say no. §4.6's "`OOPS`'s three paths become `Decision::Fatal`" belongs to `TACTICS`, where
+`OOPS` genuinely is reached, and not here. Every caller discarded the byte with a `(void)` or a
+`static_cast<void>` except one line in `TacticsTests`, which asserted `IsTrue(...)` — **a tautology
+dressed as a check**, and it is a plain call now with the reason beside it. The routine is `void`.
+
+**AND THE FIRST ATTEMPT AT IT WAS WRONG, which is worth recording rather than quietly fixing.** The
+edit blanked every `return true;` in the function. Eight of the nine were EARLY EXITS and only the
+last was the tail, so the change turned eight guards into fall-throughs. The run said so
+immediately and said it three ways: `DOCKIT: straight in front of the slot (theirs) no faces:
+INWK+29 — expected 131 actual 0`, a `TACTICS` case one byte out, and the M0-c replay diverging from
+step 342. Three instruments, one cause, no ambiguity. The lesson is the one M2-c learned about
+scripted deletions and `check_outpost.py` grew two halves for: **a mechanical edit over a control
+statement has to distinguish the tail from the guards**, and here the suite is what distinguished
+them.
+
+Nothing else moved: 402 of 402, the replay digest unchanged, all 14 repository checks, and no count
+touched.
+
 **2026-09-07 — M4-c-1: `TACTICS` answers a `Tactic`, and the `bool` it returned was three things
 wearing one costume.**
 

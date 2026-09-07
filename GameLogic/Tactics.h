@@ -214,6 +214,14 @@ namespace Elite
    * visibility of the ELEVENTH FACE OF THE LAST SHIP DRAWN, and whether an NPC completes its
    * docking depends on it (§6.125).
    */
-  [[nodiscard]] bool RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
+  /*
+   * IT ANSWERS NOTHING, and that is a finding rather than a simplification (M4-c-2).
+   *
+   * It returned "did the player survive" until 2026-09-07, and the answer was always yes: the
+   * original `DOCKIT` reaches no `OOPS` and no `DEATH` -- every exit is an `RTS`, `JMP GOPL` or
+   * `JMP TA151` -- so there is no path on which it could say no. Every caller discarded the byte
+   * except one assertion in `TacticsTests`, which asserted the tautology.
+   */
+  void RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
 } // namespace Elite

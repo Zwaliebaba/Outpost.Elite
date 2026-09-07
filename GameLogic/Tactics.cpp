@@ -1114,8 +1114,10 @@ namespace Elite
     {
       case Tactic::Docking:
         // 6502: .TN2 JMP DOCKIT -- a tail call in the original and a call here, so that the one
-        // path where `TACTICS` hands the ship to another routine is visible at the top level.
-        return RunDockingComputer(_universe, _ports, _slot);
+        // path where `TACTICS` hands the ship to another routine is visible at the top level. It
+        // cannot kill the player, so there is nothing to hand back (M4-c-2).
+        RunDockingComputer(_universe, _ports, _slot);
+        break;
       case Tactic::Fatal:
         return false;
       case Tactic::Done:
@@ -1126,7 +1128,7 @@ namespace Elite
     return true;
   }
 
-  bool RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept
+  void RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept
   {
     Ship& work = _universe.work;
     K3Block& axes = _universe.axes;
@@ -1142,7 +1144,7 @@ namespace Elite
     if (_universe.bubble.StationPresent() == 0u)
     {
       AimAtPlanet(_universe, _ports);
-      return true;
+      return;
     }
 
     (void)SubtractStationAxes(_universe.bubble, work, axes); // 6502: JSR VCSU1
@@ -1153,7 +1155,7 @@ namespace Elite
     if ((static_cast<std::uint8_t>(axes[2] | axes[5] | axes[8]) & 0x7Fu) != 0u)
     {
       AimAtPlanet(_universe, _ports);
-      return true;
+      return;
     }
 
     /*
@@ -1217,7 +1219,7 @@ namespace Elite
       OffsetDockingPosition(_universe.bubble, axes);
       OffsetDockingPosition(_universe.bubble, axes);
       AimAlongNose(_universe, _ports, NegateVector(NormaliseAxes(axes).vector));
-      return true;
+      return;
     }
 
     if (!fineApproach)
@@ -1225,7 +1227,7 @@ namespace Elite
       // 6502: .PH2 JSR TAS6 / JSR TA151, and then it FALLS INTO `PH22` rather than returning.
       AimAlongNose(_universe, _ports, NegateVector(towards));
       HaltAndTurn(work);
-      return true;
+      return;
     }
 
     /*
@@ -1256,7 +1258,7 @@ namespace Elite
       if (static_cast<std::uint8_t>(towards.x << 1u) >= 12u)
       {
         HaltAndTurn(work);
-        return true;
+        return;
       }
 
       // 6502: LDA XX15+1 / ASL A / LDA #2 / ROR A / STA INWK+30 -- the same shape for the pitch.
@@ -1265,7 +1267,7 @@ namespace Elite
       if (static_cast<std::uint8_t>(towards.y << 1u) >= 12u)
       {
         HaltAndTurn(work);
-        return true;
+        return;
       }
     }
 
@@ -1305,13 +1307,12 @@ namespace Elite
      */
     if (_universe.geometry.xx2[10] != 0u)
     {
-      return true;
+      return;
     }
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- the same three-instruction "set bit 7" as `TA873`, and
     // the same mistake: the shifts cancel (§6.126).
     work.newb = With(work.newb, NewbBit::Remove);
-    return true;
   }
 
 } // namespace Elite

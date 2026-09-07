@@ -249,7 +249,7 @@ namespace GameLogicTests
     void RunDockingComputer(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
-      static_cast<void>(Elite::RunDockingComputer(universe, game.PortsOf(), 0u));
+      Elite::RunDockingComputer(universe, game.PortsOf(), 0u);
     }
     // `ClearBottomRows` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-3b): `CLYNS` is
     // `Elite::ClearMessageRows`, which `MLOOP`'s head calls itself when a message's countdown ends.
