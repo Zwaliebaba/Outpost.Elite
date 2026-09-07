@@ -65,9 +65,25 @@ because `DOCKIT` is passed separately at every call site (§4.5) and adding it w
 **`FRCE` CHOOSES BETWEEN THREE ROUTINES, NOT THREE BRANCHES OF ONE.** `LDA QQ12 / BEQ P%+5 /
 JMP MLOOP / JMP TT100` is a jump to one of two entry points, and `FREEZE` is a third that `DK4`
 reaches and does not return from. Folding them into one method behind a mode byte would be
-inventing a machine the original does not have — and `Mode` is exactly that machine, which M4-d
-builds when it retires `LoopOutcome`. Until then the caller's choice IS the game's, and three
-methods say so.
+inventing a machine the original does not have; the caller's choice IS the game's, and three methods
+say so.
+
+**AMENDED BY M4-d (2026-09-07), IN TWO PLACES.** This paragraph said `Mode` was "exactly that
+machine" and that M4-d would build it "when it retires `LoopOutcome`". Both halves were wrong.
+
+`Game::Mode` IS built, and it is not the invented machine: `Flight` and `Docked` are `QQ12`'s own
+two values and `Paused` is the port's freeze, which §3 already records as a byte the original does
+not have. It does not replace the three `Step`s — it CHOOSES between them, which is what `FRCE`
+does — so this paragraph's conclusion stands and only its prediction does not. What `Mode` removed
+is an ordering rule the executable was keeping by hand: the pause test has to come above the `QQ12`
+test, and that is now one value rather than two calls in a required sequence.
+
+`LoopOutcome` is NOT retired and should not be. `Continued` is not a mode — it is "the frame
+finished, go round again" — and `Docked`, `Died` and `Escaped` are TRANSITIONS rather than states.
+It is the return value of `BeginFlightFrame`, `MoveEveryShip`, `EndFlightFrame` and `MainFlightLoop`,
+which have to say which of `DOENTRY`, `DEATH` and `ESCAPE` they left by; a mode cannot carry that,
+because by the time the mode has changed the routine has already returned. The two answer different
+questions and both are needed.
 
 **AND THE COUNT OF PASSES CANNOT BE HERE.** §4.4 and Modernize.md's M3-c row both say `Advance`
 moves into the library. It could not: it turns elapsed seconds into a count of passes over ADR-005
@@ -197,9 +213,9 @@ seconds, the files, the device).
   `ShipDrawEffects` when the emulator models the banking §6.108 found, `SpawnChildEffects` in M4-a —
   and what is left of that class afterwards is `DOCKIT`. When it goes, the member moves across and
   the composition root stops holding any game state at all.
-- **`Frame()`, `Sounds()`, `StateHash()` and `Mode` are not built.** The first two are the
+- **`Frame()`, `Sounds()` and `StateHash()` are not built** (`Mode` is, since M4-d — see §2). The first two are the
   executable's draw and drain and have no library caller yet; `StateHash` wants `UniverseImage`'s
-  hash, which lives in the test tree and would have to move to ship; `Mode` is M4-d's, for §2's
+  hash, which lives in the test tree and would have to move to ship; `Mode` was M4-d's, for §2's
   reason. Each is a named follow-on rather than a gap discovered later.
 - **Two seams survive M3 deliberately** — `TextSink` and `ValueTokens` are the text system's own
   polymorphism, not platform (Modernize.md §4.5) — **and two because a comparison is blocked**:
@@ -215,6 +231,7 @@ seconds, the files, the device).
 | Twenty-two seams to four ports | Built; nine abstract classes remain, four of them named above | §8, M3-b |
 | `Game` owns the dispatch and both loops | Built | §8, M3-c |
 | `Universe` owned by `Game` | Not built — see Consequences | §8, M3-c |
-| `Frame`, `Sounds`, `StateHash`, `Mode` | Not built | §8, M3-c; M4-d for `Mode` |
+| `Frame`, `Sounds`, `StateHash` | Not built | §8, M3-c |
+| `Mode` | Built 2026-09-07 (M4-d); `LoopOutcome` deliberately kept beside it | §2 above; §8 |
 | The replay digest survives M3 | Verified — unchanged across ten commits | §4 above |
 | The replay drives `Game` | Built 2026-09-07; record re-taken for three fixture defects, 0 steps moved | §5 above; §8 |

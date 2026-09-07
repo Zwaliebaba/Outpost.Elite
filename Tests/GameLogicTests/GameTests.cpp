@@ -78,7 +78,7 @@ namespace GameLogicTests
       bare.game.Reset();
 
       Assert::IsTrue(bare.game.Docked(), L"TT170 ends by entering the docked half");
-      Assert::IsFalse(bare.game.Paused(), L"nothing has pressed COPY");
+      Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"nothing has pressed COPY");
 
       const Elite::Commander& commander = bare.game.State().commander;
       Assert::AreEqual<std::uint32_t>(Elite::DefaultCommander().fuel, commander.fuel, L"NA% -- the default commander's fuel");
@@ -104,14 +104,14 @@ namespace GameLogicTests
       bare.game.Reset();
 
       Assert::IsFalse(bare.game.Step(Elite::PAUSE_KEY), L"the pause key ends the batch of steps");
-      Assert::IsTrue(bare.game.Paused(), L"and freezes the game");
+      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"and freezes the game");
 
       // 6502: CPX #&0D -- and `DK2`'s `RTS`. A key `FREEZE` does not know leaves it frozen.
       bare.game.StepPaused(0u);
-      Assert::IsTrue(bare.game.Paused(), L"an unknown key is one pass round FREEZE and no more");
+      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"an unknown key is one pass round FREEZE and no more");
 
       bare.game.StepPaused(Elite::RESUME_KEY);
-      Assert::IsFalse(bare.game.Paused(), L"and the resume key thaws it");
+      Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"and the resume key thaws it");
     }
 
     /*

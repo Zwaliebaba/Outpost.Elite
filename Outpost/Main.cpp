@@ -171,14 +171,11 @@ namespace
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
 
-      /*
-       * 6502: FREEZE -- and it comes FIRST, because a frozen game is frozen in both halves.
-       *
-       * `DK4` is reached from `DOKEY`, which the flight loop calls, so the pause key is a flight
-       * key; but what `FREEZE` does is refuse to return, and the docked loop cannot run while it
-       * is refusing either. One test above both halves is what that shape becomes here.
-       */
-      if (app->game.Paused())
+      // 6502: FRCE's `LDA QQ12 / BEQ`, and `FREEZE` above it -- ONE question since M4-d. It was two
+      // tests this file had to keep in the right order (a frozen game is frozen in both halves, so
+      // the pause test comes first); `Game::Mode` is that rule expressed once, where both bytes are.
+      const Elite::Game::Mode mode = app->game.ModeNow();
+      if (mode == Elite::Game::Mode::Paused)
       {
         std::uint8_t key = 0;
         if (app->window.TakeKey(key))
@@ -188,7 +185,7 @@ namespace
         continue;
       }
 
-      if (app->game.Docked())
+      if (mode == Elite::Game::Mode::Docked)
       {
         /*
          * The leftover is dropped rather than carried across the dock. It is never more than one

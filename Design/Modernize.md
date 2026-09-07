@@ -300,7 +300,7 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
-`Outpost/Main.cpp` is <!--count:main-lines-->256 lines and every one of them is the platform: the
+`Outpost/Main.cpp` is <!--count:main-lines-->253 lines and every one of them is the platform: the
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,098 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,101 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1480,7 +1480,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M4-a Flight frame stages** ✅ **built 2026-09-07 (§8)** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the housekeeping cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. **M4-a-3 built 2026-09-07 (§8):** the head and the tail split at their annotated parts — 324 → 14 and 254 → 43 — with the cycle as a table, the thirty-two-step count corrected in three places, and part 14's fall-through into part 15 restored. **M4-a is complete.** | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
 | **M4-b LL9 stages** ✅ **built 2026-09-07 (§8)** | `DrawShip` as the SEVEN stages of §4.6 over a `ShipRender` frame — `TestPresence`, `MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`, `OpenHeapRun`, `PushEdges`; 551 → 38 lines of pipeline. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged; the replay digest unchanged. The channel census names a PART rather than `DrawShip` for `xx2`, `xx3`, `xx12` and `q`, and raises three inherited inputs one function had hidden. | 4 |
 | **M4-c Decisions** ✅ **built 2026-09-07 (§8)** | `TACTICS` answers a `Tactic` over five parts (M4-c-1); `DOCKIT`'s `bool` was a PHANTOM — the original reaches no `OOPS` and no `DEATH`, so it is `void` (M4-c-2); `MLOOP` parts 1–4 answer a `SpawnPass` over a `SpawnFrame`, because §6.125's carry is live across all four (M4-c-3). | `TacticsTests` green at 7,326 cases; SEVEN `tactics` mutants re-anchored, none dropped, `mutate.py --check` at 72 of 72. The row said sixteen mutants and the unit has seven that name a line in `RunTactics`. | 5 |
-| **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
+| **M4-d Mode machine polish** ✅ **built 2026-09-07 (§8)** | `Game::Mode` built — `Flight`, `Docked`, `Paused` — which takes the pause-before-`QQ12` ordering out of `Main.cpp` (`main-lines` 256 → 253). The mission sub-machine was already `MissionOf` (M3-c). **`LoopOutcome` is NOT retired and the row was wrong to ask**: `Continued` is not a mode and the other three are transitions, so a mode cannot carry what four routines have to return. **The death sequence stays synchronous**, because making it a state would change the pacing this row's own acceptance forbids from moving. | Replay hashes unchanged. | 2 |
 
 ### Phase M5 — Polish and the ledger
 
@@ -1774,6 +1774,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M4-d: `Game::Mode` is built, and `LoopOutcome` is NOT retired — the row asked for
+three things and the tree already had two of them.**
+
+**`Mode` IS REAL AND IT IS NOT INVENTED.** `FRCE` is `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100`,
+a two-way dispatch on a byte the game keeps, so two of `Mode`'s three values are the game's own; the
+third is `Paused`, which the port adds because `FREEZE` is a loop that does not return and a
+windowed program cannot stop pumping messages (ADR-007 §3 already records that byte as the port's).
+What it buys is an ORDERING: a frozen game is frozen in both halves, so the pause test has to come
+above the `QQ12` test, and `Main.cpp` was keeping that rule by hand with a paragraph explaining it.
+One value cannot be got wrong. `main-lines` 256 → **253**, which is the rule leaving the executable.
+
+**`LoopOutcome` STAYS, and the row's premise does not survive contact.** The plan says M4-d retires
+it into the mode machine. It cannot: `LoopOutcome::Continued` is not a mode — it is "the frame
+finished, go round again" — and the other three are TRANSITIONS rather than states. It is the return
+value of `BeginFlightFrame`, `MoveEveryShip`, `EndFlightFrame` and `MainFlightLoop`, which have to
+say "I left early and by which of `DOENTRY`, `DEATH` and `ESCAPE`"; a mode cannot carry that,
+because by the time the mode has changed the routine has already returned. `Mode` and `LoopOutcome`
+answer different questions and both are needed. ADR-007 §2 is amended, since it is where the claim
+was written down.
+
+**The other two items were already built or are deliberately not done.** The mission sub-machine is
+`Game::MissionOf(DockingOutcome) -> ForcedKey`, built in M3-c: `DOENTRY`'s six exits are the
+briefings and the seventh is `BAY`. The death sequence as an explicit state is NOT built, and the
+reason is this row's own acceptance: `DEATH` runs sixty-four iterations of the flight loop to fly
+the wreckage past, and making that a state the outer loop pumps would change the pacing — the
+acceptance says "replay hashes unchanged", and a pacing change is exactly what would move them. It
+stays a synchronous sequence, which is what the original does.
+
+**M4 IS COMPLETE.** `origin-markers` 4,098 → 4,101 for `Mode`'s three values. 402 of 402, the replay
+digest unchanged, all 14 repository checks.
 
 **2026-09-07 — M4-c-3: `MLOOP`'s spawner in four parts, and the carry is why it needed a frame.**
 
