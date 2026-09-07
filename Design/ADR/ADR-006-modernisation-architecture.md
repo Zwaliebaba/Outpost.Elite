@@ -136,11 +136,33 @@ library one. ADR-007 §2 and §3 have the reasoning; the ownership and the repla
 
 ### §5 Control flow: pipelines with named stages
 
-**Planned, M4.** The flight frame, `LL9`, `TACTICS` and `DOCKIT` become pipelines of functions with
-typed results (`Contact`, `ScoopResult`, `DockingTest`, `ScaledOrientation` → `FaceVisibility` →
-`ProjectedVertices` → `EdgeSelection` → `ClippedLines` → `HeapRun`, `Decision` and `Apply`), the same
-control flow said once. Original bugs stay ported (ADR-001 §3, §6): a stage that could not express
-`SHPPT`'s stale read would be wrong, and the ADR-001 row is the test that says so.
+**Built by M4, 2026-09-07, and this section is amended from what was built rather than left to
+predict it.** The flight frame, `LL9`, `TACTICS`, `DOCKIT` and `MLOOP`'s spawner are pipelines of
+functions over a frame struct, each stage answering a typed result. Original bugs stayed ported
+(ADR-001 §3, §6): no stage was allowed to be unable to express `SHPPT`'s stale read.
+
+**Four things the paragraph above predicted did not survive the build, and the pattern in all four
+is the same — the stage list was written from the routine's SHAPE and the routine's shape is not
+what its 6502 control flow is.**
+
+- **The frame's stages are `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and
+  `KillOutcome`** (M4-a), and the finding that produced them was five booleans that were an
+  unwritten state machine. Part 14's `BNE MA93` fall-through, which the port had been collapsing,
+  is a branch again.
+- **`LL9` is SEVEN stages, not five**, and they are the original's own part blocks rather than a
+  graphics pipeline: `TestPresence`, `MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`,
+  `OpenHeapRun`, `PushEdges`. `DrawShip` went 551 lines to 38 and the channel census can name a
+  PART for the first time. The predicted `ScaledOrientation → FaceVisibility → ProjectedVertices →
+  EdgeSelection → ClippedLines → HeapRun` reads like a renderer and `LL9` is not one.
+- **`Decision` and `Apply` are not one pair but three different answers**, because the `bool`s they
+  replaced were three different things. `TACTICS` answers a `Tactic` (`Steer`, `Done`, `Fatal`,
+  `Docking`) because its `bool` was three outcomes in one costume; `DOCKIT`'s `bool` was a PHANTOM
+  — no caller could act on it and the original reaches no `OOPS` and no `DEATH` — so it is `void`;
+  and `MLOOP`'s spawner answers a `SpawnPass` over a `SpawnFrame` that carries §6.125's live carry
+  across all four parts.
+- **`LoopOutcome` is NOT retired, and `Game::Mode` was built anyway** (M4-d). ADR-007 §2 had said
+  M4-d would retire it; the reason it cannot is recorded there rather than here, and the death
+  sequence stays synchronous for the same reason.
 
 ### §6 Verification through the change
 
@@ -175,6 +197,16 @@ C++20, by ruling: `std::span` with fixed extents for the codecs, `constexpr` cod
 (`ShipFlagBit`), `[[nodiscard]]` wherever a result carries a flag. C++23 is held; nothing in the plan
 needs it.
 
+**M5-b, 2026-09-07: every generated table is `constexpr` and its SHAPE is a `static_assert`.**
+`tools/extract_tables.py` emits `constexpr std::array` and `GameLogic/LookupTables.cpp` — a
+translation unit that emits nothing — ties each table's length to the constant that INDEXES it
+(`SHIP_TYPE_COUNT`, `SPRITE_DEFINITION_COUNT`, `Canvas::CELL_ROWS`, `SOUND_EFFECT_COUNT`,
+`EQUIPMENT_ITEM_COUNT`), which is §6.8's rule for the whole ledger made mechanical. The assertions
+read `std::tuple_size_v`, so they hold from the DECLARATION and the big tables stay in their own
+`.cpp` rather than putting 160 KB of initialiser into every translation unit that wants a font. What
+the bytes ARE is the assembler's; what shape they have to be is the port's, and that is the half a
+compiler can hold.
+
 ## Consequences
 
 - A reader can tell what a routine consumes and produces from its signature, and what a byte means
@@ -195,8 +227,8 @@ needs it.
 |---|---|---|
 | M0 The safety net | Built 2026-09-06 | Modernize.md §6 M0, §8 |
 | M1 Typed data | Built 2026-09-06 | §2 above; Modernize.md §6 M1 |
-| M2 Calling conventions | M2-a and M2-b built 2026-09-06 (the kernel takes values and returns structs; the frame's `Q` named, Modernize.md §8 and R22); M2-c's first of three commits built the same day (the line, the pixel, the blip, the compass, the dials and the number printer); M2-c-2, M2-c-3 and M2-d open | §3 above; Modernize.md §4.3 |
+| M2 Calling conventions | Built 2026-09-06 (M2-a, M2-b, M2-c-1/2/3, M2-d). The kernel takes values and returns structs; the frame's `Q` and `K2`'s bottom byte are the two channels that stay, each named (Modernize.md §8, R22 closed) | §3 above; Modernize.md §4.3 |
 | M3 Ownership | Built 2026-09-06/07 (M3-0, M3-a, M3-b, M3-c, M3-d) | §4 above, amended from what was built; ADR-007 |
-| M4 Control flow | Planned | §5 |
-| M5 Polish and the ledger | Planned; amends this document | Modernize.md §6 M5 |
+| M4 Control flow | Built 2026-09-07 (M4-a, M4-b, M4-c-1/2/3, M4-d) | §5 above, amended from what was built |
+| M5 Polish and the ledger | Built 2026-09-07 (M5-a to its acceptance plus `SoundEffect` and `Colour`, M5-b, M5-c, M5-d). §2 carries the three strong types that were refused and why; §5 and §8 are amended from what was built | §2, §5, §8 above; Modernize.md §6 M5, §8 |
 | M6 Detach | Planned | §7 |

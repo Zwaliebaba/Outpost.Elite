@@ -224,14 +224,14 @@ namespace Elite
       }
 
       // 6502: ORA T / [EOR #128] / EOR RAT2 -- the sign back on, the half's own flip, the direction.
-      std::uint8_t signed_ = static_cast<std::uint8_t>(high | t);
+      std::uint8_t withSign = static_cast<std::uint8_t>(high | t);
       if (_flip)
       {
-        signed_ = static_cast<std::uint8_t>(signed_ ^ 0x80u);
+        withSign = static_cast<std::uint8_t>(withSign ^ 0x80u);
       }
-      signed_ = static_cast<std::uint8_t>(signed_ ^ _rat2);
+      withSign = static_cast<std::uint8_t>(withSign ^ _rat2);
 
-      return AddSigned(SignMag16{p, signed_}, shrunk); // 6502: JSR ADD
+      return AddSigned(SignMag16{p, withSign}, shrunk); // 6502: JSR ADD
     }
   } // namespace
 
@@ -502,8 +502,8 @@ namespace Elite
        */
       // 6502: the component offsets MVS5 is handed -- roofv against nosev's x, y and z for the
       // pitch, and against sidev's for the roll.
-      const std::uint8_t VECTORS[2][3] = {{SHIP_NOSE_OFFSET, SHIP_NOSE_OFFSET + 2u, SHIP_NOSE_OFFSET + 4u},
-                                          {SHIP_SIDE_OFFSET, SHIP_SIDE_OFFSET + 2u, SHIP_SIDE_OFFSET + 4u}};
+      const std::array<std::array<std::uint8_t, 3>, 2> vectors = {{{SHIP_NOSE_OFFSET, SHIP_NOSE_OFFSET + 2u, SHIP_NOSE_OFFSET + 4u},
+                                                                   {SHIP_SIDE_OFFSET, SHIP_SIDE_OFFSET + 2u, SHIP_SIDE_OFFSET + 4u}}};
 
       for (int which = 0; which < 2; ++which)
       {
@@ -521,9 +521,9 @@ namespace Elite
 
         // 6502: LDX #15 / LDY #9 / JSR MVS5, three times over -- the orientation vectors turned
         // against the ship's own roll or pitch.
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, VECTORS[which][0], _flight.rat2);
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, VECTORS[which][1], _flight.rat2);
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 4u, VECTORS[which][2], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, vectors[which][0], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, vectors[which][1], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 4u, vectors[which][2], _flight.rat2);
       }
 
       /*

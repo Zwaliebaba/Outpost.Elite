@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->fifteen repository checks pass,
+(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -1489,7 +1489,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are M5-a-8 and M5-a-9. | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
-| **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
+| **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07.** | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
@@ -1774,6 +1774,90 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-d: `.clang-tidy` calls itself this repository's single source of truth, and
+nothing in this repository had ever run it.**
+
+The row asked for ADR-006 amended from what was built and `.clang-tidy` widened one `modernize-`
+check per commit. The ADR half is four sections and is below. The tidy half turned out not to be a
+widening at all until something ran the file.
+
+**IT IS ANOTHER REPOSITORY'S FILE, AND NOT ONLY IN ITS VALUES.** `.clang-tidy` was adopted whole
+from the sibling tree Outpost.Warzone so that engine code could move between the two without a
+rename pass, which is a good reason and is still true of the option values. What came with them was
+the STATUS and the REASONS. The file claimed "CI gates this over GameLogic and NeuronServer"; there
+is no `NeuronServer` here. It named `Build/CheckProjectFiles.py` and
+`Design/Archive/MmoScalabilityPlan.md`; neither exists here. It justified three of its four
+exclusions by wire records, mesh vertices, GPU instance structs and "metres to eighth-metre lattice
+steps, radians to turns16, i64 sectors to the wire's i32" — this port's numeric model is eight-bit
+arithmetic with explicit carries and there is no wire at all. And it said GameLogic "has been swept
+clean", on a tree where **no job, script or check has ever invoked clang-tidy**. `WarningsAsErrors:
+'*'` was a setting with nothing behind it.
+
+**THE FIRST SWEEP FOUND THIRTY-SIX DIAGNOSTICS, AND WIDENING `modernize-*` TOOK IT TO FORTY-FOUR;
+sixteen of them were code, and two were undefined behaviour.** `ReadFlightControls`
+held five locals still wearing the `_` that AGENTS.md gives a PARAMETER — aliases left behind when
+M3-a and M5-a turned those parameters into fields of the `Universe` the routine already takes.
+Three dead stores were transcriptions of a 6502 flag nothing reads: two `LSR` carries in the
+divider's scaling tail, where only the third is read, and the initialiser of a loop-local carry in
+`AddDebris`. **And the fourth is the fourth vestigial assignment this port has carried**: part 4's
+`LDA SSPR / BNE MTT1` had been transcribed as `toPart3 = true`, four hundred lines after the only
+thing that reads `toPart3` has run — the branch is the `if`, and falling out of the block IS
+reaching part 3. **AND `DecideMissile` AND `DecideStation` COULD FALL OFF THEIR OWN ENDS.** Both open with
+`if (_frame.type == ShipType::Missile)` — or `::Station` — around their whole body and have no
+return after it, so a call with any other type runs off the end of a function that returns a
+`Tactic`, which is undefined behaviour. It is unreachable only because `RunTactics` dispatches on
+the same type first, which the compiler cannot see: `CPX #MSL / BEQ TA18` is ONE test in the
+original and was two here. The guards are gone and the dispatch is the test.
+
+The rest were a lambda named as if it were a type twice, a local dodging a keyword with a trailing
+underscore, a `const` C array of offsets shouting in capitals, two index loops that were walks, and
+two more dead carries. All sixteen are fixed; 395 of 395 and the replay digest unmoved, which is
+what says the dead stores were dead rather than merely unread.
+
+**THE REST ARE EXCLUDED WITH THIS TREE'S OWN REASONS, and measuring each one changed the answer
+twice.** `-bugprone-narrowing-conversions` and `-clang-analyzer-optin.performance.Padding` were
+inherited exclusions that fire NOTHING here once one struct's fields are ordered — the padding
+finding was a five-entry local table in `Equipment.cpp` with no layout obligation at all — so both
+are **removed** rather than carried, which is a strengthening the row did not ask for. Three
+exclusions are new and each is about the port's method: `-bugprone-branch-clone`, because two 6502
+branch instructions to one label are two branches and folding them into a `||` would stop saying
+what the original does; `-bugprone-implicit-widening-of-multiplication-result`, because the screen
+arithmetic is `int` on purpose and its largest term is 64,000; and
+`-clang-analyzer-optin.core.EnumCastOutOfRange`, because the analyser is simply wrong about a
+scoped enum with a fixed underlying type — `TypeOf` exists so a sweep over all 256 bytes can go
+through it, and C++ says every one of them is a value of `ShipType`.
+
+**AND THE WIDENING IS THREE CHECKS SHORT OF `modernize-*`, each one a decision.**
+`-modernize-use-trailing-return-type` is 3,835 findings and a style this tree does not use;
+`-modernize-use-auto` is 174 and would hide the WIDTH, which in a port whose numeric model is the
+byte is the one thing a reader needs; `-modernize-avoid-c-arrays` is 100 real findings and is its
+own slice rather than a rider on this one. `-performance-enum-size` stays, and its reason here is
+the opposite of the inherited one: the 78 enums it wants smaller are the port's own OUTCOME types
+(`JumpOutcome`, `KeyAction`, `DockingOutcome`, `DigitResult`) which live between two functions and
+never in memory — the enums that ARE bytes the game stores already say `: std::uint8_t`, and
+blurring the two would lose a distinction M4-c and M5-a spent slices establishing.
+
+`tools/check_tidy.py` is the gate, and it runs where the compiler cannot: `GameLogic/pch.h` reaches
+`<WinSock2.h>` through `NeuronCore.h`, so the sweep goes through `Tests/PortableRunner/Shim` — the
+stand-in that already lets g++ compile these sources. `Outpost/` is deliberately not swept; its
+DirectX headers are the Windows job's, and a linter that has never seen them would bury this
+library's findings under theirs.
+
+**ADR-006 IS AMENDED IN FOUR PLACES, and §5 is the one worth reading.** It had predicted M4's
+pipelines as `ScaledOrientation → FaceVisibility → ProjectedVertices → EdgeSelection → ClippedLines
+→ HeapRun` plus a `Decision`/`Apply` pair, and four of those predictions did not survive: `LL9` is
+SEVEN stages and they are the original's own part blocks rather than a renderer's; the flight
+frame's are `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome`; the one
+`Decision` type is three different answers because the `bool`s it replaced were three different
+things; and `LoopOutcome` is not retired. §2 carries the strong types that were refused, §8 the
+`constexpr` tables, and the status table says M2, M4 and M5 are built rather than planned.
+
+`check_all.py` is sixteen checks and the sweep comes back **clean over all sixty-eight files** under LLVM 18 -- the first time that sentence has been measured in this repository rather than
+inherited. It runs a process per file over a pool, because serially it is half an hour and
+`check_all.py` is meant to be run whole before every commit.
+
+395 of 395; the replay digest unmoved.
 
 **2026-09-07 — M5-b: the tables are `constexpr`, and the row's acceptance named a suite that had
 been deleted eight hours earlier.**

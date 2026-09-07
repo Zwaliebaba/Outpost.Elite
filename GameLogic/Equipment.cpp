@@ -395,16 +395,19 @@ namespace Elite
        */
       struct Fitting
       {
+        std::uint8_t Commander::*field; ///< the equipment byte the item fits into
         std::uint8_t item;
-        std::uint8_t Commander::* field; ///< the equipment byte the item fits into
         std::uint8_t fittedValue;
       };
+
+      // The member pointer goes FIRST so the two bytes share its tail rather than each taking a
+      // word of their own. Nothing outside this function sees the layout; `item` is still the key.
       static constexpr Fitting FITTINGS[] = {
-        {7, &Commander::escapePod, 0xFF}, // 6502: DEC ESCP
-        {8, &Commander::energyBomb, ENERGY_BOMB_FITTED},
-        {9, &Commander::energyUnit, 1}, // 6502: INC ENGY, from a known zero
-        {10, &Commander::dockingComputer, 0xFF},
-        {11, &Commander::galacticDrive, 0xFF},
+        {&Commander::escapePod, 7, 0xFF}, // 6502: DEC ESCP
+        {&Commander::energyBomb, 8, ENERGY_BOMB_FITTED},
+        {&Commander::energyUnit, 9, 1}, // 6502: INC ENGY, from a known zero
+        {&Commander::dockingComputer, 10, 0xFF},
+        {&Commander::galacticDrive, 11, 0xFF},
       };
 
       for (const Fitting& fitting : FITTINGS)

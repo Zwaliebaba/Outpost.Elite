@@ -34,7 +34,6 @@ namespace Elite
 
   LoopHead RunLoopHead(Universe& _universe, Ports& _ports) noexcept
   {
-
     /*
      * 6502: DEC DLY / BEQ me2 / BPL me3 / INC DLY.
      *
@@ -484,12 +483,15 @@ namespace Elite
         // 6502: ORA #%01101111 / STA INWK+29 -- a hard roll, on the byte `BVS` did not take.
         _frame.work.rollCounter = static_cast<std::uint8_t>(kind.value | 0x6Fu);
 
-        // 6502: LDA SSPR / BNE MTT1 -- inside the station's sphere nothing drifts in.
-        if (_frame.bubble.StationPresent() != 0u)
-        {
-          toPart3 = true;
-        }
-        else
+        /*
+         * 6502: LDA SSPR / BNE MTT1 -- inside the station's sphere nothing drifts in.
+         *
+         * THE BRANCH IS THIS `if` AND NOT A FLAG. `toPart3` decided, four hundred lines above,
+         * whether this block runs at all; setting it again here would be read by nothing, because
+         * falling out of the block IS reaching part 3. It was set anyway until slice 5d, which is
+         * the fourth vestigial assignment this port has carried from a transcription of a branch.
+         */
+        if (_frame.bubble.StationPresent() == 0u)
         {
           /*
            * 6502: TXA / BCS MTT2 / AND #31 / ORA #16 / STA INWK+27 / BCC MTT3, and `.MTT2 ORA
@@ -598,7 +600,7 @@ namespace Elite
       if ((_frame.bubble.blocks[0].z.lo & 0x3Eu) != 0u)
       {
         static_cast<void>(SpawnThargoidPair(_frame.bubble, _frame.work, _frame.rng, _frame.blueprint, _frame.carry)); // 6502: fothg2
-        return SpawnPass::Ended;                                                                        // 6502: .mj1 JMP MLOOP
+        return SpawnPass::Ended; // 6502: .mj1 JMP MLOOP
       }
 
       // 6502: LDA #18 / STA INWK+27 / LDA #%01111001 / STA INWK+32 / LDA #COU / BNE focoug.
@@ -810,8 +812,9 @@ namespace Elite
       return;
     }
 
-    SpawnFrame frame{_universe.bubble,     _universe.work,       _universe.rng,   _universe.commander,
-                     _universe.current,    _universe.explosions, _universe.flight.blueprint, _carryIn};
+    SpawnFrame frame{_universe.bubble,           _universe.work,    _universe.rng,
+                     _universe.commander,        _universe.current, _universe.explosions,
+                     _universe.flight.blueprint, _carryIn};
 
     if (SpawnTraderOrLoner(frame) == SpawnPass::Ended) // 6502: parts 1 and 2
     {

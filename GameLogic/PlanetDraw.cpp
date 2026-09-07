@@ -252,8 +252,8 @@ namespace Elite
     return extent;
   }
 
-  std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                            ClipState& _clip, const Projection& _centre, SignMag16 _offset, std::uint8_t _cnt, bool _carryIn) noexcept
+  std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                            const Projection& _centre, SignMag16 _offset, std::uint8_t _cnt, bool _carryIn) noexcept
   {
     // 6502: TXA / ADC K4 / STA K6+2 / LDA K4+1 / ADC T / STA K6+3 -- the segment's far end, as an
     // offset from the circle's centre, and both halves run on the caller's carry. `X` and `T` are
@@ -372,8 +372,8 @@ namespace Elite
 
   } // namespace
 
-  void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                ClipState& _clip, const Projection& _centre, std::uint8_t _radius, bool _carryIn) noexcept
+  void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                const Projection& _centre, std::uint8_t _radius, bool _carryIn) noexcept
   {
     // 6502: LDX #&FF / STX FLAG / INX / STX CNT. `CNT` is the angle this walk is at, `CIRCLE2`'s
     // own since M2-c-3: `BLINE` advances it and hands it back, which is what the loop below reads.
@@ -447,8 +447,8 @@ namespace Elite
     }
   }
 
-  bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                  ClipState& _clip, const Projection& _centre, std::uint8_t _radius) noexcept
+  bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                  const Projection& _centre, std::uint8_t _radius) noexcept
   {
     // 6502: JSR CHKON / BCS RTS2 -- `CIRCLE` wants the carry only; `(P+2 P+1)` is `SUN`'s.
     if (CircleOffScreen(_state, _radius, _centre).offScreen)
@@ -571,14 +571,13 @@ namespace Elite
     return {second, axis.value}; // 6502: (K2+2, K2+3)
   }
 
-  void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                   ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle,
-                   std::uint8_t _target) noexcept
+  void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                   const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle, std::uint8_t _target) noexcept
   {
     // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG. `CNT` is `BLINE`'s segment counter and
     // `CNT2` the angle this walk is at; both are locals since M2-c-3, and `CNT2` comes in as the
     // start `PLS4` or `PL26` chose while `TGT` comes in as where to stop.
-    std::uint8_t cnt = 0;    // 6502: CNT
+    std::uint8_t cnt = 0; // 6502: CNT
     std::uint8_t cnt2 = _angle;
     _state.flag = 0xFF;
 
@@ -599,7 +598,6 @@ namespace Elite
       // 6502: LDX CNT2 / CPX #33 / LDA #0 / ROR A / STA XX16+5 -- the sign for this quarter, as a
       // bit rotated straight out of the comparison.
       _geometry.xx16[5] = (cnt2 >= 33u) ? 0x80u : 0x00u;
-      bool carry = cnt2 >= 33u;
 
       // 6502: the same table a quarter-turn on -- the cosine -- against the second axis. `K+2` and
       // `P` were the scratch these waited in.
@@ -625,7 +623,7 @@ namespace Elite
                                       SignMag16{firstAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[2])});
       std::uint8_t offsetHigh = sum.high; // 6502: T -- this loop's own since M2-c-3
       std::uint8_t low = sum.low;
-      carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
+      bool carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
 
       // 6502: BPL PL42 -- a negative total is negated into a sixteen-bit value, the same block
       // `CIRCLE2` has twice.
@@ -660,8 +658,7 @@ namespace Elite
       }
 
       // 6502: PL43 -- and the segment, with the y offset in X.
-      const std::uint8_t reached =
-        DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{low, offsetHigh}, cnt, carry);
+      const std::uint8_t reached = DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{low, offsetHigh}, cnt, carry);
       cnt = reached;
 
       // 6502: CMP TGT / BEQ P%+4 / BCS PL40 -- the `BEQ` is what makes the last step INCLUSIVE, so
@@ -675,16 +672,16 @@ namespace Elite
     }
   }
 
-  void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle) noexcept
+  void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                       const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle) noexcept
   {
     // 6502: PLS2 -- LDA #31 / STA TGT, then straight into PLS22. Half a turn, because a meridian
     // seen from outside is a semicircle and the other half is behind the planet.
     DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre, _axes, _angle, 31);
   }
 
-  void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const Ship& _ship, Projection& _centre, KBlock _radius, ShipType _type) noexcept
+  void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                        const Ship& _ship, Projection& _centre, KBlock _radius, ShipType _type) noexcept
   {
     // 6502: PL9 -- rub out last frame's planet, draw this frame's outline, and only then think
     // about the markings.
@@ -801,8 +798,8 @@ namespace Elite
     DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre, axes, 0, 64);
   }
 
-  void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
+  void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                       Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
   {
     /*
      * 6502: PLANET -- three rejections before any arithmetic.
@@ -989,8 +986,8 @@ namespace Elite
         // The old line, clipped against LAST frame's centre. Its two ends go in `XX(1 0)`, which
         // `PLF23` reads back -- two locals of this loop since M2-c-3.
         const SunRow old = ClipSunRow(_state, wasAt, was, row);
-        std::uint8_t sliverFrom = old.x1;              // 6502: XX
-        const std::uint8_t sliverTo = old.x2;          // 6502: XX+1
+        std::uint8_t sliverFrom = old.x1;     // 6502: XX
+        const std::uint8_t sliverTo = old.x2; // 6502: XX+1
 
         // And the new one, against this frame's.
         const SunRow fresh = ClipSunRow(_state, isAt, _state.sun[row], row);
@@ -1127,7 +1124,8 @@ namespace Elite
     }
   }
 
-  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept
+  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
+                     std::uint8_t _view) noexcept
   {
     // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
     for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
@@ -1164,7 +1162,8 @@ namespace Elite
        * the slots. The mask clears bits 3, 4 and 6: "drawn on screen", "firing a laser", and the
        * one in between.
        */
-      _bubble.blocks[slot].state = Without(_bubble.blocks[slot].state, ShipStateBit::OnScreen, ShipStateBit::OnScanner, ShipStateBit::Firing);
+      _bubble.blocks[slot].state =
+        Without(_bubble.blocks[slot].state, ShipStateBit::OnScreen, ShipStateBit::OnScanner, ShipStateBit::Firing);
     }
 
     // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and
@@ -1190,8 +1189,8 @@ namespace Elite
     ClearAllShips(_canvas, _state, _bubble, _work, _flight, _view);
   }
 
-  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present) noexcept
+  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                          const Projection& _centre, std::uint8_t _index, Presenter& _present) noexcept
   {
     // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius, and this
     // routine's own since M2-c-3: it fills `K` and nothing else reads the block while it runs.
@@ -1235,8 +1234,8 @@ namespace Elite
     }
   }
 
-  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip, Presenter& _present) noexcept
+  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                           Presenter& _present) noexcept
   {
     // 6502: LDX #X / STX K3 / LDX #Y / STX K4 / LDX #0 / STX XX4 / STX K3+1 / STX K4+1.
     Projection centre{};

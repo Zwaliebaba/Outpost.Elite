@@ -141,8 +141,7 @@ namespace Elite
     }
   }
 
-  SaveOutcome SaveCommanderTo(CommanderStore& _store, Commander& _block,
-                              std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
+  SaveOutcome SaveCommanderTo(CommanderStore& _store, Commander& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
   {
     /*
      * 6502: LSR SVC -- and this HALVES the save count rather than incrementing it.
@@ -197,7 +196,7 @@ namespace Elite
     const auto imageName = std::span<std::uint8_t, COMMANDER_FILE_SIZE>{_universe.commanderFile}.first<COMMANDER_NAME_SIZE>();
 
     // 6502: INWK+5 -- what KERNALSETUP turns into a filename, which is the LINE and not the image.
-    const auto TypedName = [&]() noexcept
+    const auto typedName = [&]() noexcept
     {
       std::array<std::uint8_t, COMMANDER_NAME_SIZE> typed{};
       for (std::size_t index = 0; index < COMMANDER_NAME_SIZE && index < _universe.lineBuffer.size(); ++index)
@@ -234,12 +233,12 @@ namespace Elite
      * A caller that sees `Left` with `newCommander` set is not being lied to -- it is looking at
      * the game.
      */
-    const auto Leave = [&](DiskMenuResult _result) noexcept
+    const auto leave = [&](DiskMenuResult _result) noexcept
     {
       if (loadFramePending)
       {
         StoreCommanderName(_universe.lineBuffer, imageName); // 6502: JSR TRNME
-        _result.newCommander = true;            // 6502: SEC
+        _result.newCommander = true;                         // 6502: SEC
       }
       return _result;
     };
@@ -265,13 +264,13 @@ namespace Elite
         // The name GTNME falls back on is the IMAGE's, through TR1's `LDA NA%,X` -- not the live
         // commander's. Type nothing and you keep the name you last saved under, which need not be
         // the name you are playing as.
-        (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present,
-                               _universe.lineBuffer, imageName, limits);
+        (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present, _universe.lineBuffer, imageName,
+                               limits);
 
         std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
 
         // 6502: JSR KERNALLOAD / BCS tapeerror -- the device could not read it.
-        if (!_ports.store.Read(TypedName(), file))
+        if (!_ports.store.Read(typedName(), file))
         {
           loadFramePending = true;
           ReportAndReturnToMenu(_universe, _ports, DEVICE_ERROR_TOKEN);
@@ -299,7 +298,7 @@ namespace Elite
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Loaded;
         result.newCommander = true; // 6502: SEC
-        return Leave(result);
+        return leave(result);
       }
 
       /*
@@ -307,8 +306,8 @@ namespace Elite
        */
       if (key == DISK_MENU_SAVE)
       {
-        (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present,
-                               _universe.lineBuffer, imageName, limits);
+        (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present, _universe.lineBuffer, imageName,
+                               limits);
 
         // 6502: JSR TRNME -- and here it runs BEFORE the file is touched, so the name the store is
         // given and the name in the image are the same eight bytes.
@@ -378,7 +377,7 @@ namespace Elite
         result.outcome = DiskMenuOutcome::Saved;
         result.newCommander = false; // 6502: SVEX -- CLC, in spite of the DFAULT above
         result.competition = saved.competition;
-        return Leave(result);
+        return leave(result);
       }
 
       // 6502: feb10 -- LDA DISK / EOR #&FF / STA DISK / JMP SVE. Tape is 0 and disk is &FF, and
@@ -404,7 +403,7 @@ namespace Elite
         _ports.tokens.Print(CONFIRM_TOKEN);
         if (!AskYesNo(_ports.keyboard))
         {
-          return Leave(DiskMenuResult{});
+          return leave(DiskMenuResult{});
         }
 
         // 6502: JSR JAMESON -- NA2% over NA%, which is an image and not the live commander.
@@ -416,11 +415,11 @@ namespace Elite
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Reset;
         result.newCommander = true; // 6502: DFAULT's own `CMP CHK3`, not anything SVE writes
-        return Leave(result);
+        return leave(result);
       }
 
       // 6502: feb13 -- CLC / RTS. Anything that is not one of the four keys.
-      return Leave(DiskMenuResult{});
+      return leave(DiskMenuResult{});
     }
   }
 

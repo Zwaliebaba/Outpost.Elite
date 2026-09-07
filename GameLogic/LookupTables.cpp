@@ -42,36 +42,36 @@ namespace Elite
   {
 
     /// The declared length of one of the generated arrays, without reading a byte of it.
-    template <typename Table> inline constexpr std::size_t Extent = std::tuple_size_v<Table>;
+    template <typename Table> inline constexpr std::size_t EXTENT = std::tuple_size_v<Table>;
 
   } // namespace
 
   // ---- the pictures -----------------------------------------------------------------------------
 
   // 6502: FONT -- "96 characters of eight rows, starting at space".
-  static_assert(Extent<decltype(FONT_DATA)> == 96u * 8u, "the font is 96 characters of eight rows");
+  static_assert(EXTENT<decltype(FONT_DATA)> == 96u * 8u, "the font is 96 characters of eight rows");
 
   // 6502: spritp -- "the seven sprite definitions, 64 bytes each", and both numbers are `VideoState`'s.
-  static_assert(Extent<decltype(SPRITE_DEFINITIONS)> == SPRITE_DEFINITION_COUNT * SPRITE_BYTES,
+  static_assert(EXTENT<decltype(SPRITE_DEFINITIONS)> == SPRITE_DEFINITION_COUNT * SPRITE_BYTES,
                 "the sprite sheet is SPRITE_DEFINITION_COUNT definitions of SPRITE_BYTES");
 
   // ---- the screen -------------------------------------------------------------------------------
 
   // The two halves of one 16-bit table are the same length, or the address they form is nonsense.
-  static_assert(Extent<decltype(ROW_ADDRESS_LOW)> == Extent<decltype(ROW_ADDRESS_HIGH)>, "ylookup is one table in two halves");
-  static_assert(Extent<decltype(CELL_ADDRESS_LOW)> == Extent<decltype(CELL_ADDRESS_HIGH)>, "celllook is one table in two halves");
+  static_assert(EXTENT<decltype(ROW_ADDRESS_LOW)> == EXTENT<decltype(ROW_ADDRESS_HIGH)>, "ylookup is one table in two halves");
+  static_assert(EXTENT<decltype(CELL_ADDRESS_LOW)> == EXTENT<decltype(CELL_ADDRESS_HIGH)>, "celllook is one table in two halves");
 
   // 6502: ylookup -- indexed by a screen row, and a row is a byte.
-  static_assert(Extent<decltype(ROW_ADDRESS_LOW)> == 256u, "every y a byte can hold has a row address");
+  static_assert(EXTENT<decltype(ROW_ADDRESS_LOW)> == 256u, "every y a byte can hold has a row address");
 
   // 6502: celllook -- indexed by a CHARACTER row, which is what `Canvas` counts.
-  static_assert(Extent<decltype(CELL_ADDRESS_LOW)> == static_cast<std::size_t>(Canvas::CELL_ROWS),
+  static_assert(EXTENT<decltype(CELL_ADDRESS_LOW)> == static_cast<std::size_t>(Canvas::CELL_ROWS),
                 "celllook has one entry per character row");
 
   // The dashboard's two palettes cover the same cells: screen RAM and colour RAM, one byte each.
-  static_assert(Extent<decltype(DASHBOARD_SCREEN_COLOURS)> == Extent<decltype(DASHBOARD_COLOUR_RAM)>,
+  static_assert(EXTENT<decltype(DASHBOARD_SCREEN_COLOURS)> == EXTENT<decltype(DASHBOARD_COLOUR_RAM)>,
                 "the dashboard's screen RAM and colour RAM cover the same cells");
-  static_assert(Extent<decltype(DASHBOARD_SCREEN_COLOURS)> ==
+  static_assert(EXTENT<decltype(DASHBOARD_SCREEN_COLOURS)> ==
                   static_cast<std::size_t>(Canvas::CELL_COLUMNS) * (Canvas::CELL_ROWS - Canvas::DASHBOARD_CELL_ROW),
                 "and they are exactly the cells below the raster split");
 
@@ -80,20 +80,20 @@ namespace Elite
    * plus the two WRAPPED cases `CPIX2` reads two entries along. Ten and not eight, and the header
    * says in as many words that the extra two are not padding.
    */
-  static_assert(Extent<decltype(MULTICOLOUR_MASK_TABLE)> == Extent<decltype(PIXEL_MASK_TABLE)> + 2u,
+  static_assert(EXTENT<decltype(MULTICOLOUR_MASK_TABLE)> == EXTENT<decltype(PIXEL_MASK_TABLE)> + 2u,
                 "CTWOS2 is the aligned masks plus the two wrapped cases");
 
   // 6502: TWFR and TWFL -- a horizontal line's two ends, one entry per x within a byte.
-  static_assert(Extent<decltype(LINE_RIGHT_MASK_TABLE)> == Extent<decltype(LINE_LEFT_MASK_TABLE)>,
+  static_assert(EXTENT<decltype(LINE_RIGHT_MASK_TABLE)> == EXTENT<decltype(LINE_LEFT_MASK_TABLE)>,
                 "the two ends of a horizontal line are indexed the same way");
-  static_assert(Extent<decltype(LINE_RIGHT_MASK_TABLE)> == Extent<decltype(PIXEL_MASK_TABLE)>,
+  static_assert(EXTENT<decltype(LINE_RIGHT_MASK_TABLE)> == EXTENT<decltype(PIXEL_MASK_TABLE)>,
                 "and by the same x within the byte the pixel masks use");
 
   // 6502: the four tables `COMIRQ1` indexes at `LDX RASTCT` -- one entry per half of the split.
-  static_assert(Extent<decltype(RASTER_NEXT_LINE_TABLE)> == 2u, "the raster split has two halves");
-  static_assert(Extent<decltype(RASTER_SPRITE_MULTICOLOUR_TABLE)> == Extent<decltype(RASTER_NEXT_LINE_TABLE)>, "and so does santana");
-  static_assert(Extent<decltype(RASTER_SPRITE_COLOUR_TABLE)> == Extent<decltype(RASTER_NEXT_LINE_TABLE)>, "and lotus");
-  static_assert(Extent<decltype(RASTER_NEXT_COUNTER_TABLE)> == Extent<decltype(RASTER_NEXT_LINE_TABLE)>, "and innersec");
+  static_assert(EXTENT<decltype(RASTER_NEXT_LINE_TABLE)> == 2u, "the raster split has two halves");
+  static_assert(EXTENT<decltype(RASTER_SPRITE_MULTICOLOUR_TABLE)> == EXTENT<decltype(RASTER_NEXT_LINE_TABLE)>, "and so does santana");
+  static_assert(EXTENT<decltype(RASTER_SPRITE_COLOUR_TABLE)> == EXTENT<decltype(RASTER_NEXT_LINE_TABLE)>, "and lotus");
+  static_assert(EXTENT<decltype(RASTER_NEXT_COUNTER_TABLE)> == EXTENT<decltype(RASTER_NEXT_LINE_TABLE)>, "and innersec");
 
   // ---- the ships --------------------------------------------------------------------------------
 
@@ -101,13 +101,13 @@ namespace Elite
    * 6502: scacol -- "sized by what indexes it, which is a ship TYPE", and a type runs 0 to
    * `SHIP_TYPE_COUNT` inclusive because type 0 is the missing ship.
    */
-  static_assert(Extent<decltype(SCANNER_COLOUR_TABLE)> == static_cast<std::size_t>(SHIP_TYPE_COUNT) + 1u,
+  static_assert(EXTENT<decltype(SCANNER_COLOUR_TABLE)> == static_cast<std::size_t>(SHIP_TYPE_COUNT) + 1u,
                 "the scanner has a colour for every ship type and for none");
 
   // ---- the trade ---------------------------------------------------------------------------------
 
   // 6502: PRXS -- "two bytes an item, low byte first", for FOURTEEN items on this build.
-  static_assert(Extent<decltype(EQUIPMENT_PRICES)> == static_cast<std::size_t>(EQUIPMENT_ITEM_COUNT) * 2u,
+  static_assert(EXTENT<decltype(EQUIPMENT_PRICES)> == static_cast<std::size_t>(EQUIPMENT_ITEM_COUNT) * 2u,
                 "every item of equipment has a two-byte price");
 
   // ---- the commander -----------------------------------------------------------------------------
@@ -117,7 +117,7 @@ namespace Elite
    * JAMESON copies ninety-eight". The slack is real and is copied by the game, so the assertion is
    * that the block FITS rather than that it fills.
    */
-  static_assert(Extent<decltype(DEFAULT_COMMANDER)> >= COMMANDER_FILE_SIZE, "the default commander holds a name and a block");
+  static_assert(EXTENT<decltype(DEFAULT_COMMANDER)> >= COMMANDER_FILE_SIZE, "the default commander holds a name and a block");
 
   // ---- the sound ----------------------------------------------------------------------------------
 
@@ -125,23 +125,23 @@ namespace Elite
    * 6502: the eight per-effect tables `NOISE` indexes at `LDX` the effect number. They are eight
    * parallel columns of one table with sixteen rows, and `SoundEffect` is the row.
    */
-  static_assert(Extent<decltype(EFFECT_COUNT_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
-  static_assert(Extent<decltype(EFFECT_FREQUENCY_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
-  static_assert(Extent<decltype(EFFECT_CONTROL_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
-  static_assert(Extent<decltype(EFFECT_ATTACK_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
-  static_assert(Extent<decltype(EFFECT_SUSTAIN_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
-  static_assert(Extent<decltype(EFFECT_FREQUENCY_CHANGE_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
-  static_assert(Extent<decltype(EFFECT_VOLUME_RATE_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_COUNT_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_FREQUENCY_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_CONTROL_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_ATTACK_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_SUSTAIN_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_FREQUENCY_CHANGE_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
+  static_assert(EXTENT<decltype(EFFECT_VOLUME_RATE_TABLE)> == SOUND_EFFECT_COUNT, "one entry per sound effect");
 
   // ---- the Trumbles --------------------------------------------------------------------------------
 
   // 6502: TRIBTA and TRIBMA -- "how many Trumble sprites to show" and "which sprite", by population.
-  static_assert(Extent<decltype(TRUMBLE_COUNT_TABLE)> == Extent<decltype(TRUMBLE_SPRITE_TABLE)>,
+  static_assert(EXTENT<decltype(TRUMBLE_COUNT_TABLE)> == EXTENT<decltype(TRUMBLE_SPRITE_TABLE)>,
                 "the two Trumble tables are indexed by the same population");
 
   // 6502: TRIBDIR and TRIBDIRH -- "four entries because `AND #3` is what indexes them".
-  static_assert(Extent<decltype(TRUMBLE_DIRECTION_TABLE)> == 4u, "AND #3 is what indexes the directions");
-  static_assert(Extent<decltype(TRUMBLE_DIRECTION_HIGH_TABLE)> == Extent<decltype(TRUMBLE_DIRECTION_TABLE)>,
+  static_assert(EXTENT<decltype(TRUMBLE_DIRECTION_TABLE)> == 4u, "AND #3 is what indexes the directions");
+  static_assert(EXTENT<decltype(TRUMBLE_DIRECTION_HIGH_TABLE)> == EXTENT<decltype(TRUMBLE_DIRECTION_TABLE)>,
                 "and the high half is the same table");
 
   // ---- the pause screen -----------------------------------------------------------------------------
@@ -151,6 +151,6 @@ namespace Elite
    * is the only definition the option block has (§6.139, and ADR-006 §2 on why there is no
    * `Options` struct). Thirteen is the number `DKS3` walks.
    */
-  static_assert(Extent<decltype(OPTION_KEY_TABLE)> == 13u, "DKS3 walks thirteen toggles");
+  static_assert(EXTENT<decltype(OPTION_KEY_TABLE)> == 13u, "DKS3 walks thirteen toggles");
 
 } // namespace Elite

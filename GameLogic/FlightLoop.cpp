@@ -142,7 +142,6 @@ namespace Elite
     }
 
     std::uint8_t cnt = _drop.count;
-    bool carry = _drop.carryIfNone;
     for (;;)
     {
       /*
@@ -153,9 +152,9 @@ namespace Elite
        * made (M2-d). Until M4-a-1 this was a seam that answered a fixed boolean, so a full bubble
        * could not be observed here at all.
        */
-      carry = SpawnChildShip(_universe.bubble, _universe.work, _universe.rng, _universe.flight.slot, _universe.flight.type,
-                             _drop.aiFlag, _drop.type, _universe.flight.blueprint)
-                .created;
+      const bool carry = SpawnChildShip(_universe.bubble, _universe.work, _universe.rng, _universe.flight.slot, _universe.flight.type,
+                                        _drop.aiFlag, _drop.type, _universe.flight.blueprint)
+                           .created;
 
       cnt = static_cast<std::uint8_t>(cnt - 1u); // 6502: DEC CNT
       if (cnt == 0u)                             // 6502: BNE spl+2
@@ -295,7 +294,6 @@ namespace Elite
 
   void FireMissile(Universe& _universe, Ports& _ports) noexcept
   {
-
     // 6502: LDX #MSL / JSR FRS1 / BCC FR1 -- a full bubble means the missile stays on the rail.
     if (!SpawnShipAhead(_universe.bubble, _universe.work, ShipType::Missile, _universe.flight.delta, _universe.bubble.missileTarget,
                         _universe.flight.blueprint)
@@ -351,8 +349,7 @@ namespace Elite
      */
     if (_universe.trumbles.count != 0u)
     {
-      MoveTrumbleSprites(_universe.trumbles, _universe.video, _universe.rng, _universe.flight.mainLoopCounter,
-                         _universe.memoryMap);
+      MoveTrumbleSprites(_universe.trumbles, _universe.video, _universe.rng, _universe.flight.mainLoopCounter, _universe.memoryMap);
     }
   }
 
@@ -481,7 +478,7 @@ namespace Elite
     {
       AbortMissileLock(_universe, commander.missiles, MISSILE_READY);
       (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: LDY #sfxboop / JSR NOISE
-      _universe.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
+      _universe.status.missileArmed = 0u;                               // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
 
     /*
@@ -540,8 +537,7 @@ namespace Elite
       if (_universe.keys[KEY_CANCEL_DOCKING] != 0u)
       {
         _universe.control.dockingComputer = 0u;
-        StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap,
-                         _ports.sid);
+        StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
       }
 
       // 6502: .MA78 LDA KY13 / AND ESCP / BEQ noescp / LDA MJ / BNE noescp / JMP ESCAPE -- and it
@@ -975,8 +971,7 @@ namespace Elite
 
     // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
     const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token.value,
-                _universe.view);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token.value, _universe.view);
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
     // canister is removed by part 12 rather than by anything here.
@@ -1006,7 +1001,7 @@ namespace Elite
 
     if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
     {
-      (void)LoadPlanetAxes(_universe.bubble, _universe.axes); // 6502: JSR SPS1
+      (void)LoadPlanetAxes(_universe.bubble, _universe.axes);          // 6502: JSR SPS1
       const UnitVector towards = NormaliseAxes(_universe.axes).vector; // the fall-through
 
       if (towards.z >= DOCK_MINIMUM_ALIGNMENT && static_cast<std::uint8_t>(_universe.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
@@ -1140,8 +1135,7 @@ namespace Elite
       // `false` here (which the port did until M2-d) changed the carry `LL9` seeds an explosion
       // cloud on, on a silent build (§8).
       carry = PlaySoundEffect(_universe.sound, SoundEffect::Beep, carry).carry;
-      SetMissileTarget(_universe, _universe.commander.missiles,
-                       _universe.flight.slot, MISSILE_LOCKED);
+      SetMissileTarget(_universe, _universe.commander.missiles, _universe.flight.slot, MISSILE_LOCKED);
     }
 
     // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
@@ -1312,14 +1306,14 @@ namespace Elite
       {
         switch (ScoopCargo(_universe, _ports, type))
         {
-          case ScoopResult::Stowed:
-            break;
-          case ScoopResult::HoldFull:
-            impact = Impact::Bounced;
-            break;
-          case ScoopResult::Crashed:
-            impact = Impact::Crashed;
-            break;
+        case ScoopResult::Stowed:
+          break;
+        case ScoopResult::HoldFull:
+          impact = Impact::Bounced;
+          break;
+        case ScoopResult::Crashed:
+          impact = Impact::Crashed;
+          break;
         }
       }
 
@@ -1327,15 +1321,15 @@ namespace Elite
       {
         switch (TestDocking(_universe))
         {
-          case DockingTest::Arrived:
-            // 6502: .GOIN JSR stopbd / JMP DOENTRY
-            StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
-            return LoopOutcome::Docked;
-          case DockingTest::TooFast:
-            return LoopOutcome::Died; // 6502: JMP DEATH
-          case DockingTest::Bumped:
-            impact = Impact::Bumped;
-            break;
+        case DockingTest::Arrived:
+          // 6502: .GOIN JSR stopbd / JMP DOENTRY
+          StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
+          return LoopOutcome::Docked;
+        case DockingTest::TooFast:
+          return LoopOutcome::Died; // 6502: JMP DEATH
+        case DockingTest::Bumped:
+          impact = Impact::Bumped;
+          break;
         }
       }
 
@@ -1382,7 +1376,6 @@ namespace Elite
    */
   [[nodiscard]] LoopOutcome EndFlightFrameTail(Universe& _universe, Ports& _ports) noexcept
   {
-
     /*
      * 6502: .MA23 LDA LAS2 / BEQ MA16 / LDA LASCT / CMP #8 / BCS MA16 / JSR LASLI2 / LDA #0 /
      * STA LAS2.
