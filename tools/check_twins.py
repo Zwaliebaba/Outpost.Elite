@@ -54,6 +54,15 @@ TWINNED: dict[str, str] = {
     "TextPrint2x.cpp": "RS-1",
     "ShipDraw.cpp": "RS-2",
     "ShipDraw2x.cpp": "RS-2",
+    "Charts.cpp": "RS-3",
+    "Explosion.cpp": "RS-3",
+    "Flight.cpp": "RS-3",
+    "Lasers.cpp": "RS-3",
+    "Lines2x.cpp": "RS-3",
+    "LoaderScreen.cpp": "RS-3",
+    "PlanetDraw.cpp": "RS-3",
+    "Stardust.cpp": "RS-3",
+    "ViewChange.cpp": "RS-3",
 }
 
 # Routines whose twin is the CALLER's to call, and the twin each one names. Rule 3 checks them.
@@ -71,8 +80,11 @@ NEEDS_NO_TWIN: dict[str, str] = {
                     "wide line is built from the vertices those bytes came from",
     "ResetCellColours": "screen RAM palettes for the whole canvas, which the picture keeps per cell "
                         "and the glyph twin writes; there is no second surface to reset",
-    "ClearMessageRows": "RS-5's, with the docked screens it serves -- its ten callers are spread "
-                        "over six files and most have no picture in scope yet",
+    "CopyPagesDown": "the dashboard's picture, copied byte for byte into the bitmap -- RS-4's, with "
+                     "the dials that are drawn over it; its only caller is `wantdials`",
+    "DrawLaserSights": "the sights are hardware SPRITES, and `Picture::Resolve` composites the same "
+                       "eight over both surfaces at twice the coordinates (RS-0); what this writes "
+                       "is a sprite pointer and a colour register, not pixels",
 }
 
 # What "draws on the canvas" is: a write through something NAMED like a canvas, or one of the pixel

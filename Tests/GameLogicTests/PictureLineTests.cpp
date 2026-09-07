@@ -5,6 +5,8 @@
 #include "Picture.h"
 #include "ShipBlueprint.h"
 #include "ShipDraw.h"
+#include "Lines2x.h"
+#include "LookupTables.h"
 #include "ShipDraw2x.h"
 #include "StateHash.h"
 #include "Universe.h"
@@ -17,7 +19,7 @@
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 /*
- * The 640x400 picture's lines (Design/Resolution.md section 4.1, slice RS-2).
+ * The 640x400 picture's lines (Design/Resolution.md section 4.1, slices RS-2 and RS-3).
  *
  * TWO KINDS OF EVIDENCE, and they answer different questions. The SHADOW test asks whether the two
  * surfaces show the same picture, by downsampling the wide one and comparing; it would catch a twin
@@ -25,10 +27,12 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * one wide pixel out everywhere, because a two-pixel block absorbs that -- and being one pixel out
  * everywhere is exactly what a wrong scale looks like.
  *
- * So the PROPERTY sweeps are the other half, and they are what pins the extra bit: `Divide512`
- * halved must be `LL28` for every pair of bytes it does not saturate on, and a projected vertex
- * halved must be the faithful vertex. Those are equalities over the whole input space, and they are
- * the only thing in the slice that can say the resolution was actually spent rather than faked.
+ * So the SWEEP is the other half, and RS-3 is where it earned its keep. The ship shadow test was
+ * green with a twin that drew a DIFFERENT LINE: `LOIN` is not a Bresenham but a DDA over a
+ * logarithm-table slope, and an exact drawer wandered up to three canvas pixels from it -- and drew
+ * 510 pixels on each of the ninety-six lines the game refuses outright. A ship's edges are short
+ * enough to hide all of that; a sweep over 18,432 lines is not. The sweep below is what says the
+ * wide line is the faithful line and not a plausible one.
  */
 namespace GameLogicTests
 {
@@ -47,7 +51,7 @@ namespace GameLogicTests
       return (bits & (0x80u >> (_x & 7))) != 0u;
     }
 
-    /// And the picture, in the same view coordinates -- `Bresenham2x` adds the doubled margin.
+    /// And the picture, in the same view coordinates -- the twins add the doubled margin at the plot.
     [[nodiscard]] bool PictureLit(const Picture& _picture, int _x, int _y)
     {
       return _picture.Point(_x + Picture::SPACE_VIEW_MARGIN, _y);
@@ -111,17 +115,20 @@ namespace GameLogicTests
           {
             continue;
           }
-          bool near = false;
-          for (int down = -1; down <= 1 && !near; ++down)
+          // NOT `near`: `minwindef.h` defines `near` and `far` as empty macros, so a variable of
+          // either name compiles on every other toolchain and fails on the one this project builds
+          // with. It cost a red CI run at RS-2, and `check_outpost.py` now refuses both.
+          bool alongside = false;
+          for (int down = -1; down <= 1 && !alongside; ++down)
           {
-            for (int across = -1; across <= 1 && !near; ++across)
+            for (int across = -1; across <= 1 && !alongside; ++across)
             {
               const int cx = x / 2 + across;
               const int cy = y / 2 + down;
-              near = cx >= 0 && cx < 256 && cy >= 0 && cy < Canvas::SPACE_VIEW_HEIGHT && CanvasLit(_canvas, cx, cy);
+              alongside = cx >= 0 && cx < 256 && cy >= 0 && cy < Canvas::SPACE_VIEW_HEIGHT && CanvasLit(_canvas, cx, cy);
             }
           }
-          if (!near)
+          if (!alongside)
           {
             if (out.pictureOnly == 0)
             {
@@ -171,32 +178,105 @@ namespace GameLogicTests
   {
   public:
     /*
-     * The property the slice actually has, and it is not the one the design expected.
+     * The sweep that says the wide line is the faithful line, and the one RS-2 did not have.
      *
-     * `LL28` is a LOGARITHM-TABLE lookup rather than a truncating divide -- measured against exact
-     * division over all 32,640 pairs it is out by up to 3 and by 0.70 on average -- so there is no
-     * dropped bit for a twin to recover, and a twin that divided exactly would draw a different
-     * wireframe. What is true instead is an equality: the wide vertex is the faithful vertex
-     * doubled, exactly, for every sixteen-bit value `XX3` can hold. That is what `Doubled` is, and
-     * asserting it over the whole range is what stops a later slice quietly reintroducing a second
-     * arithmetic.
+     * Over 18,432 lines across the whole view, every lit wide pixel must lie within one canvas pixel
+     * of a lit canvas pixel, in BOTH directions -- and no line the game refuses to draw may be drawn
+     * here. RS-2's exact Bresenham failed both clauses: 431 wide pixels three canvas pixels away,
+     * one four away, and 96 lines drawn on a canvas the game left blank.
+     *
+     * The residue this allows is named rather than absorbed: `LOIN` threads the carry out of its
+     * SCREEN POINTER arithmetic into the accumulator, and a surface with its own geometry has no
+     * address to take that from (Lines2x.h). It moves one pixel of some lines by one canvas pixel,
+     * which is inside the slack, and nothing else does.
      */
-    TEST_METHOD(TheWideVertexIsTheFaithfulOneDoubled)
+    TEST_METHOD(TheWideLineIsTheFaithfulLineAtTwiceTheScale)
     {
-      int compared = 0;
-      for (int value = -32768; value <= 32767; value += 1)
-      {
-        const std::uint16_t bytes = static_cast<std::uint16_t>(value);
-        const std::int16_t wide = Elite::Doubled(static_cast<std::uint8_t>(bytes), static_cast<std::uint8_t>(bytes >> 8));
-        ++compared;
+      int lines = 0;
+      int strayLines = 0;
+      int strayPixels = 0;
+      std::wstring first;
 
-        // Doubling wraps at sixteen bits exactly as the sum of two such coordinates would, and the
-        // clipper below is what keeps a wrapped one off the screen -- so the assertion is on the
-        // arithmetic and not on the range.
-        Assert::AreEqual(static_cast<int>(static_cast<std::int16_t>(2 * value)), static_cast<int>(wide),
-                         L"a vertex was not doubled");
+      for (int x1 = 0; x1 < 256; x1 += 17)
+      {
+        for (int y1 = 0; y1 < Canvas::SPACE_VIEW_HEIGHT; y1 += 13)
+        {
+          for (int x2 = 0; x2 < 256; x2 += 23)
+          {
+            for (int y2 = 0; y2 < Canvas::SPACE_VIEW_HEIGHT; y2 += 19)
+            {
+              Canvas canvas;
+              Picture picture;
+              const Elite::Line line{static_cast<std::uint8_t>(x1), static_cast<std::uint8_t>(y1), static_cast<std::uint8_t>(x2),
+                                     static_cast<std::uint8_t>(y2)};
+              (void)Elite::DrawLine(canvas, line);
+              Elite::DrawLine2x(picture, line);
+              ++lines;
+
+              bool canvasHasInk = false;
+              for (int y = 0; y < Canvas::SPACE_VIEW_HEIGHT && !canvasHasInk; ++y)
+              {
+                for (int x = 0; x < 256 && !canvasHasInk; ++x)
+                {
+                  canvasHasInk = CanvasLit(canvas, x, y);
+                }
+              }
+
+              bool pictureHasInk = false;
+              for (const std::uint8_t byte : picture.Bitmap())
+              {
+                pictureHasInk = pictureHasInk || byte != 0u;
+              }
+
+              if (!canvasHasInk && pictureHasInk)
+              {
+                if (strayLines == 0)
+                {
+                  first = L"the game drew nothing for (" + std::to_wstring(x1) + L", " + std::to_wstring(y1) + L")-(" +
+                          std::to_wstring(x2) + L", " + std::to_wstring(y2) + L") and the picture did";
+                }
+                ++strayLines;
+                continue;
+              }
+
+              for (int y = 0; y < Picture::SPACE_VIEW_HEIGHT; ++y)
+              {
+                for (int x = 0; x < 512; ++x)
+                {
+                  if (!PictureLit(picture, x, y))
+                  {
+                    continue;
+                  }
+                  bool alongside = false;
+                  for (int down = -1; down <= 1 && !alongside; ++down)
+                  {
+                    for (int across = -1; across <= 1 && !alongside; ++across)
+                    {
+                      const int cx = x / 2 + across;
+                      const int cy = y / 2 + down;
+                      alongside = cx >= 0 && cx < 256 && cy >= 0 && cy < Canvas::SPACE_VIEW_HEIGHT && CanvasLit(canvas, cx, cy);
+                    }
+                  }
+                  if (!alongside)
+                  {
+                    if (strayPixels == 0)
+                    {
+                      first = L"(" + std::to_wstring(x1) + L", " + std::to_wstring(y1) + L")-(" + std::to_wstring(x2) + L", " +
+                              std::to_wstring(y2) + L"): wide pixel (" + std::to_wstring(x) + L", " + std::to_wstring(y) +
+                              L") is not beside the faithful line";
+                    }
+                    ++strayPixels;
+                  }
+                }
+              }
+            }
+          }
+        }
       }
-      Assert::AreEqual(65536, compared, L"the sweep did not cover every sixteen-bit value");
+
+      Assert::AreEqual(18432, lines, L"the sweep is not the one the measurement was taken over");
+      Assert::AreEqual(0, strayLines, (L"lines the game refuses were drawn wide: " + first).c_str());
+      Assert::AreEqual(0, strayPixels, (L"wide pixels away from the faithful line: " + first).c_str());
     }
 
     /// The measurement that settles it, kept as a test so the claim above cannot rot: the log
@@ -224,19 +304,44 @@ namespace GameLogicTests
       Assert::IsTrue(total > cases / 2, L"its average error has collapsed, which would change the same thing");
     }
 
+    /*
+     * And the measurement that decided the line drawer, which is the same finding a third time.
+     *
+     * `LOIN`'s step is `LineSlope`, a logarithm-table lookup, so the line it draws is not the
+     * straight line between its endpoints. If that ever became exact the twin could be a Bresenham
+     * again -- and until it does, one must not be.
+     */
+    TEST_METHOD(TheFaithfulLineSlopeIsALogTableAndNotExact)
+    {
+      int worst = 0;
+      int cases = 0;
+
+      for (int denominator = 1; denominator < 256; ++denominator)
+      {
+        for (int numerator = 0; numerator <= denominator; ++numerator)
+        {
+          const int got = Elite::LineSlope(static_cast<std::uint8_t>(numerator), static_cast<std::uint8_t>(denominator));
+          const int exact = (256 * numerator) / denominator;
+          const int error = (got > exact) ? (got - exact) : (exact - got);
+          worst = (error > worst) ? error : worst;
+          ++cases;
+        }
+      }
+
+      Assert::AreEqual(32895, cases, L"the sweep is not the whole space");
+      Assert::IsTrue(worst >= 2, L"the slope has become exact, which would change what a twin may do");
+    }
+
     /// The line drawer erases by drawing again, which is the whole of how a ship leaves the screen.
     TEST_METHOD(ALineDrawnTwiceIsGone)
     {
       Picture picture;
-      const std::array<Elite::Line2x, 5> LINES = {{{0, 0, 511, 287, true},
-                                                   {511, 0, 0, 287, true},
-                                                   {10, 10, 10, 200, true},
-                                                   {10, 10, 400, 10, true},
-                                                   {255, 143, 256, 144, true}}};
+      const std::array<Elite::Line, 5> LINES = {
+        {{0, 0, 255, 143}, {255, 0, 1, 143}, {10, 10, 10, 100}, {10, 10, 200, 10}, {127, 71, 128, 72}}};
 
-      for (const Elite::Line2x& line : LINES)
+      for (const Elite::Line& line : LINES)
       {
-        Elite::Bresenham2x(picture, line);
+        Elite::DrawLine2x(picture, line);
       }
       bool anything = false;
       for (const std::uint8_t byte : picture.Bitmap())
@@ -245,38 +350,14 @@ namespace GameLogicTests
       }
       Assert::IsTrue(anything, L"nothing was drawn at all");
 
-      for (const Elite::Line2x& line : LINES)
+      for (const Elite::Line& line : LINES)
       {
-        Elite::Bresenham2x(picture, line);
+        Elite::DrawLine2x(picture, line);
       }
       for (const std::uint8_t byte : picture.Bitmap())
       {
         Assert::AreEqual<std::uint32_t>(0u, byte, L"a line drawn twice left ink behind");
       }
-    }
-
-    /// The cut keeps what is inside and reports when nothing is.
-    TEST_METHOD(TheClipperCutsToTheWideView)
-    {
-      Elite::Line2x out;
-
-      Assert::IsTrue(Elite::ClipLine2x(Elite::Line2x{10, 10, 100, 100, true}, Elite::SPACE_VIEW_BOTTOM_2X, out),
-                     L"a line wholly inside was rejected");
-      Assert::IsTrue(out == Elite::Line2x{10, 10, 100, 100, true}, L"a line wholly inside was moved");
-
-      Assert::IsFalse(Elite::ClipLine2x(Elite::Line2x{-500, 10, -400, 100, true}, Elite::SPACE_VIEW_BOTTOM_2X, out),
-                      L"a line wholly left of the view was accepted");
-      Assert::IsFalse(Elite::ClipLine2x(Elite::Line2x{10, 400, 100, 500, true}, Elite::SPACE_VIEW_BOTTOM_2X, out),
-                      L"a line below the space view was accepted");
-
-      Assert::IsTrue(Elite::ClipLine2x(Elite::Line2x{-100, 100, 300, 100, true}, Elite::SPACE_VIEW_BOTTOM_2X, out),
-                     L"a line crossing the left edge was rejected");
-      Assert::AreEqual(0, static_cast<int>(out.x1), L"it was not cut to the edge");
-      Assert::AreEqual(300, static_cast<int>(out.x2), L"and its far end moved");
-
-      // `dontclip` is the short-range chart letting the drawing run down the whole screen.
-      Assert::IsTrue(Elite::ClipLine2x(Elite::Line2x{10, 300, 100, 350, true}, Elite::WHOLE_SCREEN_BOTTOM_2X, out),
-                     L"the chart's taller region rejected a line inside it");
     }
 
     /*
@@ -338,7 +419,7 @@ namespace GameLogicTests
       }
       Assert::IsTrue(drewSomething, L"the ship drew nothing on the picture at all");
 
-      Elite::DrawShipLines(universe->canvas, universe->heap, universe->work.heap, &universe->picture, &universe->heap2x);
+      Elite::DrawShipLines(universe->canvas, universe->heap, universe->work.heap, &universe->picture);
 
       for (const std::uint8_t byte : universe->picture.Bitmap())
       {
@@ -346,19 +427,27 @@ namespace GameLogicTests
       }
     }
 
-    /// The wide heap is game-shaped state and is deliberately outside the replay digest, for the
-    /// picture's reason (Resolution.md section 3.4).
-    TEST_METHOD(TheStateHashDoesNotSeeTheWideHeap)
+    /*
+     * The wide heap is GONE, and this is the test that says so (Resolution.md section 13).
+     *
+     * RS-2 kept a parallel record of every line at twice the scale, 13,824 bytes of it, excluded
+     * from the state hash for the picture's reason. RS-3 deleted it: the twin reads the faithful
+     * heap and doubles it, so there is nothing to keep in step and nothing to exclude. What is left
+     * to assert is that the ship drawing still moves no game state it should not -- the heap the
+     * game keeps still hashes, and the surface beside it still does not.
+     */
+    TEST_METHOD(TheShipDrawingMovesTheFaithfulHeapAndNotTheSurface)
     {
       Elite::Universe universe;
       const std::uint64_t base = Elite::HashState(universe);
 
-      universe.heap2x.Write(Elite::HeapOffset::FromAddress(0xFF00u), Elite::Line2x{1, 2, 3, 4, true});
-      Assert::AreEqual(base, Elite::HashState(universe), L"the wide heap moved the state hash");
+      universe.picture.PlotPoint(11, 13);
+      Assert::AreEqual(base, Elite::HashState(universe), L"the picture moved the state hash");
 
       universe.heap.Write(Elite::HeapOffset::FromAddress(0xFF00u), 0x5Au);
       Assert::AreNotEqual(base, Elite::HashState(universe), L"the faithful heap stopped moving it");
     }
+
   };
 
 } // namespace GameLogicTests

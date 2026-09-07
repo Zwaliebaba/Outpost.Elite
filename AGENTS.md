@@ -175,7 +175,9 @@ reformat anything under `Upstream/` or `MasterFile/`.**
   or configuration reports what was wrong and fails closed; it never asserts on bad input.
 - **Two words and one container the Windows toolchain owns.** `near` and `far` are still macros
   after `<windows.h>` — `const bool near = ...` compiles as a declaration with no name — and it has
-  cost a CI leg once and two compile errors since (§6.110). And `std::vector<bool>` is bit-packed:
+  cost **two** CI legs and two compile errors (§6.110, and Resolution.md RS-3, where it reached the
+  Windows job from `Tests/` because `check_gamelogic.py` only read `GameLogic/`; it reads every C++
+  file the Windows job compiles now). And `std::vector<bool>` is bit-packed:
   `operator[]` returns a proxy, and MSVC's `Assert::AreEqual` static-asserts that it has no
   `ToString` for one while g++ compiles it without a word (§6.116). Store `std::uint8_t`. Both
   reach CI through the fast leg green, so neither is a warning you get locally.
@@ -249,7 +251,7 @@ test runs them.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->434 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->445 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.

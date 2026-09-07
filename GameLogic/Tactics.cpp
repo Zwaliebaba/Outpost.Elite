@@ -953,7 +953,7 @@ namespace Elite
               .created)
         {
           ShowMessage(_frame.universe.canvas, _frame.ports.printer, _frame.universe.text, _frame.universe.sentences,
-                      _frame.universe.message, MESSAGE_INCOMING_MISSILE, _frame.universe.view);
+                      _frame.universe.message, MESSAGE_INCOMING_MISSILE, _frame.universe.view, &_frame.universe.picture);
           (void)PlaySoundEffect(_frame.universe.sound, SoundEffect::Missile, false);
         }
         return Tactic::Done;

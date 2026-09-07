@@ -394,8 +394,8 @@ namespace Elite
     FoldIntoStateHash(into, _universe.canvas);
 
     /*
-     * `_universe.picture` AND `_universe.heap2x` ARE NOT FOLDED, and this comment is the record of
-     * that (Resolution.md §3.4).
+     * `_universe.picture` IS NOT FOLDED, and this comment is the record of that (Resolution.md
+     * §3.4). It was two fields until RS-3 collapsed the wide line heap into the faithful one.
      *
      * The canvas above is the game's own bytes and is hashed. The 640x400 surface beside it is a
      * SECOND RENDERING of the same frame, produced by code the resolution slices keep changing --

@@ -142,7 +142,8 @@ namespace Elite
     }
 
     // 6502: JSR CLYNS / qv2: LDA #175 / JSR prq / JSR TT217 / SEC / SBC #'0' / CMP #4 / BCC qv3.
-    ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+    ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
+                       &_universe.picture, _universe.view);
     for (;;)
     {
       PrintThenQuestion(_ports.printer, VIEW_TOKEN);
@@ -155,7 +156,8 @@ namespace Elite
       }
 
       // 6502: JSR CLYNS / JMP qv2 -- and there is no way out of this loop but a valid view.
-      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
+                       &_universe.picture, _universe.view);
     }
   }
 
@@ -247,7 +249,8 @@ namespace Elite
       }
 
       // 6502: JSR CLYNS / LDA #127 / JSR prq / JSR gnum.
-      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
+                       &_universe.picture, _universe.view);
       PrintThenQuestion(_ports.printer, ITEM_TOKEN);
 
       const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, highest);

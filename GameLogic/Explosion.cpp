@@ -2,6 +2,8 @@
 
 #include "Explosion.h"
 
+#include "Lines2x.h"
+
 #include "EliteTypes.h"
 
 #include <array>
@@ -25,7 +27,7 @@ namespace Elite
      * `PTCLS` and the state for `PTCLS2`, which is what tells the two entries apart.
      */
     void DrawParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap, const Bubble& _bubble,
-                       VideoState* _video, MemoryMap* _map) noexcept
+                       VideoState* _video, MemoryMap* _map, Picture* _picture) noexcept
     {
       const HeapOffset address = _work.heap;
 
@@ -172,6 +174,14 @@ namespace Elite
             if (offsetX.high == 0u)
             {
               PlotPixel(_canvas, offsetX.low, y1, distance);
+              if (_picture != nullptr)
+              {
+                // The particle's two offsets are eight-bit screen coordinates the cloud's own
+                // generator produced, with nothing under them: `EXS1` adds a byte to a byte. So the
+                // wide mark is those numbers doubled, and what the resolution buys the cloud is
+                // thinness -- a shower of points rather than of two-pixel smears.
+                PlotPixel2x(*_picture, 2 * static_cast<int>(offsetX.low), 2 * static_cast<int>(y1), distance);
+              }
             }
           }
 
@@ -246,19 +256,19 @@ namespace Elite
   }
 
   void DrawExplosionParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                              const Bubble& _bubble) noexcept
+                              const Bubble& _bubble, Picture* _picture) noexcept
   {
-    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr, _picture);
   }
 
   void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                                        const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept
+                                        const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture) noexcept
   {
-    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map, _picture);
   }
 
   void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
-                          const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept
+                          const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture) noexcept
   {
     const HeapOffset address = _work.heap;
 
@@ -266,7 +276,7 @@ namespace Elite
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
     if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
-      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr, _picture);
     }
 
     /*
@@ -381,11 +391,11 @@ namespace Elite
      */
     if (frump == EXPLOSION_CLOUD_START)
     {
-      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map, _picture);
       return;
     }
 
-    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr, _picture);
   }
 
 } // namespace Elite

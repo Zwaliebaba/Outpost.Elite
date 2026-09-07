@@ -140,7 +140,7 @@ namespace Elite
    * with before it clears anything. CHPR overwrites the cells it prints into with `COL2`, so this
    * is what colours everything the text printer does NOT touch: the lines, the box, the chart.
    */
-  void ResetCellColours(Canvas& _canvas) noexcept;
+  void ResetCellColours(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: TT66, which falls into TTX66 -- the text state a screen change leaves behind.
@@ -177,9 +177,15 @@ namespace Elite
    * it was written the message counters had nowhere to live. Nothing in the library calls `CLYNS2`
    * -- it is a label with no callers -- so every real caller wanted the two stores, and slice 3d-c
    * put them back (§6.67).
+   *
+   * `_view` is `QQ11`, and it is here for the twin alone: which wide rows the message occupies is
+   * `LayoutForView`'s answer, because a message over the space view sits at the height the original
+   * put it and one on a text screen is packed with the rest (Resolution.md section 6.2). The
+   * faithful routine does not read it.
    */
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
-                        MessageState& _message) noexcept;
+                        MessageState& _message,
+                        Picture* _picture = nullptr, std::uint8_t _view = 0) noexcept;
 
   /// 6502: LDA #21 / STA YC -- the row CLYNS leaves the cursor on, which is the top of the three it
   /// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.

@@ -3,7 +3,9 @@
 #include "TextPrint.h"
 
 #include "EliteTypes.h"
+#include "Lines2x.h"
 #include "LookupTables.h"
+#include "TextPrint2x.h"
 
 namespace Elite
 {
@@ -236,7 +238,7 @@ namespace Elite
     _state.row = 1;
   }
 
-  void ResetCellColours(Canvas& _canvas) noexcept
+  void ResetCellColours(Canvas& _canvas, Picture* _picture) noexcept
   {
     /*
      * 6502: BOL3 / BOL4. SC starts at &6004 -- three cells past `celllook`'s base, which is the
@@ -257,6 +259,12 @@ namespace Elite
       for (int cell = 0; cell < 32; ++cell)
       {
         _canvas.Write(static_cast<std::uint16_t>(base + cell), TEXT_COLOUR_WHITE);
+      }
+      if (_picture != nullptr)
+      {
+        // The same thirty-two cells, as the four wide ones each becomes. `base` is one past the
+        // block, which is `celllook`'s three-cell offset plus the cursor's own one (ADR-002 §7).
+        SetCellRun2x(*_picture, row * Canvas::CELL_COLUMNS + 1, 32, TEXT_COLOUR_WHITE);
       }
     }
   }
@@ -287,7 +295,8 @@ namespace Elite
   }
 
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
-                        MessageState& _message) noexcept
+                        MessageState& _message, Picture* _picture,
+                        std::uint8_t _view) noexcept
   {
     // 6502: CLYNS -- LDA #0 / STA DLY / STA de. Whatever message was up is forgotten, which is why
     // `MESS` can clear the screen and then test `DLY` and find it zero (§6.67).
@@ -314,6 +323,11 @@ namespace Elite
         _canvas.Write(static_cast<std::uint16_t>(base + offset), 0);
       }
       base = static_cast<std::uint16_t>(base + Canvas::ROW_BYTES);
+    }
+
+    if (_picture != nullptr)
+    {
+      ClearMessageRows2x(*_picture, LayoutForView(_view));
     }
   }
 

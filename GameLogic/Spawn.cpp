@@ -32,7 +32,7 @@ namespace Elite
     {
       AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: JSR ABORT with GREEN2 -- the indicator's own green
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 200,
-                  _universe.view); // 6502: LDA #200 / JSR MESS
+                  _universe.view, &_universe.picture); // 6502: LDA #200 / JSR MESS
     }
 
     const ShipType type = TypeOf(_universe.bubble.slots[_slot]);
@@ -334,7 +334,7 @@ namespace Elite
      * created, which it always is, and clear only if the bubble had no room for it.
      */
     SeedStardustAndClearShips(_universe.canvas, _universe.dust, _universe.rng, _universe.heaps, _universe.bubble, _universe.work,
-                              _universe.flight, _universe.view, sun.created);
+                              _universe.flight, _universe.view, sun.created, &_universe.picture);
   }
 
   RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept
