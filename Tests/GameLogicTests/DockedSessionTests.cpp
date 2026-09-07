@@ -265,7 +265,7 @@ namespace GameLogicTests
           recursive(characters, text),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng),
-          ports{recursive, characters, sink,  nulls, sid,
+          ports{recursive, characters, sink, sid,
                 extended,  shell,      shell, keys,  store}
       {
         extended.SetGame(universe, ports); // 6502: DT3 -- the codes that leave run in the library

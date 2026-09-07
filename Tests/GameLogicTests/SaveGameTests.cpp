@@ -877,7 +877,7 @@ namespace GameLogicTests
 
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{recursive, characters, sink,    nulls, sid,
+        Elite::Ports ports{recursive, characters, sink, sid,
                            extended,  nulls,      effects, keys,  store};
 
         const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);

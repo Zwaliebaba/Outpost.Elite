@@ -3,7 +3,10 @@
 #include "ShipDraw.h"
 
 #include "EliteTypes.h"
+#include "Explosion.h"
+#include "PlanetDraw.h"
 #include "ShipBlueprint.h"
+#include "Universe.h"
 
 #include <array>
 #include <utility>
@@ -863,9 +866,10 @@ namespace Elite
   /*
    * ---- part 1: is there anything to draw at all? ------------------------------------------------
    *
-   * Four ways of not being drawn, and the caller performs the two that need the seam: `LL25`'s
-   * `JMP PLANET` and `LL14`'s `JMP DOEXP` are `ShipDrawEffects` calls, so the stage answers which
-   * one rather than reaching through it. `EE51` and the `EE55` cloud seeding ARE part 1 and stay.
+   * Four ways of not being drawn, and the caller performs the two that leave the routine: `LL25`'s
+   * `JMP PLANET` and `LL14`'s `JMP DOEXP` are tail jumps into `PlanetDraw.cpp` and `Explosion.cpp`,
+   * so the stage answers which one rather than making the call. `EE51` and the `EE55` cloud
+   * seeding ARE part 1 and stay.
    */
   enum class Presence : std::uint8_t
   {
@@ -1449,32 +1453,46 @@ namespace Elite
   /*
    * 6502: LL9 -- the ship renderer, as the seven stages its part blocks always were (M4-b).
    *
-   * Every stage answers and this performs: the two seam calls, the dot and the explosion are here,
-   * where the `ShipDrawEffects` reference is, and no stage carries it.
+   * Every stage answers and this performs: the two tail jumps, the dot and the explosion are here,
+   * over the universe, and no stage sees more of it than its `ShipRender` frame.
    */
-  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip, Projection& _screen,
-                Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type, ShipDrawEffects& _effects,
-                Rng& _rng, bool _carryIn) noexcept
+  namespace
   {
-    ShipRender render{_canvas, _geometry, _math, _clip, _screen, _work, _heap, _blueprint};
+    /// 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
+    /// frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
+    /// vertices part 8 projected, which `DOEXP` copies onto the ship's line heap on its first frame.
+    void DrawExplosion(Universe& _universe) noexcept
+    {
+      DrawExplosionCloud(_universe.canvas, _universe.math, _universe.rng, _universe.work, _universe.heap, _universe.geometry,
+                         _universe.bubble, _universe.video, _universe.memoryMap);
+    }
+  } // namespace
 
-    switch (TestPresence(render, _slot, _type, _rng, _carryIn)) // 6502: part 1
+  void DrawShip(Universe& _universe, Ship& _slot, bool _carryIn) noexcept
+  {
+    ShipRender render{_universe.canvas, _universe.geometry, _universe.math,           _universe.clip,
+                      _universe.projection, _universe.work, _universe.heap, *_universe.flight.blueprint};
+
+    switch (TestPresence(render, _slot, _universe.flight.type, _universe.rng, _carryIn)) // 6502: part 1
     {
     case Presence::Draw:
       break;
     case Presence::Body:
-      _effects.DrawPlanetOrSun(); // 6502: LL25's JMP PLANET
+      // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
+      // decides which of the two it is, exactly as the tail jump does.
+      DrawPlanetOrSun(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _universe.rng, _universe.work,
+                      _universe.projection, _universe.flight.type);
       return;
     case Presence::Erased:
       return; // 6502: EE51 -- and the flag it leaves is `LL9`'s exit, which nothing reads
     case Presence::Exploded:
-      _effects.DrawExplosion(); // 6502: LL14's JMP DOEXP
+      DrawExplosion(_universe); // 6502: LL14's JMP DOEXP
       return;
     }
 
     if (MeasureRange(render) == Range::Dot) // 6502: part 2
     {
-      DrawShipAsPoint(_canvas, _work, _heap, _math, _screen); // 6502: LL13's JMP SHPPT
+      DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection); // 6502: LL13's JMP SHPPT
       return;
     }
 
@@ -1484,7 +1502,7 @@ namespace Elite
 
     if (!OpenHeapRun(render)) // 6502: part 9
     {
-      _effects.DrawExplosion();
+      DrawExplosion(_universe);
       return;
     }
 

@@ -31,10 +31,10 @@
 /*
  * A flight with no window behind it (Design/Modernize.md slice M0-c).
  *
- * `Outpost::FlightSession` answers the seven seams the flight code reaches through, and most of
- * its answers are calls back into `GameLogic` -- `DrawPlanetOrSun` draws the planet, `SpawnAhead`
- * is `FRS1`. Only a handful reach the platform: the keyboard, the
- * SID and the raster mode. This is the same object with the platform half replaced by data the
+ * `Outpost::FlightSession` answers the seams the flight code reaches through, and until M6-0-a-3
+ * most of its answers were calls back into `GameLogic` -- `DrawPlanetOrSun` drew the planet,
+ * `SpawnAhead` was `FRS1`; those are calls inside the library now. What is left reaches the
+ * platform: the keyboard, the SID and the raster mode. This is the same object with the platform half replaced by data the
  * script owns: the keys held this frame are an array the test fills, the sound goes into the
  * game's own buffer and log, and the raster mode is remembered. Every game-half answer is the
  * routine the executable calls, with the same arguments, so that a flight through this port is
@@ -50,7 +50,7 @@
 namespace GameLogicTests
 {
 
-  class FlightPort final : public Elite::ShipDrawEffects, public Elite::ControlEffects, public Elite::Presenter, public Elite::Keyboard
+  class FlightPort final : public Elite::ControlEffects, public Elite::Presenter, public Elite::Keyboard
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
@@ -66,7 +66,7 @@ namespace GameLogicTests
      */
 
     /*
-     * The seven seams a flight reaches, and `Elite::Game` builds the four text members of `Ports`
+     * The five seams a flight reaches, and `Elite::Game` builds the four text members of `Ports`
      * over the universe exactly as `Outpost::App` does -- which is the point: a flight through this
      * port is the flight the app would run, and it is now the same OBJECT running it.
      *
@@ -74,7 +74,7 @@ namespace GameLogicTests
      * screen and writes no commander file.
      */
     FlightPort()
-      : game(*this, unused, *this, *this, unused, *this)
+      : game(unused, *this, *this, unused, *this)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -187,18 +187,9 @@ namespace GameLogicTests
     // `Elite::SpawnChildShip` over this port's own universe, which is exactly what
     // `Elite::PerformDrop` does inside the library now.
 
-    // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
-
-    void DrawPlanetOrSun() override
-    {
-      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, universe.rng, universe.work,
-                             universe.projection, universe.flight.type);
-    }
-    void DrawExplosion() override
-    {
-      Elite::DrawExplosionCloud(universe.canvas, universe.math, universe.rng, universe.work, universe.heap, universe.geometry,
-                                universe.bubble, universe.video, universe.memoryMap);
-    }
+    // `Elite::ShipDrawEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-a-3): `DrawPlanetOrSun`
+    // and `DrawExplosion` were one library call each over this port's own universe, which is
+    // exactly what `Elite::DrawShip` does inside the library now.
 
     // ---- Elite::Keyboard ------------------------------------------------------------------------
 

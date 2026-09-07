@@ -36,9 +36,9 @@ namespace Elite
    * WHAT IT IS WORTH, said plainly: the port has no banking, so nothing downstream reads these two
    * bytes and no pixel or sound depends on them. What they buy is that the calls are COMPARABLE --
    * `L1M` and `l1` are ordinary addresses in the oracle's image -- where a write-only seam could
-   * only be counted. The harness slice that makes them mean something is §6.108's: `Cpu6502`
-   * routing a store to &D000-&DFFF to a register file instead of to RAM when bit 2 of `l1` says
-   * the I/O page is mapped in, which is what `ShipDrawEffects` is still waiting for.
+   * only be counted. The harness slice that made them mean something was §6.108's, and it is
+   * M6-0-a-1: `Cpu6502` routes a store to &D000-&DFFF to a register file instead of to RAM when
+   * bit 2 of `l1` says the I/O page is mapped in, which is what let `ShipDrawEffects` go.
    */
 
   /// 6502: the two values the game ever passes to `SETL1`. %101 maps the I/O page in over the RAM

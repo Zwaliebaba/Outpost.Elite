@@ -228,18 +228,17 @@ namespace GameLogicTests
 
   namespace
   {
-    /// The seams that are not this slice's, trapped so both sides do the same nothing.
+    /// The seam that is not this slice's, trapped so both sides do the same nothing.
     static void Trap(Cpu6502& _cpu, const MissionWhere& _to)
     {
       _cpu.AddTrap(_to.dovdu19);
 
       /*
-       * `NOSPRITES` is trapped for §6.108's reason and not because it is a seam: `XX21` is at
-       * &D000 and so are the VIC-II registers, so its `STA VIC+&15` lands on a blueprint pointer
-       * in a flat image and `NWSHP` then refuses the ship it names.
+       * `NOSPRITES`, `DOEXP` and `PLANET` WERE TRAPPED HERE AND ARE NOT ANY MORE (M6-0-a-1 and -3).
+       * `NOSPRITES` was trapped for §6.108's reason, which the banked I/O page has undone; the other
+       * two were `ShipDrawEffects`' tail jumps, which a briefing's ship -- never a body, never
+       * killed -- does not take, so nothing here reached them on either machine.
        */
-      _cpu.AddTrap(OracleImage::Instance().Label("DOEXP"));
-      _cpu.AddTrap(OracleImage::Instance().Label("PLANET"));
     }
 
     /// A Constrictor-shaped ship in slot 0, turning, which is what `BRIEF` leaves for `PAS1`.
@@ -301,7 +300,7 @@ namespace GameLogicTests
     /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
     [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, ScriptedStart& _start)
     {
-      return _universe.universe.PortsWith(_universe.universe.unused, _start, _start, _start);
+      return _universe.universe.PortsWith(_start, _start, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.

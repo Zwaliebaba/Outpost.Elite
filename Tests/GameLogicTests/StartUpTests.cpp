@@ -621,7 +621,7 @@ namespace GameLogicTests
         RecordingStart effects({script.firstAnswer, 0});
         Elite::SidWriteLog sid; ///< 6502: SID -- what `startat`, `stopat` and `stopbd` write
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,    nulls, sid,
+        Elite::Ports ports{recursive, characters, sink, sid,
                            extended,  effects,    effects, keys,  store};
 
         /*

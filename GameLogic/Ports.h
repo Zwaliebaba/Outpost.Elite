@@ -25,7 +25,7 @@ namespace Elite
    * after M3-b-3a (which removed `SightEffects` and landed no port), twelve after M3-b-3b, where
    * `Presenter` spent that credit and `TradeScreenEffects` went, and ELEVEN after M3-b-3d, which
    * landed `Keyboard` over the two seams it replaces (§8, 2026-09-06). TEN after M4-a-1, which
-   * took `SFS1` out of it.
+   * took `SFS1` out of it, and NINE after M6-0-a-3, which took `LL9`'s two tail jumps out.
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -35,7 +35,6 @@ namespace Elite
   class TextSink;
   class TokenPrinter;
   class CharacterPrinter;
-  class ShipDrawEffects;
   class ExtendedTokenPrinter;
   class StartUpEffects;
   class Keyboard;
@@ -52,10 +51,14 @@ namespace Elite
     TextSink& sink;               ///< what `printer` and `characters` put characters through
 
     // ---- the seams the platform answers ------------------------------------------------------
-    ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
 
     /*
-     * `SpawnChildEffects& loop` WAS HERE AND IS NOT ANY MORE (M4-a-1), which takes this struct to
+     * `ShipDrawEffects& drawing` WAS HERE AND IS NOT ANY MORE (M6-0-a-3), which takes this struct
+     * to NINE. It was `LL9`'s two tail jumps -- 6502: LL25 and LL14 -- and every implementer
+     * answered them with the same two library calls; `DrawShip` makes those calls itself now that
+     * the oracle can run `DOEXP` without its sprite writes landing on `XX21` (`ShipDraw.h`).
+     *
+     * `SpawnChildEffects& loop` WAS HERE AND IS NOT ANY MORE (M4-a-1), which took this struct to
      * TEN. It was `SFS1`, and the typed stage result it was waiting on is `Elite::Drop`: `SPIN` and
      * `SPIN2` answer what to drop and `PerformDrop` calls `Elite::SpawnChildShip` for real, so the
      * suite compares an answer instead of a trap's fixed carry (`FlightLoop.h`).
