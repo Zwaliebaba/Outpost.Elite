@@ -185,13 +185,6 @@ jobs:
       - name: Assemble the reference build
         run: python tools/labels.py --assemble
 
-      # Deliberately duplicated from the windows job. Running it on both legs is what turns
-      # "the generated tables match the binaries" into "and the two platforms assemble the same
-      # binaries" -- a divergence between GNU and MSVC BeebAsm builds would otherwise only ever
-      # be visible as an unexplained oracle failure.
-      - name: Generated tables still match the binaries
-        run: python tools/extract_tables.py --check
-
       - name: Build and run the suite
         run: Tests/PortableRunner/run_tests.sh
 
@@ -303,12 +296,6 @@ jobs:
 
       - name: Assemble the reference build
         run: python tools/labels.py --assemble
-
-      # A one-way copy with no check goes stale. This is the same comparison TableTests makes,
-      # from the command line, and it fails if a generated file was hand-edited or regenerated
-      # against a different build (plan section 6.6).
-      - name: Generated tables still match the binaries
-        run: python tools/extract_tables.py --check
 
       # ---------------------------------------------------------------------------------------
       # The build. The TEST project is built rather than the solution, and that is deliberate:

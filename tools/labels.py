@@ -89,7 +89,7 @@ ASSEMBLED = UPSTREAM / "versions" / "c64" / "3-assembled-output"
 LABELS_OUT = REFERENCE / "Labels.txt"
 BINARIES_OUT = REFERENCE / "Binaries.txt"
 
-# The same two tables for the loader, read by tools/extract_tables.py and by TableTests.
+# The same two tables for the loader, read by tools/extract_tables.py.
 LOADER_LABELS_OUT = REFERENCE / "LoaderLabels.txt"
 LOADER_BINARIES_OUT = REFERENCE / "LoaderBinaries.txt"
 

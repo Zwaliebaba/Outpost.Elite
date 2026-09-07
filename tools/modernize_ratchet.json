@@ -74,7 +74,7 @@
       "slice": "M5-a-7: Colours.h names what the VIC-II latch does, which is one new rule 4 marker"
     },
     "oracle-test-files": {
-      "ceiling": 50,
+      "ceiling": 48,
       "slack": 0,
       "slice": "M0-a"
     },

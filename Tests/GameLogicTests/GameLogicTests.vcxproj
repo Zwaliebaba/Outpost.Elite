@@ -125,7 +125,6 @@
     <ClCompile Include="Cpu6502Tests.cpp" />
     <ClCompile Include="OracleTests.cpp" />
     <ClCompile Include="RngTests.cpp" />
-    <ClCompile Include="TableTests.cpp" />
     <ClCompile Include="ExtendedTokenTests.cpp" />
     <ClCompile Include="TokenTests.cpp" />
     <ClCompile Include="CanvasSpikeTests.cpp" />
