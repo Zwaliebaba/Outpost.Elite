@@ -49,9 +49,15 @@ namespace Elite
    * sources: a port that derived the cache from the seeds it just copied matched the oracle on
    * `QQ2` and disagreed on `QQ28` for the first crosshair position tried.
    */
-  void ArriveAtSystem(Commander& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
-                      SystemData& _described, MarketState& _market, Rng& _rng, std::uint8_t& _explosionCount, std::uint8_t _crosshairX,
-                      std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _findNearest) noexcept;
+  /*
+   * `_explosionCount` WAS A `std::uint8_t&` UNTIL M5-a-3 (P10). It is `EV`, the encounter counter,
+   * and it is `Universe::explosions` at every call site -- so the universe comes in and the
+   * reference goes, along with the commander, the current system and the generator, which are the
+   * same three fields at every site too. What stays by value is what varies by caller.
+   */
+  void ArriveAtSystem(Universe& _universe, SystemSeeds& _selected, const SystemSeeds& _target, SystemData& _described,
+                      MarketState& _market, std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy,
+                      bool _findNearest) noexcept;
 
   /*
    * 6502: MJP -- witchspace, which is a jump that did not arrive.

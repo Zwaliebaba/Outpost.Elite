@@ -239,7 +239,20 @@ namespace Elite
    * equal value carry on and a larger one finish, so the caller has to check. It is the buy screen
    * that says no, not this.
    */
-  [[nodiscard]] DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _available) noexcept;
+  /*
+   * 6502: R -- the number typed so far, and what the key did to it (M5-a-3).
+   *
+   * `_value` was a `std::uint8_t&` until then. It is not state anybody keeps -- it is the digits
+   * accumulating inside one prompt -- so it goes back with the outcome rather than through a
+   * reference the caller has to remember, which is M2-b's rule for the kernel applied here.
+   */
+  struct TypedDigit
+  {
+    DigitResult outcome;
+    std::uint8_t value; ///< 6502: R
+  };
+
+  [[nodiscard]] TypedDigit TypeDigit(std::uint8_t _value, std::uint8_t _key, std::uint8_t _available) noexcept;
 
   /// What gnum returned: the number in R, and which of its exits produced it.
   struct NumberEntry

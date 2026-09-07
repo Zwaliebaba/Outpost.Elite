@@ -804,9 +804,10 @@ namespace GameLogicTests
               }
             }
 
-            std::uint8_t ours = static_cast<std::uint8_t>(value);
-            const Elite::DigitResult ourResult =
-              Elite::TypeDigit(ours, static_cast<std::uint8_t>(key), static_cast<std::uint8_t>(available));
+            const Elite::TypedDigit typed =
+              Elite::TypeDigit(static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(key), static_cast<std::uint8_t>(available));
+            const std::uint8_t ours = typed.value;
+            const Elite::DigitResult ourResult = typed.outcome;
 
             const std::wstring where = L"gnum(value=" + std::to_wstring(value) + L", key=" + std::to_wstring(key) + L", available=" +
                                        std::to_wstring(available) + L")";

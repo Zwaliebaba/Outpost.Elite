@@ -208,7 +208,6 @@ namespace Elite
    * `_carryIn` is the flag the first `DORND` rotates in, which is whatever `Main.cpp` reached the
    * spawner with -- §6.121 is the reason it is a parameter rather than an assumption.
    */
-  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
-                   const FlightStatus& _status, std::uint8_t& _explosionCount, const Blueprint*& _blueprint, bool _carryIn) noexcept;
+  void RunSpawning(Universe& _universe, bool _carryIn) noexcept;
 
 } // namespace Elite

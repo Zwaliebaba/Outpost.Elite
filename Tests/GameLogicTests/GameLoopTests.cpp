@@ -228,9 +228,7 @@ namespace GameLogicTests
             {
               // 6502: the fall-through into part 2's `LDA MJ`, which is slice 4c-a. The port has to
               // run it too or the comparison is against a machine that did more work.
-              Elite::RunSpawning(universe.universe.bubble, universe.universe.work, universe.universe.rng, universe.universe.commander,
-                                 universe.universe.current, universe.universe.status, universe.universe.explosions,
-                                 universe.universe.flight.blueprint, false);
+              Elite::RunSpawning(universe.universe, false);
             }
 
             CompareState(cpu, universe.universe, where, context);
@@ -601,7 +599,11 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
 
-            Elite::Bubble bubble;
+            // 6502: every byte `MLOOP`'s spawner reads is the universe's, and it takes the
+            // universe since M5-a-3 -- so the fixture keeps them there and names the pieces it
+            // seeds, rather than building nine separate objects the routine was handed one by one.
+            Elite::Universe spawning;
+            Elite::Bubble& bubble = spawning.bubble;
             Elite::LineHeap heap;
             SeedBubble(cpu, bubble, heap, at, one.fleet);
 
@@ -612,7 +614,7 @@ namespace GameLogicTests
             {
               cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
             }
-            Elite::Rng rng;
+            Elite::Rng& rng = spawning.rng;
             rng.SetState(seed);
 
             cpu.memory[at.mj] = one.witchspace;
@@ -630,7 +632,7 @@ namespace GameLogicTests
             cpu.memory[static_cast<std::uint16_t>(at.qq20 + 6u)] = static_cast<std::uint8_t>(one.contraband / 2u);
             cpu.memory[static_cast<std::uint16_t>(at.qq20 + 10u)] = static_cast<std::uint8_t>(one.contraband / 4u);
 
-            Elite::Ship work{};
+            Elite::Ship& work = spawning.work;
             std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
@@ -640,8 +642,12 @@ namespace GameLogicTests
             }
             work = Elite::Ship::FromBytes(shipBytes);
 
-            const Elite::Blueprint* blueprint =
+            spawning.flight.blueprint =
               Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+            // 6502: XX0 -- the spawner WRITES it, so this is a reference and not a snapshot: the
+            // comparison below reads what the routine left, as it did when the pointer was passed
+            // as `const Blueprint*&`.
+            const Elite::Blueprint*& blueprint = spawning.flight.blueprint;
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
@@ -650,7 +656,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.entry, 400'000, at.mloop);
             Assert::IsTrue(run.completed, L"the spawner reached MLOOP");
 
-            Elite::Commander commander{};
+            Elite::Commander& commander = spawning.commander;
             commander.galaxyNumber = one.galaxy;
             commander.systemX = one.systemX;
             commander.systemY = one.systemY;
@@ -662,15 +668,16 @@ namespace GameLogicTests
             commander.cargoHold[10] =
               static_cast<std::uint8_t>(one.contraband / 4u);
 
-            Elite::CurrentSystem current;
+            Elite::CurrentSystem& current = spawning.current;
             current.government = one.government;
 
-            Elite::FlightStatus status;
+            Elite::FlightStatus& status = spawning.status;
             status.midJump = one.witchspace;
 
-            std::uint8_t encounters = one.encounters;
+            std::uint8_t& encounters = spawning.explosions;
+            encounters = one.encounters;
 
-            Elite::RunSpawning(bubble, work, rng, commander, current, status, encounters, blueprint, carryIn != 0u);
+            Elite::RunSpawning(spawning, carryIn != 0u);
 
             const std::wstring where =
               WidenText(std::string("spawn: ") + one.what + " seed " + std::to_string(seed[0]) + " carry " + std::to_string(carryIn));

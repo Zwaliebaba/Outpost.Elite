@@ -49,9 +49,9 @@
       "slice": "M4-a-1: SpawnChildEffects goes -- SPIN and SPIN2 answer a Drop and PerformDrop spawns"
     },
     "out-params": {
-      "ceiling": 4,
+      "ceiling": 0,
       "slack": 0,
-      "slice": "M5-a-2: the six stragglers take Universe&, which is M3-a's pattern finishing"
+      "slice": "M5-a-3: P10 at zero -- M5-a's acceptance"
     },
     "carry-params": {
       "ceiling": 30,
@@ -69,9 +69,9 @@
       "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 4101,
+      "ceiling": 4105,
       "slack": 0,
-      "slice": "M4-d: Mode's three values name QQ12's two and the freeze the port adds (rule 4)"
+      "slice": "M5-a-3: PadResult and TypedDigit name SC+1 and R (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

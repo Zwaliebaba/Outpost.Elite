@@ -531,18 +531,23 @@ namespace GameLogicTests
               cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
             }
 
-            Elite::Rng rng;
+            // 6502: EV, QQ2, the commander and RAND -- all the universe's, and `hyp1` takes the
+            // universe since M5-a-3; the fixture names the pieces it seeds rather than building
+            // four separate objects the routine was handed one by one.
+            Elite::Universe arriving;
+            Elite::Rng& rng = arriving.rng;
             rng.SetState(seed);
 
             const std::uint16_t entry = static_cast<std::uint16_t>(at.hyp1 + (skipFind != 0u ? 3u : 0u));
             const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 400'000);
             Assert::IsTrue(run.completed, L"hyp1 returned");
 
-            Elite::Commander commander{};
-            Elite::CurrentSystem current;
+            Elite::Commander& commander = arriving.commander;
+            Elite::CurrentSystem& current = arriving.current;
             Elite::SystemSeeds selected{};
             Elite::MarketState market;
-            std::uint8_t explosions = 0x7Fu;
+            std::uint8_t& explosions = arriving.explosions;
+            explosions = 0x7Fu;
 
             /*
              * `QQ3` to `QQ5` -- what the last `TT111` left, and NOT the system `QQ2` is about to
@@ -555,8 +560,7 @@ namespace GameLogicTests
             described.government = cpu.memory[at.qq4];
             described.techLevel = cpu.memory[at.qq5];
 
-            Elite::ArriveAtSystem(commander, current, selected, target, described, market, rng, explosions, where[0], where[1], galaxy,
-                                  skipFind == 0u);
+            Elite::ArriveAtSystem(arriving, selected, target, described, market, where[0], where[1], galaxy, skipFind == 0u);
 
             const std::wstring context = WidenText("hyp1" + std::string(skipFind != 0u ? "+3" : "") + " at " + std::to_string(where[0]) +
                                                    "," + std::to_string(where[1]) + " seed " + std::to_string(seed[0]));

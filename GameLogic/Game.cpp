@@ -709,8 +709,7 @@ namespace Elite
      */
     if (RunLoopHead(m_universe, m_ports) == LoopHead::Spawn)
     {
-      RunSpawning(m_universe.bubble, m_universe.work, m_universe.rng, m_universe.commander, m_universe.current, m_universe.status,
-                  m_universe.explosions, m_universe.flight.blueprint, false);
+      RunSpawning(m_universe, false);
     }
 
     /*
