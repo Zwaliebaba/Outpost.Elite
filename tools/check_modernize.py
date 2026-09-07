@@ -170,6 +170,12 @@ def count_mutants(_root: Path) -> int:
     return sum(len(unit["mutants"]) for unit in recorded["units"])
 
 
+def count_mutant_files(_root: Path) -> int:
+    """The distinct files the recorded mutants edit -- what M6-0-g's floor is measured in."""
+    recorded = json.loads((_root / "tools" / "mutants.json").read_text(encoding="utf-8"))
+    return len({mutant["file"] for unit in recorded["units"] for mutant in unit["mutants"]})
+
+
 def count_inventory_stale_files(_root: Path) -> int:
     """M5-c -- `.h`/`.cpp` names in a ledger row's HOME cell that name no file in any project folder.
 
@@ -240,6 +246,7 @@ COUNTERS = {
     "out-params": (count_out_params, "P10: std::uint8_t& output parameters in GameLogic/*.h"),
     "carry-params": (count_carry_params, "P11: bool _carryIn parameters in GameLogic/*.h"),
     "mutants": (count_mutants, "recorded mutants in tools/mutants.json"),
+    "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
@@ -347,7 +354,12 @@ namespace Elite
 
 SAMPLE_MAIN = "#include \"pch.h\"\nint main() { Elite::Game game; Elite::Canvas canvas; return Elite::Run(); }\n"
 
-SAMPLE_MUTANTS = {"units": [{"name": "u", "mutants": [{"id": "a"}, {"id": "b"}]}, {"name": "v", "mutants": [{"id": "c"}]}]}
+SAMPLE_MUTANTS = {
+    "units": [
+        {"name": "u", "mutants": [{"id": "a", "file": "GameLogic/Sample.cpp"}, {"id": "b", "file": "GameLogic/Sample.cpp"}]},
+        {"name": "v", "mutants": [{"id": "c", "file": "GameLogic/Other.cpp"}]},
+    ]
+}
 
 SAMPLE_LEDGER = (
     "| Labels | N | Home | Disposition | Notes |\n"
@@ -372,6 +384,7 @@ EXPECTED = {
     "out-params": 1,
     "carry-params": 1,
     "mutants": 3,
+    "mutant-files": 2,
     "inventory-stale-files": 1,
     "origin-markers": 2,
     "oracle-test-files": 1,

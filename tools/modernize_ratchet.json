@@ -59,9 +59,14 @@
       "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
     },
     "mutants": {
-      "ceiling": 72,
+      "ceiling": 95,
       "slack": 0,
-      "slice": "death-sequence fix 2026-09-06 (plan 6.157): the cloud-seed unit, seven mutants"
+      "slice": "M6-0-g: six new units on the files that had none -- rng, arith, shipmove, planetdraw, spawn, flight -- twenty-three mutants"
+    },
+    "mutant-files": {
+      "ceiling": 16,
+      "slack": 0,
+      "slice": "M6-0-g: the floor is fourteen .cpp files, and Commander.h and Missions.h carry the other two"
     },
     "inventory-stale-files": {
       "ceiling": 0,

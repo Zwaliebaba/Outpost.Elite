@@ -284,9 +284,15 @@ tally can be confidently wrong.
 ```
 python tools/mutate.py --list             # what is recorded, and for which slice
 python tools/mutate.py --unit tactics     # run one unit's mutants
+python tools/mutate.py --unit rng --unit arith   # or several, on one worktree and one baseline
 python tools/mutate.py --id ta-253        # run one
 python tools/mutate.py --check            # they all still apply, without building (this is in CI)
 ```
+
+**There is a floor** (plan M6-0-g): `mutants.json` names the files that must each carry a mutant
+the suite catches, and `--check` refuses one whose mutants are all survivors or equivalents. A
+slice that ports a file where a slip would be invisible to every per-routine comparison but its
+own adds the file to the floor with its first caught mutant, in the same commit.
 
 Add a `{id, file, find, replace, expect, note}` per mutant when the slice lands. `find` must match
 its file EXACTLY ONCE — the tool refuses anything else, because a mutant that applies nowhere runs
