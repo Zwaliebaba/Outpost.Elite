@@ -39,9 +39,9 @@
       "slice": "M6-0-h-3: FlightSession is no longer lent the ports"
     },
     "outpost-elite-names": {
-      "ceiling": 61,
+      "ceiling": 62,
       "slack": 0,
-      "slice": "M6-0-h-3: FlightSession stops answering DOCKIT"
+      "slice": "Resolution.md RS-0: Elite::Picture is the surface the app presents, so the app names one more type"
     },
     "effects-seams": {
       "ceiling": 5,

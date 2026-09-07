@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "Picture.h"
 
 #include <cstdint>
 #include <span>
@@ -28,8 +29,16 @@ namespace Elite::Testing
   void LoadScreenFromOracle(const std::array<std::uint8_t, 65536>& _memory, std::uint16_t _base, std::uint8_t _colourRam,
                             Canvas& _outCanvas);
 
-  /// Writes the resolved 320x200 image as an indexed PNG. Returns the path, or empty on failure.
+  /// Writes the resolved 320x200 canvas as an indexed PNG. Returns the path, or empty on failure.
   std::string WriteCanvasPng(const Canvas& _canvas, const std::string& _name);
+
+  /// The same for the 640x400 picture. `tools/golden_diff.py` reads the size out of the PNG header,
+  /// so one diff tool serves both surfaces and neither has a size written into it.
+  std::string WritePicturePng(const Picture& _picture, const Canvas& _canvas, const std::string& _name);
+
+  /// An indexed PNG of any size, which is what the two above are. Exposed because a failure that
+  /// wants to show a downsampled or cropped image (Resolution.md section 8.1) has one to write.
+  std::string WriteIndexedPng(std::span<const std::uint8_t> _indices, int _width, int _height, const std::string& _name);
 
   /// Compares two canvases as pictures. On a mismatch writes both PNGs and returns a message
   /// naming the first differing pixel and the files; on a match returns an empty string.

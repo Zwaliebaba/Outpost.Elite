@@ -79,7 +79,7 @@ OWN_DECLARATION = re.compile(r"\b(?:Outpost::)?([A-Z][A-Za-z_]\w*)\s*(?:<[^;{}()
                              r"([a-z_]\w*)\s*(?=[;={,)]|\{)")
 
 # ANY `Type name`, whatever the type is. It exists so the app-type pass can tell an identifier it
-# knows from one it only THINKS it knows: `CanvasPresenter.cpp` declares two different `view`s, an
+# knows from one it only THINKS it knows: `ScreenPresenter.cpp` declares two different `view`s, an
 # `Outpost::Viewport` and a `D3D12_SHADER_RESOURCE_VIEW_DESC`, and a check with one scope per file
 # would otherwise read the Direct3D one's members against the Viewport's.
 ANY_DECLARATION = re.compile(r"\b([A-Za-z_][\w:]*)\s*(?:<[^;{}()]*>)?\s*[*&]?\s*&?\s*"
@@ -296,7 +296,7 @@ def check_chains(_sources: list[Path], _members: dict[str, set[str]],
             for match in pattern.finditer(text):
                 scope.setdefault(match.group(2), set()).add(match.group(1))
 
-        # The same declining `check_members` does, for the same file: `CanvasPresenter.cpp` has an
+        # The same declining `check_members` does, for the same file: `ScreenPresenter.cpp` has an
         # `Outpost::Viewport view` and a `D3D12_SHADER_RESOURCE_VIEW_DESC view`, and one scope per
         # file cannot tell which `view.something` is which.
         for match in ANY_DECLARATION.finditer(text):

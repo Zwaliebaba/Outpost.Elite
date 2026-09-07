@@ -7,9 +7,10 @@ writes a third PNG marking the differing pixels in white on the expected image.
 
     python tools/golden_diff.py expected.png actual.png [diff.png]
 
-Reads the indexed PNGs the harness writes -- 320x200, eight-bit palette, stored deflate -- with
-nothing but the standard library, because a golden diff that needs a dependency installed is one
-more reason not to look at the picture.
+Reads the indexed PNGs the harness writes -- eight-bit palette, stored deflate -- with nothing but
+the standard library, because a golden diff that needs a dependency installed is one more reason not
+to look at the picture. The SIZE comes out of the IHDR chunk rather than being assumed, so the same
+tool diffs a 320x200 canvas and a 640x400 screen and neither number is written down here.
 """
 
 from __future__ import annotations

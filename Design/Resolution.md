@@ -1,7 +1,10 @@
 # Resolution — the game at 640×400
 
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
-the shape (§1) and four on what the shape left open (§11); nothing below is built. Reads after [Modernize.md](Modernize.md), because it starts
+the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
+surface, the presenter, the upscale and eleven tests, with the suite at
+<!--count:tests-->419 green against the oracle and all <!--count:checks-->16 repository checks
+passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
 model — unchanged for the canvas, and §4's "parallel path" is this), ADR-005 (presentation — §1
@@ -29,18 +32,21 @@ letterbox stay, and ADR-005 §1's "5:4 or 4:3 option is phase 6" stays where it 
 
 One new object, one rule, and a build order that keeps the game playable at every step.
 
-- **`Elite::Screen`** is a second drawing surface in `GameLogic`, 640×400, integer, deterministic,
+- **`Elite::Picture`** is a second drawing surface in `GameLogic`, 640×400, integer, deterministic,
   Linux-testable. It is a VIC-II-shaped canvas at twice the geometry — a one-bit bitmap plane with a
   cell palette, so that the game's exclusive-or drawing works on it unchanged — plus an index plane
-  for the dashboard, where two colours a cell is not enough (§3).
+  for the dashboard, where two colours a cell is not enough (§3). **CORRECTED at RS-0**: it was
+  `Elite::Screen` until the compiler found `Universe::screen` already taken by `ScreenState`, the
+  6502 raster bytes. Two near-identical type names in one namespace for unrelated things is the
+  wrong answer, and `Picture` is the word §3 had already reached for in prose.
 - **Every routine that puts a pixel on the canvas puts the matching pixels on the screen at the same
   call site**, from the same inputs, using one more bit of precision where the inputs carry it, and
   erasing through a twin heap wherever the canvas erases through a heap (§4). The faithful routine
   decides everything; the twin computes coordinates and nothing else.
 - **Text** is the same font at the same size on an 80×50 grid; a per-view **layout** maps the
   faithful cursor to the wide one, and each docked screen gets its own (§6).
-- **The presenter** uploads the screen instead of the canvas; the window opens at 1280×800 (§7).
-- **The screen starts as a 2× upscale of the canvas and is taken over region by region**, so the
+- **The presenter** uploads the picture instead of the canvas; the window opens at 1280×800 (§7).
+- **The picture starts as a 2× upscale of the canvas and is taken over region by region**, so the
   tree plays at every slice and the last slice removes the upscale (§10).
 
 Four rulings shaped it (§1) and four more closed what it left open (§11). The largest cost is not
@@ -143,7 +149,7 @@ before M6-c or after M6-d, not during, and the plan's Phase 6 row is amended to 
 
 ---
 
-## 3. The screen
+## 3. The picture
 
 ### 3.1 Geometry
 
@@ -178,7 +184,7 @@ So the screen is three planes and one background:
 | `m_bitmap` | all 400 rows, standard mode | one bit per pixel, cell-major exactly as the canvas's `RowOffset` lays it out at twice the width — `(y & 0xF8) * 80 + margin + cell * 8 + (y & 7)` | the twins, by exclusive-or; `CHPR`'s twin, by exclusive-or |
 | `m_cells` | 80×50 | a `CellPalette` per cell: the colour of a set bit and of a clear one | the twin of every `celllook` write, `TT66`'s twin, the loader's |
 | `m_dashboard` | rows 288..399 | one colour index per pixel, 640×112 | the dashboard picture, `DIL`'s twin by STORE, `SCAN`'s and `DOT`'s twins by exclusive-or of the index |
-| `m_background` | the space view while the energy bomb runs | a `Colour` | `Canvas::SetSpaceViewBackground`'s twin |
+| ~~`m_background`~~ | — | — | **CORRECTED at RS-0: removed.** Every writer it could have had is a writer the canvas already has. `moonflower`, `welcome`, `DFLAG` and the sprite registers are game bytes the faithful code maintains, so `Resolve` reads all of them from the canvas and the surface holds no raster state at all — one fewer thing for a twin to keep in step |
 
 The dashboard is an index plane because a scanner cell can hold a red blip, a yellow one and the
 ellipse's own colour at once, which two colours a cell cannot express — the original solves this
@@ -224,9 +230,11 @@ in §8.4, which drives the replay with the screen present and absent and require
 `UniverseImage` names the field and marks it excluded, so `EveryCellTheImageNamesMovesTheHash` keeps
 its meaning.
 
-`Universe` still copies. The screen is about 108 KB — a 32,000-byte bitmap, 4,000 cell bytes and a
-71,680-byte dashboard plane — so a copied universe grows by several times its present size. Tests
-copy it in the replay comparisons and nowhere hot; it is noted, not mitigated.
+`Universe` still copies. The picture is **107,682 bytes measured at RS-0** — a 32,000-byte bitmap,
+4,000 cell bytes and a 71,680-byte dashboard plane — which takes a `Universe` from 15 KB to 123 KB,
+eight times. Nothing hot copies one; the oracle's image round trips put two on the stack beside a
+64 KB interpreter, which is 310 KB of a Windows thread's megabyte. Noted, not mitigated, and the
+dashboard plane is 71,680 of it and would halve at four bits a pixel if a later slice needs it back.
 
 ---
 
@@ -515,11 +523,14 @@ re-flow that changed it would be a change to the game.
 ## 7. The presenter and the window
 
 `CanvasPresenter` becomes `ScreenPresenter` in name and in three numbers: the texture is 640×400
-`R8_UINT`, the upload footprint follows it, and `m_resolved` is `Screen::WIDTH * Screen::HEIGHT`.
-`Present` takes the `Universe` (or the canvas, the screen and the video state) and calls
-`Screen::Resolve`. The pixel shader's literal `float2(320.0, 200.0)` becomes two root constants
-beside the palette, so the shader never again knows the size. `FitCanvas` becomes `FitScreen` over
-the screen's constants and `ShellTests` moves with it. `Window::Create`'s client area is the screen
+`R8_UINT`, the upload footprint follows it, and `m_resolved` is `Picture::WIDTH * Picture::HEIGHT`.
+`Present` takes the picture, the canvas and the video state and calls `Picture::Resolve`. The pixel
+shader's literal `float2(320.0, 200.0)` becomes two more root constants beside the palette (eighteen
+in all), so the shader never again knows the size. `FitCanvas` becomes `FitPicture` over the
+picture's constants and `ShellTests` moves with it. **The three shader FILES keep their names**: the
+blit is a texture, a quad and a palette lookup and knows nothing of either surface, and renaming
+files with custom FXC build steps that no Linux leg compiles would buy a word and risk the one leg
+that reads them. `Window::Create`'s client area is the screen
 at `INITIAL_SCALE`, which drops from 3 to 2: **1280×800** (owner ruling, §11.3), which fits a 1080p
 display with room for a title bar where 3× (1920×1200) would not. On a 1440p display the largest integer scale is 3×, on a
 4K one 5×; the letterbox rule is unchanged. `GoldenCanvas.cpp`'s PNG writer and `golden_diff.py`
@@ -531,7 +542,7 @@ call both.
 
 ---
 
-## 8. Verification — what pins the screen, since the oracle cannot
+## 8. Verification — what pins the picture, since the oracle cannot
 
 The canvas keeps every test it has. The screen has no oracle and never will, and the design says
 what stands in for one, in order of strength.
@@ -620,10 +631,10 @@ path the layout did not see — are what the estimate cannot price.
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **RS-0 The screen and the presenter** | `Screen` (§3) with `Resolve`, `Hash` and the energy-bomb decode; `Universe::screen` and the hash exclusion (§3.4); `ScreenPresenter`, `FitScreen`, the root constants, `INITIAL_SCALE = 2`; **the upscale**: `Screen::Resolve` fills every region it has no native content for from the canvas doubled, per region flag, so the tree plays at 1280×800 from this slice on; `GoldenCanvas.cpp` and `golden_diff.py` at both sizes | The game plays at 640×400 looking exactly as today; `ShellTests` moved; `UniverseImage` names the field excluded; §8.4 green with nothing to twin yet | 2 |
-| **RS-1 The text layer** | `PrintGlyph2x`, `TextLayout` and `TextState::wide` (§6.2), the default centred layout, the space view's layout, `TT66simp`'s and `BOX`'s twins, the loader's; `check_twins.py` (§8.6) | Every docked screen at 8×8 on the 80×50 grid, centred; the text shadow test (§8.1) green over `TextPrintTests`' scenes; a message on the space view appears and vanishes; the seventeenth check in CI | 2–3 |
+| **RS-0 The picture and the presenter** ✅ **built 2026-09-07 (§13)** | `Picture` (§3) with `Resolve`, `Hash` and the energy-bomb decode; `Universe::picture` and the hash exclusion (§3.4); `ScreenPresenter`, `FitPicture`, the root constants, `INITIAL_SCALE = 2`; **the upscale**: `Picture::Resolve` fills every region it has no native content for from the canvas doubled, per region flag, so the tree plays at 1280×800 from this slice on; `GoldenCanvas.cpp` and `golden_diff.py` at both sizes | The game plays at 640×400 looking exactly as today; `ShellTests` moved; `UniverseImage` names the field excluded; §8.4 green with nothing to twin yet | 2 |
+| **RS-1 The text layer** | `PrintGlyph2x`, `TextLayout` and `TextState::wide` (§6.2), the default centred layout, the space view's layout, `TT66simp`'s and `BOX`'s twins, the loader's; `check_twins.py` (§8.6). The space-view REGION does not flip here — it flips when RS-3 completes it, so this slice's pixels are drawn and not shown | The text shadow test (§8.1) green over `TextPrintTests`' scenes; the glyph lands on the cell the layout names; the seventeenth check in CI | 2–3 |
 | **RS-2 Ship lines** | `Project2x`, `Divide512`, `ClipLine2x`, `Bresenham2x`, `LineHeap2x`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1) | The title ship and a flight with ships at 2×; the space-view shadow test green on `MA23`'s ship frames; the property sweeps of §8.2 for `Project2x` and `Divide512`; the first screen golden | 3–4 |
-| **RS-3 Planet, sun, dust, beams, rings** | §4.2 and §4.3: `ball2x`, `sun2x`, `isqrt`, the stardust and particle twins, the laser and tunnel twins | Shadow test green on the sun frame and the explosion frame; `isqrt` swept; the launch tunnel presents thin rings | 2–3 |
+| **RS-3 Planet, sun, dust, beams, rings** | §4.2 and §4.3: `ball2x`, `sun2x`, `isqrt`, the stardust and particle twins, the laser and tunnel twins. **The space-view region flips here**, which is the first slice a person sees any of RS-1 to RS-3 | Shadow test green on the sun frame and the explosion frame; `isqrt` swept; the launch tunnel presents thin rings; a hand-check of the whole upper region | 2–3 |
 | **RS-4 The dashboard** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, `bitmaps.py`'s fourth sheet and `bootstrap-2x`, `DASHBOARD_IMAGE_2X` as bootstrapped, the rectangle table and its import check, sprites pixel-doubled in `Resolve` | The per-instrument shadow properties green; the flight view entirely native (no region upscaled) and a hand-check recorded; the scanner sweep of §8.2 | 3 |
 | **RS-4-art The picture** | The owner redraws `DASHBOARD_IMAGE_2X` on the bootstrap (§5.3, ruling §11.1); no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
 | **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the sketch accepted before the table is written (ruling §11.2); the text shadow test green including the no-collision clause; a hand-check | 1 each, 8–10 in all; the charts are two each |
@@ -669,4 +680,71 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 | R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | The no-collision clause of the text shadow test, run over every docked screen the session tests drive; the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
 | R25 | **The extra bit is wrong and nothing sees it.** A twin that halves to the faithful value at every pixel can still be off by one hi-res pixel everywhere, and the shadow test allows one | The property sweeps of §8.2 on every twin divide and root; a screen golden per scene |
 | R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | §8.4's replay run both ways; T1 as a review rule; `LineHeap2x` addressed by the faithful `HeapOffset` so there is no second pointer to move |
-| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the screen is part canvas-upscaled and part native, and a screenshot taken then is not the design | The region flags are a struct with a `Complete()` test that RS-6 asserts; the journal names which regions are native at each slice |
+| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture is part canvas-upscaled and part native, and a screenshot taken then is not the design | `Picture::NativeRegions` is a struct with a `Complete()` test that RS-6 asserts, and `ThePicture::TheRegionsSayWhichSlicesHaveLanded` fails the day every region is native and the fallback is still there; the journal names which regions are native at each slice. **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked. The regions are the two the raster split already makes, and the text layer belongs to the upper one, which flips when RS-3 completes it |
+
+---
+
+## 13. Journal
+
+### RS-0 — the picture and the presenter, 2026-09-07
+
+**Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
+owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
+<!--count:tests-->419 tests with the oracle present, all passing, and all
+<!--count:checks-->16 repository checks pass. The canvas is untouched: every oracle comparison,
+whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
+
+**What it can claim.** `ThePicture::WithNoRegionOfItsOwnItIsTheCanvasDoubled` asserts the equation
+the whole slice exists for — `picture[y][x] == canvas[y / 2][x / 2]` — over a scene with bitmap bytes
+across the whole plane, a different palette in every cell, colour RAM under it, docked and in flight.
+`TheSpritesDoubleWithIt` asserts the same with four hardware sprites over it, one of them expanded
+and two hanging off the edges, because a sprite's position, its expand flag and the output's scale
+all multiply and that is where an off-by-one would live. `TheEnergyBombReinterpretsBothSurfacesTogether`
+asserts it while the bomb is burning. So "looks exactly as today" is a test rather than a claim.
+
+**Three things the building corrected, and each is in place above.**
+
+1. **`Elite::Screen` could not be called that.** `Universe::screen` is `ScreenState` — the 6502
+   raster bytes — and the compiler said so on the first build. Two near-identical type names in one
+   namespace for unrelated things is the wrong answer whichever field gets renamed, so the surface
+   is `Elite::Picture`, which is the word §3 had already reached for in prose.
+2. **The surface holds no raster state of its own.** §3.2 gave it a background colour; every writer
+   it could have had is one the canvas already has, so `Resolve` reads `moonflower`, `welcome`,
+   `DFLAG`, colour RAM and the sprite pointers from the canvas and the field is gone. One fewer
+   thing for a twin to keep in step, found by looking for the writer.
+3. **Two regions, not three.** "Text" is not an area — it lands over the space view in flight and
+   over the whole screen when docked — so it cannot be a region of an image. The regions are the two
+   the raster split already makes, and the text layer belongs to the upper one. The consequence is
+   scheduling and §10 now says it: RS-1 and RS-2 draw pixels nobody sees, verified by the shadow
+   tests, and the upper region flips at RS-3.
+
+**One decode in the tree, not two.** The upscale reads the canvas through `Canvas::ResolveCell`,
+which is the decode `Canvas::Resolve` itself now runs — the per-cell body was lifted out of the
+anonymous namespace for it. Likewise `CompositeSprites` is the sprite blit both surfaces call, with
+the output's width, height, split row and scale as parameters. Duplicating either would have been
+the defect ADR-002 §4 records, where the port decoded the bitmap in one mode and hashed it in
+another and every glyph came out as stripes with the whole suite green.
+
+**The mutant `raster/ra-blit-per-sprite` was re-anchored, not dropped** (Modernize.md rule 3): its
+line moved when `BlitSprite` took the output's split row instead of the canvas's constant, and it
+still pins the same decision.
+
+**Two numbers worth having.** The picture is 107,682 bytes, which takes a `Universe` from 15 KB to
+123 KB — eight times, measured rather than estimated; §3.4 carries what that costs and where it
+would come back from. And the opening window drops from 3× to 2×, because 640×400 at 3× is 1920×1200
+and misses a 1080p display, which is ruling 11.3 arriving in code.
+
+**One test failed on the way and it was right to.** `TheHashIsStableAndNoticesOnePixel` plotted a
+point into a cell nobody had coloured and the hash did not move — because an unpainted cell is
+`CellPalette{}`, black over black, so a lit bit and a clear one are both colour 0 and the point is
+invisible. That is exactly what `COL2` does on the canvas before `RES2` writes it. The test paints
+the cell now and says why.
+
+**What RS-0 does NOT do**, so nobody reads more into it: nothing is drawn natively. `Complete()` is
+false, both regions are the canvas doubled, and the only thing a player would notice is that the
+window opens at 1280×800 instead of 960×600 and every pixel is two. The twins start at RS-1.
+
+**Not verified here: the Windows build.** `Outpost/` is Win32 and D3D12 and no hosted Linux runner
+compiles it, so `ScreenPresenter.cpp`, the eighteen root constants and the shader's `gImageSize`
+have been read by `check_outpost.py` and by nothing else. The Windows CI leg is the first compiler
+to see them.

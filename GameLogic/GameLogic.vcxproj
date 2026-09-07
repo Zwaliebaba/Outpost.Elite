@@ -176,6 +176,7 @@
     <ClInclude Include="Lasers.h" />
     <ClInclude Include="Messages.h" />
     <ClInclude Include="Scanner.h" />
+    <ClInclude Include="Picture.h" />
     <ClInclude Include="Explosion.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="GameLoop.h" />
@@ -269,6 +270,7 @@
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />
+    <ClCompile Include="Picture.cpp" />
     <ClCompile Include="Explosion.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="GameLoop.cpp" />
