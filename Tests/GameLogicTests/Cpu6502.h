@@ -68,6 +68,30 @@ namespace Elite::Testing
     static constexpr std::uint16_t IO_BASE = 0xD000;
     static constexpr std::uint16_t IO_TOP = 0xDFFF;
 
+    /*
+     * 6502: CIA1's two ports, &DC00 and &DC01 -- the keyboard matrix as the chip presents it
+     * (M6-0-a-4).
+     *
+     * The game selects columns by storing a byte with one bit CLEAR to port A and reads the rows
+     * of the selected columns from port B, where a held key reads as a clear bit; `RDKEY` walks
+     * the eight columns that way and `DEC`s a logger entry for every clear bit it finds. Port A
+     * reads back what was stored (its lines are outputs on a C64, and joystick 2 shares them:
+     * nothing is plugged in here, so they read high). Port B is computed from `keysDown` on every
+     * read, which is what lets `RDKEY` run on the oracle against the same held keys a fixture's
+     * `Keyboard` answers on the port side, instead of being trapped around.
+     */
+    static constexpr std::uint16_t CIA1_PORT_A = 0xDC00;
+    static constexpr std::uint16_t CIA1_PORT_B = 0xDC01;
+
+    /// One byte per matrix column; a SET bit is a key held in that row. `HoldKey` is how a fixture
+    /// presses one, and the ninth "column" `RDKEY`'s walk ends on selects nothing and reads &FF.
+    std::array<std::uint8_t, 8> keysDown{};
+
+    void HoldKey(std::uint8_t _column, std::uint8_t _row) noexcept
+    {
+      keysDown[static_cast<std::size_t>(_column & 0x07u)] |= static_cast<std::uint8_t>(1u << (_row & 0x07u));
+    }
+
     /// 6502: bits 0 to 2 of &0001. The I/O page is mapped in when CHAREN (bit 2) is set and LORAM
     /// or HIRAM is -- %101 is what `SETL1` maps in with, %100 what it maps out with, and %x00 is
     /// RAM everywhere whatever CHAREN says.
@@ -84,6 +108,20 @@ namespace Elite::Testing
     {
       if (_address >= IO_BASE && _address <= IO_TOP && IoMappedIn())
       {
+        if (_address == CIA1_PORT_B)
+        {
+          // The rows of every selected column, pulled low where a key is held.
+          const std::uint8_t columns = io[static_cast<std::size_t>(CIA1_PORT_A - IO_BASE)];
+          std::uint8_t rows = 0xFFu;
+          for (std::size_t column = 0; column < keysDown.size(); ++column)
+          {
+            if ((columns & (1u << column)) == 0u)
+            {
+              rows = static_cast<std::uint8_t>(rows & ~keysDown[column]);
+            }
+          }
+          return rows;
+        }
         return io[static_cast<std::size_t>(_address - IO_BASE)];
       }
       return memory[_address];

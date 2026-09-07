@@ -1522,7 +1522,7 @@ were safe after M6-f, and none of them waited.
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M6-0-a The 6510 port register** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
+| **M6-0-a The 6510 port register** ✅ **built 2026-09-07 (§8, four sittings)** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
 | **M6-0-b The replay reaches death and the escape pod** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
 | **M6-0-c The eleven control codes** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
 | **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
@@ -1809,6 +1809,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-a-4: `RDKEY` runs on the oracle, and the row closes.**
+
+The last line of M6-0-a's acceptance, and the smallest: `Cpu6502` answers CIA1's port B from a
+keyboard matrix — eight column bytes a fixture presses keys into with `HoldKey`, read back as the
+rows of whichever columns the last store to port A selected, a held key pulling its bit low — and
+port A reads back what was stored, which on a C64 with nothing in joystick port 2 is what the chip
+does. That is all `RDKEY` needs to run: `SETL1`, the sprite register, `ZEKTRAN`, the eight-column
+walk with its stable-read loop, the ninth pass that selects nothing, and the `QQ11` tail. Both of
+`ControlsTests`' traps on it are gone. The `DOKEY` sweep presses the case's steering keys on the
+matrix and holds the same keys on the port's `Keyboard`, seeds both loggers FULL beforehand, and
+compares all sixty-five bytes the two scans built — so a scan that failed to clear would fail on
+`DELTA` and `JSTX` as well as on the logger; the `TT17` sweep presses its five keys the same way.
+The logger index is the walk run backwards, column `(&40 - X) / 8` and row `(&40 - X) % 8`, and
+the three positions `Controls.h` already names (Space, "A", RETURN) check it.
+
+What is NOT compared, said plainly: `RDKEY`'s joystick branch. With `JSTK` set the routine reads
+port A first and takes `dojoystick` when any of bits 0 to 4 is low; the fixture leaves the port
+as the previous scan's `STA &DC00` leaves it, so the joystick is idle and the oracle falls into
+the walk, which is the path the port's `ScanKeyboard` is. The ledger has said since 2026-09-04
+that the joystick is read inside `RDKEY` and is the seam's; that stands, and it is a `Keyboard`
+question for the executable, not a comparison this fixture can make.
+
+**M6-0-a IS BUILT**, in four sittings against the row's three: the interpreter banks the I/O page
+(a-1), the frame fixture draws the cloud (a-2), the seam goes (a-3) and `RDKEY` runs (a-4). Every
+line of the acceptance is met — the first whole-frame comparison with an explosion in it is green
+(a-2), `effects-seams` 8 → 7 (a-3), no composition test traps `DOEXP` (a-2, a-3), and `RDKEY` is
+compared with the banked writes rather than around them (a-4). 399 of 399; all 16 checks.
 
 **2026-09-07 — M6-0-a-3: `ShipDrawEffects` goes, and `DrawShip` takes the universe.**
 

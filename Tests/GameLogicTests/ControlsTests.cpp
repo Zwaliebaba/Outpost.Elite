@@ -59,6 +59,33 @@ namespace GameLogicTests
       return std::wstring(_text.begin(), _text.end());
     }
 
+    /*
+     * 6502: RDKEY's walk, run backwards -- press on the oracle's CIA the keys a logger says are held.
+     *
+     * The walk starts at `KEYLOOK+&40` with column 0 selected and bit 0 of the rows, and `DEX`es
+     * once per key through eight rows and then eight columns, so logger index X is column
+     * `(&40 - X) / 8`, row `(&40 - X) % 8`: Space (column 7, row 4) is 4, "A" (column 1, row 2)
+     * is 54, RETURN (column 0, row 1) is &3F. Index 0 is the ninth pass, on which every column is
+     * deselected and port B reads &FF, so no matrix position answers it.
+     *
+     * Port A is left as the previous scan's `LDA #%01111111 / STA &DC00` leaves it, because that
+     * is what `RDKEY` reads first when `JSTK` is set: with bits 0 to 4 high the joystick is idle
+     * and the routine falls into the matrix walk, which is the path the port's `ScanKeyboard` is.
+     */
+    void HoldOnMatrix(Cpu6502& _cpu, const Elite::KeyLogger& _keys)
+    {
+      _cpu.keysDown.fill(0u); // exactly these keys, on a CPU the sweep reuses from case to case
+      for (std::size_t index = 1; index < _keys.size(); ++index)
+      {
+        if (_keys[index] != 0u)
+        {
+          const std::size_t at = 0x40u - index;
+          _cpu.HoldKey(static_cast<std::uint8_t>(at >> 3), static_cast<std::uint8_t>(at & 0x07u));
+        }
+      }
+      _cpu.Io(Cpu6502::CIA1_PORT_A) = 0x7Fu;
+    }
+
     /// The screen's base address, derived the way the game derives it: `ylookup` holds the row
     /// addresses with the four-cell left margin already added, so the base is the first row less 32.
     std::uint16_t ScreenBase(const OracleImage& _oracle)
@@ -289,24 +316,19 @@ namespace GameLogicTests
       }
 
       Cpu6502 cpu = oracle.Fresh();
-      cpu.AddTrap(oracle.Label("RDKEY"));
       cpu.AddTrap(oracle.Label("DK4")); // which is `.ant`, where the port's function ends
 
       /*
-       * The port's side of `RDKEY`, and BOTH SIDES ARE STILL STUBBED (M3-b-3d).
+       * The port's side of `RDKEY`, and IT IS A COMPARISON OF `RDKEY` since M6-0-a-4.
        *
-       * `DOKEY` opens `JSR RDKEY`, which the oracle traps because it is the CIA matrix scan. The
-       * port used to answer with a seam that did nothing, so the key logger each side compared was
-       * the one this test seeded. `RDKEY` is `Elite::ScanKeyboard` since M3-b-3d and the port runs
-       * it for real -- `ZEKTRAN`, the walk, the `QQ11` tail -- so the seed has to arrive through
-       * the walk instead: this keyboard holds down exactly the four steering keys the case asks
-       * for and `ScanKeyboard` rebuilds the same logger from them.
-       *
-       * IT IS NOT A COMPARISON OF `RDKEY` AND DOES NOT PRETEND TO BE. The walk reads `&DC00` and
-       * `&DC01` eight columns at a time, and `Cpu6502`'s memory is flat -- one byte at `&DC01`
-       * whatever column was selected -- so an oracle that ran the real routine would read the same
-       * column eight times. Comparing it needs the CIA modelled in the emulator, which is the same
-       * shape of blocker `ShipDrawEffects` waited on (§6.108) until M6-0-a banked the I/O page.
+       * `DOKEY` opens `JSR RDKEY`, and the oracle trapped it from M3-b-3d until M6-0-a-4 because
+       * it is the CIA matrix scan: the walk reads `&DC00` and `&DC01` eight columns at a time, and
+       * a flat image had one byte at `&DC01` whatever column was selected. `Cpu6502` banks the I/O
+       * page now and answers port B from a matrix (M6-0-a-1, -4), so the oracle RUNS the routine
+       * -- `SETL1`, the sprite register, `ZEKTRAN`, the walk, the `QQ11` tail -- over keys pressed
+       * on that matrix, and the port runs `Elite::ScanKeyboard` over this keyboard holding the same
+       * four steering keys. What is compared is the logger both scans built, all sixty-five bytes,
+       * and a logger seeded full on both sides beforehand is what proves the scans CLEAR.
        */
       struct ScriptedMatrix final : Elite::Keyboard
       {
@@ -431,10 +453,13 @@ namespace GameLogicTests
         keys[Elite::KEY_PITCH_UP] = ((item.keys & 4u) != 0u) ? 0xFFu : 0u;
         keys[Elite::KEY_PITCH_DOWN] = ((item.keys & 8u) != 0u) ? 0xFFu : 0u;
 
+        // 6502: KEYLOOK -- full of last frame's presses on both sides, which the scan must clear;
+        // the keys the case holds are pressed on the CIA, and the port's keyboard holds the same.
         for (std::size_t slot = 0; slot < keys.size(); ++slot)
         {
-          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = keys[slot];
+          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = 0xFFu;
         }
+        HoldOnMatrix(cpu, keys);
 
         Elite::Ship work{};
         std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
@@ -464,7 +489,7 @@ namespace GameLogicTests
         board.held = item.keys;
         board.scans = 0;
 
-        universe.keys = keys;
+        universe.keys.fill(0xFFu);
         universe.view = 0u; // 6502: QQ11 -- the space view, where `RDKEY` forgets nothing
 
         universe.control = Elite::ControlState{};
@@ -737,10 +762,13 @@ namespace GameLogicTests
           keys[WATCHED[index]] = ((held & (1u << index)) != 0u) ? 0xFFu : 0u;
         }
 
+        // 6502: KEYLOOK -- last frame's presses, which `RDKEY` clears before the walk fills it
+        // from the keys this case presses on the CIA.
         for (std::size_t slot = 0; slot < keys.size(); ++slot)
         {
-          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = keys[slot];
+          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = 0xFFu;
         }
+        HoldOnMatrix(cpu, keys);
 
         // A chart is showing, nothing is flying the ship, and the player is on the keyboard.
         cpu.memory[qq11] = Elite::LONG_RANGE_CHART_VIEW;
@@ -752,16 +780,14 @@ namespace GameLogicTests
         }
 
         /*
-         * `RDKEY` IS TRAPPED, and finding out why cost a failing assertion. `TT17` calls `DOKEY`,
-         * `DOKEY` opens with `JSR RDKEY`, and `RDKEY` walks the CIA -- which in a flat 64 KB image
-         * is whatever bytes happen to sit at the I/O addresses. It clears the logger and fills it
-         * from that garbage, so the first run of this test compared the port against a keyboard
-         * with keys held down that nothing had pressed. The port answers the same call with
-         * `ControlEffects::ScanKeyboard`, so trapping it is the comparison's own seam rather than a
-         * convenience.
+         * `RDKEY` WAS TRAPPED HERE until M6-0-a-4, and finding out why cost a failing assertion:
+         * `TT17` calls `DOKEY`, `DOKEY` opens with `JSR RDKEY`, and `RDKEY` walks the CIA -- which
+         * in a flat 64 KB image was whatever bytes happened to sit at the I/O addresses, so the
+         * first run of this test compared the port against a keyboard with keys held down that
+         * nothing had pressed. The CIA is a matrix in `Cpu6502` now and the walk runs for real over
+         * the keys this case holds; `ReadCrosshairKeys` reads the logger the port's scan would
+         * have built from the same keys.
          */
-        cpu.AddTrap(oracle.Label("RDKEY"));
-
         const Elite::Testing::RunResult run = cpu.CallSubroutine(tt17, 20'000);
         Assert::IsTrue(run.completed, L"TT17 returned");
 
