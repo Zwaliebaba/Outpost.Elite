@@ -69,9 +69,9 @@
       "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 4021,
+      "ceiling": 4022,
       "slack": 0,
-      "slice": "M3-c: eight hundred lines of dispatch move into GameLogic with their markers (rule 4)"
+      "slice": "the replay drives Elite::Game: LastOutcome names the answer it carries (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

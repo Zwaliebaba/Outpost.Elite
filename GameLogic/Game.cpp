@@ -692,6 +692,7 @@ namespace Elite
   bool Game::Step(std::uint8_t _key) noexcept
   {
     const LoopOutcome outcome = MainFlightLoop(m_universe, m_ports); // 6502: JSR M%
+    m_lastOutcome = outcome;
     if (outcome != LoopOutcome::Continued)
     {
       Leave(outcome);

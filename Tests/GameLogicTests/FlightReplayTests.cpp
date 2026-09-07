@@ -67,7 +67,8 @@ namespace GameLogicTests
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
     /*
-     * RE-TAKEN TWICE, both under Modernize.md rule 1's second case (the port was wrong).
+     * RE-TAKEN FOUR TIMES, every one under Modernize.md rule 1's second case (the port was wrong).
+     * The count said "twice" until 2026-09-07 and had never counted the owner's fix below.
      *
      * 2026-09-06, M2-c-1: every digest moved and not one step did. What changed was the SHAPE of
      * the image the digest is taken over -- `UniverseImage` hashed a `T2` cell holding a byte the
@@ -81,24 +82,37 @@ namespace GameLogicTests
      * an altitude one unit too generous, and a death radius one unit too small, on the seven
      * checkpoints where a planet was close enough for the check to run at all. Nothing measured it
      * until the fixture that closed R22 put a planet in range (§8).
+     *
+     * 2026-09-06, the death-sequence fix: the record moved from step 200 on, because no explosion
+     * cloud had ever been seeded and the script's first kill seeds one now.
+     *
+     * 2026-09-07, the replay drives `Elite::Game`: every digest moved and NOT ONE STEP DID -- 1,170
+     * steps ending `Docked`, before and after. Two defects in this fixture, both of them the fixture
+     * differing from the app rather than the game differing from the original. `FlightPort` built
+     * `Ports` itself, so the value tokens and the control codes were deferred where the app runs
+     * them, and it never ran `NA%`: the scripted flight has been flown by a commander of all zeros,
+     * with no fuel, no laser and a galaxy seed of zero. And it held a second `QQ12` beside
+     * `Universe::dockedFlag` -- `Launch` cleared one and the flight loop's arrival wrote the other.
+     * The last of the three is why the first measurement of this change read 2,589 steps ending
+     * `Died` (§8, and the entry that corrects it).
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0x172fde4731072aafull},    // launched from Lave
-      {40, 0xdeaa6d7172c7db77ull},   // coasted
-      {100, 0x454bf9625d95f316ull},  // at full speed
-      {200, 0x2cda23565f85bb0cull},
-      {300, 0x3f34ca0ae88283e4ull},
-      {340, 0x3a2f639e66b0b31cull},  // the Viper fought
-      {342, 0x92bf510f980a6f0eull},  // the docking computer engaged
-      {400, 0x4e4ffb1784c239e2ull},
-      {500, 0x6fa8d83f77be2c57ull},
-      {600, 0x145a6b04890d5840ull},
-      {700, 0xc46c9889443e00a6ull},
-      {800, 0x4dcb7b2f69aa9ad1ull},
-      {900, 0x0d647cdd733a8d9bull},
-      {1000, 0x5c63409a02a9834bull},
-      {1100, 0xc3d1f29bf4813164ull},
-      {1170, 0x27701f86b1503c8bull}, // docked
+      {0, 0xa44a6fb6a58dd618ull},     // launched from Lave
+      {40, 0xe98f78ab0cd43ed0ull},    // coasted
+      {100, 0x39e05581c2ea6e0dull},   // at full speed
+      {200, 0x3be781674cf06ccbull},
+      {300, 0x15e5811af91bb01bull},
+      {340, 0xf2eb232f70dad2e3ull},   // the Viper fought
+      {342, 0x77c41a23fd0d1519ull},   // the docking computer engaged
+      {400, 0xd620b66bd70cf6c2ull},
+      {500, 0x7f131b23a8fbdd77ull},
+      {600, 0xe63c34cda4695ba0ull},
+      {700, 0xc96ee5ba798a5d06ull},
+      {800, 0x4bbfd05b7daf18f1ull},
+      {900, 0xdad5f822cc12febbull},
+      {1000, 0x3531163c35a6662bull},
+      {1100, 0x4702fd986054d344ull},
+      {1170, 0x35fc8447923426a7ull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;

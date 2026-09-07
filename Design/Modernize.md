@@ -355,7 +355,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,021 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,022 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1752,6 +1752,52 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-07 — the replay drives `Elite::Game`, the record is re-taken, and yesterday's
+measurement of it was wrong.**
+
+**THE CORRECTION FIRST.** The entry below says pointing `FlightPort` at an `Elite::Game` turns
+"1,170 steps ending `Docked`" into "2,589 ending `Died`" and attributes it to the two causes that
+bisection separated. **It does neither.** The flight is 1,170 steps and it ends `Docked`, exactly as
+recorded; every digest moves and not one step does. There was a THIRD cause the bisection did not
+separate out because I did not know the byte existed, and with it fixed the length and the outcome
+come back. The two causes below are real and the record moves for them; the length and the death
+were the third, and putting a wrong number in front of the owner as the reason to park a decision is
+the mistake worth recording, not the byte.
+
+**THE THIRD CAUSE IS A DUPLICATE `QQ12`.** `FlightPort` held `std::uint8_t docked = 0xFF` beside
+`Universe::dockedFlag`, and both are the same 6502 byte. Nothing noticed while the port stepped its
+own transcription: `Launch` took the port's by reference and cleared it, the transcription never
+wrote either, and `dockedFlag` sat at whatever `Universe` starts with. Step it through `Game` and
+the two diverge on the first pass — `Game::Leave` writes the universe's byte and `Game::Docked`
+reads it, while the replay's own loop tests the port's — so the flight neither stopped when it
+docked nor knew it had. It is a reference now (`std::uint8_t& docked = universe.dockedFlag`) rather
+than a rename, because `RESET` and `LAUN` take it by reference and the image names it.
+
+**AND THE OTHER TWO ARE THE FIXTURE BECOMING WHAT THE APP IS.** `FlightPort` built `Ports` itself
+out of `universe.printer`, `universe.characters` and `universe.extendedPrinter` with the value-token
+and control-code seams left null, so the scripted flight deferred eleven control codes the app runs;
+and it never ran `NA%`, so the flight has been flown by a commander of all zeros — no fuel, no
+laser, a galaxy seed of zero. `Elite::Game`'s constructor does both, because the app's does. Both
+are rule 1's second case, the record follows the fix, and this entry names them.
+
+**WHAT THE RECORD MEASURES NOW IS THE LOOP AND NOT A TRANSCRIPTION OF IT.** `FlightPort::Step` was
+`M%`, `MLOOP`'s head, the spawner, part 5's tail and the keyboard scan spelled out a second time —
+M3-c moved the executable's copy into `Elite::Game::Step` and left this one, and ADR-007 §5 recorded
+the gap. It is `game.Step(0u)` now, one call, and the zero is a key: `TT102` dispatches every pass,
+which is how `TT107`'s countdown ticks when nothing is pressed (§6.159), and the old transcription
+did not dispatch it. `Game::LastOutcome` is added for it — the replay compares outcomes digest for
+digest and wants `M%`'s answer rather than the boolean `Step` takes from it (`origin-markers`
+4,021 → 4,022, rule 4). `FlightPort::Ports()` hands back `game.PortsOf()`, so `RESET`, `LAUN` and
+`DOCKIT` reach the struct the game steps through instead of a second one built beside it.
+
+**WHAT IS STILL NOT MEASURED.** The seven bytes that moved into `Universe` yesterday have no cells
+in `UniverseImage`, so the digest still does not see them, and `Game::m_paused` is outside the
+universe by design. Closing the first is rule 1's FIRST case — a deliberate widening — and it would
+move all sixteen checkpoints a second time; it is one edit and it is not this slice's. ADR-007 §5
+says so.
+
+402 of 402; all 14 repository checks; the record re-taken, 16 of 16 checkpoints moved, 0 steps.
+
 **2026-09-07 — the ADR-007 §3 follow-on: seven bytes go where they belong, and the replay slice
 that was to come first turns out to be a decision rather than a tidy-up.**
 
@@ -1775,13 +1821,18 @@ widening under rule 1's first case which moves every checkpoint in the record.
 measures a TRANSCRIPTION of the loop rather than the loop. Pointing `FlightPort` at an `Elite::Game`
 compiles and runs. It also changes the flight:
 
-  - **1,170 steps ending `Docked` becomes 2,589 ending `Died`**, and every checkpoint differs.
+  - ~~**1,170 steps ending `Docked` becomes 2,589 ending `Died`**, and every checkpoint differs.~~
+    **THIS MEASUREMENT WAS WRONG. The next entry corrects it: the flight keeps its length and its
+    ending, and only the digests move.** The 2,589-step death was a third cause this bisection did
+    not separate out — `FlightPort` holding a second `QQ12` byte beside `universe.dockedFlag` — and
+    it was read as an effect of the two below.
   - Bisecting the composition says why, in two independent parts. **Without `SetValueTokens` and
     `SetGame` the flight is 1,170 steps again** and only the digests differ — so the value tokens
     and the control codes running rather than deferring is what changes the LENGTH of the flight.
     **With `Game` present but its ports unused the record first differs at step 400** — so
     `Game`'s constructor writing `NA%` into the commander is a second, separate cause: the replay
     has been flying a commander of all zeros, with no fuel, no laser and a galaxy seed of zero.
+    Both parts of the bisection stand; only the length and the outcome attributed to them do not.
 
 Both are the fixture becoming what the app is, and both are defensible as rule 1's second case — a
 defect in the port found and fixed. But the two together replace the project's primary regression
