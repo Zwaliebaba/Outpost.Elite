@@ -246,11 +246,11 @@
         },
         {
           "id": "hyp-fuel-zero",
-          "file": "GameLogic/Hyperspace.cpp",
-          "find": "_universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};",
-          "replace": "_universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0u};",
+          "file": "GameLogic/Commander.h",
+          "find": "return {{held ? static_cast<std::uint8_t>(tenths - _tenths) : std::uint8_t{0}}, held};",
+          "replace": "return {{held ? static_cast<std::uint8_t>(tenths - _tenths) : std::uint8_t{0u}}, held};",
           "expect": "equivalent",
-          "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
+          "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made. Re-anchored by M5-a-10 (rule 3): the empty-tank clamp moved from Hyperspace.cpp into LightYearsTenths::Burned."
         }
       ]
     },

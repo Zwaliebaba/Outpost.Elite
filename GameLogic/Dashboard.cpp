@@ -227,7 +227,7 @@ namespace Elite
     StopSoundEffect(_sound, SoundEffect::Ecm); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 
-  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel,
                  Compass& _compass, const Bubble& _bubble) noexcept
   {
     // ---- part 1: the speed bar ------------------------------------------------------------------
@@ -353,7 +353,7 @@ namespace Elite
 
     DrawBar(_canvas, _draw, _status.forwardShield, 4, BAR_THRESHOLD, plain); // 6502: LDA FSH / JSR DILX
     DrawBar(_canvas, _draw, _status.aftShield, 4, BAR_THRESHOLD, plain);     // 6502: LDA ASH / JSR DILX
-    DrawBar(_canvas, _draw, _fuel, 2, BAR_THRESHOLD, plain);                 // 6502: LDA QQ14 / JSR DILX+2
+    DrawBar(_canvas, _draw, _fuel.tenths, 2, BAR_THRESHOLD, plain);                 // 6502: LDA QQ14 / JSR DILX+2
 
     // 6502: JSR PZW / STX K+1 / STA K -- part 1's order again, so the temperatures flash.
     const DangerColours heat = DangerColour(_flight.mainLoopCounter, _status.damageFlash);

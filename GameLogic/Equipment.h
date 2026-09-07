@@ -28,7 +28,7 @@ namespace Elite
    * `prx-3` is a second entry point three bytes earlier that decrements A first, because the shop
    * numbers its items from one on screen and from zero in the table.
    */
-  [[nodiscard]] std::uint16_t EquipmentPrice(std::uint8_t _item, std::uint8_t _fuel) noexcept;
+  [[nodiscard]] std::uint16_t EquipmentPrice(std::uint8_t _item, LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: the four instructions before EQL1 -- LDA #70 / SEC / SBC QQ14 / ASL A / STA PRXS.
@@ -38,7 +38,7 @@ namespace Elite
    * doubling is the price. So `prx` reads a table one of whose entries was written moments ago,
    * which is why EquipmentPrice takes the fuel level.
    */
-  [[nodiscard]] std::uint16_t FuelPrice(std::uint8_t _fuel) noexcept;
+  [[nodiscard]] std::uint16_t FuelPrice(LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: qv -- the four-view menu, and which one the player picks.
@@ -57,7 +57,7 @@ namespace Elite
    * them falls through to the mining laser's price, which is the same "anything else is the last
    * one" shape the status screen uses to name lasers.
    */
-  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept;
+  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: EQSHP -- the Equip Ship screen.

@@ -161,9 +161,6 @@ namespace Elite
   /// 6502: LDA #194 -- the pitch, and HALVED it is both the AI byte and the frame count.
   inline constexpr std::uint8_t ESCAPE_PITCH = 194;
 
-  /// 6502: LDA #70 / STA QQ14 -- seven light years, which is what the pod is worth.
-  inline constexpr std::uint8_t ESCAPE_FUEL = 70;
-
   void AbandonShip(Universe& _universe, Ports& _ports) noexcept;
 
   /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`

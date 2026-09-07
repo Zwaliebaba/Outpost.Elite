@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "Commander.h"
 #include "ExtendedTokens.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -52,8 +53,8 @@ namespace Elite
     /// routine here branches on it rather than taking a chart as an argument.
     std::uint8_t view = 0;
 
-    /// 6502: QQ14 -- fuel, in light years times ten. It is the fuel circle's radius.
-    std::uint8_t fuel = 0;
+    /// 6502: QQ14 -- fuel, in light years times ten. Its tenths are the fuel circle's radius.
+    LightYearsTenths fuel;
   };
 
   /*

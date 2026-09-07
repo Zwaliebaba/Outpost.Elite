@@ -756,7 +756,7 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(rand + index)] = SEED[index];
         }
         cpu.memory[oracle.Label("CRGO")] = scenario.capacity;
-        cpu.memory[oracle.Label("QQ14")] = commander.fuel;
+        cpu.memory[oracle.Label("QQ14")] = commander.fuel.tenths;
         cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         cpu.memory[oracle.Label("QQ28")] = ECONOMY;
         cpu.memory[oracle.Label("QQ26")] = RANDOMISER;
@@ -1021,7 +1021,7 @@ namespace GameLogicTests
 
         // The status screen's top four lines print the fuel and the cash through control codes 5
         // and 0, which is not obvious from its source -- they arrive inside recursive token 126.
-        cpu.memory[oracle.Label("QQ14")] = commander.fuel;
+        cpu.memory[oracle.Label("QQ14")] = commander.fuel.tenths;
         cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         for (std::size_t index = 0; index < 4; ++index)
         {
@@ -1247,7 +1247,7 @@ namespace GameLogicTests
         universe.commander = Elite::DefaultCommander();
         Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (s.cash);
-        commander.fuel = s.fuel;
+        commander.fuel.tenths = s.fuel;
         commander.cargoCapacity = s.capacity;
         commander.missiles = s.missiles;
         commander.ecm = s.fitted[0];

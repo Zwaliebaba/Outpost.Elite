@@ -175,8 +175,8 @@ namespace Elite
      * game that goes through `hyp`. Transcribed anyway, because what makes it unreachable is
      * another routine.
      */
-    const SubResult fuel = SubtractWithCarry(_universe.commander.fuel, static_cast<std::uint8_t>(_jump.distance & 0xFFu), true);
-    _universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};
+    const FuelBurn fuel = _universe.commander.fuel.Burned(static_cast<std::uint8_t>(_jump.distance & 0xFFu));
+    _universe.commander.fuel = fuel.left;
 
     // 6502: LDA QQ11 / BNE ee5 / JSR TT66 / JSR LL164 -- the tunnel is only drawn from a space
     // view. Jumping with a chart up spends the fuel and shows nothing.

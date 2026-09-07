@@ -160,7 +160,7 @@ namespace GameLogicTests
 
               LoopUniverse universe;
               Seed(universe.universe, 5u);
-              universe.universe.commander.fuel = fuel;
+              universe.universe.commander.fuel.tenths = fuel;
               universe.universe.view = view;
               universe.universe.status.midJump = 0u;
 
@@ -223,7 +223,7 @@ namespace GameLogicTests
                 WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " + std::to_string(distance)
                           + " view " + std::to_string(view) + " ctrl " + std::to_string(controlHeld) + " patg " + std::to_string(patg));
 
-              Assert::AreEqual(cpu.memory[at.qq14], universe.universe.commander.fuel, (context + L": QQ14").c_str());
+              Assert::AreEqual(cpu.memory[at.qq14], universe.universe.commander.fuel.tenths, (context + L": QQ14").c_str());
               Assert::AreEqual(cpu.memory[where.mj], universe.universe.status.midJump, (context + L": MJ").c_str());
               Assert::AreEqual(cpu.memory[at.qq11], universe.universe.view, (context + L": QQ11").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
@@ -664,7 +664,7 @@ namespace GameLogicTests
         universe.universe.commander.tribbles.hi = one.tribbleHigh;
         universe.universe.commander.legalStatus = one.legal;
         universe.universe.commander.escapePod = 0xFFu;
-        universe.universe.commander.fuel = one.fuel;
+        universe.universe.commander.fuel.tenths = one.fuel;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           universe.universe.commander.cargoHold[item] = static_cast<std::uint8_t>(3u + item);
@@ -708,7 +708,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
                          universe.universe.commander.tribbles.hi,
                          (context + L": TRIBBLE+1").c_str());
-        Assert::AreEqual(cpu.memory[qq14], universe.universe.commander.fuel, (context + L": QQ14").c_str());
+        Assert::AreEqual(cpu.memory[qq14], universe.universe.commander.fuel.tenths, (context + L": QQ14").c_str());
 
         outcomes.insert(std::to_string(universe.universe.commander.tribbles.lo) + "/" +
                         std::to_string(universe.universe.bubble.slots[0]));

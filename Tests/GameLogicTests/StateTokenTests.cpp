@@ -196,7 +196,7 @@ namespace GameLogicTests
             Commander commander;
             commander.cash.tenths = (situation.cash);
             commander.galaxyNumber = situation.galaxy;
-            commander.fuel = situation.fuel;
+            commander.fuel.tenths = situation.fuel;
 
             SystemSeeds current = situation.current;
             SystemSeeds selected = situation.selected;

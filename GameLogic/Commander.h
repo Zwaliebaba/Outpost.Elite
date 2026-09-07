@@ -131,6 +131,64 @@ namespace Elite
   };
 
   /*
+   * 6502: QQ14 -- fuel, in tenths of a light year (M5-a-10).
+   *
+   * ADR-006 §2 parked this type at M1 "for M5, where a type earns its operators", and these are
+   * the operators it earned: the three arithmetic rules the game applies to the byte, each of
+   * which was spelled out at its one site with a private copy of the number seventy. Everything
+   * else that reads the byte -- the dial, the fuel circle, the printer, the codec -- reads
+   * `tenths`, because for those it IS a byte.
+   */
+  struct FuelBurn;
+
+  struct LightYearsTenths
+  {
+    std::uint8_t tenths = 0;
+
+    /// 6502: MA23's scooping -- `LSR A / ADC QQ14 / CMP #70 / BCC P%+4 / LDA #70`: the amount, plus
+    /// the bit the LSR shifted out as the carry into the add, saturating at a full tank.
+    [[nodiscard]] constexpr LightYearsTenths Scooped(std::uint8_t _amount, bool _carry) const noexcept
+    {
+      const std::uint8_t sum = static_cast<std::uint8_t>(_amount + tenths + (_carry ? 1u : 0u));
+      return {(sum < FULL_TANK_TENTHS) ? sum : FULL_TANK_TENTHS};
+    }
+
+    /// 6502: the jump's `SEC / SBC QQ8 / BCS P%+4 / LDA #0` -- a jump costing more than the tank
+    /// holds leaves it EMPTY rather than wrapped, and the carry says which it was. Defined below
+    /// `FuelBurn`, which it returns.
+    [[nodiscard]] constexpr FuelBurn Burned(std::uint8_t _tenths) const noexcept;
+
+    /// 6502: TT111's `LDA QQ8+1 / BNE TT147 / LDA QQ14 / CMP QQ8 / BCC TT147` -- a distance is in
+    /// range when its high byte is clear and the tank holds at least its low byte.
+    [[nodiscard]] constexpr bool Reaches(std::uint16_t _distanceTenths) const noexcept
+    {
+      return (_distanceTenths >> 8) == 0u && tenths >= static_cast<std::uint8_t>(_distanceTenths & 0xFFu);
+    }
+
+    [[nodiscard]] constexpr bool operator==(const LightYearsTenths&) const noexcept = default;
+
+    /// 6502: the 70 that NA%, nosurviv, MA23 and the equipment screen all write.
+    static constexpr std::uint8_t FULL_TANK_TENTHS = 70;
+  };
+
+  /// A full tank: seven light years. One definition, where until M5-a-10 `FlightLoop`, `Flight.h`
+  /// and `Equipment.cpp` each kept their own seventy.
+  inline constexpr LightYearsTenths FULL_TANK{LightYearsTenths::FULL_TANK_TENTHS};
+
+  /// What a jump leaves: the tank, and the `SBC`'s carry, which the jump's tunnel roll rotates in.
+  struct FuelBurn
+  {
+    LightYearsTenths left;
+    bool carry; ///< 6502: set when the tank held the distance -- the flag `SBC` leaves
+  };
+
+  constexpr FuelBurn LightYearsTenths::Burned(std::uint8_t _tenths) const noexcept
+  {
+    const bool held = tenths >= _tenths;
+    return {{held ? static_cast<std::uint8_t>(tenths - _tenths) : std::uint8_t{0}}, held};
+  }
+
+  /*
    * 6502: TP to CHK -- the commander, as the fields the seventy-seven bytes are.
    *
    * In the bytes' order, with the two bytes no label names kept as fields so that the codec is a
@@ -147,7 +205,7 @@ namespace Elite
     std::uint8_t systemY = 0;                 ///< 6502: QQ1
     SystemSeeds galaxySeeds{};                ///< 6502: QQ21 -- six bytes
     Credits cash{};                           ///< 6502: CASH -- four bytes, most significant first
-    std::uint8_t fuel = 0;                    ///< 6502: QQ14 -- light years times ten
+    LightYearsTenths fuel;                    ///< 6502: QQ14 -- light years times ten
     std::uint8_t competition = 0;             ///< 6502: COK
     std::uint8_t galaxyNumber = 0;            ///< 6502: GCNT
     std::array<std::uint8_t, 6> lasers{};     ///< 6502: LASER -- front, rear, left, right, and two nothing names
@@ -224,7 +282,7 @@ namespace Elite
       {
         bytes[static_cast<std::size_t>(Field::Cash) + index] = cash.Byte(index);
       }
-      at(Field::Fuel) = fuel;
+      at(Field::Fuel) = fuel.tenths;
       at(Field::Competition) = competition;
       at(Field::GalaxyNumber) = galaxyNumber;
       run(Field::Lasers, lasers);
@@ -274,7 +332,7 @@ namespace Elite
       {
         commander.cash.SetByte(index, _bytes[static_cast<std::size_t>(Field::Cash) + index]);
       }
-      commander.fuel = at(Field::Fuel);
+      commander.fuel.tenths = at(Field::Fuel);
       commander.competition = at(Field::Competition);
       commander.galaxyNumber = at(Field::GalaxyNumber);
       run(Field::Lasers, commander.lasers);

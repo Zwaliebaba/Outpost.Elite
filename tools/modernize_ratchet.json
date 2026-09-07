@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4130,
+      "ceiling": 4133,
       "slack": 0,
-      "slice": "M5-e-3: HashState names the three codec layouts it folds (K%, TP-CHK, XX0)"
+      "slice": "M5-a-10: LightYearsTenths names QQ14, MA23's scoop, the jump's SBC and TT111's compare"
     },
     "oracle-test-files": {
       "ceiling": 48,

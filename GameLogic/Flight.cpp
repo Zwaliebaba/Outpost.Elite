@@ -693,7 +693,7 @@ namespace Elite
 
     // 6502: .nosurviv LDA #70 / STA QQ14 / JMP GOIN -- seven light years, and the docking is the
     // caller's, the way every `JMP` out of a routine has been.
-    _universe.commander.fuel = ESCAPE_FUEL;
+    _universe.commander.fuel = FULL_TANK;
   }
 
 } // namespace Elite

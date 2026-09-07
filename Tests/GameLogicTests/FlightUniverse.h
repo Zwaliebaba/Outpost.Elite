@@ -227,10 +227,6 @@ namespace GameLogicTests
     bool spriteRegistersAreOurs = false;
 
 
-    /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
-    /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
-    std::uint8_t fuel = 0;
-
     /*
      * The seams and the text machinery this fixture answers with, as `Elite::Ports` (M3-a-2).
      *
@@ -405,8 +401,7 @@ namespace GameLogicTests
     _universe.status.altitude = 120u;
     _universe.status.damageFlash = 0u;
     _universe.status.ecmCountdown = 0u;
-    _universe.fuel = 40u;
-    _universe.commander.fuel = _universe.fuel; // `Mirror` sends the block, not the byte
+    _universe.commander.fuel.tenths = 40u;
 
     _universe.flight.delta = 14u;
     _universe.flight.alp1 = 5u;

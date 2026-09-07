@@ -440,7 +440,7 @@ namespace GameLogicTests
     {
       Commander block = Elite::DefaultCommander();
       block.cash.tenths = (123456);
-      block.fuel = 42;
+      block.fuel.tenths = 42;
       block.galaxyNumber = 3;
       block.saveCount = 0x60;
       block.kills.hi = 0x11;
@@ -822,7 +822,7 @@ namespace GameLogicTests
         // wrong one of the two would be visible rather than a no-op.
         Commander live = Elite::DefaultCommander();
         live.cash.tenths = (7770);
-        live.fuel = 55;
+        live.fuel.tenths = 55;
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
         Commander saved = Elite::DefaultCommander();
         saved.galaxyNumber = 1;

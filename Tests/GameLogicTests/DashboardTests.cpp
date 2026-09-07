@@ -743,7 +743,7 @@ namespace GameLogicTests
             status.altitude = item.altit;
             status.damageFlash = item.flash;
 
-            Elite::DrawDials(canvas, draw, flight, status, item.fuel, compass, bubble);
+            Elite::DrawDials(canvas, draw, flight, status, Elite::LightYearsTenths{item.fuel}, compass, bubble);
 
             const std::wstring where =
               Widen(std::string("DIALS: ") + item.what + ", MCNT " + std::to_string(counter) + (stations ? ", station" : ", planet"));

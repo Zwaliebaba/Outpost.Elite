@@ -1951,8 +1951,7 @@ namespace GameLogicTests
           frame.universe.flight.mainLoopCounter = 20u;
           frame.universe.status.midJump = 0u;
           frame.universe.commander.fuelScoops = scoops;
-          frame.universe.commander.fuel = 40u;
-          frame.universe.fuel = 40u;
+          frame.universe.commander.fuel.tenths = 40u;
           frame.universe.commander.tribbles.lo = 0x40u;
           frame.universe.commander.tribbles.hi = 0x21u;
           frame.universe.flight.delt4Next = 0xC0u;
@@ -1961,7 +1960,7 @@ namespace GameLogicTests
             WidenText("MA33 (sun at " + std::to_string(distance) + (scoops != 0u ? ", scoops fitted)" : ", no scoops)"));
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
-          scooped += (frame.universe.commander.fuel > 40u) ? 1u : 0u;
+          scooped += (frame.universe.commander.fuel.tenths > 40u) ? 1u : 0u;
           // 6502: part 15's `AND #%00000011` -- the mask leaves only sprites 0 and 1, so an enable
           // byte with no Trumble bit left is a cabin that got hot enough to kill them (M3-b-3a).
           cooked += ((frame.universe.video.enabled & 0xFCu) == 0u) ? 1u : 0u;
