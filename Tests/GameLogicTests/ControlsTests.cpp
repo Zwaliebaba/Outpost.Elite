@@ -635,7 +635,7 @@ namespace GameLogicTests
             // 6502: VIC+&27 and VIC+&15 -- seeded with the same marker as the oracle's, so "left
             // alone" and "written with zero" are different answers on both sides.
             Elite::VideoState video{};
-            video.colour[0] = 0x00u;
+            video.colour[0] = Elite::Colour::Black;
             video.enabled = 0x00u;
             Elite::MemoryMap map;
             map.port = PORT_SEED;
@@ -653,7 +653,11 @@ namespace GameLogicTests
 
             // The colour register is only written when a laser was found, so a case with none
             // leaves the marker on BOTH sides rather than a colour.
-            Assert::AreEqual(cpu.memory[vicColour], video.colour[0], (where + L": VIC+&27").c_str());
+            // The register takes four bits, so the two sides are compared through the same latch
+            // the chip applies -- `sightcol` never sets the others, and a byte that did would be
+            // the game's business rather than a difference (slice 5a).
+            Assert::AreEqual<std::uint32_t>(Elite::ColourIndex(Elite::ColourOf(cpu.memory[vicColour])),
+                                            Elite::ColourIndex(video.colour[0]), (where + L": VIC+&27").c_str());
             if (laser == 0u)
             {
               Assert::AreEqual<std::uint32_t>(0u, cpu.memory[vicColour], (where + L": and neither wrote it").c_str());

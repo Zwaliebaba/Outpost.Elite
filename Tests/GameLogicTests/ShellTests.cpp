@@ -340,7 +340,7 @@ namespace GameLogicTests
       std::set<std::uint32_t> distinct;
       for (std::size_t index = 0; index < packed.size(); ++index)
       {
-        const Outpost::Colour& colour = Outpost::C64_PALETTE[index];
+        const Outpost::Rgb& colour = Outpost::C64_PALETTE[index];
         Assert::AreEqual<std::uint32_t>(colour.red, packed[index] & 0xFFu, L"red in the low byte");
         Assert::AreEqual<std::uint32_t>(colour.green, (packed[index] >> 8) & 0xFFu, L"then green");
         Assert::AreEqual<std::uint32_t>(colour.blue, (packed[index] >> 16) & 0xFFu, L"then blue");

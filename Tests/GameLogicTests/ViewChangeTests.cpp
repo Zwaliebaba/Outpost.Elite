@@ -1122,7 +1122,7 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(0u, canvas.Background(), L"the background register is black");
+      Assert::AreEqual<std::uint32_t>(0u, Elite::ColourIndex(canvas.Background()), L"the background register is black");
     }
 
     /*

@@ -40,6 +40,9 @@
     <ClInclude Include="Canvas.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Colours.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="Raster.h">
       <Filter>Canvas</Filter>
     </ClInclude>

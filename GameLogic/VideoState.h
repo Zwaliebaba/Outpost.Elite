@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Colours.h"
+
 #include <cstdint>
 
 namespace Elite
@@ -95,8 +97,8 @@ namespace Elite
 
   /// 6502: VIC+&25 and VIC+&26 -- the two shared multicolour registers, which every multicolour
   /// sprite draws %01 and %11 from. The loader sets them and the game never does.
-  inline constexpr std::uint8_t SPRITE_MULTICOLOUR_1 = 0x0A;
-  inline constexpr std::uint8_t SPRITE_MULTICOLOUR_2 = 0x02;
+  inline constexpr Colour SPRITE_MULTICOLOUR_1 = Colour::LightRed;
+  inline constexpr Colour SPRITE_MULTICOLOUR_2 = Colour::Red;
 
   struct VideoState
   {
@@ -131,7 +133,7 @@ namespace Elite
 
     /// 6502: VIC+&27 to VIC+&2E -- each sprite's own colour, which for a multicolour sprite is
     /// only the %10 bit pair; %01 and %11 come from the two shared registers above.
-    std::uint8_t colour[SPRITE_COUNT] = {};
+    Colour colour[SPRITE_COUNT] = {};
   };
 
   /*
@@ -143,7 +145,7 @@ namespace Elite
    */
 
   /// 6502: STA VIC+&27 -- sprite 0's colour, which is the sights'.
-  void ApplySightColour(VideoState& _video, std::uint8_t _colour) noexcept;
+  void ApplySightColour(VideoState& _video, Colour _colour) noexcept;
 
   /// 6502: STA VIC+&15 -- the whole enable byte, sights and Trumbles together.
   void ApplySpritesEnabled(VideoState& _video, std::uint8_t _mask) noexcept;

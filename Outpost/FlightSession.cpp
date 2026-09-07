@@ -118,7 +118,14 @@ namespace Outpost
     m_universe.canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
     m_universe.canvas.SetBackground(dashboard.background);
 
-    // 6502: moonflower and welcome -- the energy bomb.
+    /*
+     * 6502: moonflower and welcome -- the energy bomb.
+     *
+     * AND `welcome` IS A COUNTER RATHER THAN A COLOUR, which is why these are stores and not
+     * assignments: `COMIRQ1` increments it on every pass while the bomb burns and puts the running
+     * count on the bus, so after eight frames of bomb the byte is past 15. `Canvas` is the chip and
+     * latches it to four bits, which is where slice 5a put the mask this port had never had.
+     */
     m_universe.canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
     m_universe.canvas.SetSpaceViewBackground(spaceView.background);
 
