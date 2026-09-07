@@ -226,8 +226,11 @@ files, the device). **And a byte in `Universe` gets a cell in `UniverseImage`, u
   `ShipDrawEffects` when the emulator models the banking §6.108 found, `SpawnChildEffects` in M4-a —
   and what is left of that class afterwards is `DOCKIT`. When it goes, the member moves across and
   the composition root stops holding any game state at all.
-- **`Frame()`, `Sounds()` and `StateHash()` are not built** (`Mode` is, since M4-d — see §2). The first two are the
-  executable's draw and drain and have no library caller yet; `StateHash` wants `UniverseImage`'s
+- **`Sounds()` is built (M5-e-1, 2026-09-07) and `Frame()` is recorded rather than built** (`Mode` is, since M4-d — see §2).
+  `Game` owns the SID log now and the executable drains it through `Sounds()`/`ClearSounds()`, where until then
+  the executable owned the log and handed the game a reference to write into — the one place the app reached
+  INTO library state. `Frame()` would be an alias of `State().canvas`, which the executable already reaches, so
+  §4.4's line is served rather than built; `StateHash` wants `UniverseImage`'s
   hash, which lives in the test tree and would have to move to ship; `Mode` was M4-d's, for §2's
   reason. Each is a named follow-on rather than a gap discovered later.
 - **Two seams survive M3 deliberately** — `TextSink` and `ValueTokens` are the text system's own

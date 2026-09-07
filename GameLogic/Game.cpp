@@ -32,8 +32,8 @@ namespace Elite
    * the character printer, the state tokens need the token printer AND the commander, and the token
    * printer needs the state tokens back -- which is the cycle `SetValueTokens` exists to break.
    */
-  Game::Game(Universe& _universe, ShipDrawEffects& _drawing, SidWriteLog& _sid, StartUpEffects& _start,
-             Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept
+  Game::Game(Universe& _universe, ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard,
+             CommanderStore& _store, ControlEffects& _controls) noexcept
     : m_universe(_universe),
       m_screen(m_universe.canvas, m_universe.text, &m_universe.sound),
       m_characters(m_screen),
@@ -42,7 +42,7 @@ namespace Elite
                m_universe.selectedSeeds, false),
       m_extended(m_characters, m_recursive, m_universe.rng),
       m_controls(_controls),
-      m_ports{m_recursive, m_characters, m_characters, _drawing, _sid, m_extended, _start, _present, _keyboard, _store}
+      m_ports{m_recursive, m_characters, m_characters, _drawing, m_sid, m_extended, _start, _present, _keyboard, _store}
   {
     m_recursive.SetValueTokens(&m_values);
     m_recursive.SetCursor(&m_universe.text);
@@ -139,19 +139,19 @@ namespace Elite
     ControlOptions& controls = m_universe.options;
     MusicOptions& tunes = m_universe.music.options;
     return OptionBlock{
-      &controls.dampingDisabled,          // 6502: DAMP
-      &controls.recentreDisabled,         // 6502: DJD
-      &controls.authorNames,              // 6502: PATG
+      &controls.dampingDisabled,      // 6502: DAMP
+      &controls.recentreDisabled,     // 6502: DJD
+      &controls.authorNames,          // 6502: PATG
       &m_universe.status.damageFlash, // 6502: FLH
-      &m_universe.joystickGeometry,            // 6502: JSTGY
-      &m_universe.joystickEnabled,             // 6502: JSTE
-      &controls.joystick,                 // 6502: JSTK
-      &tunes.dockingMusicOff,             // 6502: MUTOK
+      &m_universe.joystickGeometry,   // 6502: JSTGY
+      &m_universe.joystickEnabled,    // 6502: JSTE
+      &controls.joystick,             // 6502: JSTK
+      &tunes.dockingMusicOff,         // 6502: MUTOK
       &m_universe.useDisk,            // 6502: DISK
       &m_universe.heaps.pltog,        // 6502: PLTOG
-      &tunes.dockingMusicForced,          // 6502: MUFOR
-      &tunes.dockingPlaysTheme,           // 6502: MUDOCK
-      &tunes.effectsDuringMusic,          // 6502: MUSILLY
+      &tunes.dockingMusicForced,      // 6502: MUFOR
+      &tunes.dockingPlaysTheme,       // 6502: MUDOCK
+      &tunes.effectsDuringMusic,      // 6502: MUSILLY
     };
   }
 
@@ -210,7 +210,6 @@ namespace Elite
     DrawChart();
   }
 
-
   /*
    * One key, and whatever screen it reaches.
    *
@@ -240,8 +239,7 @@ namespace Elite
       const Bubble& bubble = m_universe.bubble;
       const std::size_t beyond = static_cast<std::size_t>(bubble.junk) + 2u;
       const ShipCondition condition{m_universe.dockedFlag, bubble.junk,
-                                           (beyond < bubble.slots.size()) ? bubble.slots[beyond] : std::uint8_t{0},
-                                           m_universe.status.energy};
+                                    (beyond < bubble.slots.size()) ? bubble.slots[beyond] : std::uint8_t{0}, m_universe.status.energy};
       StatusScreen(m_universe, m_ports, condition);
       return;
     }
@@ -249,9 +247,8 @@ namespace Elite
     case KeyAction::DataOnSystem:
     {
       // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
-      const NearestSystem found =
-        FindNearestSystem(m_universe.commander.galaxySeeds, m_universe.crosshairX, m_universe.crosshairY,
-                                 m_universe.commander.systemX, m_universe.commander.systemY);
+      const NearestSystem found = FindNearestSystem(m_universe.commander.galaxySeeds, m_universe.crosshairX, m_universe.crosshairY,
+                                                    m_universe.commander.systemX, m_universe.commander.systemY);
       m_universe.selectedSeeds = found.seeds;
       SystemDataScreen(m_universe, m_ports, found.data, found.distance);
       return;
@@ -260,8 +257,7 @@ namespace Elite
     case KeyAction::MarketPrice:
       SetUpScreen(m_universe, m_ports, BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
       m_ports.keyboard.Flush();
-      PrintMarketScreen(m_recursive, m_characters, m_universe.text, m_universe.current.economy,
-                               m_universe.market, false);
+      PrintMarketScreen(m_recursive, m_characters, m_universe.text, m_universe.current.economy, m_universe.market, false);
       return;
 
     case KeyAction::BuyCargo:
@@ -306,8 +302,7 @@ namespace Elite
 
     case KeyAction::DiskAccess:
     {
-      const DiskMenuResult menu =
-        DiskAccessMenu(m_universe, m_ports);
+      const DiskMenuResult menu = DiskAccessMenu(m_universe, m_ports);
       // 6502: BCC P%+5 / JMP QU5 / JMP BAY -- and QU5 is DFAULT, which installs the loaded image.
       if (menu.newCommander)
       {
@@ -325,8 +320,7 @@ namespace Elite
        * `_selected` comes back written: the launch runs `TT111` for the SEEDS rather than for the
        * distance, because the planet's appearance is generated from the system you are leaving.
        */
-      Launch(m_universe, m_ports, m_universe.crosshairX,
-                    m_universe.crosshairY, m_universe.selectedSeeds);
+      Launch(m_universe, m_ports, m_universe.crosshairX, m_universe.crosshairY, m_universe.selectedSeeds);
       return;
 
     case KeyAction::ChangeView:
@@ -412,8 +406,7 @@ namespace Elite
         return;
       }
 
-      PrintCountdown(m_characters, m_universe.text,
-                            static_cast<std::uint8_t>(m_universe.status.hyperspaceCountdown - 1u));
+      PrintCountdown(m_characters, m_universe.text, static_cast<std::uint8_t>(m_universe.status.hyperspaceCountdown - 1u));
       m_universe.status.hyperspaceCounter = 5u; // 6502: LDA #5 / STA QQ22
       PrintCountdown(m_characters, m_universe.text, m_universe.status.hyperspaceCountdown);
 
@@ -438,18 +431,16 @@ namespace Elite
         described.government = m_universe.current.government;
         described.techLevel = m_universe.current.techLevel;
 
-        const JumpResult jumped = PerformJump(
-          m_universe, m_ports, m_universe.selectedSeeds, jump, described, m_universe.market,
-          m_universe.crosshairX, m_universe.crosshairY, m_universe.commander.galaxySeeds,
-          m_ports.keyboard.Held(KEY_CONTROL), m_universe.options.authorNames != 0u);
+        const JumpResult jumped = PerformJump(m_universe, m_ports, m_universe.selectedSeeds, jump, described, m_universe.market,
+                                              m_universe.crosshairX, m_universe.crosshairY, m_universe.commander.galaxySeeds,
+                                              m_ports.keyboard.Held(KEY_CONTROL), m_universe.options.authorNames != 0u);
 
         m_universe.jumpDistance = jump.distance;
 
         if (jumped == JumpResult::Arrived)
         {
           // 6502: the fall-through into `TT110`, which is the launch the arrival ends with.
-          Launch(m_universe, m_ports, m_universe.crosshairX,
-                        m_universe.crosshairY, m_universe.selectedSeeds);
+          Launch(m_universe, m_ports, m_universe.crosshairX, m_universe.crosshairY, m_universe.selectedSeeds);
         }
       }
       return;
@@ -469,9 +460,8 @@ namespace Elite
       ChartView chart = ChartOf();
       JumpState jump = JumpOf();
 
-      const JumpOutcome decided =
-        RequestHyperspace(m_universe.canvas, m_recursive, m_extended, m_universe.text, m_characters.state,
-                                 m_universe.message, chart, jump, m_universe.commander.galaxySeeds);
+      const JumpOutcome decided = RequestHyperspace(m_universe.canvas, m_recursive, m_extended, m_universe.text, m_characters.state,
+                                                    m_universe.message, chart, jump, m_universe.commander.galaxySeeds);
 
       m_universe.status.hyperspaceCountdown = jump.countdown;
       m_universe.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
@@ -498,8 +488,7 @@ namespace Elite
 
         for (int byte = 0; byte < 6; ++byte)
         {
-          m_universe.commander.galaxySeeds.bytes[byte] =
-            galaxy.bytes[static_cast<std::size_t>(byte)];
+          m_universe.commander.galaxySeeds.bytes[byte] = galaxy.bytes[static_cast<std::size_t>(byte)];
         }
 
         m_universe.status.hyperspaceCountdown = jump.countdown;
@@ -540,8 +529,7 @@ namespace Elite
      * should have carried it said nobody was holding anything (§6.159).
      */
     const bool hyperspaceHeld = m_ports.keyboard.Held(KEY_HYPERSPACE);
-    Perform(ActionForKey(_key, m_universe.dockedFlag, m_universe.view, m_universe.status.hyperspaceCountdown,
-                                       hyperspaceHeld));
+    Perform(ActionForKey(_key, m_universe.dockedFlag, m_universe.view, m_universe.status.hyperspaceCountdown, hyperspaceHeld));
   }
 
   /*
@@ -664,8 +652,7 @@ namespace Elite
       AbandonShip(m_universe, m_ports);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
-      StopDockingMusic(m_universe.music, m_universe.status.titleReset, m_universe.sound,
-                              m_universe.memoryMap, m_ports.sid);
+      StopDockingMusic(m_universe.music, m_universe.status.titleReset, m_universe.sound, m_universe.memoryMap, m_ports.sid);
       Leave(LoopOutcome::Docked);
       return;
     }
@@ -789,8 +776,7 @@ namespace Elite
    */
   void Game::StepPaused(std::uint8_t _key) noexcept
   {
-    const PausePass pass =
-      PressPauseKey(m_universe, OptionsOf(), m_universe.control.dockingComputer, _key);
+    const PausePass pass = PressPauseKey(m_universe, OptionsOf(), m_universe.control.dockingComputer, _key);
 
     /*
      * 6502: JSR MUTOKCH -- the `Stop` answer goes through `stopbd`, which starts the music again

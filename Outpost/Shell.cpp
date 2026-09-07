@@ -2,6 +2,8 @@
 
 #include "Shell.h"
 
+#include "Game.h"
+
 #include "FlightSession.h"
 #include "Presentation.h"
 #include "SoundOutput.h"
@@ -45,9 +47,10 @@ namespace Outpost
      * here are what the device plays while this thread waits on the display, and a queue filled
      * afterwards would be a frame later than it needs to be.
      */
-    if (m_audio != nullptr && m_sound != nullptr && m_music != nullptr)
+    if (m_audio != nullptr && m_sound != nullptr && m_music != nullptr && m_game != nullptr)
     {
-      m_audio->Pump(*m_sound, *m_music);
+      m_audio->Pump(*m_sound, *m_music, m_game->Sounds());
+      m_game->ClearSounds();
     }
 
     if (!m_window.Pump())

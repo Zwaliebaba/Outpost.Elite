@@ -56,14 +56,10 @@ namespace Outpost
       return m_source != nullptr;
     }
 
-    /// Where a game-side write to the chip goes. Applied before the next interrupt's writes.
-    [[nodiscard]] Elite::SidWriteLog& Direct() noexcept
-    {
-      return m_direct;
-    }
-
     /// Run as many sound interrupts as the queue is short by, rendering and submitting each frame.
-    void Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept;
+    /// `_gameWrites` is what the game side wrote to the chip since the last pump (`Game::Sounds()`),
+    /// applied first and in order, because that is the order they happened in. The caller clears it.
+    void Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music, const Elite::SidWriteLog& _gameWrites) noexcept;
 
   private:
     /// 6502: `COLD`'s `STA SID+&18` -- see the definition. Called once, at construction.
@@ -93,7 +89,6 @@ namespace Outpost
     IXAudio2SourceVoice* m_source = nullptr;
 
     SidSynth m_synth{CLOCK_HZ, SAMPLE_RATE};
-    Elite::SidWriteLog m_direct;
     Elite::SidWriteLog m_interrupt;
 
     std::array<std::array<std::int16_t, FRAME_SAMPLES_MAX>, RING> m_ring{};

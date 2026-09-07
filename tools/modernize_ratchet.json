@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4123,
+      "ceiling": 4125,
       "slack": 0,
-      "slice": "M5-a-8: Colours.h names the palette-pair family, one marker"
+      "slice": "M5-e-1: Game owns the SID log, two markers on the member and its accessor"
     },
     "oracle-test-files": {
       "ceiling": 48,

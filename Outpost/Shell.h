@@ -19,6 +19,7 @@
 
 namespace Elite
 {
+  class Game; // Game.h -- the shell drains its sound log
   struct SoundBuffer;
   struct MusicPlayer;
 } // namespace Elite
@@ -49,9 +50,7 @@ namespace Outpost
    * yet. Three that WERE such comments no longer are: `RESET`, `RES2` and `msblob` are ported, and
    * the shell forwards them to `FlightSession` rather than approximating them (§6.73).
    */
-  class GameShell final : public Elite::Presenter,
-                          public Elite::StartUpEffects,
-                          public Elite::Keyboard
+  class GameShell final : public Elite::Presenter, public Elite::StartUpEffects, public Elite::Keyboard
   {
   public:
     GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas, std::uint8_t& _view) noexcept
@@ -211,11 +210,12 @@ namespace Outpost
     /// The SID and what feeds it. Set by the composition root, like the flight, because the sound
     /// buffer and the music player are the game's and the output is the platform's, and this object
     /// is where the two halves of the loop meet.
-    void AttachSound(SoundOutput& _audio, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music) noexcept
+    void AttachSound(SoundOutput& _audio, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, Elite::Game& _game) noexcept
     {
       m_audio = &_audio;
       m_sound = &_sound;
       m_music = &_music;
+      m_game = &_game; // whose `Sounds()` the pump drains, since M5-e-1
     }
 
   private:
@@ -236,6 +236,7 @@ namespace Outpost
     SoundOutput* m_audio = nullptr;
     Elite::SoundBuffer* m_sound = nullptr;
     Elite::MusicPlayer* m_music = nullptr;
+    Elite::Game* m_game = nullptr;
 
     /*
      * 6502: QQ11 -- which screen is showing, and it is a REFERENCE because both halves write it.

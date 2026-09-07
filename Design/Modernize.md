@@ -309,8 +309,9 @@ paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
 <!--count:outpost-elite-names-->69 distinct `Elite::` names where it reached 205 when M3 opened.
 
-What §2.1 asked for and this does not yet have is `Frame()`, `Sounds()` and `StateHash()`, and one
-thing it did not ask for: `Elite::Universe` is still the composition root's, because
+What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
+`Sounds()` is built (M5-e-1) and `Frame()` is `State().canvas`, which the executable already reaches —
+and one thing it did not ask for: `Elite::Universe` is still the composition root's, because
 `Outpost::FlightSession` binds it at construction and answers three of the seams `Game`'s `Ports`
 needs. Two of the three are already scheduled to go, and the member moves across when they do
 (§8, 2026-09-06).
@@ -365,7 +366,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,123 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,125 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1803,6 +1804,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-e-1: `Game::Sounds()`, and the one place the executable reached INTO the library.**
+
+Task #13's first item, and the owner's ruling on the three §4.4 sketched: `Sounds()` real, `Frame()`
+recorded, `StateHash()` library-native (M5-e-3). `Game` owns the SID log now — `SidWriteLog m_sid`,
+declared before the `Ports` that binds `sid` to it — and answers it through `Sounds()`, with
+`ClearSounds()` for the executable to call once it has applied what it read. Until this slice the
+executable owned the log: `SoundOutput::Direct()` handed the game a reference into the app's own
+buffer, `Pump` applied that buffer and cleared it, and the library wrote into memory it did not own.
+It was the only place the app reached into library state rather than being handed a value, and
+ADR-007 §1's rule — a byte of game state goes in the library — had not been applied to it because
+`Ports.h` argued, correctly, that the log is not STATE. It is not; but it is the library's output,
+and the executable reads outputs, it does not lend buffers for them.
+
+**WHAT MOVED IN THE EXECUTABLE.** `SoundOutput::Pump` takes the log as an argument and `Direct()`
+and `m_direct` are gone; `GameShell::AttachSound` takes the `Game` whose log it drains, and `Turn`
+reads `Sounds()` before the present and clears it after — the same point in the frame the old
+buffer was applied at, so the writes reach the chip in the same order relative to the interrupt's.
+`Main.cpp`'s construction loses `audio.Direct()`; `check_outpost.py` sees the arity change and
+agrees with the header.
+
+**`Sounds()` answers the log, not §4.4's span.** The sketch said `std::span<const SoundEvent>`; the
+log carries a `dropped` count beside its writes and `Apply` takes a log, so a span would lose the
+count and gain a conversion. `Frame()` is not built because `State().canvas` is what it would
+return and the executable already reaches it; §2.1 and ADR-007 say so rather than leave a line
+unbuilt.
+
+Two test fixtures had been handing `Game` a log of their own — `FlightPort` and `GameTests`' `Bare` —
+and neither read it back. Both members go. 395 of 395; all 16 repository checks; the replay digest
+unmoved; `outpost-elite-names` unmoved at 69, because `Game` was already a name the executable
+reached and its members are not counted; `origin-markers` 4,123 → 4,125.
 
 **2026-09-07 — M5-d-2: the hundred C arrays were thirteen, and the thirteen are `std::array`.**
 

@@ -36,11 +36,11 @@ namespace GameLogicTests
   namespace
   {
     /// The platform, answered with nothing -- which is every seam `Game` takes, `NullSeams` over
-    /// all of them and `SidWriteLog` for the chip.
+    /// all of them. The chip's log is `Game`'s own since M5-e-1.
     struct Bare
     {
       Bare()
-        : game(universe, nulls, sid, nulls, nulls, nulls, nulls, controls)
+        : game(universe, nulls, nulls, nulls, nulls, nulls, controls)
       {
       }
 
@@ -56,7 +56,6 @@ namespace GameLogicTests
       Elite::Universe universe;
       NullSeams nulls;
       NoAutopilot controls;
-      Elite::SidWriteLog sid;
       Elite::Game game;
     };
   } // namespace
@@ -133,8 +132,7 @@ namespace GameLogicTests
 
       bare.game.StepDocked(0u);
 
-      Assert::AreEqual<std::uint32_t>(14u, bare.game.State().status.hyperspaceCountdown,
-                                      L"a pass with no key still ticks TT107's counter");
+      Assert::AreEqual<std::uint32_t>(14u, bare.game.State().status.hyperspaceCountdown, L"a pass with no key still ticks TT107's counter");
     }
 
     /*

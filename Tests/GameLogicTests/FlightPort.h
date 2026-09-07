@@ -50,10 +50,7 @@
 namespace GameLogicTests
 {
 
-  class FlightPort final : public Elite::ShipDrawEffects,
-                           public Elite::ControlEffects,
-                           public Elite::Presenter,
-                           public Elite::Keyboard
+  class FlightPort final : public Elite::ShipDrawEffects, public Elite::ControlEffects, public Elite::Presenter, public Elite::Keyboard
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
@@ -77,7 +74,7 @@ namespace GameLogicTests
      * screen and writes no commander file.
      */
     FlightPort()
-      : game(universe, *this, sidLog, universe.unused, *this, *this, universe.unused, *this)
+      : game(universe, *this, universe.unused, *this, *this, universe.unused, *this)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -106,7 +103,6 @@ namespace GameLogicTests
     /// interrupt tick and the replay hash already used.
     Elite::SoundBuffer& sound = universe.sound;
     Elite::MusicPlayer& music = universe.music;
-    Elite::SidWriteLog sidLog;
 
     /*
      * 6502: QQ12 -- and it is the UNIVERSE'S byte, not a second one beside it.
@@ -159,9 +155,12 @@ namespace GameLogicTests
       }
       digest = FoldBytes(digest, arena);
 
-      const std::array<std::uint8_t, 6> rest = {universe.control.roll,             universe.control.pitch,
-                                                universe.control.dockingComputer,  universe.status.hyperspaceCounter,
-                                                universe.status.ecmOurs,           docked};
+      const std::array<std::uint8_t, 6> rest = {universe.control.roll,
+                                                universe.control.pitch,
+                                                universe.control.dockingComputer,
+                                                universe.status.hyperspaceCounter,
+                                                universe.status.ecmOurs,
+                                                docked};
       return FoldBytes(digest, rest);
     }
 
@@ -173,8 +172,8 @@ namespace GameLogicTests
 
     void DrawPlanetOrSun() override
     {
-      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, universe.rng,
-                             universe.work, universe.projection, universe.flight.type);
+      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, universe.rng, universe.work,
+                             universe.projection, universe.flight.type);
     }
     void DrawExplosion() override
     {
