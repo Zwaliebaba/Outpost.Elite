@@ -172,6 +172,45 @@ namespace Elite
   static_assert(CENTRED_LAYOUT.Map(4, 1).row == 13, "and its rows are packed, not spread");
 
   /*
+   * THE STATUS SCREEN, the first screen with a table of its own (slice RS-5-a, sketch accepted
+   * 2026-09-08).
+   *
+   * Two columns where the original had one, which is what ruling 1's "room to put them somewhere
+   * sensible" buys a screen whose content is fixed: the seven label lines down the left, the
+   * equipment list down the right, both at twice the row spacing so the screen reads as a page
+   * rather than as a small block in the middle of a large one.
+   *
+   * ONE ANCHOR MOVES THE WHOLE EQUIPMENT LIST, heading and items together, because `STATUS` prints
+   * them on consecutive canvas rows 12 to 23 and a rectangle covers exactly that. Its stride is 2
+   * and the layout's is 2, so the two columns stay in step; what differs is where they start.
+   *
+   * THE TITLE IS ON WIDE ROW 3 AND NOT 4, and the rule is why. `NLIN3`'s rule is drawn at canvas
+   * row 19, so its twin is a wide line at row 38 -- inside the glyphs of wide row 4, which spans
+   * rows 32 to 39. Row 3 puts the title above it with the seven pixels of clearance the original
+   * has four of. Nothing draws that rule today: `NLIN3`'s is "the canvas's, so a caller draws it"
+   * and only the two charts have a caller that does, which is a gap in the docked text screens
+   * older than this track and not a re-flow's to close.
+   *
+   * The offsets carry the rest: canvas column 1 -- where every label starts -- lands on wide column
+   * 5, and canvas rows 4 to 10 on wide rows 12 to 24, which puts the first label line level with
+   * the equipment heading exactly as the sketch has it.
+   */
+  inline constexpr std::array<Anchor, 2> STATUS_ANCHORS{{
+    {0, 39, 1, 1, 24, 3, 1},    // the title, moved right to sit over both columns
+    {0, 39, 12, 23, 46, 12, 2}, // "EQUIPMENT:" and the eleven lines under it, as one block
+  }};
+
+  inline constexpr TextLayout STATUS_LAYOUT{4, 4, 2, STATUS_ANCHORS};
+
+  static_assert(STATUS_LAYOUT.Map(7, 1).column == 31, "the title clears the left column");
+  static_assert(STATUS_LAYOUT.Map(7, 1).row == 3, "and sits above where the rule would be");
+  static_assert(STATUS_LAYOUT.Map(1, 4).column == 5, "the first label, four cells of margin in");
+  static_assert(STATUS_LAYOUT.Map(1, 4).row == 12, "level with the equipment heading");
+  static_assert(STATUS_LAYOUT.Map(1, 12).column == 47, "which the anchor puts in the right column");
+  static_assert(STATUS_LAYOUT.Map(1, 12).row == 12);
+  static_assert(STATUS_LAYOUT.Map(6, 23).row == 34, "and the last line the list can reach");
+
+  /*
    * `TTX66K`'s own test for which of the two kinds of screen is up, borrowed rather than invented:
    * it branches on `QQ11` being 0 or 13.
    *

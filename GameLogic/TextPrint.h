@@ -178,14 +178,14 @@ namespace Elite
    * -- it is a label with no callers -- so every real caller wanted the two stores, and slice 3d-c
    * put them back (§6.67).
    *
-   * `_view` is `QQ11`, and it is here for the twin alone: which wide rows the message occupies is
-   * `LayoutForView`'s answer, because a message over the space view sits at the height the original
-   * put it and one on a text screen is packed with the rest (Resolution.md section 6.2). The
-   * faithful routine does not read it.
+   * `_layout` is here for the twin alone: which wide rows the message occupies is the screen's
+   * layout, because a message over the space view sits at the height the original put it and one on
+   * a text screen is packed with the rest (Resolution.md section 6.2). The faithful routine does not
+   * read it, and the default is the space view's -- the screen `CLYNS` is called on most.
    */
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
                         MessageState& _message,
-                        Picture* _picture = nullptr, std::uint8_t _view = 0) noexcept;
+                        Picture* _picture = nullptr, TextLayout _layout = SPACE_VIEW_LAYOUT) noexcept;
 
   /// 6502: LDA #21 / STA YC -- the row CLYNS leaves the cursor on, which is the top of the three it
   /// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.
@@ -230,14 +230,16 @@ namespace Elite
      * have no universe to hand and are comparing the canvas anyway. A printer with nothing attached
      * draws the canvas alone, which is exactly what those fixtures assert.
      *
-     * THE VIEW AND NOT A LAYOUT, because a layout kept here would be a second copy of something the
-     * game already knows, needing a writer on every screen change to stay true. `QQ11` IS the
-     * screen that is up; the layout is read off it per glyph, and there is nothing to keep in step.
+     * THE LAYOUT AND NOT THE VIEW SINCE RS-5-a, and the reason is that `QQ11` does not name a
+     * screen: `STATUS` and `TT213` both call `TRADEMODE` with #8, so the status screen and the
+     * inventory screen are one view and a layout read off the byte cannot tell them apart. The
+     * layout lives in the universe beside the view and is written by `SetUpScreen` in the same
+     * breath as the view, so this is still ONE fact read per glyph with nothing to keep in step.
      */
-    void AttachPicture(Picture* _picture, const std::uint8_t* _view) noexcept
+    void AttachPicture(Picture* _picture, const TextLayout* _layout) noexcept
     {
       m_picture = _picture;
-      m_view = _view;
+      m_layout = _layout;
     }
 
     /// 6502: CHPR. Returns the character, as the routine does in A.
@@ -261,7 +263,7 @@ namespace Elite
     /// The layout for whatever screen is up, or the centred default when nothing is attached.
     [[nodiscard]] TextLayout Layout() const noexcept
     {
-      return (m_view != nullptr) ? LayoutForView(*m_view) : CENTRED_LAYOUT;
+      return (m_layout != nullptr) ? *m_layout : CENTRED_LAYOUT;
     }
 
     Canvas& m_canvas;
@@ -269,7 +271,7 @@ namespace Elite
     SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
 
     Picture* m_picture = nullptr;        ///< the second surface, or none -- see `AttachPicture`
-    const std::uint8_t* m_view = nullptr; ///< `QQ11`, read for its layout and never written
+    const TextLayout* m_layout = nullptr; ///< the screen's layout, read and never written
   };
 
   /*
