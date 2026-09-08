@@ -25,7 +25,7 @@ namespace Elite
 {
 
   /*
-   * 6502: ZERO -- `LDX #(de-FRIN)` and a zero-fill down to `FRIN`.
+   * 6502: ZERO -- a zero-fill from `de` down to `FRIN`.
    *
    * FIFTY-NINE BYTES BY ADDRESS, and the port has them in seven structures: the ship slots and
    * counts, the junk tally, the docking computer, both E.C.M. bytes, the mid-jump flag, the cabin
@@ -41,18 +41,18 @@ namespace Elite
   /*
    * 6502: RES2 -- the ship, the heaps, the dashboard and the stardust, and then straight into ZINF.
    *
-   * IT RE-CENTRES THE PITCH AND NOT THE ROLL. `STA JSTY` is there and `STA JSTX` is not, and
+   * IT RE-CENTRES THE PITCH AND NOT THE ROLL. The pitch's store is there and the roll's is not, and
    * neither is in `ZERO`'s range -- so a launch leaves the roll rate wherever the last flight left
    * it while the pitch is put back to centre. The ship also starts with `ALPHA`, `ALP1` and `DELTA`
-   * all at 3, from one `LDA #3`: a slow roll and a slow drift, which is what a launch looks like.
+   * all at 3, from ONE load: a slow roll and a slow drift, which is what a launch looks like.
    */
   void ResetShipAndBubble(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: RESET -- the universe, and then `RES2`, which it falls into.
    *
-   * THE 255 THAT MEANS "DOCKED" IS THE SAME 255 THAT FILLS THE SHIELDS. `LDX #6` counts a loop down
-   * past zero, `TXA` takes the 255 it ran off the end with, `STA QQ12` makes that "docked", and the
+   * THE 255 THAT MEANS "DOCKED" IS THE SAME 255 THAT FILLS THE SHIELDS. A loop counts down past
+   * zero, the 255 it ran off the end with is moved into `QQ12` to mean "docked", and the
    * three-byte loop under it fills `FSH`, `ASH` and `ENERGY` with the same byte. One loop counter,
    * two meanings, and the second is only correct because full shields happen to be 255.
    *
@@ -63,14 +63,14 @@ namespace Elite
    */
   void ResetGame(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: LDA #12 / STA DELTA -- how fast you leave the slot, and it is four times `RES2`'s 3.
+  /// 6502: how fast you leave the slot, and it is four times `RES2`'s 3.
   inline constexpr std::uint8_t LAUNCH_SPEED = 12;
 
   /*
-   * 6502: LDA #8 -- the step `LAUN` hands `HFS2`, and the upstream header comment has it backwards.
+   * 6502: the step `LAUN` hands `HFS2`, and the upstream header comment has it backwards.
    *
    * `HFS2`'s own summary says "4 for launch, 8 for hyperspace"; the instruction inside `LAUN` is
-   * `LDA #8`, and the comment beside THAT instruction says 8, "so there are fewer sections in the
+   * eight, and the comment beside THAT instruction says 8, "so there are fewer sections in the
    * rings and they are quite polygonal (compared to the step size of 4 used in the much rounder
    * hyperspace rings)". The two are irreconcilable and the code is the one that runs, so the
    * launch tunnel is the polygonal one.
@@ -91,12 +91,12 @@ namespace Elite
    */
   void DrawLaunchTunnel(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: LDA #4 -- the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
+  /// 6502: the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
   /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
   inline constexpr std::uint8_t HYPERSPACE_TUNNEL_STEP = 4;
 
-  /// 6502: LDA #&F5 / LDX #240 -- `NOISE2`'s two arguments for the first hyperspace sound. The
-  /// low nibble of A is a release length of 5 and the high nibble a sustain volume of 15.
+  /// 6502: `NOISE2`'s two arguments for the first hyperspace sound. The low nibble of the first
+  /// is a release length of 5 and the high nibble a sustain volume of 15.
   inline constexpr std::uint8_t HYPERSPACE_SUSTAIN = 0xF5;
   inline constexpr std::uint8_t HYPERSPACE_FREQUENCY = 240;
 
@@ -114,7 +114,7 @@ namespace Elite
    *
    * Five instructions once `HFS2` exists: the noise, a step of 4, and the rings. `HYPNOISE` is a
    * SOUND routine (the upstream files it as one) and it is played through the seams phase 5 owns,
-   * except for its `LDY #1 / JSR DELAY`, which is one vertical sync and is therefore
+   * except for its one vertical sync of `DELAY`, which is therefore
    * `Presenter::Present`.
    *
    * `MJP` and `TT18` are its callers, and both are built.
@@ -124,7 +124,7 @@ namespace Elite
   /*
    * 6502: TT110 -- leave the station, or refuse to.
    *
-   * `LDX QQ12 / BEQ NLUNCH` is the refusal: pressing "1" in flight falls straight through to the
+   * A zero `QQ12` branches to `NLUNCH`, which is the refusal: pressing "1" in flight falls straight through to the
    * view change, which is why the key works in both places and does something in only one.
    *
    * The order matters and is not obvious. The tunnel is drawn BEFORE the reset, so it plays over
@@ -141,43 +141,44 @@ namespace Elite
    * (slice 4b-a).
    *
    * `RES2`, then the ship you left becomes an NPC flying away from you: `FRS1` puts a Cobra ahead,
-   * and if the bubble refuses it -- `BCS ES1` takes the SUCCESS -- it tries a PIRATE Cobra instead,
+   * and if the bubble refuses it -- the branch takes the SUCCESS -- it tries a PIRATE Cobra instead,
    * which is a different blueprint and a different bounty. Then ninety-seven frames of `MVEIT` and
    * `LL9` while it recedes.
    *
-   * **194 IS THREE THINGS.** `LDA #194 / STA INWK+30` is the pitch; `LSR A / STA INWK+32` makes 97
-   * the AI byte; and `.ESL1 ... DEC INWK+32 / BNE ESL1` counts the animation down through that same
+   * **194 IS THREE THINGS.** It is stored as the pitch; HALVED it becomes 97, the AI byte; and
+   * the animation loop counts down through that same
    * byte. So the abandoned ship's AI setting drains to zero as it flies off, and the number of
    * frames it flies for is half its pitch.
    *
    * What it costs: the whole cargo hold (`QQ20`, seventeen bytes), the legal status, the pod
-   * itself, and all but a handful of Trumbles -- `DORND AND #7 ORA #1` leaves one to eight of them,
+   * itself, and all but a handful of Trumbles -- three random bits with the bottom one forced
+   * leaves one to eight of them,
    * and zeroes the high byte, so a hold full of them comes back as a nuisance rather than a crisis.
    * What it gives: seven light years of fuel, and a docking.
    */
-  /// 6502: LDA #8 / STA INWK+27 -- the speed the abandoned ship leaves at.
+  /// 6502: the speed the abandoned ship leaves at.
   inline constexpr std::uint8_t ESCAPE_SPEED = 8;
 
-  /// 6502: LDA #194 -- the pitch, and HALVED it is both the AI byte and the frame count.
+  /// 6502: the pitch, and HALVED it is both the AI byte and the frame count.
   inline constexpr std::uint8_t ESCAPE_PITCH = 194;
 
   void AbandonShip(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`
+  /// 6502: `TT66` on view 13, then the view put back to zero -- and it is two values on purpose. `TTX66K`
   /// tail-jumps to `wantdials` for view 0 AND for view 13, so both draw the same pixels; what
   /// differs is that `TT66` prints the view's NAME for a zero, and the title screen has none.
   inline constexpr std::uint8_t TITLE_CLEAR_VIEW = 13;
 
-  /// 6502: LDA #96 / STA INWK+14 and STA INWK+7 -- the nose vector's z high byte, and the ship's
-  /// own z high byte. The second is what `TLL2` walks down, so it is where the ship starts.
+  /// 6502: 96 into the nose vector's z high byte, and into the ship's own z high byte. The second
+  /// is what `TLL2` walks down, so it is where the ship starts.
   inline constexpr std::uint8_t TITLE_START_DISTANCE = 96;
 
-  /// 6502: LDX #127 / STX INWK+29 / STX INWK+30 -- the maximum roll and pitch counters, which is
+  /// 6502: the maximum roll and pitch counters, which is
   /// the whole of why the ship turns.
   inline constexpr std::uint8_t TITLE_SPIN = 127;
 
-  /// 6502: LDA #12 / STA CNT2 and LDA #5 / STA MCNT -- the two counters the loop is entered with.
-  /// 6502: LDA #15 / STA YC / LDA #1 / STA XC -- TITLE's own cursor for the prompt, which
+  /// 6502: twelve into `CNT2` and five into `MCNT` -- the two counters the loop is entered with.
+  /// 6502: row 15 and column 1 -- `TITLE`'s own cursor for the prompt, which
   /// OVERWRITES the column `BR1` set three instructions earlier.
   inline constexpr std::uint8_t TITLE_PROMPT_ROW = 15;
   inline constexpr std::uint8_t TITLE_PROMPT_LEFT = 1;
@@ -198,7 +199,7 @@ namespace Elite
    * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
    *
    * THE KEY YOU DISMISS IT WITH CONFIGURES THE JOYSTICK. `JSTK` is set to &FF immediately before
-   * the loop and the exit is `BIT KY7 / BMI TL3 / BCC TLL2 / INC JSTK`: pressing FIRE leaves the
+   * the loop, and the exit tests the fire key: pressing FIRE leaves the
    * &FF and returns, and pressing anything else runs the `INC` first, which makes it zero. So
    * "press space or fire" is not a prompt with two equal answers -- it is the input-device
    * question, asked without saying so.
@@ -209,7 +210,7 @@ namespace Elite
    * and not how big it starts. The port's placeholder box sized itself off that argument and had
    * the wrong byte.
    *
-   * AND `LDA MCNT / AND #3` IS DEAD. The next instruction is `LDA #0`, so the accumulator that
+   * AND THE MASKED READ OF `MCNT` IS DEAD. The next instruction loads zero, so the accumulator that
    * computation produced is thrown away before anything reads it. Fourth piece of dead code found
    * in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store and `MAS2`'s second entry.
    *
@@ -222,8 +223,8 @@ namespace Elite
   /*
    * 6502: what `TT66` is actually called with in `DEATH` -- MEASURED, and it is not 6 (§6.117).
    *
-   * The upstream comment says `LDX #24 / JSR DET1` hides the dashboard "and sets A to 6 in the
-   * process", which is the BBC's `DET1`: `LDA #6 / SEI / STA VIA+&00 / STX VIA+&01 / CLI`. On this
+   * The upstream comment says the pair that hides the dashboard also "sets A to 6 in the
+   * process", which is the BBC's `DET1` -- five instructions ending in a register write. On this
    * build `DET1` is ONE BYTE, `&60`, a bare `RTS` -- the whole routine is behind an `IF` the C64
    * fails. So neither the `LDX` nor the `LDA` happens, and `TT66` gets whatever `RES2` left in A.
    *
@@ -233,10 +234,10 @@ namespace Elite
    */
   inline constexpr std::uint8_t DEATH_VIEW = 224;
 
-  /// 6502: LDA #146 -- the recursive token `DEATH` prints, "{all caps}GAME OVER".
+  /// 6502: the recursive token `DEATH` prints, "{all caps}GAME OVER".
   inline constexpr std::uint8_t GAME_OVER_TOKEN = 146;
 
-  /// 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, moved to the middle of the screen.
+  /// 6502: the cursor, moved to the middle of the screen -- one load feeding both calls.
   inline constexpr std::uint8_t GAME_OVER_ROW = 12;
   inline constexpr std::uint8_t GAME_OVER_COLUMN = 12;
 
@@ -244,10 +245,10 @@ namespace Elite
   /// redraw cannot rub out. `BOTTOM_RIGHT_CORNER` in `ViewChange.h` is the first.
   inline constexpr std::uint16_t BORDER_TOP_RIGHT = 0x118;
 
-  /// 6502: LDY #64 / STY LASCT -- how long the death animation lasts, in flight-loop iterations.
+  /// 6502: how long the death animation lasts, in flight-loop iterations.
   inline constexpr std::uint8_t DEATH_FRAMES = 64;
 
-  /// 6502: LDA FRIN+4 / BEQ D1 -- the debris loop fills slots until the FIFTH one is taken.
+  /// 6502: D1 -- the debris loop fills slots until the FIFTH one is taken.
   inline constexpr std::size_t DEATH_DEBRIS_SLOT = 4;
 
   /*
@@ -257,22 +258,22 @@ namespace Elite
    * EORed off again, a fresh stardust field, the sign, then five pieces of wreckage spawned in
    * random directions and 64 iterations of the whole flight loop to fly them past.
    *
-   * FOUR TIMES, not a quarter, and this comment said a quarter until 2026-09-05. `ASL DELTA / ASL
-   * DELTA` shifts LEFT twice, `PrepareDeathScene` does `delta << 2`, and
+   * FOUR TIMES, not a quarter, and this comment said a quarter until 2026-09-05. The speed is doubled
+   * twice, `PrepareDeathScene` does `delta << 2`, and
    * `TheDeathScreenSetsUpLikeDEATH` asserts 3 becomes 12 in as many words. So the code and the
    * test were right and the two comments describing them were inverted -- which mattered, because
    * the speed is the whole visual: the wreckage RUSHES past rather than drifting, and half of it
-   * bursts on the way (`DORND / AND #%10000000` marks it dead as it is spawned).
+   * bursts on the way (a random top bit marks it dead as it is spawned).
    *
    * `DET1` IS A BARE `RTS` ON THIS BUILD and the port does not call it, which is not a shortcut --
-   * see §6.117. The upstream comment says the `LDX #24 / JSR DET1` pair hides the dashboard "and
+   * see §6.117. The upstream comment says the pair that hides the dashboard "and
    * sets A to 6 in the process", and both halves are the BBC's: the C64's `DET1` is one byte.
    *
-   * It does not return. The original ends `JMP DEATH2`, which resets the stack and falls into
+   * It does not return. The original ends by jumping to `DEATH2`, which resets the stack and falls into
    * `BR1` -- so this ends where the caller's own death exit already goes.
    */
   /*
-   * 6502: DEATH from its start to the `JSR U%` -- the scene, before anything moves.
+   * 6502: DEATH from its start to the call to `U%` -- the scene, before anything moves.
    *
    * Split from the animation because the routine is two things and not one: everything above `U%`
    * builds a screen and a bubble, and everything below it runs the flight loop over them sixty-four

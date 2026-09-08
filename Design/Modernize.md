@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,073 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->997 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,30 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-35: `Explosion.cpp` and `Flight.h` to zero, and 194 is three things.**
+
+76 sites over two files: `DOEXP`'s cloud and the flight header. Twenty-fifth and twenty-sixth at
+zero, and the counter is **under a thousand** for the first time.
+
+**One byte in the escape pod's setup is the pitch, the AI byte and the frame count.** 194 is stored
+as the pitch counter; halved it becomes 97 and is stored as the AI byte; and the animation loop
+counts down through that same AI byte. So the abandoned ship's AI setting drains to zero as it flies
+away, and the number of frames it flies for is half its pitch. Three meanings, one literal, and no
+comment in the original says so.
+
+Two more from the explosion:
+
+- **The cloud ages by four or by five depending on how far away the ship is.** The comparison against
+  32 decides whether to cap the distance, nothing between there and the addition touches the carry,
+  so the far branch adds five and the near branch adds four — and the near branch is only safe
+  because z_hi under 32 shifted twice cannot reach 128.
+- **A particle rejected on its y costs the same two random numbers as one that got as far as its x.**
+  `EX11` is not a bare jump back: it runs the generator once more before rejoining, and without that
+  the cloud would not repeat and could not be erased.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (46 and 29). `opcode-transcriptions` 1,073 → 997.
 
 **2026-09-08 — M6-d-34: `Lines.cpp` and `Game.cpp` to zero, and a carry that walks the screen
 pointer.**
