@@ -13,7 +13,7 @@ this checks.
 
     python tools/check_docs.py [path ...]
 
-Defaults to every tracked *.md outside Upstream/.
+Defaults to every tracked *.md.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parent.parent
 # `readme.md` has two over-wide table rows, which made `check_all.py` red on any machine that had
 # restored the executable's packages. A check that fails on files the repository does not track
 # teaches people to skip it.
-SKIP = {"Upstream", ".git", ".claude", ".vs", "packages", "node_modules", "out", "build", "x64"}
+SKIP = {".git", ".claude", ".vs", "packages", "node_modules", "out", "build", "x64"}
 
 
 def split_cells(_line: str) -> list[str]:

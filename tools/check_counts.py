@@ -55,7 +55,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SKIP = {"Upstream", ".git", ".claude", ".vs", "node_modules", "out", "build", "packages", "x64", "Tools-ext"}
+SKIP = {".git", ".claude", ".vs", "node_modules", "out", "build", "packages", "x64", "Tools-ext"}
 
 MARKER = re.compile(r"<!--\s*count:([a-z0-9-]+)\s*-->")
 
@@ -85,41 +85,6 @@ def count_checks() -> int:
     text = (REPO / "tools" / "check_all.py").read_text(encoding="utf-8", errors="replace")
     body = text.split("CHECKS: list[list[str]] = [", 1)[1].split("\n]", 1)[0]
     return len(re.findall(r"^\s*\[", body, re.MULTILINE))
-
-
-def count_master_lines() -> int:
-    """Lines of assembly in MasterFile/ -- the .asm files ONLY.
-
-    The corpus said "13 master files, 5,615 lines" from its opening paragraph onwards and both
-    halves counted the FOLDER: there are twelve .asm files totalling 5,577 lines, plus upstream's
-    own README.md, which is 38 lines of Markdown and not a master. `inventory.py` had been printing
-    twelve the whole time.
-    """
-    total = 0
-    for master in sorted((REPO / "MasterFile").glob("*.asm")):
-        total += len(master.read_text(encoding="utf-8", errors="replace").splitlines())
-    return total
-
-
-def count_masterfile_lines() -> int:
-    """Lines in every tracked file of MasterFile/, which is what the licence exposure is measured
-    in -- upstream's README.md carries its own copyright and is committed like the rest."""
-    total = 0
-    for path in sorted((REPO / "MasterFile").iterdir()):
-        if path.is_file():
-            total += len(path.read_text(encoding="utf-8", errors="replace").splitlines())
-    return total
-
-
-def count_includes(_under_library: bool) -> int:
-    """Distinct INCLUDE/INCBIN paths in the masters, which is inventory.py's own measurement."""
-    paths: set[str] = set()
-    pattern = re.compile(r'^\s*INC(?:LUDE|BIN)\s+"([^"]+)"', re.MULTILINE)
-    for master in sorted((REPO / "MasterFile").glob("*.asm")):
-        for path in pattern.findall(master.read_text(encoding="utf-8", errors="replace")):
-            if not _under_library or path.startswith("library/"):
-                paths.add(path)
-    return len(paths)
 
 
 def count_generated_tables() -> int:
@@ -154,16 +119,6 @@ def counts() -> dict[str, tuple[int, str]]:
         # M5-b: the arrays tools/extract_tables.py owns, counted where they are DEFINED rather than
         # where LookupTables.h declares them -- a declaration can outlive the table behind it.
         "generated-tables": (count_generated_tables(), "constexpr arrays in the generated GameLogic/*.cpp"),
-        "masters": (len(list((REPO / "MasterFile").glob("*.asm"))), "MasterFile/*.asm"),
-        "master-lines": (count_master_lines(), "lines of assembly in MasterFile/*.asm"),
-        # And the same folder counted the other way, which is a DIFFERENT claim and both are made.
-        # The exposure Risk R1 accepts is every tracked file in MasterFile/, upstream's own
-        # README.md included; the annotated SOURCE is the twelve .asm files. Conflating them is
-        # what put "13 master files, 5,615 lines" in the plan's opening paragraph for the source.
-        "masterfile-files": (len([path for path in (REPO / "MasterFile").iterdir() if path.is_file()]), "all files in MasterFile/"),
-        "masterfile-lines": (count_masterfile_lines(), "lines in all of MasterFile/"),
-        "includes": (count_includes(False), "distinct INCLUDE/INCBIN paths in the masters"),
-        "library-includes": (count_includes(True), "those of them under library/"),
         "tools": (len(list((REPO / "tools").glob("*.py"))), "scripts in tools/"),
     }
     return {**own, **check_modernize.counts()}

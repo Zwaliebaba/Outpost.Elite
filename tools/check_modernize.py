@@ -74,7 +74,6 @@ CLASS_HEAD = re.compile(r"\b(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[
 PURE_VIRTUAL = re.compile(r"\)\s*(?:const\s*)?(?:noexcept\s*)?=\s*0\s*;")
 ELITE_NAME = re.compile(r"\bElite::([A-Za-z_]\w*)")
 ORIGIN_MARKER = re.compile(r"\b6502:")
-ORIGIN_PATH = re.compile(r"\bUpstream\b|\bMasterFile\b")
 
 
 def count_register_params(_root: Path) -> int:
@@ -474,19 +473,6 @@ def count_origin_identifiers(_root: Path) -> int:
     return total
 
 
-def count_origin_tools(_root: Path) -> int:
-    """P12 -- scripts in tools/ that read Upstream/ or MasterFile/ (this one reads neither)."""
-    total = 0
-    for path in sorted((_root / "tools").glob("*.py")):
-        if path.name == Path(__file__).name:
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-        if ORIGIN_PATH.search(code):
-            total += 1
-    return total
-
-
 COUNTERS = {
     "register-params": (count_register_params, "P1: std::uint8_t _a/_x/_y parameters in GameLogic/*.h"),
     "workspace-params": (count_workspace_params, "P2: zero-page workspace reference parameters in GameLogic/*.h"),
@@ -507,7 +493,6 @@ COUNTERS = {
     # units that loaded the assembled original, and it reached zero when the tests went. A counter
     # over a header that no longer exists guards nothing -- a file that included it would not
     # compile -- so it goes with the header rather than sitting at zero for ever.
-    "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
 }
 
 
@@ -673,8 +658,6 @@ SAMPLE_MUTANTS = {
     ]
 }
 
-SAMPLE_ORIGIN_TOOL = "# Upstream in a comment does not count\nROOT = REPO / \"Upstream\" / \"elite-source-code-library\"\n"
-SAMPLE_PLAIN_TOOL = "# MasterFile mentioned only here\nprint(1)\n"
 
 EXPECTED = {
     "register-params": 3,
@@ -692,7 +675,6 @@ EXPECTED = {
     "origin-markers": 7,
     "origin-identifiers": 5,
     "opcode-transcriptions": 5,
-    "origin-tools": 1,
 }
 
 
@@ -710,8 +692,6 @@ def self_test() -> list[str]:
         (root / "Outpost" / "Main.cpp").write_text(SAMPLE_MAIN, encoding="utf-8")
         (root / "tools" / "mutants.json").write_text(json.dumps(SAMPLE_MUTANTS), encoding="utf-8")
         (root / "Tests" / "GameLogicTests").mkdir(parents=True)
-        (root / "tools" / "labels.py").write_text(SAMPLE_ORIGIN_TOOL, encoding="utf-8")
-        (root / "tools" / "check_docs.py").write_text(SAMPLE_PLAIN_TOOL, encoding="utf-8")
 
         measured = counts(root)
 

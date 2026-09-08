@@ -211,12 +211,12 @@ design. There is no interpreter, no image and no assembler step on either CI leg
 Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed
 ```
 
-`Upstream/` is still checked out (`git submodule update --init`) because `c64_source.py` and the
-master counts read it; both go at M6-f and the submodule with them.
+`Upstream/` and `MasterFile/` went at M6-f, with `labels.py`, `c64_source.py`,
+`extract_tables.py` and `golden_diff.py`. Nothing here reads the original any more.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->fourteen in CI's
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->thirteen in CI's
 order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
 2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
@@ -230,7 +230,6 @@ python tools/check_docs.py                    # no table row is wider than its h
 python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
 python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
 python tools/mutate.py --check                # every recorded mutant still applies, and every floor file carries a caught one
-python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
 python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
 python tools/check_twins.py                   # every routine with a 640x400 twin still calls it (Resolution.md §8.6)
 python tools/check_twins.py --self-test       # that check still catches a routine whose twin went missing
@@ -351,18 +350,11 @@ What it does NOT do is recover the tallies already published. Those mutants are 
 survivors §6.125 named are in the file because their names pinned them, and the rest stay
 unreproducible. R13 is open on that half.
 
-**Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
-serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
-`ELSE` / `ENDIF` conditionals -- which nest, and which include `NOT(...)` blocks that are easy to
-skim past. Porting the BBC Master's version of a routine by mistake is a real failure mode, met
-more than once here.
-
-```
-python tools/c64_source.py --code library/common/main/subroutine/tt25.asm
-```
-
-It evaluates the conditionals against the master build's own symbol values and errors on a symbol
-it does not know rather than guessing FALSE.
+**THE ORIGINAL IS NOT HERE ANY MORE (M6-f).** `tools/c64_source.py` resolved a routine's C64
+form through the upstream library's nested `IF` / `ELIF` / `ELSE` / `ENDIF` conditionals, because
+porting the BBC Master's version of a routine by mistake was a real failure mode met more than
+once. There is nothing left to read that way: the port's own comments are the record of what each
+routine does and why, which is what M6-d spent fifty-eight slices making true.
 
 **Report what you actually did.** "Builds clean, not run" and "builds, and the arithmetic suite
 is green against the oracle" are different claims. Never imply the second when you did the first.

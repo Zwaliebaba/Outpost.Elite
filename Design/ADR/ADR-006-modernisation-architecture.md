@@ -237,7 +237,8 @@ C++20, by ruling: `std::span` with fixed extents for the codecs, `constexpr` cod
 needs it.
 
 **M5-b, 2026-09-07: every generated table is `constexpr` and its SHAPE is a `static_assert`.**
-`tools/extract_tables.py` emits `constexpr std::array` and `GameLogic/LookupTables.cpp` — a
+`tools/extract_tables.py` emitted `constexpr std::array` (the tool went with the original at
+M6-f; the tables it wrote are checked in and are the port's own now) and `GameLogic/LookupTables.cpp` — a
 translation unit that emits nothing — ties each table's length to the constant that INDEXES it
 (`SHIP_TYPE_COUNT`, `SPRITE_DEFINITION_COUNT`, `Canvas::CELL_ROWS`, `SOUND_EFFECT_COUNT`,
 `EQUIPMENT_ITEM_COUNT`), which is §6.8's rule for the whole ledger made mechanical. The assertions

@@ -46,8 +46,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: actions/setup-python@v5
         with:
@@ -104,14 +102,6 @@ jobs:
       # A tool that stops on an unknown symbol is only useful if it never meets one, and four of
       # the build's own files used to stop this one -- each looking like a missing SYMBOLS entry,
       # which invites somebody to invent a value for it (§6.75).
-      - name: The source resolver can read every file the build assembles
-        run: python tools/c64_source.py --check-all
-
-      # M5-d, 2026-09-07: /.clang-tidy calls itself the single source of truth for this repository's
-      # naming and semantics, and until this step NOTHING RAN IT here -- the file came whole from
-      # the sibling tree and described that tree's CI, projects and reasons. GameLogic/pch.h reaches
-      # <WinSock2.h> through NeuronCore.h, so the sweep goes through the portable runner's shim, the
-      # same stand-in that lets g++ compile these sources at all. Outpost/ stays the Windows job's.
       - name: clang-tidy over GameLogic
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq clang-tidy
@@ -147,8 +137,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: actions/setup-python@v5
         with:
@@ -174,8 +162,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: actions/setup-python@v5
         with:
