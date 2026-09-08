@@ -50,7 +50,8 @@ namespace Elite
       if (_universe.view != 0u)
       {
         // 6502: JSR CLYNS -- a text screen's message is in the bottom rows. A seam until M3-b-3b.
-        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
+                       &_universe.picture, _universe.view);
       }
       else
       {
@@ -62,7 +63,7 @@ namespace Elite
          * STA DLY` after it is not redundant -- it undoes what the call just did.
          */
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, _universe.message.token,
-                    _universe.view);
+                    _universe.view, &_universe.picture);
         _universe.message.delay = 0u;
       }
     }
@@ -117,7 +118,8 @@ namespace Elite
     // makes the speed, roll and pitch indicators move at all.
     if (_universe.view == 0u)
     {
-      DrawDials(_universe.canvas, _universe.draw, _universe.flight, _universe.status, _commander.fuel, _universe.compass, _universe.bubble);
+      DrawDials(_universe.canvas, _universe.draw, _universe.flight, _universe.status, _commander.fuel, _universe.compass, _universe.bubble,
+                &_universe.picture);
 
       /*
        * AND `DIALS` COMES BACK WITH THE CARRY CLEAR, which is what the breeding roll below rotates
@@ -318,6 +320,7 @@ namespace Elite
   {
     Ended,     ///< 6502: .MLOOPS JMP MLOOP -- nothing more happens this pass
     Continued, ///< fall through to the next part
+    Restarted, ///< 6502: part 1's tail falling into `.TT100`, which is `SpawnOutcome::Restarted`
   };
 
   /*
@@ -377,6 +380,7 @@ namespace Elite
 
     ShipType pendingType = ShipType::None;
     bool spawnPending = false;
+    bool traderPath = false; ///< 6502: `BVS MTT4` was taken, so the tail is part 1's and not part 2's
 
     if (!toPart3)
     {
@@ -472,11 +476,14 @@ namespace Elite
 
         if (TypeOf(type.value) == ShipType::RockHermit)
         {
-          return SpawnPass::Ended; // 6502: BEQ TT100 -- unreachable on the C64 constants
+          // 6502: BEQ TT100 -- unreachable on the C64 constants, and it is the SAME destination
+          // part 1's fall-through reaches, so it says so rather than pretending the pass ended.
+          return SpawnPass::Restarted;
         }
 
         pendingType = TypeOf(type.value);
         spawnPending = true;
+        traderPath = true;
       }
       else
       {
@@ -539,13 +546,23 @@ namespace Elite
       }
     }
 
-    // 6502: .whips JSR NWSHP -- and then it FALLS INTO part 3 whatever the answer was.
+    /*
+     * 6502: .whips JSR NWSHP -- and where it goes next depends on WHICH `JSR NWSHP` it was.
+     *
+     * There are two, and they fall into different places. Part 2's is at `.whips`, three bytes
+     * above `.MTT1`, so the loner's pass carries on into part 3. Part 1's is the last instruction
+     * of `.MTT4` and the next byte is `.TT100`, so the TRADER's pass goes back to the top of the
+     * loop -- another `JSR M%`, another `DEC DLY / DEC MCNT`, and then `ytq` sends it to `MLOOP`
+     * with `MCNT` at 255. The port had one `Spawn` for both and continued into part 3 from either,
+     * which gave a trader's pass a police roll the game never makes (M6-a-1; the coverage review
+     * named `MTT4` a gap and the first fixture to roll one found this).
+     */
     if (spawnPending)
     {
       static_cast<void>(Spawn(_frame.bubble, _frame.work, pendingType, _frame.blueprint));
     }
 
-    return SpawnPass::Continued;
+    return traderPath ? SpawnPass::Restarted : SpawnPass::Continued;
   }
 
   /*
@@ -803,30 +820,36 @@ namespace Elite
     return SpawnPass::Ended;
   }
 
-  void RunSpawning(Universe& _universe, bool _carryIn) noexcept
+  SpawnOutcome RunSpawning(Universe& _universe, bool _carryIn) noexcept
   {
     // 6502: LDA MJ / BNE ytq -- nothing spawns in witchspace, because witchspace has no system to
     // spawn from. `MJP` puts the Thargoids there itself.
     if (_universe.status.midJump != 0u)
     {
-      return;
+      return SpawnOutcome::Ended;
     }
 
     SpawnFrame frame{_universe.bubble,           _universe.work,    _universe.rng,
                      _universe.commander,        _universe.current, _universe.explosions,
                      _universe.flight.blueprint, _carryIn};
 
-    if (SpawnTraderOrLoner(frame) == SpawnPass::Ended) // 6502: parts 1 and 2
+    const SpawnPass first = SpawnTraderOrLoner(frame); // 6502: parts 1 and 2
+    if (first == SpawnPass::Restarted)
     {
-      return;
+      return SpawnOutcome::Restarted; // 6502: the fall-through past part 1's `JSR NWSHP`
+    }
+    if (first == SpawnPass::Ended)
+    {
+      return SpawnOutcome::Ended;
     }
 
     if (SpawnPolice(frame) == SpawnPass::Ended) // 6502: part 3
     {
-      return;
+      return SpawnOutcome::Ended;
     }
 
     static_cast<void>(SpawnEncounter(frame)); // 6502: part 4, and the loop's fall-through IS part 5
+    return SpawnOutcome::Ended;
   }
 
 } // namespace Elite

@@ -228,8 +228,19 @@ namespace Elite::Testing
      * jump somewhere else entirely -- a run that unwinds past where it started has finished just
      * as surely as one that returned, and reporting that is better than spinning to the budget.
      */
+    /*
+     * WHAT ANSWERS IT IS A SEAM (Design/Modernize.md §4.10, built M6-a-2).
+     *
+     * With no oracle installed this IS `Interpret` below, which is what every test has always got.
+     * `Oracle::Install` puts a recorder or a fixture in its place instead, and no test changes
+     * shape: the seam is the call, not the state the test builds around it.
+     */
     RunResult CallSubroutine(std::uint16_t _address, std::uint32_t _maxInstructions = 2'000'000,
                              std::uint16_t _stopAddress = 0xFFF9) noexcept;
+
+    /// The interpreter itself, which `LiveOracle` and `RecordingOracle` run and `RecordedOracle`
+    /// does not. Public so the oracles can reach it; nothing else should call it directly.
+    RunResult Interpret(std::uint16_t _address, std::uint32_t _maxInstructions, std::uint16_t _stopAddress) noexcept;
 
     // ---- call traps --------------------------------------------------------------------
 

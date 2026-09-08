@@ -78,7 +78,7 @@ namespace Outpost
       return !m_window.Closed();
     }
 
-    return m_presenter.Present(*m_canvas, m_video, width, height);
+    return m_presenter.Present(*m_picture, *m_canvas, m_video, width, height);
   }
 
   std::uint8_t GameShell::NextKey()
@@ -103,7 +103,7 @@ namespace Outpost
      * would put the caller into a loop that never ends, so the process stops here.
      *
      * THE GRAPHICS ARE RELEASED BY HAND FIRST, because ending the process here means no destructor
-     * anywhere runs and `~CanvasPresenter` is one of them. Memory does not care -- the OS takes it
+     * anywhere runs and `~ScreenPresenter` is one of them. Memory does not care -- the OS takes it
      * back either way -- but the Direct3D debug layer reports what is still live when the process
      * dies, so closing the window used to print forty live D3D12 objects and three DXGI ones. None
      * of them was a leak; they were all still owned, by an object that never got to let go.

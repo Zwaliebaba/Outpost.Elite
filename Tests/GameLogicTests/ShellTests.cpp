@@ -10,6 +10,7 @@
 #include "FlightLoop.h"
 #include "KeyMap.h"
 #include "LookupTables.h"
+#include "Picture.h"
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
 #include "Presentation.h"
@@ -350,10 +351,15 @@ namespace GameLogicTests
      * ADR-005 section 1: the largest integer factor that fits, centred, black bars around it.
      *
      * The cases are chosen for the boundaries rather than for plausible window sizes: exactly the
-     * canvas, one pixel short of the next factor, exactly it, a client too small for 1x, and a
+     * picture, one pixel short of the next factor, exactly it, a client too small for 1x, and a
      * shape that is generous in one axis and mean in the other -- which is the case a port that
      * took the wrong minimum gets wrong, and the only one a maximised window on a wide monitor
      * ever produces.
+     *
+     * THE NUMBERS ARE 640x400's SINCE RS-0 and the boundaries moved with them: 1x is the whole
+     * picture, and a 1080p display -- which used to take 5x -- now takes 2x with bars. That is the
+     * change of scale, not a change of rule, and it is why the window opens at 2x rather than 3x
+     * (Resolution.md ruling 11.3).
      */
     TEST_METHOD(TheViewportIsTheLargestIntegerScaleThatFits)
     {
@@ -366,22 +372,23 @@ namespace GameLogicTests
       };
 
       const std::vector<Case> CASES = {
-        {"exactly the canvas", 320, 200, {0, 0, 320, 200, 1}},
-        {"one pixel short of 2x in width", 639, 400, {159, 100, 320, 200, 1}},
-        {"one pixel short of 2x in height", 640, 399, {160, 99, 320, 200, 1}},
-        {"exactly 2x", 640, 400, {0, 0, 640, 400, 2}},
-        {"a wide monitor, and the height is what binds", 1920, 800, {320, 0, 1280, 800, 4}},
-        {"a tall window, and the width binds", 700, 2000, {30, 800, 640, 400, 2}},
-        {"1080p, where the width is a multiple and the height is not", 1920, 1080, {160, 40, 1600, 1000, 5}},
-        {"smaller than the canvas still gets 1x", 200, 100, {-60, -50, 320, 200, 1}},
-        {"and clips evenly when the overflow is odd", 319, 199, {-1, -1, 320, 200, 1}},
+        {"exactly the picture", 640, 400, {0, 0, 640, 400, 1}},
+        {"one pixel short of 2x in width", 1279, 800, {319, 200, 640, 400, 1}},
+        {"one pixel short of 2x in height", 1280, 799, {320, 199, 640, 400, 1}},
+        {"exactly 2x, which is the window the game opens", 1280, 800, {0, 0, 1280, 800, 2}},
+        {"a wide monitor, and the height is what binds", 3840, 1600, {640, 0, 2560, 1600, 4}},
+        {"a tall window, and the width binds", 1400, 4000, {60, 1600, 1280, 800, 2}},
+        {"1080p, where neither axis is a multiple", 1920, 1080, {320, 140, 1280, 800, 2}},
+        {"1440p, where three fit", 2560, 1440, {320, 120, 1920, 1200, 3}},
+        {"smaller than the picture still gets 1x", 400, 200, {-120, -100, 640, 400, 1}},
+        {"and clips evenly when the overflow is odd", 639, 399, {-1, -1, 640, 400, 1}},
         {"minimised", 0, 0, {0, 0, 0, 0, 0}},
         {"a negative client area", -8, 100, {0, 0, 0, 0, 0}},
       };
 
       for (const Case& item : CASES)
       {
-        const Outpost::Viewport got = Outpost::FitCanvas(item.clientWidth, item.clientHeight);
+        const Outpost::Viewport got = Outpost::FitPicture(item.clientWidth, item.clientHeight);
         const std::wstring where = Widen(std::string("viewport: ") + item.what);
 
         Assert::AreEqual(item.expected.scale, got.scale, (where + L": the scale").c_str());
@@ -394,17 +401,17 @@ namespace GameLogicTests
 
       /*
        * And the property the cases are examples of: whatever the client area, the image is a whole
-       * number of canvases and it is centred to within a pixel. A scale computed with the wrong
+       * number of pictures and it is centred to within a pixel. A scale computed with the wrong
        * rounding passes several of the cases above and fails this.
        */
-      for (int width = 1; width <= 2400; width += 7)
+      for (int width = 1; width <= 4000; width += 7)
       {
-        for (int height = 1; height <= 1600; height += 11)
+        for (int height = 1; height <= 2600; height += 11)
         {
-          const Outpost::Viewport view = Outpost::FitCanvas(width, height);
-          Assert::AreEqual(0, view.width % Elite::Canvas::WIDTH, L"the width is a whole number of canvases");
-          Assert::AreEqual(0, view.height % Elite::Canvas::HEIGHT, L"and so is the height");
-          Assert::AreEqual(view.scale, view.width / Elite::Canvas::WIDTH, L"and the scale agrees");
+          const Outpost::Viewport view = Outpost::FitPicture(width, height);
+          Assert::AreEqual(0, view.width % Elite::Picture::WIDTH, L"the width is a whole number of pictures");
+          Assert::AreEqual(0, view.height % Elite::Picture::HEIGHT, L"and so is the height");
+          Assert::AreEqual(view.scale, view.width / Elite::Picture::WIDTH, L"and the scale agrees");
           Assert::IsTrue(view.x * 2 + view.width == width || view.x * 2 + view.width == width - 1, L"centred to within the odd pixel");
           Assert::IsTrue(view.y * 2 + view.height == height || view.y * 2 + view.height == height - 1, L"in both axes");
         }

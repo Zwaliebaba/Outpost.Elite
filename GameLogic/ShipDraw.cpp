@@ -157,8 +157,16 @@ namespace Elite
 
   } // namespace
 
-  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run, Picture* _picture) noexcept
   {
+    // Resolution.md §4, rule T3: the same run on the wide surface, from the SAME heap bytes, so the
+    // erase below matches what was drawn without a second record to keep in step. Nothing attached
+    // is a fixture comparing the canvas, which is most of them.
+    if (_picture != nullptr)
+    {
+      DrawShipLines2x(*_picture, _heap, _run);
+    }
+
     const std::uint8_t length = _heap.Read(_run);
     if (length < 4u)
     {
@@ -187,13 +195,13 @@ namespace Elite
     } while (y < length);
   }
 
-  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count, Picture* _picture) noexcept
   {
     _heap.Write(_run, _count);
-    DrawShipLines(_canvas, _heap, _run);
+    DrawShipLines(_canvas, _heap, _run, _picture);
   }
 
-  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture) noexcept
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
@@ -201,7 +209,7 @@ namespace Elite
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
-    DrawShipLines(_canvas, _heap, _ship.heap);
+    DrawShipLines(_canvas, _heap, _ship.heap, _picture);
 
     // 6502: LL155's exit -- `CMP #4 / BCC LL82` clears it for a heap with no line on it, and the
     // `CPY XX20 / BCC LL27` that ends the loop leaves it set for every heap that had one.
@@ -223,10 +231,11 @@ namespace Elite
     }
   }
 
-  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen,
+                       Picture* _picture) noexcept
   {
     // The flag `EE51` returns goes nowhere from here: `SHPPT` overwrites it in `PROJ`'s arithmetic.
-    static_cast<void>(EraseShip(_canvas, _ship, _heap, false));
+    static_cast<void>(EraseShip(_canvas, _ship, _heap, false, _picture));
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
@@ -249,7 +258,20 @@ namespace Elite
     }
 
     _ship.state = With(_ship.state, ShipStateBit::OnScreen);
-    StoreLineCountAndDraw(_canvas, _heap, heap, 8);
+
+    /*
+     * `SHPPT` draws a distant ship as TWO short horizontal lines, one above the other, which is
+     * what `StorePoint` has just put on the heap -- and the wide surface draws the same two out of
+     * the same bytes when `StoreLineCountAndDraw` below reaches `DrawShipLines2x`. There is nothing
+     * for the dot to do here: since RS-3 the twin reads the faithful heap, so a mark that had an
+     * arithmetic of its own could not exist.
+     *
+     * Its position is the faithful one and not a `Project2x`, which RS-3 measured to be the only
+     * honest answer: `PROJ` divides through `DVID3B`, whose eight-bit mantissa is out by up to
+     * fifteen pixels inside `PLS6`'s own range, so a twin that divided exactly would put a distant
+     * ship somewhere else entirely (§13).
+     */
+    StoreLineCountAndDraw(_canvas, _heap, heap, 8, _picture);
   }
 
   void DotProducts(Vector16 _vector, GeometryWorkspace& _geometry) noexcept
@@ -857,10 +879,15 @@ namespace Elite
     LineHeap& heap;
     const Blueprint& blueprint;
 
+    /// The wide surface (Resolution.md RS-2). A reference rather than a pointer: inside `DrawShip`
+    /// there is always a universe, and the nullable pointers are the public routines'.
+    Picture& picture;
+
     std::uint8_t detail = 31;               ///< 6502: XX4 -- how much detail the distance allows
     std::array<std::uint8_t, 9> position{}; ///< 6502: XX18 -- the position, halved, then rotated
     HeapOffset run{};                       ///< 6502: the ship's own block of the line heap
     std::uint8_t used = 1;                  ///< 6502: U -- heap bytes used, one because byte 0 is the count
+
   };
 
   /*
@@ -891,7 +918,7 @@ namespace Elite
     if (Has(_render.work.newb, NewbBit::Remove))
     {
       // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
-      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn));
+      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture));
       return Presence::Erased;
     }
 
@@ -909,7 +936,7 @@ namespace Elite
 
       // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
-      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn);
+      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture);
       SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
     }
 
@@ -933,7 +960,8 @@ namespace Elite
       // 6502: LL14.
       if (!Has(_render.work.state, ShipStateBit::Exploding))
       {
-        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false, &_render.picture));
         return Presence::Erased;
       }
 
@@ -1291,6 +1319,7 @@ namespace Elite
           ++x;
           _render.geometry.xx3[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
         }
+
       }
 
       // 6502: LL50 -- on to the next vertex, six bytes along, and stop when the count runs out or
@@ -1329,7 +1358,7 @@ namespace Elite
     _render.run = _render.work.heap;
     if (Has(_render.work.state, ShipStateBit::OnScreen))
     {
-      DrawShipLines(_render.canvas, _render.heap, _render.run);
+      DrawShipLines(_render.canvas, _render.heap, _render.run, &_render.picture);
     }
     _render.work.state = With(_render.work.state, ShipStateBit::OnScreen);
 
@@ -1428,6 +1457,15 @@ namespace Elite
 
         if (!clipped.rejected)
         {
+          /*
+           * NOTHING TWINS HERE SINCE RS-3, and the absence is the point (Resolution.md §4.1 and the
+           * journal). RS-2 pushed a separately doubled and re-clipped line onto a parallel wide heap
+           * at this exact spot. It does not need to exist: `PushHeapLine` below writes the four
+           * bytes, and `DrawShipLines2x` reads those same four and doubles them itself, so the wide
+           * line cannot disagree with the faithful one about anything -- and a whole heap, a
+           * `Universe` field and a state-hash exclusion went with it.
+           */
+
           // 6502: LL80 -- and stop as soon as the heap this blueprint asked for is full.
           PushHeapLine(_render.heap, _render.run, clipped.line, _render.used);
           if (_render.used >= heapLimit)
@@ -1447,7 +1485,7 @@ namespace Elite
     }
 
     // 6502: LL81 -- the heap's length goes in byte 0, and then it is drawn.
-    StoreLineCountAndDraw(_render.canvas, _render.heap, _render.run, _render.used);
+    StoreLineCountAndDraw(_render.canvas, _render.heap, _render.run, _render.used, &_render.picture);
   }
 
   /*
@@ -1464,14 +1502,14 @@ namespace Elite
     void DrawExplosion(Universe& _universe) noexcept
     {
       DrawExplosionCloud(_universe.canvas, _universe.math, _universe.rng, _universe.work, _universe.heap, _universe.geometry,
-                         _universe.bubble, _universe.video, _universe.memoryMap);
+                         _universe.bubble, _universe.video, _universe.memoryMap, &_universe.picture);
     }
   } // namespace
 
   void DrawShip(Universe& _universe, Ship& _slot, bool _carryIn) noexcept
   {
-    ShipRender render{_universe.canvas, _universe.geometry, _universe.math,           _universe.clip,
-                      _universe.projection, _universe.work, _universe.heap, *_universe.flight.blueprint};
+    ShipRender render{_universe.canvas, _universe.geometry, _universe.math,   _universe.clip,    _universe.projection,
+                      _universe.work,   _universe.heap,     *_universe.flight.blueprint, _universe.picture};
 
     switch (TestPresence(render, _slot, _universe.flight.type, _universe.rng, _carryIn)) // 6502: part 1
     {
@@ -1481,7 +1519,7 @@ namespace Elite
       // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
       // decides which of the two it is, exactly as the tail jump does.
       DrawPlanetOrSun(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _universe.rng, _universe.work,
-                      _universe.projection, _universe.flight.type);
+                      _universe.projection, _universe.flight.type, &_universe.picture);
       return;
     case Presence::Erased:
       return; // 6502: EE51 -- and the flag it leaves is `LL9`'s exit, which nothing reads
@@ -1492,7 +1530,8 @@ namespace Elite
 
     if (MeasureRange(render) == Range::Dot) // 6502: part 2
     {
-      DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection); // 6502: LL13's JMP SHPPT
+      // 6502: LL13's JMP SHPPT
+      DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection, &_universe.picture);
       return;
     }
 

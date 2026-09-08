@@ -103,6 +103,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Cpu6502.h" />
+    <ClInclude Include="Oracle.h" />
     <ClInclude Include="OracleImage.h" />
     <ClInclude Include="GoldenCanvas.h" />
     <ClInclude Include="FlightPort.h" />
@@ -120,6 +121,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Cpu6502.cpp" />
+    <ClCompile Include="Oracle.cpp" />
     <ClCompile Include="OracleImage.cpp" />
     <ClCompile Include="ArithTests.cpp" />
     <ClCompile Include="Cpu6502Tests.cpp" />
@@ -170,6 +172,11 @@
     <ClCompile Include="ExplosionTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="GameLoopTests.cpp" />
+    <ClCompile Include="PictureTests.cpp" />
+    <ClCompile Include="PictureTextTests.cpp" />
+    <ClCompile Include="PictureLineTests.cpp" />
+    <ClCompile Include="PicturePlanetTests.cpp" />
+    <ClCompile Include="PictureDashboardTests.cpp" />
     <ClCompile Include="TacticsTests.cpp" />
     <ClCompile Include="RasterTests.cpp" />
     <ClCompile Include="SidRenderTests.cpp" />
@@ -179,7 +186,7 @@
     <!-- The parts of the executable that are decisions rather than API calls, compiled into the
          suite so they are covered rather than only shipped: the commander store, the palette and
          viewport arithmetic, and the key map. None is in this directory, so none uses this
-         project's precompiled header. Window.cpp, CanvasPresenter.cpp and Shell.cpp are
+         project's precompiled header. Window.cpp, ScreenPresenter.cpp and Shell.cpp are
          deliberately absent, because they need a window and a GPU; the Outpost build on the
          Windows leg of CI is what compiles those. -->
     <ClCompile Include="..\..\Outpost\SettingsFile.cpp">

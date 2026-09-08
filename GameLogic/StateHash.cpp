@@ -392,6 +392,20 @@ namespace Elite
 
     // ---- what the drawing works on
     FoldIntoStateHash(into, _universe.canvas);
+
+    /*
+     * `_universe.picture` IS NOT FOLDED, and this comment is the record of that (Resolution.md
+     * §3.4). It was two fields until RS-3 collapsed the wide line heap into the faithful one.
+     *
+     * The canvas above is the game's own bytes and is hashed. The 640x400 surface beside it is a
+     * SECOND RENDERING of the same frame, produced by code the resolution slices keep changing --
+     * a thinner sun, a redrawn crosshair -- and none of those changes is a change to the game. Fold
+     * it and every one of them re-records the replay tables, which is exactly the brittleness Risk
+     * R10 names, applied to the whole game rather than to two goldens.
+     *
+     * A twin that LEAKED into the game would be invisible to this hash and is not invisible: the
+     * replay runs with the twins present and absent and requires the same digest (§8.4).
+     */
     FoldIntoStateHash(into, _universe.draw);
     FoldIntoStateHash(into, _universe.math);
     FoldIntoStateHash(into, _universe.geometry);

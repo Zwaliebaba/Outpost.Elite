@@ -16,6 +16,9 @@
     <ClInclude Include="Cpu6502.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="Oracle.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
     <ClInclude Include="OracleImage.h">
       <Filter>Oracle</Filter>
     </ClInclude>
@@ -38,6 +41,9 @@
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="Cpu6502.cpp">
+      <Filter>Oracle</Filter>
+    </ClCompile>
+    <ClCompile Include="Oracle.cpp">
       <Filter>Oracle</Filter>
     </ClCompile>
     <ClCompile Include="OracleImage.cpp">
@@ -161,6 +167,21 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="GameLoopTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PictureTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PictureTextTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PictureLineTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PicturePlanetTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PictureDashboardTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="TacticsTests.cpp">
