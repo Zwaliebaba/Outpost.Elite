@@ -141,11 +141,11 @@ namespace GameLogicTests
       CompareState(cpu, universe, at, L"straight after Mirror");
 
       // And one byte the game would have changed shows up as exactly one difference, by name.
-      cpu.memory[at.lsp] = static_cast<std::uint8_t>(universe.heaps.lsp + 1u);
+      cpu.memory[at.ballHeapTop] = static_cast<std::uint8_t>(universe.heaps.ballHeapTop + 1u);
       const std::vector<Difference> differences = Compare(cpu, universe, at);
       Assert::AreEqual(std::size_t{1}, differences.size(), L"one changed byte should be one difference");
       Assert::IsTrue(differences.front().name == L"LSP", (L"the difference was " + differences.front().name).c_str());
-      Assert::AreEqual(at.lsp, differences.front().address);
+      Assert::AreEqual(at.ballHeapTop, differences.front().address);
     }
   };
 

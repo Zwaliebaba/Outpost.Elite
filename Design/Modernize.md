@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,149 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,812 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,891 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -527,7 +527,7 @@ never global.
 | `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility, FoldIntoStateHash | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
 | `GeometryWorkspace.xx2` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, FoldIntoStateHash, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
 | `GeometryWorkspace.xx3` | `XX3` | MeasureRange, ProjectVertices | DrawExplosionCloud, FoldIntoStateHash, OpenHeapRun | PushEdges (after EitherFaceVisible) | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
-| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap, FoldIntoStateHash | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
+| `ClipState.clippingOff` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap, FoldIntoStateHash | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
 | `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
 | `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
 | `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine, FoldIntoStateHash | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
@@ -1886,6 +1886,40 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-08 — M6-c-2: the named oddities, and the counter had been reading `4'000'000` as a quote.**
+
+Fourteen names, 287 sites, and the family with no pattern to it: `Yx2M1` is `lowestVisibleRow`,
+`dontclip` is `clippingOff`, `LSP` is `ballHeapTop`, `STP` is `circleStep`, `PLTOG` is
+`planetDetail`, `PATG` is `authorNames` (which is what `Universe::options` already called the same
+flag), `FIST` is `legalStatus`, `newzp` is `keptQuotient`, `Ze` is `debris`, `frump` is
+`cloudCounter`, `sprx`/`spry` are `spriteX`/`spriteY`, and **`NEWB` is `traits` with `NewbBit` as
+`TraitBit`** — trader, bounty hunter, hostile, pirate, docking, innocent, cop and remove, which is a
+list of traits and not a word in any language. `SUNX` came OUT of the counter's vocabulary instead
+of being renamed: it says what it holds, which is the test this slice applies to everything else.
+
+**THE COUNTER WAS WRONG BY 366 AND THE RENAMER BY THE SAME BUG.** `Cpu6502::CallSubroutine(addr,
+4'000'000)` is all over the suite, and a scanner that reads `'` as a character literal swallows every
+identifier between one digit separator and the next. It made `origin-identifiers` read 1,924 where
+the tree had 2,290, and it made the first rename pass skip `at.fist` at one line and rename its use
+forty lines later — which the compiler caught, and which is the only reason it was found at all.
+Both scanners know a digit separator now: an apostrophe between two digits is code. The corrected
+readings are in the entries above; the ceiling is 1,891 and the direction of travel is unchanged.
+
+**AND THE FIRST FIX WAS ALSO WRONG.** Stripping comments and then literals is wrong in one order and
+stripping literals and then comments is wrong in the other: a comment's apostrophe ("sprite 1's low
+nibble") opens a literal in what the first pass left, and a literal's `//` opens a comment. One scan
+cannot get the order wrong because there is no order, and `code_only` is that scan. `strip_comments`
+is left alone deliberately — eight other counters are calibrated against it, and re-measuring them
+is not this slice.
+
+Two collisions worth recording. `dontclip` wanted to be `unclipped` and `ShipDrawTests` already had
+a local counter of that name, so the field is `clippingOff`. And `channel_census.py` holds its field
+names in three hand-written tables, so a renamed workspace field has to move in the tool and in
+§4.3's table together — which is the shape of every workspace rename left in this phase.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 2,178 → 1,891.
+
 **2026-09-08 — M6-c-1: the music player's fifteen bytes, and two of them were named backwards.**
 
 The first family, and the one that stands alone: `MusicPlayer`'s bytes are read by `Music.cpp`,
@@ -1917,7 +1951,8 @@ history and says so.
 
 454 tests green, all eighteen checks, and the replay digests unmoved — which is the row's own
 acceptance and the reason a rename slice runs the whole suite rather than the file's own.
-`origin-identifiers` 1,924 → 1,812.
+`origin-identifiers` 1,924 → 1,812 as the counter then read it, and 2,290 → 2,178 as it reads
+now (M6-c-2).
 
 **2026-09-08 — M6-c-0: the instrument, and "is a label" turned out to be the wrong question.**
 
@@ -1953,7 +1988,9 @@ convenience**: M6-f deletes the upstream tree, and a counter that reads the orig
 zero once the original is gone.
 
 The reading: **1,924 sites** — 1,060 in `GameLogic/`, 1 in `Outpost/` and 863 in the suite, which is
-where the slice's weight actually is and not where the row implies it. The ceiling is set there and
+where the slice's weight actually is and not where the row implies it. **All three numbers are wrong
+and M6-c-2 says why**: the counter read `4'000'000` as a character literal and swallowed the code
+after it. The true figure was 2,290. The ceiling is set there and
 only goes down. Nothing in `GameLogic/` changed; the suite is unmoved at 454.
 
 **2026-09-08 — M6-a's two questions ruled, and M6-b has a shape again.**

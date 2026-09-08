@@ -640,7 +640,7 @@ namespace Elite
     ClipResult result;
     result.swap = _swapIn;
 
-    if ((_clip.dontclip & 0x80u) != 0u)
+    if ((_clip.clippingOff & 0x80u) != 0u)
     {
       result.line = RepackClipped(_line);
       return result;
@@ -915,7 +915,7 @@ namespace Elite
     }
 
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
-    if (Has(_render.work.newb, NewbBit::Remove))
+    if (Has(_render.work.traits, TraitBit::Remove))
     {
       // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
       static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture));

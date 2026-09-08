@@ -66,7 +66,7 @@ namespace GameLogicTests
       std::uint16_t k = 0;
       std::uint16_t k3 = 0;
       std::uint16_t k4 = 0;
-      std::uint16_t stp = 0;
+      std::uint16_t circleStep = 0;
       std::uint16_t qq8 = 0;
       std::uint16_t qq12 = 0;
       std::uint16_t qq22 = 0;
@@ -88,7 +88,7 @@ namespace GameLogicTests
           k(_oracle.Label("K")),
           k3(_oracle.Label("K3")),
           k4(_oracle.Label("K4")),
-          stp(_oracle.Label("STP")),
+          circleStep(_oracle.Label("STP")),
           qq8(_oracle.Label("QQ8")),
           qq12(_oracle.Label("QQ12")),
           qq22(_oracle.Label("QQ22")),
@@ -656,7 +656,7 @@ namespace GameLogicTests
             // 6502: K3, K4, K and STP -- what `TT14` hands `CIRCLE2`, and the circle it draws with
             // them. The trap came off with the seam in M3-b-1b, so the pixels are the comparison
             // and these four say WHERE a disagreement is if one turns up.
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.stp], universe.heaps.stp, (where + L": STP").c_str());
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.circleStep], universe.heaps.circleStep, (where + L": STP").c_str());
             CompareScreens(cpu, zp.screen, universe.canvas, where);
             ++compared;
           }

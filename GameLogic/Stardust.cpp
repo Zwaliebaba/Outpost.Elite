@@ -416,7 +416,7 @@ namespace Elite
        */
       std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ
       const ScaledDivision step = DivideSpeedBy(_flight, static_cast<std::uint8_t>(_dust.z[at] >> 3)); // 6502: JSR DV41
-      _dust.newzp = step.whole;                                                                          // 6502: LDA P / STA newzp
+      _dust.keptQuotient = step.whole;                                                                          // 6502: LDA P / STA newzp
 
       // 6502: EOR RAT2 / STA S -- (S R) is the step with the view's sign over it, R being the
       // fraction `DVID4` left; and (A P) is the particle's x.
@@ -463,8 +463,8 @@ namespace Elite
        */
       const std::uint8_t room = static_cast<std::uint8_t>((x.hi & 0x7Fu) ^ 0x7Fu);
 
-      bool killed = room <= _dust.newzp;
-      bool entryCarry = room == _dust.newzp;
+      bool killed = room <= _dust.keptQuotient;
+      bool entryCarry = room == _dust.keptQuotient;
       bool atSide = killed;
 
       if (!killed)

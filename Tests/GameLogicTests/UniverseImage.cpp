@@ -159,7 +159,7 @@ namespace GameLogicTests
     cells.push_back(Direct(L"DTW1", _at.dtw1, _universe.sentences.lowerCaseBits, CellScope::Compared));
     cells.push_back(Direct(L"DTW2", _at.dtw2, _universe.sentences.sentenceStart, CellScope::Compared));
     cells.push_back(Direct(L"DTW6", _at.dtw6, _universe.sentences.alwaysLower, CellScope::Compared));
-    cells.push_back(Direct(L"LSP", _at.lsp, _universe.heaps.lsp, CellScope::Compared));
+    cells.push_back(Direct(L"LSP", _at.ballHeapTop, _universe.heaps.ballHeapTop, CellScope::Compared));
 
     /*
      * 6502: SUNX, Yx2M1, K5, K6, STP, FLAG and PLTOG -- the rest of the planet and sun state, cells
@@ -175,12 +175,12 @@ namespace GameLogicTests
      */
     cells.push_back(Direct(L"SUNX", _at.sunx, _universe.heaps.sunX, CellScope::Compared));
     cells.push_back(Direct(L"SUNX+1", static_cast<std::uint16_t>(_at.sunx + 1u), _universe.heaps.sunXNext, CellScope::Compared));
-    cells.push_back(Direct(L"Yx2M1", _at.yx2m1, _universe.heaps.yx2M1, CellScope::Compared));
+    cells.push_back(Direct(L"Yx2M1", _at.yx2m1, _universe.heaps.lowestVisibleRow, CellScope::Compared));
     Run(cells, L"K5", _at.k5, _universe.heaps.k5.data(), _universe.heaps.k5.size(), CellScope::Image);
     Run(cells, L"K6", _at.k6, _universe.heaps.k6.data(), _universe.heaps.k6.size(), CellScope::Image);
-    cells.push_back(Direct(L"STP", _at.stp, _universe.heaps.stp, CellScope::Compared));
+    cells.push_back(Direct(L"STP", _at.circleStep, _universe.heaps.circleStep, CellScope::Compared));
     cells.push_back(Direct(L"FLAG", _at.flag, _universe.heaps.flag, CellScope::Compared));
-    cells.push_back(Direct(L"PLTOG", _at.pltog, _universe.heaps.pltog, CellScope::Compared));
+    cells.push_back(Direct(L"PLTOG", _at.planetDetail, _universe.heaps.planetDetail, CellScope::Compared));
     cells.push_back(Direct(L"V", _at.v, _universe.heaps.v, CellScope::Image));
     cells.push_back(Direct(L"V+1", static_cast<std::uint16_t>(_at.v + 1u), _universe.heaps.vNext, CellScope::Image));
     cells.push_back(Direct(L"DLY", _at.dly, _universe.message.delay, CellScope::Compared));

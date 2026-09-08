@@ -257,9 +257,48 @@ ORIGIN_IDENTIFIERS = (
 NAME_PREFIX = re.compile(r"^(?:sm_|m_|g_|_)")
 IDENTIFIER = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 
-# A character literal is not an identifier, and `Put('m')` is not a routine still called `m`. Found
-# by the self-test's own sample rather than by review, which is the whole reason each counter has one.
-LITERAL = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
+def code_only(_text: str) -> str:
+    """Comments, string literals and character literals out, in ONE pass over the text.
+
+    `strip_comments` and a literal regex run one after the other are wrong in both orders and this
+    counter met both halves of it: a character literal holds `Put('m')`, which is not a routine still
+    called `m`, and a comment holds an apostrophe -- "sprite 1's low nibble" -- which opens a
+    character literal in whatever the other pass left behind and swallows code up to the next one.
+    That is how `lotus` came to be counted once in a file that does not use it. A single scan cannot
+    get the order wrong because there is no order: whichever opens first closes first.
+
+    `strip_comments` above is left alone deliberately -- eight other counters are calibrated against
+    it and this is not the slice that re-measures them.
+    """
+    out: list[str] = []
+    at = 0
+    end = len(_text)
+    while at < end:
+        here = _text[at]
+        pair = _text[at : at + 2]
+        if pair == "//":
+            at = _text.find("\n", at)
+            if at < 0:
+                break
+        elif pair == "/*":
+            closed = _text.find("*/", at + 2)
+            at = end if closed < 0 else closed + 2
+        elif here == "'" and at > 0 and _text[at - 1].isdigit() and at + 1 < end and _text[at + 1].isdigit():
+            # A DIGIT SEPARATOR, not a character literal: `4'000'000` is all over the suite, and
+            # reading its apostrophe as a quote swallows every identifier up to the next one. This
+            # is what made the two-pass strip read 99 sites FEWER than there are.
+            out.append(here)
+            at += 1
+        elif here in "\"'":
+            at += 1
+            while at < end and _text[at] != here:
+                at += 2 if _text[at] == "\\" else 1
+            at += 1
+        else:
+            out.append(here)
+            at += 1
+    return "".join(out)
+
 
 
 def count_origin_identifiers(_root: Path) -> int:
@@ -280,7 +319,7 @@ def count_origin_identifiers(_root: Path) -> int:
             # sites are `cpu.c` -- and the whole file leaves the tree at M6-f anyway.
             if path.stem == "Cpu6502":
                 continue
-            code = LITERAL.sub(" ", strip_comments(path.read_text(encoding="utf-8", errors="replace")))
+            code = code_only(path.read_text(encoding="utf-8", errors="replace"))
             for match in IDENTIFIER.finditer(code):
                 if NAME_PREFIX.sub("", match.group(0)) in vocabulary:
                     total += 1

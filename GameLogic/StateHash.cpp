@@ -107,23 +107,23 @@ namespace Elite
       _into.Bytes(_dust.z);
       _into.Bytes(_dust.zLow);
       _into.Byte(_dust.count);
-      _into.Byte(_dust.newzp);
+      _into.Byte(_dust.keptQuotient);
     }
 
     void FoldIntoStateHash(Folder& _into, const PlanetSunState& _heaps) noexcept
     {
       _into.Bytes(_heaps.sun);
       _into.Bytes(_heaps.ball);
-      _into.Byte(_heaps.lsp);
+      _into.Byte(_heaps.ballHeapTop);
       _into.Byte(_heaps.sunX);
       _into.Byte(_heaps.sunXNext);
-      _into.Byte(_heaps.yx2M1);
-      _into.Byte(_heaps.pltog);
+      _into.Byte(_heaps.lowestVisibleRow);
+      _into.Byte(_heaps.planetDetail);
       _into.Byte(_heaps.v);
       _into.Byte(_heaps.vNext);
       _into.Bytes(_heaps.k5);
       _into.Bytes(_heaps.k6);
-      _into.Byte(_heaps.stp);
+      _into.Byte(_heaps.circleStep);
       _into.Byte(_heaps.flag);
     }
 
@@ -153,7 +153,7 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const ClipState& _clip) noexcept
     {
-      _into.Byte(_clip.dontclip);
+      _into.Byte(_clip.clippingOff);
     }
 
     void FoldIntoStateHash(Folder& _into, const Projection& _projection) noexcept

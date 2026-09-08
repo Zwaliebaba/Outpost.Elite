@@ -117,9 +117,9 @@ namespace GameLogicTests
       const Where at(oracle);
       const std::uint16_t hfs1 = oracle.Label("HFS1");
       const std::uint16_t yx2m1 = oracle.Label("Yx2M1");
-      const std::uint16_t dontclip = oracle.Label("dontclip");
+      const std::uint16_t clippingOff = oracle.Label("dontclip");
 
-      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t circleStep = oracle.Label("STP");
 
       /*
      * 6502: STP -- and `HFS1` DOES NOT SET IT.
@@ -136,9 +136,9 @@ namespace GameLogicTests
         {
           Universe universe;
           Seed(universe, 0x2Bu);
-          universe.heaps.yx2M1 = 143u;
-          universe.heaps.lsp = 0u;
-          universe.heaps.stp = step;
+          universe.heaps.lowestVisibleRow = 143u;
+          universe.heaps.ballHeapTop = 0u;
+          universe.heaps.circleStep = step;
           for (std::size_t index = 0; index < universe.heaps.ball.size(); ++index)
           {
             universe.heaps.ball[index] = 0xFFu;
@@ -147,9 +147,9 @@ namespace GameLogicTests
           Cpu6502 cpu = oracle.Fresh();
           FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
           Mirror(universe, cpu, at);
-          cpu.memory[yx2m1] = universe.heaps.yx2M1;
-          cpu.memory[dontclip] = 0u;
-          cpu.memory[stp] = step;
+          cpu.memory[yx2m1] = universe.heaps.lowestVisibleRow;
+          cpu.memory[clippingOff] = 0u;
+          cpu.memory[circleStep] = step;
 
           Elite::DrawWorkspace draw;
           Elite::GeometryWorkspace geometry;
@@ -189,7 +189,7 @@ namespace GameLogicTests
             Assert::AreEqual<std::uint32_t>(0u, touched, (where + L": and drawing it twice erases it").c_str());
           }
 
-          Assert::AreEqual(cpu.memory[at.lsp], universe.heaps.lsp, (where + L": LSP").c_str());
+          Assert::AreEqual(cpu.memory[at.ballHeapTop], universe.heaps.ballHeapTop, (where + L": LSP").c_str());
           for (std::size_t index = 0; index < universe.heaps.ball.size(); ++index)
           {
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.lsx2 + index)], universe.heaps.ball[index],
@@ -223,7 +223,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const Where at(oracle);
       const std::uint16_t laun = oracle.Label("LAUN");
-      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t circleStep = oracle.Label("STP");
       const std::uint16_t noise = oracle.Label("NOISE");
 
       // Every view the tunnel can be drawn over: the docked screens as well as the space view,
@@ -233,22 +233,22 @@ namespace GameLogicTests
         Universe universe;
         Seed(universe, 0x71u);
         universe.view = view;
-        universe.heaps.yx2M1 = 143u;
-        universe.heaps.lsp = 0u;
+        universe.heaps.lowestVisibleRow = 143u;
+        universe.heaps.ballHeapTop = 0u;
 
         /*
          * `STP` starts at something the launch must overwrite. Four is the value §6.95 had the app
          * seeding precisely because nothing on this path wrote one -- and `LAUN` is what writes it,
          * so the seed stops being load-bearing the moment this routine exists.
          */
-        universe.heaps.stp = 4u;
+        universe.heaps.circleStep = 4u;
 
         Cpu6502 cpu = oracle.Fresh();
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);
         cpu.memory[oracle.Label("Yx2M1")] = 143u;
         cpu.memory[oracle.Label("dontclip")] = 0u;
-        cpu.memory[stp] = 4u;
+        cpu.memory[circleStep] = 4u;
 
         // The three the platform owns, plus §6.108's: `TT66` reaches `NOSPRITES`, and `NOSPRITES`
         // writes VIC registers that are the ship blueprint table in the oracle's flat memory.
@@ -273,8 +273,8 @@ namespace GameLogicTests
                                        (where + L": and so does the port").c_str());
 
         // 6502: LDA #8 / STA STP -- the step, which is the whole of §6.94's missing writer.
-        Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
-        Assert::AreEqual(cpu.memory[stp], universe.heaps.stp, (where + L": STP").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, cpu.memory[circleStep], (where + L": the shipped STP").c_str());
+        Assert::AreEqual(cpu.memory[circleStep], universe.heaps.circleStep, (where + L": STP").c_str());
 
         // 6502: LDA QQ11 / PHA / ... / PLA / STA QQ11 -- the view survives the TT66 inside.
         Assert::AreEqual(cpu.memory[at.qq11], universe.view, (where + L": QQ11").c_str());
@@ -324,7 +324,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const Where at(oracle);
       const std::uint16_t ll164 = oracle.Label("LL164");
-      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t circleStep = oracle.Label("STP");
       const std::uint16_t noise = oracle.Label("NOISE");
       const std::uint16_t noise2 = oracle.Label("NOISE2");
       const std::uint16_t delay = oracle.Label("DELAY");
@@ -334,16 +334,16 @@ namespace GameLogicTests
         Universe universe;
         Seed(universe, 0x5Eu);
         universe.view = view;
-        universe.heaps.yx2M1 = 143u;
-        universe.heaps.lsp = 0u;
-        universe.heaps.stp = 8u; // the launch's step, so a routine that forgot to store 4 is visible
+        universe.heaps.lowestVisibleRow = 143u;
+        universe.heaps.ballHeapTop = 0u;
+        universe.heaps.circleStep = 8u; // the launch's step, so a routine that forgot to store 4 is visible
 
         Cpu6502 cpu = oracle.Fresh();
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);
         cpu.memory[oracle.Label("Yx2M1")] = 143u;
         cpu.memory[oracle.Label("dontclip")] = 0u;
-        cpu.memory[stp] = 8u;
+        cpu.memory[circleStep] = 8u;
 
         cpu.AddTrap(delay);
         cpu.AddTrap(oracle.Label("DOVDU19"));
@@ -358,8 +358,8 @@ namespace GameLogicTests
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
 
         // 6502: LDA #4 / JSR HFS2 -- the step, which is the whole reason this is not `LAUN`.
-        Assert::AreEqual<std::uint8_t>(Elite::HYPERSPACE_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
-        Assert::AreEqual(cpu.memory[stp], universe.heaps.stp, (where + L": STP").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::HYPERSPACE_TUNNEL_STEP, cpu.memory[circleStep], (where + L": the shipped STP").c_str());
+        Assert::AreEqual(cpu.memory[circleStep], universe.heaps.circleStep, (where + L": STP").c_str());
 
         // 6502: LDY #1 / JSR DELAY -- one vertical sync, plus one frame for each circle drawn.
         std::uint32_t delays = 0;
@@ -406,9 +406,9 @@ namespace GameLogicTests
       {
         Universe universe;
         Seed(universe, 0x71u);
-        universe.heaps.yx2M1 = 143u;
-        universe.heaps.lsp = 0u;
-        universe.heaps.stp = step;
+        universe.heaps.lowestVisibleRow = 143u;
+        universe.heaps.ballHeapTop = 0u;
+        universe.heaps.circleStep = step;
 
         Elite::ClipState clip;
         Counting counting;
@@ -421,15 +421,15 @@ namespace GameLogicTests
       // comparisons pass: the count above must not be reachable through a screen difference.
       Universe unpaced;
       Seed(unpaced, 0x71u);
-      unpaced.heaps.yx2M1 = 143u;
-      unpaced.heaps.lsp = 0u;
-      unpaced.heaps.stp = 8u;
+      unpaced.heaps.lowestVisibleRow = 143u;
+      unpaced.heaps.ballHeapTop = 0u;
+      unpaced.heaps.circleStep = 8u;
 
       Universe paced;
       Seed(paced, 0x71u);
-      paced.heaps.yx2M1 = 143u;
-      paced.heaps.lsp = 0u;
-      paced.heaps.stp = 8u;
+      paced.heaps.lowestVisibleRow = 143u;
+      paced.heaps.ballHeapTop = 0u;
+      paced.heaps.circleStep = 8u;
 
       Elite::ClipState clipA;
       Elite::ClipState clipB;
@@ -547,8 +547,8 @@ namespace GameLogicTests
     struct LaunchWhere
     {
       std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
-      std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
-      std::uint16_t inwk, fist, stp, res2, reset, tt110, noise;
+      std::uint16_t col2, clippingOff, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
+      std::uint16_t inwk, legalStatus, circleStep, res2, reset, tt110, noise;
 
       explicit LaunchWhere(const OracleImage& _oracle)
       {
@@ -562,7 +562,7 @@ namespace GameLogicTests
         bet2 = _oracle.Label("BET2");
         bet2Next = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
         col2 = _oracle.Label("COL2");
-        dontclip = _oracle.Label("dontclip");
+        clippingOff = _oracle.Label("dontclip");
         yx2m1 = _oracle.Label("Yx2M1");
         slsp = _oracle.Label("SLSP");
         bomb = _oracle.Label("BOMB");
@@ -571,8 +571,8 @@ namespace GameLogicTests
         hfx = _oracle.Label("HFX");
         autoByte = _oracle.Label("auto");
         inwk = _oracle.Label("INWK");
-        fist = _oracle.Label("FIST");
-        stp = _oracle.Label("STP");
+        legalStatus = _oracle.Label("FIST");
+        circleStep = _oracle.Label("STP");
         res2 = _oracle.Label("RES2");
         reset = _oracle.Label("RESET");
         tt110 = _oracle.Label("TT110");
@@ -593,8 +593,8 @@ namespace GameLogicTests
       universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
       universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u));
-      universe.heaps.yx2M1 = 199u;
-      universe.heaps.lsp = 0x20u;
+      universe.heaps.lowestVisibleRow = 199u;
+      universe.heaps.ballHeapTop = 0x20u;
       universe.status.ecmCountdown = 20u;
       universe.status.ecmOurs = 0xFFu;
       universe.status.hyperspaceCounter = 5u;
@@ -607,8 +607,8 @@ namespace GameLogicTests
       _leaving.universe.control.roll = 200u;
       _leaving.universe.control.pitch = 40u;
       _leaving.universe.control.dockingComputer = 0xFFu;
-      _leaving.universe.clip.dontclip = 0x80u;
-      universe.heaps.stp = 4u; // what the short-range chart's fuel circle leaves behind
+      _leaving.universe.clip.clippingOff = 0x80u;
+      universe.heaps.circleStep = 4u; // what the short-range chart's fuel circle leaves behind
     }
 
     /// Send everything `Mirror` does not, and everything the launch reads.
@@ -625,8 +625,8 @@ namespace GameLogicTests
       _cpu.memory[_to.bet2] = universe.flight.bet2;
       _cpu.memory[_to.bet2Next] = universe.flight.bet2Next;
       _cpu.memory[_to.col2] = universe.text.palette.Byte();
-      _cpu.memory[_to.dontclip] = _leaving.universe.clip.dontclip;
-      _cpu.memory[_to.yx2m1] = universe.heaps.yx2M1;
+      _cpu.memory[_to.clippingOff] = _leaving.universe.clip.clippingOff;
+      _cpu.memory[_to.yx2m1] = universe.heaps.lowestVisibleRow;
       _cpu.memory[_to.qq22] = universe.status.hyperspaceCounter;
       _cpu.memory[_to.hfx] = universe.screen.hyperspaceEffect;
       _cpu.memory[_to.qq12] = universe.dockedFlag;
@@ -638,7 +638,7 @@ namespace GameLogicTests
        * writer in the whole game is `CIRCLE` -- which the docked screens reach exactly once, in
        * the short-range chart's fuel radius. A four is what the chart leaves.
        */
-      _cpu.memory[_to.stp] = universe.heaps.stp;
+      _cpu.memory[_to.circleStep] = universe.heaps.circleStep;
 
       _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() & 0xFFu);
       _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() >> 8);
@@ -670,13 +670,13 @@ namespace GameLogicTests
       same(_to.bet2, universe.flight.bet2, L"BET2");
       same(_to.bet2Next, universe.flight.bet2Next, L"BET2+1");
       same(_to.col2, universe.text.palette.Byte(), L"COL2");
-      same(_to.dontclip, _leaving.universe.clip.dontclip, L"dontclip");
-      same(_to.yx2m1, universe.heaps.yx2M1, L"Yx2M1");
+      same(_to.clippingOff, _leaving.universe.clip.clippingOff, L"dontclip");
+      same(_to.yx2m1, universe.heaps.lowestVisibleRow, L"Yx2M1");
       same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");
       same(_to.hfx, universe.screen.hyperspaceEffect, L"HFX");
       same(_to.qq12, universe.dockedFlag, L"QQ12");
       same(_to.bomb, universe.commander.energyBomb, L"BOMB");
-      same(_to.fist, universe.commander.legalStatus, L"FIST");
+      same(_to.legalStatus, universe.commander.legalStatus, L"FIST");
 
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(_cpu.memory[_to.slsp] | (_cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] << 8));
@@ -1054,7 +1054,7 @@ namespace GameLogicTests
       Leaving leaving;
       Occupy(leaving, 0x2Fu);
       leaving.universe.view = 0u;
-      leaving.universe.heaps.stp = 4u;
+      leaving.universe.heaps.circleStep = 4u;
 
       Cpu6502 cpu = oracle.Fresh();
       FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
@@ -1231,7 +1231,7 @@ namespace GameLogicTests
     {
       Leaving leaving;
       Occupy(leaving, 0x2Fu);
-      leaving.universe.heaps.stp = 4u;
+      leaving.universe.heaps.circleStep = 4u;
       for (std::size_t index = 0; index < leaving.universe.keys.size(); ++index)
       {
         leaving.universe.keys[index] = 0xFFu;
@@ -1398,7 +1398,7 @@ namespace GameLogicTests
       const std::uint16_t title = oracle.Label("TITLE");
       const std::uint16_t rdkey = oracle.Label("RDKEY");
       const std::uint16_t jstk = oracle.Label("JSTK");
-      const std::uint16_t patg = oracle.Label("PATG");
+      const std::uint16_t authorNames = oracle.Label("PATG");
       const std::uint16_t mulie = oracle.Label("MULIE");
       const std::uint16_t keylook = oracle.Label("KEYLOOK");
 
@@ -1484,7 +1484,7 @@ namespace GameLogicTests
                 leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12
                 Mirror(leaving.universe, cpu, at);
                 MirrorLeaving(leaving, cpu, at, to);
-                cpu.memory[patg] = authors;
+                cpu.memory[authorNames] = authors;
 
                 cpu.a = Elite::TITLE_START_TOKEN;
                 cpu.x = Elite::Byte(shipType);

@@ -458,7 +458,7 @@ namespace Elite
            * on both paths until the oracle disagreed on the type in an empty bubble.
            */
           _frame.work.ai = With(_frame.work.ai, AiBit::Active, AiBit::Hostile);
-          _frame.work.newb = Mask(NewbBit::Docking);
+          _frame.work.traits = Mask(TraitBit::Docking);
           a = _frame.work.ai;
         }
 
@@ -604,10 +604,10 @@ namespace Elite
     }
 
     // 6502: JSR Ze / CMP #136 / BEQ fothg -- one byte in 256 goes to the Cougar path.
-    RngResult ze = SeedDebris(_frame.work, _frame.rng, _frame.carry);
-    _frame.carry = ze.value == COUGAR_BYTE; // 6502: CMP #136
+    RngResult debris = SeedDebris(_frame.work, _frame.rng, _frame.carry);
+    _frame.carry = debris.value == COUGAR_BYTE; // 6502: CMP #136
 
-    if (ze.value == COUGAR_BYTE)
+    if (debris.value == COUGAR_BYTE)
     {
       /*
        * 6502: .fothg LDA K%+6 / AND #%00111110 / BNE fothg2 -- byte 6 of the PLANET's block, which
@@ -633,7 +633,7 @@ namespace Elite
      * `P%+7` counts from the branch: two bytes of `BCS`, then `LDA #COPS` (2) and `JSR NWSHP` (3)
      * make five, so the branch skips BOTH. A roll at or above the threshold means no policeman.
      */
-    _frame.carry = ze.value >= threshold; // 6502: CMP T
+    _frame.carry = debris.value >= threshold; // 6502: CMP T
     if (!_frame.carry)
     {
       // 6502: LDA #COPS / JSR NWSHP -- and `NWSHP` returns its own _frame.carry, which is the flag any
@@ -719,8 +719,8 @@ namespace Elite
     // because it was one function. Part 3's roll is dead by the time this runs -- every read of it
     // is behind the `fothg` branch, which returns -- so this is a fresh local and not the frame's
     // (M4-c-3).
-    const RngResult ze = SeedDebris(_frame.work, _frame.rng, _frame.carry);
-    _frame.carry = ze.value >= PIRATE_ROLL; // 6502: CMP #100
+    const RngResult debris = SeedDebris(_frame.work, _frame.rng, _frame.carry);
+    _frame.carry = debris.value >= PIRATE_ROLL; // 6502: CMP #100
 
     if (_frame.carry)
     {
@@ -731,7 +731,7 @@ namespace Elite
        * spawns four pirates also sets the longest cooldown. One to four of them, and each is
        * `DORND AND DORND AND 7` -- two rolls ANDed, so the low types are far more likely.
        */
-      const std::uint8_t count = static_cast<std::uint8_t>(ze.value & 3u);
+      const std::uint8_t count = static_cast<std::uint8_t>(debris.value & 3u);
       _frame.encounters = count;
 
       for (int remaining = static_cast<int>(count); remaining >= 0; --remaining)
@@ -758,7 +758,7 @@ namespace Elite
      * `THERE` is asked whether this is the Constrictor's system.
      */
     ++_frame.encounters;
-    const AddResult hunter = AddWithCarry(static_cast<std::uint8_t>(ze.value & 3u), Byte(ShipType::CobraMk3Pirate), _frame.carry);
+    const AddResult hunter = AddWithCarry(static_cast<std::uint8_t>(debris.value & 3u), Byte(ShipType::CobraMk3Pirate), _frame.carry);
     _frame.carry = hunter.carry;
     const std::uint8_t y = hunter.value;
 
@@ -807,7 +807,7 @@ namespace Elite
        * stepped over. The `CMP #200` is again there only for its CARRY, which `ROL A` shifts into
        * bit 0 of the AI byte.
        */
-      _frame.work.newb = Mask(NewbBit::Hostile);
+      _frame.work.traits = Mask(TraitBit::Hostile);
       const RngResult ai = _frame.rng.Next(_frame.carry);
       const ShiftResult rolled = RotateLeftValue(ai.value, ai.value >= THARGOID_ROLL);
       _frame.carry = rolled.carry;

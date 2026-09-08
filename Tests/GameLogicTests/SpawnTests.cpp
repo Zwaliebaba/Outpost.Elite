@@ -48,7 +48,7 @@ namespace GameLogicTests
     struct SpawnLabels
     {
       std::uint16_t frin = 0, kPercent = 0, many = 0, junk = 0, slsp = 0, mstg = 0, sspr = 0;
-      std::uint16_t tp = 0, tally = 0, fist = 0, tribble = 0, qq20 = 0, tek = 0, qq15 = 0;
+      std::uint16_t tp = 0, tally = 0, legalStatus = 0, tribble = 0, qq20 = 0, tek = 0, qq15 = 0;
       std::uint16_t inwk = 0, rand = 0, lso = 0, xx4 = 0, inf = 0, xx0 = 0;
 
       explicit SpawnLabels(const OracleImage& _oracle)
@@ -62,7 +62,7 @@ namespace GameLogicTests
         sspr = _oracle.Label("SSPR");
         tp = _oracle.Label("TP");
         tally = _oracle.Label("TALLY");
-        fist = _oracle.Label("FIST");
+        legalStatus = _oracle.Label("FIST");
         tribble = _oracle.Label("TRIBBLE");
         qq20 = _oracle.Label("QQ20");
         tek = _oracle.Label("tek");
@@ -624,7 +624,7 @@ namespace GameLogicTests
         cpu.memory[static_cast<std::uint16_t>(at.tribble + 1)] = system.tribbleHigh;
 
         commander.legalStatus = system.legal;
-        cpu.memory[at.fist] = system.legal;
+        cpu.memory[at.legalStatus] = system.legal;
 
         for (std::size_t good = 0; good < 17u; ++good)
         {
@@ -680,7 +680,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[at.tribble], commander.tribbles.lo, (where + L": TRIBBLE").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tribble + 1)], commander.tribbles.hi,
                          (where + L": TRIBBLE+1").c_str());
-        Assert::AreEqual(cpu.memory[at.fist], commander.legalStatus, (where + L": FIST").c_str());
+        Assert::AreEqual(cpu.memory[at.legalStatus], commander.legalStatus, (where + L": FIST").c_str());
         for (std::size_t good = 0; good < 17u; ++good)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.qq20 + good)],
@@ -736,7 +736,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const SpawnLabels at(oracle);
-      const std::uint16_t ze = oracle.Label("Ze");
+      const std::uint16_t debris = oracle.Label("Ze");
 
       // 244, 245 and 246 are the compare's two sides and the boundary itself.
       const std::uint8_t PREVIOUS[] = {0u, 1u, 128u, 244u, 245u, 246u, 255u};
@@ -770,7 +770,7 @@ namespace GameLogicTests
             work = Elite::Ship::FromBytes(shipBytes);
 
             cpu.c = carryIn;
-            const Elite::Testing::RunResult run = cpu.CallSubroutine(ze, 20'000);
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(debris, 20'000);
             Assert::IsTrue(run.completed, L"Ze returned");
 
             Elite::Rng rng;

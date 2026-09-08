@@ -1952,7 +1952,7 @@ namespace GameLogicTests
         station.roof.x.hi = item.roof;
         station.side.y.hi = 96u; // a third axis, so the blueprint is projected from a real frame
         station.energy = 200u;
-        station.newb = item.hostile ? Elite::Mask(Elite::NewbBit::Hostile) : std::uint8_t{0};
+        station.traits = item.hostile ? Elite::Mask(Elite::TraitBit::Hostile) : std::uint8_t{0};
         // 6502: LDA #LO(LSO) / STA INWK+33 -- `NWSPS` hands the station the SUN's heap (§6.112).
         station.heap = Elite::HeapOffset::FromAddress(Elite::SUN_HEAP_ADDRESS);
 

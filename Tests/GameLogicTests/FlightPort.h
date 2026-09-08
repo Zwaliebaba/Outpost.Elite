@@ -77,7 +77,7 @@ namespace GameLogicTests
       : game(*this, *this, unused)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
-      universe.heaps.stp = LAST_CIRCLE_STEP;
+      universe.heaps.circleStep = LAST_CIRCLE_STEP;
       universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
       universe.bubble.stationType = Elite::ShipType::Station;
       universe.LendSunHeap();

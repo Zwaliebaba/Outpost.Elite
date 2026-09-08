@@ -56,7 +56,7 @@ namespace Elite
     std::array<std::uint8_t, 2 * BALL_HEAP_SIZE> ball{};
 
     /// 6502: LSP -- how far up the ball heap the last circle got.
-    std::uint8_t lsp = 0;
+    std::uint8_t ballHeapTop = 0;
 
     /// 6502: SUNX(1 0) -- where the sun's centre is. One value for every row of it.
     std::uint8_t sunX = 0;
@@ -74,7 +74,7 @@ namespace Elite
      * Only four routines read it: `CHKON`, and `SUN` parts 1 and 2. `WPLS` uses the LITERAL 143 in
      * the same build, which is why it cannot be folded into a single constant.
      */
-    std::uint8_t yx2M1 = 0;
+    std::uint8_t lowestVisibleRow = 0;
 
     /*
      * 6502: PLTOG -- whether the planet gets its detail drawn: craters and meridians, or a circle.
@@ -87,7 +87,7 @@ namespace Elite
      * initialised from the image rather than defaulted here: a port that assumed "off" would draw
      * featureless planets for ever.
      */
-    std::uint8_t pltog = 0;
+    std::uint8_t planetDetail = 0;
 
     /*
      * 6502: V(1 0) -- 91 and 92, and the sun uses them as a COUNTER PAIR.
@@ -125,7 +125,7 @@ namespace Elite
      */
     std::array<std::uint8_t, 4> k5{};
     std::array<std::uint8_t, 4> k6{};
-    std::uint8_t stp = 0;
+    std::uint8_t circleStep = 0;
     std::uint8_t flag = 0;
 
     /// 6502: LSX2,Y and LSY2,Y -- named because the second is the first plus 256.

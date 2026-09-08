@@ -165,7 +165,7 @@ namespace Elite
   /// 6502: LDA #%11110001 -- the AI byte a station gives the ship it launches, and
   /// `LDX #%00100100` the `NEWB` a rock hermit gives the pirate it turns into.
   inline constexpr std::uint8_t STATION_LAUNCH_AI = 0xF1;
-  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = Mask(NewbBit::Innocent, NewbBit::Hostile);
+  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = Mask(TraitBit::Innocent, TraitBit::Hostile);
 
   /// 6502: CPX #4 / BCS TA22 -- a station launches Vipers until there are four of them.
   inline constexpr std::uint8_t MAXIMUM_POLICE = 4;

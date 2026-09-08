@@ -157,7 +157,7 @@ namespace Elite
      * which is a defined byte rather than a fault, and reproducing it costs nothing.
      */
     const std::uint8_t defaults = DefaultNewbFor(_shipType);
-    _work.newb = static_cast<std::uint8_t>(Without(defaults, NewbBit::Docking, NewbBit::Remove) | _work.newb);
+    _work.traits = static_cast<std::uint8_t>(Without(defaults, TraitBit::Docking, TraitBit::Remove) | _work.traits);
 
     // 6502: LDY #NI%-1 / .NWL3 LDA INWK,Y / STA (INF),Y / DEY / BPL NWL3 / SEC / RTS.
     _bubble.blocks[slot] = _work;

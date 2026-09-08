@@ -37,8 +37,8 @@ namespace Elite
        * They are RAM in the original and locals here, because `PTCLS2` writes them at the top and
        * reads them further down the same call; nothing else in the game touches either byte.
        */
-      std::uint8_t sprx = 0;
-      std::uint8_t spry = 0;
+      std::uint8_t spriteX = 0;
+      std::uint8_t spriteY = 0;
 
       if (_video != nullptr)
       {
@@ -48,8 +48,8 @@ namespace Elite
         // write, so the two answers are chosen before the branch rather than after it.
         const bool distant = _work.z.hi >= 7u;
         ApplySpriteExpansion(*_video, distant ? 0xFDu : 0xFFu);
-        sprx = distant ? 44u : 32u;
-        spry = distant ? 40u : 30u;
+        spriteX = distant ? 44u : 32u;
+        spriteY = distant ? 40u : 30u;
       }
 
       /*
@@ -114,12 +114,12 @@ namespace Elite
            * two branches because a sprite's x really is nine bits wide, and the y test is one
            * because a screen row is not.
            */
-          const AddResult lowX = AddWithCarry(k3[3], sprx, false);
+          const AddResult lowX = AddWithCarry(k3[3], spriteX, false);
           const AddResult highX = AddWithCarry(k3[2], 0, lowX.carry);
 
           if ((highX.value & 0x80u) == 0u && highX.value < 2u)
           {
-            const AddResult lowY = AddWithCarry(k3[1], spry, false);
+            const AddResult lowY = AddWithCarry(k3[1], spriteY, false);
             const AddResult highY = AddWithCarry(k3[0], 0, lowY.carry);
 
             if (highY.value == 0u && lowY.value < EXPLOSION_SPRITE_BOTTOM)
@@ -314,8 +314,8 @@ namespace Elite
 
     _math.q = scaled; // 6502: STA Q -- the distance the cloud size is divided by
 
-    const std::uint8_t frump = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
-    const AddResult grown = AddWithCarry(frump, 4u, carry);
+    const std::uint8_t cloudCounter = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
+    const AddResult grown = AddWithCarry(cloudCounter, 4u, carry);
 
     if (grown.carry)
     {
@@ -389,7 +389,7 @@ namespace Elite
      * first frame and never again. `PTCLS2S` is a `JMP PTCLS2` that exists only so the branch
      * reaches; the C64 is the only version with either.
      */
-    if (frump == EXPLOSION_CLOUD_START)
+    if (cloudCounter == EXPLOSION_CLOUD_START)
     {
       DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map, _picture);
       return;
