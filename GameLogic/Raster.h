@@ -15,9 +15,9 @@ namespace Elite
    * mode at a time, so the game reprograms it TWICE A FRAME from an interrupt that fires on a
    * chosen raster line, and `RASTCT` says which of the two set-ups is going in.
    *
-   * The handler reads seven consecutive two-byte tables at `LDX RASTCT` and writes six VIC
-   * registers from them. Four of the seven are constants (`LookupTables.h`); the other three have a
-   * second byte that is a separately named variable something writes, so they are `ScreenState`.
+   * The handler reads seven consecutive two-byte tables, indexed by `RASTCT`, and writes six VIC
+   * registers from them. Four of the seven are constants (`LookupTables.h`); the other three have
+   * a second byte that is a separately named variable something writes, so they are `ScreenState`.
    *
    * WHAT THIS IS FOR, since the port has no interrupts. FOUR of the six registers reach the screen
    * and they are two effects. `moonflower` and `welcome` are the ENERGY BOMB: the first puts the
@@ -41,7 +41,7 @@ namespace Elite
   /// upstream comment says it plainly: this byte is never changed, so only the space view flashes.
   inline constexpr std::uint8_t RASTER_BACKGROUND_DASHBOARD = 0x00;
 
-  /// 6502: BOMB -- bit 7 is "the energy bomb is going off", which is the bit `BIT BOMB / BPL` tests.
+  /// 6502: BOMB -- bit 7 is "the energy bomb is going off", and bit 7 is the only bit read.
   inline constexpr std::uint8_t BOMB_RUNNING = 0x80;
 
   /// 6502: VIC+&16 bit 4 -- the VIC-II's multicolour bit, which is the whole difference between
@@ -63,7 +63,8 @@ namespace Elite
   };
 
   /*
-   * 6502: COMIRQ1 from `LDX RASTCT` to `STA RASTCT`, which is the whole of its VIC-II half.
+   * 6502: COMIRQ1 from the load of `RASTCT` to the store back, which is the whole of its VIC-II
+   * half.
    *
    * Advances `_screen.rasterCounter` and returns what the pass just written would put on the
    * screen. `_bomb` is `BOMB`, and only its bit 7 is read.

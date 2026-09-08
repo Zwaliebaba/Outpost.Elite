@@ -33,8 +33,8 @@ namespace Elite
    *   RLINE+0/1  where to store the input, which is always INWK+5
    *   RLINE+2    the maximum line length, 9, which GTNME lowers to 7 and puts back
    *   RLINE+3    the lowest character accepted, '!'
-   *   RLINE+4    the highest, '{' -- and the test is `CMP RLINE+4 / BCS`, so '{' itself is refused
-   *              and the range is '!' to 'z' inclusive
+   *   RLINE+4    the highest, '{' -- and the test refuses anything at or above it, so '{' itself
+   *              is refused and the range is '!' to 'z' inclusive
    *
    * It is a block rather than three constants because the routine was written against the BBC's
    * OSWORD 0, and the C64 build keeps the shape even though nothing here is an operating system
@@ -76,15 +76,16 @@ namespace Elite
    * allowed range makes a beep instead of appearing. Three details are worth knowing before
    * reading it.
    *
-   * THE BEEP AND THE CHARACTER ARE THE SAME INSTRUCTION. An accepted character reaches `JSR CHPR`
-   * by falling past `LDA #7` through an `EQUB &2C` -- a `BIT absolute` opcode that swallows the two
-   * bytes after it -- so the routine has ONE print, and what it prints is either the key or the bell
-   * depending on which way it arrived. That is why a rejected key is not silently ignored.
+   * THE BEEP AND THE CHARACTER ARE THE SAME INSTRUCTION. An accepted character reaches the print
+   * by falling past the load of the bell character through a data byte that assembles as a
+   * three-byte instruction and swallows the two after it -- so the routine has ONE print, and
+   * what it prints is either the key or the bell depending on which way it arrived. That is why
+   * a rejected key is not silently ignored.
    *
-   * THE LOOP CONDITION IS CHPR'S CARRY. `BCC OSW0L` after the print always branches, because CHPR
+   * THE LOOP CONDITION IS CHPR'S CARRY. The branch after the print is always taken, because CHPR
    * returns with the carry clear (the same exit slice 1c-c-b found the justification depends on).
-   * So the branch is a jump written as a conditional, and reading it as conditional would suggest a
-   * way out of the loop that does not exist.
+   * So the branch is a jump written as a conditional, and reading it as conditional would suggest
+   * a way out of the loop that does not exist.
    *
    * RETURN IS STORED IN THE BUFFER. `OSW03` writes the carriage return at the end before returning,
    * so the line is terminated in place -- which is what makes the commander's name a CR-terminated

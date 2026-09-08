@@ -33,7 +33,7 @@
  * IT HAS TWO OUTER LOOPS AND NOT ONE, because the game does. `MLOOP`'s second half polls the
  * keyboard and dispatches, and every docked screen it reaches ends by blocking in `TT217`; `TT100`
  * runs a frame whether or not a key was pressed and only then falls into `MLOOP`. `QQ12` chooses
- * between them, exactly as `FRCE`'s `LDA QQ12 / BEQ` does, and `PlanSteps` -- the fixed-timestep
+ * between them, exactly as `FRCE`'s test of that byte does, and `PlanSteps` -- the fixed-timestep
  * accumulator ADR-005 §3 asks for -- is what paces both.
  *
  * `DockedSessionTests.cpp` builds the same graph out of a null presenter and drives it through
@@ -145,8 +145,8 @@ namespace
     app->game.Reset();
 
     /*
-     * 6502: `FRCE`'s `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` -- the whole main loop, and the
-     * flag is what chooses between its two halves.
+     * 6502: `FRCE`'s two-way dispatch on `QQ12` -- the whole main loop, and the flag is what
+     * chooses between its two halves.
      *
      * MLOOP's second half polls the keyboard, dispatches, and goes round; every docked screen it
      * reaches ends by blocking in `TT217`, so a docked game costs one present per key. `TT100` runs
@@ -168,8 +168,8 @@ namespace
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
 
-      // 6502: FRCE's `LDA QQ12 / BEQ` -- ONE question since M4-d, and two answers since InputTimer.md
-      // I-0: `FREEZE`'s third answer went with the pause screen (owner ruling 2026-09-08).
+      // 6502: FRCE's question about `QQ12` -- ONE question since M4-d, and TWO answers since
+      // InputTimer.md I-0 took `FREEZE`'s third with the pause screen (owner ruling 2026-09-08).
       const Elite::Game::Mode mode = app->game.ModeNow();
 
       if (mode == Elite::Game::Mode::Docked)

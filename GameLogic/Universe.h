@@ -264,11 +264,11 @@ namespace Elite
     /*
      * 6502: U -- the field width `BPRNT` was last given, and it is state because SV1 does not set it.
      *
-     * The competition number is printed with `CLC / JSR BPRNT` and no store to `U` first, so it
+     * The competition number is printed with the carry cleared and no store to `U` first, so it
      * comes out at whatever width the last caller left behind. `U` is a scratch byte in zero page
-     * that `ZERO` does not clear, and the upstream source says so in as many words. Harmless -- the
-     * number always has ten digits, so all that varies is a leading space -- but a port that chose
-     * a width here would be inventing one. It was `SaveScreen::numberWidth` until M3-a-3.
+     * that `ZERO` does not clear, and the upstream source says so in as many words. Harmless --
+     * the number always has ten digits, so all that varies is a leading space -- but a port that
+     * chose a width here would be inventing one. It was `SaveScreen::numberWidth` until M3-a-3.
      */
     std::uint8_t numberWidth = 0;
 
@@ -365,11 +365,11 @@ namespace Elite
     /*
      * `soundDisabled` WAS HERE AND IT WAS A SECOND `DNOIZ` (M5-a-5).
      *
-     * The original has ONE: `DK4` writes it (`STX DNOIZ`, the key code itself) and `NOISE` reads it
-     * (`LDA DNOIZ / BNE SOUR1`). This port had two -- this one, which the pause screen wrote, and
-     * `SoundBuffer::soundOff`, which `MakeNoise` reads -- so the byte was written twice and read
-     * NEVER, and pressing "2" on the pause screen did not switch the sound off. The same shape as
-     * the duplicate `QQ12` the replay slice found in `FlightPort`, and found the same way: by
+     * The original has ONE: `DK4` writes it -- the key code itself -- and `NOISE` reads it and
+     * branches away when it is non-zero. This port had two: this one, which the pause screen wrote,
+     * and `SoundBuffer::soundOff`, which `MakeNoise` reads -- so the byte was written twice and
+     * read NEVER, and pressing "2" on the pause screen did not switch the sound off. The same shape
+     * as the duplicate `QQ12` the replay slice found in `FlightPort`, and found the same way: by
      * asking which bytes the digest was not watching.
      */
 

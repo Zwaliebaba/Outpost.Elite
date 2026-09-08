@@ -19,9 +19,9 @@ namespace Elite
    * are kept separate here for the same reason: each is written independently by a different
    * control code, and folding them together would invent invariants the game does not have.
    *
-   * DTW7 is not a variable at all in the game. It is the operand byte of the `LDA #'A'` that
-   * opens MT16, so the routine that changes it is rewriting an instruction. The port gives it a
-   * name because what the trick achieves is a value.
+   * DTW7 is not a variable at all in the game. It is the operand byte of the load that opens
+   * MT16, so the routine that changes it is rewriting an instruction. The port gives it a name
+   * because what the trick achieves is a value.
    */
   struct ExtendedTextState
   {
@@ -36,8 +36,8 @@ namespace Elite
   };
 
   /*
-   * 6502: MT15 -- `LDA #0 / STA DTW4 / ASL A / STA DTW5`. Stop justifying and throw the buffered
-   * line away.
+   * 6502: MT15 -- clear both justification bytes. Stop justifying and throw the buffered line
+   * away.
    *
    * It is a function as well as a control code because `MESS` calls it as a SUBROUTINE, in the
    * middle of using the justifier as a measuring device: justify with bit 6 set so nothing flushes,
@@ -51,7 +51,7 @@ namespace Elite
    * 6502: DASC, which the game also knows as TT26.
    *
    * Every printed character in Elite passes through here, from both text systems at once: the
-   * recursive printer arrives by `JMP DASC` and the extended printer by DTS. What it decides is
+   * recursive printer arrives by a tail call and the extended printer by DTS. What it decides is
    * where the character goes. Normally it goes straight to the screen. With DTW4 set it goes
    * into a ninety-byte line buffer instead, and a form feed then empties that buffer to the
    * screen thirty columns at a time -- widening the gaps between words until each line ends

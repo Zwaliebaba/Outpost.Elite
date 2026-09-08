@@ -64,7 +64,7 @@ namespace Elite
     Cougar = 32,         ///< 6502: COU
     Dodo = 33,           ///< 6502: DOD -- a blueprint the station borrows, never a slot's type
     Planet = 128,        ///< 6502: TYPE with bit 7 set -- no blueprint, moved by MV40
-    Sun = 129,           ///< 6502: %10000001, which `AND #&81 / CMP #&81` singles out
+    Sun = 129,           ///< 6502: %10000001, which a mask-and-compare against &81 singles out
   };
 
   /// The byte a type is in `FRIN`, `MANY`'s index, `TYPE` and the image.
@@ -80,7 +80,7 @@ namespace Elite
     return static_cast<ShipType>(_byte);
   }
 
-  /// 6502: LDA TYPE / BMI -- the planet or the sun, which have no blueprint.
+  /// 6502: TYPE tested for its SIGN -- the planet or the sun, which have no blueprint.
   [[nodiscard]] constexpr bool IsBody(ShipType _type) noexcept
   {
     return (Byte(_type) & 0x80u) != 0u;
@@ -92,8 +92,8 @@ namespace Elite
     return _type == ShipType::RockHermit || (Byte(_type) >= Byte(ShipType::EscapePod) && Byte(_type) < Byte(ShipType::CobraMk3));
   }
 
-  /// 6502: CMP #SPL+1 / BCS / CMP #PLT / BCC -- the cargo range, plate to splinter, which `SFS1`
-  /// gives a random tumble and nothing else does.
+  /// 6502: the cargo range, plate to splinter, bounded at both ends -- which `SFS1` gives a
+  /// random tumble and nothing else does.
   [[nodiscard]] constexpr bool IsWreckage(ShipType _type) noexcept
   {
     return Byte(_type) >= Byte(ShipType::AlloyPlate) && Byte(_type) <= Byte(ShipType::Splinter);
