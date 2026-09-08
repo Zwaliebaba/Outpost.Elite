@@ -7,7 +7,6 @@
 #include "ExtendedTokens.h"
 #include "FlightLoop.h"
 #include "Hyperspace.h"
-#include "PauseScreen.h"
 #include "Ports.h"
 #include "SoundEffects.h"
 #include "StateTokens.h"
@@ -36,9 +35,9 @@ namespace Elite
    *
    * SO THE STEPS ARE COUNTED OUTSIDE AND TAKEN INSIDE. `Advance` used to do both, over a `double`
    * accumulator -- and the plan's row said it would move here, which it cannot: ADR-005 §3's
-   * accumulator is floating point by construction. `Step`, `StepDocked` and `StepPaused` each take
-   * ONE key and run ONE pass, and how many passes a wall-clock second is worth stays where the
-   * clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
+   * accumulator is floating point by construction. `Step` and `StepDocked` each take ONE key and run
+   * ONE pass (`StepPaused` went with the pause screen, InputTimer.md I-0), and how many passes a
+   * wall-clock second is worth stays where the clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
    *
    * THE PLATFORM ARRIVES AS FOUR REFERENCES, which is `Ports` minus the four members that are this
    * library's own: the token printer, the character printer, the sink and the extended printer are
@@ -74,11 +73,25 @@ namespace Elite
      */
     [[nodiscard]] bool Step(std::uint8_t _key) noexcept;
 
-    /// 6502: MLOOP's tail on a docked pass -- the countdowns, `TT17` and `TT102`, once.
-    void StepDocked(std::uint8_t _key) noexcept;
+    /*
+     * 6502: MLOOP on a docked pass -- part 5 whole, then `TT17` and `TT102`, once.
+     *
+     * Answers the VERTICAL SYNCS the pass asked `DELAY` for -- two off the space view, unless the
+     * view byte is odd and `PATG` is set, which is `RunLoopTail`'s own answer -- so the executable can pace
+     * the next pass by what this one waited (InputTimer.md T-2). It ran the two countdowns alone
+     * until T-2, so the Trumbles did not breed while docked and the wait was priced from a constant.
+     */
+    [[nodiscard]] std::uint8_t StepDocked(std::uint8_t _key) noexcept;
 
-    /// 6502: FREEZE -- one pass of the pause loop, which is one key.
-    void StepPaused(std::uint8_t _key) noexcept;
+    /*
+     * `StepPaused` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, owner ruling 2026-09-08).
+     *
+     * 6502: FREEZE -- `DK4`'s pause screen, which was the game's only settings interface: thirteen
+     * toggles walked by `DKS3`, two sound keys and a quit to the title. The port could enter it
+     * and not leave it (InputTimer.md I-3), and the ruling removed the screen rather than binding
+     * its keys. The thirteen bytes it toggled are still `Universe`'s and are set from the
+     * executable's settings file (InputTimer.md S-1); INST/DEL is an ordinary key now.
+     */
 
     /*
      * 6502: what `M%` answered on the last `Step`, for a caller that needs more than "may I step
@@ -94,31 +107,22 @@ namespace Elite
     }
 
     /*
-     * 6502: QQ12, and the one state the original does not have (M4-d).
+     * 6502: QQ12 -- which half of the main loop the game is in (M4-d).
      *
      * `FRCE` is `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` -- a two-way dispatch on a byte the
-     * game keeps -- so two of these three values are the game's own. `Paused` is the third and it
-     * is the PORT's: `FREEZE` is a loop that reads the keyboard and does not return, and a windowed
-     * program cannot stop pumping messages, so the freeze is a state the outer loop is in rather
-     * than a loop inside it (ADR-005 §3 makes the same trade for the frame rate).
-     *
-     * IT IS ONE ANSWER BECAUSE THE THREE ARE ORDERED. A frozen game is frozen in BOTH halves, so
-     * the pause test has to come above the `QQ12` test; the executable did that with two calls and
-     * a comment explaining the order, which is a rule a caller could get wrong. One value cannot be.
+     * game keeps -- so both values are the game's own. A THIRD, `Paused`, was the port's from M4-d
+     * until InputTimer.md I-0: `FREEZE` turned inside out into a state the outer loop was in. It
+     * went with the pause screen (owner ruling 2026-09-08); a windowed player's pause is the
+     * executable stopping the steps while the window is inactive (InputTimer.md §5.9).
      */
     enum class Mode : std::uint8_t
     {
       Flight, ///< 6502: QQ12 = 0 -- `FRCE`'s `JMP TT100`
       Docked, ///< 6502: QQ12 non-zero -- `FRCE`'s `JMP MLOOP`
-      Paused, ///< 6502: DK4's `CPX #&40` freeze, which is a state here and a loop there
     };
 
     [[nodiscard]] Mode ModeNow() const noexcept
     {
-      if (m_paused)
-      {
-        return Mode::Paused;
-      }
       return (m_universe.dockedFlag != 0u) ? Mode::Docked : Mode::Flight;
     }
 
@@ -183,7 +187,6 @@ namespace Elite
   private:
     // ---- the argument lists three routines want, gathered where the bytes live ------------------
     [[nodiscard]] ChartView ChartOf();
-    [[nodiscard]] OptionBlock OptionsOf();
     [[nodiscard]] JumpState JumpOf();
 
     void DrawChart();
@@ -210,6 +213,9 @@ namespace Elite
 
     /// 6502: the six exits `DOENTRY` can take, which are the missions plus the bay itself.
     [[nodiscard]] ForcedKey MissionOf(DockingOutcome _outcome);
+
+    /// InputTimer.md §5.1: `JSTK` after a start sequence, which only a platform with a stick may keep.
+    void SettleJoystick() noexcept;
 
     /// 6502: what `M%` answers with, and what the loop does about it.
     void Leave(LoopOutcome _outcome);
@@ -252,18 +258,11 @@ namespace Elite
      * SIX, SINCE M5-a-5: `soundDisabled` was a SECOND `DNOIZ` beside `SoundBuffer::soundOff`, so
      * the pause screen wrote a byte `NOISE` never read. It is gone and the pause screen writes the
      * one the sound system reads.
-     */
-
-    /*
-     * 6502: DK4's `CPX #&40 / BNE DK2` -- and the frozen state it leaves behind.
      *
-     * The one of the eight that STAYS. The original does not have this byte: it FREEZES, in a loop
-     * that reads the keyboard and does not return until CLR/HOME. A windowed program cannot stop
-     * pumping messages, so the freeze is a state the outer loop is in rather than a loop inside it
-     * -- which is the same trade `PlanSteps` makes for the frame rate (ADR-005 §3), and a port
-     * decision with no 6502 byte behind it.
+     * AND THE EIGHTH, `m_paused`, WENT WITH THE PAUSE SCREEN (InputTimer.md I-0, 2026-09-08). It
+     * was the one of the eight with no 6502 byte behind it -- `FREEZE` as a state rather than a
+     * loop -- and it had been in the digest never, so nothing recorded moves with it.
      */
-    bool m_paused = false;
 
     /// What `LastOutcome` answers. It is the return value of a call held, not game state, and it is
     /// not in `Universe` for that reason -- which is the rule the seven bytes above obey from the

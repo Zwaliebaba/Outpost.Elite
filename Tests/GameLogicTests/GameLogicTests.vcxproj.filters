@@ -169,9 +169,6 @@
     <ClCompile Include="GameLoopTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="PauseScreenTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="PictureTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
@@ -233,6 +230,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\SettingsFile.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Outpost\Presentation.cpp">

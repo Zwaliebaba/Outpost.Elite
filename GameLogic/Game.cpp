@@ -100,6 +100,7 @@ namespace Elite
     // 6502: TT170 -- the cold start. It ends by pressing "8" for the player and entering the docked
     // half of the main loop, which is why there is no separate "draw the first screen" step.
     const ForcedKey begun = ResetAndStartGame(m_universe, m_ports, false);
+    SettleJoystick();
     if (begun.loop == MainLoop::Docked)
     {
       // 6502: the market is rolled on arrival rather than by the start sequence, and the market
@@ -133,34 +134,16 @@ namespace Elite
   }
 
   /*
-   * 6502: DAMP through MUSILLY -- the thirteen configuration bytes, in the assembler's order.
+   * `OptionsOf` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, 2026-09-08).
    *
-   * THE ORDER IS THE ONLY DEFINITION THERE IS of which key toggles which option (§6.139), so this
-   * function is the whole of the port's statement of it and `TheTogglesMatchDKS3` is what proves
-   * the statement right. Six of the thirteen live in structs that other slices own, which is why
-   * this is pointers rather than a struct of its own: making them contiguous would touch
-   * eighty-seven call sites to buy what a sweep already establishes.
+   * 6502: DAMP through MUSILLY -- the thirteen configuration bytes in the assembler's order, which
+   * was the only definition of which pause-screen key toggled which option (§6.139). The screen is
+   * gone by owner ruling and the executable's settings file names the thirteen by field instead:
+   * `options.dampingDisabled`, `.recentreDisabled`, `.authorNames`, `status.damageFlash`,
+   * `joystickGeometry`, `joystickEnabled`, `options.joystick`, `music.options.dockingMusicOff`,
+   * `useDisk`, `heaps.pltog`, `music.options.dockingMusicForced`, `.dockingPlaysTheme` and
+   * `.effectsDuringMusic` (InputTimer.md S-1).
    */
-  OptionBlock Game::OptionsOf()
-  {
-    ControlOptions& controls = m_universe.options;
-    MusicOptions& tunes = m_universe.music.options;
-    return OptionBlock{
-      &controls.dampingDisabled,      // 6502: DAMP
-      &controls.recentreDisabled,     // 6502: DJD
-      &controls.authorNames,          // 6502: PATG
-      &m_universe.status.damageFlash, // 6502: FLH
-      &m_universe.joystickGeometry,   // 6502: JSTGY
-      &m_universe.joystickEnabled,    // 6502: JSTE
-      &controls.joystick,             // 6502: JSTK
-      &tunes.dockingMusicOff,         // 6502: MUTOK
-      &m_universe.useDisk,            // 6502: DISK
-      &m_universe.heaps.pltog,        // 6502: PLTOG
-      &tunes.dockingMusicForced,      // 6502: MUFOR
-      &tunes.dockingPlaysTheme,       // 6502: MUDOCK
-      &tunes.effectsDuringMusic,      // 6502: MUSILLY
-    };
-  }
 
   /*
    * 6502: QQ12, QQ22, QQ8 and safehouse -- what `hyp` and `TT18` read besides the chart.
@@ -540,6 +523,26 @@ namespace Elite
   }
 
   /*
+   * The original's `TITLE` ends `BIT KY7 / BMI TL3 / BCC TLL2 / INC JSTK` -- the fire key leaves `JSTK` set, and
+   * that is the joystick question answered "yes" (Design/InputTimer.md §5.1, slice I-3).
+   *
+   * THE ROUTINE IS THE ORIGINAL'S AND STAYS SO; this runs AFTER it, outside anything the oracle
+   * compares. The port has no CIA port A to read a stick from, so a `JSTK` the platform cannot
+   * honour put `DOKEY` into its joystick branch -- both rates snapped to centre whenever their keys
+   * were up, and the damping a keyboard player gets never ran (InputTimer.md I-4). Until the
+   * platform answers `HasJoystick`, the fire key on the title screen is a key like any other; when
+   * it does, nothing here runs and the original's rule returns unchanged. The byte itself stays in
+   * `Universe` and in the digest.
+   */
+  void Game::SettleJoystick() noexcept
+  {
+    if (!m_ports.keyboard.HasJoystick())
+    {
+      m_universe.options.joystick = 0u; // JSTK: keyboard
+    }
+  }
+
+  /*
    * 6502: the six `JMP` targets `DOENTRY` chooses between, and `EN6`'s `JMP BAY`.
    *
    * A function rather than six lines in the switch because `BRIEF` needs the briefing ship's slot
@@ -642,6 +645,7 @@ namespace Elite
       ResetShipAndBubble(m_universe, m_ports); // 6502: DEATH2's JSR RES2
 
       const ForcedKey begun = StartGame(m_universe, m_ports, false);
+      SettleJoystick();
       Perform(begun.outcome);
       return;
     }
@@ -722,11 +726,10 @@ namespace Elite
     }
 
     /*
-     * The frames part 5 asks to wait for are DROPPED here, and saying so is better than pretending
-     * otherwise. `JSR DELAY` is two vertical syncs on a docked screen, and this is the FLIGHT
-     * pass -- `QQ11` is zero on every call that reaches here, so the option's branch is never the
-     * one that waits. `StepDocked` is where it would matter, and that pass is paced by the caller
-     * rather than by vsync counts (ADR-005 §3).
+     * The frames part 5 asks to wait for are DROPPED here, and honestly: `JSR DELAY` is two vertical
+     * syncs on a docked screen, and this is the FLIGHT pass -- `QQ11` is zero on every call that
+     * reaches here, so the option's branch is never the one that waits. `StepDocked` is where it
+     * matters, and it returns them to the caller since InputTimer.md T-2.
      */
     static_cast<void>(RunLoopTail(m_universe, m_ports, m_universe.commander, m_universe.options.authorNames, false));
 
@@ -746,19 +749,13 @@ namespace Elite
     (void)ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     /*
-     * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
-     * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
-     * freezes the game and everything else carries on to the dispatch.
+     * 6502: `DOKEY` FALLS INTO `DK4`. `LDX thiskey / STX KL` is kept -- the key that arrived, into
+     * byte 0 of the logger, which nothing on this build reads back but the image compares
+     * (M6-0-e). `CPX #&40 / BNE DK2` IS NOT: the pause screen it opened was removed by owner ruling
+     * on 2026-09-08 (InputTimer.md I-0, §5.9), so INST/DEL carries on to the dispatch like every
+     * other key, where `TT102` matches nothing and falls through to the countdown.
      */
-    // 6502: LDX thiskey / STX KL -- the key that arrived, into byte 0 of the logger, which nothing
-    // on this build reads back but the image compares (M6-0-e).
     m_universe.keys[0] = _key;
-
-    if (_key == PAUSE_KEY)
-    {
-      m_paused = true;
-      return false;
-    }
 
     PressKey(_key);
     return true;
@@ -773,69 +770,24 @@ namespace Elite
    * rather than through the key it was handed. So a pass with no key is `MoveCrosshairs` on a chart
    * and `CountdownOnly` everywhere else, through `ActionForKey`'s own fall-through (§6.115).
    */
-  void Game::StepDocked(std::uint8_t _key) noexcept
+  std::uint8_t Game::StepDocked(std::uint8_t _key) noexcept
   {
     /*
-     * 6502: MLOOP's head, which a docked pass reaches too -- the two countdowns sit ABOVE part 5's
-     * `LDA QQ11` gate, and everything below it is about the space view.
+     * 6502: MLOOP -- part 5 WHOLE, on a docked pass as on a flying one (InputTimer.md T-2).
      *
-     * It is `CoolTheGuns` and not a copy: `RunLoopTail` runs the same function on a flying pass, so
-     * the arithmetic has one home (§6.146). What a docked pass still does NOT run is the REST of
-     * part 5 -- the author-names delay and the Trumble breeding, both of which the original reaches
-     * while docked. That gap is named rather than closed here; it needs `RunLoopTail`'s frame count
-     * plumbed into the docked pace.
+     * Until T-2 this ran `CoolTheGuns` alone and named the rest as a gap: the author-names delay
+     * and the Trumble breeding are below the two countdowns and the original reaches both while
+     * docked. `RunLoopTail` is the routine, compared against `MLOOP` on docked views with Trumbles
+     * aboard, and what it answers is the syncs the pass asked `DELAY` for -- which the executable
+     * waits, now that it is told. `DIALS` is skipped inside it because the view is not the space
+     * view, which is the original's own gate.
      */
-    CoolTheGuns(m_universe.status);
+    const std::uint8_t syncs = RunLoopTail(m_universe, m_ports, m_universe.commander, m_universe.options.authorNames, false); // docked
 
     m_universe.crosshairStep = ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held
-  }
-
-  /*
-   * 6502: FREEZE -- the loop the game is in while it is paused, one pass per key.
-   *
-   * The original does not return until CLR/HOME and reads the keyboard itself. A windowed program
-   * has to keep pumping messages, so the loop is turned inside out: the caller calls this instead
-   * of `Step` while `Paused` is set, and each key it delivers is one pass round `FREEZE`. Nothing
-   * is drawn and nothing moves, which is what freezing is.
-   */
-  void Game::StepPaused(std::uint8_t _key) noexcept
-  {
-    const PausePass pass = PressPauseKey(m_universe, OptionsOf(), m_universe.control.dockingComputer, _key);
-
-    /*
-     * 6502: JSR MUTOKCH -- the `Stop` answer goes through `stopbd`, which starts the music again
-     * when `MUFOR` is set, so the two answers are not "on" and "off" -- they are "start it now" and
-     * "ask `stopbd`".
-     */
-    if (pass.music == MusicChange::StartNow)
-    {
-      StartDockingMusicNow(m_universe.music, m_universe.memoryMap, m_ports.sid);
-    }
-    else if (pass.music == MusicChange::Stop)
-    {
-      StopDockingMusic(m_universe.music, m_universe.status.titleReset, m_universe.sound, m_universe.memoryMap, m_ports.sid);
-    }
-
-    /*
-     * The twenty frames per toggle are DROPPED, and saying so is better than pretending. `JSR
-     * DELAY` is there to stop one key press flipping a switch twenty times while the player holds
-     * it; this loop is driven by key EVENTS from the window, which repeat at the system's rate and
-     * not at the frame's, so the debounce the delay provides is already there.
-     */
-    static_cast<void>(pass.delayFrames);
-
-    if (pass.outcome == PauseOutcome::Resumed)
-    {
-      m_paused = false; // 6502: CPX #&0D -- and `DK2`'s `RTS`
-    }
-    else if (pass.outcome == PauseOutcome::Quit)
-    {
-      // 6502: CPX #&07 / JMP DEATH2 -- which does not come back, so neither does the pause.
-      m_paused = false;
-      Leave(LoopOutcome::Died);
-    }
+    return syncs;
   }
 
 } // namespace Elite

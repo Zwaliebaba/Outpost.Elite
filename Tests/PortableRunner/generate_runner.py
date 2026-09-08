@@ -67,7 +67,7 @@ def oracle_sources(_repo: Path) -> list[Path]:
 # a change in it is a hash of what it produces, and a hash is useless on a leg that cannot build it.
 # Its header includes <array>, <cstddef> and <cstdint> and nothing else, so there was never a
 # platform reason for it to be out.
-EXECUTABLE_SOURCES = ["SaveStore.cpp", "Presentation.cpp", "KeyMap.cpp", "SidSynth.cpp"]
+EXECUTABLE_SOURCES = ["SaveStore.cpp", "Presentation.cpp", "KeyMap.cpp", "SidSynth.cpp", "SettingsFile.cpp"]
 
 
 def write_if_changed(_path: Path, _text: str) -> None:

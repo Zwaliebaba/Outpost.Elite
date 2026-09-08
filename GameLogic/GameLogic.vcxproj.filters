@@ -136,9 +136,6 @@
     <ClInclude Include="GameLoop.h">
       <Filter>Universe</Filter>
     </ClInclude>
-    <ClInclude Include="PauseScreen.h">
-      <Filter>Universe</Filter>
-    </ClInclude>
     <ClInclude Include="Tactics.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -372,12 +369,6 @@
     </ClCompile>
     <ClCompile Include="GameLoop.cpp">
       <Filter>Universe</Filter>
-    </ClCompile>
-    <ClCompile Include="PauseScreen.cpp">
-      <Filter>Universe</Filter>
-    </ClCompile>
-    <ClCompile Include="OptionTables.cpp">
-      <Filter>Tables</Filter>
     </ClCompile>
     <ClCompile Include="Tactics.cpp">
       <Filter>Universe</Filter>
