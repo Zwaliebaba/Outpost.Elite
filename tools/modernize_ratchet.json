@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 736,
+      "ceiling": 683,
       "slack": 0,
-      "slice": "M6-d-39: Missions.h and Tactics.h to zero, and one load with two consumers"
+      "slice": "M6-d-40: Galaxy.cpp and Spawn.h to zero, and two constants that are one"
     },
     "opcode-quotations": {
       "ceiling": 0,

@@ -12,8 +12,8 @@ namespace Elite
   {
     std::array<std::uint8_t, 6>& seed = _seeds.bytes;
 
-    // 6502: LDA QQ15 / CLC / ADC QQ15+2 / TAX, then the high halves with the carry between them.
-    // X and Y hold s0 + s1 across the shuffle below, which is why they are computed first.
+    // 6502: the sixteen-bit s0 plus s1, low halves first with the carry running into the high
+    // ones. X and Y hold that sum across the shuffle below, which is why it is computed first.
     const AddResult low = AddWithCarry(seed[0], seed[2], false);
     const AddResult high = AddWithCarry(seed[1], seed[3], low.carry);
 
@@ -31,7 +31,7 @@ namespace Elite
     const AddResult sumLow = AddWithCarry(low.value, seed[2], false);
     seed[4] = sumLow.value;
 
-    // 6502: TYA / ADC QQ15+3 / STA QQ15+5 / RTS -- the last instruction that touches the carry, so
+    // 6502: the last addition in the routine, and the last instruction that touches the carry, so
     // this is what the routine leaves in it.
     const AddResult sumHigh = AddWithCarry(high.value, seed[3], sumLow.carry);
     seed[5] = sumHigh.value;
@@ -51,7 +51,7 @@ namespace Elite
   {
     for (std::uint8_t& byte : _seeds.bytes)
     {
-      // 6502: ASL A / ROL QQ21,X -- the byte's top bit comes back round into its own bottom bit.
+      // 6502: a shift and a rotate that bring the byte's top bit round into its own bottom bit.
       byte = static_cast<std::uint8_t>((byte << 1) | (byte >> 7));
     }
   }
@@ -61,34 +61,32 @@ namespace Elite
     const std::array<std::uint8_t, 6>& seeds = _seeds.bytes;
     SystemData data;
 
-    // 6502: LDA QQ15+1 / AND #7 -- the economy is three bits of the first seed's high byte.
+    // 6502: the economy is three bits of the first seed's high byte.
     data.economy = static_cast<std::uint8_t>(seeds[1] & 0x07u);
 
-    // 6502: LDA QQ15+2 / LSR / LSR / LSR / AND #7 -- and the government is three bits of the
-    // second seed's low byte, shifted down.
+    // 6502: and the government is three bits of the second seed's low byte, shifted down.
     data.government = static_cast<std::uint8_t>((seeds[2] >> 3) & 0x07u);
 
     /*
-     * 6502: LSR A / BNE TT77 -- anarchies and feudal states (government 0 and 1) are forced to a
-     * poor economy. The LSR that tests it also SETS THE CARRY from government's bit 0, and that
-     * carry is still there four instructions later; the explicit CLC at TT77 is what stops it
-     * reaching the first addition, so this branch is arithmetically invisible and the next one
-     * is not.
+     * 6502: TT77 -- anarchies and feudal states (government 0 and 1) are forced to a poor economy.
+     * The shift that tests it also SETS THE CARRY from government's bit 0, and that carry is still
+     * there four instructions later; the explicit `CLC` at `TT77` is what stops it reaching the
+     * first addition, so this branch is arithmetically invisible and the next one is not.
      */
     if (RotateRight(data.government, false).value == 0)
     {
       data.economy = static_cast<std::uint8_t>(data.economy | 0x02u);
     }
 
-    // 6502: LDA QQ3 / EOR #7 / CLC -- a rich economy makes for a high tech level, so it inverts.
+    // 6502: a rich economy makes for a high tech level, so it inverts.
     std::uint8_t tech = static_cast<std::uint8_t>(data.economy ^ 0x07u);
 
-    // 6502: LDA QQ15+3 / AND #3 / ADC QQ5 -- carry clear, from the CLC above.
+    // 6502: two bits of a seed added to the level, with the carry clear from the `CLC` above.
     AddResult step = AddWithCarry(static_cast<std::uint8_t>(seeds[3] & 0x03u), tech, false);
     tech = step.value;
 
     /*
-     * 6502: LDA QQ4 / LSR A / ADC QQ5.
+     * 6502: the government halved and added to the technology level.
      *
      * Here the carry is NOT clear: the LSR immediately before sets it from government's bit 0, and
      * this ADC consumes it. So an odd government adds one to the technology level, through a flag
@@ -101,10 +99,9 @@ namespace Elite
     data.techLevel = tech;
 
     /*
-     * 6502: ASL A / ASL A / ADC QQ3 / ADC QQ4 / ADC #1 -- population is four times the technology
-     * level plus the economy plus the government plus one, and every one of those additions takes
-     * the carry from the one before it. The two shifts contribute a carry as well, from bit 7 of
-     * the technology level.
+     * 6502: population is four times the technology level plus the economy plus the government
+     * plus one, and every one of those additions takes the carry from the one before it. The two
+     * shifts contribute a carry as well, from bit 7 of the technology level.
      */
     const ShiftResult once = RotateLeft(tech, false);
     const ShiftResult twice = RotateLeft(once.value, false);
@@ -115,10 +112,9 @@ namespace Elite
     data.population = step.value;
 
     /*
-     * 6502: LDA QQ3 / EOR #7 / ADC #3 / STA P / LDA QQ4 / ADC #4 / STA Q -- productivity is
-     * (inverted economy + 3) * (government + 4) * population, shifted up three places. Both
-     * constants are reached through the carry the population's last ADC left, so they are not
-     * really 3 and 4.
+     * 6502: productivity is (inverted economy + 3) * (government + 4) * population, shifted up
+     * three places. Both constants are reached through the carry the population's last addition
+     * left, so they are not really 3 and 4.
      */
     step = AddWithCarry(static_cast<std::uint8_t>(data.economy ^ 0x07u), 3, step.carry);
     const std::uint8_t economyFactor = step.value;
@@ -126,12 +122,12 @@ namespace Elite
     step = AddWithCarry(data.government, 4, step.carry);
     const std::uint8_t governmentFactor = step.value;
 
-    // 6502: JSR MULTU twice -- (A P) = P * Q, then the LOW byte of that product (still in P) times
-    // the population.
+    // 6502: `MULTU` twice -- the two factors, then the LOW byte of that product times the
+    // population.
     Product product = MultiplyUnsigned(economyFactor, governmentFactor);
     product = MultiplyUnsigned(product.low, data.population);
 
-    // 6502: ASL P / ROL A, three times -- a multiply by eight across the sixteen-bit product.
+    // 6502: three shifts across the sixteen-bit product -- a multiply by eight.
     std::uint8_t productHigh = product.high;
     std::uint8_t productLow = product.low;
     for (int shift = 0; shift < 3; ++shift)
@@ -147,7 +143,8 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the EOR #255 / ADC #1 that follows a borrow -- a negate reached with carry clear.
+    /// 6502: the complement-and-increment that follows a borrow -- a negate reached with carry
+    /// clear.
     [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _first, std::uint8_t _second) noexcept
     {
       const std::uint16_t difference = static_cast<std::uint16_t>(_first) - _second;
@@ -163,12 +160,12 @@ namespace Elite
   NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crosshairX, std::uint8_t _crosshairY, std::uint8_t _currentX,
                                   std::uint8_t _currentY) noexcept
   {
-    // 6502: JSR TT81 -- the search always starts from the galaxy's own seeds, not from wherever
-    // the seeds happen to be.
+    // 6502: TT81 -- the search always starts from the galaxy's own seeds, not from wherever the
+    // seeds happen to be.
     SystemSeeds seeds = _galaxy;
 
     NearestSystem best;
-    std::uint8_t bestMetric = 0x7F; // 6502: LDY #127 / STY T
+    std::uint8_t bestMetric = 0x7F; // 6502: T starts at 127
     std::uint8_t index = 0;
 
     for (;;)
@@ -181,7 +178,7 @@ namespace Elite
       const std::uint8_t dx = AbsoluteDifference(seeds.bytes[3], _crosshairX) >> 1;
       const std::uint8_t dy = AbsoluteDifference(seeds.bytes[1], _crosshairY) >> 1;
 
-      // 6502: CLC / ADC S / CMP T / BCS TT135 -- nearer than the best so far, and strictly so.
+      // 6502: the two halves summed and compared against the best -- nearer, and strictly so.
       const std::uint8_t metric = AddWithCarry(dy, dx, false).value;
       if (metric < bestMetric)
       {
@@ -192,7 +189,7 @@ namespace Elite
 
       NextSystem(seeds);
 
-      // 6502: INC U / BNE TT130 -- 256 systems, counted by a byte that wraps to zero.
+      // 6502: 256 systems, counted by a byte that wraps to zero.
       ++index;
       if (index == 0)
       {
@@ -212,17 +209,17 @@ namespace Elite
     const std::uint8_t halfDy = static_cast<std::uint8_t>(AbsoluteDifference(best.y, _currentY) >> 1);
     const Product second = SquareUnsigned(halfDy);
 
-    // 6502: CLC / ADC K / STA Q / PLA / ADC K+1 / BCC / LDA #255 -- the sum saturates rather than
-    // wrapping, because a distance that wrapped would read as very close indeed.
+    // 6502: the sum SATURATES rather than wrapping, because a distance that wrapped would read as
+    // very close indeed.
     const AddResult sumLow = AddWithCarry(second.low, squared.low, false);
     const AddResult sumHigh = AddWithCarry(second.high, squared.high, sumLow.carry);
 
     const std::uint8_t radicandHigh = sumHigh.carry ? std::uint8_t{255} : sumHigh.value;
 
-    // 6502: JSR LL5 -- Q becomes the square root of (R Q). The exit carry is not read here.
+    // 6502: LL5 -- Q becomes the square root of (R Q). The exit carry is not read here.
     const Root root = SquareRoot(radicandHigh, sumLow.value);
 
-    // 6502: ASL A / ROL QQ8+1 twice -- the answer times four, as a sixteen-bit value.
+    // 6502: two shifts across the pair -- the answer times four, as a sixteen-bit value.
     std::uint8_t distanceLow = root.value;
     std::uint8_t distanceHigh = 0;
     for (int shift = 0; shift < 2; ++shift)
@@ -233,7 +230,7 @@ namespace Elite
     }
     best.distance = static_cast<std::uint16_t>((static_cast<std::uint16_t>(distanceHigh) << 8) | distanceLow);
 
-    // 6502: JMP TT24 -- the routine does not return, it continues into the data generator.
+    // 6502: TT24 -- the routine does not return, it continues into the data generator.
     best.data = GenerateSystemData(best.seeds);
     return best;
   }
@@ -245,9 +242,9 @@ namespace Elite
     const SystemSeeds saved = _seeds;
 
     /*
-     * 6502: LDY #3 / BIT QQ15 / BVS / DEY -- bit 6 of the first seed byte decides whether the name
-     * has four letter-pairs or three. BIT tests it without loading it, which is why the test reads
-     * as an overflow branch and has nothing to do with arithmetic.
+     * 6502: bit 6 of the first seed byte decides whether the name has four letter-pairs or three.
+     * `BIT` tests it without loading it, which is why the test reads as an overflow branch and has
+     * nothing to do with arithmetic.
      */
     int pairs = ((_seeds.bytes[0] & 0x40u) != 0u) ? 4 : 3;
 
@@ -260,12 +257,12 @@ namespace Elite
 
     for (int pair = 0; pair < pairs; ++pair)
     {
-      // 6502: LDA QQ15+5 / AND #%00011111 / BEQ -- a zero means this pair is simply skipped, which
-      // is how the game gets names of odd length out of a fixed number of twists.
+      // 6502: five bits of a seed byte, and a zero means this pair is simply skipped, which is how
+      // the game gets names of odd length out of a fixed number of twists.
       const std::uint8_t token = static_cast<std::uint8_t>(_seeds.bytes[5] & 0x1Fu);
       if (token != 0)
       {
-        // 6502: ORA #%10000000 -- the high bit tells TT27 this is a letter pair, not a character.
+        // 6502: the high bit tells TT27 this is a letter pair, not a character.
         _printer.Print(static_cast<std::uint8_t>(token | 0x80u));
       }
 
@@ -279,7 +276,7 @@ namespace Elite
   void PrintSystemDescription(ExtendedTokenPrinter& _printer, Rng& _rng, const SystemSeeds& _seeds) noexcept
   {
     /*
-     * 6502: PDL1K -- LDA QQ15+2,X / STA RAND,X for X counting down from 3.
+     * 6502: PDL1K -- the last four seed bytes copied over the RNG state, counting down from 3.
      *
      * The randomness that varies a description is not random at all: it is the system's own seed,
      * copied over the RNG state. So the same world reads the same way every time you arrive, and
@@ -287,7 +284,7 @@ namespace Elite
      */
     _rng.SetState({_seeds.bytes[2], _seeds.bytes[3], _seeds.bytes[4], _seeds.bytes[5]});
 
-    // 6502: LDA #5 / JMP DETOK.
+    // 6502: extended token 5.
     _printer.Print(5);
   }
 
