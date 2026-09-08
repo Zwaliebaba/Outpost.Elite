@@ -546,17 +546,18 @@ namespace Elite
         Warp(_universe, _ports);
       }
 
-      // 6502: LDA KY17 / AND ECM / BEQ MA64 / LDA ECMA / BNE MA64 / DEC ECMP / JSR ECBLB2 -- and
-      // `DEC ECMP` on a zero byte is what makes it &FF, which is "ours" (§6.71's pair).
+      // 6502: the E.C.M. needs one fitted and none already running, and decrementing the owner
+      // byte from zero is what makes it &FF, which is "ours" (§6.71's pair).
       if ((_universe.keys[KEY_ECM] & commander.ecm) != 0u && _universe.status.ecmCountdown == 0u)
       {
         _universe.status.ecmOurs = static_cast<std::uint8_t>(_universe.status.ecmOurs - 1u);
         /*
-         * 6502: DEC ECMP / JSR ECBLB2, and the carry handed on is NOT KNOWN HERE (§6.118).
+         * 6502: the carry handed on from here is NOT KNOWN (§6.118).
          *
-         * `DEC`, `LDA`, `AND` and `BEQ` above this all leave the carry alone, so the flag that
-         * reaches `NOISE` was set somewhere further back in the frame -- possibly inside `WARP`,
-         * three instructions earlier, which this port calls through a seam. The port models no
+         * Everything between the last flag-setting instruction and this call leaves the carry
+         * alone, so the flag that reaches `NOISE` was set somewhere further back in the frame --
+         * possibly inside `WARP`, a few instructions earlier, which this port calls through a
+         * seam. The port models no
          * carry across the flight loop, so false is what it can honestly supply, and the sound
          * comparison excludes this effect by name rather than pretending to agree.
          */
@@ -565,11 +566,12 @@ namespace Elite
     }
 
     /*
-     * 6502: .MA64 LDA KY19 / AND DKCMP / BEQ MA68 / EOR KLO+&29 / BEQ MA68 / STA auto / JSR startbd.
+     * 6502: MA64 -- the docking-computer request, gated on one being fitted.
      *
-     * `KLO+&29` IS `KY5`, the "X" key. So holding X while pressing C cancels the docking computer
-     * request -- the two bytes are both &FF when held, and the `EOR` of a pair of &FFs is zero.
-     * Nothing in the source says so and the offset is written as a number rather than as the label.
+     * The byte it folds in at `KLO+&29` IS `KY5`, the "X" key. So holding X while pressing C
+     * cancels the request -- both bytes are &FF when held, and one exclusive-ored with the other
+     * is zero. Nothing in the source says so, and the offset is written as a number rather than as
+     * the label.
      */
     const std::uint8_t requested =
       static_cast<std::uint8_t>((_universe.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) ^ _universe.keys[KEY_PITCH_UP]);
@@ -585,8 +587,8 @@ namespace Elite
   /*
    * ---- part 3's tail: the guns -----------------------------------------------------------------
    *
-   * 6502: .MA68 -- every path through part 3 reaches this label, including the one `BMI MA64` cut
-   * five keys short of.
+   * 6502: MA68 -- every path through part 3 reaches this label, including the one the no-lock
+   * branch cut five keys short of.
    */
   [[nodiscard]] LoopOutcome FireTheGuns(Universe& _universe, Ports& _ports) noexcept
   {
@@ -594,11 +596,11 @@ namespace Elite
 
     // ---- part 3's tail: the guns -----------------------------------------------------------------
 
-    _universe.status.laserPower = 0u; // 6502: .MA68 LDA #0 / STA LAS
-    _universe.flight.speedTimes4Low = 0u;      // 6502: STA DELT4
+    _universe.status.laserPower = 0u;     // 6502: MA68 -- the laser power cleared
+    _universe.flight.speedTimes4Low = 0u; // 6502: and the stardust's low byte with it
 
-    // 6502: LDA DELTA / LSR A / ROR DELT4 / LSR A / ROR DELT4 / STA DELT4+1 -- the speed as a
-    // sixteen-bit value the stardust subtracts, which is DELTA shifted up six places.
+    // 6502: the speed as a sixteen-bit value the stardust subtracts, which is `DELTA` shifted up
+    // six places.
     {
       ShiftResult step = RotateRight(_universe.flight.speed, false);
       ShiftResult low = RotateRight(_universe.flight.speedTimes4Low, step.carry);
@@ -608,36 +610,35 @@ namespace Elite
       _universe.flight.speedTimes4High = step.value;
     }
 
-    // 6502: LDA LASCT / BNE MA3 -- a pulse laser's countdown, which is why it cannot be held down.
+    // 6502: a pulse laser's countdown, which is why it cannot be held down.
     if (_universe.status.laserCount != 0u)
     {
       return LoopOutcome::Continued;
     }
 
-    // 6502: LDA KY7 / BEQ MA3 / LDA GNTMP / CMP #242 / BCS MA3 -- and 242 is where the gun jams.
+    // 6502: 242 is where the gun jams.
     if (_universe.keys[KEY_FIRE] == 0u || _universe.status.laserTemperature >= 242u)
     {
       return LoopOutcome::Continued;
     }
 
-    // 6502: LDX VIEW / LDA LASER,X / BEQ MA3 -- this view's laser, if it has one.
+    // 6502: this view's laser, if it has one.
     const Laser fitted = commander.lasers[_universe.spaceView];
     if (!fitted.Fitted())
     {
       return LoopOutcome::Continued;
     }
 
-    // 6502: PHA / AND #%01111111 / STA LAS / STA LAS2 -- the power without its top bit, which is
-    // what the damage arithmetic uses.
+    // 6502: the power without its top bit, which is what the damage arithmetic uses.
     _universe.status.laserPower = fitted.Power();
     _universe.status.viewLaser = _universe.status.laserPower;
 
     /*
-     * 6502: LDY #sfxplas / PLA / PHA / BMI bmorarm / CMP #Mlas / BNE P%+4 / LDY #sfxmlas /
-     * BNE custard / .bmorarm CMP #Armlas / BEQ P%+5 / LDY #sfxblas / EQUB &2C / LDY #sfxalas.
+     * 6502: which of four effects the fitted laser sounds, chosen by a chain of comparisons.
      *
-     * The `EQUB &2C` is `BIT abs` again, swallowing the `LDY #sfxalas` so that the beam laser's
-     * sound survives (§6.79). Sixth time in this port.
+     * The chain ends in the assembler trick that hides one load inside another's operand, so that
+     * the beam laser's effect survives and the one below it is skipped (§6.79). Sixth time in this
+     * port.
      */
     SoundEffect sound = SoundEffect::PulseLaser;
     if (fitted.IsBeam())
@@ -650,23 +651,23 @@ namespace Elite
     }
 
     /*
-     * 6502: .custard JSR NOISE -- and `LASLI` opens `JSR DORND`, whose `ROL A` reads the carry
-     * this leaves, so the sound's own outcome shifts the burst by a pixel (§6.86).
+     * 6502: `custard` sounds it -- and the burst that follows opens with the random generator,
+     * which reads the carry this leaves, so the sound's own outcome shifts the burst by a pixel
+     * (§6.86).
      *
-     * THE CARRY GOING IN IS A COMPARISON'S, and both paths to `.custard` come off a `CMP`: the
-     * beam half arrives through `CMP #Armlas` and the rest through `CMP #Mlas`, so it is the
+     * THE CARRY GOING IN IS A COMPARISON'S, and both paths to `custard` come off one: the beam
+     * half arrives through the military test and the rest through the mining test, so it is the
      * laser power measured against whichever constant that branch tested. Nothing between the
-     * compare and the call touches the flag -- `LDY` does not, and neither does the `EQUB &2C`
-     * that swallows one of the loads. A silent build hands this straight back (§6.99).
+     * compare and the call touches the flag -- not the register load, and not the assembler trick
+     * that swallows one of them. A silent build hands this straight back (§6.99).
      */
     const bool carryIn = fitted.IsBeam() ? (fitted.byte >= LASER_MILITARY.byte) : (fitted.byte >= LASER_MINING.byte);
     const bool heard = PlaySoundEffect(_universe.sound, sound, carryIn).carry;
 
-    // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
+    // 6502: LASLI -- the burst itself, which draws and heats the gun.
     (void)FireLaser(_universe.canvas, _universe.rng, _universe.burst, _universe.status, _universe.view, heard, &_universe.picture);
 
-    // 6502: PLA / BPL ma1 / LDA #0 / .ma1 AND #%11111010 / STA LASCT -- a beam laser gets no
-    // countdown at all, which is what lets it be held down.
+    // 6502: a beam laser gets no countdown at all, which is what lets it be held down.
     const std::uint8_t countdown = fitted.IsBeam() ? std::uint8_t{0u} : fitted.byte;
     _universe.status.laserCount = static_cast<std::uint8_t>(countdown & 0xFAu);
 
@@ -678,20 +679,21 @@ namespace Elite
     StirTheFrame(_universe); // 6502: part 1
     TurnTheShip(_universe);  // 6502: part 2
 
-    // 6502: part 3 -- and `JMP ESCAPE` is the one exit it has, which is why this is not a `void`.
+    // 6502: part 3 -- and the jump to `ESCAPE` is the one exit it has, which is why this is not a
+    // `void`.
     const LoopOutcome keys = RunFlightKeys(_universe, _ports);
     if (keys != LoopOutcome::Continued)
     {
       return keys;
     }
 
-    return FireTheGuns(_universe, _ports); // 6502: .MA68 -- part 3's tail
+    return FireTheGuns(_universe, _ports); // 6502: MA68 -- part 3's tail
   }
 
   namespace
   {
 
-    /// 6502: LDA K%+NI%+36 / AND #%00000100 -- the station's own `NEWB`, in slot 1.
+    /// 6502: the station's own `NEWB` bit, read from slot 1.
     inline constexpr std::uint8_t STATION_SLOT = 1;
 
     /// 6502: the docking check's three thresholds, none of which is named in the source.
@@ -699,19 +701,19 @@ namespace Elite
     inline constexpr std::uint8_t DOCK_MINIMUM_ALIGNMENT = 89;
     inline constexpr std::uint8_t DOCK_MAXIMUM_ROLL = 80;
 
-    /// 6502: LDA DELTA / CMP #5 -- below this a failed dock is survivable and above it is not.
+    /// 6502: below this speed a failed dock is survivable and above it is not.
     inline constexpr std::uint8_t DOCK_SURVIVABLE_SPEED = 5;
 
-    /// 6502: LDY #78 -- "CARGO SCOOPED" is not a token here, it is `MESS`'s argument for a full hold.
+    /// 6502: "CARGO SCOOPED" is not a token here, it is `MESS`'s argument for a full hold.
     inline constexpr std::uint8_t MESSAGE_HOLD_FULL = 78;
 
-    /// 6502: LDA #208 -- the first cargo name's token, which the item number is added to.
+    /// 6502: the first cargo name's token, which the item number is added to.
     inline constexpr std::uint8_t MESSAGE_FIRST_CARGO = 208;
 
-    /// 6502: LDX #15 -- the laser's own "damage" for the noise `EXNO` makes, which is not `LAS`.
+    /// 6502: the laser's own "damage" for the noise `EXNO` makes, which is not `LAS`.
     inline constexpr std::uint8_t LASER_HIT_ENERGY = 15;
 
-    /// 6502: LDA #50 / CMP ENERGY -- and the message doubles when the banks are under half of it.
+    /// 6502: the message doubles when the banks are under half of this.
     inline constexpr std::uint8_t ENERGY_WARNING = 50;
     inline constexpr std::uint8_t MESSAGE_ENERGY_LOW = 50;
 
@@ -720,28 +722,28 @@ namespace Elite
     inline constexpr std::uint8_t STEP_DOCKING_REMINDER = 15;
     inline constexpr std::uint8_t STEP_CABIN_TEMPERATURE = 20;
 
-    /// 6502: LDA #123 and LDA #160 -- "DOCKING COMPUTERS ON" and "FUEL SCOOPS ON".
+    /// 6502: "DOCKING COMPUTERS ON" and "FUEL SCOOPS ON".
     inline constexpr std::uint8_t MESSAGE_DOCKING_ON = 123;
     inline constexpr std::uint8_t MESSAGE_SCOOPS_ON = 160;
 
-    /// 6502: SBC #36 / STA R / JSR LL5 -- the altitude's own constant, and the cabin's.
+    /// 6502: the altitude's own constant, and the cabin's.
     inline constexpr std::uint8_t ALTITUDE_PLANET_RADIUS = 36;
     inline constexpr std::uint8_t CABIN_BASE = 30;
 
-    /// 6502: CMP #224 / CMP #240 -- the sun cooks the cabin, and then it cooks the Trumbles.
+    /// 6502: the sun cooks the cabin, and then it cooks the Trumbles.
     inline constexpr std::uint8_t CABIN_SCOOPING = 224;
     inline constexpr std::uint8_t CABIN_TRUMBLE_DEATH = 240;
 
-    /// 6502: LDA #192 / JSR FAROF2 -- the station is respawned when the planet is inside this.
+    /// 6502: the station is respawned when the planet is inside this range.
     inline constexpr std::uint8_t STATION_SPAWN_RANGE = 192;
 
-    /// 6502: LDA VIC+&15 / AND #%00000011 -- everything but the two lowest sprites goes off.
+    /// 6502: everything but the two lowest sprites goes off.
     inline constexpr std::uint8_t SPRITES_KEEP = 0x03;
 
-    /// 6502: LDA LASCT / CMP #8 -- above this the beam is still being drawn and is left alone.
+    /// 6502: above this the beam is still being drawn and is left alone.
     inline constexpr std::uint8_t LASER_ERASE_LIMIT = 8;
 
-    /// 6502: ASL x / SEC / ROR x -- set bit 7 without touching the other seven.
+    /// 6502: bit 7 set without touching the other seven.
     [[nodiscard]] std::uint8_t MarkKilled(std::uint8_t _state) noexcept
     {
       return With(_state, ShipStateBit::Killed);
@@ -749,15 +751,16 @@ namespace Elite
   } // namespace
 
   /*
-   * 6502: part 11 from `.MA47`'s `LDX #15 / JSR EXNO` to `.MA14` -- what our laser does to it.
+   * 6502: part 11, from `MA47` to `MA14` -- what our laser does to it.
    *
-   * `LDX #15` IS DEAD. `EXNO`'s first two instructions are `LDA INWK+7 / LDX #11`, so the fifteen
-   * is overwritten before it is read and the frequency `NOISE2` gets is the 208 `EXNO` loads for
-   * itself. The upstream comment beside it describes the call, not the load.
+   * THE DAMAGE PASSED TO THE NOISE IS DEAD. `EXNO` overwrites it in its own first two
+   * instructions, so the frequency the sound gets is the one `EXNO` loads for itself. The upstream
+   * comment beside it describes the call, not the value handed to it.
    *
-   * `stores` is false for the two paths that branch to `MA14+2` -- a MID-INSTRUCTION address, and
-   * `STA INWK+35` is two bytes because `INWK` is in zero page. A station and a hardened ship shot
-   * with the wrong laser take no damage at all; they only get angry.
+   * `stores` is false for the two paths that branch to `MA14+2` -- a MID-INSTRUCTION address,
+   * reachable because the store it skips over is two bytes long when the target is in zero page. A
+   * station and a hardened ship shot with the wrong laser take no damage at all; they only get
+   * angry.
    */
   struct LaserHit
   {
@@ -767,9 +770,9 @@ namespace Elite
 
   [[nodiscard]] LaserHit ApplyLaserHit(Universe& _universe, Ports& _ports, const Blueprint& _blueprint, ShipType _type) noexcept
   {
-    (void)PlayHitSound(_universe.work, _universe.sound); // 6502: LDX #15 / JSR EXNO
+    (void)PlayHitSound(_universe.work, _universe.sound); // 6502: EXNO
 
-    // 6502: LDA TYPE / CMP #SST / BEQ MA14+2.
+    // 6502: a station takes no damage here and only gets angry.
     if (_type == ShipType::Station)
     {
       return {false, _universe.work.energy};

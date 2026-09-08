@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,594 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,559 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-4: the rest of the keys, the guns, and a block of named constants.**
+
+35 more from `FlightLoop.cpp`, which is now 105 of its original 199. No marker was lost this time,
+which is the first slice in three where the ratchet had nothing to say about rule 4 — the rule from
+M6-d-3 held on its first outing.
+
+The constants block is the easiest kind of site and worth naming as a shape: a dozen `inline
+constexpr` declarations each carrying a doc comment whose whole content was the instruction that
+loads the value. `DOCK_SURVIVABLE_SPEED` does not need the compare quoted to explain itself once the
+sentence says "below this speed a failed dock is survivable and above it is not". The name and the
+sentence together were always the useful half.
+
+Two findings needed real care because the instruction sequence was doing explanatory work:
+
+- **The laser's sound chain** ends in the assembler trick that hides one load inside another's
+  operand so the byte after it is skipped. The rewrite keeps the FACT — one effect survives and the
+  one below it does not — without the opcodes, because §6.79 is where the trick is documented and
+  this is its sixth appearance.
+- **The damage passed to the hit noise is dead**, because the routine it is handed to overwrites it
+  before reading it. That is a claim about two routines and it survives as prose; what it does not
+  need is the two instructions that make it true, which the reader cannot check from here anyway.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants.
+`opcode-transcriptions` 2,594 → 2,559.
 
 **2026-09-08 — M6-d-3: `FlightLoop.cpp`, and rule 4's third shape.**
 
