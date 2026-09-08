@@ -1031,7 +1031,7 @@ namespace GameLogicTests
           &universe.joystickEnabled,                   // JSTE
           &universe.music.options.dockingMusicOff,     // MUTOK
           &universe.useDisk,                           // DISK
-          &universe.heaps.pltog,                       // PLTOG
+          &universe.heaps.planetDetail,                       // PLTOG
           &universe.music.options.dockingMusicForced,  // MUFOR
           &universe.music.options.dockingPlaysTheme,   // MUDOCK
           &universe.music.options.effectsDuringMusic,  // MUSILLY
@@ -1102,7 +1102,7 @@ namespace GameLogicTests
       Assert::AreEqual(fresh.options.dampingDisabled, applied.options.dampingDisabled, L"DAMP at boot");
       Assert::AreEqual(fresh.options.authorNames, applied.options.authorNames, L"PATG at boot");
       Assert::AreEqual(fresh.music.options.dockingMusicOff, applied.music.options.dockingMusicOff, L"MUTOK at boot");
-      Assert::AreEqual(fresh.heaps.pltog, applied.heaps.pltog, L"PLTOG at boot");
+      Assert::AreEqual(fresh.heaps.planetDetail, applied.heaps.planetDetail, L"PLTOG at boot");
       Assert::AreEqual(fresh.sound.soundOff, applied.sound.soundOff, L"DNOIZ at boot");
     }
 
@@ -1127,7 +1127,7 @@ namespace GameLogicTests
       }
       const Outpost::SettingsReport second = Outpost::ApplySettingsFile(commanders, universe);
       Assert::IsFalse(second.created, L"the file was there");
-      Assert::AreEqual<std::uint8_t>(0xFF, universe.heaps.pltog, L"PLTOG from the file");
+      Assert::AreEqual<std::uint8_t>(0xFF, universe.heaps.planetDetail, L"PLTOG from the file");
       Assert::AreEqual<std::uint8_t>(0xFF, universe.sound.soundOff, L"DNOIZ from the file");
       Assert::AreEqual<std::size_t>(1, second.problems.size(), L"and the one bad line reported");
       Assert::IsTrue(second.Summary().find("line 3") != std::string::npos, L"with its line number in the summary");

@@ -81,21 +81,21 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const DrawWorkspace& _draw) noexcept
     {
-      _into.Word(_draw.sc);
+      _into.Word(_draw.screenPointer);
     }
 
     void FoldIntoStateHash(Folder& _into, const MathWorkspace& _math) noexcept
     {
-      _into.Byte(_math.q);
+      _into.Byte(_math.lastDivisor);
       _into.Byte(_math.k2Low);
     }
 
     void FoldIntoStateHash(Folder& _into, const GeometryWorkspace& _geometry) noexcept
     {
-      _into.Bytes(_geometry.xx16);
-      _into.Bytes(_geometry.xx12);
-      _into.Bytes(_geometry.xx2);
-      _into.Bytes(_geometry.xx3);
+      _into.Bytes(_geometry.scaledOrientation);
+      _into.Bytes(_geometry.dotProducts);
+      _into.Bytes(_geometry.faceVisible);
+      _into.Bytes(_geometry.projectedVertices);
     }
 
     void FoldIntoStateHash(Folder& _into, const Stardust& _dust) noexcept
@@ -107,23 +107,23 @@ namespace Elite
       _into.Bytes(_dust.z);
       _into.Bytes(_dust.zLow);
       _into.Byte(_dust.count);
-      _into.Byte(_dust.newzp);
+      _into.Byte(_dust.keptQuotient);
     }
 
     void FoldIntoStateHash(Folder& _into, const PlanetSunState& _heaps) noexcept
     {
       _into.Bytes(_heaps.sun);
       _into.Bytes(_heaps.ball);
-      _into.Byte(_heaps.lsp);
+      _into.Byte(_heaps.ballHeapTop);
       _into.Byte(_heaps.sunX);
       _into.Byte(_heaps.sunXNext);
-      _into.Byte(_heaps.yx2M1);
-      _into.Byte(_heaps.pltog);
+      _into.Byte(_heaps.lowestVisibleRow);
+      _into.Byte(_heaps.planetDetail);
       _into.Byte(_heaps.v);
       _into.Byte(_heaps.vNext);
-      _into.Bytes(_heaps.k5);
-      _into.Bytes(_heaps.k6);
-      _into.Byte(_heaps.stp);
+      _into.Bytes(_heaps.segmentStart);
+      _into.Bytes(_heaps.segmentEnd);
+      _into.Byte(_heaps.circleStep);
       _into.Byte(_heaps.flag);
     }
 
@@ -153,7 +153,7 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const ClipState& _clip) noexcept
     {
-      _into.Byte(_clip.dontclip);
+      _into.Byte(_clip.clippingOff);
     }
 
     void FoldIntoStateHash(Folder& _into, const Projection& _projection) noexcept
@@ -234,23 +234,23 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const FlightState& _flight) noexcept
     {
-      _into.Byte(_flight.alpha);
-      _into.Byte(_flight.alp1);
-      _into.Byte(_flight.alp2);
-      _into.Byte(_flight.alp2Next);
-      _into.Byte(_flight.beta);
-      _into.Byte(_flight.bet1);
-      _into.Byte(_flight.bet2);
-      _into.Byte(_flight.bet2Next);
-      _into.Byte(_flight.delta);
-      _into.Byte(_flight.delt4);
-      _into.Byte(_flight.delt4Next);
+      _into.Byte(_flight.rollRate);
+      _into.Byte(_flight.rollMagnitude);
+      _into.Byte(_flight.rollSign);
+      _into.Byte(_flight.rollSignFlipped);
+      _into.Byte(_flight.pitchRate);
+      _into.Byte(_flight.pitchMagnitude);
+      _into.Byte(_flight.pitchSign);
+      _into.Byte(_flight.pitchSignFlipped);
+      _into.Byte(_flight.speed);
+      _into.Byte(_flight.speedTimes4Low);
+      _into.Byte(_flight.speedTimes4High);
       _into.Byte(_flight.mainLoopCounter);
       _into.Byte(_flight.slot);
       _into.Byte(static_cast<std::uint8_t>(_flight.type));
       _into.Word(_flight.blueprint != nullptr ? _flight.blueprint->address : std::uint16_t{0}); // 6502: XX0
-      _into.Byte(_flight.rat);
-      _into.Byte(_flight.rat2);
+      _into.Byte(_flight.signMask);
+      _into.Byte(_flight.signMask2);
       _into.Byte(_flight.steerCone);
     }
 
@@ -357,23 +357,23 @@ namespace Elite
       _into.Word(_music.tuneStart);
       _into.Byte(_music.buffer);
       _into.Byte(_music.counter);
-      _into.Byte(_music.vibrato2);
-      _into.Byte(_music.vibrato3);
+      _into.Byte(_music.vibrato2Count);
+      _into.Byte(_music.vibrato3Count);
       _into.Word(_music.pointer);
       _into.Word(_music.restart);
-      _into.Byte(_music.value0);
-      _into.Byte(_music.value1);
-      _into.Byte(_music.value2);
-      _into.Byte(_music.value3);
-      _into.Byte(_music.value4);
-      _into.Byte(_music.voice2lo1);
-      _into.Byte(_music.voice2hi1);
-      _into.Byte(_music.voice2lo2);
-      _into.Byte(_music.voice2hi2);
-      _into.Byte(_music.voice3lo1);
-      _into.Byte(_music.voice3hi1);
-      _into.Byte(_music.voice3lo2);
-      _into.Byte(_music.voice3hi2);
+      _into.Byte(_music.commandSixTally);
+      _into.Byte(_music.voice1Control);
+      _into.Byte(_music.voice2Control);
+      _into.Byte(_music.voice3Control);
+      _into.Byte(_music.restLength);
+      _into.Byte(_music.voice2NoteHigh);
+      _into.Byte(_music.voice2NoteLow);
+      _into.Byte(_music.voice2RaisedHigh);
+      _into.Byte(_music.voice2RaisedLow);
+      _into.Byte(_music.voice3NoteHigh);
+      _into.Byte(_music.voice3NoteLow);
+      _into.Byte(_music.voice3RaisedHigh);
+      _into.Byte(_music.voice3RaisedLow);
       _into.Flag(_music.vibrato2Raised);
       _into.Flag(_music.vibrato3Raised);
       FoldIntoStateHash(_into, _music.options);

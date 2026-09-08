@@ -37,13 +37,13 @@ namespace Elite
     bool overflow = false;
   };
 
-  [[nodiscard]] constexpr AddResult AddWithCarry(std::uint8_t _a, std::uint8_t _b, bool _carryIn) noexcept
+  [[nodiscard]] constexpr AddResult AddWithCarry(std::uint8_t _value, std::uint8_t _addend, bool _carryIn) noexcept
   {
-    const std::uint16_t sum = static_cast<std::uint16_t>(_a) + _b + (_carryIn ? 1u : 0u);
+    const std::uint16_t sum = static_cast<std::uint16_t>(_value) + _addend + (_carryIn ? 1u : 0u);
     const std::uint8_t result = static_cast<std::uint8_t>(sum);
 
     // Signed overflow: the operands agreed about their sign and the result disagreed with them.
-    const bool overflow = ((~(static_cast<unsigned>(_a) ^ _b) & (static_cast<unsigned>(_a) ^ result)) & 0x80u) != 0u;
+    const bool overflow = ((~(static_cast<unsigned>(_value) ^ _addend) & (static_cast<unsigned>(_value) ^ result)) & 0x80u) != 0u;
 
     return AddResult{result, sum > 0xFFu, overflow};
   }
@@ -62,9 +62,9 @@ namespace Elite
     bool carry = false;
   };
 
-  [[nodiscard]] constexpr SubResult SubtractWithCarry(std::uint8_t _a, std::uint8_t _b, bool _carryIn) noexcept
+  [[nodiscard]] constexpr SubResult SubtractWithCarry(std::uint8_t _value, std::uint8_t _amount, bool _carryIn) noexcept
   {
-    const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b - (_carryIn ? 0u : 1u);
+    const std::uint16_t difference = static_cast<std::uint16_t>(_value) - _amount - (_carryIn ? 0u : 1u);
     return SubResult{static_cast<std::uint8_t>(difference), difference < 0x100u};
   }
 

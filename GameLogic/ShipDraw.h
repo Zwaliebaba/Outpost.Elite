@@ -210,10 +210,10 @@ namespace Elite
   {
     /// 6502: XX16 -- the ship's three orientation vectors, scaled, as magnitude and sign pairs:
     /// sidev in 0 to 5, roofv in 6 to 11, nosev in 12 to 17.
-    std::array<std::uint8_t, 18> xx16{};
+    std::array<std::uint8_t, 18> scaledOrientation{};
 
     /// 6502: XX12 -- three sign-magnitude dot products, magnitude then sign.
-    std::array<std::uint8_t, 6> xx12{};
+    std::array<std::uint8_t, 6> dotProducts{};
 
     /*
      * 6502: XX2 -- one byte per face saying whether you can see it, and SIXTEEN of them.
@@ -226,7 +226,7 @@ namespace Elite
      * of `LL9` part 2 and `EE30` fills this in part 4. The port stores them apart; nothing may
      * assume that means they are independent.
      */
-    std::array<std::uint8_t, 16> xx2{};
+    std::array<std::uint8_t, 16> faceVisible{};
 
     /*
      * 6502: XX3 -- the projected vertices, four bytes each: x as sixteen bits, then y.
@@ -236,7 +236,7 @@ namespace Elite
      * data indexes this with a whole byte and reads up to `XX3+3,X`, so 259 bytes are reachable.
      * The game itself never fills more than 148 -- thirty-seven vertices, the Anaconda.
      */
-    std::array<std::uint8_t, 260> xx3{};
+    std::array<std::uint8_t, 260> projectedVertices{};
 
     /*
      * 6502: XX4, XX17, XX18, XX20, V(1 0) and CNT went with M2-c-3.
@@ -421,7 +421,7 @@ namespace Elite
   struct ClipState
   {
     /// 6502: dontclip -- bit 7 set means return the line unclipped.
-    std::uint8_t dontclip = 0;
+    std::uint8_t clippingOff = 0;
   };
 
   /*

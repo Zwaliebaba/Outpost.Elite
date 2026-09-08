@@ -41,7 +41,7 @@ namespace GameLogicTests
       std::uint16_t qq2 = 0, qq3 = 0, qq4 = 0, qq5 = 0, qq28 = 0, tek = 0, gov = 0;
       std::uint16_t qq0 = 0, qq1 = 0, qq9 = 0, qq10 = 0, qq15 = 0, qq21 = 0;
       std::uint16_t safehouse = 0, qq8 = 0, qq22 = 0, qq26 = 0, avl = 0;
-      std::uint16_t ev = 0, rand = 0, gcnt = 0, ghyp = 0, fist = 0, cok = 0, qq14 = 0, patg = 0, qq11 = 0, keylook = 0;
+      std::uint16_t ev = 0, rand = 0, gcnt = 0, ghyp = 0, legalStatus = 0, cok = 0, qq14 = 0, authorNames = 0, qq11 = 0, keylook = 0;
 
       explicit Labels(const OracleImage& _oracle)
       {
@@ -70,10 +70,10 @@ namespace GameLogicTests
         rand = _oracle.Label("RAND");
         gcnt = _oracle.Label("GCNT");
         ghyp = _oracle.Label("GHYP");
-        fist = _oracle.Label("FIST");
+        legalStatus = _oracle.Label("FIST");
         cok = _oracle.Label("COK");
         qq14 = _oracle.Label("QQ14");
-        patg = _oracle.Label("PATG");
+        authorNames = _oracle.Label("PATG");
         keylook = _oracle.Label("KEYLOOK");
         qq11 = _oracle.Label("QQ11");
       }
@@ -144,7 +144,7 @@ namespace GameLogicTests
               for (const int cheat : {0, 1, 2, 3})
               {
               const bool controlHeld = (cheat & 1) != 0;
-              const bool patg = (cheat & 2) != 0;
+              const bool authorNames = (cheat & 2) != 0;
 
                 Cpu6502 cpu = oracle.Fresh();
                 // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
@@ -193,7 +193,7 @@ namespace GameLogicTests
                * port's pair of bools is that pair of bits.
                */
               cpu.memory[static_cast<std::uint16_t>(at.keylook + Elite::KEY_CONTROL)] = controlHeld ? 0xFFu : 0x00u;
-              cpu.memory[at.patg] = patg ? 0x80u : 0x00u;
+              cpu.memory[at.authorNames] = authorNames ? 0x80u : 0x00u;
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
                 cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
@@ -218,11 +218,11 @@ namespace GameLogicTests
 
               const Elite::JumpResult result =
                 Elite::PerformJump(universe.universe, ports, selected, jump, described, market,
-                                   cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
+                                   cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, authorNames);
 
               const std::wstring context =
                 WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " + std::to_string(distance)
-                          + " view " + std::to_string(view) + " ctrl " + std::to_string(controlHeld) + " patg " + std::to_string(patg));
+                          + " view " + std::to_string(view) + " ctrl " + std::to_string(controlHeld) + " patg " + std::to_string(authorNames));
 
               Assert::AreEqual(cpu.memory[at.qq14], universe.universe.commander.fuel.tenths, (context + L": QQ14").c_str());
               Assert::AreEqual(cpu.memory[where.mj], universe.universe.status.midJump, (context + L": MJ").c_str());
@@ -340,7 +340,7 @@ namespace GameLogicTests
             Mirror(universe.universe, cpu, where);
             cpu.memory[at.ghyp] = fitted;
             cpu.memory[at.gcnt] = galaxy;
-            cpu.memory[at.fist] = 40u;
+            cpu.memory[at.legalStatus] = 40u;
             cpu.memory[at.qq9] = chart.cursorX;
             cpu.memory[at.qq10] = chart.cursorY;
 
@@ -358,7 +358,7 @@ namespace GameLogicTests
                                                    " galaxy " + std::to_string(galaxy));
 
             Assert::AreEqual(cpu.memory[at.ghyp], universe.universe.commander.galacticDrive, (context + L": GHYP").c_str());
-            Assert::AreEqual(cpu.memory[at.fist], universe.universe.commander.legalStatus, (context + L": FIST").c_str());
+            Assert::AreEqual(cpu.memory[at.legalStatus], universe.universe.commander.legalStatus, (context + L": FIST").c_str());
             Assert::AreEqual(cpu.memory[at.gcnt], universe.universe.commander.galaxyNumber, (context + L": GCNT").c_str());
             for (std::size_t byte = 0; byte < 6u; ++byte)
             {
@@ -620,7 +620,7 @@ namespace GameLogicTests
       const std::uint16_t escape = oracle.Label("ESCAPE");
       const std::uint16_t qq20 = oracle.Label("QQ20");
       const std::uint16_t escp = oracle.Label("ESCP");
-      const std::uint16_t fist = oracle.Label("FIST");
+      const std::uint16_t legalStatus = oracle.Label("FIST");
       const std::uint16_t qq14 = oracle.Label("QQ14");
       const std::uint16_t tribble = oracle.Label("TRIBBLE");
       const std::uint16_t goin = oracle.Label("GOIN");
@@ -674,7 +674,7 @@ namespace GameLogicTests
         Mirror(universe.universe, cpu, where);
         cpu.memory[tribble] = one.tribbleLow;
         cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = one.tribbleHigh;
-        cpu.memory[fist] = one.legal;
+        cpu.memory[legalStatus] = one.legal;
         cpu.memory[escp] = 0xFFu;
         cpu.memory[qq14] = one.fuel;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
@@ -703,7 +703,7 @@ namespace GameLogicTests
             universe.universe.commander.cargoHold[item],
             (context + L": QQ20+" + std::to_wstring(item)).c_str());
         }
-        Assert::AreEqual(cpu.memory[fist], universe.universe.commander.legalStatus, (context + L": FIST").c_str());
+        Assert::AreEqual(cpu.memory[legalStatus], universe.universe.commander.legalStatus, (context + L": FIST").c_str());
         Assert::AreEqual(cpu.memory[escp], universe.universe.commander.escapePod, (context + L": ESCP").c_str());
         Assert::AreEqual(cpu.memory[tribble], universe.universe.commander.tribbles.lo, (context + L": TRIBBLE").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],

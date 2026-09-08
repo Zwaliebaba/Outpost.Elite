@@ -205,12 +205,298 @@ def count_inventory_stale_files(_root: Path) -> int:
     return stale
 
 
+# ---- M6-d's instrument: the assembly transcribed in comments -------------------------------------
+#
+# The 6502's 56 mnemonics, split by addressing mode, because the two need different tests.
+#
+# A mnemonic ALONE is not a transcription. "`ORA` touches no flag" and "its top BIT is set" are
+# prose about behaviour that happen to name an instruction, and R20 says a reason is what M6-d keeps.
+# What M6-d removes is the QUOTATION: an instruction with its operand, or a run of implied-mode
+# instructions separated by slashes. So the counter asks for instruction SHAPE, not for a word.
+MNEMONICS = ("ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CLV CMP CPX CPY DEC DEX DEY "
+             "EOR INC INX INY JMP JSR LDA LDX LDY LSR NOP ORA PHA PHP PLA PLP ROL ROR RTI RTS SBC SEC SED "
+             "SEI STA STX STY TAX TAY TSX TXA TXS TYA").split()
+
+# The ones that take no operand, so shape has to come from what surrounds them instead.
+IMPLIED = sorted("BRK CLC CLD CLI CLV DEX DEY INX INY NOP PHA PHP PLA PLP RTI RTS SEC SED SEI TAX TAY TSX "
+                 "TXA TXS TYA".split())
+
+# Seven mnemonics are also ordinary English words, and this tree writes its findings in CAPITALS.
+#
+# "IT IS NOT SELF-MODIFYING CODE AND IT IS NOT IN AN INTERRUPT HANDLER" and "TWO LOOPS AND ONE
+# COUNTER" are sentences; to a pattern that takes any capitalised token after a mnemonic as an
+# operand they are instructions. 203 lines of the port read that way, which is the third correction
+# this counter has needed and the largest.
+#
+# So these seven need LISTING CONTEXT -- a `6502:` marker or a `/` separator on the same line -- and
+# the other forty-nine count on shape alone. The cost is that a lone `AND #31` quoted mid-sentence
+# is not counted; that is a QUOTATION under §1 R-i rather than a transcription, so the ratchet
+# simply does not force it to be tagged. Under-counting prose is the safe direction: the alternative
+# is a ratchet that cannot reach zero without mangling two hundred good sentences.
+AMBIGUOUS = "AND BIT SEC INC DEC BRK TAX".split()
+LISTING_CONTEXT = re.compile(r"6502:|/")
+
+# `LDA #0`, `STA SC+1`, `JSR MULTU`, `ASL A` -- a mnemonic with a real OPERAND after it.
+#
+# THE OPERAND MAY NOT BE AN ENGLISH WORD, and that is the correction M6-d-2 made after the first
+# file: "clears both halves AND the carry" and "expresses that with ROR through the carry flag" both
+# read as an instruction to a looser pattern, and both are prose. A 6502 operand starts with `#`,
+# `$`, `&`, `%` or `(`, or is the accumulator, or is a label -- and every label in this game's source
+# begins with a capital, a digit or a dot. Lowercase after a mnemonic is a sentence carrying on.
+# `AND` IS TIGHTER THAN THE REST, and this is the fourth calibration of this counter (M6-d-33).
+#
+# `AND` is a conjunction, and this tree writes its findings in capitals, so "AND IT IS NOT THE
+# COMMON ONE" and "WHAT IS NOT HERE AND WHY" read as instructions to a pattern that takes any
+# capitalised token as an operand. The ambiguous-mnemonic guard does not save them: it asks for a
+# slash or a `6502:` in the body, and a file path -- `library/common/.../tt17.asm`, `&DC00`/`&DC01`
+# -- supplies one.
+#
+# So `AND` counts only with an IMMEDIATE-style operand. The tree has 221 occurrences of `AND`
+# followed by a bare token and exactly seven are real (`AND PATG`, `AND COL`, `AND VIC+&10`); every
+# one of those seven shares its line with an unambiguous mnemonic that flags it anyway, so nothing
+# is lost. Eight prose lines stop being counted, and each of them is quoted in section 8's M6-d-33.
+_AND_LESS = [m for m in MNEMONICS if m != "AND"]
+OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(_AND_LESS) + r")\s+(?:A\b|[#$&%(]|[A-Z0-9.][\w.%+,]*)"
+                            r"|\bAND\s+(?:A\b|[#$&%(])")
+
+# `TXA / CLC` -- an implied-mode instruction needs a SLASH beside it to be a listing.
+#
+# Backticks are not enough: "the `CLC` here looks dead" and "no `CLC` between them" name an
+# instruction in a sentence about behaviour, which is what R20 keeps and what §3 says is not a
+# quotation. A slash is the thing only a transcription has.
+OPCODE_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(IMPLIED) + r")\b|\b(?:" + "|".join(IMPLIED) + r")\s*/)")
+
+# The same two, over the mnemonics that cannot be mistaken for English.
+_PLAIN = [m for m in MNEMONICS if m not in AMBIGUOUS]
+_PLAIN_IMPLIED = [m for m in IMPLIED if m not in AMBIGUOUS]
+UNAMBIGUOUS_OPERAND = re.compile(r"\b(?:" + "|".join(_PLAIN) + r")\s+(?:A\b|[#$&%(]|[A-Z0-9.][\w.%+,]*)")
+UNAMBIGUOUS_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(_PLAIN_IMPLIED) + r")\b|\b(?:"
+                                 + "|".join(_PLAIN_IMPLIED) + r")\s*/)")
+
+COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
+
+
+# The tag that makes a quotation DELIBERATE (§1 R-i, ruled 2026-09-08).
+#
+# M6-d's row wants the ratchet at zero and Risk R20 lets a comment keep its instruction sequence
+# when that sequence IS the reason. Both hold once the counter can tell the two apart, and the only
+# thing that can tell them apart is the author saying which this is. So a kept quotation carries the
+# tag, ON EVERY LINE OF IT: an untagged listing is transcription and goes, a tagged one is counted
+# against a cap you can see. Tagging each line rather than opening a block keeps the rule
+# unambiguous and makes a long quotation cost more to keep, which is the right incentive.
+#
+# Not `6502:` -- that is the marker M6-e removes, and `\b6502:` does not match this.
+QUOTED_TAG = re.compile(r"\b6502 quoted:")
+
+
+def _is_transcription(_line: str) -> bool:
+    """Does this comment line QUOTE instructions, rather than name one in a sentence?"""
+    if not (OPCODE_OPERAND.search(_line) or OPCODE_IMPLIED.search(_line)):
+        return False
+    if UNAMBIGUOUS_OPERAND.search(_line) or UNAMBIGUOUS_IMPLIED.search(_line):
+        return True
+    # The comment's own `//` is a slash, so the context test reads the BODY and not the marker.
+    return bool(LISTING_CONTEXT.search(COMMENT_LINE.sub("", _line, count=1)))
+
+
+def _opcode_lines(_root: Path):
+    """Every comment line in the port that shows instruction shape, with whether it is tagged.
+
+    Counted per LINE and not per instruction, because a rewrite replaces lines: a run of six
+    instructions across two comment lines is two sites to rewrite, not six.
+
+    A comment at the END of a code line counts as much as one on a line of its own -- see
+    `comment_lines`, which is what made the difference and what M6-d-20a re-based the ceiling for.
+
+    `Design/` is not read. The plan's own journal quotes assembly deliberately and is history --
+    M6-d's row says so -- and a counter that read it could never reach zero.
+    """
+    for folder in ("GameLogic", "Outpost"):
+        here = _root / folder
+        if not here.is_dir():
+            continue
+        for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
+            for line in comment_lines(path.read_text(encoding="utf-8", errors="replace")):
+                if line and _is_transcription(line):
+                    yield line, bool(QUOTED_TAG.search(line))
+
+
+def count_opcode_transcriptions(_root: Path) -> int:
+    """P12 -- instruction listings that carry no reason. M6-d drives this one to ZERO."""
+    return sum(1 for _line, tagged in _opcode_lines(_root) if not tagged)
+
+
+def count_opcode_quotations(_root: Path) -> int:
+    """P12 -- instruction sequences kept BECAUSE they are the reason (R20, R-i). Capped, not zero."""
+    return sum(1 for _line, tagged in _opcode_lines(_root) if tagged)
+
+
 def count_origin_markers(_root: Path) -> int:
     """P12 -- `6502:` references in GameLogic/ -- the `//` markers inventory.py reads and the `*`-prefixed
     ones inside block comments alike -- read from the RAW text because they are comments."""
     total = 0
     for path in headers(_root) + sources(_root):
         total += len(ORIGIN_MARKER.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return total
+
+
+# The identifiers that are 6502 labels and nothing else (P12, Design/Modernize.md M6-c).
+#
+# WRITTEN AS A LIST AND NOT DERIVED FROM `Upstream/`, for two reasons. The first is that it has to
+# keep working after M6-f deletes the upstream tree, and a counter that reads the original cannot
+# read zero once the original is gone. The second is that "is a label" is not the question: 135
+# identifier spellings in `GameLogic/` are labels of the C64 build, and most of them are labels
+# BECAUSE THE ORIGINAL ALSO NEEDED A WORD FOR THE THING -- `view`, `status`, `type`, `energy`,
+# `name`, `counter`, `pixel`, `swap`, `sun`, `junk`, `cash`, `checksum`, `x1`, `y1`, `x2`, `y2` --
+# and renaming those would make the code worse, not freer of the original. So the question the
+# counter asks is the one M6-c is actually about: **does the name say what it holds, or do you have
+# to have read the original to know?**
+#
+# What that leaves is five families, and the count was taken over the tree before any of them moved
+# (§8, M6-c-0): 971 sites in `GameLogic/`, 7 in `Outpost/` and 1,611 in the suite.
+ORIGIN_IDENTIFIERS = (
+    # The zero-page scratch bytes. `Q` is a divisor here and a multiplicand there; `T` is whatever
+    # the routine needed a byte for. One letter, no meaning, and four hundred sites of it.
+    #
+    # `c` AND `v` ARE NOT HERE AND THAT IS DELIBERATE. Both are 6502 labels, and in this tree both
+    # are the PROCESSOR'S STATUS FLAGS: `cpu.c` in a hundred and fifty fixtures, and `Flags` in
+    # `EliteTypes.h`, which is the status register as a struct and names its four bits as the
+    # processor names them. That is the right name for the thing, so the counter does not ask for it
+    # back. `PlanetDraw`'s own `v` is a carry-over and M6-c renames it by eye rather than by ratchet.
+    "k k2 k3 k5 k6 q q2 r s s2 t t1 u b m p p2 "
+    # `XX2` to `XX17` -- the drawing workspace, named by their offsets from `XX0`.
+    "xx2 xx3 xx12 xx16 xx17 "
+    # The rates and the counters. `ALPHA` and `BETA` are the roll and the pitch and say neither;
+    # `ALP1`/`ALP2` and `BET1`/`BET2` are their magnitudes and signs, `DELTA` the speed, `DELT4` the
+    # speed shifted for the stardust, `RAT`/`RAT2` the damping constants, `SC` the screen pointer.
+    "sc cnt cnt2 rat rat2 alp1 alp2 bet1 bet2 alpha beta delta delt4 "
+    # The named oddities: labels whose names are not words in any language. `frump`, `lotus` and
+    # `santana` are the authors' jokes; `ze`, `stp`, `lsp` and `yx2M1` are abbreviations of nothing.
+    # `SUNX` is NOT here: it is a label, and `sunX` says where the sun's centre is, which is the
+    # test this list applies to everything else (M6-c-5).
+    "lsp stp ze yx2M1 dontclip newb newzp mutok pltog patg frump fist sprx spry innersec lotus santana "
+    # The music player's, which are the SID's registers under the player's own numbering.
+    "value0 value1 value2 value3 value4 vibrato2 vibrato3 "
+    "voice2lo1 voice2hi1 voice2lo2 voice2hi2 voice3lo1 voice3hi1 voice3lo2 voice3hi2"
+).split()
+
+# The prefixes the naming convention puts in front of a name (AGENTS.md §1): a parameter's `_`, a
+# member's `m_`, a global's `g_`, a mutable static's `sm_`. `_q` is the same carry-over as `q`.
+NAME_PREFIX = re.compile(r"^(?:sm_|m_|g_|_)")
+IDENTIFIER = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+
+def code_only(_text: str) -> str:
+    """Comments, string literals and character literals out, in ONE pass over the text.
+
+    `strip_comments` and a literal regex run one after the other are wrong in both orders and this
+    counter met both halves of it: a character literal holds `Put('m')`, which is not a routine still
+    called `m`, and a comment holds an apostrophe -- "sprite 1's low nibble" -- which opens a
+    character literal in whatever the other pass left behind and swallows code up to the next one.
+    That is how `lotus` came to be counted once in a file that does not use it. A single scan cannot
+    get the order wrong because there is no order: whichever opens first closes first.
+
+    `strip_comments` above is left alone deliberately -- eight other counters are calibrated against
+    it and this is not the slice that re-measures them.
+    """
+    out: list[str] = []
+    at = 0
+    end = len(_text)
+    while at < end:
+        here = _text[at]
+        pair = _text[at : at + 2]
+        if pair == "//":
+            at = _text.find("\n", at)
+            if at < 0:
+                break
+        elif pair == "/*":
+            closed = _text.find("*/", at + 2)
+            at = end if closed < 0 else closed + 2
+        elif here == "'" and at > 0 and _text[at - 1].isdigit() and at + 1 < end and _text[at + 1].isdigit():
+            # A DIGIT SEPARATOR, not a character literal: `4'000'000` is all over the suite, and
+            # reading its apostrophe as a quote swallows every identifier up to the next one. This
+            # is what made the two-pass strip read 99 sites FEWER than there are.
+            out.append(here)
+            at += 1
+        elif here in "\"'":
+            at += 1
+            while at < end and _text[at] != here:
+                at += 2 if _text[at] == "\\" else 1
+            at += 1
+        else:
+            out.append(here)
+            at += 1
+    return "".join(out)
+
+
+def comment_lines(_text: str) -> list[str]:
+    """The COMMENT text on each line of a file, one entry per line -- what `code_only` throws away.
+
+    A LISTING IS A LISTING WHEREVER IT IS WRITTEN. `_opcode_lines` used to ask
+    `COMMENT_LINE.match(line)`, which only sees a comment that STARTS its line, and 359 sites were
+    invisible to the ratchet because they sit at the end of one:
+    `SetUpScreen(...); // 6502: LDA #13 / JSR TT66` is the same site as the same words on a line of
+    their own. Five files had been reported "to zero" with sixteen of these still in them
+    (M6-d-20a).
+
+    One pass, string- and character-literal aware for the same reason `code_only` is: a `//` inside
+    a literal opens no comment, and an apostrophe inside a comment opens no literal.
+    """
+    out: list[str] = [""] * (_text.count("\n") + 1)
+    at, line, end = 0, 0, len(_text)
+    while at < end:
+        here, pair = _text[at], _text[at : at + 2]
+        if pair == "//":
+            stop = _text.find("\n", at)
+            stop = end if stop < 0 else stop
+            out[line] += _text[at:stop]
+            at = stop
+        elif pair == "/*":
+            closed = _text.find("*/", at + 2)
+            stop = end if closed < 0 else closed + 2
+            span = _text[at:stop]
+            for step, piece in enumerate(span.split("\n")):
+                out[line + step] += piece
+            line += span.count("\n")
+            at = stop
+        elif here == "'" and at > 0 and _text[at - 1].isdigit() and at + 1 < end and _text[at + 1].isdigit():
+            at += 1  # a digit separator, as in `code_only`
+        elif here in "\"'":
+            started = at
+            at += 1
+            while at < end and _text[at] != here:
+                at += 2 if _text[at] == "\\" else 1
+            at += 1
+            line += _text[started:at].count("\n")
+        else:
+            if here == "\n":
+                line += 1
+            at += 1
+    return out
+
+
+
+def count_origin_identifiers(_root: Path) -> int:
+    """P12 -- sites where the port still calls something by its 6502 label (M6-c).
+
+    THE SUITE IS COUNTED TOO, and it is two thirds of the total. M6-c's scope is "in the code and
+    the tests", and a counter that stopped at `GameLogic/` would read zero with 1,611 sites left.
+    """
+    vocabulary = set(ORIGIN_IDENTIFIERS)
+    total = 0
+    for folder in ("GameLogic", "Outpost", "Tests/GameLogicTests"):
+        here = _root / folder
+        if not here.is_dir():
+            continue
+        for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
+            # The interpreter is not the port. `Cpu6502` MODELS a 6502, so `c`, `v` and `p` are the
+            # processor's own flags and pointers and are the right names for it -- 120 of the suite's
+            # sites are `cpu.c` -- and the whole file leaves the tree at M6-f anyway.
+            if path.stem == "Cpu6502":
+                continue
+            code = code_only(path.read_text(encoding="utf-8", errors="replace"))
+            for match in IDENTIFIER.finditer(code):
+                if NAME_PREFIX.sub("", match.group(0)) in vocabulary:
+                    total += 1
     return total
 
 
@@ -249,6 +535,9 @@ COUNTERS = {
     "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
+    "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments that carry no reason"),
+    "opcode-quotations": (count_opcode_quotations, "P12: instruction sequences kept because they ARE the reason"),
+    "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
     "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
 }
@@ -308,7 +597,9 @@ def write_ratchet(_measured: dict[str, tuple[int, str]]) -> None:
         ],
         "ceilings": ceilings,
     }
-    RATCHET.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    # ensure_ascii=False: the `slice` fields cite the plan by section, so they hold `§`. The
+    # default would escape it to `\u00a7` and every --update would churn lines it did not change.
+    RATCHET.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 # ---- the self-test ---------------------------------------------------------------------------------
@@ -331,7 +622,19 @@ namespace Elite
     Byte& lo;
     Byte& hi;
   };
+  // 6502: LDA #0 / STA SC+1 -- an instruction with an operand, so this line IS a transcription
+  // `ORA` touches no flag, and its top BIT is set: prose that NAMES an instruction is not one
+  // it clears both halves AND the carry, and expresses that with ROR through the flag: also prose
+  // TWO LOOPS AND ONE COUNTER, and the mode is decided INSIDE the loop: a sentence, not a listing
+  /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
+  // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
+  /// 6502: AND #63 -- an immediate operand, so the AND alone makes this line a listing
+  /// 6502: the mask is `&DC00`/`&DC01` AND ONLY that -- capitals after AND, and a slash: still prose
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
+  // k3 and q here are a COMMENT and are not counted either
+  std::uint8_t m_alp2 = 0;                                  // a member's prefix is stripped before the match
+  void Divide(std::uint8_t _q, std::uint8_t _k3) noexcept;  // a parameter's is too
+  std::uint8_t x1 = 0;                                      // a label the port would have chosen anyway: NOT counted
   /// 6502: MAS2 -- a marker, which IS counted, from the raw text
   [[nodiscard]] std::uint8_t Mas2(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept;
   void Spawn(MathWorkspace& _math, std::uint8_t _x, bool _carryIn) noexcept;
@@ -348,6 +651,10 @@ namespace Elite
     _work[31] = static_cast<std::uint8_t>(_work[31] | 0x20u);   /* work[3] in a comment */ // 6502: MV1
     _bubble.blocks[slot][36] = _work[SHIP_FLAGS_OFFSET];
     const std::uint8_t z = _work[8u];
+    const std::uint8_t xx12 = z; /* xx16 in a comment does not count */
+    Put('m');                    // and 'm' is a character literal, not the label
+    const std::uint8_t shade = z;      // 6502: LDA #0 / STA T -- a TRAILING listing, which counts too
+    const char* path = "a//b LDA #1";  // a listing inside a STRING opens no comment, and counts for nothing
   }
 }
 """
@@ -386,7 +693,10 @@ EXPECTED = {
     "mutants": 3,
     "mutant-files": 2,
     "inventory-stale-files": 1,
-    "origin-markers": 2,
+    "origin-markers": 7,
+    "origin-identifiers": 5,
+    "opcode-transcriptions": 4,
+    "opcode-quotations": 1,
     "oracle-test-files": 1,
     "origin-tools": 1,
 }

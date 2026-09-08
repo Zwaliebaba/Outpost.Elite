@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Cpu6502.h"
+#include "OracleLabels.h"
 
 #include <cstdint>
 #include <string>
@@ -92,7 +93,7 @@ namespace Elite::Testing
     [[nodiscard]] Coverage TakeCoverage() const;
 
   private:
-    OracleImage(const char* _labelsFile, const char* _binariesFile);
+    OracleImage(const Labels::Entry* _labels, std::size_t _labelCount, const char* _binariesFile);
 
     bool m_available = false;
     std::string m_reason;

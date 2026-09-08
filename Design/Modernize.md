@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->eighteen repository checks pass,
+(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->nineteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -91,6 +91,8 @@ Clarified the same day into four rulings:
 | R-e | **"The port was wrong, the record is not needed."** (Ruled 2026-09-06, on the replay.) When a slice finds a defect in the port and fixes it, the replay record follows the fix: it is re-taken with the journal entry naming the defect, and no ADR-001 §6 row is needed for the record to move. What stays forbidden is a record that moves with no defect named — that is a refactor that changed the game. | Rule 1 and M0-c's "when the record may change", below. The journal entry is the audit trail; the oracle suites, which do not move for a fix of this kind unless the defect was theirs too, are the check that the fix is a fix. |
 | R-f | **The sweeps answer with a digest; everything else keeps its record.** (Ruled 2026-09-08, on M6-a-2's measurement.) A test that makes more than two thousand calls to the oracle stops comparing against it case by case and folds its own answers into one digest, compared against one recorded number; every test under that keeps a full input-to-answer record. | 73 of the 295 tests that call the oracle change shape in M6-b; the fixture is about 25 MB rather than 222. What is bought is diagnosis and not fidelity — a fixture of either kind pins what the tests asked on the day it was recorded — so it is spent where debugging is hard (the drawing, whole-frame and composition comparisons) and saved where a bisect against the previous commit finds the case (the arithmetic sweeps). §4.10 carries the measurement. |
 | R-g | **The labels become constants; the assembled image never enters the tree.** (Ruled 2026-09-08, with R-f.) `tools/labels.py` emits the ~1,900 addresses as a generated header — metadata about the original on the same footing as the extracted data tables — and the record's key stops being taken over the base image and is taken over what the test WROTE, which needs a write set in the interpreter. | This is the half of R-c that Q7 got wrong: the label table does NOT go with the oracle, because the tests still have to find their routines. The 64 KB image is the original's CODE and stays out, so ADR-001 §5's "nothing derived from `Upstream/` is uploaded" holds through M6-f. The risk the ruling accepts is an unsized tail of tests that read image bytes no call ever wrote; M6-b measures it before it builds on it. |
+| R-h | **What the fixture CARRIES is measured before it is committed.** (Ruled 2026-09-08, on M6-b-1's census.) The census counted image DEPENDENCE — 18.5% of calls read a non-zero byte nothing wrote — and that is an upper bound, not the quantity ADR-001 §5 turns on: a byte read from a table may be consumed into a computation rather than reaching the recorded answer. So the recorder measures how much of the answers is VERBATIM image content, and piece (3) waits on that number. | One more recording pass and a small change to `RecordingOracle`. The ruling is deliberately narrow: it does not reopen R-f or R-g, it supplies the one fact those two were ruled without. §4.10 carries the result. |
+| R-i | **M6-d's ratchet splits in two: transcription to zero, quotation capped.** (Ruled 2026-09-08, on M6-d-0's instrument.) The row's "at zero" and R20's "keeps the instruction sequence as a quotation" cannot both hold of one counter, because a kept quotation is a counted line. So there are two: a listing that carries no reason goes to **zero**, and a quotation that IS the reason carries an explicit tag the counter can see and is capped at a declared number. | Both the row and R20 stay true at once. The point of the tag is that the cap stays MECHANICAL — a floor I assert per site is not a ratchet, and the residue belongs in the counter where it can be seen rather than in a fudged floor. |
 | R-d | **History is not rewritten by this plan.** Removing the files at the tip is M6-f; whether the history that carried them is rewritten is a separate owner decision and is not scheduled here. | Recorded in R21 (§7) so that it cannot be mistaken for something M6 did. |
 
 Anything not in this table is a routine judgement call this plan makes itself and records in §6.
@@ -269,7 +271,7 @@ counted. `tools/check_modernize.py` counts them and **fails the build if any cou
 ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
 ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
 
-**P1 — The register-shaped calling convention.** <!--count:register-params-->13 parameters in
+**P1 — The register-shaped calling convention.** <!--count:register-params-->11 parameters in
 `GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
 6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
 a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
@@ -386,7 +388,16 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:oracle-test-files-->47 of the test translation
+references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
+a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
+<!--count:opcode-transcriptions-->253 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-quotations-->0 are a sequence kept
+because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
+the comments that END a line rather than start one — the shape it asks for,
+why naming an instruction is not quoting one, and the tag that separates the two, are in
+`check_modernize.py`); M6-d drives the listings to zero and caps the quotations; <!--count:origin-identifiers-->0 sites in the library, the
+executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
+2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
@@ -518,14 +529,14 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
+| `MathWorkspace.lastDivisor` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
 | `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | FoldIntoStateHash, MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
-| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
-| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, FoldIntoStateHash, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
-| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility, FoldIntoStateHash | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
-| `GeometryWorkspace.xx2` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, FoldIntoStateHash, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
-| `GeometryWorkspace.xx3` | `XX3` | MeasureRange, ProjectVertices | DrawExplosionCloud, FoldIntoStateHash, OpenHeapRun | PushEdges (after EitherFaceVisible) | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
-| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap, FoldIntoStateHash | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
+| `DrawWorkspace.screenPointer` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
+| `GeometryWorkspace.scaledOrientation` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, FoldIntoStateHash, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
+| `GeometryWorkspace.dotProducts` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility, FoldIntoStateHash | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
+| `GeometryWorkspace.faceVisible` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, FoldIntoStateHash, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
+| `GeometryWorkspace.projectedVertices` | `XX3` | MeasureRange, ProjectVertices | DrawExplosionCloud, FoldIntoStateHash, OpenHeapRun | PushEdges (after EitherFaceVisible) | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
+| `ClipState.clippingOff` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap, FoldIntoStateHash | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
 | `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
 | `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
 | `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine, FoldIntoStateHash | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
@@ -809,6 +820,41 @@ no call ever wrote (the blueprints, the font, the token tables). **M6-b measures
 builds on it**: the interpreter records its read set for one pass, and the number of tests reading
 image bytes outside what they wrote is a reading rather than a guess — the same shape as M6-0-f's
 instrument, and for the same reason.
+
+**The measurement, taken 2026-09-08 (§8, M6-b-1).** One pass, 3,224,616 calls, **704,039,505 data
+reads**. Of those, 328,377,761 (46.6%) found a byte still holding the base image's value — but that
+number counts a drawing routine reading a blank screen byte, which is "off the image" and carries
+nothing the original put there. **The number that matters is the non-zero half: 128,023,278 reads
+(18.2%), over 19,112 distinct addresses, in 597,921 calls (18.5% of the corpus).** The other 81.5%
+of calls answer from what the test wrote and from zeros, and a write-set key covers them outright.
+
+**AND THE ANSWER TO R-h, WHICH IS THE NUMBER THAT MATTERS (2026-09-08, §8 M6-b-3).** The recorder
+now asks the sharper question directly: how much of what a record HOLDS is a run of bytes the
+assembled original also holds, verbatim. **8,297,316 of 22,279,497 record memory bytes — 37.2% — in
+1,128,263 runs, the longest of them 2,024 bytes.** A run of two thousand contiguous bytes is not
+arithmetic agreeing with the original by chance; it is a block of the original's content sitting in
+the record.
+
+So the committed fixture would carry roughly 8 MB of the original verbatim, and that is a different
+proposition from "the fixture holds answers, not the image". **One caveat, stated because it cuts the
+owner's way and not mine**: this is the WHOLE corpus, before R-f folds the 73 heavy tests into
+digests. Those tests are the drawing and whole-frame comparisons — the ones whose records are most
+likely to be long runs of screen — so the proportion surviving into the ~25 MB fixture could be
+materially lower. Measuring that needs the digests built first, which is piece (3), which is the
+thing waiting on this ruling.
+
+Where those 19,112 addresses fall says the split did its job: &CF00–&FAFF holds 7,832 of them,
+&0400–&20FF 5,137, &B700–&C6FF 3,947 and &9200–&99FF 1,509 — and **&4000–&67FF, the bitmap, drops
+out of the list entirely.** 7,225 of its addresses are read off the image and almost none of them
+hold anything, which is exactly the drawing-routine-reads-a-blank-screen case the non-zero test was
+put there to remove.
+
+So the tail R-g accepts is real and it is a fifth of the corpus, concentrated in the pages the
+original keeps its tables, blueprints and text in. It does not make replay wrong — the recorded
+answer already holds what those reads produced — but it decides two things the ruling was made
+without: how much of the original the fixture's ANSWERS carry (the ADR-001 §5 question), and how
+much of the fixture would silently rot if the image ever moved. Both are the owner's to weigh; the
+number is now on the table rather than under it.
 
 The mutation harness needs no change either way: it runs the suite, and the suite no longer needs an
 oracle to be present — `check_oracle_present` goes with it, and with it the one deliberate failure
@@ -1608,11 +1654,11 @@ were safe after M6-f, and none of them waited.
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** ✅ **built 2026-09-08 (§8, two sittings)** | **M6-a-1**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. **M6-a-2**: the `Oracle` seam, at `Cpu6502::CallSubroutine` and not at §4.10's `Call(label, State)`, which no test's shape would have fitted; `LiveOracle`; `RecordingOracle` with a measuring mode and a fixture writer; the corpus measured. **THE ROW'S LAST CLAUSE IS ANSWERED RATHER THAN BUILT, and the answer is a question for the owner**: a threshold on record size saves the wrong thing, because the 222.4 MB is 3.2 million small calls and not a few big records (§4.10). Committing a fixture waits on the ruling M6-b now needs. | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. The suite runs green through the recorder (454 of 454) and two recording runs of one suite produced byte-identical files. **The "fixtures are committed" clause is NOT met and is withdrawn rather than fudged**: what to commit is the ruling, and §4.10 says what it costs either way. | 3 |
 | **M6-b Fixtures answer — scope set by §1 R-f and R-g, ruled 2026-09-08** | Four pieces, and the first is a measurement: **(1)** the interpreter records its READ set for one pass, so the tail R-g accepts — tests that read image bytes no call ever wrote — is a number before anything is built on it; **(2)** the key moves off the base image and onto what the test wrote, and `tools/labels.py --header` emits the addresses as generated constants with a `--check`; **(3)** the 73 tests over two thousand oracle calls fold their answers into a digest each, and `RecordingOracle` writes the ~25 MB fixture; **(4)** `RecordedOracle` serves the suite, `LiveOracle` and the BeebAsm steps leave CI, `OracleIsPresent` is retired and `mutate.py`'s oracle check goes (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged; the fixture committed and a second recording run byte-identical to it. | 2 for the mechanism, plus roughly 3 for the 73 tests and the read-set measurement |
-| **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
-| **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
+| **M6-c Identifiers** ✅ **built 2026-09-08 (§8, seventeen slices)** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
+| **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. **Scope split by §1 R-i, ruled 2026-09-08**: a listing that carries no reason goes, a sequence that IS the reason is tagged `6502 quoted:` and stays. | `opcode-transcriptions` at **zero**; `opcode-quotations` at or under the cap, every one of them justified in §8; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
 | **M6-f The tree** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py` and the master-count markers removed; ADR-001 §5 and Risk R1 restated; `.gitignore`'s upstream rules dropped. | A fresh clone builds and runs the whole suite with nothing but the repository; `origin-tools` at zero. | 1 |
-| **M6-g ADR-008** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. | Accepted. | 1 |
+| **M6-g ADR-009** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran, and two documents cannot share a number. | Accepted. | 1 |
 
 **Total: roughly 90 sittings**, which is the same order as the port itself took (plan §7), and the
 plan expects the estimate to be wrong in the same direction the port's was: the dense units
@@ -1896,6 +1942,2144 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-50: four more to zero, and the carry is set by a side effect where the `SEC` is
+commented out.**
+
+51 sites over four files -- `ShipMove.h`, `ShipFlags.h`, `Market.h` and `ShipSlot.h`. Fifty-seventh
+to sixtieth at zero.
+
+**Two places where the original relies on an instruction's SIDE EFFECT instead of an explicit flag
+instruction, and in one of them the explicit one is in the source, commented out.** `MVS4`'s carry is
+cleared by a SHIFT rather than by a `CLC`: the shift takes bit 0 of a value that was itself just
+shifted left, which is always zero, so the addition below starts clean. And `NWSHP`'s heap check has
+no `SEC` before its second subtraction -- the `\SEC` is right there in the upstream source with a
+backslash in front of it -- so the comparison is carry-dependent by construction and happens to work
+because `SLSP`'s high byte is never small enough for the first subtraction to borrow. A port that
+"corrected" either would be adding an instruction the game does not execute.
+
+`BAD` is the other keeper: slaves and narcotics are summed and the SUM is doubled, so the doubling
+WRAPS at 128 rather than saturating, and a hold carrying 128 tonnes of narcotics would come out
+innocent. The hold cannot carry that much, so the wrap is unreachable -- which is worth writing down
+precisely because it looks like a bug and is not one.
+
+**And the rule from M6-d-45 needed tightening.** Rewriting the SITE line and reflowing afterwards is
+not enough when the replacement runs past where the original line ended: the following line still
+carries the old tail, and `Market.h` picked up four duplicated tails that way in one pass. The rule
+is now **replace the whole PARAGRAPH**, with `reflow` for paragraphs a rewrite only shortened. A
+formatted table inside a comment is not a paragraph and must not be reflowed -- `gnum`'s six exits
+are an aligned list, and re-wrapping them would destroy the alignment that makes them readable.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (28, 28, 27 and 18). `opcode-transcriptions` 304 → 253.
+
+**2026-09-08 — M6-d-49: four files to zero, and the data-byte idiom is not only `&2C`.**
+
+55 sites over FOUR files -- `TextPrint.h`, `StateTokens.cpp`, `PlanetDraw.h` and `SoundEffects.h`.
+Fifty-third to fifty-sixth at zero, and the widest slice so far: with the tail this shallow the
+per-slice cost is the suite and the harness, so four files cost what two did.
+
+**`NOISE2` uses `EQUB &50`, and it does the same job as `&2C` with a different opcode.** The routine
+sets the OVERFLOW flag by testing a byte that happens to hold &60 -- `BIT` copies bit 6 of its
+operand into V, and &60 is `RTS` -- then enters `NOISE` past its own `CLV`, because an `EQUB &50` is
+a branch-if-overflow-clear that with V set cannot branch and therefore swallows the byte after it.
+Two data-bytes-as-instructions in one routine, and the second is a BRANCH rather than a `BIT abs`.
+So the family named across M6-d-41 to M6-d-48 is not "the `&2C` trick": it is **any opcode whose
+operand bytes are the instruction you want skipped**, and `&2C` is simply the most common member.
+Seven instances now.
+
+`PlanetDraw.h` adds a documentation-versus-build divergence of the kind M6-d-37 found in `oldlong`:
+the upstream header for `CHKON` documents a compare against the LITERAL bottom row, and this build
+assembles a compare against `Yx2M1`, a variable that `TT23` moves to 199 for the short-range chart
+and back to 143 afterwards. Reading the header and not the build gives a port that clips the chart.
+
+`SoundEffects.h` is the file where a sound routine decides a GAME value: `NOISE2` leaves something
+different in the accumulator on each of its three exits -- the flag byte it wrote, the effect's
+priority, or `DNOIZ` -- and the flight loop stores that into a dead ship's energy byte. A port that
+answered only the carry had to invent one, and invented the sustain.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (31, 13, 51 and 39). `opcode-transcriptions` 359 → 304.
+
+**2026-09-08 — M6-d-48: `Dashboard.h` and `Lasers.cpp` to zero, and the ENTRY POINT is the scale.**
+
+31 sites over two files: the dashboard header and the laser. Fifty-first and fifty-second at zero.
+
+**Two families of code-path reuse are now clear, and this slice adds to both.** `DangerColour`'s
+second path is the SIXTH `EQUB &2C`, and it states the hazard more sharply than the earlier five: a
+port written from a DISASSEMBLY would read those two operand bytes as an absolute address, emit a
+read of `$55A9`, and be right by accident (§6.63). And `DILX`/`DIL` is the third MID-INSTRUCTION
+entry point after `zZ+1` (M6-d-42) and `RE2+2` (M6-d-43) -- the routine opens with four shifts, so
+where a caller jumps in IS the scale: `DILX` divides the reading by sixteen, `DILX+2` by four,
+`DIL-1` by two and `DIL` not at all. All four are used. `DIL-1`, the one that reads like a typo, is
+the speed bar.
+
+So the original has two ways of sharing a body between callers that need different behaviour: a data
+byte that swallows the instruction after it, and an entry point part-way through an instruction.
+Neither survives a port as code; both survive as comments, and both are why M6-d rewrites rather
+than deletes.
+
+`Lasers.cpp` is the carry split §6.65 named, in three consecutive additions. Two of them run on
+`DORND`'s exit carry and are data-dependent -- the beam's convergence point moves a pixel on half the
+frames for no reason the coordinate explains. The third, the eight added to `GNTMP`, runs on a carry
+that is ALWAYS clear, because three bits plus 124 plus at most one is 132 and that cannot carry out
+of a byte. So a shot costs exactly eight, and the same uncleared shape means two different things
+three lines apart.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (45 and 16). `opcode-transcriptions` 390 → 359.
+
+**2026-09-08 — M6-d-47: `LoaderScreen.cpp` and `ShipSlot.cpp` to zero, and seven constants out of
+two.**
+
+35 sites over two files: the loader's screen set-up and the slot allocator. Forty-ninth and
+fiftieth at zero.
+
+**The strongest instance yet of "constants that are one".** The loader places seven Trumble sprites
+across the screen at x of 18, 36, 72, 144, 14, 28 and 56 — and the original loads TWO of those. 18
+is doubled three times and 14 twice, in the accumulator, between the stores. Seven `constexpr` bytes
+in the port; two loads and five shifts in the original. With `MT9`'s column-and-view (M6-d-39),
+`BRIEF`'s column-and-distance and `SPAWN_AHEAD`'s 28-and-14 (M6-d-40), that is four places where the
+port must spell as separate names what the original computes once and spends repeatedly, and the
+comment is the only thing that can say so.
+
+`LOOP15` is the other keeper and it is a one-cell fact: the loop that paints the top row's border
+yellow ends on a branch-if-not-zero, so the index never reaches zero and the cell at `COLMEM+2` keeps
+the black the earlier zeroing left. The upstream comment says "characters 3 to 36" and the code
+agrees; a branch-if-positive there would have been an easy and invisible improvement.
+
+And `ShipSlot.cpp` records an out-of-range read the port reproduces rather than tidies: the negative
+types fall into `NW8` too, so the defaults table is indexed at 128 or 129, well past its thirty-three
+entries. It lands elsewhere in the ship data region, which is a defined byte rather than a fault.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (23 and 20). `opcode-transcriptions` 425 → 390.
+
+**2026-09-08 — M6-d-46: `StartUp.cpp` and `ViewChange.h` to zero, and `EQUB &2C` decides how tall
+the border is.**
+
+37 sites over two files: the start-up sequence and the screen-change header. Forty-seventh and
+forty-eighth at zero, and the first slice under the new rule — rewrite the site line, then reflow the
+paragraph — went through both files without a single ragged tail to chase.
+
+**The fifth and most consequential `EQUB &2C`.** `BOX2` opens by loading 18 into X. `TTX66K` reaches
+it by falling off its own end through a load of 25 followed by the byte, and the `&2C` assembles as
+`BIT abs` — whose two operand bytes ARE that load of 18. So the fall-through keeps 25 and a call to
+`BOX2` gets 18. A text screen is 25 character rows tall and the space view is 18, and **that entire
+distinction is one byte of data standing in for an instruction**. `BOX` then does it a second time
+for the whole-screen border. With `OSW0L` (M6-d-41), the three view keys (M6-d-43) and `MESS`
+(M6-d-44) that is five instances in four slices, which stops it being a curiosity: it is how this
+program shares a tail between callers that need different constants, and the byte survives every
+rewrite because the byte is the mechanism.
+
+`ZES2k` is the other shape worth keeping: it stores at `_first` and counts DOWN, stopping when the
+index reaches zero, so byte 0 of the page is never touched — `TTX66K` follows the call with a store
+of its own to finish the job. A port that zeroed the whole page would agree with the game everywhere
+except that one byte. `ZES1k`, the entry above it, zeroes the index first and so wraps the count all
+the way round: 0, then 255 down to 1, the whole page out of the same loop.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (26 and 22). `opcode-transcriptions` 462 → 425.
+
+**2026-09-08 — M6-d-45: `Arith.h` and `TextPrint.cpp` to zero, and the file most about instructions
+did not need the tag either.**
+
+44 sites over two files: the arithmetic header and the text printer. Forty-fifth and forty-sixth at
+zero.
+
+**`Arith.h` is where this port keeps its flag provenance, and every one of those arguments survived
+as prose.** The eighth, ninth, thirteenth and fifteenth dropped flags are all documented in this one
+header, and each is a claim about which instruction LEAVES the carry and which one READS it: the
+multipliers ending on a rotate of `P` so a caller sees that rotate's carry out; `ADD`'s three exits
+none of which clears it; the logarithm divide whose eight steps cannot leave it set because the
+shift that seeds `P` puts a zero in bit 0; `SQUA2`'s always-clear exit. Naming the instructions was
+never the point — WHICH one and IN WHAT ORDER is — and prose says that without quoting. After
+`Hyperspace.h` in M6-d-42, this is the second file whose comments are most about instruction
+behaviour to reach zero with no tagged quotation. `opcode-quotations` is still 0.
+
+**And the method got its fourth tool, because I made the same mistake three times in one slice.**
+Rewriting one line of a paragraph to something longer leaves a ragged tail; reflowing that tail one
+line at a time pushes it down by one each pass, which is a treadmill; and hand-typing the
+continuation loses the prefix on a nested block (a five-space `     * ` came back as three) or
+duplicates a line that was already there (twice). The fix is `reflow(path, lo, hi)` beside
+`apply`: it takes a WHOLE paragraph, keeps its common prefix, and rewraps at a fixed width. It
+refuses a range containing a blank `*` separator, because that mistake merged a header line into
+its own paragraph. **The rule for the remaining slices is: rewrite the SITE line only, then reflow
+the paragraph — never hand-write a continuation.** After `rewrite.apply` (M6-d-31) and the mutation
+worktree carrying the uncommitted diff (M6-d-25a), that is the third time a repeated hand error has
+been answered with a tool rather than with more care.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (63 and 36). `opcode-transcriptions` 506 → 462.
+
+**2026-09-08 — M6-d-44: `Trumbles.cpp` and `Messages.cpp` to zero, and `EQUB &2C` for the fourth
+time.**
+
+40 sites over two files: the Trumble sprites and the in-flight message printer. Forty-third and
+forty-fourth at zero. Nothing new found; both files were already well explained and the work was
+turning label-and-listing into label-and-reason.
+
+**The fourth `EQUB &2C` is the one where the original's own comments contradict each other.** `MESS`
+loads 25 and follows it with the byte, so the `BIT` swallows the STORE of the row rather than the
+load below it: the 25 goes into the accumulator and is thrown away, and the row stays the 21 that
+`CLYNS` left. The source comments the load as "the text row for the message if this is not a space
+view" and the `EQUB` as "skip the next instruction", and both cannot be true. Ported as it runs
+rather than as it is described (§6.66, ADR-003), and the byte stays in the comment for the same
+reason it stayed in `OSW0L`, `LOOK1` and the view keys: it IS the mechanism.
+
+`Trumbles.cpp` is a carry pair worth keeping straight. The turn index is doubled into Y, and that
+doubling cannot carry out of a value below eight — so the first random call is the carry-clear one.
+The compare against 235 that decides whether the Trumble turns then SETS the carry on the way past,
+and nothing between there and the second random call touches it — so the second is the carry-set
+one. Two calls, two different carries, both determined by arithmetic that is not about randomness at
+all.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (15 and 19). `opcode-transcriptions` 546 → 506.
+
+**2026-09-08 — M6-d-43: `DockedKeys.h` and `Controls.h` to zero, and my own rewrite made a
+transcription twice.**
+
+42 sites over two headers: the docked key dispatch and the flight controls. Forty-first and
+forty-second at zero.
+
+**The counter caught two sites the rewrite itself created, and both were the word "bit" in
+capitals.** `QQ12` is tested two ways, and saying so wants a contrast between one bit and the whole
+byte. "reads BIT 7" and then "reads the TOP BIT ALONE" both read to the instrument as the `BIT`
+instruction with an operand. `BIT` is already in the ambiguous set, so the guard should have saved
+them — except the guard asks for a slash or a `6502:` in the body, and "docked/flight" supplies the
+slash. That is exactly the hole M6-d-33 recorded for `AND`, where a file path supplied it; this is
+the second word to fall through and the first time a REWRITE, rather than an inherited comment,
+created a site.
+
+No fifth calibration. Restricting `BIT` the way `AND` was restricted would exclude "BIT 7" and would
+still admit "BIT ALONE" and "BIT SEVEN", because a real `BIT` operand and a capitalised English word
+are the same shape — and unlike `AND`, this instruction has no immediate mode to key on. The cure
+was the prose: "reads its top bit and NOTHING ELSE" says the same thing, is clearer, and does not
+collide. Worth carrying into M6-e as a property of the instrument rather than a defect: the guard
+under-counts by design and over-counts when a slash wanders into the sentence, and the second is
+cheap to fix one line at a time.
+
+**`EQUB &2C` again, for the third slice running.** The three view keys reach `LOOK1` by falling
+through two of them, so which view you get depends on where the jump landed rather than on any
+comparison — the same trick `OSW0L` uses to share one print call between an accepted key and a bell
+(M6-d-41). Three appearances in three slices makes it the original's standard way of sharing a tail,
+and the byte stays in all three because the byte is the mechanism.
+
+`Controls.h` also carries `RE2+2`, which is a MID-INSTRUCTION entry point in the same family as
+`zZ+1` (M6-d-42): `BUMP2` and `REDU2` each end by branching into the other's middle, and one of the
+two targets is the second byte of a two-byte branch. Three entry points between two routines and not
+one of them a label a caller uses.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (42 and 51). `opcode-transcriptions` 588 → 546.
+
+**2026-09-08 — M6-d-42: `Docking.cpp` and `Hyperspace.h` to zero, and the hardest case for R-i's tag
+did not need it.**
+
+45 sites over two files: the arrival dispatch and the jump. Thirty-ninth and fortieth at zero.
+
+**`zZ+1` is the strongest candidate for a tagged quotation anywhere in the tree, and prose carries
+it.** `Ghy` branches to `zZ+1` when no galactic drive is fitted. `zZ` is a two-byte instruction that
+loads 96; `zZ+1` therefore addresses its OPERAND; and 96 is &60, which is the opcode for `RTS`. So
+the branch lands inside an instruction and executes its argument as a return — there is no code at
+`zZ+1` at all. The comment said this by quoting `LDA #96` and its assembled bytes `A9 60`, and the
+first rewrite kept the quotation and reached for R-i's `6502 quoted:` tag. It does not need it: "a
+TWO-BYTE instruction that loads 96 into the accumulator, so `zZ+1` addresses its operand — and 96 is
+&60, which is also the opcode for `RTS`" says every part of the argument, and naming an instruction
+in a sentence is not quoting one (R-i). **`opcode-quotations` is still 0**, and the case that looked
+most likely to need the cap is now evidence the cap may end at zero. That is worth the owner's
+attention before M6-e: the tag exists and has never been used.
+
+**A count in the prose was wrong by a factor of three.** `TT18`'s witchspace roll is `CMP #253 /
+BCS`, so 253, 254 and 255 send you there — three values in 256. The `JumpResult` enum eleven lines
+above said "three bytes in 256" and the routine's own header said "one roll in 256". Both describe
+the same compare. Corrected to three, which is what the arithmetic says and what the enum already
+said.
+
+`ptg` is the other shape worth keeping: `COK` shifted right, the carry set, `COK` rotated back left
+is an OR WITH 1 written in three instructions, and it preserves bit 7 precisely because the shift
+moved it down and the rotate moved it back. §6.126 found the mirror of it — shift-left, set,
+rotate-right — mis-ported twice.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (24 and 9). `opcode-transcriptions` 633 → 588.
+
+**2026-09-08 — M6-d-41: `ExtendedTokens.cpp` and `NameEntry.cpp` to zero, and the byte that IS the
+reason.**
+
+50 sites over two files: the extended-token printer with its justifier, and the line editor.
+Thirty-seventh and thirty-eighth at zero.
+
+**`EQUB &2C` stayed, and it is the clearest example yet of where R20's line falls.** `OSW0L` prints
+the key it accepted or a bell it did not, and there is exactly ONE call to `CHPR` for both: the
+accepted path falls past the bell's load through a byte assembled as `EQUB &2C`, which the processor
+reads as `BIT` with a two-byte absolute address and which therefore swallows the load. Naming the
+opcode is not transcription here — the *value of that byte* is the whole mechanism, and prose that
+said "the accepted path skips the bell" would be describing a consequence and hiding the cause. The
+same paragraph's other half went the other way: `BCC OSW0L` became "the branch back to the loop",
+because what matters is that it ALWAYS branches (`CHPR` returns with the carry clear) and not which
+mnemonic spells it. One paragraph, both sides of the rule.
+
+The rest of both files was label-and-listing over text plumbing — `DAS1`, `DA2`, `DA6`, `DA11`,
+`MT15`, `MT17`, `MT19`, `TRNME`, `TR1`, `GTL1` to `GTL3` — a name, then the loop under it. Each
+keeps its name and loses the transcription. `NameEntry.cpp`'s note that `thislong` is copied into
+`oldlong` "which the original's own comment says is never read" was already right; M6-d-37 confirmed
+it from the other end, and the two now agree without either having been written to match.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (48 and 24). `opcode-transcriptions` 683 → 633.
+
+**2026-09-08 — M6-d-40: `Galaxy.cpp` and `Spawn.h` to zero, and two constants that are one.**
+
+53 sites over two files: the galaxy generator and the spawner's headers. Thirty-fifth and
+thirty-sixth at zero, and the counter is under seven hundred.
+
+**A third instance of the shape M6-d-39 named, and it is now a family.** `SPAWN_AHEAD_X` is 28 and
+`SPAWN_AHEAD_Z` is 14, and the 14 is the 28 SHIFTED DOWN rather than a constant of its own. Two
+`constexpr` bytes side by side say nothing about that; the listing did, and the prose has to now.
+With `MT9`'s column-and-view and `BRIEF`'s column-and-distance that is three places where the
+original computes one value and spends it twice, and the port has to spell it as two names because
+C++ has no way to say "this is that one, halved". This is the class of fact M6-d is most at risk of
+losing: not a behaviour, but a relationship between two constants that only the comment can hold.
+
+`Galaxy.cpp` is otherwise carry chains almost end to end. The generator's population and
+productivity are five additions in a row, each consuming the one before's carry, with the two shifts
+that quadruple the technology level contributing a carry of their own from bit 7 — so the 3 and the
+4 in the productivity factors "are not really 3 and 4", as the surviving prose puts it. And the
+government test is the sharpest case in the file: the shift that decides whether an anarchy gets a
+poor economy ALSO sets the carry from government's bit 0, an explicit `CLC` stops that reaching the
+first addition, and the *second* addition then consumes it deliberately. Written as `tech +
+government / 2`, half the galaxy comes out one technology level low.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (32 and 18). `opcode-transcriptions` 736 → 683.
+
+**2026-09-08 — M6-d-39: `Missions.h` and `Tactics.h` to zero, and one load with two consumers.**
+
+57 sites over two headers: the briefings and the AI. Thirty-third and thirty-fourth at zero. No
+defect this time — three slices running had turned one up and this one did not, which is worth
+saying plainly rather than dressing a routine slice as a discovery.
+
+**The idiom worth naming is a single load serving two different things.** `MT9` loads 1, hands it to
+`DOXC` as a column, and jumps into `TT66`, which reads the SAME accumulator as its view — the store
+in between does not disturb it. `BRIEF`'s opening does it again with a column and a ship's
+distance. That is why `MT9_COLUMN_AND_VIEW` and `BRIEFING_START_DISTANCE` are each one constant
+rather than two, and it is not visible from the port's side at all: two `constexpr` bytes that
+happen to be 1 look like a coincidence unless the comment says they are the same load. Cutting the
+listing here means the prose has to carry the fact that the accumulator survives the store, which is
+the reason and not the spelling.
+
+`BRIEF` sets mission 1's bit by shifting bit 0 out and rotating a set carry back in, where the other
+four mission bits use a plain OR. The two are equivalent on `TP` (the shift preserves bit 7, which
+is the only thing that could have been lost), so the comment records the shape without claiming a
+consequence there isn't one.
+
+`Tactics.h`'s share was the sign-magnitude arithmetic: `DCS1` calling the rest of itself so its body
+runs twice, and `TAS7` building a negated sign by rotating a zero and flipping bit 7. Both keep the
+mechanism — doubling pushes the sign into the carry; the rotate pulls it back and leaves bit 0's
+zero behind, so the addition's carry is clean — and lose the mnemonics.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (35 and 18). `opcode-transcriptions` 793 → 736.
+
+**2026-09-08 — M6-d-38: `Combat.cpp` and `StatusScreen.cpp` to zero, and RED comes before YELLOW.**
+
+63 sites over two files: the damage and kill paths, and the status screen. Thirty-first and
+thirty-second at zero.
+
+**The condition tokens are not in the order the comment gave them.** `CONDITION_BASE`'s header read
+"the base of the three condition tokens, "Docked", "Green", "Yellow", "Red"" — four names for three
+tokens, in an order that is wrong. A recursive token is its argument less 160 (`TT47`'s `SBC #160`,
+reached with the carry set from the compare above it), so 230 is token 70 "GREEN", **231 is 71
+"RED"** and 232 is 72 "YELLOW"; "DOCKED" is extended token 205 and not in the run at all. The code
+was right throughout — healthy energy sets the carry and adds two, landing on YELLOW — and only the
+prose had the order backwards, which is exactly the arrangement that makes an error survive: the
+sentence names the constants in the reader's expected order and the arithmetic quietly does
+something else.
+
+**A second miscount in the same file: the flag walk reaches four bytes and the comment claimed
+five.** The loop runs tokens 113 to 116 over `BOMB`, `ENGY`, `DKCMP` and `GHYP`; `ESCP` is the byte
+after them and is printed above, on its own flag. The comment listed it as a fifth, which would be
+a double print if anyone acted on it.
+
+Both were found the same way as M6-d-36's three: by taking each claim the rewrite would carry
+forward and asking the original rather than the paragraph. That is now the routine, and it has
+turned up something in each of the last three slices.
+
+The rest was carry arguments, which are the transcriptions hardest to cut without losing the
+reason. `PlayHitSound`'s explanation of why the carry into `NOISE2` is always clear is *about* four
+shifts, and `TakeDamage`'s is about a rotate that drops bit 0 into the carry; both keep the
+mechanism and lose the mnemonics, because the mechanism is the reason and the mnemonics are not.
+`OO3`'s trap — the zero branch jumping forward PAST the carry branch onto the jump to `DEATH`, so
+energy landing exactly on zero kills a player whose addition carried — survives intact.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (25 and 31). `opcode-transcriptions` 856 → 793.
+
+**2026-09-08 — M6-d-37: `SaveGame.cpp` and `Music.cpp` to zero, and a store nothing reads.**
+
+70 sites over two files: the disk menu and the SID player. Twenty-ninth and thirtieth at zero.
+
+**`JAMESON` ends by writing a byte no build ever reads.** The header carried `LDY #7 / STY oldlong`
+without saying what `oldlong` is or why the port drops it. It is the length of the last saved
+commander's name, set to seven for "JAMESON" — and it is written twice in the whole game, here and
+in `TRNME`, and read nowhere. `thislong`, which `KERNALSETUP` reads for the filename's length, is
+the live one; the upstream annotation on `TRNME` says as much in passing ("though this is never
+used"). So the port copies the block and stops, and the header now says why rather than listing the
+store and leaving a reader to wonder what was skipped.
+
+**A configuration flag is named for its effect and not for what it holds.** `MUFOR` is not "forced
+music": it records whether the docking-music setting *can be toggled*, and both places that read it
+— the start path and the stop path — turn a locked setting into "play". It is tested BEFORE the
+setting itself, so a build that locks the option with the music switched off plays anyway. The port's
+`dockingMusicForced` is the effect, which M6-c settled and this slice did not relitigate; it is
+recorded here because the listing was the only place the flag's real name appeared, and a reader
+going back to `Upstream/` on the strength of the port's name alone will not find it.
+
+`BDRO15` is worth keeping in mind for the same reason: `SEC / ROL A` then three `ASL A` is not a
+shift by four, it is a shift by four with a 1 pushed in at the bottom, which is how command 8 gets
+slid *below* whatever the buffer already held. The port's `(buffer << 4) | 8` says it plainly, but
+only once you know the rotate carried a set bit.
+
+The rest of both files was label-and-listing: `stopat`, `startbd`, `coffeeloop`, `BDENTRY`,
+`feb10`, `feb13`, `YESNO` — a name, then the instructions under it. Each keeps its name and loses
+the transcription, and where the label named a branch's destination it stays on the path that
+reaches it (M6-d-36).
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (46 and 54). `opcode-transcriptions` 926 → 856.
+
+**2026-09-08 — M6-d-36: `SystemScreen.cpp` and `GameLoop.h` to zero, and a carry nothing clears.**
+
+71 sites over two files: the system data screen and the main loop's header. Twenty-seventh and
+twenty-eighth at zero.
+
+**The pack hunter's type depends on a carry nothing clears, and cutting the listing nearly cut the
+only sentence that said so.** Part 4's `AND #7 / ADC #PACK` reads as a mask and an add, and the
+first rewrite of the header said exactly that. `AND` does not touch the carry, nothing between the
+two instructions clears it, and the version this port follows has no `CLC` there — Elite-A's does,
+which is how the difference shows. So a live carry moves the pack one type along, the port has
+always modelled it (`AddWithCarry(masked, Sidewinder, _frame.carry)`), and the sentence three lines
+below already turns on the same carry. The listing was carrying a reason the prose was not. R20's
+test is not whether the rewritten prose reads completely; it is whether it says everything the
+listing implied, and the way to find out is to go back to the original rather than to re-read the
+paragraph.
+
+**And twice more the same hazard took the other shape: the prose invented a reason the listing had
+not given.** `LDA MJ` became "where the mission flag is read" — `MJ` is the WITCHSPACE flag, and
+`GameLoop.cpp` says so eleven lines from where the header now sits. And a label in `BCS TT205` or
+`BNE TT63` names where the branch GOES, so when the listing is cut the label has to stay on the path
+that reaches it; both rewrites left it sitting on the path that does not. All three were caught
+before the slice landed, by reading the original again rather than the paragraph. The cheap check for a whole file is that every claim the rewrite makes is
+one the source can be asked about.
+
+**A mechanical rename struck prose in M4-c-3 and sat unnoticed through two phases.** `ea6c8cb`
+renamed `carry` to `_frame.carry` and the substitution landed inside a sentence: "so the NEXT pass's
+first `DORND` rotates in the _frame.carry `NWSHP` returned". M6-d-14 reflowed the line above it
+without seeing it. Found by surveying every comment block for a port identifier standing where an
+English word belongs — one hit in the whole of `GameLogic/`, now repaired. Nothing checks for this
+shape of damage, and a rename is the one edit that can produce it everywhere at once.
+
+**`check_modernize.py --update` was escaping `§` on every run.** `json.dumps(..., indent=2)` defaults
+to `ensure_ascii=True`, so each rewrite turned `§4.3.1` in a `slice` field into `\u00a74.3.1` and
+churned a line it had not changed. `ensure_ascii=False`, and the diff for this slice is the two lines
+it should have been. The fourth defect in my own instruments this phase.
+
+The rest of `GameLoop.h` is the cheapest kind of transcription there is: nine of the spawner's rolls
+carried `CMP #220` above `TRUMBLE_BREED_ROLL = 220` and `CMP #35` above `TRADER_ROLL = 35` — the
+listing repeating the value the declaration already holds. Two of the nine were not: 224 is compared
+twice and means two different things, and 200 is compared twice with the second read against a
+rotated byte, and both of those had to survive into the prose.
+
+**And §3's own P12 row was claiming a subset relation that does not hold.** It read "4,103 `6502:`
+references in `GameLogic/`'s comments, of which 926 lines are an instruction LISTING" — but the
+listing counter has read `GameLogic/` **and** `Outpost/` since M6-d-0, deliberately, because R20
+applies to the executable too, and a listing need not carry a `6502:` marker at all. Two counts with
+different scopes, joined by an "of which". The row now says what each one covers. The numbers were
+right; the sentence around them was not, which is the harder kind to notice.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (36 and 21). `opcode-transcriptions` 997 → 926.
+
+**2026-09-08 — M6-d-35: `Explosion.cpp` and `Flight.h` to zero, and 194 is three things.**
+
+76 sites over two files: `DOEXP`'s cloud and the flight header. Twenty-fifth and twenty-sixth at
+zero, and the counter is **under a thousand** for the first time.
+
+**One byte in the escape pod's setup is the pitch, the AI byte and the frame count.** 194 is stored
+as the pitch counter; halved it becomes 97 and is stored as the AI byte; and the animation loop
+counts down through that same AI byte. So the abandoned ship's AI setting drains to zero as it flies
+away, and the number of frames it flies for is half its pitch. Three meanings, one literal, and no
+comment in the original says so.
+
+Two more from the explosion:
+
+- **The cloud ages by four or by five depending on how far away the ship is.** The comparison against
+  32 decides whether to cap the distance, nothing between there and the addition touches the carry,
+  so the far branch adds five and the near branch adds four — and the near branch is only safe
+  because z_hi under 32 shifted twice cannot reach 128.
+- **A particle rejected on its y costs the same two random numbers as one that got as far as its x.**
+  `EX11` is not a bare jump back: it runs the generator once more before rejoining, and without that
+  the cloud would not repeat and could not be erased.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (46 and 29). `opcode-transcriptions` 1,073 → 997.
+
+**2026-09-08 — M6-d-34: `Lines.cpp` and `Game.cpp` to zero, and a carry that walks the screen
+pointer.**
+
+84 sites over two files: the pixel plotter, both line drawers, and the game object's dispatch.
+Twenty-third and twenty-fourth at zero.
+
+**A line advances one step further on the iterations where a cell boundary happens to carry.**
+Stepping to the next character cell adds eight to the screen pointer's low byte, and the carry that
+addition leaves is still set when the next iteration adds the slope to the error accumulator. So the
+pointer's arithmetic and the line's arithmetic are not independent — which is why the port keeps the
+pointer as two bytes rather than as a flat offset, and why `DrawShallowLine` threads a carry the
+geometry has no use for.
+
+Two more:
+
+- **The negation of a downward offset adds one, plus NOTHING**, because the comparison above it did
+  not branch and left the carry clear — unlike the x half of the same routine, which clears it
+  explicitly. For y1 = 128 the negation wraps to zero and SETS the carry, so the subtraction does
+  not borrow and the point lands on row 73.
+- **`BAY2` is reached both ways out of the buy screen** — a letter through `gnum`'s test against 10,
+  the seventeenth item through `TT222`'s test against 17 — and there is no third exit, which is why
+  the dispatch takes it unconditionally.
+
+Rule 4 caught one more marker: collapsing a three-line comment took a trailing `// 6502: LDA Y1`
+with it, and `origin-markers` fell 53 → 52 in `Lines.cpp` before the check saw it. Same fifth shape
+as M6-d-28 — a marker that is not at the start of what it marks.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (53 and 63). `opcode-transcriptions` 1,157 → 1,073.
+
+**2026-09-08 — M6-d-33: `SoundEffects.cpp` and `FlightLoop.h` to zero, and `AND` is a conjunction.**
+
+88 sites over two files: the SID's three voices and the flight loop's own header. Twenty-first and
+twenty-second at zero.
+
+**The fourth calibration of this counter, and the fourth downward one.** `FlightLoop.h` would not
+reach zero: one line, "THE C64 HAS ITS OWN `TT17` AND IT IS NOT THE COMMON ONE.
+`library/common/.../tt17.asm` is …", parses as an instruction. `AND` is a conjunction, this tree
+writes its findings in CAPITALS, and the ambiguous-mnemonic guard asks only for a slash or a `6502:`
+somewhere in the body — which a file path supplies.
+
+The rule is now that `AND` counts only with an IMMEDIATE-style operand, and the evidence is the
+whole tree rather than the line that provoked it: there are **221 occurrences of `AND` followed by a
+bare token** and exactly **seven are real** — `AND PATG` five times, `AND COL` and `AND VIC+&10`
+once each. Every one of those seven shares its line with an unambiguous mnemonic that flags it
+anyway, so the tightening loses nothing. It drops **eight** lines, and they are all of this shape:
+
+- "`RDKEY` WAS A SEAM AND ONLY ONE LINE OF IT HAD TO BE" (`&DC00`/`&DC01` supplies the slash)
+- "WHAT IS NOT HERE AND WHY", "WHAT IS NOT HERE AND IS NOT A SEAM EITHER"
+- "AND IT IS NOT RESET PER SHIP", "AND IT DOES NOTHING IN THIS VERSION"
+- "the index into CTWOS2" and its twin, both of which write `x AND 7`
+
+The three calibrations before it removed English words as lowercase operands (M6-d-2), backticked
+implied-mode mnemonics (M6-d-4) and the seven mnemonics that are also English words (M6-d-6). All
+four are the same mistake in different clothes: **a pattern built for assembly reading English**, and
+each was settled on evidence from the whole tree rather than from the file that hit it.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved. `opcode-transcriptions` 1,252 → 1,157 — 88 rewritten and 8 no longer counted, and the
+journal says which is which so the two are never confused.
+
+**2026-09-08 — M6-d-32: `Hyperspace.cpp` and `Equipment.cpp` to zero, and a branch that lands on an
+operand.**
+
+98 sites over two files: the jump, witchspace, the galactic drive, and the whole of `EQSHP`.
+Nineteenth and twentieth at zero. Also the first slice written with the line-range rewriter — two
+batches in M6-d-31 failed because the `old` half of an exact-match edit had to reproduce a block
+comment's indentation from memory and got it wrong by one column, so the rewriter now takes line
+numbers from the survey and the file supplies its own text.
+
+**With no galactic drive fitted, `Ghy` returns from the middle of an instruction.** The branch goes
+to `zZ+1`, and there is no code at `zZ+1`: `zZ` loads 96, assembled as `A9 60`, so the branch lands
+on the OPERAND and the processor executes &60 as a return. One byte serving as both a literal and an
+instruction, chosen by where you jump into it.
+
+Two more:
+
+- **`LL164` always returns with the carry set, and that is provable rather than measured.** It is
+  `HYPNOISE` then `HFS2`, and `HFS2` has exactly two exits: the doubling that carries out of the
+  byte, taken only with the carry set, and the fall-through past the test against 160, reached only
+  when that branch is not taken and so only with the carry set. Both roads out carry a one — which
+  matters because the random byte after it takes the carry as an operand.
+- **A subtraction of ZERO is a subtraction of ONE**, in `EQSHP`, because the carry is clear where it
+  sits: `A - 0 - (1 - C)`. The item number the player typed becomes the index into the table by an
+  instruction that looks like it does nothing.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (44 and 55). `opcode-transcriptions` 1,350 → 1,252.
+
+**2026-09-08 — M6-d-31: `Charts.cpp` and `Stardust.cpp` to zero, and which kill test fired.**
+
+102 sites over two files: both charts, the crosshair, the fuel circle, the system search, and all
+three stardust movers. Seventeenth and eighteenth at zero.
+
+**Which of three kill tests fires decides the carry the next random byte runs on.** A speck that
+drifted sideways and a speck that came too close both get replaced, but the two tests against 120
+arrive at the generator with the carry SET and the one against 16 arrives with it CLEAR — and the
+generator takes the carry as an operand. So the speck that replaces one is a different speck from
+the one that replaces the other, and nothing about the code says so except the flag.
+
+Two more from the same file:
+
+- **`STARS1` squares its pitch term and `STARS6` does not.** The first stores into `Q` and calls the
+  multiply with the accumulator still holding what it stored; the second multiplies by the negated
+  x. Two routines that look like one routine written twice, deliberately different (ADR-003).
+- **The rear view's second halving leaves a carry nobody reads**, where the front view's next
+  instruction is a subtraction that does. Same opening, different consequence.
+
+And from `Charts.cpp`: **a system's dot is large or small according to a byte that means nothing
+else.** The x is a seed byte, the y another halved, and the SIZE comes from a third with two bits
+forced on so that `PIXEL` reads it as a distance.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (70 and 59). `opcode-transcriptions` 1,452 → 1,350.
+
+**2026-09-08 — M6-d-30: `Market.cpp` and `Scanner.cpp` to zero, and a blip one pixel to the right.**
+
+108 sites over two files: the price and quantity model, `gnum`'s digit entry, the scanner's blip and
+the compass. Fifteenth and sixteenth at zero.
+
+**A ship at x_hi = 0 with its sign bit set lands one pixel right of one without it.** The scanner
+clears the carry BEFORE the branch that decides whether to negate, so the positive path adds 123
+with a clear carry and the negative path adds it with whatever the negation's own addition produced
+— 124 rather than 123. Two identical positions, one pixel apart, decided by a flag set two
+instructions earlier than it needed to be.
+
+Two more where the carry crosses a boundary the reader would not expect:
+
+- **`ContrabandPenalty` has exactly one addition that clears the carry**, and every other addition
+  in `Market.cpp`'s hold check reads one it was handed — the comparison's on the first pass, the
+  previous addition's after that.
+- **The item name's token addition takes the carry the table-index shift left.** With seventeen
+  items that shift cannot overflow, so it is always clear; the addition is written as one anyway,
+  and the port keeps it as one.
+
+And a small thing worth keeping: **the market's units come out BEFORE the price is finished**,
+because `TT151` interleaves the printing with the arithmetic.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (58 and 64). `opcode-transcriptions` 1,560 → 1,452.
+
+**2026-09-08 — M6-d-29: `Controls.cpp` and `Missions.cpp` to zero, and one load doing three jobs.**
+
+116 sites over two files — the first slice to take two, because the overhead of a slice is the suite
+and the mutation run and neither cares how many files moved. Thirteenth and fourteenth at zero.
+
+**`DOXC` and `DOYC` store and return, and a store does not touch the accumulator.** `Missions.cpp`
+leans on that three times, and the third is the clearest: `LDA #1` is loaded once and the same 1
+becomes the text column, the ship's distance and `TT66`'s view argument, with two calls in between.
+Reading a `JSR` as a boundary the accumulator does not cross gets all three wrong, which is why the
+comment says so rather than showing the four instructions and hoping.
+
+Two more from `Missions.cpp`, both about a bit:
+
+- **Setting bit 0 of `TP` is a shift, a set-carry and a rotate**, not a fold — the same answer
+  written for a machine whose author preferred shifts, and every other bit ends where it started.
+- **Picking up the plans forgets mission 1 entirely**, because the store that sets the new state
+  clears the whole low nibble first.
+
+And from `Controls.cpp`: **the roll and the pitch are not the same shape.** The roll doubles its
+counter, uses the OLD sign for direction and the NEW sign to ask whether the request overflowed;
+the pitch has no second sign test and no large-request path at all.
+
+Three mutants re-anchored (rule 3), all three because their `find` reached across a comment this
+slice rewrote — `mi-tp-set`, `mi-second-inc` and `mi-dead-counter`. That is the most in one slice so
+far, and it is a direct consequence of taking two files at once: a bigger diff crosses more anchors.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (56 and 65). `opcode-transcriptions` 1,676 → 1,560.
+
+**2026-09-08 — M6-d-28: `ShipDraw.cpp` to zero, and rule 4's FIFTH shape.**
+
+All 63, across `LL9`'s eleven parts, the clipper, the slope arithmetic and the explosion seed.
+Twelfth file at zero, and the longest file in the tree at 1,552 lines.
+
+**A `6502:` marker in the MIDDLE of a sentence.** Two comments here end their prose and then add the
+listing after a full stop — "…the sign of the answer and not of the first product. 6502: STA Q / JSR
+FMLTU / STA T … STA S." Rewriting them by cutting the listing cut the marker with it, and
+`origin-markers` fell 130 → 128 on the same run that took the transcriptions to zero. The ratchet
+caught it, as it has caught the four shapes before it.
+
+The four already recorded were: deleting a whole comment (M6-c-18), rewriting a block's opening line
+(M6-d-2), dropping an inline trailing marker where the listing was the whole comment (M6-d-3), and
+merging two marked blocks into one (M6-d-9). **The fifth is a marker that is not at the start of
+what it marks**, and it is the least visible of the five, because every instinct while rewriting says
+the listing is at the end and the prose is what to keep. Both markers are back, one as `(6502:
+`LL38`)` inside the parenthesis the sentence already wanted.
+
+Kept from the file itself: the entry to the slope routine shifts BOTH ends once before the loop, and
+the loop's own test shifts again before testing — so a gradient of zero gets TWO shifts and not one,
+which the port had wrong until the mutation sweep said otherwise.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, and 130
+markers in this file before and after — after the fix. `opcode-transcriptions` 1,739 → 1,676.
+
+**2026-09-08 — M6-d-27: `MarketScreen.cpp` to zero, and a branch used as a jump.**
+
+All 65, over the buy screen, the cargo listing, the sell prompt and the inventory. Eleventh file at
+zero. Almost every site here is a token number or a cursor position, so this is the cheap kind of
+slice — but three of them were carrying an argument.
+
+**`TT163` branches on a condition it has just made certain.** The column is set, 255 is loaded, and
+the branch that follows tests a flag that load has already decided — so it is always taken, and what
+it lands on is the jump inside the space-printing routine two bytes in. A branch used as an
+unconditional jump, to save two bytes over writing one.
+
+Two of the same family:
+
+- **A quantity of ZERO never hears that the hold is full**, because the branch on zero steps over the
+  carry test rather than round it. It costs nothing and buys nothing, which is how the original lets
+  a player press RETURN past an item.
+- **The sell screen prints each line twice**, the second time with printing switched off, purely so
+  that `TT151` leaves the price behind as a side effect. The routine is called for its arithmetic and
+  its output is thrown away.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, no marker lost
+(68 in this file, before and after). `opcode-transcriptions` 1,804 → 1,739.
+
+**2026-09-08 — M6-d-26: `Dashboard.cpp` to zero, and a flag that is constant and load-bearing at
+once.**
+
+All 68, over `DIAL`'s four parts, the bar and indicator drawers, the missile blocks and the ECM.
+Tenth file at zero.
+
+**The pitch indicator is offset by two rather than by one, and that is a flag nobody cleared.** The
+subtraction before it has no set of the carry in front of it, so it runs on whatever `DIL2` left --
+and `DIL2` ends by adding one to a screen-address high byte, which cannot carry out. The carry is
+therefore always CLEAR, the subtraction always borrows, and the indicator sits one slot further over
+than the arithmetic reads.
+
+What makes it worth its own paragraph is the comparison the comment already drew: this is the
+fourteenth uncleared flag in the corpus and, unlike the thirteenth, it is LOAD-BEARING. `SP2`'s
+addition of 195 could not see an always-clear carry, so a mutation that assumed a set one there was
+equivalent; here the same assumption moves the indicator. **Constant does not mean invisible**, and
+which of the two a constant flag is depends on what reads it — which is the argument for keeping
+every one of them measured rather than reasoned about.
+
+Also kept: the `&2C` swallow appears a third time, in the danger-colour routine, doing the same job
+it does twice in `ViewChange.cpp` — the yellow path skips the red load because the byte in front of
+it eats the instruction.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, no marker lost
+(67 in this file, before and after). `opcode-transcriptions` 1,872 → 1,804.
+
+**2026-09-08 — M6-d-25: `Spawn.cpp` to zero, and three carries that leave a routine.**
+
+All 71, over `KILLSHP`'s heap compaction, `NWSPS`, `SOLAR`, the debris seeds and `FRS1`/`SFS1`.
+Ninth file at zero. The subject of this file is a carry crossing a call boundary, three times over,
+and in each case the listing showed the instruction and the sentence beside it had to carry why it
+matters.
+
+**The planet's distance from the player depends on whether the bounty was odd.** `SOLAR` halves
+`FIST` and the bit shifted out is not discarded: `ZINF` touches no flag, so the addition that builds
+the planet's z runs on it (§6.58). Nobody designed that. It is what happens when a routine is
+written straight through without clearing the carry, and it is in every copy of the game ever sold.
+
+The other two are the same mechanism deliberately used:
+
+- **`fq1` collects `MSTG`'s bit 7 four instructions after it was shifted out**, which is how the
+  missile target's top bit reaches the new ship's speed byte (§6.121).
+- **The carry into `SFS1`'s generator call is SET every time**, because reaching that line means the
+  lower of two comparisons did not borrow and the push in between leaves the flag alone. The port
+  had `false` there once and the oracle disagreed about the generator's own state — the only place a
+  wrong carry into `DORND` shows.
+
+And one that is simply a good joke: **a swarm whose count reaches a multiple of 256 stops breeding**,
+because only the low byte is tested.
+
+One mutant re-anchored (rule 3): `sp-selftest`'s `find` quoted the station roll counter's comment,
+which lost its listing here.
+
+469 tests green, all nineteen checks, and **97 of 97 mutants over a run that carried this slice** —
+the first since M6-d-16 whose subject was the tree being committed rather than the one before it,
+which is M6-d-25a's whole subject. No marker lost (71 in this file, before and after).
+`opcode-transcriptions` 1,943 → 1,872.
+
+**2026-09-08 — M6-d-25a: the mutation harness measured the previous commit, and said so every
+time.**
+
+Nothing in `GameLogic/` changed. `make_worktree` built its scratch tree with
+`git worktree add --detach HEAD`, so a run made before committing mutated the LAST commit and not
+the slice being written. Every entry from M6-d-17 to M6-d-24 reports "97 of 97 mutants from a full
+run" and each of those runs covered the commit before the one it is written in. Eight entries.
+
+**The tool was not silent about it.** `warn_if_dirty` printed, on every one of those runs, "the
+worktree is built from HEAD, and these are modified but NOT committed -- the tally below will not
+describe them", followed by the file list. It was read past because the output was taken with
+`tail -3`, which keeps the tally and drops everything above it. A warning that is correct, present
+and unread is worth exactly nothing, and the fix is not a louder warning.
+
+So the worktree now carries the uncommitted diff on top of HEAD, and the note says what the run's
+subject IS rather than what it is not — a line naming the files being measured is harder to skip
+than a line disclaiming them. `--check` still reads the working tree, which is why this was
+survivable: it is what `check_all.py` runs and what catches a mutant whose `find` a slice has
+rewritten, and it is exactly how the gap surfaced (M6-d-25's `sp-selftest`).
+
+What this does NOT change: the eight tallies were about a real tree, run properly, and every one of
+them passed — HEAD in each case was the slice before, which had itself been measured. The claim that
+was wrong is which commit each number described, and for a run of comment-only slices that is a
+small error. It is written down because the next slice to change code would have made it a large
+one.
+
+469 tests green, all nineteen checks, 97 recorded mutants still applying. A `--unit spawn` run
+against a deliberately dirtied tree reports "worktree carrying 55 lines of uncommitted diff on top
+of HEAD" and catches all four.
+
+**2026-09-08 — M6-d-24: `ShipMove.cpp` to zero, and the damping nobody wrote.**
+
+All 81, over `MVEIT` and everything it reaches: the coordinate adders, the vector rotations, `TIDY`,
+`MV40`'s planet path and the view flips. Eighth file at zero. This is the most arithmetic-dense file
+done so far and the one where the difference between a listing and a reason is sharpest — almost
+every comment here is about a flag, and a flag is exactly what a listing shows and does not explain.
+
+**A ship straightens up after a turn and nothing decides that it should.** The roll and pitch
+counters are damped by a compare against 127 followed by a subtraction of NOTHING. That reads as a
+no-op until you look at the carry: the compare sets it at 127, so the subtraction takes nothing off
+and a ship at full roll holds it; below 127 the carry is clear and the subtraction takes one off
+every iteration, so any other roll decays to zero. Two instructions, no branch, and the behaviour is
+entirely in a flag.
+
+Two more of the same shape:
+
+- **The sign test before the y coordinate's add is the opposite way round from every other one in
+  the file.** The branch fires on a CLEAR top bit and what it lands on is the SUBTRACTION, so signs
+  agreeing means subtract. The journal already records that reading it the natural way put the
+  ship's y one out on the first iteration; the comment now says which way it goes rather than
+  showing the fold and leaving the reader to work it out.
+- **Two additions here have no clear of the carry in front of them**, and one subtraction has no set,
+  because both run on what `MLTU2` left — nothing between them touches the flag. Stated as a claim
+  about the routine rather than as the three instructions that happen to be carry-blind.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, no marker lost (104 in this
+file, before and after). `opcode-transcriptions` 2,024 → 1,943.
+
+**2026-09-08 — M6-d-23: `ViewChange.cpp` to zero, and the stray byte that eats the next
+instruction.**
+
+All 94 — 44 on their own lines, 50 trailing — over the screen wipe, the border, the dashboard copy
+and `LOOK1`. Seventh file at zero, and the largest single file in the tree by site count.
+
+**`EQUB &2C` is a two-byte opcode used as a swallow.** It appears twice here, both times
+immediately before `BOX2`'s own row count, and the whole point is that it is not an instruction at
+all in the sense the listing suggests: the assembler emits one byte that the processor reads as the
+start of a three-byte instruction, so the two bytes after it — `BOX2`'s `LDX #18` — are consumed as
+its operand and never execute. The count that survives is the caller's 25, which is why the same
+routine draws an eighteen-row border at one entry point and a twenty-five-row one at the other
+(§6.79). The listing showed the trick; only prose says what it is FOR, and both comments now do.
+
+Two more where the listing was hiding the argument rather than making it:
+
+- **A load read for its flags alone.** `Warp` tests the planet's z sign with a load into Y and then
+  throws that Y away — the move that follows overwrites it with the accumulator's zero, which is
+  slot 0 and `MAS2`'s argument. Two instructions apart, unrelated, and reading them as a pair is
+  exactly the mistake the transcription invites.
+- **A negative z is a body behind you, so its distance is never tested.** That was already prose,
+  and it is the sentence the listing above it made look like a detail.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, no marker lost (103 in this
+file, before and after). `opcode-transcriptions` 2,118 → 2,024.
+
+**2026-09-08 — M6-d-22: `Flight.cpp` to zero, and a comment that had the shift the wrong way round.**
+
+All 122 of them — 88 on lines of their own and 34 at the end of a line of code, which is the first
+file done since the counter learned to see the second kind. `RES2`, `ZERO`, the launch tunnel, the
+title screen's spinning Cobra, the death scene's wreckage and the escape pod. Sixth file at zero.
+
+**The shift that says "divide" and multiplies.** `PrepareDeathScene` doubles the speed twice, and
+the comment recorded that the upstream source says "divide by 4" — true of the BBC, which shifts the
+other way, and false of this build (§6.117). Rewriting it made the point plainer than the listing
+did: the sentence now says the speed is shifted LEFT and the upstream comment says divide, so the
+disagreement is the subject rather than something a reader has to spot between two mnemonics.
+
+Three more where the prose had to take over a claim the listing was carrying:
+
+- **The wreckage is a plate when the random X was odd** — and NOT, as the upstream comment says,
+  because of the generator called just above. A set carry rotated into the accumulator sits four
+  instructions up, and what it rotates is the roll counter, so the bit that decides is a different
+  random number from the one the comment names (§6.117).
+- **The carry into `Ze`'s first generator call is always clear on the first pass**, because every
+  character leaves through `CHPR` and `CHPR` returns with it clear; on later passes it is what the
+  previous round's own addition left. The old comment proved that by listing the five instructions
+  in between; the new one says they are carry-blind, which is the same claim and survives M6-f.
+- **`FRS1` takes `DELTA` and `MSTG` rather than a speed**, rotating the speed left with the missile
+  lock's top bit as the carry — so a pod leaves at twice your speed plus one, and since `RES2` has
+  just set `DELTA` to 3 it is always 6 or 7 however fast you were going.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, no marker lost (128 in this
+file, before and after). `opcode-transcriptions` 2,240 → 2,118.
+
+**2026-09-08 — M6-d-21: the sixteen, and why R-i's tag stays unused after all.**
+
+The sites M6-d-20 exposed in the three files that had been called done. `Tactics.cpp`, `GameLoop.cpp`
+and `PlanetDraw.cpp` are now at zero against the widened counter, and so are `Arith.cpp` and
+`FlightLoop.cpp`, which never had any. Five files, and this time the claim is measured with the
+instrument that reads both kinds of comment.
+
+**M6-d-20 expected two of these to need R-i's tag. Neither does, and the reason applies to the whole
+phase.** The two are `PlanetDraw.cpp`'s
+`` `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's `` and its twin four blocks down —
+comments whose entire content is an instruction sequence and the flag it does not touch. That looks
+like R20's case: the sequence IS the reason. It is not, and what settles it is **M6-f**. A listing
+kept so a reader can check it against the original is kept for a check that will not exist — the
+original leaves the tree in the same phase. What has to survive is the CLAIM, and "the store and the
+branch touch no flag, so ADD's carry survives" carries it whole, in fewer words, and stays checkable
+against the port itself.
+
+So R20's exception is narrower than it looked. It is not "the reason is about instructions" — that
+describes most of this file. It is "prose cannot state the reason at all", and after twenty slices
+nothing has met it. `opcode-quotations` stays 0 and the cap R-i asks for may honestly be zero; the
+tag still earns its place as the thing that would make a kept quotation VISIBLE rather than
+asserted, which is what R-i was for.
+
+Tagging would also have cost a marker, which is worth recording: `QUOTED_TAG` is deliberately not
+`\b6502:`, so a tagged line is not an origin marker and `origin-markers` would have fallen by two.
+Nothing here needed it, and the count is unmoved at 4,103.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, markers unmoved.
+`opcode-transcriptions` 2,256 → 2,240.
+
+**2026-09-08 — M6-d-20: the counter had been reading half the comments.**
+
+Nothing in `GameLogic/` changed. `_opcode_lines` asked `COMMENT_LINE.match(line)` — a comment that
+STARTS its line — so every listing written at the END of a line of code was invisible to it. There
+are 359 of them across 47 files, and
+`SetUpScreen(_universe, _ports, TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66` is not a different
+kind of site from the same words on a line of their own.
+
+**Three files reported "to zero" were not.** `Arith.cpp` and `FlightLoop.cpp` genuinely are;
+`Tactics.cpp` has one, `GameLoop.cpp` three and `PlanetDraw.cpp` twelve — sixteen sites the entries
+for M6-d-11, -14 and -19 counted as finished. The next slice clears them, and this one says so
+rather than letting the claims stand.
+
+The instrument now walks a file the way `code_only` does — one pass, literal-aware, so a `//` inside
+a string opens no comment and an apostrophe inside a comment opens no literal — and hands back the
+comment text per line, which is exactly what `code_only` throws away. The self-test gained both
+cases: a trailing listing that must count, and `"a//b LDA #1"` that must not.
+
+**The ceiling RISES, 1,897 → 2,256, and rule 5 wants that said plainly: nothing came back.** The
+instrument grew, and 359 sites that were always there are now visible to it. This is the fourth
+calibration of this counter and the first upward — the three before it removed false positives
+(English words as operands, backticked implied-mode mnemonics, the seven mnemonics that are also
+English words), and this one removes false negatives.
+
+It also unsettles what M6-d-19 reported. Among `PlanetDraw.cpp`'s newly visible twelve is
+`// 6502: ``STA T / BPL PL42`` touches no flag, so ``ADC K3`` reads ADD's` — a comment whose whole
+content IS an instruction sequence and the flag it does not touch. That is R20's case exactly, and
+R-i's `6502 quoted:` tag is what it wants. **The tag is no longer certain to end unused**, which is a
+better answer than the one that entry gave and arrives one slice later.
+
+469 tests green, all nineteen checks, 97 recorded mutants still applying. No C++ changed.
+
+**2026-09-08 — M6-d-19: `PlanetDraw.cpp` to zero, and a block comment that had never been indented.**
+
+The last 16, and the file is at 0 of 89 — the ball, the sun, the meridians, the crater, the stardust
+seed, the slot sweep and the hyperspace rings, over five slices (-15, -16, -17, -18, -19). It is the
+fifth file at zero, after `Arith.cpp`, `FlightLoop.cpp`, `Tactics.cpp` and `GameLoop.cpp`.
+
+**`HFL2`'s block comment had its body one column left of its own opener** — `/*` at six spaces and
+every `*` under it at five — and had been that way since the routine was ported. Nothing in the tree
+catches it: there is a `.clang-format`, and no check runs it. The file has four other deviations,
+all in code rather than comments, all older than M6-d and all left alone: reformatting code is not
+this slice's pattern (rule 8), and the count is the same before and after these three slices, so
+nothing here introduced one. The indentation IS fixed, because the comment was already being
+rewritten and leaving it would have been a choice.
+
+Three findings kept from the tail of the file: forcing bit 3 of a fresh speck's distance is what
+keeps every one of them at least eight units from the player's face; `WS2` resets the ball heap
+pointer to ZERO where `WP1` resets it to one, and the two are not interchangeable; and the state
+mask writes back through the SLOT pointer rather than to the copy in `INWK`, so the two disagree the
+moment the routine returns — correctly, because the caller is about to redraw from the slots.
+
+**R-i's quotation tag is still unused.** 89 sites in the largest file done so far and not one of them
+needed `6502 quoted:` to keep a sequence that IS the reason. `opcode-quotations` remains 0. If the
+tail of M6-d goes the same way the cap ends up at zero and the second counter is a gate that never
+fired — which is worth knowing before M6-e writes the ledger, and is reported here rather than
+decided here.
+
+469 tests green including the five `TheFlightReplay` digests, all nineteen checks, 97 of 97 mutants
+from a full run, no marker lost (149 in this file, before and after — the same 149 it had at -16).
+`opcode-transcriptions` 1,913 → 1,897.
+
+**2026-09-08 — M6-d-18: the sun's walk, and four comments that were a listing and nothing else.**
+
+15 more from `PlanetDraw.cpp`, now at 16 of 89. This is `SUN`'s row walk — the roughness mask, the
+half-width, the two exits — and it is the cheap half of M6-d: most of these comments already carried
+their reason in prose and the listing beside it was duplication. Removing it cost nothing and the
+sentences are unchanged.
+
+**Four of the fourteen carried no prose at all.** `LDA TYPE / LSR A / BCC PL9 / JMP SUN.`, `PLF6 --
+DEY / BEQ PLF8.`, `DEC V / BNE PLFL / DEC V+1.` and the three rolled comparisons that build `CNT`
+were comments whose entire content was the instructions. There is nothing to preserve in a rewrite of
+one of these; there is a reason to go and FIND, and the first of them is the argument for M6-d in
+miniature — the port reads `Byte(_type) & 0x01u`, and what bit 0 means is in neither the code nor the
+comment. It is in `ShipType.h`: `Planet` is 128 and `Sun` is 129, so an odd type is the sun. The
+listing recorded the shift; nothing recorded why a shift answers the question.
+
+This is also the shape rule 4 exists for. A listing-only comment looks like something to delete, and
+deleting it takes the `// 6502:` marker with it — which is how M6-c-18 lost two. The rule stands: the
+marker leaves at M6-e and at no other time, and a comment that held nothing but the listing gets
+prose, not deletion.
+
+469 tests green including the five `TheFlightReplay` digests, all nineteen checks, 97 of 97 mutants
+from a full run, no marker lost (149 in this file, before and after). A `--measure` pass over the tree
+as M6-d-17 left it reproduces the recorder's totals byte for byte — 3,224,616 calls, 3,177,126
+distinct, 222,140,342 bytes, 0 collisions — which is the expected answer for a comment slice and the
+first time it has been checked rather than assumed. `opcode-transcriptions` 1,928 → 1,913.
+
+**2026-09-08 — M6-d-17: `PlanetDraw.cpp`'s meridians and crater, and the vector the prose named
+wrong.**
+
+18 more from `PlanetDraw.cpp`, now at 31 of 89. This is `PLS22`'s ellipse walk, `PL9`'s markings and
+`PL26`'s crater, and rewriting them turned up a comment that had been wrong since it was written.
+
+**The crater slides along the ROOF vector, not the nose.** `PL26` offsets the ellipse from the
+planet's centre and the prose said the offset ran along "its own nose vector", with the far-side test
+described as "the nose pointing away". Both are the roof: the test reads `INWK+20`, the offset starts
+at index 15, and `Ship.h` pins 15..20 to `roofv` — the port has always done the right thing and the
+sentence above it has always said otherwise. It survived because the listing under it (`LDA INWK+20 /
+BMI PL20`) was the part a reader would check, and the listing is right; drop the listing and the
+sentence has to carry the claim on its own, which is when it fails. That is the case for M6-d in one
+comment: a transcription can make a wrong explanation look verified.
+
+Two more of the same kind, kept rather than corrected because they were already right: the equality
+test in front of the greater-or-equal one is what makes the walk's last step INCLUSIVE, so a meridian
+reaching exactly 31 draws its final segment and a crater reaching 64 draws its; and `PLTOG`, the
+detail switch that skips the markings, is never written by anything in this build.
+
+`SetMeridianAngle` has the same fault the other way round: two of its comments say the ROOF vector's
+sign decides which way the meridian starts, and the line under them reads the NOSE — which is what
+`PLS4` reads (`INWK+14`), so again the code is right. Those two lines carry no listing, so they are
+not this slice's sites and are not touched here; noted so the next pass over this file does not have
+to rediscover them.
+
+469 tests green — the five `TheFlightReplay` digests among them, which is what the earlier entries'
+"replay digests unmoved" has always meant — all nineteen checks, 97 of 97 mutants from a full run,
+and no marker lost (149 in this file, before and after). `opcode-transcriptions` 1,946 → 1,928.
+
+**2026-09-08 — M6-d-17a: the mutation harness had been blocked since before M6-c, and one mutant had
+stopped compiling.**
+
+Nothing in `GameLogic/` changed. `check_all.py` runs `mutate.py --check`, which asks only whether
+every mutant still APPLIES to the tree; it builds nothing and runs no test. The full harness had not
+run since the merges, and running it found two things at once.
+
+First, correcting the record: every M6-d entry from -2 onward reports "97 of 97 mutants", and what
+was actually verified in those slices is `--check`'s *all 97 recorded mutants still apply*. The two
+are not the same claim and this entry is where they stop being written as if they were.
+
+**The filter gate was firing on four units.** `trumbles`, `missions`, `cloud-seed` and `planetdraw`
+each select more tests than `mutants.json` records, and in every case the surplus is a test that did
+not exist when the number was written: T-2's docked pass breeds trumbles, `TheMissionText` grew from
+six tests to nine, M6-a-1 added the docking check that closed the fourth coverage gap, and RS-3's
+`PicturePlanetTests.cpp` puts the planet and the sun on both surfaces (its methods are selected by
+name, two containing `ThePlanet` and one `TheSun`). All four exercise the code their unit mutates, so
+all four are re-based with the reason in the unit's own note. The field description now says what the
+two directions mean, because they do not mean the same thing: a RISE is normally coverage that
+arrived after the number, and is re-based; a FALL is a filter that has stopped reaching its own
+class, and is a bug.
+
+**`ar-ll5-carry` had been uncompilable since M6-c-7.** That slice re-anchored the mutant's `find` when
+`LL5`'s accumulator stopped being `q` and left the `replace` still naming `q`. So the mutant applied
+cleanly and then failed to build — and `--check` cannot see it, because it reads the `find` and
+nothing else. The harness classifies a build failure as its own outcome rather than as a catch, which
+is the only reason this surfaced instead of passing as a green tally.
+
+Both are the same lesson from opposite ends: `--check` is not the harness, and nineteen checks can
+pass without a single mutant ever being compiled.
+
+97 of 97 — 92 caught, 5 recorded survivors, 0 neither — from a full run. 469 tests green.
+
+**2026-09-08 — M6-d-16: the circle walk, and a carry that decides how far a quarter-turn is.**
+
+17 more from `PlanetDraw.cpp`, now at 49 of 89. This is `CIRCLE2`'s walk and the projection helpers
+under it, and one site in it is the best argument yet for the rule that a REASON is not the same as
+the instructions carrying it.
+
+**The quarter-turn is only a quarter-turn when the multiply produced something.** The step that
+advances the angle for the cosine adds fifteen, not sixteen — and nothing clears the carry first, so
+it runs on the sine multiply's exit flag, which is set on both antilog exits and clear on the one
+returning zero. Fifteen plus that carry is the sixteen the code appears to want (§6.50). Four
+instructions said what happened; two sentences say why it is right, and only the second lets a reader
+check the port against it.
+
+Two more of the same kind: the axis divide SATURATES at 254 rather than wrapping, because a planet
+close enough to overflow it is one whose markings run off the disc; and `PLS3` hands back the STEPPED
+index rather than the one it was given, which is how `PL26` gets two different axes from two calls
+that look identical (§6.53).
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 1,963 → 1,946.
+
+**2026-09-08 — M6-d-15: the sun's rows and the circle's heap.**
+
+23 sites from `PlanetDraw.cpp`, now at 66 of 89. The subject here is a HEAP with two conventions in
+it, and the comments that matter are the ones describing the conventions rather than the instructions
+that maintain them.
+
+Three survive intact:
+
+- **Entry 0 of the sun heap is never zeroed by the clearing loop**, because the loop stops at 1 —
+  and then the index falls to 255 and that is what lands in it. One byte carrying two meanings, kept
+  apart by nothing but the loop's bound.
+- **A break in the ball heap starts a new run rather than ending one**, which is how a circle that
+  leaves the screen comes back as several polylines instead of one with a chord across it. The start
+  point is written only after a break, which makes a run of N segments N+1 points.
+- **The clipper may hand its endpoints back reversed**, so the heap has to store them in the order
+  the walk produced them, not the order they were drawn in.
+
+`pd-pl44-clc` re-anchored (rule 3), the third mutant this phase to have quoted a comment M6-d
+rewrote. The pattern is entirely predictable now: a mutant whose `find` reaches into a comment moves
+whenever that comment is touched, and re-anchoring is always right, because what the mutant is
+pinning is the code beside the prose and not the prose.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 1,986 → 1,963.
+
+**2026-09-08 — M6-d-14: `GameLoop.cpp` to zero, and under two thousand.**
+
+44 more and the file is done: 101 sites, none left. **Four files are now at zero** — `Arith.cpp`,
+`FlightLoop.cpp`, `Tactics.cpp` and `GameLoop.cpp` — and the count is **1,986**, under two thousand
+for the first time and down 935 from where the instrument started.
+
+Parts 3 and 4 of the spawner finish the carry chain M6-d-13 began, and the shape holds: a comparison
+whose ANSWER is never tested, sitting there only to set the flag the next instruction consumes. The
+junk type is the clearest — a roll compared against ten, and the comparison's result feeds an
+addition rather than a branch, so a roll of ten or more picks the next type up. Written as prose that
+is one sentence; written as instructions it looks like a test with no consumer.
+
+Three more kept whole: the police threshold folds the legal status in **only** when a Viper is
+already about, and the branch that skips the fold lands on the store; the Viper count is read AFTER
+the spawn, so one in the bubble ends the pass whether it just arrived or was already there; and the
+bounty hunter's tail ends on the same assembler trick as the laser's, hiding one instruction inside
+another's operand so the type computed earlier survives.
+
+**The tooling note from this slice is about EDITING, not about the port.** Two batches failed their
+own uniqueness assertion — one line appeared twice in the file, and a later attempt used line numbers
+that earlier edits in the same pass had already shifted. Both failed ATOMICALLY and wrote nothing,
+which is the property that made them cheap: the fix was to find the duplicated line by content after
+the other edits had landed, not to guess at offsets. A patch that half-applies is worse than one that
+refuses.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,030 → 1,986.
+
+**2026-09-08 — M6-d-13: the spawner, where the accumulator changes meaning mid-routine.**
+
+26 more from `GameLoop.cpp`, now at 44 of 101. Parts 1 and 2 of `MLOOP` are the densest carry
+argument in the tree — nine comparisons each overwriting the generator's own flag — and the whole
+chain survives as prose because what a reader has to check is WHICH comparison supplied the flag,
+never how the comparison was spelled.
+
+The trader's type is the finding that matters most here, and it is a claim about a REGISTER rather
+than about a byte of memory. On one path the accumulator still holds the roll; on the other, reading
+and modifying the AI byte has replaced it twice over. The mask that chooses the ship type therefore
+runs on two entirely different quantities depending on how it was reached, and the port had it as
+the roll on both until the oracle disagreed about the type in an empty bubble. That reads better as
+three sentences than it ever did as five instructions.
+
+Two smaller ones kept: the trader's escort flag is skipped by a NEGATIVE roll, so half of them fly
+with the docking trait and half with whatever the clear left; and the branch back to the top of the
+loop is dead code on this build, because the two constants that would make it live are 11 and 15.
+It stays, because what makes it dead is a choice this version happens to make.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,056 → 2,030.
+
+**2026-09-08 — M6-d-12: the loop's head and tail, where one flag has two sources.**
+
+31 sites from `GameLoop.cpp`, now at 70 of 101. This is the message countdown, the gun cooling, the
+docked-screen delay and the Trumbles, and the recurring subject is a CARRY WITH TWO SOURCES —
+exactly the shape §6.118's instrument was built for.
+
+The squeak roll is the clearest case and the one the port once got wrong. The flag it rotates in
+comes from the temperature test on a hot cabin and from the count's own top bit on a cool one: two
+paths, two different sources, one roll. The rewrite keeps that as two sentences and drops the four
+instructions, because what a reader has to check is WHICH path supplied the flag, not how.
+
+Two more in the same file: the docked delay's test is a single shift doing both the branch and the
+argument, which is why the option byte is passed rather than a bool; and the Trumble breeding is a
+CARRY added rather than an addition, so the population grows by one about one pass in seven.
+
+The gun countdown is the one place the instruction count itself mattered — it decrements TWICE with a
+zero test between, and that middle test is why it never passes zero. Prose carries it: an odd
+countdown stops at zero, an even one steps through, and a port that subtracted two would go negative.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,087 → 2,056.
+
+**2026-09-08 — M6-d-11: `Tactics.cpp` to zero, and the counter's own residue.**
+
+57 more and the file is done: 163 sites, none left. Three files are now at zero — `Arith.cpp`,
+`FlightLoop.cpp` and `Tactics.cpp` — and they were the three largest.
+
+The docking computer is the densest part of the phase so far and every finding in it survived:
+
+- **`DOCKIT` normalises the same vector TWICE**, and the second call is not redundant. `TA2` skips
+  the shifting loop and `TAS2` runs it, so the vector steered along is the shifted one while the
+  DISTANCE came from the unshifted one. The port made the first call and not the second, and every
+  approach came out on the wrong branch (§6.125).
+- **`K3+10` is a byte nobody gave it.** It names the eleventh face-visibility flag of the last ship
+  drawn, because two workspaces overlap; the upstream commentary says outright that it does not know
+  what the byte holds. What it guards is the ship actually docking.
+- **The roll's magnitude is always one** and all the sign arithmetic decides is its direction —
+  rotating a two right gives a one with the carry above it.
+
+**THE LAST TWO SITES WERE THE COUNTER'S OWN RESIDUE, not the port's.** One line reads
+"…`TA20`, AND THE PORT HAS NO LINE FOR IT" — a `6502:` marker plus the house style's capitals, which
+is exactly the shape M6-d-6's calibration was scoped to allow through, since an ambiguous mnemonic
+on a marker line is normally a real listing. The other quotes a single instruction in a sentence.
+**Neither was reworded to satisfy the ratchet at the cost of the prose**: the first says the same
+thing with a dash instead of a conjunction, the second names the hand-off rather than the jump. Had
+either needed its meaning bent to reach zero, the right answer would have been the tag and a note
+here, not a worse sentence.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,144 → 2,087.
+
+**2026-09-08 — M6-d-10: the disposition walk and the combat rolls.**
+
+31 more, and `Tactics.cpp` is at 57 of 163. This is part 3's walk down the trait byte and part 4's
+rolls, and the shape that keeps recurring is **a bit position and what it means**, which prose says
+better than a shift does: bit 1 is "bounty hunter" and only turns on you above a legal status of 40;
+bit 3 is "runs away when the station is near"; bit 4 is "docking".
+
+Three sites carried an argument rather than a description, and all three survive:
+
+- **The two flee branches do not go to the same place.** One lands on the capital `TA3`, which is
+  part SIX, so a healthy ship jumps clean over part five and never launches a missile; the other
+  lands on the lower-case `ta3`, which IS part five. The port ran both into part five and a mutation
+  is what said so (§6.153). Case-sensitive labels are the entire finding, so both names stay.
+- **The Anaconda's fall-through arrives with a different carry** from the type comparison's, and the
+  port's one expression covers both paths only because the second is reachable solely on equality.
+  That argument is three sentences and no instructions.
+- **A dead copy of `TA20` once stood in part 4** and a surviving mutant found it, because no missile
+  ever reaches that line. The entry keeps why the mutation mattered without the instruction it
+  flipped.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,175 → 2,144.
+
+**2026-09-08 — M6-d-9: the missile's death, the station's launches, and rule 4's fourth shape.**
+
+22 more, and `Tactics.cpp` is at 88 of 163.
+
+Two sites in this stretch are the reason the port is right where it once was wrong, and both keep
+their argument in prose:
+
+- **The E.C.M. branch steps over a three-byte jump**, so a SET bit — "this ship has an E.C.M." —
+  skips the steering and lands on the E.C.M. instead. The port had it the other way round, and a
+  missile set off the E.C.M. of every target that did not have one (§6.126). The rewrite says which
+  bit the branch tests and where each side of it goes; the byte count of the instruction it steps
+  over is what makes that true, so it stays as a sentence rather than an opcode.
+- **The wreck test reads an instruction as data.** What it tests against is the OPERAND of a load
+  sitting a few bytes earlier — a constant 32 in the middle of an instruction, which is bit 5, which
+  is "already exploding" (§6.125). That has to survive, and it does, without quoting either
+  instruction: "written by pointing at a byte of code" is the finding.
+
+**RULE 4'S FOURTH SHAPE: MERGING TWO MARKED BLOCKS INTO ONE.** `TA64` carried two consecutive
+comments, each opening `// 6502:` — one for what the routine does and one for the carry it inherits.
+Folding them into a single paragraph read better and lost a marker; `origin-markers` went 4,103 →
+4,102 and the ratchet said so. The two are split again, because the rule is about the COUNT and not
+about the prose, and M6-e is where markers go.
+
+Four shapes now, all found by the same counter: deleting a whole comment, rewriting a block's opening
+line, dropping an inline trailing marker, and merging two blocks. The rule that covers all four is
+one sentence — **a `6502:` marker leaves at M6-e and at no other time** — and the ratchet is what
+enforces it, slice after slice, whatever new way there is to break it.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants.
+`opcode-transcriptions` 2,197 → 2,175.
+
+**2026-09-08 — M6-d-8: the anger chain and the missile's own logic.**
+
+26 more, and `Tactics.cpp` is at 110 of 163. This is `ANGRY`, the dot product helper, the docking
+offset and part 1 — the missile — and almost all of it rewrote mechanically, which is the point
+worth recording after the care M6-d-7 needed: **most of this corpus really is decoration, and the
+sites that carry an argument are the minority.**
+
+Three that were not decoration:
+
+- **`AN2` is CALLED rather than jumped to**, so an ally of the station angers the station AND
+  carries on being angered itself. The distinction is the whole behaviour and it lives in one word.
+- **A ship with no AI byte is left entirely alone** — the branch lands on a bare return borrowed from
+  another routine, which is why nothing after it runs.
+- **The missile's target slot is halved out of its AI byte**, because `FRS1` doubled the lock into it
+  when the missile was made. Two routines and a shift, and the sentence has to carry all three.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,223 → 2,197.
+
+**2026-09-08 — M6-d-7: `Tactics.cpp`'s geometry, and a finding that must not be paraphrased away.**
+
+27 sites, all in the steering: the axis subtraction, the unit vector, the two dot products that
+decide pitch and roll, and the missile's inverted approach. `Tactics.cpp` is at 136 of 163.
+
+Two of them needed the rewrite to be careful rather than mechanical, and both are places where the
+INSTRUCTION SEQUENCE was the evidence for a claim:
+
+- **The pitch magnitude and its sign come from one measurement read twice.** The original saves the
+  dot product, masks it down to a sign for the counter, then brings the saved byte back to compare
+  its magnitude. Say only "the dot product decides both" and the reader loses why the two readings
+  cannot disagree. The rewrite keeps the ORDER — saved, flattened, brought back — without the five
+  instructions that perform it.
+- **`TA873`'s two shifts cancel**, and that is the whole point of the comment: a shift up followed by
+  a shift back down through a set carry leaves the byte alone and sets bit 7. The port once read it
+  as a shift AND a set, which agreed for a whole slice because the two callers only ever passed
+  zero (§6.126). The rewrite names the two shifts and what they cancel to, because a reader who
+  cannot see that they cancel cannot check the port against them.
+
+Neither needed the tag. **R-i's quotation hatch is still unused at 2,223 sites**, which is worth
+recording: the row's instinct that almost all of this should simply go looks right so far, and the
+cap it will eventually need may be very small.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,250 → 2,223.
+
+**2026-09-08 — M6-d-6: `FlightLoop.cpp` to zero, and the counter's third and largest correction.**
+
+The file is done: 199 sites, none left. But **63 of the drop in this slice is rewriting and 212 is
+the counter admitting it was wrong**, and the second number is the one worth reading.
+
+**`AND` IS A MNEMONIC AND ALSO A CONJUNCTION, AND THIS TREE WRITES ITS FINDINGS IN CAPITALS.** "IT IS
+NOT SELF-MODIFYING CODE AND IT IS NOT IN AN INTERRUPT HANDLER", "TWO LOOPS AND ONE COUNTER", "THE X
+AXIS IS SIXTEEN BITS AND THE Y AXIS IS EIGHT" — to a pattern that takes any capitalised token after
+a mnemonic as an operand, every one of those is an instruction. So are "SIXTEEN-BIT COMPARE" (`BIT`,
+hyphen-bounded) and every emphatic sentence containing `SEC`, `INC` or `DEC`. **203 lines of the port
+read that way**, and the count was inflated by them from the moment the instrument was written.
+
+The fix is scoped to the seven mnemonics that are English words — `AND`, `BIT`, `SEC`, `INC`, `DEC`,
+`BRK`, `TAX` — which now need LISTING CONTEXT, a `6502:` marker or a `/` on the line. The other
+forty-nine still count on shape alone. A broader rule was tried first and rejected: requiring context
+of EVERY mnemonic excluded 551 lines, and a random sample showed it throwing away genuine backticked
+quotations along with the prose.
+
+**The residual is stated rather than hidden.** A lone `AND #31` quoted mid-sentence is no longer
+counted. That is a QUOTATION under R-i, not a transcription, so the ratchet simply will not force it
+to be tagged — an under-count, and the safe direction, because the alternative is a ratchet that
+cannot reach zero without mangling two hundred good sentences.
+
+**THREE CORRECTIONS, ALL DOWNWARD, IS A PATTERN THAT DESERVES SUSPICION** and it got some: this one
+was checked on two random samples across the whole tree, not on the lines in front of me, precisely
+because the convenient direction and the correct direction agreed. The self-test now pins a sample of
+each kind so a fourth drift has to break it.
+
+The last eight sites were rewritten BY LINE NUMBER after two failed string matches on indentation.
+Worth recording as a tool note: when a patch is a comment rewrite and the anchor is the comment
+itself, the line number is the more reliable address.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,525 → 2,250 (212 calibration, 63 rewriting).
+
+**2026-09-08 — M6-d-5: the combat half of the frame, and the labels that earn their keep.**
+
+34 more, and `FlightLoop.cpp` is at 71 of its original 199. This stretch is parts 7 to 12 — contact,
+scooping, docking, the collision cost, our laser and the write-back — and it is where the file's
+real findings live, so it is the stretch that tests whether prose can carry them.
+
+It can, and the shape that works is consistent: **the LABEL stays and the LISTING goes.** `// 6502:
+MA59 -- and the carry is SET, because part 8's branch is the only way here` keeps everything the
+reader needs. The label is the address in the original a person would go and look at; the six
+instructions after it were never what made the sentence true.
+
+Three findings came through with nothing lost. The scoop's item number is the blueprint's top nibble
+plus one plus a bit of the bottom nibble, because the addition takes the fourth shift's carry
+(§6.89). A full hold reaches the impact code with the carry SET, because the capacity test's own
+branch is the only way in. And the flag `LL9` seeds an explosion cloud on is the one `HITCH` set,
+which the missile-lock test does not touch — the finding that a silent build once broke (§8).
+
+`cs-ll9-carry-hit` re-anchored (rule 3): its `find` quoted that last comment verbatim. The pattern is
+now familiar enough to predict — **a mutant anchored on a comment moves when M6-d rewrites it** —
+and the answer is always to re-anchor rather than to leave the comment alone, because a mutant
+pinning a line of prose is pinning the wrong thing anyway. Two mutants in five slices; 97 of 97.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+`opcode-transcriptions` 2,559 → 2,525.
+
+**2026-09-08 — M6-d-4: the rest of the keys, the guns, and a block of named constants.**
+
+35 more from `FlightLoop.cpp`, which is now 105 of its original 199. No marker was lost this time,
+which is the first slice in three where the ratchet had nothing to say about rule 4 — the rule from
+M6-d-3 held on its first outing.
+
+The constants block is the easiest kind of site and worth naming as a shape: a dozen `inline
+constexpr` declarations each carrying a doc comment whose whole content was the instruction that
+loads the value. `DOCK_SURVIVABLE_SPEED` does not need the compare quoted to explain itself once the
+sentence says "below this speed a failed dock is survivable and above it is not". The name and the
+sentence together were always the useful half.
+
+Two findings needed real care because the instruction sequence was doing explanatory work:
+
+- **The laser's sound chain** ends in the assembler trick that hides one load inside another's
+  operand so the byte after it is skipped. The rewrite keeps the FACT — one effect survives and the
+  one below it does not — without the opcodes, because §6.79 is where the trick is documented and
+  this is its sixth appearance.
+- **The damage passed to the hit noise is dead**, because the routine it is handed to overwrites it
+  before reading it. That is a claim about two routines and it survives as prose; what it does not
+  need is the two instructions that make it true, which the reader cannot check from here anyway.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants.
+`opcode-transcriptions` 2,594 → 2,559.
+
+**2026-09-08 — M6-d-3: `FlightLoop.cpp`, and rule 4's third shape.**
+
+59 of the file's 199, and the rewrite is mechanical wherever the comment already ended in a gloss:
+the listing goes, the marker stays, the sentence after the colon does the work it was already doing.
+`SumOfSquares` reads as three axes squared and added rather than as nine instructions; `IsHit` keeps
+its finding — that a sixteen-bit compare's early branch is an ANSWER and not a rejection, which is
+the bug §6.84 records — and loses the seven instructions that finding was wrapped around.
+
+**RULE 4 BIT FOR THE THIRD TIME AND IN A THIRD SHAPE.** M6-c-18 lost markers by deleting whole
+comments; M6-d-2 lost them by rewriting a block's opening line; this time it was the INLINE TRAILING
+marker — `running = sum.value; // 6502: STA R` — where the listing IS the entire comment and there
+is nothing left to attach the marker to once it goes. Seven of them, `origin-markers` 4,103 → 4,096,
+caught on the same run as always.
+
+The answer is the same each time and it is worth stating as a rule rather than rediscovering it:
+**a marker whose comment held nothing but the listing gets prose, not deletion.** `// 6502: back
+into the running total` says where the value goes; `// 6502: CNT counts down` names the byte the
+loop is standing in for. Both are worth more than the instruction they replaced, which is the whole
+premise of M6-d, and neither is M6-e's job to do early.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants.
+`opcode-transcriptions` 2,653 → 2,594.
+
+**2026-09-08 — M6-b-3: what the answers carry, and it is more than the reads suggested.**
+
+R-h, answered. The recorder indexes the base image by four-byte window and asks of every distinct
+record whether its written bytes appear in the image verbatim. **8,297,316 of 22,279,497 record
+bytes — 37.2% — in 1,128,263 runs, longest 2,024.**
+
+**That is higher than the census implied and the two numbers are not in conflict.** The census said
+18.5% of CALLS read image content; this says 37.2% of BYTES are image content. A call that reads six
+table bytes and writes a screen row copied from the font is one call and hundreds of bytes. The
+first number sized how many answers depend on the original; this one sizes how much of the original
+the answers contain, and only the second is what ADR-001 §5 asks about. **I framed the first as if it
+were the second when I reported it, and it was not.**
+
+The instrument understates rather than overstates, deliberately: a window's candidate list is capped
+at 64, so a byte sequence occurring thousands of times over is measured against the first 64 places
+it could have come from and its longest match can only be missed, never invented.
+
+The caveat that cuts the owner's way is in §4.10: this is the whole corpus, and R-f's digests remove
+exactly the tests whose records are longest. The proportion in the fixture that actually ships could
+be much lower — and measuring that needs the digests, which is the piece waiting on the ruling.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+
+**2026-09-08 — M6-d-2: `Arith.cpp` to zero, and the counter wrong twice on the way.**
+
+The first file, and it corrected the instrument twice before it rewrote anything — which is M6-c-0's
+lesson arriving on schedule.
+
+**A mnemonic followed by an English word is not an instruction.** "clears both halves AND the carry"
+and "expresses that with ROR through the carry flag" both read as a transcription to a pattern that
+takes anything after the mnemonic as an operand. A 6502 operand begins with `#`, `$`, `&`, `%` or
+`(`, or is the accumulator, or is a label — and every label in this source begins with a capital, a
+digit or a dot. Lowercase after a mnemonic is a sentence carrying on.
+
+**Backticks are not a listing either.** "the `CLC` here looks dead" and "no `CLC` between them" name
+an instruction inside a sentence about behaviour, which is what R20 keeps. An implied-mode mnemonic
+needs a SLASH beside it to be a transcription, because a slash is the thing only a listing has.
+
+Together those two are **221 lines** the counter was wrong about, out of 2,921, and every one of
+them is prose. `opcode-transcriptions` 2,921 → 2,653: 221 from the calibration and 44 from this
+file, which is now at zero.
+
+**Rule 4 bit again and the ratchet caught it again.** Forty-two of `Arith.cpp`'s rewrites dropped
+the `// 6502:` marker along with the listing, `origin-markers` fell 4,103 → 4,061, and the check
+said so on the same run. **THE MARKER IS NOT THE TRANSCRIPTION.** M6-d removes the assembly; M6-e
+removes the marker; a slice that does both has done M6-e's work early and without its acceptance.
+All forty-two are back, with the prose after the colon lowercased to match the form the file already
+used — `// 6502: the two antilog exits ...` — which is now the shape the remaining 2,653 follow.
+
+Two of the forty-two were comments I deleted outright because the listing was ALL they held. They
+are back too, saying in prose what the code does, because rule 4 does not have an exception for a
+marker whose line has nothing else on it.
+
+`ar-mu1-clc` re-anchored (rule 3): its `find` quoted a comment line this slice rewrote. 97 of 97.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+`opcode-transcriptions` 2,921 → 2,653.
+
+**2026-09-08 — M6-d-1: the ratchet splits, and the tag is the whole of the design.**
+
+§1 R-i, implemented. `opcode-comments` is gone and two counters stand where it was:
+`opcode-transcriptions`, which M6-d drives to **zero**, and `opcode-quotations`, which is capped.
+They sum to the number the single counter read — **2,921 and 0** — which is the arithmetic that says
+the split lost nothing: every line the old counter saw is in exactly one of the two, and none is
+tagged yet because no quotation has been justified yet.
+
+**THE TAG IS THE DESIGN AND THE REST IS BOOKKEEPING.** A tool cannot tell a listing that carries a
+reason from one that does not; only the person writing the comment can. So a kept quotation says so
+in the text — `6502 quoted:` — and the counter reads the author's claim rather than guessing at it.
+Two consequences worth naming:
+
+- **The cap stays MECHANICAL.** A floor I assert per site is not a ratchet; a tagged line is one the
+  tool can count, so "how many quotations survived" is a number rather than an opinion.
+- **Every line of a quotation carries the tag**, not just its first. It makes the rule unambiguous
+  where a block delimiter would need parsing, and it makes a long quotation cost more to keep —
+  which is the incentive M6-d wants, since the row's instinct that most of this should simply go is
+  the right one.
+
+The tag is deliberately not `6502:`: that is the marker M6-e removes, `\b6502:` does not match
+`6502 quoted:`, and the two must not be confused by a counter or by a person. `origin-markers` is
+unmoved at 4,103, which proves it.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+
+**2026-09-08 — the second merge from `main`: the resolution track, and two things it took.**
+
+`main` gained RS-0 to RS-6 whole — the 640×400 surface, built and closed — while this branch ran.
+Twelve commits, and **the code merged without a single conflict**, which is worth recording: M6-c
+renamed identifiers across the drawing files in the same days RS re-flowed every screen through
+them, and the two never touched the same line. All seven conflicts were in `Design/`, and all seven
+were the same two numbers: this branch had 460 tests and nineteen checks, `main` had 469 and
+eighteen. Both facts are true after the merge and both survive — main's prose everywhere, because
+the RS document is now a RECORD rather than a plan, with the check count corrected to nineteen.
+
+**`opcode-comments` went UP, 2,911 → 2,921, and the ratchet said so before anything else did.** That
+is rule 5 working exactly as intended and it is not a regression: eight of the ten are
+`TextPrint2x.h`, a file that did not exist on this branch, and the rest are four single lines against
+two that `Picture.h` LOST. None of it has been through M6-d because M6-d had not started when `main`
+wrote it. So the ceiling is re-baselined to 2,921 with the reason on the record — **imported, not
+regressed** — and M6-d's target moves up with the tree it has to clean. Re-baselining upward is the
+thing rule 5 exists to prevent, so it is worth being plain about why this is the exception: the rule
+stops a SLICE undoing its own progress, and a merge is not a slice.
+
+**M6-g IS ADR-009 NOW.** RS-6 landed `ADR-008-the-picture.md`, and the detachment ADR was scheduled
+under the same number since before the resolution track existed. Two documents cannot share one, and
+the built one keeps it.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+
+**2026-09-08 — M6-d-0: the instrument, and a tension between the row and R20.**
+
+M6-c's lesson applies again: the counter comes first, because "opcode-shaped comment line" is not
+one thing and a ratchet is only as honest as what it counts.
+
+**A mnemonic ALONE is not a transcription.** "`ORA` touches no flag", "its top BIT is set", "no
+`RTS` -- it falls into `DK4`" are prose ABOUT behaviour that happen to name an instruction, and R20
+says the reason is exactly what M6-d keeps. What M6-d removes is the QUOTATION. So the counter asks
+for instruction SHAPE — a mnemonic with an operand after it, or an implied-mode one standing inside
+a slash-separated run — and not for a word in capitals. The two readings differ by 228 lines out of
+3,074, and every one of the 228 is a sentence rather than a listing.
+
+**The tree holds 2,911 of them** across `GameLogic/` and `Outpost/`. `Design/` is not counted: the
+plan's own journal quotes assembly deliberately, the row says it is history and left alone, and a
+counter that read it could never reach zero.
+
+**AND HERE IS THE TENSION, WHICH IS THE OWNER'S TO SETTLE.** The row's acceptance is "a ratchet
+counter over opcode-shaped comment lines AT ZERO". R20's mitigation is "a comment that cannot be
+rewritten without losing its reason KEEPS THE INSTRUCTION SEQUENCE AS A QUOTATION". Both cannot hold
+at once: a kept quotation is a counted line. Either the ratchet's floor is zero and R20's escape
+hatch is never used, or the floor is whatever the escape hatch legitimately needs and "at zero" was
+written before anyone had looked at the corpus.
+
+Nothing is rewritten until that is answered, because it decides what 2,911 rewrites are aiming at.
+The instrument is committed either way: under both readings the number has to come down, and under
+both it is this number that comes down.
+
+460 tests green, all nineteen checks, replay digests unmoved.
+
+**2026-09-08 — M6-b-2: the labels become a header, and the tests stop reading a file to find a
+routine.**
+
+R-g's other half. A test finds its routine by name, so the ~1,900 names have to outlive `Upstream/`
+— they are metadata about the original on the same footing as the extracted data tables, and R-c's
+"the label table goes with the oracle" was the part Q7 got wrong.
+
+`tools/labels.py --header` writes `Tests/GameLogicTests/OracleLabels.h`: three `constexpr` tables of
+`{name, address}`, 1,927 for the game, 34 for the loader and 1 for the sprites, sorted by name and
+written a line at a time so regenerating it on another machine produces the same bytes. **Names and
+numbers only.** The image is the original's CODE and stays out, which is what keeps ADR-001 §5 true
+through M6-f.
+
+`--check` is the nineteenth repository check. It re-derives the tables from `Design/Reference/` and
+fails if the committed header disagrees, naming the first five lines that differ. **It SKIPS rather
+than fails when those tables are absent**, and that is the whole design: absent is the normal state
+of a fresh clone and the PERMANENT state after M6-f. A check that demanded the original be present
+would be a check that has to be deleted later, which is the opposite of what this phase is for.
+
+`OracleImage` now takes its labels from the header instead of from `Design/Reference/*Labels.txt`,
+so its three instances name a table rather than a filename. `ReadTable` stays for the binaries: the
+IMAGE is a different question and is still loaded from the assembled blocks until M6-b-4 removes the
+need for it.
+
+460 tests green, all nineteen checks, replay digests unmoved.
+
+**2026-09-08 — M6-b-1: the read census, and the key that was missing a probe.**
+
+§1 R-g accepts a tail — "tests that read image bytes no call ever wrote" — on the condition that
+M6-b sizes it first. This is the reading, and taking it found a defect on the way.
+
+**The instrument.** `Cpu6502` carries a pointer to the base image and classifies every DATA read
+against it: a byte still equal to the image's is one nothing wrote, so a record keyed on the write
+set does not name it; a byte that differs was put there by the test or by an earlier call on the
+same machine, and the key covers it. Instruction fetches are not counted — the original's code by
+definition, and counting it would drown the number — but the two indirect pointer fetches are, since
+a blueprint pointer left in zero page by the image is exactly the dependence being measured. A test
+that wrote a byte the value it already held is counted as an image read, which errs towards
+reporting MORE dependence than there is: the safe direction for a number a ruling will be made on.
+The census rides on `--measure`, which already wanted one whole pass and keeps nothing.
+
+**A byte that is zero is not the same finding as a byte that is not**, and splitting them is what
+turns this from a soft number into a decidable one. A drawing routine reads the screen byte before
+it EORs into it; in a fresh machine that byte is zero because the bitmap is zero, so the read is
+"off the image" while carrying nothing the original put there.
+
+| | reads | share | addresses | calls |
+|---|---|---|---|---|
+| data reads | 704,039,505 | | | 3,224,616 |
+| off the image | 328,377,761 | 46.6% | 30,805 | 1,739,324 |
+| **off the image and not zero** | **128,023,278** | **18.2%** | **19,112** | **597,921 (18.5%)** |
+
+Where the 30,805 fall, as runs of pages: &CF00–&FAFF holds 10,460 of them (93% of that range),
+&4000–&67FF 7,225 (71% — the bitmap, and mostly the zero half), &0400–&20FF 6,178 (83%),
+&B700–&C6FF 3,958 (97%), &9200–&99FF 1,521 (74%). The rest is a long tail of a few hundred.
+
+So the tail is real and it is a fifth of the corpus. It does not make replay wrong; it decides how
+much of the original the fixture's ANSWERS carry and how much of the fixture would rot if the image
+moved. §4.10 carries the number and both are the owner's to weigh.
+
+**AND THE MEASUREMENT FOUND A DEFECT IN THE KEY, WHICH IS THE BETTER HALF OF THIS SLICE.** The
+recorder reported **four collisions** where M6-a-2's pass reported none, and four is not chance: a
+64-bit key over 3.2M calls collides by accident about once in three million runs. `Probe` — which
+arrived with the InputTimer track after M6-a-2 measured — carries a `std::function` that changes the
+machine WHILE the call runs, and `CallDigest` folded nothing about it. `TT217`'s five keyboard
+scripts poke identical machines and differ only in what the probe holds down, so all five keyed as
+one record. A fixture built on that key would have answered four of those calls with the fifth's
+memory and failed somewhere unrelated, which is exactly what `Oracle.h` says the collision counter
+is for.
+
+`Probe` now carries a REQUIRED `identity` — no default, so a new probe site cannot forget — the
+digest folds the count, the addresses and the identities, and the one call site derives its identity
+from the script it replays. Collisions are back to 0 and `distinct` is up by exactly four, which is
+the five scripts becoming five records.
+
+**The general lesson: a call's answer is a function of the machine only while nothing else can
+speak.** The whole-machine digest was sound when the interpreter was the only thing running; a seam
+that lets a fixture run its own code part-way through is outside it by construction, and the key can
+only hold what the caller promises about that code.
+
+460 tests green, all eighteen checks, replay digests unmoved, 97 of 97 mutants still apply.
+3,224,616 calls, 3,177,126 distinct, 0 collisions.
+
+**2026-09-08 — M6-c-18: the last twenty-five, and three that were not renames.**
+
+`origin-identifiers` is **ZERO**. Seventeen slices, 2,290 sites, no test moved and no digest moved.
+
+The last twenty-five split three ways. Ten were ordinary: `SumOfSquares`' `R` is the `running` total
+of three squares; `MVT1`'s and `MVT6`'s sweeps take `valueLow` and `valueMid` from
+`AddToShipCoordinate`'s and `AddShipCoordinateToP`'s own signatures; and `DOCKIT`'s ladder builds a
+`magnitudeByte` from its `int magnitude`, which is all that copy has ever been.
+
+**Three of the six `T`s were not renames at all.** `ClipSunRow` opened with
+`const std::uint8_t t = _halfWidth;` and then used `_halfWidth` directly four lines later;
+`DrawBorder` did the same with `_rows`; `SetCompassDot` did it with `down.offset`, one line under a
+sibling that reads `across.offset` where it stands. All three are the original's zero-page byte
+surviving as a copy the port has no use for: `STX T` exists because `BOXS2` clobbers X and because
+`SBC` cannot subtract from a literal. Deleting the copy is what "renamed for what it holds" means
+when what it holds is something that already has a name.
+
+**And that deletion broke rule 4 before it was caught.** Two of the three carried a `// 6502:`
+marker, `origin-markers` fell 4,103 → 4,101, and the ratchet said so on the same run. The markers are
+back, attached to the code that now does the work and rewritten to say what the original parked and
+why the port does not — which is the sentence M6-d will want anyway. **The lesson: a ratchet that
+only goes down still catches a slice going down the WRONG counter.** Rule 5 permits the fall; rule 4
+forbids this particular one; the pair of them is what noticed.
+
+The block renamer's new guard fired twice in this slice on `TacticsTests.cpp` — both loops sit under
+a block comment, and both times the range I reached for started inside one. It is the cheapest check
+in the tool and it has now paid for itself three times.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored across all seventeen slices; six mutants
+moved earlier in the phase and every one was re-anchored, never dropped (rule 3).
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 25 → **0**. M6-c is done.
+
+**2026-09-08 — M6-c-17: `B`, and the one slice that moves two ratchets.**
+
+27 sites and six meanings, and only two of them descend from the original at all.
+
+`MVS4`'s and `MV40`'s sweeps really do sweep `ALPHA` and `BETA`, and the port's own signatures say
+what those are: `RotateShipVector(_work, _y, _rollRate, _pitchRate)`. The label holders in those
+tests are already `rollRate` and `pitchRate`, so the swept values are `roll` and `pitch` and the
+lines that poke them read as the sentence they are.
+
+The other four are `a` and `b` because that is what a second operand is called in arithmetic, not
+because the original has a `B`. `AbsoluteDifference` takes a `_first` and a `_second`; `GoldenCanvas`
+computes Adler-32, whose two running totals are a `sum` and a `sumOfSums`; two more `Context`
+helpers join `ArithTests`' at M6-c-13, with `MarketTests`' taking `_item`, `_economy` and `_random`
+from the message it formats; and `PictureDashboardTests` compares two dashboard planes, so `first`
+and `second`.
+
+**THIS SLICE MOVES TWO RATCHETS AND THAT IS DELIBERATE.** `AddWithCarry(std::uint8_t _a,
+std::uint8_t _b, bool _carryIn)` is a pair: renaming `_b` and leaving `_a` would have made the
+signature worse, not better, so both moved — `_value` with `_addend` for the add and `_value` with
+`_amount` for the subtract. `_a` was one of P1's register-shaped parameters, so `register-params`
+falls 13 → 11 in the same commit. Rule 8 asks for one PATTERN per slice, not one counter; the
+pattern here is a binary operator's two operands, and half of it happened to be P1's.
+
+**A range that starts inside a block comment renames nothing.** `PictureDashboardTests`' first pass
+reported "unchanged" and the reason is the hazard `code_only` already documents from the other side:
+the comment above the declaration contains "the blip's colour", and to a renamer that walks from the
+middle of a comment that apostrophe opens a character literal which then swallows every site after
+it. The tool now refuses a range whose first line is inside a comment rather than silently doing
+nothing.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 52 → 25, `register-params` 13 → 11.
+
+**2026-09-08 — M6-c-16: `Q`, the divisor that was not always a divisor.**
+
+23 sites and three meanings. `Q` is the original's second operand — the divisor, the multiplier —
+and the arithmetic files spent it that way, but the dashboard borrowed it for something else
+entirely and `GenerateSystemData` borrowed it for a name.
+
+The dashboard's three are all "how much of the bar is still to light", counted DOWN as the blocks
+are filled: `DIL`'s and `DLL10`'s in pixels, so both are `pixelsLeft`, and `DLL24`'s in energy dealt
+sixteen at a time from the top bar, so it is `energyLeft`. Each of the three is a different routine's
+local and none of them ever divides anything.
+
+`GenerateSystemData`'s is not a value at all: `const std::array<std::uint8_t, 6>& q = _seeds.bytes`
+is an ALIAS, and it is called `q` because the original indexes `QQ15`. It is `seeds`, which is what
+every one of its four uses reads as.
+
+`MULT3`'s sweep is the one that really is a second operand, so it takes `multiplier` — the name
+`ArithTests.cpp` settled on at M6-c-13 and the one the port's own signature uses.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 75 → 52.
+
+**2026-09-08 — M6-c-15: `CNT` was five different counters.**
+
+29 sites and five meanings, which is what a name like `CNT` costs: the original had one zero-page
+byte and every routine that wanted a counter used it, so a rename keyed to the NAME would have made
+five unrelated things share a sixth.
+
+`CIRCLE2`'s and `PLS22`'s is the angle a walk round a circle is at — `DrawBallLine` advances it by
+the circle's step and hands it back, so its parameter is `_angle` and `DrawBall`'s local is `angle`.
+`DrawEllipse`'s is the same value with a complication: `_angle` there is ALREADY the start the
+caller chose and `_target` is where to stop, so the running one is `atAngle` and the three read as
+the triple they are.
+
+`TA152`'s is the nose dot product, and the port had already named it: part 6 of the same file reads
+`_frame.offNose` into a local called `cnt` two hundred lines from a parameter called `_cnt` holding
+the identical byte. Both are `offNose` now and the file says so twice.
+
+The other two are plain. `SPL`'s counts ships still to make, so it is `remaining`; `DOEXP`'s is the
+heap index parked across the sprite work and EORed into the cloud's seeds on the way past, so it is
+`savedVertex` — and `vertex`, the name it wanted, is the index it was saved from.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 104 → 75.
+
+**2026-09-08 — M6-c-14: the `K` blocks, across the four files that share one.**
+
+72 sites, and this slice follows a VALUE rather than a file. `K`, `K2` and `K3` are the original's
+wide accumulators, and the port's chain passes one of them through `MVT3` — `AddShipCoordinateToK`
+in `ShipMove.cpp`, whose `_k` is the running `_total` — from callers in three other files. Each
+caller's copy gets the name its own routine gives it: `DoubleAndAddCoordinate`'s is a `total` too,
+but `SubtractShipAxis`'s is a `difference`, because the comment two lines above it already says
+"K is now this ship minus the other" and nothing else in the function says it. `DivideToScreenOffset`
+holds the divide's `quotient`, which is what the comment under the declaration has always called it.
+
+`DOEXP`'s `K3` is the awkward one: four bytes of a vertex's screen position, and `vertex` — the
+obvious name — is already the heap index that fills them. It is a `point`.
+
+The two sweeps that poke a `K` block name their operands after the block's fields, so `MVT3`'s three
+swept bytes are `totalMid`, `totalHigh` and `totalTop` and the array poked into the oracle's zero
+page is the `block`; `MULT3`'s answer is a `result` like every other `KBlock` a routine returns.
+
+`KBlock` itself STAYS. It is a type the port declares, not a label it inherited: M6-c is about
+identifiers that name a 6502 location, and a struct with `low`, `mid`, `high` and `top` names a
+shape. Whether the type keeps the letter is M6-d's question, not this slice's.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 176 → 104.
+
+**2026-09-08 — M6-c-13: the arithmetic sweeps take the port's own parameter names.**
+
+59 sites in `ArithTests.cpp`, and this one needed no invention at all: the port's signatures already
+name every operand. `AddSigned(SignMag16 _value, SignMag16 _addend)`, so the sweep's `p`/`r`/`s` are
+`valueLow`, `addendLow` and `addendHigh`; `MultiplyAndAdd(_value, _multiplier, _addend)`, so `MAD`'s
+`q` is the `multiplier`; `DivideWide(_high, _low, _divisor)`, so `DVIDT`'s `q` is the `divisor`; and
+`CombineSigned(_termSign, _term, _total)`, so `LL38`'s three are `term`, `totalLow` and `totalHigh`.
+Where a sweep's variables ALREADY read as what they feed — `multiplicand` against `multiplier` in
+the `MULT1` block — nothing changed, and those blocks are why `multiplier` and `divisor` were the
+names to reach for: this file settled on them nine test methods ago.
+
+The edge-case table is the same rename one level in: `Case` is a struct of four bytes and its
+initialisers are positional, so its fields move with the sweep they mirror.
+
+Also `Context(_what, _a, _b)`, the failure-message helper forty assertions call — `_first` and
+`_second`, because it takes whatever pair the caller is comparing and its `_b` was the vocabulary's
+`B` by accident rather than by descent.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored: the `ar-*` mutants name lines in
+`GameLogic/Arith.cpp`, which this slice does not touch.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 235 → 176.
+
+**2026-09-08 — M6-c-12: the divide sweeps say which operand they are sweeping.**
+
+62 sites in one file, and all of them are the operands of a sweep. `ShipDrawTests.cpp` sets up five
+of them and every one used to name its loop variables after the workspace bytes the ORACLE is poked
+with, so `DVID3B`'s six-deep nest read `p`, `p1`, `p2`, `q`, `r`, `s` — which says where the bytes go
+and nothing about what they are. They are a numerator and a denominator, three bytes each, so they
+are `numeratorLow`/`Mid`/`High` and `denominatorLow`/`Mid`/`High`, and the `if` that skips the
+denominator that cannot terminate now says so on its face. `DVID3B2` and `PLS6` take the same
+numerator with the denominator coming from a ship's `z`, and the `K` block all three return is the
+`result`. The slope routines' `(S R)` is one distance, so it is `distanceLow`/`distanceHigh`, and
+`LL61`'s swept `Q` is the `divisor`.
+
+**The oracle's own names stay in the failure messages.** `Widen("DVID3B(P=" ...)` still reports
+`P`, `Q`, `R` and `S`, because when this test fails what you do next is find those bytes in the
+original — the message is addressed to the 6502, not to the port. The renamer walks string literals
+verbatim, which is why they survived a pass that changed the identifier feeding each one.
+
+No block needed splitting this time: each sweep is a whole test method and the five maps are
+disjoint. The one line the rename pushed past the file's longest is wrapped rather than left.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored — no mutant names a line in this file.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 297 → 235.
+
+**2026-09-08 — M6-c-11: `Arctan`'s two `T`s, which is why M6-c-7 left it alone.**
+
+56 sites, and the two functions M6-c-7 pulled back out are done properly. **`Arctan` has TWO `T`s in
+disjoint blocks** — the angle of the inverted ratio in the `AR1` branch, and a copy of the answer in
+the quadrant reflection at the end — so a rename keyed to the function renames both to one name, and
+the one it collides with is the `angle` already in scope. That is the defect M6-c-7 shipped and
+reverted. Read as two blocks they are `inverseAngle` and `firstQuadrant`, and `T1` is `signs`, which
+is what the operands' EOR is for.
+
+With them: `MULT12`'s inner `T1` is a `decrementedMultiplier` like every other; `MULT3` and `DVID3`
+each build a `KBlock` called `k`, which is the `result`; `NORM`'s running sum of squares is
+`totalHigh`/`totalLow` with a `squareHigh` per axis; and `MVS4`'s second half takes `otherLow` and
+`otherSign` from the split M6-c-9 made.
+
+**THE LESSON IS THE SCOPE OF A RENAME, NOT THE NAME.** Twice now the unit that needs one map has
+been a BLOCK and not a function, and both times the compiler was silent because the colliding name
+was an outer local. A scoped renamer that stops at the function boundary is the right tool for four
+families out of five and the wrong one here; what caught it both times was the whole suite.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored — the three `arith` mutants that moved at
+M6-c-7 name lines this slice did not touch.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 353 → 297.
+
+**2026-09-08 — M6-c-10: the line drawers, the seed twist, the number printer and the cloud.**
+
+100 sites over four files, and each one was a comment away from its own name. `LOIN`'s `P2` and `Q2`
+are the two spans as magnitudes — `deltaX` and `deltaY` — and its `S2` is the Bresenham error seeded
+at half, which is `errorSeed`; `HLOIN`'s `T` is the left end rounded down to its byte (`leftByte`)
+and its `R` the count of whole bytes between the ends (`wholeBytes`). `TwistSeeds` aliased the six
+system seeds as `q` because the original calls them `QQ15`; they are `seed`. `TT11`'s `U` is where
+the decimal point falls (`pointPosition`), its `T` the field width and its `S` the flag that says a
+digit has already been printed. `DOEXP`'s `S` is the vertex's high byte and its `T` the offset's low
+half.
+
+`Lines2x.cpp` moved with `Lines.cpp`, which is the twin rule doing its job in a direction
+`check_twins.py` does not check: the twin's parameters are the faithful routine's, so a rename that
+stopped at one of them would leave two routines that no longer read as a pair.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 453 → 353.
+
+**2026-09-08 — M6-c-9: the ship movers, and one local that was two things.**
+
+73 sites over five routines. `AddToShipCoordinate`'s `S` and `T` are a `magnitude` and its `sign`;
+`AddShipCoordinateToK`'s are a `topByte` and its `sign`; `MV40`'s `K` is the coordinate being
+`moved` and its `K2` the copy `parked` while `MULT3` refills the first; `MoveShip`'s `K2` is
+`rolledY`, the y coordinate after the roll.
+
+**AND `MVS4`'s `T` IS TWO VARIABLES, WHICH A RENAME CANNOT EXPRESS.** It holds half the magnitude of
+one high byte, is consumed by the subtraction four lines down, and is then reassigned to another
+value's sign — the original's reuse of one zero-page byte, transcribed. There is no name that is
+true of both, so the local is split: `halfHigh` and `otherSign`, and the compiler is what proves the
+first is dead before the second exists. That is the first place in this phase where the honest
+rename was not a rename, and it is worth naming as a shape rather than as a one-off: a scratch byte
+the original reused is two things and the port should say so.
+
+Two mutants re-anchored, none dropped (rule 3): `sm-mv43-sense` and `sm-mltu2-carry` both name `k2`
+in their `find`, and name `rolledY` now. `mutate.py --check` is 97 of 97.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 526 → 453.
+
+**2026-09-08 — M6-c-8: the sweeps' operands, named for the routine each one drives.**
+
+188 sites, and no judgement needed once the question was asked the right way round: a sweep's loop
+variable is called `p` or `q` because the ORIGINAL called the byte it writes `P` or `Q`, and what it
+actually is, is the routine's operand. So the name comes from the call three lines below the loop —
+`Elite::MultiplyUnsigned(p, q)` makes them `multiplicand` and `multiplier`, `Elite::Arctan(p, q)`
+makes them `numerator` and `denominator`, `Elite::SquareRoot(r, q)` makes them `radicandHigh` and
+`radicandLow`, and every `DivideBy…` makes its `q` a `divisor`. Thirteen test methods, each with its
+own map, because the same `q` is a multiplier in one and a divisor in the next.
+
+`MarketScreenTests` went with them: 63 of its 65 sites were two range-for variables over
+`Situation` and `Scenario`, which are `situation` and `scenario`.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 714 → 526.
+
+**2026-09-08 — M6-c-7: the kernel's scratch letters, and a filtered run is not a verification.**
+
+`Arith.cpp`'s public shape was already clean — `MultiplyUnsigned(_multiplicand, _multiplier)`,
+`Product{high, low, carry}` — so what was left was locals, and each one needed its own name because
+the byte behind it has none: `T` is the decremented multiplier in `MULT1`, the operands' sign in
+`MULT12`, and a counter seeded with seven set bits in `DVID4`. Ten functions, seventy-four sites,
+one map per function rather than one map: `decrementedMultiplier`, `valueSign`, `valueHigh`,
+`addendMagnitude`, `quotientAndMarkers`, `signs`, `remainingLow`, `root`, `decrementedMagnitude`.
+
+**TWO FUNCTIONS WERE PULLED BACK OUT OF THE SLICE.** `Arctan` already has an `angle` and
+`AngleOfRatio`'s `T` holds one too, so renaming `t` to `angle` there merges two variables into one
+— and it COMPILES, because the outer one is in scope. `ArctanMatchesExhaustively` said
+"expected 95, actual 128" and `ThePlanetMatchesPLANET` differed at screen offset 1765. Their `T`
+stays until a slice reads the routine properly rather than pattern-matching its neighbours.
+
+**AND THE ONLY REASON THAT COST ONE ROUND INSTEAD OF THREE IS THAT THE SECOND RUN WAS UNFILTERED.**
+`run_tests.sh Arith` ran thirteen tests and passed; the two that fail are in
+`LogarithmRoutinesAgainstTheShippedGame` and `ThePlanet`, which the filter does not match. A rename
+slice's blast radius is not the file it edits, so the verification is the whole suite, every time —
+the same lesson `check_all.py` exists for, in a different shape.
+
+Three mutants re-anchored, none dropped (rule 3): `ar-selftest`, `ar-add-carry` and `ar-ll5-carry`
+name `t`, `t` and `q` in their `find`. `mutate.py --check` is 97 of 97.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 788 → 714.
+
+**2026-09-08 — M6-c-6: the oracle's zero page is not the port's, and the counter could not tell.**
+
+296 sites, and the slice is one distinction. `MathWorkspace::q` is the PORT's byte — the one nine
+routines write before a divide and `MA23` reads as its radicand's low byte a frame later — and it is
+`lastDivisor`, which is what it holds and what makes the altitude quirk read as a quirk. But
+fourteen test files ALSO have a `q`, and theirs is a `std::uint16_t` holding the ADDRESS of the
+original's `Q`, seven of them in an `ArithTests` struct actually called `Scratch`.
+
+**A field initialised from `_oracle.Label("Q")` addresses the original's zero page, and there is no
+port name to borrow for it**: `Q` is a divisor in one routine and a multiplicand in the next, which
+is the whole reason this family is last. So those fields say what they are — `zeroPageQ`,
+`zeroPageK3`, `zeroPageCnt` — rather than pretending to a meaning the byte does not have. The rule is
+mechanical (the initialiser names the label) and it moved 47 fields across fifteen files in one
+pass. It is the same ruling as `Cpu6502`, which models a 6502 and keeps the processor's names, one
+level down: this is the zero page rather than the registers.
+
+**AND THE TWO KINDS SAT IN THE SAME FILES, WHICH IS HOW THIS WENT WRONG TWICE.** A blanket `.q`
+turned `at.q` — the oracle's address — into `at.lastDivisor`; and the bridge pass then turned
+`state.k5` — the PORT's ellipse segment — into `state.zeroPageK5`. The compiler caught both, four
+files apart, and the fix is the distinction rather than the spelling: `PlanetSunState`'s pair is
+`segmentStart` and `segmentEnd` (the segment's start and end, four bytes each because both
+coordinates are sixteen bits), and `Where`'s two are the addresses of `K5` and `K6`.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,084 → 788, and what is left is locals: 166 `q`, 122 `k`, 112 `s` and the rest,
+almost all of them inside `Arith.cpp` and its sweep, `ShipMove.cpp` and the line drawers.
+
+**2026-09-08 — M6-c-5: fifty-nine sites four slices had walked past, because a parameter wears a prefix.**
+
+The counter strips `_`, `m_`, `g_` and `sm_` before it matches, because `_alpha` is the same
+carry-over as `alpha` (AGENTS.md §1). **The renamer did not**, so four slices renamed every field
+and every local and left every PARAMETER behind: `_alpha`, `_beta`, `_rat2`, `_sc`, `_patg`, `_lsp`
+and `_mutok` were still there with their callers reading `rollRate` and `pitchRate`. The counter was
+right and the tool was wrong, which is the good way round — a ratchet that cannot reach zero is a
+ratchet doing its job — but it took a per-name listing to see it, because a count going down every
+slice looks like progress whatever it leaves.
+
+`MUTOK` is `dockingMusicOff` with them, which is what `MusicOptions` already called the same byte.
+
+**`SUNX` came out of the vocabulary rather than being renamed.** `sunX` says where the sun's centre
+is; it is a label, and it is also the name anyone would choose. That is the same ruling as `x1`,
+`y1`, `view` and `status`, and it is written beside them in the counter now rather than left as an
+intention in a journal entry.
+
+`hyp-ctrl-and` re-anchored from `_patg` to `_authorNames` (rule 3); `mutate.py --check` is 95 of 95.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,143 → 1,084, and what is left is one family: the zero-page scratch bytes and
+`CNT`, which need a name per SITE rather than a name per label.
+
+**2026-09-08 — M6-c-4: the rates, and a rename that quietly wrote an address into a speed.**
+
+The biggest family so far: 532 sites. `ALPHA` and `BETA` are `rollRate` and `pitchRate`, with
+`ALP1`/`ALP2`/`ALP2+1` as `rollMagnitude`, `rollSign` and `rollSignFlipped` and `BET1`/`BET2`/`BET2+1`
+the same for the pitch; `DELTA` is `speed` and `DELT4(1 0)` is `speedTimes4Low`/`speedTimes4High`;
+`RAT` and `RAT2` are `signMask` and `signMask2`, which is what `PLUT` writes them as and what
+`MVS5` leaves behind; `CNT2` is `coneWidth` — how wide a cone counts as pointing at something — and
+`SC(1 0)` is `screenPointer`.
+
+**`CNT` IS NOT IN THIS SLICE AND THAT IS DELIBERATE.** It is three different things in three files —
+the angle round a circle in `PlanetDraw`, a count of drops in `FlightLoop`, an XOR seed in
+`Explosion` — so it needs a name per site, not a name. It goes with the zero-page scratch, where
+every name needs the same treatment.
+
+**AND THE SUITE CAUGHT A RENAME WRITING AN ADDRESS INTO A BYTE.** `SpawnTests` held
+`const std::uint16_t delta = oracle.Label("DELTA")` beside a loop variable already called `speed`,
+so `cpu.memory[delta] = speed` became `cpu.memory[speed] = speed` — the label's own address seeded
+into the game's speed byte — and `TheShipAheadMatchesFRS1` failed on ship byte 27 immediately.
+`ControlsTests` had the same collision and did NOT fail, because there the value came from
+`item.speed` and only the reader was confusing. Both label holders are `speedByte` now, which is the
+rule when the port's name for a byte is already taken in the scope that addresses it: the bridge
+local keeps the port's word and adds what it holds.
+
+**The mutant was re-anchored, not dropped** (rule 3): `sm-mv43-sense` names `flight.bet2` in its
+`find`, and it names `flight.pitchSign` now, with the note saying when it moved.
+`mutate.py --check` is 95 of 95.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,675 → 1,143.
+
+**2026-09-08 — M6-c-3: the `XX` workspace, named for what each block holds.**
+
+Five names and 216 sites, and every one of them had a comment already saying what the block was —
+which is what made this the easy family. `XX16` is `scaledOrientation` (the ship's three orientation
+vectors, scaled, sidev then roofv then nosev); `XX12` is `dotProducts` (three sign-magnitude
+results, magnitude then sign); `XX2` is `faceVisible` (one byte per face, and sixteen of them);
+`XX3` is `projectedVertices` (four bytes each, x as sixteen bits then y). `XX17` was not a workspace
+field at all — it is a local in `TextPrint.cpp` counting the digits of a number down, and it is
+`digitsLeft`.
+
+**THE TWO-MEANING BLOCKS KEEP THEIR NAMES AND THEIR WARNINGS.** `scaledOrientation` is also where the
+planet drawer puts the ellipse's four signs, and `dotProducts` is also where the clipper works while
+a line is being clipped. Naming a block for one of its two uses is not a claim that the other went
+away: the census verdicts say both, in the same words they said before, and they are the reason
+these are still one block rather than four fields.
+
+`channel_census.py` carries its field names in three hand-written tables and §4.3's table is
+generated from them, so four rows moved in the tool, four in the document, and the check is what
+proves the two agree. That is now twice this phase (M6-c-2 moved `dontclip`), and it is the shape of
+every workspace rename left.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,891 → 1,675.
+
+**2026-09-08 — M6-c-2: the named oddities, and the counter had been reading `4'000'000` as a quote.**
+
+Fourteen names, 287 sites, and the family with no pattern to it: `Yx2M1` is `lowestVisibleRow`,
+`dontclip` is `clippingOff`, `LSP` is `ballHeapTop`, `STP` is `circleStep`, `PLTOG` is
+`planetDetail`, `PATG` is `authorNames` (which is what `Universe::options` already called the same
+flag), `FIST` is `legalStatus`, `newzp` is `keptQuotient`, `Ze` is `debris`, `frump` is
+`cloudCounter`, `sprx`/`spry` are `spriteX`/`spriteY`, and **`NEWB` is `traits` with `NewbBit` as
+`TraitBit`** — trader, bounty hunter, hostile, pirate, docking, innocent, cop and remove, which is a
+list of traits and not a word in any language. `SUNX` came OUT of the counter's vocabulary instead
+of being renamed: it says what it holds, which is the test this slice applies to everything else.
+
+**THE COUNTER WAS WRONG BY 366 AND THE RENAMER BY THE SAME BUG.** `Cpu6502::CallSubroutine(addr,
+4'000'000)` is all over the suite, and a scanner that reads `'` as a character literal swallows every
+identifier between one digit separator and the next. It made `origin-identifiers` read 1,924 where
+the tree had 2,290, and it made the first rename pass skip `at.fist` at one line and rename its use
+forty lines later — which the compiler caught, and which is the only reason it was found at all.
+Both scanners know a digit separator now: an apostrophe between two digits is code. The corrected
+readings are in the entries above; the ceiling is 1,891 and the direction of travel is unchanged.
+
+**AND THE FIRST FIX WAS ALSO WRONG.** Stripping comments and then literals is wrong in one order and
+stripping literals and then comments is wrong in the other: a comment's apostrophe ("sprite 1's low
+nibble") opens a literal in what the first pass left, and a literal's `//` opens a comment. One scan
+cannot get the order wrong because there is no order, and `code_only` is that scan. `strip_comments`
+is left alone deliberately — eight other counters are calibrated against it, and re-measuring them
+is not this slice.
+
+Two collisions worth recording. `dontclip` wanted to be `unclipped` and `ShipDrawTests` already had
+a local counter of that name, so the field is `clippingOff`. And `channel_census.py` holds its field
+names in three hand-written tables, so a renamed workspace field has to move in the tool and in
+§4.3's table together — which is the shape of every workspace rename left in this phase.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 2,178 → 1,891.
+
+**2026-09-08 — M6-c-1: the music player's fifteen bytes, and two of them were named backwards.**
+
+The first family, and the one that stands alone: `MusicPlayer`'s bytes are read by `Music.cpp`,
+`StateHash.cpp` and `SoundTests.cpp` and by nothing else. `value0` to `value4` become
+`commandSixTally`, `voice1Control`, `voice2Control`, `voice3Control` and `restLength`; `vibrato2`
+and `vibrato3` become `vibrato2Count` and `vibrato3Count`, which is what they are — counters stepped
+each pass until they reach a period.
+
+**AND THE EIGHT VIBRATO BYTES WERE ALREADY KNOWN TO BE BACKWARDS.** `Music.h` has said since M5 that
+`voice2lo1` holds the byte written to SID+&8, which is the frequency's HIGH register, and
+`voice2hi1` the one written to SID+&7, the LOW — and that the 32 the vibrato adds goes into `hi2`
+with a carry into `lo2`, which is a sixteen-bit add only if the names are read the other way round.
+The comment ended "they are kept as named because the ledger and the oracle test name them", which
+was true while the ledger and the oracle test were the point. They are `voice2NoteHigh`,
+`voice2NoteLow`, `voice2RaisedHigh` and `voice2RaisedLow` now, and voice 3's the same, so the carry
+reads as a carry between a low byte and a high one.
+
+**THE BRIDGE'S FIELDS WERE RENAMED WITH THEM AND THE STRINGS WERE NOT.** `SoundLabels::value0` holds
+the ADDRESS of `value0`, so by this slice's own rule its name was correct — but the field is the
+port's side of the map and the string in `_oracle.Label("value0")` is the original's, so the field
+takes the port's name and the literal keeps the label. That is the pattern for every bridge struct
+the rest of M6-c meets, and it needs no exemption in the counter.
+
+**THE FIRST ATTEMPT REWROTE THE MARKERS**, because the rename ran over the whole file: every
+`///< 6502: value0` became `///< 6502: commandSixTally`, which is rule 4 broken fifteen times in one
+commit. Comments and string literals are masked out of the pass now and the markers are what they
+were; the ONE comment that had to change is the block explaining the backwards names, which is
+history and says so.
+
+454 tests green, all eighteen checks, and the replay digests unmoved — which is the row's own
+acceptance and the reason a rename slice runs the whole suite rather than the file's own.
+`origin-identifiers` 1,924 → 1,812 as the counter then read it, and 2,290 → 2,178 as it reads
+now (M6-c-2).
+
+**2026-09-08 — M6-c-0: the instrument, and "is a label" turned out to be the wrong question.**
+
+M6-c's acceptance is a ratchet at zero, and nothing counted. `check_modernize.py` gains
+`origin-identifiers`, and building it took the same three wrong readings M6-0-f's took.
+
+**THE FIRST READING WAS "AN IDENTIFIER THAT IS A LABEL", AND IT IS NOT THE QUESTION.** 135
+identifier spellings in `GameLogic/` are labels of the C64 build, at 2,785 sites — and most of them
+are labels because the ORIGINAL ALSO NEEDED A WORD FOR THE THING. `view`, `status`, `type`,
+`energy`, `name`, `counter`, `pixel`, `swap`, `sun`, `junk`, `cash`, `checksum`, `x1`, `y1`, `x2`,
+`y2`: renaming those would make the code worse and no freer of the original. So the question the
+counter asks is the one the row is actually about — **does the name say what it holds, or do you
+have to have read the original to know?** — and what survives it is five families: the zero-page
+scratch bytes (`k`, `q`, `t`, `s`, `p`, `r`, `u`, `b` and their numbered siblings), the `XX`
+workspace, the rates and counters (`ALPHA`, `BETA`, `DELTA`, `ALP1`, `BET2`, `RAT2`, `SC`, `CNT`),
+the named oddities (`ze`, `stp`, `lsp`, `yx2M1`, `dontclip`, `newb`, `frump`, `lotus`, `santana`),
+and the music player's `value0`–`value4`, `vibrato2/3` and eight `voice*` bytes.
+
+**THE SECOND READING COUNTED CHARACTER LITERALS**, and `_ports.characters.Put('m')` is not a routine
+still called `m`. Found by the counter's own self-test rather than by review, which is why every
+counter has one.
+
+**THE THIRD READING COUNTED THE INTERPRETER'S FLAGS.** `c` and `v` are labels, and in this tree both
+are the PROCESSOR'S status bits: `cpu.c` in a hundred and fifty fixtures, and `Flags` in
+`EliteTypes.h`, which is the status register as a struct and names its four bits as the processor
+names them. That is the right name for the thing, so neither is in the vocabulary and `Cpu6502` is
+skipped whole — it models a 6502, and it leaves the tree at M6-f regardless. `PlanetDraw`'s own `v`
+is a genuine carry-over and M6-c renames it by eye rather than by ratchet, which is the one thing
+this instrument does not police and says so.
+
+**THE LIST IS DATA AND NOT DERIVED FROM `Upstream/`, and that is a requirement rather than a
+convenience**: M6-f deletes the upstream tree, and a counter that reads the original cannot read
+zero once the original is gone.
+
+The reading: **1,924 sites** — 1,060 in `GameLogic/`, 1 in `Outpost/` and 863 in the suite, which is
+where the slice's weight actually is and not where the row implies it. **All three numbers are wrong
+and M6-c-2 says why**: the counter read `4'000'000` as a character literal and swallowed the code
+after it. The true figure was 2,290. The ceiling is set there and
+only goes down. Nothing in `GameLogic/` changed; the suite is unmoved at 454.
 
 **2026-09-08 — M6-a's two questions ruled, and M6-b has a shape again.**
 

@@ -353,7 +353,7 @@ namespace GameLogicTests
     {
       _universe.heaps.ball[index] = next();
     }
-    _universe.heaps.lsp = 0x37u;
+    _universe.heaps.ballHeapTop = 0x37u;
     /*
      * 6502: SUNX(1 0) -- an old sun for the frame to rub out (M6-0-d), with a centre the game could
      * have LEFT THERE: `SUN` writes it from `K3` only when it has drawn, so the high byte is 0 or 1.
@@ -364,7 +364,7 @@ namespace GameLogicTests
      */
     _universe.heaps.sunX = next();
     _universe.heaps.sunXNext = static_cast<std::uint8_t>(next() & 0x01u);
-    _universe.heaps.yx2M1 = 143u;    // 6502: Yx2M1 -- what RES2 leaves, and what CHKON reads
+    _universe.heaps.lowestVisibleRow = 143u;    // 6502: Yx2M1 -- what RES2 leaves, and what CHKON reads
 
     _universe.commander.lasers[0] = Elite::LASER_PULSE;
     _universe.commander.lasers[1u] = Elite::LASER_NONE;
@@ -397,11 +397,11 @@ namespace GameLogicTests
     _universe.status.ecmCountdown = 0u;
     _universe.commander.fuel.tenths = 40u;
 
-    _universe.flight.delta = 14u;
-    _universe.flight.alp1 = 5u;
-    _universe.flight.alp2 = 128u;
-    _universe.flight.beta = 200u;
-    _universe.flight.bet1 = 3u;
+    _universe.flight.speed = 14u;
+    _universe.flight.rollMagnitude = 5u;
+    _universe.flight.rollSign = 128u;
+    _universe.flight.pitchRate = 200u;
+    _universe.flight.pitchMagnitude = 3u;
     _universe.flight.mainLoopCounter = 0u;
 
     _universe.screen.colourBank = 0x33u;
@@ -414,12 +414,12 @@ namespace GameLogicTests
   struct Where
   {
     std::uint16_t frin, kPercent, many, inwk, sx, sxl, sy, syl, sz, szl, nostm;
-    std::uint16_t lso, lsx2, lsp, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
-    std::uint16_t lsy2, sunx, yx2m1, k5, k6, stp, flag, pltog, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
+    std::uint16_t lso, lsx2, ballHeapTop, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
+    std::uint16_t lsy2, sunx, yx2m1, zeroPageK5, zeroPageK6, circleStep, flag, planetDetail, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
     std::uint16_t dtw3, dtw4, dtw5, dtw8;
     std::uint16_t dly, de, las2, qq22, viewByte, qq11, mj, junk, ev, rand;
     std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
-    std::uint16_t delta, alp1, alp2, beta, bet1, energy, fsh, ash, qq14, xx0;
+    std::uint16_t speed, rollMagnitude, rollSign, pitchRate, pitchMagnitude, energy, fsh, ash, qq14, xx0;
     std::uint16_t cabtmp, gntmp, altit, mcnt, flh, ecma, laser, tribble, tribct;
     std::uint16_t tribvx, tribvxh, tribxh, vic; ///< 6502: the Trumble sprite bank, slice 4d-a
     std::uint16_t tp, mch, messxc, screen;
@@ -485,13 +485,13 @@ namespace GameLogicTests
       lsy2 = _oracle.Label("LSY2");
       sunx = _oracle.Label("SUNX");
       yx2m1 = _oracle.Label("Yx2M1");
-      k5 = _oracle.Label("K5");
-      k6 = _oracle.Label("K6");
-      stp = _oracle.Label("STP");
+      zeroPageK5 = _oracle.Label("K5");
+      zeroPageK6 = _oracle.Label("K6");
+      circleStep = _oracle.Label("STP");
       flag = _oracle.Label("FLAG");
-      pltog = _oracle.Label("PLTOG");
+      planetDetail = _oracle.Label("PLTOG");
       v = _oracle.Label("V");
-      lsp = _oracle.Label("LSP");
+      ballHeapTop = _oracle.Label("LSP");
       xc = _oracle.Label("XC");
       yc = _oracle.Label("YC");
       qq17 = _oracle.Label("QQ17");
@@ -520,11 +520,11 @@ namespace GameLogicTests
       comy = _oracle.Label("COMY");
       comc = _oracle.Label("COMC");
       t2 = _oracle.Label("T2");
-      delta = _oracle.Label("DELTA");
-      alp1 = _oracle.Label("ALP1");
-      alp2 = _oracle.Label("ALP2");
-      beta = _oracle.Label("BETA");
-      bet1 = _oracle.Label("BET1");
+      speed = _oracle.Label("DELTA");
+      rollMagnitude = _oracle.Label("ALP1");
+      rollSign = _oracle.Label("ALP2");
+      pitchRate = _oracle.Label("BETA");
+      pitchMagnitude = _oracle.Label("BET1");
       energy = _oracle.Label("ENERGY");
       fsh = _oracle.Label("FSH");
       ash = _oracle.Label("ASH");

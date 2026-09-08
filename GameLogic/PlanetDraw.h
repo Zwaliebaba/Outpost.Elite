@@ -56,7 +56,7 @@ namespace Elite
     std::array<std::uint8_t, 2 * BALL_HEAP_SIZE> ball{};
 
     /// 6502: LSP -- how far up the ball heap the last circle got.
-    std::uint8_t lsp = 0;
+    std::uint8_t ballHeapTop = 0;
 
     /// 6502: SUNX(1 0) -- where the sun's centre is. One value for every row of it.
     std::uint8_t sunX = 0;
@@ -65,38 +65,39 @@ namespace Elite
     /*
      * 6502: Yx2M1 -- the bottom row that counts as on-screen, and it is a VARIABLE.
      *
-     * The upstream header for `CHKON` documents `CPX #2*Y-1`; this build assembles `CPX Yx2M1`, a
-     * byte at 184 that `TT23` sets to 199 so the short-range chart can use the whole screen and
-     * `TT23`'s own tail and `RES2` set back to 143. It moves in lockstep with `dontclip` -- the
-     * same two-instruction pairs write both -- so it is the second byte of the view-extent state
-     * §6.38 found, and whichever slice makes `TT23` write one must write both (§6.45).
+     * The upstream header for `CHKON` documents a compare against the LITERAL 2*Y-1; this build
+     * assembles a compare against `Yx2M1`, a byte at 184 that `TT23` sets to 199 so the short-range
+     * chart can use the whole screen and `TT23`'s own tail and `RES2` set back to 143. It moves in
+     * lockstep with `dontclip` -- the same two-instruction pairs write both -- so it is the second
+     * byte of the view-extent state §6.38 found, and whichever slice makes `TT23` write one must
+     * write both (§6.45).
      *
      * Only four routines read it: `CHKON`, and `SUN` parts 1 and 2. `WPLS` uses the LITERAL 143 in
      * the same build, which is why it cannot be folded into a single constant.
      */
-    std::uint8_t yx2M1 = 0;
+    std::uint8_t lowestVisibleRow = 0;
 
     /*
      * 6502: PLTOG -- whether the planet gets its detail drawn: craters and meridians, or a circle.
      *
      * `PL9` is its one reader. Its one WRITER is the pause screen: `DKS3` walks the configuration
-     * block as `DAMP,Y` against the key table `TGINT`, and offset 9 is this byte behind the "P"
-     * key -- an indexed store, which is why an earlier version of this comment, written from a
-     * search for `STA PLTOG`, said the byte had no writer at all (§6.120). The pause screen was
+     * block as `DAMP,Y` against the key table `TGINT`, and offset 9 is this byte behind the "P" key
+     * -- an indexed store, which is why an earlier version of this comment, written from a search
+     * for a store to `PLTOG`, said the byte had no writer at all (§6.120). The pause screen was
      * ported as slice 4e and removed by owner ruling on 2026-09-08 (InputTimer.md I-0), so the
      * executable's settings file is the writer now; the byte still holds whatever the loader left
      * at 7439 and is initialised from the image rather than defaulted here: a port that assumed
      * "off" would draw featureless planets for ever.
      */
-    std::uint8_t pltog = 0;
+    std::uint8_t planetDetail = 0;
 
     /*
      * 6502: V(1 0) -- 91 and 92, and the sun uses them as a COUNTER PAIR.
      *
      * Eleven files write these two bytes and they do not agree about what they are. `DETOK`,
-     * `TACTICS`, `TAS1`, `EX` and `LL9` part 5 use them as a POINTER, read through `LDA (V),Y`;
-     * `SUN` uses them as a signed distance from the sun's centre that it walks with `DEC V` and
-     * `INX / STX V`. One storage, two meanings.
+     * `TACTICS`, `TAS1`, `EX` and `LL9` part 5 use them as a POINTER, read indirectly; `SUN` uses
+     * them as a signed distance from the sun's centre that it walks a byte at a time, down and up.
+     * One storage, two meanings.
      *
      * The port keeps them apart -- `GeometryWorkspace::v` is a `std::uint16_t` because the
      * blueprints are an address-indexed region (§6.32), and making it a byte pair to share with a
@@ -124,9 +125,9 @@ namespace Elite
      * slice 2 and already ported: the third outward pointer this slice has found, after `dontclip`
      * and `Yx2M1`.
      */
-    std::array<std::uint8_t, 4> k5{};
-    std::array<std::uint8_t, 4> k6{};
-    std::uint8_t stp = 0;
+    std::array<std::uint8_t, 4> segmentStart{};
+    std::array<std::uint8_t, 4> segmentEnd{};
+    std::uint8_t circleStep = 0;
     std::uint8_t flag = 0;
 
     /// 6502: LSX2,Y and LSY2,Y -- named because the second is the first plus 256.
@@ -219,10 +220,10 @@ namespace Elite
    * the circle in P+1 and P+2, which `CIRCLE`'s caller reads, so the answer is three values and not
    * one flag.
    *
-   * Its `BMI PL44` branches into the tail of `PLS6` -- ported with slice 3b -- and not into the
-   * `EDGES` sitting next to it in the source, which also defines a `PL44` behind an `IF` this
-   * build does not take. Both are `CLC / RTS`, so a port that picked the wrong one would be right
-   * by luck (§6.45).
+   * Its sign branch goes into the tail of `PLS6` -- ported with slice 3b -- and not into the
+   * `EDGES` sitting next to it in the source, which also defines a `PL44` behind an `IF` this build
+   * does not take. Both clear the carry and return, so a port that picked the wrong one would be
+   * right by luck (§6.45).
    */
   /*
    * 6502: what `CHKON` answers with -- the carry, and the circle's bottom edge in `(P+2 P+1)`.
@@ -251,8 +252,8 @@ namespace Elite
    * segment that clips away entirely, or that comes back with an end moved, ends the run -- so a
    * circle crossing the screen edge is stored as several polylines and erased as several.
    *
-   * It takes the offset, `CNT` and the carry because all three are operands: `TXA / ADC K4` is the
-   * first instruction, `ADC T` the fourth, and `PLS22` reaches it with a carry `CIRCLE2` never
+   * It takes the offset, `CNT` and the carry because all three are operands: `K4` is added by the
+   * first instruction and `T` by the fourth, and `PLS22` reaches it with a carry `CIRCLE2` never
    * produces. `_offset` is `(T X)` -- the segment's far end as an offset from the centre.
    *
    * It returns the new `CNT`, which is what both callers loop on -- and since M2-c-3 that is the
@@ -260,15 +261,15 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                                           MathWorkspace& _math, ClipState& _clip, const Projection& _centre, SignMag16 _offset,
-                                          std::uint8_t _cnt, bool _carryIn, Picture* _picture = nullptr) noexcept;
+                                          std::uint8_t _angle, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: CIRCLE2 -- walk a whole circle, sixty-four steps at most, `STP` at a time.
    *
    * The two coordinates come from the same sine table a quarter-turn apart, which is how one table
    * gives both, and each is negated for the half of the turn where it points the other way. The
-   * negation is what the `CMP #33` tests are for: 33 rather than 32 because the compare is against
-   * a count that has already been advanced.
+   * negation is what the two compares against 33 are for: 33 rather than 32 because the compare is
+   * against a count that has already been advanced.
    */
   void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                 ClipState& _clip, const Projection& _centre, std::uint8_t _radius, bool _carryIn,
@@ -309,8 +310,8 @@ namespace Elite
    * last. The radius starts at `(_index AND 7) + 8` and doubles, so the eight rings are eight
    * different starting sizes crossing the screen at eight different times.
    *
-   * `ASL K / BCS HF8` is the exit as much as `CMP #160` is: a radius past 128 doubles into the
-   * carry and stops there, so the loop ends on whichever comes first.
+   * DOUBLING THE RADIUS is the exit as much as the compare against 160 is: a radius past 128
+   * doubles into the carry and stops there, so the loop ends on whichever comes first.
    */
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                           ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present,
@@ -330,7 +331,7 @@ namespace Elite
    *
    * Returns the carry: set means `CHKON` refused it and nothing was drawn. The step is 8 for a
    * radius under 8, 4 under 60 and 2 above -- so a planet gets 32 segments and a distant one gets
-   * 8, and the `LSR A` pair that chooses is two instructions rather than a table.
+   * 8, and the pair of shifts that chooses is two instructions rather than a table.
    */
   [[nodiscard]] bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                                 MathWorkspace& _math, ClipState& _clip, const Projection& _centre, std::uint8_t _radius,
@@ -385,7 +386,7 @@ namespace Elite
    *
    * A value since M2-c-3. `MathWorkspace` keeps ONE byte of `K2` -- the bottom one, which `MV40`
    * reads for the carry of its first addition without ever writing it (M2-b, §8) -- and the three
-   * drawers store to it where the original's `STA K2` does, for that read alone.
+   * drawers store to it where the original does, for that read alone.
    */
   struct EllipseAxes
   {
@@ -457,7 +458,7 @@ namespace Elite
   /*
    * 6502: ZINF -- clear a ship's data block and give it an identity orientation.
    *
-   * `LDY #NI%-1 / LDA #0 / .ZI1 STA INWK,Y / DEY / BPL ZI1`, then 96 into `INWK+18` and `INWK+22`
+   * The block is zeroed from its last byte down, then 96 goes into `INWK+18` and `INWK+22`
    * and 96-with-the-sign-bit into `INWK+14`. Those three are the high bytes of `nosev_z`,
    * `roofv_y` and `sidev_x`, so the ship comes out pointing along the axes -- and the sign on the
    * nose is what makes it face TOWARDS the player rather than away.
@@ -482,11 +483,11 @@ namespace Elite
    * nothing on screen and nothing firing. Then `LSP`, `LSX2` and `LSY2` are reset and it falls
    * into `FLFLLS`.
    *
-   * IT WRITES `TYPE` AND `XSAV` ITSELF, before each `JSR SCAN`, which is why the flight state is
-   * an argument: `SCAN` reads `TYPE` as a global and `WPSHPS` is what sets it. That was a seam
-   * until 3d-a -- `BubbleEffects::ScanShip(const Ship&, std::uint8_t)`, one of the two
-   * signatures that disagreed about the same routine (§6.59) -- and the seam is gone because the
-   * scanner is built.
+   * IT WRITES `TYPE` AND `XSAV` ITSELF, before each call to `SCAN`, which is why the flight state
+   * is an argument: `SCAN` reads `TYPE` as a global and `WPSHPS` is what sets it. That was a seam
+   * until 3d-a -- `BubbleEffects::ScanShip(const Ship&, std::uint8_t)`, one of the two signatures
+   * that disagreed about the same routine (§6.59) -- and the seam is gone because the scanner is
+   * built.
    *
    * `_view` is `QQ11`. `WPSHPS` is reachable with a chart on screen, and `SCAN` returns at once
    * when it is, so every ship keeps whatever blip it had; the bit 3, 4 and 6 clearing below still

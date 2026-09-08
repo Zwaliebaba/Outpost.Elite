@@ -51,10 +51,10 @@ namespace Elite
   /*
    * 6502: SOS1 -- put the system's planet or sun into the bubble.
    *
-   * `LDA tek / AND #%00000010 / ORA #%10000000` is the whole of how Elite chooses a planet's look:
-   * bit 1 of the tech level becomes bit 1 of the type, so type 128 gets meridians and type 130 a
-   * crater (§6.53's other half). The 127s in `INWK+29` and `INWK+30` are the maximum roll and
-   * pitch counters, which is what makes a planet rotate.
+   * ONE BIT OF THE TECH LEVEL is the whole of how Elite chooses a planet's look: bit 1 of the tech
+   * level becomes bit 1 of the type, so type 128 gets meridians and type 130 a crater (§6.53's
+   * other half). The 127s in `INWK+29` and `INWK+30` are the maximum roll and pitch counters,
+   * which is what makes a planet rotate.
    */
   [[nodiscard]] NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept;
 
@@ -63,18 +63,18 @@ namespace Elite
   /// 60973 in the assembled image.
   /// `ShipType::Dodo` is the enumerator; this note stays for the measurement.
 
-  /// 6502: LDA tek / CMP #10 / BCC notadodo -- a system this advanced has a Dodo, not a Coriolis.
+  /// 6502: a system this advanced has a Dodo, not a Coriolis.
   inline constexpr std::uint8_t STATION_DODO_TECH_LEVEL = 10;
 
   /*
    * 6502: NWSPS -- put the space station into the bubble, and NwS1 with it.
    *
    * IT TAKES THE SUN'S PLACE AND THE SUN'S MEMORY, which is two separate instructions doing one
-   * thing. `STX FRIN+1` with X at zero empties slot 1 -- the sun's -- without going anywhere near
-   * `KILLSHP`; and `LDA #LO(LSO) / STA INWK+33` points the station's line heap at `LSO`, which is
-   * the sun's 200-byte heap. `NWSHP` then skips its own allocation for a station (`CPY #2*SST /
-   * BEQ NW6`), so the pointer survives. That is why you never see a station and a sun at once, and
-   * why part 14 calls `WPLS` to erase the sun immediately before calling this.
+   * thing. Storing a zero in `FRIN+1` empties slot 1 -- the sun's -- without going anywhere near
+   * `KILLSHP`; and the station's line-heap pointer is set to `LSO`, which is the sun's 200-byte
+   * heap. `NWSHP` then skips its own allocation for a station, so the pointer survives. That is
+   * why you never see a station and a sun at once, and why part 14 calls `WPLS` to erase the sun
+   * immediately before calling this.
    *
    * AND IT SELF-MODIFIES THE BLUEPRINT TABLE. `spasto` holds the Coriolis's address, saved by
    * `BEGIN` before anything could change it; this writes that back into the table's station entry
@@ -95,10 +95,11 @@ namespace Elite
    * and then shifted up -- so a pair breeds into a swarm over a few jumps, and the `BPL` that
    * guards the high byte is what stops it overflowing into something else.
    *
-   * `LSR FIST` is Elite's legal-status decay: half your bounty is forgiven at every jump.
+   * `FIST` is HALVED here, which is Elite's legal-status decay: half your bounty is forgiven at
+   * every jump.
    */
   /*
-   * And it does not return where it looks as though it does. `SOLAR` ends `LDA #129 / JSR NWSHP`
+   * And it does not return where it looks as though it does. `SOLAR` ends by creating the planet
    * with no `RTS`, so it falls into `NWSTARS`, which falls into `nWq`, which falls into `WPSHPS`,
    * which falls into `FLFLLS`. **Five routines, five rows in the ledger, one fall-through** --
    * arriving in a new system fills the stardust, clears the ships and resets both line heaps as
@@ -114,26 +115,26 @@ namespace Elite
    * direction. Then it falls into `DORND` again -- so what comes back is a fresh random pair, and
    * `DEATH` uses it for the pitch, the roll and the type.
    *
-   * `CMP #245 / ROL A` is the trick worth naming: the compare puts "was the byte at least 245" in
-   * the carry and the `ROL` shifts it into bit 0, so one byte in eleven gets its AI flag set --
-   * `ORA #%11000000` then makes the rest of it hostile and slow.
+   * A COMPARE FEEDING A ROTATE is the trick worth naming: the compare puts "was the byte at least
+   * 245" in the carry and the rotate shifts that into bit 0, so one byte in eleven gets its AI
+   * flag set -- and the two top bits are then forced on, making the rest of it hostile and slow.
    *
    * THE FIRST `DORND` ROTATES THE CALLER'S CARRY IN. `ZINF` touches no flag, so `_carryIn` is
-   * whatever `JSR Ze` was reached with -- in `DEATH`, what the previous piece's last `DORND` left
-   * in its `ADC`. The second does not: what `Ze` falls into is `DORND2`, a `CLC` in front of
-   * `DORND`, so the bit 7 the `ROL A` shifted out never reaches it. The first version of this
+   * whatever `Ze` was called with -- in `DEATH`, what the previous piece's last `DORND` left in
+   * its addition. The second does not: what `Ze` falls into is `DORND2`, a `CLC` in front of
+   * `DORND`, so the bit 7 the rotate shifted out never reaches it. The first version of this
    * routine passed a clear carry to both and matched the shipped game for four pieces of wreckage
    * before the fifth landed one random step off (§6.117).
    */
-  /// 6502: LDA #25 -- the high byte the debris starts at in all three axes, so it appears at one
-  /// distance in a random direction rather than at a random distance.
+  /// 6502: the high byte the debris starts at in all three axes, so it appears at one distance in
+  /// a random direction rather than at a random distance.
   inline constexpr std::uint8_t DEBRIS_DISTANCE = 25;
 
-  /// 6502: CMP #245 -- the compare whose CARRY becomes bit 0 of the AI byte, so roughly one
-  /// wreck in eleven gets its flag set.
+  /// 6502: the compare whose CARRY becomes bit 0 of the AI byte, so roughly one wreck in eleven
+  /// gets its flag set.
   inline constexpr std::uint8_t DEBRIS_AI_THRESHOLD = 245;
 
-  /// 6502: LDA #&60 -- the orientation `fq1` gives every piece: nose along z, side along x.
+  /// 6502: the orientation `fq1` gives every piece: nose along z, side along x.
   inline constexpr std::uint8_t DEBRIS_ORIENTATION = 0x60;
 
   [[nodiscard]] RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept;
@@ -142,39 +143,39 @@ namespace Elite
    * 6502: fq1 -- point a ship along the z axis, give it the player's speed, and create it.
    *
    * `INWK+14 = &60` is the nose vector's z, `INWK+22 = &60 OR 128` the side vector's x with its
-   * sign set, and `INWK+27` is `DELTA` ROTATED left -- `ROL A`, so the caller's carry lands in
-   * bit 0 and the speed is twice `DELTA` or one more than that. Nothing between the entry and the
-   * `ROL` touches the flag, so `_carryIn` is whatever the caller branched on: in `DEATH` it is the
-   * bit that chose a plate over a canister, so the plates fly one unit faster (§6.117). The
+   * sign set, and `INWK+27` is `DELTA` ROTATED left, so the caller's carry lands in bit 0 and the
+   * speed is twice `DELTA` or one more than that. Nothing between the entry and the rotate touches
+   * the flag, so `_carryIn` is whatever the caller branched on: in `DEATH` it is the bit that
+   * chose a plate over a canister, so the plates fly one unit faster (§6.117). The
    * upstream comment says "double DELTA speed (i.e. 6)", which is neither the rotate nor the 12
-   * that `DELTA` actually holds by then. `TXA / JMP NWSHP` makes the type the caller's X.
+   * that `DELTA` actually holds by then. The type is whatever the caller left in X.
    */
   [[nodiscard]] NewShip AddDebris(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
                                   const Blueprint*& _blueprint) noexcept;
 
   // ---- slice 4a-b: putting a ship into the bubble from inside the bubble ------------------------
 
-  /// 6502: LDA #28 / STA INWK+3 / LSR A / STA INWK+6 -- twenty-eight units to the right and
-  /// fourteen ahead, which is where a fired missile appears.
+  /// 6502: twenty-eight units to the right and HALF that ahead -- the second is the first shifted
+  /// down rather than a constant of its own -- which is where a fired missile appears.
   inline constexpr std::uint8_t SPAWN_AHEAD_X = 28;
   inline constexpr std::uint8_t SPAWN_AHEAD_Z = 14;
 
-  /// 6502: LDA #%11111110 -- the AI byte `SESCP` and `SFRMIS` hand `SFS1`: hostile, aggression 15,
-  /// and bit 0 clear so it has no target yet.
+  /// 6502: the AI byte `SESCP` and `SFRMIS` hand `SFS1`: hostile, aggression 15, and bit 0 clear
+  /// so it has no target yet.
   inline constexpr std::uint8_t SPAWN_CHILD_AI = 0xFE;
 
-  /// 6502: LDA #32 / STA INWK+27 -- the speed a station's child leaves at, which is why a Viper
-  /// launched from a Coriolis is already moving when you see it.
+  /// 6502: the speed a station's child leaves at, which is why a Viper launched from a Coriolis is
+  /// already moving when you see it.
   inline constexpr std::uint8_t STATION_CHILD_SPEED = 32;
 
   /*
    * 6502: FRS1 -- put a ship 28 to the right and 14 ahead of us, pointing away.
    *
    * `ZINF` then four stores then a FALL INTO `fq1`, which is `AddDebris` above: the same three
-   * bytes of orientation and the same `ROL A` on the speed. So the carry that `ROL` rotates in has
-   * a second source, and it is as unobvious as `DEATH`'s: `LDA MSTG / ASL A / ORA #%10000000 /
-   * STA INWK+32` leaves the carry holding BIT 7 OF THE MISSILE TARGET, and neither the `ORA` nor
-   * the `STA` touches it (§6.121). `MSTG` is 255 when nothing is locked on, so an unlocked missile
+   * bytes of orientation and the same rotate on the speed. So the carry that rotate brings in has
+   * a second source, and it is as unobvious as `DEATH`'s: doubling `MSTG` to build the AI byte
+   * leaves the carry holding BIT 7 OF THE MISSILE TARGET, and neither the OR nor the store that
+   * follow touch it (§6.121). `MSTG` is 255 when nothing is locked on, so an unlocked missile
    * launches one unit faster than a locked one.
    *
    * The answer is `NWSHP`'s carry: clear means the bubble was full, and `FRMIS` shows "MISSILE
@@ -186,9 +187,9 @@ namespace Elite
   /*
    * 6502: SFS2 -- move a ship along one axis by twice A, sign and all.
    *
-   * Five instructions, and the first four are `TAS7`'s opening exactly: `ASL A` doubles and pushes
-   * the sign into the carry, `LDA #0 / ROR A` catches it. Then `JMP MVT1` rather than `TAS7`'s own
-   * arithmetic, so this one adds to a SHIP COORDINATE where that one adds to `K3`.
+   * Five instructions, and the first four are `TAS7`'s opening exactly: the double pushes the sign
+   * into the carry and a zero rotated right catches it. Then a jump to `MVT1` rather than `TAS7`'s
+   * own arithmetic, so this one adds to a SHIP COORDINATE where that one adds to `K3`.
    */
   void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept;
 
@@ -209,8 +210,8 @@ namespace Elite
    * unchanged, and every one of them gets `_aiFlag` in `INWK+32` and bit 0 of `INWK+29` cleared.
    *
    * `SESCP` is this routine entered two bytes early with the escape pod's type already in X, and
-   * `SFRMIS` enters at `SFS1-2` -- the `LDA #%11111110` -- so all three share one body and differ
-   * only in what they arrive holding.
+   * `SFRMIS` enters two bytes before `SFS1`, at the load of that AI byte -- so all three share one
+   * body and differ only in what they arrive holding.
    */
   [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent,
                                        ShipType _parentType, std::uint8_t _aiFlag, ShipType _shipType,
