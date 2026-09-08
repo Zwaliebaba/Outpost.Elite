@@ -17,24 +17,19 @@
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 /*
- * The three sign-magnitude adders `MVEIT` is built from (slice 3a).
+ * That all three of `TIDY`'s shapes are reached (slice 3a).
  *
- * A ship's position is three twenty-four bit SIGN-MAGNITUDE numbers, not two's complement, so
- * every addition is a comparison of signs followed by an add or a subtract, and the subtract has
- * to negate its own result when it crosses zero. These are that operation in three shapes, and
- * they are swept rather than sampled because the interesting behaviour is entirely at the
- * boundaries -- crossing zero, and the sign bit of each operand.
+ * The sign-magnitude adders, the rotation steppers, the view axes and the movers were swept
+ * against the shipped routines and went with the oracle (M6-b-5), and `TIDY`'s own comparison
+ * with them. What is left is the branch coverage the comparison never stated: `TIDY` normalises
+ * an orientation three different ways depending on which axis is largest, and without this the
+ * suite could be green with two of them never exercised.
  */
 namespace GameLogicTests
 {
 
   namespace
   {
-    /// Values chosen for the boundaries: zero, one either side of it, the sign bit, and the extremes.
-    const std::vector<std::uint8_t> EDGES = {0, 1, 2, 127, 128, 129, 254, 255};
-
-    /// The three axes `MVEIT` calls these on: x at INWK+0, y at INWK+3, z at INWK+6.
-    const std::vector<std::uint8_t> AXES = {0, 3, 6};
   } // namespace
 
   /*

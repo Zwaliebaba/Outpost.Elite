@@ -14,23 +14,22 @@ using Elite::TextPrinter;
 using Elite::TextState;
 
 /*
- * The character printer against the game that drew it (slice 1d-b).
+ * The cell colours a printed glyph leaves behind (slice 1d-b).
  *
- * Whole-screen compare, same as the pixel primitives, plus the cursor and the cell colour --
- * because CHPR's most interesting property is the ORDER it does things in. It advances the
- * column before writing the colour, which is the only reason celllook's three-cell offset lands
- * on the same cell as the glyph.
+ * The whole-screen comparisons against the game that drew them went with the oracle (M6-b-5),
+ * `CHPR`'s ordering among them -- it advances the column before writing the colour, which is the
+ * only reason `celllook`'s three-cell offset lands on the same cell as the glyph. What is left is
+ * the assertion that stands without it: resetting the cell colours makes the picture visible,
+ * which is a property of the port's own two surfaces.
  */
 namespace GameLogicTests
 {
 
   namespace
   {
-    constexpr std::uint16_t SPACE_VIEW_MARGIN = 0x20;
-
   } // namespace
 
-  TEST_CLASS(TextPrinterAgainstTheShippedGame)
+  TEST_CLASS(TheTextPrintersCellColours)
   {
   public:
     /*
@@ -38,11 +37,11 @@ namespace GameLogicTests
      *
      * THIS IS A REGRESSION TEST FOR A BLANK SCREEN. The bitmap holds two-bit codes, not colours,
      * and a code of %01 or %10 reads its colour out of the cell's byte in screen RAM. Every screen
-     * routine in this suite passed with those bytes left at zero, because they all compare the
-     * BITMAP against the oracle and the bitmap was right -- the whole picture just resolved to
-     * colour 0 on a colour 0 background. Nothing in a per-routine test looks at the resolved image,
-     * so nothing could notice, and the shell drew perfect black frames for as long as this was
-     * missing.
+     * routine in this suite passed with those bytes left at zero, because they all compared the
+     * BITMAP against the original and the bitmap was right -- the whole picture just resolved to
+     * colour 0 on a colour 0 background. Nothing in a per-routine comparison looked at the resolved
+     * image, so nothing could notice, and the shell drew perfect black frames for as long as this
+     * was missing.
      *
      * So this asserts the two halves separately: the cells `ResetCellColours` fills, and the fact
      * that a character printed after it RESOLVES to something other than black.

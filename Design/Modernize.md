@@ -1713,6 +1713,43 @@ M1-a's first file and the worked example every later slice copies.
 
 ## 8. Journal
 
+**2026-09-08 — M6-b-6: the names and the prose the deletion left behind.**
+
+M6-b-5 deleted the tests and said in its own entry that it had left two things: file comments
+describing suites that no longer exist, and nine classes named for a comparison they no longer
+make. Both are done here, and one more thing the compiler could not see.
+
+**Nine classes renamed.** `LogarithmRoutinesAgainstTheShippedGame` → `TheScaledDivide`,
+`CanvasAgainstTheShippedGame` → `TheCanvasPrimitives`, `CommanderAgainstTheShippedGame` →
+`TheCommanderBlock`, `GalaxyAgainstTheShippedGame` → `TheSystemDescriptions`,
+`MarketAgainstTheShippedGame` → `TheEconomyGradient`, `RngAgainstOracle` →
+`TheRepeatableGenerator`, `SavingACommanderMatchesTheShippedGame` → `TheSaveMenuAndItsStore`,
+`TextPrinterAgainstTheShippedGame` → `TheTextPrintersCellColours`,
+`TokenPrinterAgainstTheShippedGame` → `TheTokenPrinter`. Each is named for what its surviving
+tests actually assert.
+
+**Fifteen file comments rewritten**, and the shape of every one is the same: say what the deleted
+comparison was, then say what the survivor asserts and why it did not depend on it. That is worth
+the words -- `TheScaledDivide` looks like a thin test until you know that the exhaustive sweep
+beside it proved the port AGREED with the original and this one proves they were both RIGHT, which
+is the failure a comparison cannot see. The same reading applies to `TIDY`'s branch coverage, the
+economy gradient's sign, the repeatable generator's carry and the description seeding: each is the
+assertion its comparison could not make, which is why each is what is left.
+
+**AND TWENTY-ONE DECLARATIONS NOTHING REFERENCED, which `-Wall` does not report.**
+`-Wunused-function` sees functions and stops there, so `ShippedMenu`, `OracleRun`, `DeviceStore`,
+`StampedSink`, `RecordingSink`, `Change`, `DeferredValueTokens`, the assembled `ROUTINE_BYTES` and
+eleven constants all survived M6-b-5's compiler-driven sweep. A second instrument -- count the
+references to every declared name outside its own definition -- found them; the false positives it
+also reports are call sites its regular expression reads as declarations, and they were checked by
+hand rather than trusted. Two more functions fell out once those went (`FileImage`, then
+`FileCommander`), which is why the sweep loops.
+
+Suite green at 131, all fifteen checks. `VideoStateTests`'s `Widen` is dead too and is NOT touched
+here: it was dead before M6-b-5 and has nothing to do with the oracle, so it is a tidy of its own
+rather than a line smuggled into this one.
+
+
 **2026-09-08 — M6-b-5: the oracle's tests go. 469 → 131, and the reason is an owner ruling.**
 
 "I want to get rid of the oracle. Why bother?" -- asked after M6-b-4 measured what a committed

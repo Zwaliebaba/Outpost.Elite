@@ -20,11 +20,13 @@
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 /*
- * Leaving the station (the launch path).
+ * Leaving the station, and dying (the launch path).
  *
- * `TT110` is what the "1" key reaches from the docked screens, and everything under it was either
- * already ported or is here: the contraband fine, the hyperspace rings, and the two resets. None
- * of it needs the executable, which is why it is compared here rather than looked at.
+ * `TT110` is what the "1" key reaches from the docked screens, and the comparisons against the
+ * shipped routines under it -- the resets, the fine, the rings, the death screen's set-up -- went
+ * with the oracle (M6-b-5). What is left is what the original could not have answered: that both
+ * tunnels are paced one frame per circle, that dying clears the keys and stops the ship, and that
+ * the wreckage stays inside the space view.
  */
 namespace GameLogicTests
 {
@@ -32,12 +34,10 @@ namespace GameLogicTests
   /*
    * 6502: LAUN and the `HFS2` it falls into -- the tunnel a launch and an arrival both open with.
    *
-   * The port had this behind a seam until this slice, so the LAST thing on the launch path that
-   * was not compared against the shipped game is compared here (§6.109). Three things happen before
-   * the rings and each one is asserted separately, because each is a different kind of mistake:
-   * the whoosh is a call whose RESULT is dropped, the step is a store the port used to be missing
-   * altogether, and the view type is saved and restored around a `TT66` that would otherwise
-   * change it.
+   * The port had this behind a seam until slice 3d, which is why the tunnel was the last thing on
+   * the launch path never compared against the shipped game (§6.109). That comparison went with
+   * the oracle; what stays is the pacing, which it never covered: the rings are drawn one frame
+   * per circle, and 34 circles is what a full tunnel is.
    */
   TEST_CLASS(TheLaunchTunnel)
   {
@@ -71,8 +71,8 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
       }
 
-      // And a null pacing is the same drawing with nobody watching, which is what the oracle
-      // comparisons pass: the count above must not be reachable through a screen difference.
+      // And a null pacing is the same drawing with nobody watching -- which is how every other
+      // caller runs it, so the count above must not be reachable through a screen difference.
       Universe unpaced;
       Seed(unpaced, 0x71u);
       unpaced.heaps.lowestVisibleRow = 143u;
@@ -124,8 +124,7 @@ namespace GameLogicTests
        * It answered `TitleKey` until M3-b-3d, when `RDKEY` stopped being a seam: the walk is
        * `Elite::ScanKeyboard`'s now and this is the one line of it that was ever the platform's.
        * `quiet` walks answer "nothing down"; the one after holds `key`, and `KY7` too when `fire`
-       * is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven by a
-       * stub written over `RDKEY` that counts the same way.
+       * is on so that the loop takes `BMI TL3` instead of `INC JSTK`.
        *
        * A WALK IS COUNTED AT ITS FIRST KEY. `ScanKeyboard` counts DOWN from the top of the logger,
        * so the highest index is where a scan begins and `scans` still counts scans.
@@ -159,11 +158,11 @@ namespace GameLogicTests
     /*
      * `StopDockingMusic` WAS COUNTED HERE AND IS NOT ANY MORE (M3-b-2b).
      *
-     * `RES2` opens with `JSR stopbd` and the seam counted it, with the oracle trapped at `stopbd`
-     * so that neither machine ran it. Both run it now, and on this path it does nothing on either:
-     * no tune is playing, so `stopbd` falls to `stopat` and `stopat`'s first test returns. That is
-     * an assertion about SILENCE rather than about a call, and `CompareMusic` below is where it is
-     * made -- against the oracle's own `MUPLA` and its own SID writes, which are also none.
+     * `RES2` opens with `JSR stopbd` and the seam counted it, with the original trapped at
+     * `stopbd` so that neither machine ran it. The library runs it, and on this path it does
+     * nothing: no tune is playing, so `stopbd` falls to `stopat` and `stopat`'s first test
+     * returns. What the seam was counting is silence, which is not a thing a call count can
+     * assert.
      */
     /*
      * `RecordingLaunch` WAS HERE AND IS NOT ANY MORE (M4-a-1). It was `SFS1` answering "there was
@@ -177,7 +176,7 @@ namespace GameLogicTests
      * it was one seam this fixture had to declare because `Ports` carried it.
      */
 
-    /// Everything the launch works on, and the oracle's memory beside it.
+    /// Everything the launch works on.
     struct Leaving
     {
       Universe universe; ///< every byte of it, since M3-a
@@ -234,11 +233,11 @@ namespace GameLogicTests
    * A LAUNCH PACES BOTH OF ITS TUNNELS, and only a mutation could have asked for this test.
    *
    * `TT110` draws the effect twice: once inside `LAUN`, over the docked screen, and once through
-   * `HFS1` after the bubble has been rebuilt. Every oracle comparison here passes a null pacing,
-   * because the 6502 has no present and the two sides must agree on pixels rather than on time --
-   * so replacing the FIRST call's argument with `nullptr` changed no pixel, failed no assertion,
-   * and quietly put half of §6.109 back: the tunnel instantly, the rings paced. Nothing in the
-   * suite could see it. This is what sees it.
+   * `HFS1` after the bubble has been rebuilt. Every comparison against the original passed a null
+   * pacing, because the 6502 has no present and the two sides had to agree on pixels rather than
+   * on time -- so replacing the FIRST call's argument with `nullptr` changed no pixel, failed no
+   * assertion, and quietly put half of §6.109 back: the tunnel instantly, the rings paced. Nothing
+   * in the suite could see it. This is what sees it.
    *
    * Sixty-eight is thirty-four twice, and thirty-four is what `ThePacingIsOneFramePerCircle`
    * derives from the doubling: five circles each from the rings starting at radius 8 and 9,
@@ -305,11 +304,11 @@ namespace GameLogicTests
     /*
      * `Die` after the scene: the keys, the speed and the count, by what is left when it returns.
      *
-     * Not an oracle comparison, and it says so: the 6502 runs `M%` sixty-four times over the
-     * wreckage and never comes back, so the two sides can only be compared frame by frame through
-     * the whole-frame fixture, which is a different suite's. What THIS pins is the five
-     * instructions between the scene and the loop -- `JSR U%`, `STA DELTA`, and a count that must
-     * reach zero -- because a mutation that dropped any of them passed the scene comparison.
+     * Never a comparison, and it said so even when there was one to make: the 6502 runs `M%`
+     * sixty-four times over the wreckage and never comes back, so the two sides could only be
+     * compared frame by frame. What THIS pins is the five instructions between the scene and the
+     * loop -- `JSR U%`, `STA DELTA`, and a count that must reach zero -- because a mutation that
+     * dropped any of them passed the scene comparison.
      */
     TEST_METHOD(DyingClearsTheKeysAndStopsTheShip)
     {

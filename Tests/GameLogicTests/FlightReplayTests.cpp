@@ -31,13 +31,12 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * at every hundredth step and at every turn of the script. The digests are RECORDED below, and
  * the suite fails when a step's digest is not the one recorded.
  *
- * WHAT THIS PINS THAT NOTHING ELSE DOES. Every routine in the flight is compared against the
- * shipped game somewhere in this suite, one call at a time. A refactor that keeps every one of
- * those green can still change how they compose: the order two side effects happen in, a value
- * one routine leaves for the next (`XX0`, `K3+1`), a seam answered with a different argument.
- * The replay sees the composition, and it sees it without the oracle -- which is what lets it
- * outlive the oracle (Modernize.md M6) and what the modernisation's every slice is measured by
- * (Risk R14).
+ * WHAT THIS PINS THAT NOTHING ELSE DOES. Every routine in the flight was compared against the
+ * shipped game somewhere in this suite, one call at a time, and a refactor that kept every one of
+ * those green could still change how they compose: the order two side effects happen in, a value
+ * one routine leaves for the next (`XX0`, `K3+1`), a seam answered with a different argument. The
+ * replay sees the composition, and it sees it without the original -- which is why it outlived it
+ * (Modernize.md M6-b-5) and what the modernisation's every slice is measured by (Risk R14).
  *
  * WHEN THE RECORD MAY CHANGE. Never for a refactor: a changed digest is a changed game, and the
  * slice that changed it has found a defect or introduced one. The record is re-taken in two cases

@@ -23,12 +23,14 @@
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 /*
- * What the flight loop calls but does not need (slice 3d-d-i).
+ * The one thing the flight loop is asked here: that a launch leaves a station behind you.
  *
- * All four distance helpers are small enough to sweep properly: `MAS2` and `MAS4` are exhaustive
- * in the byte they OR into, `MAS3` over every high byte a block can hold, and `MAS1` over the
- * coordinates that make its sixteen-bit doubling overflow -- which is the case its third byte
- * exists for. `cntr` is exhaustive outright, in the reading and in both flags.
+ * The frame-by-frame comparisons against the original -- the distance helpers, the control rates,
+ * the gun, the per-ship loop, the docking checks, the frame tail and the whole-canvas compares --
+ * were this file and went with the oracle (M6-b-5). What is left is the test that was never a
+ * comparison: every routine on the path agreed with the shipped game one at a time, and the
+ * station still vanished, because the port kept the line heap in a different object from the ship
+ * arena and every line the station drew was written out of range.
  */
 namespace GameLogicTests
 {
@@ -54,17 +56,9 @@ namespace GameLogicTests
       {
         Seed(universe, _seed);
 
-        /*
-         * 6502: TRIBCT -- ZERO here, and `Seed` leaves it at 90 (slice 4d-a).
-         *
-         * `MVTRIBS` writes the six Trumble sprites' coordinate registers, and in the oracle's flat
-         * image those registers ARE `XX21`, the ship blueprint pointer table (§6.108). On the real
-         * machine `SETL1` banks the video chip in over that RAM and the table survives; there is no
-         * bank here, so a frame that moves a Trumble and then draws a ship reads a corrupted
-         * blueprint on one side of the comparison and a good one on the other. Every fixture that
-         * wants Trumbles has to stop before the ships, and `TheControlRatesMatchM` is the one that
-         * does.
-         */
+        // 6502: TRIBCT -- zero, where `Seed` leaves 90. A launch has no Trumbles aboard, and the
+        // frames below draw ships: the two are independent and mixing them would only make a
+        // failure here harder to read.
         universe.trumbles.count = 0u;
 
         // 6502: LSO -- the station draws into the SUN's heap, which lives in the universe (§6.112).

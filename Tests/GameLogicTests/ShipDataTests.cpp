@@ -22,11 +22,11 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * the motion and slot routines and says nothing about the blueprints, and the ledger files them
  * under 3b because that is what they are ABOUT -- the vertices and edges a ship is drawn from.
  * But `MVEIT` reads byte 15 of the blueprint on every iteration to clamp acceleration, and
- * `NWSHP` reads bytes 5, 14 and 19 before a ship exists at all, so 3a TOUCHES them and cannot be
- * compared against the shipped game without them. That is §6.12's pattern for the seventh time.
+ * `NWSHP` reads bytes 5, 14 and 19 before a ship exists at all, so 3a TOUCHES them.
  *
- * Extracting them then turned up the reason they cannot be thirty-three arrays, which is what
- * most of this file measures.
+ * Extracting them turned up the reason they cannot be thirty-three arrays, and that is what these
+ * two measure: three blueprints whose header extent disagrees with the gap to the next one, and
+ * a bubble whose every slot has its own block with nothing beyond them.
  */
 namespace GameLogicTests
 {
