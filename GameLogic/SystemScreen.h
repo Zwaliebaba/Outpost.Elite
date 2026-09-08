@@ -21,7 +21,7 @@ namespace Elite
    * fifth time.
    */
 
-  /// 6502: TT25's `LDA #1 / JSR TRADEMODE` -- QQ11 = 1, which is this screen's view number.
+  /// 6502: the view number TT25 sets up with -- QQ11 = 1, which is this screen's.
   inline constexpr std::uint8_t DATA_ON_SYSTEM_VIEW = 1;
 
   /*
@@ -63,8 +63,8 @@ namespace Elite
    * runs off the end of TT63 into TT60, so the light years, the cursor move, sentence case and a
    * newline all come from a fall-through rather than from a call.
    *
-   * Exposed separately because it is not only this screen's: `T95` in TT102 ends `JMP TT146`, so
-   * moving the crosshairs on a chart prints the distance through the same routine.
+   * Exposed separately because it is not only this screen's: `T95` in TT102 ends with a tail call
+   * to TT146, so moving the crosshairs on a chart prints the distance through the same routine.
    */
   void PrintDistanceLine(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text, std::uint16_t _distance) noexcept;
 

@@ -190,8 +190,8 @@ namespace Elite
    * two of them or hand them their neighbour's bytes. Plan §6.32 has the measurements.
    *
    * Underneath that is the reason it was never going to work: the game has NO CONCEPT of where a
-   * blueprint ends. `NWSHP` puts an address into `XX0` and every read is `LDA (XX0),Y`. So the
-   * port keeps the region and the addresses, and `ShipBlueprint.h` is the indexing.
+   * blueprint ends. `NWSHP` puts an address into `XX0` and every read is indirect through it. So
+   * the port keeps the region and the addresses, and `ShipBlueprint.h` is the indexing.
    *
    * The size is derived, not chosen -- `tools/extract_tables.py` computes it from the last
    * blueprint's own header -- so if it ever changed this declaration would stop compiling, which is
@@ -262,12 +262,12 @@ namespace Elite
   /*
    * 6502: shango, santana, lotus and innersec -- four of the seven tables `COMIRQ1` indexes.
    *
-   * The raster interrupt runs twice a frame and `RASTCT` says which half it is setting up: entry 0
-   * is the space view and entry 1 the dashboard. Seven tables sit consecutively in memory and the
-   * handler reads all of them at `LDX RASTCT`, but only these four are DATA. The other three have
-   * a second byte the game WRITES under its own name -- `zebop`/`abraxas`, `moonflower`/
-   * `caravanserai`, `welcome`/`welcome+1` -- so they are `ScreenState` fields rather than tables,
-   * and `Raster.h` holds the two halves of those that really are fixed.
+   * The raster interrupt runs twice a frame and `RASTCT` says which half it is setting up: entry
+   * 0 is the space view and entry 1 the dashboard. Seven tables sit consecutively in memory and
+   * the handler reads all of them indexed by that counter, but only these four are DATA. The
+   * other three have a second byte the game WRITES under its own name -- `zebop`/`abraxas`,
+   * `moonflower`/`caravanserai`, `welcome`/`welcome+1` -- so they are `ScreenState` fields rather
+   * than tables, and `Raster.h` holds the two halves of those that really are fixed.
    *
    * `RASTER_NEXT_LINE_TABLE` is the pair that makes the split: 194 and 51. Fifty-one is the first
    * raster line of the bitmap and 194 is `51 + 143`, so the interrupt fires on the LAST row of the

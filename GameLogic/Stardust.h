@@ -40,7 +40,7 @@ namespace Elite
      * 6502: NOSTM -- how many specks there are, and it is only ever `NOST` or 3.
      *
      * `NOST` is **12** in this build, which the layout agrees with: `SX` is at 1698 and `SXL` at
-     * 1711. The upstream comments beside the two `STA NOSTM` instructions say "the maximum allowed
+     * 1711. The upstream comments beside the two writes to `NOSTM` say "the maximum allowed
      * (18)" and "(20)", and both are other versions' — §6.38's lesson, and the number this port
      * would have taken if it had read the comment instead of the constant.
      *

@@ -127,8 +127,8 @@ namespace Elite
   inline constexpr Blueprint NO_BLUEPRINT{};
 
   /*
-   * 6502: LDA XX21-1,Y / LDA XX21-2,Y with Y = type * 2 -- the blueprint for a ship type, or null
-   * if this build does not carry one.
+   * 6502: the two bytes at `XX21` indexed by twice the type -- the blueprint for a ship type, or
+   * null if this build does not carry one.
    *
    * The off-by-one in the original is the indexing, not a bug: `XX21` is indexed from ONE, because
    * ship type 0 means an empty slot. `NWSHP` checks the high byte for zero and refuses the ship,
@@ -141,9 +141,9 @@ namespace Elite
   /// that is not a blueprint's. The bridge's way from the oracle's `XX0` back to a pointer.
   [[nodiscard]] const Blueprint* BlueprintAt(std::uint16_t _address) noexcept;
 
-  /// 6502: LDA E%-1,X -- the default `NEWB` for a type. The NEGATIVE types reach it too (`NW2`
-  /// falls into `NW8`), and read past the thirty-three entries into the kill tables and the first
-  /// blueprint: a defined byte, reproduced.
+  /// 6502: the default `NEWB` for a type, read one below `E%`. The NEGATIVE types reach it too
+  /// (`NW2` falls into `NW8`), and read past the thirty-three entries into the kill tables and
+  /// the first blueprint: a defined byte, reproduced.
   [[nodiscard]] std::uint8_t DefaultNewbFor(ShipType _shipType) noexcept;
 
   /// 6502: KWL%-1,X and KWH%-1,X -- what killing a type is worth: a fraction of a kill, and whole

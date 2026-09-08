@@ -45,10 +45,10 @@ namespace Elite
      * 6502: LSO -- the SUN's line heap, which the SPACE STATION borrows, and it is nowhere near
      * this arena.
      *
-     * `NWSPS` empties the sun's slot and then writes `LDA #LO(LSO) / STA INWK+33`, so the station's
-     * heap pointer is &0580 and not an address carved out of `SLSP`. On the machine that is
-     * unremarkable -- memory is flat and a pointer is a pointer. In this port the sun's 200 bytes
-     * live in `PlanetSunState` and the ship arena lives here, so the station's pointer lands
+     * `NWSPS` empties the sun's slot and then writes the LOW BYTE of `LSO` into the station's heap
+     * pointer, so that pointer is &0580 and not an address carved out of `SLSP`. On the machine
+     * that is unremarkable -- memory is flat and a pointer is a pointer. In this port the sun's 200
+     * bytes live in `PlanetSunState` and the ship arena lives here, so the station's pointer lands
      * BETWEEN two objects: every line it wrote went out of range and was dropped, `LL9` set the
      * "drawn" bit on a ship that had put nothing on screen, and the station was invisible from the
      * moment you launched (§6.112).

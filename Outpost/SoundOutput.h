@@ -62,7 +62,7 @@ namespace Outpost
     void Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music, const Elite::SidWriteLog& _gameWrites) noexcept;
 
   private:
-    /// 6502: `COLD`'s `STA SID+&18` -- see the definition. Called once, at construction.
+    /// 6502: the volume `COLD` writes -- see the definition. Called once, at construction.
     void SetBootVolume() noexcept;
 
     void Apply(const Elite::SidWriteLog& _log) noexcept;

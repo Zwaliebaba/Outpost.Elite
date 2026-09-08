@@ -87,9 +87,10 @@ namespace Elite
   /*
    * 6502: Ghy's G1 loop -- the galactic hyperdrive.
    *
-   * Each of the six bytes is rotated left by one bit, INDEPENDENTLY: `ASL A` takes the byte's top
-   * bit into the carry and `ROL` puts it back into the same byte's bottom. Not a rotate of the
-   * three sixteen-bit seeds, which is what it looks like and would give a different universe.
+   * Each of the six bytes is rotated left by one bit, INDEPENDENTLY: a shift takes the byte's
+   * top bit into the carry and a rotate puts it back into the same byte's bottom. Not a rotate
+   * of the three sixteen-bit seeds, which is what it looks like and would give a different
+   * universe.
    */
   void NextGalaxy(SystemSeeds& _seeds) noexcept;
 
@@ -129,9 +130,9 @@ namespace Elite
    *
    * The halving of dy in both is the chart's aspect ratio, not an approximation.
    *
-   * Like several routines before it this one has no RTS: it ends in JMP TT24, so a caller gets the
-   * system's data as well, and the port returns that too rather than pretending the jump is not
-   * there.
+   * Like several routines before it this one has no return of its own: it ends in a tail call to
+   * TT24, so a caller gets the system's data as well, and the port returns that too rather than
+   * pretending the jump is not there.
    */
   [[nodiscard]] NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
                                                 std::uint8_t _currentX, std::uint8_t _currentY) noexcept;
