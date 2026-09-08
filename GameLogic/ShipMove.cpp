@@ -211,8 +211,8 @@ namespace Elite
       const SignMag16 shrunk{low.value, SubtractWithCarry(from.hi, 0, low.carry).value};
 
       // 6502: LDA INWK,Y / STA P / LDA INWK+1,Y / AND #128 / STA T -- the other value and its sign.
-      std::uint8_t p = other.lo;
-      std::uint8_t t = static_cast<std::uint8_t>(other.hi & 0x80u);
+      std::uint8_t otherLow = other.lo;
+      std::uint8_t otherSign = static_cast<std::uint8_t>(other.hi & 0x80u);
 
       // 6502: LSR A / ROR P, four times -- (A P) divided by sixteen, which is the rotation's angle.
       std::uint8_t high = static_cast<std::uint8_t>(other.hi & 0x7Fu);
@@ -220,18 +220,18 @@ namespace Elite
       {
         const bool carry = (high & 1u) != 0u;
         high = static_cast<std::uint8_t>(high >> 1);
-        p = static_cast<std::uint8_t>((p >> 1) | (carry ? 0x80u : 0u));
+        otherLow = static_cast<std::uint8_t>((otherLow >> 1) | (carry ? 0x80u : 0u));
       }
 
       // 6502: ORA T / [EOR #128] / EOR RAT2 -- the sign back on, the half's own flip, the direction.
-      std::uint8_t withSign = static_cast<std::uint8_t>(high | t);
+      std::uint8_t withSign = static_cast<std::uint8_t>(high | otherSign);
       if (_flip)
       {
         withSign = static_cast<std::uint8_t>(withSign ^ 0x80u);
       }
       withSign = static_cast<std::uint8_t>(withSign ^ _signMask2);
 
-      return AddSigned(SignMag16{p, withSign}, shrunk); // 6502: JSR ADD
+      return AddSigned(SignMag16{otherLow, withSign}, shrunk); // 6502: JSR ADD
     }
   } // namespace
 
