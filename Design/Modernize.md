@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->92 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->65 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,40 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-56: six files to zero, an orphan comment inside an empty namespace, and a
+five-instruction sequence called four.**
+
+27 sites over six files -- `Outpost/KeyMap.cpp`, `Outpost/Presentation.h`, `Outpost/Shell.cpp`,
+`Equipment.h`, `Game.h` and `Messages.h`. Eighty-first to eighty-sixth at zero.
+
+**A doc comment documenting nothing.** `Shell.cpp` opened with an anonymous namespace whose entire
+contents were `/// 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.` and a blank line. Whatever it once
+described went elsewhere -- `dn2`'s two halves are `Elite::Beep` and `Presenter::WaitFrames`, and
+the constant is `MarketScreen.h`'s `BEEP_PAUSE_FRAMES`. A comment with no declaration under it
+cannot be made right by rewriting; it can only be deleted, so the comment and the empty namespace
+went together. `origin-markers` is unmoved because it counts `GameLogic/` only, which is worth
+knowing rather than assuming -- the run confirms it.
+
+**A sixth error in landed prose, and this one miscounts and mislocates in six words.** `Equipment.h`
+said "the four instructions before EQL1" and then listed FIVE, and they are not before `EQL1` --
+`LDX #1` and, on some builds, a whole conditional block sit between. The sequence is the fuel price
+at the top of `EQSHP`: 70 minus the tank, doubled, into the table's first entry. That is what the
+comment says now, and it has no count to get wrong.
+
+**M6-d-52's FRCE finding is now recorded where the enum lives.** `Game.h`'s `Mode` is exactly the
+two values that branch decides, so the note that the original's own annotation reads backwards for
+this build belongs beside it as well as in `StartUp.h`. Two places, one fact, because a reader
+arriving at either needs it -- the same judgement as the data-byte idiom in M6-d-51.
+
+`Presentation.h` is the timing file and its sites were all `JSR WSCAN` and `JSR DELAY` in prose
+about how long a pass takes. The calls are not the fact; the SYNCS are, and the file already counts
+them.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved except `Shell.cpp`'s 10 → 9, which is the orphan (37, 7, 9, 7, 17 and 5).
+`opcode-transcriptions` 92 → 65.
+
 
 **2026-09-08 — M6-d-55: the VIC registers named rather than addressed, and the harness's subject
 line was under-reporting.**
