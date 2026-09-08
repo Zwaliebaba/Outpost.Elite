@@ -205,10 +205,10 @@ namespace Elite
      * third one reachable at all.
      */
     std::uint8_t legal = LEGAL_BASE;
-    const std::uint8_t fist = _universe.commander.legalStatus;
-    if (fist != 0)
+    const std::uint8_t legalStatus = _universe.commander.legalStatus;
+    if (legalStatus != 0)
     {
-      legal = AddWithCarry(legal, 1, fist >= FUGITIVE_AT).value;
+      legal = AddWithCarry(legal, 1, legalStatus >= FUGITIVE_AT).value;
     }
     PrintThenNewline(_ports.printer, legal);
 

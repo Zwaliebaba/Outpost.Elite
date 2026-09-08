@@ -307,7 +307,7 @@ namespace GameLogicTests
        * without a step the game could have left, a port that DROPPED `LAUN`'s store would hang
        * this test rather than fail it. Four is what a middling planet's disc leaves behind.
        */
-      universe.heaps.stp = 4u;
+      universe.heaps.circleStep = 4u;
 
       universe.flight.delta = 0x5C;
       universe.status.laserTemperature = 0x5C;
@@ -343,7 +343,7 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint8_t>(0u, universe.bubble.slots[0], L"RES2 emptied the bubble");
       Assert::AreEqual<std::uint8_t>(0u, universe.flight.delta, L"and stopped the ship");
 
-      Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.stp, L"LAUN stored the step");
+      Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.circleStep, L"LAUN stored the step");
       /*
        * 6502: LDY #sfxwhosh / JSR NOISE -- and the BUFFER says so since M3-b-2a.
        *
@@ -396,7 +396,7 @@ namespace GameLogicTests
 
       Universe earnerUniverse;
       earnerUniverse.commander = earner;
-      earnerUniverse.heaps.stp = 4u; // §6.95, as above
+      earnerUniverse.heaps.circleStep = 4u; // §6.95, as above
       Elite::Ports earnerPorts = earnerUniverse.PortsWith(briefed);
       const Elite::DockingResult briefing =
         Elite::DockAtStation(earnerUniverse, earnerPorts, 0, false);

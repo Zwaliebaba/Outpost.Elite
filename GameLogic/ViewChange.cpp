@@ -353,7 +353,7 @@ namespace Elite
     _universe.sentences.lowerCaseBits = 32u;
     _universe.sentences.alwaysLower = 0u;
 
-    _universe.heaps.lsp = 0u; // 6502: LDA #0 / STA LSP -- the ball heap is forgotten
+    _universe.heaps.ballHeapTop = 0u; // 6502: LDA #0 / STA LSP -- the ball heap is forgotten
 
     /*
      * 6502: LDA #%10000000 / STA QQ17 / STA DTW2.

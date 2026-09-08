@@ -49,7 +49,7 @@ namespace GameLogicTests
     {
       std::uint16_t inwk = 0, k3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
       std::uint16_t q = 0, r = 0, s = 0, u = 0, k = 0;
-      std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, fist = 0, slsp = 0;
+      std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, legalStatus = 0, slsp = 0;
       std::uint16_t cnt = 0, cnt2 = 0, rat = 0, rat2 = 0, junk = 0;
       std::uint16_t energy = 0, fsh = 0, ash = 0, dly = 0;
       std::uint16_t tally = 0, tallyl = 0;
@@ -63,7 +63,7 @@ namespace GameLogicTests
         xx0 = _oracle.Label("XX0");
         type = _oracle.Label("TYPE");
         ecma = _oracle.Label("ECMA");
-        fist = _oracle.Label("FIST");
+        legalStatus = _oracle.Label("FIST");
         slsp = _oracle.Label("SLSP");
         energy = _oracle.Label("ENERGY");
         fsh = _oracle.Label("FSH");
@@ -431,7 +431,7 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       std::uint32_t angered = 0;
 
-      for (const std::uint8_t newb : NEWBS)
+      for (const std::uint8_t traits : NEWBS)
       {
         for (const std::uint8_t ai : AI)
         {
@@ -452,7 +452,7 @@ namespace GameLogicTests
                 bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
               }
               bubble.blocks[SLOT].ai = ai;
-              bubble.blocks[SLOT].newb = newb;
+              bubble.blocks[SLOT].traits = traits;
 
               /*
                * THE STATION'S HOSTILE BIT STARTS CLEAR, and the first version of this sweep did
@@ -460,7 +460,7 @@ namespace GameLogicTests
                * already has bit 2 set, so `AN2`'s `ORA #%00000100` changed nothing and a mutation
                * that skipped `AN2` altogether agreed on every case (§6.124).
                */
-              bubble.blocks[1].newb = Elite::Without(bubble.blocks[1].newb, Elite::NewbBit::Hostile);
+              bubble.blocks[1].traits = Elite::Without(bubble.blocks[1].traits, Elite::TraitBit::Hostile);
 
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
@@ -484,7 +484,7 @@ namespace GameLogicTests
               flight.type = Elite::TypeOf(loopType);
               const bool carry = Elite::Anger(bubble, flight, SLOT, called);
 
-              const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
+              const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(traits) + " AI " + std::to_string(ai) + " TYPE " +
                                                    std::to_string(loopType) + " called " + std::to_string(Elite::Byte(called)));
 
               // The exit carry is an output: part 11 falls from `JSR ANGRY` into `JSR LL9`, and a
@@ -499,7 +499,7 @@ namespace GameLogicTests
                                    (where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
                 }
               }
-              angered += Elite::Has(bubble.blocks[1].newb, Elite::NewbBit::Hostile) ? 1u : 0u;
+              angered += Elite::Has(bubble.blocks[1].traits, Elite::TraitBit::Hostile) ? 1u : 0u;
               ++compared;
             }
           }
@@ -725,7 +725,7 @@ namespace GameLogicTests
         _universe.universe.bubble.blocks[slot].state = 0u;
         _universe.universe.bubble.blocks[slot].heap = Elite::HeapOffset{}; // address 0, as ZINF leaves it
         _universe.universe.bubble.blocks[slot].energy = 20u;
-        _universe.universe.bubble.blocks[slot].newb = subject ? _where.flags : 0u;
+        _universe.universe.bubble.blocks[slot].traits = subject ? _where.flags : 0u;
       }
 
       _universe.universe.bubble.Count(Elite::ShipType::Station) = _stations;
@@ -785,7 +785,7 @@ namespace GameLogicTests
       _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1)] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint->address >> 8u);
       _cpu.memory[_at.type] = Elite::Byte(_universe.universe.flight.type);
       _cpu.memory[_at.ecma] = _universe.ecm;
-      _cpu.memory[_at.fist] = _universe.legal;
+      _cpu.memory[_at.legalStatus] = _universe.legal;
       _cpu.memory[_at.energy] = _universe.universe.status.energy;
       _cpu.memory[_at.fsh] = _universe.universe.status.forwardShield;
       _cpu.memory[_at.ash] = _universe.universe.status.aftShield;
@@ -889,7 +889,7 @@ namespace GameLogicTests
         const char* what;
         std::uint8_t type;
         std::uint8_t ai;    ///< 6502: INWK+32
-        std::uint8_t newb;  ///< 6502: INWK+36
+        std::uint8_t traits;  ///< 6502: INWK+36
         std::uint8_t state; ///< 6502: INWK+31
         std::uint8_t energy;
         std::uint8_t ecm;
@@ -1087,7 +1087,7 @@ namespace GameLogicTests
             universe.universe.work.state = one.state;
             universe.universe.work.ai = one.ai;
             universe.universe.work.energy = one.energy;
-            universe.universe.work.newb = one.newb;
+            universe.universe.work.traits = one.traits;
             universe.universe.bubble.blocks[2] = universe.universe.work;
 
             /*
@@ -1401,7 +1401,7 @@ namespace GameLogicTests
              * bit 6. With the byte zero the two are the same answer, and the mutation that made it
              * an `ORA` survived a thousand cases (§6.126). It varies per case so the shift shows.
              */
-            universe.universe.work.newb = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
+            universe.universe.work.traits = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
 
             universe.universe.bubble.blocks[1].nose.x.hi = approach.nose;
             universe.universe.bubble.blocks[1].nose.y.hi = approach.noseY;
@@ -1460,7 +1460,7 @@ namespace GameLogicTests
              */
             outcomes.insert(std::to_string(universe.universe.work.speed) + "," + std::to_string(universe.universe.work.acceleration) + "," +
                             std::to_string(universe.universe.work.rollCounter) + "," + std::to_string(universe.universe.work.pitchCounter) +
-                            "," + std::to_string(universe.universe.work.newb));
+                            "," + std::to_string(universe.universe.work.traits));
             ++compared;
           }
         }

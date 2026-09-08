@@ -88,7 +88,7 @@ namespace Elite
    * `KS1`'s `AND #%01000000 / ORA FIST` folds into the legal status when a ship dies -- the port
    * had that bit named `NEWB_INNOCENT`, which is the wrong bit's name (§8).
    */
-  enum class NewbBit : std::uint8_t
+  enum class TraitBit : std::uint8_t
   {
     Trader = 0x01,       ///< 6502: bit 0 -- flees at a roll of fifty or more
     BountyHunter = 0x02, ///< 6502: bit 1 -- turns on you once `FIST` passes forty
@@ -103,7 +103,7 @@ namespace Elite
   /// The three flag enumerations, and only those: the helpers below work on a byte with any of
   /// them, and refuse a bit from one byte against another.
   template <typename Bit>
-  concept ShipFlagBit = std::same_as<Bit, ShipStateBit> || std::same_as<Bit, AiBit> || std::same_as<Bit, NewbBit>;
+  concept ShipFlagBit = std::same_as<Bit, ShipStateBit> || std::same_as<Bit, AiBit> || std::same_as<Bit, TraitBit>;
 
   /// The mask one or more bits of the same byte make -- the immediate of the `AND`, `ORA` or `EOR`.
   template <ShipFlagBit Bit, std::same_as<Bit>... More>

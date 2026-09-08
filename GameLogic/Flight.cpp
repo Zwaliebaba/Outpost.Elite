@@ -113,8 +113,8 @@ namespace Elite
     _universe.flight.alp1 = LAUNCH_ROLL;
 
     _universe.text.palette = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
-    _universe.clip.dontclip = 0u;                  // 6502: LDA #0 / STA dontclip
-    _universe.heaps.yx2M1 = SPACE_VIEW_LAST_ROW;   // 6502: LDA #2*Y-1 / STA Yx2M1
+    _universe.clip.clippingOff = 0u;                  // 6502: LDA #0 / STA dontclip
+    _universe.heaps.lowestVisibleRow = SPACE_VIEW_LAST_ROW;   // 6502: LDA #2*Y-1 / STA Yx2M1
 
     // 6502: LDA SSPR / BEQ P%+5 / JSR SPBLB -- the station bulb is a TOGGLE, so this puts it out
     // only because it was lit, and the test is what keeps the two in step.
@@ -183,7 +183,7 @@ namespace Elite
 
     // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
     // only writer of the step on the launch path, and its absence is what §6.95 was working around.
-    _universe.heaps.stp = LAUNCH_TUNNEL_STEP;
+    _universe.heaps.circleStep = LAUNCH_TUNNEL_STEP;
 
     /*
      * 6502: .HFS2 LDA QQ11 / PHA / LDA #0 / JSR TT66 / PLA / STA QQ11.
@@ -200,7 +200,7 @@ namespace Elite
   {
     // 6502: .HFS2 STA STP -- the only writer of the step on either tunnel's path, which is the
     // other half of §6.94's answer.
-    _universe.heaps.stp = _step;
+    _universe.heaps.circleStep = _step;
 
     /*
      * 6502: LDA QQ11 / PHA / LDA #0 / JSR TT66 / PLA / STA QQ11.

@@ -1303,7 +1303,7 @@ namespace GameLogicTests
       const std::uint16_t xx12 = oracle.Label("XX12");
       const std::uint16_t xx13 = oracle.Label("XX13");
       const std::uint16_t swap = oracle.Label("SWAP");
-      const std::uint16_t dontclip = oracle.Label("dontclip");
+      const std::uint16_t clippingOff = oracle.Label("dontclip");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t ll145 = oracle.Label("LL145");
       const std::uint16_t ll147 = oracle.Label("LL147");
@@ -1367,9 +1367,9 @@ namespace GameLogicTests
                 geometry.xx12[0] = static_cast<std::uint8_t>(y2);
                 geometry.xx12[1] = static_cast<std::uint8_t>(y2 >> 8);
 
-                cpu.memory[dontclip] = off;
+                cpu.memory[clippingOff] = off;
                 cpu.memory[swap] = seededSwap;
-                clip.dontclip = off;
+                clip.clippingOff = off;
 
                 // LL147 is entered with XX15+5 in the accumulator, which is where its only caller
                 // leaves it.
@@ -1576,7 +1576,7 @@ namespace GameLogicTests
       const std::uint16_t inf = oracle.Label("INF");
       const std::uint16_t type = oracle.Label("TYPE");
       const std::uint16_t ll9 = oracle.Label("LL9");
-      const std::uint16_t dontclip = oracle.Label("dontclip");
+      const std::uint16_t clippingOff = oracle.Label("dontclip");
       const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t screenBase = ScreenBase(oracle);
 
@@ -1749,7 +1749,7 @@ namespace GameLogicTests
             slot.acceleration = 0x5A;
             slot.pitchCounter = 0xA5;
             cpu.memory[type] = shipType;
-            cpu.memory[dontclip] = 0;
+            cpu.memory[clippingOff] = 0;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");

@@ -267,8 +267,8 @@ namespace Elite
        * empty heap is a pointer of 1 and a `LSP` of 0 would make `BLINE`'s first segment
        * overwrite it.
        */
-      _universe.heaps.lsp = 1u;
-      _universe.heaps.stp = circle.step;
+      _universe.heaps.ballHeapTop = 1u;
+      _universe.heaps.circleStep = circle.step;
       const Projection centre{circle.x, 0u, circle.y, 0u};
       DrawBall(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, centre, circle.radius, false,
                &_universe.picture);
@@ -343,8 +343,8 @@ namespace Elite
      */
     // 6502: TT23's opening `LDA #199 / STA Yx2M1 / STA dontclip` -- the clipper's limits, lifted
     // for the length of the routine because the discs go below the space view's floor.
-    _universe.heaps.yx2M1 = CHART_SCREEN_BOTTOM;
-    _universe.clip.dontclip = CHART_SCREEN_BOTTOM;
+    _universe.heaps.lowestVisibleRow = CHART_SCREEN_BOTTOM;
+    _universe.clip.clippingOff = CHART_SCREEN_BOTTOM;
 
     _universe.text.column = 7;
     _ports.printer.Print(TITLE_SHORT_RANGE);
@@ -494,8 +494,8 @@ namespace Elite
 
     // The other half of `CHART_SCREEN_BOTTOM`'s note: the clipper back where the space view wants
     // it, which the routine does on its way out.
-    _universe.clip.dontclip = 0u;
-    _universe.heaps.yx2M1 = SPACE_VIEW_BOTTOM;
+    _universe.clip.clippingOff = 0u;
+    _universe.heaps.lowestVisibleRow = SPACE_VIEW_BOTTOM;
   }
 
   void PrintRangeError(TokenPrinter& _printer) noexcept

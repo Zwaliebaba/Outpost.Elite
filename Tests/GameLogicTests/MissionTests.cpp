@@ -358,7 +358,7 @@ namespace GameLogicTests
       {
         _cpu.memory[address] = _universe.universe.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
-      _cpu.memory[_at.lsp] = _universe.universe.heaps.lsp;
+      _cpu.memory[_at.ballHeapTop] = _universe.universe.heaps.ballHeapTop;
 
       // 6502: SLSP -- the bottom of the ship line heap, which `NWSHP` allocates downwards from.
       _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() & 0xFFu);

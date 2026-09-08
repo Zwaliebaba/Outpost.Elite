@@ -353,7 +353,7 @@ namespace GameLogicTests
     {
       _universe.heaps.ball[index] = next();
     }
-    _universe.heaps.lsp = 0x37u;
+    _universe.heaps.ballHeapTop = 0x37u;
     /*
      * 6502: SUNX(1 0) -- an old sun for the frame to rub out (M6-0-d), with a centre the game could
      * have LEFT THERE: `SUN` writes it from `K3` only when it has drawn, so the high byte is 0 or 1.
@@ -364,7 +364,7 @@ namespace GameLogicTests
      */
     _universe.heaps.sunX = next();
     _universe.heaps.sunXNext = static_cast<std::uint8_t>(next() & 0x01u);
-    _universe.heaps.yx2M1 = 143u;    // 6502: Yx2M1 -- what RES2 leaves, and what CHKON reads
+    _universe.heaps.lowestVisibleRow = 143u;    // 6502: Yx2M1 -- what RES2 leaves, and what CHKON reads
 
     _universe.commander.lasers[0] = Elite::LASER_PULSE;
     _universe.commander.lasers[1u] = Elite::LASER_NONE;
@@ -414,8 +414,8 @@ namespace GameLogicTests
   struct Where
   {
     std::uint16_t frin, kPercent, many, inwk, sx, sxl, sy, syl, sz, szl, nostm;
-    std::uint16_t lso, lsx2, lsp, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
-    std::uint16_t lsy2, sunx, yx2m1, k5, k6, stp, flag, pltog, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
+    std::uint16_t lso, lsx2, ballHeapTop, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
+    std::uint16_t lsy2, sunx, yx2m1, k5, k6, circleStep, flag, planetDetail, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
     std::uint16_t dtw3, dtw4, dtw5, dtw8;
     std::uint16_t dly, de, las2, qq22, viewByte, qq11, mj, junk, ev, rand;
     std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
@@ -487,11 +487,11 @@ namespace GameLogicTests
       yx2m1 = _oracle.Label("Yx2M1");
       k5 = _oracle.Label("K5");
       k6 = _oracle.Label("K6");
-      stp = _oracle.Label("STP");
+      circleStep = _oracle.Label("STP");
       flag = _oracle.Label("FLAG");
-      pltog = _oracle.Label("PLTOG");
+      planetDetail = _oracle.Label("PLTOG");
       v = _oracle.Label("V");
-      lsp = _oracle.Label("LSP");
+      ballHeapTop = _oracle.Label("LSP");
       xc = _oracle.Label("XC");
       yc = _oracle.Label("YC");
       qq17 = _oracle.Label("QQ17");

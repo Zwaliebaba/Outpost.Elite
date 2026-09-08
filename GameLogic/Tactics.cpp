@@ -346,7 +346,7 @@ namespace Elite
     // 6502: .AN2 LDA K%+NI%+36 / ORA #%00000100 / STA K%+NI%+36 -- the station is always slot 1,
     // so this is a fixed address in the original and a fixed index here. None of it touches the
     // carry, so what `CMP #SST` left is what every path out of here still holds.
-    const auto angerStation = [&station]() noexcept { station.newb = With(station.newb, NewbBit::Hostile); };
+    const auto angerStation = [&station]() noexcept { station.traits = With(station.traits, TraitBit::Hostile); };
 
     // 6502: CMP #SST -- and the flag it sets is the routine's exit on two of the three paths.
     const bool comparedToStation = _type >= ShipType::Station;
@@ -361,7 +361,7 @@ namespace Elite
 
     // 6502: LDY #36 / LDA (INF),Y / AND #%00100000 / BEQ P%+5 / JSR AN2 -- and it is a `JSR`, so
     // an ally of the station angers the station AND carries on being angered itself.
-    if (Has(ship.newb, NewbBit::Innocent))
+    if (Has(ship.traits, TraitBit::Innocent))
     {
       angerStation();
     }
@@ -384,7 +384,7 @@ namespace Elite
     const bool comparedToCobra = _flight.type >= ShipType::CobraMk3;
     if (comparedToCobra)
     {
-      ship.newb = With(ship.newb, NewbBit::Hostile);
+      ship.traits = With(ship.traits, TraitBit::Hostile);
     }
     return comparedToCobra; // 6502: .AN3 RTS, on the flag `CMP #CYL` left
   }
@@ -620,7 +620,7 @@ namespace Elite
     ShipType launch = ShipType::None;
 
     // 6502: LDA NEWB / AND #%00000100 / BNE TN5 -- the hostile bit `ANGRY` sets.
-    if (!Has(_frame.work.newb, NewbBit::Hostile))
+    if (!Has(_frame.work.traits, TraitBit::Hostile))
     {
       // 6502: LDA MANY+SHU+1 / BNE TA1 -- one Transporter at a time, and `MANY+SHU+1` is the
       // count of the _frame.type ABOVE the Shuttle because the two are launched as a pair.
@@ -694,7 +694,7 @@ namespace Elite
        * and clearing it after is what stops the HERMIT flying off.
        */
       _frame.work.ai = 0u;
-      _frame.work.newb = HERMIT_PIRATE_NEWB;
+      _frame.work.traits = HERMIT_PIRATE_NEWB;
 
       // 6502: AND #3 / ADC #SH3 -- and the carry is the `CMP #200`'s, which is SET on this path.
       const ShipType pirate = TypeOf(static_cast<std::uint8_t>((roll.value & 3u) + Byte(ShipType::Sidewinder) + 1u));
@@ -730,7 +730,7 @@ namespace Elite
      * which is why traders mostly ignore you and occasionally do not.
      */
     const RngResult roll = _frame.universe.rng.Next(Byte(_frame.type) >= Byte(ShipType::Thargon));
-    std::uint8_t flags = _frame.work.newb;
+    std::uint8_t flags = _frame.work.traits;
 
     if ((flags & 1u) != 0u && roll.previous >= TRADER_FLEE_ROLL)
     {
@@ -743,8 +743,8 @@ namespace Elite
     // legal status is over 40. The two `LSR`s put the shifted copy back in step.
     if ((flags & 1u) != 0u && _frame.universe.commander.legalStatus >= BOUNTY_HUNTER_FIST)
     {
-      _frame.work.newb = With(_frame.work.newb, NewbBit::Hostile);
-      flags = static_cast<std::uint8_t>(_frame.work.newb >> 2u);
+      _frame.work.traits = With(_frame.work.traits, TraitBit::Hostile);
+      flags = static_cast<std::uint8_t>(_frame.work.traits >> 2u);
     }
     else
     {
@@ -897,8 +897,8 @@ namespace Elite
              * SLOT as well as to `INWK` -- the one place in `TACTICS` that writes both copies --
              * and then the pod is launched with the standard hostile AI byte.
              */
-            _frame.work.newb = Without(_frame.work.newb, NewbBit::Trader, NewbBit::BountyHunter, NewbBit::Hostile, NewbBit::Pirate);
-            _frame.universe.bubble.blocks[_frame.slot].newb = _frame.work.newb;
+            _frame.work.traits = Without(_frame.work.traits, TraitBit::Trader, TraitBit::BountyHunter, TraitBit::Hostile, TraitBit::Pirate);
+            _frame.universe.bubble.blocks[_frame.slot].traits = _frame.work.traits;
             _frame.work.ai = 0u;
 
             (void)SpawnEscapePod(_frame.universe.bubble, _frame.work, _frame.universe.rng, _frame.slot, _frame.type,
@@ -1303,7 +1303,7 @@ namespace Elite
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- the same three-instruction "set bit 7" as `TA873`, and
     // the same mistake: the shifts cancel (§6.126).
-    work.newb = With(work.newb, NewbBit::Remove);
+    work.traits = With(work.traits, TraitBit::Remove);
   }
 
 } // namespace Elite

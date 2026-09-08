@@ -204,7 +204,7 @@ namespace Elite
     _universe.work.ai = Mask(AiBit::Active, AiBit::HasEcm);
 
     _universe.work.pitchCounter = 0u;   // 6502: LDX #0 / STX INWK+30 -- the pitch counter
-    _universe.work.newb = 0u;           // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
+    _universe.work.traits = 0u;           // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
     _universe.bubble.slots[1] = 0u;     // 6502: STX FRIN+1 -- and slot 1 is the SUN's
     _universe.work.rollCounter = 0xFFu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
 

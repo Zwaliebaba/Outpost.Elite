@@ -351,7 +351,7 @@ namespace GameLogicTests
       for (const std::uint8_t radius : {std::uint8_t{6}, std::uint8_t{30}, std::uint8_t{90}})
       {
         auto universe = std::make_unique<Elite::Universe>();
-        universe->heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM;
+        universe->heaps.lowestVisibleRow = Elite::SPACE_VIEW_BOTTOM;
 
         const Elite::Projection centre{Elite::SPACE_VIEW_CENTRE_X, 0u, Elite::SPACE_VIEW_CENTRE_Y, 0u};
         const bool refused = Elite::DrawCircle(universe->canvas, universe->heaps, universe->geometry, universe->math, universe->clip,
@@ -368,7 +368,7 @@ namespace GameLogicTests
     TEST_METHOD(ErasingThePlanetClearsBothSurfaces)
     {
       auto universe = std::make_unique<Elite::Universe>();
-      universe->heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM;
+      universe->heaps.lowestVisibleRow = Elite::SPACE_VIEW_BOTTOM;
 
       const Elite::Projection centre{Elite::SPACE_VIEW_CENTRE_X, 0u, Elite::SPACE_VIEW_CENTRE_Y, 0u};
       (void)Elite::DrawCircle(universe->canvas, universe->heaps, universe->geometry, universe->math, universe->clip, centre, 40u,
@@ -393,7 +393,7 @@ namespace GameLogicTests
     TEST_METHOD(TheSunLandsOnBothSurfacesAsItDrifts)
     {
       auto universe = std::make_unique<Elite::Universe>();
-      universe->heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM;
+      universe->heaps.lowestVisibleRow = Elite::SPACE_VIEW_BOTTOM;
       Elite::ClearSunHeap(universe->heaps);
 
       for (int frame = 0; frame < 3; ++frame)

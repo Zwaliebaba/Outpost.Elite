@@ -108,7 +108,7 @@ namespace Elite
   void ClearBallHeap(PlanetSunState& _state) noexcept
   {
     // 6502: WP1 -- LDA #1 / STA LSP / LDA #&FF / STA LSX2 / RTS.
-    _state.lsp = 1;
+    _state.ballHeapTop = 1;
     _state.SetBallX(0, 0xFF);
   }
 
@@ -163,7 +163,7 @@ namespace Elite
     while (true)
     {
       // 6502: WPL1 -- CPY LSP / BCS WP1.
-      if (at >= _state.lsp)
+      if (at >= _state.ballHeapTop)
       {
         ClearBallHeap(_state);
         return;
@@ -268,7 +268,7 @@ namespace Elite
     }
 
     // 6502: CPX Yx2M1 / RTS -- the carry from the comparison IS the return value.
-    extent.offScreen = topLow.value >= _state.yx2M1;
+    extent.offScreen = topLow.value >= _state.lowestVisibleRow;
     return extent;
   }
 
@@ -329,7 +329,7 @@ namespace Elite
          * The start point is written only when the entry before is a break, which is what makes a
          * run of segments N+1 points rather than 2N.
          */
-        std::uint8_t at = _state.lsp;
+        std::uint8_t at = _state.ballHeapTop;
         if (_state.BallYBefore(at) == 0xFFu)
         {
           _state.SetBallX(at, line.x1);
@@ -339,7 +339,7 @@ namespace Elite
         _state.SetBallX(at, line.x2);
         _state.SetBallY(at, line.y2);
         ++at;
-        _state.lsp = at;
+        _state.ballHeapTop = at;
 
         (void)DrawLine(_canvas, line);
         if (_picture != nullptr)
@@ -356,17 +356,17 @@ namespace Elite
     if (endTheRun)
     {
       // 6502: BL5 -- a break, unless the last thing written was already one.
-      const std::uint8_t at = _state.lsp;
+      const std::uint8_t at = _state.ballHeapTop;
       if (_state.BallYBefore(at) != 0xFFu)
       {
         _state.SetBallY(at, 0xFF);
-        ++_state.lsp;
+        ++_state.ballHeapTop;
       }
     }
 
     // 6502: BL7 -- this segment's end is the next one's start, and the angle moves on.
     _state.k5 = _state.k6;
-    return AddWithCarry(_cnt, _state.stp, false).value;
+    return AddWithCarry(_cnt, _state.circleStep, false).value;
   }
 
   namespace
@@ -502,7 +502,7 @@ namespace Elite
         step >>= 1;
       }
     }
-    _state.stp = step;
+    _state.circleStep = step;
 
     DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, _radius, carry, _picture);
     return false;
@@ -694,7 +694,7 @@ namespace Elite
         return;
       }
 
-      cnt2 = static_cast<std::uint8_t>((cnt2 + _state.stp) & 0x3Fu);
+      cnt2 = static_cast<std::uint8_t>((cnt2 + _state.circleStep) & 0x3Fu);
     }
   }
 
@@ -728,7 +728,7 @@ namespace Elite
     }
 
     // 6502: LDA PLTOG / BEQ PL20 -- the detail switch, which nothing in this build ever writes.
-    if (_state.pltog == 0u)
+    if (_state.planetDetail == 0u)
     {
       return;
     }
@@ -901,8 +901,8 @@ namespace Elite
      * and the bottom row of the sun is whichever of that and the screen's own bottom comes first.
      * A sun whose top is at row 0 is given a `TGT` of 1 rather than 0, because row 0 is the flag.
      */
-    std::uint8_t stopAt = _state.yx2M1; // 6502: TGT -- `SUN`'s own too
-    if (extent.bottomHigh == 0u && _state.yx2M1 >= extent.bottom)
+    std::uint8_t stopAt = _state.lowestVisibleRow; // 6502: TGT -- `SUN`'s own too
+    if (extent.bottomHigh == 0u && _state.lowestVisibleRow >= extent.bottom)
     {
       stopAt = (extent.bottom != 0u) ? extent.bottom : std::uint8_t{1};
     }
@@ -911,7 +911,7 @@ namespace Elite
      * 6502: LDA Yx2M1 / SEC / SBC K4 / TAX / LDA #0 / SBC K4+1 -- how far the bottom row is from
      * the sun's centre, which is where the walk starts.
      */
-    const SubResult offsetLow = SubtractWithCarry(_state.yx2M1, _centre.y, true);
+    const SubResult offsetLow = SubtractWithCarry(_state.lowestVisibleRow, _centre.y, true);
     std::uint8_t at = offsetLow.value;
     const SubResult offsetHigh = SubtractWithCarry(0u, _centre.y1, offsetLow.carry);
 
@@ -952,7 +952,7 @@ namespace Elite
 
     // 6502: part 2 -- rub out the rows BELOW the sun, with last frame's centre, before any of
     // this frame's arithmetic touches `YY`.
-    std::uint8_t row = _state.yx2M1;
+    std::uint8_t row = _state.lowestVisibleRow;
     const SignMag16 wasAt{_state.sunX, _state.sunXNext}; // 6502: YY(1 0) -- where the sun was
     const SignMag16 isAt{_centre.x, _centre.x1};         // 6502: YY(1 0) again -- and where it is
 
@@ -1213,7 +1213,7 @@ namespace Elite
 
     // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and
     // to one in `WP1`; the two are not the same reset.
-    _state.lsp = 0;
+    _state.ballHeapTop = 0;
     _state.SetBallX(0, 0xFF);
     _state.SetBallY(0, 0xFF);
 
@@ -1250,7 +1250,7 @@ namespace Elite
      * run rather than after it -- and because `BLINE` EORs, drawing the next size erases the
      * previous. The whole effect is one heap entry deep.
      */
-      _state.lsp = 1u;
+      _state.ballHeapTop = 1u;
       DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, radius, false, _picture);
 
       /*

@@ -421,7 +421,7 @@ namespace Elite
   struct ClipState
   {
     /// 6502: dontclip -- bit 7 set means return the line unclipped.
-    std::uint8_t dontclip = 0;
+    std::uint8_t clippingOff = 0;
   };
 
   /*

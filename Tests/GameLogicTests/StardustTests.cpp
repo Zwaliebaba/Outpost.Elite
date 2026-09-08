@@ -52,7 +52,7 @@ namespace GameLogicTests
     struct DustLabels
     {
       std::uint16_t sx = 0, sxl = 0, sy = 0, syl = 0, sz = 0, szl = 0, nostm = 0;
-      std::uint16_t xx = 0, yy = 0, newzp = 0, rand = 0;
+      std::uint16_t xx = 0, yy = 0, keptQuotient = 0, rand = 0;
       std::uint16_t alpha = 0, alp1 = 0, alp2 = 0, beta = 0, bet1 = 0, bet2 = 0;
       std::uint16_t delta = 0, delt4 = 0, rat = 0, rat2 = 0;
       std::uint16_t p = 0, q = 0, r = 0, s = 0, t = 0, x1 = 0, y1 = 0, zz = 0;
@@ -69,7 +69,7 @@ namespace GameLogicTests
         nostm = _oracle.Label("NOSTM");
         xx = _oracle.Label("XX");
         yy = _oracle.Label("YY");
-        newzp = _oracle.Label("newzp");
+        keptQuotient = _oracle.Label("newzp");
         rand = _oracle.Label("RAND");
         alpha = _oracle.Label("ALPHA");
         alp1 = _oracle.Label("ALP1");
@@ -571,7 +571,7 @@ namespace GameLogicTests
               if (_view >= 2u)
               {
                 CompareFlight(cpu, state, at, where);
-                Assert::AreEqual(cpu.memory[at.newzp], dust.newzp, (where + L": newzp").c_str());
+                Assert::AreEqual(cpu.memory[at.keptQuotient], dust.keptQuotient, (where + L": newzp").c_str());
               }
 
               if (rng.State() != seed)

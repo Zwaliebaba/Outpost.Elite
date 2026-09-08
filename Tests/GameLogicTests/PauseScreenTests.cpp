@@ -132,7 +132,7 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       std::uint32_t reachedSecondLoop = 0;
 
-      for (const std::uint8_t patg : {std::uint8_t{0}, std::uint8_t{0xFF}})
+      for (const std::uint8_t authorNames : {std::uint8_t{0}, std::uint8_t{0xFF}})
       {
         for (std::uint32_t key = 0; key < 256u; ++key)
         {
@@ -149,7 +149,7 @@ namespace GameLogicTests
           std::array<std::uint8_t, Elite::OPTION_COUNT> ours{};
           for (std::size_t byte = 0; byte < Elite::OPTION_COUNT; ++byte)
           {
-            const std::uint8_t value = (byte == Elite::OPTION_PATG) ? patg : static_cast<std::uint8_t>(0x11u * (byte + 1u));
+            const std::uint8_t value = (byte == Elite::OPTION_PATG) ? authorNames : static_cast<std::uint8_t>(0x11u * (byte + 1u));
             ours[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(damp + byte)] = value;
           }
@@ -166,7 +166,7 @@ namespace GameLogicTests
 
           const std::uint8_t frames = Elite::ApplyOptionKey(block, static_cast<std::uint8_t>(key));
 
-          const std::wstring where = WidenText("DKL4 key " + std::to_string(key) + " patg " + std::to_string(patg));
+          const std::wstring where = WidenText("DKL4 key " + std::to_string(key) + " patg " + std::to_string(authorNames));
 
           for (std::size_t byte = 0; byte < Elite::OPTION_COUNT; ++byte)
           {
@@ -260,7 +260,7 @@ namespace GameLogicTests
 
       for (const std::uint8_t docking : {std::uint8_t{0}, std::uint8_t{0xFF}})
       {
-        for (const std::uint8_t patg : {std::uint8_t{0}, std::uint8_t{0xFF}})
+        for (const std::uint8_t authorNames : {std::uint8_t{0}, std::uint8_t{0xFF}})
         {
           for (std::uint32_t key = 0; key < 256u; ++key)
           {
@@ -287,7 +287,7 @@ namespace GameLogicTests
             std::array<std::uint8_t, Elite::OPTION_COUNT> ours{};
             for (std::size_t byte = 0; byte < Elite::OPTION_COUNT; ++byte)
             {
-              const std::uint8_t value = (byte == Elite::OPTION_PATG) ? patg : static_cast<std::uint8_t>(0x11u * (byte + 1u));
+              const std::uint8_t value = (byte == Elite::OPTION_PATG) ? authorNames : static_cast<std::uint8_t>(0x11u * (byte + 1u));
               ours[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(damp + byte)] = value;
             }
@@ -323,7 +323,7 @@ namespace GameLogicTests
             const Elite::PausePass pass = Elite::PressPauseKey(frozen, block, docking, static_cast<std::uint8_t>(key));
 
             const std::wstring where =
-              WidenText("FREEZE key " + std::to_string(key) + " patg " + std::to_string(patg) + " auto " + std::to_string(docking));
+              WidenText("FREEZE key " + std::to_string(key) + " patg " + std::to_string(authorNames) + " auto " + std::to_string(docking));
 
             for (std::size_t byte = 0; byte < Elite::OPTION_COUNT; ++byte)
             {

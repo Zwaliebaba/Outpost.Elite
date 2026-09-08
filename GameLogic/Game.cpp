@@ -155,7 +155,7 @@ namespace Elite
       &controls.joystick,             // 6502: JSTK
       &tunes.dockingMusicOff,         // 6502: MUTOK
       &m_universe.useDisk,            // 6502: DISK
-      &m_universe.heaps.pltog,        // 6502: PLTOG
+      &m_universe.heaps.planetDetail,        // 6502: PLTOG
       &tunes.dockingMusicForced,      // 6502: MUFOR
       &tunes.dockingPlaysTheme,       // 6502: MUDOCK
       &tunes.effectsDuringMusic,      // 6502: MUSILLY
@@ -196,13 +196,13 @@ namespace Elite
 
     if (universe.view == SHORT_RANGE_CHART_VIEW)
     {
-      universe.heaps.yx2M1 = CHART_SCREEN_BOTTOM;
-      universe.clip.dontclip = CHART_SCREEN_BOTTOM;
+      universe.heaps.lowestVisibleRow = CHART_SCREEN_BOTTOM;
+      universe.clip.clippingOff = CHART_SCREEN_BOTTOM;
 
       DrawShortRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds);
 
-      universe.clip.dontclip = 0u;
-      universe.heaps.yx2M1 = SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
+      universe.clip.clippingOff = 0u;
+      universe.heaps.lowestVisibleRow = SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
       return;
     }
 

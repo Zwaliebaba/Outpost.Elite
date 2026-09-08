@@ -972,7 +972,7 @@ namespace Elite
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
     // canister is removed by part 12 rather than by anything here.
-    _universe.work.newb = With(_universe.work.newb, NewbBit::Remove);
+    _universe.work.traits = With(_universe.work.traits, TraitBit::Remove);
     return ScoopResult::Stowed;
   }
 
@@ -994,7 +994,7 @@ namespace Elite
 
   [[nodiscard]] DockingTest TestDocking(Universe& _universe) noexcept
   {
-    const bool hostile = Has(_universe.bubble.blocks[STATION_SLOT].newb, NewbBit::Hostile);
+    const bool hostile = Has(_universe.bubble.blocks[STATION_SLOT].traits, TraitBit::Hostile);
 
     if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
     {
@@ -1102,7 +1102,7 @@ namespace Elite
 
   [[nodiscard]] Aim AimAtShip(Universe& _universe, Ports& _ports, ShipType _type) noexcept
   {
-    if (Has(_universe.work.newb, NewbBit::Remove))
+    if (Has(_universe.work.traits, TraitBit::Remove))
     {
       DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view, &_universe.picture);
     }
@@ -1172,7 +1172,7 @@ namespace Elite
 
     _block.energy = _universe.work.energy;
 
-    if (Has(_universe.work.newb, NewbBit::Remove))
+    if (Has(_universe.work.traits, TraitBit::Remove))
     {
       return KillOutcome::Removed;
     }
@@ -1186,7 +1186,7 @@ namespace Elite
        * -- so the offence is recorded once however many innocents die, and a fugitive cannot become
        * more of one this way.
        */
-      commander.legalStatus = static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.newb & Mask(NewbBit::Cop)));
+      commander.legalStatus = static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.traits & Mask(TraitBit::Cop)));
 
       // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
       // because the bounty IS a message and there is nowhere to put it.
