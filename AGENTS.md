@@ -66,26 +66,26 @@ uses plain `camelCase` fields so brace initialization reads naturally.
 **R6 — Units and spaces belong in names; types do not.** `speedPerStep`, `angleTurns`,
 `xCanvas` are encouraged. Never encode the type: no `iCount`, `pShip`, `strName`.
 
-### R7 — The port carries its origin (this repository's own rule)
+### R7 — RETIRED at M6-e (2026-09-08)
 
-*(Stands until [Design/Modernize.md](Design/Modernize.md) slice M6-e removes the markers, the ledger and
-`inventory.py` together, by owner ruling of 2026-09-06. Until then this rule is unchanged.)*
+*(Removed by [Design/Modernize.md](Design/Modernize.md) slice M6-e, on the owner ruling of
+2026-09-06 that the markers, the ledger and `inventory.py` go together. The rule is kept here as a
+heading so a reader who arrives at a reference to "R7" finds out what it was and when it went,
+rather than finding nothing.)*
 
-**Every function ported from 6502 names its original label on the declaration:**
+**R7 said: every function ported from 6502 names its original label on the declaration**, as
+`/// 6502: DORND — generate the next random number.`, and `tools/inventory.py` reconciled those
+markers with `Design/Source-Inventory.md` and the master files' include list. That was the map from
+the port back to the original, and it was needed exactly as long as the original was.
 
-```cpp
-/// 6502: DORND — generate the next random number.
-[[nodiscard]] RngResult NextRandom() noexcept;
-```
+It is not needed any longer. M6-f deletes `Upstream/` and `MasterFile/`, so a marker would point at
+nothing and a ledger would reconcile against nothing. **What the markers carried that is worth
+keeping was moved into the prose by M6-d** — the reason a carry matters, why a routine is entered
+part-way through, which flag is set at a distance — and that prose stands on its own without a label
+beside it. What the markers carried that was only a name went with them.
 
-`tools/inventory.py` collects these `// 6502:` markers and reconciles them with
-[Design/Source-Inventory.md](Design/Source-Inventory.md) and the master files' include list.
-Where several 6502 entry points merged into one function, name them all. The ledger names a
-multi-part routine once (`mveit_part_1_of_9` … `part_9_of_9`) and a numbered family as a range
-(`bdro1`–`bdro15`); `inventory.py` expands both, and `--strict` -- which CI runs -- fails on any
-master-level include no row names (plan §6.120). Where the upstream
-commentary explains a trick, leave a one-line pointer to the label rather than reproducing the
-essay — the source is vendored and a reader can go and read it.
+The rules that replace it are the ordinary ones: §1 names things for what they hold, and a comment
+says why the code is the shape it is.
 
 ---
 
@@ -226,12 +226,11 @@ not ours (§2).
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->nineteen in CI's
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->fifteen in CI's
 order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
 2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
 ```
-python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/check_gamelogic.py               # GameLogic/ has no clock, no randomness, no float, no file or Win32 call
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
@@ -242,29 +241,17 @@ python tools/check_counts.py                  # every <!--count:NAME--> number i
 python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
 python tools/mutate.py --check                # every recorded mutant still applies, and every floor file carries a caught one
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
-python tools/inventory.py --strict            # coverage ledger: every master-level include has a row
-python tools/inventory.py --check-homes       # every file a ledger row's HOME cell names is on disk
-python tools/inventory.py --self-test         # that check still catches a planted stale home
 python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
 python tools/check_twins.py                   # every routine with a 640x400 twin still calls it (Resolution.md §8.6)
 python tools/check_twins.py --self-test       # that check still catches a routine whose twin went missing
 python tools/channel_census.py --check        # the channel census names every workspace field and matches the plan
 ```
 
-**And one review that needs the suite to have run first**, so it is a step of the Ubuntu suite
-job rather than a repository check:
-
-```
-Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # the suite, recording which oracle labels each test ran
-python tools/inventory.py --coverage x64/Debug/coverage.txt           # every Port row's files are run by some test, or the row says why not
-```
-
-The instrument is M6-0-f's: the interpreter marks every address it executes and every trap it
-takes, the runner writes the labels per test, and the review reads them against
-`Source-Inventory.md`'s *Port* rows. A row may exempt a file with `<!--uncovered: stem -- why-->`
-inside its notes cell, and the review prints every exemption it honoured; four of the current
-nineteen are written as GAPS for M6-a rather than as exemptions, and the tool will say so until a
-test runs them.
+**The coverage review went with the ledger at M6-e.** M6-0-f built it: the interpreter marked every
+address it executed, the runner wrote the labels per test, and `inventory.py --coverage` read them
+against `Source-Inventory.md`'s *Port* rows. It did its job — the four gaps it found are closed
+(M6-a-1) — and it cannot outlive the rows it read. The suite still runs under the portable runner;
+what is gone is the reconciliation against a ledger that no longer exists.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
@@ -402,8 +389,9 @@ patience:
   clone every time.
 - **Suite on Ubuntu (portable runner)** (Ubuntu, ~85s): builds BeebAsm at the pinned commit (cached
   across runs), assembles the reference build, then builds and runs
-  the whole suite through `Tests/PortableRunner/` with `--coverage`, and reads the coverage file
-  against the ledger's *Port* rows (`inventory.py --coverage`, M6-0-f). Not the authority
+  the whole suite through `Tests/PortableRunner/`. It read the coverage file against the ledger's
+  *Port* rows until M6-e retired both (M6-0-f built that review; it found four gaps and they are
+  closed). Not the authority
   (ADR-004 §1) — it is here so a
   broken push says so in a minute rather than five, and because a second compiler catches what the
   first tolerates. It is also more permissive than MSVC in ways nothing measures (§6.116).
@@ -444,12 +432,11 @@ the test result file. Do not add an upload that changes that.
 
 ## 8. Before you hand work back
 
-- [ ] Naming conforms to §1, and every ported function carries its `// 6502:` label (R7).
+- [ ] Naming conforms to §1. (R7's `// 6502:` label is retired — see R7.)
 - [ ] Files are PascalCase, flat, unique repo-wide including against the CRT and STL.
 - [ ] Every added/removed/moved file is in both the `.vcxproj` **and** the `.filters`.
 - [ ] `GameLogic` gained no clock, no randomness, no float, no Win32 call.
-- [ ] `Design/Source-Inventory.md` updated for anything you ported, INSIDE the notes column
-      rather than as a new cell; `tools/inventory.py` and `tools/check_docs.py` run.
+- [ ] `tools/check_docs.py` runs.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
 - [ ] Tests for the layer you touched were run, and you said which, and whether the oracle was
       present.

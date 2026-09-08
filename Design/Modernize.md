@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->nineteen repository checks pass,
+(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->fifteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -398,7 +398,7 @@ deleted with the phase (owner ruling, M6-d-59), so every listing in a comment is
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
-submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
+submodule and the label map; <!--count:origin-tools-->6 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
 it, and it is the one pattern that the owner's ruling (§1, R-a to R-d) makes a target: the end state
 builds, tests and reads with none of it present. Until M6 it is also what every other slice is
@@ -1610,7 +1610,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times) and so is `Laser` (**M5-a-11**, four constant families for four bytes); `Equipment` is refused (**M5-a-12**) with the reason in ADR-006 §2 — the bytes are four encodings, and hold slots besides (§8). | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->54 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
-| **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
+| **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; 0 stale homes. **The check and its counter went with the ledger at M6-e-1**, which is what M6-e is for. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
 | **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the eight `DTW` bytes into `Universe` (**M5-e-2b**, built) and the doubled `QQ17` collapsed into `TextState` with the token printer bound to it (**M5-e-2c**, built), `StateHash()` library-native beside the label hash (**M5-e-3**, built — `Elite::HashState`, with a completeness test that walks the label table and found five fields the first fold forgot). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
 
@@ -1941,6 +1941,50 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-e-1: the ledger and `inventory.py` retire, and R7 with them. No marker touched
+yet.**
+
+`Design/Source-Inventory.md` (241 rows) and `tools/inventory.py` (451 lines) are deleted, and with
+them the four `check_all.py` entries, the five CI steps, the `inventory-stale-files` counter and the
+coverage review M6-0-f built. `check_all.py` runs **fifteen** checks where it ran nineteen; the
+ratchet holds **seventeen** counts where it held eighteen. AGENTS.md R7 is retired in place -- kept
+as a heading that says what the rule was and when it went, so a reader who meets a reference to "R7"
+finds an answer rather than a hole -- and ADR-004 §4 is discharged the same way.
+
+**The order is forced and worth writing down.** M6-e's row lists the markers and the ledger together
+and rule 4 says they go together, but they cannot go in the same commit without a 4,200-line diff
+nobody can read. The constraint is one-directional: `inventory.py --check-homes` reconciles the
+markers AGAINST the ledger, so removing markers first turns `check_all` red, while removing the
+ledger first leaves the markers as ordinary comments and everything green. So the ledger goes first
+and the markers follow in slices. Rule 4's "together" is satisfied by the phase, which is where it
+was always going to be satisfied.
+
+**Three headers pointed at the ledger and now point at nothing, so they were fixed here rather than
+left.** `EliteConfig.h` cited "Source-Inventory section 6", `LoaderScreen.h` its §3, `Controls.h` its
+row 145. A dangling reference in a comment is the same defect M6-d spent six findings on: it reads
+as authority and cannot be checked.
+
+**What the markers themselves take, measured before touching one.** All 4,200 of them (4,103 in
+`GameLogic/`, 97 in `Outpost/`) fall into four classes by what follows the marker, and only the last
+needs a person:
+
+| class | count | what removal is |
+|---|---|---|
+| `PROSE` | 2,078 | drop the marker, capitalise: `// 6502: the carry the second subtraction leaves` |
+| `LABEL_THEN_PROSE` | 1,699 | drop the marker AND the label, keep the sentence: `// 6502: NW8 -- the type's defaults ...` |
+| `LABELS_ONLY` | 370 | drop the COMMENT: `Worm = 23, ///< 6502: WRM` says nothing but where it came from, and `///< WRM` would be worse than either keeping or deleting it |
+| `EMBEDDED` | 53 | the marker is mid-sentence and carries a clause -- by hand, a paragraph at a time |
+
+The classifier earned two corrections while it was being written. `///< 6502: KY1 -- "?"` was going
+to be dropped whole as labels-only, which would have lost the KEY as well as the label; a payload
+with a dash or a quoted thing has a description in it and is never labels-only. And `* 6502: MVEIT.`
+inside a block comment was leaving an empty ` *` line, because a block continuation is not a comment
+opener in the C sense; it drops whole now. Zero lines would be left as an empty comment.
+
+469 tests green, all fifteen checks, 97 of 97 mutants still applying. `origin-markers` unmoved at
+4,103, which is the point: this slice took the map away and left the markers where they were.
+
 
 **2026-09-08 — M6-d-59: R-i's `6502 quoted:` tag is deleted, and zero now has no exemption.**
 

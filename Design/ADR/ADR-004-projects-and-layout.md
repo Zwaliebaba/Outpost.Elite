@@ -72,12 +72,14 @@ project configuration for the libraries.
 ### §3 The original source and the generated data
 
 - `MasterFile/` stays exactly as it is: the 13 masters, reference only, never compiled, never on
-  an include path. It is the index into the upstream tree and what `tools/inventory.py` parses.
+  an include path. It is the index into the upstream tree, and was what `tools/inventory.py` parsed
+  until M6-e retired that tool. M6-f deletes both.
 - `Upstream/elite-source-code-library` is the upstream tree, a **submodule** pinned at
   `aa3f7ee` (ADR-001 §5, corrected 2026-09-03). **Never edited, never reformatted, never
   compiled by this solution.** A fresh clone has nothing there until
-  `git submodule update --init` runs, and until it does `tools/inventory.py --check-includes`
-  reports 0/712 and nothing from slice 1a onward can be built.
+  `git submodule update --init` runs, and until it does nothing from slice 1a onward can be built.
+  `inventory.py --check-includes` used to say so in one line; it went with the ledger at M6-e, and
+  M6-f deletes the submodule itself.
 - Generated data files (`ShipBlueprintData.cpp`, `TokenTables.cpp`, `SineTable.cpp`,
   `ArctanTable.cpp`, `LogTables.cpp`, `SoundTables.cpp`, `TuneData.cpp`, `Font.cpp`,
   `DashboardImage.cpp`, `SpriteData.cpp`, `Palette.cpp`, `CommanderData.cpp`) are **checked in**,
@@ -85,13 +87,18 @@ project configuration for the libraries.
   compares each against the oracle's loaded memory (slice 1a) so a stale regeneration cannot
   pass silently.
 
-### §4 Traceability
+### §4 Traceability — DISCHARGED at M6-e (2026-09-08)
 
-Every ported function's declaration carries `// 6502: <LABEL>` (AGENTS.md R7).
-`tools/inventory.py` collects those markers and reconciles them with the source inventory and
-the masters' include list. A marker may name something that is not its own file — a second entry
-point such as `DORND2`, or a workspace field such as `RAND` — and the tool reports those
-separately rather than treating them as errors.
+**It said:** every ported function's declaration carries `// 6502: <LABEL>` (AGENTS.md R7), and
+`tools/inventory.py` collects those markers and reconciles them with the source inventory and the
+masters' include list. That was the map from the port back to the original, and it held for six
+phases.
+
+**It is discharged because the thing it maps to is going.** M6-f deletes `Upstream/` and
+`MasterFile/`, at which point a label points at nothing and a ledger reconciles against nothing. The
+markers, `Source-Inventory.md` and `inventory.py` went together at M6-e, on the owner ruling of
+2026-09-06 and by Modernize.md R-b. What the markers carried that is worth keeping was moved into
+prose by M6-d, which is the phase this one was waiting for.
 
 ### §5 Tooling
 
@@ -99,7 +106,6 @@ separately rather than treating them as errors.
 
 | Script | Job | Status |
 |---|---|---|
-| `inventory.py` | `--check-includes` resolves every master include against `Upstream/`; the default report reconciles the ledger with the `// 6502:` markers; `--strict` fails on an unaccounted file | **Built** (slice 0c); `--strict` green and in CI since 2026-09-05 (plan §6.120) |
 | `labels.py` | Assembles the C64 variant and normalises BeebAsm's label dump and load addresses into `Design/Reference/Labels.txt` and `Binaries.txt` | **Built** (slice 0b-a) |
 | `extract_tables.py` | upstream `.asm` and the assembled binaries → the generated `.cpp` data tables, leaving the three picture files to `bitmaps.py` unless `--pictures` is passed. Its `--check` and the `TableTests` suite compared every table against the oracle until 2026-09-07, when both were retired: the tables are the port's own data now | **Built** (slice 1a); no longer a check |
 | `golden_diff.py` | expected versus actual canvas → a diff image plus the differing rows and columns | **Built** (slice 1d) |
@@ -113,7 +119,7 @@ separately rather than treating them as errors.
 | `check_modernize.py` | The modernisation ratchet: counts the legacy patterns `Design/Modernize.md` names and fails when any count rises above, or falls below, the ceiling recorded in `modernize_ratchet.json`; `--list` prints the counts, `--update` lowers the ceilings when a slice lands, and a self-test runs first | **Built** (Modernize.md M0-a); in CI |
 | `channel_census.py` | The channel census (Modernize.md M2-a): every routine's reads and writes of the zero-page workspace fields, with a verdict per field; `--check` fails when the table in Modernize.md §4.3 differs from the tree or a field has no verdict; `--report` prints every routine's events | **Built** (Modernize.md M2-a); `--check` in CI |
 | `bitmaps.py` | The three data tables that are pictures -- `FONT_DATA`, `DASHBOARD_IMAGE` and `SPRITE_DEFINITIONS` -- exported to indexed BMP sheets a paint program can edit, and imported back into the byte literals of their generated `.cpp` in place, by array name; a pixel's palette index is its bit value, and `--self-test` proves the round trip is the identity | **Built**; a tool, not a check |
-| `check_all.py` | Runs the <!--count:checks-->nineteen repository checks in CI's order, so a local run cannot leave one out. Thirteen CHECKS from ten scripts — `inventory.py` contributes `--check-includes` and `--strict`, and `check_gamelogic.py` and `check_outpost.py` each their own `--self-test`; `labels.py`, `golden_diff.py`, `bitmaps.py`, `extract_tables.py` and `mutate.py` are tools rather than checks and are not in it | **Built** (plan §6.127) |
+| `check_all.py` | Runs the <!--count:checks-->fifteen repository checks in CI's order, so a local run cannot leave one out. `check_gamelogic.py`, `check_outpost.py`, `check_modernize.py` and `check_twins.py` each contribute their own `--self-test`; `labels.py`, `golden_diff.py`, `bitmaps.py`, `extract_tables.py` and `mutate.py` are tools rather than checks and are not in it. Four `inventory.py` entries went at M6-e with the ledger | **Built** (plan §6.127) |
 
 **The mutation tooling exists as of 2026-09-05, and what it changes is narrower than it looks.**
 `tools/mutants.json` holds the mutants per unit and `tools/mutate.py` runs them against a

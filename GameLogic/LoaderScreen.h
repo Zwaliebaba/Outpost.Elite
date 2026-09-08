@@ -20,7 +20,7 @@ namespace Elite
    * THE LOADER'S CODE IS NOT PORTED and this is not a port of it: it is what its two screen parts
    * LEAVE BEHIND, written straight into the canvas. The rest of the loader is a decryptor, a set
    * of memory moves and the VIC-II bank setup, none of which this port has an equivalent for
-   * (`Design/Source-Inventory.md` §3 drops all seven parts). These two parts are different because
+   * (the ledger dropped all seven parts, before M6-e retired it). These two parts differ because
    * the game reads what they wrote and never writes it itself.
    *
    * WITHOUT IT EVERY PIXEL IS STILL RIGHT AND THE SCREEN IS BLACK. Colour on the C64 is not in the

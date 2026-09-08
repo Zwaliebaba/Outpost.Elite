@@ -3,7 +3,7 @@
 #include <cstdint>
 
 /*
- * Constants the game is built with (Source-Inventory section 6).
+ * Constants the game is built with.
  *
  * These come from the master file's preamble rather than from any routine, and they carry the
  * original names so that a reader with the commentary open can find them. Build options live
