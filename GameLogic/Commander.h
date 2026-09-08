@@ -26,7 +26,7 @@ namespace Elite
    * one behaviour here the port does not reproduce -- see LoadCommander.
    */
 
-  /// 6502: TP to CHK -- the block SVE writes, `LDX #&4C` and count down.
+  /// 6502: TP to CHK -- the block SVE writes, seventy-seven bytes counted down from the top.
   inline constexpr std::size_t COMMANDER_BLOCK_SIZE = 77;
 
   /// 6502: NAME -- eight bytes, the last of which is the carriage return that ends it.
@@ -113,9 +113,10 @@ namespace Elite
 
   /*
    * 6502: TALLY and TRIBBLE -- a sixteen-bit count kept as two bytes, low byte first, which the
-   * game steps and shifts a byte at a time (`INC TALLY+1`, the Trumbles' `ROR TRIBBLE+1 / ROR
-   * TRIBBLE`). The halves are fields because that is how every routine reaches them; `Value` is
-   * for the ones that read the pair (`TT111`'s rank, the market's count).
+   * game steps and shifts ONE BYTE AT A TIME: the kill tally increments its high byte on its own,
+   * and the Trumbles' count is halved by rotating each half in turn. The halves are fields because
+   * that is how every routine reaches them; `Value` is for the ones that read the pair (`TT111`'s
+   * rank, the market's count).
    */
   struct Tally
   {
@@ -145,21 +146,21 @@ namespace Elite
   {
     std::uint8_t tenths = 0;
 
-    /// 6502: MA23's scooping -- `LSR A / ADC QQ14 / CMP #70 / BCC P%+4 / LDA #70`: the amount, plus
-    /// the bit the LSR shifted out as the carry into the add, saturating at a full tank.
+    /// 6502: MA23's scooping -- the amount, plus the bit the halving before it shifted out as the
+    /// carry into the add, saturating at a full tank rather than wrapping.
     [[nodiscard]] constexpr LightYearsTenths Scooped(std::uint8_t _amount, bool _carry) const noexcept
     {
       const std::uint8_t sum = static_cast<std::uint8_t>(_amount + tenths + (_carry ? 1u : 0u));
       return {(sum < FULL_TANK_TENTHS) ? sum : FULL_TANK_TENTHS};
     }
 
-    /// 6502: the jump's `SEC / SBC QQ8 / BCS P%+4 / LDA #0` -- a jump costing more than the tank
-    /// holds leaves it EMPTY rather than wrapped, and the carry says which it was. Defined below
-    /// `FuelBurn`, which it returns.
+    /// 6502: the jump's fuel subtraction -- a jump costing more than the tank holds leaves it
+    /// EMPTY rather than wrapped, and the carry says which it was. Defined below `FuelBurn`,
+    /// which it returns.
     [[nodiscard]] constexpr FuelBurn Burned(std::uint8_t _tenths) const noexcept;
 
-    /// 6502: TT111's `LDA QQ8+1 / BNE TT147 / LDA QQ14 / CMP QQ8 / BCC TT147` -- a distance is in
-    /// range when its high byte is clear and the tank holds at least its low byte.
+    /// 6502: TT111's range test -- a distance is in range when its high byte is clear and the
+    /// tank holds at least its low byte.
     [[nodiscard]] constexpr bool Reaches(std::uint16_t _distanceTenths) const noexcept
     {
       return (_distanceTenths >> 8) == 0u && tenths >= static_cast<std::uint8_t>(_distanceTenths & 0xFFu);
@@ -192,10 +193,10 @@ namespace Elite
    * 6502: LASER,Y -- one mount's laser (M5-a-11).
    *
    * THE POWER BYTE IS THE LASER'S IDENTITY: there is no separate type. `POW` is 15 and a pulse
-   * laser is that; a beam laser is `POW+128`, the same power with bit 7 set, which is what makes it
-   * fire every frame (`MA3`'s `BMI`); `Armlas` is `INT(128.5 + 1.5 * POW)`, 151, and `Mlas` is 50,
-   * two values that happen not to collide. Zero is no laser on the mount. The damage arithmetic
-   * takes the byte without its top bit (`AND #%01111111 / STA LAS`), and that is `Power()`.
+   * laser is that; a beam laser is `POW+128`, the same power with bit 7 set, which is what makes
+   * it fire every frame (`MA3` branches on that bit); `Armlas` is `INT(128.5 + 1.5 * POW)`, 151,
+   * and `Mlas` is 50, two values that happen not to collide. Zero is no laser on the mount. The
+   * damage arithmetic masks off the top bit before storing, and that is `Power()`.
    *
    * Until this slice the four values lived in FOUR places -- `Controls.h`, `FlightLoop.h`,
    * `Equipment.cpp` and `StatusScreen.cpp`, each with its own names for the same bytes.
@@ -471,16 +472,16 @@ namespace Elite
   /*
    * 6502: SVE's SVL1 loop, plus the two CHECK calls -- write a commander out.
    *
-   * The checksums go into the FILE and not into the live commander: `STA CHK3`, `STA CHK` and
-   * `STA CHK2` all write to NA%, which is the copy about to be written to disk, and the block at TP
-   * is left exactly as it was. So saving does not change the commander, and a port that stored them
-   * back would give the next save a different checksum from the one the original computes.
+   * The checksums go into the FILE and not into the live commander: all three stores land in the
+   * copy about to be written to disk, and the block at TP is left exactly as it was. So saving
+   * does not change the commander, and a port that stored them back would give the next save a
+   * different checksum from the one the original computes.
    *
-   * ALL THREE, and the third one was missing here until 2026-09-03. `CHK2` is the checksum EOR &A9
-   * and SV1 writes it four instructions past the competition number, long after the two CHECK
-   * calls -- so a reading that stopped at those looked complete. `LoadCommander` only reads it, to
-   * decide whether to flag the file as tampered, so a round trip agreed with itself and the gap
-   * survived 221 compared blocks. Building the save flow on top is what found it.
+   * ALL THREE, and the third one was missing here until 2026-09-03. `CHK2` is the first checksum
+   * EORed with &A9, and SV1 writes it four instructions past the competition number, long after the
+   * two CHECK calls -- so a reading that stopped at those looked complete. `LoadCommander` only
+   * reads it, to decide whether to flag the file as tampered, so a round trip agreed with itself
+   * and the gap survived 221 compared blocks. Building the save flow on top is what found it.
    */
   void SaveCommander(const Commander& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
                      std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept;

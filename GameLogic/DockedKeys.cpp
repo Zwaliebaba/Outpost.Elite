@@ -27,7 +27,7 @@ namespace Elite
     }
     if (_key == KEY_DATA_ON_SYSTEM)
     {
-      // 6502: JSR TT111 / JMP TT25 -- the only one of these that is two calls, because the screen
+      // 6502: the only one of these that is TWO calls -- TT111 first, because the data screen
       // reads the system TT111 leaves behind rather than finding it itself.
       return {KeyAction::DataOnSystem, 0};
     }
@@ -44,7 +44,8 @@ namespace Elite
       return {KeyAction::Launch, 0};
     }
 
-    // 6502: fvw -- BIT QQ12 / BPL INSP. Bit 7, and BAY sets the whole byte to &FF.
+    // 6502: fvw -- the docked flag's top bit, tested without loading the byte, and BAY sets the
+    // whole byte to &FF.
     if ((_dockedFlag & 0x80u) != 0u)
     {
       if (_key == KEY_EQUIP_SHIP)
@@ -57,7 +58,7 @@ namespace Elite
       }
       if (_key == KEY_DISK_ACCESS)
       {
-        // 6502: JSR SVE / BCC P%+5 / JMP QU5 / JMP BAY -- the menu decides which, on its carry.
+        // 6502: call the disk menu; the carry it returns picks the docking bay or a restart.
         return {KeyAction::DiskAccess, 0};
       }
       if (_key == KEY_SELL_CARGO)
@@ -67,7 +68,9 @@ namespace Elite
     }
     else
     {
-      // 6502: INSP -- and the three land on LDX #1, #2 and #3 by falling through two EQUB &2C.
+      // 6502: INSP -- one chain of three loads entered at three different points, and a key that
+      // enters high skips the loads below it by falling into a data byte that assembles as a
+      // three-byte instruction and swallows them.
       if (_key == KEY_REAR_VIEW)
       {
         return {KeyAction::ChangeView, VIEW_REAR};
@@ -83,7 +86,7 @@ namespace Elite
     }
 
     /*
-     * 6502: LABEL_3 -- BIT KLO+HINT / BPL P%+5 / JMP hyp.
+     * 6502: LABEL_3 -- test the hyperspace key and leave for `hyp` when it is down.
      *
      * The key matrix, not the accumulator. So this fires on H being HELD, whatever key the rest of
      * the routine was given, and the key that was pressed is thrown away.
@@ -93,17 +96,17 @@ namespace Elite
       return {KeyAction::Hyperspace, 0};
     }
 
-    // 6502: NWDAV5 -- CMP #DINT / BEQ T95. The view test is T95's own, not this one's.
+    // 6502: NWDAV5 -- the "D" key alone; the view test that follows is T95's own, not this one's.
     if (_key == KEY_DISTANCE)
     {
       return {KeyAction::ShowDistance, 0};
     }
 
     /*
-     * 6502: CMP #FINT / BNE HME1 / LDA QQ12 / BEQ t95 / LDA QQ11 / AND #%11000000 / BEQ t95.
+     * 6502: the "F" key -- docked AND on a chart, or nothing happens.
      *
-     * Docked AND on a chart, and "docked" here is `LDA QQ12 / BEQ` -- the byte being non-zero,
-     * rather than bit 7 being set as the split above tests it.
+     * "Docked" here is the WHOLE BYTE being non-zero, rather than its top bit being set as the
+     * split above tests it. The chart test is the view byte's top two bits.
      */
     if (_key == KEY_FIND_SYSTEM)
     {
@@ -115,10 +118,10 @@ namespace Elite
     }
 
     /*
-     * 6502: HME1 -- STA T1 / LDA QQ11 / AND #%11000000 / BEQ TT107 / LDA QQ22+1 / BNE TT107.
+     * 6502: HME1 -- the crosshair move, and the two ways out of it before anything moves.
      *
      * Off a chart, or with the hyperspace counter already running, the crosshairs do not move and
-     * the routine drops straight into the countdown. The key is preserved in T1 across the two
+     * the routine drops straight into the countdown. The key is stashed in `T1` before the two
      * tests, which is the only reason it is still available below.
      */
     if (!IsChartView(_view) || _countdown != 0u)
@@ -126,14 +129,14 @@ namespace Elite
       return {KeyAction::CountdownOnly, 0};
     }
 
-    // 6502: LDA T1 / CMP #OINT / BNE ee2 -- and "O" is a TAIL call, so it is the one path through
-    // here that does not reach the countdown at all.
+    // 6502: the "O" key, read back out of `T1` -- and it leaves by a TAIL call, so it is the one
+    // path through here that does not reach the countdown at all.
     if (_key == KEY_HOME)
     {
       return {KeyAction::HomeCrosshairs, 0};
     }
 
-    // 6502: ee2 -- JSR TT16, and then TT107.
+    // 6502: ee2 -- move the crosshairs, and then fall into the countdown.
     return {KeyAction::MoveCrosshairs, 0};
   }
 
