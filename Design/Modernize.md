@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->926 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->856 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,39 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-37: `SaveGame.cpp` and `Music.cpp` to zero, and a store nothing reads.**
+
+70 sites over two files: the disk menu and the SID player. Twenty-ninth and thirtieth at zero.
+
+**`JAMESON` ends by writing a byte no build ever reads.** The header carried `LDY #7 / STY oldlong`
+without saying what `oldlong` is or why the port drops it. It is the length of the last saved
+commander's name, set to seven for "JAMESON" — and it is written twice in the whole game, here and
+in `TRNME`, and read nowhere. `thislong`, which `KERNALSETUP` reads for the filename's length, is
+the live one; the upstream annotation on `TRNME` says as much in passing ("though this is never
+used"). So the port copies the block and stops, and the header now says why rather than listing the
+store and leaving a reader to wonder what was skipped.
+
+**A configuration flag is named for its effect and not for what it holds.** `MUFOR` is not "forced
+music": it records whether the docking-music setting *can be toggled*, and both places that read it
+— the start path and the stop path — turn a locked setting into "play". It is tested BEFORE the
+setting itself, so a build that locks the option with the music switched off plays anyway. The port's
+`dockingMusicForced` is the effect, which M6-c settled and this slice did not relitigate; it is
+recorded here because the listing was the only place the flag's real name appeared, and a reader
+going back to `Upstream/` on the strength of the port's name alone will not find it.
+
+`BDRO15` is worth keeping in mind for the same reason: `SEC / ROL A` then three `ASL A` is not a
+shift by four, it is a shift by four with a 1 pushed in at the bottom, which is how command 8 gets
+slid *below* whatever the buffer already held. The port's `(buffer << 4) | 8` says it plainly, but
+only once you know the rotate carried a set bit.
+
+The rest of both files was label-and-listing: `stopat`, `startbd`, `coffeeloop`, `BDENTRY`,
+`feb10`, `feb13`, `YESNO` — a name, then the instructions under it. Each keeps its name and loses
+the transcription, and where the label named a branch's destination it stays on the path that
+reaches it (M6-d-36).
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (46 and 54). `opcode-transcriptions` 926 → 856.
 
 **2026-09-08 — M6-d-36: `SystemScreen.cpp` and `GameLoop.h` to zero, and a carry nothing clears.**
 
