@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,056 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,030 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,28 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-13: the spawner, where the accumulator changes meaning mid-routine.**
+
+26 more from `GameLoop.cpp`, now at 44 of 101. Parts 1 and 2 of `MLOOP` are the densest carry
+argument in the tree — nine comparisons each overwriting the generator's own flag — and the whole
+chain survives as prose because what a reader has to check is WHICH comparison supplied the flag,
+never how the comparison was spelled.
+
+The trader's type is the finding that matters most here, and it is a claim about a REGISTER rather
+than about a byte of memory. On one path the accumulator still holds the roll; on the other, reading
+and modifying the AI byte has replaced it twice over. The mask that chooses the ship type therefore
+runs on two entirely different quantities depending on how it was reached, and the port had it as
+the roll on both until the oracle disagreed about the type in an empty bubble. That reads better as
+three sentences than it ever did as five instructions.
+
+Two smaller ones kept: the trader's escort flag is skipped by a NEGATIVE roll, so half of them fly
+with the docking trait and half with whatever the clear left; and the branch back to the top of the
+loop is dead code on this build, because the two constants that would make it live are 11 and 15.
+It stays, because what makes it dead is a choice this version happens to make.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,056 → 2,030.
 
 **2026-09-08 — M6-d-12: the loop's head and tail, where one flag has two sources.**
 
