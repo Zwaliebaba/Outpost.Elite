@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,913 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,897 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-19: `PlanetDraw.cpp` to zero, and a block comment that had never been indented.**
+
+The last 16, and the file is at 0 of 89 — the ball, the sun, the meridians, the crater, the stardust
+seed, the slot sweep and the hyperspace rings, over five slices (-15, -16, -17, -18, -19). It is the
+fifth file at zero, after `Arith.cpp`, `FlightLoop.cpp`, `Tactics.cpp` and `GameLoop.cpp`.
+
+**`HFL2`'s block comment had its body one column left of its own opener** — `/*` at six spaces and
+every `*` under it at five — and had been that way since the routine was ported. Nothing in the tree
+catches it: there is a `.clang-format`, and no check runs it. The file has four other deviations,
+all in code rather than comments, all older than M6-d and all left alone: reformatting code is not
+this slice's pattern (rule 8), and the count is the same before and after these three slices, so
+nothing here introduced one. The indentation IS fixed, because the comment was already being
+rewritten and leaving it would have been a choice.
+
+Three findings kept from the tail of the file: forcing bit 3 of a fresh speck's distance is what
+keeps every one of them at least eight units from the player's face; `WS2` resets the ball heap
+pointer to ZERO where `WP1` resets it to one, and the two are not interchangeable; and the state
+mask writes back through the SLOT pointer rather than to the copy in `INWK`, so the two disagree the
+moment the routine returns — correctly, because the caller is about to redraw from the slots.
+
+**R-i's quotation tag is still unused.** 89 sites in the largest file done so far and not one of them
+needed `6502 quoted:` to keep a sequence that IS the reason. `opcode-quotations` remains 0. If the
+tail of M6-d goes the same way the cap ends up at zero and the second counter is a gate that never
+fired — which is worth knowing before M6-e writes the ledger, and is reported here rather than
+decided here.
+
+469 tests green including the five `TheFlightReplay` digests, all nineteen checks, 97 of 97 mutants
+from a full run, no marker lost (149 in this file, before and after — the same 149 it had at -16).
+`opcode-transcriptions` 1,913 → 1,897.
 
 **2026-09-08 — M6-d-18: the sun's walk, and four comments that were a listing and nothing else.**
 

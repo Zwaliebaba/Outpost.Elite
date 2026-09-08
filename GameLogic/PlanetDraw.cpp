@@ -1112,11 +1112,11 @@ namespace Elite
 
   void ClearShip(Ship& _work) noexcept
   {
-    // 6502: ZINF -- LDY #NI%-1 / LDA #0 / .ZI1 STA INWK,Y / DEY / BPL ZI1.
+    // 6502: ZINF -- every byte of the block zeroed, top down.
     _work = Ship{};
 
     /*
-     * 6502: LDA #96 / STA INWK+18 / STA INWK+22 / ORA #%10000000 / STA INWK+14.
+     * 6502: and then three bytes go back in, 96 in each and the third with its top bit set.
      *
      * The three high bytes of `roofv_y`, `sidev_x` and `nosev_z`, so the ship comes out square to
      * the axes -- and the sign on the nose is what makes it face TOWARDS the player. 96 rather than
@@ -1133,12 +1133,12 @@ namespace Elite
     /*
      * 6502: nWq -- three random bytes per speck, and the generator is threaded straight through.
      *
-     * `JSR PIXEL2 / DEY / BNE SAL4` and then `JSR DORND`, so each speck's first random byte runs
+     * The plot comes before the next call to the generator, so each speck's first random byte runs
      * on the carry the PREVIOUS speck's plot left -- which is `ZZ >= 80`, the distance test inside
      * `PIXEL` (§6.57). The field a fresh view is filled with therefore depends on where the last
      * speck was drawn.
      *
-     * `ORA #8` on the distance keeps every speck at least eight units away, so none of them starts
+     * Forcing bit 3 of the distance keeps every speck at least eight units away, so none of them starts
      * on the player's face.
      */
     bool carry = _carryIn;
@@ -1171,7 +1171,7 @@ namespace Elite
   void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view,
                      Picture* _picture) noexcept
   {
-    // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
+    // 6502: WPSHPS -- the slot list walked from the start, with the two cases the body handles.
     for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
     {
       const ShipType type = TypeOf(_bubble.slots[slot]);
@@ -1184,22 +1184,21 @@ namespace Elite
         continue; // 6502: BMI WS1 -- the planet and the sun have no blip and no line heap
       }
 
-      // 6502: JSR GINF / LDY #31 / .WSL2 -- thirty-two bytes, not the whole block: the AI byte,
-      // the heap pointer, the energy and NEWB keep what INWK held.
+      // 6502: thirty-two bytes copied out of the slot, not the whole block: the AI byte, the heap
+      // pointer, the energy and NEWB keep what `INWK` held.
       std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _work.ToBytes();
       const std::array<std::uint8_t, SHIP_BLOCK_SIZE> from = _bubble.blocks[slot].ToBytes();
       std::copy_n(from.begin(), 32u, bytes.begin());
       _work = Ship::FromBytes(bytes);
 
-      // 6502: STA TYPE / ... / STX XSAV / JSR SCAN / LDX XSAV. Both stores are the routine's own
-      // and were invisible while the scanner was a seam: `SCAN` reads `TYPE` as a global, and
-      // `XSAV` is how the loop index survives the call.
+      // 6502: both stores are the routine's own and were invisible while the scanner was a seam:
+      // `SCAN` reads `TYPE` as a global, and `XSAV` is how the loop index survives the call.
       _flight.type = type;
       _flight.slot = static_cast<std::uint8_t>(slot);
       DrawScannerBlip(_canvas, _work, type, _view, _picture);
 
       /*
-       * 6502: LDY #31 / LDA (INF),Y / AND #%10100111 / STA (INF),Y.
+       * 6502: the state byte read back through the slot pointer, masked, and put where it came from.
        *
        * It masks the byte in the SLOT and not the copy in `INWK`, so the two disagree the moment
        * this returns -- which is correct, because the caller is about to redraw everything from
@@ -1210,8 +1209,8 @@ namespace Elite
         Without(_bubble.blocks[slot].state, ShipStateBit::OnScreen, ShipStateBit::OnScanner, ShipStateBit::Firing);
     }
 
-    // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and
-    // to one in `WP1`; the two are not the same reset.
+    // 6502: WS2 -- the heap pointer to zero and 255 into entry 0 of both halves. Note `LSP` goes
+    // to ZERO here and to one in `WP1`; the two are not the same reset.
     _state.ballHeapTop = 0;
     _state.SetBallX(0, 0xFF);
     _state.SetBallY(0, 0xFF);
@@ -1223,8 +1222,9 @@ namespace Elite
   void SeedStardustAndClearShips(Canvas& _canvas, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
                                  FlightState& _flight, std::uint8_t _view, bool _carryIn, Picture* _picture) noexcept
   {
-    // 6502: NWSTARS -- LDA QQ11 / BNE WPSHPS. `QQ11` is the view, zero for the space view, and a
-    // menu has no stardust to fill. The same byte then decides whether `SCAN` draws anything.
+    // 6502: NWSTARS -- `QQ11` is the view, zero for the space view, and a menu has no stardust to
+    // fill, so any other view skips straight to the ships. The same byte then decides whether
+    // `SCAN` draws anything.
     if (_view == 0u)
     {
       SeedStardustField(_canvas, _dust, _rng, _carryIn, _picture);
@@ -1236,19 +1236,19 @@ namespace Elite
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                           const Projection& _centre, std::uint8_t _index, Presenter& _present, Picture* _picture) noexcept
   {
-    // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius, and this
-    // routine's own since M2-c-3: it fills `K` and nothing else reads the block while it runs.
+    // 6502: HFL1 -- the ring's starting radius, the low three bits of the index plus eight, and
+    // this routine's own since M2-c-3: it fills `K` and nothing else reads the block while it runs.
     std::uint8_t radius = static_cast<std::uint8_t>((_index & 7u) + 8u);
 
     for (;;)
     {
       /*
-     * 6502: .HFL2 LDA #1 / STA LSP / JSR CIRCLE2.
-     *
-     * The heap is rewound to one before every circle, so each ring is drawn over the last one's
-     * run rather than after it -- and because `BLINE` EORs, drawing the next size erases the
-     * previous. The whole effect is one heap entry deep.
-     */
+       * 6502: HFL2 -- the ring loop's top.
+       *
+       * The heap is rewound to one before every circle, so each ring is drawn over the last one's
+       * run rather than after it -- and because `BLINE` EORs, drawing the next size erases the
+       * previous. The whole effect is one heap entry deep.
+       */
       _state.ballHeapTop = 1u;
       DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, radius, false, _picture);
 
@@ -1260,7 +1260,7 @@ namespace Elite
        */
       _present.Present();
 
-      // 6502: ASL K / BCS HF8 -- a radius past 128 doubles out of the byte and ends the ring.
+      // 6502: a radius past 128 doubles out of the byte, and the carry that falls out ends the ring.
       const ShiftResult doubled = RotateLeftValue(radius, false);
       radius = doubled.value;
 
@@ -1269,8 +1269,8 @@ namespace Elite
         return;
       }
 
-      // 6502: LDA K / CMP #160 / BCC HFL2 -- and 160 is half the screen's width, so a ring is
-      // abandoned once it is wider than the view rather than once it is off it.
+      // 6502: 160 is half the screen's width, so a ring is abandoned once it is wider than the
+      // view rather than once it is off it.
       if (radius >= 160u)
       {
         return;
@@ -1281,16 +1281,16 @@ namespace Elite
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                            Presenter& _present, Picture* _picture) noexcept
   {
-    // 6502: LDX #X / STX K3 / LDX #Y / STX K4 / LDX #0 / STX XX4 / STX K3+1 / STX K4+1.
+    // 6502: the centre of the space view as a sixteen-bit pair, and the ring counter zeroed.
     Projection centre{};
     centre.x = SPACE_VIEW_CENTRE_X;
     centre.y = SPACE_VIEW_CENTRE_Y;
     centre.x1 = 0;
     centre.y1 = 0;
 
-    // 6502: .HFL5 JSR HFL1 / INC XX4 / LDX XX4 / CPX #8 / BNE HFL5 -- `XX4` is this loop's counter
-    // and nothing reads it afterwards: `LL9` part 1 writes 31 into it before its first read, so the
-    // eight the loop leaves is dead. A local since M2-c-3, with `LL9`'s own four.
+    // 6502: HFL5 -- eight rings, and `XX4` is this loop's counter. Nothing reads it afterwards:
+    // `LL9` part 1 writes 31 into it before its first read, so the eight the loop leaves is dead.
+    // A local since M2-c-3, with `LL9`'s own four.
     for (std::uint8_t index = 0; index < 8u; ++index)
     {
       DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _present, _picture);
