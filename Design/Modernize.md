@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,024 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,943 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-24: `ShipMove.cpp` to zero, and the damping nobody wrote.**
+
+All 81, over `MVEIT` and everything it reaches: the coordinate adders, the vector rotations, `TIDY`,
+`MV40`'s planet path and the view flips. Eighth file at zero. This is the most arithmetic-dense file
+done so far and the one where the difference between a listing and a reason is sharpest — almost
+every comment here is about a flag, and a flag is exactly what a listing shows and does not explain.
+
+**A ship straightens up after a turn and nothing decides that it should.** The roll and pitch
+counters are damped by a compare against 127 followed by a subtraction of NOTHING. That reads as a
+no-op until you look at the carry: the compare sets it at 127, so the subtraction takes nothing off
+and a ship at full roll holds it; below 127 the carry is clear and the subtraction takes one off
+every iteration, so any other roll decays to zero. Two instructions, no branch, and the behaviour is
+entirely in a flag.
+
+Two more of the same shape:
+
+- **The sign test before the y coordinate's add is the opposite way round from every other one in
+  the file.** The branch fires on a CLEAR top bit and what it lands on is the SUBTRACTION, so signs
+  agreeing means subtract. The journal already records that reading it the natural way put the
+  ship's y one out on the first iteration; the comment now says which way it goes rather than
+  showing the fold and leaving the reader to work it out.
+- **Two additions here have no clear of the carry in front of them**, and one subtraction has no set,
+  because both run on what `MLTU2` left — nothing between them touches the flag. Stated as a claim
+  about the routine rather than as the three instructions that happen to be carry-blind.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, no marker lost (104 in this
+file, before and after). `opcode-transcriptions` 2,024 → 1,943.
 
 **2026-09-08 — M6-d-23: `ViewChange.cpp` to zero, and the stray byte that eats the next
 instruction.**
