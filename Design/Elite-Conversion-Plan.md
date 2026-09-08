@@ -117,7 +117,7 @@ is preserved in the history and was true then.
 - `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
 - `NeuronCore/` — the foundation static library: the shared precompiled-header content and
   `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
-- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->75 translation units and <!--count:gamelogic-headers-->69 headers,
+- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->73 translation units and <!--count:gamelogic-headers-->68 headers,
   deterministic and platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3
   name is here — the arithmetic kernel, the text system, the universe, every docked screen, the
   ship slots and motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of
@@ -129,13 +129,13 @@ is preserved in the history and was true then.
   briefings, and the Trumbles that wander the dashboard.
 - `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
   canvas, the SID synthesiser and its XAudio2 output, the key map, the commander store, and a
-  composition root in `Main.cpp` of <!--count:main-lines-->250 lines that builds `Elite::Game`
+  composition root in `Main.cpp` of <!--count:main-lines-->238 lines that builds `Elite::Game`
   over three ports and paces it. Both outer loops, the dispatch and every game byte are the
   library's since Modernize.md M3 (ADR-007); `FlightSession` and `Shell` are what remains of the
-  two worlds' plumbing, and reach <!--count:outpost-elite-names-->62 `Elite::` names between them.
+  two worlds' plumbing, and reach <!--count:outpost-elite-names-->63 `Elite::` names between them.
   It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
   owner ruling). It launches, flies, fights, docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->454 tests in <!--count:test-files-->62 files: the 6502 interpreter with its cycle counter,
+- `Tests/GameLogicTests/` — <!--count:tests-->460 tests in <!--count:test-files-->61 files: the 6502 interpreter with its cycle counter,
   its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
   and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
@@ -179,8 +179,8 @@ to head this list is gone, and so is the item below it:
    to compare against.
 3. ~~**Two live mutation survivors.**~~ **Closed 2026-09-06** (§6.156). Every unit is at zero
    and the not-caught entries left in `tools/mutants.json` are recorded EQUIVALENTS with the
-   proof on them, which is a measurement and not debt — <!--count:mutants-->95 mutants in
-   <!--count:mutant-files-->sixteen files since Modernize.md M6-0-g (2026-09-07), which also put
+   proof on them, which is a measurement and not debt — <!--count:mutants-->97 mutants in
+   <!--count:mutant-files-->seventeen files since Modernize.md M6-0-g (2026-09-07), which also put
    a floor under the corpus: fourteen files that must each carry a caught mutant, enforced by
    `mutate.py --check`. **R13 does not close on it**: every tally
    published before `mutate.py` existed is still an assertion nobody can re-run, and that half of
@@ -367,6 +367,12 @@ from that measurement** (expected 10–20 Hz), presenting every step, with vsync
 rate like the original" mode is a modernisation option. This is the one place where fidelity
 cannot be defined by the oracle, and it is called out as Risk R3.
 
+**Measured to the crowded end, 2026-09-08 (Design/InputTimer.md T-0).** `Outpost::FLIGHT_FRAME_COSTS` is
+four rows keyed by occupied slots, linear between them, down to three and a half frames a second in a
+fight of eight; the docked pass is two vertical syncs around four thousand cycles and is paced by the
+syncs `Game::StepDocked` asks for. ADR-005 §3 carries the numbers. What is still unbuilt is the simulated
+vertical blank (T-1): every `DELAY` still counts the player's monitor.
+
 ### 5.4 Input
 
 `Window` (from Frontier) produces a key-state table; `KeyMap` in the executable turns virtual
@@ -382,6 +388,15 @@ and the flight keys in `KYTB`)", and **the last five words could never have been
 does not use it. The C64's flight keys are the `KY1`–`KY7` and `KY12`–`KY20` positions inside
 `KEYLOOK`, and none of the sixteen was bound until this change — a gap slice 2e's own tests could
 not see, because they asserted only that what WAS bound translated correctly.
+
+**The blocking read is the original's, 2026-09-08 (Design/InputTimer.md I-1), and the pause screen is
+gone (I-0, owner ruling).** `TT217` is `Elite::ReadKey` — two frames of debounce, wait for no key, wait
+for a key, translate — compared against the original with the matrix changing under it; the executable's
+queue of key-down messages, auto-repeats included, is gone, and the dispatch takes one genuine press a
+step. `DK4`'s pause screen, which was the only settings interface and which the port could enter on
+Backspace and never leave, is removed; its thirteen bytes are `Settings.txt` beside the commanders (S-1).
+The fire key on the title screen no longer selects a joystick the port cannot read (I-3). `InputFrame`
+itself is still I-2's.
 
 ---
 
@@ -508,6 +523,38 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.161 Input and time: six slices in a day, and what reading the source found
+
+[InputTimer.md](InputTimer.md) opened 2026-09-08 as an analysis of the keyboard and the clock, and
+six of its slices were built the same day by owner ruling; its §9 is the journal and this entry is
+the pointer. Four findings belong in this list because they are the kind §6.128 named -- a routine
+ported and reached by nothing, or a loop written from a description rather than a listing.
+
+**The blocking read had none of `TT217`'s three waits.** The original waits two frames, waits for no
+key, then waits for a key; the executable popped a queue that Windows filled on every auto-repeat, so
+a held RETURN answered the next prompt and a held digit typed itself twice. `Elite::ReadKey` is the
+routine, compared with the CIA matrix changing on every scan, which needed a probe on the interpreter
+because a matrix set once cannot reach the second wait.
+
+**The pause screen could be entered and not left.** Backspace is INST/DEL and froze the game; CLR/HOME
+was never bound. The owner ruled the screen out rather than its keys in; the thirteen toggles it
+carried, one of which gates the spawner, live in a settings file now.
+
+**The fire key selected a joystick.** `TITLE` leaves `JSTK` set when fire dismisses it, and `DOKEY`'s
+joystick branch was ported, so `A` on the title screen put the flight controls into a mode the
+platform had no stick for. `JSTK` is settled after each start sequence unless the platform says it
+has one.
+
+**The docked pass is its waits.** Measured for the first time: 4,472 cycles of work between two
+vertical syncs, so the docked half runs at just under half the sync rate, not at a flight floor;
+and the gate that lifts the wait -- `AND PATG / LSR A` -- tests bit 0 of the VIEW byte, which only
+the Data on System screen has set. The docked pass also ran two countdowns and nothing else of
+`MLOOP`'s part 5, so a Trumble bought at the station never bred in dock; it runs the part whole now.
+
+The crowded end of the flight cost model was measured too, on a station that returns once its block
+is sane -- `Seed`'s random one was why §6.114 could not -- and the number that matters is three and a
+half frames a second with eight fighters in the bubble.
 
 ### 6.160 The sights were switched on at the origin, because the loader's registers were never modelled
 
@@ -888,7 +935,7 @@ is a fourth assembly `tools/labels.py` does not build") — the reasoning is kep
 and the status is marked beside it. `GameLogic/Explosion.h` said the `VideoState` work "is not
 done". Risk R2 said thirteen masters where there are twelve, R5 described two write-only sprite
 seams that no longer exist, and R11's "~45 C++ homes" was a design-time estimate against
-<!--count:gamelogic-sources-->75 sources and <!--count:gamelogic-headers-->69 headers. The three
+<!--count:gamelogic-sources-->73 sources and <!--count:gamelogic-headers-->68 headers. The three
 counts now carry markers, which is the difference between correcting a number and stopping it
 rotting again.
 

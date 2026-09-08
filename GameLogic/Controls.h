@@ -26,13 +26,14 @@ namespace Elite
    */
 
   /*
-   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggles.
+   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggled.
    *
    * `DKS3` toggles a byte between 0 and &FF with `EOR #&FF`. On this build it walks the block as
    * `DAMP,Y` and compares the key against `TGINT,Y`, a table of key codes in block order -- the
    * `DAMP-&40,X` of the BBC, indexed straight from the key code, is what an earlier version of this
-   * comment described, and it is not here. The screen that does the walking is `DK4`, which `DOKEY`
-   * falls into every frame, and it is not ported yet (slice 4e, §6.120). TWO OF THE THREE READ
+   * comment described, and it is not here. The screen that did the walking was `DK4`, which `DOKEY`
+   * falls into every frame; it was ported as slice 4e and removed by owner ruling on 2026-09-08
+   * (InputTimer.md I-0), so the executable's settings file writes these now. TWO OF THE THREE READ
    * BACKWARDS: `DAMP` non-zero means damping is OFF and `DJD` non-zero means auto-recentre is OFF,
    * because the options are phrased as the thing being disabled. `JSTK` is the plain way round.
    *
@@ -236,11 +237,37 @@ namespace Elite
     /// 6502: the matrix walk's `LDA &DC01` for one row -- is key `_key` down right now?
     [[nodiscard]] virtual bool Held(std::size_t _key) = 0;
 
-    /// 6502: TT217 -- block until a key is pressed, and return its character.
+    /*
+     * 6502: TT217 -- block until a key is pressed, and return its character.
+     *
+     * The EXECUTABLE ANSWERS THIS WITH `Elite::ReadKey` (InputTimer.md I-1), which is the routine
+     * over `Held` and the presenter: two frames of debounce, wait for no key, wait for a key,
+     * translate. It is a method here so that a fixture can script the CHARACTERS a screen is fed,
+     * which is how the market, the line editor and the menus are compared against the original
+     * with `TT217` answered by hand on both sides. An implementation that queued presses -- which
+     * is what the executable had until I-1 -- is the defect that routine exists to remove.
+     */
     [[nodiscard]] virtual std::uint8_t NextKey() = 0;
 
-    /// 6502: FLKB -- empty the keyboard buffer, so a key pressed before a prompt is discarded.
+    /// 6502: FLKB -- on the C64 build `LDA #15 / TAX / RTS`, left over from the second processor's
+    /// OSBYTE call: it flushes nothing. Still a method, because the fixtures compare WHERE the game
+    /// reaches it; the executable answers it with nothing (InputTimer.md I-1).
     virtual void Flush() = 0;
+
+    /*
+     * Whether the platform has a joystick to read (Design/InputTimer.md §5.1, slice I-3).
+     *
+     * The original's `TITLE` ends with `JSTK` set when the fire key dismissed it, and `RDKEY` then reads CIA
+     * port A for the stick. The port reads no port A, so a game that believed it had a joystick
+     * ran `DOKEY`'s joystick branch over keys that were never going to arrive (InputTimer.md I-4).
+     * `Game` clears `JSTK` after the start sequence unless this answers true, and it answers false
+     * until the gamepad slice gives the platform something to read; then the original's rule
+     * returns unchanged. Not pure, because every implementer today gives the same answer.
+     */
+    [[nodiscard]] virtual bool HasJoystick() noexcept
+    {
+      return false;
+    }
   };
 
   /*
@@ -269,6 +296,35 @@ namespace Elite
    */
   [[nodiscard]] TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view,
                                       Keyboard& _keyboard) noexcept;
+
+  /// 6502: TT217's `LDY #2 / JSR DELAY` -- the two vertical syncs of debounce before each wait.
+  inline constexpr std::uint8_t TT217_DEBOUNCE_FRAMES = 2;
+
+  /*
+   * 6502: TT217 -- wait for a key press, and return its character (Design/InputTimer.md I-1).
+   *
+   * THE ROUTINE IS THREE WAITS AND A TABLE LOOK-UP, and the port had none of the waits. `.t` waits
+   * two vertical syncs, scans, and goes back to the top while ANY key is held; `.t2` scans until a
+   * key is held; then `LDA TRANTABLE,X` turns `thiskey` into the character every docked screen
+   * compares against. So a key that was down when the prompt appeared is discarded, a key held
+   * down produces ONE character however long it is held, and two presses need a release between
+   * them. The executable's `NextKey` was a queue Windows filled on every auto-repeat, which is how
+   * a held RETURN answered the next prompt too and a held digit typed itself twice (InputTimer.md
+   * I-1); this is the original's read over the port's one question, compared against `TT217` on
+   * the interpreter's CIA matrix with the keys changing under it as a hand's would.
+   *
+   * THE `.t2` LOOP PRESENTS. On the machine `RDKEY` reads the CIA directly and the VIC-II shows the
+   * screen regardless; here `Held` answers from a table the window's message pump fills, and the
+   * pump runs inside a present. One vertical sync a scan is the port's sampling rate, and it is
+   * the `Presenter` port that provides it, so the oracle fixture's null presenter costs nothing.
+   *
+   * `Keyboard::NextKey` STAYS ON THE PORT AS THE CHARACTER SOURCE THE FIXTURES SCRIPT -- the
+   * market, the line editor, the disk menu and the briefings are compared over scripted characters
+   * with `TT217` answered by hand on both machines -- and the executable answers it with this
+   * routine. The plan's shape, where the port is `Held` alone and the fixtures script frames, is
+   * I-2's, when `InputFrame` exists to script (InputTimer.md §5.2).
+   */
+  [[nodiscard]] std::uint8_t ReadKey(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * `ControlEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-3).

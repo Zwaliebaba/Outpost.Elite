@@ -34,14 +34,14 @@
       "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 250,
+      "ceiling": 238,
       "slack": 0,
-      "slice": "M6-0-h-3: FlightSession is no longer lent the ports"
+      "slice": "InputTimer.md I-1: the press queue goes and the dispatch takes one press a step"
     },
     "outpost-elite-names": {
-      "ceiling": 62,
+      "ceiling": 63,
       "slack": 0,
-      "slice": "Resolution.md RS-0: Elite::Picture is the surface the app presents, so the app names one more type"
+      "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "effects-seams": {
       "ceiling": 5,
@@ -59,14 +59,14 @@
       "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
     },
     "mutants": {
-      "ceiling": 95,
+      "ceiling": 97,
       "slack": 0,
-      "slice": "M6-0-g: six new units on the files that had none -- rng, arith, shipmove, planetdraw, spawn, flight -- twenty-three mutants"
+      "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
     },
     "mutant-files": {
-      "ceiling": 16,
+      "ceiling": 17,
       "slack": 0,
-      "slice": "M6-0-g: the floor is fourteen .cpp files, and Commander.h and Missions.h carry the other two"
+      "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
     },
     "inventory-stale-files": {
       "ceiling": 0,
@@ -74,14 +74,14 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4149,
+      "ceiling": 4103,
       "slack": 0,
-      "slice": "M6-a-1: SpawnOutcome and the TT100 fall-through carry the labels the branch they replace carried (rule 4)"
+      "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "oracle-test-files": {
-      "ceiling": 48,
+      "ceiling": 47,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
     },
     "origin-tools": {
       "ceiling": 7,
