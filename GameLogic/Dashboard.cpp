@@ -30,7 +30,7 @@ namespace Elite
       value = static_cast<std::uint8_t>(value >> 1);
     }
 
-    std::uint8_t q = value; // 6502: DIL -- STA Q, and Q is this routine's own (M2-c)
+    std::uint8_t pixelsLeft = value; // 6502: DIL -- STA Q, and Q is this routine's own (M2-c)
 
     // 6502: LDX #&FF / STX R -- a full block of pixels, which the partial block below shifts down.
     std::uint8_t bits = 0xFFu;
@@ -56,11 +56,11 @@ namespace Elite
     {
       std::uint8_t pattern = 0;
 
-      if (q >= 4u) // 6502: LDA Q / CMP #4 / BCC DL2
+      if (pixelsLeft >= 4u) // 6502: LDA Q / CMP #4 / BCC DL2
       {
         // 6502: SBC #4 / STA Q / LDA R -- a whole block lit, and the carry the CMP left makes the
         // subtraction exact.
-        q = static_cast<std::uint8_t>(q - 4u);
+        pixelsLeft = static_cast<std::uint8_t>(pixelsLeft - 4u);
         pattern = bits;
       }
       else
@@ -71,7 +71,7 @@ namespace Elite
          * `EOR #3` is `3 - Q` for a Q below four, and the loop shifts the full block left twice for
          * each step of it -- so a Q of three lights three pixels and a Q of zero lights none.
          */
-        std::uint8_t remaining = static_cast<std::uint8_t>(q ^ 3u);
+        std::uint8_t remaining = static_cast<std::uint8_t>(pixelsLeft ^ 3u);
         pattern = bits;
         do
         {
@@ -82,7 +82,7 @@ namespace Elite
         // 6502: LDA #0 / STA R / LDA #99 / STA Q -- everything past the partial block is empty, and
         // 99 is how the loop is told there is nothing left: it can never fall below four again.
         bits = 0;
-        q = 99u;
+        pixelsLeft = 99u;
       }
 
       // 6502: DL5 -- AND COL / STA (SC),Y three times over. It STORES rather than EORs, which is
@@ -125,17 +125,17 @@ namespace Elite
   void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, Picture* _picture, std::uint8_t _wideValue) noexcept
   {
     std::uint8_t row = 1u;   // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
-    std::uint8_t q = _value; // 6502: STA Q -- this routine's own (M2-c)
+    std::uint8_t pixelsLeft = _value; // 6502: STA Q -- this routine's own (M2-c)
 
     do
     {
       std::uint8_t byte = 0;
 
       // 6502: SEC / LDA Q / SBC #4 / BCS DLL11
-      const SubResult step = SubtractWithCarry(q, 4u, true);
+      const SubResult step = SubtractWithCarry(pixelsLeft, 4u, true);
       if (step.carry)
       {
-        q = step.value; // 6502: DLL11 -- STA Q / LDA #0, an empty block
+        pixelsLeft = step.value; // 6502: DLL11 -- STA Q / LDA #0, an empty block
       }
       else
       {
@@ -145,8 +145,8 @@ namespace Elite
          * The lit pixel, and then `Q` is set to 255 so that no later block can match -- a loop exit
          * written as data rather than as a branch.
          */
-        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[q & 3u] & PatternByte(DIAL_NORMAL));
-        q = 0xFFu;
+        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[pixelsLeft & 3u] & PatternByte(DIAL_NORMAL));
+        pixelsLeft = 0xFFu;
       }
 
       // 6502: DLL12 -- four stores down the character cell.
@@ -374,18 +374,18 @@ namespace Elite
        * full bank fills bar 3 first and the remainder lands in whichever bar the subtraction ran
        * out on.
        */
-      std::uint8_t q = static_cast<std::uint8_t>(_status.energy >> 2); // 6502: STA Q
+      std::uint8_t energyLeft = static_cast<std::uint8_t>(_status.energy >> 2); // 6502: STA Q
       int bar = 3;
       for (;;)
       {
-        const SubResult left = SubtractWithCarry(q, 16u, true);
+        const SubResult left = SubtractWithCarry(energyLeft, 16u, true);
         if (!left.carry)
         {
-          dotProducts[static_cast<std::size_t>(bar)] = q; // 6502: DLL26
+          dotProducts[static_cast<std::size_t>(bar)] = energyLeft; // 6502: DLL26
           break;
         }
 
-        q = left.value;
+        energyLeft = left.value;
         dotProducts[static_cast<std::size_t>(bar)] = 16u;
         --bar;
         if (bar < 0)
