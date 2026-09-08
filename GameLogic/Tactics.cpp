@@ -26,15 +26,15 @@ namespace Elite
      */
     void OffsetAxis(K3Block& _axes, std::uint8_t _nose, std::uint8_t _at) noexcept
     {
-      // 6502: ASL A / STA R -- the doubling, and the carry out is the vector's SIGN.
+      // 6502: the doubling, and the carry out of it is the vector's SIGN.
       const std::uint8_t doubled = static_cast<std::uint8_t>(_nose << 1u);
       const bool negative = (_nose & 0x80u) != 0u;
 
       /*
-       * 6502: LDA #0 / ROR A / EOR #%10000000 / EOR K3+2,X / BMI TS71.
+       * 6502: the carry rotated into an empty byte, flipped, and matched against the axis sign.
        *
-       * The `ROR` puts the carry into bit 7 of a zero, so this is the vector's sign on its own; the
-       * `EOR` flips it, because what is being added is the NEGATED vector. Comparing that against
+       * The rotate puts the carry into bit 7 of a zero, so this is the vector's sign on its own;
+       * flipping it is what makes the addition a SUBTRACTION of the vector. Comparing that against
        * `K3`'s sign says whether the magnitudes add or fight.
        */
       const std::uint8_t sign = static_cast<std::uint8_t>((negative ? 0x80u : 0x00u) ^ 0x80u);
@@ -43,22 +43,22 @@ namespace Elite
       if (!opposed)
       {
         /*
-         * 6502: LDA R / ADC K3,X / STA K3,X / BCC TS72 / INC K3+1,X.
+         * 6502: the doubled vector added into the axis, carrying up into the high byte.
          *
-         * The carry into the `ADC` is zero and no `CLC` says so: the `ROR A` four instructions up
-         * shifted bit 0 of a literal zero out into it. The sign byte is not touched on this path.
+         * The carry going in is clear and nothing says so explicitly: the rotate four instructions
+         * up shifted bit 0 of a literal zero out into it. The sign byte is untouched on this path.
          */
         const AddResult low = AddWithCarry(doubled, _axes[_at], false);
         _axes[_at] = low.value;
 
         if (low.carry)
         {
-          ++_axes[_at + 1u]; // 6502: INC K3+1,X -- an INC, so it cannot carry any further
+          ++_axes[_at + 1u]; // 6502: an increment, so it cannot carry any further
         }
         return;
       }
 
-      // 6502: .TS71 LDA K3,X / SEC / SBC R / STA K3,X / LDA K3+1,X / SBC #0 / STA K3+1,X.
+      // 6502: TS71 -- the doubled vector taken off the axis, borrowing into the high byte.
       SubResult low = SubtractWithCarry(_axes[_at], doubled, true);
       _axes[_at] = low.value;
 
@@ -67,15 +67,15 @@ namespace Elite
 
       if (high.carry)
       {
-        return; // 6502: BCS TS72 -- the magnitude was big enough, so the sign stands
+        return; // 6502: TS72 -- the magnitude was big enough, so the sign stands
       }
 
       /*
-       * 6502: EOR #%11111111 / ADC #1 twice, then EOR #%10000000 on the sign byte.
+       * 6502: both bytes complemented and one added, then the sign byte flipped.
        *
        * The subtraction went the wrong way round, so the answer is negated and the sign flipped --
-       * the same fix `MVT3` makes, and the `ADC #1` gets its clean carry from the borrow the `BCS`
-       * just tested.
+       * the same fix `MVT3` makes, and the add gets its clean carry from the borrow the branch
+       * above just tested.
        */
       AddResult negatedLow = AddWithCarry(static_cast<std::uint8_t>(_axes[_at] ^ 0xFFu), 1u, false);
       _axes[_at] = negatedLow.value;
@@ -106,7 +106,7 @@ namespace Elite
                                             static_cast<std::uint8_t>((_axes[4] >> 1u) | _axes[5]),
                                             static_cast<std::uint8_t>((_axes[7] >> 1u) | _axes[8])};
 
-      // 6502: and no RTS -- `TA2` falls into `NORM`, exactly as `TAS2` does above it.
+      // 6502: and no return -- `TA2` falls into `NORM`, exactly as `TAS2` does above it.
       const std::uint8_t length = Normalise(std::span<std::uint8_t, 3>(vector));
       return NormalisedVector{UnitVector{vector[0], vector[1], vector[2]}, length};
     }
@@ -124,29 +124,30 @@ namespace Elite
     {
       Ship& work = _universe.work;
 
-      // 6502: .TA15 LDY #16 / JSR TAS3 / TAX / EOR #%10000000 / AND #%10000000 / STA INWK+30.
+      // 6502: TA15 -- the roof dot product, whose flipped sign becomes the pitch counter.
       const AddSignedResult roof = DotProductWithShip(work, _towards, ORIENTATION_ROOF);
       work.pitchCounter = static_cast<std::uint8_t>((roof.high ^ 0x80u) & 0x80u);
 
       /*
-       * 6502: TXA / ASL A / CMP RAT2 / BCC TA11 / LDA RAT / ORA INWK+30 / STA INWK+30.
+       * 6502: the saved dot product doubled and compared against the tolerance, then the turn rate
+       * folded into the pitch counter.
        *
-       * `TXA` brings back the byte `TAX` saved four instructions ago -- the dot product's A, before
-       * the two masks flattened it to a sign. So the magnitude decides whether to pitch at all and
-       * the sign decides which way, out of one measurement read twice.
+       * The byte brought back is the dot product as it was four instructions earlier, BEFORE the
+       * two masks flattened it to a sign. So the magnitude decides whether to pitch at all and the
+       * sign decides which way, out of one measurement read twice.
        */
       if (static_cast<std::uint8_t>(roof.high << 1u) >= _universe.flight.signMask2)
       {
         work.pitchCounter = static_cast<std::uint8_t>(_universe.flight.signMask | work.pitchCounter);
       }
 
-      // 6502: .TA11 LDA INWK+29 / ASL A / CMP #32 / BCS TA6 -- a ship already rolling hard is left
-      // to finish the roll rather than given a new one.
+      // 6502: TA11 -- a ship already rolling hard is left to finish the roll rather than given a
+      // new one.
       if (static_cast<std::uint8_t>(work.rollCounter << 1u) < 32u)
       {
-        // 6502: LDY #22 / JSR TAS3 / TAX / EOR INWK+30 / AND #%10000000 / EOR #%10000000 --
-        // the roll's direction is the side dot product XORed with the PITCH just chosen, which is
-        // what makes a ship bank into its turn rather than roll and pitch independently.
+        // 6502: the roll's direction is the side dot product exclusive-ored with the PITCH just
+        // chosen, which is what makes a ship bank into its turn rather than roll and pitch
+        // independently.
         const AddSignedResult side = DotProductWithShip(work, _towards, ORIENTATION_SIDE);
         work.rollCounter = static_cast<std::uint8_t>((((side.high ^ work.pitchCounter) & 0x80u) ^ 0x80u));
 
@@ -157,13 +158,13 @@ namespace Elite
       }
 
       /*
-       * 6502: .TA6 LDA CNT / BMI TA9 / CMP CNT2 / BCC TA9 / .PH10E LDA #3 / STA INWK+28 / RTS.
+       * 6502: TA6 and PH10E -- behind or inside the cone, and the ship throttles back to three.
        *
        * `CNT` is the NOSE dot product, so bit 7 means the target is behind. Behind, or inside the
-       * cone `CNT2` names, and the ship throttles back to 3 and stops here.
+       * cone `CNT2` names, and the ship stops here.
        */
-      // 6502: .TA152 STA CNT / ... / .TA6 LDA CNT -- `TA152`'s only job is to park the byte its
-      // caller measured, so it is this routine's parameter since M2-c-3.
+      // 6502: TA152's only job is to park the byte its caller measured, so it is this routine's
+      // parameter since M2-c-3.
       const std::uint8_t offNose = _offNose;
       if ((offNose & 0x80u) == 0u && offNose >= _universe.flight.steerCone)
       {
@@ -171,20 +172,20 @@ namespace Elite
         return;
       }
 
-      // 6502: .TA9 AND #%01111111 / CMP #18 / BCC TA10 -- and `TA10` is a bare `RTS`.
+      // 6502: TA9 -- the magnitude against eighteen, and `TA10` is a bare return.
       if (static_cast<std::uint8_t>(offNose & 0x7Fu) < 18u)
       {
         return;
       }
 
       /*
-       * 6502: LDA #&FF / LDX TYPE / CPX #MSL / BNE P%+3 / ASL A / STA INWK+28.
+       * 6502: minus one into the acceleration, doubled first if this is a missile.
        *
-       * THIS IS A DECELERATION and the byte is signed: `MVEIT` adds `INWK+28` to the speed and
-       * clamps, so &FF is minus one and &FE is minus two. `ASL A` on &FF gives &FE rather than
+       * THIS IS A DECELERATION and the byte is signed: `MVEIT` adds the acceleration to the speed
+       * and clamps, so &FF is minus one and &FE is minus two. Doubling &FF gives &FE rather than
        * doubling anything, so a missile sheds speed twice as fast as a ship -- which is how it
-       * turns tightly enough to come back round. The branch skips a ONE-byte instruction, which is
-       * what `P%+3` means after a two-byte `BNE`.
+       * turns tightly enough to come back round. The branch that skips the doubling steps over a
+       * single byte.
        *
        * And reaching here at all means the target is behind or wide (`TA6`'s two branches), so the
        * ship that is pointing AT you is the one that speeds up, three lines above.
@@ -192,27 +193,27 @@ namespace Elite
       work.acceleration = (_universe.flight.type == ShipType::Missile) ? static_cast<std::uint8_t>(0xFFu << 1u) : std::uint8_t{0xFFu};
     }
 
-    /// 6502: .TA151 -- one nose dot product, which can throw the turn rate away, then `TA152`.
+    /// 6502: TA151 -- one nose dot product, which can throw the turn rate away, then `TA152`.
     void AimAlongNose(Universe& _universe, Ports& _ports, UnitVector _towards) noexcept
     {
-      // 6502: LDY #10 / JSR TAS3 / CMP #&98 / BCC ttt / LDX #0 / STX RAT2.
+      // 6502: the nose dot product, and past &98 the tolerance is cleared entirely.
       const AddSignedResult nose = DotProductWithShip(_universe.work, _towards, ORIENTATION_NOSE);
       if (nose.high >= 0x98u)
       {
         _universe.flight.signMask2 = 0u;
       }
 
-      SteerTowards(_universe, _ports, _towards, nose.high); // 6502: .ttt JMP TA152
+      SteerTowards(_universe, _ports, _towards, nose.high); // 6502: ttt, into TA152
     }
 
     /*
-     * 6502: .TN4 / .TA19 as PART 1 reaches them -- and part 1 is only ever a missile.
+     * 6502: TN4 and TA19 as PART 1 reaches them -- and part 1 is only ever a missile.
      *
      * `TN4` copies the ship's own position into `K3`, `TA19` normalises it and takes the nose dot
-     * product, and then the code FALLS INTO PART 4, whose first act is `LDA TYPE / CMP #MSL /
-     * BNE P%+5 / JMP TA20`. So a missile does not steer along that vector: `TA20` turns it round
-     * with `TAS6` and flips the sign of `CNT` first, because a missile closes on its target rather
-     * than facing it.
+     * product, and then the code FALLS INTO PART 4, whose first act is a missile test that jumps
+     * to `TA20`. So a missile does not steer along that vector: `TA20` turns it round with `TAS6`
+     * and flips the sign of `CNT` first, because a missile closes on its target rather than facing
+     * it.
      *
      * The port jumped from `TA19` straight to the steering at both of part 1's rejoins, which is
      * two instructions of part 4 skipped, and it only became visible once the test fixture stopped
@@ -220,35 +221,35 @@ namespace Elite
      */
     void SteerMissileTowardsTarget(Universe& _universe, Ports& _ports) noexcept
     {
-      const UnitVector towards = NormaliseAxes(_universe.axes).vector; // 6502: .TA19 JSR TAS2
+      const UnitVector towards = NormaliseAxes(_universe.axes).vector; // 6502: TA19, into TAS2
       const AddSignedResult nose = DotProductWithShip(_universe.work, towards, ORIENTATION_NOSE);
 
-      // 6502: .TA20 JSR TAS6, reached through part 4's `CMP #MSL`
+      // 6502: TA20 and TAS6, reached through part 4's missile test
       SteerTowards(_universe, _ports, NegateVector(towards), static_cast<std::uint8_t>(nose.high ^ 0x80u));
     }
 
-    /// 6502: .GOPL -- give up on the station and steer at the PLANET instead.
+    /// 6502: GOPL -- give up on the station and steer at the PLANET instead.
     void AimAtPlanet(Universe& _universe, Ports& _ports) noexcept
     {
-      // 6502: JSR SPS1 / JMP TA151 -- `SPS1` is the compass's own "where is the planet", and it
-      // leaves the unit vector in `XX15` exactly where the steering wants it.
+      // 6502: `SPS1` is the compass's own "where is the planet", and it leaves the unit vector in
+      // `XX15` exactly where the steering wants it.
       AimAlongNose(_universe, _ports, LoadPlanetAxes(_universe.bubble, _universe.axes));
     }
 
-    /// 6502: .PH22 -- stop dead and turn on the spot, which is what an autopilot does when it is
+    /// 6502: PH22 -- stop dead and turn on the spot, which is what an autopilot does when it is
     /// pointing the wrong way.
     void HaltAndTurn(Ship& _work) noexcept
     {
-      _work.acceleration = 0u; // 6502: LDX #0 / STX INWK+28
-      _work.speed = 1u;        // 6502: INX / STX INWK+27
+      _work.acceleration = 0u; // 6502: no acceleration
+      _work.speed = 1u;        // 6502: and the slowest speed there is
     }
 
     /*
-     * 6502: .TA873 -- ASL INWK+31 / SEC / ROR INWK+31.
+     * 6502: TA873 -- a shift up, then a shift back down through a set carry.
      *
-     * THE TWO SHIFTS CANCEL. `ASL` moves every bit up and drops bit 7; `SEC / ROR` moves every bit
-     * back down and puts a one into bit 7. What comes out is the byte it went in as, with bit 7
-     * set -- an `ORA #128` written in three instructions, which is how a 6502 sets the top bit of a
+     * THE TWO SHIFTS CANCEL. The first moves every bit up and drops bit 7; the second moves every
+     * bit back down and puts a one into bit 7. What comes out is the byte it went in as, with bit 7
+     * set -- a bitwise OR written in three instructions, which is how a 6502 sets the top bit of a
      * memory location without loading it into the accumulator.
      *
      * The port had it as a shift AND a set, which is a different answer for every byte with
@@ -266,16 +267,16 @@ namespace Elite
 
   bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, std::uint8_t _at) noexcept
   {
-    // 6502: LDA (V),Y / EOR #%10000000 / STA K+3 -- the other object's sign, negated.
+    // 6502: the other object's sign, negated.
     const SignMag24& axis = _other.PositionAt(_at);
     KBlock difference;
     difference.top = static_cast<std::uint8_t>(axis.sgn ^ 0x80u);
 
-    // 6502: DEY / LDA (V),Y / STA K+2 / DEY / LDA (V),Y / STA K+1.
+    // 6502: and its two magnitude bytes below that.
     difference.high = axis.hi;
     difference.mid = axis.lo;
 
-    // 6502: STY U / LDX U / JSR MVT3 -- K = K + INWK+X, so K is now this ship minus the other.
+    // 6502: MVT3 adds this ship's coordinate, so K is now this ship minus the other.
     const KBlockSum sum = AddShipCoordinateToK(_work, difference, _at);
 
     // 6502: STA K3+2,X, and the A it stores is the sign byte `MVT3` left in the register.
