@@ -54,37 +54,37 @@ namespace Elite
 
   ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept
   {
-    const KBlock k = DivideByShipZ(_ship, _math, _numerator);
+    const KBlock quotient = DivideByShipZ(_ship, _math, _numerator);
 
     // The top two bytes of the quotient, sign removed. Anything at all up there is already past
     // 65,536 and there is nothing to say about where it would be on a 256-pixel view.
-    const std::uint8_t top = static_cast<std::uint8_t>((k.top & 0x7Fu) | k.high);
+    const std::uint8_t top = static_cast<std::uint8_t>((quotient.top & 0x7Fu) | quotient.high);
     if (top != 0u)
     {
       // 6502: PL21 -- SEC and return. X is not touched on this path.
-      return ScreenOffset{k.low, 0, top, true};
+      return ScreenOffset{quotient.low, 0, top, true};
     }
 
-    const std::uint8_t high = k.mid;
+    const std::uint8_t high = quotient.mid;
     if (high >= 4u)
     {
       // 6502: the CPX that overflows at 1024, returning through PL6's RTS with the carry the
       // comparison set. A is still the zero the test above left, which is why `SHPPT` -- which
       // reads A and not the carry -- can miss this and does.
-      return ScreenOffset{k.low, high, 0, true};
+      return ScreenOffset{quotient.low, high, 0, true};
     }
 
-    if ((k.top & 0x80u) == 0u)
+    if ((quotient.top & 0x80u) == 0u)
     {
       // Positive, and the carry is already clear: the comparison above did not set it.
-      return ScreenOffset{k.low, high, 0, false};
+      return ScreenOffset{quotient.low, high, 0, false};
     }
 
     // 6502: the two's complement negation. `ADC #1` runs with the carry the CPX left CLEAR, so it
     // adds exactly one -- the one place in this file where the incoming carry is not part of the
     // sum, and the only one where reading it as `+ 1 + C` would still be right. The original writes
     // the negated low byte back into `K`; nothing reads it there, and it is the returned value.
-    const AddResult low = AddWithCarry(static_cast<std::uint8_t>(k.low ^ 0xFFu), 1, false);
+    const AddResult low = AddWithCarry(static_cast<std::uint8_t>(quotient.low ^ 0xFFu), 1, false);
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(high ^ 0xFFu), 0, low.carry);
 
     // 6502: PL44 -- CLC, then PL6's RTS.

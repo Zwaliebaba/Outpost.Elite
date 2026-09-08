@@ -77,53 +77,53 @@ namespace Elite
     axis.sgn = static_cast<std::uint8_t>((high.value & 0x7Fu) | sign);
   }
 
-  KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _k, std::uint8_t _axis) noexcept
+  KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _total, std::uint8_t _axis) noexcept
   {
     // 6502: LDA K+3 / STA S / AND #128 / STA T / EOR INWK+2,X / BMI MV13.
-    std::uint8_t topByte = _k.top;
-    const std::uint8_t sign = static_cast<std::uint8_t>(_k.top & 0x80u);
+    std::uint8_t topByte = _total.top;
+    const std::uint8_t sign = static_cast<std::uint8_t>(_total.top & 0x80u);
     const auto& axis = _work.PositionAt(_axis); // 6502: INWK,X
 
     if (((sign ^ axis.sgn) & 0x80u) == 0u)
     {
       // 6502: LDA K+1 / CLC / ADC INWK,X ... -- an explicit CLC here, unlike MVT1's LSR.
-      const AddResult low = AddWithCarry(_k.mid, axis.lo, false);
-      _k.mid = low.value;
+      const AddResult low = AddWithCarry(_total.mid, axis.lo, false);
+      _total.mid = low.value;
 
-      const AddResult middle = AddWithCarry(_k.high, axis.hi, low.carry);
-      _k.high = middle.value;
+      const AddResult middle = AddWithCarry(_total.high, axis.hi, low.carry);
+      _total.high = middle.value;
 
-      const AddResult high = AddWithCarry(_k.top, axis.sgn, middle.carry);
-      _k.top = static_cast<std::uint8_t>((high.value & 0x7Fu) | sign);
-      return KBlockSum{_k, high.carry}; // 6502: the `ADC`'s, which `AND` and `ORA` leave alone
+      const AddResult high = AddWithCarry(_total.top, axis.sgn, middle.carry);
+      _total.top = static_cast<std::uint8_t>((high.value & 0x7Fu) | sign);
+      return KBlockSum{_total, high.carry}; // 6502: the `ADC`'s, which `AND` and `ORA` leave alone
     }
 
     // 6502: MV13 -- LDA S / AND #127 / STA S, then subtract the other way round.
     topByte = static_cast<std::uint8_t>(topByte & 0x7Fu);
 
-    SubResult low = SubtractWithCarry(axis.lo, _k.mid, true);
-    _k.mid = low.value;
+    SubResult low = SubtractWithCarry(axis.lo, _total.mid, true);
+    _total.mid = low.value;
 
-    SubResult middle = SubtractWithCarry(axis.hi, _k.high, low.carry);
-    _k.high = middle.value;
+    SubResult middle = SubtractWithCarry(axis.hi, _total.high, low.carry);
+    _total.high = middle.value;
 
     SubResult high = SubtractWithCarry(static_cast<std::uint8_t>(axis.sgn & 0x7Fu), topByte, middle.carry);
-    _k.top = static_cast<std::uint8_t>((high.value | 0x80u) ^ sign);
+    _total.top = static_cast<std::uint8_t>((high.value | 0x80u) ^ sign);
 
     if (high.carry)
     {
-      return KBlockSum{_k, true}; // 6502: BCS MV14 -- taken means the carry is set by definition
+      return KBlockSum{_total, true}; // 6502: BCS MV14 -- taken means the carry is set by definition
     }
 
-    low = SubtractWithCarry(1, _k.mid, false);
-    _k.mid = low.value;
+    low = SubtractWithCarry(1, _total.mid, false);
+    _total.mid = low.value;
 
-    middle = SubtractWithCarry(0, _k.high, low.carry);
-    _k.high = middle.value;
+    middle = SubtractWithCarry(0, _total.high, low.carry);
+    _total.high = middle.value;
 
-    high = SubtractWithCarry(0, _k.top, middle.carry);
-    _k.top = static_cast<std::uint8_t>((high.value & 0x7Fu) | sign);
-    return KBlockSum{_k, high.carry};
+    high = SubtractWithCarry(0, _total.top, middle.carry);
+    _total.top = static_cast<std::uint8_t>((high.value & 0x7Fu) | sign);
+    return KBlockSum{_total, high.carry};
   }
 
   SignMag24 AddShipCoordinateToP(const Ship& _work, SignMag24 _value, std::uint8_t _axis) noexcept

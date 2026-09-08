@@ -137,38 +137,38 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       for (const std::uint8_t axis : AXES)
       {
-        for (const std::uint8_t k1 : EDGES)
+        for (const std::uint8_t totalMid : EDGES)
         {
-          for (const std::uint8_t k2 : EDGES)
+          for (const std::uint8_t totalHigh : EDGES)
           {
-            for (const std::uint8_t k3 : EDGES)
+            for (const std::uint8_t totalTop : EDGES)
             {
               for (const std::uint8_t low : EDGES)
               {
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Ship work;
 
-                const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x3Cu), k3};
+                const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x3Cu), totalTop};
                 for (int byte = 0; byte < 3; ++byte)
                 {
                   cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
                   PokeShip(work, axis + byte, bytes[byte]);
                 }
-                const std::uint8_t k[4] = {0, k1, k2, k3};
+                const std::uint8_t block[4] = {0, totalMid, totalHigh, totalTop};
                 for (int byte = 0; byte < 4; ++byte)
                 {
-                  cpu.memory[static_cast<std::uint16_t>(kk + byte)] = k[byte];
+                  cpu.memory[static_cast<std::uint16_t>(kk + byte)] = block[byte];
                 }
 
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt3);
                 Assert::IsTrue(run.completed, L"MVT3 returned");
 
-                const Elite::KBlockSum sum = Elite::AddShipCoordinateToK(work, Elite::KBlock{0, k1, k2, k3}, axis);
+                const Elite::KBlockSum sum = Elite::AddShipCoordinateToK(work, Elite::KBlock{0, totalMid, totalHigh, totalTop}, axis);
                 const bool carry = sum.carry;
                 const std::uint8_t ours[4] = {sum.value.low, sum.value.mid, sum.value.high, sum.value.top};
 
-                const std::wstring where = Widen("MVT3(K=" + std::to_string(k1) + "/" + std::to_string(k2) + "/" + std::to_string(k3) +
+                const std::wstring where = Widen("MVT3(K=" + std::to_string(totalMid) + "/" + std::to_string(totalHigh) + "/" + std::to_string(totalTop) +
                                                  ", x=" + std::to_string(axis) + ")");
                 for (int byte = 0; byte < 4; ++byte)
                 {

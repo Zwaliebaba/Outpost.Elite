@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->176 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->104 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-14: the `K` blocks, across the four files that share one.**
+
+72 sites, and this slice follows a VALUE rather than a file. `K`, `K2` and `K3` are the original's
+wide accumulators, and the port's chain passes one of them through `MVT3` — `AddShipCoordinateToK`
+in `ShipMove.cpp`, whose `_k` is the running `_total` — from callers in three other files. Each
+caller's copy gets the name its own routine gives it: `DoubleAndAddCoordinate`'s is a `total` too,
+but `SubtractShipAxis`'s is a `difference`, because the comment two lines above it already says
+"K is now this ship minus the other" and nothing else in the function says it. `DivideToScreenOffset`
+holds the divide's `quotient`, which is what the comment under the declaration has always called it.
+
+`DOEXP`'s `K3` is the awkward one: four bytes of a vertex's screen position, and `vertex` — the
+obvious name — is already the heap index that fills them. It is a `point`.
+
+The two sweeps that poke a `K` block name their operands after the block's fields, so `MVT3`'s three
+swept bytes are `totalMid`, `totalHigh` and `totalTop` and the array poked into the oracle's zero
+page is the `block`; `MULT3`'s answer is a `result` like every other `KBlock` a routine returns.
+
+`KBlock` itself STAYS. It is a type the port declares, not a label it inherited: M6-c is about
+identifiers that name a 6502 location, and a struct with `low`, `mid`, `high` and `top` names a
+shape. Whether the type keeps the letter is M6-d's question, not this slice's.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 176 → 104.
 
 **2026-09-08 — M6-c-13: the arithmetic sweeps take the port's own parameter names.**
 
