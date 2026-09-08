@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->253 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->211 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,45 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-51: the commander and its file to zero, and three citations that were wrong in
+ways only the original could show.**
+
+42 sites over four files -- `Commander.cpp`, `Commander.h`, `SaveGame.h` and `DockedKeys.cpp`.
+Sixty-first to sixty-fourth at zero.
+
+**Three of the listings this slice removed were WRONG, and all three were in `Commander.cpp`.** The
+CHECK transcription read `ADC NA%+6,X / EOR NA%+7,X` where the original reads `NA%+7` and `NA%+8`,
+and the sentence under it said "NA%+7 is the block's first byte" when the block starts at NA%+8 --
+which `SaveGame.cpp` had said correctly for two phases. The copy loop in `DFAULT` was cited as
+`STA YSAV2,X`; it stores to `NAME-1,X`, and `YSAV2` is a scratch byte belonging to the character
+printer with no connection to the commander at all. And one sentence changed convention mid-breath:
+"read the block's first seventy-four bytes only, so byte seventy-four cannot change what they
+returned" counts bytes in its first half and indexes them in its second, so as written it
+contradicts itself; the byte it means is the seventy-fifth.
+
+In all three the CODE was right. The listing was decoration, nothing read it, and nothing could
+therefore catch it. That is the strongest form of the R20 argument and it is worth stating plainly:
+**after M6-f deletes `Upstream/`, a wrong listing is not merely useless but unfalsifiable** -- it
+reads as authority and there is nothing left to check it against. A reason can be argued with from
+the port alone; a transcription cannot.
+
+**A third instance of the flag set at a distance** (M6-d-50 found the first two). `SVE`'s option 4
+reports "new commander" with the carry, and nothing in `SVE` writes that flag: the jump to `DFAULT`
+is a tail call, and DFAULT's last act is the comparison against the third checksum, which on the
+agreeing path leaves the carry set. The flag that decides whether `TT102` restarts the game or
+returns to the docking bay is a side effect of a checksum test in another routine. Named here, not
+re-derived: the family is real and this is its extreme.
+
+The data-byte idiom appears at BOTH ENDS for the first time. `INSP`'s three view keys enter one
+chain of three loads at three different points, each skipping the loads below it through an
+`EQUB &2C`, and the port documents that in `DockedKeys.cpp` as well as at the `LOOK1` end -- because
+in the port they are two functions and a reader arriving at either needs the reason. Same instance,
+counted once, written twice.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (11, 86, 24 and 11). `opcode-transcriptions` 253 → 211.
+
 
 **2026-09-08 — M6-d-50: four more to zero, and the carry is set by a side effect where the `SEC` is
 commented out.**
