@@ -49,7 +49,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
-| **M6** | **Detach — DONE 2026-09-08 except M6-g. The M6-0 gate closed 2026-09-07; M6-a built the recorder; M6-b was then CANCELLED by owner ruling and the oracle deleted instead (§8).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then -- by the ruling of 2026-09-08 -- the 337 comparisons against the original and the interpreter that answered them are DELETED rather than recorded; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
+| **M6** | **Detach — DONE 2026-09-08, all rows. The M6-0 gate closed 2026-09-07; M6-a built the recorder; M6-b was then CANCELLED by owner ruling and the oracle deleted instead (§8).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then -- by the ruling of 2026-09-08 -- the 337 comparisons against the original and the interpreter that answered them are DELETED rather than recorded; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | **Met.** A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1): a fresh clone needs a C++20 compiler and nothing else. What it cost is [ADR-009](ADR/ADR-009-detachment.md) §4, and the one row left open in the phase is the mutation corpus. |
 
 Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
 it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
@@ -1668,7 +1668,7 @@ were safe after M6-f, and none of them waited.
 | **M6-d Comments** — **DONE**, 58 slices | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. §1 R-i split the scope on 2026-09-08 and is now discharged: the tagged-quotation half went unused and was deleted (M6-d-59). | `opcode-transcriptions` at **zero**, met — 997 → 0 across 116 files, with no exemption left in the counter; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** — **DONE**, 4 slices | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone (15 checks, from 19); `origin-markers` at **zero**, met — 4,103 → 0 in `GameLogic/` and 97 → 0 in `Outpost/`. The residue R-b may still want is 2,702 citations of original NAMES in prose, measured in §8 and left for the owner. | 1 |
 | **M6-f The tree** ✅ **built 2026-09-08 (§8)** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `labels.py`, `c64_source.py`, `extract_tables.py`, `golden_diff.py`, `Design/Reference/`, the master-count markers and `.gitignore`'s upstream rules removed; the `origin-tools` counter retired with the folders it counted; ADR-001 §5 and Risk R1 restated. `Cpu6502` and `OracleImage` went a slice earlier, at M6-b-7. | **Met.** A fresh clone builds and runs the whole suite with a compiler and nothing else: no submodule, no assembler, no assembled game. `origin-tools` is not "at zero" but GONE, which is the stronger answer and the same one M6-b-7 gave `oracle-test-files`. | 1 |
-| **M6-g ADR-009** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran, and two documents cannot share a number. | Accepted. | 1 |
+| **M6-g ADR-009** ✅ **written 2026-09-08 (§8)** | [ADR-009](ADR/ADR-009-detachment.md), the detachment as built: what pins behaviour now (seven instruments, named one at a time), what a recorded digest is and what changing one means, the two alternatives and why each was not taken, and -- at length, because a record of only what remains would be worse than none -- exactly what was given up. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran. | **Accepted.** ADR-003 §1, §2 and §4 are superseded in part and say so; §3 is untouched and is now the centre of the method. | 1 |
 
 **Total: roughly 90 sittings**, which is the same order as the port itself took (plan §7), and the
 plan expects the estimate to be wrong in the same direction the port's was: the dense units
@@ -1717,6 +1717,38 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-08 — M6-g: ADR-009, and M6 closes.**
+
+[ADR-009](ADR/ADR-009-detachment.md), written from what was built rather than from what was
+planned, because the two differ at the largest possible scale: the plan said M6-b would record a
+fixture and the owner ruled that it would not.
+
+**THE ADR SPENDS MORE WORDS ON WHAT WAS LOST THAN ON WHAT REMAINS, and that is the point of it.**
+A document that recorded only the seven surviving instruments would read as though the method had
+improved. It has not: 337 comparisons against the machine that defines the answer are gone and
+cannot be re-run anywhere without re-obtaining the original; Risk R19 is realised in a stronger
+form than its own wording, because no fixture was recorded at all; and the mutation corpus M6-0-g
+built for exactly this moment lost most of its subjects. §4 says all of that in the ADR's own
+voice, with the numbers.
+
+**What it can claim, and it is not nothing.** Not one line of `GameLogic/` was touched by any slice
+of M6-b or M6-f, and the three replay records are the same numbers they were before the deletion,
+to the bit. That is the evidence the game is the game it was, and after the deletion it is the only
+evidence there is -- which is why M5-e-3 putting a library-native digest beside the label one, a
+month early, turns out to be the most valuable thing in the phase.
+
+The alternative the owner rejected is written down with the measurement behind it, and so is one
+that was never put to them: freezing each test's expectation as a literal, which is cheaper than a
+fixture and remains available if the coverage loss proves unacceptable. It would need its own
+ruling, because an expectation taken from the port's own answers is a weaker claim than one taken
+from the original's, and the ADR says so rather than leaving a reader to work it out.
+
+ADR-003 is superseded in part rather than replaced: §1, §2 and §4 describe machinery that no longer
+exists and are kept as the record of how the port was got right; §3 is untouched. **M6 is done
+except for the mutation corpus**, which M6-b-5 measured, this slice records, and nobody has yet
+decided about.
+
 
 **2026-09-08 — M6-f: `Upstream/` and `MasterFile/` leave the tree.**
 
