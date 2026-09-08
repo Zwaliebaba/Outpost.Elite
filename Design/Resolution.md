@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->452 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->454 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -540,6 +540,39 @@ is that function and `TextState` is untouched. What the stored cursor was really
 re-wrapping, where the wide column stops being a function of the faithful one; that slice can store
 what it needs when it needs it, and until then there is nothing to keep in step.
 
+**CORRECTED at RS-5-0: an anchor is a RECTANGLE, and the table above's cell-to-cell version cannot
+work.** `Map` is a pure function of the faithful cell — that is what the paragraph above settled —
+so nothing remembers that the E of "EQUIPMENT:" was moved by the time the Q is printed. A cell-to-cell
+table would have to name all ten cells of that heading, and the equipment list's eleven rows of up
+to twenty-four characters would be some two hundred and fifty entries kept in step by hand. An
+`Anchor` is therefore a rectangle of faithful cells relocated to a wide origin, with a row stride of
+its own, and the status screen's whole re-flow is ONE of them:
+
+```cpp
+struct Anchor
+{
+  std::uint8_t firstColumn, lastColumn; // the faithful cells it covers, inclusive
+  std::uint8_t firstRow, lastRow;
+  std::uint8_t wideColumn, wideRow;     // where its top-left cell goes instead
+  std::uint8_t rowStride;               // and how the block's own rows are spread once there
+};
+```
+
+**And a table anchored INTO the centred layout cannot be written at all**, which the collision sweep
+found the first time it was run: a 40-column screen placed at column 20 already covers columns 20 to
+59, so every anchor target inside the wide grid is a cell the offsets already reach. A re-flowed
+screen moves its offsets as well as its blocks. `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOne
+WideCell` sweeps the whole 40×25 grid of every layout in the tree and is Risk R24's tripwire.
+
+**OPEN, and it gates the first sub-slice: `QQ11` does not name a screen.** `LayoutForView` reads the
+view byte, and the status screen and the inventory screen are both view 8 — `STATUS` and `TT213`
+each call `TRADEMODE` with `#8`. So the two cannot be given different tables by the mechanism as
+designed. The choices are one shared table for both (they are the same shape: a heading, a few
+label lines, a list), or a layout handed to `SetUpTradeScreen` beside the view it already takes, at
+the one instruction that already says which screen is starting. The second is a parameter on a
+faithful routine and not a second copy of the game's state, so it does not drift; it is put with the
+status screen's sketch rather than settled here.
+
 **And the offsets are measured in CANVAS CELLS, not in `XC`.** §6.2's original numbers mixed the two:
 the space view's `columnOffset` is given as 24, which is right in `XC` — counted from the view's own
 left edge — and 20 in canvas cells, which is what the clears count because that is what the game's
@@ -574,7 +607,7 @@ accept or redraw (§11) and are not normative until a slice lands them.
 
 | Screen | Layout | What the table cannot do, and the twin that does it |
 |---|---|---|
-| Status (`STATUS`) | Two columns: commander, present system, hyperspace, condition, fuel, cash, rating, on the left 36 columns; the equipment list on the right 36 | Nothing; the equipment list is consecutive rows and an anchor moves its first |
+| Status (`STATUS`) | Two columns: commander, present system, hyperspace, condition, fuel, cash, legal status, rating on the left; the equipment list on the right | Nothing; the equipment list is one anchored rectangle — rows 12 to 23, whole width — moved right and spread. **CORRECTED at RS-5-0: not "an anchor moves its first"** — an anchor covers a block, because a per-cell one would leave the rest of each string behind |
 | Buy / sell / inventory (`TT167`, `TT210`, `TT213`) | The table widened: item, unit, price and quantity at columns 4, 26, 38 and 52; `ListCargo` the same | Nothing |
 | Equip ship (`EQSHP`) | Item at column 4, price at column 44; the laser view prompt on its own line | Nothing |
 | Data on system (`TT25`) | The label/value pairs at columns 4 and 28; the description re-wrapped at `wrapWidth = 64` | **The wide sink re-wraps.** `TT27`'s justifier breaks lines at `JUSTIFIED_LINE_WIDTH` (30) and emits the break as a newline in the character stream. The wide sink treats a break the justifier made (the printer knows, because it made it) as soft and re-wraps at the layout's width; a break from a token is hard. The faithful stream is unchanged |
@@ -605,14 +638,21 @@ And the status screen, two columns where the original had one:
 ```
                             COMMANDER JAMESON
   ────────────────────────────────────────────────────────────────────────
-  PRESENT SYSTEM      : LAVE            EQUIPMENT:
-  HYPERSPACE SYSTEM   : LAVE              FUEL SCOOPS
-  CONDITION           : DOCKED            E.C.M. SYSTEM
-  FUEL                : 7.0 LIGHT YEARS   FRONT PULSE LASER
-  CASH                : 100.0 CR
-  LEGAL STATUS        : CLEAN
-  RATING              : HARMLESS
+  Present System      :Lave              EQUIPMENT:
+  Hyperspace System   :Lave                    Fuel Scoops
+  Condition           :Docked                  E.C.M.System
+  Fuel:7.0 Light Years                         Front Pulse Laser
+  Cash:    100.0 Cr
+  Legal Status: Clean
+  Rating: Harmless
 ```
+
+**CORRECTED at RS-5-0: the strings above are the printed ones and the first draft's were not.** That
+draft had every label in capitals with the colons in one column, and the screen prints neither: only
+the title and "EQUIPMENT:" are capitals, the first three labels are tabbed to column 21 and the last
+four carry their colon inline, and the spacing inside "Cash:    100.0 Cr" is `PCASH`'s own. The
+strings here were read off the port printing the screen rather than written down from memory, which
+is the standard the paragraph below sets and the draft did not meet.
 
 Nothing in either sketch is a new sentence, a new token or a new order: every string is the one the
 faithful screen prints, in the order it prints it, and the layout only decides the cell. That is the
@@ -785,7 +825,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 | # | Risk | Mitigation |
 |---|---|---|
 | R23 | **A faithful routine is edited without its twin.** The canvas is right, the tests are green, and the screen drifts — a line drawn from a heap the twin no longer mirrors, a new call site with no twin | `check_twins.py` (§8.6) fails the push; the shadow tests (§8.1) fail the frame; both in CI |
-| R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | The no-collision clause of the text shadow test, run over every docked screen the session tests drive; the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
+| R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOneWideCell` sweeps the whole 40×25 grid of every layout in the tree and fails on the first collision (RS-5-0, and it caught one the day it was written); the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
 | R25 | **The extra bit is wrong and nothing sees it.** A twin that halves to the faithful value at every pixel can still be off by one hi-res pixel everywhere, and the shadow test allows one | The property sweeps of §8.2 on every twin divide and root; a screen golden per scene |
 | R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | §8.4's replay run both ways; T1 as a review rule; and since RS-3 there is no second heap at all — the twins read the faithful bytes, so there is no second pointer to move |
 | R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture is part canvas-upscaled and part native, and a screenshot taken then is not the design | `Picture::NativeRegions` is a struct with a `Complete()` test that RS-6 asserts, and `ThePicture::TheRegionsSayWhichSlicesHaveLanded` fails the day every region is native and the fallback is still there; the journal names which regions are native at each slice. **Both regions flipped by RS-4 and `Complete()` now holds — the tripwire has fired and RS-6 is the only slice left that owes anything to it.** **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked. The regions are the two the raster split already makes, and the text layer belongs to the upper one, which flips when RS-3 completes it |
@@ -798,7 +838,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->452 tests with the oracle present, all passing, and all
+<!--count:tests-->454 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -882,7 +922,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->452 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->454 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -935,7 +975,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->452 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->454 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1198,3 +1238,48 @@ canvas pixel is two, and `x_hi` moves in canvas pixels.
 frame lines, the same labels. That is RS-4-art and it is the owner's, on no slice's schedule. And
 nothing is re-flowed — RS-5 is the first slice with a design question in it rather than a
 measurement, and its rulings ask for a sketch per screen before a table is written.
+
+### RS-5-0 — the anchor, and two things the re-flow's mechanism could not do, 2026-09-08
+
+**Built and green: `Anchor`, `TextLayout::anchors`, and the collision sweep.** Nothing moved on the
+screen — no view has a table yet, `CENTRED_LAYOUT` and `SPACE_VIEW_LAYOUT` are what every view still
+gets, and the suite is 454 green with all 18 checks passing. This slice is the mechanism §6.3's
+sub-slices need and nothing else, because every one of those is gated on an accepted sketch
+(ruling §11.2) and building a table before the sketch is building the wrong screen faster.
+
+**AN ANCHOR IS A RECTANGLE, and the design's cell-to-cell version cannot be built.** §6.2 gives one
+as `(fieldColumn, fieldRow) -> (wideColumn, wideRow)`, and a field is not a cell. RS-1 settled that
+`Map` is a pure function of the faithful cell with nothing stored between glyphs, so by the time the
+Q of "EQUIPMENT:" is printed, nothing remembers that its E was moved — a per-cell table has to name
+all ten, and the eleven equipment rows of up to twenty-four characters come to some two hundred and
+fifty entries kept in step by hand. A rectangle relocated to a wide origin, with a row stride of its
+own, says the same thing in one table row, and the whole status re-flow is ONE anchor. The stride is
+the anchor's rather than the layout's because a block that moves usually wants spreading: eleven
+packed rows in the right-hand half of a fifty-row screen leave two thirds of it empty.
+
+**A table anchored INTO the centred layout cannot exist, and the sweep said so on its first run.**
+The collision test was written to protect Risk R24 and immediately failed on its own example:
+`CENTRED_LAYOUT` puts a 40-column screen at column 20, so it already covers columns 20 to 59 and
+every anchor target inside the wide grid is a cell the offsets reach. A re-flowed screen has to move
+its offsets as well as its blocks — which is a constraint on every table §6.3 will write, found in
+minutes by a property test rather than in a week by looking at a screen with two glyphs
+exclusive-ored into one cell.
+
+**`wrapWidth` was not added.** §6.2 lists it and only the data screen and the briefings need it, and
+it cannot be written before the sink that re-wraps exists to read it: a field nothing reads is a
+claim the code does not keep. That sub-slice adds it.
+
+**OPEN, and it gates the first sub-slice: `QQ11` does not name a screen.** `LayoutForView` reads the
+view byte, and `STATUS` and `TT213` both call `TRADEMODE` with `#8` — the status screen and the
+inventory screen are one view. Two ways out, and both are the owner's: one shared table for the two
+(they are the same shape — a heading, a few label lines, a list), or a layout handed to
+`SetUpTradeScreen` beside the view it already takes, at the one instruction that already says which
+screen is starting. The second adds a parameter to a faithful routine and no second copy of the
+game's state, so there is nothing to drift; it is put with the status sketch.
+
+**And the status screen was MEASURED before it was sketched.** §6.3's draft sketch had every label
+in capitals with the colons in one column, and the screen prints neither — only the title and
+"EQUIPMENT:" are capitals, the first three labels tab to column 21 and the last four carry their
+colon inline. The strings in §6.3 are now the ones a fully-fitted commander's screen actually
+prints, read off the port rather than remembered. The design's own line is that every string in a
+sketch is the string the faithful screen prints; a sketch drawn from memory does not meet it.

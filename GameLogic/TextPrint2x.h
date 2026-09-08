@@ -42,21 +42,92 @@ namespace Elite
   };
 
   /*
+   * THE PART OF A SCREEN THAT GOES SOMEWHERE ELSE -- what a re-flow is made of (slice RS-5).
+   *
+   * Everything a `TextLayout` does with its three offsets is one rigid transform applied to every
+   * cell, which can MOVE a screen and cannot RE-ARRANGE one. Re-arranging is what Resolution.md
+   * section 6.3 asks for: the status screen's equipment list belongs in a second column and the
+   * market screen's prices further right, and neither is an offset, because only SOME of the
+   * screen moves.
+   *
+   * A RECTANGLE AND NOT A CELL, and that is the correction the building made. Section 6.2 gives an
+   * anchor as `(fieldColumn, fieldRow) -> (wideColumn, wideRow)`, one cell to one cell -- and a
+   * field is not a cell. `Map` is a pure function of the faithful cell, so nothing remembers that
+   * the E of "EQUIPMENT:" was moved by the time the Q is printed; a per-cell table would have to
+   * name all ten, and the equipment list's eleven rows of up to twenty-four characters would be
+   * some two hundred and fifty entries kept in step by hand. A rectangle moved to a wide origin
+   * says the same thing in one row of a table, and the status screen's whole re-flow is ONE of
+   * them.
+   *
+   * `rowStride` is the anchor's own, because a block that moves usually wants spreading too: the
+   * equipment list at twice the row spacing fills the right-hand half of a fifty-row screen that
+   * its eleven packed rows would leave two thirds empty.
+   *
+   * THE SCREEN ROUTINE IS NOT TOLD, which is the whole point of doing it this way: `STATUS` still
+   * stores `XC = 6` and still prints down consecutive rows, the faithful character stream stays
+   * the stream the fixtures compare, and the table alone decides that those rows land on the
+   * right-hand half of a wider screen.
+   */
+  struct Anchor
+  {
+    std::uint8_t firstColumn = 0; ///< the faithful cells this covers, inclusive, in canvas cells
+    std::uint8_t lastColumn = 0;
+    std::uint8_t firstRow = 0;
+    std::uint8_t lastRow = 0;
+    std::uint8_t wideColumn = 0; ///< where its top-left cell goes instead
+    std::uint8_t wideRow = 0;
+    std::uint8_t rowStride = 1; ///< and how the block's own rows are spread once it is there
+
+    [[nodiscard]] constexpr bool Covers(std::uint8_t _column, std::uint8_t _row) const noexcept
+    {
+      return _column >= firstColumn && _column <= lastColumn && _row >= firstRow && _row <= lastRow;
+    }
+  };
+
+  /*
    * How a view's 40x25 grid sits on the 80x50 one.
    *
    * `rowStride` is the one field that is not an offset, and the space view is why: a message there
    * belongs over the 3D scene at the height the original put it, so its rows are SPREAD over the
    * doubled ones rather than packed at the top. A text screen packs them, because a text screen is
    * text all the way down.
+   *
+   * `anchors` is CONSULTED FIRST and the offsets are the fallback, so a table says only what moves.
+   * The search is linear and stops at the first match, because these tables are a handful of
+   * rectangles and a glyph costs eight bitmap writes either way. Overlapping rectangles are legal
+   * and the earlier one wins, which is how an exception inside a moved block is written.
+   *
+   * THE TABLE MUST NOT SEND TWO FAITHFUL CELLS TO ONE WIDE CELL. Nothing here can enforce it -- an
+   * anchor is free to name a wide cell the offsets already reach -- so it is a property of each
+   * table, swept over the whole 40x25 grid by `PictureTextTests`. It is Risk R24's tripwire and it
+   * bites: a table anchored INTO the centred layout's own footprint always collides, because a
+   * 40-column screen placed at column 20 already covers columns 20 to 59. A re-flowed screen has
+   * to move its offsets as well as its blocks.
+   *
+   * NO `wrapWidth` YET, and section 6.2 lists one. It belongs to the data screen and the briefings,
+   * which are the only screens whose text is justified, and it cannot be written before the sink
+   * that re-wraps exists to read it: a field nothing reads is a claim the code does not keep. The
+   * sub-slice that re-wraps adds it.
    */
   struct TextLayout
   {
     std::uint8_t columnOffset = 0;
     std::uint8_t rowOffset = 0;
     std::uint8_t rowStride = 1;
+    std::span<const Anchor> anchors{};
 
     [[nodiscard]] constexpr WideCell Map(std::uint8_t _column, std::uint8_t _row) const noexcept
     {
+      for (const Anchor& anchor : anchors)
+      {
+        if (anchor.Covers(_column, _row))
+        {
+          return WideCell{static_cast<int>(anchor.wideColumn) + static_cast<int>(_column) - static_cast<int>(anchor.firstColumn),
+                          static_cast<int>(anchor.wideRow) +
+                            (static_cast<int>(_row) - static_cast<int>(anchor.firstRow)) * static_cast<int>(anchor.rowStride)};
+        }
+      }
+
       return WideCell{static_cast<int>(columnOffset) + static_cast<int>(_column),
                       static_cast<int>(rowOffset) + static_cast<int>(_row) * static_cast<int>(rowStride)};
     }
