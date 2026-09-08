@@ -2,12 +2,14 @@
 
 #include "NullSeams.h"
 
+#include "Charts.h"
 #include "Commander.h"
 #include "Controls.h"
 #include "DockedKeys.h"
-#include "PauseScreen.h"
 #include "Game.h"
+#include "MarketScreen.h"
 #include "SoundEffects.h"
+#include "SystemScreen.h"
 #include "Universe.h"
 
 #include <cstdint>
@@ -21,8 +23,8 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * WHAT THIS IS FOR IS THE SHAPE RATHER THAN THE ARITHMETIC. Every routine `Game` calls is compared
  * against the shipped original by its own suite, over sweeps this could not improve on; what none
  * of them can see is whether the OBJECT that calls them is wired up -- whether `Reset` reaches the
- * cold start, whether a docked pass dispatches a key, whether the pause key freezes the game and
- * a second one thaws it. That was eight hundred lines in `Outpost/Main.cpp` until M3-c, in the one
+ * cold start, whether a docked pass dispatches a key, whether the key that used to freeze the
+ * game is an ordinary key now. That was eight hundred lines in `Outpost/Main.cpp` until M3-c, in the one
  * file no Linux runner compiles, and the answer to "does it still work" was the Windows job and a
  * human looking at a screen.
  *
@@ -89,7 +91,6 @@ namespace GameLogicTests
       bare.game.Reset();
 
       Assert::IsTrue(bare.game.Docked(), L"TT170 ends by entering the docked half");
-      Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"nothing has pressed COPY");
 
       const Elite::Commander& commander = bare.game.State().commander;
       Assert::AreEqual<std::uint32_t>(Elite::DefaultCommander().fuel.tenths, commander.fuel.tenths, L"NA% -- the default commander's fuel");
@@ -103,27 +104,63 @@ namespace GameLogicTests
     }
 
     /*
-     * 6502: DK4's `CPX #&40 / BNE DK2` -- the pause key, and the key that leaves.
+     * 6502: DK4's `CPX #&40` -- INST/DEL, which froze the game until InputTimer.md I-0 (owner
+     * ruling 2026-09-08) and is an ordinary key now.
      *
-     * `FREEZE` is a LOOP in the original and a state here, so the thing worth asserting is that the
-     * state goes both ways: a game that entered it and could not leave would look exactly like one
-     * that had never entered it, from the outside of a windowed build.
+     * The pause screen was the port's `Mode::Paused`, a state the outer loop could enter and, with
+     * the resume key unbound, never leave. What is worth asserting after its removal is the other
+     * direction: the key still reaches `DK4`'s `STX KL`, and the batch of steps carries on.
      */
-    TEST_METHOD(ThePauseKeyFreezesTheGameAndTheResumeKeyThawsIt)
+    /*
+     * 6502: TITLE's `BIT KY7 / BMI TL3` -- the fire key ends the title screen with `JSTK` still set,
+     * which on a C64 is the player saying they have a joystick.
+     *
+     * The port has no stick to read, so `Game` settles the byte after the start sequence: cleared
+     * unless the platform says it has one (InputTimer.md §5.1, I-3). Both answers are driven, and
+     * the second is what keeps the original's rule reachable for the gamepad slice.
+     */
+    TEST_METHOD(TheFireKeyOnTheTitleSelectsAJoystickOnlyWhenThePlatformHasOne)
+    {
+      struct FireKey : NullSeams
+      {
+        bool Held(std::size_t _key) override
+        {
+          return _key == Elite::KEY_FIRE;
+        }
+        bool HasJoystick() noexcept override
+        {
+          return joystick;
+        }
+        bool joystick = false;
+      };
+
+      {
+        FireKey keys;
+        NullSeams nulls;
+        Elite::Game game(nulls, keys, nulls);
+        game.Reset();
+        Assert::IsTrue(game.Docked(), L"fire is not Y, so no disk menu, and the cold start still ends docked");
+        Assert::AreEqual<std::uint8_t>(0u, game.State().options.joystick, L"6502: JSTK -- cleared, because there is no stick to read");
+      }
+      {
+        FireKey keys;
+        keys.joystick = true;
+        NullSeams nulls;
+        Elite::Game game(nulls, keys, nulls);
+        game.Reset();
+        Assert::AreEqual<std::uint8_t>(0xFFu, game.State().options.joystick, L"6502: JSTK -- and the original's answer when there is");
+      }
+    }
+
+    TEST_METHOD(TheOldPauseKeyIsAnOrdinaryKey)
     {
       Bare bare;
       bare.game.Reset();
 
-      Assert::IsFalse(bare.game.Step(Elite::PAUSE_KEY), L"the pause key ends the batch of steps");
-      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"and freezes the game");
-      Assert::AreEqual<std::uint8_t>(Elite::PAUSE_KEY, bare.game.State().keys[0], L"6502: STX KL -- the key that arrived, in byte 0 of the logger");
-
-      // 6502: CPX #&0D -- and `DK2`'s `RTS`. A key `FREEZE` does not know leaves it frozen.
-      bare.game.StepPaused(0u);
-      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"an unknown key is one pass round FREEZE and no more");
-
-      bare.game.StepPaused(Elite::RESUME_KEY);
-      Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"and the resume key thaws it");
+      constexpr std::uint8_t INST_DEL = 0x40; // 6502: the key `DK4` compared against
+      Assert::IsTrue(bare.game.Step(INST_DEL), L"INST/DEL no longer ends the batch of steps");
+      Assert::AreEqual<std::uint8_t>(INST_DEL, bare.game.State().keys[0], L"6502: STX KL -- the key that arrived, in byte 0 of the logger");
+      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Docked, L"and the game is where it was");
     }
 
     /*
@@ -143,9 +180,62 @@ namespace GameLogicTests
       bare.game.State().status.hyperspaceCountdown = 15u;
       bare.game.State().status.hyperspaceCounter = 1u;
 
-      bare.game.StepDocked(0u);
+      static_cast<void>(bare.game.StepDocked(0u));
 
       Assert::AreEqual<std::uint32_t>(14u, bare.game.State().status.hyperspaceCountdown, L"a pass with no key still ticks TT107's counter");
+    }
+
+    /*
+     * 6502: MLOOP part 5 on a docked pass -- the Trumbles breed and the delay is asked for
+     * (InputTimer.md T-2).
+     *
+     * `RunLoopTail` is compared against `MLOOP` on docked views with Trumbles aboard in
+     * `GameLoopTests`; what nothing compared until T-2 was whether a DOCKED PASS reached it, and
+     * it did not: the port ran the two countdowns and nothing below them, so a commander who
+     * docked with a Trumble had a hold that stopped breeding at the airlock. The syncs the pass
+     * asks for are the gate `LDA QQ11 / AND PATG / LSR A / BCS plus13` -- bit 0 of the view ANDed
+     * with the option -- so a chart, whose view byte is even, waits even with the names on.
+     */
+    TEST_METHOD(ADockedPassBreedsTheTrumblesAndAsksForItsSyncs)
+    {
+      Bare bare;
+      bare.game.Reset();
+      Elite::Universe& universe = bare.game.State();
+
+      universe.commander.tribbles.lo = 200u;
+      universe.commander.tribbles.hi = 1u;
+      universe.options.authorNames = 0u;
+
+      // 6502: RAND -- a generator with something in it. A bare fixture's is four zeroes, and DORND
+      // over zeroes with the carry clear rolls zero for ever, which is a state the machine is never
+      // in: the loader leaves RAND with whatever the disk read left there.
+      universe.rng.SetState({0x21u, 0x84u, 0x5Fu, 0xC0u});
+
+      std::uint32_t syncs = 0;
+      for (std::uint32_t pass = 0; pass < 64u; ++pass)
+      {
+        syncs += bare.game.StepDocked(0u);
+      }
+      Assert::AreEqual<std::uint32_t>(128u, syncs, L"6502: LDY #2 / JSR DELAY -- two syncs a pass with the names off");
+      Assert::IsTrue(universe.commander.tribbles.hi > 1u || universe.commander.tribbles.lo != 200u,
+                     L"6502: DORND / CMP #220 / ADC #0 -- sixty-four passes breed at least one Trumble");
+
+      /*
+       * 6502: AND PATG / LSR A / BCS plus13 -- bit 0 of the VIEW byte ANDed with the option. Only one
+       * docked view has an odd byte, the Data on System screen at 1, so the names lift the wait
+       * there and nowhere else: the status screen is 8, the charts 64 and 128, and all of them wait
+       * with the names on. Read off the constants rather than assumed; the first draft of this test
+       * had the status screen lifting it.
+       */
+      universe.options.authorNames = 0xFFu;
+      universe.view = Elite::DATA_ON_SYSTEM_VIEW;
+      Assert::AreEqual<std::uint32_t>(0u, bare.game.StepDocked(0u), L"names on, on the one odd view: no wait");
+
+      universe.view = Elite::INVENTORY_VIEW;
+      Assert::AreEqual<std::uint32_t>(2u, bare.game.StepDocked(0u), L"names on, on an even view: the wait stays");
+      universe.view = Elite::LONG_RANGE_CHART_VIEW;
+      Assert::AreEqual<std::uint32_t>(2u, bare.game.StepDocked(0u), L"names on, on a chart: the wait stays");
+      universe.options.authorNames = 0u;
     }
 
     /*
@@ -163,7 +253,7 @@ namespace GameLogicTests
 
       for (std::uint32_t pass = 0; pass < 64u; ++pass)
       {
-        bare.game.StepDocked(0u);
+        static_cast<void>(bare.game.StepDocked(0u));
       }
       Assert::IsTrue(bare.game.Docked(), L"nothing in a keyless docked pass launches the ship");
 

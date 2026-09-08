@@ -184,7 +184,6 @@
     <ClInclude Include="Explosion.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="GameLoop.h" />
-    <ClInclude Include="PauseScreen.h" />
     <ClInclude Include="Tactics.h" />
     <ClInclude Include="Raster.h" />
     <ClInclude Include="Trumbles.h" />
@@ -282,8 +281,6 @@
     <ClCompile Include="Explosion.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="GameLoop.cpp" />
-    <ClCompile Include="PauseScreen.cpp" />
-    <ClCompile Include="OptionTables.cpp" />
     <ClCompile Include="Tactics.cpp" />
     <ClCompile Include="Raster.cpp" />
     <ClCompile Include="Trumbles.cpp" />

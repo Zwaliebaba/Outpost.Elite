@@ -5,11 +5,20 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # <!--count:tests-->460 tests, about a minute from cold
+Tests/PortableRunner/run_tests.sh        # <!--count:tests-->469 tests, about a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # and which oracle labels each test ran
 python tools/inventory.py --coverage x64/Debug/coverage.txt           # read against the ledger's Port rows (M6-0-f)
+Tests/PortableRunner/run_tests.sh --measure                           # every call to the interpreter, counted and sized
+Tests/PortableRunner/run_tests.sh --record out.fixture Galaxy         # and kept, as a fixture (M6-a-2)
 ```
+
+`--measure` and `--record` install a `RecordingOracle` behind `Cpu6502::CallSubroutine`
+(`Tests/GameLogicTests/Oracle.h`, Design/Modernize.md §4.10). Measuring prints a `MEASURE` line per
+test and a record-size histogram at the end and keeps nothing; recording keeps every distinct call
+and writes the fixture, and two runs of the same filter produce byte-identical files. Measuring the
+whole suite takes about six times as long as running it, and its answer is 3.2 million calls and
+222 MB — which is why nothing commits a fixture yet (Modernize.md M6-b).
 
 Needs `g++` with C++20, `make`, and Python 3. Nothing else.
 
@@ -67,10 +76,11 @@ copied.** That is the property that makes this trustworthy: there is one suite, 
 disagree only about how it is invoked. A test added to a `.cpp` is picked up by both without being
 registered anywhere.
 
-Three files from `Outpost/` are compiled here too — `SaveStore.cpp`, `Presentation.cpp` and
-`KeyMap.cpp` — because each is the executable's and yet holds a DECISION rather than an API call:
-the commander store, the palette and viewport arithmetic and the frame pacing, and the key map.
-`ShellTests.cpp` covers them and runs on both legs. Everything else in `Outpost/` is Win32 and
+Five files from `Outpost/` are compiled here too — `SaveStore.cpp`, `Presentation.cpp`,
+`KeyMap.cpp`, `SidSynth.cpp` and `SettingsFile.cpp` — because each is the executable's and yet
+holds a DECISION rather than an API call: the commander store, the palette and viewport arithmetic
+and the frame pacing, the key map, the synthesiser, and the settings file's parser.
+`ShellTests.cpp`, `SaveStoreTests.cpp` and `SidRenderTests.cpp` cover them and run on both legs. Everything else in `Outpost/` is Win32 and
 D3D12 and is not compiled here; `tools/check_outpost.py` checks the names and arities it uses,
 and only the Windows build checks the types.
 

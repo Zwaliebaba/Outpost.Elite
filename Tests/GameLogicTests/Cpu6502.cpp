@@ -2,6 +2,8 @@
 
 #include "Cpu6502.h"
 
+#include "Oracle.h"
+
 #include <cstring>
 
 namespace Elite::Testing
@@ -524,8 +526,22 @@ namespace Elite::Testing
     traps.push_back(Trap{_address, _exit});
   }
 
+  void Cpu6502::AddProbe(std::uint16_t _address, std::function<void(Cpu6502&)> _act)
+  {
+    probes.push_back(Probe{_address, std::move(_act)});
+  }
+
   bool Cpu6502::Step() noexcept
   {
+    // A probed address runs the fixture's code first and is then executed as it stands.
+    for (const Probe& probe : probes)
+    {
+      if (pc == probe.address && probe.act)
+      {
+        probe.act(*this);
+      }
+    }
+
     // A trapped address is recorded and returned from rather than executed. The pop mirrors what
     // the routine's own RTS would have done, so the caller continues as if it had run.
     if (!traps.empty())
@@ -1255,6 +1271,13 @@ namespace Elite::Testing
   }
 
   RunResult Cpu6502::CallSubroutine(std::uint16_t _address, std::uint32_t _maxInstructions, std::uint16_t _stopAddress) noexcept
+  {
+    Oracle* const oracle = Oracle::Current();
+    return (oracle != nullptr) ? oracle->Call(*this, _address, _maxInstructions, _stopAddress)
+                               : Interpret(_address, _maxInstructions, _stopAddress);
+  }
+
+  RunResult Cpu6502::Interpret(std::uint16_t _address, std::uint32_t _maxInstructions, std::uint16_t _stopAddress) noexcept
   {
     RunResult result{};
 

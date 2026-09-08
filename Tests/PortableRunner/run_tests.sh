@@ -8,6 +8,16 @@
 #   Tests/PortableRunner/run_tests.sh --coverage FILE [Chart]   and, per test, the oracle labels it
 #                                                  ran and the ones its traps answered for (M6-0-f);
 #                                                  `python tools/inventory.py --coverage FILE` reads it
+#   Tests/PortableRunner/run_tests.sh --measure [Chart]         every call to the interpreter through
+#                                                  the recorder, counted and sized but not kept: a
+#                                                  MEASURE line per test and a histogram at the end
+#                                                  (M6-a-2, Design/Modernize.md section 4.10). Six
+#                                                  times slower than a plain run.
+#   Tests/PortableRunner/run_tests.sh --record FILE [Chart]     the same, keeping every distinct call,
+#                                                  and writing the fixture. Two runs of the same
+#                                                  filter produce byte-identical files; the whole
+#                                                  suite is 222 MB, which is why nothing commits one
+#                                                  yet (Modernize.md M6-b).
 #
 # The executable lands at x64/Debug/PortableTests, which is where MSBuild puts GameLogicTests.dll
 # and therefore where the oracle expects to start walking up from (Tests/GameLogicTests/

@@ -1089,6 +1089,40 @@
           "note": "`INC INWK+7` once: the station you have just left is one high-byte unit behind. Would have hidden: the station spawned twice as far away on every launch."
         }
       ]
+    },
+    {
+      "name": "game",
+      "slice": "InputTimer.md T-2",
+      "filter": [
+        "TheGameObject"
+      ],
+      "tests": 6,
+      "note": [
+        "`Elite::Game` (Modernize.md section 4.4) -- the object that calls the routines every other unit",
+        "compares. Nothing here is arithmetic; what a mutant catches is a CALL left out, which is the shape",
+        "of every outer-loop defect the plan's section 6.128 and 6.111 record: a routine ported, swept, green",
+        "and reached by nothing. InputTimer.md T-2 added the first, on the docked pass reaching `MLOOP`'s",
+        "part 5 whole rather than its two countdowns alone."
+      ],
+      "mutants": [
+        {
+          "id": "game-selftest",
+          "file": "GameLogic/Game.cpp",
+          "find": "    PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held\n    return syncs;",
+          "replace": "    static_cast<void>(_key);\n    return syncs;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. A docked pass that never dispatches its key never ticks TT107's countdown, and ADockedPassWithNoKeyStillRunsTheCountdown reads the counter. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "game-docked-tail",
+          "file": "GameLogic/Game.cpp",
+          "find": "    const std::uint8_t syncs = RunLoopTail(m_universe, m_ports, m_universe.commander, m_universe.options.authorNames, false); // docked",
+          "replace": "    CoolTheGuns(m_universe.status);\n    const std::uint8_t syncs = 2u;",
+          "expect": "caught",
+          "note": "The docked pass back to its two countdowns, which is what the port ran until T-2. ADockedPassBreedsTheTrumblesAndAsksForItsSyncs reads the hold after sixty-four passes and the syncs a chart asks for with the names on. Would have hidden: a hold that stops breeding at the airlock, and a docked pace priced from a constant rather than from the gate."
+        }
+      ]
     }
   ],
   "floor": [

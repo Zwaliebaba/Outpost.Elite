@@ -3,6 +3,7 @@
 #include <array>
 #include <bitset>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 /*
@@ -227,8 +228,19 @@ namespace Elite::Testing
      * jump somewhere else entirely -- a run that unwinds past where it started has finished just
      * as surely as one that returned, and reporting that is better than spinning to the budget.
      */
+    /*
+     * WHAT ANSWERS IT IS A SEAM (Design/Modernize.md §4.10, built M6-a-2).
+     *
+     * With no oracle installed this IS `Interpret` below, which is what every test has always got.
+     * `Oracle::Install` puts a recorder or a fixture in its place instead, and no test changes
+     * shape: the seam is the call, not the state the test builds around it.
+     */
     RunResult CallSubroutine(std::uint16_t _address, std::uint32_t _maxInstructions = 2'000'000,
                              std::uint16_t _stopAddress = 0xFFF9) noexcept;
+
+    /// The interpreter itself, which `LiveOracle` and `RecordingOracle` run and `RecordedOracle`
+    /// does not. Public so the oracles can reach it; nothing else should call it directly.
+    RunResult Interpret(std::uint16_t _address, std::uint32_t _maxInstructions, std::uint16_t _stopAddress) noexcept;
 
     // ---- call traps --------------------------------------------------------------------
 
@@ -303,6 +315,26 @@ namespace Elite::Testing
     std::vector<TrapHit> trapHits;
 
     void AddTrap(std::uint16_t _address, TrapExit _exit = TrapExit::Unchanged);
+
+    // ---- probes ------------------------------------------------------------------------
+
+    /*
+     * An address that runs a fixture's code and is then EXECUTED, unlike a trap.
+     *
+     * For a routine whose input changes while it runs: `TT217` waits for the matrix to empty and
+     * then to fill, and a fixture that can only set the matrix once before the call cannot reach
+     * its second wait. A probe on `RDKEY` lets the fixture change what the CIA holds on every scan,
+     * which is what a person's hand does (InputTimer.md I-1).
+     */
+    struct Probe
+    {
+      std::uint16_t address = 0;
+      std::function<void(Cpu6502&)> act;
+    };
+
+    std::vector<Probe> probes;
+
+    void AddProbe(std::uint16_t _address, std::function<void(Cpu6502&)> _act);
     void ClearTrapHits() noexcept
     {
       trapHits.clear();

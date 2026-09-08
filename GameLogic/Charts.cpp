@@ -546,7 +546,7 @@ namespace Elite
   {
     // 6502: hm -- JSR TT103 / JSR TT111 / JSR TT103 / JMP CLYNS. The first call rubs the crosshair
     // out, because LOIN draws by EOR and drawing it twice is how it moves.
-    DrawTargetCrosshairs(_canvas, _view);
+    DrawTargetCrosshairs(_canvas, _view, _picture);
 
     const NearestSystem nearest = FindNearestSystem(_galaxy, _view.cursorX, _view.cursorY, _view.homeX, _view.homeY);
     _view.cursorX = nearest.x;

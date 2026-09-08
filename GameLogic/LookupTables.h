@@ -34,14 +34,12 @@ namespace Elite
 
   // 6502: SNE -- a quarter turn of sine, scaled to a byte.
   /*
-   * 6502: TGINT -- the key each of the pause screen's thirteen toggles answers to.
+   * `OPTION_KEY_TABLE` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, 2026-09-08).
    *
-   * ITS ORDER IS THE ONLY THING THAT DEFINES THE OPTION BLOCK. `DKS3` is `CMP TGINT,Y / LDA DAMP,Y
-   * / EOR #&FF / STA DAMP,Y`, so entry Y here and the byte Y after `DAMP` are one pair, and the
-   * assembler's layout is the whole of the relationship. `DAMP` is at &1D06 and `MUSILLY` at
-   * &1D12, which is thirteen bytes, and this table is thirteen entries: that is the check.
+   * 6502: TGINT -- the key each of the pause screen's thirteen toggles answered to, whose order was
+   * the option block's only definition. The pause screen was removed by owner ruling and the
+   * thirteen bytes are set by name from the executable's settings file, so the table had no reader.
    */
-  extern const std::array<std::uint8_t, 13> OPTION_KEY_TABLE;
 
   extern const std::array<std::uint8_t, 32> SINE_TABLE;
 
