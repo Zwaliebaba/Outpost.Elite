@@ -36,7 +36,7 @@ namespace Elite
     virtual ~Presenter() = default;
 
     /*
-     * 6502: DELAY -- wait for `_frames` vertical syncs.
+     * Wait for `_frames` vertical syncs.
      *
      * Declared once where `LineEntryEffects` and `StartUpEffects` each declared it, and that is not
      * a merge of two things that happened to look alike: there is one `DELAY` in the game and the

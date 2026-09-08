@@ -36,7 +36,7 @@ namespace Elite
   /// GenerateMarket, which fills only sixteen.
   inline constexpr int MARKET_ITEM_COUNT = 17;
 
-  /// 6502: QQ23 -- four bytes an item, in the order the routines index them.
+  /// Four bytes an item, in the order the routines index them.
   struct MarketItem
   {
     std::uint8_t basePrice = 0;    ///< QQ23+0
@@ -48,16 +48,16 @@ namespace Elite
   /// The market as a docked player sees it: what everything costs and how much there is.
   struct MarketState
   {
-    std::uint8_t randomiser = 0; ///< 6502: QQ26, one DORND byte that perturbs the whole market
+    std::uint8_t randomiser = 0; ///< QQ26, one DORND byte that perturbs the whole market
     std::array<std::uint8_t, MARKET_ITEM_COUNT> price{};
-    std::array<std::uint8_t, MARKET_ITEM_COUNT> availability{}; ///< 6502: AVL
+    std::array<std::uint8_t, MARKET_ITEM_COUNT> availability{};
   };
 
-  /// 6502: QQ23 -- the shipped table, read out of the assembled game.
+  /// The shipped table, read out of the assembled game.
   [[nodiscard]] MarketItem MarketItemAt(int _item) noexcept;
 
   /*
-   * 6502: var -- the economy's contribution, which is the gradient's magnitude times the economy.
+   * The economy's contribution, which is the gradient's magnitude times the economy.
    *
    * The original spells the multiply as repeated addition with `ADC` and no `CLC` inside the loop,
    * so a carry out of one addition feeds the next. With an economy of at most 7 and a magnitude of
@@ -68,7 +68,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t EconomyAdjustment(std::uint8_t _gradient, std::uint8_t _economy) noexcept;
 
   /*
-   * 6502: TT151's arithmetic half -- what one item costs, in tenths of a credit.
+   * TT151's arithmetic half -- what one item costs, in tenths of a credit.
    *
    * The printing half of TT151 belongs with the market screen; this is the part that decides the
    * number, and it is the part every other price in the game is derived from.
@@ -76,7 +76,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t MarketPrice(int _item, std::uint8_t _economy, std::uint8_t _randomiser) noexcept;
 
   /*
-   * 6502: GVL -- roll a new market, which happens on arrival at every system.
+   * Roll a new market, which happens on arrival at every system.
    *
    * Takes the RNG rather than a byte because the original calls DORND itself, and where the
    * randomness comes from is part of the behaviour: a caller that supplied its own byte would give
@@ -95,7 +95,7 @@ namespace Elite
   void GenerateMarket(Rng& _rng, std::uint8_t _economy, MarketState& _outMarket) noexcept;
 
   /*
-   * 6502: LCASH -- spend an amount, in tenths of a credit.
+   * Spend an amount, in tenths of a credit.
    *
    * Returns false when it cannot be afforded, and the cash is then exactly as it was. The original
    * gets there by an unusual route: the four subtractions run unconditionally, and if the top one
@@ -104,12 +104,12 @@ namespace Elite
    */
   [[nodiscard]] bool SpendCash(Commander& _commander, std::uint16_t _tenths) noexcept;
 
-  /// 6502: MCASH -- receive an amount. Cannot fail, and returns with the carry clear so that a
+  /// Receive an amount. Cannot fail, and returns with the carry clear so that a
   /// caller sharing LCASH's exit reads it as "not affordable".
   void ReceiveCash(Commander& _commander, std::uint16_t _tenths) noexcept;
 
   /*
-   * 6502: GCASH -- what a quantity costs, in tenths.
+   * What a quantity costs, in tenths.
    *
    * The multiply times FOUR. Prices are quoted in tenths of a credit but held in units of
    * four-tenths, so every total in the game passes through this and a port that dropped the two
@@ -118,7 +118,7 @@ namespace Elite
   [[nodiscard]] std::uint16_t TotalPrice(std::uint8_t _price, std::uint8_t _quantity) noexcept;
 
   /*
-   * 6502: tnpr -- is there room for this much more of an item?
+   * Is there room for this much more of an item?
    *
    * Two rules, and which applies depends on the item: the first thirteen are tonne canisters and
    * share the hold's capacity, and the last four -- gold, platinum, gem-stones and alien items --
@@ -136,7 +136,7 @@ namespace Elite
   [[nodiscard]] bool CargoFits(const Commander& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept;
 
   /*
-   * 6502: BAD -- what the hold is worth in trouble, from three of its seventeen slots.
+   * What the hold is worth in trouble, from three of its seventeen slots.
    *
    * Slaves and narcotics are added together and the SUM is doubled, then firearms are added at face
    * value. So a tonne of slaves costs twice what a tonne of firearms does, and the doubling is a
@@ -150,7 +150,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t ContrabandPenalty(const Commander& _commander) noexcept;
 
   /*
-   * 6502: TT152 -- the units an item is sold in, from two bits of its own gradient byte.
+   * The units an item is sold in, from two bits of its own gradient byte.
    *
    * Three answers and they are not laid out alike. Tonnes print "t" and a space; grams print "g"
    * and a space; kilos print "kg" and NO space, because TT161 falls into TT16a and TT16a's `JMP
@@ -161,7 +161,7 @@ namespace Elite
   void PrintMarketUnits(TokenPrinter& _printer, CharacterPrinter& _characters, std::uint8_t _gradient) noexcept;
 
   /*
-   * 6502: TT151 -- one line of the market screen: name, price, and how much there is.
+   * One line of the market screen: name, price, and how much there is.
    *
    * The price is recomputed here rather than read from anywhere, which is why MarketPrice exists
    * and why this takes the economy and the randomiser rather than a table of prices. An item with
@@ -180,7 +180,7 @@ namespace Elite
                        MarketState& _market, bool _misJumped) noexcept;
 
   /*
-   * 6502: TT167 -- the market screen.
+   * The market screen.
    *
    * The screen reset at the top is TRADEMODE, which is TT66 and a keyboard flush; a caller does
    * that first. What is here is the title, the rule, the column headings and the seventeen lines --
@@ -193,7 +193,7 @@ namespace Elite
   /*
    * What one keystroke did to a number the player is typing.
    *
-   * 6502: gnum's exits -- and there are FOUR labels for six outcomes, which is why this enum has six
+   * gnum's exits -- and there are FOUR labels for six outcomes, which is why this enum has six
    * entries. `OUT` is the only way out of the number-building path, and it restores the colour and
    * loads the value before returning: neither the load nor the store touches the carry, so the carry
    * a caller reads is whichever comparison branched to `OUT`.
@@ -210,16 +210,16 @@ namespace Elite
    */
   enum class DigitResult
   {
-    Accepted,    ///< 6502: TT226 -- the digit went in and the routine asks for another
-    Complete,    ///< 6502: OUT with the carry CLEAR -- the number is finished and usable
-    TooBig,      ///< 6502: OUT with the carry SET -- 26 or more, or past what is available
-    TakeAll,     ///< 6502: NWDAV1 -- "Y", meaning all of what is available
-    TakeNone,    ///< 6502: NWDAV3 -- "N"
-    LeaveScreen, ///< 6502: BAY2 -- a letter, which abandons the screen entirely
+    Accepted,    ///< The digit went in and the routine asks for another
+    Complete,    ///< OUT with the carry CLEAR -- the number is finished and usable
+    TooBig,      ///< OUT with the carry SET -- 26 or more, or past what is available
+    TakeAll,     ///< "Y", meaning all of what is available
+    TakeNone,    ///< "N"
+    LeaveScreen, ///< A letter, which abandons the screen entirely
   };
 
   /*
-   * 6502: gnum's body, from the instruction after the key read to whichever exit it takes.
+   * gnum's body, from the instruction after the key read to whichever exit it takes.
    *
    * The loop around this is a keyboard read, so the loop belongs with the key dispatch and the step
    * is what can be compared. Four things about the step are worth knowing.
@@ -238,7 +238,7 @@ namespace Elite
    * one finishes, so the caller has to check. It is the buy screen that says no, not this.
    */
   /*
-   * 6502: R -- the number typed so far, and what the key did to it (M5-a-3).
+   * The number typed so far, and what the key did to it (M5-a-3).
    *
    * `_value` was a `std::uint8_t&` until then. It is not state anybody keeps -- it is the digits
    * accumulating inside one prompt -- so it goes back with the outcome rather than through a
@@ -247,7 +247,7 @@ namespace Elite
   struct TypedDigit
   {
     DigitResult outcome;
-    std::uint8_t value; ///< 6502: R
+    std::uint8_t value;
   };
 
   [[nodiscard]] TypedDigit TypeDigit(std::uint8_t _value, std::uint8_t _key, std::uint8_t _available) noexcept;
@@ -255,12 +255,12 @@ namespace Elite
   /// What gnum returned: the number in R, and which of its exits produced it.
   struct NumberEntry
   {
-    std::uint8_t value = 0; ///< 6502: R, which is also what OUT leaves in A
+    std::uint8_t value = 0; ///< R, which is also what OUT leaves in A
     DigitResult outcome = DigitResult::Complete;
   };
 
   /*
-   * 6502: gnum -- the whole routine, loop and all.
+   * The whole routine, loop and all.
    *
    * TypeDigit above is one step of this; here is the loop around it. Three things it owns rather
    * than the step:

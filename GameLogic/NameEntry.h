@@ -17,7 +17,7 @@ namespace Elite
   /*
    * Typing a line at the keyboard, and the commander's name (slice 2d).
    *
-   * 6502: MT26, TRNME, TR1 and GTNME. This is the game's ONLY line editor -- the save and load
+   * MT26, TRNME, TR1 and GTNME. This is the game's ONLY line editor -- the save and load
    * screen is the one place a player types anything other than a number -- and the number entry in
    * `gnum` is a different routine that shares nothing with it.
    *
@@ -28,7 +28,7 @@ namespace Elite
    */
 
   /*
-   * 6502: RLINE -- the OSWORD block MT26 reads its rules from.
+   * The OSWORD block MT26 reads its rules from.
    *
    *   RLINE+0/1  where to store the input, which is always INWK+5
    *   RLINE+2    the maximum line length, 9, which GTNME lowers to 7 and puts back
@@ -42,16 +42,16 @@ namespace Elite
    */
   struct LineLimits
   {
-    std::uint8_t maxLength = 9; ///< 6502: RLINE+2
-    std::uint8_t lowest = '!';  ///< 6502: RLINE+3
-    std::uint8_t highest = '{'; ///< 6502: RLINE+4, exclusive
+    std::uint8_t maxLength = 9;
+    std::uint8_t lowest = '!';
+    std::uint8_t highest = '{'; ///< RLINE+4, exclusive
   };
 
   /// What MT26 left behind: the length in Y, and the carry that says how the line ended.
   struct LineResult
   {
-    std::uint8_t length = 0; ///< 6502: Y on return -- the characters typed, not counting the CR
-    bool escaped = false;    ///< 6502: the carry, SET only when ESCAPE ended the line
+    std::uint8_t length = 0; ///< Y on return -- the characters typed, not counting the CR
+    bool escaped = false;    ///< The carry, SET only when ESCAPE ended the line
   };
 
   /*
@@ -70,7 +70,7 @@ namespace Elite
    */
 
   /*
-   * 6502: MT26 -- read a line of text.
+   * Read a line of text.
    *
    * RETURN ends it, ESCAPE abandons it, DELETE removes a character, and anything outside the
    * allowed range makes a beep instead of appearing. Three details are worth knowing before
@@ -95,7 +95,7 @@ namespace Elite
                                     std::span<std::uint8_t> _buffer, const LineLimits& _limits) noexcept;
 
   /*
-   * 6502: TRNME, which FALLS INTO TR1 -- store the typed name, then read it straight back.
+   * TRNME, which FALLS INTO TR1 -- store the typed name, then read it straight back.
    *
    * The copy back is redundant on this path and is not a mistake: TR1 is a separate entry point
    * that GTNME jumps to when nothing was typed, and TRNME simply sits above it. So a name that has
@@ -108,12 +108,12 @@ namespace Elite
    */
   void StoreCommanderName(std::span<std::uint8_t> _buffer, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept;
 
-  /// 6502: TR1 -- copy the stored name back into the line buffer, which is what GTNME does when
+  /// Copy the stored name back into the line buffer, which is what GTNME does when
   /// the player types nothing and keeps the name they had.
   void LoadCommanderName(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, std::span<std::uint8_t> _buffer) noexcept;
 
   /*
-   * 6502: GTNME -- ask for the commander's name.
+   * Ask for the commander's name.
    *
    * Lowers the line limit to SEVEN for the question and puts it back to nine afterwards, so the
    * name is shorter than the filename the same buffer becomes. Prints extended token 8

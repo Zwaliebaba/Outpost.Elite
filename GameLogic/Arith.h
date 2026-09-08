@@ -18,12 +18,11 @@ namespace Elite
    * that OUTLIVE their writer on purpose, both named in Modernize.md section 8, and this struct
    * exists to say so rather than to hold scratch.
    *
-   * 6502: Q and K2.
    */
   struct MathWorkspace
   {
     /*
-     * 6502: Q -- the frame's `Q` (Modernize.md section 8; risk R22, closed).
+     * The frame's `Q` (Modernize.md section 8; risk R22, closed).
      *
      * `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte.
      * `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two
@@ -36,7 +35,7 @@ namespace Elite
     std::uint8_t lastDivisor = 0;
 
     /*
-     * 6502: K2 -- the BOTTOM BYTE of the second four-byte block, and only that byte.
+     * The BOTTOM BYTE of the second four-byte block, and only that byte.
      *
      * `MV40` never writes `K2`, and its first addition READS this byte for that addition's carry,
      * so what it gets is whatever the last planet or sun drawer left there a frame
@@ -50,7 +49,7 @@ namespace Elite
   // ---- what the kernel answers with ------------------------------------------------------------
 
   /*
-   * 6502: (A P) and the carry -- what the shift-and-add multipliers leave behind.
+   * (A P) and the carry -- what the shift-and-add multipliers leave behind.
    *
    * Every one of them ends on a rotate of `P`, and neither the count-and-branch above it nor the
    * return below touches the carry, so what a caller sees is that rotate's carry out -- the low bit
@@ -62,8 +61,8 @@ namespace Elite
    */
   struct Product
   {
-    std::uint8_t high = 0; ///< 6502: A
-    std::uint8_t low = 0;  ///< 6502: P
+    std::uint8_t high = 0;
+    std::uint8_t low = 0;
     bool carry = false;
 
     /// The product as the sixteen-bit sign-magnitude pair `ADD` takes: (A P), high byte first.
@@ -73,12 +72,12 @@ namespace Elite
     }
   };
 
-  /// 6502: (A P+1 P) and the carry -- the sixteen-step multiply's twenty-four bit product.
+  /// (A P+1 P) and the carry -- the sixteen-step multiply's twenty-four bit product.
   struct Product24
   {
-    std::uint8_t high = 0; ///< 6502: A
-    std::uint8_t mid = 0;  ///< 6502: P+1
-    std::uint8_t low = 0;  ///< 6502: P
+    std::uint8_t high = 0;
+    std::uint8_t mid = 0;
+    std::uint8_t low = 0;
     bool carry = false;
   };
 
@@ -90,7 +89,7 @@ namespace Elite
     std::uint8_t low = 0;
 
     /*
-     * 6502: the carry, which `PLS22` reads twice and the port dropped until it did (§6.53).
+     * The carry, which `PLS22` reads twice and the port dropped until it did (§6.53).
      *
      * `ADD` has three exits and none of them clears it: the same-sign path leaves whatever
      * its own addition produced, the `MU9` path leaves it SET by definition, and the negating path
@@ -109,38 +108,38 @@ namespace Elite
     }
   };
 
-  /// 6502: R and the carry -- the logarithm divide's answer, which `LL9` branches on.
+  /// R and the carry -- the logarithm divide's answer, which `LL9` branches on.
   struct Quotient
   {
-    std::uint8_t value = 0; ///< 6502: R
+    std::uint8_t value = 0;
     bool carry = false;
   };
 
-  /// 6502: (U R) -- the sixteen-bit answer of `LL61`, which `LL9`'s projection reads both halves of.
+  /// (U R) -- the sixteen-bit answer of `LL61`, which `LL9`'s projection reads both halves of.
   struct Quotient16
   {
-    std::uint8_t high = 0; ///< 6502: U
-    std::uint8_t low = 0;  ///< 6502: R
+    std::uint8_t high = 0;
+    std::uint8_t low = 0;
   };
 
-  /// 6502: (P+1 P) and T -- the long division's quotient and the sign it applies on the way out.
+  /// (P+1 P) and T -- the long division's quotient and the sign it applies on the way out.
   struct WideQuotient
   {
-    std::uint8_t high = 0; ///< 6502: P+1
-    std::uint8_t low = 0;  ///< 6502: P
-    std::uint8_t sign = 0; ///< 6502: T -- the operands' signs, EORed, in bit 7
+    std::uint8_t high = 0;
+    std::uint8_t low = 0;
+    std::uint8_t sign = 0; ///< The operands' signs, EORed, in bit 7
 
-    /// 6502: what the routine returns in A: the low byte with the sign ORed on top.
+    /// What the routine returns in A: the low byte with the sign ORed on top.
     [[nodiscard]] constexpr std::uint8_t Signed() const noexcept
     {
       return static_cast<std::uint8_t>(low | sign);
     }
   };
 
-  /// 6502: A and the carry from the logarithm multiply -- a byte scaled by another over 256.
+  /// A and the carry from the logarithm multiply -- a byte scaled by another over 256.
   struct LogProduct
   {
-    std::uint8_t value = 0; ///< 6502: A
+    std::uint8_t value = 0;
     bool carry = false;
   };
 
@@ -157,8 +156,8 @@ namespace Elite
    */
   struct SignedSum
   {
-    std::uint8_t value = 0; ///< 6502: A
-    std::uint8_t sign = 0;  ///< 6502: S, afterwards
+    std::uint8_t value = 0;
+    std::uint8_t sign = 0;  ///< S, afterwards
     bool carry = false;
   };
 
@@ -166,20 +165,20 @@ namespace Elite
   /// on to `SP2` (§6.60).
   struct ScaledDivision
   {
-    std::uint8_t whole = 0;    ///< 6502: P
-    std::uint8_t fraction = 0; ///< 6502: R -- the remainder scaled up by the divisor, through LL28's body
+    std::uint8_t whole = 0;
+    std::uint8_t fraction = 0; ///< The remainder scaled up by the divisor, through LL28's body
     bool carry = false;
   };
 
-  /// 6502: Q and the carry -- the square root, and the last bit to fall out of it.
+  /// Q and the carry -- the square root, and the last bit to fall out of it.
   struct Root
   {
-    std::uint8_t value = 0; ///< 6502: Q
+    std::uint8_t value = 0;
     bool carry = false;
   };
 
   /*
-   * 6502: K(3 2 1 0) -- the four-byte block `MULT3` and `DVID3B` answer with and `MVT3` adds to.
+   * K(3 2 1 0) -- the four-byte block `MULT3` and `DVID3B` answer with and `MVT3` adds to.
    *
    * Three bytes of magnitude, low first, and a fourth holding the sign in bit 7 over the
    * magnitude's top seven bits. Bytes 1 to 3 have the shape of a ship's coordinate, which is how
@@ -188,19 +187,19 @@ namespace Elite
    */
   struct KBlock
   {
-    std::uint8_t low = 0;  ///< 6502: K
-    std::uint8_t mid = 0;  ///< 6502: K+1
-    std::uint8_t high = 0; ///< 6502: K+2
-    std::uint8_t top = 0;  ///< 6502: K+3 -- seven bits of magnitude under the sign
+    std::uint8_t low = 0;
+    std::uint8_t mid = 0;
+    std::uint8_t high = 0;
+    std::uint8_t top = 0;  ///< Seven bits of magnitude under the sign
 
-    /// 6502: MU5 -- fills the four-byte K block with A. The original also clears carry; nothing
+    /// Fills the four-byte K block with A. The original also clears carry; nothing
     /// downstream reads that, so it is not modelled.
     [[nodiscard]] static constexpr KBlock Filled(std::uint8_t _value) noexcept
     {
       return KBlock{_value, _value, _value, _value};
     }
 
-    /// 6502: K+1 to K+3 as INWK reads them -- the coordinate the block holds from its second byte.
+    /// K+1 to K+3 as INWK reads them -- the coordinate the block holds from its second byte.
     [[nodiscard]] constexpr SignMag24 Coordinate() const noexcept
     {
       return SignMag24{mid, high, top};
@@ -211,26 +210,26 @@ namespace Elite
 
   // ---- the multipliers ---------------------------------------------------------------------------
 
-  /// 6502: MU11 -- (A P) = P * X, unsigned, with no guard on a zero multiplier: `MULTU` is the
+  /// (A P) = P * X, unsigned, with no guard on a zero multiplier: `MULTU` is the
   /// entry point that checks, and a zero here multiplies by 255 as the original would.
   [[nodiscard]] Product MultiplyUnguarded(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept;
 
-  /// 6502: MULTU -- (A P) = P * Q, unsigned.
+  /// (A P) = P * Q, unsigned.
   [[nodiscard]] Product MultiplyUnsigned(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept;
 
-  /// 6502: MLU2 -- (A P) = |A| * Q, unsigned. The stardust reads its carry.
+  /// (A P) = |A| * Q, unsigned. The stardust reads its carry.
   [[nodiscard]] Product MultiplyMagnitude(std::uint8_t _value, std::uint8_t _multiplier) noexcept;
 
   /*
-   * 6502: MULT1 -- (A P) = Q * A for sign-magnitude operands; the high byte carries the sign.
+   * (A P) = Q * A for sign-magnitude operands; the high byte carries the sign.
    *
-   * 6502: MULT12 -- the same product stored as (S R). A caller that went on to `MAD` or `ADD` used
+   * The same product stored as (S R). A caller that went on to `MAD` or `ADD` used
    * to find it in the workspace; it hands the `Product`'s pair over instead.
    */
   [[nodiscard]] Product MultiplySigned(std::uint8_t _value, std::uint8_t _multiplier) noexcept;
 
   /*
-   * 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
+   * (A P) = A * A for an A already known to be positive.
    *
    * Returns the carry, because `MAS3` reads it: it sums three squares, adding `R` after each call
    * with no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR,
@@ -244,41 +243,41 @@ namespace Elite
    */
   [[nodiscard]] Product SquareUnsigned(std::uint8_t _value) noexcept;
 
-  /// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first. Carries the same flag.
+  /// (A P) = |A| * |A|, clearing the sign bit first. Carries the same flag.
   [[nodiscard]] Product Square(std::uint8_t _value) noexcept;
 
-  /// 6502: MULTS -- (A P) = P * |A|, scaled: only five of the eight bits get an addition and the
+  /// (A P) = P * |A|, scaled: only five of the eight bits get an addition and the
   /// remaining three are shifted through, which divides the result down. Used where one operand
   /// is known to be small. (6502: MU6 is its zero exit, which clears P and P+1; nothing reads the
   /// second byte, so the port has no field for it.)
   [[nodiscard]] Product MultiplyScaled(std::uint8_t _multiplicand, std::uint8_t _value) noexcept;
 
-  /// 6502: MLTU2 -- (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier:
+  /// (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier:
   /// `_high` arrives as the ONES' COMPLEMENT of the multiplicand's high byte, as the routine reads it.
   [[nodiscard]] Product24 MultiplyWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _multiplier) noexcept;
 
   // ---- the sign-magnitude adders -----------------------------------------------------------------
 
-  /// 6502: ADD (with its MU8 and MU9 branches) -- (A X) = (A P) + (S R), sign-magnitude. `_value`
+  /// ADD (with its MU8 and MU9 branches) -- (A X) = (A P) + (S R), sign-magnitude. `_value`
   /// is (A P) and `_addend` is (S R), each with its sign in the high byte's bit 7.
   [[nodiscard]] AddSignedResult AddSigned(SignMag16 _value, SignMag16 _addend) noexcept;
 
-  /// 6502: MAD -- (A X) = Q * A + (S R). The multiply-accumulate the geometry code runs on.
+  /// (A X) = Q * A + (S R). The multiply-accumulate the geometry code runs on.
   [[nodiscard]] AddSignedResult MultiplyAndAdd(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept;
 
   // ---- the dividers ------------------------------------------------------------------------------
 
-  /// 6502: DVID96 -- A = A / 96, keeping the sign bit. The tail TIS1 shares.
+  /// A = A / 96, keeping the sign bit. The tail TIS1 shares.
   [[nodiscard]] std::uint8_t DivideBy96(std::uint8_t _value) noexcept;
 
-  /// 6502: TIS1 -- (A ?) = (-X * A + (S R)) / 96, sign-magnitude. `_multiplier` is X, which the
+  /// (A ?) = (-X * A + (S R)) / 96, sign-magnitude. `_multiplier` is X, which the
   /// routine stores in Q on the way in.
   [[nodiscard]] std::uint8_t MultiplyAddDivide96(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept;
 
-  /// 6502: TIS2 -- A = A / Q, sign-magnitude, saturating at 96 when the magnitude is too large.
+  /// A = A / Q, sign-magnitude, saturating at 96 when the magnitude is too large.
   [[nodiscard]] std::uint8_t DivideSigned(std::uint8_t _value, std::uint8_t _divisor) noexcept;
 
-  /// 6502: DVIDT -- (P+1 P) = (A P+1) / Q, sixteen-step long division. `_high` is A and `_low` is
+  /// (P+1 P) = (A P+1) / Q, sixteen-step long division. `_high` is A and `_low` is
   /// the P the caller staged; the answer's `Signed()` is the byte the routine returns.
   [[nodiscard]] WideQuotient DivideWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _divisor) noexcept;
 
@@ -289,7 +288,7 @@ namespace Elite
   // applies, because that choice falls out of a parity test rather than being a detail.
 
   /*
-   * 6502: FMLTU -- A = A * Q / 256, through the logarithm tables.
+   * A = A * Q / 256, through the logarithm tables.
    *
    * IT CLOBBERS `P`. The routine PARKS X in `P` on the way in and reloads X from it at every one of
    * its four exits, so it preserves the caller's X -- and `P` keeps that register value afterwards.
@@ -305,12 +304,12 @@ namespace Elite
    */
   [[nodiscard]] LogProduct MultiplyByLog(std::uint8_t _value, std::uint8_t _multiplier, bool _carryIn) noexcept;
 
-  /// 6502: LL28 -- R = 256 * A / Q, saturating at 255 when A is not smaller than Q. Returns the
+  /// R = 256 * A / Q, saturating at 255 when A is not smaller than Q. Returns the
   /// carry the routine leaves, because its callers branch on it.
   [[nodiscard]] Quotient DivideByLog(std::uint8_t _dividend, std::uint8_t _divisor) noexcept;
 
   /*
-   * 6502: LL61 (with its LL84 error exit) -- (U R) = 256 * A / Q, for an A that is NOT smaller
+   * LL61 (with its LL84 error exit) -- (U R) = 256 * A / Q, for an A that is NOT smaller
    * than Q (slice 3b).
    *
    * `LL28`'s sister, and it works by borrowing `LL28`: halve A until it is small enough, divide,
@@ -331,16 +330,16 @@ namespace Elite
    */
   [[nodiscard]] Quotient16 DivideWideByLog(std::uint8_t _dividend, std::uint8_t _divisor, std::uint8_t _high) noexcept;
 
-  /// 6502: LL38 (with its LL39 and LL40 branches) -- combines Q and R under the signs in A and S,
+  /// LL38 (with its LL39 and LL40 branches) -- combines Q and R under the signs in A and S,
   /// flipping S when the result turns negative. `_termSign` is A (a sign in bit 7), `_term` is Q,
   /// and `_total` is (S R): the running sum and its sign, which comes back as `SignedSum::sign`.
   [[nodiscard]] SignedSum CombineSigned(std::uint8_t _termSign, std::uint8_t _term, SignMag16 _total) noexcept;
 
-  /// 6502: ARCTAN -- the angle of the ratio P over Q, as a byte turn.
+  /// The angle of the ratio P over Q, as a byte turn.
   [[nodiscard]] std::uint8_t Arctan(std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
   /*
-   * 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
+   * A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
    * bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
    *
    * The carry is part of the answer, and `CIRCLE2` is the caller that reads it: it calls this,
@@ -352,7 +351,7 @@ namespace Elite
   [[nodiscard]] LogProduct MultiplyBySine(std::uint8_t _value, std::uint8_t _angle, bool _carryIn) noexcept;
 
   /*
-   * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
+   * An 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
    * the fraction: eight steps of restoring division, then -- because the routine has no RTS of
    * its own -- LL28's body scaling the remainder back up, which leaves R.
    *
@@ -373,7 +372,7 @@ namespace Elite
   [[nodiscard]] ScaledDivision DivideAndScale(std::uint8_t _dividend, std::uint8_t _divisor) noexcept;
 
   /*
-   * 6502: LL5 -- Q = square root of (R Q), by the schoolbook bitwise method.
+   * Q = square root of (R Q), by the schoolbook bitwise method.
    *
    * Eight rounds, each shifting two more bits of the radicand in and testing whether the next
    * candidate bit fits. The comparison is spread across three registers with a borrow threaded
@@ -385,7 +384,7 @@ namespace Elite
   [[nodiscard]] Root SquareRoot(std::uint8_t _high, std::uint8_t _low) noexcept;
 
   /*
-   * 6502: MULT3 -- K(4) = (A P+1 P) * Q, a twenty-four bit magnitude by an eight bit one, signed
+   * K(4) = (A P+1 P) * Q, a twenty-four bit magnitude by an eight bit one, signed
    * (slice 3a). `_value` is (A P+1 P) as the sign-magnitude coordinate it always is at the one
    * caller: the sign in `sgn`'s bit 7 over the magnitude's top bits.
    *
@@ -400,7 +399,7 @@ namespace Elite
   [[nodiscard]] KBlock MultiplySigned24(SignMag24 _value, std::uint8_t _multiplier) noexcept;
 
   /*
-   * 6502: NORM -- scale the three-byte vector in XX15 to a length of 96 (slice 3a).
+   * Scale the three-byte vector in XX15 to a length of 96 (slice 3a).
    *
    * Sum the squares, take the square root, divide each component by it. `TIDY` calls this every
    * sixteenth iteration of the main loop to stop a ship's orientation vectors drifting out of shape
@@ -418,7 +417,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t Normalise(std::span<std::uint8_t, 3> _vector) noexcept;
 
   /*
-   * 6502: DVID3B -- sign-magnitude, twenty-four bits over twenty-four (slice 3b). This is the
+   * Sign-magnitude, twenty-four bits over twenty-four (slice 3b). This is the
    * divide the whole of the projection runs through. `_numerator` is P(2 1 0) and `_denominator`
    * is (S R Q), each with its sign in the top byte's bit 7.
    *

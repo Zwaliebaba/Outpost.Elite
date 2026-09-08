@@ -387,7 +387,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->2,701 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
 <!--count:opcode-transcriptions-->0 comment lines are an instruction LISTING (M6-d's instrument,
@@ -1941,6 +1941,52 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-e-2: `Outpost/` and `GameLogic/`'s headers. 1,462 markers, and the classifier
+earned five corrections on the way.**
+
+`origin-markers` 4,103 → **2,701**; 97 more went from `Outpost/`, which the counter does not read.
+Seventy-five files, and the code is proved untouched rather than reviewed: `code_only` strips
+comments from HEAD's copy and from the new one and the two are compared byte for byte, per line
+right-stripped. Seventy-five files, zero differ. **A comment edit that passes that test cannot have
+moved anything the compiler sees, whatever the diff's size** -- which is the only honest way to
+review four thousand lines.
+
+**Five corrections, every one of them found by reading the tool's output rather than by a check.**
+
+1. **The comment opener was being found from the RIGHT.** `* The \`// 6502:\` comment on a flight row
+   names the KY label ...` -- a line that QUOTES a marker -- split on the last `//` and read the
+   text on the wrong side of it, decided the marker opened the comment, and stripped it. The opener
+   is now found from the left, and a `*` block continuation counts as one.
+2. **`LABEL, ` is not a label head.** `RDKEY, once, into whichever logger the caller owns` and
+   "\`thiskey\`, and ZERO IS A KEY" are sentences whose SUBJECT is the label; taking it leaves them
+   headless. Only a DASH reliably says "this is the name and what follows describes it".
+3. **Nor is `LABEL -- and ...`.** `LSO -- and the station's line heap is IT` reads "IT" as `LSO`.
+   A conjunction or relative pronoun after the dash means the sentence continues, so the label stays.
+4. **Capitalising a label INVENTS A WORD.** `moonflower and welcome -- the energy bomb` must not
+   become `Moonflower`: `moonflower` is a table in the C64 build and `Moonflower` is nothing. The
+   tool now harvests every lowercase name a marker introduces -- 212 of them -- and leaves those
+   alone. The first attempt harvested every lowercase word after a marker, learnt "the" and "which"
+   as labels, and then declined to capitalise a sentence that began with one; a harvest has to know
+   what POSITION a name is in.
+5. **`///< 6502: KY1 -- "?"` is not labels-only.** It names the key as well as the label, and
+   dropping the comment would have lost the key. A payload with a dash or a quoted thing has a
+   description in it.
+
+**The 370 labels-only comments go whole, and that is the judgement worth stating.** `Worm = 23,
+///< 6502: WRM` says nothing but where the thing came from. Leaving `///< WRM` behind would be worse
+than either keeping or deleting it: a bare label with no marker to say what kind of name it is, in a
+tree whose original is about to be deleted. So the marker takes the comment with it, and the line
+too when the comment was the whole line.
+
+**On the harness.** `mutate.py --check` says all 97 anchors still apply, and for a comment-only
+change that is the complete argument: a mutant's `find` text still matching means no anchor crossed
+a changed line, so no mutation is different. The full run comes at the end of the marker work rather
+than four times over.
+
+469 tests green, all fifteen checks, 97 of 97 anchors applying. Twelve markers are left in the
+headers and 37 in `Outpost/` -- the EMBEDDED ones, for M6-e-4.
+
 
 **2026-09-08 — M6-e-1: the ledger and `inventory.py` retire, and R7 with them. No marker touched
 yet.**

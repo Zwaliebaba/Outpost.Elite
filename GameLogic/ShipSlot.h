@@ -15,14 +15,14 @@ namespace Elite
   /*
    * The local bubble of ships (slice 3a).
    *
-   * 6502: FRIN, K%, UNIV and MANY. Elite does not have a persistent universe; it has a BUBBLE of at most ten
+   * FRIN, K%, UNIV and MANY. Elite does not have a persistent universe; it has a BUBBLE of at most ten
    * ships around the player, created as they come into range and destroyed as they leave. Every
    * routine that moves, draws, shoots at or is shot by a ship works on one slot of this at a time,
    * copied into `INWK` and copied back.
    */
 
   /*
-   * 6502: NOSH -- the most ships the bubble holds at once.
+   * The most ships the bubble holds at once.
    *
    * Ten, and the assembled layout says so independently of the source: `FRIN` is at 1106 and `MANY`
    * at 1117, eleven bytes apart, which is `NOSH + 1` for the terminator. Worth the cross-check
@@ -32,7 +32,7 @@ namespace Elite
   inline constexpr std::uint8_t MAX_SHIPS = 10;
 
   /*
-   * 6502: FRIN, K% and MANY together -- everything that is in the bubble right now.
+   * FRIN, K% and MANY together -- everything that is in the bubble right now.
    *
    * `UNIV` has no equivalent and needs none: it is a table of POINTERS to the ten blocks in `K%`,
    * which exists because the 6502 has no way to multiply an index by 37 cheaply. `GINF` reads it to
@@ -42,15 +42,15 @@ namespace Elite
    */
   struct Bubble
   {
-    /// 6502: FRIN -- the ship type in each slot, zero for empty, and one byte more than there are
+    /// The ship type in each slot, zero for empty, and one byte more than there are
     /// slots because the scan for a free one runs off the end and stops on the terminator.
     std::array<std::uint8_t, MAX_SHIPS + 1> slots{};
 
-    /// 6502: K% -- the ten data blocks the slots point at.
+    /// The ten data blocks the slots point at.
     std::array<Ship, MAX_SHIPS> blocks{};
 
     /*
-     * 6502: MANY -- how many of each type are in the bubble, indexed by SHIP TYPE.
+     * How many of each type are in the bubble, indexed by SHIP TYPE.
      *
      * Sized by what indexes it (§6.8): `INC MANY,X` with X a ship type, so types 0 to
      * `SHIP_TYPE_COUNT` inclusive. Entry 0 is never incremented -- type 0 means an empty slot --
@@ -58,12 +58,12 @@ namespace Elite
      */
     std::array<std::uint8_t, SHIP_TYPE_COUNT + 1u> counts{};
 
-    /// 6502: JUNK -- cargo canisters, escape pods and the rest, counted together as well as
+    /// Cargo canisters, escape pods and the rest, counted together as well as
     /// separately, because the tactics code asks "is any of this worth shooting at".
     std::uint8_t junk = 0;
 
     /*
-     * 6502: MSTG -- which slot the player's missile is locked on, or 255 for none.
+     * MSTG -- which slot the player's missile is locked on, or 255 for none.
      *
      * It is bubble state and not missile state, because `KILLSHP` has to know: killing the ship a
      * missile is chasing has to unlock it, and killing a ship BELOW it in the list has to renumber
@@ -72,7 +72,7 @@ namespace Elite
     std::uint8_t missileTarget = 0xFF;
 
     /*
-     * 6502: SSPR -- and it is not a byte of its own. `MANY` is at 1117 and `SSPR` at 1119, and
+     * SSPR -- and it is not a byte of its own. `MANY` is at 1117 and `SSPR` at 1119, and
      * `SST` is 2, so **`SSPR` IS `MANY + SST`**: "is the space station present" and "how many
      * space stations are in the bubble" are one byte with two names (§6.58).
      *
@@ -85,7 +85,7 @@ namespace Elite
       return Count(ShipType::Station);
     }
 
-    /// 6502: MANY,X with X = the type -- how many of a type are in the bubble.
+    /// MANY,X with X = the type -- how many of a type are in the bubble.
     [[nodiscard]] constexpr std::uint8_t& Count(ShipType _type) noexcept
     {
       return counts[Byte(_type)];
@@ -95,13 +95,13 @@ namespace Elite
       return counts[Byte(_type)];
     }
 
-    /// 6502: SLSP -- the bottom of the ship line heap, which grows DOWN from LS%. It is bubble
+    /// The bottom of the ship line heap, which grows DOWN from LS%. It is bubble
     /// state rather than drawing state: `NWSHP` moves it and `KILLSHP` moves it back, and what
     /// lives between it and LS% is slice 3b's.
     HeapOffset heapBottom = HeapOffset::Top();
 
     /*
-     * 6502: NWSHP's heap check -- carve `_bytes` off the bottom of the heap for the ship going
+     * NWSHP's heap check -- carve `_bytes` off the bottom of the heap for the ship going
      * into `_slot`, unless that would run down into the slot's own block.
      *
      * Byte for byte, with the two arena addresses as the only 6502 addresses in the model, because
@@ -118,7 +118,7 @@ namespace Elite
     [[nodiscard]] HeapReservation TryReserveHeap(std::uint8_t _slot, std::uint8_t _bytes) noexcept;
 
     /*
-     * 6502: XX21+2*SST-2 and XX21+2*SST-1 -- the space station's entry in the blueprint pointer
+     * XX21+2*SST-2 and XX21+2*SST-1 -- the space station's entry in the blueprint pointer
      * table, and THE ONLY BYTES OF THAT TABLE THE GAME EVER WRITES.
      *
      * `XX21` is at &D000, the first 66 bytes of the ship data region, and the port holds that
@@ -138,11 +138,11 @@ namespace Elite
      * bubble refuses to create a station rather than creating a wrong one, which is §6.95's rule
      * applied to a second byte -- the flight universe has to be built in a state the game could be in.
      */
-    ShipType stationType = ShipType::Station; ///< 6502: which blueprint the entry names -- the Coriolis or the Dodo
+    ShipType stationType = ShipType::Station; ///< Which blueprint the entry names -- the Coriolis or the Dodo
   };
 
   /*
-   * 6502: a blueprint address out of the table AS IT STANDS.
+   * A blueprint address out of the table AS IT STANDS.
    *
    * The difference from `BlueprintAddress` is one ship type. Everything but the station reads the
    * assembled region, which is `const`; the station reads whatever the last `NWSPS` put in the
@@ -152,7 +152,7 @@ namespace Elite
   [[nodiscard]] const Blueprint* BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept;
 
   /*
-   * 6502: GINF -- the address of slot X's data block.
+   * The address of slot X's data block.
    *
    * The index is DOUBLED and used to read a table, because the 6502 cannot index by 37. Here it is
    * the index, and the doubling and a table read because the 6502 cannot index by 37. Here it is
@@ -164,12 +164,12 @@ namespace Elite
   /// What `NWSHP` left behind: whether the ship was created, and where.
   struct NewShip
   {
-    bool created = false; ///< 6502: the carry -- SET on success, CLEAR on either refusal
+    bool created = false; ///< The carry -- SET on success, CLEAR on either refusal
     std::uint8_t slot = 0;
   };
 
   /*
-   * 6502: NWSHP -- put the ship in `_work` into a free slot.
+   * Put the ship in `_work` into a free slot.
    *
    * TWO WAYS TO FAIL and they are different: no free slot, or no room in the ship line heap. Both
    * return with the carry clear, and the second is the interesting one -- it reads byte 5 of the

@@ -62,14 +62,14 @@ namespace Outpost
     void Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music, const Elite::SidWriteLog& _gameWrites) noexcept;
 
   private:
-    /// 6502: the volume `COLD` writes -- see the definition. Called once, at construction.
+    /// The volume `COLD` writes -- see the definition. Called once, at construction.
     void SetBootVolume() noexcept;
 
     void Apply(const Elite::SidWriteLog& _log) noexcept;
     void RunFrame(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept;
     [[nodiscard]] std::uint32_t QueuedBuffers() noexcept;
 
-    /// 6502: the 6510's clock on the NTSC machine, and the VIC-II's frame in cycles on the same.
+    /// The 6510's clock on the NTSC machine, and the VIC-II's frame in cycles on the same.
     static constexpr std::uint32_t CLOCK_HZ = 1'022'727;
     static constexpr std::uint32_t FRAME_CYCLES = 65 * 263;
     static constexpr std::uint32_t SAMPLE_RATE = 44'100;

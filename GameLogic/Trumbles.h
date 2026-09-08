@@ -19,7 +19,7 @@ namespace Elite
   /*
    * The Trumbles on the screen (slice 4d-a).
    *
-   * 6502: MVTRIBS, and the four variables it walks -- TRIBCT, TRIBVX, TRIBVXH and TRIBXH -- plus
+   * MVTRIBS, and the four variables it walks -- TRIBCT, TRIBVX, TRIBVXH and TRIBXH -- plus
    * the six VIC-II sprites they steer. The Trumbles the player is CARRYING are a two-byte number
    * in the commander block and are counted, bred, burnt and sold in five other files already; this
    * is the half that has a position.
@@ -33,16 +33,16 @@ namespace Elite
    * than a register") while `Controls.h` and `VideoState.h` had it wrong.
    */
 
-  /// 6502: TRIBCT's range -- "the number of Trumble sprites we are showing, 0 to 6", and the six
+  /// TRIBCT's range -- "the number of Trumble sprites we are showing, 0 to 6", and the six
   /// are VIC-II sprites 2 to 7 because 0 and 1 are the laser sights and the explosion.
   inline constexpr std::uint8_t TRUMBLE_SPRITE_MAX = 6;
 
-  /// 6502: the Trumbles are VIC-II sprites 2 to 7 -- 0 is the laser sights and 1 is the explosion,
+  /// The Trumbles are VIC-II sprites 2 to 7 -- 0 is the laser sights and 1 is the explosion,
   /// so Trumble N is sprite N + 2 and `VIC+4,Y` with Y = 2N is that sprite's x register.
   inline constexpr std::size_t FIRST_TRUMBLE_SPRITE = 2;
 
   /*
-   * 6502: TRIBVX, TRIBVXH and TRIBXH -- `SKIP 16` each, and sixteen is what the port keeps.
+   * TRIBVX, TRIBVXH and TRIBXH -- `SKIP 16` each, and sixteen is what the port keeps.
    *
    * Section 6.8's rule sizes a TABLE from what can index it, and by that rule these would be
    * twelve: Y is twice a Trumble number below six, so `TRIBVX+1,Y` reaches offset 11 and no
@@ -56,20 +56,20 @@ namespace Elite
   // The bracket around everything below is `MEMORY_MAP_IO` and `MEMORY_MAP_RAM`, which are one pair
   // for the whole library since M3-b-3a: there is one `SETL1` and it is asked for two values.
 
-  /// 6502: the main loop counter's low three bits -- one Trumble per pass, so any one of them
+  /// The main loop counter's low three bits -- one Trumble per pass, so any one of them
   /// moves every eighth frame.
   inline constexpr std::uint8_t TRUMBLE_TURN_MASK = 7;
 
-  /// 6502: at or above this roll a Trumble picks a new direction, which is 21 values in 256 and
+  /// At or above this roll a Trumble picks a new direction, which is 21 values in 256 and
   /// so a little over 8%. The upstream comment rounds it to "8% of the time".
   inline constexpr std::uint8_t TRUMBLE_TURN_ROLL = 235;
 
-  /// 6502: the roll's low two bits -- the four entries of `TRIBDIR`, and both axes are chosen
+  /// The roll's low two bits -- the four entries of `TRIBDIR`, and both axes are chosen
   /// with the same mask.
   inline constexpr std::uint8_t TRUMBLE_DIRECTION_MASK = 3;
 
   /*
-   * 6502: the two edges of the screen, in the nine-bit coordinates a VIC-II sprite has -- built
+   * The two edges of the screen, in the nine-bit coordinates a VIC-II sprite has -- built
    * a byte at a time, low half then high.
    *
    * &148 is 328 and &150 is 336. A sprite whose x has gone negative is put at 328 and one that
@@ -82,7 +82,7 @@ namespace Elite
   /*
    * Where the six Trumbles are, how fast, and how many of them there are.
    *
-   * 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH, VIC+&04 to VIC+&0F and VIC+&10. One struct because one
+   * TRIBCT, TRIBVX, TRIBVXH, TRIBXH, VIC+&04 to VIC+&0F and VIC+&10. One struct because one
    * routine writes all of it and because splitting it would put the ninth bit of a coordinate in a
    * different object from the other eight.
    *
@@ -91,18 +91,18 @@ namespace Elite
    */
   struct TrumbleSprites
   {
-    /// 6502: TRIBCT -- how many of the six are showing. Written by `SIGHT`, read here.
+    /// How many of the six are showing. Written by `SIGHT`, read here.
     std::uint8_t count = 0;
 
-    /// 6502: TRIBVX -- the low byte of the x velocity at even offsets, and the WHOLE y velocity
+    /// The low byte of the x velocity at even offsets, and the WHOLE y velocity
     /// at odd ones. Two different quantities in one array because the original interleaves them.
     std::array<std::uint8_t, TRUMBLE_VELOCITY_COUNT> velocityX{};
 
-    /// 6502: TRIBVXH -- the high byte of the x velocity, which is 0 or &FF.
+    /// The high byte of the x velocity, which is 0 or &FF.
     std::array<std::uint8_t, TRUMBLE_VELOCITY_COUNT> velocityXHigh{};
 
     /*
-     * 6502: TRIBXH -- bit 8 of the x coordinate, and it is here rather than in `VideoState`
+     * Bit 8 of the x coordinate, and it is here rather than in `VideoState`
      * because the GAME keeps it here.
      *
      * The ninth bit of a sprite's x lives in a register shared by all eight sprites, so it cannot
@@ -114,7 +114,7 @@ namespace Elite
   };
 
   /*
-   * 6502: MVTRIBS -- move one Trumble sprite, and which one depends on the frame.
+   * Move one Trumble sprite, and which one depends on the frame.
    *
    * ONE SPRITE PER FRAME, CHOSEN BY THE MAIN LOOP COUNTER. Its low three bits count 0 to 7 and
    * the routine returns immediately when that is not below `TRIBCT`, so with six Trumbles showing

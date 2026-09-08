@@ -8,7 +8,7 @@ namespace Elite
   /*
    * What a key press means when the game is docked or flying (slice 2e).
    *
-   * 6502: TT102's dispatch, which is the game's whole top-level keyboard. Every screen in phases 2
+   * TT102's dispatch, which is the game's whole top-level keyboard. Every screen in phases 2
    * and 3 is reached from here, and the routine is a chain of comparisons rather than a table -- so
    * the ORDER matters, two of the keys are tested against a different byte from the rest, and one
    * of them is not read from the accumulator at all.
@@ -21,33 +21,33 @@ namespace Elite
    * original today, for every one of the 256 key codes.
    */
 
-  /// 6502: the internal key numbers, which are the C64's keyboard matrix positions and not ASCII.
+  /// The internal key numbers, which are the C64's keyboard matrix positions and not ASCII.
   /// They are here rather than in the executable's key map because TT102 compares against them.
-  inline constexpr std::uint8_t KEY_LAUNCH = 0x3C;         ///< 6502: f0 -- F1
-  inline constexpr std::uint8_t KEY_BUY_CARGO = 0x08;      ///< 6502: f1 -- "1"
-  inline constexpr std::uint8_t KEY_SELL_CARGO = 0x05;     ///< 6502: f2 -- "2"
-  inline constexpr std::uint8_t KEY_EQUIP_SHIP = 0x38;     ///< 6502: f3 -- "3"
-  inline constexpr std::uint8_t KEY_LONG_RANGE = 0x35;     ///< 6502: f4 -- "4"
-  inline constexpr std::uint8_t KEY_SHORT_RANGE = 0x30;    ///< 6502: f5 -- "5"
-  inline constexpr std::uint8_t KEY_DATA_ON_SYSTEM = 0x2D; ///< 6502: f6 -- "6"
-  inline constexpr std::uint8_t KEY_MARKET_PRICE = 0x28;   ///< 6502: f7 -- "7"
-  inline constexpr std::uint8_t KEY_STATUS = 0x25;         ///< 6502: f8 -- "8"
-  inline constexpr std::uint8_t KEY_INVENTORY = 0x20;      ///< 6502: f9 -- "9"
-  inline constexpr std::uint8_t KEY_REAR_VIEW = 0x3B;      ///< 6502: f12 -- F3
-  inline constexpr std::uint8_t KEY_LEFT_VIEW = 0x3A;      ///< 6502: f22 -- F5
-  inline constexpr std::uint8_t KEY_RIGHT_VIEW = 0x3D;     ///< 6502: f32 -- F7
-  inline constexpr std::uint8_t KEY_DISK_ACCESS = 0x12;    ///< 6502: &12 -- "@"
-  inline constexpr std::uint8_t KEY_DISTANCE = 0x2E;       ///< 6502: DINT -- "D"
-  inline constexpr std::uint8_t KEY_FIND_SYSTEM = 0x2B;    ///< 6502: FINT -- "F"
-  inline constexpr std::uint8_t KEY_HOME = 0x1A;           ///< 6502: OINT -- "O"
+  inline constexpr std::uint8_t KEY_LAUNCH = 0x3C;         ///< F1
+  inline constexpr std::uint8_t KEY_BUY_CARGO = 0x08;      ///< "1"
+  inline constexpr std::uint8_t KEY_SELL_CARGO = 0x05;     ///< "2"
+  inline constexpr std::uint8_t KEY_EQUIP_SHIP = 0x38;     ///< "3"
+  inline constexpr std::uint8_t KEY_LONG_RANGE = 0x35;     ///< "4"
+  inline constexpr std::uint8_t KEY_SHORT_RANGE = 0x30;    ///< "5"
+  inline constexpr std::uint8_t KEY_DATA_ON_SYSTEM = 0x2D; ///< "6"
+  inline constexpr std::uint8_t KEY_MARKET_PRICE = 0x28;   ///< "7"
+  inline constexpr std::uint8_t KEY_STATUS = 0x25;         ///< "8"
+  inline constexpr std::uint8_t KEY_INVENTORY = 0x20;      ///< "9"
+  inline constexpr std::uint8_t KEY_REAR_VIEW = 0x3B;      ///< F3
+  inline constexpr std::uint8_t KEY_LEFT_VIEW = 0x3A;      ///< F5
+  inline constexpr std::uint8_t KEY_RIGHT_VIEW = 0x3D;     ///< F7
+  inline constexpr std::uint8_t KEY_DISK_ACCESS = 0x12;    ///< &12 -- "@"
+  inline constexpr std::uint8_t KEY_DISTANCE = 0x2E;       ///< "D"
+  inline constexpr std::uint8_t KEY_FIND_SYSTEM = 0x2B;    ///< "F"
+  inline constexpr std::uint8_t KEY_HOME = 0x1A;           ///< "O"
 
-  /// 6502: the three view numbers `LOOK1` is given, reached by falling through two `EQUB &2C`s, so
+  /// The three view numbers `LOOK1` is given, reached by falling through two `EQUB &2C`s, so
   /// the assembler's own bytes decide which one a jump lands on.
   inline constexpr std::uint8_t VIEW_REAR = 1;
   inline constexpr std::uint8_t VIEW_LEFT = 2;
   inline constexpr std::uint8_t VIEW_RIGHT = 3;
 
-  /// 6502: QQ11 -- the routine tests the TOP TWO BITS and nothing else, so any view with either of
+  /// The routine tests the TOP TWO BITS and nothing else, so any view with either of
   /// them set counts as a chart.
   [[nodiscard]] constexpr bool IsChartView(std::uint8_t _view) noexcept
   {
@@ -58,35 +58,35 @@ namespace Elite
   /// two of them do the same thing from different states and one does nothing at all.
   enum class KeyAction
   {
-    Nothing,            ///< 6502: t95, which is an RTS -- the key was not one of these
-    StatusMode,         ///< 6502: STATUS
-    LongRangeChart,     ///< 6502: TT22
-    ShortRangeChart,    ///< 6502: TT23
-    DataOnSystem,       ///< 6502: TT111 then TT25 -- the only target reached by two calls
-    Inventory,          ///< 6502: TT213
-    MarketPrice,        ///< 6502: TT167
-    Launch,             ///< 6502: TT110, and it is tested BEFORE the docked check
-    EquipShip,          ///< 6502: EQSHP, docked only
-    BuyCargo,           ///< 6502: TT219, docked only
-    DiskAccess,         ///< 6502: SVE, then QU5 or BAY on its carry -- docked only
-    SellCargo,          ///< 6502: TT208, docked only
-    ChangeView,         ///< 6502: LOOK1, in flight only -- the view is in the result
-    Hyperspace,         ///< 6502: hyp, and it is NOT decided by the key in A
-    ShowDistance,       ///< 6502: T95
-    SearchBySystemName, ///< 6502: HME2
-    HomeCrosshairs,     ///< 6502: TT103 / ping / TT103, which is a TAIL call and skips the counter
-    MoveCrosshairs,     ///< 6502: TT16, and then the counter
-    CountdownOnly,      ///< 6502: TT107 reached without moving anything
+    Nothing,            ///< T95, which is an RTS -- the key was not one of these
+    StatusMode,
+    LongRangeChart,
+    ShortRangeChart,
+    DataOnSystem,       ///< TT111 then TT25 -- the only target reached by two calls
+    Inventory,
+    MarketPrice,
+    Launch,             ///< TT110, and it is tested BEFORE the docked check
+    EquipShip,          ///< EQSHP, docked only
+    BuyCargo,           ///< TT219, docked only
+    DiskAccess,         ///< SVE, then QU5 or BAY on its carry -- docked only
+    SellCargo,          ///< TT208, docked only
+    ChangeView,         ///< LOOK1, in flight only -- the view is in the result
+    Hyperspace,         ///< hyp, and it is NOT decided by the key in A
+    ShowDistance,
+    SearchBySystemName,
+    HomeCrosshairs,     ///< TT103 / ping / TT103, which is a TAIL call and skips the counter
+    MoveCrosshairs,     ///< TT16, and then the counter
+    CountdownOnly,      ///< TT107 reached without moving anything
   };
 
   struct KeyOutcome
   {
     KeyAction action = KeyAction::Nothing;
-    std::uint8_t view = 0; ///< 6502: X for LOOK1. Only meaningful for ChangeView.
+    std::uint8_t view = 0; ///< X for LOOK1. Only meaningful for ChangeView.
   };
 
   /*
-   * 6502: TT102 -- one key press, and which of eighteen places the game goes next.
+   * One key press, and which of eighteen places the game goes next.
    *
    * Four things about it are worth knowing, and none of them is visible from the list of keys.
    *

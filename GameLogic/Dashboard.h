@@ -25,13 +25,13 @@ namespace Elite
    * rather than rubbed out. The bulbs are the exception and they are not bitmap at all.
    */
 
-  /// 6502: RED, YELLOW -- four multicolour pixels of one colour each, which is what `COL` is ANDed
+  /// RED, YELLOW -- four multicolour pixels of one colour each, which is what `COL` is ANDed
   /// with. The dials use only these two; the scanner's own colours are in `SCANNER_COLOUR_TABLE`.
-  inline constexpr PixelPattern DIAL_DANGER = PixelPattern::Red;    ///< 6502: RED
-  inline constexpr PixelPattern DIAL_NORMAL = PixelPattern::Yellow; ///< 6502: YELLOW
+  inline constexpr PixelPattern DIAL_DANGER = PixelPattern::Red;
+  inline constexpr PixelPattern DIAL_NORMAL = PixelPattern::Yellow;
 
   /*
-   * 6502: BULBCOL -- what the three indicator bulbs EOR into SCREEN RAM.
+   * What the three indicator bulbs EOR into SCREEN RAM.
    *
    * Not a bitmap colour and not a mask: it is a palette byte for two character cells, and the bulbs
    * are toggled by EORing it in and out. That is why `ECBLB` and `SPBLB` are four instructions each
@@ -40,7 +40,7 @@ namespace Elite
   inline constexpr CellPalette BULB_COLOUR{Colour::LightBlue, Colour::Black};
 
   /*
-   * 6502: DLOC%, ECELL, SCELL, MCELL -- where the dashboard is.
+   * DLOC%, ECELL, SCELL, MCELL -- where the dashboard is.
    *
    * `DLOC%` is `SCBASE + 18*8*40`: the dashboard starts at character row 18, which is the same 144
    * that makes the space view 256 x 144. The three cell addresses are in the SECOND block of screen
@@ -58,7 +58,7 @@ namespace Elite
   inline constexpr std::uint16_t MISSILE_CELL = Canvas::DASHBOARD_CELLS + 24u * 40u + 6u;
 
   /*
-   * 6502: GNTMP, QQ22+1, FSH, ASH, ENERGY, CABTMP, ALTIT, ECMA and FLH -- what the dials read.
+   * GNTMP, QQ22+1, FSH, ASH, ENERGY, CABTMP, ALTIT, ECMA and FLH -- what the dials read.
    *
    * This was `DockedShip` in slice 2d, named for `DOENTRY`, which RESETS six of these rather than
    * for the seven routines that read them. It also held `DELTA`, which is `FlightState`'s: one 6502
@@ -79,10 +79,10 @@ namespace Elite
    */
   struct FlightStatus
   {
-    std::uint8_t laserTemperature = 0; ///< 6502: GNTMP
+    std::uint8_t laserTemperature = 0;
 
     /*
-     * 6502: MULIE -- "this `RESET` came from the title screen", and nothing in `GameLogic` reads it.
+     * "this `RESET` came from the title screen", and nothing in `GameLogic` reads it.
      *
      * `TITLE` sets it, calls `RESET`, and clears it again; the only reader in the whole build is
    * `stopbd`, whose first two instructions test its SIGN and leave -- so the guard exists to
@@ -95,43 +95,43 @@ namespace Elite
      */
     std::uint8_t titleReset = 0;
     /*
-     * 6502: QQ22 and QQ22+1 -- the hyperspace countdown, which is TWO bytes and one number.
+     * QQ22 and QQ22+1 -- the hyperspace countdown, which is TWO bytes and one number.
      *
      * `QQ22+1` is what is printed and counts 15 down to 1; `QQ22` is the tick within each of
      * those, reloaded from 5 every time the printed digit changes. The port had only the printed
      * half because that is all `ee3` and `TT66` read; `RESET` clears both, which is what made the
      * other one necessary.
      */
-    std::uint8_t hyperspaceCounter = 0;   ///< 6502: QQ22
-    std::uint8_t hyperspaceCountdown = 0; ///< 6502: QQ22+1
-    std::uint8_t forwardShield = 0;       ///< 6502: FSH
-    std::uint8_t aftShield = 0;           ///< 6502: ASH
-    std::uint8_t energy = 0;              ///< 6502: ENERGY
-    std::uint8_t cabinTemperature = 0;    ///< 6502: CABTMP
-    std::uint8_t altitude = 0;            ///< 6502: ALTIT
-    std::uint8_t ecmCountdown = 0;        ///< 6502: ECMA
-    std::uint8_t ecmOurs = 0;             ///< 6502: ECMP
-    std::uint8_t damageFlash = 0;         ///< 6502: FLH
+    std::uint8_t hyperspaceCounter = 0;
+    std::uint8_t hyperspaceCountdown = 0;
+    std::uint8_t forwardShield = 0;
+    std::uint8_t aftShield = 0;
+    std::uint8_t energy = 0;
+    std::uint8_t cabinTemperature = 0;
+    std::uint8_t altitude = 0;
+    std::uint8_t ecmCountdown = 0;
+    std::uint8_t ecmOurs = 0;
+    std::uint8_t damageFlash = 0;
 
-    /// 6502: LAS2 -- the laser power for the view being shown, or zero for "no laser here, stop
+    /// The laser power for the view being shown, or zero for "no laser here, stop
     /// pulsing". `TTX66` clears it on every screen change and flight loop part 16 reads it.
     std::uint8_t viewLaser = 0;
 
-    /// 6502: MJ -- non-zero in witchspace. `WARP` refuses to work while it is set, which is why
+    /// Non-zero in witchspace. `WARP` refuses to work while it is set, which is why
     /// you cannot skip past a Thargoid ambush.
     std::uint8_t midJump = 0;
 
     /*
-     * 6502: LAS, LASCT and MSAR -- what the guns and the missile are doing this frame.
+     * LAS, LASCT and MSAR -- what the guns and the missile are doing this frame.
      *
      * `LAS` is the power of the shot being fired right now and is cleared at the top of every pass;
      * `LASCT` is the pulse laser's countdown, which is why a pulse laser cannot be held down; `MSAR`
      * says the missile is armed and looking for a lock. All three arrived with the flight loop in
      * 3d-d-iii-b for the same reason `LAS2` and `MJ` did: one byte, one writer, one reader.
      */
-    std::uint8_t laserPower = 0;   ///< 6502: LAS
-    std::uint8_t laserCount = 0;   ///< 6502: LASCT
-    std::uint8_t missileArmed = 0; ///< 6502: MSAR
+    std::uint8_t laserPower = 0;
+    std::uint8_t laserCount = 0;
+    std::uint8_t missileArmed = 0;
   };
 
   /// What `PZW` hands back: the original returns one colour in A and another in X, and both of its
@@ -143,7 +143,7 @@ namespace Elite
   };
 
   /*
-   * 6502: PZW -- the colour a dial in the danger zone is drawn in, which flashes.
+   * The colour a dial in the danger zone is drawn in, which flashes.
    *
    * X is always yellow. A is red unless `MCNT AND 8 AND FLH` is non-zero, in which case it is
    * yellow too -- so with the damage flash on, the danger colour alternates every eight passes of
@@ -158,7 +158,7 @@ namespace Elite
   [[nodiscard]] DangerColours DangerColour(std::uint8_t _mainLoopCounter, std::uint8_t _damageFlash) noexcept;
 
   /*
-   * 6502: DILX and DIL -- one bar, sixteen steps wide, and FOUR ENTRY POINTS.
+   * DILX and DIL -- one bar, sixteen steps wide, and FOUR ENTRY POINTS.
    *
    * The routine opens with four shifts and then `.DIL`, so where a caller jumps in IS the scale:
    * `DILX` divides the reading by sixteen, `DILX+2` by four, `DIL-1` by two, and `DIL` not at all.
@@ -170,19 +170,19 @@ namespace Elite
    * character cell and goes out pointing at the next row down, which is how four calls in a row
    * draw four dials. `Q`, `R` and `COL` are the routine's own (M2-c).
    */
-  /// 6502: K and K+1 -- the two colours `DIALS` stores for `DIL`, as `PZW`'s (A X) or the other way
+  /// K and K+1 -- the two colours `DIALS` stores for `DIL`, as `PZW`'s (A X) or the other way
   /// round, which is why the same threshold means the opposite thing for the energy bars.
   struct DialColours
   {
-    PixelPattern atOrAbove = PixelPattern::Blank; ///< 6502: K -- drawn when the reading reaches `T1`, or when `K+1` is blank
-    PixelPattern below = PixelPattern::Blank;     ///< 6502: K+1 -- drawn under `T1`, unless it is blank
+    PixelPattern atOrAbove = PixelPattern::Blank; ///< Drawn when the reading reaches `T1`, or when `K+1` is blank
+    PixelPattern below = PixelPattern::Blank;     ///< Drawn under `T1`, unless it is blank
   };
 
   void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,
                DialColours _colours, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: DIL2 -- the roll and pitch indicators, which are one lit pixel rather than a bar.
+   * The roll and pitch indicators, which are one lit pixel rather than a bar.
    *
    * Four cells of four pixels, and the pixel is `CTWOS,X` for whichever block the value lands in;
    * every other block is blank. Once the lit block is drawn, `Q` is set to 255 so no later block
@@ -198,7 +198,7 @@ namespace Elite
                      std::uint8_t _wideValue = 0) noexcept;
 
   /*
-   * 6502: DIALS parts 1 to 4 -- the whole dashboard, and it ends by jumping into `COMPAS`.
+   * DIALS parts 1 to 4 -- the whole dashboard, and it ends by jumping into `COMPAS`.
    *
    * One fall-through chain of four files, so the compass is not something the caller does next: it
    * is the last thing `DIALS` does. Part 3 is the energy bars and runs on ONE PASS IN FOUR
@@ -215,7 +215,7 @@ namespace Elite
                  Compass& _compass, const Bubble& _bubble, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: MSBAR -- set missile indicator X to the colour in Y.
+   * Set missile indicator X to the colour in Y.
    *
    * A colour cell and not a drawing: the missiles are four character blocks in the second block of
    * screen RAM and this writes one palette byte. The index is stepped down, moved across, stepped
@@ -227,7 +227,7 @@ namespace Elite
   void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: msblob -- redraw all four indicators from `NOMSL`.
+   * Redraw all four indicators from `NOMSL`.
    *
    * TWO LOOPS AND ONE COUNTER. `.ss` walks X down from four drawing black until it MEETS `NOMSL`,
    * then falls into `.SAL8`, which carries on down the same X drawing green -- so the split point
@@ -238,7 +238,7 @@ namespace Elite
   void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: BLACK2, RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM
+   * BLACK2, RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM
    * palette bytes rather than bitmap colours.
    *
    * `MISSILE_NONE` WAS ZERO HERE UNTIL 3d-d-iii-b, and zero is not a colour the game ever passes:
@@ -247,13 +247,13 @@ namespace Elite
    * byte it is given and the port matched the game on that byte -- but the NAME claimed to be a
    * value the game uses and was not one.
    */
-  inline constexpr CellPalette MISSILE_NONE{Colour::DarkGrey, Colour::Yellow}; ///< 6502: BLACK2 -- no missile, and not black
-  inline constexpr CellPalette MISSILE_LOCKED{Colour::Red, Colour::Yellow};    ///< 6502: RED2 -- armed and locked
-  inline constexpr CellPalette MISSILE_ARMED{Colour::Orange, Colour::Yellow};  ///< 6502: YELLOW2 -- armed, seeking, and not yellow
-  inline constexpr CellPalette MISSILE_READY{Colour::Green, Colour::Yellow}; ///< 6502: GREEN2 -- unarmed, and what KILLSHP hands ABORT too
+  inline constexpr CellPalette MISSILE_NONE{Colour::DarkGrey, Colour::Yellow}; ///< No missile, and not black
+  inline constexpr CellPalette MISSILE_LOCKED{Colour::Red, Colour::Yellow};    ///< Armed and locked
+  inline constexpr CellPalette MISSILE_ARMED{Colour::Orange, Colour::Yellow};  ///< Armed, seeking, and not yellow
+  inline constexpr CellPalette MISSILE_READY{Colour::Green, Colour::Yellow}; ///< Unarmed, and what KILLSHP hands ABORT too
 
   /*
-   * 6502: ABORT2 -- point the leftmost missile at slot X, and recolour its indicator.
+   * Point the leftmost missile at slot X, and recolour its indicator.
    *
    * THE STORE INTO `MSAR` WRITES ZERO, not the colour it was handed: `MSBAR` ends by zeroing Y, and
    * the store three instructions later reads that rather than the Y the caller passed. So every
@@ -263,13 +263,13 @@ namespace Elite
    */
   void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept;
 
-  /// 6502: ABORT -- a target of &FF and then straight into `ABORT2`: no target, so the lock is off.
+  /// A target of &FF and then straight into `ABORT2`: no target, so the lock is off.
   void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, CellPalette _palette) noexcept;
 
-  /// 6502: ECBLB -- toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
+  /// Toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
   void ToggleEcmIndicator(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: SPBLB -- the same for the space station bulb, seventeen cells to the right.
+  /// The same for the space station bulb, seventeen cells to the right.
   void ToggleStationIndicator(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   // `MISSILE_GREEN` WAS HERE AND WAS `MISSILE_READY` UNDER A SECOND NAME: both were `GREEN2`, &57, one
@@ -297,7 +297,7 @@ namespace Elite
    */
 
   /*
-   * 6502: ECBLB2 -- start the E.C.M.: thirty-two passes on the countdown, the noise, and the bulb.
+   * Start the E.C.M.: thirty-two passes on the countdown, the noise, and the bulb.
    *
    * It has no `RTS`; it falls into `ECBLB`, so lighting the bulb is part of starting the E.C.M.
    * rather than something the caller does afterwards.
@@ -307,7 +307,7 @@ namespace Elite
   void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: ECMOF -- stop the E.C.M.: clear both flags, put the bulb out, silence the hum.
+   * Stop the E.C.M.: clear both flags, put the bulb out, silence the hum.
    *
    * The counterpart to `StartEcm` and not its mirror image. Starting it sets `ECMA` alone and
    * leaves `ECMP` to the caller; stopping it clears both. And `ECBLB` is a TOGGLE, so this puts

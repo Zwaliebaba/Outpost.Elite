@@ -98,7 +98,7 @@ namespace
   };
 
   /*
-   * 6502: TT100 -- how many passes of the flight half a wall-clock interval is worth.
+   * How many passes of the flight half a wall-clock interval is worth.
    *
    * THE STEPS ARE COUNTED HERE AND TAKEN IN THE LIBRARY, and the split is the determinism guard's:
    * this is the only arithmetic in the loop that needs a `double`. `Present` blocks on the display's
@@ -122,11 +122,11 @@ namespace
 
     for (int step = 0; step < plan.steps; ++step)
     {
-      // 6502: `thiskey`, and ZERO IS A KEY -- `TT102` runs every pass, which is how the hyperspace
+      // `thiskey`, and ZERO IS A KEY -- `TT102` runs every pass, which is how the hyperspace
       // countdown ticks whether or not the player touched anything (§6.159).
       if (!_app.game.Step(_app.window.TakePressed()))
       {
-        return; // 6502: `M%` left the flight half, or `DK4` froze it
+        return; // `M%` left the flight half, or `DK4` froze it
       }
     }
   }
@@ -141,11 +141,11 @@ namespace
     // The thirteen bytes the pause screen toggled, from Settings.txt beside the commanders (InputTimer.md S-1).
     app->window.Warn(Outpost::ApplySettingsFile(app->store.Root(), app->game.State()).Summary());
 
-    // 6502: the loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
+    // The loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
     app->game.Reset();
 
     /*
-     * 6502: `FRCE`'s two-way dispatch on `QQ12` -- the whole main loop, and the flag is what
+     * `FRCE`'s two-way dispatch on `QQ12` -- the whole main loop, and the flag is what
      * chooses between its two halves.
      *
      * MLOOP's second half polls the keyboard, dispatches, and goes round; every docked screen it
@@ -159,7 +159,7 @@ namespace
      */
     double accumulated = 0.0;
     double dockedLeftover = 0.0;
-    std::uint8_t dockedSyncs = Outpost::DOCKED_PASS_SYNCS; // 6502: what the last docked pass asked DELAY for
+    std::uint8_t dockedSyncs = Outpost::DOCKED_PASS_SYNCS; // What the last docked pass asked DELAY for
     auto last = std::chrono::steady_clock::now();
 
     while (app->shell.Turn())
@@ -168,7 +168,7 @@ namespace
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
 
-      // 6502: FRCE's question about `QQ12` -- ONE question since M4-d, and TWO answers since
+      // FRCE's question about `QQ12` -- ONE question since M4-d, and TWO answers since
       // InputTimer.md I-0 took `FREEZE`'s third with the pause screen (owner ruling 2026-09-08).
       const Elite::Game::Mode mode = app->game.ModeNow();
 
@@ -188,7 +188,7 @@ namespace
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
-          dockedSyncs = app->game.StepDocked(app->window.TakePressed()); // 6502: `thiskey`, which is zero when nothing was pressed
+          dockedSyncs = app->game.StepDocked(app->window.TakePressed()); // `thiskey`, which is zero when nothing was pressed
         }
         continue;
       }

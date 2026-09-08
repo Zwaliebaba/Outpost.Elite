@@ -26,10 +26,10 @@ namespace Elite
    * one behaviour here the port does not reproduce -- see LoadCommander.
    */
 
-  /// 6502: TP to CHK -- the block SVE writes, seventy-seven bytes counted down from the top.
+  /// TP to CHK -- the block SVE writes, seventy-seven bytes counted down from the top.
   inline constexpr std::size_t COMMANDER_BLOCK_SIZE = 77;
 
-  /// 6502: NAME -- eight bytes, the last of which is the carriage return that ends it.
+  /// Eight bytes, the last of which is the carriage return that ends it.
   inline constexpr std::size_t COMMANDER_NAME_SIZE = 8;
 
   /// A saved commander: the name, then the block. Eighty-five bytes on disk.
@@ -45,17 +45,17 @@ namespace Elite
    */
   enum class Field : std::size_t
   {
-    MissionProgress = 0, ///< 6502: TP
-    SystemX = 1,         ///< 6502: QQ0 -- where you are, in galactic coordinates
-    SystemY = 2,         ///< 6502: QQ1
-    GalaxySeeds = 3,     ///< 6502: QQ21 -- six bytes, and the whole galaxy follows from them
-    Cash = 9,            ///< 6502: CASH -- four bytes, most significant first, in tenths
-    Fuel = 13,           ///< 6502: QQ14 -- in light years times ten
-    Competition = 14,    ///< 6502: COK -- the flags the competition code was built from
-    GalaxyNumber = 15,   ///< 6502: GCNT
-    Lasers = 16,         ///< 6502: LASER -- six bytes: front, rear, left, right and two unused
+    MissionProgress = 0,
+    SystemX = 1,         ///< QQ0 -- where you are, in galactic coordinates
+    SystemY = 2,
+    GalaxySeeds = 3,     ///< Six bytes, and the whole galaxy follows from them
+    Cash = 9,            ///< Four bytes, most significant first, in tenths
+    Fuel = 13,           ///< In light years times ten
+    Competition = 14,    ///< The flags the competition code was built from
+    GalaxyNumber = 15,
+    Lasers = 16,         ///< Six bytes: front, rear, left, right and two unused
     /*
-     * 6502: CRGO -- and it is TWO GREATER than the capacity it describes.
+     * CRGO -- and it is TWO GREATER than the capacity it describes.
      *
      * A standard hold is 22 here and holds 20 tonnes; a large one is 37 and holds 35. The comment
      * in the original says why: it makes the arithmetic in `tnpr`, which decides whether a
@@ -63,29 +63,29 @@ namespace Elite
      * the player carry two tonnes too many, and the default commander's block says 22.
      */
     CargoCapacity = 22,
-    CargoHold = 23,        ///< 6502: QQ20 -- seventeen goods
-    Ecm = 40,              ///< 6502: ECM
-    FuelScoops = 41,       ///< 6502: BST
-    EnergyBomb = 42,       ///< 6502: BOMB
-    EnergyUnit = 43,       ///< 6502: ENGY
-    DockingComputer = 44,  ///< 6502: DKCMP
-    GalacticDrive = 45,    ///< 6502: GHYP
-    EscapePod = 46,        ///< 6502: ESCP, with one byte after it that nothing names
-    Tribbles = 48,         ///< 6502: TRIBBLE -- two bytes
-    KillsLow = 50,         ///< 6502: TALLYL
-    Missiles = 51,         ///< 6502: NOMSL
-    LegalStatus = 52,      ///< 6502: FIST
-    Availability = 53,     ///< 6502: AVL -- seventeen goods, the market's stock
-    MarketRandomiser = 70, ///< 6502: QQ26
-    Kills = 71,            ///< 6502: TALLY -- two bytes
-    SaveCount = 73,        ///< 6502: SVC
-    Checksum2Byte = 74,    ///< 6502: CHK2
-    Checksum3Byte = 75,    ///< 6502: CHK3
-    ChecksumByte = 76,     ///< 6502: CHK
+    CargoHold = 23,        ///< Seventeen goods
+    Ecm = 40,
+    FuelScoops = 41,
+    EnergyBomb = 42,
+    EnergyUnit = 43,
+    DockingComputer = 44,
+    GalacticDrive = 45,
+    EscapePod = 46,        ///< ESCP, with one byte after it that nothing names
+    Tribbles = 48,         ///< Two bytes
+    KillsLow = 50,
+    Missiles = 51,
+    LegalStatus = 52,
+    Availability = 53,     ///< Seventeen goods, the market's stock
+    MarketRandomiser = 70,
+    Kills = 71,            ///< Two bytes
+    SaveCount = 73,
+    Checksum2Byte = 74,
+    Checksum3Byte = 75,
+    ChecksumByte = 76,
   };
 
   /*
-   * 6502: CASH -- four bytes, MOST significant first, in tenths of a credit.
+   * Four bytes, MOST significant first, in tenths of a credit.
    *
    * The opposite way round from everything else in the game, which keeps its sixteen-bit values
    * low byte first. A port that used one convention throughout would give the player either
@@ -97,7 +97,7 @@ namespace Elite
   {
     std::uint32_t tenths = 0;
 
-    /// 6502: CASH+n -- one of the four bytes, most significant first.
+    /// One of the four bytes, most significant first.
     [[nodiscard]] constexpr std::uint8_t Byte(std::size_t _index) const noexcept
     {
       return static_cast<std::uint8_t>(tenths >> (8u * (3u - _index)));
@@ -112,7 +112,7 @@ namespace Elite
   };
 
   /*
-   * 6502: TALLY and TRIBBLE -- a sixteen-bit count kept as two bytes, low byte first, which the
+   * TALLY and TRIBBLE -- a sixteen-bit count kept as two bytes, low byte first, which the
    * game steps and shifts ONE BYTE AT A TIME: the kill tally increments its high byte on its own,
    * and the Trumbles' count is halved by rotating each half in turn. The halves are fields because
    * that is how every routine reaches them; `Value` is for the ones that read the pair (`TT111`'s
@@ -132,7 +132,7 @@ namespace Elite
   };
 
   /*
-   * 6502: QQ14 -- fuel, in tenths of a light year (M5-a-10).
+   * Fuel, in tenths of a light year (M5-a-10).
    *
    * ADR-006 §2 parked this type at M1 "for M5, where a type earns its operators", and these are
    * the operators it earned: the three arithmetic rules the game applies to the byte, each of
@@ -146,7 +146,7 @@ namespace Elite
   {
     std::uint8_t tenths = 0;
 
-    /// 6502: MA23's scooping -- the amount, plus the bit the halving before it shifted out as the
+    /// MA23's scooping -- the amount, plus the bit the halving before it shifted out as the
     /// carry into the add, saturating at a full tank rather than wrapping.
     [[nodiscard]] constexpr LightYearsTenths Scooped(std::uint8_t _amount, bool _carry) const noexcept
     {
@@ -154,12 +154,12 @@ namespace Elite
       return {(sum < FULL_TANK_TENTHS) ? sum : FULL_TANK_TENTHS};
     }
 
-    /// 6502: the jump's fuel subtraction -- a jump costing more than the tank holds leaves it
+    /// The jump's fuel subtraction -- a jump costing more than the tank holds leaves it
     /// EMPTY rather than wrapped, and the carry says which it was. Defined below `FuelBurn`,
     /// which it returns.
     [[nodiscard]] constexpr FuelBurn Burned(std::uint8_t _tenths) const noexcept;
 
-    /// 6502: TT111's range test -- a distance is in range when its high byte is clear and the
+    /// TT111's range test -- a distance is in range when its high byte is clear and the
     /// tank holds at least its low byte.
     [[nodiscard]] constexpr bool Reaches(std::uint16_t _distanceTenths) const noexcept
     {
@@ -168,7 +168,7 @@ namespace Elite
 
     [[nodiscard]] constexpr bool operator==(const LightYearsTenths&) const noexcept = default;
 
-    /// 6502: the 70 that NA%, nosurviv, MA23 and the equipment screen all write.
+    /// The 70 that NA%, nosurviv, MA23 and the equipment screen all write.
     static constexpr std::uint8_t FULL_TANK_TENTHS = 70;
   };
 
@@ -180,7 +180,7 @@ namespace Elite
   struct FuelBurn
   {
     LightYearsTenths left;
-    bool carry; ///< 6502: set when the tank held the distance -- the flag `SBC` leaves
+    bool carry; ///< Set when the tank held the distance -- the flag `SBC` leaves
   };
 
   constexpr FuelBurn LightYearsTenths::Burned(std::uint8_t _tenths) const noexcept
@@ -190,7 +190,7 @@ namespace Elite
   }
 
   /*
-   * 6502: LASER,Y -- one mount's laser (M5-a-11).
+   * LASER,Y -- one mount's laser (M5-a-11).
    *
    * THE POWER BYTE IS THE LASER'S IDENTITY: there is no separate type. `POW` is 15 and a pulse
    * laser is that; a beam laser is `POW+128`, the same power with bit 7 set, which is what makes
@@ -209,12 +209,12 @@ namespace Elite
     {
       return byte != 0u;
     }
-    /// 6502: bit 7 -- a beam of some kind: fires every frame, and the sound picker's `BMI`.
+    /// Bit 7 -- a beam of some kind: fires every frame, and the sound picker's `BMI`.
     [[nodiscard]] constexpr bool IsBeam() const noexcept
     {
       return (byte & 0x80u) != 0u;
     }
-    /// 6502: LAS -- the power the damage arithmetic uses, which is the byte without bit 7.
+    /// The power the damage arithmetic uses, which is the byte without bit 7.
     [[nodiscard]] constexpr std::uint8_t Power() const noexcept
     {
       return static_cast<std::uint8_t>(byte & 0x7Fu);
@@ -224,13 +224,13 @@ namespace Elite
   };
 
   inline constexpr Laser LASER_NONE{0};       ///< an empty mount
-  inline constexpr Laser LASER_PULSE{15};     ///< 6502: POW
-  inline constexpr Laser LASER_BEAM{143};     ///< 6502: POW+128
-  inline constexpr Laser LASER_MILITARY{151}; ///< 6502: Armlas
-  inline constexpr Laser LASER_MINING{50};    ///< 6502: Mlas
+  inline constexpr Laser LASER_PULSE{15};
+  inline constexpr Laser LASER_BEAM{143};
+  inline constexpr Laser LASER_MILITARY{151};
+  inline constexpr Laser LASER_MINING{50};
 
   /*
-   * 6502: TP to CHK -- the commander, as the fields the seventy-seven bytes are.
+   * TP to CHK -- the commander, as the fields the seventy-seven bytes are.
    *
    * In the bytes' order, with the two bytes no label names kept as fields so that the codec is a
    * plain walk: `lasers` has six entries because `LASER` is six bytes of which four are mounts,
@@ -241,41 +241,41 @@ namespace Elite
    */
   struct Commander
   {
-    std::uint8_t missionProgress = 0;         ///< 6502: TP
-    std::uint8_t systemX = 0;                 ///< 6502: QQ0
-    std::uint8_t systemY = 0;                 ///< 6502: QQ1
-    SystemSeeds galaxySeeds{};                ///< 6502: QQ21 -- six bytes
-    Credits cash{};                           ///< 6502: CASH -- four bytes, most significant first
-    LightYearsTenths fuel;                    ///< 6502: QQ14 -- light years times ten
-    std::uint8_t competition = 0;             ///< 6502: COK
-    std::uint8_t galaxyNumber = 0;            ///< 6502: GCNT
-    std::array<Laser, 6> lasers{};            ///< 6502: LASER -- front, rear, left, right, and two nothing names
-    std::uint8_t cargoCapacity = 0;           ///< 6502: CRGO -- two more than the hold holds
-    std::array<std::uint8_t, 17> cargoHold{}; ///< 6502: QQ20 -- seventeen goods
-    std::uint8_t ecm = 0;                     ///< 6502: ECM
-    std::uint8_t fuelScoops = 0;              ///< 6502: BST
-    std::uint8_t energyBomb = 0;              ///< 6502: BOMB
-    std::uint8_t energyUnit = 0;              ///< 6502: ENGY
-    std::uint8_t dockingComputer = 0;         ///< 6502: DKCMP
-    std::uint8_t galacticDrive = 0;           ///< 6502: GHYP
-    std::uint8_t escapePod = 0;               ///< 6502: ESCP
-    std::uint8_t spare = 0;                   ///< 6502: the byte after ESCP that nothing names
-    Tally tribbles{};                         ///< 6502: TRIBBLE -- two bytes
-    std::uint8_t killsFraction = 0;           ///< 6502: TALLYL
-    std::uint8_t missiles = 0;                ///< 6502: NOMSL
-    std::uint8_t legalStatus = 0;             ///< 6502: FIST
-    std::array<std::uint8_t, 17> availability{}; ///< 6502: AVL -- the market's stock
-    std::uint8_t marketRandomiser = 0;        ///< 6502: QQ26
-    Tally kills{};                            ///< 6502: TALLY -- two bytes
-    std::uint8_t saveCount = 0;               ///< 6502: SVC
-    std::uint8_t checksum2 = 0;               ///< 6502: CHK2
-    std::uint8_t checksum3 = 0;               ///< 6502: CHK3
-    std::uint8_t checksum = 0;                ///< 6502: CHK
+    std::uint8_t missionProgress = 0;
+    std::uint8_t systemX = 0;
+    std::uint8_t systemY = 0;
+    SystemSeeds galaxySeeds{};                ///< Six bytes
+    Credits cash{};                           ///< Four bytes, most significant first
+    LightYearsTenths fuel;                    ///< Light years times ten
+    std::uint8_t competition = 0;
+    std::uint8_t galaxyNumber = 0;
+    std::array<Laser, 6> lasers{};            ///< Front, rear, left, right, and two nothing names
+    std::uint8_t cargoCapacity = 0;           ///< Two more than the hold holds
+    std::array<std::uint8_t, 17> cargoHold{}; ///< Seventeen goods
+    std::uint8_t ecm = 0;
+    std::uint8_t fuelScoops = 0;
+    std::uint8_t energyBomb = 0;
+    std::uint8_t energyUnit = 0;
+    std::uint8_t dockingComputer = 0;
+    std::uint8_t galacticDrive = 0;
+    std::uint8_t escapePod = 0;
+    std::uint8_t spare = 0;                   ///< The byte after ESCP that nothing names
+    Tally tribbles{};                         ///< Two bytes
+    std::uint8_t killsFraction = 0;
+    std::uint8_t missiles = 0;
+    std::uint8_t legalStatus = 0;
+    std::array<std::uint8_t, 17> availability{}; ///< The market's stock
+    std::uint8_t marketRandomiser = 0;
+    Tally kills{};                            ///< Two bytes
+    std::uint8_t saveCount = 0;
+    std::uint8_t checksum2 = 0;
+    std::uint8_t checksum3 = 0;
+    std::uint8_t checksum = 0;
 
     [[nodiscard]] constexpr bool operator==(const Commander&) const noexcept = default;
 
     /*
-     * 6502: QQ20,X for X in 0 to 21 -- the hold, and then the five fittings that follow it in the
+     * QQ20,X for X in 0 to 21 -- the hold, and then the five fittings that follow it in the
      * block: ECM, BST, BOMB, ENGY, DKCMP.
      *
      * `OUCH` picks a slot under 22 and empties `QQ20,X`, which is a cargo type below seventeen and
@@ -303,7 +303,7 @@ namespace Elite
       }
     }
 
-    /// 6502: the TP layout -- the seventy-seven bytes SVE writes and DFAULT reads.
+    /// The TP layout -- the seventy-seven bytes SVE writes and DFAULT reads.
     [[nodiscard]] constexpr std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> ToBytes() const noexcept
     {
       std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes{};
@@ -435,7 +435,7 @@ namespace Elite
                 "the codec round-trips seventy-seven distinct bytes in their order");
 
   /*
-   * 6502: CHECK -- the checksum SVE writes to CHK and DFAULT insists on.
+   * The checksum SVE writes to CHK and DFAULT insists on.
    *
    * Seventy-three steps, and every one of them is `ADC` with no `CLC`, so a carry out of one
    * addition is carried into the next. It also reads the block one byte BEFORE the index it EORs
@@ -448,7 +448,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t Checksum(const Commander& _block) noexcept;
 
   /*
-   * 6502: CHECK2 -- the second checksum, which goes into CHK3.
+   * The second checksum, which goes into CHK3.
    *
    * The same shape with two more operations per step: the index is EORed in, and then the
    * accumulator is ROTATED through the carry the last addition left before the next addition
@@ -458,7 +458,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t Checksum2(const Commander& _block) noexcept;
 
   /*
-   * 6502: NA2% -- the commander the game hands a new player.
+   * The commander the game hands a new player.
    *
    * Lave at (20, 173), a hundred credits, seven light years of fuel, twenty tonnes of cargo space
    * and a pulse laser. The seeds in it are the ones slice 2a carries as GALAXY_ONE_SEEDS, and a
@@ -466,11 +466,11 @@ namespace Elite
    */
   [[nodiscard]] Commander DefaultCommander() noexcept;
 
-  /// 6502: NA2% -- the eight bytes of name that go in front of the block.
+  /// The eight bytes of name that go in front of the block.
   [[nodiscard]] std::array<std::uint8_t, COMMANDER_NAME_SIZE> DefaultCommanderName() noexcept;
 
   /*
-   * 6502: SVE's SVL1 loop, plus the two CHECK calls -- write a commander out.
+   * SVE's SVL1 loop, plus the two CHECK calls -- write a commander out.
    *
    * The checksums go into the FILE and not into the live commander: all three stores land in the
    * copy about to be written to disk, and the block at TP is left exactly as it was. So saving
@@ -487,7 +487,7 @@ namespace Elite
                      std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept;
 
   /*
-   * 6502: DFAULT's QUL1 loop and the check that follows it -- read a commander in.
+   * DFAULT's QUL1 loop and the check that follows it -- read a commander in.
    *
    * BOTH checksums are checked, and the branch for either failure goes BACKWARDS to the first one:
    * `BNE doitagain`. So a tampered save file hangs the game on a black screen rather than being

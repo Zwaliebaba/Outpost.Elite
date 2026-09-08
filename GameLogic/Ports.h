@@ -46,8 +46,8 @@ namespace Elite
   struct Ports
   {
     // ---- the text machinery, bound to the universe's own bytes -------------------------------
-    TokenPrinter& printer;        ///< 6502: TT27 and the routines it falls into
-    CharacterPrinter& characters; ///< 6502: CHPR, and `DTW1` to `DTW8` are its own state
+    TokenPrinter& printer;        ///< TT27 and the routines it falls into
+    CharacterPrinter& characters; ///< CHPR, and `DTW1` to `DTW8` are its own state
     TextSink& sink;               ///< what `printer` and `characters` put characters through
 
     // ---- the seams the platform answers ------------------------------------------------------
@@ -65,7 +65,7 @@ namespace Elite
      */
 
     /*
-     * 6502: SID -- the chip, as the game side of the code writes it (M3-b-2b).
+     * The chip, as the game side of the code writes it (M3-b-2b).
      *
      * THE FIRST OF SECTION 4.5's FOUR TO ARRIVE, and it is a `SidWriteLog` rather than an interface
      * because that is what the port has meant by a sound sink since slice 5a: the library runs
@@ -100,7 +100,7 @@ namespace Elite
     ExtendedTokenPrinter& tokens;
 
     /*
-     * 6502: DELAY -- §4.5's `Presenter`, and the second of the four to arrive (M3-b-3b).
+     * §4.5's `Presenter`, and the second of the four to arrive (M3-b-3b).
      *
      * It is here rather than beside `SidWriteLog` because both halves of the loop wait: the docked
      * screens pause after a beep and the title sequence between its frames. `Presenter.h` has why

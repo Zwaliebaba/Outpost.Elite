@@ -13,7 +13,7 @@ namespace Elite
   struct Ports;    // Ports.h, likewise
 
   /*
-   * 6502: STATUS -- the Status Mode screen (slice 2c).
+   * The Status Mode screen (slice 2c).
    *
    * A report rather than a transaction: what the ship is carrying, what condition it is in, how
    * legal it is, what the player's rating is, and what equipment is fitted. It reads no keys, so
@@ -22,7 +22,7 @@ namespace Elite
    */
 
   /*
-   * 6502: QQ12, JUNK, FRIN and ENERGY -- the four bytes the condition line reads.
+   * QQ12, JUNK, FRIN and ENERGY -- the four bytes the condition line reads.
    *
    * None of this belongs to slice 2c: JUNK, FRIN and ENERGY are the local ship bubble and the energy
    * banks, which are phase 3's and exist now. They still arrive as VALUES, for the same reason
@@ -31,14 +31,14 @@ namespace Elite
    */
   struct ShipCondition
   {
-    std::uint8_t docked = 1;    ///< 6502: QQ12 -- non-zero when docked, and then nothing else is read
-    std::uint8_t junkCount = 0; ///< 6502: JUNK -- how many of the ship slots hold junk
-    std::uint8_t firstShip = 0; ///< 6502: FRIN+2,Y with Y = JUNK -- the first slot past the junk
-    std::uint8_t energy = 0;    ///< 6502: ENERGY -- the energy banks
+    std::uint8_t docked = 1;    ///< Non-zero when docked, and then nothing else is read
+    std::uint8_t junkCount = 0; ///< How many of the ship slots hold junk
+    std::uint8_t firstShip = 0; ///< FRIN+2,Y with Y = JUNK -- the first slot past the junk
+    std::uint8_t energy = 0;    ///< The energy banks
   };
 
   /*
-   * 6502: STATUS -- and the one part of it that is not a straight read is the rating.
+   * STATUS -- and the one part of it that is not a straight read is the rating.
    *
    * The rating is derived from the kill tally by counting SHIFTS rather than by comparing against
    * thresholds: the low byte is shifted right twice and then once at a time until it reaches zero,

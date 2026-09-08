@@ -13,7 +13,7 @@ namespace Elite
   struct Ports;    // Ports.h, likewise
 
   /*
-   * 6502: DTW1 to DTW8 -- the state the extended printer carries between bytes.
+   * DTW1 to DTW8 -- the state the extended printer carries between bytes.
    *
    * These are eight separate bytes in the original rather than a packed set of flags, and they
    * are kept separate here for the same reason: each is written independently by a different
@@ -25,18 +25,18 @@ namespace Elite
    */
   struct ExtendedTextState
   {
-    std::uint8_t lowerCaseBits = 0; ///< 6502: DTW1 -- bits set into a letter to lower its case
-    std::uint8_t sentenceStart = 0; ///< 6502: DTW2 -- set when the last character ended a word
-    std::uint8_t toLineBuffer = 0;  ///< 6502: DTW3 -- send characters through the recursive printer
-    std::uint8_t justify = 0;       ///< 6502: DTW4 -- bit 7 buffers the line, bit 6 never flushes it
-    std::uint8_t bufferLength = 0;  ///< 6502: DTW5 -- how much of the line buffer is in use
-    std::uint8_t alwaysLower = 0;   ///< 6502: DTW6 -- lower case regardless of the sentence state
-    std::uint8_t literal = 'A';     ///< 6502: DTW7 -- the character control code 16 prints
-    std::uint8_t caseMask = 0xFF;   ///< 6502: DTW8 -- bits cleared from the next letter, once
+    std::uint8_t lowerCaseBits = 0; ///< Bits set into a letter to lower its case
+    std::uint8_t sentenceStart = 0; ///< Set when the last character ended a word
+    std::uint8_t toLineBuffer = 0;  ///< Send characters through the recursive printer
+    std::uint8_t justify = 0;       ///< Bit 7 buffers the line, bit 6 never flushes it
+    std::uint8_t bufferLength = 0;  ///< How much of the line buffer is in use
+    std::uint8_t alwaysLower = 0;   ///< Lower case regardless of the sentence state
+    std::uint8_t literal = 'A';     ///< The character control code 16 prints
+    std::uint8_t caseMask = 0xFF;   ///< Bits cleared from the next letter, once
   };
 
   /*
-   * 6502: MT15 -- clear both justification bytes. Stop justifying and throw the buffered line
+   * Clear both justification bytes. Stop justifying and throw the buffered line
    * away.
    *
    * It is a function as well as a control code because `MESS` calls it as a SUBROUTINE, in the
@@ -48,7 +48,7 @@ namespace Elite
   void StopJustifying(ExtendedTextState& _state) noexcept;
 
   /*
-   * 6502: DASC, which the game also knows as TT26.
+   * DASC, which the game also knows as TT26.
    *
    * Every printed character in Elite passes through here, from both text systems at once: the
    * recursive printer arrives by a tail call and the extended printer by DTS. What it decides is
@@ -66,7 +66,6 @@ namespace Elite
   {
   public:
     /*
-     * 6502: BUF.
      *
      * The game gives this ninety bytes before the next variable begins, and its own text is
      * longer than that: a system description runs to a hundred characters or so, and the buffer
@@ -84,7 +83,7 @@ namespace Elite
     /// The column a justified line breaks at. Thirty characters, then a form feed.
     static constexpr std::uint8_t LINE_WIDTH = 30;
 
-    /// 6502: character 12, which is a newline everywhere except inside the line buffer, where it
+    /// Character 12, which is a newline everywhere except inside the line buffer, where it
     /// is the instruction to empty it.
     static constexpr std::uint8_t FORM_FEED = 12;
 
@@ -96,7 +95,7 @@ namespace Elite
     {
     }
 
-    /// 6502: DTW1 to DTW8 -- the universe's bytes, which this printer works on (M5-e-2b).
+    /// DTW1 to DTW8 -- the universe's bytes, which this printer works on (M5-e-2b).
     [[nodiscard]] ExtendedTextState& State() noexcept
     {
       return m_state;
@@ -106,28 +105,28 @@ namespace Elite
       return m_state;
     }
 
-    /// 6502: DASC -- route one character, and justify the buffered line when one is asked for.
+    /// Route one character, and justify the buffered line when one is asked for.
     void Put(std::uint8_t _character) noexcept override;
 
-    /// 6502: BUF -- the line being justified. Public because MT17 reaches into it.
+    /// The line being justified. Public because MT17 reaches into it.
     std::array<std::uint8_t, BUFFER_SIZE> buffer{};
 
   private:
-    /// 6502: DA1 to DAL4 -- empty the buffer to the screen, thirty columns at a time.
+    /// DA1 to DAL4 -- empty the buffer to the screen, thirty columns at a time.
     void Justify() noexcept;
 
-    /// 6502: DAS1 -- print the first _count characters of the buffer.
+    /// Print the first _count characters of the buffer.
     void Emit(std::uint8_t _count) noexcept;
 
     /*
-     * 6502: DA11 through DAL3 -- widen one gap in the line, and say whether the line is ready.
+     * DA11 through DAL3 -- widen one gap in the line, and say whether the line is ready.
      *
      * The rotating bit that chooses which gap lives in SC+1, the screen pointer's high byte,
      * borrowed for the purpose. It is passed by reference here for the same reason it is a
      * variable there: it carries from one gap to the next within a line.
      */
     /*
-   * 6502: SC+1 -- the rotating bit that chooses which gap, and the answer beside it (M5-a-3).
+   * The rotating bit that chooses which gap, and the answer beside it (M5-a-3).
    *
    * It was a `std::uint8_t&` out-parameter until then, which is P10's pattern: a bare byte
    * reference the caller has to remember to keep. It is one value carried out and back in, so the
@@ -136,12 +135,12 @@ namespace Elite
   struct PadResult
   {
     bool broke;         ///< false is the port's give-up on a line with no gap at all
-    std::uint8_t rotor; ///< 6502: SC+1, carried to the next gap on the same line
+    std::uint8_t rotor; ///< SC+1, carried to the next gap on the same line
   };
 
   [[nodiscard]] PadResult PadToWidth(std::uint8_t _rotor) noexcept;
 
-    TextSink& m_screen; ///< 6502: CHPR
+    TextSink& m_screen;
     ExtendedTextState& m_state; ///< `Universe::sentences`, bound the way `TextPrinter` binds its `TextState`
   };
 
@@ -163,7 +162,6 @@ namespace Elite
    */
 
   /*
-   * 6502: DETOK, DETOK2, DETOK3.
    *
    * The second and larger of Elite's two text systems. Where the recursive tokens are a
    * compression scheme, these are closer to a small interpreter: a byte can be a character, a
@@ -213,17 +211,17 @@ namespace Elite
       return m_codesThatLeft;
     }
 
-    /// 6502: DETOK -- print extended token N from the main table.
+    /// Print extended token N from the main table.
     void Print(std::uint8_t _token) noexcept;
 
-    /// 6502: DETOK3 -- the same, from the per-system override table.
+    /// The same, from the per-system override table.
     void PrintSystemOverride(std::uint8_t _token) noexcept;
 
-    /// 6502: DETOK2 -- act on one byte of a token's text. Public because the walkers are not the
+    /// Act on one byte of a token's text. Public because the walkers are not the
     /// only callers in the game.
     void PrintByte(std::uint8_t _byte) noexcept;
 
-    /// 6502: DASC -- the routine this printer sends its characters to, and the one every other
+    /// The routine this printer sends its characters to, and the one every other
     /// part of the game prints through as well. Callers that print a NUMBER rather than a token
     /// need it, because BPRNT ends there too.
     [[nodiscard]] CharacterPrinter& Characters() noexcept
@@ -231,7 +229,7 @@ namespace Elite
       return m_characters;
     }
 
-    /// 6502: DTW1 to DTW8, and BUF. They live with DASC because that is the routine that reads
+    /// DTW1 to DTW8, and BUF. They live with DASC because that is the routine that reads
     /// and writes most of them.
     [[nodiscard]] ExtendedTextState& State() noexcept
     {
@@ -241,15 +239,15 @@ namespace Elite
   private:
     void Walk(const std::uint8_t* _table, std::size_t _size, std::uint8_t _token) noexcept;
 
-    /// 6502: DTS -- one character, under the case state, then on to DASC.
+    /// One character, under the case state, then on to DASC.
     void PrintCharacter(std::uint8_t _character) noexcept;
 
-    /// 6502: DT6 -- pick one of up to five alternatives and print that instead.
+    /// Pick one of up to five alternatives and print that instead.
     void PrintRandomVariant(std::uint8_t _byte) noexcept;
 
-    /// 6502: DT3 and the JMTB jump table -- one control code.
+    /// DT3 and the JMTB jump table -- one control code.
     /*
-     * 6502: DT3 -- the text system's half of the dispatch.
+     * The text system's half of the dispatch.
      *
      * It is `RunTextCode` and not `RunControlCode` because `Elite::RunControlCode` is the game's
      * half and lives in `Missions.h`: this one sets the flags that belong to the printer and hands
@@ -257,10 +255,10 @@ namespace Elite
      */
     void RunTextCode(std::uint8_t _code) noexcept;
 
-    /// 6502: MT17 -- the current system's name, turned into an adjective.
+    /// The current system's name, turned into an adjective.
     void PrintSystemAdjective() noexcept;
 
-    /// 6502: MT18 -- a random pronounceable word, one to four letter pairs long.
+    /// A random pronounceable word, one to four letter pairs long.
     void PrintRandomWord() noexcept;
 
     CharacterPrinter& m_characters;

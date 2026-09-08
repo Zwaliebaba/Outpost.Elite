@@ -18,7 +18,7 @@ namespace Elite
   /*
    * The explosion cloud (slice 4b-b).
    *
-   * 6502: DOEXP with PTCLS inside it, and the C64's own PTCLS2 beside them. This is the third and
+   * DOEXP with PTCLS inside it, and the C64's own PTCLS2 beside them. This is the third and
    * last of `LL9`'s exits -- `PLANET` went in slice 3c, `DOEXP` is here -- and it is the routine
    * that makes a dying ship into a bloom of particles rather than a wireframe.
    *
@@ -34,15 +34,15 @@ namespace Elite
    * would fill with debris that never goes away.
    */
 
-  /// 6502: the cloud counter `EE55` writes into byte 1 of the line heap, and the value `DOEXP`
+  /// The cloud counter `EE55` writes into byte 1 of the line heap, and the value `DOEXP`
   /// compares `frump` against to decide that this is the explosion's first frame.
   inline constexpr std::uint8_t EXPLOSION_CLOUD_START = 18;
 
-  /// 6502: the particle's row is compared against one less than the space view's height -- at or
+  /// The particle's row is compared against one less than the space view's height -- at or
   /// below it, the particle is off the bottom. `SPACE_VIEW_BOTTOM` is that height.
   inline constexpr std::uint8_t EXPLOSION_PARTICLE_BOTTOM = SPACE_VIEW_BOTTOM - 1;
 
-  /// 6502: the sprite's row is compared against the view's height plus fifty -- FIFTY ROWS
+  /// The sprite's row is compared against the view's height plus fifty -- FIFTY ROWS
   /// FURTHER DOWN than a particle is allowed, because the sprite is placed by its top-left
   /// corner and the fifty is how far behind the dashboard the original will let it start.
   inline constexpr std::uint8_t EXPLOSION_SPRITE_BOTTOM = SPACE_VIEW_BOTTOM + 50;
@@ -78,7 +78,7 @@ namespace Elite
    */
 
   /*
-   * 6502: EXS1 -- (A X) = (A R) +/- random * cloud size, with the flags set for the high byte.
+   * (A X) = (A R) +/- random * cloud size, with the flags set for the high byte.
    *
    * The one piece of arithmetic in the explosion, and it is an "other entry point" in the upstream
    * source rather than private to `PTCLS`, so it is exported and compared on its own: three of the
@@ -95,15 +95,15 @@ namespace Elite
    */
   struct ExplosionOffset
   {
-    std::uint8_t high = 0; ///< 6502: A -- non-zero means the particle is off the screen
-    std::uint8_t low = 0;  ///< 6502: X
+    std::uint8_t high = 0; ///< Non-zero means the particle is off the screen
+    std::uint8_t low = 0;
   };
 
   /// `_high` is A, the vertex's high byte; `_low` is R and `_size` is Q, which the caller staged.
   [[nodiscard]] ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept;
 
   /*
-   * 6502: PTCLS -- draw one frame of the cloud, and PTCLS2 -- the same with the burst sprite.
+   * Draw one frame of the cloud, and PTCLS2 -- the same with the burst sprite.
    *
    * They are ONE BODY. Instruction for instruction the C64's `PTCLS2` is `PTCLS` with a prologue
    * that sizes the sprite, an insert inside the vertex loop that places it, and a `SETL1` pair
@@ -127,7 +127,7 @@ namespace Elite
                                         const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
+   * DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
    *
    * The shape is: rub out the last frame if there was one, work out how big this frame's cloud is,
    * copy the ship's visible vertices onto its line heap as the cloud's origins, and draw. Byte 1

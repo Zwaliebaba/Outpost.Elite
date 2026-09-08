@@ -18,14 +18,14 @@ namespace Elite
   /*
    * Saving and loading a commander (slice 2d).
    *
-   * 6502: SV1, LOD, YESNO and JAMESON. The C64 build's `SVE` is not a file write at all -- it is
+   * SV1, LOD, YESNO and JAMESON. The C64 build's `SVE` is not a file write at all -- it is
    * the disk access menu -- and the only instructions in the whole flow that touch a device are two
    * Kernal calls. Everything around them is arithmetic, text and a keyboard, which is why this
    * waited on nothing but somebody looking.
    */
 
   /*
-   * 6502: KERNALSVE and KERNALLOAD -- where a commander file goes and comes from.
+   * KERNALSVE and KERNALLOAD -- where a commander file goes and comes from.
    *
    * The port's answer to the C64's Kernal. It is a seam for the reason `GameLogic` has all its
    * others: the determinism guard forbids file access here (AGENTS.md §5, checked by
@@ -40,16 +40,16 @@ namespace Elite
   public:
     virtual ~CommanderStore() = default;
 
-    /// 6502: SV1's call into the Kernal to write the file. False when the write failed.
+    /// SV1's call into the Kernal to write the file. False when the write failed.
     virtual bool Write(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
                        std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file) = 0;
 
-    /// 6502: LOD's call into the Kernal to read it back. False when the file could not be read.
+    /// LOD's call into the Kernal to read it back. False when the file could not be read.
     virtual bool Read(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) = 0;
   };
 
   /*
-   * 6502: SV1's K to K+3 -- the competition number, and the CHK2 that is computed with it.
+   * SV1's K to K+3 -- the competition number, and the CHK2 that is computed with it.
    *
    * A four-byte number printed after every save, and it is not a serial: it is the commander's
    * checksum folded together with the competition flags, the third byte of the cash and the high
@@ -63,12 +63,12 @@ namespace Elite
    */
   struct CompetitionNumber
   {
-    std::array<std::uint8_t, 4> value{}; ///< 6502: K to K+3, which BPRNT prints most significant first
-    std::uint8_t checksum2 = 0;          ///< 6502: CHK2 -- the checksum EORed with &A9, in the file
+    std::array<std::uint8_t, 4> value{}; ///< K to K+3, which BPRNT prints most significant first
+    std::uint8_t checksum2 = 0;          ///< The checksum EORed with &A9, in the file
   };
 
   /*
-   * 6502: what SV1 does between computing the checksum and handing the file to the Kernal.
+   * What SV1 does between computing the checksum and handing the file to the Kernal.
    *
    * Takes the FILE image rather than the live block, because the checksum it folds in is the one
    * SaveCommander wrote into the file and not anything the commander at TP holds.
@@ -76,7 +76,7 @@ namespace Elite
   [[nodiscard]] CompetitionNumber MakeCompetitionNumber(const Commander& _image) noexcept;
 
   /*
-   * 6502: YESNO -- wait for "Y" or "N", and ignore everything else.
+   * Wait for "Y" or "N", and ignore everything else.
    *
    * Returns true for "Y". The original says so with the carry, and it gets it for free: comparing
    * the key with 'Y' sets the carry when the key is 'Y' or higher, and the branch that test takes
@@ -86,7 +86,7 @@ namespace Elite
   [[nodiscard]] bool AskYesNo(Keyboard& _keys) noexcept;
 
   /*
-   * 6502: JAMESON -- put the default commander back.
+   * Put the default commander back.
    *
    * Copies NA2% over NA%, which is the SAVE IMAGE and not the live commander, so a caller has to
    * load it afterwards for the reset to take effect. `SVE`'s option 4 does exactly that: JAMESON
@@ -95,7 +95,7 @@ namespace Elite
   void ResetToDefaultCommander(std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept;
 
   /*
-   * 6502: SV1 without its two Kernal calls -- everything a save does before the bytes leave.
+   * SV1 without its two Kernal calls -- everything a save does before the bytes leave.
    *
    * Halves the save count, builds the file image with all three checksums, works out the
    * competition number and hands the result to the store. The competition number is returned rather
@@ -111,7 +111,7 @@ namespace Elite
     CompetitionNumber competition{};
 
     /*
-     * 6502: NA% after SVL1 -- the save image, and it outlives the write.
+     * NA% after SVL1 -- the save image, and it outlives the write.
      *
      * SV1 calls DFAULT once the Kernal returns, and DFAULT reads NA% rather than re-reading the
      * disk, so the bytes have to be here for the menu to reproduce that. Returning them also says
@@ -125,7 +125,7 @@ namespace Elite
                                             std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept;
 
   /*
-   * 6502: `loading` without LOD's Kernal call -- read a file back and check it.
+   * `loading` without LOD's Kernal call -- read a file back and check it.
    *
    * Returns false when the store could not read it OR when either checksum disagrees, which are
    * different failures to a player and the same one to this routine. The original does not
@@ -149,10 +149,10 @@ namespace Elite
   /// How the menu ended. 6502: which label it reached, and the carry it left.
   enum class DiskMenuOutcome
   {
-    Left,   ///< 6502: feb13 -- any key but 1 to 4, and CLC
-    Loaded, ///< 6502: `loading` -- SEC, and a different commander is in place
-    Saved,  ///< 6502: SVEX after a successful save -- and CLC, even though DFAULT just ran
-    Reset,  ///< 6502: option 4 -- JAMESON then DFAULT, so the default commander is loaded
+    Left,   ///< Any key but 1 to 4, and CLC
+    Loaded, ///< SEC, and a different commander is in place
+    Saved,  ///< SVEX after a successful save -- and CLC, even though DFAULT just ran
+    Reset,  ///< Option 4 -- JAMESON then DFAULT, so the default commander is loaded
   };
 
   /*
@@ -163,7 +163,7 @@ namespace Elite
    * an inconsistency in the port -- it is what the routine does, and the header above says how.
    */
 
-  /// 6502: the four keys SVE compares against, in the order it compares them.
+  /// The four keys SVE compares against, in the order it compares them.
   inline constexpr std::uint8_t DISK_MENU_LOAD = '1';
   inline constexpr std::uint8_t DISK_MENU_SAVE = '2';
   inline constexpr std::uint8_t DISK_MENU_MEDIA = '3';
@@ -172,12 +172,12 @@ namespace Elite
   struct DiskMenuResult
   {
     DiskMenuOutcome outcome = DiskMenuOutcome::Left;
-    bool newCommander = false;       ///< 6502: the carry on return
-    CompetitionNumber competition{}; ///< 6502: K to K+3, when a save happened
+    bool newCommander = false;       ///< The carry on return
+    CompetitionNumber competition{}; ///< K to K+3, when a save happened
   };
 
   /*
-   * 6502: SVE -- the disk access menu, which is what the C64 build calls its save routine.
+   * The disk access menu, which is what the C64 build calls its save routine.
    *
    * Five options around routines that all exist by now, and three things about it are worth
    * knowing before reading it.

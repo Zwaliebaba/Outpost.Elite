@@ -28,7 +28,7 @@ namespace Elite
    */
 
   /*
-   * 6502: hyp1 -- arrive at the selected system, and fall into `GVL` to stock its market.
+   * Arrive at the selected system, and fall into `GVL` to stock its market.
    *
    * `_findNearest` is the difference between the two entry points the game uses. `hyp1` opens
    * by calling `TT111`, which puts the system nearest the crosshairs into `QQ15`; `TT18` jumps to
@@ -60,7 +60,7 @@ namespace Elite
                       bool _findNearest) noexcept;
 
   /*
-   * 6502: MJP -- witchspace, which is a jump that did not arrive.
+   * Witchspace, which is a jump that did not arrive.
    *
    * `TT66` clears to the space view, `LL164` draws the tunnel, `RES2` resets the bubble, and then
    * `MJ` is set from Y -- the flag that stops the spawner and refuses the fuel scoop.
@@ -74,7 +74,7 @@ namespace Elite
   void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander) noexcept;
 
   /*
-   * 6502: ptg -- `COK` shifted right, the carry set, and `COK` rotated back left, and then it
+   * `COK` shifted right, the carry set, and `COK` rotated back left, and then it
    * FALLS INTO `MJP`.
    *
    * That is an OR WITH 1 and not a rotate: the shift and the rotate cancel, the set carry forces
@@ -98,14 +98,14 @@ namespace Elite
    */
   enum class JumpResult : std::uint8_t
   {
-    Arrived,     ///< 6502: the fall-through into `TT110` -- the caller launches
-    Witchspace,  ///< 6502: the branch to `MJP` -- three bytes in 256 miss the system
-    NoRedraw,    ///< 6502: the branch to `RTS111` -- the view's low six bits are set, nothing drawn
-    RedrawChart, ///< 6502: the branch to `TT114` -- a chart is up, and the caller redraws it
+    Arrived,     ///< The fall-through into `TT110` -- the caller launches
+    Witchspace,  ///< The branch to `MJP` -- three bytes in 256 miss the system
+    NoRedraw,    ///< The branch to `RTS111` -- the view's low six bits are set, nothing drawn
+    RedrawChart, ///< The branch to `TT114` -- a chart is up, and the caller redraws it
   };
 
   /*
-   * 6502: TT18 -- spend the fuel and go, and it is the whole jump.
+   * Spend the fuel and go, and it is the whole jump.
    *
    * The fuel minus the distance, and the carry branch steps over a two-byte load of zero, so a
    * jump that costs more than you have leaves you with none rather than with a wrapped byte. The
@@ -121,7 +121,7 @@ namespace Elite
                                        bool _authorNames) noexcept;
 
   /*
-   * 6502: Ghy -- the galactic hyperdrive, which moves you a galaxy on and forgets your crimes.
+   * The galactic hyperdrive, which moves you a galaxy on and forgets your crimes.
    *
    * The branch taken when no drive is fitted is the one to read twice: it goes to `zZ+1`. `zZ` is a
    * TWO-BYTE instruction that loads 96 into the accumulator, so `zZ+1` addresses its operand -- and

@@ -18,18 +18,18 @@ namespace Elite
    * printer every docked screen uses.
    */
 
-  /// 6502: the row a message uses on the space view. Every other view keeps whatever `CLYNS`
+  /// The row a message uses on the space view. Every other view keeps whatever `CLYNS`
   /// left, which is 21, because a data byte swallows the store (§6.66).
   inline constexpr std::uint8_t MESSAGE_ROW_SPACE_VIEW = 16;
 
-  /// 6502: recursive token 93, " DESTROYED", which `mes9` appends when `de` says to.
+  /// Recursive token 93, " DESTROYED", which `mes9` appends when `de` says to.
   inline constexpr std::uint8_t TOKEN_DESTROYED = 253;
 
-  /// 6502: DLY set to twenty frames, which is how long a message stays up.
+  /// DLY set to twenty frames, which is how long a message stays up.
   inline constexpr std::uint8_t MESSAGE_FRAMES = 20;
 
   /*
-   * 6502: mes9 -- print a token, and " DESTROYED" after it if `de` says so.
+   * Print a token, and " DESTROYED" after it if `de` says so.
    *
    * `LSR de` both TESTS and CONSUMES the flag: the shift is the test, so a second call prints the
    * token alone. That is what makes erasing a "DESTROYED" message work -- the erase pass re-prints
@@ -38,7 +38,7 @@ namespace Elite
   void PrintMessageToken(TokenPrinter& _printer, MessageState& _message, std::uint8_t _token) noexcept;
 
   /*
-   * 6502: MESS -- put a message on screen, and me1, which erases the old one first.
+   * Put a message on screen, and me1, which erases the old one first.
    *
    * `me1` stores the new delay, saves the new token, erases the message currently up, restores
    * the token and then falls into `MESS` -- so "erase the one that is up and show this one" is

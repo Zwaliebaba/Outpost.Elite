@@ -373,7 +373,7 @@ namespace Outpost
 
     const Viewport view = FitPicture(m_width, m_height);
 
-    // 6502: what the VIC-II put on the wire -- the bitmap, and then the eight sprites over it
+    // What the VIC-II put on the wire -- the bitmap, and then the eight sprites over it
     // (ADR-005 §1). With no registers to composite from this is the bitmap alone, which is what
     // every golden hash asserts and what the loader screen and title show.
     //

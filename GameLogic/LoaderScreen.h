@@ -14,7 +14,7 @@ namespace Elite
   /*
    * The screen the game starts on, which nothing in the game puts there.
    *
-   * 6502: the Elite loader, parts 5 and 6 -- "Configure the screen bitmap and copy colour data
+   * The Elite loader, parts 5 and 6 -- "Configure the screen bitmap and copy colour data
    * into screen RAM" and "Copy colour data into colour RAM and configure more screen RAM".
    *
    * THE LOADER'S CODE IS NOT PORTED and this is not a port of it: it is what its two screen parts
@@ -39,7 +39,7 @@ namespace Elite
   void SetUpLoaderScreen(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: the Elite loader's part 4 -- the VIC-II registers the game inherits and never sets.
+   * The Elite loader's part 4 -- the VIC-II registers the game inherits and never sets.
    *
    * The sprite half of it: all eight switched off, all eight double width and double height, the
    * laser sights (sprite 0) at (161, 101), the centre of the space view, the explosion sprite at
@@ -58,7 +58,7 @@ namespace Elite
   void SetUpLoaderVideo(VideoState& _video) noexcept;
 
   /*
-   * 6502: foreground colour 7 (yellow) over background colour 0 (black), as one byte.
+   * Foreground colour 7 (yellow) over background colour 0 (black), as one byte.
    *
    * The border box's palette, and the reason the box is yellow. It is a SCREEN RAM byte, so the
    * high nibble is the colour a set bit takes and the low nibble the colour a clear one takes.
@@ -66,7 +66,7 @@ namespace Elite
   inline constexpr CellPalette SCREEN_YELLOW_ON_BLACK{Colour::Yellow, Colour::Black};
 
   /*
-   * 6502: black on black, for the three cells outside the border box on each side.
+   * Black on black, for the three cells outside the border box on each side.
    *
    * The game screen is 256 pixels wide and the screen mode is 320, so four cells each side are
    * margin. The innermost of the four carries the border box; the outer three show nothing at
@@ -76,7 +76,7 @@ namespace Elite
   inline constexpr CellPalette SCREEN_BLACK_ON_BLACK{Colour::Black, Colour::Black};
 
   /*
-   * 6502: colour 7, yellow, in the LOW nibble because colour RAM only has one.
+   * Colour 7, yellow, in the LOW nibble because colour RAM only has one.
    *
    * The top row of colour RAM, and the loader's comment is worth keeping: the top border is drawn
    * as bytes of %11111111, which in multicolour bitmap mode is four pixels of %11 -- the code that
