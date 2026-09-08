@@ -157,6 +157,33 @@ namespace Elite
     return answer;
   }
 
+  std::uint8_t ReadKey(Universe& _universe, Ports& _ports) noexcept
+  {
+    for (;;)
+    {
+      // 6502: .t LDY #2 / JSR DELAY -- the debounce.
+      _ports.present.WaitFrames(TT217_DEBOUNCE_FRAMES);
+
+      // 6502: JSR RDKEY / BNE t -- a key already down when the prompt appeared is not the answer.
+      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).pressed)
+      {
+        continue;
+      }
+
+      // 6502: .t2 JSR RDKEY / BEQ t2 -- now wait for one.
+      for (;;)
+      {
+        const TitleKey scan = ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
+        if (scan.pressed)
+        {
+          // 6502: LDA TRANTABLE,X -- the character, which is what every caller compares against.
+          return KEY_TRANSLATION[scan.key];
+        }
+        _ports.present.Present(); // the port's: the matrix is the window's table, and a present is what fills it
+      }
+    }
+  }
+
   void ReadFlightControls(Universe& _universe, Ports& _ports) noexcept
   {
     KeyLogger& keys = _universe.keys;

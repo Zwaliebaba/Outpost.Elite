@@ -4,11 +4,11 @@
 #include "FlightSession.h"
 #include "Presentation.h"
 #include "SaveStore.h"
+#include "SettingsFile.h"
 #include "Shell.h"
 #include "SoundOutput.h"
 #include "Window.h"
 
-#include "Controls.h"
 #include "Game.h"
 #include "Universe.h"
 
@@ -124,10 +124,7 @@ namespace
     {
       // 6502: `thiskey`, and ZERO IS A KEY -- `TT102` runs every pass, which is how the hyperspace
       // countdown ticks whether or not the player touched anything (§6.159).
-      std::uint8_t key = 0;
-      (void)_app.window.TakeKey(key);
-
-      if (!_app.game.Step(key))
+      if (!_app.game.Step(_app.window.TakePressed()))
       {
         return; // 6502: `M%` left the flight half, or `DK4` froze it
       }
@@ -141,6 +138,9 @@ namespace
     app->window.Create(_instance, INITIAL_SCALE);
     app->presenter.Create(app->window.Handle());
 
+    // The thirteen bytes the pause screen toggled, from Settings.txt beside the commanders (InputTimer.md S-1).
+    app->window.Warn(Outpost::ApplySettingsFile(app->store.Root(), app->game.State()).Summary());
+
     // 6502: the loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
     app->game.Reset();
 
@@ -150,9 +150,8 @@ namespace
      *
      * MLOOP's second half polls the keyboard, dispatches, and goes round; every docked screen it
      * reaches ends by blocking in `TT217`, so a docked game costs one present per key. `TT100` runs
-     * a frame first and only then falls into the same poll -- so both halves are paced, and the
-     * docked one uses the flight frame's EMPTY-bubble cost as a floor rather than a measurement,
-     * because a docked pass draws no ships and is cheaper than that (§6.114 one screen on).
+     * a frame first and then the same poll -- so both halves are paced, the flight one by what a
+     * frame costs and the docked one by the syncs the last pass asked for (InputTimer.md T-0, T-2).
      *
      * The POSITION goes to the dispatch and not the character, which is the whole reason `KeyMap`
      * maps a Windows key to a C64 matrix position: `TT102` compares against 37 for "8" and never
@@ -160,6 +159,7 @@ namespace
      */
     double accumulated = 0.0;
     double dockedLeftover = 0.0;
+    std::uint8_t dockedSyncs = Outpost::DOCKED_PASS_SYNCS; // 6502: what the last docked pass asked DELAY for
     auto last = std::chrono::steady_clock::now();
 
     while (app->shell.Turn())
@@ -168,19 +168,9 @@ namespace
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
 
-      // 6502: FRCE's `LDA QQ12 / BEQ`, and `FREEZE` above it -- ONE question since M4-d. It was two
-      // tests this file had to keep in the right order (a frozen game is frozen in both halves, so
-      // the pause test comes first); `Game::Mode` is that rule expressed once, where both bytes are.
+      // 6502: FRCE's `LDA QQ12 / BEQ` -- ONE question since M4-d, and two answers since InputTimer.md
+      // I-0: `FREEZE`'s third answer went with the pause screen (owner ruling 2026-09-08).
       const Elite::Game::Mode mode = app->game.ModeNow();
-      if (mode == Elite::Game::Mode::Paused)
-      {
-        std::uint8_t key = 0;
-        if (app->window.TakeKey(key))
-        {
-          app->game.StepPaused(key);
-        }
-        continue;
-      }
 
       if (mode == Elite::Game::Mode::Docked)
       {
@@ -193,14 +183,12 @@ namespace
          */
         accumulated = 0.0;
 
-        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::FlightFrameSeconds(0));
+        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::DockedPassSeconds(dockedSyncs));
         dockedLeftover = docked.leftoverSeconds;
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
-          std::uint8_t key = 0;
-          (void)app->window.TakeKey(key); // 6502: `thiskey`, which is zero when nothing is held
-          app->game.StepDocked(key);
+          dockedSyncs = app->game.StepDocked(app->window.TakePressed()); // 6502: `thiskey`, which is zero when nothing was pressed
         }
         continue;
       }

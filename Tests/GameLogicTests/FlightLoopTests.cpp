@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "Charts.h"
 #include "FlightUniverse.h"
 #include "OracleImage.h"
 
@@ -2553,6 +2554,260 @@ namespace GameLogicTests
                                                            L" cycles, which is outside the range "
                                                            L"Outpost::FLIGHT_FRAME_COSTS was derived from")
                                                             .c_str());
+      }
+    }
+
+    /*
+     * The crowded end of the range, measured while the interpreter is still in the tree
+     * (InputTimer.md T-0, 2026-09-08).
+     *
+     * §6.114's three scenes had no planet in them and stopped at two ships, because `Seed`'s station
+     * -- a random block -- never returned from its own thinking. This one builds its bubbles by hand:
+     * the planet at a high byte of 0x20, the sun at 0x60 or a SANE station at 0x08 dead ahead, and
+     * fighters straight ahead at 0x0C, which draws them as small wireframes of four lines. A sane
+     * station returns in under a hundred thousand cycles, so the excuse is gone.
+     *
+     * TWO FRAMES ARE RUN AND THE SECOND IS THE MEASUREMENT. The first frame draws every body onto a
+     * clean screen; the second draws AND erases, which is what every frame after it does, and a
+     * scene with the sun in it costs twice as much the first time round. `Outpost::FLIGHT_FRAME_COSTS`
+     * carries the midpoint of the sun and station rows at each count, and the numbers here are the
+     * measurement it was read from; the bounds asserted are wide, for §6.110's reason.
+     */
+    TEST_METHOD(TheCrowdedFrameCostsWhatItCosts)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      struct Scene
+      {
+        const char* what;
+        std::uint8_t fighters; ///< straight ahead at 0x0C and on, one slot each
+        std::uint8_t second;   ///< 129 for the sun at 0x60, 2 for the station at 0x08, 0 for neither
+        std::uint8_t ai;       ///< INWK+32 for the fighters and the station
+        std::uint32_t atLeast; ///< the band the recorded number sits in
+        std::uint32_t atMost;
+      };
+
+      const Scene SCENES[] = {
+        {"planet alone", 0u, 0u, 0u, 15'000u, 60'000u},
+        {"planet and sun", 0u, 129u, 0u, 60'000u, 160'000u},
+        {"planet and station", 0u, 2u, 0x80u, 40'000u, 120'000u},
+        {"planet, sun, three fighters", 3u, 129u, 0u, 100'000u, 260'000u},
+        {"planet, station, three fighters, AI", 3u, 2u, 0x80u, 90'000u, 230'000u},
+        {"planet, sun, eight fighters", 8u, 129u, 0u, 200'000u, 480'000u},
+        {"planet, station, eight fighters, AI", 8u, 2u, 0x80u, 180'000u, 450'000u},
+      };
+
+      // The pack hunters and the two Cobras -- a real fight's cast, one blueprint each.
+      const std::uint8_t FIGHTERS[] = {17u, 18u, 19u, 20u, 11u, 16u, 24u, 17u};
+
+      for (const Scene& scene : SCENES)
+      {
+        Frame frame(0x51u);
+        Universe& universe = frame.universe;
+
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
+        {
+          universe.bubble.slots[slot] = 0u;
+        }
+        for (std::size_t type = 0; type < universe.bubble.counts.size(); ++type)
+        {
+          universe.bubble.counts[type] = 0u;
+        }
+        universe.bubble.junk = 0u;
+
+        std::uint16_t nextHeap = Elite::LineHeap::TOP;
+        std::size_t slot = 0;
+
+        // One body, zeroed and placed: `PopulateBubble`'s recipe with the position as an argument,
+        // because the sun and the station want different distances from the fighters.
+        auto place = [&](std::uint8_t _type, std::uint8_t _ai, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z)
+        {
+          universe.bubble.slots[slot] = _type;
+          if (_type < 34u)
+          {
+            ++universe.bubble.counts[_type];
+          }
+          Elite::Ship& block = universe.bubble.blocks[slot];
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> bytes = block.ToBytes();
+          for (std::uint8_t& byte : bytes)
+          {
+            byte = 0u;
+          }
+          block = Elite::Ship::FromBytes(bytes);
+          block.x.hi = _x;
+          block.y.hi = _y;
+          block.z.hi = _z;
+          block.nose.z.hi = 20u;
+          block.speed = 20u;
+          block.ai = _ai;
+          block.energy = 60u;
+          if (_type == 2u)
+          {
+            // 6502: NWSPS -- the station draws through the sun's heap (§6.112).
+            block.heap = Elite::HeapOffset::FromAddress(Elite::SUN_HEAP_ADDRESS);
+          }
+          else if (_type < 34u)
+          {
+            nextHeap = static_cast<std::uint16_t>(nextHeap - Elite::BlueprintOf(static_cast<Elite::ShipType>(_type))->heapBytes);
+            block.heap = Elite::HeapOffset::FromAddress(nextHeap);
+          }
+          ++slot;
+        };
+
+        place(128u, 0u, 0x20u, 0x20u, 0x20u);
+        if (scene.second == 129u)
+        {
+          place(129u, 0u, 0x60u, 0x60u, 0x60u);
+        }
+        else if (scene.second == 2u)
+        {
+          place(2u, scene.ai, 0u, 0u, 0x08u);
+        }
+        for (std::uint8_t fighter = 0; fighter < scene.fighters; ++fighter)
+        {
+          place(FIGHTERS[fighter], scene.ai, 0u, 0u, static_cast<std::uint8_t>(0x0Cu + fighter));
+        }
+        universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(nextHeap);
+        universe.flight.mainLoopCounter = 10u;
+        universe.status.midJump = 0u;
+        universe.status.energy = 200u;
+        universe.view = 0u;
+
+        Cpu6502 cpu = oracle.Fresh();
+        const std::uint16_t EXITS[] = {loop.death, loop.doentry, loop.escape};
+        for (const std::uint16_t exit : EXITS)
+        {
+          const std::uint8_t leave[] = {0x4Cu, 0xF9u, 0xFFu};
+          cpu.Load(exit, leave, sizeof(leave));
+        }
+        cpu.AddTrap(loop.dovdu19); // sound only: everything that draws or thinks runs for real
+
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
+        MirrorFrame(frame, cpu, at, loop);
+        for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
+        {
+          cpu.memory[address] = universe.heap.Read(Elite::HeapOffset::FromAddress(address));
+        }
+        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() >> 8);
+
+        std::uint64_t first = 0;
+        std::uint64_t second = 0;
+        for (int pass = 0; pass < 2; ++pass)
+        {
+          const std::uint64_t before = cpu.cycles;
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(loop.mainLoop, 60'000'000);
+          Assert::IsTrue(run.completed, WidenText(std::string("M% returned for ") + scene.what).c_str());
+          (pass == 0 ? first : second) = cpu.cycles - before;
+        }
+
+        Logger::WriteMessage((std::string("flight frame, ") + scene.what + ": " + std::to_string(slot) + " slots, " + std::to_string(first) +
+                              " cycles the first time and " + std::to_string(second) + " the second, " +
+                              std::to_string(1022727.0 / static_cast<double>(second)) + " frames a second")
+                               .c_str());
+
+        Assert::IsTrue(second >= scene.atLeast && second <= scene.atMost,
+                       (WidenText(scene.what) + L" cost " + std::to_wstring(second) + L" cycles, outside the band Outpost::FLIGHT_FRAME_COSTS was read from")
+                         .c_str());
+      }
+    }
+
+    /*
+     * The docked pass -- `MLOOP` with `QQ12` set -- measured for the same reason and at the same
+     * moment (InputTimer.md T-0). The port paced it at the flight frame's empty-bubble cost, which
+     * was a stand-in; this is the number, and it is small: the pass is two vertical syncs of
+     * waiting (`LDY #2 / JSR DELAY`, unless `PATG` says otherwise) and a few thousand cycles of
+     * everything else. `DELAY` and `WSCAN` are trapped, because the oracle has no raster to wait
+     * on; what is timed is the work between the waits.
+     *
+     * The run starts three bytes in, past `LDX #&FF / TXS`: the loop resets the stack because six
+     * paths reach it by `JMP`, and a stack reset is what `CallSubroutine` reads as a return. It ends
+     * at `FRCE`'s `JMP MLOOP`, patched into the stop -- three bytes for the `JSR`, two for the
+     * zero-page `LDA QQ12`, two for the `BEQ`, so the jump is at +7.
+     */
+    TEST_METHOD(TheDockedPassCostsWhatItCosts)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+      const std::uint16_t mloop = oracle.Label("MLOOP");
+      const std::uint16_t frce = oracle.Label("FRCE");
+      const std::uint16_t qq12 = oracle.Label("QQ12");
+      const std::uint16_t qq11 = oracle.Label("QQ11");
+      const std::uint16_t qq22 = oracle.Label("QQ22");
+      const std::uint16_t tribble = oracle.Label("TRIBBLE");
+
+      struct Scene
+      {
+        const char* what;
+        std::uint8_t view;
+        bool trumbles;
+        bool cursor; ///< the cursor-right key held, which on a chart reaches `TT16`
+      };
+
+      const Scene SCENES[] = {
+        {"status screen, no key", 0xFFu, false, false},
+        {"status screen, Trumbles aboard", 0xFFu, true, false},
+        {"long-range chart, no key", Elite::LONG_RANGE_CHART_VIEW, false, false},
+        {"long-range chart, cursor held", Elite::LONG_RANGE_CHART_VIEW, false, true},
+        {"short-range chart, cursor held", Elite::SHORT_RANGE_CHART_VIEW, false, true},
+      };
+
+      for (const Scene& scene : SCENES)
+      {
+        Frame frame(0x61u);
+        Universe& universe = frame.universe;
+        universe.view = scene.view;
+        universe.dockedFlag = 0xFFu;
+        universe.status.hyperspaceCountdown = 0u;
+        universe.commander.tribbles.lo = scene.trumbles ? 0x40u : 0u;
+        universe.commander.tribbles.hi = scene.trumbles ? 0x21u : 0u;
+
+        Cpu6502 cpu = oracle.Fresh();
+        const std::uint8_t leave[] = {0x4Cu, 0xF9u, 0xFFu};
+        cpu.Load(static_cast<std::uint16_t>(frce + 7u), leave, sizeof(leave));
+        cpu.AddTrap(loop.dovdu19);
+        cpu.AddTrap(oracle.Label("DELAY"));
+        cpu.AddTrap(oracle.Label("WSCAN"));
+
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
+        MirrorFrame(frame, cpu, at, loop);
+        cpu.memory[qq12] = 0xFFu;
+        cpu.memory[qq11] = scene.view;
+        cpu.memory[static_cast<std::uint16_t>(qq22 + 1u)] = 0u;
+        cpu.memory[tribble] = universe.commander.tribbles.lo;
+        cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = universe.commander.tribbles.hi;
+        if (scene.cursor)
+        {
+          // RDKEY walks X from &40 down, eight rows a column: key k is column (64-k)/8, row (64-k)%8.
+          cpu.HoldKey(static_cast<std::uint8_t>((64u - Elite::KEY_CURSOR_X) / 8u), static_cast<std::uint8_t>((64u - Elite::KEY_CURSOR_X) % 8u));
+        }
+
+        const std::uint64_t before = cpu.cycles;
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(static_cast<std::uint16_t>(mloop + 3u), 20'000'000);
+        Assert::IsTrue(run.completed, WidenText(std::string("MLOOP came round for ") + scene.what).c_str());
+        const std::uint64_t cost = cpu.cycles - before;
+
+        Logger::WriteMessage((std::string("docked pass, ") + scene.what + ": " + std::to_string(cost) + " cycles between the syncs").c_str());
+
+        // A few thousand cycles: the pass is its waits, and this is what Outpost::DOCKED_PASS_CYCLES holds.
+        Assert::IsTrue(cost >= 1'000u && cost <= 20'000u,
+                       (WidenText(scene.what) + L" cost " + std::to_wstring(cost) + L" cycles, outside the band Outpost::DOCKED_PASS_CYCLES was read from")
+                         .c_str());
       }
     }
   };

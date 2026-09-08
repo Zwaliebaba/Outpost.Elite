@@ -144,13 +144,4 @@ namespace Elite
   static_assert(EXTENT<decltype(TRUMBLE_DIRECTION_HIGH_TABLE)> == EXTENT<decltype(TRUMBLE_DIRECTION_TABLE)>,
                 "and the high half is the same table");
 
-  // ---- the pause screen -----------------------------------------------------------------------------
-
-  /*
-   * 6502: TGINT -- "the key each of the pause screen's thirteen toggles answers to", and its ORDER
-   * is the only definition the option block has (§6.139, and ADR-006 §2 on why there is no
-   * `Options` struct). Thirteen is the number `DKS3` walks.
-   */
-  static_assert(EXTENT<decltype(OPTION_KEY_TABLE)> == 13u, "DKS3 walks thirteen toggles");
-
 } // namespace Elite

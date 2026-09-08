@@ -83,19 +83,16 @@ namespace Outpost
 
   std::uint8_t GameShell::NextKey()
   {
-    std::uint8_t key = 0;
-    while (!m_window.TakeKey(key))
-    {
-      if (!Turn())
-      {
-        Abandon();
-      }
-    }
-
-    // 6502: LDA TRANTABLE,X -- the CHARACTER, because that is what TT217 returns in A and what
-    // every screen that calls it compares against. The dispatch reads the position instead, and
-    // takes it from the window directly.
-    return CharacterFor(key);
+    /*
+     * 6502: TT217 -- and it is `Elite::ReadKey`, the routine, over this object's `Held` and its
+     * presenter (InputTimer.md I-1). The queue this popped until I-1 delivered auto-repeats and
+     * type-ahead to prompts the original answered from a matrix it had first watched go quiet;
+     * the library's read has the two-frame debounce, the wait for release and the wait for a
+     * press, and it presents once a scan, which is what pumps the window and fills the table
+     * `Held` answers from. The close-on-window-gone rule is unchanged: `WaitFrames` and `Present`
+     * call `Abandon` when the window has gone, and this is reached only through them.
+     */
+    return Elite::ReadKey(m_flight->Universe(), *m_ports);
   }
 
   void GameShell::Abandon()
@@ -168,7 +165,8 @@ namespace Outpost
 
   void GameShell::Flush()
   {
-    m_window.FlushKeys(); // 6502: FLKB
+    // 6502: FLKB -- `LDA #15 / TAX / RTS` on this build, a flush of nothing; the window has had no
+    // queue to empty since InputTimer.md I-1, so the answer is the original's.
   }
 
   bool GameShell::Held(std::size_t _key)
