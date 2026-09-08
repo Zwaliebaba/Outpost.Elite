@@ -200,7 +200,7 @@ namespace Elite
       universe.heaps.yx2M1 = CHART_SCREEN_BOTTOM;
       universe.clip.dontclip = CHART_SCREEN_BOTTOM;
 
-      DrawShortRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds);
+      DrawShortRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds, &m_screen);
 
       universe.clip.dontclip = 0u;
       universe.heaps.yx2M1 = SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
@@ -214,7 +214,11 @@ namespace Elite
   /// the chart itself.
   void Game::ShowChart(std::uint8_t _view)
   {
-    SetUpScreen(m_universe, m_ports, _view);
+    // Each chart's own layout for the wide surface: the long-range chart's title has to clear the
+    // rule the map is drawn under, and the short-range chart's labels have to scale with the discs
+    // they name (Resolution.md section 6.3, slice RS-5-e).
+    SetUpScreen(m_universe, m_ports, _view,
+                (_view == SHORT_RANGE_CHART_VIEW) ? SHORT_RANGE_LAYOUT : LONG_RANGE_LAYOUT);
     DrawChart();
   }
 

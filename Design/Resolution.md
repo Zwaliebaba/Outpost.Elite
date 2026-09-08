@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->459 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->460 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -656,8 +656,8 @@ accept or redraw (§11) and are not normative until a slice lands them.
 | Sell cargo (`TT210` at view 4) | **BLOCKED, and not on this design.** `TT208`'s head — the `TRADEMODE` and the "SELL CARGO" title — is not in the port: `KeyAction::SellCargo` calls `ListCargo` directly, so the sell screen never sets its view, never clears, and has no instruction at which to name a layout. It inherits whatever the previous screen left. Porting `TT208`'s head is a change to the character stream and is not a re-flow's to make | — |
 | Equip ship (`EQSHP`) | **LANDED at RS-5-b.** `EQUIP_LAYOUT{0, 1, 2}`: number and item over canvas columns 0–24, price over 25–39 right-aligned to wide 52, and a fourth anchor that brings `CLYNS`'s row 21 back to wide row 40 from the 43 the offsets would give it | Nothing |
 | Data on system (`TT25`) | **CORRECTED at RS-5-c: a column, not a width, and not two columns of pairs.** The pairs stay whole on the left — their colons are at a different canvas column on every line, so no rectangle can split label from value — and the description moves to a column of its own beside them, at the thirty characters `DA11` justified it to | Nothing. **The wide sink does NOT re-wrap**, and §6.2 carries the measurement: the faithful stream already holds thirty-column PADDING, so re-wrapping means re-justifying, and re-justifying means the picture carrying different space characters from the canvas |
-| Long-range chart (`TT22`) | The map at 512×256 from cell (8, 4): each system plotted at `(2x, y)`, which is the original's half vertical scale doubled; the title rule and legend above and below | `PlotDot2x` at `(2x, 2 * top + (y & ~1))` — the faithful `y >> 1` doubled is `y` less its low bit, kept so the map is the original's and not a redrawn one; `DrawCrosshairs2x` |
-| Short-range chart (`TT23`) | The full 640×352 above a two-row legend; systems as the planet twin's discs; the fuel circle at twice its radius; **labels no longer collide**, because a name that overlapped its neighbour in 40 columns has room in 80 — the anchor for a label is computed from the 2× position exactly as `TT23` computes it from the 1× one | `DrawSun2x` and `DrawCircle2x` are the planet's (§4.2); the label placement (`TT23` derives a label's column from the disc's x by dividing by eight) has a twin that divides the 2× position by eight |
+| Long-range chart (`TT22`) | **LANDED at RS-5-e.** `LONG_RANGE_LAYOUT{0, 19, 1}` with one anchor: the title to wide (20, 4), above the top rule. **CORRECTED: the map does not move.** `ToSpaceViewPoint` already supplies the space view's 64-pixel margin, so the doubled map is at 512×256 from cell (8, 4) — exactly what §6.3 asked a translation to produce. What was wrong was the TEXT, which the centred layout put at wide row 13, in the middle of the map | Nothing. `PlotDot2x` is `PlotPixel2x` and `DrawCrosshairs2x` is `DrawLine2x`; RS-3 built both |
+| Short-range chart (`TT23`) | **LANDED at RS-5-e.** `SHORT_RANGE_LAYOUT{0, 0, 2}` — `rowStride = 2` so every name keeps its disc's height — with one anchor for the title, which must not scale | **`TextPrinter::SetLabelRun`**, and it is the one thing a layout cannot do. A label's ORIGIN must double while its letters stay eight pixels apart; a column stride scales the gaps too and prints "O r r e r e". `TT23` is the only thing that knows where a disc landed, so it says so, once, at the instruction that already places the cursor. **"Labels no longer collide" is DECLINED, measured**: 142 names of 2,668 systems in range across all 256 charts, 0.4 per chart |
 | Title (`TITLE`) | The ship centred in a 512×288 view as in flight; "COMMODORE 64 ELITE", the load prompt and the "press space" line at rows 4, 40 and 44 | Nothing beyond the ship, which is `LL9`'s twin |
 | Name entry, save menu (`MT26`, `SVE`) | Prompt and input line centred | Nothing |
 | Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | **CORRECTED at RS-5-c**: not re-wrapped at 64, for the data screen's reason. The justified block is placed as it stands; the Constrictor at the view's centre | `LL9`'s twin for the ship, and nothing for the text |
@@ -896,7 +896,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->459 tests with the oracle present, all passing, and all
+<!--count:tests-->460 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -980,7 +980,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->459 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->460 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -1033,7 +1033,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->459 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->460 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1360,7 +1360,7 @@ reason, and the replay digest is unchanged.
 
 **Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
 cannot write one parameter's default in terms of another. Every screen without a table of its own
-still gets exactly what it got before, which is why 454 of the 459 tests did not move.
+still gets exactly what it got before, which is why 454 of the 460 tests did not move.
 
 **The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
 row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
@@ -1465,3 +1465,38 @@ thing for two slices.
 **Everything is re-rendered and re-accepted against the corrected instrument**: the status screen's
 offsets go from 4 to 0 with its anchors from (24, 46) to (20, 42), the three trade tables likewise,
 and every screen now lands exactly where its sketch showed.
+
+### RS-5-e — the two charts, and the label a layout cannot place, 2026-09-08
+
+**NEITHER MAP MOVES, and §6.3's translation was work that did not need doing.** The design has the
+long-range map re-laid at 512×256 from cell (8, 4). It is already there: `ToSpaceViewPoint` supplies
+the space view's 64-pixel margin to every 2× drawing, so the doubled map runs from wide cell 8 and
+the rules with it. Nothing needed an offset, no twin needed a parameter, and the thing that was
+actually wrong was invisible in the design — the chart's TEXT was still on the centred layout, which
+put "GALACTIC CHART 1" at wide row 13, in the middle of its own map. A table fixes it.
+
+**THE SHORT-RANGE CHART NEEDED A MECHANISM, AND `columnStride` WAS NOT IT.** `TT23` puts a name
+beside its disc by dividing the disc's x by eight; the discs are at twice their coordinates, so the
+name's origin must double. The obvious field — a column stride to mirror `rowStride` — was built,
+and it prints `O r r e r e`: `Map` runs per GLYPH, so a stride of 2 doubles the gaps between letters
+as well as the distance to the origin. **A label is a RUN whose start moves and whose letters do
+not**, and no pure function of a cell can express that, which is exactly what §6.2 predicted when it
+said the stored cursor was really for RS-5.
+
+So `TextPrinter::SetLabelRun` is that cursor, in its smallest honest form: the row, the first canvas
+column, and the wide column, set by `TT23` at the instruction that already places `XC`, and cleared
+by the first control code — the newline after the name. It lives in the PRINTER and not the
+universe, because a `Universe` is copied and hashed field by field and a cursor that lasts one name
+belongs in neither.
+
+**"Labels no longer collide" is DECLINED, and this one was measured before it was argued.** `TT23`
+gives a name the row it wants, else the row below, else the row above, and drops it if all three are
+taken. Over all 256 charts of galaxy one: 2,668 systems in range, **142 names lost — 5.3%, or 0.4
+names on an average chart**, with the worst chart losing four; a fifty-row test would recover about
+a hundred of them across all 256. Against that: the twin would be DECIDING which systems are named,
+which is rule T1's line; the picture would carry ink the canvas has not, which §8.1's third clause
+forbids; and `TT23` feeds "was it named" back into the disc's SIZE through the carry `cpl` leaves,
+so a differently-named chart is a differently-DRAWN one. Half a name a chart is not worth any of it.
+
+**Fourth decline of the track**, after `Divide512`, the compass bit and `wrapWidth` — and the first
+where the measurement was of the GAME rather than of the arithmetic.

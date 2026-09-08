@@ -340,6 +340,17 @@ namespace Elite
       return _character;
     }
 
+    /*
+     * A label run lasts one line and ends at the first control code, which for `TT23` is the
+     * newline after the name (`TextPrinter::SetLabelRun`). Clearing it here rather than trusting the
+     * row to change is what stops a run outliving its screen: the next screen to print on the same
+     * canvas row would otherwise inherit it.
+     */
+    if (_character < 32u)
+    {
+      m_labelActive = false;
+    }
+
     if (_character == 7)
     {
       // 6502: R5 -- JSR BEEP, whose carry `dn2`, `R5` and `DK4` all drop.
@@ -476,7 +487,7 @@ namespace Elite
        * turn an `XC` into a canvas cell.
        */
       const std::uint8_t cell = static_cast<std::uint8_t>(TEXT_FIRST_COLUMN + m_state.column - 1u);
-      PrintGlyph2x(*m_picture, Layout(), cell, m_state.row, drawn, m_state.palette);
+      PrintGlyphAt2x(*m_picture, WideCellFor(cell, m_state.row), drawn, m_state.palette);
     }
   }
 

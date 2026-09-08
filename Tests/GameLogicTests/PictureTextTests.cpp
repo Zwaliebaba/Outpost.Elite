@@ -571,6 +571,46 @@ namespace GameLogicTests
     }
 
     /*
+     * THE LABEL RUN, which is the one thing a layout cannot do (slice RS-5-e).
+     *
+     * `Map` is a pure function of the faithful cell, and that is right for text ON a screen and
+     * wrong for a LABEL ON A DRAWING: the short-range chart puts a system's name beside its disc,
+     * the discs are at twice their coordinates, so the name's ORIGIN must double while its letters
+     * stay eight pixels apart. A column stride cannot do it -- it scales the gaps too, and prints
+     * "O r r e r e", which is what the first attempt did.
+     *
+     * So `TT23` says where the run starts and the printer carries it for one line. The four cases
+     * below are the whole of it: inside the run, the cell before it, another row, and the newline
+     * that ends it.
+     */
+    TEST_METHOD(ALabelRunMovesItsOriginAndNotItsLetters)
+    {
+      Canvas canvas;
+      Picture picture;
+      Elite::TextState text;
+      Elite::TextLayout layout = Elite::SHORT_RANGE_LAYOUT;
+      Elite::TextPrinter printer{canvas, text};
+      printer.AttachPicture(&picture, &layout);
+
+      // A system whose name `TT23` placed at canvas column 12 of canvas row 11, with its disc's
+      // wide cell worked out as 30.
+      printer.SetLabelRun(11, 12, 30);
+
+      Assert::AreEqual(30, printer.WideCellFor(12, 11).column, L"the run starts where the disc is");
+      Assert::AreEqual(31, printer.WideCellFor(13, 11).column, L"and its second letter is the next cell along");
+      Assert::AreEqual(37, printer.WideCellFor(19, 11).column, L"seven letters in, still one cell each");
+      Assert::AreEqual(layout.Map(12, 11).row, printer.WideCellFor(12, 11).row, L"the row is the layout's, doubled");
+
+      Assert::AreEqual(layout.Map(11, 11).column, printer.WideCellFor(11, 11).column, L"the cell before the run is not in it");
+      Assert::AreEqual(layout.Map(12, 12).column, printer.WideCellFor(12, 12).column, L"nor is the same column on another row");
+
+      // A run lasts one line. Anything below 32 ends it, which for `TT23` is the newline after the
+      // name -- and that is what stops a run outliving the screen that opened it.
+      (void)printer.Print(12);
+      Assert::AreEqual(layout.Map(12, 11).column, printer.WideCellFor(12, 11).column, L"the newline closed the run");
+    }
+
+    /*
      * THE PROPERTY EVERY PER-SCREEN TABLE HAS TO KEEP -- Risk R24's tripwire, and the reason it is
      * a test rather than an assertion in the header: nothing about an `Anchor` stops it naming a
      * wide cell the offsets already reach, and two faithful cells landing on one wide cell would
@@ -592,13 +632,15 @@ namespace GameLogicTests
       // exercising the anchor path and not two rigid transforms.
       static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
 
-      const std::array<Named, 8> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
+      const std::array<Named, 10> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
                                           {L"the space view", Elite::SPACE_VIEW_LAYOUT},
                                           {L"the status screen", Elite::STATUS_LAYOUT},
                                           {L"the market screens", Elite::BUY_LAYOUT},
                                           {L"the inventory screen", Elite::INVENTORY_LAYOUT},
                                           {L"the equip ship screen", Elite::EQUIP_LAYOUT},
                                           {L"the data on system screen", Elite::DATA_LAYOUT},
+                                          {L"the long-range chart", Elite::LONG_RANGE_LAYOUT},
+                                          {L"the short-range chart", Elite::SHORT_RANGE_LAYOUT},
                                           {L"an anchored table", Elite::TextLayout{4, 8, 2, ANCHORS}}}};
 
       for (const Named& named : LAYOUTS)
