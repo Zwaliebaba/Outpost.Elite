@@ -21,7 +21,7 @@ namespace Elite
    *
    * `DOKEY` reads the keyboard and the joystick, and then does 77 instructions of arithmetic on
    * what it read. The reading is hardware and stays behind a seam; the arithmetic is not, and it is
-   * as comparable as anything else in this port. `Source-Inventory.md` row 145 files the whole of
+   * as comparable as anything else in this port. The ledger, before M6-e retired it, filed all of
    * it under "Replace", which is right about the scan and wrong about the rest (§6.73).
    */
 

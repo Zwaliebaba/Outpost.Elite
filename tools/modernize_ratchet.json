@@ -68,11 +68,6 @@
       "slack": 0,
       "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
     },
-    "inventory-stale-files": {
-      "ceiling": 0,
-      "slack": 0,
-      "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
-    },
     "origin-markers": {
       "ceiling": 4103,
       "slack": 0,
@@ -94,7 +89,7 @@
       "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
     },
     "origin-tools": {
-      "ceiling": 7,
+      "ceiling": 6,
       "slack": 0,
       "slice": "M0-a"
     }

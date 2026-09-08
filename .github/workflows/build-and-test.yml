@@ -65,12 +65,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Slice 0a's acceptance criterion, and the one that was only ever true on the machine that
-      # wrote it until 2026-09-03 (plan section 6.9). It is here because a fresh clone is exactly
-      # the case it failed.
-      - name: Every INCLUDE resolves
-        run: python tools/inventory.py --check-includes
-
       # GameLogic must stay deterministic and platform-free (ADR-002, AGENTS.md section 5).
       - name: GameLogic is deterministic
         run: python tools/check_gamelogic.py
@@ -124,22 +118,6 @@ jobs:
       # which invites somebody to invent a value for it (§6.75).
       - name: The source resolver can read every file the build assembles
         run: python tools/c64_source.py --check-all
-
-      # Strict since 2026-09-05: every master-level include has a ledger row, or the push fails.
-      # The mode had waited three days for the ledger to be complete and the ledger had waited for
-      # the mode to be run; 101 files had no row when it first was (plan section 6.120).
-      - name: Coverage ledger
-        run: python tools/inventory.py --strict
-
-      # M5-c, 2026-09-07: a row's HOME cell is its live claim about where its labels are, and twenty
-      # of them named files the port never built. The notes beside a home are HISTORY and two of them
-      # name a missing file deliberately, to say the tree does not have it -- so this reads the home
-      # cell and nothing else, and the self-test plants both traps.
-      - name: Every ledger home names a file on disk
-        run: python tools/inventory.py --check-homes
-
-      - name: The ledger check catches a planted stale home
-        run: python tools/inventory.py --self-test
 
       # M5-d, 2026-09-07: /.clang-tidy calls itself the single source of truth for this repository's
       # naming and semantics, and until this step NOTHING RAN IT here -- the file came whole from
@@ -216,11 +194,6 @@ jobs:
 
       - name: Build and run the suite, recording which labels each test runs
         run: Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt
-
-      # M6-0-f: the coverage review as a tool's output. Every Port row of the ledger names files
-      # some test RUNS on the oracle, or carries a note saying which it does not and why.
-      - name: Review the ledger's Port rows against what the suite ran
-        run: python tools/inventory.py --coverage x64/Debug/coverage.txt
 
   windows:
     name: Debug x64 build and tests

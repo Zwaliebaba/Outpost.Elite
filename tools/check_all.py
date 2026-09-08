@@ -26,7 +26,6 @@ REPO = Path(__file__).resolve().parent.parent
 
 # The order CI runs them in, so a local failure and a CI failure read the same way.
 CHECKS: list[list[str]] = [
-    ["inventory.py", "--check-includes"],
     ["check_gamelogic.py"],
     ["check_gamelogic.py", "--self-test"],
     ["check_projects.py"],
@@ -38,9 +37,6 @@ CHECKS: list[list[str]] = [
     ["mutate.py", "--check"],
     ["c64_source.py", "--check-all"],
     ["labels.py", "--check"],
-    ["inventory.py", "--strict"],
-    ["inventory.py", "--check-homes"],
-    ["inventory.py", "--self-test"],
     ["check_tidy.py"],
     ["check_twins.py"],
     ["check_twins.py", "--self-test"],
