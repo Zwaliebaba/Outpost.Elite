@@ -35,10 +35,10 @@ namespace Elite
    * 6502: MAS1 -- K(3 2 1) = INWK(Y) doubled, plus INWK(X), written back over INWK(X).
    *
    * The doubling is a sixteen-bit `ASL`/`ROL` with the carry caught in a third byte by
-   * `LDA #0 / ROR A`, which turns the overflow into a SIGN rather than losing it -- so what
+   * a zero rotated right, which turns the overflow into a SIGN rather than losing it -- so what
    * `MVT3` then adds to is a signed 24-bit value built out of a 16-bit one.
    *
-   * `MVT3` ends `STA K+3` on every one of its three paths, so the `STA INWK+2,X` that follows it
+   * `MVT3` ends by storing `K+3` on every one of its three paths, so the store that follows it
    * stores `K+3` and the port needs nothing returned from the call. Returns the high byte with the
    * sign cleared, which is what the caller compares against a distance.
    */
@@ -48,7 +48,7 @@ namespace Elite
    * 6502: MAS2, and `m` above it -- OR the three sign bytes of a ship block together and drop the
    * sign, which is "the largest of the three distances, to within a factor of two".
    *
-   * TWO ENTRY POINTS. `m` is `LDA #0` and then falls in, so it starts from nothing; `MAS2` ORs into
+   * TWO ENTRY POINTS. `m` starts from a loaded zero and then falls in; `MAS2` ORs into
    * whatever the caller left in A. The third such routine this slice has met, after `DILX`'s four
    * and `CLYNS`'s two (§6.63, §6.67), and the only one where both are used deliberately.
    */
@@ -63,7 +63,8 @@ namespace Elite
   /*
    * 6502: MAS3 -- A = x^2 + y^2 + z^2 of a ship block's HIGH bytes, saturating at 255.
    *
-   * Two `ADC R`s with no `CLC`, both reading the carry `SQUA2` exits with -- which is never set, so
+   * Two additions of `R` with no clear of the carry, both reading the one `SQUA2` exits with --
+   * which is never set, so
    * the additions are the plain ones they look like. That is measured over all 512 inputs rather
    * than assumed, and it is why `MAS3` needed no change when the flag was modelled (§6.70).
    */
@@ -85,8 +86,8 @@ namespace Elite
    * off. `_dockingComputer` is `auto`, and it wins -- the autopilot always gets damping, whatever
    * the player set.
    *
-   * ITS LAST TWO INSTRUCTIONS CANNOT RUN. `.REDU DEX / BEQ BUMP` is reached only when `BUMP`'s
-   * `INX` wraps to zero, which needs X = 255 on entry to `BUMP`; but `BUMP` is entered only with
+   * ITS LAST TWO INSTRUCTIONS CANNOT RUN. `REDU`'s tail is reached only when `BUMP`'s step up
+   * wraps X to zero, which needs X = 255 on entry to `BUMP`; but `BUMP` is entered only with
    * X < 128 (from `BPL`) or with X = 128 (undoing the `DEX`), so the wrap never happens. The port
    * leaves them out and the sweep proves it rather than assuming it: a trap on `REDU` records no
    * hits across all 2,304 inputs (§6.71).
@@ -96,7 +97,8 @@ namespace Elite
   /*
    * 6502: DENGY -- take one unit off the energy banks, and say whether that emptied them.
    *
-   * `DEC ENERGY / PHP / BNE P%+5 / INC ENERGY / PLP / RTS`. The `PHP` is the point: the flag the
+   * The push of the flags is the point: the flag the caller sees is the one the step DOWN set,
+   * not the one the step back up would have. So
    * caller sees is the one the DECREMENT set, not the one the `INC` that undoes it would have. So
    * the banks never reach zero through this -- one is the floor -- and the caller still learns that
    * they tried to.
@@ -109,7 +111,9 @@ namespace Elite
   /*
    * 6502: SHD, which FALLS INTO DENGY -- bump a shield by one, and PAY FOR IT.
    *
-   * `INX / BEQ SHD-2`, and `SHD-2` is the `DEX / RTS` two bytes above the label. So a shield already
+   * A shield already at 255 branches to `SHD-2`, which is the step-back-down and return two
+   * bytes above the label. So a full shield is put back and the routine returns; anything less
+   * is stepped up AND THEN RUNS ON INTO
    * at 255 is put back and the routine returns; anything less is incremented AND THEN RUNS ON INTO
    * `DENGY`, which takes a unit off the energy banks.
    *
@@ -124,7 +128,7 @@ namespace Elite
    * below `_limit`?
    *
    * Three compares and two branches, and the carry it returns is the answer: SET when the ship is
-   * inside the box, clear when any axis is outside it. `FAROF` is `LDA #224` and then this, which
+   * inside the box, clear when any axis is outside it. `FAROF` is the same thing with 224, which
    * is the distance at which the flight loop stops caring about a ship at all.
    */
   [[nodiscard]] bool WithinRange(const Ship& _work, std::uint8_t _limit) noexcept;
@@ -140,11 +144,12 @@ namespace Elite
    *
    * FIVE WAYS TO SAY NO BEFORE IT MEASURES ANYTHING. A non-zero `INWK+8` (the ship is not in front
    * of us), a negative type (the planet or the sun), an exploding ship, or a large x or y offset all
-   * take the same `BNE HI1` out with the carry as `CLC` left it. Only then does it square x and y,
+   * take the same branch to `HI1` out, with the carry as the routine's opening cleared it. Only
+   * then does it square x and y,
    * add them, and compare the sum against the blueprint's own target area at `(XX0),0` and
    * `(XX0),1`.
    *
-   * The overflow path is not the same as the near misses. `BCS TN10` reaches a `CLC / RTS` of its
+   * The overflow path is not the same as the near misses. A sum too big to compare reaches a `TN10`
    * own, which says "no" for a sum too big to compare rather than for a ship too far to the side --
    * the same answer by a different route, and the port keeps them apart because the original does.
    */
@@ -153,7 +158,7 @@ namespace Elite
   /*
    * `SpawnChildEffects` WAS HERE AND IS NOT ANY MORE (M4-a-1).
    *
-   * It was one method -- `JSR SFS1` with A = the AI flag and X = the type -- and `SFS1` has been
+   * It was one method -- `SFS1` with the AI flag and the type -- and `SFS1` has been
    * `Elite::SpawnChildShip` in `Spawn.cpp` since slice 4a-b, so by §6.73's rule it should have gone
    * with the other seven in M3-b-1. It could not, and the reason was the SUITE rather than the
    * code: `TheWreckageMatchesSPINAndSPIN2` traps `SFS1` on the oracle to `SEC` and let the port's
@@ -170,17 +175,17 @@ namespace Elite
    * 6502: what `SPIN` and `SPIN2` decide before a single `SFS1` runs -- the typed stage result
    * M4-a is named for.
    *
-   * `SPIN2` is a loop around one `JSR SFS1` and `SPIN` is a roll in front of `SPIN2`, so between
+   * `SPIN2` is a loop around one call to `SFS1` and `SPIN` is a roll in front of `SPIN2`, so between
    * them they choose exactly three things: a type, a count, and the AI byte the children get. The
    * fourth field is not a decision but a CARRY: both routines have a path that spawns nothing and
    * hands the caller's own flag straight back (`oh` is a bare `RTS`), and `MA47` runs its second
-   * `JSR SPIN` on whatever the first left, so the flag has to survive the split (M2-d).
+   * second `SPIN` on whatever the first left, so the flag has to survive the split (M2-d).
    */
   struct Drop
   {
     ShipType type;         ///< 6502: X on the way into `SFS1`
     std::uint8_t count;    ///< 6502: CNT, and zero means `oh`
-    std::uint8_t aiFlag;   ///< 6502: A on the way into `SFS1`, which is `LDA #0` for both callers
+    std::uint8_t aiFlag;   ///< 6502: A on the way into `SFS1`, which is zero for both callers
     bool carryIfNone;      ///< 6502: the flag `oh`'s `RTS` hands back when the count is zero
   };
 
@@ -197,13 +202,14 @@ namespace Elite
   /*
    * 6502: SPIN2 -- spawn `_count` ships of one type, one after another.
    *
-   * `.spl BEQ oh` READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET. `STA CNT` leaves the flags
+   * `spl`'s FIRST TEST READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET. Storing the count
+   * leaves the flags
    * alone, so the `BEQ` at the top of the loop is testing whatever the CALLER left in Z -- which
    * for `SPIN2`'s only caller is the `AND #3` two instructions earlier, and for `SPIN` is its own
    * `AND #15`. Both happen to describe the count, which is what makes the loop look ordinary.
    *
    * The loop's back edge is `BNE spl+2`, which lands one instruction PAST the `BEQ`, so the test
-   * runs once on entry and never again: after that it is `DEC CNT / BNE` that decides. A port that
+   * runs once on entry and never again: after that the count's own step down decides. A port that
    * kept the test inside the loop would agree with the game on every input and be a different
    * routine.
    */
@@ -218,25 +224,25 @@ namespace Elite
   /*
    * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
    *
-   * Half the time nothing happens at all: `JSR DORND / BPL oh` throws the whole call away on a
+   * Half the time nothing happens at all: a random byte with bit 7 clear goes straight to `oh` and
    * clear bit 7. That is the ONLY thing the roll decides.
    *
-   * THE COUNT IS NOT RANDOM. `TYA / TAX / LDY #0 / AND (XX0),Y / AND #15` reads as "copy the type
+   * THE COUNT IS NOT RANDOM. The move that copies the type into X for `SFS1` goes through the
    * into X for `SFS1`", and it does that -- but the copy goes through A, so the `AND` that follows
    * masks the TYPE and not the random byte `DORND` left behind. A ship of a given type against a
    * given blueprint always drops the same amount, on the half of the calls that drop anything.
    * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
    * byte 0 differed from the roll (§6.74).
    */
-  /// The roll is HERE and not in `PerformDrop`, because `MA47`'s two `JSR SPIN`s roll, spawn, roll
+  /// The roll is HERE and not in `PerformDrop`, because `MA47`'s two calls to `SPIN` roll, spawn, roll
   /// and spawn in that order -- the second roll runs on the first drop's carry (M2-d), so planning
   /// both up front would run the generator twice before either loop.
   [[nodiscard]] Drop PlanDebris(Rng& _rng, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept;
 
   /*
-   * 6502: `SPIN2`'s loop body -- `LDA #0 / JSR SFS1 / DEC CNT / BNE spl+2`, run over a `Drop`.
+   * 6502: `SPIN2`'s loop body -- one call to `SFS1` and the count stepped down, run over a `Drop`.
    *
-   * `.spl BEQ oh` READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET, and the loop's back edge lands
+   * `spl`'s first test reads a flag the instruction above it did not set, and the loop's back edge lands
    * one instruction PAST that `BEQ`, so the test runs once on entry and never again. `Drop::count`
    * carries the answer the flag encoded, and this runs the loop the same number of times: a port
    * that put the test back inside the loop would agree with the game on every input and be a
@@ -285,22 +291,22 @@ namespace Elite
    *
    * `StartDockingMusic` was `JSR startbd` and `StopDockingMusic` was `JSR stopbd`, and both are
    * `Music.cpp`'s routines over `Universe::music`, writing the chip through `Ports::sid`. `stopbd`
-   * READS A BYTE THE SEAM COULD NOT SEE: `BIT MULIE / BMI itsoff`, the title screen's bracket
+   * READS A BYTE THE SEAM COULD NOT SEE: it tests `MULIE`, the title screen's bracket
    * around its `RESET`, which is `Status::titleReset` and is why the call takes it. The executable
    * was passing it in from the universe it happened to hold; the library passes it from the
    * universe it is given.
    *
    * `FRS1` AND `ANGRY` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1d).
    *
-   * `SpawnAhead` was `JSR FRS1` with X = the type -- "put a ship right in front of us" -- and
-   * `Anger` was `JSR ANGRY` with the ship's slot and type. Slice 4a-b built both, in `Spawn.cpp`
+   * `SpawnAhead` was `FRS1` with the type -- "put a ship right in front of us" -- and `Anger`
+   * was `ANGRY` with the ship's slot and type. Slice 4a-b built both, in `Spawn.cpp`
    * and `Tactics.cpp`, and the flight loop calls them: §6.73's rule again.
    *
    * TWO THINGS THEY TAUGHT SURVIVE THEM. `ANGRY`'s SLOT had to be an argument because the two
-   * callers point `INF` at different ships -- part 3 angers the missile's TARGET (`LDX MSTG /
-   * JSR GINF`) and part 11 the ship OUR LASER hit (`XSAV`'s) -- and the seam that took only the
+   * callers point `INF` at different ships -- part 3 angers the missile's TARGET, reached
+   * through `MSTG`, and part 11 the ship OUR LASER hit -- and the seam that took only the
    * type guessed `MSTG` and read block 255 the first time a laser landed without a lock (§6.142).
-   * And `ANGRY`'s EXIT CARRY is part 11's, because it falls from there into `JSR LL9` and a ship
+   * And `ANGRY`'s EXIT CARRY is part 11's, because it falls from there into `LL9` and a ship
    * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger`
    * takes the slot and answers the carry; the seam only ever forwarded to it.
    */
@@ -320,15 +326,15 @@ namespace Elite
    * 6502: M% and the fifteen parts after it -- how a frame in space ends.
    *
    * Three of its jumps leave and three do not, and telling them apart is the routine's whole shape
-   * (§6.82). The three that leave are `JMP DOENTRY`, `JMP DEATH` and `JMP ESCAPE`, none of which
+   * (§6.82). The three that leave jump to `DOENTRY`, `DEATH` and `ESCAPE`, none of which
    * returns -- so the port hands back an outcome the way `TT102`'s dispatch hands back a label.
    */
   enum class LoopOutcome : std::uint8_t
   {
     Continued, ///< the frame finished; the loop goes round again
-    Docked,    ///< 6502: JMP DOENTRY, from part 9's docking check
-    Died,      ///< 6502: JMP DEATH, from part 9 or part 15
-    Escaped,   ///< 6502: JMP ESCAPE, from part 3's escape pod
+    Docked,    ///< 6502: DOENTRY, from part 9's docking check
+    Died,      ///< 6502: DEATH, from part 9 or part 15
+    Escaped,   ///< 6502: ESCAPE, from part 3's escape pod
   };
 
   // `FlightLoop` was the argument list the flight half took: `FlightScreen&` plus the keys, the
@@ -338,13 +344,13 @@ namespace Elite
   /*
    * 6502: M% to `MA3` -- the head of a frame: the seed, the Trumbles, the controls and the keys.
    *
-   * IT SEEDS THE RANDOM NUMBER GENERATOR FROM THE PLANET. `LDA K% / STA RAND` puts the planet's own
+   * IT SEEDS THE RANDOM NUMBER GENERATOR FROM THE PLANET. The planet's own x low byte goes into
    * x low byte into the first byte of `RAND` on every single frame, so the sequence is stirred by
    * where the planet is -- which is itself a function of everything the player has done. Elite's
    * randomness is not a generator left running; it is a generator being pushed.
    *
-   * AND THE PITCH READS A CARRY THE ROLL LEFT BEHIND. The roll's magnitude ends `CMP #8 / BCS P%+3
-   * / LSR A`, and the pitch's begins `EOR #%11111111 / ADC #4` with no `SEC` or `CLC` between them
+   * AND THE PITCH READS A CARRY THE ROLL LEFT BEHIND. The roll's magnitude ends on a comparison
+   * against 8 and a halving, and the pitch's begins by complementing and adding four with nothing
    * -- and `cntr` touches no flags on any of its three paths. So the four added to the pitch is
    * four or five depending on the low bit of the roll (§6.85).
    */
@@ -358,7 +364,7 @@ namespace Elite
    * and `FR1` prints "MISSILE JAMMED" and stops. Otherwise the target is told it has been shot at,
    * the lock is dropped, the count goes down and the launch is heard.
    *
-   * `LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY` reads the TARGET's type out of the slot the lock
+   * The lock names a slot, and the type read out of it is the TARGET's -- so what gets angry is
    * names -- so what gets angry is the ship being shot at, not the missile.
    */
   void FireMissile(Universe& _universe, Ports& _ports) noexcept;
@@ -369,9 +375,10 @@ namespace Elite
   [[nodiscard]] LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: MA3 to `JMP MAL1` -- parts 4 to 12, once per occupied slot, and `KS1` under them.
+   * 6502: MA3 to the jump back to `MAL1` -- parts 4 to 12, once per occupied slot, and `KS1`
+   * under them.
    *
-   * The loop is a `JMP MAL1` back edge rather than a counted loop, and `KS1` is inside it: killing
+   * The loop's back edge is a jump to `MAL1` rather than a counted loop, and `KS1` is inside it: killing
    * a ship shuffles the slots down, so the index is NOT advanced afterwards and the slot that took
    * the dead one's place is processed next. A port that wrote a `for` over the slots would skip
    * every ship behind a kill.
@@ -383,9 +390,10 @@ namespace Elite
   [[nodiscard]] LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: MA18 to `JMP STARS` -- parts 13 to 16, once per frame after the ships.
+   * 6502: MA18 to the jump to `STARS` -- parts 13 to 16, once per frame after the ships.
    *
-   * Everything here is on a clock: `LDA MCNT / AND #7` recharges the shields and the banks every
+   * Everything here is on a clock: three bits of the loop counter recharge the shields and the
+   * banks every
    * eighth frame, `AND #31` gives the rest of the part a sixteen-step cycle, and steps 10, 15 and
    * 20 of that cycle are the energy warning, the docking-computer reminder and the cabin
    * temperature. So a frame in the flight loop does one sixteenth of the housekeeping and the
@@ -399,19 +407,21 @@ namespace Elite
   /*
    * 6502: TT17 -- scan the keyboard for the flight controls, once a frame.
    *
-   * THE C64 HAS ITS OWN `TT17` AND IT IS NOT THE COMMON ONE. `library/common/.../tt17.asm` is three
-   * instructions -- `LDA JSTX / EOR #&FF / RTS` -- and the master file includes
+   * THE C64 HAS ITS OWN `TT17` AND IT IS NOT THE COMMON ONE. `library/common/.../tt17.asm` is
+   * three instructions long and returns the joystick's roll complemented; the master file
+   * includes
    * `library/c64/main/subroutine/tt17.asm` instead, which calls `DOKEY` on BOTH of its paths.
    * Reading the common file is how a port ends up believing the frame has no keyboard scan in it,
    * which is what happened here (§6.111).
    *
-   * IT IS THE LAST THING `MLOOP` DOES BEFORE `TT102`. Part 5 ends `JSR TT17` and falls into part 6,
+   * IT IS THE LAST THING `MLOOP` DOES BEFORE `TT102`. Part 5 ends by calling it and falls into
+   * part 6,
    * which dispatches the key that was pressed -- so the game reads the hardware TWICE a frame and
    * for two different questions: this one fills the key LOGGER with what is being held, and
    * `TT102` takes the one key that was pressed. `M%` then reads the logger at the top of the next
    * frame, which is why the controls are scanned at the end of a frame rather than the start.
    *
-   * BOTH PATHS ARE HERE. `LDA QQ11 / BNE TT17afterall` chooses between them and they differ in
+   * BOTH PATHS ARE HERE. The view chooses between them and they differ in
    * what they hand back rather than in what they do: the space view's returns `thiskey` alone, and
    * a chart's returns `thiskey` with the crosshair steps in X and Y. The port's `TT102` takes its
    * key from the window's one press a step, so what is left to return is the steps -- zero on both

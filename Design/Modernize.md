@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,252 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,157 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-33: `SoundEffects.cpp` and `FlightLoop.h` to zero, and `AND` is a conjunction.**
+
+88 sites over two files: the SID's three voices and the flight loop's own header. Twenty-first and
+twenty-second at zero.
+
+**The fourth calibration of this counter, and the fourth downward one.** `FlightLoop.h` would not
+reach zero: one line, "THE C64 HAS ITS OWN `TT17` AND IT IS NOT THE COMMON ONE.
+`library/common/.../tt17.asm` is …", parses as an instruction. `AND` is a conjunction, this tree
+writes its findings in CAPITALS, and the ambiguous-mnemonic guard asks only for a slash or a `6502:`
+somewhere in the body — which a file path supplies.
+
+The rule is now that `AND` counts only with an IMMEDIATE-style operand, and the evidence is the
+whole tree rather than the line that provoked it: there are **221 occurrences of `AND` followed by a
+bare token** and exactly **seven are real** — `AND PATG` five times, `AND COL` and `AND VIC+&10`
+once each. Every one of those seven shares its line with an unambiguous mnemonic that flags it
+anyway, so the tightening loses nothing. It drops **eight** lines, and they are all of this shape:
+
+- "`RDKEY` WAS A SEAM AND ONLY ONE LINE OF IT HAD TO BE" (`&DC00`/`&DC01` supplies the slash)
+- "WHAT IS NOT HERE AND WHY", "WHAT IS NOT HERE AND IS NOT A SEAM EITHER"
+- "AND IT IS NOT RESET PER SHIP", "AND IT DOES NOTHING IN THIS VERSION"
+- "the index into CTWOS2" and its twin, both of which write `x AND 7`
+
+The three calibrations before it removed English words as lowercase operands (M6-d-2), backticked
+implied-mode mnemonics (M6-d-4) and the seven mnemonics that are also English words (M6-d-6). All
+four are the same mistake in different clothes: **a pattern built for assembly reading English**, and
+each was settled on evidence from the whole tree rather than from the file that hit it.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved. `opcode-transcriptions` 1,252 → 1,157 — 88 rewritten and 8 no longer counted, and the
+journal says which is which so the two are never confused.
 
 **2026-09-08 — M6-d-32: `Hyperspace.cpp` and `Equipment.cpp` to zero, and a branch that lands on an
 operand.**
