@@ -407,6 +407,31 @@ namespace Elite
 
 
   /*
+   * THE BRIEFINGS (slice RS-5-g), and this table is the space view's arrangement given to a screen
+   * that is not the space view.
+   *
+   * `BRIEF`, `BRIEF2`, `DEBRIEF` and `BRP` all run on view 1, which `LayoutForView` calls a text
+   * screen and hands `CENTRED_LAYOUT` -- so the briefing prints as a 40x25 block in the middle of an
+   * 80x50 one, which is precisely the "1x centred" arrangement ruling 3 rejected as an end state.
+   * But a briefing is not a text screen: it prints justified text OVER a ship, and the ship is drawn
+   * at twice its coordinates. Spreading the rows the way the space view does puts every line back at
+   * the height the original put it, over a Constrictor twice the size.
+   *
+   * The columns are the space view's twenty as well, which centres a 30-column justified block in
+   * the frame's 8..71 interior: canvas cell 5, where `DA11` starts a line, lands on wide 25 and the
+   * block ends at 55, whose midpoint is the interior's.
+   *
+   * No anchors: there is nothing on a briefing that moves relative to anything else.
+   */
+  inline constexpr TextLayout BRIEFING_LAYOUT{20, 0, 2};
+
+  static_assert(BRIEFING_LAYOUT.Map(5, 1).column == 25, "the justified block, centred in the frame");
+  static_assert(BRIEFING_LAYOUT.Map(5, 1).row == 2, "and its rows spread as the space view's are");
+  static_assert(BRIEFING_LAYOUT.Map(35, 17).column == 55, "the block's right edge, well inside the frame");
+  static_assert(BRIEFING_LAYOUT.Map(5, 17).row == 34, "and its last line over the ship, not under it");
+
+
+  /*
    * `TTX66K`'s own test for which of the two kinds of screen is up, borrowed rather than invented:
    * it branches on `QQ11` being 0 or 13.
    *

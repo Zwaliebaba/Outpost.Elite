@@ -573,6 +573,35 @@ namespace GameLogicTests
     }
 
     /*
+     * THE THREE SCREENS THAT NEEDED NOTHING (slice RS-5-g), asserted rather than assumed.
+     *
+     * The title screen, the death screen and every flight view run on view 0 or 13, so
+     * `LayoutForView` already hands them the space view's arrangement -- and that arrangement is
+     * exactly what section 6.3 asks for: the rows spread so a line lands at the height the original
+     * put it, over a ship drawn at twice its coordinates. Three of the last five rows are a table
+     * that did not need writing, which is worth a test saying so: a later slice that changed
+     * `LayoutForView` would otherwise move three screens with nothing to catch it.
+     *
+     * The numbers are the title screen's own three lines, measured off the running screen: "----
+     * E L I T E ----" on canvas row 1, the prompt on 15 and the copyright on 17.
+     */
+    TEST_METHOD(TheTitleAndDeathScreensAreTheSpaceViewsAlready)
+    {
+      Assert::AreEqual<std::uint32_t>(Elite::SPACE_VIEW_LAYOUT.rowStride, Elite::LayoutForView(0).rowStride,
+                                      L"the title and death screens run on view 0");
+      Assert::AreEqual<std::uint32_t>(Elite::SPACE_VIEW_LAYOUT.rowStride, Elite::LayoutForView(13).rowStride,
+                                      L"and TITLE's own clear is view 13");
+
+      // The title's three lines land at the heights the original put them, proportionally.
+      Assert::AreEqual(2, Elite::SPACE_VIEW_LAYOUT.Map(10, 1).row, L"---- E L I T E ----");
+      Assert::AreEqual(30, Elite::SPACE_VIEW_LAYOUT.Map(11, 15).row, L"the load prompt");
+      Assert::AreEqual(34, Elite::SPACE_VIEW_LAYOUT.Map(11, 17).row, L"and the copyright line");
+
+      // "GAME OVER" is centred on the wreckage, which is the whole of the death screen's re-flow.
+      Assert::AreEqual(24, Elite::SPACE_VIEW_LAYOUT.Map(16, 12).row, L"GAME OVER, where it is");
+    }
+
+    /*
      * NO TABLE PUTS TEXT UNDER THE FRAME -- a constraint the picture's own border imposes, and one
      * that only appeared when `TTX66K` began drawing that border on the wide surface too (RS-5-f).
      *
@@ -590,13 +619,14 @@ namespace GameLogicTests
         Elite::TextLayout layout;
       };
 
-      const std::array<Named, 7> LAYOUTS{{{L"the status screen", Elite::STATUS_LAYOUT},
+      const std::array<Named, 8> LAYOUTS{{{L"the status screen", Elite::STATUS_LAYOUT},
                                           {L"the market screens", Elite::BUY_LAYOUT},
                                           {L"the inventory screen", Elite::INVENTORY_LAYOUT},
                                           {L"the equip ship screen", Elite::EQUIP_LAYOUT},
                                           {L"the data on system screen", Elite::DATA_LAYOUT},
                                           {L"the long-range chart", Elite::LONG_RANGE_LAYOUT},
-                                          {L"the short-range chart", Elite::SHORT_RANGE_LAYOUT}}};
+                                          {L"the short-range chart", Elite::SHORT_RANGE_LAYOUT},
+                                          {L"the briefings", Elite::BRIEFING_LAYOUT}}};
 
       for (const Named& named : LAYOUTS)
       {
@@ -683,7 +713,7 @@ namespace GameLogicTests
       // exercising the anchor path and not two rigid transforms.
       static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
 
-      const std::array<Named, 10> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
+      const std::array<Named, 11> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
                                           {L"the space view", Elite::SPACE_VIEW_LAYOUT},
                                           {L"the status screen", Elite::STATUS_LAYOUT},
                                           {L"the market screens", Elite::BUY_LAYOUT},
@@ -692,6 +722,7 @@ namespace GameLogicTests
                                           {L"the data on system screen", Elite::DATA_LAYOUT},
                                           {L"the long-range chart", Elite::LONG_RANGE_LAYOUT},
                                           {L"the short-range chart", Elite::SHORT_RANGE_LAYOUT},
+                                          {L"the briefings", Elite::BRIEFING_LAYOUT},
                                           {L"an anchored table", Elite::TextLayout{4, 8, 2, ANCHORS}}}};
 
       for (const Named& named : LAYOUTS)
