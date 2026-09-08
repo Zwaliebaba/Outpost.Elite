@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->460 tests, oracle present), all <!--count:checks-->eighteen repository checks pass,
+(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->eighteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -719,7 +719,7 @@ layout-independent by construction and is the one instrument that sees compositi
 
 ### 4.8 What the executable becomes
 
-`Outpost/` keeps `Window`, `CanvasPresenter`, `SidSynth`, `SoundOutput`, `KeyMap`, `SaveStore` and
+`Outpost/` keeps `Window`, `ScreenPresenter`, `SidSynth`, `SoundOutput`, `KeyMap`, `SaveStore` and
 `Presentation.h`'s pacing, and gains one `Platform` class implementing the four ports. `Main.cpp`
 becomes: create the window and the device, build `Game` over `Platform`, and loop `PlanSteps` →
 `game.Step(input)` → present, with `Guarded` around it — the two hundred lines ADR-004 §1

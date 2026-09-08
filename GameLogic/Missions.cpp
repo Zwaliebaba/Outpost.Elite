@@ -2,6 +2,8 @@
 
 #include "Missions.h"
 
+#include "TextPrint2x.h"
+
 #include "EliteTypes.h"
 #include "Market.h"
 #include "NameEntry.h"
@@ -87,7 +89,7 @@ namespace Elite
     _universe.work.state = 0u;
 
     // 6502: LDA #1 / JSR TT66 -- the space view again, cleared.
-    SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);
+    SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW, BRIEFING_LAYOUT);
 
     // 6502: JSR LL9 -- one more draw, onto the screen that was just cleared.
     DrawBriefingShip(_universe);
@@ -162,7 +164,7 @@ namespace Elite
        * the routine does it, not because anything can see it.
        */
       _universe.text.column = MT9_COLUMN_AND_VIEW;
-      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);
+      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW, BRIEFING_LAYOUT);
       return;
 
     case 21:
@@ -174,7 +176,7 @@ namespace Elite
        * what is left is the screen half -- and that half is `Elite::ClearMessageRows`.
        */
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.view);
+                       &_universe.picture, _universe.screenLayout);
       return;
 
     case 22:
@@ -279,7 +281,7 @@ namespace Elite
      */
     _universe.text.column = BRIEFING_START_DISTANCE;
     _universe.work.z.hi = BRIEFING_START_DISTANCE;
-    SetUpScreen(_universe, _ports, BRIEFING_START_DISTANCE);
+    SetUpScreen(_universe, _ports, BRIEFING_START_DISTANCE, BRIEFING_LAYOUT);
 
     // 6502: LDA #64 / STA MCNT.
     _universe.flight.mainLoopCounter = BRIEFING_SPIN_FRAMES;

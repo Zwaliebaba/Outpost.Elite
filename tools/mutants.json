@@ -500,8 +500,8 @@
         {
           "id": "mi-mt9-view",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);",
-          "replace": "      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);",
+          "find": "      _universe.text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW, BRIEFING_LAYOUT);",
+          "replace": "      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW, BRIEFING_LAYOUT);",
           "expect": "equivalent",
           "note": "MT9's column store, DROPPED -- and it makes no difference, which is not what this mutant was written to show. `LDA #1 / JSR DOXC / JMP TT66` is one load serving as a column and a view, and the port had only the view; adding the store is faithful and is what the routine does. But `TT66` sets `XC` to 1 ITSELF, twice -- once near the top and again at `.tt66 LDX #1 / STX XC / STX YC` -- and nothing between `DOXC` and `TT66` reads the byte, because `JMP TT66` is the next instruction. So the `DOXC` is DEAD, and the port was accidentally right for two slices. Recorded as an equivalent, with the store kept: it is the FIFTH piece of dead code found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store, `MAS2`'s second entry and `TITLE`'s `LDA MCNT / AND #3`. It must never come back caught -- if it does, something has stopped writing `XC` in `TT66`."
         },

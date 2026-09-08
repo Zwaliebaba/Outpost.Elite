@@ -2,6 +2,8 @@
 
 #include "SystemScreen.h"
 
+#include "TextPrint2x.h"
+
 #include "EliteTypes.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -134,7 +136,9 @@ namespace Elite
   void SystemDataScreen(Universe& _universe, Ports& _ports, const SystemData& _data, std::uint16_t _distance) noexcept
   {
     // 6502: LDA #1 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    SetUpScreen(_universe, _ports, DATA_ON_SYSTEM_VIEW);
+    // The screen's own layout for the wide surface, named here because nothing downstream could
+    // work it out (Resolution.md section 6.2, slice RS-5-d).
+    SetUpScreen(_universe, _ports, DATA_ON_SYSTEM_VIEW, DATA_LAYOUT);
     _ports.keyboard.Flush();
 
     // 6502: LDA #9 / JSR DOXC / LDA #163 / JSR NLIN3 -- the rule NLIN3 falls into is the canvas's,

@@ -43,7 +43,7 @@ namespace Elite
       if (_view != 0u)
       {
         // 6502: JSR CLYNS -- which leaves the cursor on row 21 and clears DLY and de (§6.67).
-        ClearMessageRows(_canvas, _printer, _text, _extended, _message, _picture, _view);
+        ClearMessageRows(_canvas, _printer, _text, _extended, _message, _picture, LayoutForView(_view));
 
         /*
          * 6502: LDA #25 / EQUB &2C.

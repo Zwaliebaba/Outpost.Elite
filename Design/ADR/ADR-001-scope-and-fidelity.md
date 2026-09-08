@@ -19,8 +19,10 @@ done at once, because the second has no definition of "correct" until the first 
 ## Decision
 
 1. **The target is the C64 game, behaviour-exact in its logic.** Same universe, same prices,
-   same AI decisions on the same RNG state, same lines on a 320×200 canvas, same sounds as a
-   sequence of SID register writes. Anything that can be checked against the assembled original
+   same AI decisions on the same RNG state, same lines on a 320×200 canvas — which is the
+   verification view — same sounds as a sequence of SID register writes. What the executable
+   presents is `Elite::Picture`, a 640×400 rendering of the same frame
+   ([Design/Resolution.md](../Resolution.md)), drawn beside the canvas and never in its place. Anything that can be checked against the assembled original
    is checked (ADR-003).
 2. **The variant is the one the masters are configured for** (GMA85 NTSC), held as
    `constexpr` in `EliteConfig.h` so the PAL variant and the maxed commander are switches, not
@@ -35,8 +37,11 @@ done at once, because the second has no definition of "correct" until the first 
    ruling: the gate below is met, the modernisation of the PROGRAM is planned in
    [Design/Modernize.md](../Modernize.md), and its last phase detaches the port from the original —
    the oracle becomes recorded fixtures and `MasterFile/` and `Upstream/` leave the tree (Modernize.md
-   §1 R-a to R-d, Phase M6). Every clause of this ADR stands until that phase amends §5 for real.)* Resolution, smoothing,
+   §1 R-a to R-d, Phase M6). Every clause of this ADR stands until that phase amends §5 for real.)* Smoothing,
    input remapping, gamepad, save UI, timing options — none is designed in this corpus. The
+   resolution is designed in [Design/Resolution.md](../Resolution.md) and is not an option: the
+   fidelity suites keep their meaning because they read the canvas, which the picture never
+   replaces. The
    gate for starting phase 6 is: every oracle suite, every golden and the replay suite green on
    the faithful build. **One original feature is removed ahead of that phase by owner ruling,
    2026-09-08: the pause screen, recorded in ADR-005 §4 and Design/InputTimer.md §5.9.** It is a

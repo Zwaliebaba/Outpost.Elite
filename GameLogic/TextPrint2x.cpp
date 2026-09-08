@@ -26,7 +26,13 @@ namespace Elite
   void PrintGlyph2x(Picture& _picture, TextLayout _layout, std::uint8_t _column, std::uint8_t _row,
                     std::span<const std::uint8_t, 8> _glyph, CellPalette _palette) noexcept
   {
-    const WideCell cell = _layout.Map(_column, _row);
+    PrintGlyphAt2x(_picture, _layout.Map(_column, _row), _glyph, _palette);
+  }
+
+  void PrintGlyphAt2x(Picture& _picture, WideCell _cell, std::span<const std::uint8_t, 8> _glyph,
+                      CellPalette _palette) noexcept
+  {
+    const WideCell cell = _cell;
     if (!OnGrid(cell))
     {
       return;
