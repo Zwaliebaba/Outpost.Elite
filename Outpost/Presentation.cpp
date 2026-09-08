@@ -149,19 +149,44 @@ namespace Outpost
 
   double FlightFrameSeconds(std::uint8_t _ships) noexcept
   {
-    // Two entries, in ascending order of how full the bubble is, and flat above the last -- the
-    // crowded end is not measured, so it is held rather than extrapolated (see the header).
-    const FlightFrameCost* cost = &FLIGHT_FRAME_COSTS.front();
+    // Ascending in occupied slots, linear between rows, flat outside: below the first row is the
+    // empty bubble's cost and above the last is the fullest bubble the game can hold.
+    const FlightFrameCost* below = &FLIGHT_FRAME_COSTS.front();
+    const FlightFrameCost* above = &FLIGHT_FRAME_COSTS.back();
 
     for (const FlightFrameCost& point : FLIGHT_FRAME_COSTS)
     {
       if (_ships >= point.ships)
       {
-        cost = &point;
+        below = &point;
+      }
+    }
+    for (std::size_t index = FLIGHT_FRAME_COSTS.size(); index-- > 0u;)
+    {
+      if (_ships <= FLIGHT_FRAME_COSTS[index].ships)
+      {
+        above = &FLIGHT_FRAME_COSTS[index];
       }
     }
 
-    return static_cast<double>(cost->cycles) / NTSC_CLOCK_HZ;
+    double cycles = static_cast<double>(below->cycles);
+    if (above->ships > below->ships)
+    {
+      const double span = static_cast<double>(above->ships - below->ships);
+      const double along = static_cast<double>(_ships - below->ships) / span;
+      cycles += along * (static_cast<double>(above->cycles) - static_cast<double>(below->cycles));
+    }
+
+    return cycles / NTSC_CLOCK_HZ;
+  }
+
+  double DockedPassSeconds(std::uint8_t _authorNames) noexcept
+  {
+    // 6502: AND PATG / LSR A / BCS plus13 -- bit 0 set skips the wait; the port's docked pass runs
+    // `RunLoopTail`'s gate the same way once InputTimer.md T-2 wires it.
+    const double work = static_cast<double>(DOCKED_PASS_CYCLES) / NTSC_CLOCK_HZ;
+    const double syncs = ((_authorNames & 1u) != 0u) ? 0.0 : static_cast<double>(DOCKED_PASS_SYNCS);
+    return work + syncs * NTSC_FRAME_CYCLES / NTSC_CLOCK_HZ;
   }
 
 } // namespace Outpost

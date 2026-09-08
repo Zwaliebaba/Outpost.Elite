@@ -153,9 +153,9 @@ namespace
      *
      * MLOOP's second half polls the keyboard, dispatches, and goes round; every docked screen it
      * reaches ends by blocking in `TT217`, so a docked game costs one present per key. `TT100` runs
-     * a frame first and only then falls into the same poll -- so both halves are paced, and the
-     * docked one uses the flight frame's EMPTY-bubble cost as a floor rather than a measurement,
-     * because a docked pass draws no ships and is cheaper than that (§6.114 one screen on).
+     * a frame first and only then falls into the same poll -- so both halves are paced, the flight
+     * one by what a frame costs and the docked one by `DockedPassSeconds`: two vertical syncs and
+     * four thousand cycles, measured (InputTimer.md T-0), where a flight floor stood in before.
      *
      * The POSITION goes to the dispatch and not the character, which is the whole reason `KeyMap`
      * maps a Windows key to a C64 matrix position: `TT102` compares against 37 for "8" and never
@@ -186,7 +186,7 @@ namespace
          */
         accumulated = 0.0;
 
-        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::FlightFrameSeconds(0));
+        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::DockedPassSeconds(app->game.State().options.authorNames));
         dockedLeftover = docked.leftoverSeconds;
 
         for (int pass = 0; pass < docked.steps; ++pass)
