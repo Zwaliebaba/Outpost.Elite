@@ -108,6 +108,47 @@ namespace GameLogicTests
      * the resume key unbound, never leave. What is worth asserting after its removal is the other
      * direction: the key still reaches `DK4`'s `STX KL`, and the batch of steps carries on.
      */
+    /*
+     * 6502: TITLE's `BIT KY7 / BMI TL3` -- the fire key ends the title screen with `JSTK` still set,
+     * which on a C64 is the player saying they have a joystick.
+     *
+     * The port has no stick to read, so `Game` settles the byte after the start sequence: cleared
+     * unless the platform says it has one (InputTimer.md §5.1, I-3). Both answers are driven, and
+     * the second is what keeps the original's rule reachable for the gamepad slice.
+     */
+    TEST_METHOD(TheFireKeyOnTheTitleSelectsAJoystickOnlyWhenThePlatformHasOne)
+    {
+      struct FireKey : NullSeams
+      {
+        bool Held(std::size_t _key) override
+        {
+          return _key == Elite::KEY_FIRE;
+        }
+        bool HasJoystick() noexcept override
+        {
+          return joystick;
+        }
+        bool joystick = false;
+      };
+
+      {
+        FireKey keys;
+        NullSeams nulls;
+        Elite::Game game(nulls, keys, nulls);
+        game.Reset();
+        Assert::IsTrue(game.Docked(), L"fire is not Y, so no disk menu, and the cold start still ends docked");
+        Assert::AreEqual<std::uint8_t>(0u, game.State().options.joystick, L"6502: JSTK -- cleared, because there is no stick to read");
+      }
+      {
+        FireKey keys;
+        keys.joystick = true;
+        NullSeams nulls;
+        Elite::Game game(nulls, keys, nulls);
+        game.Reset();
+        Assert::AreEqual<std::uint8_t>(0xFFu, game.State().options.joystick, L"6502: JSTK -- and the original's answer when there is");
+      }
+    }
+
     TEST_METHOD(TheOldPauseKeyIsAnOrdinaryKey)
     {
       Bare bare;

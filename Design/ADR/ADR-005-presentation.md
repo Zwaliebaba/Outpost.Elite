@@ -273,6 +273,14 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   the window is inactive (§3, to be built as InputTimer.md T-1). This is the first deliberate
   removal of an original FEATURE rather than of a hardware read, and ADR-001 §4 points here.
 
+- **The game may believe it has a joystick only when the platform has one to read. Owner ruling
+  2026-09-08 (Design/InputTimer.md §5.1, slice I-3).** `TITLE` leaves `JSTK` set when the fire
+  key dismisses it, which on a C64 selects the stick `RDKEY` then reads from CIA port A. The port
+  reads no port A, so `Game` clears `JSTK` after each start sequence unless `Keyboard::HasJoystick`
+  answers true, which nothing does until the gamepad slice. `TITLE` itself is unchanged and still
+  compared; the settlement runs after it. When a controller exists the original's rule returns:
+  fire on the title screen selects it, and `JSTGY`/`JSTE` become its axis reversals.
+
 ### §5 The window and the application shell
 
 **Superseded 2026-09-03 by owner ruling: do not strip WinUI, ignore it and proceed.** The

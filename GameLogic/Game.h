@@ -207,6 +207,9 @@ namespace Elite
     /// 6502: the six exits `DOENTRY` can take, which are the missions plus the bay itself.
     [[nodiscard]] ForcedKey MissionOf(DockingOutcome _outcome);
 
+    /// InputTimer.md §5.1: `JSTK` after a start sequence, which only a platform with a stick may keep.
+    void SettleJoystick() noexcept;
+
     /// 6502: what `M%` answers with, and what the loop does about it.
     void Leave(LoopOutcome _outcome);
 

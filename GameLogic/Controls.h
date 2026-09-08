@@ -241,6 +241,21 @@ namespace Elite
 
     /// 6502: FLKB -- empty the keyboard buffer, so a key pressed before a prompt is discarded.
     virtual void Flush() = 0;
+
+    /*
+     * Whether the platform has a joystick to read (Design/InputTimer.md §5.1, slice I-3).
+     *
+     * The original's `TITLE` ends with `JSTK` set when the fire key dismissed it, and `RDKEY` then reads CIA
+     * port A for the stick. The port reads no port A, so a game that believed it had a joystick
+     * ran `DOKEY`'s joystick branch over keys that were never going to arrive (InputTimer.md I-4).
+     * `Game` clears `JSTK` after the start sequence unless this answers true, and it answers false
+     * until the gamepad slice gives the platform something to read; then the original's rule
+     * returns unchanged. Not pure, because every implementer today gives the same answer.
+     */
+    [[nodiscard]] virtual bool HasJoystick() noexcept
+    {
+      return false;
+    }
   };
 
   /*
