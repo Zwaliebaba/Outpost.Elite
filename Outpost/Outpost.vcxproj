@@ -146,6 +146,7 @@
     </ClCompile>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="SaveStore.cpp" />
+    <ClCompile Include="SettingsFile.cpp" />
     <ClCompile Include="Presentation.cpp" />
     <ClCompile Include="KeyMap.cpp" />
     <ClCompile Include="Window.cpp" />
@@ -180,6 +181,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SaveStore.h" />
+    <ClInclude Include="SettingsFile.h" />
     <ClInclude Include="Presentation.h" />
     <ClInclude Include="KeyMap.h" />
     <ClInclude Include="Window.h" />

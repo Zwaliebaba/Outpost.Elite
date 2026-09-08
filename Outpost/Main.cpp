@@ -4,11 +4,11 @@
 #include "FlightSession.h"
 #include "Presentation.h"
 #include "SaveStore.h"
+#include "SettingsFile.h"
 #include "Shell.h"
 #include "SoundOutput.h"
 #include "Window.h"
 
-#include "Controls.h"
 #include "Game.h"
 #include "Universe.h"
 
@@ -140,6 +140,9 @@ namespace
 
     app->window.Create(_instance, INITIAL_SCALE);
     app->presenter.Create(app->window.Handle());
+
+    // The thirteen bytes the pause screen toggled, from Settings.txt beside the commanders (InputTimer.md S-1).
+    app->window.Warn(Outpost::ApplySettingsFile(app->store.Root(), app->game.State()).Summary());
 
     // 6502: the loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
     app->game.Reset();

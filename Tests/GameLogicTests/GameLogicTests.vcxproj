@@ -182,6 +182,9 @@
          project's precompiled header. Window.cpp, CanvasPresenter.cpp and Shell.cpp are
          deliberately absent, because they need a window and a GPU; the Outpost build on the
          Windows leg of CI is what compiles those. -->
+    <ClCompile Include="..\..\Outpost\SettingsFile.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

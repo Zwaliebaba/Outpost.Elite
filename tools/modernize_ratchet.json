@@ -34,9 +34,9 @@
       "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 240,
+      "ceiling": 243,
       "slack": 0,
-      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
+      "slice": "InputTimer.md S-1: three lines of platform composition -- the settings file -- raised the ceiling, deliberately and journaled"
     },
     "outpost-elite-names": {
       "ceiling": 61,
