@@ -145,21 +145,21 @@ namespace Elite
    * method it serves, and the comment on that method is the authority for what it means.
    */
 
-  /// 6502: STA VIC+&27 -- sprite 0's colour, which is the sights'.
+  /// 6502: sprite 0's colour register, which is the sights'.
   void ApplySightColour(VideoState& _video, Colour _colour) noexcept;
 
-  /// 6502: STA VIC+&15 -- the whole enable byte, sights and Trumbles together.
+  /// 6502: the whole sprite enable byte, sights and Trumbles together.
   void ApplySpritesEnabled(VideoState& _video, std::uint8_t _mask) noexcept;
 
-  /// 6502: LDA VIC+&15 / AND #.. / STA VIC+&15 -- part 15's read-modify-write, which is why this
-  /// is a separate call and not a second `ApplySpritesEnabled`.
+  /// 6502: part 15's READ-MODIFY-WRITE of the enable byte, which is why this is a separate call
+  /// and not a second `ApplySpritesEnabled`.
   void ApplyMaskSprites(VideoState& _video, std::uint8_t _mask) noexcept;
 
-  /// 6502: STA VIC+&17 / STA VIC+&1D -- the same byte into both expand registers.
+  /// 6502: the same byte into both sprite expand registers, vertical and horizontal.
   void ApplySpriteExpansion(VideoState& _video, std::uint8_t _mask) noexcept;
 
   /*
-   * 6502: STX VIC+&2 / STY VIC+&3, the ninth x bit into bit 1 of VIC+&10, and bit 1 of VIC+&15.
+   * 6502: sprite 1's x and y, the ninth bit of its x, and its enable bit -- five writes.
    *
    * Sprite 1 is the explosion's, always. `PTCLS2` does not call this when the burst would be off
    * the screen -- it draws the particles anyway -- so an off-screen burst leaves the sprite where

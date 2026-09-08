@@ -516,7 +516,7 @@ def matches(_outcome: Outcome, _expect: str) -> bool:
     return _outcome.result == _expect
 
 
-def say_what_is_measured(_chosen: list[Mutant]) -> None:
+def say_what_is_measured() -> None:
     """Name the uncommitted files the run DOES cover, so the tally's subject is on the screen.
 
     This used to warn that they were NOT covered, which was true and was printed on every run and
@@ -524,6 +524,13 @@ def say_what_is_measured(_chosen: list[Mutant]) -> None:
     entries of the plan's journal came to report a tally for the wrong commit (M6-d-25a). The
     worktree now carries them (`make_worktree`), so the note says what is in rather than what is
     out; a line naming the subject is harder to skip than a line disclaiming it.
+
+    AND IT NAMES ALL OF THEM. It used to name only `Tests/`, `GameLogic/` and the files the chosen
+    mutants live in, which silently omitted `Outpost/` -- so a slice that edited `FlightSession.cpp`
+    got a subject line that did not mention it, and the reader who checks the line against the slice
+    would have concluded the run did not cover it. It did: `make_worktree` applies `git diff HEAD`
+    whole. An under-reporting subject line is the same defect as the disclaimer it replaced, one
+    layer down, so there is no filter here any more.
     """
     status = subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, text=True)
     if status.returncode != 0:
@@ -533,10 +540,7 @@ def say_what_is_measured(_chosen: list[Mutant]) -> None:
     if not dirty:
         return
 
-    interesting = sorted(
-        path for path in dirty
-        if path in {mutant.file for mutant in _chosen} or path.startswith("Tests/") or path.startswith("GameLogic/")
-    )
+    interesting = sorted(dirty)
     if interesting:
         print("subject: HEAD plus these uncommitted files, which the worktree carries --")
         for path in interesting[:12]:
@@ -653,7 +657,7 @@ def main(_argv: list[str]) -> int:
         return check_applicable(chosen, load_floor() if whole_corpus else None)
 
     check_oracle_present()
-    say_what_is_measured(chosen)
+    say_what_is_measured()
 
     scratch = Path(arguments.worktree) if arguments.worktree else REPO.parent / f".mutate-{os.getpid()}"
     print(f"worktree   {scratch}")
