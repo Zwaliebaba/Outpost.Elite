@@ -162,7 +162,7 @@ namespace Outpost
    */
   struct TitleTurnCost
   {
-    std::uint8_t distanceHigh; ///< 6502: INWK+7, which `TLL2` walks from 96 down to 1
+    std::uint8_t distanceHigh; ///< INWK+7, which `TLL2` walks from 96 down to 1
     std::uint32_t cycles;      ///< what one turn costs there, measured against the shipped routines
   };
 
@@ -174,7 +174,7 @@ namespace Outpost
     {1, 121'276},
   }};
 
-  /// 6502: the 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
+  /// The 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
   /// 985,248, and choosing between them is the same decision the shipped build's variant makes.
   inline constexpr double NTSC_CLOCK_HZ = 1'022'727.0;
 
@@ -229,7 +229,7 @@ namespace Outpost
    */
   struct FlightFrameCost
   {
-    std::uint8_t ships;   ///< 6502: how many slots of `FRIN` are occupied, planet and sun included
+    std::uint8_t ships;   ///< How many slots of `FRIN` are occupied, planet and sun included
     std::uint32_t cycles; ///< what a frame costs there, measured against the shipped `M%`
   };
 
@@ -247,7 +247,7 @@ namespace Outpost
   /*
    * How long a DOCKED pass takes, and it is two vertical syncs and almost nothing else.
    *
-   * 6502: `MLOOP` with `QQ12` set -- the guns cool, `DIALS` is skipped, a two-sync `DELAY` runs
+   * `MLOOP` with `QQ12` set -- the guns cool, `DIALS` is skipped, a two-sync `DELAY` runs
    * unless the view byte masked with the author-names option comes out ODD -- which only the Data
    * on System screen, at 1, ever does -- the Trumbles breed, `TT17` scans the keyboard, and `TT102`
    * dispatches `thiskey`, which on a pass with no key falls through `TT107`'s countdown and
@@ -266,14 +266,14 @@ namespace Outpost
    */
   inline constexpr std::uint32_t DOCKED_PASS_CYCLES = 4'472;
 
-  /// 6502: the two syncs a docked pass waits, unless `QQ11 AND PATG` is odd.
+  /// The two syncs a docked pass waits, unless `QQ11 AND PATG` is odd.
   inline constexpr std::uint8_t DOCKED_PASS_SYNCS = 2;
 
-  /// 6502: TT16's call to `WSCAN` -- one more sync on a chart pass that moves the crosshairs, so
+  /// TT16's call to `WSCAN` -- one more sync on a chart pass that moves the crosshairs, so
   /// step at most once a frame. Recorded here; honoured when T-1's blank exists.
   inline constexpr std::uint8_t CHART_CURSOR_SYNCS = 1;
 
-  /// 6502: the VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
+  /// The VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
   inline constexpr double NTSC_FRAME_CYCLES = 65.0 * 263.0;
 
   /// How long one docked pass should take, in seconds, given the syncs the last pass asked `DELAY`

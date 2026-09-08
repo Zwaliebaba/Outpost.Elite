@@ -12,7 +12,7 @@ namespace Elite
   /*
    * The ship line heap (slice 3b).
    *
-   * 6502: the region between `SLSP` and `LS%`. Every ship on screen owns a run of bytes in it,
+   * The region between `SLSP` and `LS%`. Every ship on screen owns a run of bytes in it,
    * holding the lines that were last drawn for that ship -- a count, then four bytes per line. The
    * game draws by EOR, so drawing the same lines again erases them, and that is the ONLY way a ship
    * is ever removed from the screen. Lose the heap and the game cannot rub anything out.
@@ -42,7 +42,7 @@ namespace Elite
     static constexpr std::size_t SIZE = TOP - BASE;
 
     /*
-     * 6502: LSO -- the SUN's line heap, which the SPACE STATION borrows, and it is nowhere near
+     * The SUN's line heap, which the SPACE STATION borrows, and it is nowhere near
      * this arena.
      *
      * `NWSPS` empties the sun's slot and then writes the LOW BYTE of `LSO` into the station's heap

@@ -16,7 +16,7 @@ namespace Elite
   /*
    * Putting a ship on the screen (slice 3b).
    *
-   * 6502: PROJ and the divide it is built on. Everything the space view draws goes through this:
+   * PROJ and the divide it is built on. Everything the space view draws goes through this:
    * a ship's position is where it is RELATIVE TO THE PLAYER in three dimensions, and turning that
    * into a pixel is one division per axis, x / z and -y / z, added to the centre of the view.
    *
@@ -25,12 +25,12 @@ namespace Elite
    * the sign of z, and a ship too far off to one side is rejected by the overflow test below.
    */
 
-  /// 6502: X and Y, from the constants block -- the centre of the space view, which the resolved
+  /// X and Y, from the constants block -- the centre of the space view, which the resolved
   /// C64 source annotates as "the 256 x 144 space view". Canvas::SPACE_VIEW_HEIGHT is the 144.
   inline constexpr std::uint8_t SPACE_VIEW_CENTRE_X = 128;
   inline constexpr std::uint8_t SPACE_VIEW_CENTRE_Y = 72;
 
-  /// 6502: `#Y*2`, which the drawing code writes out every time rather than naming. It is the row
+  /// `#Y*2`, which the drawing code writes out every time rather than naming. It is the row
   /// the dashboard starts on, so it is the first row a ship may not occupy.
   inline constexpr std::uint8_t SPACE_VIEW_BOTTOM = 2 * SPACE_VIEW_CENTRE_Y;
 
@@ -45,14 +45,14 @@ namespace Elite
    */
   struct ScreenOffset
   {
-    std::uint8_t low = 0;  ///< 6502: K
-    std::uint8_t high = 0; ///< 6502: X
-    std::uint8_t a = 0;    ///< 6502: A on return
-    bool overflow = false; ///< 6502: the C flag -- set when the magnitude reached 1024
+    std::uint8_t low = 0;
+    std::uint8_t high = 0;
+    std::uint8_t a = 0;    ///< A on return
+    bool overflow = false; ///< The C flag -- set when the magnitude reached 1024
   };
 
   /*
-   * 6502: DVID3B2 -- K(3 2 1 0) = (A P+1 P) / (z_sign z_hi z_lo).
+   * K(3 2 1 0) = (A P+1 P) / (z_sign z_hi z_lo).
    *
    * The preamble that copies the ship's z into the divisor and so turns `DVID3B` into "divide by
    * this ship's z". FORCING THE LOW BIT of the z low byte on the way is load-bearing: it is what
@@ -71,7 +71,7 @@ namespace Elite
   KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /*
-   * 6502: PLS6 (with its PL21, PL44 and PL6 exits) -- (X K) = (A P+1 P) / z, overflowing at 1024.
+   * PLS6 (with its PL21, PL44 and PL6 exits) -- (X K) = (A P+1 P) / z, overflowing at 1024.
    *
    * The overflow test is in two halves and both matter: the top two bytes of the quotient must be
    * zero, and then its high byte must be under four. 1024 rather than 256 because a planet's
@@ -84,28 +84,28 @@ namespace Elite
    */
   [[nodiscard]] ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
-  /// 6502: K3(1 0) and K4(1 0) -- where a point landed on the screen, as sixteen bits per axis so
+  /// K3(1 0) and K4(1 0) -- where a point landed on the screen, as sixteen bits per axis so
   /// that a shape whose centre is off the edge still has somewhere to be drawn from. These are the
   /// same zero-page bytes the short-range chart uses for the range circle's centre, one byte each;
   /// `RangeCircle` in `Charts.h` is that use and this is not it.
   struct Projection
   {
-    std::uint8_t x = 0;  ///< 6502: K3
-    std::uint8_t x1 = 0; ///< 6502: K3+1
-    std::uint8_t y = 0;  ///< 6502: K4
-    std::uint8_t y1 = 0; ///< 6502: K4+1
+    std::uint8_t x = 0;
+    std::uint8_t x1 = 0;
+    std::uint8_t y = 0;
+    std::uint8_t y1 = 0;
   };
 
   /// What `PROJ` returns, which is not just the carry: `SHPPT` ignores the carry entirely and
   /// branches on `A OR K3+1` instead, so the accumulator is part of the contract.
   struct ProjectResult
   {
-    bool offScreen = false; ///< 6502: the C flag
-    std::uint8_t a = 0;     ///< 6502: A -- K4+1 when the point projected, and not that when it did not
+    bool offScreen = false; ///< The C flag
+    std::uint8_t a = 0;     ///< K4+1 when the point projected, and not that when it did not
   };
 
   /*
-   * 6502: PROJ -- project a ship, planet or sun onto the screen.
+   * Project a ship, planet or sun onto the screen.
    *
    *   K3(1 0) = #X + 256 * x / z
    *   K4(1 0) = #Y - 256 * y / z
@@ -124,7 +124,7 @@ namespace Elite
   ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept;
 
   /*
-   * 6502: LL155, with the LL27 loop it is the head of -- draw every line on a ship's line heap.
+   * LL155, with the LL27 loop it is the head of -- draw every line on a ship's line heap.
    *
    * Byte 0 of the heap is its length in bytes, and under four there is not a whole line there, so
    * nothing is drawn. Everything after it is groups of four: x1, y1, x2, y2, which are `XX15` to
@@ -137,7 +137,7 @@ namespace Elite
   void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: LL81 -- store the heap's length in byte 0 and fall straight into `LL155`.
+   * Store the heap's length in byte 0 and fall straight into `LL155`.
    *
    * Two instructions and a fall-through, and the fall-through is the routine: `LL9` reaches it
    * having built the heap and left the length in `U`, and `SHPPT` reaches `LL81+2` with the length
@@ -148,7 +148,7 @@ namespace Elite
                              Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: EE51 -- take the ship off the screen, if it is on it.
+   * Take the ship off the screen, if it is on it.
    *
    * Bit 3 of `INWK+31` is the whole state: set means the lines on the heap are currently on the
    * screen. The routine clears it with an `EOR` (not an `AND`, because A already holds the mask and
@@ -165,7 +165,7 @@ namespace Elite
   bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: what `LL9` part 1 does after `EE51`, and the `EE55` loop -- set up a newly killed
+   * What `LL9` part 1 does after `EE51`, and the `EE55` loop -- set up a newly killed
    * ship's explosion cloud on its line heap.
    *
    * Byte 1 is 18, the counter `DOEXP` ages; byte 2 is the blueprint's seventh byte, how many
@@ -183,7 +183,7 @@ namespace Elite
   void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept;
 
   /*
-   * 6502: SHPPT, with its `Shpt` helper and its `nono` exit -- a distant ship, drawn as a dot.
+   * SHPPT, with its `Shpt` helper and its `nono` exit -- a distant ship, drawn as a dot.
    *
    * Two four-pixel horizontal lines one row apart, built onto the ship's line heap so that the next
    * frame erases them the same way it erases a wireframe. `LL9` comes here when a ship is too far
@@ -199,7 +199,7 @@ namespace Elite
                        Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: XX16 and XX12 -- the workspace `LL9`'s geometry runs in (slice 3b).
+   * XX16 and XX12 -- the workspace `LL9`'s geometry runs in (slice 3b).
    *
    * Both are sized by what indexes them and both are confirmed by the zero-page layout, which is
    * §6.8's test passed three ways: `XX16` is at 69 and `XX0` at 87, eighteen bytes apart, and it
@@ -212,15 +212,15 @@ namespace Elite
    */
   struct GeometryWorkspace
   {
-    /// 6502: XX16 -- the ship's three orientation vectors, scaled, as magnitude and sign pairs:
+    /// The ship's three orientation vectors, scaled, as magnitude and sign pairs:
     /// sidev in 0 to 5, roofv in 6 to 11, nosev in 12 to 17.
     std::array<std::uint8_t, 18> scaledOrientation{};
 
-    /// 6502: XX12 -- three sign-magnitude dot products, magnitude then sign.
+    /// Three sign-magnitude dot products, magnitude then sign.
     std::array<std::uint8_t, 6> dotProducts{};
 
     /*
-     * 6502: XX2 -- one byte per face saying whether you can see it, and SIXTEEN of them.
+     * One byte per face saying whether you can see it, and SIXTEEN of them.
      *
      * Three measurements agree (§6.37): the edge data indexes it with a NIBBLE, the largest face
      * count across the thirty-three blueprints is fifteen, and `XX2` is at 53 with `XX16` at 69.
@@ -233,7 +233,7 @@ namespace Elite
     std::array<std::uint8_t, 16> faceVisible{};
 
     /*
-     * 6502: XX3 -- the projected vertices, four bytes each: x as sixteen bits, then y.
+     * The projected vertices, four bytes each: x as sixteen bits, then y.
      *
      * In the original this is at 256, the bottom of the STACK page, and the 6502's own stack grows
      * down towards it from 511. Nothing here needs that, but the SIZE does come from it: the edge
@@ -243,7 +243,7 @@ namespace Elite
     std::array<std::uint8_t, 260> projectedVertices{};
 
     /*
-     * 6502: XX4, XX17, XX18, XX20, V(1 0) and CNT went with M2-c-3.
+     * XX4, XX17, XX18, XX20, V(1 0) and CNT went with M2-c-3.
      *
      * They are `LL9`'s own -- the distance threshold, the three loops' counters, the position it
      * halves, the loops' bounds, the blueprint walker and where the next vertex goes in `XX3` --
@@ -258,7 +258,7 @@ namespace Elite
   };
 
   /*
-   * 6502: LL51 (with its `ll51` loop) -- the three dot products of `XX15` with each of `XX16`'s
+   * LL51 (with its `ll51` loop) -- the three dot products of `XX15` with each of `XX16`'s
    * vectors, left in `XX12`.
    *
    * This is how Elite decides both what a ship looks like and which of its faces you can see. `LL9`
@@ -285,11 +285,11 @@ namespace Elite
   /// What `LL120` and `LL123` leave in (Y X) -- a sixteen-bit signed step along the line.
   struct SlopeStep
   {
-    std::uint8_t low = 0;  ///< 6502: X
-    std::uint8_t high = 0; ///< 6502: Y
+    std::uint8_t low = 0;
+    std::uint8_t high = 0;
 
     /*
-     * 6502: Q as the loop leaves it -- 0 after `LL122`, still the gradient after `LL121`.
+     * Q as the loop leaves it -- 0 after `LL122`, still the gradient after `LL121`.
      *
      * Not part of the step, and here because it is not the helpers' scratch either: `Q` is the
      * frame's, and the altitude check reads whatever the frame last left in it (M2-b, §8; risk
@@ -301,7 +301,7 @@ namespace Elite
   };
 
   /*
-   * 6502: XX15(1 0) and XX15(3 2) -- one end of a line, sixteen bits an axis, as `LL118` clamps it.
+   * XX15(1 0) and XX15(3 2) -- one end of a line, sixteen bits an axis, as `LL118` clamps it.
    *
    * It goes in as two sixteen-bit coordinates and comes out as two eight-bit ones in the same
    * bytes: `xLow` and `yLow` hold the answer and the two high bytes are cleared. That aliasing is
@@ -309,26 +309,26 @@ namespace Elite
    */
   struct Point16
   {
-    std::uint8_t xLow = 0;  ///< 6502: XX15
-    std::uint8_t xHigh = 0; ///< 6502: XX15+1
-    std::uint8_t yLow = 0;  ///< 6502: XX15+2
-    std::uint8_t yHigh = 0; ///< 6502: XX15+3
+    std::uint8_t xLow = 0;
+    std::uint8_t xHigh = 0;
+    std::uint8_t yLow = 0;
+    std::uint8_t yHigh = 0;
   };
 
   /*
-   * 6502: XX15's six bytes with XX12(1 0) -- the line `LL145` takes.
+   * XX15's six bytes with XX12(1 0) -- the line `LL145` takes.
    *
    * The second end's y is in `XX12(1 0)` and not in `XX15`, because `XX15` is six bytes and a line
    * of two sixteen-bit points needs eight. `LL9` part 10 fills both, and so does `BLINE`.
    */
   struct Line16
   {
-    Point16 first;  ///< 6502: XX15(1 0) and XX15(3 2)
-    Point16 second; ///< 6502: XX15(5 4) and XX12(1 0)
+    Point16 first;
+    Point16 second;
   };
 
   /*
-   * 6502: what `LL145` answers with -- the clipped line, the carry, `SWAP` and `XX13`.
+   * What `LL145` answers with -- the clipped line, the carry, `SWAP` and `XX13`.
    *
    * `ends` is `XX13`: 0 if the far end is on screen, 143 if neither end is, 71 if only the near one
    * is. The upstream header gives 0, 95 and 191, which are the BBC's -- they are `Y*2-1` and half
@@ -337,11 +337,11 @@ namespace Elite
    */
   struct ClipResult
   {
-    Line line;             ///< 6502: X1, Y1, X2, Y2 -- the same bytes as `XX15`, four of them
-    bool rejected = false; ///< 6502: the carry -- the line cannot be made to fit
+    Line line;             ///< X1, Y1, X2, Y2 -- the same bytes as `XX15`, four of them
+    bool rejected = false; ///< The carry -- the line cannot be made to fit
 
     /*
-     * 6502: SWAP, and a BYTE rather than a bool because `LL147` decrements it.
+     * SWAP, and a BYTE rather than a bool because `LL147` decrements it.
      *
      * `LL145` zeroes it first, so its answer is 0 or 255 and reads as "were the ends exchanged".
      * `LL147` does not, and `LL9` part 10 clips edge after edge through it -- so the byte walks
@@ -350,30 +350,30 @@ namespace Elite
      */
     std::uint8_t swap = 0;
 
-    std::uint8_t ends = 0; ///< 6502: XX13
+    std::uint8_t ends = 0;
   };
 
   /*
-   * 6502: XX12+2, XX12+3 and T -- the line's gradient, its direction and which axis it is measured
+   * XX12+2, XX12+3 and T -- the line's gradient, its direction and which axis it is measured
    * along, which is what `LL115` computes and `LL118`'s four clamps walk the point with.
    */
   struct Slope
   {
-    std::uint8_t gradient = 0;  ///< 6502: XX12+2 -- `LL28`'s quotient, the smaller span over the larger
-    std::uint8_t direction = 0; ///< 6502: XX12+3 -- the two spans' signs EOR'd
-    std::uint8_t steep = 0;     ///< 6502: T -- 0 when the line moves further across than down, 255 when it does not
+    std::uint8_t gradient = 0;  ///< `LL28`'s quotient, the smaller span over the larger
+    std::uint8_t direction = 0; ///< The two spans' signs EOR'd
+    std::uint8_t steep = 0;     ///< 0 when the line moves further across than down, 255 when it does not
   };
 
   /// What `LL129` leaves: the divisor in `Q`, the magnitude in `(S R)`, and the sign in A.
   struct PreparedSlope
   {
-    SignMag16 magnitude;        ///< 6502: (S R), made positive -- `lo` is R and `hi` is S
-    std::uint8_t divisor = 0;   ///< 6502: Q, which is the gradient
-    std::uint8_t sign = 0;      ///< 6502: A -- the original S EOR'd with the slope's direction
+    SignMag16 magnitude;        ///< (S R), made positive -- `lo` is R and `hi` is S
+    std::uint8_t divisor = 0;   ///< Q, which is the gradient
+    std::uint8_t sign = 0;      ///< The original S EOR'd with the slope's direction
   };
 
   /*
-   * 6502: LL129 -- Q = XX12+2, (S R) = |S R|, and the answer is the sign the step will get.
+   * Q = XX12+2, (S R) = |S R|, and the answer is the sign the step will get.
    *
    * The returned byte is the ORIGINAL S EOR'd with the slope direction in `XX12+3`, taken before
    * the magnitude is made positive. Both callers push it and use it at the very end to decide
@@ -382,7 +382,7 @@ namespace Elite
   [[nodiscard]] PreparedSlope PrepareSlope(Slope _slope, SignMag16 _distance) noexcept;
 
   /*
-   * 6502: LL120 and LL123, which are the same code with the dispatch the other way round.
+   * LL120 and LL123, which are the same code with the dispatch the other way round.
    *
    * `T` says whether the line is steep or shallow, and that decides whether the step is a multiply
    * or a divide: `LL120` multiplies on a shallow slope and divides on a steep one, `LL123` does the
@@ -397,7 +397,7 @@ namespace Elite
   [[nodiscard]] SlopeStep StepAlongY(Slope _slope, SignMag16 _distance) noexcept;
 
   /*
-   * 6502: LL118 -- move a point along its line until it is on the screen.
+   * Move a point along its line until it is on the screen.
    *
    * Four clamps in order, one per edge, and each is "step along the slope by however far off you
    * are, then set the coordinate to the edge". The step is `LL120` for the x edges and `LL123` for
@@ -413,7 +413,7 @@ namespace Elite
   void MovePointOnScreen(Point16& _point, Slope _slope, MathWorkspace& _math) noexcept;
 
   /*
-   * 6502: XX13 and dontclip -- what `LL145` reports, and the one flag that switches it off.
+   * XX13 and dontclip -- what `LL145` reports, and the one flag that switches it off.
    *
    * `dontclip` is NOT the clipper's own scratch: `TT23` sets it to 199 so that the short-range
    * chart can use the whole screen instead of being clipped to the space view, and `RES2` clears
@@ -424,12 +424,12 @@ namespace Elite
    */
   struct ClipState
   {
-    /// 6502: dontclip -- bit 7 set means return the line unclipped.
+    /// Bit 7 set means return the line unclipped.
     std::uint8_t clippingOff = 0;
   };
 
   /*
-   * 6502: LL145 and LL147 -- clip a line to the screen.
+   * LL145 and LL147 -- clip a line to the screen.
    *
    * In: two sixteen-bit points, which the original holds in `XX15`'s six bytes and `XX12(1 0)`.
    * Out: four eight-bit coordinates in the SAME bytes, which is why `XX15` cannot be split into a
@@ -465,7 +465,7 @@ namespace Elite
   struct Universe;
 
   /*
-   * 6502: LL9 parts 1 to 12 -- draw a ship.
+   * LL9 parts 1 to 12 -- draw a ship.
    *
    * The hardest routine in Elite, and the shape of it is three passes: decide which of the ship's
    * faces you can see, project the vertices those faces touch, then walk the edges between visible

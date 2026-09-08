@@ -9,7 +9,7 @@ namespace Elite
 {
 
   /*
-   * 6502: the VIC-II sprite registers, as DATA the port owns (ADR-005 §1, plan §6.133).
+   * The VIC-II sprite registers, as DATA the port owns (ADR-005 §1, plan §6.133).
    *
    * WHY THIS EXISTS, and it is a design decision rather than a convenience. `SIGHT` and `PTCLS2`
    * both write VIC-II registers, and both did it through WRITE-ONLY seams -- `SightEffects` for
@@ -47,10 +47,10 @@ namespace Elite
    * mitigation is a golden hash plus a hand-checked screenshot, not a coverage claim.
    */
 
-  /// 6502: how many hardware sprites the VIC-II has. Bit N of the enable register is sprite N.
+  /// How many hardware sprites the VIC-II has. Bit N of the enable register is sprite N.
   inline constexpr std::size_t SPRITE_COUNT = 8;
 
-  /// 6502: 24 pixels across, 21 rows down, three bytes per row -- 63 bytes and a padding byte,
+  /// 24 pixels across, 21 rows down, three bytes per row -- 63 bytes and a padding byte,
   /// which is why a sprite pointer steps 64 bytes at a time.
   inline constexpr std::size_t SPRITE_BYTES = 64;
   inline constexpr int SPRITE_ROWS = 21;
@@ -58,7 +58,7 @@ namespace Elite
   inline constexpr int SPRITE_WIDTH = 24;
 
   /*
-   * 6502: the VIC-II's own screen origin, which is what sprite coordinates are measured from.
+   * The VIC-II's own screen origin, which is what sprite coordinates are measured from.
    *
    * A sprite at x = 24, y = 50 sits in the top-left corner of the 320x200 display. Both numbers are
    * the hardware's and neither is a choice this port makes; they are here rather than at the blit
@@ -89,14 +89,14 @@ namespace Elite
    */
   inline constexpr std::size_t SPRITE_DEFINITION_COUNT = 7;
 
-  /// 6502: the sprite the raster split moves -- `santana` and `lotus` are both about this one.
+  /// The sprite the raster split moves -- `santana` and `lotus` are both about this one.
   inline constexpr int EXPLOSION_SPRITE = 1;
 
-  /// 6502: SPOFF% -- `(SPRITELOC% - SCBASE) / 64`, and `SPRITELOC%` is `SCBASE + &2800`, which is
+  /// `(SPRITELOC% - SCBASE) / 64`, and `SPRITELOC%` is `SCBASE + &2800`, which is
   /// one byte past everything `Canvas` holds. So a pointer of 160 selects definition 0.
   inline constexpr std::uint8_t SPRITE_POINTER_ORIGIN = 160;
 
-  /// 6502: VIC+&25 and VIC+&26 -- the two shared multicolour registers, which every multicolour
+  /// VIC+&25 and VIC+&26 -- the two shared multicolour registers, which every multicolour
   /// sprite draws %01 and %11 from. The loader sets them and the game never does.
   inline constexpr Colour SPRITE_MULTICOLOUR_1 = Colour::LightRed;
   inline constexpr Colour SPRITE_MULTICOLOUR_2 = Colour::Red;
@@ -104,7 +104,7 @@ namespace Elite
   struct VideoState
   {
     /*
-     * 6502: VIC+&15 -- which sprites are switched on, one bit each.
+     * VIC+&15 -- which sprites are switched on, one bit each.
      *
      * Bit 0 is the laser sights, bit 1 is the explosion, and bits 2 to 7 are the Trumbles. `SIGHT`
      * writes the whole byte with the sights' bit ORed into the Trumbles', because neither can be
@@ -114,7 +114,7 @@ namespace Elite
     std::uint8_t enabled = 0;
 
     /*
-     * 6502: VIC+&17 and VIC+&1D -- y-expand and x-expand, written with the SAME byte.
+     * VIC+&17 and VIC+&1D -- y-expand and x-expand, written with the SAME byte.
      *
      * One field and not two, because there is one write: `PTCLS2` stores the same value to both, so
      * a sprite is double size in both directions or in neither. Modelling them apart would invent a
@@ -123,7 +123,7 @@ namespace Elite
     std::uint8_t expanded = 0;
 
     /*
-     * 6502: VIC+&10 with VIC+&0 to VIC+&F -- each sprite's position.
+     * VIC+&10 with VIC+&0 to VIC+&F -- each sprite's position.
      *
      * `x` is NINE bits: the low eight in the per-sprite register and the ninth in bit N of VIC+&10.
      * It is stored whole here and split only where a register is actually being imitated, which is
@@ -132,7 +132,7 @@ namespace Elite
     std::array<std::uint16_t, SPRITE_COUNT> x = {};
     std::array<std::uint8_t, SPRITE_COUNT> y = {};
 
-    /// 6502: VIC+&27 to VIC+&2E -- each sprite's own colour, which for a multicolour sprite is
+    /// VIC+&27 to VIC+&2E -- each sprite's own colour, which for a multicolour sprite is
     /// only the %10 bit pair; %01 and %11 come from the two shared registers above.
     std::array<Colour, SPRITE_COUNT> colour = {};
   };
@@ -145,21 +145,21 @@ namespace Elite
    * method it serves, and the comment on that method is the authority for what it means.
    */
 
-  /// 6502: sprite 0's colour register, which is the sights'.
+  /// Sprite 0's colour register, which is the sights'.
   void ApplySightColour(VideoState& _video, Colour _colour) noexcept;
 
-  /// 6502: the whole sprite enable byte, sights and Trumbles together.
+  /// The whole sprite enable byte, sights and Trumbles together.
   void ApplySpritesEnabled(VideoState& _video, std::uint8_t _mask) noexcept;
 
-  /// 6502: part 15's READ-MODIFY-WRITE of the enable byte, which is why this is a separate call
+  /// Part 15's READ-MODIFY-WRITE of the enable byte, which is why this is a separate call
   /// and not a second `ApplySpritesEnabled`.
   void ApplyMaskSprites(VideoState& _video, std::uint8_t _mask) noexcept;
 
-  /// 6502: the same byte into both sprite expand registers, vertical and horizontal.
+  /// The same byte into both sprite expand registers, vertical and horizontal.
   void ApplySpriteExpansion(VideoState& _video, std::uint8_t _mask) noexcept;
 
   /*
-   * 6502: sprite 1's x and y, the ninth bit of its x, and its enable bit -- five writes.
+   * Sprite 1's x and y, the ninth bit of its x, and its enable bit -- five writes.
    *
    * Sprite 1 is the explosion's, always. `PTCLS2` does not call this when the burst would be off
    * the screen -- it draws the particles anyway -- so an off-screen burst leaves the sprite where
@@ -167,7 +167,7 @@ namespace Elite
    */
   void ApplyExplosionSprite(VideoState& _video, std::uint16_t _x, std::uint8_t _y) noexcept;
 
-  /// 6502: NOSPRITES -- every sprite off. It does not move or recolour anything, so neither does
+  /// Every sprite off. It does not move or recolour anything, so neither does
   /// this: a sprite switched back on reappears exactly where it was.
   void ApplyHideAllSprites(VideoState& _video) noexcept;
 

@@ -32,7 +32,7 @@ namespace Elite
    */
 
   /*
-   * 6502: MUTOK, MUFOR, MUDOCK and MUSILLY -- the four music options the pause screen toggled.
+   * MUTOK, MUFOR, MUDOCK and MUSILLY -- the four music options the pause screen toggled.
    *
    * All four are bit 7 flags (`BIT` and `BMI`), and two read backwards: `MUTOK` set means the
    * docking music is OFF, `MUFOR` set means it is FORCED on and cannot be stopped -- `stopbd` jumps
@@ -45,14 +45,14 @@ namespace Elite
    */
   struct MusicOptions
   {
-    std::uint8_t dockingMusicOff = 0;    ///< 6502: MUTOK
-    std::uint8_t dockingMusicForced = 0; ///< 6502: MUFOR
-    std::uint8_t dockingPlaysTheme = 0;  ///< 6502: MUDOCK
-    std::uint8_t effectsDuringMusic = 0; ///< 6502: MUSILLY
+    std::uint8_t dockingMusicOff = 0;
+    std::uint8_t dockingMusicForced = 0;
+    std::uint8_t dockingPlaysTheme = 0;
+    std::uint8_t effectsDuringMusic = 0;
   };
 
   /*
-   * 6502: music_variables, MUPLA -- everything the player owns.
+   * Music_variables, MUPLA -- everything the player owns.
    *
    * `playing` is `MUPLA`, bit 7 set while a tune runs; `COMIRQ1` tests it to decide whether to call
    * the player at all. `tuneStart` is `value5`, the address a tune's pointer starts on, which
@@ -75,34 +75,34 @@ namespace Elite
    */
   struct MusicPlayer
   {
-    std::uint8_t playing = 0;    ///< 6502: MUPLA
-    std::uint16_t tuneStart = 0; ///< 6502: value5(1 0), as an offset into MUSIC_DATA
+    std::uint8_t playing = 0;
+    std::uint16_t tuneStart = 0; ///< Value5(1 0), as an offset into MUSIC_DATA
 
-    std::uint8_t buffer = 0;   ///< 6502: BDBUFF -- the nibbles not yet processed
-    std::uint8_t counter = 0;  ///< 6502: counter -- interrupts of rest left
-    std::uint8_t vibrato2Count = 0; ///< 6502: vibrato2
-    std::uint8_t vibrato3Count = 0; ///< 6502: vibrato3
+    std::uint8_t buffer = 0;   ///< The nibbles not yet processed
+    std::uint8_t counter = 0;  ///< Interrupts of rest left
+    std::uint8_t vibrato2Count = 0; ///< vibrato2
+    std::uint8_t vibrato3Count = 0; ///< vibrato3
 
-    std::uint16_t pointer = 0; ///< 6502: BDdataptr1(1 0), as an offset into MUSIC_DATA
-    std::uint16_t restart = 0; ///< 6502: BDdataptr3(1 0), the same
+    std::uint16_t pointer = 0; ///< BDdataptr1(1 0), as an offset into MUSIC_DATA
+    std::uint16_t restart = 0; ///< BDdataptr3(1 0), the same
 
-    std::uint8_t commandSixTally = 0; ///< 6502: value0 -- command 6 counts it and nothing reads it
-    std::uint8_t voice1Control = 0; ///< 6502: value1 -- voice 1's control register, from command 13
-    std::uint8_t voice2Control = 0; ///< 6502: value2 -- voice 2's
-    std::uint8_t voice3Control = 0; ///< 6502: value3 -- voice 3's
-    std::uint8_t restLength = 0; ///< 6502: value4 -- the rest length, from command 12
+    std::uint8_t commandSixTally = 0; ///< Command 6 counts it and nothing reads it
+    std::uint8_t voice1Control = 0; ///< Voice 1's control register, from command 13
+    std::uint8_t voice2Control = 0; ///< Voice 2's
+    std::uint8_t voice3Control = 0; ///< Voice 3's
+    std::uint8_t restLength = 0; ///< The rest length, from command 12
 
-    std::uint8_t voice2NoteHigh = 0; ///< 6502: voice2lo1
-    std::uint8_t voice2NoteLow = 0; ///< 6502: voice2hi1
-    std::uint8_t voice2RaisedHigh = 0; ///< 6502: voice2lo2
-    std::uint8_t voice2RaisedLow = 0; ///< 6502: voice2hi2
-    std::uint8_t voice3NoteHigh = 0; ///< 6502: voice3lo1
-    std::uint8_t voice3NoteLow = 0; ///< 6502: voice3hi1
-    std::uint8_t voice3RaisedHigh = 0; ///< 6502: voice3lo2
-    std::uint8_t voice3RaisedLow = 0; ///< 6502: voice3hi2
+    std::uint8_t voice2NoteHigh = 0; ///< voice2lo1
+    std::uint8_t voice2NoteLow = 0; ///< voice2hi1
+    std::uint8_t voice2RaisedHigh = 0; ///< voice2lo2
+    std::uint8_t voice2RaisedLow = 0; ///< voice2hi2
+    std::uint8_t voice3NoteHigh = 0; ///< voice3lo1
+    std::uint8_t voice3NoteLow = 0; ///< voice3hi1
+    std::uint8_t voice3RaisedHigh = 0; ///< voice3lo2
+    std::uint8_t voice3RaisedLow = 0; ///< voice3hi2
 
     /*
-     * 6502: the operand of the BEQ at BDbeqmod1 / BDbeqmod2 -- which half of the vibrato routine
+     * The operand of the BEQ at BDbeqmod1 / BDbeqmod2 -- which half of the vibrato routine
      * the next trigger lands in.
      *
      * False is the assembled operand, which reaches the LABELLED half (`BDlab24`, `BDlab23`): the
@@ -117,7 +117,7 @@ namespace Elite
   };
 
   /*
-   * 6502: startbd, april16, startat2 -- start the docking music, if the options allow.
+   * startbd, april16, startat2 -- start the docking music, if the options allow.
    *
    * The docking-music flag's top bit chooses the theme over the Blue Danube; then `startat2`
    * records the tune's start, and the checks run: already playing, do nothing; forced on, start
@@ -131,7 +131,7 @@ namespace Elite
   void StartDockingMusic(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /*
-   * 6502: april16 -- start it NOW, with none of the checks above it.
+   * Start it NOW, with none of the checks above it.
    *
    * `MUTOKCH` jumps here rather than calling `startbd`, and the difference is five instructions'
    * worth of decision: `april16` skips the `MUDOCK` choice between the two tunes, the `STA value5`
@@ -145,11 +145,11 @@ namespace Elite
    */
   void StartDockingMusicNow(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
-  /// 6502: startat -- the title theme, through the same `startat2` and so the same checks.
+  /// The title theme, through the same `startat2` and so the same checks.
   void StartTheme(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /*
-   * 6502: stopbd -- stop the docking music, unless something says not to.
+   * Stop the docking music, unless something says not to.
    *
    * `MULIE`'s top bit: the title screen sets `_titleReset` around its `RESET` so that the reset
    * does not silence the theme it has just started. `MUFOR`'s top bit: forced music cannot be
@@ -160,7 +160,7 @@ namespace Elite
                         SidWriteLog& _log) noexcept;
 
   /*
-   * 6502: stopat -- stop whatever is playing.
+   * Stop whatever is playing.
    *
    * Nothing if nothing is. Otherwise `SOFLUSH` runs the effects down, `MUPLA` goes to zero, the
    * chip's twenty-five registers are zeroed from &18 down to 0, and the volume register is set to
@@ -169,7 +169,7 @@ namespace Elite
   void StopMusic(MusicPlayer& _music, SoundBuffer& _buffer, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /*
-   * 6502: BDENTRY -- start the tune at `tuneStart`.
+   * Start the tune at `tuneStart`.
    *
    * Clears the nibble buffer, the rest counter and both vibrato counters; zeroes the chip's
    * registers from &18 down to ONE -- the loop ends on the counter reaching zero, so register 0
@@ -178,7 +178,7 @@ namespace Elite
   void BeginTune(MusicPlayer& _music, SidWriteLog& _log) noexcept;
 
   /*
-   * 6502: BDirqhere -- one interrupt of the music player. The fifteen commands are BDRO1 to BDRO15
+   * One interrupt of the music player. The fifteen commands are BDRO1 to BDRO15
    * and the helpers BDlab1 to BDlab24, each marked where it lands in Music.cpp.
    *
    * If a rest is in progress the counter comes down and the vibrato runs. Otherwise commands are
@@ -195,7 +195,7 @@ namespace Elite
   void RunMusic(MusicPlayer& _music, SidWriteLog& _log) noexcept;
 
   /*
-   * 6502: COMIRQ1, coffee, RASTCT, zebop -- the interrupt's SID half.
+   * COMIRQ1, coffee, RASTCT, zebop -- the interrupt's SID half.
    *
    * The handler fires twice a frame, once at the top of the screen and once at the dashboard, and
    * `RASTCT` flips between them; only the dashboard pass reaches the sound. On that pass: music if

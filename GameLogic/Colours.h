@@ -65,14 +65,14 @@ namespace Elite
     return static_cast<std::uint8_t>(_colour);
   }
 
-  /// 6502: what the VIC-II does to every byte stored in a colour register -- it keeps four bits.
+  /// What the VIC-II does to every byte stored in a colour register -- it keeps four bits.
   [[nodiscard]] constexpr Colour ColourOf(std::uint8_t _byte) noexcept
   {
     return static_cast<Colour>(_byte & 0x0Fu);
   }
 
   /*
-   * 6502: RED, YELLOW, GREEN and WHITE -- the first of the two families above, as its own type
+   * RED, YELLOW, GREEN and WHITE -- the first of the two families above, as its own type
    * (slice 5a-9).
    *
    * FOUR MULTICOLOUR PIXELS PACKED IN A BYTE, and never a colour. `COL` holds one, `CPIX2` ANDs it
@@ -107,7 +107,7 @@ namespace Elite
   }
 
   /*
-   * 6502: RED2, GREEN2, YELLOW2, BLACK2, MAG2 and BULBCOL -- the second family, as its own type
+   * RED2, GREEN2, YELLOW2, BLACK2, MAG2 and BULBCOL -- the second family, as its own type
    * (slice 5a-8).
    *
    * A SCREEN RAM BYTE IN MULTICOLOUR BITMAP MODE IS TWO COLOURS: the high nibble is what a %01

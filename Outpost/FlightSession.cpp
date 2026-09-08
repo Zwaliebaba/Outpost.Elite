@@ -16,7 +16,7 @@ namespace Outpost
   namespace
   {
     /*
-     * 6502: what `CIRCLE` would have left in `STP`, for a flight universe that has never drawn one.
+     * What `CIRCLE` would have left in `STP`, for a flight universe that has never drawn one.
      *
      * §6.95: `HFS1` walks a circle `STP` at a time and cannot terminate on a zero, and nothing on
      * the path from a cold start to the first launch was writing one. `CIRCLE` stores 8, 4 or 2 by
@@ -35,7 +35,7 @@ namespace Outpost
     constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
 
     /*
-     * 6502: the nine key flags `KY12` to `KY20` at the tail of `RDKEY`, cleared when `QQ11` says
+     * The nine key flags `KY12` to `KY20` at the tail of `RDKEY`, cleared when `QQ11` says
      * this is not a space view.
      *
      * The bomb, the pod, the missiles, the E.C.M., the warp and the docking computer are the keys
@@ -47,7 +47,7 @@ namespace Outpost
       Elite::KEY_ECM,         Elite::KEY_WARP,       Elite::KEY_DOCKING_COMPUTER, Elite::KEY_CANCEL_DOCKING,
     };
 
-    /// 6502: the mask that clears sprite 1, which `RDKEY` switches off on its way past and is not
+    /// The mask that clears sprite 1, which `RDKEY` switches off on its way past and is not
     /// one of the four the sights use. The two `SETL1` values are `Elite::MEMORY_MAP_IO` and
     /// `_RAM`.
     constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
@@ -74,19 +74,19 @@ namespace Outpost
     m_universe->heaps.circleStep = LAST_CIRCLE_STEP;
     m_universe->flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
-    // 6502: the loader's part 4 -- the sprite positions, sizes and colours the game inherits and
+    // The loader's part 4 -- the sprite positions, sizes and colours the game inherits and
     // never writes. Without it the sights are switched on at (0, 0), off the screen (§6.160).
     Elite::SetUpLoaderVideo(m_universe->video);
 
     /*
-     * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
+     * XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
      * screen at all: `BEGIN` writes it at boot and only `NWSPS` writes it afterwards. Zero is what
      * `NWSHP` refuses, so an unseeded session would silently never build a station.
      */
     m_universe->bubble.stationType = Elite::ShipType::Station;
 
     /*
-     * 6502: LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
+     * LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
      *
      * `NWSPS` points the station at the sun's 200 bytes, which are `heaps.sun` and not the arena
      * `heap` addresses. Lending the window is what makes the station's lines land somewhere;
@@ -99,7 +99,7 @@ namespace Outpost
   void FlightSession::SyncVideoRegisters() noexcept
   {
     /*
-     * 6502: COMIRQ1's VIC-II half, BOTH PASSES, once per presented frame (slice 4f).
+     * COMIRQ1's VIC-II half, BOTH PASSES, once per presented frame (slice 4f).
      *
      * The handler runs twice a frame on the real machine -- once at the top of the space view and
      * once at the top of the dashboard -- and each pass programs the registers for the half below
@@ -111,20 +111,20 @@ namespace Outpost
      * ABOVE the split test, so a burning bomb moves the background colour on EVERY pass: running
      * this once a frame would halve the flash rate.
      */
-    const std::uint8_t bomb = m_universe->commander.energyBomb; // 6502: BOMB
+    const std::uint8_t bomb = m_universe->commander.energyBomb;
     const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_universe->screen, bomb);
     const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_universe->screen, bomb);
 
     const Elite::RasterRegisters& spaceView = first.spaceView ? first : second;
     const Elite::RasterRegisters& dashboard = first.spaceView ? second : first;
 
-    // 6502: `abraxas` into the memory-pointer register -- &91 is the dashboard's block, which is
+    // `abraxas` into the memory-pointer register -- &91 is the dashboard's block, which is
     // also the only state in which its rows are multicolour.
     m_universe->canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
     m_universe->canvas.SetBackground(dashboard.background);
 
     /*
-     * 6502: moonflower and welcome -- the energy bomb.
+     * moonflower and welcome -- the energy bomb.
      *
      * AND `welcome` IS A COUNTER RATHER THAN A COLOUR, which is why these are stores and not
      * assignments: `COMIRQ1` increments it on every pass while the bomb burns and puts the running
@@ -134,7 +134,7 @@ namespace Outpost
     m_universe->canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
     m_universe->canvas.SetSpaceViewBackground(spaceView.background);
 
-    // 6502: santana and lotus -- the explosion sprite, which is multicolour and red above the
+    // santana and lotus -- the explosion sprite, which is multicolour and red above the
     // split and single-colour in colour 0 below it, so it never draws over the dashboard.
     m_universe->canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
     m_universe->canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);

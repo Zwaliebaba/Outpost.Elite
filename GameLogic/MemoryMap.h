@@ -6,7 +6,7 @@ namespace Elite
 {
 
   /*
-   * 6502: SETL1, L1M and `l1` -- the 6510's own input/output port register (slice M3-b-3a).
+   * SETL1, L1M and `l1` -- the 6510's own input/output port register (slice M3-b-3a).
    *
    * IT IS NOT SELF-MODIFYING CODE AND IT IS NOT IN AN INTERRUPT HANDLER, which is what the port
    * believed for six slices. The conversion plan's row said "`SETL1` is NOT one of them: it is
@@ -41,7 +41,7 @@ namespace Elite
    * bit 2 of `l1` says the I/O page is mapped in, which is what let `ShipDrawEffects` go.
    */
 
-  /// 6502: the two values the game ever passes to `SETL1`. %101 maps the I/O page in over the RAM
+  /// The two values the game ever passes to `SETL1`. %101 maps the I/O page in over the RAM
   /// at &D000-&DFFF so the chips can be reached; %100 maps it back out to RAM.
   inline constexpr std::uint8_t MEMORY_MAP_IO = 0b101;
   inline constexpr std::uint8_t MEMORY_MAP_RAM = 0b100;
@@ -49,7 +49,7 @@ namespace Elite
   struct MemoryMap
   {
     /*
-     * 6502: L1M -- "temporary storage for the new value", and it is assembled as %100.
+     * "temporary storage for the new value", and it is assembled as %100.
      *
      * It outlives the call: `SETL1` writes it and then reads it back one instruction later, so a
      * caller sees the last value anybody asked for. Nothing else in the game reads it, which makes

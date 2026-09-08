@@ -234,8 +234,8 @@ namespace Outpost
     struct CursorBinding
     {
       int virtualKey = 0;
-      std::uint8_t axis = NO_KEY;  ///< 6502: KLO+&3E or KLO+&39
-      std::uint8_t shift = NO_KEY; ///< 6502: KLO+&31, pressed for the reverse direction
+      std::uint8_t axis = NO_KEY;
+      std::uint8_t shift = NO_KEY; ///< KLO+&31, pressed for the reverse direction
       const char* what = "";
     };
 
@@ -285,7 +285,7 @@ namespace Outpost
 
   std::uint8_t CharacterFor(std::uint8_t _c64Key) noexcept
   {
-    // 6502: the translation table, indexed by the key number -- and the index cannot exceed 64,
+    // The translation table, indexed by the key number -- and the index cannot exceed 64,
     // because that is what RDKEY produces. A key outside the table is not a key the hardware
     // could have reported.
     if (_c64Key >= Elite::KEY_TRANSLATION.size())

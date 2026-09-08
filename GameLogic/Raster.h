@@ -8,7 +8,7 @@ namespace Elite
 {
 
   /*
-   * 6502: COMIRQ1's VIC-II half -- the raster interrupt that makes the screen two screens.
+   * COMIRQ1's VIC-II half -- the raster interrupt that makes the screen two screens.
    *
    * The C64 has one bitmap and Elite needs two: a standard-mode space view coloured from one block
    * of screen RAM, and a multicolour dashboard coloured from another. The VIC-II can only be in one
@@ -33,37 +33,37 @@ namespace Elite
    * thing said without a fall-through.
    */
 
-  /// 6502: zebop -- the space view's screen RAM block, and the one entry of that pair the game
+  /// The space view's screen RAM block, and the one entry of that pair the game
   /// never writes. Its partner is `abraxas`, which `wantdials` moves to &91 for the dashboard.
   inline constexpr std::uint8_t RASTER_MEMORY_SPACE_VIEW = 0x81;
 
-  /// 6502: welcome+1 -- the dashboard's background colour, and the other fixed half of a pair. The
+  /// The dashboard's background colour, and the other fixed half of a pair. The
   /// upstream comment says it plainly: this byte is never changed, so only the space view flashes.
   inline constexpr std::uint8_t RASTER_BACKGROUND_DASHBOARD = 0x00;
 
-  /// 6502: BOMB -- bit 7 is "the energy bomb is going off", and bit 7 is the only bit read.
+  /// Bit 7 is "the energy bomb is going off", and bit 7 is the only bit read.
   inline constexpr std::uint8_t BOMB_RUNNING = 0x80;
 
-  /// 6502: VIC+&16 bit 4 -- the VIC-II's multicolour bit, which is the whole difference between
+  /// VIC+&16 bit 4 -- the VIC-II's multicolour bit, which is the whole difference between
   /// `moonflower`'s %11000000 and the %11010000 the energy bomb stores.
   inline constexpr std::uint8_t BITMAP_MODE_MULTICOLOUR = 0x10;
 
   /// The six VIC-II registers one pass of the handler writes, in the order it writes them.
   struct RasterRegisters
   {
-    std::uint8_t memoryPointers = 0;     ///< 6502: VIC+&18 -- zebop / abraxas
-    std::uint8_t control2 = 0;           ///< 6502: VIC+&16 -- moonflower / caravanserai
-    std::uint8_t nextRasterLine = 0;     ///< 6502: VIC+&12 -- shango
-    std::uint8_t spriteMulticolour = 0;  ///< 6502: VIC+&1C -- santana, which sprites are multicolour
-    std::uint8_t explosionColour = 0;    ///< 6502: VIC+&28 -- lotus, and &28 is SPRITE 1's colour
-    std::uint8_t background = 0;         ///< 6502: VIC+&21 -- welcome
+    std::uint8_t memoryPointers = 0;     ///< VIC+&18 -- zebop / abraxas
+    std::uint8_t control2 = 0;           ///< VIC+&16 -- moonflower / caravanserai
+    std::uint8_t nextRasterLine = 0;     ///< VIC+&12 -- shango
+    std::uint8_t spriteMulticolour = 0;  ///< VIC+&1C -- santana, which sprites are multicolour
+    std::uint8_t explosionColour = 0;    ///< VIC+&28 -- lotus, and &28 is SPRITE 1's colour
+    std::uint8_t background = 0;         ///< VIC+&21 -- welcome
 
     /// True on the pass that sets up the space view, which is `RASTCT` = 0.
     bool spaceView = true;
   };
 
   /*
-   * 6502: COMIRQ1 from the load of `RASTCT` to the store back, which is the whole of its VIC-II
+   * COMIRQ1 from the load of `RASTCT` to the store back, which is the whole of its VIC-II
    * half.
    *
    * Advances `_screen.rasterCounter` and returns what the pass just written would put on the

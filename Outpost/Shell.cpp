@@ -22,7 +22,7 @@ namespace Outpost
   bool GameShell::Turn()
   {
     /*
-     * 6502: comirq1 -- the raster interrupt, which runs whether or not the game is doing anything.
+     * The raster interrupt, which runs whether or not the game is doing anything.
      *
      * It is HERE and not in the outer loop because `WaitFrames` and `NextKey` present too, and both
      * of those are reached from inside ported routines. A frame is a frame however the game got to
@@ -35,7 +35,7 @@ namespace Outpost
     }
 
     /*
-     * 6502: COMIRQ1's SID half, as many times as the audio device is short a frame.
+     * COMIRQ1's SID half, as many times as the audio device is short a frame.
      *
      * Before the present rather than after, because the present is what blocks: the frames rendered
      * here are what the device plays while this thread waits on the display, and a queue filled
@@ -78,7 +78,7 @@ namespace Outpost
   std::uint8_t GameShell::NextKey()
   {
     /*
-     * 6502: TT217 -- and it is `Elite::ReadKey`, the routine, over this object's `Held` and its
+     * TT217 -- and it is `Elite::ReadKey`, the routine, over this object's `Held` and its
      * presenter (InputTimer.md I-1). The queue this popped until I-1 delivered auto-repeats and
      * type-ahead to prompts the original answered from a matrix it had first watched go quiet;
      * the library's read has the two-frame debounce, the wait for release and the wait for a
@@ -115,7 +115,7 @@ namespace Outpost
   void GameShell::ClearToView(std::uint8_t _view)
   {
     /*
-     * 6502: TT66 -- the whole routine, since slice 3d-d-iii-a.
+     * The whole routine, since slice 3d-d-iii-a.
      *
      * This was three calls and an apology for as long as the dashboard, the sprites, the border and
      * the colour bands were phase 3's (§6.77): a palette fill, a text-area clear and `SetUpTextScreen`
@@ -143,7 +143,7 @@ namespace Outpost
   void GameShell::WaitFrames(std::uint8_t _frames)
   {
     /*
-     * 6502: DELAY -- wait for _frames VERTICAL SYNCS, and that is literally what this is: `Turn`
+     * Wait for _frames VERTICAL SYNCS, and that is literally what this is: `Turn`
      * ends in `Present(1, 0)`, so a turn is a frame. No timer, no sleep, and the wait is the same
      * length as the original's on a 50 Hz display and shorter on a 60 Hz one -- which is the PAL
      * and NTSC difference section 6.17 records rather than a defect in this loop.
@@ -159,14 +159,14 @@ namespace Outpost
 
   void GameShell::Flush()
   {
-    // 6502: FLKB -- a load, a register transfer and a return on this build, a flush of nothing;
+    // A load, a register transfer and a return on this build, a flush of nothing;
     // the window has had no queue to empty since InputTimer.md I-1, so the answer is the
     // original's.
   }
 
   bool GameShell::Held(std::size_t _key)
   {
-    // 6502: the matrix walk's read of one row. Everything around it -- the `SETL1` bracket, the
+    // The matrix walk's read of one row. Everything around it -- the `SETL1` bracket, the
     // sprite mask, `ZEKTRAN`'s clear and the countdown that produces `thiskey` -- is
     // `Elite::ScanKeyboard`'s since M3-b-3d.
     return m_window.Held(static_cast<std::uint8_t>(_key));

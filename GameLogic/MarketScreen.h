@@ -52,7 +52,7 @@ namespace Elite
    * case. `SetUpScreen` does what `TTX66` does, which is why the callers do not.
    */
 
-  /// 6502: dn2's wait -- fifty VERTICAL SYNCS and not a second (§6.17), which is why
+  /// dn2's wait -- fifty VERTICAL SYNCS and not a second (§6.17), which is why
   /// `Presenter::WaitFrames` counts frames.
   inline constexpr std::uint8_t BEEP_PAUSE_FRAMES = 50;
 
@@ -67,7 +67,7 @@ namespace Elite
   // text state and the generator are `Universe`'s, and the keyboard and `TRADEMODE` are `Ports`'
   // two docked seams. It went in M3-a-3.
 
-  /// 6502: QQ11 -- which trading screen this is. The value decides whether the cargo listing offers
+  /// QQ11 -- which trading screen this is. The value decides whether the cargo listing offers
   /// each item for sale or only lists it, so it is an argument rather than a constant.
   inline constexpr std::uint8_t BUY_CARGO_VIEW = 2;
   inline constexpr std::uint8_t SELL_CARGO_VIEW = 4;
@@ -75,7 +75,7 @@ namespace Elite
   inline constexpr std::uint8_t EQUIP_SHIP_VIEW = 32;
 
   /*
-   * 6502: TT219 -- the buy screen.
+   * The buy screen.
    *
    * Prints the market a line at a time and, for every item with any stock, asks how much. The
    * asking is a RETRY LOOP rather than a single question: a quantity that is too large, will not
@@ -98,7 +98,7 @@ namespace Elite
    */
   void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept;
 
-  /// 6502: TRADEMODE -- `TT66` with the view in A, then `FLKB`. Every docked screen opens with it;
+  /// `TT66` with the view in A, then `FLKB`. Every docked screen opens with it;
   /// one routine here rather than the two calls at each caller, so that it can be compared as one
   /// (M6-0-e), which the trap `MarketTests` puts on its label stands in for.
   void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
@@ -108,7 +108,7 @@ namespace Elite
   void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept;
 
   /*
-   * 6502: TT210 -- list what is in the hold, and on the Sell Cargo screen offer each item for sale.
+   * List what is in the hold, and on the Sell Cargo screen offer each item for sale.
    *
    * ONE routine for two screens, told apart by the VIEW NUMBER alone. The inventory screen falls
    * into it from TT213 with QQ11 = 8 and gets a list; the sell screen enters at the top with
@@ -132,7 +132,7 @@ namespace Elite
                  std::uint8_t _view) noexcept;
 
   /*
-   * 6502: TT213 -- the inventory screen, which FALLS INTO TT210.
+   * The inventory screen, which FALLS INTO TT210.
    *
    * A title, a rule, the fuel and cash lines, and the words "LARGE CARGO BAY" when the hold is a
    * big one. That last test compares `CRGO` against 26, and 26 sits between the two capacities as

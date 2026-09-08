@@ -26,7 +26,7 @@ namespace Elite
    */
 
   /*
-   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggled.
+   * DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggled.
    *
    * `DKS3` toggles a byte between 0 and &FF by flipping all eight bits. On this build it walks the
    * block as `DAMP,Y` and compares the key against `TGINT,Y`, a table of key codes in block order
@@ -45,12 +45,12 @@ namespace Elite
    */
   struct ControlOptions
   {
-    std::uint8_t dampingDisabled = 0;  ///< 6502: DAMP
-    std::uint8_t recentreDisabled = 0; ///< 6502: DJD
-    std::uint8_t joystick = 0;         ///< 6502: JSTK
+    std::uint8_t dampingDisabled = 0;
+    std::uint8_t recentreDisabled = 0;
+    std::uint8_t joystick = 0;
 
     /*
-     * 6502: PATG -- "show the author names on the title screen", and it does two things.
+     * "show the author names on the title screen", and it does two things.
      *
      * `TITLE` prints an extra token when it is set, which is the visible half. The other half is
      * in the main game loop's spawning: five of its tests are `AND PATG`, so switching the credits
@@ -64,7 +64,7 @@ namespace Elite
   };
 
   /*
-   * 6502: JSTX, JSTY and `auto` -- what the player is asking the ship to do.
+   * JSTX, JSTY and `auto` -- what the player is asking the ship to do.
    *
    * Not in the configuration block: these are six kilobytes away in the UP workspace, and they do
    * not survive a new commander. Both rates run 1 to 255 with 128 as centred, so 1 is full left or
@@ -72,13 +72,13 @@ namespace Elite
    */
   struct ControlState
   {
-    std::uint8_t roll = 128;          ///< 6502: JSTX
-    std::uint8_t pitch = 128;         ///< 6502: JSTY
-    std::uint8_t dockingComputer = 0; ///< 6502: auto
+    std::uint8_t roll = 128;
+    std::uint8_t pitch = 128;
+    std::uint8_t dockingComputer = 0; ///< auto
   };
 
   /*
-   * 6502: BUMP2 -- add `_amount` to a control rate, clamping at 255 and re-centring on the way.
+   * Add `_amount` to a control rate, clamping at 255 and re-centring on the way.
    *
    * `REDU2` is its mirror and the two are ONE routine spread over two files that call into each
    * other: `BUMP2` ends by branching to `djd1`, which is inside `REDU2`; `REDU2` ends by branching
@@ -97,7 +97,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t BumpControl(std::uint8_t _value, std::uint8_t _amount, std::uint8_t _recentreDisabled) noexcept;
 
   /*
-   * 6502: REDU2 -- subtract `_amount` from a control rate, clamping at 1 and re-centring.
+   * Subtract `_amount` from a control rate, clamping at 1 and re-centring.
    *
    * AND THE CLAMP HAS A HOLE. The subtraction leaves the carry SET when it did not borrow, so the
    * branch to `RE3` skips the clamp to 1 whenever the value was greater than or equal to the
@@ -109,7 +109,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t ReduceControl(std::uint8_t _value, std::uint8_t _amount, std::uint8_t _recentreDisabled) noexcept;
 
   /*
-   * 6502: KEYLOOK, which `KLO` is another name for -- sixty-five bytes, one per key the game
+   * KEYLOOK, which `KLO` is another name for -- sixty-five bytes, one per key the game
    * watches, indexed by the C64's internal key number rather than by anything meaningful.
    *
    * The scan sets a byte while its key is held and `ZEKTRAN` zeroes the lot. `DOKEY` both reads it
@@ -119,7 +119,7 @@ namespace Elite
   using KeyLogger = std::array<std::uint8_t, 65>;
 
   /*
-   * 6502: U% -- clear the flight keys, which is NOT `ZEKTRAN` however much it looks like one.
+   * Clear the flight keys, which is NOT `ZEKTRAN` however much it looks like one.
    *
    * `DKL3` walks DOWN to one, so it clears `KLO+1` to `KLO+56` -- fifty-six bytes of sixty-five,
    * and `ZEKTRAN` clears the lot.
@@ -133,23 +133,23 @@ namespace Elite
    * has no byte to clear for it (§6.117). The first version of this routine cleared `KLO+0` for
    * it, which the shipped game does not.
    */
-  /// 6502: the highest index `U%` clears; the lowest is 1, because the loop's decrement-and-branch
+  /// The highest index `U%` clears; the lowest is 1, because the loop's decrement-and-branch
   /// stops before zero.
   inline constexpr std::size_t FLIGHT_KEYS_CLEARED = 56;
 
   void ClearFlightKeys(KeyLogger& _keys) noexcept;
 
-  /// 6502: KY1 to KY7 -- offsets of the flight keys within `KLO`, which are their key numbers.
-  inline constexpr std::size_t KEY_SLOW_DOWN = 9;   ///< 6502: KY1 -- "?"
-  inline constexpr std::size_t KEY_SPEED_UP = 4;    ///< 6502: KY2 -- Space
-  inline constexpr std::size_t KEY_ROLL_LEFT = 17;  ///< 6502: KY3 -- "<"
-  inline constexpr std::size_t KEY_ROLL_RIGHT = 20; ///< 6502: KY4 -- ">"
-  inline constexpr std::size_t KEY_PITCH_UP = 41;   ///< 6502: KY5 -- "X"
-  inline constexpr std::size_t KEY_PITCH_DOWN = 51; ///< 6502: KY6 -- "S"
-  inline constexpr std::size_t KEY_FIRE = 54;       ///< 6502: KY7 -- "A"
+  /// KY1 to KY7 -- offsets of the flight keys within `KLO`, which are their key numbers.
+  inline constexpr std::size_t KEY_SLOW_DOWN = 9;   ///< "?"
+  inline constexpr std::size_t KEY_SPEED_UP = 4;    ///< Space
+  inline constexpr std::size_t KEY_ROLL_LEFT = 17;  ///< "<"
+  inline constexpr std::size_t KEY_ROLL_RIGHT = 20; ///< ">"
+  inline constexpr std::size_t KEY_PITCH_UP = 41;   ///< "X"
+  inline constexpr std::size_t KEY_PITCH_DOWN = 51; ///< "S"
+  inline constexpr std::size_t KEY_FIRE = 54;       ///< "A"
 
   /*
-   * 6502: the five key-logger entries `TT17`'s CHART path reads, which are not `KY` anything.
+   * The five key-logger entries `TT17`'s CHART path reads, which are not `KY` anything.
    *
    * The flight keys above have names in the source because `DOKEY` reads them through labels; these
    * are written as raw offsets from `KLO` and named only in the upstream commentary, which is why
@@ -159,14 +159,14 @@ namespace Elite
    * up/down" -- one key each, with SHIFT choosing the direction, which is what the two SHIFT
    * entries are for. RETURN is the accelerator: held, it multiplies the step by four.
    */
-  inline constexpr std::size_t KEY_CURSOR_X = 0x3E;       ///< 6502: KLO+&3E -- cursor left/right
-  inline constexpr std::size_t KEY_CURSOR_Y = 0x39;       ///< 6502: KLO+&39 -- cursor up/down
-  inline constexpr std::size_t KEY_SHIFT_LEFT = 0x31;     ///< 6502: KLO+&31 -- left SHIFT
-  inline constexpr std::size_t KEY_SHIFT_RIGHT = 0x0C;    ///< 6502: KLO+&C -- right SHIFT
-  inline constexpr std::size_t KEY_CROSSHAIR_FAST = 0x3F; ///< 6502: KLO+&3F -- RETURN
+  inline constexpr std::size_t KEY_CURSOR_X = 0x3E;       ///< KLO+&3E -- cursor left/right
+  inline constexpr std::size_t KEY_CURSOR_Y = 0x39;       ///< KLO+&39 -- cursor up/down
+  inline constexpr std::size_t KEY_SHIFT_LEFT = 0x31;     ///< KLO+&31 -- left SHIFT
+  inline constexpr std::size_t KEY_SHIFT_RIGHT = 0x0C;    ///< KLO+&C -- right SHIFT
+  inline constexpr std::size_t KEY_CROSSHAIR_FAST = 0x3F; ///< KLO+&3F -- RETURN
 
   /*
-   * 6502: CTRL -- and it is a key-logger entry like the five above, not a modifier.
+   * CTRL -- and it is a key-logger entry like the five above, not a modifier.
    *
    * `CTRL` is one instruction -- a load of 6 into X -- falling into `DKS4`, which reads that entry
    * of the logger and returns it, so "is CTRL held" is `KEYLOOK+6` and nothing more exotic --
@@ -178,23 +178,23 @@ namespace Elite
    * and that left the galactic hyperdrive built and unreachable from slice 4c-b onwards. Ctrl IS
    * a matrix position, and the seam could have expressed it the whole time.
    */
-  inline constexpr std::size_t KEY_CONTROL = 0x06; ///< 6502: KLO+&6 -- CTRL, read by `hyp` and `TT18`
+  inline constexpr std::size_t KEY_CONTROL = 0x06; ///< KLO+&6 -- CTRL, read by `hyp` and `TT18`
 
-  /// 6502: HINT -- "H", the matrix position `TT102` tests directly to reach `hyp`. It is read as a
+  /// "H", the matrix position `TT102` tests directly to reach `hyp`. It is read as a
   /// key HELD, not as the key that was pressed (`DockedKeys.h`), so the caller of the dispatch
   /// reads it off the matrix the way `JumpOf` reads CTRL (§6.159).
   inline constexpr std::size_t KEY_HYPERSPACE = 0x23;
 
-  /// 6502: what `TT17` leaves in X and Y -- one signed step per axis, four times as big with
+  /// What `TT17` leaves in X and Y -- one signed step per axis, four times as big with
   /// RETURN held. Zero on both when nothing is pressed, which is most passes.
   struct CrosshairStep
   {
-    std::uint8_t x = 0; ///< 6502: X on return from `TT17`
-    std::uint8_t y = 0; ///< 6502: Y
+    std::uint8_t x = 0; ///< X on return from `TT17`
+    std::uint8_t y = 0;
   };
 
   /*
-   * 6502: TT17's `TJ1` path -- the cursor keys, as two signed steps.
+   * TT17's `TJ1` path -- the cursor keys, as two signed steps.
    *
    * `JSTK` chooses between this and the joystick path above it, and this build's joystick path is
    * the one `TT17afterall` runs when `JSTK` is non-zero; the title screen sets `JSTK` to zero the
@@ -208,7 +208,7 @@ namespace Elite
    */
   [[nodiscard]] CrosshairStep ReadCrosshairKeys(const KeyLogger& _keys) noexcept;
 
-  /// 6502: what `DOKEY` bumps and reduces the rates by on every pass.
+  /// What `DOKEY` bumps and reduces the rates by on every pass.
   inline constexpr std::uint8_t CONTROL_STEP = 14;
 
   /*
@@ -236,11 +236,11 @@ namespace Elite
   public:
     virtual ~Keyboard() = default;
 
-    /// 6502: the matrix walk's read of one row -- is key `_key` down right now?
+    /// The matrix walk's read of one row -- is key `_key` down right now?
     [[nodiscard]] virtual bool Held(std::size_t _key) = 0;
 
     /*
-     * 6502: TT217 -- block until a key is pressed, and return its character.
+     * Block until a key is pressed, and return its character.
      *
      * The EXECUTABLE ANSWERS THIS WITH `Elite::ReadKey` (InputTimer.md I-1), which is the routine
      * over `Held` and the presenter: two frames of debounce, wait for no key, wait for a key,
@@ -251,7 +251,7 @@ namespace Elite
      */
     [[nodiscard]] virtual std::uint8_t NextKey() = 0;
 
-    /// 6502: FLKB -- three instructions on the C64 build that flush nothing, left over from the
+    /// Three instructions on the C64 build that flush nothing, left over from the
     /// second processor's OSBYTE call. Still a method, because the fixtures compare WHERE the game
     /// reaches it; the executable answers it with nothing (InputTimer.md I-1).
     virtual void Flush() = 0;
@@ -273,19 +273,19 @@ namespace Elite
   };
 
   /*
-   * 6502: RDKEY's answer -- the carry and `thiskey`.
+   * RDKEY's answer -- the carry and `thiskey`.
    *
    * It was declared on `StartUpEffects` until M3-b-3d, because the title screen was the only
    * caller that read it: `DOKEY` calls the same routine and throws the answer away.
    */
   struct TitleKey
   {
-    bool pressed = false; ///< 6502: the carry, SET when the matrix walk found something
-    std::uint8_t key = 0; ///< 6502: thiskey, which is what `TITLE` returns and `BR1` compares
+    bool pressed = false; ///< The carry, SET when the matrix walk found something
+    std::uint8_t key = 0; ///< Thiskey, which is what `TITLE` returns and `BR1` compares
   };
 
   /*
-   * 6502: RDKEY -- the whole routine, over a `Keyboard` that answers only which keys are down.
+   * The whole routine, over a `Keyboard` that answers only which keys are down.
    *
    * THE LOGGER IS CLEARED AND THEN DECREMENTED, not stored into: `ZEKTRAN` zeroes all sixty-five
    * bytes and the walk DECREMENTS the entry it hits, so a held key reads 255. Everything
@@ -299,11 +299,11 @@ namespace Elite
   [[nodiscard]] TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view,
                                       Keyboard& _keyboard) noexcept;
 
-  /// 6502: TT217's own wait -- the two vertical syncs of debounce before each scan.
+  /// TT217's own wait -- the two vertical syncs of debounce before each scan.
   inline constexpr std::uint8_t TT217_DEBOUNCE_FRAMES = 2;
 
   /*
-   * 6502: TT217 -- wait for a key press, and return its character (Design/InputTimer.md I-1).
+   * Wait for a key press, and return its character (Design/InputTimer.md I-1).
    *
    * THE ROUTINE IS THREE WAITS AND A TABLE LOOK-UP, and the port had none of the waits. `.t` waits
    * two vertical syncs, scans, and goes back to the top while ANY key is held; `.t2` scans until a
@@ -332,7 +332,7 @@ namespace Elite
    * `ControlEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-3).
    *
    * It was "the one thing `DOKEY`'s flight half reaches that is neither memory nor the keyboard" --
-   * 6502: DOKEY's `auton` path -- 6502: the docking autopilot, which reads the ship block and
+   * DOKEY's `auton` path -- 6502: the docking autopilot, which reads the ship block and
    * writes `INWK+27` to `INWK+30` -- an acceleration and three rates -- and which M4-c-2 made
    * `Elite::RunDockingComputer` (`Tactics.h`). Every implementer of the seam made that one call;
    * `ReadFlightControls` makes it itself now, and the `DOKEY` sweep runs the real autopilot over a
@@ -340,7 +340,7 @@ namespace Elite
    */
 
   /*
-   * 6502: DOKEY's flight half -- turn what is held down into a roll rate and a pitch rate.
+   * DOKEY's flight half -- turn what is held down into a roll rate and a pitch rate.
    *
    * TWO ROUTINES IN ONE, and the ledger files both under the keyboard scan (§6.73). The scan is
    * `RDKEY` and is hardware. What is left is arithmetic on `JSTX` and `JSTY` that touches no
@@ -362,7 +362,7 @@ namespace Elite
   void ReadFlightControls(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: SPOFF% -- the sprite pointer for the first sprite definition.
+   * The sprite pointer for the first sprite definition.
    *
    * `(SPRITELOC% - SCBASE) / 64`, and `SPRITELOC%` is `SCBASE + &2800` on this build: the sprite
    * definitions start exactly where the canvas ends, so the pointer is 160. The four the sights
@@ -371,7 +371,7 @@ namespace Elite
   inline constexpr std::uint8_t SPRITE_POINTER_BASE = 160;
 
   /*
-   * 6502: &63F8 and &67F8 -- where sprite 0's pointer lives, in BOTH blocks of screen RAM.
+   * &63F8 and &67F8 -- where sprite 0's pointer lives, in BOTH blocks of screen RAM.
    *
    * The last eight bytes of each 1KB block of screen RAM are the VIC-II's sprite pointers, and the
    * game keeps two blocks in step because it flips the chip between them. So these are inside the
@@ -399,7 +399,7 @@ namespace Elite
    */
 
   /*
-   * 6502: SIGHT -- the laser sights and the Trumbles, which are the same four instructions apart.
+   * The laser sights and the Trumbles, which are the same four instructions apart.
    *
    * Two unrelated jobs in one routine because they share a register: bit 0 of the sprite-enable
    * byte is the sights and bits 2 to 7 are the Trumbles, so neither can be written without the

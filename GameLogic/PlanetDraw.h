@@ -38,13 +38,13 @@ namespace Elite
    * zero it reads the last byte of `LSX2`. The two are one 512-byte block here for that reason,
    * the same way `XX3` is 260 bytes because its 256th is the stack page.
    */
-  inline constexpr std::size_t SUN_HEAP_SIZE = 200;  ///< 6502: LSO, 1408 to 1607
-  inline constexpr std::size_t BALL_HEAP_SIZE = 256; ///< 6502: LSX2, and LSY2 immediately after it
+  inline constexpr std::size_t SUN_HEAP_SIZE = 200;
+  inline constexpr std::size_t BALL_HEAP_SIZE = 256; ///< LSX2, and LSY2 immediately after it
 
   struct PlanetSunState
   {
     /*
-     * 6502: LSO -- one half-width per screen row, and `LSX` is THE SAME ADDRESS.
+     * One half-width per screen row, and `LSX` is THE SAME ADDRESS.
      *
      * Entry 0 is not a row: it is the flag that says whether there is a sun to rub out at all,
      * which `FLFLLS` sets to 255 and `WPLS` sets back to 255 when it has finished. Two names for
@@ -52,18 +52,18 @@ namespace Elite
      */
     std::array<std::uint8_t, SUN_HEAP_SIZE> sun{};
 
-    /// 6502: LSX2 then LSY2 -- one block, because `BLINE` indexes across the join.
+    /// LSX2 then LSY2 -- one block, because `BLINE` indexes across the join.
     std::array<std::uint8_t, 2 * BALL_HEAP_SIZE> ball{};
 
-    /// 6502: LSP -- how far up the ball heap the last circle got.
+    /// How far up the ball heap the last circle got.
     std::uint8_t ballHeapTop = 0;
 
-    /// 6502: SUNX(1 0) -- where the sun's centre is. One value for every row of it.
+    /// SUNX(1 0) -- where the sun's centre is. One value for every row of it.
     std::uint8_t sunX = 0;
     std::uint8_t sunXNext = 0;
 
     /*
-     * 6502: Yx2M1 -- the bottom row that counts as on-screen, and it is a VARIABLE.
+     * The bottom row that counts as on-screen, and it is a VARIABLE.
      *
      * The upstream header for `CHKON` documents a compare against the LITERAL 2*Y-1; this build
      * assembles a compare against `Yx2M1`, a byte at 184 that `TT23` sets to 199 so the short-range
@@ -78,7 +78,7 @@ namespace Elite
     std::uint8_t lowestVisibleRow = 0;
 
     /*
-     * 6502: PLTOG -- whether the planet gets its detail drawn: craters and meridians, or a circle.
+     * Whether the planet gets its detail drawn: craters and meridians, or a circle.
      *
      * `PL9` is its one reader. Its one WRITER is the pause screen: `DKS3` walks the configuration
      * block as `DAMP,Y` against the key table `TGINT`, and offset 9 is this byte behind the "P" key
@@ -92,7 +92,7 @@ namespace Elite
     std::uint8_t planetDetail = 0;
 
     /*
-     * 6502: V(1 0) -- 91 and 92, and the sun uses them as a COUNTER PAIR.
+     * V(1 0) -- 91 and 92, and the sun uses them as a COUNTER PAIR.
      *
      * Eleven files write these two bytes and they do not agree about what they are. `DETOK`,
      * `TACTICS`, `TAS1`, `EX` and `LL9` part 5 use them as a POINTER, read indirectly; `SUN` uses
@@ -110,7 +110,7 @@ namespace Elite
     std::uint8_t vNext = 0;
 
     /*
-     * 6502: K5, K6, STP and FLAG -- the ball's walk, and they are the planet's state rather than
+     * K5, K6, STP and FLAG -- the ball's walk, and they are the planet's state rather than
      * the arithmetic's.
      *
      * `K5` is the segment's start and `K6` its end, four bytes each because both coordinates are
@@ -130,7 +130,7 @@ namespace Elite
     std::uint8_t circleStep = 0;
     std::uint8_t flag = 0;
 
-    /// 6502: LSX2,Y and LSY2,Y -- named because the second is the first plus 256.
+    /// LSX2,Y and LSY2,Y -- named because the second is the first plus 256.
     [[nodiscard]] std::uint8_t BallX(std::uint8_t _at) const noexcept
     {
       return ball[_at];
@@ -148,7 +148,7 @@ namespace Elite
       ball[BALL_HEAP_SIZE + _at] = _value;
     }
 
-    /// 6502: LSY2-1,Y -- which for Y = 0 is the last byte of `LSX2`, and that is reachable.
+    /// LSY2-1,Y -- which for Y = 0 is the last byte of `LSX2`, and that is reachable.
     [[nodiscard]] std::uint8_t BallYBefore(std::uint8_t _at) const noexcept
     {
       return ball[BALL_HEAP_SIZE + _at - 1u];
@@ -156,7 +156,7 @@ namespace Elite
   };
 
   /*
-   * 6502: EDGES -- where does a horizontal line of half-width A, centred on YY(1 0), start and end?
+   * EDGES -- where does a horizontal line of half-width A, centred on YY(1 0), start and end?
    *
    * Returns the carry: SET means the line is entirely off one side and the row has been cleared;
    * CLEAR means `X1` and `X2` are its ends, clamped to the screen. It is the sun's clipper, and it
@@ -167,15 +167,15 @@ namespace Elite
   /// x, which `SUN` sets twice a row (where it was, then where it is) and `WPLS` once.
   struct SunRow
   {
-    std::uint8_t x1 = 0;      ///< 6502: X1
-    std::uint8_t x2 = 0;      ///< 6502: X2
-    bool offScreen = false;   ///< 6502: the carry -- SEC on both of `ED1`'s and `ED3`'s exits
+    std::uint8_t x1 = 0;
+    std::uint8_t x2 = 0;
+    bool offScreen = false;   ///< The carry -- SEC on both of `ED1`'s and `ED3`'s exits
   };
 
   [[nodiscard]] SunRow ClipSunRow(PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept;
 
   /*
-   * 6502: HLOIN2 -- clip the row, forget it, and draw it.
+   * Clip the row, forget it, and draw it.
    *
    * It IGNORES what `EDGES` returned. Both of its callers only reach it for a row the heap says
    * has a line on it, so the off-screen exit is not a case they can produce -- but the routine as
@@ -185,15 +185,15 @@ namespace Elite
   void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row,
                    Picture* _picture = nullptr) noexcept;
 
-  /// 6502: FLFLLS -- forget the whole sun. Rows 1 to 199 are zeroed and entry 0 becomes 255.
+  /// Forget the whole sun. Rows 1 to 199 are zeroed and entry 0 becomes 255.
   void ClearSunHeap(PlanetSunState& _state) noexcept;
 
-  /// 6502: WP1 -- and the whole ball. `LSP` goes to 1 rather than 0, which is what makes
+  /// WP1 -- and the whole ball. `LSP` goes to 1 rather than 0, which is what makes
   /// `LSY2-1,Y` read entry 0 on the first pass rather than the byte before the array.
   void ClearBallHeap(PlanetSunState& _state) noexcept;
 
   /*
-   * 6502: WPLS -- rub the sun out, one row at a time, from row 143 upwards.
+   * Rub the sun out, one row at a time, from row 143 upwards.
    *
    * The 143 is the literal `2*Y-1` and not `Yx2M1`, in the same build where `CHKON` reads the
    * variable. Reproduced as written.
@@ -201,7 +201,7 @@ namespace Elite
   void EraseSun(Canvas& _canvas, PlanetSunState& _state, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: WPLS2 -- rub the planet out, one segment at a time.
+   * Rub the planet out, one segment at a time.
    *
    * The heap is a run of coordinate pairs with 255 as a break: a break means the next pair is a new
    * run's START rather than another segment's end. `BLINE` writes those breaks when a segment is
@@ -209,12 +209,12 @@ namespace Elite
    */
   void EraseBall(Canvas& _canvas, PlanetSunState& _state, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: PL2 -- rub out whichever of the two this is. `TYPE` is 128 for the planet and 129 for
+  /// Rub out whichever of the two this is. `TYPE` is 128 for the planet and 129 for
   /// the sun, and the routine tells them apart with an `LSR` rather than a comparison.
   void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: CHKON -- is a circle of radius K at (K3, K4) worth drawing?
+   * Is a circle of radius K at (K3, K4) worth drawing?
    *
    * Returns the carry: SET means no part of it is on screen. It also leaves the top and bottom of
    * the circle in P+1 and P+2, which `CIRCLE`'s caller reads, so the answer is three values and not
@@ -226,7 +226,7 @@ namespace Elite
    * right by luck (§6.45).
    */
   /*
-   * 6502: what `CHKON` answers with -- the carry, and the circle's bottom edge in `(P+2 P+1)`.
+   * What `CHKON` answers with -- the carry, and the circle's bottom edge in `(P+2 P+1)`.
    *
    * The original writes the two bytes ON SOME PATHS AND NOT OTHERS: `PL21`'s three early exits
    * leave both stale and the fourth leaves `P+2` stale. Every path that says "on screen" writes
@@ -236,15 +236,15 @@ namespace Elite
    */
   struct CircleExtent
   {
-    bool offScreen = false;       ///< 6502: the carry
-    std::uint8_t bottom = 0;      ///< 6502: P+1 -- the low byte of the circle's bottom row
-    std::uint8_t bottomHigh = 0;  ///< 6502: P+2 -- and its high byte
+    bool offScreen = false;       ///< The carry
+    std::uint8_t bottom = 0;      ///< The low byte of the circle's bottom row
+    std::uint8_t bottomHigh = 0;  ///< P+2 -- and its high byte
   };
 
   [[nodiscard]] CircleExtent CircleOffScreen(const PlanetSunState& _state, std::uint8_t _radius, const Projection& _centre) noexcept;
 
   /*
-   * 6502: BLINE -- one segment of a circle: clip it, remember it, draw it.
+   * One segment of a circle: clip it, remember it, draw it.
    *
    * The routine is a straight line with three branches into one tail, not a loop. What makes it
    * interesting is the HEAP FORMAT it maintains, which is the format `WPLS2` walks: a run of
@@ -264,7 +264,7 @@ namespace Elite
                                           std::uint8_t _angle, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: CIRCLE2 -- walk a whole circle, sixty-four steps at most, `STP` at a time.
+   * Walk a whole circle, sixty-four steps at most, `STP` at a time.
    *
    * The two coordinates come from the same sine table a quarter-turn apart, which is how one table
    * gives both, and each is negated for the half of the turn where it points the other way. The
@@ -303,7 +303,7 @@ namespace Elite
    */
 
   /*
-   * 6502: HFL1 -- one ring of the hyperspace effect, expanding until it leaves the screen.
+   * One ring of the hyperspace effect, expanding until it leaves the screen.
    *
    * `LSP` is set to 1 before EVERY circle, which is what makes the ring erase itself: the heap is
    * rewound so the next `CIRCLE2` overwrites the same run, and each circle is EORed over the
@@ -318,7 +318,7 @@ namespace Elite
                           Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: HFS1 -- the whole effect, eight rings from the centre of the space view.
+   * The whole effect, eight rings from the centre of the space view.
    *
    * `K3` and `K4` are set to the view centre and their high bytes cleared, so the rings are drawn
    * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
@@ -327,7 +327,7 @@ namespace Elite
                            MathWorkspace& _math, ClipState& _clip, Presenter& _present, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: CIRCLE -- is it worth drawing, how coarse should it be, and then draw it.
+   * Is it worth drawing, how coarse should it be, and then draw it.
    *
    * Returns the carry: set means `CHKON` refused it and nothing was drawn. The step is 8 for a
    * radius under 8, 4 under 60 and 2 above -- so a planet gets 32 segments and a distant one gets
@@ -338,7 +338,7 @@ namespace Elite
                                 Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: PLS1 -- one axis of the planet's position, divided by its distance.
+   * One axis of the planet's position, divided by its distance.
    *
    * Three values come back and the original returns them in three places: A is the magnitude
    * (saturated at 254 when it will not fit in a byte), Y is the sign from `K+3`, and X has been
@@ -346,29 +346,29 @@ namespace Elite
    */
   struct AxisResult
   {
-    std::uint8_t value = 0; ///< 6502: A
-    std::uint8_t sign = 0;  ///< 6502: Y
-    std::uint8_t at = 0;    ///< 6502: X, after its two INXs
+    std::uint8_t value = 0;
+    std::uint8_t sign = 0;
+    std::uint8_t at = 0;    ///< X, after its two INXs
   };
 
   [[nodiscard]] AxisResult DivideAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept;
 
-  /// 6502: PLS3 -- the same, scaled by 222/256, and returned as a signed sixteen-bit value with the
+  /// The same, scaled by 222/256, and returned as a signed sixteen-bit value with the
   /// high half in Y. `X` is preserved here rather than stepped, through `U`.
   [[nodiscard]] AxisResult ScaleAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept;
 
-  /// 6502: PLS4 -- where a meridian starts, as an angle: `ARCTAN` of the ratio, flipped by the
+  /// PLS4 -- where a meridian starts, as an angle: `ARCTAN` of the ratio, flipped by the
   /// roof vector's sign, and divided by four to index a sixty-fourth of a turn.
   /// `_numerator` is the P the caller staged and `_denominator` the A it arrived with.
   [[nodiscard]] std::uint8_t SetMeridianAngle(const Ship& _ship, std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
-  /// 6502: PLS5 -- two axes into `K2+2`/`K2+3` and their signs into `XX16+2`/`XX16+3`.
+  /// Two axes into `K2+2`/`K2+3` and their signs into `XX16+2`/`XX16+3`.
   /// Returns the second axis pair, `K2(3 2)`, and writes its two signs into `XX16+2` and `XX16+3`.
   [[nodiscard]] std::pair<std::uint8_t, std::uint8_t> LoadTwoAxes(const Ship& _ship, MathWorkspace& _math,
                                                                   GeometryWorkspace& _geometry, std::uint8_t _at) noexcept;
 
   /*
-   * 6502: PLS22, and PLS2 which is the two instructions above it.
+   * PLS22, and PLS2 which is the two instructions above it.
    *
    * An ellipse rather than a circle: the two axes are `K2(1 0)` and `K2(3 2)` with their signs in
    * `XX16`, so a meridian drawn edge-on is a line and one drawn face-on is a circle, and every
@@ -377,7 +377,7 @@ namespace Elite
    * other a whole one.
    */
   /*
-   * 6502: K2(3 2 1 0) as `PLS22` reads it -- the ellipse's two axes projected onto the screen.
+   * K2(3 2 1 0) as `PLS22` reads it -- the ellipse's two axes projected onto the screen.
    *
    * Four magnitudes, and their signs are `XX16`'s first four bytes: `PLS22` multiplies the two `x`
    * halves by the cosine and the two `y` halves by the sine, so a meridian seen edge-on has one
@@ -390,10 +390,10 @@ namespace Elite
    */
   struct EllipseAxes
   {
-    std::uint8_t firstX = 0;  ///< 6502: K2
-    std::uint8_t firstY = 0;  ///< 6502: K2+1
-    std::uint8_t secondX = 0; ///< 6502: K2+2
-    std::uint8_t secondY = 0; ///< 6502: K2+3
+    std::uint8_t firstX = 0;
+    std::uint8_t firstY = 0;
+    std::uint8_t secondX = 0;
+    std::uint8_t secondY = 0;
   };
 
   /// `_axes` is `K2(3 2 1 0)`, `_angle` the `CNT2` the caller chose and `_target` the `TGT` it stops
@@ -407,7 +407,7 @@ namespace Elite
                        Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: PL9, in its three parts -- the planet's outline and then its markings.
+   * PL9, in its three parts -- the planet's outline and then its markings.
    *
    * Elite's planets have two looks and the game picks between them with one bit of the system's
    * tech level: `SOS1` spawns the planet as `128 OR (tek AND 2)`, so type 128 gets MERIDIANS -- two
@@ -422,7 +422,7 @@ namespace Elite
                         Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: PLANET -- the entry the main loop calls for both the planet and the sun.
+   * The entry the main loop calls for both the planet and the sun.
    *
    * It rejects the object before projecting it: a distance sign byte of 48 or more is too far to
    * see, and a zero distance is the case the divide cannot take. Then `PROJ`, then the radius --
@@ -434,7 +434,7 @@ namespace Elite
    */
 
   /*
-   * 6502: SUN, in its four parts -- and it is not a filled circle drawn the obvious way.
+   * SUN, in its four parts -- and it is not a filled circle drawn the obvious way.
    *
    * The sun is a stack of horizontal lines, one per screen row, whose half-widths come from
    * `sqrt(K^2 - v^2)` with a few random bits added so the edge is ragged rather than smooth. What
@@ -456,7 +456,7 @@ namespace Elite
                        Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: ZINF -- clear a ship's data block and give it an identity orientation.
+   * Clear a ship's data block and give it an identity orientation.
    *
    * The block is zeroed from its last byte down, then 96 goes into `INWK+18` and `INWK+22`
    * and 96-with-the-sign-bit into `INWK+14`. Those three are the high bytes of `nosev_z`,
@@ -466,7 +466,7 @@ namespace Elite
   void ClearShip(Ship& _work) noexcept;
 
   /*
-   * 6502: nWq -- fill the whole stardust field with new specks, and draw them.
+   * Fill the whole stardust field with new specks, and draw them.
    *
    * `NWSTARS` is the entry, and it is two instructions: if this is not a space view, skip straight
    * to `WPSHPS`. The three routines are one fall-through chain -- `NWSTARS` into `nWq` into
@@ -476,7 +476,7 @@ namespace Elite
   void SeedStardustField(Canvas& _canvas, Stardust& _dust, Rng& _rng, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: WPSHPS -- rub every ship off the screen and forget both line heaps.
+   * Rub every ship off the screen and forget both line heaps.
    *
    * It walks `FRIN`, copies each ship's block into `INWK`, calls `SCAN` to take it off the
    * scanner, and clears bit 3 and bit 6 of its state byte so the drawing code knows there is

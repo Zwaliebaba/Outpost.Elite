@@ -15,7 +15,7 @@ namespace Elite
   /*
    * Docking at the station (slice 2e).
    *
-   * 6502: DOENTRY, and the ledger had it filed under the program's entry point -- `Game.cpp
+   * DOENTRY, and the ledger had it filed under the program's entry point -- `Game.cpp
    * (entry)`, alongside `COLD` and `BRKBK`, marked "Replace". It is nothing of the sort. DOENTRY is
    * what runs when the ship arrives at a station: it resets the flight variables, shows the docking
    * tunnel, and then decides which of six mission briefings the player has just earned. The name is
@@ -26,7 +26,7 @@ namespace Elite
    */
 
   /*
-   * 6502: DELTA, GNTMP, QQ22+1, FSH, ASH and ENERGY -- what arriving resets.
+   * DELTA, GNTMP, QQ22+1, FSH, ASH and ENERGY -- what arriving resets.
    *
    * Six bytes, three to zero and three to &FF, and the six are not a group in the original: they
    * are in three different workspaces and are written by six consecutive stores that share one
@@ -35,7 +35,7 @@ namespace Elite
    * is `FlightState`'s, and having it here as well was one 6502 byte in two C++ fields (§6.64).
    */
 
-  /// 6502: the pause after the tunnel -- forty-four VERTICAL SYNCS, so 0.88 seconds on PAL and
+  /// The pause after the tunnel -- forty-four VERTICAL SYNCS, so 0.88 seconds on PAL and
   /// 0.73 on NTSC (§6.17). It is what makes the docking tunnel readable.
   inline constexpr std::uint8_t DOCKING_PAUSE_FRAMES = 44;
 
@@ -43,17 +43,17 @@ namespace Elite
   /// same screen from opposite ends of a mission.
   enum class DockingOutcome
   {
-    DockingBay,      ///< 6502: EN6 -- a tail call to BAY, and nothing happened
-    BriefMission1,   ///< 6502: BRIEF -- the Constrictor is offered
-    DebriefMission1, ///< 6502: DEBRIEF -- and paid for
-    BriefMission2,   ///< 6502: BRIEF2 -- the Thargoid plans are offered
-    CollectPlans,    ///< 6502: BRIEF3 -- arriving at Ceerdi to pick them up
-    DebriefMission2, ///< 6502: DEBRIEF2 -- arriving at Birera to deliver them
-    OfferTrumbles,   ///< 6502: TBRIEF
+    DockingBay,      ///< A tail call to BAY, and nothing happened
+    BriefMission1,   ///< The Constrictor is offered
+    DebriefMission1, ///< DEBRIEF -- and paid for
+    BriefMission2,   ///< The Thargoid plans are offered
+    CollectPlans,    ///< Arriving at Ceerdi to pick them up
+    DebriefMission2, ///< Arriving at Birera to deliver them
+    OfferTrumbles,
   };
 
   /*
-   * 6502: the tests between reading the mission byte and leaving for a briefing -- which briefing,
+   * The tests between reading the mission byte and leaving for a briefing -- which briefing,
    * if any, docking has earned.
    *
    * A decision and nothing else, so it is separable from the arrival it is half of, and it reads
@@ -83,13 +83,13 @@ namespace Elite
   {
     DockingOutcome outcome = DockingOutcome::DockingBay;
 
-    /// 6502: what the tail call to BAY produced. Only the DockingBay outcome reaches it; every
+    /// What the tail call to BAY produced. Only the DockingBay outcome reaches it; every
     /// briefing is a tail call of its own and the docking bay is what it eventually returns to.
     ForcedKey bay{};
   };
 
   /*
-   * 6502: DOENTRY -- arrive at the station.
+   * Arrive at the station.
    *
    * `RES2`, then `LAUN`, then six stores, then a pause, then the dispatch. Note that RES2 is
    * called here on its own, where the cold start reaches it twice through two fall-throughs

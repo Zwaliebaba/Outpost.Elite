@@ -23,13 +23,13 @@
 namespace Elite
 {
 
-  /// 6502: the three message tokens this file sends that are not arithmetic on a slot number.
-  inline constexpr std::uint8_t MESSAGE_RIGHT_ON_COMMANDER = 101; ///< 6502: EXNO2
-  inline constexpr std::uint8_t MESSAGE_ECM_DESTROYED = 108;      ///< 6502: ou2
-  inline constexpr std::uint8_t MESSAGE_SCOOPS_DESTROYED = 111;   ///< 6502: ou3
+  /// The three message tokens this file sends that are not arithmetic on a slot number.
+  inline constexpr std::uint8_t MESSAGE_RIGHT_ON_COMMANDER = 101;
+  inline constexpr std::uint8_t MESSAGE_ECM_DESTROYED = 108;      ///< ou2
+  inline constexpr std::uint8_t MESSAGE_SCOOPS_DESTROYED = 111;   ///< ou3
 
   /*
-   * 6502: NOISE2's X -- the frequency each explosion is played at, and they differ.
+   * NOISE2's X -- the frequency each explosion is played at, and they differ.
    *
    * `EXNO` passes 208 and `EXNO2` passes 81, so a ship being hit and a ship blowing up are told
    * apart by pitch as well as by effect number. Both are bare immediates with no name in the
@@ -39,7 +39,7 @@ namespace Elite
   inline constexpr std::uint8_t EXPLOSION_PITCH_KILL = 81;
 
   /*
-   * 6502: EXNO -- the noise a ship makes when our laser lands on it.
+   * The noise a ship makes when our laser lands on it.
    *
    * Returns the sustain byte `NOISE2` is handed, because that is the whole of what the routine
    * computes: five volumes chosen by the target's z high byte, loudest when it is nearest. The
@@ -48,14 +48,14 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t ExplosionVolume(std::uint8_t _distance) noexcept;
 
-  /// 6502: EXNO's tail -- the same, one threshold set apart, for a ship that has actually died.
+  /// EXNO's tail -- the same, one threshold set apart, for a ship that has actually died.
   [[nodiscard]] std::uint8_t KillVolume(std::uint8_t _distance) noexcept;
 
-  /// 6502: EXNO -- play it. `_work` is `INWK`, and byte 7 is what picks the volume.
+  /// Play it. `_work` is `INWK`, and byte 7 is what picks the volume.
   std::uint8_t PlayHitSound(const Ship& _work, SoundBuffer& _sound) noexcept;
 
   /*
-   * 6502: EXNO2 -- add a kill to the tally, and make the bigger noise.
+   * Add a kill to the tally, and make the bigger noise.
    *
    * The tally is TWENTY-FOUR bits and its bottom eight are a fraction: `KWL%` is what a type is
    * worth below one kill and `KWH%` what it is worth above. Both tables live in the ship data
@@ -68,7 +68,7 @@ namespace Elite
   std::uint8_t RecordKill(Universe& _universe, Ports& _ports, ShipType _type) noexcept;
 
   /*
-   * 6502: OOPS -- take `_damage`, on the shield the hit came from, and the banks under it.
+   * Take `_damage`, on the shield the hit came from, and the banks under it.
    *
    * The byte it tests is read THROUGH `INF`, out of the stored block rather than out of `INWK`,
    * which matters only for `TACTICS`: in the flight loop the two are the same copy. Byte 8 is the
@@ -84,7 +84,7 @@ namespace Elite
                                 bool _carryIn) noexcept;
 
   /*
-   * 6502: OUCH -- break something, one time in two, and say what broke.
+   * Break something, one time in two, and say what broke.
    *
    * `DORND`'s sign bit is the coin toss and its X compared against 22 is the range: the
    * generator's X picks which of the twenty-two hold slots is emptied, and the first seventeen
@@ -98,7 +98,7 @@ namespace Elite
    */
   void DamageEquipment(Universe& _universe, Ports& _ports, bool _carryIn) noexcept;
 
-  /// 6502: BOMBOFF -- the bomb has burned out: standard bitmap mode again, and stop the flashing.
+  /// The bomb has burned out: standard bitmap mode again, and stop the flashing.
   void StopEnergyBomb(ScreenState& _screen) noexcept;
 
 } // namespace Elite

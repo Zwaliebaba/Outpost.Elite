@@ -10,7 +10,7 @@ namespace Outpost
 
   namespace
   {
-    /// 6502: the name is eight bytes ending in a carriage return, which MT26 writes there (§6.19).
+    /// The name is eight bytes ending in a carriage return, which MT26 writes there (§6.19).
     constexpr std::uint8_t NAME_TERMINATOR = 13;
 
     /// One folder under LocalAppData, and one extension, so a person can find and copy them.

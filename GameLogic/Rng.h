@@ -29,11 +29,11 @@ namespace Elite
   class Rng
   {
   public:
-    /// 6502: DORND -- the next random byte. The carry flag on entry participates, which is why
+    /// The next random byte. The carry flag on entry participates, which is why
     /// the caller has to say what it was.
     [[nodiscard]] RngResult Next(bool _carryIn) noexcept;
 
-    /// 6502: DORND2 -- the same, with carry forced clear so a sequence repeats regardless of
+    /// The same, with carry forced clear so a sequence repeats regardless of
     /// what the caller happened to leave in C. Used where a cloud has to look the same twice.
     [[nodiscard]] RngResult NextRepeatable() noexcept
     {
@@ -50,7 +50,7 @@ namespace Elite
     }
 
   private:
-    // 6502: RAND (four bytes of zero page).
+    // RAND (four bytes of zero page).
     std::array<std::uint8_t, 4> m_state{};
   };
 

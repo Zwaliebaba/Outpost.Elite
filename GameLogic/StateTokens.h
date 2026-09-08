@@ -15,7 +15,7 @@ namespace Elite
   /*
    * The six tokens that print game state rather than text (slice 2c).
    *
-   * 6502: TT27's first six branches, which test the token by counting it down. Tokens 0 to 5 are
+   * TT27's first six branches, which test the token by counting it down. Tokens 0 to 5 are
    * control codes that reach into the commander and the universe instead of into the token table,
    * and slice 1c-a declared them a seam because nothing that could answer them existed yet. This
    * closes it.
@@ -54,11 +54,11 @@ namespace Elite
     void Print(std::uint8_t _token, TextSink& _sink) override;
 
   private:
-    void PrintCash(TextSink& _sink);          ///< 6502: csh, which falls into plf
-    void PrintGalaxyNumber(TextSink& _sink);  ///< 6502: tal
-    void PrintCurrentSystem();                ///< 6502: ypl
-    void PrintCommanderName(TextSink& _sink); ///< 6502: cmn
-    void PrintFuelAndCash(TextSink& _sink);   ///< 6502: fwl, which falls into PCASH
+    void PrintCash(TextSink& _sink);          ///< csh, which falls into plf
+    void PrintGalaxyNumber(TextSink& _sink);  ///< tal
+    void PrintCurrentSystem();                ///< ypl
+    void PrintCommanderName(TextSink& _sink); ///< cmn
+    void PrintFuelAndCash(TextSink& _sink);   ///< fwl, which falls into PCASH
 
     TokenPrinter& m_printer;
     TextState& m_text;

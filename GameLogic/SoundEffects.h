@@ -25,7 +25,7 @@ namespace Elite
    * the sequence of writes and not the picture they leave.
    */
 
-  /// 6502: SID -- one register write, as the interrupt handler makes it. `reg` is the offset from
+  /// One register write, as the interrupt handler makes it. `reg` is the offset from
   /// SID (&D400), 0 to &18.
   struct SidWrite
   {
@@ -69,7 +69,7 @@ namespace Elite
     }
   };
 
-  /// 6502: the SID's register map, as `SOINT` and the music player address it.
+  /// The SID's register map, as `SOINT` and the music player address it.
   inline constexpr std::uint8_t SID_FREQUENCY_LOW = 0;
   inline constexpr std::uint8_t SID_FREQUENCY_HIGH = 1;
   inline constexpr std::uint8_t SID_PULSE_WIDTH_LOW = 2;
@@ -84,12 +84,12 @@ namespace Elite
   inline constexpr std::uint8_t SID_VOLUME = 0x18;
   inline constexpr std::uint8_t SID_REGISTER_COUNT = 0x19;
 
-  /// 6502: the three voices, and the sixteen effects `NOISE` can be asked for.
+  /// The three voices, and the sixteen effects `NOISE` can be asked for.
   inline constexpr std::size_t SID_VOICE_COUNT = 3;
   inline constexpr std::uint8_t SOUND_EFFECT_COUNT = 16;
 
   /*
-   * 6502: the sixteen sounds of `sfxatk` and its five sibling tables (M5-a-4).
+   * The sixteen sounds of `sfxatk` and its five sibling tables (M5-a-4).
    *
    * THEY WERE DECLARED IN EIGHT HEADERS, one beside whichever routine first played each: `sfxbeep`
    * and two more in `Combat.h`, `sfxboop` in `ViewChange.h`, `sfxecm` in `Dashboard.h`, `sfxhyp1`
@@ -104,25 +104,25 @@ namespace Elite
    */
   enum class SoundEffect : std::uint8_t
   {
-    PulseLaser = 0,     ///< 6502: sfxplas -- pulse lasers fired by us
-    HitByLaser = 1,     ///< 6502: sfxelas
-    ShipExploding = 2,  ///< 6502: sfxhit
-    Explosion = 3,      ///< 6502: sfxexpl -- we died, or collided
-    Missile = 4,        ///< 6502: sfxwhosh -- a missile launched, and a ship launching
-    Beep = 5,           ///< 6502: sfxbeep -- short and high
-    Boop = 6,           ///< 6502: sfxboop -- long and low
-    Hyperspace = 7,     ///< 6502: sfxhyp1
-    Engine = 8,         ///< 6502: sfxeng -- and the original's own comment says it is not used
-    Ecm = 9,            ///< 6502: sfxecm
-    BeamLaser = 10,     ///< 6502: sfxblas
-    MilitaryLaser = 11, ///< 6502: sfxalas
-    MiningLaser = 12,   ///< 6502: sfxmlas
-    EnergyBomb = 13,    ///< 6502: sfxbomb
-    Trumbles = 14,      ///< 6502: sfxtrib -- the Trumbles dying
-    HitByLaser2 = 15,   ///< 6502: sfxelas2
+    PulseLaser = 0,     ///< Pulse lasers fired by us
+    HitByLaser = 1,     ///< sfxelas
+    ShipExploding = 2,  ///< sfxhit
+    Explosion = 3,      ///< We died, or collided
+    Missile = 4,        ///< A missile launched, and a ship launching
+    Beep = 5,           ///< Short and high
+    Boop = 6,           ///< Long and low
+    Hyperspace = 7,     ///< sfxhyp1
+    Engine = 8,         ///< sfxeng -- and the original's own comment says it is not used
+    Ecm = 9,            ///< sfxecm
+    BeamLaser = 10,     ///< sfxblas
+    MilitaryLaser = 11, ///< sfxalas
+    MiningLaser = 12,   ///< sfxmlas
+    EnergyBomb = 13,    ///< sfxbomb
+    Trumbles = 14,      ///< The Trumbles dying
+    HitByLaser2 = 15,   ///< sfxelas2
 
     /*
-     * 6502: sfxhyp1 with its top bit SET -- and it is the ONE place in the game that sets it.
+     * sfxhyp1 with its top bit SET -- and it is the ONE place in the game that sets it.
      *
      * Not a seventeenth sound: it is sound 7 again with an index that falls PAST the end of
      * `SFXPR`, so the priority byte reads as zero and the routine looks for a voice already playing
@@ -133,7 +133,7 @@ namespace Elite
   };
 
   /*
-   * 6502: sound_variables -- the buffer between the game and the interrupt.
+   * The buffer between the game and the interrupt.
    *
    * Ten arrays of three, one entry a voice, and one byte on its own. Every one is a label in the
    * original and the names are kept: `flag` is `SOFLG`, whose low six bits hold the effect number
@@ -152,18 +152,18 @@ namespace Elite
    */
   struct SoundBuffer
   {
-    std::array<std::uint8_t, SID_VOICE_COUNT> flag{};            ///< 6502: SOFLG
-    std::array<std::uint8_t, SID_VOICE_COUNT> counter{};         ///< 6502: SOCNT
-    std::array<std::uint8_t, SID_VOICE_COUNT> priority{};        ///< 6502: SOPR
-    std::uint8_t pulseWidth = 2;                                 ///< 6502: PULSEW
-    std::array<std::uint8_t, SID_VOICE_COUNT> frequencyChange{}; ///< 6502: SOFRCH
-    std::array<std::uint8_t, SID_VOICE_COUNT> frequency{};       ///< 6502: SOFRQ
-    std::array<std::uint8_t, SID_VOICE_COUNT> control{};         ///< 6502: SOCR
-    std::array<std::uint8_t, SID_VOICE_COUNT> attack{};          ///< 6502: SOATK
-    std::array<std::uint8_t, SID_VOICE_COUNT> sustain{};         ///< 6502: SOSUS
-    std::array<std::uint8_t, SID_VOICE_COUNT> volumeRate{};      ///< 6502: SOVCH
+    std::array<std::uint8_t, SID_VOICE_COUNT> flag{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> counter{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> priority{};
+    std::uint8_t pulseWidth = 2;
+    std::array<std::uint8_t, SID_VOICE_COUNT> frequencyChange{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> frequency{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> control{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> attack{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> sustain{};
+    std::array<std::uint8_t, SID_VOICE_COUNT> volumeRate{};
 
-    std::uint8_t soundOff = 0; ///< 6502: DNOIZ
+    std::uint8_t soundOff = 0;
   };
 
   /*
@@ -187,7 +187,7 @@ namespace Elite
   };
 
   /*
-   * 6502: NOISE -- put effect `_effect` into the buffer, if it is allowed a voice.
+   * Put effect `_effect` into the buffer, if it is allowed a voice.
    *
    * THREE ANSWERS, and the caller's carry is one of them (§6.99). The routine SETS the carry when
    * it takes a voice; it reaches `SOUR1`, a bare `RTS`, by two different branches, and they leave
@@ -208,7 +208,7 @@ namespace Elite
   [[nodiscard]] NoiseResult PlaySoundEffect(SoundBuffer& _buffer, SoundEffect _effect, bool _carryIn) noexcept;
 
   /*
-   * 6502: NOISE2 -- NOISE with the sustain byte and the frequency supplied instead of looked up.
+   * NOISE with the sustain byte and the frequency supplied instead of looked up.
    *
    * It sets the OVERFLOW flag by testing a byte that holds &60, stashes the two supplied bytes, and
    * enters `NOISE` past its own `CLV`. The two overflow branches inside `NOISE` then take the
@@ -219,13 +219,13 @@ namespace Elite
   [[nodiscard]] NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, SoundEffect _effect, std::uint8_t _sustain,
                                                    std::uint8_t _frequency, bool _carryIn) noexcept;
 
-  /// 6502: BEEP, BELL -- a tail call into `NOISE`, so the carry it returns is `NOISE`'s. `BELL`
+  /// BEEP, BELL -- a tail call into `NOISE`, so the carry it returns is `NOISE`'s. `BELL`
   /// prints character 7, and character 7 in `CHPR` is `R5`, which calls `BEEP`: the
   /// text printer rings it over a `SoundBuffer` since M3-b-2b, so the bell has no routine of its own.
   [[nodiscard]] NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
 
   /*
-   * 6502: NOISEOFF -- find the voice playing `_effect` and run its counter down.
+   * Find the voice playing `_effect` and run its counter down.
    *
    * It sets `SOCNT` to 1 rather than clearing the flag, so the interrupt handler ends the sound on
    * its next pass the ordinary way -- gate off, flag and priority cleared -- and nothing here writes
@@ -233,12 +233,12 @@ namespace Elite
    */
   void StopSoundEffect(SoundBuffer& _buffer, SoundEffect _effect) noexcept;
 
-  /// 6502: SOFLUSH -- the same for all three voices at once: every counter to 1, so every sound
+  /// The same for all three voices at once: every counter to 1, so every sound
   /// ends on the next interrupt. `stopbd` calls it before silencing the chip.
   void FlushSoundEffects(SoundBuffer& _buffer) noexcept;
 
   /*
-   * 6502: SOINT, SOUL3b -- one interrupt's worth of the effect player.
+   * SOINT, SOUL3b -- one interrupt's worth of the effect player.
    *
    * Voice 3 down to voice 1, and for each: nothing to do if the flag is zero; if the flag's top bit
    * is set the effect is NEW, so zero the voice's seven registers and write control, attack and

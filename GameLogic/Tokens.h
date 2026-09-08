@@ -40,7 +40,7 @@ namespace Elite
   };
 
   /*
-   * 6502: TT27 and the routines it falls through into.
+   * TT27 and the routines it falls through into.
    *
    * Elite's text is a small language rather than a set of strings. A byte is either a character,
    * a pair of letters, a whole phrase to be expanded (which may itself contain more of the same),
@@ -51,7 +51,7 @@ namespace Elite
   {
   public:
     /*
-     * 6502: XC and QQ17 -- the text state this printer works on, bound at construction the way
+     * XC and QQ17 -- the text state this printer works on, bound at construction the way
      * `TextPrinter` and `CharacterPrinter` bind theirs (M5-e-2c). Control code 9 moves the column,
      * and the case flags ARE `TextState::caseFlags`: until M5-e-2c this class kept a copy of QQ17
      * and `CHPR` read the struct's, so every routine that stored QQ17 had to store it twice (§8).
@@ -63,11 +63,11 @@ namespace Elite
     {
     }
 
-    /// 6502: TT27 -- print one token, expanding whatever it turns out to mean.
+    /// Print one token, expanding whatever it turns out to mean.
     void Print(std::uint8_t _token) noexcept;
 
     /*
-     * 6502: ex -- walk the table to a RECURSIVE token's text and print it, character by character.
+     * Walk the table to a RECURSIVE token's text and print it, character by character.
      *
      * Public because `DEATH` calls it directly with token 146, printing "{all caps}GAME OVER"
      * without going through `TT27`'s dispatch, which would read 146 as something else entirely.
@@ -88,21 +88,21 @@ namespace Elite
       m_values = _values;
     }
 
-    /// 6502: QQ17 -- the capitalisation state. Bit 7 asks for sentence case, bit 6 records that
+    /// The capitalisation state. Bit 7 asks for sentence case, bit 6 records that
     /// the first letter has been seen, and 255 suppresses output entirely. The byte is
     /// `TextState::caseFlags`; these read and write it for the callers that hold the printer.
     [[nodiscard]] std::uint8_t CaseFlags() const noexcept;
     void SetCaseFlags(std::uint8_t _flags) noexcept;
 
   private:
-    /// 6502: the TT41/TT42/TT45/TT46/TT74 chain -- one character, under the case flags.
+    /// The TT41/TT42/TT45/TT46/TT74 chain -- one character, under the case flags.
     void PrintCharacter(std::uint8_t _character) noexcept;
 
-    /// 6502: TT43 -- a letter pair, or a recursive token when the value is high enough.
+    /// A letter pair, or a recursive token when the value is high enough.
     void PrintLetterPair(std::uint8_t _token) noexcept;
 
     TextSink& m_sink;
-    TextState& m_text; ///< 6502: XC and QQ17 -- `Universe::text`, or a suite's own
+    TextState& m_text; ///< XC and QQ17 -- `Universe::text`, or a suite's own
     ValueTokens* m_values = nullptr;
   };
 
@@ -118,16 +118,16 @@ namespace Elite
    * a TextState.
    */
 
-  /// 6502: TT162 -- a space, sent through the TOKEN printer, so it is subject to the case flags
+  /// A space, sent through the TOKEN printer, so it is subject to the case flags
   /// like any other character.
   void PrintSpace(TokenPrinter& _printer) noexcept;
 
-  /// 6502: TT67 -- character twelve, which is the newline the screen understands, through the
+  /// Character twelve, which is the newline the screen understands, through the
   /// same printer.
   void PrintNewline(TokenPrinter& _printer) noexcept;
 
   /*
-   * 6502: TT69, which FALLS INTO TT67 -- sentence case, and then a newline.
+   * TT69, which FALLS INTO TT67 -- sentence case, and then a newline.
    *
    * The fall-through is not visible in the source and is exact in the assembled build: TT69 sets
    * `QQ17`'s top bit in four bytes, and TT67 begins at TT69 + 4. So there is no return, and every
@@ -136,17 +136,17 @@ namespace Elite
    */
   void SetSentenceCaseAndNewline(TokenPrinter& _printer) noexcept;
 
-  /// 6502: spc -- a token then a space, the second half a tail call.
+  /// A token then a space, the second half a tail call.
   void PrintThenSpace(TokenPrinter& _printer, std::uint8_t _token) noexcept;
 
-  /// 6502: prq -- a token then a question mark, which is how every "QUANTITY?" and "CASH?" on the
+  /// A token then a question mark, which is how every "QUANTITY?" and "CASH?" on the
   /// trading screens is built.
   void PrintThenQuestion(TokenPrinter& _printer, std::uint8_t _token) noexcept;
 
-  /// 6502: TT68, which falls into TT73 -- a token then a colon.
+  /// TT68, which falls into TT73 -- a token then a colon.
   void PrintThenColon(TokenPrinter& _printer, std::uint8_t _token) noexcept;
 
-  /// 6502: plf -- a token then a newline, the second half a tail call.
+  /// A token then a newline, the second half a tail call.
   void PrintThenNewline(TokenPrinter& _printer, std::uint8_t _token) noexcept;
 
 } // namespace Elite
