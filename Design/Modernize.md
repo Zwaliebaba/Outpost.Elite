@@ -48,7 +48,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
-| **M6** | **Detach — behind the M6-0 gate, which closed 2026-09-07.** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then the oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
+| **M6** | **Detach — behind the M6-0 gate, which closed 2026-09-07; M6-a is built and M6-b is blocked on two owner rulings (§4.10, §6).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then the oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
 
 Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
 it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
@@ -738,29 +738,66 @@ compare with the port. The interpreter is reached through one object, `OracleIma
 seam the detachment uses — **the tests do not change shape; what answers them does.**
 
 ```cpp
-class Oracle                     // Tests/GameLogicTests/Oracle.h
+class Oracle                     // Tests/GameLogicTests/Oracle.h, built M6-a-2
 {
 public:
-  virtual State Call(std::string_view _label, const State& _in) = 0;      // the one method every test uses
-  virtual std::span<const std::uint8_t> Memory() const = 0;
+  virtual RunResult Call(Cpu6502&, address, maxInstructions, stopAddress) = 0;  // what CallSubroutine goes to
 };
-class LiveOracle final : public Oracle { Cpu6502 ... };                    // today's OracleImage, until M6-b
-class RecordingOracle final : public Oracle                                 // M6-a: wraps a LiveOracle, writes the fixture
-{ /* per call: FNV-1a of (label, _in, the bytes the test reads back) folded into the test's digest;
-     below a size threshold the full (input -> output diff) is written too, for diagnosis */ };
+class LiveOracle final : public Oracle { /* Cpu6502::Interpret, named */ };  // and installing it is installing nothing
+class RecordingOracle final : public Oracle                                 // M6-a: runs the interpreter, writes the fixture
+{ /* per call: a 64-bit FNV-1a of the WHOLE machine as the call found it is the key, and the record
+     is the DIFFERENCE the call made -- changed RAM, changed I/O page, the registers, the flags, the
+     cycles, the RunResult, and the trap hits and store-log entries the call appended */ };
 class RecordedOracle final : public Oracle                                  // M6-b: serves the fixture; no interpreter
-{ /* a call whose input hash the fixture does not hold fails the test loudly: the test asked the
+{ /* a call whose key the fixture does not hold fails the test loudly: the test asked the
      original something it was never asked while the original was here */ };
 ```
 
-The fixture per test file is `Tests/Fixtures/<Suite>.oracle`: one digest per `TEST_METHOD`, and the
-full input-to-output records for tests whose record is under the threshold M6-a measures (the
-exhaustive 65,536-case sweeps are digests only; a sweep that fails after M6 is re-run against the
-port's previous commit to find the case, which is the diagnosis path the plan accepts in exchange for
-a tree with no interpreter in it). The whole-bitmap comparisons record the bitmap bytes they read, so
-a drawing test after M6 still says which byte differs. The mutation harness needs no change: it runs
-the suite, and the suite no longer needs an oracle to be present — `check_oracle_present` goes with
-it, and with it the one deliberate failure `OracleIsPresent` (R9 closes by construction).
+**THE SEAM IS `CallSubroutine` AND NOT A `Call(label, State)`, and the difference is not cosmetic.**
+The sketch above this paragraph, written at M2's opening, assumed a test hands the oracle a state
+and takes one back. No test does. A test takes a whole machine from `OracleImage::Fresh()`,
+scribbles wherever it likes on top of the assembled game, arms traps and a store log, runs a routine
+and then reads back whatever it chooses; nothing names which bytes were the inputs and nothing names
+which are the outputs. A record keyed by "the inputs" cannot be built without rewriting every
+fixture, which is what this section promises not to do — so the key is a digest of the whole machine
+and the record is the difference. That is content-addressed, order-independent, and the same on any
+machine: two recording runs of one suite produced byte-identical files on the first try (§8, M6-a-2).
+
+**ONE FILE, NOT ONE PER SUITE.** A record is addressed by what the call ASKED, not by which test
+asked it, and the recorder has no way to know whose test it is in: MSVC's test platform does not
+tell a fixture its own name. `Tests/Fixtures/Oracle.fixture`, records in key order.
+
+**THE CORPUS IS MEASURED, AND THE THRESHOLD THIS SECTION ASKED FOR IS THE WRONG INSTRUMENT**
+(M6-a-2, 2026-09-08). The suite makes 3,229,712 calls to the interpreter,
+of which 3,182,222 have an input no earlier call had — 98.5%, so there is almost nothing to
+share — and the records come to **222.4 MB**, or about 65 MB gzipped. They are not a few big
+records: 84% of the calls cost 64 bytes or less and 98.7% cost 128 or less, and the 2,867 calls
+whose records run past 8 KB — the whole-frame and whole-bitmap comparisons — account for 32 MB of
+the 222. **So a threshold on RECORD SIZE saves the wrong thing**: cutting everything above 2 KB
+removes 3,610 calls and 36 MB and takes the byte-level diagnosis of every drawing test with it. The
+size is made of CALL COUNT, and the count is made of sweeps: 29 tests make more than fifty thousand
+calls each and account for 2.77 M calls and 150 MB, and going down to a limit of two thousand calls
+a test catches 73 of the 295 tests that call the oracle at all and leaves 58,139 calls and 24.7 MB.
+The per-test table is in §8.
+
+**WHAT THAT LEAVES M6-b, AND IT NEEDS A RULING** (§1 has no question that covers it). A fixture
+that keeps every test's shape is 222 MB in the tree. A fixture of 25 MB means 73 tests stop
+comparing against the original per case and compare a FOLD of their own answers against a recorded
+digest instead — which is what this section already intended by "the exhaustive sweeps are digests
+only", and which is a change of shape for those tests, not a change of what answers them. **And
+there is a second thing M6-b needs that nothing has scheduled**: a test finds its routine with
+`oracle.Label("MAS2")` and builds its machine from `OracleImage::Fresh()`, which is the assembled
+64 KB. §1 R-c rules that the label table "exists only while the oracle does" and goes with it, and
+M6-f deletes `OracleImage` — so after M6-b either the labels become constants in the tests and the
+base image is committed as data (which is the original's CODE, not its data, and a different
+exposure from the one Risk R1 accepts), or the digest stops being taken over the base image and is
+taken over what the test WROTE instead, which needs the interpreter to track writes and needs the
+tests' reads of untouched image bytes accounted for. Neither is a slice this plan has. M6-a stops
+here and the question goes to the owner.
+
+The mutation harness needs no change either way: it runs the suite, and the suite no longer needs an
+oracle to be present — `check_oracle_present` goes with it, and with it the one deliberate failure
+`OracleIsPresent` (R9 closes by construction).
 
 **What a fixture can and cannot pin.** A fixture pins exactly the calls the tests made while the
 original was here. A behaviour no test reached before M6-b is unpinned for ever afterwards, because
@@ -1554,8 +1591,8 @@ were safe after M6-f, and none of them waited.
 | **M6-0-f A coverage instrument** ✅ **built 2026-09-07 (§8)** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
 | **M6-0-g Mutants to a stated floor** ✅ **built 2026-09-07 (§8)** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
-| **M6-a Coverage review and the recorder** | **M6-a-1 is built, 2026-09-08 (§8)**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. What is left of the row: the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. (The row was READY from the gate closing on 2026-09-07 and was not what went next — [Resolution.md](Resolution.md)'s RS-0 to RS-4 were, and neither track blocks the other because the resolution track asks the original nothing.) | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
-| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
+| **M6-a Coverage review and the recorder** ✅ **built 2026-09-08 (§8, two sittings)** | **M6-a-1**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. **M6-a-2**: the `Oracle` seam, at `Cpu6502::CallSubroutine` and not at §4.10's `Call(label, State)`, which no test's shape would have fitted; `LiveOracle`; `RecordingOracle` with a measuring mode and a fixture writer; the corpus measured. **THE ROW'S LAST CLAUSE IS ANSWERED RATHER THAN BUILT, and the answer is a question for the owner**: a threshold on record size saves the wrong thing, because the 222.4 MB is 3.2 million small calls and not a few big records (§4.10). Committing a fixture waits on the ruling M6-b now needs. | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. The suite runs green through the recorder (454 of 454) and two recording runs of one suite produced byte-identical files. **The "fixtures are committed" clause is NOT met and is withdrawn rather than fudged**: what to commit is the ruling, and §4.10 says what it costs either way. | 3 |
+| **M6-b Fixtures answer — BLOCKED ON TWO OWNER RULINGS since 2026-09-08 (§4.10, §8)** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). **What M6-a measured and this row has to answer first**: (1) a fixture that keeps every test's shape is 222.4 MB, or about 65 MB gzipped, and one of 25 MB means 73 of the 295 tests that call the oracle stop comparing per case and compare a fold against a recorded digest — which is a change of shape §4.10 said it would not make; (2) after the interpreter goes, a test still finds its routine with `oracle.Label` and builds its machine from the assembled 64 KB, and §1 R-c sends the label table away with the oracle — so either those become committed data, which is the original's CODE and a different exposure from the one Risk R1 accepts, or the key stops being taken over the base image and the interpreter grows a write set. Neither is a slice this plan has. | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 + whatever the ruling adds |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
@@ -1603,6 +1640,7 @@ M1-a's first file and the worked example every later slice copies.
 | **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-0-f's instrument, on every push since 2026-09-07; the M0-c replay's breadth, which reaches death and the escape pod since M6-0-b. | M6 is last; the review is a tool's output and a gate, not a report; a fixture is never re-recorded (rule 1). |
 | **R20** | Rewriting the comments loses the reasons — the commentary records WHY a carry matters, and prose that says only WHAT is worth less than the assembly it replaced. | M6-d, per file. | The rule for M6-d is "keep the reason, drop the transcription"; a comment that cannot be rewritten without losing its reason keeps the instruction sequence as a quotation. |
 | **R21** | Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them. | Not validated by this plan. | Owner decision, out of this plan's scope (§1 R-d); recorded so that M6-f is not mistaken for having done it. |
+| **R23** | **A fixture that answers the tests as they are is 222 MB, and a fixture that is small needs 73 of them to stop asking per case.** Measured at M6-a-2: 3,229,712 calls, 98.5% of them with an input no earlier call had, so there is nothing to share and no record-size threshold that helps. Beside it, a smaller and harder one: after the interpreter goes, a test still finds its routine with `oracle.Label` and builds its machine from the assembled 64 KB, and §1 R-c sends the label table away with the oracle. | Measured, not estimated: §4.10 and §8 carry the histogram and the per-test table, and the M6-b row is marked blocked. | **Owner ruling, and M6-b does not start without it.** The options are stated in §4.10 with what each costs; this plan does not choose between committing the original's code as data and changing the shape of seventy-three tests. |
 | **R22** ✅ **closed 2026-09-06** | The altitude's radicand low byte is a stale scratch byte: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left. The risk as written also said `LOIN` writes `Q` on every line and the port keeps it local — **and that half was false**: this build's `LOIN` works in `P2`, `Q2`, `R2`, `S2` at 188–191 and never touches `Q` at 154. The claim came from the BBC commentary, which is where M2-c-1's `T`/`T2` defect came from too. | `TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances; `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range over six bubble shapes and lets each side decide `Q` for itself. `ALTIT` is in the compared image. | **Closed by measurement, not by ruling.** Neither fix was needed: `LOIN` had nothing to publish, and the frame's `Q` agrees with the game's on every shape the sweep covers. The fixture found a different defect on the way — `MA23` reaches `SBC #36` with the carry CLEAR, so the planet's radius costs 37 — which is fixed and the replay re-taken (§8). |
 
 ---
@@ -1833,6 +1871,75 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-a-2: the seam is `CallSubroutine`, and the corpus is 222 MB of three million small calls.**
+
+`Tests/GameLogicTests/Oracle.h` and `.cpp`: `Oracle` with `LiveOracle` and `RecordingOracle` behind
+it, `Cpu6502::CallSubroutine` routed through it and the interpreter itself now called `Interpret`.
+Not one test changed a line, which is the property §4.10 asked for and the reason the seam is where
+it is.
+
+**§4.10's `State Call(std::string_view, const State&)` DOES NOT FIT ANY TEST IN THIS TREE.** It was
+written at M2's opening from an idea of what an oracle test looks like, and what they actually look
+like is: take a whole machine from `OracleImage::Fresh()`, scribble on top of the assembled game
+wherever you like, arm traps and a store log, run a routine, then read back whatever you please --
+`cpu.memory[...]`, `cpu.a`, `cpu.trapHits`, `cpu.stores`. Nothing names the inputs and nothing names
+the outputs. So the record is keyed by a 64-bit FNV-1a of the WHOLE machine as the call found it --
+memory, the I/O page, the keyboard matrix, the registers, the flags, the traps, the watch slots, the
+store range, and how many hits were already banked -- and the record is the DIFFERENCE the call
+made. Content-addressed, order-independent and reproducible: two recording runs of one suite
+produced files with the same SHA-256 on the first try, which is the acceptance clause about a second
+run, met on a subset.
+
+**THE MEASUREMENT, WHICH IS THE ROW'S OTHER HALF, AND IT SAYS THE THRESHOLD IS THE WRONG
+INSTRUMENT.** One pass of the suite through the recorder's counting mode, 8m38s against the usual
+1m25s: **3,229,712 calls, 3,182,222 of them with an input no earlier call had (98.5%), 222,402,732
+bytes of records, no key collisions.** The average record is seventy bytes. The histogram, in powers
+of two from 64:
+
+| record | calls | bytes |
+|---|---|---|
+| ≤64 | 2,677,211 | 139.2 MB |
+| ≤128 | 464,031 | 35.8 MB |
+| ≤256 | 25,181 | 4.0 MB |
+| ≤512 | 7,349 | 2.6 MB |
+| ≤1,024 | 2,812 | 2.1 MB |
+| ≤2,048 | 2,028 | 3.0 MB |
+| ≤4,096 | 401 | 1.0 MB |
+| ≤8,192 | 342 | 2.3 MB |
+| ≤16,384 | 2,603 | 25.4 MB |
+| ≤32,768 | 264 | 7.0 MB |
+
+Eighty-four per cent of the calls cost 64 bytes or less. The 2,867 records above 8 KB -- the
+whole-frame and whole-bitmap comparisons -- are 32 MB of the 222, so cutting everything above 2 KB
+removes 3,610 calls, saves 36 MB and takes the byte-level diagnosis of every drawing test with it.
+**The bytes are made of CALL COUNT, and the count is made of sweeps.** 295 tests call the oracle at
+all; the heaviest are `TheControlRatesMatchBUMP2AndREDU2` at 262,144 calls and the arithmetic
+sweeps at 150,000 to 200,000 each, and the 29 tests over fifty thousand calls account for 2.77 M
+calls and 150 MB. A limit of two thousand calls a test catches 73 of the 295 and leaves 58,139
+calls and 24.7 MB. Gzip is 3.4× on a real fixture (3,624,372 → 1,064,053 on `GalaxyAgainstTheShippedGame`),
+so the whole corpus is about 65 MB compressed.
+
+**SO M6-a STOPS ONE CLAUSE SHORT, DELIBERATELY.** "The fixtures are committed" is not met, because
+what to commit is a decision and not a slice: 222 MB in the tree, or 73 tests changing shape to fold
+their own answers against a recorded digest -- which §4.10 already described as "the exhaustive
+sweeps are digests only" without noticing that it is a change of shape rather than a change of what
+answers them. The row's acceptance is rewritten to say so.
+
+**AND MEASURING IT SURFACED A SECOND THING NOTHING HAD SCHEDULED.** A test finds its routine with
+`oracle.Label("MAS2")` and builds its machine from `OracleImage::Fresh()`, which is the assembled
+64 KB; §1 R-c rules that the label table "exists only while the oracle does" and M6-f deletes
+`OracleImage`. So after M6-b either the labels become constants and the base image is committed as
+data -- and that is the original's CODE, not the derived tables Risk R1's residual exposure covers
+-- or the key stops being taken over the base image and is taken over what the test wrote instead,
+which needs a write set in the interpreter and an answer for the bytes a test reads back that no
+call ever wrote. Both are recorded in §4.10 and in the M6-b row, which is marked blocked. This is
+R19's shape in a place R19 did not look: the gate asked whether every behaviour was pinned before
+the fixtures were recorded, and this is whether the fixtures can be recorded at all.
+
+454 tests green through the recorder and 454 green without it; all eighteen checks; `Oracle.h` and
+`Oracle.cpp` in both project files. The runner takes `--measure` and `--record FILE` before its
+filter, and prints the per-test tally and the histogram.
 
 **2026-09-08 — M6-a-1: the four gaps closed, and the trader's pass never went where the port sent it.**
 
