@@ -417,13 +417,13 @@ namespace Elite
       std::uint8_t across = sine.value;
       std::uint8_t high = 0; // 6502: T -- the offset's high byte, this loop's own since M2-c-3
 
-      carry = angle >= 33u; // 6502: LDX CNT / CPX #33
+      carry = angle >= 33u; // 6502: past the quarter-wave, so the sign has to be put back
       if (carry)
       {
         const Negated negated = NegateWide(across, carry);
         across = negated.low;
         high = negated.high;
-        carry = false; // 6502: CLC
+        carry = false; // 6502: the carry cleared for the addition below
       }
 
       // 6502: PL37 -- and the centre added on, sixteen bits at a time.
@@ -431,19 +431,18 @@ namespace Elite
       _state.segmentEnd[0] = xLow.value;
       _state.segmentEnd[1] = AddWithCarry(_centre.x1, high, xLow.carry).value;
 
-      // 6502: LDA CNT / CLC / ADC #16 / JSR FMLTU2 -- the same table a quarter-turn on, which is
-      // the cosine.
+      // 6502: the same table a quarter-turn on, which is the cosine.
       const AddResult quarter = AddWithCarry(angle, 16u, false);
       const LogProduct cosine = MultiplyBySine(_radius, quarter.value, false);
       std::uint8_t down = cosine.value;
       high = 0;
 
       /*
-       * 6502: LDA CNT / ADC #15 / AND #63 / CMP #33.
+       * 6502: fifteen added to the angle, masked to six bits, and compared against 33.
        *
-       * The `ADC #15` has no `CLC` in front of it and runs on FMLTU2's exit carry, which is set on
+       * Nothing clears the carry before that addition, so it runs on `FMLTU2`'s exit flag -- set on
        * both of its antilog exits and clear on the one that returns zero. Fifteen plus that carry
-       * is the sixteen above -- so the quarter-turn is only a quarter-turn when the multiply
+       * is the sixteen used above, so the quarter-turn is only a quarter-turn when the multiply
        * produced something (§6.50).
        */
       const AddResult stepped = AddWithCarry(angle, 15u, cosine.carry);
@@ -461,10 +460,10 @@ namespace Elite
         DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{down, high}, angle, carry, _picture);
       angle = reached;
 
-      // 6502: CMP #65 / BCS P%+5 / JMP PLL3 -- sixty-four steps of one, or eight of eight.
+      // 6502: sixty-four steps of one, or eight of eight.
       if (reached >= 65u)
       {
-        return; // 6502: CLC / RTS
+        return; // 6502: the carry cleared on the way out
       }
       carry = false; // the branch was not taken, so the comparison left it clear
     }
@@ -473,7 +472,7 @@ namespace Elite
   bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                   const Projection& _centre, std::uint8_t _radius, Picture* _picture) noexcept
   {
-    // 6502: JSR CHKON / BCS RTS2 -- `CIRCLE` wants the carry only; `(P+2 P+1)` is `SUN`'s.
+    // 6502: RTS2 -- `CIRCLE` wants `CHKON`'s carry only; the extent it also computes is `SUN`'s.
     if (CircleOffScreen(_state, _radius, _centre).offScreen)
     {
       return true;
@@ -483,11 +482,11 @@ namespace Elite
     _state.SetBallX(0, 0);
 
     /*
-     * 6502: LDX K / LDA #8 / CPX #8 / BCC PL89 / LSR A / CPX #60 / BCC PL89 / LSR A.
+     * 6502: PL89 -- the step halved once above a radius of 8 and again above 60.
      *
      * Eight steps for a speck, sixteen for a planet, thirty-two for one you are close to. Two
-     * shifts and two comparisons rather than a table, and the carry the second `CPX` leaves is the
-     * one `CIRCLE2` starts its first multiply on.
+     * shifts and two comparisons rather than a table, and the carry the second comparison leaves is
+     * the one `CIRCLE2` starts its first multiply on.
      */
     std::uint8_t step = 8;
     bool carry = _radius >= 8u;
@@ -508,18 +507,18 @@ namespace Elite
 
   AxisResult DivideAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
   {
-    // 6502: PLS1 -- LDA INWK,X / STA P / LDA INWK+1,X / AND #%01111111 / STA P+1, then the sign.
-    // X is 9, 11, 21 or 23: one COMPONENT of an orientation vector, whose sign is bit 7 of its
-    // high byte -- not a position axis, whose sign has a byte of its own.
+    // 6502: PLS1 -- the component's two bytes with the sign split off. The index is 9, 11, 21 or
+    // 23: one COMPONENT of an orientation vector, whose sign is bit 7 of its high byte -- not a
+    // position axis, whose sign has a byte of its own.
     const SignMag16& component = _ship.ComponentAt(_at);
     const KBlock quotient = DivideByShipZ(
       _ship, _math,
       SignMag24{component.lo, static_cast<std::uint8_t>(component.hi & 0x7Fu), static_cast<std::uint8_t>(component.hi & 0x80u)});
 
     /*
-     * 6502: LDA K / LDY K+1 / BEQ P%+4 / LDA #254.
+     * 6502: the quotient's low byte, replaced by 254 when the middle byte is not zero.
      *
-     * The branch skips the `LDA #254`, so a result that fits in a byte comes back as itself and
+     * The branch skips that replacement, so a result which fits in a byte comes back as itself and
      * anything larger SATURATES rather than wrapping. A planet close enough for the division to
      * overflow is one whose markings run off the disc, and 254 is what keeps them there.
      */
@@ -538,24 +537,23 @@ namespace Elite
     // wants to divide the same axis twice.
     const AxisResult axis = DivideAxisByZ(_ship, _math, _at);
 
-    // 6502: `STX U` comes AFTER the `JSR PLS1`, and `PLS1` ends with two `INX`s -- so what is
-    // saved and handed back is the STEPPED index, not the one this call was given. `PL26` calls
-    // this twice in a row without touching X in between and gets two different axes (§6.53).
+    // 6502: the index is saved AFTER the call, and `PLS1` has already stepped it twice -- so what
+    // comes back is the STEPPED index, not the one this call was given. `PL26` calls this twice in
+    // a row without touching the index in between and gets two different axes (§6.53).
     const std::uint8_t stepped = axis.at;
 
-    // 6502: STA P / LDA #222 / STA Q / JSR MULTU.
+    // 6502: MULTU scales the axis by 222/256.
     const std::uint8_t scaled = MultiplyUnsigned(axis.value, 222).high;
 
-    // 6502: LDY K+3 / BPL PL12 -- a positive axis returns as it is with a zero high byte. `K+3` is
-    // what `PLS1` returned in Y, which is `AxisResult::sign` since slice 3b.
+    // 6502: PL12 -- a positive axis returns as it is with a zero high byte. The sign is what `PLS1`
+    // handed back, which is `AxisResult::sign` since slice 3b.
     if ((axis.sign & 0x80u) == 0u)
     {
       return {scaled, 0, stepped};
     }
 
-    // 6502: EOR #&FF / CLC / ADC #1 / BEQ PL12 -- and a negative one is negated into a sixteen-bit
-    // value whose high half is 255. Negating zero gives zero, which needs a high half of ZERO, and
-    // the `BEQ` is what catches it.
+    // 6502: a negative one is negated into a sixteen-bit value whose high half is 255. Negating
+    // zero gives zero, which needs a high half of ZERO, and the branch is what catches it.
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(scaled ^ 0xFFu), 1u, false);
     if (negated.value == 0u)
     {
@@ -567,18 +565,17 @@ namespace Elite
 
   std::uint8_t SetMeridianAngle(const Ship& _ship, std::uint8_t _numerator, std::uint8_t _denominator) noexcept
   {
-    // 6502: PLS4 -- STA Q / JSR ARCTAN, then the roof vector's sign decides which way round.
+    // 6502: PLS4 -- the arctangent, then the roof vector's sign decides which way round.
     std::uint8_t angle = Arctan(_numerator, _denominator);
 
-    // 6502: LDX INWK+14 / BMI P%+4 / EOR #%10000000 -- the branch SKIPS the flip, so it is the
-    // POSITIVE roof vector that gets it.
+    // 6502: the branch SKIPS the flip, so it is the POSITIVE roof vector that gets it.
     if ((_ship.nose.z.hi & 0x80u) == 0u)
     {
       angle = static_cast<std::uint8_t>(angle ^ 0x80u);
     }
 
     // Two shifts: a byte turn becomes a sixty-fourth, which is what the ellipse walk counts in.
-    return static_cast<std::uint8_t>(angle >> 2); // 6502: STA CNT2
+    return static_cast<std::uint8_t>(angle >> 2); // 6502: CNT2
   }
 
   std::pair<std::uint8_t, std::uint8_t> LoadTwoAxes(const Ship& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry,
@@ -586,18 +583,18 @@ namespace Elite
   {
     // 6502: PLS5 -- two of PLS1 into the second half of the ellipse's axes.
     AxisResult axis = DivideAxisByZ(_ship, _math, _at);
-    const std::uint8_t second = axis.value; // 6502: STA K2+2
+    const std::uint8_t second = axis.value; // 6502: the first of the pair
     _geometry.scaledOrientation[2] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
     _geometry.scaledOrientation[3] = axis.sign;
-    return {second, axis.value}; // 6502: (K2+2, K2+3)
+    return {second, axis.value}; // 6502: the ellipse's two scaled axes
   }
 
   void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                    const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle, std::uint8_t _target, Picture* _picture) noexcept
   {
-    // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG. `CNT` is `BLINE`'s segment counter and
+    // 6502: PLS22 -- the counter zeroed and the flag set. `CNT` is `BLINE`'s segment counter and
     // `CNT2` the angle this walk is at; both are locals since M2-c-3, and `CNT2` comes in as the
     // start `PLS4` or `PL26` chose while `TGT` comes in as where to stop.
     std::uint8_t atAngle = 0; // 6502: CNT
@@ -612,8 +609,8 @@ namespace Elite
        * circle: `K2(3 2)` is how far the meridian reaches across and `K2(1 0)` how far it reaches
        * down, and a meridian seen edge-on has one of them at zero.
        */
-      // 6502: LDA SNE,X / STA Q / LDA K2+2 / JSR FMLTU / STA R / LDA K2+3 / JSR FMLTU / STA K --
-      // the first axis against the sine, both halves; `R` and `K` were the scratch they waited in.
+      // 6502: the first axis against the sine, both halves; `R` and `K` were the scratch they
+      // waited in.
       const std::uint8_t sine = SINE_TABLE[coneWidth & 0x1Fu];
       const std::uint8_t firstAcross = MultiplyByLog(_axes.secondX, sine, false).value;
       const std::uint8_t secondAcross = MultiplyByLog(_axes.secondY, sine, false).value;

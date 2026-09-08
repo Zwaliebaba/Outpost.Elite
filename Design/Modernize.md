@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,963 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,946 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,27 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-16: the circle walk, and a carry that decides how far a quarter-turn is.**
+
+17 more from `PlanetDraw.cpp`, now at 49 of 89. This is `CIRCLE2`'s walk and the projection helpers
+under it, and one site in it is the best argument yet for the rule that a REASON is not the same as
+the instructions carrying it.
+
+**The quarter-turn is only a quarter-turn when the multiply produced something.** The step that
+advances the angle for the cosine adds fifteen, not sixteen — and nothing clears the carry first, so
+it runs on the sine multiply's exit flag, which is set on both antilog exits and clear on the one
+returning zero. Fifteen plus that carry is the sixteen the code appears to want (§6.50). Four
+instructions said what happened; two sentences say why it is right, and only the second lets a reader
+check the port against it.
+
+Two more of the same kind: the axis divide SATURATES at 254 rather than wrapping, because a planet
+close enough to overflow it is one whose markings run off the disc; and `PLS3` hands back the STEPPED
+index rather than the one it was given, which is how `PL26` gets two different axes from two calls
+that look identical (§6.53).
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 1,963 → 1,946.
 
 **2026-09-08 — M6-d-15: the sun's rows and the circle's heap.**
 
