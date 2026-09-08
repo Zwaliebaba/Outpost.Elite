@@ -421,15 +421,15 @@ namespace GameLogicTests
       // And the three cells the sketch is made of, stated as numbers so that a table edited by
       // accident fails here rather than on somebody's screen.
       const Elite::WideCell title = Elite::STATUS_LAYOUT.Map(11, 1); // XC 7, which is canvas cell 11
-      Assert::AreEqual(31, title.column, L"the title, over both columns");
+      Assert::AreEqual(35, title.column, L"the title, over both columns");
       Assert::AreEqual(3, title.row, L"above where NLIN3's rule would fall");
 
       const Elite::WideCell heading = Elite::STATUS_LAYOUT.Map(5, 12);
-      Assert::AreEqual(47, heading.column, L"EQUIPMENT: in the right-hand column");
+      Assert::AreEqual(41, heading.column, L"EQUIPMENT: in the right-hand column");
       Assert::AreEqual(12, heading.row, L"level with the first label line");
 
       const Elite::WideCell lastItem = Elite::STATUS_LAYOUT.Map(10, 23);
-      Assert::AreEqual(52, lastItem.column, L"the last equipment line, at its indent");
+      Assert::AreEqual(46, lastItem.column, L"the last equipment line, at its indent");
       Assert::AreEqual(34, lastItem.row, L"and two wide rows below the one before it");
     }
 
@@ -467,12 +467,14 @@ namespace GameLogicTests
       const Elite::WideCell unit = Elite::BUY_LAYOUT.Map(21, 1);
       const Elite::WideCell price = Elite::BUY_LAYOUT.Map(21, 2);
       Assert::AreEqual(unit.row, price.row, L"the two heading rows land on one");
-      Assert::AreEqual(40, unit.column, L"UNIT ...");
-      Assert::AreEqual(45, price.column, L"... PRICE, one space along");
+      Assert::AreEqual(35, unit.column, L"UNIT ...");
+      Assert::AreEqual(40, price.column, L"... PRICE, one space along");
 
       // And each heading sits over the column it heads.
-      Assert::AreEqual(Elite::BUY_LAYOUT.Map(5, 4).column, Elite::BUY_LAYOUT.Map(6, 2).column, L"PRODUCT over the names");
-      Assert::AreEqual(48, Elite::BUY_LAYOUT.Map(24, 4).column, L"and the price still ends where PrintNumber left it");
+      // The heading's field and the data's share an origin, so "PRODUCT" keeps the same offset from
+      // the item names that it has on the canvas -- one cell, not zero.
+      Assert::AreEqual(Elite::BUY_LAYOUT.Map(6, 4).column, Elite::BUY_LAYOUT.Map(6, 2).column, L"PRODUCT over the names");
+      Assert::AreEqual(43, Elite::BUY_LAYOUT.Map(24, 4).column, L"and the price still ends where PrintNumber left it");
     }
 
     TEST_METHOD(TheInventoryScreenPutsTheHoldInItsOwnColumn)
@@ -497,8 +499,8 @@ namespace GameLogicTests
       const Elite::WideCell fuel = Elite::INVENTORY_LAYOUT.Map(5, 4);
       const Elite::WideCell first = Elite::INVENTORY_LAYOUT.Map(5, 7);
       Assert::AreEqual(fuel.row, first.row, L"the hold starts level with the fuel");
-      Assert::AreEqual(6, fuel.column, L"the fuel line on the left");
-      Assert::AreEqual(47, first.column, L"and the hold on the right");
+      Assert::AreEqual(9, fuel.column, L"the fuel line on the left");
+      Assert::AreEqual(41, first.column, L"and the hold on the right");
     }
 
     TEST_METHOD(TheEquipScreenBringsItsPromptBackUnderTheList)
@@ -561,13 +563,62 @@ namespace GameLogicTests
       const Elite::WideCell pair = Elite::DATA_LAYOUT.Map(5, 3);
       const Elite::WideCell blurb = Elite::DATA_LAYOUT.Map(5, 19);
       Assert::AreEqual(pair.row, blurb.row, L"the description starts level with the first pair");
-      Assert::AreEqual(6, pair.column, L"the pairs on the left");
-      Assert::AreEqual(47, blurb.column, L"and the description on the right");
+      Assert::AreEqual(9, pair.column, L"the pairs on the left");
+      Assert::AreEqual(41, blurb.column, L"and the description on the right");
 
       // Stride one, because the screen already spaces itself: a pair and the pair after it are two
       // wide rows apart and not four.
       Assert::AreEqual(2, Elite::DATA_LAYOUT.Map(5, 5).row - Elite::DATA_LAYOUT.Map(5, 3).row,
                        L"the game's own spacing, not the layout's on top of it");
+    }
+
+    /*
+     * NO TABLE PUTS TEXT UNDER THE FRAME -- a constraint the picture's own border imposes, and one
+     * that only appeared when `TTX66K` began drawing that border on the wide surface too (RS-5-f).
+     *
+     * Measured rather than reasoned about: the frame fills wide columns 0 to 6 and 73 to 79 with
+     * colour band and puts its vertical rules on 7 and 72, so the interior is 8 to 71 -- 64 columns,
+     * exactly twice the 32 the canvas gives `CHPR`. A table that reaches outside it draws a glyph
+     * where the border already is, and the shadow test then finds a cell carrying the border
+     * instead of the letter. That is how four screens failed the day the border landed.
+     */
+    TEST_METHOD(NoTablePutsAGlyphUnderTheFrame)
+    {
+      struct Named
+      {
+        const wchar_t* what;
+        Elite::TextLayout layout;
+      };
+
+      const std::array<Named, 7> LAYOUTS{{{L"the status screen", Elite::STATUS_LAYOUT},
+                                          {L"the market screens", Elite::BUY_LAYOUT},
+                                          {L"the inventory screen", Elite::INVENTORY_LAYOUT},
+                                          {L"the equip ship screen", Elite::EQUIP_LAYOUT},
+                                          {L"the data on system screen", Elite::DATA_LAYOUT},
+                                          {L"the long-range chart", Elite::LONG_RANGE_LAYOUT},
+                                          {L"the short-range chart", Elite::SHORT_RANGE_LAYOUT}}};
+
+      for (const Named& named : LAYOUTS)
+      {
+        for (std::uint8_t row = 0; row < 25u; ++row)
+        {
+          for (std::uint8_t column = Elite::TEXT_FIRST_COLUMN; column <= Elite::TEXT_LAST_COLUMN; ++column)
+          {
+            const Elite::WideCell cell = named.layout.Map(column, row);
+            if (cell.row < 0 || cell.row >= 50)
+            {
+              continue;
+            }
+            if (cell.column < Elite::WIDE_FIRST_COLUMN || cell.column > Elite::WIDE_LAST_COLUMN)
+            {
+              const std::wstring message = std::wstring(named.what) + L": canvas cell (" + std::to_wstring(column) + L", " +
+                                           std::to_wstring(row) + L") lands on wide column " + std::to_wstring(cell.column) +
+                                           L", which is under the frame";
+              Assert::Fail(message.c_str());
+            }
+          }
+        }
+      }
     }
 
     /*
@@ -650,7 +701,15 @@ namespace GameLogicTests
 
         for (std::uint8_t row = 0; row < 25u; ++row)
         {
-          for (std::uint8_t column = 0; column < 40u; ++column)
+          /*
+           * THE 32 CELLS `CHPR` CAN WRITE, and not all 40. `XC` wraps to a new line at 32, so a
+           * glyph never lands outside canvas columns 4 to 35; the eight margin cells carry the
+           * frame, which is drawn on both surfaces in wide coordinates and never through a layout.
+           * Sweeping them turned two-column tables into an impossible packing problem -- the wide
+           * interior is 64 columns and two 40-column images do not fit in it -- for cells that
+           * cannot collide because neither can hold a glyph.
+           */
+          for (std::uint8_t column = Elite::TEXT_FIRST_COLUMN; column <= Elite::TEXT_LAST_COLUMN; ++column)
           {
             const Elite::WideCell cell = named.layout.Map(column, row);
             if (cell.column < 0 || cell.column >= 80 || cell.row < 0 || cell.row >= 50)

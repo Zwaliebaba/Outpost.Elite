@@ -199,41 +199,86 @@ namespace Outpost
    * which is a game running at four to five times speed: the station spinning, the ships closing,
    * the fuel burning, all of it (§6.114).
    *
-   * SO IT IS MEASURED, by `FlightLoopTests::TheFlightFrameCostsWhatItCosts`, which runs the shipped
-   * `M%` over a mirrored frame with everything that draws or thinks left untrapped:
+   * SO IT IS MEASURED, by `FlightLoopTests`, which runs the shipped `M%` over a mirrored frame
+   * with everything that draws or thinks left untrapped. §6.114 measured three scenes with no
+   * planet in them; InputTimer.md T-0 (2026-09-08) measured the crowded end while the interpreter
+   * was still in the tree, on the STEADY STATE -- the second of two frames, which draws and erases
+   * -- with the planet at a high byte of 0x20, the sun at 0x60 or the station at 0x08 dead ahead,
+   * and fighters straight ahead at 0x0C, four wireframe lines each:
    *
-   *     bubble            cycles a frame     frames a second
-   *     empty                 47,784               21.4
-   *     one ship              86,258               11.9
-   *     two ships             75,736               13.5
+   *     occupied slots   what is in them                    cycles a frame   frames a second
+   *     0                nothing (§6.114's empty scene)         47,784           21.4
+   *     2                planet and sun                         93,974           10.9
+   *     2                planet and station                     70,498           14.5
+   *     5                planet, sun, three fighters           162,487            6.3
+   *     5                planet, station, three fighters       137,740            7.4
+   *     10               planet, sun, eight fighters           305,693            3.3
+   *     10               planet, station, eight fighters       281,016            3.6
    *
-   * TWO BANDS AND NOT A CURVE, because two of those numbers are one number. A frame with ships in
-   * it costs about 81,000 cycles and the two scenes sit 7% either side of that -- the difference
-   * between them is what the ships ARE and where, not how many, exactly as the title screen's cost
-   * turned out to depend on the ship's size rather than on its distance (§6.110). Reading a trend
-   * into a 7% wobble would be inventing one.
-   *
-   * WHAT IT DOES NOT COVER, stated because a measurement whose limits are not written beside it
-   * gets read as a fact. The crowded end is not measured: `Seed`'s third slot is a station and its
-   * `TACTICS` does not return untrapped, so a frame with a station or a fight in it is paced at the
-   * one-ship cost and is really slower. The scenes have no planet in them, so the floor is
-   * optimistic. And the counter prices neither the trapped sound calls nor the cycles the VIC-II
-   * steals, which is a further 5-10% -- so the port still runs slightly fast, and every one of
-   * those errors is in the same direction.
+   * THE TABLE BELOW IS THE MIDPOINT OF THE TWO SECOND BODIES at each count, because a bubble has
+   * one or the other and the model is keyed by the count alone; it is linear between rows, which
+   * the eight-fighter scenes bear out (a fighter costs about 21,000 cycles at 0x0C). The count is
+   * what `Game::ShipsInBubble` answers: occupied `FRIN` slots, planet and sun included, so a bubble
+   * in play is never below two -- a count of zero or one happens only as the wreckage of a death
+   * flies past. Ship AI adds 1% (`TACTICS` runs for one ship a frame); position adds more than
+   * count does: the same eight fighters cost 366,000 at 0x04 and 177,000 at 0x30, and a sun or a
+   * planet filling the screen at 0x02 costs no more than one at a distance, because the disc is
+   * clipped to the same pixels. The counter prices neither the trapped sound calls nor the cycles
+   * the VIC-II steals, which is a further 5-10% -- so the port still runs slightly fast, and every
+   * one of those errors is in the same direction.
    */
   struct FlightFrameCost
   {
-    std::uint8_t ships;   ///< 6502: how many slots of `FRIN` are occupied
+    std::uint8_t ships;   ///< 6502: how many slots of `FRIN` are occupied, planet and sun included
     std::uint32_t cycles; ///< what a frame costs there, measured against the shipped `M%`
   };
 
-  inline constexpr std::array<FlightFrameCost, 2> FLIGHT_FRAME_COSTS = {{
+  inline constexpr std::array<FlightFrameCost, 4> FLIGHT_FRAME_COSTS = {{
     {0, 47'784},
-    {1, 81'000},
+    {2, 82'236},
+    {5, 150'113},
+    {10, 293'354},
   }};
 
-  /// How long one flight frame should take with `_ships` in the bubble, in seconds. Flat above the
-  /// last measured point, because a rate beyond the measurement would be a guess wearing a number.
+  /// How long one flight frame should take with `_ships` slots occupied, in seconds. Linear between
+  /// the measured rows and flat outside them; the bubble cannot hold more than the last row.
   [[nodiscard]] double FlightFrameSeconds(std::uint8_t _ships) noexcept;
+
+  /*
+   * How long a DOCKED pass takes, and it is two vertical syncs and almost nothing else.
+   *
+   * 6502: `MLOOP` with `QQ12` set -- the guns cool, `DIALS` is skipped, `LDA QQ11 / AND PATG / LSR A
+   * / BCS plus13 / LDY #2 / JSR DELAY` waits TWO vertical syncs unless the view byte is odd AND the
+   * author-names option is on -- which only the Data on System screen, at 1, ever is -- the
+   * Trumbles breed, `TT17` scans the keyboard, and `TT102` dispatches `thiskey`, which on
+   * a pass with no key falls through `TT107`'s countdown and returns. Measured by
+   * `FlightLoopTests::TheDockedPassCostsWhatItCosts` (InputTimer.md T-0) with `DELAY` and `WSCAN`
+   * trapped, on the status screen with no key held: 4,472 cycles, 4,591 with Trumbles aboard,
+   * 2,746 on the long-range chart and up to 5,691 on the short-range chart with a cursor key
+   * held. So the pass is 4 ms of work and 40 ms of waiting at PAL, and the docked half runs at
+   * a little under HALF THE VERTICAL-SYNC RATE -- 22 passes a second on a PAL machine, 26 on NTSC
+   * -- which is what paces the hyperspace countdown and the chart crosshairs. On the one screen
+   * where the names lift the wait the same pass runs at 228 a second; that is the original's
+   * behaviour and the model follows it, because `Game::StepDocked` says which it was.
+   *
+   * Until InputTimer.md T-1 builds the simulated vertical blank, the syncs are priced at the NTSC
+   * frame the rest of this file and `SoundOutput` use. The port paced the docked half at the
+   * flight frame's empty-bubble cost until T-0, which was a stand-in and not a measurement.
+   */
+  inline constexpr std::uint32_t DOCKED_PASS_CYCLES = 4'472;
+
+  /// 6502: LDY #2 / JSR DELAY -- the two syncs a docked pass waits, unless `QQ11 AND PATG` is odd.
+  inline constexpr std::uint8_t DOCKED_PASS_SYNCS = 2;
+
+  /// 6502: TT16's `JSR WSCAN` -- one more sync on a chart pass that moves the crosshairs, so they
+  /// step at most once a frame. Recorded here; honoured when T-1's blank exists.
+  inline constexpr std::uint8_t CHART_CURSOR_SYNCS = 1;
+
+  /// 6502: the VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
+  inline constexpr double NTSC_FRAME_CYCLES = 65.0 * 263.0;
+
+  /// How long one docked pass should take, in seconds, given the syncs the last pass asked `DELAY`
+  /// for -- `Game::StepDocked`'s answer, two or none (InputTimer.md T-2).
+  [[nodiscard]] double DockedPassSeconds(std::uint8_t _syncs) noexcept;
 
 } // namespace Outpost

@@ -9,7 +9,7 @@
 #include <windows.h>
 
 #include <cstdint>
-#include <deque>
+#include <string>
 
 namespace Outpost
 {
@@ -72,23 +72,30 @@ namespace Outpost
     void ClientSize(int& _outWidth, int& _outHeight) const noexcept;
 
     /*
-     * 6502: RDKEY -- the next key press as a C64 internal key NUMBER, or false if none is waiting.
+     * 6502: `thiskey` for `TT102` -- the C64 internal key NUMBER pressed since the last time this
+     * was asked, or `NO_KEY`, and it is an EDGE: one answer per press of a key, however long it is
+     * held, and never an auto-repeat (InputTimer.md I-1).
      *
      * A number and not a character, because that is what the game's own keyboard scan produces and
      * what `TT102` compares against; `Outpost::CharacterFor` is the other half, and `KeyMap.h` says
-     * why there are two.
+     * why there are two. The QUEUE that stood here until I-1 -- sixteen deep, one entry per
+     * `WM_KEYDOWN` including the repeats -- is what delivered a held RETURN to the next prompt and
+     * typed a held digit twice; the blocking read is `Elite::ReadKey` over `Held` now, and this is
+     * the one press the dispatch takes per step. Two presses between two steps keep the later one,
+     * which is what a matrix scanned once a pass would have seen.
      */
-    [[nodiscard]] bool TakeKey(std::uint8_t& _outKey) noexcept;
+    [[nodiscard]] std::uint8_t TakePressed() noexcept;
 
     /// 6502: KEYLOOK -- whether a key is held right now, for the polling idiom `DOKEY` uses.
     [[nodiscard]] bool Held(std::uint8_t _c64Key) const noexcept;
 
-    /// 6502: FLKB -- empty the keyboard buffer, so a key pressed before a prompt is discarded.
-    void FlushKeys() noexcept;
-
     /// True once, if the client area has changed since the last time this was asked. The presenter
     /// resizes its buffers on it.
     [[nodiscard]] bool TakeResize() noexcept;
+
+    /// A diagnostic the player should read before the game goes on -- a settings line it could not
+    /// use, for instance -- as a box owned by this window. An empty text shows nothing.
+    void Warn(const std::string& _text) const noexcept;
 
   private:
     static LRESULT CALLBACK Dispatch(HWND, UINT, WPARAM, LPARAM) noexcept;
@@ -102,15 +109,13 @@ namespace Outpost
      */
     LRESULT OnMessage(HWND _window, UINT _message, WPARAM _wparam, LPARAM _lparam) noexcept;
 
-    void PressKey(WPARAM _virtualKey, bool _down) noexcept;
+    /// `_repeat` is lParam's bit 30 -- the key was already down -- which Windows sets on every
+    /// auto-repeat; a repeat moves nothing here.
+    void PressKey(WPARAM _virtualKey, bool _down, bool _repeat) noexcept;
 
-    /*
-     * How many key presses are remembered. The game consumes one per blocking read and the pump
-     * produces one per press, so the queue is normally empty or has one thing in it; the cap is
-     * here so that holding a key down while a screen is drawing cannot grow it without bound. When
-     * it is full the OLDEST is dropped, because the newest press is the one the player means.
-     */
-    static constexpr std::size_t MAX_QUEUED_KEYS = 16;
+    /// Every key up and the pending press forgotten: what focus loss means, because no WM_KEYUP
+    /// follows it.
+    void ReleaseAllKeys() noexcept;
 
     /// 6502: KEYLOOK is 65 bytes, one per internal key number, which is also TRANTABLE's extent.
     static constexpr std::uint8_t KEY_COUNT = 65;
@@ -120,7 +125,7 @@ namespace Outpost
     bool m_closed = false;
     bool m_resized = false;
 
-    std::deque<std::uint8_t> m_pressed;
+    std::uint8_t m_pressed = 0; ///< the last press since `TakePressed`, or 0
     bool m_held[KEY_COUNT] = {};
   };
 

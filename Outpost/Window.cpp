@@ -13,6 +13,12 @@ namespace Outpost
   {
     constexpr wchar_t WINDOW_CLASS[] = L"OutpostEliteWindow";
     constexpr wchar_t WINDOW_TITLE[] = L"Elite";
+
+    /// Bit 29 of a WM_SYSKEYDOWN's lParam: the context code, set when Alt is down.
+    constexpr LPARAM ALT_CONTEXT_BIT = LPARAM{1} << 29;
+
+    /// Bit 30 of a WM_KEYDOWN's lParam: the previous key state, set when this is an auto-repeat.
+    constexpr LPARAM PREVIOUS_STATE_BIT = LPARAM{1} << 30;
   } // namespace
 
   Window::~Window()
@@ -122,13 +128,21 @@ namespace Outpost
       return 0;
 
     /*
-     * WM_SYSKEYDOWN as well as WM_KEYDOWN, because the function keys reach it when Alt is held
-     * and F10 reaches it always. Falling through to DefWindowProc afterwards is deliberate for
-     * the SYS pair: Alt+F4 has to keep working.
+     * WM_SYSKEYDOWN as well as WM_KEYDOWN, because F10 reaches the window as a SYS message even
+     * with nothing else held. Falling through to DefWindowProc afterwards is deliberate for the
+     * SYS pair: Alt+F4 has to keep working.
+     *
+     * A SYS message WITH ALT DOWN IS NOT A GAME KEY (InputTimer.md I-6). Bit 29 of lParam is the
+     * context code, set when Alt is held, and a chord like Alt+Left is the system's -- letting it
+     * through put the ship into a roll on the way to whatever the chord meant. F10 arrives with
+     * the bit clear, which is why the test is the bit and not the message.
      */
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-      PressKey(_wparam, true);
+      if ((_lparam & ALT_CONTEXT_BIT) == 0)
+      {
+        PressKey(_wparam, true, (_lparam & PREVIOUS_STATE_BIT) != 0);
+      }
       if (_message == WM_KEYDOWN)
       {
         return 0;
@@ -137,10 +151,29 @@ namespace Outpost
 
     case WM_KEYUP:
     case WM_SYSKEYUP:
-      PressKey(_wparam, false);
+      // A release is always taken, so a key pressed before Alt went down cannot be left held.
+      PressKey(_wparam, false, false);
       if (_message == WM_KEYUP)
       {
         return 0;
+      }
+      break;
+
+    /*
+     * FOCUS LOSS RELEASES EVERY KEY (InputTimer.md I-6). Windows sends no WM_KEYUP to a window
+     * that has lost the keyboard, so an arrow held across Alt+Tab stayed held here until it was
+     * pressed again in this window and the ship rolled until then. WM_ACTIVATEAPP with FALSE
+     * covers the switch to another application and WM_KILLFOCUS the switch within this one; the
+     * queue is emptied too, so nothing pressed on the way out reaches the next prompt.
+     */
+    case WM_KILLFOCUS:
+      ReleaseAllKeys();
+      return 0;
+
+    case WM_ACTIVATEAPP:
+      if (_wparam == FALSE)
+      {
+        ReleaseAllKeys();
       }
       break;
 
@@ -163,7 +196,7 @@ namespace Outpost
     return DefWindowProcW(_window, _message, _wparam, _lparam);
   }
 
-  void Window::PressKey(WPARAM _virtualKey, bool _down) noexcept
+  void Window::PressKey(WPARAM _virtualKey, bool _down, bool _repeat) noexcept
   {
     /*
      * The chart's crosshairs first, because an arrow key is TWO C64 keys and only one of them is
@@ -171,7 +204,7 @@ namespace Outpost
      *
      * `TT17` reads one cursor key per axis and takes the direction from SHIFT (`KeyMap.h`), so an
      * arrow puts its axis key into the logger and, for two of the four, a shift with it. Both are
-     * held state and neither is a key PRESS: the queue below is what `TT102` dispatches on, and
+     * held state and neither is a key PRESS: the press below is what `TT102` dispatches on, and
      * the crosshairs are moved from the logger by the frame rather than by an event.
      */
     const CursorKeys cursor = CursorKeysFor(static_cast<int>(_virtualKey));
@@ -191,21 +224,20 @@ namespace Outpost
     }
 
     m_held[key] = _down;
-    if (!_down)
+    if (!_down || _repeat)
     {
       return;
     }
 
     /*
-     * AUTO-REPEAT IS KEPT, and that is a choice rather than an oversight. Windows sends repeated
-     * WM_KEYDOWNs while a key is held, and the game's own keyboard scan repeats too -- holding a
-     * cursor key is how the crosshairs are moved across the chart. So a repeat is a key press.
+     * AUTO-REPEAT IS NOT A PRESS (InputTimer.md I-1). It was kept until this slice on the argument
+     * that "holding a cursor key is how the crosshairs are moved across the chart" -- which is true
+     * and is done from the HELD table by `TT17`, never from a press. What a repeat did reach was
+     * every prompt that reads a key: a RETURN held past Windows' repeat delay answered the next
+     * screen too. So the held table is the only thing a repeat touches, and this is the newest
+     * genuine press since the dispatch last asked.
      */
-    if (m_pressed.size() >= MAX_QUEUED_KEYS)
-    {
-      m_pressed.pop_front();
-    }
-    m_pressed.push_back(key);
+    m_pressed = key;
   }
 
   bool Window::Pump() noexcept
@@ -236,15 +268,20 @@ namespace Outpost
     }
   }
 
-  bool Window::TakeKey(std::uint8_t& _outKey) noexcept
+  void Window::ReleaseAllKeys() noexcept
   {
-    if (m_pressed.empty())
+    for (bool& held : m_held)
     {
-      return false;
+      held = false;
     }
-    _outKey = m_pressed.front();
-    m_pressed.pop_front();
-    return true;
+    m_pressed = NO_KEY;
+  }
+
+  std::uint8_t Window::TakePressed() noexcept
+  {
+    const std::uint8_t pressed = m_pressed;
+    m_pressed = NO_KEY;
+    return pressed;
   }
 
   bool Window::Held(std::uint8_t _c64Key) const noexcept
@@ -252,16 +289,20 @@ namespace Outpost
     return (_c64Key < KEY_COUNT) && m_held[_c64Key];
   }
 
-  void Window::FlushKeys() noexcept
-  {
-    m_pressed.clear();
-  }
-
   bool Window::TakeResize() noexcept
   {
     const bool resized = m_resized;
     m_resized = false;
     return resized;
+  }
+
+  void Window::Warn(const std::string& _text) const noexcept
+  {
+    if (_text.empty())
+    {
+      return;
+    }
+    MessageBoxA(m_window, _text.c_str(), "Elite", MB_OK | MB_ICONWARNING);
   }
 
 } // namespace Outpost

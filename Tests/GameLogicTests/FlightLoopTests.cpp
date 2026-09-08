@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "Charts.h"
 #include "FlightUniverse.h"
 #include "OracleImage.h"
 
@@ -1105,8 +1106,11 @@ namespace GameLogicTests
     /// `_seed` runs after the mirror and before the call: the one hook for a byte `UniverseImage`
     /// does not carry, which since M2-c is `MathWorkspace`'s two (the altitude's `Q`, and `MV40`'s
     /// `K2`). Everything else in the frame goes through the image.
-    void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at, const LoopWhere& _loop, const std::wstring& _context,
-                       Reach _reach = Reach::Opening, const std::function<void(Cpu6502&)>& _seed = {})
+    /// Returns the exit both machines took, which the docking sweep reads and every other caller
+    /// ignores: the assertions below have already established that the two agree on it.
+    Elite::LoopOutcome CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at, const LoopWhere& _loop,
+                                     const std::wstring& _context, Reach _reach = Reach::Opening,
+                                     const std::function<void(Cpu6502&)>& _seed = {})
     {
       Cpu6502 cpu = _oracle.Fresh();
 
@@ -1300,6 +1304,8 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.many + type)], _frame.universe.bubble.counts[type],
                          (_context + L": MANY " + std::to_wstring(type)).c_str());
       }
+
+      return outcome;
     }
   } // namespace
 
@@ -1837,6 +1843,144 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint32_t>(18u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(killed > 0u, L"some bubbles emptied");
+    }
+
+    /*
+     * 6502: ISDK and GOIN -- the four docking checks at the station, and what a failed one costs.
+     *
+     * NO FIXTURE HAD EVER PUT A STATION IN A BUBBLE, so part 9 ran on neither machine and the
+     * coverage review named it a gap (M6-0-f): `ISDK` was run by no test and `GOIN` was only ever
+     * trapped, in `HyperspaceTests`, where the escape pod's `JMP GOIN` is the caller's business.
+     * Each of the four checks is failed on its own here, and both exits from `MA62` are taken --
+     * `DELTA` under five is `MA67`'s bump, which part 10 charges for, and five or more is
+     * `JMP DEATH`.
+     *
+     * THE CHECK THIS BUILD OMITS IS PINNED WITH THEM. The cassette version calls `SPS4` for the
+     * vector to the STATION and refuses a negative z; this one calls `SPS1` for the vector to the
+     * PLANET and compares it UNSIGNED, so a planet BEHIND the player normalises to 96 with bit 7
+     * on and sails past a threshold of 89. "The planet behind us" is that, ported.
+     *
+     * The bubble holds the planet and the station and nothing else, so every exit the frame can
+     * take is one part 9 chose. `MCNT` is zero and the station is slot 1, which makes
+     * `MCNT EOR XSAV AND 15` non-zero and keeps `TIDY` out of the frame: the orientation the case
+     * asks for is the orientation part 9 reads.
+     */
+    TEST_METHOD(TheDockingChecksMatchISDK)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      /// Where the planet sits, which is the third check's only input.
+      enum class Planet
+      {
+        Ahead,  ///< dead ahead, so `XX15+2` normalises to 96
+        Beside, ///< mostly to one side, so the z component falls well under 89
+        Behind, ///< dead astern -- 96 with bit 7 on, which an unsigned `CMP #89` accepts
+      };
+
+      struct Case
+      {
+        const char* what;
+        bool hostile;       ///< 6502: NEWB bit 2 on the station's own block, which `ANGRY` sets
+        std::uint8_t nose;  ///< 6502: INWK+14 -- nosev_z_hi, against 214
+        Planet planet;      ///< 6502: XX15+2 after `SPS1`, against 89
+        std::uint8_t roof;  ///< 6502: INWK+16 -- roofv_x_hi, against 80 once the sign is masked
+        std::uint8_t delta; ///< 6502: DELTA -- five and over turns a failed dock into `JMP DEATH`
+        Elite::LoopOutcome exit;
+      };
+
+      const std::vector<Case> CASES = {
+        {"a clean approach", false, 224, Planet::Ahead, 96, 2, Elite::LoopOutcome::Docked},
+        {"a clean approach at speed", false, 224, Planet::Ahead, 96, 20, Elite::LoopOutcome::Docked},
+        {"the station is hostile", true, 224, Planet::Ahead, 96, 2, Elite::LoopOutcome::Continued},
+        {"hostile, and fast enough to die", true, 224, Planet::Ahead, 96, 20, Elite::LoopOutcome::Died},
+        {"nose down, outside the cone", false, 213, Planet::Ahead, 96, 2, Elite::LoopOutcome::Continued},
+        {"nose down, and fast enough to die", false, 213, Planet::Ahead, 96, 20, Elite::LoopOutcome::Died},
+        {"off the approach line", false, 224, Planet::Beside, 96, 2, Elite::LoopOutcome::Continued},
+        {"off the approach line at speed", false, 224, Planet::Beside, 96, 20, Elite::LoopOutcome::Died},
+        {"rolled across the slot", false, 224, Planet::Ahead, 79, 2, Elite::LoopOutcome::Continued},
+        {"rolled across the slot at speed", false, 224, Planet::Ahead, 79, 20, Elite::LoopOutcome::Died},
+        {"the planet behind us, which this build accepts", false, 224, Planet::Behind, 96, 2, Elite::LoopOutcome::Docked},
+      };
+
+      std::uint32_t docked = 0;
+      std::uint32_t died = 0;
+      std::uint32_t bumped = 0;
+
+      for (const Case& item : CASES)
+      {
+        Frame frame(0x5Bu);
+        Universe& universe = frame.universe;
+
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
+        {
+          universe.bubble.slots[slot] = 0u;
+          universe.bubble.blocks[slot] = Elite::Ship::FromBytes(std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE>{});
+        }
+        for (std::size_t type = 0; type < universe.bubble.counts.size(); ++type)
+        {
+          universe.bubble.counts[type] = 0u;
+        }
+        universe.bubble.junk = 0u;
+        universe.bubble.heapBottom = Elite::HeapOffset::Top();
+
+        // Slot 0, the planet: far enough away that the frame's own movement cannot turn it round.
+        universe.bubble.slots[0] = Elite::Byte(Elite::ShipType::Planet);
+        Elite::Ship& planet = universe.bubble.blocks[0];
+        planet.x.hi = (item.planet == Planet::Beside) ? 0x40u : 0x00u;
+        planet.z.hi = (item.planet == Planet::Beside) ? 0x08u : 0x40u;
+        planet.z.sgn = (item.planet == Planet::Behind) ? 0x80u : 0x00u;
+
+        /*
+         * Slot 1, the station, close enough for part 7 to hand it to part 9.
+         *
+         * `MVEIT` takes `DELTA` off z before part 7 looks, so the low byte is 120 rather than
+         * something smaller: at twenty it comes out at 100, which still has bit 7 clear. Bit 6 is
+         * set and does not matter -- `CPX #SST / BEQ ISDK` is decided before the `AND #%11000000`
+         * that would send anything else away.
+         */
+        universe.bubble.slots[1] = Elite::Byte(Elite::ShipType::Station);
+        universe.bubble.counts[Elite::Byte(Elite::ShipType::Station)] = 1u;
+        Elite::Ship& station = universe.bubble.blocks[1];
+        station.z.lo = 120u;
+        station.nose.z.hi = item.nose;
+        station.roof.x.hi = item.roof;
+        station.side.y.hi = 96u; // a third axis, so the blueprint is projected from a real frame
+        station.energy = 200u;
+        station.newb = item.hostile ? Elite::Mask(Elite::NewbBit::Hostile) : std::uint8_t{0};
+        // 6502: LDA #LO(LSO) / STA INWK+33 -- `NWSPS` hands the station the SUN's heap (§6.112).
+        station.heap = Elite::HeapOffset::FromAddress(Elite::SUN_HEAP_ADDRESS);
+
+        universe.flight.delta = item.delta;
+        universe.flight.mainLoopCounter = 0u;
+        universe.flight.alpha = 0u;
+        universe.flight.alp2Next = 0u;
+        universe.flight.bet2 = 0u;
+        universe.flight.bet2Next = 0u;
+
+        const std::wstring where = WidenText(std::string("ISDK (") + item.what + ")");
+        const Elite::LoopOutcome outcome = CompareFrames(frame, oracle, at, loop, where, Reach::Ships);
+
+        Assert::AreEqual<int>(static_cast<int>(item.exit), static_cast<int>(outcome), (where + L": the exit part 9 chose").c_str());
+
+        docked += (outcome == Elite::LoopOutcome::Docked) ? 1u : 0u;
+        died += (outcome == Elite::LoopOutcome::Died) ? 1u : 0u;
+        bumped += (outcome == Elite::LoopOutcome::Continued) ? 1u : 0u;
+      }
+
+      Assert::IsTrue(docked > 0u, L"GOIN was reached");
+      Assert::IsTrue(died > 0u, L"MA62's JMP DEATH was taken");
+      Assert::IsTrue(bumped > 0u, L"MA62's MA67 was taken");
+
+      Logger::WriteMessage(("\nISDK: " + std::to_string(CASES.size()) + " approaches compared, " + std::to_string(docked) +
+                            " docked, " + std::to_string(died) + " fatal, " + std::to_string(bumped) + " a survivable bump\n")
+                             .c_str());
     }
   };
 
@@ -2410,6 +2554,260 @@ namespace GameLogicTests
                                                            L" cycles, which is outside the range "
                                                            L"Outpost::FLIGHT_FRAME_COSTS was derived from")
                                                             .c_str());
+      }
+    }
+
+    /*
+     * The crowded end of the range, measured while the interpreter is still in the tree
+     * (InputTimer.md T-0, 2026-09-08).
+     *
+     * §6.114's three scenes had no planet in them and stopped at two ships, because `Seed`'s station
+     * -- a random block -- never returned from its own thinking. This one builds its bubbles by hand:
+     * the planet at a high byte of 0x20, the sun at 0x60 or a SANE station at 0x08 dead ahead, and
+     * fighters straight ahead at 0x0C, which draws them as small wireframes of four lines. A sane
+     * station returns in under a hundred thousand cycles, so the excuse is gone.
+     *
+     * TWO FRAMES ARE RUN AND THE SECOND IS THE MEASUREMENT. The first frame draws every body onto a
+     * clean screen; the second draws AND erases, which is what every frame after it does, and a
+     * scene with the sun in it costs twice as much the first time round. `Outpost::FLIGHT_FRAME_COSTS`
+     * carries the midpoint of the sun and station rows at each count, and the numbers here are the
+     * measurement it was read from; the bounds asserted are wide, for §6.110's reason.
+     */
+    TEST_METHOD(TheCrowdedFrameCostsWhatItCosts)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      struct Scene
+      {
+        const char* what;
+        std::uint8_t fighters; ///< straight ahead at 0x0C and on, one slot each
+        std::uint8_t second;   ///< 129 for the sun at 0x60, 2 for the station at 0x08, 0 for neither
+        std::uint8_t ai;       ///< INWK+32 for the fighters and the station
+        std::uint32_t atLeast; ///< the band the recorded number sits in
+        std::uint32_t atMost;
+      };
+
+      const Scene SCENES[] = {
+        {"planet alone", 0u, 0u, 0u, 15'000u, 60'000u},
+        {"planet and sun", 0u, 129u, 0u, 60'000u, 160'000u},
+        {"planet and station", 0u, 2u, 0x80u, 40'000u, 120'000u},
+        {"planet, sun, three fighters", 3u, 129u, 0u, 100'000u, 260'000u},
+        {"planet, station, three fighters, AI", 3u, 2u, 0x80u, 90'000u, 230'000u},
+        {"planet, sun, eight fighters", 8u, 129u, 0u, 200'000u, 480'000u},
+        {"planet, station, eight fighters, AI", 8u, 2u, 0x80u, 180'000u, 450'000u},
+      };
+
+      // The pack hunters and the two Cobras -- a real fight's cast, one blueprint each.
+      const std::uint8_t FIGHTERS[] = {17u, 18u, 19u, 20u, 11u, 16u, 24u, 17u};
+
+      for (const Scene& scene : SCENES)
+      {
+        Frame frame(0x51u);
+        Universe& universe = frame.universe;
+
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
+        {
+          universe.bubble.slots[slot] = 0u;
+        }
+        for (std::size_t type = 0; type < universe.bubble.counts.size(); ++type)
+        {
+          universe.bubble.counts[type] = 0u;
+        }
+        universe.bubble.junk = 0u;
+
+        std::uint16_t nextHeap = Elite::LineHeap::TOP;
+        std::size_t slot = 0;
+
+        // One body, zeroed and placed: `PopulateBubble`'s recipe with the position as an argument,
+        // because the sun and the station want different distances from the fighters.
+        auto place = [&](std::uint8_t _type, std::uint8_t _ai, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z)
+        {
+          universe.bubble.slots[slot] = _type;
+          if (_type < 34u)
+          {
+            ++universe.bubble.counts[_type];
+          }
+          Elite::Ship& block = universe.bubble.blocks[slot];
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> bytes = block.ToBytes();
+          for (std::uint8_t& byte : bytes)
+          {
+            byte = 0u;
+          }
+          block = Elite::Ship::FromBytes(bytes);
+          block.x.hi = _x;
+          block.y.hi = _y;
+          block.z.hi = _z;
+          block.nose.z.hi = 20u;
+          block.speed = 20u;
+          block.ai = _ai;
+          block.energy = 60u;
+          if (_type == 2u)
+          {
+            // 6502: NWSPS -- the station draws through the sun's heap (§6.112).
+            block.heap = Elite::HeapOffset::FromAddress(Elite::SUN_HEAP_ADDRESS);
+          }
+          else if (_type < 34u)
+          {
+            nextHeap = static_cast<std::uint16_t>(nextHeap - Elite::BlueprintOf(static_cast<Elite::ShipType>(_type))->heapBytes);
+            block.heap = Elite::HeapOffset::FromAddress(nextHeap);
+          }
+          ++slot;
+        };
+
+        place(128u, 0u, 0x20u, 0x20u, 0x20u);
+        if (scene.second == 129u)
+        {
+          place(129u, 0u, 0x60u, 0x60u, 0x60u);
+        }
+        else if (scene.second == 2u)
+        {
+          place(2u, scene.ai, 0u, 0u, 0x08u);
+        }
+        for (std::uint8_t fighter = 0; fighter < scene.fighters; ++fighter)
+        {
+          place(FIGHTERS[fighter], scene.ai, 0u, 0u, static_cast<std::uint8_t>(0x0Cu + fighter));
+        }
+        universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(nextHeap);
+        universe.flight.mainLoopCounter = 10u;
+        universe.status.midJump = 0u;
+        universe.status.energy = 200u;
+        universe.view = 0u;
+
+        Cpu6502 cpu = oracle.Fresh();
+        const std::uint16_t EXITS[] = {loop.death, loop.doentry, loop.escape};
+        for (const std::uint16_t exit : EXITS)
+        {
+          const std::uint8_t leave[] = {0x4Cu, 0xF9u, 0xFFu};
+          cpu.Load(exit, leave, sizeof(leave));
+        }
+        cpu.AddTrap(loop.dovdu19); // sound only: everything that draws or thinks runs for real
+
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
+        MirrorFrame(frame, cpu, at, loop);
+        for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
+        {
+          cpu.memory[address] = universe.heap.Read(Elite::HeapOffset::FromAddress(address));
+        }
+        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() >> 8);
+
+        std::uint64_t first = 0;
+        std::uint64_t second = 0;
+        for (int pass = 0; pass < 2; ++pass)
+        {
+          const std::uint64_t before = cpu.cycles;
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(loop.mainLoop, 60'000'000);
+          Assert::IsTrue(run.completed, WidenText(std::string("M% returned for ") + scene.what).c_str());
+          (pass == 0 ? first : second) = cpu.cycles - before;
+        }
+
+        Logger::WriteMessage((std::string("flight frame, ") + scene.what + ": " + std::to_string(slot) + " slots, " + std::to_string(first) +
+                              " cycles the first time and " + std::to_string(second) + " the second, " +
+                              std::to_string(1022727.0 / static_cast<double>(second)) + " frames a second")
+                               .c_str());
+
+        Assert::IsTrue(second >= scene.atLeast && second <= scene.atMost,
+                       (WidenText(scene.what) + L" cost " + std::to_wstring(second) + L" cycles, outside the band Outpost::FLIGHT_FRAME_COSTS was read from")
+                         .c_str());
+      }
+    }
+
+    /*
+     * The docked pass -- `MLOOP` with `QQ12` set -- measured for the same reason and at the same
+     * moment (InputTimer.md T-0). The port paced it at the flight frame's empty-bubble cost, which
+     * was a stand-in; this is the number, and it is small: the pass is two vertical syncs of
+     * waiting (`LDY #2 / JSR DELAY`, unless `PATG` says otherwise) and a few thousand cycles of
+     * everything else. `DELAY` and `WSCAN` are trapped, because the oracle has no raster to wait
+     * on; what is timed is the work between the waits.
+     *
+     * The run starts three bytes in, past `LDX #&FF / TXS`: the loop resets the stack because six
+     * paths reach it by `JMP`, and a stack reset is what `CallSubroutine` reads as a return. It ends
+     * at `FRCE`'s `JMP MLOOP`, patched into the stop -- three bytes for the `JSR`, two for the
+     * zero-page `LDA QQ12`, two for the `BEQ`, so the jump is at +7.
+     */
+    TEST_METHOD(TheDockedPassCostsWhatItCosts)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+      const std::uint16_t mloop = oracle.Label("MLOOP");
+      const std::uint16_t frce = oracle.Label("FRCE");
+      const std::uint16_t qq12 = oracle.Label("QQ12");
+      const std::uint16_t qq11 = oracle.Label("QQ11");
+      const std::uint16_t qq22 = oracle.Label("QQ22");
+      const std::uint16_t tribble = oracle.Label("TRIBBLE");
+
+      struct Scene
+      {
+        const char* what;
+        std::uint8_t view;
+        bool trumbles;
+        bool cursor; ///< the cursor-right key held, which on a chart reaches `TT16`
+      };
+
+      const Scene SCENES[] = {
+        {"status screen, no key", 0xFFu, false, false},
+        {"status screen, Trumbles aboard", 0xFFu, true, false},
+        {"long-range chart, no key", Elite::LONG_RANGE_CHART_VIEW, false, false},
+        {"long-range chart, cursor held", Elite::LONG_RANGE_CHART_VIEW, false, true},
+        {"short-range chart, cursor held", Elite::SHORT_RANGE_CHART_VIEW, false, true},
+      };
+
+      for (const Scene& scene : SCENES)
+      {
+        Frame frame(0x61u);
+        Universe& universe = frame.universe;
+        universe.view = scene.view;
+        universe.dockedFlag = 0xFFu;
+        universe.status.hyperspaceCountdown = 0u;
+        universe.commander.tribbles.lo = scene.trumbles ? 0x40u : 0u;
+        universe.commander.tribbles.hi = scene.trumbles ? 0x21u : 0u;
+
+        Cpu6502 cpu = oracle.Fresh();
+        const std::uint8_t leave[] = {0x4Cu, 0xF9u, 0xFFu};
+        cpu.Load(static_cast<std::uint16_t>(frce + 7u), leave, sizeof(leave));
+        cpu.AddTrap(loop.dovdu19);
+        cpu.AddTrap(oracle.Label("DELAY"));
+        cpu.AddTrap(oracle.Label("WSCAN"));
+
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
+        MirrorFrame(frame, cpu, at, loop);
+        cpu.memory[qq12] = 0xFFu;
+        cpu.memory[qq11] = scene.view;
+        cpu.memory[static_cast<std::uint16_t>(qq22 + 1u)] = 0u;
+        cpu.memory[tribble] = universe.commander.tribbles.lo;
+        cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = universe.commander.tribbles.hi;
+        if (scene.cursor)
+        {
+          // RDKEY walks X from &40 down, eight rows a column: key k is column (64-k)/8, row (64-k)%8.
+          cpu.HoldKey(static_cast<std::uint8_t>((64u - Elite::KEY_CURSOR_X) / 8u), static_cast<std::uint8_t>((64u - Elite::KEY_CURSOR_X) % 8u));
+        }
+
+        const std::uint64_t before = cpu.cycles;
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(static_cast<std::uint16_t>(mloop + 3u), 20'000'000);
+        Assert::IsTrue(run.completed, WidenText(std::string("MLOOP came round for ") + scene.what).c_str());
+        const std::uint64_t cost = cpu.cycles - before;
+
+        Logger::WriteMessage((std::string("docked pass, ") + scene.what + ": " + std::to_string(cost) + " cycles between the syncs").c_str());
+
+        // A few thousand cycles: the pass is its waits, and this is what Outpost::DOCKED_PASS_CYCLES holds.
+        Assert::IsTrue(cost >= 1'000u && cost <= 20'000u,
+                       (WidenText(scene.what) + L" cost " + std::to_wstring(cost) + L" cycles, outside the band Outpost::DOCKED_PASS_CYCLES was read from")
+                         .c_str());
       }
     }
   };

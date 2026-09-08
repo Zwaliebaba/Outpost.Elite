@@ -387,7 +387,9 @@ namespace Elite
 
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
                       _universe.status, _universe.commander.fuel, _universe.compass, _universe.video, _universe.memoryMap,
-                      _universe.view); // 6502: JSR TTX66K
+                      _universe.view, &_universe.picture); // 6502: JSR TTX66K -- Resolution.md §4, rule T3:
+                                                           // the wipe has to reach the index plane too, or a
+                                                           // screen change leaves the last one's lines behind.
 
     // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change
     // and is reprinted, because the screen it was on has just been wiped.

@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->460 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->469 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -896,7 +896,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->460 tests with the oracle present, all passing, and all
+<!--count:tests-->469 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -980,7 +980,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->460 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->469 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -1033,7 +1033,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->460 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->469 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1360,7 +1360,7 @@ reason, and the replay digest is unchanged.
 
 **Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
 cannot write one parameter's default in terms of another. Every screen without a table of its own
-still gets exactly what it got before, which is why 454 of the 460 tests did not move.
+still gets exactly what it got before, which is why 454 of the 469 tests did not move.
 
 **The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
 row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
@@ -1500,3 +1500,33 @@ so a differently-named chart is a differently-DRAWN one. Half a name a chart is 
 
 **Fourth decline of the track**, after `Divide512`, the compass bit and `wrapWidth` — and the first
 where the measurement was of the GAME rather than of the arithmetic.
+
+### RS-5-f — the frame, which made four green screens red, 2026-09-08
+
+**`main` moved under this branch, and the merge was where the constraint appeared.** M6-a's work
+gave `TTX66K` the picture, so a screen change now wipes the wide surface and draws the border on it
+— which is right, and is rule T3 applied to a routine this track had not twinned. It also means the
+wide surface has a FRAME on it for the first time, and four of the five re-flowed screens were
+drawing text underneath it.
+
+**The interior is 8 to 71, measured.** The border fills wide columns 0 to 6 and 73 to 79 with colour
+band and puts its vertical rules on 7 and 72. Sixty-four columns — exactly twice the thirty-two the
+canvas gives `CHPR`, which is the arithmetic that makes the two-column screens work at all: one
+column of text at `columnOffset = 4` occupies 8 to 39 and leaves 40 to 71 for a second, which is why
+every two-column table here anchors its right-hand block to wide column 36.
+
+**Every table moved right by four and every right-hand block moved left by six**, and the design's
+numbers in §6.3 with them. Nothing about the arrangement changed; the screens are the ones the owner
+accepted, inside the frame instead of over it.
+
+**§8.1 gains a fifth clause and the third loses eight columns.** The new one is that no table may put
+a glyph outside 8..71, checked over every layout in the tree — the property that would have caught
+this the moment the border landed rather than four tests later. The collision sweep now runs over the
+32 cells `CHPR` can write rather than all 40, because the eight margin cells carry the frame and can
+never hold a glyph: sweeping them turned two-column tables into an impossible packing — two
+40-column images do not fit in a 64-column interior — for cells that cannot collide.
+
+**The lesson is the same one RS-5-d taught, one level up.** That slice found a test that could not
+see a sheared word; this one found a test that could not see a screen printed under its own border.
+Both times the missing clause was about something the shadow test's cell-by-cell view has no word
+for, and both times the fix was to say the property out loud.

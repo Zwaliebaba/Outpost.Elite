@@ -32,7 +32,7 @@ namespace Elite
    */
 
   /*
-   * 6502: MUTOK, MUFOR, MUDOCK and MUSILLY -- the four music options the pause screen toggles.
+   * 6502: MUTOK, MUFOR, MUDOCK and MUSILLY -- the four music options the pause screen toggled.
    *
    * All four are bit 7 flags (`BIT` and `BMI`), and two read backwards: `MUTOK` set means the
    * docking music is OFF, `MUFOR` set means it is FORCED on and cannot be stopped -- `stopbd` jumps
@@ -40,7 +40,8 @@ namespace Elite
    * docking computer engages, and `MUSILLY` set lets sound effects play while music plays; clear,
    * which is how the game boots, the effect player is skipped while the music runs.
    *
-   * The pause screen that toggles them is slice 4e's; these are the bytes it will toggle.
+   * The pause screen that toggled them was slice 4e's and was removed on 2026-09-08 (InputTimer.md
+   * I-0); the executable's settings file sets them at start-up instead.
    */
   struct MusicOptions
   {
