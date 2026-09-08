@@ -23,20 +23,20 @@ namespace Elite
    *
    * THE FALL-THROUGHS ARE THE STRUCTURE, again. `hyp1` ends `STA gov` and continues into `GVL`, so
    * arriving somewhere generates that system's market as part of the same routine; `Ghy` ends
-   * `JSR MESS` and continues into `jmp`; and `TT18` ends `INC QQ11` and continues into `TT110`,
-   * which is the launch. None of the three is a call.
+   * by printing a message and continues into `jmp`; and `TT18` ends by stepping the view and
+   * continues into `TT110`, which is the launch. None of the three is a call.
    */
 
   /*
    * 6502: hyp1 -- arrive at the selected system, and fall into `GVL` to stock its market.
    *
    * `_findNearest` is the difference between the two entry points the game uses. `hyp1` opens
-   * `JSR TT111`, which puts the system nearest the crosshairs into `QQ15`; `TT18` jumps to
+   * by calling `TT111`, which puts the system nearest the crosshairs into `QQ15`; `TT18` jumps to
    * `hyp1+3`, three bytes past it, because the chart has already chosen and calling it again would
    * pick the same system a second time for nothing. Two entries into one routine, distinguished by
    * a flag rather than by a second function, because there is only one routine.
    *
-   * `STX EV` with X zero is the encounter counter reset -- arriving somewhere new means the
+   * `EV` IS ZEROED here -- the encounter counter reset, so arriving somewhere new means the
    * spawner (slice 4c-a) starts its rate limit again.
    */
   /*
@@ -62,23 +62,25 @@ namespace Elite
   /*
    * 6502: MJP -- witchspace, which is a jump that did not arrive.
    *
-   * `LDA #3 / JSR TT66` clears to the space view, `LL164` draws the tunnel, `RES2` resets the
-   * bubble, and then `STY MJ` sets the flag that stops the spawner and refuses the fuel scoop.
+   * `TT66` clears to the space view, `LL164` draws the tunnel, `RES2` resets the bubble, and then
+   * `MJ` is set from Y -- the flag that stops the spawner and refuses the fuel scoop.
    * **Y is whatever `RES2` left**, not a value this routine chose -- so the port passes the byte
    * rather than assuming a 1, and the oracle is what says which it is.
    *
-   * `MJP1` spawns Thargoid pairs until there are more than three of them, and the `LDA #3` it
+   * `MJP1` spawns Thargoid pairs until there are more than three of them, and the THREE it
    * compares against is then stored into `NOSTM`: witchspace has three specks of dust instead of
    * the usual eighteen, and the constant is shared between the two on purpose.
    */
   void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander) noexcept;
 
   /*
-   * 6502: ptg -- `LSR COK / SEC / ROL COK`, and then it FALLS INTO `MJP`.
+   * 6502: ptg -- `COK` shifted right, the carry set, and `COK` rotated back left, and then it
+   * FALLS INTO `MJP`.
    *
-   * That is `ORA #1` and not a rotate: the `LSR` and the `ROL` cancel, the `SEC` forces bit 0, and
-   * bit 7 survives because the `LSR` shifted it down and the `ROL` shifted it back. The same shape
-   * as the `ASL / SEC / ROR` that §6.126 found mis-ported twice, one bit the other way round.
+   * That is an OR WITH 1 and not a rotate: the shift and the rotate cancel, the set carry forces
+   * bit 0, and bit 7 survives because the shift moved it down and the rotate moved it back. The
+   * same shape as the shift-left/set/rotate-right that §6.126 found mis-ported twice, one bit the
+   * other way round.
    *
    * `COK` is the competition flags byte, so holding the configuration key through a jump is
    * recorded in the commander file for ever.
@@ -88,50 +90,51 @@ namespace Elite
   /*
    * What `TT18` did, which the original says by WHERE IT ENDS UP -- and that is four places.
    *
-   * Three of them look alike from inside the routine and are not. `BNE RTS111` returns having
-   * drawn nothing; `BNE TT114` JUMPS OUT to redraw the chart, which is a different screen's job
-   * and not a return at all; and the fall-through past `INC QQ11` is the launch. The port had the
-   * first two as one outcome and the oracle disagreed about the generator on the short-range
-   * chart, because the original had gone off to draw it.
+   * Three of them look alike from inside the routine and are not. The branch to `RTS111` returns
+   * having drawn nothing; the branch to `TT114` JUMPS OUT to redraw the chart, which is a
+   * different screen's job and not a return at all; and the fall-through past `INC QQ11` is the
+   * launch. The port had the first two as one outcome and the oracle disagreed about the generator
+   * on the short-range chart, because the original had gone off to draw it.
    */
   enum class JumpResult : std::uint8_t
   {
     Arrived,     ///< 6502: the fall-through into `TT110` -- the caller launches
-    Witchspace,  ///< 6502: BCS MJP -- three bytes in 256 miss the system
-    NoRedraw,    ///< 6502: BNE RTS111 -- the view's low six bits are set, so nothing is drawn
-    RedrawChart, ///< 6502: BNE TT114 -- a chart is up, and the caller redraws it
+    Witchspace,  ///< 6502: the branch to `MJP` -- three bytes in 256 miss the system
+    NoRedraw,    ///< 6502: the branch to `RTS111` -- the view's low six bits are set, nothing drawn
+    RedrawChart, ///< 6502: the branch to `TT114` -- a chart is up, and the caller redraws it
   };
 
   /*
    * 6502: TT18 -- spend the fuel and go, and it is the whole jump.
    *
-   * `LDA QQ14 / SEC / SBC QQ8 / BCS P%+4 / LDA #0 / STA QQ14`: the fuel minus the distance, and
-   * `BCS P%+4` steps over the two-byte `LDA #0`, so a jump that costs more than you have leaves
-   * you with none rather than with a wrapped byte. The check that it is affordable happened in
-   * `hyp` (slice 2d); this is the arithmetic.
+   * The fuel minus the distance, and the carry branch steps over a two-byte load of zero, so a
+   * jump that costs more than you have leaves you with none rather than with a wrapped byte. The
+   * check that it is affordable happened in `hyp` (slice 2d); this is the arithmetic.
    *
-   * `JSR CTRL / AND PATG / BMI ptg` is the cheat: holding the key with the configuration option on
-   * forces witchspace. Then one roll in 256 -- `CMP #253 / BCS MJP` -- does it anyway.
+   * The keyboard read masked with `PATG` is the cheat: holding the key with the configuration
+   * option on forces witchspace. Then a random byte of 253 or more -- THREE in 256, not one --
+   * does it anyway.
    */
   [[nodiscard]] JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump,
                                        SystemData& _described, MarketState& _market, 
                                        std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld,
-                                       bool _patg) noexcept;
+                                       bool _authorNames) noexcept;
 
   /*
    * 6502: Ghy -- the galactic hyperdrive, which moves you a galaxy on and forgets your crimes.
    *
-   * `LDX GHYP / BEQ zZ+1` is the one to read twice. `zZ` is `LDA #96`, which assembles as `A9 60`,
-   * so `zZ+1` is the OPERAND -- and &60 is `RTS`. With no drive fitted the branch jumps into the
-   * middle of an instruction and executes its argument as a return. §6.121's rule about idioms
-   * that look like something else, in its purest form: there is no code at `zZ+1`.
+   * The branch taken when no drive is fitted is the one to read twice: it goes to `zZ+1`. `zZ` is a
+   * TWO-BYTE instruction that loads 96 into the accumulator, so `zZ+1` addresses its operand -- and
+   * 96 is &60, which is also the opcode for `RTS`. With no drive fitted the branch jumps into the
+   * middle of an instruction and executes its argument as a return. §6.121's rule about idioms that
+   * look like something else, in its purest form: there is no code at `zZ+1`.
    *
-   * `INX / STX GHYP / STX FIST` is why the drive is single-use and why it cleans your record: X was
-   * 255 and becomes 0, and the same zero goes into both bytes.
+   * X STEPPED FROM 255 TO 0 AND STORED TWICE is why the drive is single-use and why it cleans your
+   * record: the same zero goes into `GHYP` and into `FIST`.
    *
-   * `.G1 LDA QQ21,X / ASL A / ROL QQ21,X` rotates each of the galaxy's six seed bytes left by one
-   * -- the `ASL A` is there only to put bit 7 in the carry so the `ROL` on MEMORY can bring it back
-   * round into bit 0. Two instructions to rotate a byte the 6502 cannot rotate in place.
+   * `G1` rotates each of the galaxy's six seed bytes left by one -- the shift in the accumulator is
+   * there only to put bit 7 in the carry so the rotate ON MEMORY can bring it back round into bit
+   * 0. Two instructions to rotate a byte the 6502 cannot rotate in place.
    */
   void GalacticJump(Universe& _universe, Ports& _ports, SystemSeeds& _galaxy, SystemSeeds& _selected, JumpState& _jump,
                     ChartView& _chart) noexcept;

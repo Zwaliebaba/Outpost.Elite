@@ -211,7 +211,7 @@ namespace GameLogicTests
       const std::uint16_t tp = oracle.Label("TP");
       const std::uint16_t na = oracle.Label("NA%");
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t k = oracle.Label("K");
+      const std::uint16_t zeroPageK = oracle.Label("K");
       const std::uint16_t svc = oracle.Label("SVC");
 
       static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> NAME = {'B', 'E', 'L', 'L', 13, 0, 0, 0};
@@ -290,7 +290,7 @@ namespace GameLogicTests
         // 6502: K to K+3 -- the competition number, in the order the stores left them.
         for (std::size_t index = 0; index < 4; ++index)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k + index)], outcome.competition.value[index],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(zeroPageK + index)], outcome.competition.value[index],
                            (where + L": competition byte " + std::to_wstring(index)).c_str());
         }
 
@@ -598,7 +598,7 @@ namespace GameLogicTests
       const std::uint16_t tp = _oracle.Label("TP");
       const std::uint16_t disk = _oracle.Label("DISK");
       const std::uint16_t bprnt = _oracle.Label("BPRNT");
-      const std::uint16_t k = _oracle.Label("K");
+      const std::uint16_t zeroPageK = _oracle.Label("K");
 
       cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
       // The seams: two of them are the C64's own hardware waits, and the rest are the control-code
@@ -689,7 +689,7 @@ namespace GameLogicTests
         {
           for (std::size_t index = 0; index < run.competition.size(); ++index)
           {
-            run.competition[index] = cpu.memory[static_cast<std::uint16_t>(k + index)];
+            run.competition[index] = cpu.memory[static_cast<std::uint16_t>(zeroPageK + index)];
           }
         }
 

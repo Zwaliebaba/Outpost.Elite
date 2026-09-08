@@ -17,7 +17,11 @@
     "                before any mutant is applied. A filter that selects the wrong tests reports",
     "                survivors for code it never ran, which is worse than no filter at all --",
     "                `hyperspace` was recorded as \"Hyperspace\" and matched three tests in other",
-    "                files whose method names contain the word (plan section 6.147)",
+    "                files whose method names contain the word (plan section 6.147). The number",
+    "                is a tripwire on the SELECTION, and the two directions do",
+    "                not mean the same thing: a RISE is normally tests that did not exist when the",
+    "                number was written, and is re-based here with the reason in the unit's note; a",
+    "                FALL is a filter that has stopped reaching its own class, and is a bug",
     "  mutant.id     the name the plan uses for it, where the plan named one",
     "  mutant.find   text that must appear EXACTLY ONCE in the file; the run fails loudly if not,",
     "                because a mutant that silently applied nowhere is a mutant reported as caught",
@@ -239,10 +243,10 @@
         {
           "id": "hyp-ctrl-and",
           "file": "GameLogic/Hyperspace.cpp",
-          "find": "if (_controlHeld && _patg)",
-          "replace": "if (_controlHeld || _patg)",
+          "find": "if (_controlHeld && _authorNames)",
+          "replace": "if (_controlHeld || _authorNames)",
           "expect": "caught",
-          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option. Survived because the sweep passed false for both and `&&` and `||` agree there. The test's own comment said the oracle could not answer `CTRL`; `CTRL` is `LDX #6` falling into `DKS4`, which on the C64 is `LDA KEYLOOK,X / TAX / RTS` over ordinary memory. All four combinations are a dimension of the sweep now (plan section 6.156)."
+          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option. Survived because the sweep passed false for both and `&&` and `||` agree there. The test's own comment said the oracle could not answer `CTRL`; `CTRL` is `LDX #6` falling into `DKS4`, which on the C64 is `LDA KEYLOOK,X / TAX / RTS` over ordinary memory. All four combinations are a dimension of the sweep now (plan section 6.156). Re-anchored at M6-c-5, when `PATG` became `authorNames`."
         },
         {
           "id": "hyp-fuel-zero",
@@ -260,7 +264,7 @@
       "filter": [
         "TheTrumbles"
       ],
-      "tests": 8,
+      "tests": 9,
       "note": [
         "MVTRIBS and the six Trumble sprites (plan section 6.148). Ten mutants, written with the",
         "slice rather than reconstructed from a name, so this unit is a measurement from its first",
@@ -287,7 +291,13 @@
         "`VideoState` gives each sprite a whole sixteen-bit x, so the pair of masks that clear and",
         "set one sprite's bit in a shared register have nothing to mask -- and `tr-spritebit` and",
         "`tr-msb-or` went with it. `tr-sprite-index` and `tr-ninth-bit` cover the store that",
-        "replaced them."
+        "replaced them.",
+        "",
+        "THE COUNT WENT 8 -> 9 (M6-d-17). A filter is a substring of the whole `Suite.Method` name, so",
+        "this one also selects two tests outside the class by their METHOD names, and the second of",
+        "them -- `TheGameObject.ADockedPassBreedsTheTrumblesAndAsksForItsSyncs` -- arrived with T-2 on",
+        "the main track. It breeds trumbles, so the surplus is coverage rather than the `hyperspace`",
+        "mistake happening again."
       ],
       "mutants": [
         {
@@ -388,7 +398,7 @@
         "TheMissionText",
         "TheMissions"
       ],
-      "tests": 9,
+      "tests": 12,
       "note": [
         "The four control codes a mission briefing is made of (plan section 6.149).",
         "",
@@ -405,7 +415,10 @@
         "",
         "SECOND RUN, 2026-09-05, with 4d-c's thirteen added: 25 mutants, 22 caught, 3 survived, and all",
         "three are recorded equivalents. `mi-mt9-view` became one: it was written as a defect and the",
-        "run proved the defect had no effect, because `TT66` writes the same `XC` twice on its own."
+        "run proved the defect had no effect, because `TT66` writes the same `XC` twice on its own.",
+        "",
+        "THE COUNT WENT 9 -> 12 (M6-d-17): `TheMissionText` grew from six tests to nine after the nine",
+        "was recorded. The three in `TheMissions` were counted then and are counted now."
       ],
       "mutants": [
         {
@@ -508,10 +521,10 @@
         {
           "id": "mi-tp-set",
           "file": "GameLogic/Missions.cpp",
-          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS",
-          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: BRIS",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: BRIS",
           "expect": "caught",
-          "note": "`LSR TP / SEC / ROL TP` sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not."
+          "note": "The shift-set-rotate trio sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
         {
           "id": "mi-brief3-and",
@@ -580,10 +593,10 @@
         {
           "id": "mi-second-inc",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
-          "replace": "      // 6502: LDX INWK+3",
+          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: the ship climbs one row a frame",
+          "replace": "      // 6502: the ship climbs one row a frame",
           "expect": "caught",
-          "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
+          "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
         {
           "id": "mi-height-clamp",
@@ -596,10 +609,10 @@
         {
           "id": "mi-dead-counter",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: .BR2 INC INWK+7",
-          "replace": "    }\n\n    // 6502: .BR2 INC INWK+7",
+          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: BR2 -- the high byte follows",
+          "replace": "    }\n\n    // 6502: BR2 -- the high byte follows",
           "expect": "caught",
-          "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows."
+          "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
         {
           "id": "mi-inwk7",
@@ -717,12 +730,15 @@
         "TheFlightFrameShips",
         "TheTacticsVectors"
       ],
-      "tests": 17,
+      "tests": 18,
       "note": [
         "The EE55 cloud seeding, the carries it reads and the two defects the tightened comparison",
         "found beside it (plan section 6.157). Every decision here is a flag: which carry the first",
         "DORND rolls in, what the other three get, what EE51 leaves, what ANGRY leaves, what the",
-        "scooped canister's roll gets. Each mutant flips one and names the oracle test that sees it."
+        "scooped canister's roll gets. Each mutant flips one and names the oracle test that sees it.",
+        "",
+        "THE COUNT WENT 17 -> 18 (M6-d-17): M6-a-1 added `TheFlightFrameShips.TheDockingChecksMatchISDK`",
+        "while closing the fourth coverage gap."
       ],
       "mutants": [
         {
@@ -777,8 +793,8 @@
         {
           "id": "cs-ll9-carry-hit",
           "file": "GameLogic/FlightLoop.cpp",
-          "find": "carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
-          "replace": "carry = false; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
+          "find": "carry = true; // 6502: the flag `HITCH` sets, which nothing on the way to `MA47` touches",
+          "replace": "carry = false; // 6502: the flag `HITCH` sets, which nothing on the way to `MA47` touches",
           "expect": "caught",
           "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'in the sights, already dead' is that ship, and its RAND is compared -- 'on top of us' is not, because MVEIT takes the player's speed off z before HITCH looks, and the generator was not compared by the frame tests until this mutant survived (2026-09-06)."
         }
@@ -845,35 +861,35 @@
         {
           "id": "ar-selftest",
           "file": "GameLogic/Arith.cpp",
-          "find": "    for (int step = 0; step < 8; ++step)\n    {\n      ShiftAndAddStep(a, low, t, carry);",
-          "replace": "    for (int step = 0; step < 7; ++step)\n    {\n      ShiftAndAddStep(a, low, t, carry);",
+          "find": "    for (int step = 0; step < 8; ++step)\n    {\n      ShiftAndAddStep(a, low, decrementedMultiplier, carry);",
+          "replace": "    for (int step = 0; step < 7; ++step)\n    {\n      ShiftAndAddStep(a, low, decrementedMultiplier, carry);",
           "expect": "caught",
-          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Seven shift-and-add steps instead of eight leaves every product a bit short, and the exhaustive MULTU sweep cannot miss it. Keep it first.",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Seven shift-and-add steps instead of eight leaves every product a bit short, and the exhaustive MULTU sweep cannot miss it. Keep it first. Re-anchored at M6-c-7, when the kernel's scratch letters took names.",
           "selftest": true
         },
         {
           "id": "ar-mu1-clc",
           "file": "GameLogic/Arith.cpp",
-          "find": "      // overflow to the caller below it.\n      return Product{0, 0, false};",
-          "replace": "      // overflow to the caller below it.\n      return Product{0, 0, true};",
+          "find": "      // drops, and it is what stops a zero multiply looking like an overflow to the caller below.\n      return Product{0, 0, false};",
+          "replace": "      // drops, and it is what stops a zero multiply looking like an overflow to the caller below.\n      return Product{0, 0, true};",
           "expect": "caught",
           "note": "`MU1` is `CLC / STX P / TXA / RTS`: a zero multiplier clears the carry as well as both halves. Would have hidden: a zero multiply reading as an overflow to the three callers that take the carry before setting it."
         },
         {
           "id": "ar-add-carry",
           "file": "GameLogic/Arith.cpp",
-          "find": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, high.carry};",
-          "replace": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, false};",
+          "find": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | valueSign), low.value, high.carry};",
+          "replace": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | valueSign), low.value, false};",
           "expect": "caught",
-          "note": "`ADD`'s same-sign path leaves the carry `ADC T1` produced and `ORA T` does not touch it. Would have hidden: a caller whose next `ADC` runs on the addition's carry getting a clean one instead."
+          "note": "`ADD`'s same-sign path leaves the carry `ADC T1` produced and `ORA T` does not touch it. Would have hidden: a caller whose next `ADC` runs on the addition's carry getting a clean one instead. Re-anchored at M6-c-7, when the kernel's scratch letters took names."
         },
         {
           "id": "ar-ll5-carry",
           "file": "GameLogic/Arith.cpp",
-          "find": "    return Root{q, exitCarry};",
-          "replace": "    return Root{q, false};",
+          "find": "    return Root{root, exitCarry};",
+          "replace": "    return Root{root, false};",
           "expect": "caught",
-          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit."
+          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit. Re-anchored at M6-c-7, when the kernel's scratch letters took names. M6-c-7 re-anchored the `find` and left the `replace` naming `q`, so the mutant stopped compiling instead of running; M6-d-17 finished the job, which is the first full harness run since."
         }
       ]
     },
@@ -907,18 +923,18 @@
         {
           "id": "sm-mv43-sense",
           "file": "GameLogic/ShipMove.cpp",
-          "find": "    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) != 0u)",
-          "replace": "    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) == 0u)",
+          "find": "    if (((rolledY.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) != 0u)",
+          "replace": "    if (((rolledY.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) == 0u)",
           "expect": "caught",
-          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found."
+          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found. Re-anchored at M6-c-4, when `BET2` became `pitchSign`. Re-anchored at M6-c-9, when `MoveShip`'s `K2` became `rolledY`."
         },
         {
           "id": "sm-mltu2-carry",
           "file": "GameLogic/ShipMove.cpp",
-          "find": "      AddResult sum = AddWithCarry(wide.mid, k2.lo, wide.carry);",
-          "replace": "      AddResult sum = AddWithCarry(wide.mid, k2.lo, false);",
+          "find": "      AddResult sum = AddWithCarry(wide.mid, rolledY.lo, wide.carry);",
+          "replace": "      AddResult sum = AddWithCarry(wide.mid, rolledY.lo, false);",
           "expect": "equivalent",
-          "note": "EQUIVALENT, AND PROVABLY SO. `LDA P+1 / ADC K2+1` has no `CLC` and runs on the carry `MLTU2` left -- but that carry is ALWAYS CLEAR. `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero, and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one; `WideMultiplyMatchesOverASweep` counts the carries the shipped routine leaves over 150,000 samples and asserts the count is zero. The mutant replaces a flag that is never set with `false`, so it survives, and the ADC-without-CLC the port reproduces is safe for a reason rather than by luck. First run 2026-09-07: survived, as an equivalent must."
+          "note": "EQUIVALENT, AND PROVABLY SO. `LDA P+1 / ADC K2+1` has no `CLC` and runs on the carry `MLTU2` left -- but that carry is ALWAYS CLEAR. `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero, and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one; `WideMultiplyMatchesOverASweep` counts the carries the shipped routine leaves over 150,000 samples and asserts the count is zero. The mutant replaces a flag that is never set with `false`, so it survives, and the ADC-without-CLC the port reproduces is safe for a reason rather than by luck. First run 2026-09-07: survived, as an equivalent must. Re-anchored at M6-c-9, when `MoveShip`'s `K2` became `rolledY`."
         },
         {
           "id": "sm-tidy-last-byte",
@@ -941,7 +957,7 @@
         "TheSun",
         "TheBubbleReset"
       ],
-      "tests": 21,
+      "tests": 24,
       "note": [
         "`PLANET`, `SUN`, `CHKON` and `ZINF` (plan sections 6.40 to 6.57). The mutants are the clamp",
         "`PL82` writes, the branch `CHKON` takes to `PLS6`'s `CLC` rather than `EDGES`'s (section 6.45), and",
@@ -949,7 +965,11 @@
         "",
         "The filters overlap on purpose: `ThePlanet` also selects `ThePlanetLineHeap` and `TheSun` selects",
         "`TheSunLineHeap`, so the twenty-one the tool counts are twelve tests, some run twice. The",
-        "filter gate caught the first record of twelve, which is what the gate is for."
+        "filter gate caught the first record of twelve, which is what the gate is for.",
+        "",
+        "THE COUNT WENT 21 -> 24 (M6-d-17). `PicturePlanetTests.cpp` arrived with RS-3 on the main track",
+        "and its three tests are selected by their METHOD names: two contain `ThePlanet` and one",
+        "`TheSun`. They put the planet and the sun on both surfaces, so the surplus is coverage."
       ],
       "mutants": [
         {
@@ -972,8 +992,8 @@
         {
           "id": "pd-pl44-clc",
           "file": "GameLogic/PlanetDraw.cpp",
-          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (\u00a76.45).",
-          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (\u00a76.45).",
+          "find": "      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
+          "replace": "      extent.offScreen = true;\n      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
           "expect": "caught",
           "note": "A circle whose top is above the screen is ON screen -- `BMI PL44` lands on a `CLC`, not on a rejection (plan section 6.45). Would have hidden: a planet vanishing the moment its top edge left the view."
         },
@@ -1007,10 +1027,10 @@
         {
           "id": "sp-selftest",
           "file": "GameLogic/Spawn.cpp",
-          "find": "    _universe.work.rollCounter = 0xFFu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum",
-          "replace": "    _universe.work.rollCounter = 0x7Fu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum",
+          "find": "    _universe.work.rollCounter = 0xFFu; // 6502: the roll counter, at maximum",
+          "replace": "    _universe.work.rollCounter = 0x7Fu; // 6502: the roll counter, at maximum",
           "expect": "caught",
-          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The station's roll counter at 127 instead of 255 is one byte in the block NWSPS is compared on. Keep it first.",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The station's roll counter at 127 instead of 255 is one byte in the block NWSPS is compared on. Keep it first. Re-anchored at M6-d-25, when the comment beside it lost its listing.",
           "selftest": true
         },
         {

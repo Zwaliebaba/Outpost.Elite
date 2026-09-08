@@ -77,8 +77,8 @@ namespace Elite
      * space stations are in the bubble" are one byte with two names (§6.58).
      *
      * That is why nothing ever sets it when a station is created -- `NWSHP`'s `INC MANY,X` has
-     * already done it -- and why `KS4`'s `STA SSPR` is how the count is cleared. The port had it
-     * as a separate field for about an hour, and the sweep caught it on the first station kill.
+     * already done it -- and why `KS4`'s store to `SSPR` is how the count is cleared. The port had
+     * it as a separate field for about an hour, and the sweep caught it on the first station kill.
      */
     [[nodiscard]] std::uint8_t StationPresent() const noexcept
     {
@@ -101,9 +101,7 @@ namespace Elite
     HeapOffset heapBottom = HeapOffset::Top();
 
     /*
-     * 6502: NWSHP's heap check -- LDA SLSP / SEC / SBC T1 / STA INWK+33 / LDA SLSP+1 / SBC #0 /
-     * STA INWK+34 / LDA INWK+33 / SBC INF / LDA INWK+34 / SBC INF+1 / BCC NW3+1 / BNE NW4 /
-     * CPY #NI% / BCC NW3+1 / .NW4 -- carve `_bytes` off the bottom of the heap for the ship going
+     * 6502: NWSHP's heap check -- carve `_bytes` off the bottom of the heap for the ship going
      * into `_slot`, unless that would run down into the slot's own block.
      *
      * Byte for byte, with the two arena addresses as the only 6502 addresses in the model, because
@@ -127,7 +125,7 @@ namespace Elite
      * region as a `const` array because nothing writes it -- which was true until `NWSPS`, whose
      * fourteen instructions above the fall into `NWSHP` are a SELF-MODIFICATION: they store either
      * the Coriolis's address or the Dodo's into this entry, and everything downstream then reads
-     * the table normally. A grep of the whole build for `STA XX21` finds those four stores and
+     * the table normally. A grep of the whole build for a store to `XX21` finds those four and
      * nothing else, which is what makes one field the right model rather than a mutable copy of
      * the table: the port would be modelling writes the game does not make.
      *
@@ -144,7 +142,7 @@ namespace Elite
   };
 
   /*
-   * 6502: LDA XX21-2,Y / LDA XX21-1,Y -- a blueprint address out of the table AS IT STANDS.
+   * 6502: a blueprint address out of the table AS IT STANDS.
    *
    * The difference from `BlueprintAddress` is one ship type. Everything but the station reads the
    * assembled region, which is `const`; the station reads whatever the last `NWSPS` put in the
@@ -156,10 +154,10 @@ namespace Elite
   /*
    * 6502: GINF -- the address of slot X's data block.
    *
-   * `TXA / ASL A / TAY / LDA UNIV,Y / STA INF / LDA UNIV+1,Y / STA INF+1 / RTS`, which is a
-   * doubling and a table read because the 6502 cannot index by 37. Here it is the index, and the
-   * routine survives as a named function only because the ledger counts it and because a caller
-   * that asked for slot 10 in the original would read past `UNIV`.
+   * The index is DOUBLED and used to read a table, because the 6502 cannot index by 37. Here it is
+   * the index, and the doubling and a table read because the 6502 cannot index by 37. Here it is
+   * the index, and the routine survives as a named function only because the ledger counts it and
+   * because a caller that asked for slot 10 in the original would read past `UNIV`.
    */
   [[nodiscard]] Ship* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept;
 
@@ -180,22 +178,22 @@ namespace Elite
    * slots, so this is reachable rather than defensive.
    *
    * THE SECOND SUBTRACTION HAS NO `SEC`, and the original says so -- the `\SEC` in the source is
-   * commented out. `LDA INWK+33 / SBC INF` runs on whatever carry the `SBC #0` above it left, so
+   * commented out. The second subtraction runs on whatever carry the first left, so
    * the comparison is carry-dependent by construction. In practice that carry is always set,
    * because SLSP's high byte is never small enough for the first subtraction to borrow out of it;
    * the port reproduces the chain rather than assuming that, and the oracle sweep is what says so.
    *
    * A NEGATIVE TYPE skips all of it. The planet and the sun are types 128 and 129, they have no
-   * blueprint and no heap, and `BMI NW2` takes them straight to the bookkeeping.
+   * blueprint and no heap, and the sign test takes them straight to the bookkeeping.
    *
    * `NEWB` is not a parameter because it is not a separate byte: it is `_work[36]`, the last byte
    * of the block, which the routine ORs into and then copies along with everything else.
    *
-   * `XX0` IS A PARAMETER, and it is one because the routine WRITES it: `LDA XX21-1,Y / STA XX0+1 /
-   * LDA XX21-2,Y / STA XX0` is how the new ship's blueprint becomes the current one. The port had
-   * it as a local for as long as the only caller was `SOS1`, whose types are all negative and take
-   * the `BMI NW2` path past those stores -- so the omission could not be seen until `NWSPS` created
-   * a real ship. The oracle caught it on the first frame that spawned a station.
+   * `XX0` IS A PARAMETER, and it is one because the routine WRITES it: the new ship's blueprint
+   * address is stored there, high byte first. The port had it as a local for as long as the only
+   * caller was `SOS1`, whose types are all negative and take the sign-test path past those stores
+   * -- so the omission could not be seen until `NWSPS` created a real ship. The oracle caught it on
+   * the first frame that spawned a station.
    */
   [[nodiscard]] NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, const Blueprint*& _blueprint) noexcept;
 

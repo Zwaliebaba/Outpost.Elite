@@ -77,7 +77,7 @@ namespace GameLogicTests
         {
           for (const std::uint8_t a : EDGES)
           {
-            for (const std::uint8_t r : EDGES)
+            for (const std::uint8_t valueLow : EDGES)
             {
               for (const std::uint8_t low : EDGES)
               {
@@ -93,17 +93,17 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
                     PokeShip(work, axis + byte, bytes[byte]);
                   }
-                  cpu.memory[rr] = r;
+                  cpu.memory[rr] = valueLow;
 
                   cpu.a = a;
                   cpu.x = axis;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(masked ? static_cast<std::uint16_t>(mvt1 - 2) : mvt1);
                   Assert::IsTrue(run.completed, L"MVT1 returned");
 
-                  Elite::AddToShipCoordinate(work, a, r, axis, masked);
+                  Elite::AddToShipCoordinate(work, a, valueLow, axis, masked);
 
                   const std::wstring where =
-                    Widen(std::string(masked ? "MVT1-2" : "MVT1") + "(a=" + std::to_string(a) + ", r=" + std::to_string(r) +
+                    Widen(std::string(masked ? "MVT1-2" : "MVT1") + "(a=" + std::to_string(a) + ", r=" + std::to_string(valueLow) +
                           ", x=" + std::to_string(axis) + ", coord=" + std::to_string(low) + "/" + std::to_string(high) + ")");
                   for (int byte = 0; byte < 3; ++byte)
                   {
@@ -137,38 +137,38 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       for (const std::uint8_t axis : AXES)
       {
-        for (const std::uint8_t k1 : EDGES)
+        for (const std::uint8_t totalMid : EDGES)
         {
-          for (const std::uint8_t k2 : EDGES)
+          for (const std::uint8_t totalHigh : EDGES)
           {
-            for (const std::uint8_t k3 : EDGES)
+            for (const std::uint8_t totalTop : EDGES)
             {
               for (const std::uint8_t low : EDGES)
               {
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Ship work;
 
-                const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x3Cu), k3};
+                const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x3Cu), totalTop};
                 for (int byte = 0; byte < 3; ++byte)
                 {
                   cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
                   PokeShip(work, axis + byte, bytes[byte]);
                 }
-                const std::uint8_t k[4] = {0, k1, k2, k3};
+                const std::uint8_t block[4] = {0, totalMid, totalHigh, totalTop};
                 for (int byte = 0; byte < 4; ++byte)
                 {
-                  cpu.memory[static_cast<std::uint16_t>(kk + byte)] = k[byte];
+                  cpu.memory[static_cast<std::uint16_t>(kk + byte)] = block[byte];
                 }
 
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt3);
                 Assert::IsTrue(run.completed, L"MVT3 returned");
 
-                const Elite::KBlockSum sum = Elite::AddShipCoordinateToK(work, Elite::KBlock{0, k1, k2, k3}, axis);
+                const Elite::KBlockSum sum = Elite::AddShipCoordinateToK(work, Elite::KBlock{0, totalMid, totalHigh, totalTop}, axis);
                 const bool carry = sum.carry;
                 const std::uint8_t ours[4] = {sum.value.low, sum.value.mid, sum.value.high, sum.value.top};
 
-                const std::wstring where = Widen("MVT3(K=" + std::to_string(k1) + "/" + std::to_string(k2) + "/" + std::to_string(k3) +
+                const std::wstring where = Widen("MVT3(K=" + std::to_string(totalMid) + "/" + std::to_string(totalHigh) + "/" + std::to_string(totalTop) +
                                                  ", x=" + std::to_string(axis) + ")");
                 for (int byte = 0; byte < 4; ++byte)
                 {
@@ -215,9 +215,9 @@ namespace GameLogicTests
       {
         for (const std::uint8_t a : EDGES)
         {
-          for (const std::uint8_t p1 : EDGES)
+          for (const std::uint8_t valueLow : EDGES)
           {
-            for (const std::uint8_t p2 : EDGES)
+            for (const std::uint8_t valueMid : EDGES)
             {
               for (const std::uint8_t low : EDGES)
               {
@@ -230,17 +230,17 @@ namespace GameLogicTests
                   cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
                   PokeShip(work, axis + byte, bytes[byte]);
                 }
-                cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                cpu.memory[static_cast<std::uint16_t>(pp + 2)] = p2;
+                cpu.memory[static_cast<std::uint16_t>(pp + 1)] = valueLow;
+                cpu.memory[static_cast<std::uint16_t>(pp + 2)] = valueMid;
 
                 cpu.a = a;
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt6);
                 Assert::IsTrue(run.completed, L"MVT6 returned");
 
-                const Elite::SignMag24 moved = Elite::AddShipCoordinateToP(work, Elite::SignMag24{p1, p2, a}, axis);
+                const Elite::SignMag24 moved = Elite::AddShipCoordinateToP(work, Elite::SignMag24{valueLow, valueMid, a}, axis);
 
-                const std::wstring where = Widen("MVT6(a=" + std::to_string(a) + ", P=" + std::to_string(p1) + "/" + std::to_string(p2) +
+                const std::wstring where = Widen("MVT6(a=" + std::to_string(a) + ", P=" + std::to_string(valueLow) + "/" + std::to_string(valueMid) +
                                                  ", x=" + std::to_string(axis) + ")");
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], moved.lo, (where + L": P+1").c_str());
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], moved.hi, (where + L": P+2").c_str());
@@ -276,8 +276,8 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t alpha = oracle.Label("ALPHA");
-      const std::uint16_t beta = oracle.Label("BETA");
+      const std::uint16_t rollRate = oracle.Label("ALPHA");
+      const std::uint16_t pitchRate = oracle.Label("BETA");
       const std::uint16_t mvs4 = oracle.Label("MVS4");
 
       // The three vectors MVEIT rotates: the ship's nose, roof and side.
@@ -287,9 +287,9 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       for (const std::uint8_t vector : VECTORS)
       {
-        for (const std::uint8_t a : ANGLES)
+        for (const std::uint8_t roll : ANGLES)
         {
-          for (const std::uint8_t b : ANGLES)
+          for (const std::uint8_t pitch : ANGLES)
           {
             for (const std::uint8_t seed : EDGES)
             {
@@ -303,17 +303,17 @@ namespace GameLogicTests
                 cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)] = value;
                 PokeShip(work, vector + byte, value);
               }
-              cpu.memory[alpha] = a;
-              cpu.memory[beta] = b;
+              cpu.memory[rollRate] = roll;
+              cpu.memory[pitchRate] = pitch;
 
               cpu.y = vector;
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs4);
               Assert::IsTrue(run.completed, L"MVS4 returned");
 
-              Elite::RotateShipVector(work, vector, a, b);
+              Elite::RotateShipVector(work, vector, roll, pitch);
 
-              const std::wstring where = Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(a) +
-                                               ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
+              const std::wstring where = Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(roll) +
+                                               ", beta=" + std::to_string(pitch) + ", seed=" + std::to_string(seed) + ")");
               for (std::uint8_t byte = 0; byte < 6u; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)], PeekShip(work, vector + byte),
@@ -345,7 +345,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t rat2 = oracle.Label("RAT2");
+      const std::uint16_t signMask2 = oracle.Label("RAT2");
       const std::uint16_t mvs5 = oracle.Label("MVS5");
 
       // The six pairs MVEIT rotates, three for roll and three for pitch.
@@ -376,7 +376,7 @@ namespace GameLogicTests
                   cpu.memory[static_cast<std::uint16_t>(inwk + at[index])] = bytes[index];
                   PokeShip(work, at[index], bytes[index]);
                 }
-                cpu.memory[rat2] = direction;
+                cpu.memory[signMask2] = direction;
 
                 cpu.x = pair.first;
                 cpu.y = pair.second;
@@ -535,8 +535,8 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t alpha = oracle.Label("ALPHA");
-      const std::uint16_t beta = oracle.Label("BETA");
+      const std::uint16_t rollRate = oracle.Label("ALPHA");
+      const std::uint16_t pitchRate = oracle.Label("BETA");
       const std::uint16_t mv40 = oracle.Label("MV40");
       const std::uint16_t mv45 = oracle.Label("MV45");
 
@@ -544,9 +544,9 @@ namespace GameLogicTests
       const std::vector<std::uint8_t> TURNS = {0, 1, 3, 127, 128, 129, 131, 255};
 
       std::uint32_t compared = 0;
-      for (const std::uint8_t a : TURNS)
+      for (const std::uint8_t roll : TURNS)
       {
-        for (const std::uint8_t b : TURNS)
+        for (const std::uint8_t pitch : TURNS)
         {
           for (const std::uint8_t seed : EDGES)
           {
@@ -566,16 +566,16 @@ namespace GameLogicTests
               shipBytes[offset] = value;
             }
             work = Elite::Ship::FromBytes(shipBytes);
-            cpu.memory[alpha] = a;
-            cpu.memory[beta] = b;
+            cpu.memory[rollRate] = roll;
+            cpu.memory[pitchRate] = pitch;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mv40);
             Assert::IsTrue(run.completed, L"MV40 reached MV45");
 
-            Elite::MovePlanetOrSun(work, math, a, b);
+            Elite::MovePlanetOrSun(work, math, roll, pitch);
 
             const std::wstring where =
-              Widen("MV40(alpha=" + std::to_string(a) + ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
+              Widen("MV40(alpha=" + std::to_string(roll) + ", beta=" + std::to_string(pitch) + ", seed=" + std::to_string(seed) + ")");
             for (std::uint8_t offset = 0; offset < 9u; ++offset)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],
@@ -647,8 +647,8 @@ namespace GameLogicTests
         std::uint8_t speed;     ///< INWK+27
         std::uint8_t exploding; ///< INWK+31
         std::uint8_t hostile;   ///< INWK+32
-        std::uint8_t alpha;
-        std::uint8_t beta;
+        std::uint8_t rollRate;
+        std::uint8_t pitchRate;
       };
 
       const std::vector<Case> CASES = {
@@ -752,20 +752,20 @@ namespace GameLogicTests
         cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
         // The player's roll and pitch, in all three of the forms MVEIT reads them in.
-        flight.alpha = item.alpha;
-        flight.alp1 = static_cast<std::uint8_t>(item.alpha & 0x7Fu);
-        flight.alp2 = static_cast<std::uint8_t>(item.alpha & 0x80u);
-        flight.alp2Next = static_cast<std::uint8_t>(flight.alp2 ^ 0x80u);
-        flight.beta = item.beta;
-        flight.bet1 = static_cast<std::uint8_t>(item.beta & 0x7Fu);
-        flight.bet2 = static_cast<std::uint8_t>(item.beta & 0x80u);
-        flight.delta = 14;
+        flight.rollRate = item.rollRate;
+        flight.rollMagnitude = static_cast<std::uint8_t>(item.rollRate & 0x7Fu);
+        flight.rollSign = static_cast<std::uint8_t>(item.rollRate & 0x80u);
+        flight.rollSignFlipped = static_cast<std::uint8_t>(flight.rollSign ^ 0x80u);
+        flight.pitchRate = item.pitchRate;
+        flight.pitchMagnitude = static_cast<std::uint8_t>(item.pitchRate & 0x7Fu);
+        flight.pitchSign = static_cast<std::uint8_t>(item.pitchRate & 0x80u);
+        flight.speed = 14;
         flight.type = Elite::TypeOf(item.type);
         flight.slot = 3;
 
         const std::uint8_t NAMES[][2] = {
-          {0u, flight.alpha}, {1u, flight.alp1}, {2u, flight.alp2}, {3u, flight.alp2Next},
-          {4u, flight.beta},  {5u, flight.bet1}, {6u, flight.bet2}, {7u, flight.delta},
+          {0u, flight.rollRate}, {1u, flight.rollMagnitude}, {2u, flight.rollSign}, {3u, flight.rollSignFlipped},
+          {4u, flight.pitchRate},  {5u, flight.pitchMagnitude}, {6u, flight.pitchSign}, {7u, flight.speed},
         };
         const char* LABELS[] = {"ALPHA", "ALP1", "ALP2", "", "BETA", "BET1", "BET2", "DELTA"};
         for (const auto& named : NAMES)
@@ -776,7 +776,7 @@ namespace GameLogicTests
             cpu.memory[oracle.Label(label)] = named[1];
           }
         }
-        cpu.memory[static_cast<std::uint16_t>(oracle.Label("ALP2") + 1)] = flight.alp2Next;
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("ALP2") + 1)] = flight.rollSignFlipped;
         cpu.memory[oracle.Label("TYPE")] = item.type;
         cpu.memory[oracle.Label("XSAV")] = flight.slot;
 
@@ -878,8 +878,8 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
       const std::uint16_t view = oracle.Label("VIEW");
-      const std::uint16_t rat = oracle.Label("RAT");
-      const std::uint16_t rat2 = oracle.Label("RAT2");
+      const std::uint16_t signMask = oracle.Label("RAT");
+      const std::uint16_t signMask2 = oracle.Label("RAT2");
       const std::uint16_t plut = oracle.Label("PLUT");
       const std::uint16_t pu1 = oracle.Label("PU1");
 
@@ -908,10 +908,10 @@ namespace GameLogicTests
           }
           work = Elite::Ship::FromBytes(shipBytes);
           cpu.memory[view] = which;
-          cpu.memory[rat] = 0x11;
-          cpu.memory[rat2] = 0x22;
-          flight.rat = 0x11;
-          flight.rat2 = 0x22;
+          cpu.memory[signMask] = 0x11;
+          cpu.memory[signMask2] = 0x22;
+          flight.signMask = 0x11;
+          flight.signMask2 = 0x22;
 
           cpu.x = which;
           const Elite::Testing::RunResult run = cpu.CallSubroutine((entry == 0) ? plut : pu1, 20'000);
@@ -932,8 +932,8 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                              (where + L": INWK+" + std::to_wstring(byte)).c_str());
           }
-          Assert::AreEqual(cpu.memory[rat], flight.rat, (where + L": RAT").c_str());
-          Assert::AreEqual(cpu.memory[rat2], flight.rat2, (where + L": RAT2").c_str());
+          Assert::AreEqual(cpu.memory[signMask], flight.signMask, (where + L": RAT").c_str());
+          Assert::AreEqual(cpu.memory[signMask2], flight.signMask2, (where + L": RAT2").c_str());
           ++compared;
         }
       }

@@ -68,7 +68,7 @@ namespace Outpost
       case 7:
         return &_universe.useDisk;
       case 8:
-        return &_universe.heaps.pltog;
+        return &_universe.heaps.planetDetail;
       case 9:
         return &_universe.music.options.dockingMusicForced;
       case 10:

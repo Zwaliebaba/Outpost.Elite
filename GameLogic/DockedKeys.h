@@ -41,14 +41,14 @@ namespace Elite
   inline constexpr std::uint8_t KEY_FIND_SYSTEM = 0x2B;    ///< 6502: FINT -- "F"
   inline constexpr std::uint8_t KEY_HOME = 0x1A;           ///< 6502: OINT -- "O"
 
-  /// 6502: LDX #1 / #2 / #3 before `JMP LOOK1` -- and the three are reached by falling through two
-  /// `EQUB &2C`s, so the assembler's own bytes decide which one a jump lands on.
+  /// 6502: the three view numbers `LOOK1` is given, reached by falling through two `EQUB &2C`s, so
+  /// the assembler's own bytes decide which one a jump lands on.
   inline constexpr std::uint8_t VIEW_REAR = 1;
   inline constexpr std::uint8_t VIEW_LEFT = 2;
   inline constexpr std::uint8_t VIEW_RIGHT = 3;
 
-  /// 6502: QQ11 -- `AND #%11000000` is the test the routine actually makes, so any view with either
-  /// of those bits set counts as a chart.
+  /// 6502: QQ11 -- the routine tests the TOP TWO BITS and nothing else, so any view with either of
+  /// them set counts as a chart.
   [[nodiscard]] constexpr bool IsChartView(std::uint8_t _view) noexcept
   {
     return (_view & 0xC0u) != 0u;
@@ -59,23 +59,23 @@ namespace Elite
   enum class KeyAction
   {
     Nothing,            ///< 6502: t95, which is an RTS -- the key was not one of these
-    StatusMode,         ///< 6502: JMP STATUS
-    LongRangeChart,     ///< 6502: JMP TT22
-    ShortRangeChart,    ///< 6502: JMP TT23
-    DataOnSystem,       ///< 6502: JSR TT111 / JMP TT25 -- the only target reached by two calls
-    Inventory,          ///< 6502: JMP TT213
-    MarketPrice,        ///< 6502: JMP TT167
-    Launch,             ///< 6502: JMP TT110, and it is tested BEFORE the docked check
-    EquipShip,          ///< 6502: JMP EQSHP, docked only
-    BuyCargo,           ///< 6502: JMP TT219, docked only
-    DiskAccess,         ///< 6502: JSR SVE, then QU5 or BAY on its carry -- docked only
-    SellCargo,          ///< 6502: JMP TT208, docked only
-    ChangeView,         ///< 6502: JMP LOOK1, in flight only -- the view is in the result
-    Hyperspace,         ///< 6502: JMP hyp, and it is NOT decided by the key in A
+    StatusMode,         ///< 6502: STATUS
+    LongRangeChart,     ///< 6502: TT22
+    ShortRangeChart,    ///< 6502: TT23
+    DataOnSystem,       ///< 6502: TT111 then TT25 -- the only target reached by two calls
+    Inventory,          ///< 6502: TT213
+    MarketPrice,        ///< 6502: TT167
+    Launch,             ///< 6502: TT110, and it is tested BEFORE the docked check
+    EquipShip,          ///< 6502: EQSHP, docked only
+    BuyCargo,           ///< 6502: TT219, docked only
+    DiskAccess,         ///< 6502: SVE, then QU5 or BAY on its carry -- docked only
+    SellCargo,          ///< 6502: TT208, docked only
+    ChangeView,         ///< 6502: LOOK1, in flight only -- the view is in the result
+    Hyperspace,         ///< 6502: hyp, and it is NOT decided by the key in A
     ShowDistance,       ///< 6502: T95
-    SearchBySystemName, ///< 6502: JMP HME2
+    SearchBySystemName, ///< 6502: HME2
     HomeCrosshairs,     ///< 6502: TT103 / ping / TT103, which is a TAIL call and skips the counter
-    MoveCrosshairs,     ///< 6502: JSR TT16, and then the counter
+    MoveCrosshairs,     ///< 6502: TT16, and then the counter
     CountdownOnly,      ///< 6502: TT107 reached without moving anything
   };
 
@@ -90,27 +90,26 @@ namespace Elite
    *
    * Four things about it are worth knowing, and none of them is visible from the list of keys.
    *
-   * LAUNCH IS TESTED BEFORE THE DOCKED CHECK. `BIT QQ12 / BPL INSP` splits the docked keys from the
-   * flight ones, and F1, the four screens and the two charts are all ABOVE it -- so the status
-   * screen and the charts work in space, and pressing F1 in space reaches `TT110` just as it does
-   * on the pad. What is below the split is the shop, the two trading screens, the disk menu and, on
-   * the other branch, the three view changes.
+   * LAUNCH IS TESTED BEFORE THE DOCKED CHECK. A test of `QQ12`'s top bit splits the docked keys
+   * from the flight ones, and F1, the four screens and the two charts are all ABOVE it -- so the
+   * status screen and the charts work in space, and pressing F1 in space reaches `TT110` just as it
+   * does on the pad. What is below the split is the shop, the two trading screens, the disk menu
+   * and, on the other branch, the three view changes.
    *
    * "H" IS NOT READ FROM THE KEY. `BIT KLO+HINT` reads the keyboard MATRIX directly, so hyperspace
    * is checked against whether the key is HELD rather than against the key that was translated into
    * A. A player holding H while pressing something else gets hyperspace, and the key they pressed
    * is discarded. That is why `_hyperspaceHeld` is an argument here and not a comparison.
    *
-   * QQ12 IS TESTED TWO WAYS. The docked/flight split is `BIT QQ12 / BPL`, which reads bit 7; the
-   * system search is `LDA QQ12 / BEQ`, which asks whether the byte is zero. `BAY` sets it to &FF
-   * and the flight code sets it to 0, so the two agree for every value the game produces -- and
-   * they would disagree for, say, 1. The port keeps both tests rather than one flag, because the
-   * byte is what the original branches on.
+   * QQ12 IS TESTED TWO WAYS. The docked/flight split reads its top bit and NOTHING ELSE; the
+   * system search asks whether the WHOLE BYTE is zero. `BAY` sets it to &FF and the flight code sets it to 0, so the two agree
+   * for every value the game produces -- and they would disagree for, say, 1. The port keeps both
+   * tests rather than one flag, because the byte is what the original branches on.
    *
-   * AND THE THREE VIEW KEYS SHARE THEIR TAIL THROUGH TWO `EQUB &2C`s. `LDX #3` falls past `LDX #2`
-   * and `LDX #1` because each is swallowed by a `BIT absolute` opcode assembled from the byte
-   * before it -- so the three entry points are one instruction stream read three ways, and the view
-   * number depends on where the jump landed rather than on any comparison.
+   * AND THE THREE VIEW KEYS SHARE THEIR TAIL THROUGH TWO `EQUB &2C`s. The load of 3 falls past the
+   * load of 2 and the load of 1 because each is swallowed by a `BIT absolute` opcode assembled from
+   * the byte before it -- so the three entry points are one instruction stream read three ways, and
+   * the view number depends on where the jump landed rather than on any comparison.
    */
   [[nodiscard]] KeyOutcome ActionForKey(std::uint8_t _key, std::uint8_t _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
                                         bool _hyperspaceHeld) noexcept;
