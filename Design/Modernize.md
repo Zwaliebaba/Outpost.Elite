@@ -388,9 +388,10 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,897 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,256 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
-because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
+because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
+the comments that END a line rather than start one — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
 `check_modernize.py`); M6-d drives the first to zero and caps the second; <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
@@ -1939,6 +1940,38 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-20: the counter had been reading half the comments.**
+
+Nothing in `GameLogic/` changed. `_opcode_lines` asked `COMMENT_LINE.match(line)` — a comment that
+STARTS its line — so every listing written at the END of a line of code was invisible to it. There
+are 359 of them across 47 files, and
+`SetUpScreen(_universe, _ports, TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66` is not a different
+kind of site from the same words on a line of their own.
+
+**Three files reported "to zero" were not.** `Arith.cpp` and `FlightLoop.cpp` genuinely are;
+`Tactics.cpp` has one, `GameLoop.cpp` three and `PlanetDraw.cpp` twelve — sixteen sites the entries
+for M6-d-11, -14 and -19 counted as finished. The next slice clears them, and this one says so
+rather than letting the claims stand.
+
+The instrument now walks a file the way `code_only` does — one pass, literal-aware, so a `//` inside
+a string opens no comment and an apostrophe inside a comment opens no literal — and hands back the
+comment text per line, which is exactly what `code_only` throws away. The self-test gained both
+cases: a trailing listing that must count, and `"a//b LDA #1"` that must not.
+
+**The ceiling RISES, 1,897 → 2,256, and rule 5 wants that said plainly: nothing came back.** The
+instrument grew, and 359 sites that were always there are now visible to it. This is the fourth
+calibration of this counter and the first upward — the three before it removed false positives
+(English words as operands, backticked implied-mode mnemonics, the seven mnemonics that are also
+English words), and this one removes false negatives.
+
+It also unsettles what M6-d-19 reported. Among `PlanetDraw.cpp`'s newly visible twelve is
+`// 6502: ``STA T / BPL PL42`` touches no flag, so ``ADC K3`` reads ADD's` — a comment whose whole
+content IS an instruction sequence and the flag it does not touch. That is R20's case exactly, and
+R-i's `6502 quoted:` tag is what it wants. **The tag is no longer certain to end unused**, which is a
+better answer than the one that entry gave and arrives one slice later.
+
+469 tests green, all nineteen checks, 97 recorded mutants still applying. No C++ changed.
 
 **2026-09-08 — M6-d-19: `PlanetDraw.cpp` to zero, and a block comment that had never been indented.**
 

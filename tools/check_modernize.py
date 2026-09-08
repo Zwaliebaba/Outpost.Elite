@@ -291,6 +291,9 @@ def _opcode_lines(_root: Path):
     Counted per LINE and not per instruction, because a rewrite replaces lines: a run of six
     instructions across two comment lines is two sites to rewrite, not six.
 
+    A comment at the END of a code line counts as much as one on a line of its own -- see
+    `comment_lines`, which is what made the difference and what M6-d-20a re-based the ceiling for.
+
     `Design/` is not read. The plan's own journal quotes assembly deliberately and is history --
     M6-d's row says so -- and a counter that read it could never reach zero.
     """
@@ -299,8 +302,8 @@ def _opcode_lines(_root: Path):
         if not here.is_dir():
             continue
         for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
-            for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
-                if COMMENT_LINE.match(line) and _is_transcription(line):
+            for line in comment_lines(path.read_text(encoding="utf-8", errors="replace")):
+                if line and _is_transcription(line):
                     yield line, bool(QUOTED_TAG.search(line))
 
 
@@ -409,6 +412,52 @@ def code_only(_text: str) -> str:
             out.append(here)
             at += 1
     return "".join(out)
+
+
+def comment_lines(_text: str) -> list[str]:
+    """The COMMENT text on each line of a file, one entry per line -- what `code_only` throws away.
+
+    A LISTING IS A LISTING WHEREVER IT IS WRITTEN. `_opcode_lines` used to ask
+    `COMMENT_LINE.match(line)`, which only sees a comment that STARTS its line, and 359 sites were
+    invisible to the ratchet because they sit at the end of one:
+    `SetUpScreen(...); // 6502: LDA #13 / JSR TT66` is the same site as the same words on a line of
+    their own. Five files had been reported "to zero" with sixteen of these still in them
+    (M6-d-20a).
+
+    One pass, string- and character-literal aware for the same reason `code_only` is: a `//` inside
+    a literal opens no comment, and an apostrophe inside a comment opens no literal.
+    """
+    out: list[str] = [""] * (_text.count("\n") + 1)
+    at, line, end = 0, 0, len(_text)
+    while at < end:
+        here, pair = _text[at], _text[at : at + 2]
+        if pair == "//":
+            stop = _text.find("\n", at)
+            stop = end if stop < 0 else stop
+            out[line] += _text[at:stop]
+            at = stop
+        elif pair == "/*":
+            closed = _text.find("*/", at + 2)
+            stop = end if closed < 0 else closed + 2
+            span = _text[at:stop]
+            for step, piece in enumerate(span.split("\n")):
+                out[line + step] += piece
+            line += span.count("\n")
+            at = stop
+        elif here == "'" and at > 0 and _text[at - 1].isdigit() and at + 1 < end and _text[at + 1].isdigit():
+            at += 1  # a digit separator, as in `code_only`
+        elif here in "\"'":
+            started = at
+            at += 1
+            while at < end and _text[at] != here:
+                at += 2 if _text[at] == "\\" else 1
+            at += 1
+            line += _text[started:at].count("\n")
+        else:
+            if here == "\n":
+                line += 1
+            at += 1
+    return out
 
 
 
@@ -586,6 +635,8 @@ namespace Elite
     const std::uint8_t z = _work[8u];
     const std::uint8_t xx12 = z; /* xx16 in a comment does not count */
     Put('m');                    // and 'm' is a character literal, not the label
+    const std::uint8_t shade = z;      // 6502: LDA #0 / STA T -- a TRAILING listing, which counts too
+    const char* path = "a//b LDA #1";  // a listing inside a STRING opens no comment, and counts for nothing
   }
 }
 """
@@ -624,9 +675,9 @@ EXPECTED = {
     "mutants": 3,
     "mutant-files": 2,
     "inventory-stale-files": 1,
-    "origin-markers": 4,
+    "origin-markers": 5,
     "origin-identifiers": 5,
-    "opcode-transcriptions": 2,
+    "opcode-transcriptions": 3,
     "opcode-quotations": 1,
     "oracle-test-files": 1,
     "origin-tools": 1,
