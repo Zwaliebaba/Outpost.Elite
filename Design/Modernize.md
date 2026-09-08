@@ -1941,6 +1941,36 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-08 — M6-d-25a: the mutation harness measured the previous commit, and said so every
+time.**
+
+Nothing in `GameLogic/` changed. `make_worktree` built its scratch tree with
+`git worktree add --detach HEAD`, so a run made before committing mutated the LAST commit and not
+the slice being written. Every entry from M6-d-17 to M6-d-24 reports "97 of 97 mutants from a full
+run" and each of those runs covered the commit before the one it is written in. Eight entries.
+
+**The tool was not silent about it.** `warn_if_dirty` printed, on every one of those runs, "the
+worktree is built from HEAD, and these are modified but NOT committed -- the tally below will not
+describe them", followed by the file list. It was read past because the output was taken with
+`tail -3`, which keeps the tally and drops everything above it. A warning that is correct, present
+and unread is worth exactly nothing, and the fix is not a louder warning.
+
+So the worktree now carries the uncommitted diff on top of HEAD, and the note says what the run's
+subject IS rather than what it is not — a line naming the files being measured is harder to skip
+than a line disclaiming them. `--check` still reads the working tree, which is why this was
+survivable: it is what `check_all.py` runs and what catches a mutant whose `find` a slice has
+rewritten, and it is exactly how the gap surfaced (M6-d-25's `sp-selftest`).
+
+What this does NOT change: the eight tallies were about a real tree, run properly, and every one of
+them passed — HEAD in each case was the slice before, which had itself been measured. The claim that
+was wrong is which commit each number described, and for a run of comment-only slices that is a
+small error. It is written down because the next slice to change code would have made it a large
+one.
+
+469 tests green, all nineteen checks, 97 recorded mutants still applying. A `--unit spawn` run
+against a deliberately dirtied tree reports "worktree carrying 55 lines of uncommitted diff on top
+of HEAD" and catches all four.
+
 **2026-09-08 — M6-d-24: `ShipMove.cpp` to zero, and the damping nobody wrote.**
 
 All 81, over `MVEIT` and everything it reaches: the coordinate adders, the vector rotations, `TIDY`,
