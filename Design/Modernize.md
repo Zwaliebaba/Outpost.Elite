@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->425 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->390 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-47: `LoaderScreen.cpp` and `ShipSlot.cpp` to zero, and seven constants out of
+two.**
+
+35 sites over two files: the loader's screen set-up and the slot allocator. Forty-ninth and
+fiftieth at zero.
+
+**The strongest instance yet of "constants that are one".** The loader places seven Trumble sprites
+across the screen at x of 18, 36, 72, 144, 14, 28 and 56 — and the original loads TWO of those. 18
+is doubled three times and 14 twice, in the accumulator, between the stores. Seven `constexpr` bytes
+in the port; two loads and five shifts in the original. With `MT9`'s column-and-view (M6-d-39),
+`BRIEF`'s column-and-distance and `SPAWN_AHEAD`'s 28-and-14 (M6-d-40), that is four places where the
+port must spell as separate names what the original computes once and spends repeatedly, and the
+comment is the only thing that can say so.
+
+`LOOP15` is the other keeper and it is a one-cell fact: the loop that paints the top row's border
+yellow ends on a branch-if-not-zero, so the index never reaches zero and the cell at `COLMEM+2` keeps
+the black the earlier zeroing left. The upstream comment says "characters 3 to 36" and the code
+agrees; a branch-if-positive there would have been an easy and invisible improvement.
+
+And `ShipSlot.cpp` records an out-of-range read the port reproduces rather than tidies: the negative
+types fall into `NW8` too, so the defaults table is indexed at 128 or 129, well past its thirty-three
+entries. It lands elsewhere in the ship data region, which is a defined byte rather than a fault.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (23 and 20). `opcode-transcriptions` 425 → 390.
 
 **2026-09-08 — M6-d-46: `StartUp.cpp` and `ViewChange.h` to zero, and `EQUB &2C` decides how tall
 the border is.**
