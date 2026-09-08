@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,928 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,913 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-18: the sun's walk, and four comments that were a listing and nothing else.**
+
+15 more from `PlanetDraw.cpp`, now at 16 of 89. This is `SUN`'s row walk — the roughness mask, the
+half-width, the two exits — and it is the cheap half of M6-d: most of these comments already carried
+their reason in prose and the listing beside it was duplication. Removing it cost nothing and the
+sentences are unchanged.
+
+**Four of the fourteen carried no prose at all.** `LDA TYPE / LSR A / BCC PL9 / JMP SUN.`, `PLF6 --
+DEY / BEQ PLF8.`, `DEC V / BNE PLFL / DEC V+1.` and the three rolled comparisons that build `CNT`
+were comments whose entire content was the instructions. There is nothing to preserve in a rewrite of
+one of these; there is a reason to go and FIND, and the first of them is the argument for M6-d in
+miniature — the port reads `Byte(_type) & 0x01u`, and what bit 0 means is in neither the code nor the
+comment. It is in `ShipType.h`: `Planet` is 128 and `Sun` is 129, so an odd type is the sun. The
+listing recorded the shift; nothing recorded why a shift answers the question.
+
+This is also the shape rule 4 exists for. A listing-only comment looks like something to delete, and
+deleting it takes the `// 6502:` marker with it — which is how M6-c-18 lost two. The rule stands: the
+marker leaves at M6-e and at no other time, and a comment that held nothing but the listing gets
+prose, not deletion.
+
+469 tests green including the five `TheFlightReplay` digests, all nineteen checks, 97 of 97 mutants
+from a full run, no marker lost (149 in this file, before and after). A `--measure` pass over the tree
+as M6-d-17 left it reproduces the recorder's totals byte for byte — 3,224,616 calls, 3,177,126
+distinct, 222,140,342 bytes, 0 collisions — which is the expected answer for a comment slice and the
+first time it has been checked rather than assumed. `opcode-transcriptions` 1,928 → 1,913.
 
 **2026-09-08 — M6-d-17: `PlanetDraw.cpp`'s meridians and crater, and the vector the prose named
 wrong.**

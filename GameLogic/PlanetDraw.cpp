@@ -847,19 +847,19 @@ namespace Elite
       return;
     }
 
-    // 6502: LDA #96 / STA P+1 / LDA #0 / STA P / JSR DVID3B2 -- the radius is 96 * 256 / z, and
-    // 96 is the planet's size in the same units everything else in the geometry uses. `K` is the
-    // `KBlock` the divide returns since M2-c-3.
+    // 6502: the radius is 96 * 256 / z, and 96 is the planet's size in the same units everything
+    // else in the geometry uses. `K` is the `KBlock` the divide returns since M2-c-3.
     KBlock radius = DivideByShipZ(_ship, _math, SignMag24{0, 96, 0});
 
-    // 6502: LDA K+1 / BEQ PL82 / LDA #248 / STA K -- a radius that overflowed a byte is clamped,
-    // and K+1 is LEFT SET, which is what `PL9` reads to skip the markings.
+    // 6502: a radius that overflowed a byte is clamped to 248, and the middle byte is LEFT AS IT
+    // WAS, which is what `PL9` reads to skip the markings.
     if (radius.mid != 0u)
     {
       radius.low = 248;
     }
 
-    // 6502: LDA TYPE / LSR A / BCC PL9 / JMP SUN.
+    // 6502: an ODD type is the sun and an even one the planet -- bit 0 shifted out into the carry
+    // and branched on. The two share this routine down to here and nothing below it.
     if ((Byte(_type) & 0x01u) != 0u)
     {
       DrawSun(_canvas, _state, _math, _rng, _centre, radius.low, _picture);
@@ -872,20 +872,20 @@ namespace Elite
   void DrawSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, Rng& _rng, const Projection& _centre,
                std::uint8_t _radius, Picture* _picture) noexcept
   {
-    // 6502: LDA #1 / STA LSX -- entry 0 stops being the "nothing there" flag the moment the
-    // routine commits to drawing, so a `WPLS` interrupted halfway still has something to erase.
+    // 6502: entry 0 stops being the "nothing there" flag the moment the routine commits to
+    // drawing, so a `WPLS` interrupted halfway still has something to erase.
     _state.sun[0] = 1;
 
     const CircleExtent extent = CircleOffScreen(_state, _radius, _centre);
     if (extent.offScreen)
     {
-      // 6502: BCS PLF3M3 / JMP WPLS -- nothing of it is on screen, so only rub out the old one.
+      // 6502: nothing of it is on screen, so only rub out the old one.
       EraseSun(_canvas, _state, _picture);
       return;
     }
 
     /*
-     * 6502: LDA #0 / LDX K / CPX #96 / ROL A / CPX #40 / ROL A / CPX #16 / ROL A.
+     * 6502: `CNT`, the roughness mask, built out of the radius rather than looked up.
      *
      * Three comparisons rolled into three bits, so `CNT` is 0, 1, 3 or 7 -- the mask the random
      * byte is ANDed with before it is added to each row's half-width. A distant sun is a smooth
@@ -908,8 +908,8 @@ namespace Elite
     }
 
     /*
-     * 6502: LDA Yx2M1 / SEC / SBC K4 / TAX / LDA #0 / SBC K4+1 -- how far the bottom row is from
-     * the sun's centre, which is where the walk starts.
+     * 6502: how far the bottom visible row is from the sun's centre, as a sixteen-bit subtraction.
+     * That is where the walk starts.
      */
     const SubResult offsetLow = SubtractWithCarry(_state.lowestVisibleRow, _centre.y, true);
     std::uint8_t at = offsetLow.value;
@@ -939,14 +939,13 @@ namespace Elite
       sign = 0;
     }
 
-    // 6502: PLF5 -- STX V / STA V+1, and K2(1 0) = K * K, which every row's width is measured
-    // against.
+    // 6502: PLF5 -- the distance from the centre and its sign, stored where `PLF6` reads them.
     _state.v = at;
     _state.vNext = sign;
 
-    // 6502: LDA K / JSR SQUA2 / STA K2+1 / LDA P / STA K2 -- the radius squared, which every row's
-    // half-width is a square root of. `SUN`'s own since M2-c-3 except for the store into `K2`,
-    // which is there for `MV40`'s read a frame later (§8).
+    // 6502: the radius squared, which every row's half-width is a square root of. `SUN`'s own
+    // since M2-c-3 except for the store into `K2`, which is there for `MV40`'s read a frame later
+    // (§8).
     const Product radiusSquared = SquareUnsigned(_radius);
     _math.k2Low = radiusSquared.low;
 
@@ -974,9 +973,9 @@ namespace Elite
      * sign byte in `V+1` is for.
      */
     /*
-     * 6502: `PLF6`'s `DEY / BEQ PLF8` leaves through the ROUTINE'S TAIL and not through part 4, so
-     * a sun that reaches the top of the screen does not get the rows above it erased -- there are
-     * none. The other exit, `PLF10`'s `CPX K`, falls into part 4 because there are.
+     * 6502: `PLF6`'s row-zero exit leaves through the ROUTINE'S TAIL and not through part 4, so a
+     * sun that reaches the top of the screen does not get the rows above it erased -- there are
+     * none. The other exit, `PLF10`'s test against the radius, falls into part 4 because there are.
      */
     bool eraseAbove = false;
 
@@ -991,9 +990,9 @@ namespace Elite
       const Root root = SquareRoot(widthHigh, widthLow.value);
       _math.lastDivisor = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
 
-      // 6502: JSR DORND / AND CNT / CLC / ADC Q / BCC PLF44 / LDA #255 -- the ragged edge, and it
-      // saturates rather than wrapping round to nothing. The generator runs on the carry `LL5`
-      // left, which is the last bit out of the square root (§6.55).
+      // 6502: the ragged edge -- a random byte masked by `CNT` and added to the half-width -- and
+      // it saturates at 255 rather than wrapping round to nothing. The generator runs on the carry
+      // `LL5` left, which is the last bit out of the square root (§6.55).
       const RngResult roll = _rng.Next(root.carry);
       const AddResult ragged = AddWithCarry(static_cast<std::uint8_t>(roll.value & roughness), root.value, false);
       std::uint8_t width = ragged.value;
@@ -1002,8 +1001,8 @@ namespace Elite
         width = 255;
       }
 
-      // 6502: PLF44 -- LDX LSO,Y / STA LSO,Y. The old width is kept and the new one stored, and
-      // what gets drawn is the DIFFERENCE between the two lines rather than both of them.
+      // 6502: PLF44 -- the old width is read out of the heap and the new one stored in its place,
+      // and what gets drawn is the DIFFERENCE between the two lines rather than both of them.
       const std::uint8_t was = _state.sun[row];
       _state.sun[row] = width;
 
@@ -1056,7 +1055,7 @@ namespace Elite
         }
       }
 
-      // 6502: PLF6 -- DEY / BEQ PLF8.
+      // 6502: PLF6 -- the row steps up, and row zero ends the walk through the routine's tail.
       --row;
       if (row == 0u)
       {
@@ -1078,7 +1077,7 @@ namespace Elite
       else
       {
         /*
-         * 6502: DEC V / BNE PLFL / DEC V+1.
+         * 6502: below the centre, so the distance SHRINKS as the walk climbs.
          *
          * The decrement is UNCONDITIONAL and the branch only decides whether the high byte follows
          * it down. So V reaching zero is what flips the walk from "coming in towards the centre"
