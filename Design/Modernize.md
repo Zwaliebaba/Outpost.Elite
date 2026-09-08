@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,149 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,924 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,812 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1885,6 +1885,39 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-1: the music player's fifteen bytes, and two of them were named backwards.**
+
+The first family, and the one that stands alone: `MusicPlayer`'s bytes are read by `Music.cpp`,
+`StateHash.cpp` and `SoundTests.cpp` and by nothing else. `value0` to `value4` become
+`commandSixTally`, `voice1Control`, `voice2Control`, `voice3Control` and `restLength`; `vibrato2`
+and `vibrato3` become `vibrato2Count` and `vibrato3Count`, which is what they are — counters stepped
+each pass until they reach a period.
+
+**AND THE EIGHT VIBRATO BYTES WERE ALREADY KNOWN TO BE BACKWARDS.** `Music.h` has said since M5 that
+`voice2lo1` holds the byte written to SID+&8, which is the frequency's HIGH register, and
+`voice2hi1` the one written to SID+&7, the LOW — and that the 32 the vibrato adds goes into `hi2`
+with a carry into `lo2`, which is a sixteen-bit add only if the names are read the other way round.
+The comment ended "they are kept as named because the ledger and the oracle test name them", which
+was true while the ledger and the oracle test were the point. They are `voice2NoteHigh`,
+`voice2NoteLow`, `voice2RaisedHigh` and `voice2RaisedLow` now, and voice 3's the same, so the carry
+reads as a carry between a low byte and a high one.
+
+**THE BRIDGE'S FIELDS WERE RENAMED WITH THEM AND THE STRINGS WERE NOT.** `SoundLabels::value0` holds
+the ADDRESS of `value0`, so by this slice's own rule its name was correct — but the field is the
+port's side of the map and the string in `_oracle.Label("value0")` is the original's, so the field
+takes the port's name and the literal keeps the label. That is the pattern for every bridge struct
+the rest of M6-c meets, and it needs no exemption in the counter.
+
+**THE FIRST ATTEMPT REWROTE THE MARKERS**, because the rename ran over the whole file: every
+`///< 6502: value0` became `///< 6502: commandSixTally`, which is rule 4 broken fifteen times in one
+commit. Comments and string literals are masked out of the pass now and the markers are what they
+were; the ONE comment that had to change is the block explaining the backwards names, which is
+history and says so.
+
+454 tests green, all eighteen checks, and the replay digests unmoved — which is the row's own
+acceptance and the reason a rename slice runs the whole suite rather than the file's own.
+`origin-identifiers` 1,924 → 1,812.
 
 **2026-09-08 — M6-c-0: the instrument, and "is a label" turned out to be the wrong question.**
 

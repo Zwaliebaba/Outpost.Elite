@@ -79,9 +79,9 @@
       "slice": "M6-a-1: SpawnOutcome and the TT100 fall-through carry the labels the branch they replace carried (rule 4)"
     },
     "origin-identifiers": {
-      "ceiling": 1924,
+      "ceiling": 1812,
       "slack": 0,
-      "slice": "M6-c-0: the instrument, measured before any rename"
+      "slice": "M6-c-1: the music player's fifteen bytes"
     },
     "oracle-test-files": {
       "ceiling": 48,

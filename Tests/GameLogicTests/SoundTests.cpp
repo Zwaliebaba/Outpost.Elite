@@ -60,9 +60,9 @@ namespace GameLogicTests
       std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
       std::uint16_t noise, noise2, noiseoff, soflush, beep, comirq1, rastct, bomb;
       std::uint16_t mupla, mutok, mufor, mudock, musilly, mulie;
-      std::uint16_t bdbuff, counter, vibrato2, vibrato3, bddataptr1, bddataptr3;
-      std::uint16_t value0, value1, value2, value3, value4, value5;
-      std::uint16_t voice2lo1, voice2hi1, voice2lo2, voice2hi2, voice3lo1, voice3hi1, voice3lo2, voice3hi2;
+      std::uint16_t bdbuff, counter, vibrato2Count, vibrato3Count, bddataptr1, bddataptr3;
+      std::uint16_t commandSixTally, voice1Control, voice2Control, voice3Control, restLength, value5;
+      std::uint16_t voice2NoteHigh, voice2NoteLow, voice2RaisedHigh, voice2RaisedLow, voice3NoteHigh, voice3NoteLow, voice3RaisedHigh, voice3RaisedLow;
       std::uint16_t bdbeqmod1, bdbeqmod2, bdlab24, bdlab23;
       std::uint16_t startbd, startat, stopbd, stopat, musicstart;
 
@@ -94,24 +94,24 @@ namespace GameLogicTests
           mulie(_oracle.Label("MULIE")),
           bdbuff(_oracle.Label("BDBUFF")),
           counter(_oracle.Label("counter")),
-          vibrato2(_oracle.Label("vibrato2")),
-          vibrato3(_oracle.Label("vibrato3")),
+          vibrato2Count(_oracle.Label("vibrato2")),
+          vibrato3Count(_oracle.Label("vibrato3")),
           bddataptr1(_oracle.Label("BDdataptr1")),
           bddataptr3(_oracle.Label("BDdataptr3")),
-          value0(_oracle.Label("value0")),
-          value1(_oracle.Label("value1")),
-          value2(_oracle.Label("value2")),
-          value3(_oracle.Label("value3")),
-          value4(_oracle.Label("value4")),
+          commandSixTally(_oracle.Label("value0")),
+          voice1Control(_oracle.Label("value1")),
+          voice2Control(_oracle.Label("value2")),
+          voice3Control(_oracle.Label("value3")),
+          restLength(_oracle.Label("value4")),
           value5(_oracle.Label("value5")),
-          voice2lo1(_oracle.Label("voice2lo1")),
-          voice2hi1(_oracle.Label("voice2hi1")),
-          voice2lo2(_oracle.Label("voice2lo2")),
-          voice2hi2(_oracle.Label("voice2hi2")),
-          voice3lo1(_oracle.Label("voice3lo1")),
-          voice3hi1(_oracle.Label("voice3hi1")),
-          voice3lo2(_oracle.Label("voice3lo2")),
-          voice3hi2(_oracle.Label("voice3hi2")),
+          voice2NoteHigh(_oracle.Label("voice2lo1")),
+          voice2NoteLow(_oracle.Label("voice2hi1")),
+          voice2RaisedHigh(_oracle.Label("voice2lo2")),
+          voice2RaisedLow(_oracle.Label("voice2hi2")),
+          voice3NoteHigh(_oracle.Label("voice3lo1")),
+          voice3NoteLow(_oracle.Label("voice3hi1")),
+          voice3RaisedHigh(_oracle.Label("voice3lo2")),
+          voice3RaisedLow(_oracle.Label("voice3hi2")),
           bdbeqmod1(_oracle.Label("BDbeqmod1")),
           bdbeqmod2(_oracle.Label("BDbeqmod2")),
           bdlab24(_oracle.Label("BDlab24")),
@@ -256,25 +256,25 @@ namespace GameLogicTests
       Assert::AreEqual<int>(_cpu.memory[_at.mupla], _music.playing, (_where + L": MUPLA").c_str());
       Assert::AreEqual<int>(_cpu.memory[_at.bdbuff], _music.buffer, (_where + L": BDBUFF").c_str());
       Assert::AreEqual<int>(_cpu.memory[_at.counter], _music.counter, (_where + L": counter").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.vibrato2], _music.vibrato2, (_where + L": vibrato2").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.vibrato3], _music.vibrato3, (_where + L": vibrato3").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.vibrato2Count], _music.vibrato2Count, (_where + L": vibrato2").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.vibrato3Count], _music.vibrato3Count, (_where + L": vibrato3").c_str());
       Assert::AreEqual<int>(_cpu.ReadWord(_at.bddataptr1), static_cast<int>(_music.pointer + _at.musicstart),
                             (_where + L": BDdataptr1").c_str());
       Assert::AreEqual<int>(_cpu.ReadWord(_at.bddataptr3), static_cast<int>(_music.restart + _at.musicstart),
                             (_where + L": BDdataptr3").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.value0], _music.value0, (_where + L": value0").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.value1], _music.value1, (_where + L": value1").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.value2], _music.value2, (_where + L": value2").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.value3], _music.value3, (_where + L": value3").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.value4], _music.value4, (_where + L": value4").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice2lo1], _music.voice2lo1, (_where + L": voice2lo1").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice2hi1], _music.voice2hi1, (_where + L": voice2hi1").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice2lo2], _music.voice2lo2, (_where + L": voice2lo2").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice2hi2], _music.voice2hi2, (_where + L": voice2hi2").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice3lo1], _music.voice3lo1, (_where + L": voice3lo1").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice3hi1], _music.voice3hi1, (_where + L": voice3hi1").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice3lo2], _music.voice3lo2, (_where + L": voice3lo2").c_str());
-      Assert::AreEqual<int>(_cpu.memory[_at.voice3hi2], _music.voice3hi2, (_where + L": voice3hi2").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.commandSixTally], _music.commandSixTally, (_where + L": value0").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice1Control], _music.voice1Control, (_where + L": value1").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice2Control], _music.voice2Control, (_where + L": value2").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice3Control], _music.voice3Control, (_where + L": value3").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.restLength], _music.restLength, (_where + L": value4").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice2NoteHigh], _music.voice2NoteHigh, (_where + L": voice2lo1").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice2NoteLow], _music.voice2NoteLow, (_where + L": voice2hi1").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice2RaisedHigh], _music.voice2RaisedHigh, (_where + L": voice2lo2").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice2RaisedLow], _music.voice2RaisedLow, (_where + L": voice2hi2").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice3NoteHigh], _music.voice3NoteHigh, (_where + L": voice3lo1").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice3NoteLow], _music.voice3NoteLow, (_where + L": voice3hi1").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice3RaisedHigh], _music.voice3RaisedHigh, (_where + L": voice3lo2").c_str());
+      Assert::AreEqual<int>(_cpu.memory[_at.voice3RaisedLow], _music.voice3RaisedLow, (_where + L": voice3hi2").c_str());
 
       /*
        * The two self-modified branch operands, read as the bit they stand for. The assembled operand
@@ -766,7 +766,7 @@ namespace GameLogicTests
         music.tuneStart = place.offset;
         music.pointer = place.offset;
         music.restart = place.offset;
-        music.value4 = REST;
+        music.restLength = REST;
         const std::uint16_t address = static_cast<std::uint16_t>(place.offset + at.musicstart);
         cpu.memory[at.bddataptr1] = static_cast<std::uint8_t>(address & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(at.bddataptr1 + 1u)] = static_cast<std::uint8_t>(address >> 8);
@@ -774,7 +774,7 @@ namespace GameLogicTests
         cpu.memory[static_cast<std::uint16_t>(at.bddataptr3 + 1u)] = static_cast<std::uint8_t>(address >> 8);
         cpu.memory[at.value5] = static_cast<std::uint8_t>(address & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(at.value5 + 1u)] = static_cast<std::uint8_t>(address >> 8);
-        cpu.memory[at.value4] = REST;
+        cpu.memory[at.restLength] = REST;
 
         std::uint32_t writes = 0;
         for (std::uint32_t tick = 0; tick < TICKS; ++tick)
@@ -796,13 +796,13 @@ namespace GameLogicTests
          * only evidence the command ran at all -- which makes this assertion the one that says the
          * gap is closed rather than merely aimed at.
          */
-        Assert::IsTrue(music.value0 > 0u, (tune + L": command 6 ran, which is what value0 counts").c_str());
+        Assert::IsTrue(music.commandSixTally > 0u, (tune + L": command 6 ran, which is what value0 counts").c_str());
         Assert::AreEqual<int>(static_cast<int>(place.offset), static_cast<int>(music.restart),
                               (tune + L": the rewind point never moved").c_str());
 
         Logger::WriteMessage((std::string("commands at comudat+") + std::to_string(place.offset) + " (" + place.what + "): " +
                               std::to_string(TICKS) + " interrupts, " + std::to_string(writes) + " register writes, value0 " +
-                              std::to_string(music.value0) + "\n")
+                              std::to_string(music.commandSixTally) + "\n")
                                .c_str());
       }
     }
