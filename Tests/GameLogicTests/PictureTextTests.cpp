@@ -5,12 +5,14 @@
 #include "Canvas.h"
 #include "Commander.h"
 #include "Equipment.h"
+#include "Galaxy.h"
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
 #include "Picture.h"
 #include "Ports.h"
 #include "StateTokens.h"
 #include "StatusScreen.h"
+#include "SystemScreen.h"
 #include "TextPrint.h"
 #include "TextPrint2x.h"
 #include "Tokens.h"
@@ -166,6 +168,49 @@ namespace GameLogicTests
         }
       }
 
+      return {};
+    }
+
+    /*
+     * NO ANCHOR BOUNDARY FALLS INSIDE A WORD -- the clause `TheGlyphsAgree` cannot see, and the
+     * reason it is here is that the absence of it let two sheared screens through (slice RS-5-d).
+     *
+     * An anchor covers a RANGE of canvas columns. A range that ends in the middle of a run of ink
+     * sends the first half of a word to the anchor's column and the rest to the offsets, and the
+     * result -- "Radioacti   ve  s" -- is a mapping that is still perfectly INJECTIVE, still puts
+     * every canvas glyph on the picture, and still has nothing on the picture the canvas lacks. All
+     * three clauses of the shadow test hold on a screen that is unreadable.
+     *
+     * So this asks the question those cannot: two canvas cells side by side, both with ink, must
+     * land side by side. It is the property a table is FOR, and a sketch is how a person checks it;
+     * this is how the suite does.
+     */
+    std::wstring NothingIsSheared(const Canvas& _canvas, TextLayout _layout, const Canvas& _before)
+    {
+      for (int row = 0; row < Canvas::CELL_ROWS; ++row)
+      {
+        for (int column = 0; column + 1 < Canvas::CELL_COLUMNS; ++column)
+        {
+          const bool here = !Blank(CanvasCell(_canvas, column, row)) && CanvasCell(_canvas, column, row) != CanvasCell(_before, column, row);
+          const bool next = !Blank(CanvasCell(_canvas, column + 1, row)) &&
+                            CanvasCell(_canvas, column + 1, row) != CanvasCell(_before, column + 1, row);
+          if (!here || !next)
+          {
+            continue;
+          }
+
+          const Elite::WideCell left = _layout.Map(static_cast<std::uint8_t>(column), static_cast<std::uint8_t>(row));
+          const Elite::WideCell right = _layout.Map(static_cast<std::uint8_t>(column + 1), static_cast<std::uint8_t>(row));
+          if (left.row != right.row || right.column != left.column + 1)
+          {
+            return L"canvas cells (" + std::to_wstring(column) + L", " + std::to_wstring(row) + L") and (" +
+                   std::to_wstring(column + 1) + L", " + std::to_wstring(row) +
+                   L") both carry ink and are side by side, but the table sends them to (" + std::to_wstring(left.column) + L", " +
+                   std::to_wstring(left.row) + L") and (" + std::to_wstring(right.column) + L", " + std::to_wstring(right.row) +
+                   L") -- an anchor boundary falls inside a word";
+          }
+        }
+      }
       return {};
     }
 
@@ -370,17 +415,20 @@ namespace GameLogicTests
         TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::STATUS_LAYOUT, frame, framePicture);
       Assert::IsTrue(wrong.empty(), wrong.c_str());
 
+      const std::wstring sheared = NothingIsSheared(docked.universe.canvas, Elite::STATUS_LAYOUT, frame);
+      Assert::IsTrue(sheared.empty(), sheared.c_str());
+
       // And the three cells the sketch is made of, stated as numbers so that a table edited by
       // accident fails here rather than on somebody's screen.
-      const Elite::WideCell title = Elite::STATUS_LAYOUT.Map(7, 1);
+      const Elite::WideCell title = Elite::STATUS_LAYOUT.Map(11, 1); // XC 7, which is canvas cell 11
       Assert::AreEqual(31, title.column, L"the title, over both columns");
       Assert::AreEqual(3, title.row, L"above where NLIN3's rule would fall");
 
-      const Elite::WideCell heading = Elite::STATUS_LAYOUT.Map(1, 12);
+      const Elite::WideCell heading = Elite::STATUS_LAYOUT.Map(5, 12);
       Assert::AreEqual(47, heading.column, L"EQUIPMENT: in the right-hand column");
       Assert::AreEqual(12, heading.row, L"level with the first label line");
 
-      const Elite::WideCell lastItem = Elite::STATUS_LAYOUT.Map(6, 23);
+      const Elite::WideCell lastItem = Elite::STATUS_LAYOUT.Map(10, 23);
       Assert::AreEqual(52, lastItem.column, L"the last equipment line, at its indent");
       Assert::AreEqual(34, lastItem.row, L"and two wide rows below the one before it");
     }
@@ -411,17 +459,20 @@ namespace GameLogicTests
         TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::BUY_LAYOUT, frame, framePicture);
       Assert::IsTrue(wrong.empty(), wrong.c_str());
 
+      const std::wstring sheared = NothingIsSheared(docked.universe.canvas, Elite::BUY_LAYOUT, frame);
+      Assert::IsTrue(sheared.empty(), sheared.c_str());
+
       // The fold: canvas row 1's "UNIT" and canvas row 2's "PRICE" are on ONE wide row, four cells
       // apart, so they read as the phrase the forty-column screen had to split.
-      const Elite::WideCell unit = Elite::BUY_LAYOUT.Map(17, 1);
-      const Elite::WideCell price = Elite::BUY_LAYOUT.Map(17, 2);
+      const Elite::WideCell unit = Elite::BUY_LAYOUT.Map(21, 1);
+      const Elite::WideCell price = Elite::BUY_LAYOUT.Map(21, 2);
       Assert::AreEqual(unit.row, price.row, L"the two heading rows land on one");
       Assert::AreEqual(40, unit.column, L"UNIT ...");
       Assert::AreEqual(45, price.column, L"... PRICE, one space along");
 
       // And each heading sits over the column it heads.
-      Assert::AreEqual(Elite::BUY_LAYOUT.Map(1, 4).column, Elite::BUY_LAYOUT.Map(2, 2).column, L"PRODUCT over the names");
-      Assert::AreEqual(Elite::BUY_LAYOUT.Map(20, 4).column, 48, L"and the price still ends where PrintNumber left it");
+      Assert::AreEqual(Elite::BUY_LAYOUT.Map(5, 4).column, Elite::BUY_LAYOUT.Map(6, 2).column, L"PRODUCT over the names");
+      Assert::AreEqual(48, Elite::BUY_LAYOUT.Map(24, 4).column, L"and the price still ends where PrintNumber left it");
     }
 
     TEST_METHOD(TheInventoryScreenPutsTheHoldInItsOwnColumn)
@@ -439,9 +490,12 @@ namespace GameLogicTests
         TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::INVENTORY_LAYOUT, frame, framePicture);
       Assert::IsTrue(wrong.empty(), wrong.c_str());
 
+      const std::wstring sheared = NothingIsSheared(docked.universe.canvas, Elite::INVENTORY_LAYOUT, frame);
+      Assert::IsTrue(sheared.empty(), sheared.c_str());
+
       // The first item is level with the fuel line and in the other column, which is the sketch.
-      const Elite::WideCell fuel = Elite::INVENTORY_LAYOUT.Map(1, 4);
-      const Elite::WideCell first = Elite::INVENTORY_LAYOUT.Map(1, 7);
+      const Elite::WideCell fuel = Elite::INVENTORY_LAYOUT.Map(5, 4);
+      const Elite::WideCell first = Elite::INVENTORY_LAYOUT.Map(5, 7);
       Assert::AreEqual(fuel.row, first.row, L"the hold starts level with the fuel");
       Assert::AreEqual(6, fuel.column, L"the fuel line on the left");
       Assert::AreEqual(47, first.column, L"and the hold on the right");
@@ -461,16 +515,59 @@ namespace GameLogicTests
         TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::EQUIP_LAYOUT, frame, framePicture);
       Assert::IsTrue(wrong.empty(), wrong.c_str());
 
+      const std::wstring sheared = NothingIsSheared(docked.universe.canvas, Elite::EQUIP_LAYOUT, frame);
+      Assert::IsTrue(sheared.empty(), sheared.c_str());
+
       /*
        * `CLYNS`'s row 21 is the point of the fourth anchor. At twice the row spacing the offsets
        * would put it on wide row 43, thirty rows below a list that ends at 34; the anchor brings it
        * to 40. A row number that meant "just under the text" at 25 rows does not at 50.
        */
-      const Elite::WideCell lastItem = Elite::EQUIP_LAYOUT.Map(3, 16);
-      const Elite::WideCell prompt = Elite::EQUIP_LAYOUT.Map(1, 21);
+      const Elite::WideCell lastItem = Elite::EQUIP_LAYOUT.Map(7, 16);
+      const Elite::WideCell prompt = Elite::EQUIP_LAYOUT.Map(5, 21);
       Assert::AreEqual(34, lastItem.row, L"the thirteenth item, which is as many as any station sells");
       Assert::AreEqual(40, prompt.row, L"and the prompt six rows under it rather than at 43");
       Assert::IsTrue(prompt.row > lastItem.row, L"under the list and not through it");
+    }
+
+    /*
+     * THE DATA ON SYSTEM SCREEN (slice RS-5-d), whose table is the one that is NOT stride 2.
+     *
+     * `TT25` double-spaces itself, so the offsets keep the game's own spacing and the anchors do
+     * the re-flow. The assertion that matters beyond the sweep is the one about the description:
+     * it is the text `DA11` justified to thirty columns, placed in a column of its own, and the
+     * picture carries it CHARACTER FOR CHARACTER -- which is what section 6.2's `wrapWidth`
+     * measurement gave up a wider paragraph to keep.
+     */
+    TEST_METHOD(TheDataScreenStandsItsDescriptionBesideThePairs)
+    {
+      Docked docked;
+
+      Elite::SetUpScreen(docked.universe, docked.ports, Elite::DATA_ON_SYSTEM_VIEW, Elite::DATA_LAYOUT);
+      const Canvas frame = docked.universe.canvas;
+      const Picture framePicture = docked.universe.picture;
+
+      const Elite::SystemData data = Elite::GenerateSystemData(docked.universe.selectedSeeds);
+      Elite::SystemDataScreen(docked.universe, docked.ports, data, 60);
+
+      const std::wstring wrong =
+        TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::DATA_LAYOUT, frame, framePicture);
+      Assert::IsTrue(wrong.empty(), wrong.c_str());
+
+      const std::wstring sheared = NothingIsSheared(docked.universe.canvas, Elite::DATA_LAYOUT, frame);
+      Assert::IsTrue(sheared.empty(), sheared.c_str());
+
+      // The first pair and the description's first line are level, in two columns.
+      const Elite::WideCell pair = Elite::DATA_LAYOUT.Map(5, 3);
+      const Elite::WideCell blurb = Elite::DATA_LAYOUT.Map(5, 19);
+      Assert::AreEqual(pair.row, blurb.row, L"the description starts level with the first pair");
+      Assert::AreEqual(6, pair.column, L"the pairs on the left");
+      Assert::AreEqual(47, blurb.column, L"and the description on the right");
+
+      // Stride one, because the screen already spaces itself: a pair and the pair after it are two
+      // wide rows apart and not four.
+      Assert::AreEqual(2, Elite::DATA_LAYOUT.Map(5, 5).row - Elite::DATA_LAYOUT.Map(5, 3).row,
+                       L"the game's own spacing, not the layout's on top of it");
     }
 
     /*
@@ -495,12 +592,13 @@ namespace GameLogicTests
       // exercising the anchor path and not two rigid transforms.
       static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
 
-      const std::array<Named, 7> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
+      const std::array<Named, 8> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
                                           {L"the space view", Elite::SPACE_VIEW_LAYOUT},
                                           {L"the status screen", Elite::STATUS_LAYOUT},
                                           {L"the market screens", Elite::BUY_LAYOUT},
                                           {L"the inventory screen", Elite::INVENTORY_LAYOUT},
                                           {L"the equip ship screen", Elite::EQUIP_LAYOUT},
+                                          {L"the data on system screen", Elite::DATA_LAYOUT},
                                           {L"an anchored table", Elite::TextLayout{4, 8, 2, ANCHORS}}}};
 
       for (const Named& named : LAYOUTS)
