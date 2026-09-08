@@ -229,9 +229,21 @@ OPCODE_IMPLIED = re.compile(r"(?:^|[/`(,]\s*)(?:" + "|".join(IMPLIED) + r")\b\s*
 
 COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 
+# The tag that makes a quotation DELIBERATE (§1 R-i, ruled 2026-09-08).
+#
+# M6-d's row wants the ratchet at zero and Risk R20 lets a comment keep its instruction sequence
+# when that sequence IS the reason. Both hold once the counter can tell the two apart, and the only
+# thing that can tell them apart is the author saying which this is. So a kept quotation carries the
+# tag, ON EVERY LINE OF IT: an untagged listing is transcription and goes, a tagged one is counted
+# against a cap you can see. Tagging each line rather than opening a block keeps the rule
+# unambiguous and makes a long quotation cost more to keep, which is the right incentive.
+#
+# Not `6502:` -- that is the marker M6-e removes, and `\b6502:` does not match this.
+QUOTED_TAG = re.compile(r"\b6502 quoted:")
 
-def count_opcode_comments(_root: Path) -> int:
-    """P12 -- comment lines in `GameLogic/` that QUOTE the original's instructions (M6-d).
+
+def _opcode_lines(_root: Path):
+    """Every comment line in the port that shows instruction shape, with whether it is tagged.
 
     Counted per LINE and not per instruction, because a rewrite replaces lines: a run of six
     instructions across two comment lines is two sites to rewrite, not six.
@@ -239,7 +251,6 @@ def count_opcode_comments(_root: Path) -> int:
     `Design/` is not read. The plan's own journal quotes assembly deliberately and is history --
     M6-d's row says so -- and a counter that read it could never reach zero.
     """
-    total = 0
     for folder in ("GameLogic", "Outpost"):
         here = _root / folder
         if not here.is_dir():
@@ -247,8 +258,17 @@ def count_opcode_comments(_root: Path) -> int:
         for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
             for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
                 if COMMENT_LINE.match(line) and (OPCODE_OPERAND.search(line) or OPCODE_IMPLIED.search(line)):
-                    total += 1
-    return total
+                    yield line, bool(QUOTED_TAG.search(line))
+
+
+def count_opcode_transcriptions(_root: Path) -> int:
+    """P12 -- instruction listings that carry no reason. M6-d drives this one to ZERO."""
+    return sum(1 for _line, tagged in _opcode_lines(_root) if not tagged)
+
+
+def count_opcode_quotations(_root: Path) -> int:
+    """P12 -- instruction sequences kept BECAUSE they are the reason (R20, R-i). Capped, not zero."""
+    return sum(1 for _line, tagged in _opcode_lines(_root) if tagged)
 
 
 def count_origin_markers(_root: Path) -> int:
@@ -409,7 +429,8 @@ COUNTERS = {
     "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
-    "opcode-comments": (count_opcode_comments, "P12: comment lines quoting the original's instructions"),
+    "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments that carry no reason"),
+    "opcode-quotations": (count_opcode_quotations, "P12: instruction sequences kept because they ARE the reason"),
     "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
     "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
@@ -496,6 +517,7 @@ namespace Elite
   // 6502: LDA #0 / STA SC+1 -- an instruction with an operand, so this line IS a transcription
   // `ORA` touches no flag, and its top BIT is set: prose that NAMES an instruction is not one
   /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
+  // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
   // k3 and q here are a COMMENT and are not counted either
   std::uint8_t m_alp2 = 0;                                  // a member's prefix is stripped before the match
@@ -559,7 +581,8 @@ EXPECTED = {
     "inventory-stale-files": 1,
     "origin-markers": 4,
     "origin-identifiers": 5,
-    "opcode-comments": 2,
+    "opcode-transcriptions": 2,
+    "opcode-quotations": 1,
     "oracle-test-files": 1,
     "origin-tools": 1,
 }

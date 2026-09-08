@@ -135,6 +135,10 @@ namespace Elite::Testing
     static constexpr std::size_t BUCKETS = 11;
     static constexpr std::size_t SMALLEST_BUCKET = 64;
 
+    /// The shortest run of written bytes that counts as content carried out of the image rather
+    /// than as arithmetic agreeing with it by chance. Four bytes is 1 in 4 billion by chance.
+    static constexpr std::size_t CARRY_RUN = 4;
+
     struct Totals
     {
       std::uint64_t calls = 0;    ///< every `CallSubroutine` the suite made
@@ -153,6 +157,21 @@ namespace Elite::Testing
        * much of the corpus answers from the original rather than from its inputs. `callsPure` is
        * its complement and is the fraction a write-set key covers outright.
        */
+      /*
+       * What the ANSWERS carry (M6-b-3, §1 R-h), which is the quantity ADR-001 §5 turns on.
+       *
+       * The census below counts image DEPENDENCE, and that is an upper bound: a byte read out of a
+       * table may be consumed into a computation and never reach the record. This counts the other
+       * thing -- runs of bytes in a record that appear VERBATIM in the base image, which is what a
+       * block copy of a table, a piece of text or a glyph bitmap looks like once it has landed in a
+       * fixture. A run has to be at least `CARRY_RUN` bytes long: shorter matches are arithmetic
+       * that happened to agree with a byte of the original, not content carried out of it.
+       */
+      std::uint64_t recordBytes = 0;  ///< memory bytes across all distinct records, the denominator
+      std::uint64_t carryBytes = 0;   ///< of those, bytes inside a verbatim run
+      std::uint64_t carryRuns = 0;
+      std::uint64_t longestCarry = 0;
+
       std::uint64_t reads = 0;
       std::uint64_t imageReads = 0;
       std::uint64_t imageContentReads = 0; ///< of those, the ones where the image's byte is not zero
