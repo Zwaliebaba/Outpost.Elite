@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,118 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,024 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-23: `ViewChange.cpp` to zero, and the stray byte that eats the next
+instruction.**
+
+All 94 — 44 on their own lines, 50 trailing — over the screen wipe, the border, the dashboard copy
+and `LOOK1`. Seventh file at zero, and the largest single file in the tree by site count.
+
+**`EQUB &2C` is a two-byte opcode used as a swallow.** It appears twice here, both times
+immediately before `BOX2`'s own row count, and the whole point is that it is not an instruction at
+all in the sense the listing suggests: the assembler emits one byte that the processor reads as the
+start of a three-byte instruction, so the two bytes after it — `BOX2`'s `LDX #18` — are consumed as
+its operand and never execute. The count that survives is the caller's 25, which is why the same
+routine draws an eighteen-row border at one entry point and a twenty-five-row one at the other
+(§6.79). The listing showed the trick; only prose says what it is FOR, and both comments now do.
+
+Two more where the listing was hiding the argument rather than making it:
+
+- **A load read for its flags alone.** `Warp` tests the planet's z sign with a load into Y and then
+  throws that Y away — the move that follows overwrites it with the accumulator's zero, which is
+  slot 0 and `MAS2`'s argument. Two instructions apart, unrelated, and reading them as a pair is
+  exactly the mistake the transcription invites.
+- **A negative z is a body behind you, so its distance is never tested.** That was already prose,
+  and it is the sentence the listing above it made look like a detail.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, no marker lost (103 in this
+file, before and after). `opcode-transcriptions` 2,118 → 2,024.
 
 **2026-09-08 — M6-d-22: `Flight.cpp` to zero, and a comment that had the shift the wrong way round.**
 

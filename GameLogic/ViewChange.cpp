@@ -17,13 +17,13 @@ namespace Elite
 
     do
     {
-      _canvas.Write(static_cast<std::uint16_t>(_pageBase + y), 0u); // 6502: .ZEL1k STA (SC),Y
+      _canvas.Write(static_cast<std::uint16_t>(_pageBase + y), 0u); // 6502: ZEL1k -- the store through `SC`
       if (_picture != nullptr)
       {
         WriteBitmapByte2x(*_picture, static_cast<std::uint16_t>(_pageBase + y), 0u, false);
       }
       y = static_cast<std::uint8_t>(y - 1u); // 6502: DEY
-    } while (y != 0u); // 6502: BNE ZEL1k
+    } while (y != 0u); // 6502: round again while the index is not zero
   }
 
   void CopyPagesDown(Canvas& _canvas, const std::uint8_t* _from, std::uint16_t _to, std::uint8_t _pages, std::uint8_t _first) noexcept
@@ -37,13 +37,13 @@ namespace Elite
     {
       do
       {
-        // 6502: LDA (V),Y / STA (SC),Y.
+        // 6502: a byte in through `V`, out through `SC`.
         _canvas.Write(static_cast<std::uint16_t>(target + y), _from[source + y]);
         y = static_cast<std::uint8_t>(y - 1u); // 6502: DEY
       } while (y != 0u); // 6502: BNE mvbllop
 
-      source = static_cast<std::uint16_t>(source + 256u); // 6502: INC V+1
-      target = static_cast<std::uint16_t>(target + 256u); // 6502: INC SC+1
+      source = static_cast<std::uint16_t>(source + 256u); // 6502: the source page steps up
+      target = static_cast<std::uint16_t>(target + 256u); // 6502: and the target's
 
       pages = static_cast<std::uint8_t>(pages - 1u); // 6502: DEX
       if (pages == 0u)                               // 6502: BNE mvbllop
@@ -55,7 +55,7 @@ namespace Elite
 
   void DrawScreenRule(Canvas& _canvas, std::uint8_t _row, Picture* _picture) noexcept
   {
-    // 6502: STX Y1 / LDX #0 / STX X1 / DEX / STX X2 / JMP HLOIN -- a tail call.
+    // 6502: the row, then 0 and 255 as its ends, and a tail call into HLOIN.
     DrawHorizontalLine(_canvas, 0u, 255u, _row);
     if (_picture != nullptr)
     {
@@ -67,13 +67,13 @@ namespace Elite
   {
     std::uint16_t cell = _cell;
 
-    for (std::uint8_t row = _rows; row != 0u; --row) // 6502: .BOXL2 ... DEX / BNE BOXL2
+    for (std::uint8_t row = _rows; row != 0u; --row) // 6502: BOXL2, counting rows down
     {
-      for (int line = 7; line >= 0; --line) // 6502: LDY #7 / .BOXL3 ... DEY / BPL BOXL3
+      for (int line = 7; line >= 0; --line) // 6502: BOXL3, eight pixel rows down through zero
       {
         const std::uint16_t at = static_cast<std::uint16_t>(cell + line);
 
-        // 6502: LDA R2 / EOR (SC),Y / STA (SC),Y -- an EOR, so twice puts it back.
+        // 6502: the pattern EORed into the byte -- so doing it twice puts it back.
         _canvas.Write(at, static_cast<std::uint8_t>(_canvas.Read(at) ^ _pattern));
         if (_picture != nullptr)
         {
@@ -87,17 +87,18 @@ namespace Elite
 
   void DrawFullBorder(Canvas& _canvas, Picture* _picture) noexcept
   {
-    DrawScreenRule(_canvas, BOTTOM_RULE_ROW, _picture); // 6502: LDX #199 / JSR BOXS
+    DrawScreenRule(_canvas, BOTTOM_RULE_ROW, _picture); // 6502: BOXS on row 199
 
-    // 6502: LDA #&FF / STA SCBASE+&1F1F -- the corner byte the rule stops one short of. The
-    // canvas is laid out from SCBASE contiguously, so the address IS the offset.
+    // 6502: the corner byte the rule stops one short of, filled by hand. The canvas is laid out
+    // from SCBASE contiguously, so the address IS the offset.
     _canvas.Write(BOTTOM_RIGHT_CORNER, 0xFFu);
     if (_picture != nullptr)
     {
       WriteBitmapByte2x(*_picture, BOTTOM_RIGHT_CORNER, 0xFFu, false);
     }
 
-    // 6502: LDX #25 / EQUB &2C -- and 25 is what falls through into `BOX2` (§6.79).
+    // 6502: 25 rows, and the stray byte after it swallows `BOX2`'s own count, so 25 is what
+    // falls through (§6.79).
     DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN, _picture);
   }
 
@@ -105,11 +106,11 @@ namespace Elite
   {
     std::uint16_t cell = _cell;
 
-    for (std::uint8_t row = 18u; row != 0u; --row) // 6502: LDX #18 / .BLUEL2 ... DEX / BNE BLUEL2
+    for (std::uint8_t row = 18u; row != 0u; --row) // 6502: BLUEL2, eighteen rows
     {
-      for (int offset = 23; offset >= 0; --offset) // 6502: LDY #23 / .BLUEL1 ... DEY / BPL BLUEL1
+      for (int offset = 23; offset >= 0; --offset) // 6502: BLUEL1, twenty-four cells down through zero
       {
-        // 6502: LDA #%11111111 / STA (SC),Y -- a STORE, unlike `BOXS2` above it.
+        // 6502: every bit set, and a STORE rather than the EOR `BOXS2` above it uses.
         _canvas.Write(static_cast<std::uint16_t>(cell + offset), 0xFFu);
         if (_picture != nullptr)
         {
@@ -123,35 +124,35 @@ namespace Elite
 
   void DrawColourBands(Canvas& _canvas, Picture* _picture) noexcept
   {
-    DrawColourBand(_canvas, 0u, _picture);       // 6502: LDX #LO(SCBASE) / LDY #HI(SCBASE) / JSR BLUEBANDS
+    DrawColourBand(_canvas, 0u, _picture);       // 6502: BLUEBANDS at the top of the screen
     DrawColourBand(_canvas, 37u * 8u, _picture); // 6502: SCBASE+37*8, and it FALLS INTO BLUEBANDS
   }
 
   void DrawBorder(Canvas& _canvas, std::uint8_t _rows, Picture* _picture) noexcept
   {
-    // 6502: LDY #LO(SCBASE+3*8) / STY SC / LDY #HI(SCBASE+3*8) / LDA #%00000011 / JSR BOXS2.
+    // 6502: BOXS2 at cell 3, with the left two pixels.
     ToggleVerticalEdge(_canvas, 3u * 8u, 0x03u, _rows, _picture);
 
-    // 6502: STX T -- the original parks the count in the kernel's byte because `BOXS2` clobbers X.
+    // 6502: the original parks the count in the kernel's byte because `BOXS2` clobbers X.
     // The port passes it, so there is nothing to park and nothing to read back.
     // 6502: the same again at cell 36 with the opposite two pixels, and the count comes back out
     // of `T2` rather than out of X -- `BOXS2` leaves X at zero.
     ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, _rows, _picture);
 
-    // 6502: LDA #1 / STA SCBASE+&118 -- one byte, in cell 35 of the top character row.
+    // 6502: one byte, in cell 35 of the top character row.
     _canvas.Write(0x118u, 1u);
     if (_picture != nullptr)
     {
       WriteBitmapByte2x(*_picture, 0x118u, 1u, false);
     }
 
-    DrawScreenRule(_canvas, 0u, _picture); // 6502: LDX #0, and it falls into BOXS
+    DrawScreenRule(_canvas, 0u, _picture); // 6502: row 0, and it falls into BOXS
   }
 
   void ForgetScannerBlips(Bubble& _bubble) noexcept
   {
-    // 6502: LDX #0 / .zonkL LDA FRIN,X / BEQ zonk1 -- it stops at the first empty slot, which is
-    // what makes `FRIN`'s terminator a terminator.
+    // 6502: zonkL -- it stops at the first empty slot, which is what makes `FRIN`'s terminator a
+    // terminator.
     for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
     {
       const std::uint8_t type = _bubble.slots[slot];
@@ -166,7 +167,7 @@ namespace Elite
         continue;
       }
 
-      // 6502: JSR GINF / LDY #31 / LDA (INF),Y / AND #%11101111 / STA (INF),Y.
+      // 6502: the state byte read through `INF`, masked, and written back.
       Ship& block = _bubble.blocks[slot];
       block.state = Without(block.state, ShipStateBit::OnScanner);
     }
@@ -174,28 +175,28 @@ namespace Elite
 
   void HideAllSprites(VideoState& _video, MemoryMap& _map) noexcept
   {
-    SetMemoryMap(_map, MEMORY_MAP_IO);  // 6502: LDA #%101 / JSR SETL1
-    ApplySpritesEnabled(_video, 0u);    // 6502: LDA #%00000000 / STA VIC+&15
-    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: LDA #%100, and it falls into SETL1
+    SetMemoryMap(_map, MEMORY_MAP_IO);  // 6502: SETL1 with the I/O map
+    ApplySpritesEnabled(_video, 0u);    // 6502: every sprite disabled
+    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: the RAM map, and it falls into SETL1
   }
 
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
                      const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map,
                      Picture* _picture) noexcept
   {
-    // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
+    // 6502: BOX2 at its label, so eighteen rows: the space view's height (§6.79).
     DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW, _picture);
 
-    _screen.colourBank = COLOUR_BANK_DASHBOARD; // 6502: LDA #&91 / STA abraxas
-    _screen.bitmapMode = BITMAP_MODE_DASHBOARD; // 6502: LDA #%11010000 / STA caravanserai
+    _screen.colourBank = COLOUR_BANK_DASHBOARD; // 6502: &91 into abraxas
+    _screen.bitmapMode = BITMAP_MODE_DASHBOARD; // 6502: the dashboard's mode into caravanserai
 
-    // 6502: LDA DFLAG / BNE nearlyxmas -- the dashboard is already there, so skip the expensive
-    // half. The border above and the bands below happen either way.
+    // 6502: a set `DFLAG` skips to nearlyxmas -- the dashboard is already there, so skip the
+    // expensive half. The border above and the bands below happen either way.
     if (_screen.dashboardShown == 0u)
     {
       /*
-       * 6502: LDX #8 / V = DSTORE% / SC = DLOC% / JSR mvblockK, then LDY #&C0 / LDX #1 /
-       * JSR mvbllop with `V` and `SC` still where the first call left them.
+       * 6502: eight whole pages through `mvblockK`, then one more entered at `mvbllop` with `V`
+       * and `SC` still where the first call left them.
        *
        * 2,240 bytes, and NOT the first 2,240: the second entry stores at Y and counts down to 1,
        * so offset 2,048 is skipped and offset 2,240 is written (§6.78).
@@ -213,15 +214,15 @@ namespace Elite
 
       ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
 
-      // 6502: JSR DIALS -- all seven dials and the compass, on a dashboard that has just arrived
+      // 6502: DIALS -- all seven dials and the compass, on a dashboard that has just arrived
       // as a picture with every bar empty.
       DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble, _picture);
     }
 
-    DrawColourBands(_canvas, _picture); // 6502: .nearlyxmas JSR BLUEBAND
-    HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
+    DrawColourBands(_canvas, _picture); // 6502: nearlyxmas -- BLUEBAND
+    HideAllSprites(_video, _map); // 6502: NOSPRITES
 
-    _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
+    _screen.dashboardShown = 0xFFu; // 6502: &FF into DFLAG
   }
 
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
@@ -229,8 +230,7 @@ namespace Elite
                          MemoryMap& _map, std::uint8_t _view, Picture* _picture) noexcept
   {
     /*
-     * 6502: LDA #&04 / STA SC / LDA #&60 / STA SC+1 / LDX #24 / .BOL3 LDA #&10 / LDY #31 /
-     * .BOL4 STA (SC),Y / DEY / BPL BOL4 / SC += 40 / DEX / BNE BOL3.
+     * 6502: BOL3 over BOL4 -- one colour byte written into a rectangle of cells.
      *
      * The colour bytes, not the bitmap: `&6004` is the first block of screen RAM, four cells in,
      * which is where the left margin ends. Thirty-two cells a row for twenty-four rows, in steps of
@@ -253,8 +253,7 @@ namespace Elite
     }
 
     /*
-     * 6502: LDX #HI(SCBASE) / .BOL1 JSR ZES1k / INX / CPX #HI(DLOC%) / BNE BOL1 -- the bitmap, as
-     * far as the dashboard.
+     * 6502: BOL1 -- a page at a time through `ZES1k`: the bitmap, as far as the dashboard.
      *
      * THE COMPARE IS AGAINST THE PAGE AND NOT THE ADDRESS. `DLOC%` is &5680, so the loop stops when
      * X reaches &56 and leaves it there -- which is where the partial page below starts AND where
@@ -268,8 +267,8 @@ namespace Elite
       ZeroWholePage(_canvas, page, _picture);
     }
 
-    // 6502: LDY #LO(DLOC%)-1 / JSR ZES2k / STA (SC),Y -- the partial page, and then by hand the one
-    // byte `ZES2k` walks past because it stops at zero rather than through it.
+    // 6502: ZES2k on the partial page, and then by hand the one byte it walks past, because it
+    // stops at zero rather than through it.
     ZeroPageDown(_canvas, page, static_cast<std::uint8_t>((DASHBOARD_BITMAP & 0xFFu) - 1u), _picture);
     _canvas.Write(page, 0u);
     if (_picture != nullptr)
@@ -277,37 +276,37 @@ namespace Elite
       WriteBitmapByte2x(*_picture, page, 0u, false);
     }
 
-    _text.column = 1u; // 6502: LDA #1 / STA XC
-    _text.row = 1u;    // 6502: STA YC
+    _text.column = 1u; // 6502: 1 into XC
+    _text.row = 1u;    // 6502: and into YC
 
-    // 6502: LDA QQ11 / BEQ wantSTEP / CMP #13 / BNE P%+5 / .wantSTEP JMP wantdials -- a tail call,
-    // so the space view and view 13 never reach anything below this.
+    // 6502: wantSTEP -- the space view and view 13 jump to wantdials, a tail call, so neither
+    // reaches anything below this.
     if (_view == 0u || _view == 13u)
     {
       ShowDashboard(_canvas, _draw, _screen, _bubble, _flight, _status, _fuel, _compass, _video, _map, _picture);
       return;
     }
 
-    _screen.colourBank = 0x81u; // 6502: LDA #&81 / STA abraxas -- screen RAM at &6000
-    _screen.bitmapMode = 0xC0u; // 6502: LDA #%11000000 / STA caravanserai
+    _screen.colourBank = 0x81u; // 6502: &81 into abraxas -- screen RAM at &6000
+    _screen.bitmapMode = 0xC0u; // 6502: the text mode into caravanserai
 
-    // 6502: .BOL2 JSR ZES1k / INX / CPX #HI(SCBASE)+&20 / BNE BOL2 -- and X is still where the
-    // first loop left it, so this clears the dashboard's part of the bitmap as well.
+    // 6502: BOL2 -- the same page loop again, and X is still where the first left it, so this
+    // clears the dashboard's part of the bitmap as well.
     for (; page < Canvas::SCREEN_CELLS; page = static_cast<std::uint16_t>(page + 256u))
     {
       ZeroWholePage(_canvas, page, _picture);
     }
 
-    _compass.pattern = PixelPattern::Blank; // 6502: LDX #0 / STX COMC
-    _screen.dashboardShown = 0u;            // 6502: STX DFLAG
-    _text.column = 1u;                      // 6502: INX / STX XC
-    _text.row = 1u;                         // 6502: STX YC
+    _compass.pattern = PixelPattern::Blank; // 6502: zero into COMC
+    _screen.dashboardShown = 0u;            // 6502: and into DFLAG
+    _text.column = 1u;                      // 6502: stepped to one, into XC
+    _text.row = 1u;                         // 6502: and into YC
 
-    DrawColourBands(_canvas, _picture); // 6502: JSR BLUEBAND
+    DrawColourBands(_canvas, _picture); // 6502: BLUEBAND
     ForgetScannerBlips(_bubble);  // 6502: JSR zonkscanners
-    HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
+    HideAllSprites(_video, _map); // 6502: NOSPRITES
 
-    // 6502: LDY #31 / LDA #&70 / .BOL5 STA &6004,Y / DEY / BPL BOL5 -- the top row's colour band.
+    // 6502: BOL5 -- the top row's colour band, thirty-two cells of &70.
     for (int offset = 31; offset >= 0; --offset)
     {
       _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 4u + offset), 0x70u);
@@ -317,8 +316,8 @@ namespace Elite
       SetCellRun2x(*_picture, 4, 32, CellPalette::Of(0x70u));
     }
 
-    // 6502: LDX QQ11 / CPX #2 / BEQ BOX / CPX #64 / BEQ BOX / CPX #128 / BEQ BOX -- three views
-    // stop at one band; everything else gets the second one two rows down.
+    // 6502: three views -- 2, 64 and 128 -- jump straight to BOX and stop at one band; everything
+    // else gets the second one two rows down.
     if (_view != 2u && _view != 64u && _view != 128u)
     {
       for (int offset = 31; offset >= 0; --offset)
@@ -331,15 +330,15 @@ namespace Elite
       }
     }
 
-    DrawScreenRule(_canvas, 199u, _picture); // 6502: .BOX LDX #199 / JSR BOXS
+    DrawScreenRule(_canvas, 199u, _picture); // 6502: BOX -- BOXS on row 199
 
-    _canvas.Write(0x1F1Fu, 0xFFu); // 6502: LDA #&FF / STA SCBASE+&1F1F
+    _canvas.Write(0x1F1Fu, 0xFFu); // 6502: the corner byte again
     if (_picture != nullptr)
     {
       WriteBitmapByte2x(*_picture, 0x1F1Fu, 0xFFu, false);
     }
 
-    // 6502: LDX #25 / EQUB &2C -- and the `&2C` eats `BOX2`'s own `LDX #18`, so the border is the
+    // 6502: 25 rows, and the stray byte after it eats `BOX2`'s own count, so the border is the
     // whole screen's height rather than the space view's (§6.79).
     DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN, _picture);
   }
@@ -351,21 +350,21 @@ namespace Elite
 
   void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept
   {
-    _universe.view = _view; // 6502: .TT66 STA QQ11, and then it falls into TTX66
+    _universe.view = _view; // 6502: TT66 -- into QQ11, and then it falls into TTX66
 
     // Where the wide surface puts this screen's text. Not the game's, and written here so that it
     // cannot be a screen behind the view it belongs to (Resolution.md section 6.2).
     _universe.screenLayout = _layout;
 
-    // 6502: JSR MT2 -- LDA #32 / STA DTW1 / LDA #0 / STA DTW6. Sentence case for the extended
-    // printer, which is the first thing a new screen is put back to.
+    // 6502: MT2 -- sentence case for the extended printer, which is the first thing a new screen
+    // is put back to.
     _universe.sentences.lowerCaseBits = 32u;
     _universe.sentences.alwaysLower = 0u;
 
-    _universe.heaps.ballHeapTop = 0u; // 6502: LDA #0 / STA LSP -- the ball heap is forgotten
+    _universe.heaps.ballHeapTop = 0u; // 6502: into LSP -- the ball heap is forgotten
 
     /*
-     * 6502: LDA #%10000000 / STA QQ17 / STA DTW2.
+     * 6502: 128 into `QQ17` and into `DTW2`.
      *
      * BOTH OF THEM, AND ONLY ONE KEEPS IT. `QQ17` is put back to zero five bytes from the end, so
      * what a caller sees is ALL CAPS with `DTW2` still at 128 (§6.29). The intermediate 128 is not
@@ -376,42 +375,42 @@ namespace Elite
     _universe.text.caseFlags = 0x80u;
     _universe.sentences.sentenceStart = 0x80u;
 
-    ClearSunHeap(_universe.heaps); // 6502: JSR FLFLLS -- and the sun's heap with it
+    ClearSunHeap(_universe.heaps); // 6502: FLFLLS -- and the sun's heap with it
 
-    _universe.status.viewLaser = 0u; // 6502: LDA #0 / STA LAS2 -- stop any laser pulsing
-    _universe.message.delay = 0u;    // 6502: STA DLY
+    _universe.status.viewLaser = 0u; // 6502: zero into LAS2 -- stop any laser pulsing
+    _universe.message.delay = 0u;    // 6502: and into DLY
     _universe.message.append = 0u;   // 6502: STA de
 
-    _universe.text.column = 1u; // 6502: LDA #1 / STA XC
-    _universe.text.row = 1u;    // 6502: STA YC
+    _universe.text.column = 1u; // 6502: 1 into XC
+    _universe.text.row = 1u;    // 6502: and into YC
 
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
                       _universe.status, _universe.commander.fuel, _universe.compass, _universe.video, _universe.memoryMap,
-                      _universe.view, &_universe.picture); // 6502: JSR TTX66K -- Resolution.md §4, rule T3:
+                      _universe.view, &_universe.picture); // 6502: TTX66K -- Resolution.md §4, rule T3:
                                                            // the wipe has to reach the index plane too, or a
                                                            // screen change leaves the last one's lines behind.
 
-    // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change
-    // and is reprinted, because the screen it was on has just been wiped.
+    // 6502: a countdown still running goes to `ee3` rather than OLDBOX -- it outlives a screen
+    // change and is reprinted, because the screen it was on has just been wiped.
     if (_universe.status.hyperspaceCountdown != 0u)
     {
       PrintCountdown(_ports.sink, _universe.text, _universe.status.hyperspaceCountdown);
     }
 
-    _universe.text.row = 1u; // 6502: .OLDBOX LDA #1 / JSR DOYC
+    _universe.text.row = 1u; // 6502: OLDBOX -- DOYC with 1
 
-    // 6502: LDA QQ11 / BNE tt66 -- the view's name belongs to the space view alone.
+    // 6502: any other view skips to tt66 -- the view's name belongs to the space view alone.
     if (_universe.view == 0u)
     {
-      _universe.text.column = 11u; // 6502: LDA #11 / JSR DOXC
+      _universe.text.column = 11u; // 6502: DOXC with 11
 
-      // 6502: LDA VIEW / ORA #&60 / JSR TT27 -- views 0 to 3 become tokens 96 to 99.
+      // 6502: the view ORed with &60 and printed -- views 0 to 3 become tokens 96 to 99.
       _ports.printer.Print(static_cast<std::uint8_t>(_universe.spaceView | 0x60u));
-      PrintSpace(_ports.printer); // 6502: JSR TT162
-      _ports.printer.Print(175u); // 6502: LDA #175 / JSR TT27 -- "VIEW"
+      PrintSpace(_ports.printer); // 6502: TT162
+      _ports.printer.Print(175u); // 6502: token 175 -- "VIEW"
     }
 
-    // 6502: .tt66 LDX #1 / STX XC / STX YC / DEX / STX QQ17.
+    // 6502: tt66 -- one into both cursor bytes, then stepped back to zero for `QQ17`.
     _universe.text.column = 1u;
     _universe.text.row = 1u;
     _universe.text.caseFlags = 0u;
@@ -419,39 +418,39 @@ namespace Elite
 
   void ChangeView(Universe& _universe, Ports& _ports, std::uint8_t _to) noexcept
   {
-    // 6502: LDA #0 / JSR DOVDU19 -- an RTS on this build, and `LOOK1` makes it the first thing it
-    // does, before it has even looked at the view.
+    // 6502: DOVDU19 with zero -- a bare return on this build, and `LOOK1` makes it the first
+    // thing it does, before it has even looked at the view.
 
-    // 6502: LDY QQ11 / BNE LQ -- a chart or a text screen takes the short path.
+    // 6502: a non-zero `QQ11` goes to LQ -- a chart or a text screen takes the short path.
     if (_universe.view != 0u)
     {
-      _universe.spaceView = _to;          // 6502: .LQ STX VIEW
-      SetUpScreen(_universe, _ports, 0u); // 6502: JSR TT66, with A zero, so it becomes the space view
+      _universe.spaceView = _to;          // 6502: LQ -- into VIEW
+      SetUpScreen(_universe, _ports, 0u); // 6502: TT66 with A zero, so it becomes the space view
 
       DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video,
-                      _universe.memoryMap); // 6502: JSR SIGHT
+                      _universe.memoryMap); // 6502: SIGHT
 
-      // 6502: JMP NWSTARS -- a whole new field, because there was no space view to keep.
+      // 6502: NWSTARS -- a whole new field, because there was no space view to keep.
       SeedStardustAndClearShips(_universe.canvas, _universe.dust, _universe.rng, _universe.heaps, _universe.bubble, _universe.work,
                                 _universe.flight, _universe.view, false, &_universe.picture);
       return;
     }
 
-    // 6502: CPX VIEW / BEQ LO2 -- already looking that way, so `LO2`'s bare RTS. The palette above
-    // has happened anyway, and that is the whole of what this path does.
+    // 6502: already looking that way, so LO2's bare return. The palette above has happened
+    // anyway, and that is the whole of what this path does.
     if (_to == _universe.spaceView)
     {
       return;
     }
 
-    _universe.spaceView = _to;          // 6502: STX VIEW
-    SetUpScreen(_universe, _ports, 0u); // 6502: JSR TT66
+    _universe.spaceView = _to;          // 6502: into VIEW
+    SetUpScreen(_universe, _ports, 0u); // 6502: TT66
 
-    // 6502: JSR FLIP -- the dust is MIRRORED rather than replaced, which is why the stars look
+    // 6502: FLIP -- the dust is MIRRORED rather than replaced, which is why the stars look
     // familiar for a moment after a view change.
     FlipStardust(_universe.canvas, _universe.dust, &_universe.picture);
 
-    // 6502: JSR WPSHPS, and then it falls into SIGHT.
+    // 6502: WPSHPS, and then it falls into SIGHT.
     ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view,
                   &_universe.picture);
 
@@ -461,7 +460,7 @@ namespace Elite
   void Warp(Universe& _universe, Ports& _ports) noexcept
   {
     /*
-     * 6502: LDX JUNK / LDA FRIN+2,X / ORA SSPR / ORA MJ / BNE WA1.
+     * 6502: the slot two past the junk count, ORed with the station count and with witchspace.
      *
      * The junk count doubles as an index: every slot up to `JUNK` holds junk, so `FRIN+2,X` is the
      * slot two beyond it -- and a non-zero type there means something worth staying for. `SSPR` is
@@ -473,16 +472,16 @@ namespace Elite
 
     if ((occupied | station | _universe.status.midJump) != 0u)
     {
-      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: .WA1 LDY #sfxboop / JMP NOISE
+      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: WA1 -- the boop, as a tail call into NOISE
       return;
     }
 
     /*
-     * 6502: LDY K%+8 / BMI WA3 / TAY / JSR MAS2 / CMP #2 / BCC WA1.
+     * 6502: the planet's z sign tested, then its largest axis against 2.
      *
-     * `LDY K%+8` is read for its FLAGS alone -- `TAY` throws the Y it just loaded away and puts the
-     * accumulator's zero there instead, which is slot 0. So the `LDY` is a sign test on the
-     * planet's z and the `TAY` is `MAS2`'s argument, two instructions apart and unrelated.
+     * The load into Y is read for its FLAGS alone -- the move that follows throws that Y away and
+     * puts the accumulator's zero there instead, which is slot 0. So the load is a sign test on the
+     * planet's z and the move is `MAS2`'s argument, two instructions apart and unrelated.
      *
      * A negative z is a body BEHIND you, and you cannot warp into something behind you, so its
      * distance is not tested at all.
@@ -496,8 +495,8 @@ namespace Elite
       }
     }
 
-    // 6502: .WA3 LDY K%+NI%+8 / BMI WA2 / LDY #NI% / JSR m / CMP #2 / BCC WA1 -- the same for the
-    // sun, through `m` rather than `MAS2` because there is no accumulator worth keeping this time.
+    // 6502: WA3 -- the same for the sun, through `m` rather than `MAS2` because there is no
+    // accumulator worth keeping this time.
     if ((_universe.bubble.blocks[1].z.sgn & 0x80u) == 0u)
     {
       if (LargestAxis(_universe.bubble, 1u) < 2u)
@@ -507,27 +506,27 @@ namespace Elite
       }
     }
 
-    // 6502: .WA2 LDA #&81 / STA S / STA R / STA P -- &81 is -1 in sign-magnitude with the low bit
+    // 6502: WA2 -- &81 into all three scratch bytes. It is -1 in sign-magnitude with the low bit
     // set, so `ADD` subtracts the same fixed amount from each body's z: (A P) is the sign byte
     // over &81, and (S R) is &81 twice.
     constexpr SignMag16 WARP_STEP{0x81u, 0x81u};
 
-    // 6502: LDA K%+8 / JSR ADD / STA K%+8, and the same for the sun.
+    // 6502: the planet's z sign through `ADD` and back, and the same for the sun.
     _universe.bubble.blocks[0].z.sgn = AddSigned(SignMag16{0x81u, _universe.bubble.blocks[0].z.sgn}, WARP_STEP).high;
     _universe.bubble.blocks[1].z.sgn = AddSigned(SignMag16{0x81u, _universe.bubble.blocks[1].z.sgn}, WARP_STEP).high;
 
     /*
-     * 6502: LDA #1 / STA QQ11 / STA MCNT / LSR A / STA EV / LDX VIEW / JMP LOOK1.
+     * 6502: one into `QQ11` and `MCNT`, halved to zero for `EV`, then LOOK1 on the current view.
      *
      * `QQ11 = 1` IS A LIE TOLD TO `LOOK1`. The view is not changing -- X is `VIEW` itself -- so the
-     * space-view path would take `CPX VIEW / BEQ LO2` and do nothing at all. Setting `QQ11` to
+     * space-view path would find the view already correct and do nothing at all. Setting `QQ11` to
      * something non-zero first sends `LOOK1` down `LQ` instead, which clears the screen and seeds a
      * WHOLE NEW stardust field, and `TT66` puts `QQ11` back to zero on the way. One store, to make
      * a routine take the other branch.
      */
     _universe.view = 1u;
     _universe.flight.mainLoopCounter = 1u;
-    _universe.explosions = 0u; // 6502: LSR A -- one shifted right is zero
+    _universe.explosions = 0u; // 6502: one shifted right is zero
 
     ChangeView(_universe, _ports, _universe.spaceView);
   }
