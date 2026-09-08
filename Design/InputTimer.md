@@ -54,8 +54,9 @@ three different backlog rules and the stall flag is thrown away (T-2). The hold 
 re-draw an unchanged canvas every vsync while waiting, and spin a core when the swap chain is
 occluded rather than minimised (T-3). The cost model runs on the NTSC clock while the sound
 interrupt runs on the NTSC frame and §6.17 says the default should be PAL (T-4). And the one hard
-sequencing fact: **every remaining cost measurement must be taken before M6-f deletes the
-interpreter**, or it can never be taken (T-5).
+sequencing fact: **every remaining cost measurement must be taken before M6-b takes the live
+oracle out of CI** — M6-f deletes the interpreter, but M6-b is when nothing runs it — or it can
+never be taken (T-5).
 
 The plan (§6) is twelve slices in two tracks. The first slice on each track is small and fixes the
 defects a player meets in the first five minutes; the later ones are the modernisation proper — an
@@ -311,15 +312,15 @@ is what `DELAY` will use once T-1 is fixed, so the decision has to be taken then
 decision (§7), not a technical one: the GMA85 variant `elite-build-options.asm` configures is the
 question.
 
-### T-5 (A for sequencing) — What is unmeasured has to be measured before M6-f
+### T-5 (A for sequencing) — What is unmeasured has to be measured before M6-b
 
 `FlightFrameSeconds` is two bands because the crowded bubble could not be timed (`TACTICS` does not
 return for a station in the fixture); the docked pass is paced at the empty-bubble *flight* cost as
 a stand-in, so the hyperspace countdown's tick rate and the chart crosshairs' speed while docked
 rest on a number nobody measured; `TT16` calls `WSCAN`, so crosshair movement is vertical-sync
 quantised on the C64 and free-running here; and the planet is in no measured scene. Every one of
-those is a cycle count read off the interpreter. Modernize.md's M6-f deletes the interpreter. After
-that the cost model is frozen at whatever it holds, forever. This is the one item in this document
+those is a cycle count read off the interpreter. Modernize.md's M6-b takes the live oracle out of
+CI and M6-f deletes it; after M6-b the cost model is frozen at whatever it holds, forever. This is the one item in this document
 that has a deadline rather than a priority.
 
 ### T-6 (C) — Frames the library asks for and the executable drops
@@ -613,7 +614,7 @@ the Windows CI leg (R15).
 
 | Slice | What | Gate | Ratchets and checks touched | Sittings |
 |---|---|---|---|---|
-| **T-0 Measure while the oracle exists** | `FlightLoopTests`: a crowded-bubble scene with `TACTICS` returning (a station whose AI path terminates, or the station trapped and its cost added from a separate measurement); a scene with the planet; the docked `MLOOP` pass; `TT16`'s `WSCAN`. Recorded as rows of `FLIGHT_FRAME_COSTS` and a new `DOCKED_PASS_COST`, each asserted by a test as the title curve is. | The new rows exist and the tests assert them; §6 journal entry naming the numbers as history. **Before M6-f.** | `check_counts` if any doc states the count | 2 |
+| **T-0 Measure while the oracle exists** | `FlightLoopTests`: a crowded-bubble scene with `TACTICS` returning (a station whose AI path terminates, or the station trapped and its cost added from a separate measurement); a scene with the planet; the docked `MLOOP` pass; `TT16`'s `WSCAN`. Recorded as rows of `FLIGHT_FRAME_COSTS` and a new `DOCKED_PASS_COST`, each asserted by a test as the title curve is. | The new rows exist and the tests assert them; §6 journal entry naming the numbers as history. **Before M6-b.** | `check_counts` if any doc states the count | 2 |
 | **T-1 `MachineTiming`, `FrameClock`, `Scheduler`** | §5.5, in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated vertical blanks; the stall log; PAL/NTSC as one constant set with the default the owner rules; `SoundOutput` takes the same `MachineTiming`; **auto-pause while inactive** (§5.9 item 2). | `ShellTests` moved and extended (vertical-blank cases, the inactive case plans zero steps and banks nothing); play on a 60 Hz and a high-refresh panel: `dn2`'s beep pause is one second on both at PAL; Alt+Tab away for a minute and back, the game is where it was. | `main-lines`; ADR-005 §3 amended | 2 |
 | **T-2 Honour the dropped frames** | With T-1's tick: `StepDocked` runs `RunLoopTail` and the executable waits its two blanks. | Trumbles breed while docked, compared against the oracle's `MLOOP` on a docked pass; the digest re-taken with a journal entry naming the defect (rule R-e). | `mutants.json` gains a mutant for the docked tail | 1 |
 | **T-3 Waitable swap chain** | §5.6: latency-waitable flip model, canvas generation counter, present-on-change, occlusion idle. | Golden screenshot unchanged; CPU at rest with the window hidden. | ADR-005 §1 one paragraph | 1 |
@@ -622,7 +623,7 @@ the Windows CI leg (R15).
 ### Sequencing
 
 ```
-T-0 ──────────────────────────────────────────────► (must land before Modernize.md M6-f)
+T-0 ──────────────────────────────────────────────► (must land before Modernize.md M6-b)
 I-0, I-3 ── independent, a day each, first;  S-1 right after I-0 (the settings the removal orphans)
 I-1 ──► I-2 ──► I-4 ◄── T-1 (I-4 wants the simulated blank; T-1 wants nothing from I)
                  T-1 ──► T-2, T-3 ──► T-4
@@ -635,6 +636,44 @@ set. I-1 is the first real fix and is oracle-comparable, which is why it comes b
 changes rather than after. T-1 can run beside I-1 and I-2 on the other track. I-4 is the slice
 that makes the executable the two hundred lines ADR-004 §1 described, and it is deliberately last
 on its track so that every seam it folds has been made small first.
+
+### Sequencing against Modernize.md's M6
+
+Asked on 2026-09-08 whether this plan conflicts with M6 or can run beside it: it can run beside it,
+under one rule and two ordering constraints, and no slice in either plan undoes the other's work.
+
+**The rule is M6-b's.** Once recorded fixtures answer the suite instead of the live oracle, nothing
+new can be compared against the original, and a test that asks the oracle something it did not
+ask while the interpreter was present fails by design (§4.10, R19). So every slice here that
+changes or adds LIBRARY behaviour lands before M6-b, and each is the same kind of work M6-a is
+doing with its four gaps:
+
+| Slice | Why it is bound to M6-b | Lands |
+|---|---|---|
+| I-1 | `ReadKey` is an oracle comparison; it also changes how the fixtures' scripted keyboards press keys, which changes the call sequence some tests make | before M6-a's recording run, or with one re-record while the interpreter is present |
+| T-2 | compares the docked `MLOOP` pass against the oracle and moves the replay record under rule R-e | before M6-b |
+| T-0 | needs `Cpu6502` to count; the cycle tests run against the live interpreter, which M6-b takes out of CI | before M6-b — the hard cliff, not M6-f |
+| I-3 | must not touch the compared `TITLE`; if the replay script dismisses the title with the fire key the digest moves, which is a re-record | before M6-b |
+| I-0 | deletes a *Port* row and its oracle tests; M6-a's coverage review reads the ledger's Port rows | before M6-a's review, so the review does not demand a test for a routine that no longer exists |
+
+**The two ordering constraints are about files, not behaviour.** M6-c renames every 6502-shaped
+identifier and M6-d rewrites every transcribed comment, across the same docked screens, `Game.*`
+and `Controls.*` that I-2 and I-4 rewrite. I-2 lands before M6-c starts. I-4 lands either before
+M6-c or after M6-d, and after is the better order: M6-d is the eight-to-ten-sitting slice, and a
+coroutine diff over freshly rewritten comments reviews more easily than the reverse.
+
+**Everything executable-only is free.** T-1, T-3, T-4, S-1 and the window half of I-0 touch
+`Outpost/` and `Presentation.*` only; the oracle never sees them and M6 never edits them.
+
+What this plan does to M6's own claims: nothing permanent. `ReadKey`'s comparison is recorded like
+any other and the input path is pinned by fixtures after M6-b exactly as the rest of the library
+is. One documented number moves — Modernize.md's "five seams, final for M6" becomes four if I-4
+folds `Presenter` and `Keyboard` into a `Platform` — and that is a sentence to amend, not a
+conflict.
+
+So the interleaving is: I-0, S-1, I-3, T-0, I-1 and T-2 now, beside M6-a's four gaps and before
+the recorder runs; T-1 and T-3 whenever; I-2 before M6-c; I-4 after M6-d. **Ruled 2026-09-08 by the
+owner: the first six run now.**
 
 ### What the plan does to the documents
 
