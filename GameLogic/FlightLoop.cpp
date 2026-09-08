@@ -353,7 +353,7 @@ namespace Elite
   /*
    * ---- part 2: the roll and the pitch, which are not the same shape ----------------------------
    *
-   * The two halves are ONE function because the roll's exit carry is the pitch's `ADC #4` input
+   * The two halves are ONE function because the roll's exit carry is what the pitch's add takes
    * (§6.85) -- a flag that is live across what looks like a boundary, so a split here would need a
    * carry parameter to say what a local already says.
    */
@@ -442,7 +442,8 @@ namespace Elite
   /*
    * ---- part 3: the keys ------------------------------------------------------------------------
    *
-   * Answers `Escaped` for `JMP ESCAPE`, which does not come back, and `Continued` otherwise.
+   * Answers `Escaped` for the jump to `ESCAPE`, which does not come back, and `Continued`
+   * otherwise.
    */
   [[nodiscard]] LoopOutcome RunFlightKeys(Universe& _universe, Ports& _ports) noexcept
   {
@@ -540,7 +541,7 @@ namespace Elite
         return LoopOutcome::Escaped;
       }
 
-      // 6502: .noescp LDA KY18 / BEQ P%+5 / JSR WARP.
+      // 6502: noescp -- the warp key, if it is held.
       if (_universe.keys[KEY_WARP] != 0u)
       {
         Warp(_universe, _ports);
@@ -717,7 +718,7 @@ namespace Elite
     inline constexpr std::uint8_t ENERGY_WARNING = 50;
     inline constexpr std::uint8_t MESSAGE_ENERGY_LOW = 50;
 
-    /// 6502: the three steps of `MCNT AND 31` that do something.
+    /// 6502: the three steps of the thirty-two frame cycle that do something.
     inline constexpr std::uint8_t STEP_ENERGY_CHECK = 10;
     inline constexpr std::uint8_t STEP_DOCKING_REMINDER = 15;
     inline constexpr std::uint8_t STEP_CABIN_TEMPERATURE = 20;
@@ -781,7 +782,7 @@ namespace Elite
     std::uint8_t power = _universe.status.laserPower;
 
     /*
-     * 6502: CMP #CON / BCC BURN / LDA LAS / CMP #(Armlas AND 127) / BNE MA14+2 / LSR LAS / LSR LAS.
+     * 6502: the type compared against the Constrictor, then the laser against the military one.
      *
      * A Constrictor or anything above it is immune to everything but a military laser, and takes a
      * QUARTER of even that. The comparison is against the MASKED power -- 23, which is what `MA68`
@@ -1176,7 +1177,7 @@ namespace Elite
     if (Has(_universe.work.state, ShipStateBit::Killed) && Has(_universe.work.state, ShipStateBit::Exploding))
     {
       /*
-       * 6502: LDA NEWB / AND #%01000000 / ORA FIST / STA FIST.
+       * 6502: the trait bit folded into the legal status.
        *
        * Bit 6 is "shooting this was a crime", and it is ORed into the legal status rather than added
        * -- so the offence is recorded once however many innocents die, and a fugitive cannot become
@@ -1184,13 +1185,13 @@ namespace Elite
        */
       commander.legalStatus = static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.traits & Mask(TraitBit::Cop)));
 
-      // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
-      // because the bounty IS a message and there is nowhere to put it.
+      // 6502: no bounty while a message is up or in witchspace, because the bounty IS a message
+      // and there is nowhere to put it.
       const bool quiet = (_universe.message.delay | _universe.status.midJump) == 0u;
 
       if (quiet)
       {
-        // 6502: LDY #10 / LDA (XX0),Y / BEQ KS1S / TAX / INY / LDA (XX0),Y / TAY / JSR MCASH.
+        // 6502: the blueprint's bounty, two bytes, paid only when the low one is not zero.
         const std::uint8_t low = static_cast<std::uint8_t>(_universe.flight.blueprint->bounty & 0xFFu);
 
         if (low != 0u)
@@ -1198,21 +1199,22 @@ namespace Elite
           ReceiveCash(commander, _universe.flight.blueprint->bounty);
 
           /*
-           * 6502: LDA #0 / JSR MESS.
+           * 6502: message token zero.
            *
-           * TOKEN ZERO IS THE CASH. `TT27` opens `TAX / BEQ csh`, so the bounty message is the
-           * player's balance printed in flight -- and `MESS` then stores that zero in `MCH`, so the
-           * next message within twenty frames erases this one by printing the balance again.
+           * TOKEN ZERO IS THE CASH. The printer branches on it before anything else, so the bounty
+           * message is the player's balance printed in flight -- and `MESS` then remembers that
+           * zero, so the next message within twenty frames erases this one by printing the balance
+           * again.
            */
           ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 0u, _universe.view, &_universe.picture);
         }
       }
 
-      return KillOutcome::Removed; // 6502: .KS1S JMP KS1 -- every path through this block ends there
+      return KillOutcome::Removed; // 6502: KS1S -- every path through this block ends there
     }
 
-    // 6502: .MAC1 LDA TYPE / BMI MA27 / JSR FAROF / BCC KS1S -- and the planet and the sun are never
-    // out of range, because they are what range is measured against.
+    // 6502: MAC1 -- and the planet and the sun are never out of range, because they are what range
+    // is measured against.
     return (!_isBody && !WithinLoopRange(_universe.work)) ? KillOutcome::Removed : KillOutcome::Kept;
   }
 
@@ -1220,31 +1222,31 @@ namespace Elite
   {
     Commander& commander = _universe.commander;
 
-    // 6502: .MA3 LDX #0 / .MAL1 STX XSAV -- and the index is advanced by hand, never by the loop.
+    // 6502: MA3 and MAL1 -- the index is advanced by hand, never by the loop.
     std::uint8_t slot = 0;
 
     for (;;)
     {
-      _universe.flight.slot = slot; // 6502: STX XSAV
+      _universe.flight.slot = slot; // 6502: XSAV
 
-      // 6502: LDA FRIN,X / BNE P%+5 / JMP MA18 -- the first empty slot ends the pass.
+      // 6502: the first empty slot ends the pass.
       const ShipType type = TypeOf(_universe.bubble.slots[slot]);
       if (type == ShipType::None)
       {
         return LoopOutcome::Continued;
       }
 
-      _universe.flight.type = type; // 6502: STA TYPE
+      _universe.flight.type = type; // 6502: TYPE
 
-      // 6502: JSR GINF / LDY #NI%-1 / .MAL2 LDA (INF),Y / STA INWK,Y / DEY / BPL MAL2.
+      // 6502: MAL2 -- the whole block copied into the workspace, one byte at a time.
       Ship& block = _universe.bubble.blocks[slot];
       _universe.work = block;
 
       /*
-       * 6502: LDA TYPE / BMI MA21 / ASL A / TAY / LDA XX21-2,Y / STA XX0 / LDA XX21-1,Y / STA XX0+1.
+       * 6502: the blueprint pointer, looked up from the doubled ship type.
        *
-       * The planet and the sun have no blueprint, and `XX0` is left holding the LAST ship's -- which
-       * is why part 5's `CPY` tests below run on a Y that only a real ship has set.
+       * The planet and the sun have no blueprint, and `XX0` is left holding the LAST ship's --
+       * which is why part 5's tests below run on an index only a real ship has set.
        */
       const bool isBody = IsBody(type);
       if (!isBody)
@@ -1252,29 +1254,29 @@ namespace Elite
         _universe.flight.blueprint = BlueprintFor(_universe.bubble, type);
 
         /*
-         * 6502: part 5 -- LDA BOMB / BPL MA21 and four tests under it.
+         * 6502: part 5 -- the bomb's test and the four under it.
          *
          * The energy bomb kills everything in the bubble EXCEPT a station, a Thargoid and anything
-         * from the Constrictor upwards, and the three exemptions are written as `CPY` against
-         * `2*SST`, `2*THG` and `2*CON` -- comparisons on the DOUBLED type, because Y still holds
-         * the blueprint index. A ship already exploding is skipped as well, or the bomb would
-         * restart its cloud on every frame it burns.
+         * from the Constrictor upwards, and the three exemptions are compared against the DOUBLED
+         * type, because the index still holds the blueprint's rather than the ship's. A ship
+         * already exploding is skipped as well, or the bomb would restart its cloud on every frame
+         * it burns.
          */
         const bool exempt = (type == ShipType::Station) || (type == ShipType::Thargoid) || (Byte(type) >= Byte(ShipType::Constrictor));
 
         if ((commander.energyBomb & 0x80u) != 0u && !exempt && !Has(_universe.work.state, ShipStateBit::Exploding))
         {
           _universe.work.state = MarkKilled(_universe.work.state);
-          (void)RecordKill(_universe, _ports, type); // 6502: LDX TYPE / JSR EXNO2
+          (void)RecordKill(_universe, _ports, type); // 6502: EXNO2
         }
       }
 
       /*
-       * 6502: .MA21 JSR MVEIT / LDY #NI%-1 / .MAL3 LDA INWK,Y / STA (INF),Y / DEY / BPL MAL3.
+       * 6502: MA21 moves the ship, and MAL3 copies the workspace back a byte at a time.
        *
        * The block is written back BEFORE the death is acted on, because the original writes it
-       * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
-       * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
+       * back only on the path that survives -- the jump to `DEATH` from inside `TACTICS` never
+       * reaches `MAL3` -- and `DEATH` clears the bubble anyway (§6.122).
        */
       if (!MoveShip(_universe, _ports))
       {
@@ -1315,11 +1317,11 @@ namespace Elite
         switch (TestDocking(_universe))
         {
         case DockingTest::Arrived:
-          // 6502: .GOIN JSR stopbd / JMP DOENTRY
+          // 6502: GOIN -- the music stops and the docked screen takes over
           StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
           return LoopOutcome::Docked;
         case DockingTest::TooFast:
-          return LoopOutcome::Died; // 6502: JMP DEATH
+          return LoopOutcome::Died; // 6502: DEATH
         case DockingTest::Bumped:
           impact = Impact::Bumped;
           break;
@@ -1333,7 +1335,7 @@ namespace Elite
 
       const Aim aim = AimAtShip(_universe, _ports, type);
 
-      // 6502: .MA8 JSR LL9 -- and it is the same call that erases the last frame's ship.
+      // 6502: MA8 -- and it is the same call that erases the last frame's ship.
       if (aim.draws)
       {
         DrawShip(_universe, block, aim.carry);
@@ -1342,10 +1344,10 @@ namespace Elite
       if (RetireShip(_universe, _ports, block, type, isBody) == KillOutcome::Removed)
       {
         /*
-         * 6502: .KS1 LDX XSAV / JSR KILLSHP / LDX XSAV / JMP MAL1.
+         * 6502: KS1 -- `KILLSHP`, then straight back to the top of the loop.
          *
          * THE INDEX IS NOT ADVANCED. `KILLSHP` shuffles every slot above the dead one down, so the
-         * ship that was behind it is now in the same slot -- and going round with the same X is
+         * ship that was behind it is now in the same slot -- and going round on the same index is
          * what processes it. A port that wrote a `for` over the slots would skip a ship for every
          * one killed.
          */
@@ -1353,8 +1355,8 @@ namespace Elite
       }
       else
       {
-        block.state = _universe.work.state; // 6502: .MA27 LDY #31 / STA (INF),Y
-        ++slot;                             // 6502: LDX XSAV / INX / JMP MAL1
+        block.state = _universe.work.state; // 6502: MA27 -- the state byte goes back
+        ++slot;                             // 6502: and only here does the index advance
       }
     }
   }
@@ -1362,15 +1364,14 @@ namespace Elite
   /*
    * 6502: part 16, from `.MA23` -- the laser beam, the E.C.M. countdowns, and the stardust.
    *
-   * Every path through parts 13 to 15 ends here, most of them by `JMP MA23`. It is written as a
+   * Every path through parts 13 to 15 ends here, most of them by jumping to it. It is written as a
    * separate function for exactly that reason: `MA23S` appears four times in the source and is
-   * nothing but `JMP MA23`, which is what a shared tail looks like when the branch cannot reach.
+   * nothing but that jump, which is what a shared tail looks like when the branch cannot reach.
    */
   [[nodiscard]] LoopOutcome EndFlightFrameTail(Universe& _universe, Ports& _ports) noexcept
   {
     /*
-     * 6502: .MA23 LDA LAS2 / BEQ MA16 / LDA LASCT / CMP #8 / BCS MA16 / JSR LASLI2 / LDA #0 /
-     * STA LAS2.
+     * 6502: MA23 -- the beam on screen, erased once its countdown is low enough.
      *
      * `LAS2` is "there is a beam on screen" and `LASCT` is how long it has left. Below eight the
      * beam is rubbed out by drawing it again -- `LASLI2` is `LASLI` without the firing -- so the
@@ -1383,8 +1384,7 @@ namespace Elite
     }
 
     /*
-     * 6502: .MA16 LDA ECMP / BEQ MA69 / JSR DENGY / BEQ MA70 / .MA69 LDA ECMA / BEQ MA66 /
-     * DEC ECMA / BNE MA66 / .MA70 JSR ECMOF.
+     * 6502: MA16, MA69 and MA70 -- the two countdowns and the off switch.
      *
      * TWO COUNTDOWNS AND ONE OFF SWITCH. `ECMP` says the E.C.M. is ours, and while it is the banks
      * pay for it a unit a frame -- `DENGY` returning zero means the banks are empty, which turns
@@ -1395,7 +1395,7 @@ namespace Elite
 
     if (_universe.status.ecmOurs != 0u)
     {
-      stop = DrainEnergy(_universe.status); // 6502: JSR DENGY / BEQ MA70
+      stop = DrainEnergy(_universe.status); // 6502: DENGY, and an empty bank jumps to MA70
     }
 
     if (!stop && _universe.status.ecmCountdown != 0u)
@@ -1406,13 +1406,13 @@ namespace Elite
 
     if (stop)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture); // 6502: .MA70 JSR ECMOF
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture); // 6502: MA70
     }
 
     /*
-     * 6502: .MA66 LDA QQ11 / BNE oh / JMP STARS -- and `oh` is an `RTS` thirty-three bytes further
-     * on, borrowed from another routine. So a chart on screen ends the frame with the stardust
-     * left exactly where it was.
+     * 6502: MA66 -- and the branch out lands on a return borrowed from another routine thirty-three
+     * bytes further on. So a chart on screen ends the frame with the stardust left exactly where it
+     * was.
      */
     if (_universe.view == 0u)
     {
@@ -1425,11 +1425,12 @@ namespace Elite
   /*
    * ---- part 13's head: the energy bomb burns down --------------------------------------------
    *
-   * 6502: .MA18 LDA BOMB / BPL MA77 / ASL BOMB / BMI MA77 / JSR BOMBOFF.
+   * 6502: MA18 -- the bomb doubled, and switched off when the top bit falls out.
    *
    * The bomb is a countdown kept as a shift register: part 3 doubles it when the key is pressed and
    * this doubles it again every frame, so it burns for as many frames as it has bits left and ends
-   * when the top bit falls off. It runs on EVERY frame, which is why it is above the `AND #7`.
+   * when the top bit falls off. It runs on EVERY frame, which is why it sits above the every-eighth
+   * test rather than inside it.
    */
   void BurnEnergyBomb(Universe& _universe) noexcept
   {
@@ -1449,15 +1450,15 @@ namespace Elite
   /*
    * ---- part 13's tail: the shields and the banks ---------------------------------------------
    *
-   * Every eighth frame, which is what `AND #7` selects.
+   * Every eighth frame, which is what masking the counter's low three bits selects.
    */
   void RechargeBanks(Universe& _universe) noexcept
   {
     Commander& commander = _universe.commander;
 
     /*
-     * 6502: LDX ENERGY / BPL b -- the shields are fed FROM the banks, so they only recharge while
-     * the banks are at least half full. `SHD` itself takes a unit of energy per shield (§6.83).
+     * 6502: the shields are fed FROM the banks, so they only recharge while the banks are at least
+     * half full. `SHD` itself takes a unit of energy per shield (§6.83).
      */
     if ((_universe.status.energy & 0x80u) != 0u)
     {
@@ -1466,9 +1467,9 @@ namespace Elite
     }
 
     /*
-     * 6502: .b SEC / LDA ENGY / ADC ENERGY / BCS P%+5 / STA ENERGY.
+     * 6502: `b` -- the energy unit added into the banks, with the carry SET going in.
      *
-     * The `SEC` is the recharge: a commander with no energy unit still gains one point every
+     * That set carry IS the recharge: a commander with no energy unit still gains one point every
      * eighth frame. And the overflow branch SKIPS the store rather than clamping, so banks that
      * would pass 255 are left exactly where they were.
      */
@@ -1488,31 +1489,31 @@ namespace Elite
    */
   void MaybeSpawnStation(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: LDA SSPR / BNE MA23S, then TAY / JSR MAS2 / BNE MA23S.
+    // 6502: no station already in range, and the planet not too far off on any axis.
     if (_universe.bubble.Count(ShipType::Station) != 0u || LargestAxis(_universe.bubble, 0u) != 0u)
     {
       return;
     }
 
-    // 6502: LDX #28 / .MAL4 LDA K%,X / STA INWK,X / DEX / BPL MAL4 -- 29 bytes, not the block:
-    // the position, the orientation, the speed and the acceleration, and nothing after.
+    // 6502: MAL4 copies 29 bytes, not the whole block: the position, the orientation, the speed
+    // and the acceleration, and nothing after.
     std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _universe.work.ToBytes();
     const std::array<std::uint8_t, SHIP_BLOCK_SIZE> planet = _universe.bubble.blocks[0].ToBytes();
     std::copy_n(planet.begin(), 29u, bytes.begin());
     _universe.work = Ship::FromBytes(bytes);
 
-    // 6502: INX / LDY #9 / JSR MAS1 / BNE MA23S, and twice more at (3, 11) and (6, 13).
-    // The `&&`s short-circuit and have to: each `MAS1` DOUBLES the coordinate it reads, in
-    // place, so a second call after a non-zero answer would move the planet twice.
+    // 6502: MAS1 three times, on the axis pairs (9, 0), (11, 3) and (13, 6).
+    // The `&&`s short-circuit and have to: each call DOUBLES the coordinate it reads, in place,
+    // so a second one after a non-zero answer would move the planet twice.
     const bool ahead = DoubleAndAddCoordinate(_universe.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(_universe.work, 11u, 3u) == 0u &&
                        DoubleAndAddCoordinate(_universe.work, 13u, 6u) == 0u;
 
     if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
     {
-      EraseSun(_universe.canvas, _universe.heaps, &_universe.picture); // 6502: JSR WPLS
+      EraseSun(_universe.canvas, _universe.heaps, &_universe.picture); // 6502: WPLS
 
-      // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
-      // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
+      // 6502: NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties the
+      // sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
       (void)AddStation(_universe, _ports);
     }
   }
@@ -1520,7 +1521,7 @@ namespace Elite
   /*
    * ---- part 15: the thirty-two step cycle, as the table it is ----------------------------------
    *
-   * 6502: .MA22 LDA MJ / BNE MA23S / LDA MCNT / AND #31 / .MA93 CMP #10 / BNE MA29.
+   * 6502: MA22 and MA93 -- the counter masked to five bits, then compared step by step.
    *
    * THE CYCLE IS THIRTY-TWO STEPS AND NOT SIXTEEN. The M4-a row and this block's own heading both
    * said sixteen and neither is right: `MCNT` is masked with 31, so the three jobs below fire once
@@ -1531,9 +1532,9 @@ namespace Elite
    *   step 10  the energy warning, then the altitude -- and `MA28` out of it is death
    *   step 15  the docking-computer reminder
    *   step 20  the cabin temperature, the Trumbles cooking, and fuel scooping -- death here too
-   *   others   nothing, which is the `BNE MA29 / BNE MA33 / BNE MA23` chain falling through
+   *   others   nothing, which is the chain of step tests falling through to the tail
    *
-   * `MCNT` DECREMENTS rather than increments (`MLOOP`'s `DEC MCNT`), so the cycle runs backwards
+   * `MCNT` DECREMENTS rather than increments, so the cycle runs backwards
    * through those residues; every one of the thirty-two is still visited once per block.
    */
   [[nodiscard]] LoopOutcome RunCycleStep(Universe& _universe, Ports& _ports, std::uint8_t _counter) noexcept
@@ -1543,10 +1544,11 @@ namespace Elite
     if (_counter == STEP_ENERGY_CHECK)
     {
       /*
-       * 6502: LDA #50 / CMP ENERGY / BCC P%+6 / ASL A / JSR MESS.
+       * 6502: fifty compared against the banks, then doubled into a message token.
        *
-       * AND `P%+6` SKIPS BOTH INSTRUCTIONS, not just the shift. The branch is two bytes and `ASL A`
-       * plus `JSR MESS` is four, so healthy banks send no message at all -- the fifty is a
+       * AND THE BRANCH SKIPS BOTH INSTRUCTIONS, not just the doubling: it clears four bytes, which
+       * is the shift and the call together, so healthy banks send no message at all -- the fifty is
+       * a
        * threshold that happens to be half of the token, and the token itself is only ever 100.
        * Reading it as "50 or 100" gives a warning every sixteenth frame for the whole game.
        */
@@ -1557,44 +1559,44 @@ namespace Elite
       }
 
       /*
-       * 6502: LDY #&FF / STY ALTIT / INY / JSR m / BNE MA23 -- the altitude is 255 until proved
-       * otherwise, so a planet too far away in any axis leaves the dial full.
+       * 6502: the altitude is set to 255 before anything is measured, so a planet too far away in
+       * any axis leaves the dial full.
        */
       _universe.status.altitude = 0xFFu;
 
       if (LargestAxis(_universe.bubble, 0u) == 0u)
       {
-        // 6502: JSR MAS3 / BCS MA23 -- and the carry is `MAS3`'s saturation, not a comparison.
+        // 6502: MAS3 -- and the carry out of it is its saturation, not a comparison.
         const std::uint8_t squares = SumOfSquares(_universe.bubble, 0u);
         if (squares != 0xFFu)
         {
           /*
-           * 6502: SBC #36 / BCC MA28 -- inside the planet's own radius, so this is the ground.
+           * 6502: the planet's radius taken off, and a borrow means the ground.
            *
            * AND THE CARRY IS CLEAR, so the subtraction takes THIRTY-SEVEN. `MAS3` returns with the
-           * flag its last `ADC` left -- set only when the sum saturated, which is the case the
-           * `BCS MA23` two instructions above has already sent away -- so every arrival here has a
+           * flag its own last addition left -- set only when the sum saturated, which is the case
+           * the branch two instructions above has already sent away -- so every arrival here has a
            * borrow to pay. The port subtracted 36 until the R22 fixture put a planet close enough
            * to reach this line, and the oracle died where the port did not (§8).
            */
           const SubResult above = SubtractWithCarry(squares, ALTITUDE_PLANET_RADIUS, false);
           if (!above.carry)
           {
-            return LoopOutcome::Died; // 6502: .MA28 JMP DEATH
+            return LoopOutcome::Died; // 6502: MA28
           }
 
           /*
-           * 6502: STA R / JSR LL5 / LDA Q / STA ALTIT.
+           * 6502: the square root of the difference, whose low byte becomes the altitude.
            *
            * THE RADICAND'S LOW BYTE IS WHATEVER `Q` LAST HELD. Nothing between the last ship's
-           * processing and this square root writes `Q` -- `MAS3` and `m` do not -- so the altitude's
-           * low bits come from the last routine of the frame that used the scratch byte: `MVS4`'s
-           * `STA Q` of BETA for a ship the loop moved and did not draw, `LL9`'s vertex distance or
-           * the clipper's for one it drew, `DVID3B`'s scaled divisor for a dot, `SUN`'s last row's
-           * root. Since M2-b the kernel keeps its scratch to itself, so those routines write
+           * processing and this square root writes `Q` -- neither `MAS3` nor `m` does -- so the
+           * altitude's low bits come from the last routine of the frame that used the scratch byte:
+           * `MVS4`'s pitch rate for a ship the loop moved and did not draw, `LL9`'s vertex distance
+           * or the clipper's for one it drew, `DVID3B`'s scaled divisor for a dot, `SUN`'s last
+           * row's root. Since M2-b the kernel keeps its scratch to itself, so those routines write
            * `MathWorkspace::q` for this read alone -- the "frame's Q".
            *
-           * R22 said there was a tenth writer the port never modelled, `LOIN`'s `STA Q`. There is
+           * R22 said there was a tenth writer the port never modelled, `LOIN`. There is
            * not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never
            * touches `Q` at 154, and the risk was written from the BBC commentary -- the same source
            * that gave M2-c-1 its `T`/`T2` defect. What the byte holds is now compared against the
@@ -1607,7 +1609,7 @@ namespace Elite
     }
     else if (_counter == STEP_DOCKING_REMINDER)
     {
-      // 6502: .MA29 CMP #15 / BNE MA33 / LDA auto / BEQ MA23 / LDA #123 / BNE MA34.
+      // 6502: MA29 -- step 15, and the reminder only when the computer is on.
       if (_universe.control.dockingComputer != 0u)
       {
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_DOCKING_ON,
@@ -1617,7 +1619,7 @@ namespace Elite
     else if (_counter == STEP_CABIN_TEMPERATURE)
     {
       /*
-       * 6502: .MA33 CMP #20 / BNE MA23 / LDA #30 / STA CABTMP / LDA SSPR / BNE MA23.
+       * 6502: MA33 -- step 20, room temperature stored, then the station-range test.
        *
        * Thirty is room temperature and it is written unconditionally, so the sun's contribution
        * below is a replacement rather than an increase. Inside station range there is no sun to
@@ -1631,7 +1633,7 @@ namespace Elite
       }
 
       /*
-       * 6502: JSR MAS3 / EOR #%11111111 / ADC #30 / STA CABTMP / BCS MA28.
+       * 6502: the distance squared, complemented and added to thirty.
        *
        * The temperature is thirty MINUS the distance squared, written as a negate-and-add on
        * `MAS3`'s exit carry -- and the carry OUT is death: an overflow here means the sum passed
@@ -1643,18 +1645,17 @@ namespace Elite
 
       if (heat.carry)
       {
-        return LoopOutcome::Died; // 6502: BCS MA28
+        return LoopOutcome::Died; // 6502: MA28
       }
 
-      // 6502: CMP #224 / BCC MA23 -- below this the sun is just warm and nothing else happens.
+      // 6502: below this the sun is just warm and nothing else happens.
       if (heat.value < CABIN_SCOOPING)
       {
         return EndFlightFrameTail(_universe, _ports);
       }
 
       /*
-       * 6502: CMP #240 / BCC nokilltr / LDA #%101 / JSR SETL1 / LDA VIC+&15 / AND #%00000011 /
-       * STA VIC+&15 / LDA #%100 / JSR SETL1 / LSR TRIBBLE+1 / ROR TRIBBLE.
+       * 6502: past 240 the sprites are cut back and the Trumble count is halved.
        *
        * THE TRUMBLES COOK. The sprite write is bracketed by two raster-mode changes because the
        * sprites belong to the interrupt handler, and the population is HALVED as a sixteen-bit
@@ -1672,11 +1673,10 @@ namespace Elite
       }
 
       /*
-       * 6502: .nokilltr LDA BST / BEQ MA23 / LDA DELT4+1 / LSR A / ADC QQ14 / CMP #70 / BCC P%+4 /
-       * LDA #70 / STA QQ14 / LDA #160 / .MA34 JSR MESS.
+       * 6502: nokilltr -- fuel scooping, capped at a full tank, then the message.
        *
-       * Fuel scooping, and the amount is the player's own SPEED: `DELT4+1` is `DELTA` shifted up
-       * six places, halved again here. Flying into the sun faster fills the tank faster.
+       * The amount is the player's own SPEED: `DELT4+1` is `DELTA` shifted up six places, halved
+       * again here. Flying into the sun faster fills the tank faster.
        */
       if (commander.fuelScoops != 0u)
       {
@@ -1695,21 +1695,21 @@ namespace Elite
   {
     BurnEnergyBomb(_universe); // 6502: part 13's head, on every frame
 
-    // 6502: .MA77 LDA MCNT / AND #7 / BNE MA22 -- seven frames in eight skip straight to part 15.
+    // 6502: MA77 -- seven frames in eight skip straight to part 15.
     const std::uint8_t counter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter & 31u);
 
     if ((_universe.flight.mainLoopCounter & 7u) == 0u)
     {
       RechargeBanks(_universe); // 6502: part 13's tail
 
-      // 6502: part 14 opens LDA MJ / BNE MA23S -- no space stations in witchspace.
+      // 6502: part 14 opens with the witchspace test -- no space stations there.
       if (_universe.status.midJump != 0u)
       {
         return EndFlightFrameTail(_universe, _ports);
       }
 
       /*
-       * 6502: LDA MCNT / AND #31 / BNE MA93 -- and the fall-through matters (M4-a-3).
+       * 6502: the counter masked to five bits, and the fall-through matters (M4-a-3).
        *
        * A zero runs part 14 and every path through it ends at `MA23S`; anything else drops into
        * `MA93`, which is part 15's first compare. The port used to return the tail on BOTH, which
@@ -1725,7 +1725,7 @@ namespace Elite
     }
     else
     {
-      // 6502: .MA22 LDA MJ / BNE MA23S -- part 15's own witchspace test, the twin of part 14's.
+      // 6502: MA22 -- part 15's own witchspace test, the twin of part 14's.
       if (_universe.status.midJump != 0u)
       {
         return EndFlightFrameTail(_universe, _ports);
@@ -1754,11 +1754,11 @@ namespace Elite
 
   CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
-    // 6502: JSR DOKEY, which BOTH paths do before they differ.
+    // 6502: DOKEY, which BOTH paths do before they differ.
     ReadFlightControls(_universe, _ports);
 
-    // 6502: LDA QQ11 / BNE TT17afterall -- the space view returns with X and Y untouched, so the
-    // caller gets no movement rather than a movement of zero, and the two are the same thing here.
+    // 6502: the space view returns with the two registers untouched, so the caller gets no movement
+    // rather than a movement of zero, and the two are the same thing here.
     if (_view == 0u)
     {
       return {};
