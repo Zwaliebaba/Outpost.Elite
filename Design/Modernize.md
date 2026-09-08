@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,559 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,525 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-5: the combat half of the frame, and the labels that earn their keep.**
+
+34 more, and `FlightLoop.cpp` is at 71 of its original 199. This stretch is parts 7 to 12 — contact,
+scooping, docking, the collision cost, our laser and the write-back — and it is where the file's
+real findings live, so it is the stretch that tests whether prose can carry them.
+
+It can, and the shape that works is consistent: **the LABEL stays and the LISTING goes.** `// 6502:
+MA59 -- and the carry is SET, because part 8's branch is the only way here` keeps everything the
+reader needs. The label is the address in the original a person would go and look at; the six
+instructions after it were never what made the sentence true.
+
+Three findings came through with nothing lost. The scoop's item number is the blueprint's top nibble
+plus one plus a bit of the bottom nibble, because the addition takes the fourth shift's carry
+(§6.89). A full hold reaches the impact code with the carry SET, because the capacity test's own
+branch is the only way in. And the flag `LL9` seeds an explosion cloud on is the one `HITCH` set,
+which the missile-lock test does not touch — the finding that a silent build once broke (§8).
+
+`cs-ll9-carry-hit` re-anchored (rule 3): its `find` quoted that last comment verbatim. The pattern is
+now familiar enough to predict — **a mutant anchored on a comment moves when M6-d rewrites it** —
+and the answer is always to re-anchor rather than to leave the comment alone, because a mutant
+pinning a line of prose is pinning the wrong thing anyway. Two mutants in five slices; 97 of 97.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+`opcode-transcriptions` 2,559 → 2,525.
 
 **2026-09-08 — M6-d-4: the rest of the keys, the guns, and a block of named constants.**
 
