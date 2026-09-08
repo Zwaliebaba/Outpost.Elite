@@ -1940,6 +1940,39 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-08 — M6-d-17a: the mutation harness had been blocked since before M6-c, and one mutant had
+stopped compiling.**
+
+Nothing in `GameLogic/` changed. `check_all.py` runs `mutate.py --check`, which asks only whether
+every mutant still APPLIES to the tree; it builds nothing and runs no test. The full harness had not
+run since the merges, and running it found two things at once.
+
+First, correcting the record: every M6-d entry from -2 onward reports "97 of 97 mutants", and what
+was actually verified in those slices is `--check`'s *all 97 recorded mutants still apply*. The two
+are not the same claim and this entry is where they stop being written as if they were.
+
+**The filter gate was firing on four units.** `trumbles`, `missions`, `cloud-seed` and `planetdraw`
+each select more tests than `mutants.json` records, and in every case the surplus is a test that did
+not exist when the number was written: T-2's docked pass breeds trumbles, `TheMissionText` grew from
+six tests to nine, M6-a-1 added the docking check that closed the fourth coverage gap, and RS-3's
+`PicturePlanetTests.cpp` puts the planet and the sun on both surfaces (its methods are selected by
+name, two containing `ThePlanet` and one `TheSun`). All four exercise the code their unit mutates, so
+all four are re-based with the reason in the unit's own note. The field description now says what the
+two directions mean, because they do not mean the same thing: a RISE is normally coverage that
+arrived after the number, and is re-based; a FALL is a filter that has stopped reaching its own
+class, and is a bug.
+
+**`ar-ll5-carry` had been uncompilable since M6-c-7.** That slice re-anchored the mutant's `find` when
+`LL5`'s accumulator stopped being `q` and left the `replace` still naming `q`. So the mutant applied
+cleanly and then failed to build — and `--check` cannot see it, because it reads the `find` and
+nothing else. The harness classifies a build failure as its own outcome rather than as a catch, which
+is the only reason this surfaced instead of passing as a green tally.
+
+Both are the same lesson from opposite ends: `--check` is not the harness, and nineteen checks can
+pass without a single mutant ever being compiled.
+
+97 of 97 — 92 caught, 5 recorded survivors, 0 neither — from a full run. 469 tests green.
+
 **2026-09-08 — M6-d-16: the circle walk, and a carry that decides how far a quarter-turn is.**
 
 17 more from `PlanetDraw.cpp`, now at 49 of 89. This is `CIRCLE2`'s walk and the projection helpers
