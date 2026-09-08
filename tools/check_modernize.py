@@ -214,6 +214,79 @@ def count_origin_markers(_root: Path) -> int:
     return total
 
 
+# The identifiers that are 6502 labels and nothing else (P12, Design/Modernize.md M6-c).
+#
+# WRITTEN AS A LIST AND NOT DERIVED FROM `Upstream/`, for two reasons. The first is that it has to
+# keep working after M6-f deletes the upstream tree, and a counter that reads the original cannot
+# read zero once the original is gone. The second is that "is a label" is not the question: 135
+# identifier spellings in `GameLogic/` are labels of the C64 build, and most of them are labels
+# BECAUSE THE ORIGINAL ALSO NEEDED A WORD FOR THE THING -- `view`, `status`, `type`, `energy`,
+# `name`, `counter`, `pixel`, `swap`, `sun`, `junk`, `cash`, `checksum`, `x1`, `y1`, `x2`, `y2` --
+# and renaming those would make the code worse, not freer of the original. So the question the
+# counter asks is the one M6-c is actually about: **does the name say what it holds, or do you have
+# to have read the original to know?**
+#
+# What that leaves is five families, and the count was taken over the tree before any of them moved
+# (§8, M6-c-0): 971 sites in `GameLogic/`, 7 in `Outpost/` and 1,611 in the suite.
+ORIGIN_IDENTIFIERS = (
+    # The zero-page scratch bytes. `Q` is a divisor here and a multiplicand there; `T` is whatever
+    # the routine needed a byte for. One letter, no meaning, and four hundred sites of it.
+    #
+    # `c` AND `v` ARE NOT HERE AND THAT IS DELIBERATE. Both are 6502 labels, and in this tree both
+    # are the PROCESSOR'S STATUS FLAGS: `cpu.c` in a hundred and fifty fixtures, and `Flags` in
+    # `EliteTypes.h`, which is the status register as a struct and names its four bits as the
+    # processor names them. That is the right name for the thing, so the counter does not ask for it
+    # back. `PlanetDraw`'s own `v` is a carry-over and M6-c renames it by eye rather than by ratchet.
+    "k k2 k3 k5 k6 q q2 r s s2 t t1 u b m p p2 "
+    # `XX2` to `XX17` -- the drawing workspace, named by their offsets from `XX0`.
+    "xx2 xx3 xx12 xx16 xx17 "
+    # The rates and the counters. `ALPHA` and `BETA` are the roll and the pitch and say neither;
+    # `ALP1`/`ALP2` and `BET1`/`BET2` are their magnitudes and signs, `DELTA` the speed, `DELT4` the
+    # speed shifted for the stardust, `RAT`/`RAT2` the damping constants, `SC` the screen pointer.
+    "sc cnt cnt2 rat rat2 alp1 alp2 bet1 bet2 alpha beta delta delt4 "
+    # The named oddities: labels whose names are not words in any language. `frump`, `lotus` and
+    # `santana` are the authors' jokes; `ze`, `stp`, `lsp` and `yx2M1` are abbreviations of nothing.
+    "lsp stp ze yx2M1 sunX dontclip newb newzp mutok pltog patg frump fist sprx spry innersec lotus santana "
+    # The music player's, which are the SID's registers under the player's own numbering.
+    "value0 value1 value2 value3 value4 vibrato2 vibrato3 "
+    "voice2lo1 voice2hi1 voice2lo2 voice2hi2 voice3lo1 voice3hi1 voice3lo2 voice3hi2"
+).split()
+
+# The prefixes the naming convention puts in front of a name (AGENTS.md §1): a parameter's `_`, a
+# member's `m_`, a global's `g_`, a mutable static's `sm_`. `_q` is the same carry-over as `q`.
+NAME_PREFIX = re.compile(r"^(?:sm_|m_|g_|_)")
+IDENTIFIER = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+
+# A character literal is not an identifier, and `Put('m')` is not a routine still called `m`. Found
+# by the self-test's own sample rather than by review, which is the whole reason each counter has one.
+LITERAL = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
+
+
+def count_origin_identifiers(_root: Path) -> int:
+    """P12 -- sites where the port still calls something by its 6502 label (M6-c).
+
+    THE SUITE IS COUNTED TOO, and it is two thirds of the total. M6-c's scope is "in the code and
+    the tests", and a counter that stopped at `GameLogic/` would read zero with 1,611 sites left.
+    """
+    vocabulary = set(ORIGIN_IDENTIFIERS)
+    total = 0
+    for folder in ("GameLogic", "Outpost", "Tests/GameLogicTests"):
+        here = _root / folder
+        if not here.is_dir():
+            continue
+        for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
+            # The interpreter is not the port. `Cpu6502` MODELS a 6502, so `c`, `v` and `p` are the
+            # processor's own flags and pointers and are the right names for it -- 120 of the suite's
+            # sites are `cpu.c` -- and the whole file leaves the tree at M6-f anyway.
+            if path.stem == "Cpu6502":
+                continue
+            code = LITERAL.sub(" ", strip_comments(path.read_text(encoding="utf-8", errors="replace")))
+            for match in IDENTIFIER.finditer(code):
+                if NAME_PREFIX.sub("", match.group(0)) in vocabulary:
+                    total += 1
+    return total
+
+
 def count_oracle_test_files(_root: Path) -> int:
     """P12 -- test translation units that load the assembled original through OracleImage."""
     tests = _root / "Tests" / "GameLogicTests"
@@ -249,6 +322,7 @@ COUNTERS = {
     "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
+    "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
     "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
 }
@@ -332,6 +406,10 @@ namespace Elite
     Byte& hi;
   };
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
+  // k3 and q here are a COMMENT and are not counted either
+  std::uint8_t m_alp2 = 0;                                  // a member's prefix is stripped before the match
+  void Divide(std::uint8_t _q, std::uint8_t _k3) noexcept;  // a parameter's is too
+  std::uint8_t x1 = 0;                                      // a label the port would have chosen anyway: NOT counted
   /// 6502: MAS2 -- a marker, which IS counted, from the raw text
   [[nodiscard]] std::uint8_t Mas2(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept;
   void Spawn(MathWorkspace& _math, std::uint8_t _x, bool _carryIn) noexcept;
@@ -348,6 +426,8 @@ namespace Elite
     _work[31] = static_cast<std::uint8_t>(_work[31] | 0x20u);   /* work[3] in a comment */ // 6502: MV1
     _bubble.blocks[slot][36] = _work[SHIP_FLAGS_OFFSET];
     const std::uint8_t z = _work[8u];
+    const std::uint8_t xx12 = z; /* xx16 in a comment does not count */
+    Put('m');                    // and 'm' is a character literal, not the label
   }
 }
 """
@@ -387,6 +467,7 @@ EXPECTED = {
     "mutant-files": 2,
     "inventory-stale-files": 1,
     "origin-markers": 2,
+    "origin-identifiers": 5,
     "oracle-test-files": 1,
     "origin-tools": 1,
 }

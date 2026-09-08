@@ -386,7 +386,9 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,149 `6502:`
-references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,924 sites in the library, the
+executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
+2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
@@ -1883,6 +1885,43 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-0: the instrument, and "is a label" turned out to be the wrong question.**
+
+M6-c's acceptance is a ratchet at zero, and nothing counted. `check_modernize.py` gains
+`origin-identifiers`, and building it took the same three wrong readings M6-0-f's took.
+
+**THE FIRST READING WAS "AN IDENTIFIER THAT IS A LABEL", AND IT IS NOT THE QUESTION.** 135
+identifier spellings in `GameLogic/` are labels of the C64 build, at 2,785 sites — and most of them
+are labels because the ORIGINAL ALSO NEEDED A WORD FOR THE THING. `view`, `status`, `type`,
+`energy`, `name`, `counter`, `pixel`, `swap`, `sun`, `junk`, `cash`, `checksum`, `x1`, `y1`, `x2`,
+`y2`: renaming those would make the code worse and no freer of the original. So the question the
+counter asks is the one the row is actually about — **does the name say what it holds, or do you
+have to have read the original to know?** — and what survives it is five families: the zero-page
+scratch bytes (`k`, `q`, `t`, `s`, `p`, `r`, `u`, `b` and their numbered siblings), the `XX`
+workspace, the rates and counters (`ALPHA`, `BETA`, `DELTA`, `ALP1`, `BET2`, `RAT2`, `SC`, `CNT`),
+the named oddities (`ze`, `stp`, `lsp`, `yx2M1`, `dontclip`, `newb`, `frump`, `lotus`, `santana`),
+and the music player's `value0`–`value4`, `vibrato2/3` and eight `voice*` bytes.
+
+**THE SECOND READING COUNTED CHARACTER LITERALS**, and `_ports.characters.Put('m')` is not a routine
+still called `m`. Found by the counter's own self-test rather than by review, which is why every
+counter has one.
+
+**THE THIRD READING COUNTED THE INTERPRETER'S FLAGS.** `c` and `v` are labels, and in this tree both
+are the PROCESSOR'S status bits: `cpu.c` in a hundred and fifty fixtures, and `Flags` in
+`EliteTypes.h`, which is the status register as a struct and names its four bits as the processor
+names them. That is the right name for the thing, so neither is in the vocabulary and `Cpu6502` is
+skipped whole — it models a 6502, and it leaves the tree at M6-f regardless. `PlanetDraw`'s own `v`
+is a genuine carry-over and M6-c renames it by eye rather than by ratchet, which is the one thing
+this instrument does not police and says so.
+
+**THE LIST IS DATA AND NOT DERIVED FROM `Upstream/`, and that is a requirement rather than a
+convenience**: M6-f deletes the upstream tree, and a counter that reads the original cannot read
+zero once the original is gone.
+
+The reading: **1,924 sites** — 1,060 in `GameLogic/`, 1 in `Outpost/` and 863 in the suite, which is
+where the slice's weight actually is and not where the row implies it. The ceiling is set there and
+only goes down. Nothing in `GameLogic/` changed; the suite is unmoved at 454.
 
 **2026-09-08 — M6-a's two questions ruled, and M6-b has a shape again.**
 
