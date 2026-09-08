@@ -77,7 +77,7 @@ namespace GameLogicTests
         {
           for (const std::uint8_t a : EDGES)
           {
-            for (const std::uint8_t r : EDGES)
+            for (const std::uint8_t valueLow : EDGES)
             {
               for (const std::uint8_t low : EDGES)
               {
@@ -93,17 +93,17 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
                     PokeShip(work, axis + byte, bytes[byte]);
                   }
-                  cpu.memory[rr] = r;
+                  cpu.memory[rr] = valueLow;
 
                   cpu.a = a;
                   cpu.x = axis;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(masked ? static_cast<std::uint16_t>(mvt1 - 2) : mvt1);
                   Assert::IsTrue(run.completed, L"MVT1 returned");
 
-                  Elite::AddToShipCoordinate(work, a, r, axis, masked);
+                  Elite::AddToShipCoordinate(work, a, valueLow, axis, masked);
 
                   const std::wstring where =
-                    Widen(std::string(masked ? "MVT1-2" : "MVT1") + "(a=" + std::to_string(a) + ", r=" + std::to_string(r) +
+                    Widen(std::string(masked ? "MVT1-2" : "MVT1") + "(a=" + std::to_string(a) + ", r=" + std::to_string(valueLow) +
                           ", x=" + std::to_string(axis) + ", coord=" + std::to_string(low) + "/" + std::to_string(high) + ")");
                   for (int byte = 0; byte < 3; ++byte)
                   {
@@ -215,9 +215,9 @@ namespace GameLogicTests
       {
         for (const std::uint8_t a : EDGES)
         {
-          for (const std::uint8_t p1 : EDGES)
+          for (const std::uint8_t valueLow : EDGES)
           {
-            for (const std::uint8_t p2 : EDGES)
+            for (const std::uint8_t valueMid : EDGES)
             {
               for (const std::uint8_t low : EDGES)
               {
@@ -230,17 +230,17 @@ namespace GameLogicTests
                   cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
                   PokeShip(work, axis + byte, bytes[byte]);
                 }
-                cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                cpu.memory[static_cast<std::uint16_t>(pp + 2)] = p2;
+                cpu.memory[static_cast<std::uint16_t>(pp + 1)] = valueLow;
+                cpu.memory[static_cast<std::uint16_t>(pp + 2)] = valueMid;
 
                 cpu.a = a;
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt6);
                 Assert::IsTrue(run.completed, L"MVT6 returned");
 
-                const Elite::SignMag24 moved = Elite::AddShipCoordinateToP(work, Elite::SignMag24{p1, p2, a}, axis);
+                const Elite::SignMag24 moved = Elite::AddShipCoordinateToP(work, Elite::SignMag24{valueLow, valueMid, a}, axis);
 
-                const std::wstring where = Widen("MVT6(a=" + std::to_string(a) + ", P=" + std::to_string(p1) + "/" + std::to_string(p2) +
+                const std::wstring where = Widen("MVT6(a=" + std::to_string(a) + ", P=" + std::to_string(valueLow) + "/" + std::to_string(valueMid) +
                                                  ", x=" + std::to_string(axis) + ")");
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], moved.lo, (where + L": P+1").c_str());
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], moved.hi, (where + L": P+2").c_str());

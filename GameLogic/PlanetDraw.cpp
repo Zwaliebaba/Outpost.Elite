@@ -15,7 +15,6 @@ namespace Elite
   {
     // 6502: EDGES -- STA T / CLC / ADC YY / STA X2, the right-hand end first. `T` is the kernel's
     // byte and this routine's own since M2-c-2; `X1` and `X2` are the answer.
-    const std::uint8_t t = _halfWidth;
     SunRow row;
 
     const AddResult right = AddWithCarry(_halfWidth, _centre.lo, false);
@@ -48,7 +47,7 @@ namespace Elite
       row.x2 = 255;
     }
 
-    const SubResult left = SubtractWithCarry(_centre.lo, t, true);
+    const SubResult left = SubtractWithCarry(_centre.lo, _halfWidth, true);
     row.x1 = left.value;
     const SubResult leftHigh = SubtractWithCarry(_centre.hi, 0u, left.carry);
 

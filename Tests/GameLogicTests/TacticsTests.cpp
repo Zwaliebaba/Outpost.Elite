@@ -1245,8 +1245,8 @@ namespace GameLogicTests
       std::vector<Approach> ladder;
       for (int magnitude = 0x60; magnitude <= 0xFE; magnitude += 8)
       {
-        const std::uint8_t m = static_cast<std::uint8_t>(magnitude);
-        ladder.push_back({"diagonal ladder", m, 0u, m, 0u, m, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
+        const std::uint8_t magnitudeByte = static_cast<std::uint8_t>(magnitude);
+        ladder.push_back({"diagonal ladder", magnitudeByte, 0u, magnitudeByte, 0u, magnitudeByte, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
       }
       /*
        * SKEWED, because a uniform diagonal cannot produce every length. `TA2` halves each component
@@ -1259,9 +1259,9 @@ namespace GameLogicTests
       {
         for (int skew = -4; skew <= 4; skew += 2)
         {
-          const std::uint8_t m = static_cast<std::uint8_t>(magnitude);
+          const std::uint8_t magnitudeByte = static_cast<std::uint8_t>(magnitude);
           const std::uint8_t skewed = static_cast<std::uint8_t>(magnitude + skew);
-          ladder.push_back({"diagonal ladder", m, 0u, skewed, 0u, m, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
+          ladder.push_back({"diagonal ladder", magnitudeByte, 0u, skewed, 0u, magnitudeByte, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
         }
       }
 
