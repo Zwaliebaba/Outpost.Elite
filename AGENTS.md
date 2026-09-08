@@ -202,31 +202,21 @@ Tests are an MSVC CppUnitTest DLL:
 vstest.console.exe x64\Debug\GameLogicTests.dll
 ```
 
-**Oracle tests need the reference binaries** and report *skipped — oracle absent* without them
-(ADR-003 §1). That is expected on a fresh machine until BeebAsm has assembled the upstream
-tree; it is not a passing suite. Tests that hand-assemble the routine under test need nothing
-and always run.
-
-**On a Linux box the whole oracle takes four commands**, which is what CI's Ubuntu job does and
-what a hosted session did on 2026-09-08 to build six slices against the original:
+**THE SUITE NEEDS NOTHING BUT THE REPOSITORY** since M6-b-7 (Modernize.md §8). Until then every
+comparison against the original needed BeebAsm, the `Upstream/` submodule and an assembled game,
+and a machine without them reported *skipped — oracle absent* and failed `OracleIsPresent` by
+design. There is no interpreter, no image and no assembler step on either CI leg:
 
 ```sh
-git submodule update --init                      # the upstream tree, pinned by the gitlink
-git clone https://github.com/stardot/beebasm.git Tools-ext/beebasm && cd Tools-ext/beebasm \
-  && git checkout $BEEBASM_REF && mkdir -p out && g++ -std=c++14 -O2 -o out/beebasm src/*.cpp
-python tools/labels.py --assemble                # the reference build, Labels.txt and Binaries.txt
-Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed -- not N passed, 1 failed
+Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed
 ```
 
-`BEEBASM_REF` is the commit `.github/workflows/build-and-test.yml` pins; `Tools-ext/` is ignored.
-**The assembly rewrites one file inside the submodule** (`COMLOD.unprot.bin` under
-`3-assembled-output`), which `git status` then shows as a modified submodule: restore it with
-`git -C Upstream/elite-source-code-library checkout -- .` and never commit it -- `Upstream/` is
-not ours (§2).
+`Upstream/` is still checked out (`git submodule update --init`) because `c64_source.py` and the
+master counts read it; both go at M6-f and the submodule with them.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->fifteen in CI's
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->fourteen in CI's
 order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
 2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
@@ -325,25 +315,24 @@ the unmutated suite and reports a survivor. `expect` is `caught` unless the note
 
 Six things the tool does that a hand run kept getting wrong, so that reading them here is enough:
 
-- **The baseline is proven before any mutant is believed.** With the oracle missing the suite
-  reports `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that reads
-  only that line reports every mutant as caught, and three tallies were published from exactly
+- **The baseline is proven before any mutant is believed.** With the oracle missing the suite used
+  to report `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that read
+  only that line reported every mutant as caught, and three tallies were published from exactly
   that (§6.119). The unmutated suite runs first and must be green.
 - **A timeout is a catch.** Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an
   odd count run for ever: the suite times out, no summary line is printed, and a harness looking
   for one calls it a tooling failure. It is the strongest possible catch.
 - **A worktree with no symlinks in it.** The old recipe symlinked the submodule into a detached
-  worktree and warned that every `git checkout -f` ate the link. The tool COPIES instead — the
-  reference files are text and the oracle's `versions/c64` tree is 4.4 MB — so the trap is gone by
-  construction rather than documented.
+  worktree and warned that every `git checkout -f` ate the link. The tool COPIES instead, so the
+  trap is gone by construction rather than documented.
 - **A unit's test filter is verified before it is trusted.** A filter that selects the wrong tests
   is worse than no filter, because it produces a confident number about code it never ran. Record
   one filter per `TEST_CLASS` and the count they select; the tool checks it against the unmutated
   build.
 - **Every unit carries a `selftest` mutant** — an unmissable change the suite cannot fail to catch,
-  run first, and the run stops if it survives. It is the harness's own `OracleIsPresent`: without
-  it, a list of "survivors" could be a run that never rebuilt, which is R13 realised (§6.119). Add
-  one when you add a unit; `--check` fails if a unit has none.
+  run first, and the run stops if it survives. It is the one deliberate failure that says the
+  harness works: without it, a list of "survivors" could be a run that never rebuilt, which is R13
+  realised (§6.119). Add one when you add a unit; `--check` fails if a unit has none.
 - **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
 
 **Closing a survivor: three questions, in this order.** §6.132's method is "probe the comparison,

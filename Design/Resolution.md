@@ -3,7 +3,7 @@
 **Status:** **BUILT · 2026-09-08**, in seven slices (RS-0 to RS-6, §13), from a design proposed
 2026-09-07 with eight owner rulings taken the day it was opened — four on the shape (§1) and four on
 what the shape left open (§11). The suite is <!--count:tests-->131 green with all
-<!--count:checks-->15 repository checks passing, and what it decided is
+<!--count:checks-->14 repository checks passing, and what it decided is
 [ADR-008](ADR/ADR-008-the-picture.md).
 
 **This document is now a record of how it was built rather than a plan for building it**, and the

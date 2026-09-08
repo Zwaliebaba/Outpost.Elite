@@ -455,11 +455,12 @@ namespace Elite
   /*
    * `ShipDrawEffects` WAS HERE AND IS NOT ANY MORE (M6-0-a-3). It was the two places `LL9` leaves
    * its own code -- `LL25`'s tail jump to `PLANET` and LL14's to `DOEXP` -- and it outlived
-   * every other seam for one reason: in a flat oracle image the VIC-II's registers and `XX21` were
-   * the same bytes, so an explosion drawn on the oracle side corrupted the blueprints of the ships
-   * drawn after it (§6.108), and no whole frame with an explosion in it could be compared.
-   * `Cpu6502` banks the I/O page now (M6-0-a-1), the frame fixture draws the cloud (M6-0-a-2), and
-   * the two tail jumps are the calls into `PlanetDraw.cpp` and `Explosion.cpp` they always were.
+   * every other seam for one reason: in the flat image the comparisons ran against, the VIC-II's
+   * registers and `XX21` were the same bytes, so an explosion drawn on that side corrupted the
+   * blueprints of the ships drawn after it (§6.108), and no whole frame with an explosion in it
+   * could be compared. Banking the I/O page fixed that (M6-0-a-1), the frame fixture drew the
+   * cloud (M6-0-a-2), and the two tail jumps are the calls into `PlanetDraw.cpp` and
+   * `Explosion.cpp` they always were.
    * The `EE55` block was a third seam here until 2026-09-06 and is `SeedExplosionCloud` above.
    */
   struct Universe;

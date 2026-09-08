@@ -397,9 +397,10 @@ why naming an instruction is not quoting one are in `check_modernize.py`). M6-d 
 it has NO EXEMPTION: R-i's `6502 quoted:` tag went unused through all fifty-eight slices and was
 deleted with the phase (owner ruling, M6-d-59), so every listing in a comment is a violation. <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
-2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->0 of the test translation
-units load the assembled original through `OracleImage` -- 47 did until M6-b-5 deleted them and
-the 337 comparisons they carried, so no test needs BeebAsm, the submodule or the label map; <!--count:origin-tools-->6 of the tools read `Upstream/` or
+2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); no test loads the assembled original --
+47 files did until M6-b-5 deleted them and the 337 comparisons they carried, and M6-b-7 deleted
+the interpreter and the loader they used, so nothing needs BeebAsm, the submodule or the label
+map (the counter went with them: a count over a header that no longer exists guards nothing); <!--count:origin-tools-->6 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
 it, and it is the one pattern that the owner's ruling (§1, R-a to R-d) makes a target: the end state
 builds, tests and reads with none of it present. Until M6 it is also what every other slice is
@@ -1712,6 +1713,46 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-08 — M6-b-7: the interpreter, the image and the label header. No assembler on either leg.**
+
+`Cpu6502` (1,300 lines), `Oracle`, `OracleImage`, `OracleLabels.h` and `FlightUniverse.h`'s oracle
+half are gone, and with them the runner's `--coverage`, `--measure` and `--record`, the BeebAsm
+build and the assemble step on both CI legs, `labels.py --check` from the fourteen, and the two
+Win32 stand-ins in the portable runner's shim that existed only so `OracleImage` could find the
+repository root. **A fresh clone builds and runs the whole suite with a compiler and nothing else**
+-- which is what M6-f's acceptance asks for, arriving a slice early because the tests that needed
+the assembler went first.
+
+**TWO THINGS SURVIVED THAT LOOKED LIKE THE ORACLE'S AND ARE NOT.**
+
+**The state-cell table.** `UniverseImage` mapped every byte of `Universe` to the address the 6502
+kept it at, and four walks over it did the work: `Materialise` wrote the port's state into the
+interpreter, `Compare` read it back, `Absorb` reversed it, `Hash` folded it into the replay's
+digest. The first three go with the interpreter and the fourth with the labels, exactly as M6-f
+always said. But the TABLE is the list `Elite::HashState` is held to -- the risk with a
+hand-written fold is a field it forgot, and `StateHashTests` walks every cell, changes its byte and
+requires the hash to move. So the table stays, as `StateCells.h/.cpp`, with the address and the
+I/O-page flag taken out of every one of 102 constructor calls (`tools`-side script, arguments split
+at top level so a `static_cast<std::uint16_t>(_at.sunx + 1u)` counted as one). **The names are the
+original's and stay**, for the reason §1 R-b gives. One thing the address was doing had to be
+replaced: it was what told two `TRIBVX` cells apart, so the six Trumble velocities and the twenty
+dust cells carry their index in the name now. 1,489 cells move the hash, 7 are inert.
+
+**The replay's second digest.** Each checkpoint carried two: the label fold and
+`Game::StateHash()`. The label fold is deleted and thirty-six recorded rows lose their first
+column -- **NOT a re-take under rule 1**: the state column is the one it was, to the bit, in all
+three records, and the flight is unchanged. That column was added at M5-e-3 precisely so that this
+day would cost nothing, and it did.
+
+**What the compiler could not see, again.** `-Wunused-function` found nothing here, because what
+was left over were TYPES and the two Win32 shims are `inline` in a header. The reference count from
+M6-b-6 found them.
+
+131 tests green, all fourteen checks. `labels.py` and `c64_source.py` are still in `tools/` and
+`Upstream/` is still checked out, because the master counts and the source resolver read it; those
+are M6-f, one slice away, and nothing runs `labels.py --check` in between.
+
 
 **2026-09-08 — M6-b-6: the names and the prose the deletion left behind.**
 

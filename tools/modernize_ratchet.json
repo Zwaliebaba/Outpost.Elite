@@ -83,11 +83,6 @@
       "slack": 0,
       "slice": "M6-c-11: Arctan's two Ts, and the kernel finished"
     },
-    "oracle-test-files": {
-      "ceiling": 0,
-      "slack": 0,
-      "slice": "M6-b-5: the 337 comparisons against the original, and the 47 files that held them"
-    },
     "origin-tools": {
       "ceiling": 6,
       "slack": 0,
