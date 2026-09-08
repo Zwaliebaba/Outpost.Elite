@@ -292,6 +292,15 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   compared; the settlement runs after it. When a controller exists the original's rule returns:
   fire on the title screen selects it, and `JSTGY`/`JSTE` become its axis reversals.
 
+- **The blocking read is `TT217`, ported. 2026-09-08 (Design/InputTimer.md I-1).** `Elite::ReadKey`
+  waits two frames, waits for no key, waits for a key and translates, over the port's `Held`, and is
+  compared against the original with the matrix changing under it. The executable's `NextKey` is
+  that routine; the queue of `WM_KEYDOWN`s it popped until then -- auto-repeats included -- is gone,
+  and the dispatch takes one genuine press per step from the window, never a repeat. A key held
+  when a prompt appears is not its answer, a key held down is one character, and two presses need
+  a release between them, which is what the C64 did and what "a screen was skipped" was the
+  absence of.
+
 ### §5 The window and the application shell
 
 **Superseded 2026-09-03 by owner ruling: do not strip WinUI, ignore it and proceed.** The

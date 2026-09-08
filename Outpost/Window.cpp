@@ -16,6 +16,9 @@ namespace Outpost
 
     /// Bit 29 of a WM_SYSKEYDOWN's lParam: the context code, set when Alt is down.
     constexpr LPARAM ALT_CONTEXT_BIT = LPARAM{1} << 29;
+
+    /// Bit 30 of a WM_KEYDOWN's lParam: the previous key state, set when this is an auto-repeat.
+    constexpr LPARAM PREVIOUS_STATE_BIT = LPARAM{1} << 30;
   } // namespace
 
   Window::~Window()
@@ -138,7 +141,7 @@ namespace Outpost
     case WM_SYSKEYDOWN:
       if ((_lparam & ALT_CONTEXT_BIT) == 0)
       {
-        PressKey(_wparam, true);
+        PressKey(_wparam, true, (_lparam & PREVIOUS_STATE_BIT) != 0);
       }
       if (_message == WM_KEYDOWN)
       {
@@ -149,7 +152,7 @@ namespace Outpost
     case WM_KEYUP:
     case WM_SYSKEYUP:
       // A release is always taken, so a key pressed before Alt went down cannot be left held.
-      PressKey(_wparam, false);
+      PressKey(_wparam, false, false);
       if (_message == WM_KEYUP)
       {
         return 0;
@@ -193,7 +196,7 @@ namespace Outpost
     return DefWindowProcW(_window, _message, _wparam, _lparam);
   }
 
-  void Window::PressKey(WPARAM _virtualKey, bool _down) noexcept
+  void Window::PressKey(WPARAM _virtualKey, bool _down, bool _repeat) noexcept
   {
     /*
      * The chart's crosshairs first, because an arrow key is TWO C64 keys and only one of them is
@@ -221,21 +224,20 @@ namespace Outpost
     }
 
     m_held[key] = _down;
-    if (!_down)
+    if (!_down || _repeat)
     {
       return;
     }
 
     /*
-     * AUTO-REPEAT IS KEPT, and that is a choice rather than an oversight. Windows sends repeated
-     * WM_KEYDOWNs while a key is held, and the game's own keyboard scan repeats too -- holding a
-     * cursor key is how the crosshairs are moved across the chart. So a repeat is a key press.
+     * AUTO-REPEAT IS NOT A PRESS (InputTimer.md I-1). It was kept until this slice on the argument
+     * that "holding a cursor key is how the crosshairs are moved across the chart" -- which is true
+     * and is done from the HELD table by `TT17`, never from a press. What a repeat did reach was
+     * every prompt that reads a key: a RETURN held past Windows' repeat delay answered the next
+     * screen too. So the held table is the only thing a repeat touches, and this is the newest
+     * genuine press since the dispatch last asked.
      */
-    if (m_pressed.size() >= MAX_QUEUED_KEYS)
-    {
-      m_pressed.pop_front();
-    }
-    m_pressed.push_back(key);
+    m_pressed = key;
   }
 
   bool Window::Pump() noexcept
@@ -272,28 +274,19 @@ namespace Outpost
     {
       held = false;
     }
-    m_pressed.clear();
+    m_pressed = NO_KEY;
   }
 
-  bool Window::TakeKey(std::uint8_t& _outKey) noexcept
+  std::uint8_t Window::TakePressed() noexcept
   {
-    if (m_pressed.empty())
-    {
-      return false;
-    }
-    _outKey = m_pressed.front();
-    m_pressed.pop_front();
-    return true;
+    const std::uint8_t pressed = m_pressed;
+    m_pressed = NO_KEY;
+    return pressed;
   }
 
   bool Window::Held(std::uint8_t _c64Key) const noexcept
   {
     return (_c64Key < KEY_COUNT) && m_held[_c64Key];
-  }
-
-  void Window::FlushKeys() noexcept
-  {
-    m_pressed.clear();
   }
 
   bool Window::TakeResize() noexcept
