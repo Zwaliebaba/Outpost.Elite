@@ -14,12 +14,17 @@
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
 #include "Presentation.h"
+#include "SettingsFile.h"
 #include "StartUp.h"
 #include "TextPrint.h"
 #include "Tokens.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <set>
 #include <string>
 #include <vector>
@@ -491,6 +496,43 @@ namespace GameLogicTests
     }
 
     /*
+     * The flight frame's cost curve and the docked pass, straight off InputTimer.md T-0's
+     * measurement -- pinned here the way the title curve is, so that a row cannot drift from the
+     * number it was read from without a test saying so.
+     */
+    TEST_METHOD(TheFlightFrameAndTheDockedPassArePacedByWhatTheyCost)
+    {
+      // The rows: the empty bubble of §6.114, and T-0's midpoints of the sun and station scenes.
+      Assert::AreEqual(47'784.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(0), 1e-9, L"an empty bubble");
+      Assert::AreEqual(82'236.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(2), 1e-9, L"the planet and its companion");
+      Assert::AreEqual(150'113.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(5), 1e-9, L"and three fighters");
+      Assert::AreEqual(293'354.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(10), 1e-9, L"and eight");
+
+      // Linear between rows -- a fighter costs about 21,000 cycles -- and flat past the last.
+      Assert::AreEqual((82'236.0 + 150'113.0) / 2.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(3) + (Outpost::FlightFrameSeconds(4) - Outpost::FlightFrameSeconds(3)) / 2.0, 1e-9,
+                       L"the rows are joined by straight lines");
+      Assert::AreEqual(Outpost::FlightFrameSeconds(10), Outpost::FlightFrameSeconds(255), 1e-12, L"the bubble cannot hold more than ten");
+      for (int ships = 1; ships <= 10; ++ships)
+      {
+        Assert::IsTrue(Outpost::FlightFrameSeconds(static_cast<std::uint8_t>(ships)) > Outpost::FlightFrameSeconds(static_cast<std::uint8_t>(ships - 1)),
+                       (L"a fuller bubble is never cheaper, at " + std::to_wstring(ships)).c_str());
+      }
+
+      // The game slows to three frames a second in a fight of eight, which is the difficulty §6.17
+      // said the port had to keep.
+      Assert::AreEqual(3.49, 1.0 / Outpost::FlightFrameSeconds(10), 0.05, L"a full bubble: three and a half frames a second");
+      Assert::AreEqual(12.4, 1.0 / Outpost::FlightFrameSeconds(2), 0.1, L"a quiet one: twelve");
+
+      // The docked pass: 4,472 cycles of work and the syncs the library asked for -- two off the
+      // space view unless PATG's bit 0 lifts them, which is `RunLoopTail`'s answer and not this file's.
+      const double sync = Outpost::NTSC_FRAME_CYCLES / Outpost::NTSC_CLOCK_HZ;
+      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ + 2.0 * sync, Outpost::DockedPassSeconds(2), 1e-9, L"two syncs waited");
+      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ, Outpost::DockedPassSeconds(0), 1e-9, L"and none when the author names lift them");
+      Assert::AreEqual(26.5, 1.0 / Outpost::DockedPassSeconds(Outpost::DOCKED_PASS_SYNCS), 0.2,
+                       L"twenty-six passes a second on the NTSC frame: two syncs and four milliseconds");
+    }
+
+    /*
      * ADR-005 section 3: a fixed timestep, and steps are never SILENTLY skipped or doubled.
      *
      * The clamp is the part worth testing hardest. A breakpoint or a closed laptop lid leaves the
@@ -918,6 +960,156 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint8_t>(Outpost::NO_KEY, Outpost::C64KeyFor(0x5A), L"Z is not bound");
       Assert::AreEqual<std::uint8_t>(0, Outpost::CharacterFor(Outpost::NO_KEY), L"and nothing pressed translates to nothing printable");
+    }
+  };
+
+  /*
+   * The settings file (Design/InputTimer.md S-1): the thirteen bytes the pause screen toggled and
+   * `DNOIZ`, read from text the player edits.
+   *
+   * What is worth asserting is the SENSE of each key, because three of the thirteen read backwards
+   * -- `damping = on` has to clear `DAMP`, not set it -- and a file that got one wrong would look
+   * right to a player until the ship flew oddly. So every key is driven both ways through the
+   * parser into a real `Universe` and the byte is read back against the table's own values.
+   */
+  TEST_CLASS(TheSettingsFile)
+  {
+  public:
+    TEST_METHOD(EveryKeySetsItsByteInBothSenses)
+    {
+      const Outpost::SettingKey* keys = Outpost::SettingKeys();
+      const int count = Outpost::SettingKeyCount();
+      Assert::AreEqual(13, count, L"the thirteen: the block minus JSTK, plus DNOIZ");
+
+      for (const bool on : {true, false})
+      {
+        std::string text;
+        for (int index = 0; index < count; ++index)
+        {
+          text += std::string(keys[index].key) + " = " + (on ? "on" : "off") + "\n";
+        }
+
+        const Outpost::ParsedSettings parsed = Outpost::ParseSettings(text);
+        Assert::AreEqual<std::size_t>(0, parsed.problems.size(), L"a file of every key is clean");
+
+        Elite::Universe universe{};
+        Outpost::ApplySettings(parsed, universe);
+
+        // The bytes, by name, so a key wired to the wrong field fails here and not in play.
+        const std::uint8_t* bytes[] = {
+          &universe.options.dampingDisabled,           // DAMP
+          &universe.options.recentreDisabled,          // DJD
+          &universe.options.authorNames,               // PATG
+          &universe.status.damageFlash,                // FLH
+          &universe.joystickGeometry,                  // JSTGY
+          &universe.joystickEnabled,                   // JSTE
+          &universe.music.options.dockingMusicOff,     // MUTOK
+          &universe.useDisk,                           // DISK
+          &universe.heaps.planetDetail,                       // PLTOG
+          &universe.music.options.dockingMusicForced,  // MUFOR
+          &universe.music.options.dockingPlaysTheme,   // MUDOCK
+          &universe.music.options.effectsDuringMusic,  // MUSILLY
+          &universe.sound.soundOff,                    // DNOIZ
+        };
+        for (int index = 0; index < count; ++index)
+        {
+          const std::uint8_t expected = on ? keys[index].onValue : keys[index].offValue;
+          const std::wstring where = std::wstring(keys[index].label, keys[index].label + std::strlen(keys[index].label)) +
+                                     (on ? L" on" : L" off");
+          Assert::AreEqual(expected, *bytes[index], where.c_str());
+        }
+      }
+
+      // 6502: DAMP, DJD and MUTOK read backwards, DNOIZ non-zero is silence -- the three the table
+      // must have the other way round, pinned by name.
+      Assert::AreEqual<std::uint8_t>(0x00, *Outpost::ParseSettings("damping = on").ValueOf("damping"), L"damping on clears DAMP");
+      Assert::AreEqual<std::uint8_t>(0xFF, *Outpost::ParseSettings("docking-music = off").ValueOf("docking-music"), L"music off sets MUTOK");
+      Assert::AreEqual<std::uint8_t>(0xFF, *Outpost::ParseSettings("sound = off").ValueOf("sound"), L"sound off sets DNOIZ");
+      Assert::AreEqual<std::uint8_t>(0xFF, *Outpost::ParseSettings("planet-detail = yes").ValueOf("planet-detail"), L"and PLTOG reads forwards");
+    }
+
+    TEST_METHOD(ALineItCannotUseIsReportedAndTheRestAreHonoured)
+    {
+      const Outpost::ParsedSettings parsed = Outpost::ParseSettings("# a comment\n"
+                                                                     "\n"
+                                                                     "  Damping = OFF   # trailing comment, odd case, spaces\n"
+                                                                     "nonsense\n"
+                                                                     "warp-drive = on\n"
+                                                                     "sound = maybe\n"
+                                                                     "joystick = on\n"
+                                                                     "planet-detail = 1\n"
+                                                                     "planet-detail = 0\n");
+
+      Assert::AreEqual<std::size_t>(4, parsed.problems.size(), L"four lines could not be used");
+      Assert::IsTrue(parsed.problems[0].rfind("line 4:", 0) == 0, L"the bare word, by line number");
+      Assert::IsTrue(parsed.problems[1].rfind("line 5:", 0) == 0, L"the unknown key");
+      Assert::IsTrue(parsed.problems[2].rfind("line 6:", 0) == 0, L"the value that is neither on nor off");
+      Assert::IsTrue(parsed.problems[3].find("joystick") != std::string::npos, L"and JSTK is refused by name, not unknown");
+
+      Assert::AreEqual<std::uint8_t>(0xFF, *parsed.ValueOf("damping"), L"damping off sets DAMP, case and comment notwithstanding");
+      Assert::IsFalse(parsed.ValueOf("sound").has_value(), L"the bad value set nothing");
+      Assert::AreEqual<std::uint8_t>(0x00, *parsed.ValueOf("planet-detail"), L"the later line wins");
+
+      // Applying a partial file leaves what it did not name alone.
+      Elite::Universe universe{};
+      universe.sound.soundOff = 0x02;
+      Outpost::ApplySettings(parsed, universe);
+      Assert::AreEqual<std::uint8_t>(0x02, universe.sound.soundOff, L"DNOIZ untouched by a file that could not set it");
+      Assert::AreEqual<std::uint8_t>(0xFF, universe.options.dampingDisabled, L"and DAMP written");
+    }
+
+    TEST_METHOD(TheDefaultFileIsTheGameAsItBootsAndParsesClean)
+    {
+      const std::string text = Outpost::DefaultSettingsText();
+      const Outpost::ParsedSettings parsed = Outpost::ParseSettings(text);
+      Assert::AreEqual<std::size_t>(0, parsed.problems.size(), L"the file the game writes is one it can read");
+
+      Elite::Universe fresh{};
+      Elite::Universe applied{};
+      Outpost::ApplySettings(parsed, applied);
+
+      // Every key named, and every byte where a fresh universe already had it.
+      for (int index = 0; index < Outpost::SettingKeyCount(); ++index)
+      {
+        Assert::IsTrue(parsed.ValueOf(Outpost::SettingKeys()[index].key).has_value(), L"every key is in the default file");
+      }
+      Assert::AreEqual(fresh.options.dampingDisabled, applied.options.dampingDisabled, L"DAMP at boot");
+      Assert::AreEqual(fresh.options.authorNames, applied.options.authorNames, L"PATG at boot");
+      Assert::AreEqual(fresh.music.options.dockingMusicOff, applied.music.options.dockingMusicOff, L"MUTOK at boot");
+      Assert::AreEqual(fresh.heaps.planetDetail, applied.heaps.planetDetail, L"PLTOG at boot");
+      Assert::AreEqual(fresh.sound.soundOff, applied.sound.soundOff, L"DNOIZ at boot");
+    }
+
+    /// The file on disk: absent, it is written; present, it is read; and the report says which.
+    TEST_METHOD(AnAbsentFileIsWrittenAndAPresentOneIsRead)
+    {
+      const std::filesystem::path root = std::filesystem::temp_directory_path() / "outpost-settings-test";
+      std::error_code error;
+      std::filesystem::remove_all(root, error);
+      const std::filesystem::path commanders = root / "Commanders";
+
+      Elite::Universe universe{};
+      const Outpost::SettingsReport first = Outpost::ApplySettingsFile(commanders, universe);
+      Assert::IsTrue(first.created, L"no file, so the default is written");
+      Assert::IsTrue(first.problems.empty(), L"and nothing to report");
+      Assert::IsTrue(std::filesystem::exists(root / "Settings.txt"), L"beside the commander folder, not inside it");
+      Assert::IsTrue(first.Summary().empty(), L"an empty summary is what the window shows nothing for");
+
+      {
+        std::ofstream out(root / "Settings.txt", std::ios::trunc);
+        out << "planet-detail = on\nsound = off\nwhat = ever\n";
+      }
+      const Outpost::SettingsReport second = Outpost::ApplySettingsFile(commanders, universe);
+      Assert::IsFalse(second.created, L"the file was there");
+      Assert::AreEqual<std::uint8_t>(0xFF, universe.heaps.planetDetail, L"PLTOG from the file");
+      Assert::AreEqual<std::uint8_t>(0xFF, universe.sound.soundOff, L"DNOIZ from the file");
+      Assert::AreEqual<std::size_t>(1, second.problems.size(), L"and the one bad line reported");
+      Assert::IsTrue(second.Summary().find("line 3") != std::string::npos, L"with its line number in the summary");
+
+      const Outpost::SettingsReport none = Outpost::ApplySettingsFile(std::filesystem::path{}, universe);
+      Assert::IsTrue(none.problems.empty() && !none.created, L"no LocalAppData: nothing read, nothing written, nothing said");
+
+      std::filesystem::remove_all(root, error);
     }
   };
 

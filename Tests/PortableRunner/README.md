@@ -5,7 +5,7 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # <!--count:tests-->454 tests, about a minute from cold
+Tests/PortableRunner/run_tests.sh        # <!--count:tests-->460 tests, about a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # and which oracle labels each test ran
 python tools/inventory.py --coverage x64/Debug/coverage.txt           # read against the ledger's Port rows (M6-0-f)
@@ -76,10 +76,11 @@ copied.** That is the property that makes this trustworthy: there is one suite, 
 disagree only about how it is invoked. A test added to a `.cpp` is picked up by both without being
 registered anywhere.
 
-Three files from `Outpost/` are compiled here too — `SaveStore.cpp`, `Presentation.cpp` and
-`KeyMap.cpp` — because each is the executable's and yet holds a DECISION rather than an API call:
-the commander store, the palette and viewport arithmetic and the frame pacing, and the key map.
-`ShellTests.cpp` covers them and runs on both legs. Everything else in `Outpost/` is Win32 and
+Five files from `Outpost/` are compiled here too — `SaveStore.cpp`, `Presentation.cpp`,
+`KeyMap.cpp`, `SidSynth.cpp` and `SettingsFile.cpp` — because each is the executable's and yet
+holds a DECISION rather than an API call: the commander store, the palette and viewport arithmetic
+and the frame pacing, the key map, the synthesiser, and the settings file's parser.
+`ShellTests.cpp`, `SaveStoreTests.cpp` and `SidRenderTests.cpp` cover them and run on both legs. Everything else in `Outpost/` is Win32 and
 D3D12 and is not compiled here; `tools/check_outpost.py` checks the names and arities it uses,
 and only the Windows build checks the types.
 

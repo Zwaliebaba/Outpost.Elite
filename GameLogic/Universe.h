@@ -339,7 +339,9 @@ namespace Elite
     std::uint8_t joystickGeometry = 0;
     std::uint8_t joystickEnabled = 0;
 
-    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
+    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it noticed the switch moving. Its
+    /// only writer went with the pause screen (InputTimer.md I-0); the byte stays because the
+    /// digest covers it and `DKS3`'s layout counted it.
     std::uint8_t musicSwitchWas = 0;
 
     /*

@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->454 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->460 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -798,7 +798,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->454 tests with the oracle present, all passing, and all
+<!--count:tests-->460 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -882,7 +882,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->454 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->460 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -935,7 +935,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->454 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->460 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
