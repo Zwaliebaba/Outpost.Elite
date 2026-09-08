@@ -30,7 +30,8 @@ namespace Elite
    * `MVEIT` calls both, two instructions apart, because on one path A already holds nothing but a
    * sign and on the other it holds a whole coordinate byte.
    *
-   * THE CARRY IS CLEARED BY AN `LSR`, not by a `CLC`. `ASL A / ... / LSR S` leaves bit 0 of a value
+   * THE CARRY IS CLEARED BY A SHIFT, not by a `CLC`. The shift takes bit 0 of a value that was just
+   * shifted LEFT, which is always zero, so the addition below it starts clean. A port
    * that was just shifted left, which is always zero, so the addition below it starts clean. A port
    * that read the `LSR` as arithmetic and dropped the flag would be adding an extra one about half
    * the time.
@@ -77,21 +78,21 @@ namespace Elite
    * roof and side vectors -- so the whole orientation is rotated by running the same six bytes of
    * arithmetic on three different sixes.
    *
-   * The subtractions are done by FLIPPING A SIGN BIT rather than by subtracting: `LDA INWK+1,Y /
-   * EOR #128` hands `MAD` the same magnitude with the opposite sign, because these are
-   * sign-magnitude numbers and negating one is a single bit.
+   * The subtractions are done by FLIPPING A SIGN BIT rather than by subtracting: the operand's top
+   * bit is EORed before `MAD` sees it, which hands the same magnitude with the opposite sign,
+   * because these are sign-magnitude numbers and negating one is a single bit.
    */
   void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept;
 
   /*
    * 6502: MVS5 -- rotate a PAIR of coordinates by a sixteenth, for the ship's own roll and pitch.
    *
-   * Two halves that are the same code with the two indices swapped, and one `EOR #128` between them
+   * Two halves that are the same code with the two indices swapped, and one sign flip between them
    * which is what makes the pair rotate rather than both drift the same way. The angle is fixed:
-   * `LSR A / ROR P` four times is a division by sixteen, so a ship rolls in sixteenths regardless of
-   * how fast it is turning, and `_rat2` is the direction.
+   * four shifts through the pair are a division by sixteen, so a ship rolls in sixteenths
+   * regardless of how fast it is turning, and `_rat2` is the direction.
    *
-   * The shrinking is not a rounding artefact either -- `LDA INWK+1,X / AND #127 / LSR A / STA T`
+   * The shrinking is not a rounding artefact either -- the magnitude is masked, HALVED and stored,
    * then subtracting T is a deliberate reduction of the vector's length on every step, which is
    * what stops the rotation from growing without bound. `TIDY` (through `NORM`) is what puts the
    * length back.
@@ -130,8 +131,8 @@ namespace Elite
   /*
    * 6502: MV40 -- move a PLANET or a SUN, which is the whole of `MVEIT` for a negative ship type.
    *
-   * It is a BRANCH of `MVEIT` rather than a subroutine of it: `MV3` reaches it with `JMP MV40` and
-   * it leaves with `JMP MV45`, back into `MVEIT`'s tail. So it skips the scanner, the acceleration
+   * It is a BRANCH of `MVEIT` rather than a subroutine of it: `MV3` jumps to it and it jumps back
+   * to `MV45`, into `MVEIT`'s tail. So it skips the scanner, the acceleration
    * clamp and the ordinary rotation, and does its own -- which is right, because a planet is not on
    * the scanner, does not accelerate, and rotates about the player rather than about itself.
    *
@@ -142,7 +143,7 @@ namespace Elite
    * that line), and `Q` is left holding ALPHA on the way out, because for the sun that is the
    * frame's Q the altitude check reads (`EndFlightFrame`).
    *
-   * ITS ADDITIONS DISCARD THEIR LOW BYTE. `LDA K / CLC / ADC K2` throws the result away and keeps
+   * ITS ADDITIONS DISCARD THEIR LOW BYTE. The first addition throws its result away and keeps
    * only the carry, because the answer is stored from K+1 upwards -- the bottom byte exists solely
    * to carry into the byte above it. A port that stored it would be writing a fourth byte nothing
    * reads, and one that skipped the addition would lose the carry.
@@ -158,7 +159,7 @@ namespace Elite
    * behind it existed, which is §6.73's rule and this is its last application in the flight path.
    *
    * ITS `bool` SURVIVES IT, and that is not an accident of the removal. Three of the AI's paths
-   * reach `OOPS`, and `OOPS` ends `JMP DEATH` when the energy banks are gone; on the 6502 that
+   * reach `OOPS`, and `OOPS` jumps to `DEATH` when the energy banks are gone; on the 6502 that
    * abandons the stack, so `TACTICS`, `MVEIT` and the whole flight loop simply stop. The port has
    * no equivalent, so the answer is carried back out through `MoveShip` to `MoveEveryShip`, which
    * turns it into `LoopOutcome::Died` (§6.122). False still means the player died and the caller
@@ -202,7 +203,7 @@ namespace Elite
     /*
      * 6502: XX0(1 0) -- the blueprint the loop is working from, AND IT IS NOT RESET PER SHIP.
      *
-     * Part 4 writes it only for a ship with a blueprint: `LDA TYPE / BMI MA21` skips the two loads
+     * Part 4 writes it only for a ship with a blueprint: a NEGATIVE type skips the two loads
      * for the planet and the sun. So a body inherits whatever the last real ship left, and `MVEIT`
      * reads byte 15 of it to clamp the speed -- on the one path a body reaches that clamp, which is
      * when it is exploding or dead. It is loop state and not ship state, which is why it sits here
@@ -244,8 +245,8 @@ namespace Elite
    * FOUR PATHS LEAVE IT DIFFERENT SHAPES. An exploding or dead ship (bits 5 or 7 of INWK+31) skips
    * everything but the scanner. A negative type is the planet or the sun and goes through `MV40`,
    * skipping the scanner, the acceleration and the ordinary rotation. The SUN skips the orientation
-   * rotation too -- `AND #&81 / CMP #&81` is a test for type 129 and nothing else. Everything else
-   * runs the lot.
+   * rotation too -- a mask and a compare that together test for type 129 and nothing else.
+   * Everything else runs the lot.
    */
   /*
    * IT DRAWS. `MVEIT` calls `SCAN` twice -- once at `MV30` for every ship, and again at the end of
@@ -265,7 +266,7 @@ namespace Elite
    * Elite draws all four views with one piece of geometry: rather than four projections, it turns
    * the SHIP round. The rear view flips eight sign bytes; the left and right views swap x with z
    * throughout and then flip one of the two, which is what `RAT` and `RAT2` are -- one mask each,
-   * built from a single `LDA #0 / CPX #2 / ROR A`.
+   * built from a zero rotated right through the carry a comparison left.
    *
    * The ledger files this with the ship drawing, and it is not drawing: it is a transform of
    * `INWK`, in the same family as `MVS4` and `MVS5`, and the source's own category for it is

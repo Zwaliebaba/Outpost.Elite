@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->304 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->253 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-50: four more to zero, and the carry is set by a side effect where the `SEC` is
+commented out.**
+
+51 sites over four files -- `ShipMove.h`, `ShipFlags.h`, `Market.h` and `ShipSlot.h`. Fifty-seventh
+to sixtieth at zero.
+
+**Two places where the original relies on an instruction's SIDE EFFECT instead of an explicit flag
+instruction, and in one of them the explicit one is in the source, commented out.** `MVS4`'s carry is
+cleared by a SHIFT rather than by a `CLC`: the shift takes bit 0 of a value that was itself just
+shifted left, which is always zero, so the addition below starts clean. And `NWSHP`'s heap check has
+no `SEC` before its second subtraction -- the `\SEC` is right there in the upstream source with a
+backslash in front of it -- so the comparison is carry-dependent by construction and happens to work
+because `SLSP`'s high byte is never small enough for the first subtraction to borrow. A port that
+"corrected" either would be adding an instruction the game does not execute.
+
+`BAD` is the other keeper: slaves and narcotics are summed and the SUM is doubled, so the doubling
+WRAPS at 128 rather than saturating, and a hold carrying 128 tonnes of narcotics would come out
+innocent. The hold cannot carry that much, so the wrap is unreachable -- which is worth writing down
+precisely because it looks like a bug and is not one.
+
+**And the rule from M6-d-45 needed tightening.** Rewriting the SITE line and reflowing afterwards is
+not enough when the replacement runs past where the original line ended: the following line still
+carries the old tail, and `Market.h` picked up four duplicated tails that way in one pass. The rule
+is now **replace the whole PARAGRAPH**, with `reflow` for paragraphs a rewrite only shortened. A
+formatted table inside a comment is not a paragraph and must not be reflowed -- `gnum`'s six exits
+are an aligned list, and re-wrapping them would destroy the alignment that makes them readable.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (28, 28, 27 and 18). `opcode-transcriptions` 304 → 253.
 
 **2026-09-08 — M6-d-49: four files to zero, and the data-byte idiom is not only `&2C`.**
 
