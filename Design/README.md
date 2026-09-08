@@ -28,7 +28,7 @@ settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one p
 no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
 while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->469 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->470 tests** and
 CI runs **<!--count:checks-->eighteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits

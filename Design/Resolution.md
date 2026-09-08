@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->469 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->470 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -658,12 +658,12 @@ accept or redraw (§11) and are not normative until a slice lands them.
 | Data on system (`TT25`) | **LANDED at RS-5-d**, sketch accepted 2026-09-08: `DATA_LAYOUT{4, 8, 1}` — the only table with `rowStride = 1`, because `TT25` double-spaces itself. **CORRECTED at RS-5-c: a column, not a width, and not two columns of pairs.** The pairs stay whole on the left — their colons are at a different canvas column on every line, so no rectangle can split label from value — and the description moves to a column of its own beside them, at the thirty characters `DA11` justified it to | Nothing. **The wide sink does NOT re-wrap**, and §6.2 carries the measurement: the faithful stream already holds thirty-column PADDING, so re-wrapping means re-justifying, and re-justifying means the picture carrying different space characters from the canvas |
 | Long-range chart (`TT22`) | **LANDED at RS-5-e.** `LONG_RANGE_LAYOUT{0, 19, 1}` with one anchor: the title to wide (20, 4), above the top rule. **CORRECTED: the map does not move.** `ToSpaceViewPoint` already supplies the space view's 64-pixel margin, so the doubled map is at 512×256 from cell (8, 4) — exactly what §6.3 asked a translation to produce. What was wrong was the TEXT, which the centred layout put at wide row 13, in the middle of the map | Nothing. `PlotDot2x` is `PlotPixel2x` and `DrawCrosshairs2x` is `DrawLine2x`; RS-3 built both |
 | Short-range chart (`TT23`) | **LANDED at RS-5-e.** `SHORT_RANGE_LAYOUT{0, 0, 2}` — `rowStride = 2` so every name keeps its disc's height — with one anchor for the title, which must not scale | **`TextPrinter::SetLabelRun`**, and it is the one thing a layout cannot do. A label's ORIGIN must double while its letters stay eight pixels apart; a column stride scales the gaps too and prints "O r r e r e". `TT23` is the only thing that knows where a disc landed, so it says so, once, at the instruction that already places the cursor. **"Labels no longer collide" is DECLINED, measured**: 142 names of 2,668 systems in range across all 256 charts, 0.4 per chart |
-| Title (`TITLE`) | The ship centred in a 512×288 view as in flight; "COMMODORE 64 ELITE", the load prompt and the "press space" line at rows 4, 40 and 44 | Nothing beyond the ship, which is `LL9`'s twin |
-| Name entry, save menu (`MT26`, `SVE`) | Prompt and input line centred | Nothing |
-| Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | **CORRECTED at RS-5-c**: not re-wrapped at 64, for the data screen's reason. The justified block is placed as it stands; the Constrictor at the view's centre | `LL9`'s twin for the ship, and nothing for the text |
-| Pause screen (`FREEZE`) | Default layout | Nothing — it prints nothing, it holds the frame |
-| Death (`DEATH2`) | The wreckage in the 2× view, "GAME OVER" where it is | Nothing beyond the space view's twins |
-| Flight views | §6.2 | Nothing |
+| Title (`TITLE`) | **LANDED at RS-5-g with no table at all.** `TITLE` clears to view 13 and then sets `QQ11` to 0, so `LayoutForView` already hands it the space view's arrangement — and that is what the row asked for. **CORRECTED: rows 2, 30 and 34, not 4, 40 and 44**: the three lines are on canvas rows 1, 15 and 17, measured off the running screen, and the space view's stride puts each at the height the original put it | Nothing |
+| Name entry, save menu (`MT26`, `SVE`) | **BLOCKED, like the sell screen, and for the same reason.** `DiskAccessMenu` sets up no screen: it prints on whatever screen is up and inherits that screen's layout, so there is no instruction at which to name one. Not a re-flow's to fix | — |
+| Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | **LANDED at RS-5-g.** `BRIEFING_LAYOUT{20, 0, 2}` — the space view's arrangement given to a screen `LayoutForView` calls a text screen. A briefing prints justified text OVER a ship drawn at twice its coordinates, so its rows must spread; `CENTRED_LAYOUT` was giving it the "1× centred" block ruling 3 rejected | `LL9`'s twin for the ship, which RS-2 built |
+| Pause screen (`FREEZE`) | **GONE.** `PauseScreen.cpp` and its header were deleted on `main` by InputTimer.md I-0, which turned `FREEZE` inside out into a state the outer loop is in. There is no routine here to re-flow | — |
+| Death (`DEATH2`) | **LANDED at RS-5-g with no table at all.** The screen runs on view 0, so it already has the space view's arrangement: "GAME OVER" lands on wide row 24, centred over a wreckage drawn at twice the scale | Nothing |
+| Flight views | **LANDED at RS-1** — §6.2's `SPACE_VIEW_LAYOUT`, and nothing since has needed changing | Nothing |
 
 Two sketches, so the shape is visible before any table is written. The market screen at 80 columns,
 the frame omitted:
@@ -896,7 +896,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->469 tests with the oracle present, all passing, and all
+<!--count:tests-->470 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -980,7 +980,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->469 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->470 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -1033,7 +1033,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->469 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->470 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1360,7 +1360,7 @@ reason, and the replay digest is unchanged.
 
 **Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
 cannot write one parameter's default in terms of another. Every screen without a table of its own
-still gets exactly what it got before, which is why 454 of the 469 tests did not move.
+still gets exactly what it got before, which is why 454 of the 470 tests did not move.
 
 **The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
 row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
@@ -1530,3 +1530,39 @@ never hold a glyph: sweeping them turned two-column tables into an impossible pa
 see a sheared word; this one found a test that could not see a screen printed under its own border.
 Both times the missing clause was about something the shadow test's cell-by-cell view has no word
 for, and both times the fix was to say the property out loud.
+
+### RS-5-g — the last five rows, three of which were a table that did not need writing, 2026-09-08
+
+**RS-5 is complete.** Every row of §6.3 is landed, blocked with its reason, or gone.
+
+**THREE OF THE LAST FIVE NEEDED NOTHING, and measuring is what showed it.** The title screen, the
+death screen and every flight view run on view 0 or 13, so `LayoutForView` has been handing them the
+space view's arrangement since RS-1 — and that arrangement is exactly what §6.3 asks for: the rows
+spread so a line lands at the height the original put it, over a ship drawn at twice its
+coordinates. The title's three lines are on canvas rows 1, 15 and 17 and land on wide 2, 30 and 34;
+"GAME OVER" lands on wide row 24, centred over the wreckage. §6.3's "rows 4, 40 and 44" was a guess
+and is corrected. A test asserts all of it, because three screens that are right by inheritance are
+three screens a later change to `LayoutForView` would move with nothing to catch it.
+
+**THE BRIEFINGS WERE THE ONE REAL TABLE, and the diagnosis is the interesting part.** `BRIEF`,
+`BRIEF2`, `DEBRIEF` and `BRP` run on view 1, which `LayoutForView` calls a text screen — so the
+briefing was printing as a 40×25 block in the middle of an 80×50 one, which is precisely the "1×
+centred" arrangement ruling 3 rejected as an end state. But a briefing is not a text screen: it
+prints justified text OVER a ship. `BRIEFING_LAYOUT{20, 0, 2}` gives it the space view's treatment
+on a screen that is not the space view, and the 30-column justified block lands centred in the
+frame's interior at wide 25 to 55.
+
+**THE SAVE MENU IS BLOCKED, and it is the sell screen's blockage exactly.** `DiskAccessMenu` sets up
+no screen at all: it prints on whatever screen is up and inherits that screen's layout, so there is
+no instruction at which to name one. Both are the same shape of gap — a screen the port drives
+without ever clearing or claiming the display — and neither is a re-flow's to close.
+
+**AND THE PAUSE SCREEN IS GONE.** `PauseScreen.cpp` and its header were deleted on `main` by
+InputTimer.md's I-0, which turned `FREEZE` inside out into a state the outer loop is in. §6.3's row
+described a routine that no longer exists; it says so now rather than being quietly left true.
+
+**Two of the eleven §6.3 rows are blocked and both blockages are the same defect**, which is worth
+naming once rather than twice: the port has two screens — sell cargo and the save menu — that print
+without setting up a screen. On the canvas that has always meant they draw over whatever was there;
+on the wide surface it means they inherit a layout chosen for something else. Fixing either changes
+the character stream the fixtures compare, so it belongs to the port track and not to this one.
