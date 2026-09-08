@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,560 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,452 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-30: `Market.cpp` and `Scanner.cpp` to zero, and a blip one pixel to the right.**
+
+108 sites over two files: the price and quantity model, `gnum`'s digit entry, the scanner's blip and
+the compass. Fifteenth and sixteenth at zero.
+
+**A ship at x_hi = 0 with its sign bit set lands one pixel right of one without it.** The scanner
+clears the carry BEFORE the branch that decides whether to negate, so the positive path adds 123
+with a clear carry and the negative path adds it with whatever the negation's own addition produced
+— 124 rather than 123. Two identical positions, one pixel apart, decided by a flag set two
+instructions earlier than it needed to be.
+
+Two more where the carry crosses a boundary the reader would not expect:
+
+- **`ContrabandPenalty` has exactly one addition that clears the carry**, and every other addition
+  in `Market.cpp`'s hold check reads one it was handed — the comparison's on the first pass, the
+  previous addition's after that.
+- **The item name's token addition takes the carry the table-index shift left.** With seventeen
+  items that shift cannot overflow, so it is always clear; the addition is written as one anyway,
+  and the port keeps it as one.
+
+And a small thing worth keeping: **the market's units come out BEFORE the price is finished**,
+because `TT151` interleaves the printing with the arithmetic.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (58 and 64). `opcode-transcriptions` 1,560 → 1,452.
 
 **2026-09-08 — M6-d-29: `Controls.cpp` and `Missions.cpp` to zero, and one load doing three jobs.**
 
