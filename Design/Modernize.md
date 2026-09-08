@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->736 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->683 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-40: `Galaxy.cpp` and `Spawn.h` to zero, and two constants that are one.**
+
+53 sites over two files: the galaxy generator and the spawner's headers. Thirty-fifth and
+thirty-sixth at zero, and the counter is under seven hundred.
+
+**A third instance of the shape M6-d-39 named, and it is now a family.** `SPAWN_AHEAD_X` is 28 and
+`SPAWN_AHEAD_Z` is 14, and the 14 is the 28 SHIFTED DOWN rather than a constant of its own. Two
+`constexpr` bytes side by side say nothing about that; the listing did, and the prose has to now.
+With `MT9`'s column-and-view and `BRIEF`'s column-and-distance that is three places where the
+original computes one value and spends it twice, and the port has to spell it as two names because
+C++ has no way to say "this is that one, halved". This is the class of fact M6-d is most at risk of
+losing: not a behaviour, but a relationship between two constants that only the comment can hold.
+
+`Galaxy.cpp` is otherwise carry chains almost end to end. The generator's population and
+productivity are five additions in a row, each consuming the one before's carry, with the two shifts
+that quadruple the technology level contributing a carry of their own from bit 7 — so the 3 and the
+4 in the productivity factors "are not really 3 and 4", as the surviving prose puts it. And the
+government test is the sharpest case in the file: the shift that decides whether an anarchy gets a
+poor economy ALSO sets the carry from government's bit 0, an explicit `CLC` stops that reaching the
+first addition, and the *second* addition then consumes it deliberately. Written as `tech +
+government / 2`, half the galaxy comes out one technology level low.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (32 and 18). `opcode-transcriptions` 736 → 683.
 
 **2026-09-08 — M6-d-39: `Missions.h` and `Tactics.h` to zero, and one load with two consumers.**
 
