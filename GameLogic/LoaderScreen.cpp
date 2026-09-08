@@ -15,7 +15,7 @@ namespace Elite
     /// is 18 * 40: the first cell of character row 18, where `DLOC%` starts.
     constexpr std::uint16_t DASHBOARD_CELL_OFFSET = Canvas::DASHBOARD_CELL_ROW * Canvas::CELL_COLUMNS;
 
-    /// 6502: LDY #36 and LDY #3 -- the two cells the border box is drawn down.
+    /// 6502: the two cells the border box is drawn down.
     constexpr int BORDER_LEFT_CELL = 3;
     constexpr int BORDER_RIGHT_CELL = 36;
 
@@ -33,7 +33,8 @@ namespace Elite
       {
         const std::uint16_t base = static_cast<std::uint16_t>(_block + row * Canvas::CELL_COLUMNS);
 
-        // 6502: LDA #&70 / LDY #36 / STA (ZP),Y / LDY #3 / STA (ZP),Y -- the right edge first,
+        // 6502: the right edge FIRST, because the left one is reached by decrementing the index
+        // from it into the loop below.
         // because the left one is reached by decrementing Y from it into the loop below.
         _canvas.Write(static_cast<std::uint16_t>(base + BORDER_RIGHT_CELL), SCREEN_YELLOW_ON_BLACK);
         _canvas.Write(static_cast<std::uint16_t>(base + BORDER_LEFT_CELL), SCREEN_YELLOW_ON_BLACK);
@@ -51,7 +52,7 @@ namespace Elite
           SetCellBlock2x(*_picture, BORDER_LEFT_CELL, cellRow, SCREEN_YELLOW_ON_BLACK);
         }
 
-        // 6502: DEY / LDA #&00 / .frogl STA (ZP),Y / DEY / BPL frogl -- cells 2, 1 and 0.
+        // 6502: frogl -- cells 2, 1 and 0, counting down.
         for (int cell = BORDER_LEFT_CELL - 1; cell >= 0; --cell)
         {
           _canvas.Write(static_cast<std::uint16_t>(base + cell), SCREEN_BLACK_ON_BLACK);
@@ -61,7 +62,9 @@ namespace Elite
           }
         }
 
-        // 6502: LDY #37 / STA (ZP),Y / INY / STA (ZP),Y / INY / STA (ZP),Y -- and written out
+        // 6502: cells 37, 38 and 39, written out three times rather than looped -- the original's
+        // shape and not a transcription slip: A is still black from the loop above and the index
+        // is counting the other way.
         // three times rather than looped, which is the original's shape and not a transcription
         // slip: A is still black from the loop above and Y is counting the other way.
         for (int cell = BORDER_RIGHT_CELL + 1; cell < Canvas::CELL_COLUMNS; ++cell)
@@ -79,7 +82,7 @@ namespace Elite
   void SetUpLoaderScreen(Canvas& _canvas, Picture* _picture) noexcept
   {
     /*
-     * 6502: part 5's first loop -- LDA #0 / LDX #&40 / .LOOP2 ... CPX #&60 / BNE LOOP2.
+     * 6502: part 5's first loop, which runs the pages from &40 up to &60.
      *
      * The bitmap, &4000 to &5FFF, which is the canvas's first 0x2000 bytes. A fresh `Canvas` is
      * already zero; this is here because the routine is what the loader does and not what the
@@ -103,7 +106,7 @@ namespace Elite
      */
     for (std::uint16_t cell = Canvas::SCREEN_CELLS; cell < Canvas::SCREEN_SIZE; ++cell)
     {
-      _canvas.Write(cell, TEXT_COLOUR_WHITE); // 6502: LDA #&10
+      _canvas.Write(cell, TEXT_COLOUR_WHITE); // 6502: white on black
     }
     if (_picture != nullptr)
     {
@@ -118,14 +121,14 @@ namespace Elite
       _canvas.Write(static_cast<std::uint16_t>(Canvas::DASHBOARD_CELLS + DASHBOARD_CELL_OFFSET + index), DASHBOARD_SCREEN_COLOURS[index]);
     }
 
-    // 6502: LDX #25 / .LOOP10 -- the border box down the text view's block, all 25 rows.
+    // 6502: LOOP10 -- the border box down the text view's block, all 25 rows.
     ColourBorderBox(_canvas, Canvas::SCREEN_CELLS, Canvas::CELL_ROWS, _picture);
 
-    // 6502: LDX #18 / .LOOP11 -- and down the space view's block, which stops at the dashboard.
+    // 6502: LOOP11 -- and down the space view's block, which stops at the dashboard.
     ColourBorderBox(_canvas, Canvas::DASHBOARD_CELLS, Canvas::DASHBOARD_CELL_ROW, _picture);
 
     /*
-     * 6502: LDA #&70 / LDY #31 / .LOOP16 STA &63C4,Y / DEY / BPL LOOP16.
+     * 6502: LOOP16 -- thirty-two cells of the bottom row, counting down.
      *
      * The bottom row of the text view, and the reason a text screen's border box has a bottom at
      * all: `TTX66K` refills rows 0 to 23 with white on every clear and does not touch row 24, so
@@ -160,7 +163,7 @@ namespace Elite
     }
 
     /*
-     * 6502: LDY #34 / LDA #&07 / .LOOP15 STA COLMEM+2,Y / DEY / BNE LOOP15.
+     * 6502: LOOP15 -- thirty-four cells from the top row's third, counting down.
      *
      * Cells 3 to 36 of the top row, and cell 2 is NOT one of them: the loop ends on `BNE`, so Y
      * never reaches zero and the cell at `COLMEM+2` keeps the black the zeroing left. The
@@ -173,7 +176,7 @@ namespace Elite
     }
 
     /*
-     * 6502: part 4's LDA #0 / STA VIC+&21 -- the background register, which is multicolour %00.
+     * 6502: part 4's store to the background register, which is multicolour %00.
      *
      * The one byte this port takes from part 4, because it is the fourth colour of every
      * dashboard cell and the other stores in that part are the screen bank, the raster and the
@@ -185,10 +188,10 @@ namespace Elite
 
   void SetUpLoaderVideo(VideoState& _video) noexcept
   {
-    _video.enabled = 0u;     // 6502: LDA #%00000000 / STA VIC+&15 -- all eight off
-    _video.expanded = 0xFFu; // 6502: LDA #%11111111 / STA VIC+&17 / STA VIC+&1D -- all double height and width
+    _video.enabled = 0u;     // 6502: all eight sprites off
+    _video.expanded = 0xFFu; // 6502: all eight double height and double width
 
-    // 6502: LDA #9 / STA VIC+&29 ... LDA #9 / STA VIC+&2E -- the six Trumbles' colours.
+    // 6502: the six Trumbles' colours, all nine.
     _video.colour[2] = Colour::Brown;
     _video.colour[3] = Colour::Grey;
     _video.colour[4] = Colour::Blue;
@@ -196,13 +199,13 @@ namespace Elite
     _video.colour[6] = Colour::Green;
     _video.colour[7] = Colour::Brown;
 
-    // 6502: LDA #0 / STA VIC+&10 -- bit 9 of every x clear, which the sixteen-bit x carries.
-    // 6502: LDX #161 / LDY #101 / STX VIC+0 / STY VIC+1 -- the sights, in the centre of the view.
+    // 6502: bit 9 of every x cleared, which the sixteen-bit x carries.
+    // 6502: the sights, in the centre of the view.
     _video.x[0] = 161u;
     _video.y[0] = 101u;
 
-    // 6502: LDA #18 / LDY #12 / STA VIC+2 / STY VIC+3, then ASL A between each Trumble's STA and
-    // the same Y for every one: 18, 36, 72, 144; then LDA #14: 14, 28, 56.
+    // 6502: the first Trumble at 18 and each one after it DOUBLED -- 18, 36, 72, 144 -- then a
+    // fresh 14 and the same doubling again: 14, 28, 56. All seven share one y.
     _video.x[1] = 18u;
     _video.x[2] = 36u;
     _video.x[3] = 72u;

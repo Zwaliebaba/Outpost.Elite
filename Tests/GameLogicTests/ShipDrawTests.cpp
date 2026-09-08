@@ -144,41 +144,43 @@ namespace GameLogicTests
       std::uint32_t unscaled = 0;
       std::uint32_t unclassified = 0;
 
-      for (const std::uint8_t p : LOW)
+      for (const std::uint8_t numeratorLow : LOW)
       {
-        for (const std::uint8_t p1 : LOW)
+        for (const std::uint8_t numeratorMid : LOW)
         {
-          for (const std::uint8_t p2 : EDGES)
+          for (const std::uint8_t numeratorHigh : EDGES)
           {
-            for (const std::uint8_t q : EDGES)
+            for (const std::uint8_t denominatorLow : EDGES)
             {
-              for (const std::uint8_t r : EDGES)
+              for (const std::uint8_t denominatorMid : EDGES)
               {
-                for (const std::uint8_t s : EDGES)
+                for (const std::uint8_t denominatorHigh : EDGES)
                 {
-                  if ((q | r | (s & 0x7Fu)) == 0u)
+                  if ((denominatorLow | denominatorMid | (denominatorHigh & 0x7Fu)) == 0u)
                   {
                     continue;
                   }
 
                   Cpu6502 cpu = oracle.Fresh();
 
-                  cpu.memory[pp] = p;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 2)] = p2;
-                  cpu.memory[qq] = q;
-                  cpu.memory[rr] = r;
-                  cpu.memory[ss] = s;
+                  cpu.memory[pp] = numeratorLow;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = numeratorMid;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 2)] = numeratorHigh;
+                  cpu.memory[qq] = denominatorLow;
+                  cpu.memory[rr] = denominatorMid;
+                  cpu.memory[ss] = denominatorHigh;
 
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b);
                   Assert::IsTrue(run.completed, L"DVID3B returned");
 
-                  const Elite::KBlock k = Elite::DivideSigned24(Elite::SignMag24{p, p1, p2}, Elite::SignMag24{q, r, s});
-                  const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
+                  const Elite::KBlock result =
+                    Elite::DivideSigned24(Elite::SignMag24{numeratorLow, numeratorMid, numeratorHigh},
+                                          Elite::SignMag24{denominatorLow, denominatorMid, denominatorHigh});
+                  const std::uint8_t bytes[4] = {result.low, result.mid, result.high, result.top};
 
                   const std::wstring where =
-                    Widen("DVID3B(P=" + std::to_string(p) + "/" + std::to_string(p1) + "/" + std::to_string(p2) +
-                          ", Q=" + std::to_string(q) + ", R=" + std::to_string(r) + ", S=" + std::to_string(s) + ")");
+                    Widen("DVID3B(P=" + std::to_string(numeratorLow) + "/" + std::to_string(numeratorMid) + "/" + std::to_string(numeratorHigh) +
+                          ", Q=" + std::to_string(denominatorLow) + ", R=" + std::to_string(denominatorMid) + ", S=" + std::to_string(denominatorHigh) + ")");
                   for (int byte = 0; byte < 4; ++byte)
                   {
                     Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte],
@@ -201,11 +203,11 @@ namespace GameLogicTests
                   {
                     ++unclassified;
                   }
-                  else if ((k.mid | k.high | (k.top & 0x7Fu)) != 0u || k.low > quotient)
+                  else if ((result.mid | result.high | (result.top & 0x7Fu)) != 0u || result.low > quotient)
                   {
                     ++scaledUp;
                   }
-                  else if (k.low == quotient)
+                  else if (result.low == quotient)
                   {
                     ++unscaled;
                   }
@@ -248,9 +250,9 @@ namespace GameLogicTests
 
       for (const std::uint8_t a : EDGES)
       {
-        for (const std::uint8_t p : LOW)
+        for (const std::uint8_t numeratorLow : LOW)
         {
-          for (const std::uint8_t p1 : LOW)
+          for (const std::uint8_t numeratorMid : LOW)
           {
             for (const std::uint8_t zLow : EDGES)
             {
@@ -270,20 +272,20 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
                     PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
-                  cpu.memory[pp] = p;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
+                  cpu.memory[pp] = numeratorLow;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = numeratorMid;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b2);
                   Assert::IsTrue(run.completed, L"DVID3B2 returned");
 
-                  const Elite::KBlock k = Elite::DivideByShipZ(ship, math, Elite::SignMag24{p, p1, a});
+                  const Elite::KBlock result = Elite::DivideByShipZ(ship, math, Elite::SignMag24{numeratorLow, numeratorMid, a});
 
                   const std::wstring where =
-                    Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
+                    Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(numeratorLow) + "/" + std::to_string(numeratorMid) +
                           ", z=" + std::to_string(zLow) + "/" + std::to_string(zHigh) + "/" + std::to_string(zSign) + ")");
                   // `K(3 2 1 0)` is the value this routine returns since M2-c-3.
-                  const std::uint8_t ours[4] = {k.low, k.mid, k.high, k.top};
+                  const std::uint8_t ours[4] = {result.low, result.mid, result.high, result.top};
                   for (int byte = 0; byte < 4; ++byte)
                   {
                     Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], ours[static_cast<std::size_t>(byte)],
@@ -339,9 +341,9 @@ namespace GameLogicTests
 
       for (const std::uint8_t a : EDGES)
       {
-        for (const std::uint8_t p : LOW)
+        for (const std::uint8_t numeratorLow : LOW)
         {
-          for (const std::uint8_t p1 : LOW)
+          for (const std::uint8_t numeratorMid : LOW)
           {
             for (const std::uint8_t zLow : EDGES)
             {
@@ -359,17 +361,17 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
                     PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
-                  cpu.memory[pp] = p;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
+                  cpu.memory[pp] = numeratorLow;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = numeratorMid;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(pls6);
                   Assert::IsTrue(run.completed, L"PLS6 returned");
 
-                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, Elite::SignMag24{p, p1, a});
+                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, Elite::SignMag24{numeratorLow, numeratorMid, a});
 
                   const std::wstring where =
-                    Widen("PLS6(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
+                    Widen("PLS6(a=" + std::to_string(a) + ", P=" + std::to_string(numeratorLow) + "/" + std::to_string(numeratorMid) +
                           ", z=" + std::to_string(zLow) + "/" + std::to_string(zHigh) + "/" + std::to_string(zSign) + ")");
 
                   Assert::AreEqual(cpu.c, offset.overflow, (where + L": C").c_str());
@@ -436,7 +438,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t k3 = oracle.Label("K3");
+      const std::uint16_t zeroPageK3 = oracle.Label("K3");
       const std::uint16_t k4 = oracle.Label("K4");
       const std::uint16_t proj = oracle.Label("PROJ");
 
@@ -479,8 +481,8 @@ namespace GameLogicTests
                       }
 
                       // The sentinel that makes a half-written answer visible.
-                      cpu.memory[k3] = 0xAA;
-                      cpu.memory[static_cast<std::uint16_t>(k3 + 1)] = 0xBB;
+                      cpu.memory[zeroPageK3] = 0xAA;
+                      cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)] = 0xBB;
                       cpu.memory[k4] = 0xCC;
                       cpu.memory[static_cast<std::uint16_t>(k4 + 1)] = 0xDD;
                       screen.x = 0xAA;
@@ -500,8 +502,8 @@ namespace GameLogicTests
 
                       Assert::AreEqual(cpu.c, result.offScreen, (where + L": C").c_str());
                       Assert::AreEqual(cpu.a, result.a, (where + L": A").c_str());
-                      Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
-                      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1, (where + L": K3+1").c_str());
+                      Assert::AreEqual(cpu.memory[zeroPageK3], screen.x, (where + L": K3").c_str());
+                      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)], screen.x1, (where + L": K3+1").c_str());
                       Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
                       Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
@@ -832,7 +834,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
       const std::uint16_t shppt = oracle.Label("SHPPT");
-      const std::uint16_t k3 = oracle.Label("K3");
+      const std::uint16_t zeroPageK3 = oracle.Label("K3");
       const std::uint16_t k4 = oracle.Label("K4");
       const std::uint16_t screenBase = ScreenBase(oracle);
 
@@ -881,8 +883,8 @@ namespace GameLogicTests
 
       // K3 and K4 start where the machine starts them, and the port has to agree from there --
       // the stale-coordinate path reads them before anything has written them.
-      screen.x = cpu.memory[k3];
-      screen.x1 = cpu.memory[static_cast<std::uint16_t>(k3 + 1)];
+      screen.x = cpu.memory[zeroPageK3];
+      screen.x1 = cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)];
       screen.y = cpu.memory[k4];
       screen.y1 = cpu.memory[static_cast<std::uint16_t>(k4 + 1)];
 
@@ -912,8 +914,8 @@ namespace GameLogicTests
         CompareHeaps(cpu, heap, where);
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
                          (where + L": INWK+31").c_str());
-        Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1, (where + L": K3+1").c_str());
+        Assert::AreEqual(cpu.memory[zeroPageK3], screen.x, (where + L": K3").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)], screen.x1, (where + L": K3+1").c_str());
         Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
@@ -958,8 +960,8 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx16 = oracle.Label("XX16");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t scaledOrientation = oracle.Label("XX16");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t ll51 = oracle.Label("LL51");
 
       // The hand-picked block first, then the generated sweep. The generator is an LCG so the
@@ -1008,8 +1010,8 @@ namespace GameLogicTests
         }
         for (std::size_t byte = 0; byte < 18u; ++byte)
         {
-          geometry.xx16[byte] = block[6u + byte];
-          cpu.memory[static_cast<std::uint16_t>(xx16 + byte)] = block[6u + byte];
+          geometry.scaledOrientation[byte] = block[6u + byte];
+          cpu.memory[static_cast<std::uint16_t>(scaledOrientation + byte)] = block[6u + byte];
         }
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll51, 200'000);
@@ -1020,7 +1022,7 @@ namespace GameLogicTests
         const std::wstring where = Widen("LL51 case " + std::to_string(compared));
         for (std::size_t byte = 0; byte < 6u; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(dotProducts + byte)], geometry.dotProducts[byte],
                            (where + L": XX12+" + std::to_wstring(byte)).c_str());
         }
 
@@ -1030,7 +1032,7 @@ namespace GameLogicTests
         {
           const std::size_t base = product * 6u;
           const std::uint8_t firstSign = static_cast<std::uint8_t>(vector[1] ^ block[6u + base + 1u]) & 0x80u;
-          if ((geometry.xx12[product * 2u + 1u] & 0x80u) != firstSign)
+          if ((geometry.dotProducts[product * 2u + 1u] & 0x80u) != firstSign)
           {
             ++flipped;
           }
@@ -1065,7 +1067,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t rr = oracle.Label("R");
       const std::uint16_t ss = oracle.Label("S");
@@ -1085,9 +1087,9 @@ namespace GameLogicTests
         {
           for (const std::uint8_t steep : {0x00, 0xFF})
           {
-            for (const std::uint8_t r : EDGES)
+            for (const std::uint8_t distanceLow : EDGES)
             {
-              for (const std::uint8_t s : EDGES)
+              for (const std::uint8_t distanceHigh : EDGES)
               {
                 for (const std::uint8_t x1 : LOW)
                 {
@@ -1096,18 +1098,18 @@ namespace GameLogicTests
                   {
                     Cpu6502 cpu = oracle.Fresh();
 
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 2)] = gradient;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 3)] = direction;
                     cpu.memory[tt] = steep;
-                    cpu.memory[rr] = r;
-                    cpu.memory[ss] = s;
+                    cpu.memory[rr] = distanceLow;
+                    cpu.memory[ss] = distanceHigh;
                     cpu.memory[xx15] = x1;
 
                     // Since M2-c-2 the three routines take the slope and the distance as values:
                     // `XX12+2`, `XX12+3` and `T` are one `Slope`, `(S R)` is a `SignMag16`, and
                     // `XX15` is the point's own low byte that `LL120` overwrites `R` with.
                     const Elite::Slope slope{gradient, direction, steep};
-                    const Elite::SignMag16 distance{r, s};
+                    const Elite::SignMag16 distance{distanceLow, distanceHigh};
 
                     const std::uint16_t routine = (which == 0) ? ll129 : ((which == 1) ? ll120 : ll123);
                     const Elite::Testing::RunResult run = cpu.CallSubroutine(routine, 200'000);
@@ -1115,8 +1117,8 @@ namespace GameLogicTests
 
                     const std::wstring where =
                       Widen(std::string(which == 0 ? "LL129" : (which == 1 ? "LL120" : "LL123")) + "(XX12+2=" + std::to_string(gradient) +
-                            ", XX12+3=" + std::to_string(direction) + ", T=" + std::to_string(steep) + ", R=" + std::to_string(r) +
-                            ", S=" + std::to_string(s) + ", x1=" + std::to_string(x1) + ")");
+                            ", XX12+3=" + std::to_string(direction) + ", T=" + std::to_string(steep) + ", R=" + std::to_string(distanceLow) +
+                            ", S=" + std::to_string(distanceHigh) + ", x1=" + std::to_string(x1) + ")");
 
                     if (which == 0)
                     {
@@ -1129,7 +1131,7 @@ namespace GameLogicTests
                     else
                     {
                       const Elite::SlopeStep step =
-                        (which == 1) ? Elite::StepAlongX(slope, s, x1) : Elite::StepAlongY(slope, distance);
+                        (which == 1) ? Elite::StepAlongX(slope, distanceHigh, x1) : Elite::StepAlongY(slope, distance);
                       Assert::AreEqual(cpu.x, step.low, (where + L": X").c_str());
                       Assert::AreEqual(cpu.y, step.high, (where + L": Y").c_str());
 
@@ -1180,7 +1182,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t tt = oracle.Label("T");
       const std::uint16_t ll118 = oracle.Label("LL118");
@@ -1220,8 +1222,8 @@ namespace GameLogicTests
                     }
                     Elite::Point16 moved{x1Low, x1High, y1Low, y1High};
 
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 2)] = gradient;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 3)] = direction;
                     cpu.memory[tt] = steep;
                     const Elite::Slope slope{gradient, direction, steep};
 
@@ -1246,7 +1248,7 @@ namespace GameLogicTests
                     // multiply or divide stopped, and the altitude check reads it (§8, R22). `R`
                     // and `S` are the helpers' own since M2-c-2 and are not modelled across the
                     // call.
-                    Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+                    Assert::AreEqual(cpu.memory[qq], math.lastDivisor, (where + L": Q").c_str());
 
                     // Which clamps the inputs asked for, decided from the inputs and not from the
                     // port, so a port that skipped one still counts as having been asked.
@@ -1300,10 +1302,10 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t xx13 = oracle.Label("XX13");
       const std::uint16_t swap = oracle.Label("SWAP");
-      const std::uint16_t dontclip = oracle.Label("dontclip");
+      const std::uint16_t clippingOff = oracle.Label("dontclip");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t ll145 = oracle.Label("LL145");
       const std::uint16_t ll147 = oracle.Label("LL147");
@@ -1362,14 +1364,14 @@ namespace GameLogicTests
                 const Elite::Line16 line{{block[0], block[1], block[2], block[3]},
                                          {block[4], block[5], static_cast<std::uint8_t>(y2), static_cast<std::uint8_t>(y2 >> 8)}};
 
-                cpu.memory[xx12] = static_cast<std::uint8_t>(y2);
-                cpu.memory[static_cast<std::uint16_t>(xx12 + 1)] = static_cast<std::uint8_t>(y2 >> 8);
-                geometry.xx12[0] = static_cast<std::uint8_t>(y2);
-                geometry.xx12[1] = static_cast<std::uint8_t>(y2 >> 8);
+                cpu.memory[dotProducts] = static_cast<std::uint8_t>(y2);
+                cpu.memory[static_cast<std::uint16_t>(dotProducts + 1)] = static_cast<std::uint8_t>(y2 >> 8);
+                geometry.dotProducts[0] = static_cast<std::uint8_t>(y2);
+                geometry.dotProducts[1] = static_cast<std::uint8_t>(y2 >> 8);
 
-                cpu.memory[dontclip] = off;
+                cpu.memory[clippingOff] = off;
                 cpu.memory[swap] = seededSwap;
-                clip.dontclip = off;
+                clip.clippingOff = off;
 
                 // LL147 is entered with XX15+5 in the accumulator, which is where its only caller
                 // leaves it.
@@ -1421,7 +1423,7 @@ namespace GameLogicTests
                  */
                 for (std::size_t byte = 2; byte < 6u; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(dotProducts + byte)], geometry.dotProducts[byte],
                                    (where + L": XX12+" + std::to_wstring(byte)).c_str());
                 }
                 Assert::AreEqual(cpu.memory[xx13], clipped.ends, (where + L": XX13").c_str());
@@ -1430,7 +1432,7 @@ namespace GameLogicTests
                 // `Q` is the frame's and survives the call (§8, R22): `LL115` leaves its divisor
                 // and each of `LL118`'s clamps leaves whatever its loop stopped on. `R`, `S` and
                 // `T` are the slope helpers' own since M2-c-2 and are not modelled across it.
-                Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+                Assert::AreEqual(cpu.memory[qq], math.lastDivisor, (where + L": Q").c_str());
 
                 if ((off & 0x80u) != 0u)
                 {
@@ -1491,7 +1493,7 @@ namespace GameLogicTests
       std::uint32_t failed = 0;
       std::uint32_t divided = 0;
 
-      for (std::uint32_t q = 0; q < 256u; ++q)
+      for (std::uint32_t divisor = 0; divisor < 256u; ++divisor)
       {
         for (std::uint32_t a = 0; a < 256u; ++a)
         {
@@ -1499,19 +1501,19 @@ namespace GameLogicTests
 
           // Not zero: `ROL U` brings the old bits back up, so a cleared U would hide a port that
           // dropped the rotate and assigned instead. Since M2-b the incoming U is a parameter.
-          const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + q * 13u) & 0x3Fu);
+          const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + divisor * 13u) & 0x3Fu);
 
-          cpu.memory[qq] = static_cast<std::uint8_t>(q);
+          cpu.memory[qq] = static_cast<std::uint8_t>(divisor);
           cpu.memory[uu] = seededU;
 
           cpu.a = static_cast<std::uint8_t>(a);
           const Elite::Testing::RunResult run = cpu.CallSubroutine(ll61, 100'000);
           Assert::IsTrue(run.completed, L"LL61 returned");
 
-          const Elite::Quotient16 quotient = Elite::DivideWideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q), seededU);
+          const Elite::Quotient16 quotient = Elite::DivideWideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(divisor), seededU);
 
           const std::wstring where =
-            Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(q) + ", U=" + std::to_string(seededU) + ")");
+            Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(divisor) + ", U=" + std::to_string(seededU) + ")");
           Assert::AreEqual(cpu.memory[rr], quotient.low, (where + L": R").c_str());
           Assert::AreEqual(cpu.memory[uu], quotient.high, (where + L": U").c_str());
 
@@ -1571,12 +1573,12 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
       const std::uint16_t xx0 = oracle.Label("XX0");
-      const std::uint16_t xx2 = oracle.Label("XX2");
-      const std::uint16_t xx3 = oracle.Label("XX3");
+      const std::uint16_t faceVisible = oracle.Label("XX2");
+      const std::uint16_t projectedVertices = oracle.Label("XX3");
       const std::uint16_t inf = oracle.Label("INF");
       const std::uint16_t type = oracle.Label("TYPE");
       const std::uint16_t ll9 = oracle.Label("LL9");
-      const std::uint16_t dontclip = oracle.Label("dontclip");
+      const std::uint16_t clippingOff = oracle.Label("dontclip");
       const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t screenBase = ScreenBase(oracle);
 
@@ -1715,11 +1717,11 @@ namespace GameLogicTests
             // XX3's compared range, cleared on both sides so an unwritten byte cannot pass by luck.
             for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = 0;
+              cpu.memory[static_cast<std::uint16_t>(projectedVertices + byte)] = 0;
             }
             for (std::uint16_t byte = 0; byte < 16u; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(xx2 + byte)] = 0;
+              cpu.memory[static_cast<std::uint16_t>(faceVisible + byte)] = 0;
             }
 
             std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
@@ -1749,7 +1751,7 @@ namespace GameLogicTests
             slot.acceleration = 0x5A;
             slot.pitchCounter = 0xA5;
             cpu.memory[type] = shipType;
-            cpu.memory[dontclip] = 0;
+            cpu.memory[clippingOff] = 0;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
@@ -1801,12 +1803,12 @@ namespace GameLogicTests
             const std::size_t firstFlag = ((placement.state & 0x20u) != 0u) ? 4u : 2u;
             for (std::size_t byte = firstFlag; byte < 14u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx2 + byte)], geometry.xx2[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(faceVisible + byte)], geometry.faceVisible[byte],
                                (where + L": XX2+" + std::to_wstring(byte)).c_str());
             }
             for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx3 + byte)], geometry.xx3[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(projectedVertices + byte)], geometry.projectedVertices[byte],
                                (where + L": XX3+" + std::to_wstring(byte)).c_str());
             }
 

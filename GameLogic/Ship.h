@@ -129,7 +129,7 @@ namespace Elite
     std::uint8_t ai = 0;           ///< 6502: INWK+32 -- see `AiBit`
     HeapOffset heap{};             ///< 6502: INWK+33 and 34 -- XX19, the ship's own line heap
     std::uint8_t energy = 0;       ///< 6502: INWK+35
-    std::uint8_t newb = 0;         ///< 6502: INWK+36, which is NEWB -- see `NewbBit`
+    std::uint8_t traits = 0;         ///< 6502: INWK+36, which is NEWB -- see `NewbBit`
 
     [[nodiscard]] constexpr bool operator==(const Ship&) const noexcept = default;
 
@@ -210,7 +210,7 @@ namespace Elite
       bytes[SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heap.Address() & 0xFFu);
       bytes[SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heap.Address() >> 8);
       bytes[SHIP_ENERGY_OFFSET] = energy;
-      bytes[SHIP_FLAGS_OFFSET] = newb;
+      bytes[SHIP_FLAGS_OFFSET] = traits;
       return bytes;
     }
 
@@ -241,7 +241,7 @@ namespace Elite
       ship.ai = _bytes[SHIP_AI_OFFSET];
       ship.heap = HeapOffset::FromAddress(static_cast<std::uint16_t>(_bytes[SHIP_HEAP_LOW_OFFSET] | (_bytes[SHIP_HEAP_HIGH_OFFSET] << 8)));
       ship.energy = _bytes[SHIP_ENERGY_OFFSET];
-      ship.newb = _bytes[SHIP_FLAGS_OFFSET];
+      ship.traits = _bytes[SHIP_FLAGS_OFFSET];
       return ship;
     }
 

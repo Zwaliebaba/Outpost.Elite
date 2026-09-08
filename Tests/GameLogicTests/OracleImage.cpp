@@ -2,6 +2,8 @@
 
 #include "OracleImage.h"
 
+#include "OracleLabels.h"
+
 #include <algorithm>
 
 #include <filesystem>
@@ -101,7 +103,7 @@ namespace Elite::Testing
 
   } // namespace
 
-  OracleImage::OracleImage(const char* _labelsFile, const char* _binariesFile)
+  OracleImage::OracleImage(const Labels::Entry* _labels, std::size_t _labelCount, const char* _binariesFile)
   {
     const std::filesystem::path root = FindRepositoryRoot();
     if (root.empty())
@@ -111,16 +113,8 @@ namespace Elite::Testing
     }
 
     const std::filesystem::path reference = root / "Design" / "Reference";
-    const std::filesystem::path labelsPath = reference / _labelsFile;
     const std::filesystem::path binariesPath = reference / _binariesFile;
     const std::filesystem::path output = root / "Upstream" / "elite-source-code-library" / "versions" / "c64" / "3-assembled-output";
-
-    std::vector<std::pair<std::string, std::uint32_t>> labelRows;
-    if (!ReadTable(labelsPath, labelRows))
-    {
-      m_reason = "missing " + labelsPath.string() + " -- run: python tools/labels.py --assemble";
-      return;
-    }
 
     std::vector<std::pair<std::string, std::uint32_t>> binaryRows;
     if (!ReadTable(binariesPath, binaryRows))
@@ -129,12 +123,18 @@ namespace Elite::Testing
       return;
     }
 
-    for (const auto& [name, address] : labelRows)
+    /*
+     * The labels come from the GENERATED HEADER (M6-b-2), not from a file read at run time.
+     *
+     * A test finds its routine by name, so the names have to outlive `Upstream/` -- they are
+     * metadata about the original on the same footing as the extracted data tables (§1 R-g), and
+     * `tools/labels.py --check` is what keeps them honest while the assembler is still here. The
+     * IMAGE is a different question and is still loaded from the assembled blocks below, until
+     * M6-b-4 removes the need for it.
+     */
+    for (std::size_t at = 0; at < _labelCount; ++at)
     {
-      if (address <= 0xFFFFu)
-      {
-        m_labels.emplace(name, static_cast<std::uint16_t>(address));
-      }
+      m_labels.emplace(_labels[at].name, _labels[at].address);
     }
 
     for (const auto& [fileName, address] : binaryRows)
@@ -174,13 +174,13 @@ namespace Elite::Testing
 
   const OracleImage& OracleImage::Instance()
   {
-    static const OracleImage instance("Labels.txt", "Binaries.txt");
+    static const OracleImage instance(Labels::GAME, std::size(Labels::GAME), "Binaries.txt");
     return instance;
   }
 
   const OracleImage& OracleImage::LoaderInstance()
   {
-    static const OracleImage instance("LoaderLabels.txt", "LoaderBinaries.txt");
+    static const OracleImage instance(Labels::LOADER, std::size(Labels::LOADER), "LoaderBinaries.txt");
     return instance;
   }
 
@@ -193,7 +193,7 @@ namespace Elite::Testing
    */
   const OracleImage& OracleImage::SpriteInstance()
   {
-    static const OracleImage instance("SpriteLabels.txt", "SpriteBinaries.txt");
+    static const OracleImage instance(Labels::SPRITES, std::size(Labels::SPRITES), "SpriteBinaries.txt");
     return instance;
   }
 
@@ -219,6 +219,9 @@ namespace Elite::Testing
   {
     Cpu6502 cpu;
     cpu.memory = m_memory;
+    // What the read census compares against (M6-b-1). The image is a singleton and outlives every
+    // processor it hands out, so the pointer cannot dangle.
+    cpu.baseImage = &m_memory;
     cpu.a = cpu.x = cpu.y = 0;
     cpu.sp = 0xFD;
     cpu.pc = 0;

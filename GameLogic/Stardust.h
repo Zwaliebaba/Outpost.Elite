@@ -61,7 +61,7 @@ namespace Elite
      * genuinely the stardust's: `XX` and `YY` looked like it and are not (§6.45) -- they are the
      * sun's, and are `EDGES`'s parameter and `SUN`'s locals since M2-c.
      */
-    std::uint8_t newzp = 0;
+    std::uint8_t keptQuotient = 0;
   };
 
   // ---- the wrappers, which are one or two instructions and a fall-through -------------------

@@ -291,7 +291,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t gnum = oracle.Label("gnum");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t r = oracle.Label("R");
+      const std::uint16_t zeroPageR = oracle.Label("R");
       const std::uint16_t col2 = oracle.Label("COL2");
       const std::uint16_t dasc = oracle.Label("DASC");
 
@@ -375,7 +375,7 @@ namespace GameLogicTests
         // ---- compare -----------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
-        Assert::AreEqual(cpu.memory[r], entry.value, (where + L": the number in R").c_str());
+        Assert::AreEqual(cpu.memory[zeroPageR], entry.value, (where + L": the number in R").c_str());
         Assert::AreEqual(cpu.memory[col2], text.palette.Byte(), (where + L": the text colour on exit").c_str());
 
         /*
@@ -958,9 +958,9 @@ namespace GameLogicTests
 
       std::uint32_t compared = 0;
 
-      for (const Situation& s : SITUATIONS)
+      for (const Situation& situation : SITUATIONS)
       {
-        const std::wstring where = Widen(std::string("STATUS: ") + s.what);
+        const std::wstring where = Widen(std::string("STATUS: ") + situation.what);
 
         /*
          * The universe, and the names below are ALIASES INTO IT rather than separate objects.
@@ -972,19 +972,19 @@ namespace GameLogicTests
         Elite::Universe universe;
         universe.commander = Elite::DefaultCommander();
         Elite::Commander& commander = universe.commander;
-        commander.legalStatus = s.legal;
-        commander.kills.lo = static_cast<std::uint8_t>(s.kills & 0xFFu);
-        commander.kills.hi = static_cast<std::uint8_t>(s.kills >> 8);
-        commander.escapePod = s.escapePod;
-        commander.fuelScoops = s.fuelScoops;
-        commander.ecm = s.ecm;
-        commander.energyBomb = s.bomb;
-        commander.energyUnit = s.energyUnit;
-        commander.dockingComputer = s.docking;
-        commander.galacticDrive = s.galactic;
+        commander.legalStatus = situation.legal;
+        commander.kills.lo = static_cast<std::uint8_t>(situation.kills & 0xFFu);
+        commander.kills.hi = static_cast<std::uint8_t>(situation.kills >> 8);
+        commander.escapePod = situation.escapePod;
+        commander.fuelScoops = situation.fuelScoops;
+        commander.ecm = situation.ecm;
+        commander.energyBomb = situation.bomb;
+        commander.energyUnit = situation.energyUnit;
+        commander.dockingComputer = situation.docking;
+        commander.galacticDrive = situation.galactic;
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.lasers[mount].byte = s.lasers[mount];
+          commander.lasers[mount].byte = situation.lasers[mount];
         }
 
         constexpr std::uint8_t CROSSHAIR_X = 30;
@@ -998,23 +998,23 @@ namespace GameLogicTests
         cpu.AddTrap(oracle.Label("NLIN"));
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        cpu.memory[oracle.Label("QQ12")] = s.docked;
-        cpu.memory[oracle.Label("JUNK")] = s.junk;
-        cpu.memory[static_cast<std::uint16_t>(oracle.Label("FRIN") + 2 + s.junk)] = s.firstShip;
-        cpu.memory[oracle.Label("ENERGY")] = s.energy;
-        cpu.memory[oracle.Label("FIST")] = s.legal;
-        cpu.memory[oracle.Label("TALLY")] = static_cast<std::uint8_t>(s.kills & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(oracle.Label("TALLY") + 1)] = static_cast<std::uint8_t>(s.kills >> 8);
-        cpu.memory[oracle.Label("ESCP")] = s.escapePod;
-        cpu.memory[oracle.Label("BST")] = s.fuelScoops;
-        cpu.memory[oracle.Label("ECM")] = s.ecm;
-        cpu.memory[oracle.Label("BOMB")] = s.bomb;
-        cpu.memory[oracle.Label("ENGY")] = s.energyUnit;
-        cpu.memory[oracle.Label("DKCMP")] = s.docking;
-        cpu.memory[oracle.Label("GHYP")] = s.galactic;
+        cpu.memory[oracle.Label("QQ12")] = situation.docked;
+        cpu.memory[oracle.Label("JUNK")] = situation.junk;
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("FRIN") + 2 + situation.junk)] = situation.firstShip;
+        cpu.memory[oracle.Label("ENERGY")] = situation.energy;
+        cpu.memory[oracle.Label("FIST")] = situation.legal;
+        cpu.memory[oracle.Label("TALLY")] = static_cast<std::uint8_t>(situation.kills & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("TALLY") + 1)] = static_cast<std::uint8_t>(situation.kills >> 8);
+        cpu.memory[oracle.Label("ESCP")] = situation.escapePod;
+        cpu.memory[oracle.Label("BST")] = situation.fuelScoops;
+        cpu.memory[oracle.Label("ECM")] = situation.ecm;
+        cpu.memory[oracle.Label("BOMB")] = situation.bomb;
+        cpu.memory[oracle.Label("ENGY")] = situation.energyUnit;
+        cpu.memory[oracle.Label("DKCMP")] = situation.docking;
+        cpu.memory[oracle.Label("GHYP")] = situation.galactic;
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)] = s.lasers[mount];
+          cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)] = situation.lasers[mount];
         }
         cpu.memory[oracle.Label("QQ9")] = CROSSHAIR_X;
         cpu.memory[oracle.Label("QQ10")] = CROSSHAIR_Y;
@@ -1100,7 +1100,7 @@ namespace GameLogicTests
         Elite::Ports ports{printer,  characters, sink, sid,
                            extended, effects, keys, nulls};
 
-        const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
+        const Elite::ShipCondition condition{situation.docked, situation.junk, situation.firstShip, situation.energy};
         universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
         universe.crosshairY = CROSSHAIR_Y;
         Elite::StatusScreen(universe, ports, condition);
@@ -1234,9 +1234,9 @@ namespace GameLogicTests
 
       std::uint32_t compared = 0;
 
-      for (const Scenario& s : SCENARIOS)
+      for (const Scenario& scenario : SCENARIOS)
       {
-        const std::wstring where = Widen(std::string("EQSHP: ") + s.what);
+        const std::wstring where = Widen(std::string("EQSHP: ") + scenario.what);
 
         /*
          * The universe, and the names below are ALIASES INTO IT rather than separate objects.
@@ -1248,20 +1248,20 @@ namespace GameLogicTests
         Elite::Universe universe;
         universe.commander = Elite::DefaultCommander();
         Elite::Commander& commander = universe.commander;
-        commander.cash.tenths = (s.cash);
-        commander.fuel.tenths = s.fuel;
-        commander.cargoCapacity = s.capacity;
-        commander.missiles = s.missiles;
-        commander.ecm = s.fitted[0];
-        commander.fuelScoops = s.fitted[1];
-        commander.escapePod = s.fitted[2];
-        commander.energyBomb = s.fitted[3];
-        commander.energyUnit = s.fitted[4];
-        commander.dockingComputer = s.fitted[5];
-        commander.galacticDrive = s.fitted[6];
+        commander.cash.tenths = (scenario.cash);
+        commander.fuel.tenths = scenario.fuel;
+        commander.cargoCapacity = scenario.capacity;
+        commander.missiles = scenario.missiles;
+        commander.ecm = scenario.fitted[0];
+        commander.fuelScoops = scenario.fitted[1];
+        commander.escapePod = scenario.fitted[2];
+        commander.energyBomb = scenario.fitted[3];
+        commander.energyUnit = scenario.fitted[4];
+        commander.dockingComputer = scenario.fitted[5];
+        commander.galacticDrive = scenario.fitted[6];
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.lasers[mount].byte = s.lasers[mount];
+          commander.lasers[mount].byte = scenario.lasers[mount];
         }
 
         // ---- the shipped routine ------------------------------------------------------------
@@ -1270,20 +1270,20 @@ namespace GameLogicTests
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        cpu.memory[oracle.Label("tek")] = s.tech;
-        cpu.memory[oracle.Label("QQ14")] = s.fuel;
-        cpu.memory[oracle.Label("CRGO")] = s.capacity;
-        cpu.memory[oracle.Label("NOMSL")] = s.missiles;
-        cpu.memory[oracle.Label("ECM")] = s.fitted[0];
-        cpu.memory[oracle.Label("BST")] = s.fitted[1];
-        cpu.memory[oracle.Label("ESCP")] = s.fitted[2];
-        cpu.memory[oracle.Label("BOMB")] = s.fitted[3];
-        cpu.memory[oracle.Label("ENGY")] = s.fitted[4];
-        cpu.memory[oracle.Label("DKCMP")] = s.fitted[5];
-        cpu.memory[oracle.Label("GHYP")] = s.fitted[6];
+        cpu.memory[oracle.Label("tek")] = scenario.tech;
+        cpu.memory[oracle.Label("QQ14")] = scenario.fuel;
+        cpu.memory[oracle.Label("CRGO")] = scenario.capacity;
+        cpu.memory[oracle.Label("NOMSL")] = scenario.missiles;
+        cpu.memory[oracle.Label("ECM")] = scenario.fitted[0];
+        cpu.memory[oracle.Label("BST")] = scenario.fitted[1];
+        cpu.memory[oracle.Label("ESCP")] = scenario.fitted[2];
+        cpu.memory[oracle.Label("BOMB")] = scenario.fitted[3];
+        cpu.memory[oracle.Label("ENGY")] = scenario.fitted[4];
+        cpu.memory[oracle.Label("DKCMP")] = scenario.fitted[5];
+        cpu.memory[oracle.Label("GHYP")] = scenario.fitted[6];
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)] = s.lasers[mount];
+          cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)] = scenario.lasers[mount];
         }
         for (std::size_t index = 0; index < 4; ++index)
         {
@@ -1306,7 +1306,7 @@ namespace GameLogicTests
         cpu.sp = 0xFD;
 
         const KeyboardRun run =
-          RunWithKeys(cpu, oracle.Label("EQSHP"), tt217, s.keys, oracle.Label("BAY"), 8'000'000, oracle.Label("BAY2"));
+          RunWithKeys(cpu, oracle.Label("EQSHP"), tt217, scenario.keys, oracle.Label("BAY"), 8'000'000, oracle.Label("BAY2"));
         Assert::IsTrue(run.completed, (where + L": the shipped screen should finish").c_str());
 
         std::vector<std::uint32_t> expected;
@@ -1345,7 +1345,7 @@ namespace GameLogicTests
                                   selected, false);
         printer.SetValueTokens(&values);
 
-        ScriptedKeys keys(s.keys);
+        ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
@@ -1354,7 +1354,7 @@ namespace GameLogicTests
         Elite::Ports ports{printer,  characters, sink, sid,
                            extended, effects, keys, nulls};
 
-        universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
+        universe.current.techLevel = scenario.tech; // 6502: tek -- the byte the shop reads
 
         /*
          * 6502: msblob -- the ONE thing in this screen that touches the canvas (M3-b-1e).
@@ -1394,7 +1394,7 @@ namespace GameLogicTests
         }
 
         // And `msblob`, which a count cannot say any more: a missile bought redraws the indicators.
-        if (commander.missiles > s.missiles)
+        if (commander.missiles > scenario.missiles)
         {
           Assert::IsTrue(inkAfter != inkBefore, (where + L": msblob redrew the missile indicators").c_str());
         }

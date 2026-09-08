@@ -9,7 +9,7 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 13,
+      "ceiling": 11,
       "slack": 0,
       "slice": "M3-b-3a: DrawLaserSights takes the state, not a _view plus a seam"
     },
@@ -56,7 +56,7 @@
     "carry-params": {
       "ceiling": 30,
       "slack": 0,
-      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
+      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is §4.3.1)"
     },
     "mutants": {
       "ceiling": 97,
@@ -77,6 +77,21 @@
       "ceiling": 4103,
       "slack": 0,
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
+    },
+    "opcode-transcriptions": {
+      "ceiling": 253,
+      "slack": 0,
+      "slice": "M6-d-50: four more to zero, and the carry is set by a side effect where the SEC is commented out"
+    },
+    "opcode-quotations": {
+      "ceiling": 0,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "origin-identifiers": {
+      "ceiling": 0,
+      "slack": 0,
+      "slice": "M6-c-11: Arctan's two Ts, and the kernel finished"
     },
     "oracle-test-files": {
       "ceiling": 47,

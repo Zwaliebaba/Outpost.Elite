@@ -16,14 +16,14 @@ namespace Elite
 
   namespace
   {
-    /// 6502: ORA #%10000000 -- bit 7 forced on, so the first byte is never small.
+    /// 6502: bit 7 forced on, so the first byte is never small.
     constexpr std::uint8_t COMPETITION_HIGH_BIT = 0x80;
 
-    /// 6502: EOR #&5A and EOR #&A9. Two constants with no meaning beyond being hard to guess.
+    /// 6502: two constants with no meaning beyond being hard to guess.
     constexpr std::uint8_t COMPETITION_MIX = 0x5A;
     constexpr std::uint8_t CHECKSUM_STAMP = 0xA9;
 
-    /// 6502: CMP #'Y' / CMP #'N'.
+    /// 6502: the only two keys `YESNO` accepts.
     constexpr std::uint8_t KEY_YES = 'Y';
     constexpr std::uint8_t KEY_NO = 'N';
 
@@ -46,7 +46,7 @@ namespace Elite
     constexpr std::uint8_t DEVICE_ERROR_TOKEN = 255;
 
     /*
-     * 6502: LOD's `LDA TAP% / BMI ELT2F`.
+     * 6502: LOD's test of the block's first byte, which branches to `ELT2F`.
      *
      * The whole test for "is this a commander file". Bit 7 of the first byte of the block is bit 7
      * of TP, the mission flags, and no commander the game writes has it set -- so a file from some
@@ -59,7 +59,7 @@ namespace Elite
      * 6502: tapeerror and ELT2F -- print a token, wait for a key, and jump back to SVE.
      *
      * Two labels with one body between them, which is why the port has one function: the only thing
-     * that differs is the token, and both end at the same `JMP SVE`.
+     * that differs is the token, and both end by jumping back to `SVE`.
      */
     void ReportAndReturnToMenu(Universe& _universe, Ports& _ports, std::uint8_t _token) noexcept
     {
@@ -71,8 +71,7 @@ namespace Elite
   CompetitionNumber MakeCompetitionNumber(const Commander& _image) noexcept
   {
     /*
-     * 6502: PHA / ORA #%10000000 / STA K / EOR COK / STA K+2 / EOR CASH+2 / STA K+1 /
-     *       EOR #&5A / EOR TALLY+1 / STA K+3, then later PLA / EOR #&A9 / STA CHK2.
+     * 6502: SVE's competition-number chain, and the checksum stamped beside it.
      *
      * ONE ACCUMULATOR, four stores, and the stores are out of order. Each EOR builds on what the
      * last one left, so the four bytes are a chain rather than four independent expressions -- and
@@ -94,7 +93,7 @@ namespace Elite
     accumulator = static_cast<std::uint8_t>(accumulator ^ _image.competition);
     result.value[2] = accumulator;
 
-    // 6502: EOR CASH+2 -- the third byte of the four, counting from the most significant.
+    // 6502: the third byte of the four, counting from the most significant.
     accumulator = static_cast<std::uint8_t>(accumulator ^ _image.cash.Byte(2u));
     result.value[1] = accumulator;
 
@@ -102,7 +101,7 @@ namespace Elite
     accumulator = static_cast<std::uint8_t>(accumulator ^ _image.kills.hi);
     result.value[3] = accumulator;
 
-    // 6502: PLA / EOR #&A9 / STA CHK2 -- the checksum as it was BEFORE the chain above touched it.
+    // 6502: the checksum as it was BEFORE the chain above touched it, which is why it was stacked.
     result.checksum2 = static_cast<std::uint8_t>(checksum ^ CHECKSUM_STAMP);
 
     return result;
@@ -110,7 +109,7 @@ namespace Elite
 
   bool AskYesNo(Keyboard& _keys) noexcept
   {
-    // 6502: YESNO -- JSR t / CMP #'Y' / BEQ PL6 / CMP #'N' / BNE YESNO / CLC / RTS.
+    // 6502: YESNO -- anything that is not Y or N is read again, and N returns with the carry clear.
     for (;;)
     {
       const std::uint8_t key = _keys.NextKey();
@@ -128,12 +127,16 @@ namespace Elite
   void ResetToDefaultCommander(std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept
   {
     /*
-     * 6502: JAMESON -- LDY #(NAEND%-NA2%) / JAMEL1: LDA NA2%,Y / STA NA%,Y / DEY / BPL JAMEL1,
-     * then LDY #7 / STY oldlong.
+     * 6502: JAMESON -- the default commander at NA2% copied over the save image at NA%, and then
+     * `oldlong` set to seven for the length of "JAMESON".
      *
      * It writes over NA%, the SAVE IMAGE, and not over the commander at TP -- so the reset does
      * nothing until something loads that image. SVE's option 4 does exactly that: JAMESON, then a
      * jump to DFAULT.
+     *
+     * That last store is DEAD, which is why the port copies the block and stops. `oldlong` is
+     * written here and again by TRNME, and nothing in the build reads it -- `thislong`, which
+     * KERNALSETUP reads for the filename's length, is the live one.
      */
     for (std::size_t index = 0; index < COMMANDER_FILE_SIZE; ++index)
     {
@@ -144,7 +147,7 @@ namespace Elite
   SaveOutcome SaveCommanderTo(CommanderStore& _store, Commander& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
   {
     /*
-     * 6502: LSR SVC -- and this HALVES the save count rather than incrementing it.
+     * 6502: the save count is HALVED here rather than incremented.
      *
      * So it decays towards zero and a commander saved ten times looks like one saved once. It is
      * the live commander that changes here, not the file image, which is why this takes the block
@@ -207,12 +210,12 @@ namespace Elite
     };
 
     /*
-     * 6502: JSR LOD's return address, which the error paths never pop.
+     * 6502: the return address `loading` pushes, which the error paths never pop.
      *
-     * `tapeerror` and `ELT2F` end in `JMP SVE`, not in an RTS -- so when a load fails, the menu is
-     * RE-ENTERED with `loading`'s frame still on the stack. Whatever leaf the player reaches next
-     * therefore returns into `loading` at its `JSR TRNME`, and runs the three instructions that
-     * were waiting there: store the typed name, SEC, RTS.
+     * `tapeerror` and `ELT2F` jump back to `SVE` rather than returning -- so when a load fails, the
+     * menu is RE-ENTERED with `loading`'s frame still on the stack. Whatever leaf the player reaches
+     * next therefore returns into `loading` at its call to TRNME, and runs the three instructions
+     * that were waiting there: store the typed name, SEC, RTS.
      *
      * The consequences are not small. Leaving the menu with "5" after a failed load renames the
      * saved commander to whatever was typed and tells the caller a new commander was loaded, so
@@ -237,7 +240,7 @@ namespace Elite
     {
       if (loadFramePending)
       {
-        StoreCommanderName(_universe.lineBuffer, imageName); // 6502: JSR TRNME
+        StoreCommanderName(_universe.lineBuffer, imageName); // 6502: TRNME
         _result.newCommander = true;                         // 6502: SEC
       }
       return _result;
@@ -245,14 +248,14 @@ namespace Elite
 
     for (;;)
     {
-      // 6502: LDA #1 / JSR DETOK -- the menu, redrawn every time round.
+      // 6502: token 1 through `DETOK` -- the menu, redrawn every time round.
       _ports.tokens.Print(MENU_TOKEN);
 
       // 6502: JSR t.
       const std::uint8_t key = _ports.keyboard.NextKey();
 
       /*
-       * 6502: `loading` -- JSR GTNMEW / JSR LOD / JSR TRNME / SEC / RTS.
+       * 6502: `loading` -- ask for a name, load, copy the name in, and return with the carry set.
        *
        * The order is the interesting part. LOD runs BEFORE TRNME, so the name it opens is the one
        * MT26 left in the line buffer while the image still holds the previous commander's, and
@@ -261,7 +264,7 @@ namespace Elite
        */
       if (key == DISK_MENU_LOAD)
       {
-        // The name GTNME falls back on is the IMAGE's, through TR1's `LDA NA%,X` -- not the live
+        // The name GTNME falls back on is the IMAGE's, which is what TR1 reads -- not the live
         // commander's. Type nothing and you keep the name you last saved under, which need not be
         // the name you are playing as.
         (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present, _universe.lineBuffer, imageName,
@@ -269,7 +272,7 @@ namespace Elite
 
         std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
 
-        // 6502: JSR KERNALLOAD / BCS tapeerror -- the device could not read it.
+        // 6502: the Kernal's load reporting failure in the carry -- the device could not read it.
         if (!_ports.store.Read(typedName(), file))
         {
           loadFramePending = true;
@@ -277,7 +280,7 @@ namespace Elite
           continue;
         }
 
-        // 6502: LDA TAP% / BMI ELT2F -- it read something, but not a commander.
+        // 6502: the block's first byte is negative -- it read something, but not a commander.
         if ((file[BLOCK_IN_FILE] & NOT_A_COMMANDER) != 0u)
         {
           loadFramePending = true;
@@ -292,7 +295,7 @@ namespace Elite
           _universe.commanderFile[BLOCK_IN_FILE + index] = file[BLOCK_IN_FILE + index];
         }
 
-        // 6502: JSR TRNME -- the typed name over the one the image was carrying.
+        // 6502: TRNME -- the typed name over the one the image was carrying.
         StoreCommanderName(_universe.lineBuffer, imageName);
 
         DiskMenuResult result;
@@ -309,12 +312,13 @@ namespace Elite
         (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present, _universe.lineBuffer, imageName,
                                limits);
 
-        // 6502: JSR TRNME -- and here it runs BEFORE the file is touched, so the name the store is
+        // 6502: TRNME -- and here it runs BEFORE the file is touched, so the name the store is
         // given and the name in the image are the same eight bytes.
         StoreCommanderName(_universe.lineBuffer, imageName);
 
-        // 6502: LDA #4 / JSR DETOK. It comes one instruction after `LSR SVC` in the original and
-        // one before it here, which nothing can observe: the token does not read the save count.
+        // 6502: token 4 through `DETOK`. It comes one instruction after the save count is halved
+        // in the original and one before it here, which nothing can observe: the token does not
+        // read the save count.
         _ports.tokens.Print(SAVE_TOKEN);
 
         /*
@@ -335,7 +339,7 @@ namespace Elite
         }
 
         /*
-         * 6502: CLC / JSR BPRNT -- the competition number, printed BEFORE the Kernal is called.
+         * 6502: the competition number, printed BEFORE the Kernal is called.
          *
          * So a save the device refuses still shows a number, and the number it shows is the one
          * the refused file would have had.
@@ -347,7 +351,7 @@ namespace Elite
         }
         _universe.numberWidth = PrintNumber(_ports.characters, competition, _universe.numberWidth, false);
 
-        // 6502: JSR TT67 / JSR TT67 -- two of them, so the number gets a blank line under it.
+        // 6502: TT67 twice, so the number gets a blank line under it.
         PrintNewline(_ports.printer);
         PrintNewline(_ports.printer);
 
@@ -361,7 +365,7 @@ namespace Elite
         }
 
         /*
-         * 6502: JSR DFAULT -- the save reads its own file image straight back.
+         * 6502: DFAULT -- the save reads its own file image straight back.
          *
          * Which means a save is also a load: the platform bit goes on in the competition flags, the
          * block's checksum byte is left as DFAULT's copy loop leaves it, and the commander that
@@ -380,19 +384,19 @@ namespace Elite
         return leave(result);
       }
 
-      // 6502: feb10 -- LDA DISK / EOR #&FF / STA DISK / JMP SVE. Tape is 0 and disk is &FF, and
-      // the redisplay is the point: control code 31 in the menu names the media it is not using.
+      // 6502: feb10 -- the media byte flipped and the menu redisplayed. Tape is 0 and disk is &FF,
+      // and the redisplay is the point: control code 31 in the menu names the media it is not using.
       if (key == DISK_MENU_MEDIA)
       {
-        // 6502: EOR #&FF -- the same all-eight-bits flip the pause screen's `DKS3` does, and
-        // the reason `DISK` is a BYTE and not a bool: it is one of the thirteen toggles, and a
-        // bool cannot hold the &FF the indexed store writes (§6.139).
+        // 6502: the same all-eight-bits flip the pause screen's `DKS3` does, and the reason `DISK`
+        // is a BYTE and not a bool: it is one of the thirteen toggles, and a bool cannot hold the
+        // &FF the indexed store writes (§6.139).
         _universe.useDisk = static_cast<std::uint8_t>(_universe.useDisk ^ 0xFFu);
         continue;
       }
 
       /*
-       * 6502: LDA #224 / JSR DETOK / JSR YESNO / BCC feb13 / JSR JAMESON / JMP DFAULT.
+       * 6502: token 224, the yes/no prompt, then `JAMESON` and a tail jump into `DFAULT`.
        *
        * "No" leaves the menu rather than redisplaying it, which is the one place SVE treats a
        * refusal as an exit. And the `JMP` is a tail call, so what the caller sees on return is
@@ -406,19 +410,19 @@ namespace Elite
           return leave(DiskMenuResult{});
         }
 
-        // 6502: JSR JAMESON -- NA2% over NA%, which is an image and not the live commander.
+        // 6502: JAMESON -- NA2% over NA%, which is an image and not the live commander.
         ResetToDefaultCommander(_universe.commanderFile);
 
-        // 6502: JMP DFAULT -- and only now is the default commander actually in play.
+        // 6502: DFAULT -- and only now is the default commander actually in play.
         (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Reset;
-        result.newCommander = true; // 6502: DFAULT's own `CMP CHK3`, not anything SVE writes
+        result.newCommander = true; // 6502: DFAULT's own checksum compare, not anything SVE writes
         return leave(result);
       }
 
-      // 6502: feb13 -- CLC / RTS. Anything that is not one of the four keys.
+      // 6502: feb13 -- return with the carry clear. Anything that is not one of the four keys.
       return leave(DiskMenuResult{});
     }
   }

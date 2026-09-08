@@ -439,7 +439,7 @@ namespace Elite
    */
   struct DrawWorkspace
   {
-    std::uint16_t sc = 0; ///< 6502: SC(1 0)
+    std::uint16_t screenPointer = 0; ///< 6502: SC(1 0)
   };
 
   // ---- the pixel primitives (slice 1d-a) ------------------------------------------------------

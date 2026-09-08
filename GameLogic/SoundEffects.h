@@ -122,7 +122,7 @@ namespace Elite
     HitByLaser2 = 15,   ///< 6502: sfxelas2
 
     /*
-     * 6502: LDY #sfxhyp1+128 -- and it is the ONE place in the game that sets bit 7.
+     * 6502: sfxhyp1 with its top bit SET -- and it is the ONE place in the game that sets it.
      *
      * Not a seventeenth sound: it is sound 7 again with an index that falls PAST the end of
      * `SFXPR`, so the priority byte reads as zero and the routine looks for a voice already playing
@@ -146,10 +146,9 @@ namespace Elite
    * same slow duty-cycle wobble. It starts at 2 because that is the byte the binary loads with.
    *
    * `soundOff` is `DNOIZ`, which is a configuration byte the pause screen toggled -- the settings
-   * file sets it since InputTimer.md S-1 -- rather than sound
-   * state, and it is here because `NOISE` is its only reader in this library. It is also the ONLY
-   * `DNOIZ`: `Universe` carried a second one that the pause screen wrote and nothing read, until
-   * M5-a-5 found it.
+   * file sets it since InputTimer.md S-1 -- rather than sound state, and it is here because `NOISE`
+   * is its only reader in this library. It is also the ONLY `DNOIZ`: `Universe` carried a second
+   * one that the pause screen wrote and nothing read, until M5-a-5 found it.
    */
   struct SoundBuffer
   {
@@ -176,10 +175,10 @@ namespace Elite
    * decides a game value and a port that answered only the carry had to invent one. It invented the
    * sustain, which is what `EXNO2` had in A on the way IN; the routine overwrites it.
    *
-   * Three exits and three different accumulators. The path that takes a voice ends `INY / TYA /
-   * ORA #128 / STA SOFLG,X / CLI / SEC` -- so A is the flag byte it just wrote. The priority
-   * refusal is `LDA SFXPR,Y / CMP SOPR,X / BCC SOUR1`, so A is the effect's priority. And with
-   * sound switched off, `LDA DNOIZ / BNE SOUR1` leaves A holding `DNOIZ` and the carry untouched.
+   * Three exits and three different accumulators. The path that takes a voice ends by writing the
+   * flag byte, so A is that byte. The priority refusal branches out of a comparison, so A is the
+   * effect's priority. And with sound switched off the test on `DNOIZ` leaves A holding `DNOIZ` and
+   * the carry untouched.
    */
   struct NoiseResult
   {
@@ -190,12 +189,12 @@ namespace Elite
   /*
    * 6502: NOISE -- put effect `_effect` into the buffer, if it is allowed a voice.
    *
-   * THREE ANSWERS, and the caller's carry is one of them (§6.99). The routine ends `SEC / RTS` when
+   * THREE ANSWERS, and the caller's carry is one of them (§6.99). The routine SETS the carry when
    * it takes a voice; it reaches `SOUR1`, a bare `RTS`, by two different branches, and they leave
-   * different flags. `LDA DNOIZ / BNE SOUR1` touches no flag, so with sound switched off the carry
-   * that comes back is the one that went in. `CMP SOPR,X / BCC SOUR1` is a comparison that FAILED,
-   * so an effect refused for priority comes back with the carry clear. `OUCH` opens its `DORND` on
-   * this carry, which is why the difference is worth modelling (§6.88).
+   * different flags. The test on `DNOIZ` touches no flag, so with sound switched off the carry that
+   * comes back is the one that went in. The priority branch is taken out of a comparison that
+   * FAILED, so an effect refused for priority comes back with the carry clear. `OUCH` opens its
+   * `DORND` on this carry, which is why the difference is worth modelling (§6.88).
    *
    * BIT 7 OF THE EFFECT NUMBER IS A FLAG and it is read late. `HYPNOISE` passes sfxhyp1 + 128 to
    * layer the drive's sound on top of itself, and the routine reads `SFXPR,Y` with the 128 still
@@ -211,16 +210,17 @@ namespace Elite
   /*
    * 6502: NOISE2 -- NOISE with the sustain byte and the frequency supplied instead of looked up.
    *
-   * It is `BIT SOUR1 / STA XX15 / STX XX15+1 / EQUB &50` and then `NOISE` past its `CLV`. The `BIT`
-   * on a byte holding `RTS` (&60) sets the overflow flag, and the two `BVS` inside `NOISE` take the
-   * supplied bytes instead of the table's. The `EQUB &50` is a `BVC` that cannot branch, swallowing
-   * the `CLV` (§6.79's idiom). So this is one routine with a flag, and the port writes it that way.
+   * It sets the OVERFLOW flag by testing a byte that holds &60, stashes the two supplied bytes, and
+   * enters `NOISE` past its own `CLV`. The two overflow branches inside `NOISE` then take the
+   * supplied bytes instead of the table's, and an `EQUB &50` -- a branch-if-overflow-clear that
+   * cannot branch -- swallows the `CLV` (§6.79's idiom). So this is one routine with a flag, and
+   * the port writes it that way.
    */
   [[nodiscard]] NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, SoundEffect _effect, std::uint8_t _sustain,
                                                    std::uint8_t _frequency, bool _carryIn) noexcept;
 
-  /// 6502: BEEP, BELL -- `LDY #sfxbeep / BNE NOISE`, a tail call, so the carry it returns is NOISE's.
-  /// `BELL` is `LDA #7 / JMP CHPR`, and character 7 in `CHPR` is `R5`, which is `JSR BEEP`: the
+  /// 6502: BEEP, BELL -- a tail call into `NOISE`, so the carry it returns is `NOISE`'s. `BELL`
+  /// prints character 7, and character 7 in `CHPR` is `R5`, which calls `BEEP`: the
   /// text printer rings it over a `SoundBuffer` since M3-b-2b, so the bell has no routine of its own.
   [[nodiscard]] NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
 
@@ -248,7 +248,7 @@ namespace Elite
    * multiple the volume-rate mask picks out, the sustain volume drops a step.
    *
    * THE FREQUENCY IS ONE BYTE SPREAD ACROSS TWO REGISTERS: `f` becomes `00ffffff ff000000`, so the
-   * chip's sixteen-bit frequency is `f * 64`. And the sustain step is `SEC / SBC #16` on a byte
+   * chip's sixteen-bit frequency is `f * 64`. And the sustain step SUBTRACTS SIXTEEN from a byte
    * whose high nibble is the volume, which WRAPS when the volume is already zero -- a nibble of
    * zero minus one is fifteen, so a quiet effect that keeps stepping comes back at full volume.
    * The port keeps the byte arithmetic and the oracle confirms the wrap is what the game does.
@@ -256,7 +256,7 @@ namespace Elite
    * THE PULSE WIDTH FLIPS ON ONE EXIT AND NOT THE OTHER. A voice with nothing playing branches to
    * `SOUL3b`, which steps to the next voice and, after voice 1, returns from the interrupt
    * directly; a voice that was processed reaches `SOUL3`, which after voice 1 falls into the
-   * `EOR #4` on `PULSEW`. So the width alternates only on frames where voice 1 is active.
+   * width flip on `PULSEW`. So the width alternates only on frames where voice 1 is active.
    */
   void RunSoundEffects(SoundBuffer& _buffer, SidWriteLog& _log) noexcept;
 

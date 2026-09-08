@@ -48,7 +48,7 @@ namespace GameLogicTests
       std::uint16_t entry = 0, mloop = 0, tt100 = 0, gthg = 0, there = 0;
       std::uint16_t frin = 0, kPercent = 0, many = 0, junk = 0, slsp = 0;
       std::uint16_t inwk = 0, rand = 0, xx0 = 0;
-      std::uint16_t mj = 0, ev = 0, tp = 0, gov = 0, fist = 0, qq20 = 0;
+      std::uint16_t mj = 0, ev = 0, tp = 0, gov = 0, legalStatus = 0, qq20 = 0;
       std::uint16_t gcnt = 0, qq0 = 0, qq1 = 0;
 
       explicit Labels(const OracleImage& _oracle)
@@ -74,7 +74,7 @@ namespace GameLogicTests
         ev = _oracle.Label("EV");
         tp = _oracle.Label("TP");
         gov = _oracle.Label("gov");
-        fist = _oracle.Label("FIST");
+        legalStatus = _oracle.Label("FIST");
         qq20 = _oracle.Label("QQ20");
         gcnt = _oracle.Label("GCNT");
         qq0 = _oracle.Label("QQ0");
@@ -277,7 +277,7 @@ namespace GameLogicTests
       const Where where(oracle);
       const std::uint16_t mloop = static_cast<std::uint16_t>(oracle.Label("MLOOP") + 3u);
       const std::uint16_t tt17 = oracle.Label("TT17");
-      const std::uint16_t patg = oracle.Label("PATG");
+      const std::uint16_t authorNames = oracle.Label("PATG");
       const std::uint16_t tribble = oracle.Label("TRIBBLE");
 
       struct Case
@@ -332,7 +332,7 @@ namespace GameLogicTests
             universe.universe.commander.tribbles.hi = one.tribbleHigh;
 
             Mirror(universe.universe, cpu, where);
-            cpu.memory[patg] = one.authors;
+            cpu.memory[authorNames] = one.authors;
             cpu.memory[tribble] = one.tribbleLow;
             cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = one.tribbleHigh;
             for (std::size_t byte = 0; byte < 4u; ++byte)
@@ -648,7 +648,7 @@ namespace GameLogicTests
             cpu.memory[at.ev] = one.encounters;
             cpu.memory[at.gov] = one.government;
             cpu.memory[at.tp] = one.mission;
-            cpu.memory[at.fist] = one.legal;
+            cpu.memory[at.legalStatus] = one.legal;
             cpu.memory[at.gcnt] = one.galaxy;
             cpu.memory[at.qq0] = one.systemX;
             cpu.memory[at.qq1] = one.systemY;

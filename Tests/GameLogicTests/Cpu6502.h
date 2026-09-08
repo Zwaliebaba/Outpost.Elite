@@ -81,6 +81,52 @@ namespace Elite::Testing
     std::bitset<65536>* trapped = nullptr;
 
     /*
+     * The read census (M6-b-1), which is what §1 R-g asks to be sized before anything is built on
+     * it: how much of what the oracle answers depends on bytes of the assembled original that
+     * NOTHING WROTE.
+     *
+     * M6-b keys a fixture record on what the test wrote, not on the whole machine. That is sound
+     * exactly as far as a routine's answer is a function of the write set — and a routine that
+     * reads a table, a blueprint or a constant out of the image is reading something the key does
+     * not name. Those reads do not make replay wrong (the recorded answer already holds what they
+     * produced) but they decide how much of the original the fixture's ANSWERS carry, which is the
+     * ADR-001 §5 question, and how much a fixture would silently rot if the image ever moved.
+     *
+     * A read is counted against the image when the byte is still equal to the base image's. A test
+     * that wrote a byte the value it already held is therefore counted as an image read, which
+     * errs towards reporting MORE dependence than there is — the safe direction for a measurement
+     * a ruling will be made on.
+     *
+     * Only DATA reads are counted: the `Read` path and the two indirect pointer fetches. An
+     * instruction fetch is the original's code by definition and would drown the number; the stack
+     * is the call's own.
+     */
+    const std::array<std::uint8_t, 65536>* baseImage = nullptr;
+
+    struct ReadCensus
+    {
+      bool on = false;             ///< off in every normal run; `--measure` turns it on
+      std::uint64_t reads = 0;     ///< data reads that reached RAM
+      std::uint64_t fromImage = 0; ///< of those, the ones still holding the base image's byte
+      /*
+       * And of THOSE, the ones where the image's byte is not zero.
+       *
+       * The distinction decides how the number should be read. A drawing routine reads the screen
+       * byte before it EORs into it, and in a fresh machine that byte is zero because the bitmap
+       * is zero -- so the read is "off the image" by the test above while carrying nothing the
+       * original put there. A non-zero byte is the other case: a table entry, a blueprint, a piece
+       * of text. The first is noise in this measurement and the second is what §1 R-g is about.
+       */
+      std::uint64_t fromImageContent = 0;
+      std::bitset<65536> addresses{};        ///< which image bytes the whole suite read that way
+      std::bitset<65536> contentAddresses{}; ///< and which of those held something
+
+      /// One per process. The distinct-address set is 8 KB and a machine is copied per call, so it
+      /// cannot live on the processor.
+      [[nodiscard]] static ReadCensus& Instance() noexcept;
+    };
+
+    /*
      * 6502: CIA1's two ports, &DC00 and &DC01 -- the keyboard matrix as the chip presents it
      * (M6-0-a-4).
      *
@@ -136,6 +182,7 @@ namespace Elite::Testing
         }
         return io[static_cast<std::size_t>(_address - IO_BASE)];
       }
+      NoteRead(_address);
       return memory[_address];
     }
 
@@ -330,11 +377,25 @@ namespace Elite::Testing
     {
       std::uint16_t address = 0;
       std::function<void(Cpu6502&)> act;
+
+      /*
+       * What tells one probe from another, and it is REQUIRED (M6-b-1).
+       *
+       * A probe changes the machine WHILE the call runs, so the call's answer is not a function of
+       * the machine the call started on -- and a fixture keyed on that machine cannot tell two
+       * probes apart. `TT217` is the case: five scripts, five identical starting machines, five
+       * different answers. The measuring pass found it as four key collisions, which is exactly
+       * what the recorder's collision counter is for.
+       *
+       * The identity is the caller's promise that two probes with the same number behave the same
+       * way. There is no default: a new probe site cannot forget to make it.
+       */
+      std::uint64_t identity = 0;
     };
 
     std::vector<Probe> probes;
 
-    void AddProbe(std::uint16_t _address, std::function<void(Cpu6502&)> _act);
+    void AddProbe(std::uint16_t _address, std::function<void(Cpu6502&)> _act, std::uint64_t _identity);
     void ClearTrapHits() noexcept
     {
       trapHits.clear();
@@ -387,6 +448,16 @@ namespace Elite::Testing
     void Store(std::uint16_t _address, std::uint8_t _value) noexcept;
 
   private:
+    /// One branch when the census is off, which is every run but `--measure`.
+    void NoteRead(std::uint16_t _address) const noexcept
+    {
+      if (ReadCensus::Instance().on)
+      {
+        CountRead(_address);
+      }
+    }
+    void CountRead(std::uint16_t _address) const noexcept;
+
     [[nodiscard]] std::uint8_t Fetch() noexcept
     {
       return memory[pc++];

@@ -19,7 +19,7 @@ says what happened.
     python tools/mutate.py --id ta-253            run one mutant
     python tools/mutate.py                        run everything (slow: builds once per mutant)
 
-FIVE THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has already lied.
+SIX THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has already lied.
 
 1. THE BASELINE IS PROVEN BEFORE ANY MUTANT IS BELIEVED. A worktree whose `Upstream/` submodule was
    empty made every oracle test skip and `OracleIsPresent` fail by design; the harness read only
@@ -43,7 +43,13 @@ FIVE THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has al
    text files and the oracle's whole `versions/c64` tree is 4.4 MB. Copying removes the trap by
    construction rather than documenting it, which is what section 6.119 asked for.
 
-5. A UNIT'S TEST FILTER IS VERIFIED BEFORE IT IS TRUSTED. A filter that selects the wrong tests is
+5. THE WORKTREE CARRIES WHAT YOU HAVE, NOT WHAT YOU LAST COMMITTED. It is still built from HEAD --
+   a mutation run wants a state somebody can name -- but the uncommitted diff is applied on top,
+   because "the tally covers what I am about to commit" is what every reader of a tally assumes.
+   It did not, for eight slices, and the run said so on every one of them in a note that was read
+   past (section 8, M6-d-25a).
+
+6. A UNIT'S TEST FILTER IS VERIFIED BEFORE IT IS TRUSTED. A filter that selects the wrong tests is
    worse than no filter: it produces a confident number about code it never ran. The first real
    run had `hyperspace` filtered on "Hyperspace", the jump's tests live in a class called
    `TheJump`, and the filter matched three tests in two other files whose method names happen to
@@ -170,7 +176,21 @@ ORACLE_DIR = "Upstream/elite-source-code-library/versions/c64"
 
 
 def make_worktree(_at: Path) -> None:
-    """A detached worktree at HEAD with the oracle copied in -- no symlinks anywhere."""
+    """A detached worktree carrying the WORKING TREE, with the oracle copied in -- no symlinks.
+
+    IT USED TO BE HEAD, AND THAT MADE THE HARNESS ANSWER ABOUT THE WRONG TREE. `git worktree add
+    --detach HEAD` checks out the last commit, so a run made before committing mutated the PREVIOUS
+    slice and reported a tally for it. Every M6-d entry from -17 to -24 says "97 of 97 from a full
+    run" and each of those runs was against the commit before the one it is written in (M6-d-25a).
+
+    It was survivable only because `--check` reads the working tree and `check_all.py` runs it, so a
+    mutant whose `find` a slice had rewritten was still caught before the commit -- which is exactly
+    how this was found. But "the tally covers what I am about to commit" is what every reader of a
+    tally assumes, so the worktree now carries the uncommitted changes on top of HEAD.
+
+    Tracked changes only. An untracked new source file is not in the diff, and it would not be in
+    the project files either, so the build would not see it in any case.
+    """
     if _at.exists():
         subprocess.run(["git", "worktree", "remove", "--force", str(_at)], cwd=REPO, capture_output=True, text=True)
         shutil.rmtree(_at, ignore_errors=True)
@@ -179,6 +199,17 @@ def make_worktree(_at: Path) -> None:
     made = subprocess.run(["git", "worktree", "add", "--detach", str(_at), "HEAD"], cwd=REPO, capture_output=True, text=True)
     if made.returncode != 0:
         sys.exit(f"error: could not create the worktree\n{made.stdout}{made.stderr}")
+
+    pending = subprocess.run(["git", "diff", "HEAD", "--binary"], cwd=REPO, capture_output=True, text=True)
+    if pending.returncode != 0:
+        sys.exit(f"error: could not read the uncommitted changes\n{pending.stdout}{pending.stderr}")
+    if pending.stdout.strip():
+        applied = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=_at, input=pending.stdout,
+                                 capture_output=True, text=True)
+        if applied.returncode != 0:
+            sys.exit("error: the worktree could not take this tree's uncommitted changes, so a run "
+                     f"would answer about HEAD instead\n{applied.stdout}{applied.stderr}")
+        print(f"worktree   carrying {len(pending.stdout.splitlines())} lines of uncommitted diff on top of HEAD")
 
     for relative in ORACLE_FILES:
         source = REPO / relative
@@ -485,13 +516,14 @@ def matches(_outcome: Outcome, _expect: str) -> bool:
     return _outcome.result == _expect
 
 
-def warn_if_dirty(_chosen: list[Mutant]) -> None:
-    """The worktree is HEAD, so uncommitted work is NOT what gets measured.
+def say_what_is_measured(_chosen: list[Mutant]) -> None:
+    """Name the uncommitted files the run DOES cover, so the tally's subject is on the screen.
 
-    That is the right default -- a mutation run wants a state somebody can name -- but it is a
-    quiet way to produce a tally for code that is not the code being written. Anything modified
-    that a selected mutant touches, or any change to the suite itself, is worth a sentence before
-    twenty minutes of building.
+    This used to warn that they were NOT covered, which was true and was printed on every run and
+    was read past anyway -- `tail -3` on the output is enough to lose it, and that is how eight
+    entries of the plan's journal came to report a tally for the wrong commit (M6-d-25a). The
+    worktree now carries them (`make_worktree`), so the note says what is in rather than what is
+    out; a line naming the subject is harder to skip than a line disclaiming it.
     """
     status = subprocess.run(["git", "status", "--porcelain"], cwd=REPO, capture_output=True, text=True)
     if status.returncode != 0:
@@ -506,8 +538,7 @@ def warn_if_dirty(_chosen: list[Mutant]) -> None:
         if path in {mutant.file for mutant in _chosen} or path.startswith("Tests/") or path.startswith("GameLogic/")
     )
     if interesting:
-        print("note: the worktree is built from HEAD, and these are modified but NOT committed --")
-        print("      the tally below will not describe them:")
+        print("subject: HEAD plus these uncommitted files, which the worktree carries --")
         for path in interesting[:12]:
             print(f"        {path}")
         print()
@@ -622,7 +653,7 @@ def main(_argv: list[str]) -> int:
         return check_applicable(chosen, load_floor() if whole_corpus else None)
 
     check_oracle_present()
-    warn_if_dirty(chosen)
+    say_what_is_measured(chosen)
 
     scratch = Path(arguments.worktree) if arguments.worktree else REPO.parent / f".mutate-{os.getpid()}"
     print(f"worktree   {scratch}")

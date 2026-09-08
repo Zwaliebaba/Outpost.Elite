@@ -226,7 +226,7 @@ not ours (§2).
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->eighteen in CI's
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->nineteen in CI's
 order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
 2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 

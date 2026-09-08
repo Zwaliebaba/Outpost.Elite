@@ -518,22 +518,22 @@ namespace GameLogicTests
         {
           for (const std::uint8_t p0 : VALUES)
           {
-            for (const std::uint8_t q : VALUES)
+            for (const std::uint8_t multiplier : VALUES)
             {
               Cpu6502 cpu = oracle.Fresh();
               cpu.memory[pp] = p0;
               cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-              cpu.memory[qq] = q;
+              cpu.memory[qq] = multiplier;
               cpu.a = a;
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mult3);
               Assert::IsTrue(run.completed, L"MULT3 returned");
 
-              const Elite::KBlock k = Elite::MultiplySigned24(Elite::SignMag24{p0, p1, a}, q);
-              const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
+              const Elite::KBlock result = Elite::MultiplySigned24(Elite::SignMag24{p0, p1, a}, multiplier);
+              const std::uint8_t bytes[4] = {result.low, result.mid, result.high, result.top};
 
               const std::wstring where =
-                Widen("MULT3(" + std::to_string(a) + " " + std::to_string(p1) + " " + std::to_string(p0) + " * " + std::to_string(q) + ")");
+                Widen("MULT3(" + std::to_string(a) + " " + std::to_string(p1) + " " + std::to_string(p0) + " * " + std::to_string(multiplier) + ")");
               for (int byte = 0; byte < 4; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte], (where + L": K+" + std::to_wstring(byte)).c_str());

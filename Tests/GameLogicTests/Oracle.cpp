@@ -3,8 +3,10 @@
 #include "Oracle.h"
 
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 
 namespace Elite::Testing
 {
@@ -57,6 +59,70 @@ namespace Elite::Testing
     constexpr std::size_t MEMORY_WRITE_BYTES = 3;                  // address and value
     constexpr std::size_t TRAP_HIT_BYTES = 2 + 3 + 1 + Cpu6502::WATCH_SLOTS; // address, AXY, carry, watched
     constexpr std::size_t STORE_HIT_BYTES = 3;                     // address and value
+
+    /*
+     * Does a run of bytes a call WROTE appear verbatim in the assembled original? (M6-b-3, R-h.)
+     *
+     * A block copy is what this looks for: a table chunk moved into a workspace, a piece of text, a
+     * glyph bitmap drawn onto the screen. Those are the writes that put the original's own content
+     * into a fixture, as opposed to arithmetic whose answer happens to be a byte the original also
+     * holds somewhere.
+     *
+     * Indexed by four-byte window, so a run costs a hash lookup rather than a scan of 64K. The
+     * candidate list per window is capped: four identical bytes occur thousands of times in a
+     * mostly-empty image, and following every one buys nothing -- the answer is already "yes,
+     * verbatim", and only the LENGTH could sharpen, which the cap can only understate. Understating
+     * is the safe direction for a measurement a ruling is made on.
+     */
+    class ImageIndex
+    {
+    public:
+      static constexpr std::size_t WINDOW = 4;
+      static constexpr std::size_t MAX_CANDIDATES = 64;
+
+      explicit ImageIndex(const std::array<std::uint8_t, 65536>& _image)
+        : m_image(&_image)
+      {
+        m_windows.reserve(_image.size());
+        for (std::size_t at = 0; at + WINDOW <= _image.size(); ++at)
+        {
+          m_windows.emplace(Key(_image.data() + at), static_cast<std::uint16_t>(at));
+        }
+      }
+
+      /// The longest run at `_bytes` the image holds verbatim, or 0 if it holds no four of it.
+      [[nodiscard]] std::size_t LongestAt(const std::uint8_t* _bytes, std::size_t _count) const noexcept
+      {
+        if (_count < WINDOW)
+        {
+          return 0;
+        }
+        std::size_t best = 0;
+        std::size_t looked = 0;
+        const auto range = m_windows.equal_range(Key(_bytes));
+        for (auto candidate = range.first; candidate != range.second && looked < MAX_CANDIDATES; ++candidate, ++looked)
+        {
+          const std::size_t at = candidate->second;
+          std::size_t length = 0;
+          while (length < _count && at + length < m_image->size() && (*m_image)[at + length] == _bytes[length])
+          {
+            ++length;
+          }
+          best = std::max(best, length);
+        }
+        return best;
+      }
+
+    private:
+      [[nodiscard]] static std::uint32_t Key(const std::uint8_t* _bytes) noexcept
+      {
+        return static_cast<std::uint32_t>(_bytes[0]) | (static_cast<std::uint32_t>(_bytes[1]) << 8)
+               | (static_cast<std::uint32_t>(_bytes[2]) << 16) | (static_cast<std::uint32_t>(_bytes[3]) << 24);
+      }
+
+      const std::array<std::uint8_t, 65536>* m_image;
+      std::unordered_multimap<std::uint32_t, std::uint16_t> m_windows;
+    };
 
   } // namespace
 
@@ -113,6 +179,19 @@ namespace Elite::Testing
       const std::uint8_t exit = static_cast<std::uint8_t>(trap.exit);
       FoldValue(digest, exit);
     }
+    /*
+     * The probes, which the first version of this digest left out (M6-b-1). A probe runs the
+     * FIXTURE'S OWN CODE part-way through the call, so two calls that start on the same machine can
+     * answer differently and nothing about the machine says why. What the key can hold is the
+     * caller's identity for the probe; the collision counter is what proves it is enough.
+     */
+    const std::uint32_t probes = static_cast<std::uint32_t>(_cpu.probes.size());
+    FoldValue(digest, probes);
+    for (const Cpu6502::Probe& probe : _cpu.probes)
+    {
+      FoldValue(digest, probe.address);
+      FoldValue(digest, probe.identity);
+    }
     Fold(digest, _cpu.watch.data(), _cpu.watch.size() * sizeof(std::uint16_t));
 
     FoldValue(digest, _cpu.storeLogLow);
@@ -138,7 +217,30 @@ namespace Elite::Testing
     const std::size_t beforeHits = _cpu.trapHits.size();
     const std::size_t beforeStores = _cpu.stores.size();
 
+    Cpu6502::ReadCensus& census = Cpu6502::ReadCensus::Instance();
+    const std::uint64_t beforeReads = census.reads;
+    const std::uint64_t beforeImageReads = census.fromImage;
+    const std::uint64_t beforeContentReads = census.fromImageContent;
+
     const RunResult result = _cpu.Interpret(_address, _maxInstructions, _stopAddress);
+
+    m_totals.reads += census.reads - beforeReads;
+    const std::uint64_t onImage = census.fromImage - beforeImageReads;
+    m_totals.imageReads += onImage;
+    const std::uint64_t onContent = census.fromImageContent - beforeContentReads;
+    m_totals.imageContentReads += onContent;
+    if (onImage != 0ull)
+    {
+      ++m_totals.callsOnImage;
+    }
+    else
+    {
+      ++m_totals.callsPure;
+    }
+    if (onContent != 0ull)
+    {
+      ++m_totals.callsOnContent;
+    }
 
     CallRecord record;
     for (std::size_t at = 0; at < beforeMemory.size(); ++at)
@@ -215,6 +317,55 @@ namespace Elite::Testing
       }
       ++m_totals.bucketCalls[bucket];
       m_totals.bucketBytes[bucket] += bytes;
+
+      /*
+       * How much of THIS record is the original's own content, verbatim (M6-b-3, §1 R-h).
+       *
+       * Only distinct records are measured, because only distinct records reach the fixture. The
+       * written bytes arrive sorted by address, so a contiguous run is a walk; each run is matched
+       * greedily -- take the longest verbatim stretch at this offset, count it, and carry on after
+       * it -- so a run that is half copied and half computed reports only its copied half.
+       */
+      if (_cpu.baseImage != nullptr && !record.memory.empty())
+      {
+        static const ImageIndex index(*_cpu.baseImage);
+
+        std::vector<std::uint8_t> run;
+        std::size_t at = 0;
+        while (at < record.memory.size())
+        {
+          std::size_t end = at + 1u;
+          while (end < record.memory.size() && record.memory[end].first == record.memory[end - 1u].first + 1u)
+          {
+            ++end;
+          }
+
+          run.clear();
+          for (std::size_t byte = at; byte < end; ++byte)
+          {
+            run.push_back(record.memory[byte].second);
+          }
+          m_totals.recordBytes += run.size();
+
+          std::size_t offset = 0;
+          while (offset < run.size())
+          {
+            const std::size_t length = index.LongestAt(run.data() + offset, run.size() - offset);
+            if (length >= CARRY_RUN)
+            {
+              m_totals.carryBytes += length;
+              ++m_totals.carryRuns;
+              m_totals.longestCarry = std::max<std::uint64_t>(m_totals.longestCarry, length);
+              offset += length;
+            }
+            else
+            {
+              ++offset;
+            }
+          }
+          at = end;
+        }
+      }
 
       m_answers.emplace(key, answer);
       if (m_mode == Mode::Keep && (m_threshold == 0u || bytes <= m_threshold))
