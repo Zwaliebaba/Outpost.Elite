@@ -530,7 +530,7 @@ namespace Elite
             // hands it straight to `NOISE`, whose only use for it is the value it returns when
             // the sound is switched off -- so it is unobservable, and the port passed `false`
             // until M2-d read the branch (§8).
-            StartEcm(_frame.universe.canvas, _frame.universe.status, _frame.universe.sound, true);
+            StartEcm(_frame.universe.canvas, _frame.universe.status, _frame.universe.sound, true, &_frame.universe.picture);
             return Tactic::Done;
           }
         }
@@ -953,7 +953,7 @@ namespace Elite
               .created)
         {
           ShowMessage(_frame.universe.canvas, _frame.ports.printer, _frame.universe.text, _frame.universe.sentences,
-                      _frame.universe.message, MESSAGE_INCOMING_MISSILE, _frame.universe.view);
+                      _frame.universe.message, MESSAGE_INCOMING_MISSILE, _frame.universe.view, &_frame.universe.picture);
           (void)PlaySoundEffect(_frame.universe.sound, SoundEffect::Missile, false);
         }
         return Tactic::Done;

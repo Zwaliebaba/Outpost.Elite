@@ -3,7 +3,9 @@
 #include "TextPrint.h"
 
 #include "EliteTypes.h"
+#include "Lines2x.h"
 #include "LookupTables.h"
+#include "TextPrint2x.h"
 
 namespace Elite
 {
@@ -236,7 +238,7 @@ namespace Elite
     _state.row = 1;
   }
 
-  void ResetCellColours(Canvas& _canvas) noexcept
+  void ResetCellColours(Canvas& _canvas, Picture* _picture) noexcept
   {
     /*
      * 6502: BOL3 / BOL4. SC starts at &6004 -- three cells past `celllook`'s base, which is the
@@ -257,6 +259,12 @@ namespace Elite
       for (int cell = 0; cell < 32; ++cell)
       {
         _canvas.Write(static_cast<std::uint16_t>(base + cell), TEXT_COLOUR_WHITE);
+      }
+      if (_picture != nullptr)
+      {
+        // The same thirty-two cells, as the four wide ones each becomes. `base` is one past the
+        // block, which is `celllook`'s three-cell offset plus the cursor's own one (ADR-002 §7).
+        SetCellRun2x(*_picture, row * Canvas::CELL_COLUMNS + 1, 32, TEXT_COLOUR_WHITE);
       }
     }
   }
@@ -287,7 +295,8 @@ namespace Elite
   }
 
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
-                        MessageState& _message) noexcept
+                        MessageState& _message, Picture* _picture,
+                        std::uint8_t _view) noexcept
   {
     // 6502: CLYNS -- LDA #0 / STA DLY / STA de. Whatever message was up is forgotten, which is why
     // `MESS` can clear the screen and then test `DLY` and find it zero (§6.67).
@@ -314,6 +323,11 @@ namespace Elite
         _canvas.Write(static_cast<std::uint16_t>(base + offset), 0);
       }
       base = static_cast<std::uint16_t>(base + Canvas::ROW_BYTES);
+    }
+
+    if (_picture != nullptr)
+    {
+      ClearMessageRows2x(*_picture, LayoutForView(_view));
     }
   }
 
@@ -388,6 +402,10 @@ namespace Elite
        * The recursion terminates because the clear leaves `YC` at 1.
        */
       ClearTextArea(m_canvas, m_state);
+      if (m_picture != nullptr)
+      {
+        ClearTextArea2x(*m_picture, Layout()); // Resolution.md §4, rule T3 -- every erase has a twin
+      }
       PrintGlyph(_character);
       return;
     }
@@ -415,6 +433,12 @@ namespace Elite
       {
         m_canvas.Write(static_cast<std::uint16_t>(previous + row), 0);
       }
+      if (m_picture != nullptr)
+      {
+        // The decrement above already moved the cursor, so this IS the cell just blanked. The
+        // layout counts canvas cells, and `XC` is four cells in from the first of them.
+        EraseCell2x(*m_picture, Layout(), static_cast<std::uint8_t>(TEXT_FIRST_COLUMN + m_state.column), m_state.row);
+      }
       return;
     }
 
@@ -423,18 +447,37 @@ namespace Elite
     ++m_state.column;
 
     const std::uint16_t glyph = GlyphPointer(_character);
+
+    // The eight bytes are KEPT as the loop reads them, so that the twin below draws the glyph the
+    // faithful printer drew rather than looking one up again. One font lookup in the tree means the
+    // two surfaces can disagree about where a glyph goes and never about which glyph it is.
+    std::array<std::uint8_t, 8> drawn{};
+
     for (int row = 7; row >= 0; --row)
     {
       const std::uint16_t source = static_cast<std::uint16_t>(glyph + row);
       const std::uint8_t bits =
         (source >= FONT_BASE && source < FONT_BASE + FONT_DATA.size()) ? FONT_DATA[source - FONT_BASE] : std::uint8_t{0};
 
+      drawn[static_cast<std::size_t>(row)] = bits;
       m_canvas.ExclusiveOr(static_cast<std::uint16_t>(offset + row), bits);
     }
 
     // 6502: LDY YC / celllook / LDY XC / LDA COL2 / STA (SC),Y -- the cell's colour, written after
     // the cursor moved, which is what makes the three-cell offset in celllook come out right.
     m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.palette);
+
+    if (m_picture != nullptr)
+    {
+      /*
+       * The cursor was advanced before the glyph was drawn, so the cell the glyph went on is the
+       * one BEFORE it -- which is what `offset` was computed from and what `celllook`'s three-cell
+       * base makes the colour write land on. `TEXT_FIRST_COLUMN` is the four cells of margin that
+       * turn an `XC` into a canvas cell.
+       */
+      const std::uint8_t cell = static_cast<std::uint8_t>(TEXT_FIRST_COLUMN + m_state.column - 1u);
+      PrintGlyph2x(*m_picture, Layout(), cell, m_state.row, drawn, m_state.palette);
+    }
   }
 
   void MoveCursorDown(TextState& _text) noexcept

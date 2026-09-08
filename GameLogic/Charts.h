@@ -124,7 +124,7 @@ namespace Elite
    * lines are drawn by LOIN, which plots by EOR, so drawing the same crosshair twice erases it --
    * that is how the cursor moves.
    */
-  void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view) noexcept;
+  void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: TT103 -- draw the crosshair at the selected system, on whichever chart is showing.
@@ -135,7 +135,7 @@ namespace Elite
    * to -36. So the visible window is off-centre, by different amounts on each axis, and the two
    * constants are four instructions apart in the original.
    */
-  void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view) noexcept;
+  void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: TT16 -- move the crosshairs and redraw them.
@@ -143,7 +143,7 @@ namespace Elite
    * Erase, move, draw. The move arrives as two signed steps and the original negates the vertical
    * one on the way in, because the keyboard's "down" is the screen's "up".
    */
-  void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY) noexcept;
+  void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: TT14 -- the circle showing how far the fuel reaches, and the crosshair at its centre.
@@ -160,12 +160,12 @@ namespace Elite
    * Both charts draw one under their title. X2 is 255 rather than the screen width, so the line
    * runs into the right margin; that is the original's, not a rounding here.
    */
-  void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept;
+  void DrawSeparator(Canvas& _canvas, std::uint8_t _y, Picture* _picture = nullptr) noexcept;
 
   /// 6502: NLIN -- LDA #23 / JSR INCYC / NLIN2. The cursor moves down one line and a rule is drawn
   /// at pixel row 23, in that order; the increment is `INCYC`'s and has nothing to do with the 23.
   /// One routine rather than two calls at its caller, so that it can be compared as one (M6-0-e).
-  void DrawTitleRule(Canvas& _canvas, TextState& _text) noexcept;
+  void DrawTitleRule(Canvas& _canvas, TextState& _text, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: TT22 -- the long-range chart.
@@ -264,7 +264,7 @@ namespace Elite
    * draws by EOR, and the second draws it at wherever TT111 settled.
    */
   NearestSystem SelectNearestSystem(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _sentences,
-                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy) noexcept;
+                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: hyp -- the hyperspace key, up to the point where the countdown starts.
@@ -280,7 +280,7 @@ namespace Elite
    */
   JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended, TextState& _text,
                                 ExtendedTextState& _sentences, MessageState& _message, ChartView& _view, JumpState& _jump,
-                                const SystemSeeds& _galaxy) noexcept;
+                                const SystemSeeds& _galaxy, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: HME2's HME3 loop -- find a system by the name that was typed.

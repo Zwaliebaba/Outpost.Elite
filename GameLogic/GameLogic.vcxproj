@@ -154,6 +154,7 @@
     <ClInclude Include="Colours.h" />
     <ClInclude Include="LoaderScreen.h" />
     <ClInclude Include="TextPrint.h" />
+    <ClInclude Include="TextPrint2x.h" />
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="HeapOffset.h" />
     <ClInclude Include="ShipBlueprint.h" />
@@ -163,6 +164,9 @@
     <ClInclude Include="ShipType.h" />
     <ClInclude Include="ShipMove.h" />
     <ClInclude Include="ShipDraw.h" />
+    <ClInclude Include="ShipDraw2x.h" />
+    <ClInclude Include="Lines2x.h" />
+    <ClInclude Include="Dashboard2x.h" />
     <ClInclude Include="LineHeap.h" />
     <ClInclude Include="Stardust.h" />
     <ClInclude Include="PlanetDraw.h" />
@@ -176,6 +180,7 @@
     <ClInclude Include="Lasers.h" />
     <ClInclude Include="Messages.h" />
     <ClInclude Include="Scanner.h" />
+    <ClInclude Include="Picture.h" />
     <ClInclude Include="Explosion.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="GameLoop.h" />
@@ -229,6 +234,7 @@
     <ClCompile Include="StateHash.cpp" />
     <ClCompile Include="Lines.cpp" />
     <ClCompile Include="TextPrint.cpp" />
+    <ClCompile Include="TextPrint2x.cpp" />
     <ClCompile Include="Galaxy.cpp" />
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Missions.cpp" />
@@ -256,6 +262,9 @@
     <ClCompile Include="ShipSlot.cpp" />
     <ClCompile Include="ShipMove.cpp" />
     <ClCompile Include="ShipDraw.cpp" />
+    <ClCompile Include="ShipDraw2x.cpp" />
+    <ClCompile Include="Lines2x.cpp" />
+    <ClCompile Include="Dashboard2x.cpp" />
     <ClCompile Include="Stardust.cpp" />
     <ClCompile Include="PlanetDraw.cpp" />
     <ClCompile Include="Dashboard.cpp" />
@@ -269,6 +278,7 @@
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />
+    <ClCompile Include="Picture.cpp" />
     <ClCompile Include="Explosion.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="GameLoop.cpp" />

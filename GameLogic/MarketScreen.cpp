@@ -160,7 +160,8 @@ namespace Elite
         for (;;)
         {
           // 6502: JSR CLYNS.
-          ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+          ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
+                       &_universe.picture, _universe.view);
 
           // 6502: LDA #204 / JSR TT27 -- "QUANTITY OF ".
           _ports.printer.Print(QUANTITY_OF_TOKEN);

@@ -7,6 +7,7 @@
 
 #include "Arith.h"
 #include "Canvas.h"
+#include "Picture.h"
 #include "Controls.h"
 #include "Dashboard.h"
 #include "ShipDraw.h"
@@ -51,13 +52,13 @@ namespace Elite
    * canvas's own -- it is addressed from `SCBASE` rather than from zero -- and doing it at the call
    * site keeps this routine about the loop rather than about the memory map.
    */
-  void ZeroPageDown(Canvas& _canvas, std::uint16_t _pageBase, std::uint8_t _first) noexcept;
+  void ZeroPageDown(Canvas& _canvas, std::uint16_t _pageBase, std::uint8_t _first, Picture* _picture = nullptr) noexcept;
 
   /// 6502: ZES1k -- the entry that zeroes a whole page, by entering `ZES2k` with Y = 0 so that the
   /// first `DEY` wraps to 255.
-  inline void ZeroWholePage(Canvas& _canvas, std::uint16_t _pageBase) noexcept
+  inline void ZeroWholePage(Canvas& _canvas, std::uint16_t _pageBase, Picture* _picture = nullptr) noexcept
   {
-    ZeroPageDown(_canvas, _pageBase, 0);
+    ZeroPageDown(_canvas, _pageBase, 0, _picture);
   }
 
   /*
@@ -74,7 +75,7 @@ namespace Elite
 
   /// 6502: BOXS -- a horizontal line right across the screen on row `_row`, through `HLOIN`.
   /// `X1 = 0` and `X2 = 255`, which is the whole 256-pixel width and not the 32 cells of text.
-  void DrawScreenRule(Canvas& _canvas, std::uint8_t _row) noexcept;
+  void DrawScreenRule(Canvas& _canvas, std::uint8_t _row, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: BOXS2 -- EOR one byte into all eight rows of a character cell, eighteen cells down.
@@ -83,14 +84,15 @@ namespace Elite
    * border comes and goes without the routine knowing whether it is drawing or rubbing out.
    * `_cell` is `SC` and it steps by &140, one character row.
    */
-  void ToggleVerticalEdge(Canvas& _canvas, std::uint16_t _cell, std::uint8_t _pattern, std::uint8_t _rows) noexcept;
+  void ToggleVerticalEdge(Canvas& _canvas, std::uint16_t _cell, std::uint8_t _pattern, std::uint8_t _rows,
+                          Picture* _picture = nullptr) noexcept;
 
   /// 6502: BLUEBANDS -- 24 bytes of &FF at `_cell`, eighteen character rows down. Two of these make
   /// the coloured bands either side of the space view, and unlike `BOXS2` it STORES.
-  void DrawColourBand(Canvas& _canvas, std::uint16_t _cell) noexcept;
+  void DrawColourBand(Canvas& _canvas, std::uint16_t _cell, Picture* _picture = nullptr) noexcept;
 
   /// 6502: BLUEBAND -- both bands, the left at `SCBASE` and the right 37 cells along.
-  void DrawColourBands(Canvas& _canvas) noexcept;
+  void DrawColourBands(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   // 6502: abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
   // `Universe.h` with M3-a, because it is state and that is where the state lives now.
@@ -117,7 +119,7 @@ namespace Elite
    * `BOXS2` leaves X at zero -- and it is the kernel's byte, a local since M2-b. The port wrote
    * `T2` until M2-c and nothing read it (§8).
    */
-  void DrawBorder(Canvas& _canvas, std::uint8_t _rows) noexcept;
+  void DrawBorder(Canvas& _canvas, std::uint8_t _rows, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: BOX -- the whole-screen border, which is `BOX2` with a floor under it.
@@ -128,7 +130,7 @@ namespace Elite
    *
    * `TT66` does not call this; `DEATH` does, once, over the screen `TT66` has just cleared.
    */
-  void DrawFullBorder(Canvas& _canvas) noexcept;
+  void DrawFullBorder(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   /// 6502: LDX #18 -- what a `JSR BOX2` gets, which is the space view's height in character rows.
   inline constexpr std::uint8_t BORDER_ROWS_SPACE_VIEW = 18;
@@ -168,8 +170,8 @@ namespace Elite
    * time and differ on the first.
    */
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video,
-                     MemoryMap& _map) noexcept;
+                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map,
+                     Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
@@ -189,7 +191,7 @@ namespace Elite
    */
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
                          const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass,
-                         VideoState& _video, MemoryMap& _map, std::uint8_t _view) noexcept;
+                         VideoState& _video, MemoryMap& _map, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
   /*

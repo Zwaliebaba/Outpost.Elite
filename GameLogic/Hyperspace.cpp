@@ -245,7 +245,7 @@ namespace Elite
     // 6502: JSR TTX66 / LDA QQ11 / BNE TT114 / INC QQ11, and then it falls into `TT110`.
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
                       _universe.status, _universe.commander.fuel, _universe.compass, _universe.video,
-                      _universe.memoryMap, _universe.view);
+                      _universe.memoryMap, _universe.view, &_universe.picture);
 
     if (_universe.view != 0u)
     {
@@ -335,7 +335,7 @@ namespace Elite
      * stock its market. The routine says otherwise and the routine wins.
      */
     ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, GALACTIC_MESSAGE,
-                _universe.view);
+                _universe.view, &_universe.picture);
     CurrentSystemToCrosshairs(_universe.commander, _chart.cursorX, _chart.cursorY);
   }
 

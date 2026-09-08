@@ -2,6 +2,8 @@
 
 #include "Charts.h"
 
+#include "Lines2x.h"
+
 #include "EliteTypes.h"
 
 #include <array>
@@ -112,7 +114,7 @@ namespace Elite
     return _value;
   }
 
-  void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view) noexcept
+  void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view, Picture* _picture) noexcept
   {
     // 6502: LDA #24 / LDX QQ11 / BPL TT178 / LDA #0 -- the long-range chart is 24 rows down.
     const std::uint8_t top = ShortRange(_view) ? std::uint8_t{0} : LONG_RANGE_TOP;
@@ -128,6 +130,10 @@ namespace Elite
     stroke.y1 = AddWithCarry(_at.y, top, false).value;
     stroke.y2 = stroke.y1;
     (void)DrawLine(_canvas, stroke);
+    if (_picture != nullptr)
+    {
+      DrawLine2x(*_picture, stroke);
+    }
 
     // 6502: TT86 -- the vertical stroke's top.
     const std::uint16_t above = static_cast<std::uint16_t>(_at.y) - _at.size;
@@ -151,9 +157,13 @@ namespace Elite
     stroke.x1 = _at.x;
     stroke.x2 = _at.x;
     (void)DrawLine(_canvas, stroke);
+    if (_picture != nullptr)
+    {
+      DrawLine2x(*_picture, stroke);
+    }
   }
 
-  void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view) noexcept
+  void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view, Picture* _picture) noexcept
   {
     Crosshairs at;
 
@@ -163,7 +173,7 @@ namespace Elite
       at.x = _view.cursorX;
       at.y = static_cast<std::uint8_t>(_view.cursorY >> 1);
       at.size = 4;
-      DrawCrosshairs(_canvas, at, _view.view);
+      DrawCrosshairs(_canvas, at, _view.view, _picture);
       return;
     }
 
@@ -190,13 +200,13 @@ namespace Elite
 
     at.y = AddWithCarry(static_cast<std::uint8_t>(dy << 1), SHORT_RANGE_CENTRE_Y, false).value;
     at.size = 8;
-    DrawCrosshairs(_canvas, at, _view.view);
+    DrawCrosshairs(_canvas, at, _view.view, _picture);
   }
 
-  void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY) noexcept
+  void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY, Picture* _picture) noexcept
   {
     // 6502: JSR TT103 -- the lines are drawn by EOR, so this erases the crosshair that is there.
-    DrawTargetCrosshairs(_canvas, _view);
+    DrawTargetCrosshairs(_canvas, _view, _picture);
 
     /*
      * 6502: DEY / TYA / EOR #255 -- the vertical step arrives negated, because a key that means
@@ -207,7 +217,7 @@ namespace Elite
     _view.cursorX = StepCoordinate(_view.cursorX, _stepX);
 
     // 6502: falls through into TT103 again, which redraws at the new place.
-    DrawTargetCrosshairs(_canvas, _view);
+    DrawTargetCrosshairs(_canvas, _view, _picture);
   }
 
   void DrawFuelRange(Universe& _universe, const ChartView& _view) noexcept
@@ -222,7 +232,7 @@ namespace Elite
       at.x = SHORT_RANGE_CENTRE_X;
       at.y = SHORT_RANGE_CENTRE_Y;
       at.size = 16;
-      DrawCrosshairs(_universe.canvas, at, _view.view);
+      DrawCrosshairs(_universe.canvas, at, _view.view, &_universe.picture);
 
       circle.x = at.x;
       circle.y = at.y;
@@ -234,7 +244,7 @@ namespace Elite
       at.x = _view.homeX;
       at.y = static_cast<std::uint8_t>(_view.homeY >> 1);
       at.size = 7;
-      DrawCrosshairs(_universe.canvas, at, _view.view);
+      DrawCrosshairs(_universe.canvas, at, _view.view, &_universe.picture);
 
       circle.x = at.x;
 
@@ -260,23 +270,29 @@ namespace Elite
       _universe.heaps.lsp = 1u;
       _universe.heaps.stp = circle.step;
       const Projection centre{circle.x, 0u, circle.y, 0u};
-      DrawBall(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, centre, circle.radius, false);
+      DrawBall(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, centre, circle.radius, false,
+               &_universe.picture);
     }
   }
 
-  void DrawTitleRule(Canvas& _canvas, TextState& _text) noexcept
+  void DrawTitleRule(Canvas& _canvas, TextState& _text, Picture* _picture) noexcept
   {
     // 6502: LDA #23 / JSR INCYC / (fall into NLIN2) -- the cursor moves down one line FIRST, and
     // the increment is INCYC's own; the 23 is where the rule goes and nothing else.
     ++_text.row;
-    DrawSeparator(_canvas, LONG_RANGE_RULE_TOP);
+    DrawSeparator(_canvas, LONG_RANGE_RULE_TOP, _picture);
   }
 
-  void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept
+  void DrawSeparator(Canvas& _canvas, std::uint8_t _y, Picture* _picture) noexcept
   {
     // 6502: NLIN2 -- LDX #0 / STX X1 / DEX / STX X2, so the line runs to 255 rather than to the
     // edge of the drawing area, and its right end lands in the margin.
-    (void)DrawLine(_canvas, Line{0u, _y, 255u, _y});
+    const Line rule{0u, _y, 255u, _y};
+    (void)DrawLine(_canvas, rule);
+    if (_picture != nullptr)
+    {
+      DrawLine2x(*_picture, rule);
+    }
   }
 
   void DrawLongRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
@@ -286,8 +302,8 @@ namespace Elite
     _ports.printer.Print(TITLE_LONG_RANGE);
 
     // 6502: JSR NLIN -- the rule under the title, and then a second rule at 152, under the chart.
-    DrawTitleRule(_universe.canvas, _universe.text);
-    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM);
+    DrawTitleRule(_universe.canvas, _universe.text, &_universe.picture);
+    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM, &_universe.picture);
 
     // 6502: JSR TT14 -- the fuel circle, before the dots rather than after.
     DrawFuelRange(_universe, _view);
@@ -305,11 +321,14 @@ namespace Elite
       const std::uint8_t distance = static_cast<std::uint8_t>(seeds.bytes[4] | 0x50u); // 6502: STA ZZ
       const std::uint8_t y = AddWithCarry(static_cast<std::uint8_t>(seeds.bytes[1] >> 1), LONG_RANGE_TOP, false).value;
       PlotPixel(_universe.canvas, seeds.bytes[3], y, distance);
+      // The map's dots are eight-bit chart coordinates with nothing under them, so the wide dot is
+      // those numbers doubled. RS-5 re-flows the map itself; this puts it on the surface.
+      PlotPixel2x(_universe.picture, 2 * static_cast<int>(seeds.bytes[3]), 2 * static_cast<int>(y), distance);
       NextSystem(seeds);
     }
 
     // 6502: the fall-through into TT15 with QQ19 set from QQ9 and QQ10.
-    DrawTargetCrosshairs(_universe.canvas, _view);
+    DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
   }
 
   void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
@@ -329,10 +348,10 @@ namespace Elite
 
     _universe.text.column = 7;
     _ports.printer.Print(TITLE_SHORT_RANGE);
-    DrawSeparator(_universe.canvas, SHORT_RANGE_RULE);
+    DrawSeparator(_universe.canvas, SHORT_RANGE_RULE, &_universe.picture);
 
     DrawFuelRange(_universe, _view);
-    DrawTargetCrosshairs(_universe.canvas, _view);
+    DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
 
     /*
      * 6502: EE3 -- LDX #24 / STA XX1,X, counting down.
@@ -465,7 +484,7 @@ namespace Elite
            */
           ClearSunHeap(_universe.heaps);
           const Projection centre{screenX, 0u, screenY, 0u};
-          DrawSun(_universe.canvas, _universe.heaps, _universe.math, _universe.rng, centre, radius);
+          DrawSun(_universe.canvas, _universe.heaps, _universe.math, _universe.rng, centre, radius, &_universe.picture);
           ClearSunHeap(_universe.heaps);
         }
       }
@@ -503,7 +522,7 @@ namespace Elite
   }
 
   NearestSystem SelectNearestSystem(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _sentences,
-                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy) noexcept
+                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy, Picture* _picture) noexcept
   {
     // 6502: hm -- JSR TT103 / JSR TT111 / JSR TT103 / JMP CLYNS. The first call rubs the crosshair
     // out, because LOIN draws by EOR and drawing it twice is how it moves.
@@ -513,17 +532,17 @@ namespace Elite
     _view.cursorX = nearest.x;
     _view.cursorY = nearest.y;
 
-    DrawTargetCrosshairs(_canvas, _view);
+    DrawTargetCrosshairs(_canvas, _view, _picture);
 
     // 6502: JMP CLYNS, which is `ClearMessageRows` and was a seam until M3-b-3b.
-    ClearMessageRows(_canvas, _printer, _text, _sentences, _message);
+    ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, _view.view);
 
     return nearest;
   }
 
   JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended, TextState& _text,
                                 ExtendedTextState& _sentences, MessageState& _message, ChartView& _view, JumpState& _jump,
-                                const SystemSeeds& _galaxy) noexcept
+                                const SystemSeeds& _galaxy, Picture* _picture) noexcept
   {
     if (_jump.docked != 0)
     {
@@ -533,7 +552,7 @@ namespace Elite
        * The message is an EXTENDED token, which is why this routine needs both printers: the rest
        * of hyp prints recursive ones.
        */
-      ClearMessageRows(_canvas, _printer, _text, _sentences, _message); // 6502: JSR CLYNS
+      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, _view.view); // 6502: JSR CLYNS
       _text.column = 15;
       _extended.Print(DOCKED_TOKEN);
       return JumpOutcome::Docked;
@@ -569,7 +588,7 @@ namespace Elite
     }
     else
     {
-      const NearestSystem nearest = SelectNearestSystem(_canvas, _printer, _text, _sentences, _message, _view, _galaxy);
+      const NearestSystem nearest = SelectNearestSystem(_canvas, _printer, _text, _sentences, _message, _view, _galaxy, _picture);
       _jump.distance = nearest.distance;
       _jump.target = nearest.seeds;
     }

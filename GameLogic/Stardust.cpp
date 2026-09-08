@@ -3,6 +3,7 @@
 #include "Stardust.h"
 
 #include "EliteTypes.h"
+#include "Lines2x.h"
 
 namespace Elite
 {
@@ -40,15 +41,20 @@ namespace Elite
   }
 
   std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend, std::uint8_t _across,
-                            std::uint8_t _down, std::uint8_t _distance) noexcept
+                            std::uint8_t _down, std::uint8_t _distance, Picture* _picture, std::uint8_t _acrossLow,
+                            std::uint8_t _downLow) noexcept
   {
     const AddSignedResult sum = AddSigned(_value, _addend);
     _dust.yLow[_at] = sum.low; // 6502: STX SYL,Y
     (void)PlotRelativePixel(_canvas, _across, _down, _distance);
+    if (_picture != nullptr)
+    {
+      PlotRelativePixel2x(*_picture, _across, _down, _acrossLow, _downLow, _distance);
+    }
     return sum.high; // 6502: STA YY+1
   }
 
-  void FlipStardust(Canvas& _canvas, Stardust& _dust) noexcept
+  void FlipStardust(Canvas& _canvas, Stardust& _dust, Picture* _picture) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
@@ -58,6 +64,13 @@ namespace Elite
       _dust.x[at] = was;
 
       (void)PlotRelativePixel(_canvas, was, _dust.y[at], _dust.z[at]);
+      if (_picture != nullptr)
+      {
+        // The fractions are NOT swapped by `FLIP`, so the twin's half-pixel goes on the axis the
+        // byte now belongs to rather than the one it came from -- which is what the next frame's
+        // erase will read, so the pair still holds (Resolution.md section 13).
+        PlotRelativePixel2x(*_picture, was, _dust.y[at], _dust.xLow[at], _dust.yLow[at], _dust.z[at]);
+      }
     }
   }
 
@@ -94,10 +107,18 @@ namespace Elite
 
   } // namespace
 
-  void MoveStardustAhead(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept
+  void MoveStardustAhead(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng, Picture* _picture) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
+      /*
+       * `SXL` and `SYL` as the last frame's plot left them, staged beside the position that plot
+       * used because both are overwritten before the erase below reaches them. They are the wide
+       * mark's half-pixel and nothing faithful reads them (Resolution.md section 4.3).
+       */
+      const std::uint8_t wasAcrossLow = _dust.xLow[at];
+      const std::uint8_t wasDownLow = _dust.yLow[at];
+
       // 6502: STL1 -- the speed over the distance, halved twice, is how far this speck moves.
       // The `ORA #1` stops a distant speck dividing by zero further down.
       const ShiftResult halved = HalveTwice(DivideSpeedByDistance(_flight, _dust, at));
@@ -142,7 +163,8 @@ namespace Elite
       _dust.xLow[at] = sum.low;
 
       // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / EOR #128 / JSR PIX1.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.beta ^ 0x80u)}, y, x1, y1, distance);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.beta ^ 0x80u)}, y, x1, y1, distance,
+                          _picture, wasAcrossLow, wasDownLow);
 
       // 6502: the three kill tests. A speck that has drifted more than 120 either way, or come
       // closer than 16, is not clipped -- it is thrown away and a new one rolled at the edge.
@@ -193,13 +215,27 @@ namespace Elite
       }
 
       (void)PlotRelativePixel(_canvas, x1, y1, distance);
+      if (_picture != nullptr)
+      {
+        // The fractions the loop has just stored, which are this speck's own: the mark is drawn at
+        // the position the two bytes name, and next frame's erase reads the same two.
+        PlotRelativePixel2x(*_picture, x1, y1, _dust.xLow[at], _dust.yLow[at], distance);
+      }
     }
   }
 
-  void MoveStardustAstern(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept
+  void MoveStardustAstern(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng, Picture* _picture) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
+      /*
+       * `SXL` and `SYL` as the last frame's plot left them, staged beside the position that plot
+       * used because both are overwritten before the erase below reaches them. They are the wide
+       * mark's half-pixel and nothing faithful reads them (Resolution.md section 4.3).
+       */
+      const std::uint8_t wasAcrossLow = _dust.xLow[at];
+      const std::uint8_t wasDownLow = _dust.yLow[at];
+
       // 6502: STL6 -- the same opening as the front view, down to the `ORA #1`. The carry the
       // second `ROR A` leaves is not read: the front view's next instruction is an `SBC`, and this
       // one's is a `JSR`.
@@ -255,7 +291,7 @@ namespace Elite
       _dust.xLow[at] = sum.low;
 
       // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / JSR PIX1.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.beta}, y, x1, y1, distance);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.beta}, y, x1, y1, distance, _picture, wasAcrossLow, wasDownLow);
 
       x1 = x.hi;
       _dust.x[at] = x.hi;
@@ -312,6 +348,12 @@ namespace Elite
       }
 
       (void)PlotRelativePixel(_canvas, x1, y1, distance);
+      if (_picture != nullptr)
+      {
+        // The fractions the loop has just stored, which are this speck's own: the mark is drawn at
+        // the position the two bytes name, and next frame's erase reads the same two.
+        PlotRelativePixel2x(*_picture, x1, y1, _dust.xLow[at], _dust.yLow[at], distance);
+      }
     }
   }
 
@@ -340,7 +382,8 @@ namespace Elite
 
   } // namespace
 
-  void MoveStardustSideways(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept
+  void MoveStardustSideways(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view,
+                            Picture* _picture) noexcept
   {
     /*
      * 6502: LDA #0 / CPX #2 / ROR A / STA RAT / EOR #%10000000 / STA RAT2.
@@ -357,6 +400,14 @@ namespace Elite
 
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
+      /*
+       * `SXL` and `SYL` as the last frame's plot left them, staged beside the position that plot
+       * used because both are overwritten before the erase below reaches them. They are the wide
+       * mark's half-pixel and nothing faithful reads them (Resolution.md section 4.3).
+       */
+      const std::uint8_t wasAcrossLow = _dust.xLow[at];
+      const std::uint8_t wasDownLow = _dust.yLow[at];
+
       /*
        * 6502: STL2 -- and the first thing to notice is what is NOT here. The dust does not come
        * closer or recede: `SZ` is untouched from one frame to the next, and only a speck that is
@@ -393,7 +444,8 @@ namespace Elite
 
       sum = MultiplyAndAdd(y.hi, roll, y);
       // 6502: STA S / STX R / LDA #0 / STA P / LDA ALPHA / JSR PIX1.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.alpha}, sum.Pair(), x1, y1, distance);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.alpha}, sum.Pair(), x1, y1, distance, _picture, wasAcrossLow,
+                          wasDownLow);
 
       _dust.x[at] = x.hi;
       x1 = x.hi;
@@ -461,26 +513,32 @@ namespace Elite
       }
 
       (void)PlotRelativePixel(_canvas, x1, y1, distance);
+      if (_picture != nullptr)
+      {
+        // The fractions the loop has just stored, which are this speck's own: the mark is drawn at
+        // the position the two bytes name, and next frame's erase reads the same two.
+        PlotRelativePixel2x(*_picture, x1, y1, _dust.xLow[at], _dust.yLow[at], distance);
+      }
     }
 
     // 6502: the loop leaves through `BEQ ST2`, so the angles are put back on the way out.
     FlipRollAndPitch(_flight);
   }
 
-  void MoveStardust(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept
+  void MoveStardust(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view, Picture* _picture) noexcept
   {
     // 6502: STARS -- LDX VIEW / BEQ STARS1 / DEX / BNE ST11 / JMP STARS6 / .ST11 JMP STARS2.
     if (_view == 0u)
     {
-      MoveStardustAhead(_canvas, _flight, _dust, _rng);
+      MoveStardustAhead(_canvas, _flight, _dust, _rng, _picture);
     }
     else if (_view == 1u)
     {
-      MoveStardustAstern(_canvas, _flight, _dust, _rng);
+      MoveStardustAstern(_canvas, _flight, _dust, _rng, _picture);
     }
     else
     {
-      MoveStardustSideways(_canvas, _flight, _dust, _rng, _view);
+      MoveStardustSideways(_canvas, _flight, _dust, _rng, _view, _picture);
     }
   }
 

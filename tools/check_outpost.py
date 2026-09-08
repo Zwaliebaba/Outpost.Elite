@@ -25,6 +25,11 @@ because M3 moves every byte of game state into one `Elite::Universe` and rewrite
 it, which is a rename of a hundred member names in files no Linux runner compiles -- the hole the
 two checks above leave open at exactly the width of the slice about to go through it.
 
+And it checks that every bare `m_member` and `_parameter` the app mentions is one it DECLARES.
+That half exists because a scripted rename can rewrite the uses before the declarations and leave
+neither: Resolution.md RS-0 turned `_screen` into `_picture` in the bodies and not in the
+signatures, and five C2065s reached the Windows job through a tree all sixteen checks called clean.
+
     python tools/check_outpost.py --self-test
 
 It reads `struct X { ... }` and `class X { ... }` out of `GameLogic/*.h` with their base classes,
@@ -79,7 +84,7 @@ OWN_DECLARATION = re.compile(r"\b(?:Outpost::)?([A-Z][A-Za-z_]\w*)\s*(?:<[^;{}()
                              r"([a-z_]\w*)\s*(?=[;={,)]|\{)")
 
 # ANY `Type name`, whatever the type is. It exists so the app-type pass can tell an identifier it
-# knows from one it only THINKS it knows: `CanvasPresenter.cpp` declares two different `view`s, an
+# knows from one it only THINKS it knows: `ScreenPresenter.cpp` declares two different `view`s, an
 # `Outpost::Viewport` and a `D3D12_SHADER_RESOURCE_VIEW_DESC`, and a check with one scope per file
 # would otherwise read the Direct3D one's members against the Viewport's.
 ANY_DECLARATION = re.compile(r"\b([A-Za-z_][\w:]*)\s*(?:<[^;{}()]*>)?\s*[*&]?\s*&?\s*"
@@ -296,7 +301,7 @@ def check_chains(_sources: list[Path], _members: dict[str, set[str]],
             for match in pattern.finditer(text):
                 scope.setdefault(match.group(2), set()).add(match.group(1))
 
-        # The same declining `check_members` does, for the same file: `CanvasPresenter.cpp` has an
+        # The same declining `check_members` does, for the same file: `ScreenPresenter.cpp` has an
         # `Outpost::Viewport view` and a `D3D12_SHADER_RESOURCE_VIEW_DESC view`, and one scope per
         # file cannot tell which `view.something` is which.
         for match in ANY_DECLARATION.finditer(text):
@@ -455,6 +460,57 @@ def check_initialisers(_sources: list[Path]) -> tuple[int, list[str]]:
                     if entry.group(1) not in declared:
                         wrong.append(f"  FAIL  {source.name}: {name}'s constructor initialises "
                                      f"{entry.group(1)}, which is not one of its members or bases")
+
+    return checked, wrong
+
+
+def check_bare_identifiers(_sources: list[Path], _ownMembers: dict[str, set[str]]) -> tuple[int, list[str]]:
+    """Every `m_member` and every `_parameter` the app MENTIONS is one it also DECLARES.
+
+    WHY THIS EXISTS, and it is the fourth answer to the question the other three leave open: what
+    catches a BARE IDENTIFIER that resolves to nothing? The name check reads `Elite::Name`, the
+    arity check reads a call's arguments, the member check reads `name.member` and the initialiser
+    check reads a constructor's list -- and none of them can see `m_picture` used where the class
+    declares `m_screen`, or `_picture.Resolve(...)` in a function whose parameter is `_screen`.
+
+    That is C2065, "undeclared identifier", and it is what a scripted rename produces when the rule
+    that rewrites the USES runs before the rule that would have rewritten the DECLARATION. It cost
+    a red Windows build on Resolution.md RS-0, five errors across three files, several minutes after
+    a push that all sixteen checks had passed -- the third break through the hole this file exists
+    to close, after `DockedShip` and `ClearMessageRows` (see the header).
+
+    Two halves, and each is deliberately conservative:
+
+      - A `m_name` is DECLARED if any type in `Outpost/` declares it, rather than the type whose
+        method uses it. Attributing a use to its enclosing class needs a parser; the union catches
+        a name that exists nowhere, which is the failure, and never flags one that exists.
+      - A `_name` is DECLARED IN ITS FILE if the file has an occurrence with a type in front of it
+        -- `Type& _name,` -- rather than in the function that uses it. Same trade, same reason.
+
+    So it reports a name the app declares NOWHERE. A name declared in the wrong place still
+    compiles on the Windows job and is still this file's blind spot; only a compiler closes that.
+    """
+    checked = 0
+    wrong: list[str] = []
+
+    declared: set[str] = set()
+    for members in _ownMembers.values():
+        declared |= {name for name in members if name.startswith("m_")}
+
+    for source in _sources:
+        text = strip_comments(source.read_text(encoding="utf-8", errors="replace"))
+
+        for name in sorted(set(re.findall(r"\bm_[A-Za-z_]\w*", text))):
+            checked += 1
+            if name not in declared:
+                wrong.append(f"  FAIL  {source.name} names {name}, which no type in Outpost/ declares")
+
+        # A parameter is spelled with a type in front of it exactly once, at its declaration.
+        parameters = set(re.findall(r"[A-Za-z_>\]]\s*[*&]*\s*(_[a-z]\w*)\s*[,)=\[]", text))
+        for name in sorted(set(re.findall(r"\b_[a-z]\w*", text))):
+            checked += 1
+            if name not in parameters:
+                wrong.append(f"  FAIL  {source.name} names {name}, which it declares as no parameter")
 
     return checked, wrong
 
@@ -628,6 +684,38 @@ def self_test() -> int:
             print(line)
         return 1
 
+    # ---- and the bare-identifier check, planted with the rename that broke RS-0 ---------------
+    #
+    # Resolution.md RS-0 renamed `Elite::Screen` to `Elite::Picture` with a scripted replacement
+    # whose rules ran in the wrong order: the uses became `_picture` and `m_picture` and the
+    # declarations stayed `_screen` and `m_screen`. Five C2065s on the Windows job, several minutes
+    # after every other check had passed. Both halves are planted here.
+    with tempfile.TemporaryDirectory() as folder:
+        planted = Path(folder) / "Planted.cpp"
+        planted.write_text("void Present(const Picture& _screen) { _picture.Resolve(); }\n"
+                           "void Turn() { return m_absent->Draw(); }\n", encoding="utf-8")
+        bareChecked, bareWrong = check_bare_identifiers([planted], {"Held": {"m_present"}})
+
+    if bareChecked == 0:
+        print("FAIL  the self-test's bare identifiers were not read at all")
+        return 1
+    if not any("_picture" in line for line in bareWrong):
+        print("FAIL  the self-test's undeclared parameter was not reported")
+        return 1
+    if not any("m_absent" in line for line in bareWrong):
+        print("FAIL  the self-test's undeclared member was not reported")
+        return 1
+    if any("_screen" in line for line in bareWrong):
+        print("FAIL  the self-test reported a parameter that IS declared")
+        return 1
+
+    realBare = check_bare_identifiers(sorted(list(APP.glob("*.cpp")) + list(APP.glob("*.h"))), declared_members(APP))[1]
+    if realBare:
+        print("FAIL  the tree itself does not pass the bare-identifier check")
+        for line in realBare:
+            print(line)
+        return 1
+
     # ---- and the initialiser check, planted the same way -------------------------------------
     with tempfile.TemporaryDirectory() as folder:
         planted = Path(folder) / "Planted.cpp"
@@ -745,8 +833,8 @@ def self_test() -> int:
         return 1
 
     print(f"OK    self-test passed: a planted Elite:: member, a planted Outpost:: member, a planted "
-          f"initialiser, a planted missing brace, a planted unbraced case and a planted broken "
-          f"chain were caught, "
+          f"initialiser, a planted bare identifier, a planted missing brace, a planted unbraced "
+          f"case and a planted broken chain were caught, "
           f"{len(members) + len(ownMembers)} types parsed, the tree is clean")
     return 0
 
@@ -807,6 +895,10 @@ def main() -> int:
     initialisersChecked, badInitialisers = check_initialisers(sources)
     wrong.extend(badInitialisers)
 
+    # ---- and every bare m_member and _parameter it mentions -----------------------------------
+    bareChecked, badBare = check_bare_identifiers(sources, ownMembers)
+    wrong.extend(badBare)
+
     # ---- and that every one of them still balances its delimiters ----------------------------
     bracesChecked, unbalanced = check_braces(sources)
     wrong.extend(unbalanced)
@@ -828,6 +920,7 @@ def main() -> int:
     print(f"calls checked    {checked}")
     print(f"members checked  {membersChecked}")
     print(f"initialisers     {initialisersChecked}")
+    print(f"bare names       {bareChecked}")
     print(f"braces balanced  {bracesChecked}")
     print(f"switch bodies    {switchesChecked}")
     print(f"chained members  {chainsChecked}")

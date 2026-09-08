@@ -2,7 +2,7 @@
 
 #include "Presentation.h"
 
-#include "Canvas.h"
+#include "Picture.h"
 
 namespace Outpost
 {
@@ -39,7 +39,7 @@ namespace Outpost
     return packed;
   }
 
-  Viewport FitCanvas(int _clientWidth, int _clientHeight) noexcept
+  Viewport FitPicture(int _clientWidth, int _clientHeight) noexcept
   {
     Viewport view{};
     if (_clientWidth <= 0 || _clientHeight <= 0)
@@ -47,8 +47,8 @@ namespace Outpost
       return view;
     }
 
-    const int horizontal = _clientWidth / Elite::Canvas::WIDTH;
-    const int vertical = _clientHeight / Elite::Canvas::HEIGHT;
+    const int horizontal = _clientWidth / Elite::Picture::WIDTH;
+    const int vertical = _clientHeight / Elite::Picture::HEIGHT;
 
     view.scale = (horizontal < vertical) ? horizontal : vertical;
     if (view.scale < 1)
@@ -56,8 +56,8 @@ namespace Outpost
       view.scale = 1;
     }
 
-    view.width = Elite::Canvas::WIDTH * view.scale;
-    view.height = Elite::Canvas::HEIGHT * view.scale;
+    view.width = Elite::Picture::WIDTH * view.scale;
+    view.height = Elite::Picture::HEIGHT * view.scale;
 
     // Centred, and an odd remainder leaves the extra column on the right rather than splitting a
     // pixel, which is the only choice that keeps the scale integral.

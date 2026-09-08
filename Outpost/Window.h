@@ -60,7 +60,7 @@ namespace Outpost
     }
 
     /// Dispatches everything waiting and returns false once the window has closed. It does NOT
-    /// block: the vsync wait belongs to `CanvasPresenter::Present`, so that a frame is what paces
+    /// block: the vsync wait belongs to `ScreenPresenter::Present`, so that a frame is what paces
     /// the loop rather than a timer.
     [[nodiscard]] bool Pump() noexcept;
 

@@ -29,7 +29,7 @@ namespace Elite
   }
 
   void ShowMessage(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended, MessageState& _message,
-                   std::uint8_t _token, std::uint8_t _view) noexcept
+                   std::uint8_t _token, std::uint8_t _view, Picture* _picture) noexcept
   {
     /*
      * 6502: MESS, and `me1` above it, which is reached by a branch from inside MESS and falls back
@@ -43,7 +43,7 @@ namespace Elite
       if (_view != 0u)
       {
         // 6502: JSR CLYNS -- which leaves the cursor on row 21 and clears DLY and de (§6.67).
-        ClearMessageRows(_canvas, _printer, _text, _extended, _message);
+        ClearMessageRows(_canvas, _printer, _text, _extended, _message, _picture, _view);
 
         /*
          * 6502: LDA #25 / EQUB &2C.

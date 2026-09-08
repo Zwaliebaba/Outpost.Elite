@@ -11,54 +11,102 @@ namespace Elite
   namespace
   {
     /*
-     * One character cell, resolved into eight rows of the output image.
+     * The four colours a multicolour cell can offer, in the order its two bits select them.
      *
-     * The two modes are one function because everything except the innermost loop is shared -- the
-     * cell's byte in screen RAM, the walk down its eight sub-rows, where in the output each one goes.
-     * Splitting them would duplicate all of that so that the two halves of a split screen could
-     * disagree about it, which is the bug this file just had.
+     * A helper rather than four lines inside the decode, because `Screen` needs the same tuple for
+     * the energy bomb's reinterpretation of its own bits (Design/Resolution.md section 3.2) and the
+     * order -- background, high nibble, low nibble, colour RAM -- is the thing to state once.
      */
-    void ResolveCell(std::uint8_t* _out, int _outStride, const std::uint8_t* _bitmap, std::uint8_t _cellByte, std::uint8_t _colourRam,
-                     Colour _background, bool _multicolour) noexcept
+    std::array<std::uint8_t, 4> MulticolourChoices(std::uint8_t _cellByte, std::uint8_t _colourRam, Colour _background) noexcept
     {
-      // 6502: the nibbles of the cell's byte in screen RAM. Both modes read them; they differ only
-      // in what selects between them.
-      const std::uint8_t high = static_cast<std::uint8_t>(_cellByte >> 4);
-      const std::uint8_t low = static_cast<std::uint8_t>(_cellByte & 0x0Fu);
-
-      // The four colours a multicolour cell can offer, in the order the two bits select them.
-      const std::array<std::uint8_t, 4> colours = {ColourIndex(_background), high, low, static_cast<std::uint8_t>(_colourRam & 0x0Fu)};
-
-      for (int subRow = 0; subRow < 8; ++subRow)
-      {
-        const std::uint8_t bits = _bitmap[subRow];
-        std::uint8_t* row = _out + static_cast<std::size_t>(subRow) * _outStride;
-
-        if (_multicolour)
-        {
-          for (int pixel = 0; pixel < 4; ++pixel)
-          {
-            const std::uint8_t colour = colours[(bits >> (6 - 2 * pixel)) & 0x03u];
-
-            // A multicolour pixel is two screen columns wide. This is the only doubling in the port,
-            // and it is here rather than in the shader so that the canvas the golden tests hash is
-            // the image a person would see.
-            row[pixel * 2] = colour;
-            row[pixel * 2 + 1] = colour;
-          }
-          continue;
-        }
-
-        // Standard bitmap mode: one bit, one pixel, one column. A set bit takes the cell's high
-        // nibble and a clear one takes its low nibble -- there is no background register in this
-        // mode and colour RAM is not read at all.
-        for (int pixel = 0; pixel < 8; ++pixel)
-        {
-          row[pixel] = (((bits >> (7 - pixel)) & 1u) != 0u) ? high : low;
-        }
-      }
+      return {ColourIndex(_background), static_cast<std::uint8_t>(_cellByte >> 4), static_cast<std::uint8_t>(_cellByte & 0x0Fu),
+              static_cast<std::uint8_t>(_colourRam & 0x0Fu)};
     }
   } // namespace
+
+  std::array<std::uint8_t, 4> Canvas::DashboardChoices(int _cell) const noexcept
+  {
+    if (_cell < 0 || _cell >= CELL_COLUMNS * CELL_ROWS)
+    {
+      return {0, 0, 0, 0};
+    }
+    return MulticolourChoices(m_screen[DASHBOARD_CELLS + _cell], m_colourCells[_cell], m_background);
+  }
+
+  /*
+   * One character cell, resolved into eight rows of the output image.
+   *
+   * The two modes are one function because everything except the innermost loop is shared -- the
+   * cell's byte in screen RAM, the walk down its eight sub-rows, where in the output each one goes.
+   * Splitting them would duplicate all of that so that the two halves of a split screen could
+   * disagree about it, which is the bug this file once had.
+   */
+  void Canvas::ResolveCell(int _cellColumn, int _cellRow, std::uint8_t* _out, int _stride) const noexcept
+  {
+    if (_cellColumn < 0 || _cellColumn >= CELL_COLUMNS || _cellRow < 0 || _cellRow >= CELL_ROWS)
+    {
+      return;
+    }
+
+    /*
+     * 6502: where `comirq1`'s raster split falls. The interrupt reprograms VIC registers &16 and
+     * &18 at the top of the dashboard, so a row below it is multicolour and coloured from the
+     * second block of screen RAM -- but only while the dashboard is actually there. On a text
+     * view `abraxas` and `caravanserai` are left alone and the whole screen is standard.
+     */
+    const bool lower = m_dashboardShown && (_cellRow >= DASHBOARD_CELL_ROW);
+    const std::uint16_t cellBase = lower ? DASHBOARD_CELLS : SCREEN_CELLS;
+
+    /*
+     * 6502: moonflower and welcome, the other half of the same interrupt's pair.
+     *
+     * Above the split the mode is `moonflower`'s bit 4 and the background is `welcome`, and both
+     * of them move only while the energy bomb burns -- so for every ordinary frame this is the
+     * standard-mode branch it always was. The cell BLOCK does not follow the mode: `zebop` is
+     * &81 whatever happens, so the upper half is coloured from the first block either way.
+     */
+    const bool multicolour = lower || m_spaceViewMulticolour;
+    const Colour background = lower ? m_background : m_spaceViewBackground;
+
+    const int cell = _cellRow * CELL_COLUMNS + _cellColumn;
+    const std::uint8_t cellByte = m_screen[cellBase + cell];
+    const std::uint8_t* bitmap = &m_screen[_cellRow * ROW_BYTES + _cellColumn * 8];
+
+    // 6502: the nibbles of the cell's byte in screen RAM. Both modes read them; they differ only
+    // in what selects between them.
+    const std::uint8_t high = static_cast<std::uint8_t>(cellByte >> 4);
+    const std::uint8_t low = static_cast<std::uint8_t>(cellByte & 0x0Fu);
+    const std::array<std::uint8_t, 4> colours = MulticolourChoices(cellByte, m_colourCells[cell], background);
+
+    for (int subRow = 0; subRow < 8; ++subRow)
+    {
+      const std::uint8_t bits = bitmap[subRow];
+      std::uint8_t* row = _out + static_cast<std::size_t>(subRow) * _stride;
+
+      if (multicolour)
+      {
+        for (int pixel = 0; pixel < 4; ++pixel)
+        {
+          const std::uint8_t colour = colours[(bits >> (6 - 2 * pixel)) & 0x03u];
+
+          // A multicolour pixel is two screen columns wide. This is the only doubling in the port,
+          // and it is here rather than in the shader so that the canvas the golden tests hash is
+          // the image a person would see.
+          row[pixel * 2] = colour;
+          row[pixel * 2 + 1] = colour;
+        }
+        continue;
+      }
+
+      // Standard bitmap mode: one bit, one pixel, one column. A set bit takes the cell's high
+      // nibble and a clear one takes its low nibble -- there is no background register in this
+      // mode and colour RAM is not read at all.
+      for (int pixel = 0; pixel < 8; ++pixel)
+      {
+        row[pixel] = (((bits >> (7 - pixel)) & 1u) != 0u) ? high : low;
+      }
+    }
+  }
 
   void Canvas::Clear() noexcept
   {
@@ -78,32 +126,9 @@ namespace Elite
 
     for (int cellRow = 0; cellRow < CELL_ROWS; ++cellRow)
     {
-      /*
-       * 6502: where `comirq1`'s raster split falls. The interrupt reprograms VIC registers &16 and
-       * &18 at the top of the dashboard, so a row below it is multicolour and coloured from the
-       * second block of screen RAM -- but only while the dashboard is actually there. On a text
-       * view `abraxas` and `caravanserai` are left alone and the whole screen is standard.
-       */
-      const bool lower = m_dashboardShown && (cellRow >= DASHBOARD_CELL_ROW);
-      const std::uint16_t cellBase = lower ? DASHBOARD_CELLS : SCREEN_CELLS;
-
-      /*
-       * 6502: moonflower and welcome, the other half of the same interrupt's pair.
-       *
-       * Above the split the mode is `moonflower`'s bit 4 and the background is `welcome`, and both
-       * of them move only while the energy bomb burns -- so for every ordinary frame this is the
-       * standard-mode branch it always was. The cell BLOCK does not follow the mode: `zebop` is
-       * &81 whatever happens, so the upper half is coloured from the first block either way.
-       */
-      const bool multicolour = lower || m_spaceViewMulticolour;
-      const Colour background = lower ? m_background : m_spaceViewBackground;
-
       for (int cellColumn = 0; cellColumn < CELL_COLUMNS; ++cellColumn)
       {
-        const int cell = cellRow * CELL_COLUMNS + cellColumn;
-        ResolveCell(_out.data() + static_cast<std::size_t>(cellRow) * 8 * WIDTH + cellColumn * 8, WIDTH,
-                    &m_screen[cellRow * ROW_BYTES + cellColumn * 8], m_screen[cellBase + cell], m_colourCells[cell], background,
-                    multicolour);
+        ResolveCell(cellColumn, cellRow, _out.data() + static_cast<std::size_t>(cellRow) * 8 * WIDTH + cellColumn * 8, WIDTH);
       }
     }
   }
@@ -179,8 +204,10 @@ namespace Elite
       std::span<const Colour, 2> explosion;         ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
     };
 
+    /// `_width`, `_height` and `_splitRow` are the OUTPUT's, because both surfaces composite the
+    /// same eight sprites and only their geometry differs (Design/Resolution.md section 3.3).
     void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, const SpriteRegisters& _registers, int _left, int _top,
-                    int _scale) noexcept
+                    int _scale, int _width, int _height, int _splitRow) noexcept
     {
       /*
        * ROW BY ROW, AND THE MODE IS DECIDED INSIDE THE LOOP.
@@ -201,12 +228,12 @@ namespace Elite
         for (int down = 0; down < _scale; ++down)
         {
           const int y = _top + (row * _scale) + down;
-          if (y < 0 || y >= Canvas::HEIGHT)
+          if (y < 0 || y >= _height)
           {
             continue;
           }
 
-          const std::size_t half = (y >= Canvas::SPACE_VIEW_HEIGHT) ? 1u : 0u;
+          const std::size_t half = (y >= _splitRow) ? 1u : 0u;
           const bool multicolour = ((_registers.multicolour[half] >> _registers.sprite) & 1u) != 0u;
           const Colour colour = (_registers.sprite == EXPLOSION_SPRITE) ? _registers.explosion[half] : _registers.colour;
 
@@ -221,11 +248,11 @@ namespace Elite
               continue; // %00, or a clear bit: the bitmap shows through
             }
 
-            std::uint8_t* line = _out + static_cast<std::size_t>(y) * Canvas::WIDTH;
+            std::uint8_t* line = _out + static_cast<std::size_t>(y) * _width;
             for (int wide = 0; wide < dots * _scale; ++wide)
             {
               const int x = _left + (step * dots * _scale) + wide;
-              if (x >= 0 && x < Canvas::WIDTH)
+              if (x >= 0 && x < _width)
               {
                 line[x] = static_cast<std::uint8_t>(index);
               }
@@ -236,11 +263,10 @@ namespace Elite
     }
   } // namespace
 
-  void Canvas::Resolve(std::span<std::uint8_t> _out, const VideoState& _video) const noexcept
+  void CompositeSprites(std::span<std::uint8_t> _out, int _width, int _height, int _splitRow, int _scale, const Canvas& _canvas,
+                        const VideoState& _video) noexcept
   {
-    Resolve(_out);
-
-    if (_out.size() < static_cast<std::size_t>(WIDTH) * HEIGHT)
+    if (_out.size() < static_cast<std::size_t>(_width) * _height)
     {
       return;
     }
@@ -255,7 +281,7 @@ namespace Elite
         continue; // 6502: VIC+&15 -- switched off
       }
 
-      const std::uint8_t pointer = Read(static_cast<std::uint16_t>(SPRITE_POINTERS + sprite));
+      const std::uint8_t pointer = _canvas.Read(static_cast<std::uint16_t>(SPRITE_POINTERS + sprite));
       const int definition = static_cast<int>(pointer) - static_cast<int>(SPRITE_POINTER_ORIGIN);
       if (definition < 0 || definition >= static_cast<int>(SPRITE_DEFINITION_COUNT))
       {
@@ -269,7 +295,12 @@ namespace Elite
         continue;
       }
 
-      const int scale = ((_video.expanded & (1u << sprite)) != 0u) ? 2 : 1;
+      /*
+       * The VIC-II's own expand flag TIMES the output's scale, which is what makes one blit serve
+       * both surfaces: on the canvas `_scale` is one and this is the flag alone, and on the 640x400
+       * screen an ordinary sprite is two output pixels to a dot and an expanded one is four.
+       */
+      const int expanded = ((_video.expanded & (1u << sprite)) != 0u) ? 2 : 1;
 
       /*
        * 6502: VIC+&1C, and the mode is NOT read off the definition.
@@ -278,11 +309,18 @@ namespace Elite
        * writes it twice a frame and the explosion sprite is the one it moves (§6.155). The
        * registers go in as the split leaves them and `BlitSprite` picks per screen row.
        */
-      const SpriteRegisters registers{sprite, _video.colour[sprite], m_spriteMulticolour, m_explosionColour};
+      const SpriteRegisters registers{sprite, _video.colour[sprite], _canvas.SpriteMulticolour(), _canvas.ExplosionColour()};
 
       BlitSprite(_out.data(), SPRITE_DEFINITIONS.data() + static_cast<std::size_t>(definition) * SPRITE_BYTES, registers,
-                 static_cast<int>(_video.x[sprite]) - SPRITE_ORIGIN_X, static_cast<int>(_video.y[sprite]) - SPRITE_ORIGIN_Y, scale);
+                 (static_cast<int>(_video.x[sprite]) - SPRITE_ORIGIN_X) * _scale,
+                 (static_cast<int>(_video.y[sprite]) - SPRITE_ORIGIN_Y) * _scale, expanded * _scale, _width, _height, _splitRow);
     }
+  }
+
+  void Canvas::Resolve(std::span<std::uint8_t> _out, const VideoState& _video) const noexcept
+  {
+    Resolve(_out);
+    CompositeSprites(_out, WIDTH, HEIGHT, SPACE_VIEW_HEIGHT, 1, *this, _video);
   }
 
   std::uint64_t Canvas::Hash() const noexcept
