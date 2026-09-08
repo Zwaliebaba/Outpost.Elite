@@ -189,6 +189,106 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint32_t>(Elite::CENTRED_LAYOUT.rowStride, Elite::LayoutForView(128).rowStride, L"the short-range chart too");
     }
 
+    /*
+     * The anchor, which is the whole of a re-flow (slice RS-5-0).
+     *
+     * A layout's three offsets move a screen and cannot re-arrange one, and re-arranging is what
+     * Resolution.md section 6.3 asks of every docked screen. An anchor is the exception: a
+     * RECTANGLE of faithful cells goes where it says, spread by a stride of its own, and every
+     * other cell follows the offsets -- so a table can put the status screen's equipment list in a
+     * second column without `STATUS` knowing anything about it.
+     */
+    TEST_METHOD(AnAnchorMovesTheBlockItCoversAndNothingElse)
+    {
+      // The status screen's equipment list, measured off the screen the port prints: the heading
+      // is on canvas row 12 and the items run to row 23, and the whole block goes to the right-hand
+      // half at twice the row spacing. ONE anchor, which is the point of it being a rectangle.
+      static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
+
+      // The offsets of a screen re-flowed for the wider grid rather than centred on it: a re-flow
+      // that kept the centred +20 would have nowhere to anchor TO, since a 40-column screen placed
+      // at column 20 already covers columns 20 to 59. `NoLayoutSends...` below is what says so.
+      constexpr Elite::TextLayout REFLOWED{4, 8, 2, ANCHORS};
+
+      // The block's own origin, and then the cell beside it: a run of glyphs stays a run, which a
+      // per-cell anchor could not have done -- the second letter of "EQUIPMENT:" would have been
+      // left behind at the offsets.
+      Assert::AreEqual(47, REFLOWED.Map(1, 12).column, L"the E of the heading");
+      Assert::AreEqual(16, REFLOWED.Map(1, 12).row);
+      Assert::AreEqual(48, REFLOWED.Map(2, 12).column, L"and its Q, one cell along as it was");
+      Assert::AreEqual(16, REFLOWED.Map(2, 12).row);
+
+      // The anchor's own stride, which is not the layout's: eleven packed rows become twenty-two.
+      Assert::AreEqual(52, REFLOWED.Map(6, 13).column, L"the first item, at its indent");
+      Assert::AreEqual(18, REFLOWED.Map(6, 13).row);
+      Assert::AreEqual(52, REFLOWED.Map(6, 23).column, L"and the last one the list can reach");
+      Assert::AreEqual(38, REFLOWED.Map(6, 23).row);
+
+      // Everything outside the rectangle is the offsets, including the row directly above it.
+      Assert::AreEqual(5, REFLOWED.Map(1, 11).column, L"a cell above the block keeps the offsets");
+      Assert::AreEqual(30, REFLOWED.Map(1, 11).row);
+
+      // A layout with no anchors is the layout it was before this field existed.
+      Assert::AreEqual(26, Elite::CENTRED_LAYOUT.Map(6, 13).column, L"an empty table changes nothing");
+      Assert::AreEqual(25, Elite::CENTRED_LAYOUT.Map(6, 13).row);
+    }
+
+    /*
+     * THE PROPERTY EVERY PER-SCREEN TABLE HAS TO KEEP -- Risk R24's tripwire, and the reason it is
+     * a test rather than an assertion in the header: nothing about an `Anchor` stops it naming a
+     * wide cell the offsets already reach, and two faithful cells landing on one wide cell would
+     * print two glyphs into the same eight bytes, exclusive-ored together, which is neither of them.
+     *
+     * It sweeps the whole 40x25 grid rather than the anchors alone, because the collision that
+     * matters is between an ANCHORED cell and an offset one, which no amount of looking at the
+     * table by itself would find. Every layout section 6.3 adds joins the list below.
+     */
+    TEST_METHOD(NoLayoutSendsTwoFaithfulCellsToOneWideCell)
+    {
+      struct Named
+      {
+        const wchar_t* what;
+        Elite::TextLayout layout;
+      };
+
+      // The one anchored table there is until a screen's sketch is accepted, so that the sweep is
+      // exercising the anchor path and not two rigid transforms.
+      static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
+
+      const std::array<Named, 3> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
+                                          {L"the space view", Elite::SPACE_VIEW_LAYOUT},
+                                          {L"an anchored table", Elite::TextLayout{4, 8, 2, ANCHORS}}}};
+
+      for (const Named& named : LAYOUTS)
+      {
+        std::array<std::uint16_t, 80u * 50u> seen{};
+        seen.fill(0xFFFFu);
+
+        for (std::uint8_t row = 0; row < 25u; ++row)
+        {
+          for (std::uint8_t column = 0; column < 40u; ++column)
+          {
+            const Elite::WideCell cell = named.layout.Map(column, row);
+            if (cell.column < 0 || cell.column >= 80 || cell.row < 0 || cell.row >= 50)
+            {
+              continue; // off the grid is allowed and is dropped by `PrintGlyph2x`
+            }
+
+            const std::size_t index = static_cast<std::size_t>(cell.row) * 80u + static_cast<std::size_t>(cell.column);
+            const std::uint16_t here = static_cast<std::uint16_t>(row * 40u + column);
+            if (seen[index] != 0xFFFFu)
+            {
+              const std::wstring message = std::wstring(named.what) + L": faithful cells " + std::to_wstring(seen[index]) +
+                                           L" and " + std::to_wstring(here) + L" both land on wide cell " +
+                                           std::to_wstring(cell.column) + L"," + std::to_wstring(cell.row);
+              Assert::Fail(message.c_str());
+            }
+            seen[index] = here;
+          }
+        }
+      }
+    }
+
     /// The shadow test, on a text screen and on the space view.
     TEST_METHOD(EveryGlyphTheCanvasHasThePictureHasOnce)
     {
