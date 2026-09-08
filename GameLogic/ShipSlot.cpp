@@ -7,7 +7,7 @@ namespace Elite
 
   namespace
   {
-    /// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
+    /// What GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
     /// heap against. The blocks are an array; this is the address the original would have used, and
     /// `TryReserveHeap` is the one place that needs it.
     [[nodiscard]] constexpr std::uint16_t SlotAddress(std::uint8_t _slot) noexcept
@@ -21,7 +21,7 @@ namespace Elite
     const std::uint16_t block = SlotAddress(_slot);
     const std::uint16_t bottom = heapBottom.Address();
 
-    // 6502: the heap's bottom less the blueprint's byte count, sixteen bits, into the block's own
+    // The heap's bottom less the blueprint's byte count, sixteen bits, into the block's own
     // heap pointer.
     const std::uint16_t lowDifference = static_cast<std::uint16_t>((bottom & 0xFFu) + 0x100u - _bytes);
     const std::uint8_t heapLow = static_cast<std::uint8_t>(lowDifference);
@@ -33,7 +33,7 @@ namespace Elite
 
     HeapReservation reservation{HeapOffset::FromAddress(static_cast<std::uint16_t>(heapLow | (heapHigh << 8))), false};
 
-    // 6502: NW3+1 -- that pointer compared against the block's address, and a borrow means the heap
+    // NW3+1 -- that pointer compared against the block's address, and a borrow means the heap
     // would run below the block.
     const std::uint16_t lowGap = static_cast<std::uint16_t>(heapLow + 0xFFu + (carry ? 1u : 0u) - (block & 0xFFu));
     const std::uint8_t gapLow = static_cast<std::uint8_t>(lowGap);
@@ -48,14 +48,14 @@ namespace Elite
       return reservation;
     }
 
-    // 6502: NW4 -- within the SAME page the gap must be a whole block, and the index still holds
+    // Within the SAME page the gap must be a whole block, and the index still holds
     // the LOW byte of the difference, which is what the compare reads.
     if (gapHigh == 0u && gapLow < SHIP_BLOCK_SIZE)
     {
       return reservation;
     }
 
-    // 6502: NW4 -- the allocation is committed.
+    // The allocation is committed.
     heapBottom = reservation.start;
     reservation.fits = true;
     return reservation;
@@ -63,7 +63,7 @@ namespace Elite
 
   const Blueprint* BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept
   {
-    // 6502: the table is RAM and only the station's entry is ever written into. See `Bubble`.
+    // The table is RAM and only the station's entry is ever written into. See `Bubble`.
     return BlueprintOf((_shipType == ShipType::Station) ? _bubble.stationType : _shipType);
   }
 
@@ -77,7 +77,7 @@ namespace Elite
 
   NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
-    // 6502: NWL1 -- the slot table walked for an empty entry, stopping at `NOSH`.
+    // The slot table walked for an empty entry, stopping at `NOSH`.
     std::uint8_t slot = 0;
     while (slot < MAX_SHIPS && _bubble.slots[slot] != 0u)
     {
@@ -85,15 +85,15 @@ namespace Elite
     }
     if (slot >= MAX_SHIPS)
     {
-      return {}; // 6502: NW3 -- the carry clear, and out
+      return {}; // The carry clear, and out
     }
 
-    // 6502: NW2 -- a NEGATIVE type branches past all of this: the planet and the sun have no
+    // A NEGATIVE type branches past all of this: the planet and the sun have no
     // blueprint and no heap.
     if (!IsBody(_shipType))
     {
       /*
-     * 6502: the blueprint's HIGH byte read from `XX21`, tested, and stored; then the low one.
+     * The blueprint's HIGH byte read from `XX21`, tested, and stored; then the low one.
        *
        * THE HIGH BYTE IS TESTED AND STORED BEFORE THE LOW ONE IS READ, so a refused type leaves
        * `XX0+1` alone as well -- the `BEQ` is taken before the `STA`. And the store happens at all,
@@ -102,36 +102,36 @@ namespace Elite
       const Blueprint* blueprint = BlueprintFor(_bubble, _shipType);
       if (blueprint == nullptr)
       {
-        return {}; // 6502: NW3 -- a type this build does not carry
+        return {}; // A type this build does not carry
       }
       _blueprint = blueprint;
 
-      // 6502: NW6 -- the space station keeps no line heap of its own.
+      // The space station keeps no line heap of its own.
       if (_shipType != ShipType::Station)
       {
-      // 6502: GINF, then the heap check -- the block's heap pointer takes the new value whether or
+      // GINF, then the heap check -- the block's heap pointer takes the new value whether or
       // not the ship is admitted, and `SLSP` moves only when it is.
         const Bubble::HeapReservation reservation = _bubble.TryReserveHeap(slot, blueprint->heapBytes);
         _work.heap = reservation.start;
         if (!reservation.fits)
         {
-          return {}; // 6502: NW3+1 -- below the block, or not a whole block clear
+          return {}; // Below the block, or not a whole block clear
         }
       }
 
-      // 6502: NW6 -- byte 14 of the blueprint is the energy, and byte 19 masked to three bits is
+      // Byte 14 of the blueprint is the energy, and byte 19 masked to three bits is
       // the missiles.
       _work.energy = blueprint->maxEnergy;
       _work.state = MissilesOf(blueprint->weapons);
     }
 
-    // 6502: NW2 -- the slot takes the type, and X BECOMES the type.
+    // The slot takes the type, and X BECOMES the type.
     _bubble.slots[slot] = Byte(_shipType);
 
     if (!IsBody(_shipType))
     {
       /*
-     * 6502: the hermit compared for on its own, then the junk range's two ends.
+     * The hermit compared for on its own, then the junk range's two ends.
        *
        * The rock hermit is counted as junk even though its type is nowhere near the junk range,
        * which is what the extra comparison is for -- it looks like an asteroid until it opens fire.
@@ -141,7 +141,7 @@ namespace Elite
         ++_bubble.junk;
       }
 
-      // 6502: NW7 -- the per-type count stepped up.
+      // The per-type count stepped up.
       if (Byte(_shipType) < _bubble.counts.size())
       {
         ++_bubble.Count(_shipType);
@@ -149,7 +149,7 @@ namespace Elite
     }
 
     /*
-     * 6502: NW8 -- the type's defaults from `E%`, masked, ORed with what the caller already had.
+     * The type's defaults from `E%`, masked, ORed with what the caller already had.
      *
      * `E%` is indexed from ONE, exactly as `XX21` is, and for the same reason: type 0 is an empty
      * slot. The mask keeps bits 0-3, 5 and 6 of the type's defaults and lets the caller's own bits
@@ -162,7 +162,7 @@ namespace Elite
     const std::uint8_t defaults = DefaultNewbFor(_shipType);
     _work.traits = static_cast<std::uint8_t>(Without(defaults, TraitBit::Docking, TraitBit::Remove) | _work.traits);
 
-    // 6502: NWL3 -- the whole workspace copied into the slot's block, counting down, and out with
+    // The whole workspace copied into the slot's block, counting down, and out with
     // the carry SET.
     _bubble.blocks[slot] = _work;
 

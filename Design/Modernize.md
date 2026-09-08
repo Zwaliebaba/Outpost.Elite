@@ -387,7 +387,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->2,701 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->18 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
 <!--count:opcode-transcriptions-->0 comment lines are an instruction LISTING (M6-d's instrument,
@@ -1941,6 +1941,49 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-e-3: `GameLogic/`'s sources. 2,683 markers, eight mutants re-anchored, and the
+detector was counting the comment's own slash.**
+
+`origin-markers` 2,701 → **18**. Sixty-seven files; the code proved identical, non-blank line for
+non-blank line, by the same `code_only` comparison.
+
+**M6-d-57's guard paid for itself in one slice.** `--update` refused to run: `opcode-transcriptions`
+was 3 where its ceiling is 0, and the ratchet only goes down. Three sentences had become listings
+without changing a word:
+
+```
+    // 6502: CLC, in spite of the DFAULT above      ->   // CLC, in spite of the DFAULT above
+    // 6502: TYA puts the 4 into A, and Y ...       ->   // TYA puts the 4 into A, and Y ...
+    // 6502: CLV, then the routine.                 ->   // CLV, then the routine.
+```
+
+**An implied-mode instruction needs a slash beside it to be a listing, and the comment's own `//`
+was being read as that slash.** With a marker in between the two were never adjacent, so the flaw
+was invisible for the whole of M6-d; removing the marker put them together. `_is_transcription`
+already ran the LISTING_CONTEXT test against the comment's BODY rather than the raw line, with a
+comment saying exactly why -- it just did not do the same for the opcode tests. It does now, and all
+three read as 0, which is the right answer: naming an instruction in a sentence is what R20 keeps
+and what §3 says is not a quotation. **The counter has been slightly wrong since it was built, in
+the one direction that was never going to show up while the markers were there.**
+
+**Eight mutants re-anchored, none dropped (rule 3).** `mi-second-inc`, `mi-dead-counter`,
+`mi-pause2-loop`, `mi-tp-set`, `cs-ll9-carry-hit`, `pd-pl44-clc`, `game-selftest` and `sp-selftest`
+carry comment text inside their `find`, and a marker sat in it. Re-anchoring is the same
+transformation the files got, applied to the anchor -- so the anchor cannot drift from the file it
+names.
+
+**The verifier's own false positive is worth recording.** It first reported five files whose code
+had "changed", all with the same signature: HEAD had a blank line where the new file had a
+statement. A comment-only line contributes an empty line to `code_only`'s output, and dropping such
+a line -- which is exactly what a labels-only marker asks for -- removes it and shifts everything
+after. The question the check is actually asking is whether any STATEMENT changed, moved relative to
+another, or vanished, so it compares the non-blank code. All five were `// 6502: TT146.` and its
+kind, correctly removed.
+
+469 tests green, all fifteen checks, 97 of 97 mutants over a full run carrying this slice. Eighteen
+markers are left in `GameLogic/` and 37 in `Outpost/`, all of them EMBEDDED, for M6-e-4.
+
 
 **2026-09-08 — M6-e-2: `Outpost/` and `GameLogic/`'s headers. 1,462 markers, and the classifier
 earned five corrections on the way.**

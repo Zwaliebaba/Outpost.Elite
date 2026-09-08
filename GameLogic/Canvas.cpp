@@ -49,7 +49,7 @@ namespace Elite
     }
 
     /*
-     * 6502: where `comirq1`'s raster split falls. The interrupt reprograms VIC registers &16 and
+     * Where `comirq1`'s raster split falls. The interrupt reprograms VIC registers &16 and
      * &18 at the top of the dashboard, so a row below it is multicolour and coloured from the
      * second block of screen RAM -- but only while the dashboard is actually there. On a text
      * view `abraxas` and `caravanserai` are left alone and the whole screen is standard.
@@ -58,7 +58,7 @@ namespace Elite
     const std::uint16_t cellBase = lower ? DASHBOARD_CELLS : SCREEN_CELLS;
 
     /*
-     * 6502: moonflower and welcome, the other half of the same interrupt's pair.
+     * moonflower and welcome, the other half of the same interrupt's pair.
      *
      * Above the split the mode is `moonflower`'s bit 4 and the background is `welcome`, and both
      * of them move only while the energy bomb burns -- so for every ordinary frame this is the
@@ -72,7 +72,7 @@ namespace Elite
     const std::uint8_t cellByte = m_screen[cellBase + cell];
     const std::uint8_t* bitmap = &m_screen[_cellRow * ROW_BYTES + _cellColumn * 8];
 
-    // 6502: the nibbles of the cell's byte in screen RAM. Both modes read them; they differ only
+    // The nibbles of the cell's byte in screen RAM. Both modes read them; they differ only
     // in what selects between them.
     const std::uint8_t high = static_cast<std::uint8_t>(cellByte >> 4);
     const std::uint8_t low = static_cast<std::uint8_t>(cellByte & 0x0Fu);
@@ -136,7 +136,7 @@ namespace Elite
   namespace
   {
     /*
-     * 6502: the last eight bytes of screen RAM -- sprite N's pointer lives at base + &3F8 + N.
+     * The last eight bytes of screen RAM -- sprite N's pointer lives at base + &3F8 + N.
      *
      * WHICH BLOCK IS READ CANNOT MATTER, and that is a property of the game rather than a shrug.
      * There are two blocks of screen RAM and the VIC-II reads whichever the raster split has
@@ -199,9 +199,9 @@ namespace Elite
     struct SpriteRegisters
     {
       int sprite = 0;                               ///< which of the eight, because &1C is indexed by it
-      Colour colour = Colour::Black;                ///< 6502: VIC+&27 + N -- this sprite's own colour
-      std::span<const std::uint8_t, 2> multicolour; ///< 6502: santana -- [0] the space view's, [1] the dashboard's
-      std::span<const Colour, 2> explosion;         ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
+      Colour colour = Colour::Black;                ///< VIC+&27 + N -- this sprite's own colour
+      std::span<const std::uint8_t, 2> multicolour; ///< [0] the space view's, [1] the dashboard's
+      std::span<const Colour, 2> explosion;         ///< VIC+&28, and sprite 1 is the only reader
     };
 
     /// `_width`, `_height` and `_splitRow` are the OUTPUT's, because both surfaces composite the
@@ -271,14 +271,14 @@ namespace Elite
       return;
     }
 
-    // 6502: the VIC-II draws sprite 7 first and sprite 0 last, so a LOWER-numbered sprite is in
+    // The VIC-II draws sprite 7 first and sprite 0 last, so a LOWER-numbered sprite is in
     // front. Walking down means the laser sights end up over a Trumble, which is the hardware's
     // order and not a preference.
     for (int sprite = static_cast<int>(SPRITE_COUNT) - 1; sprite >= 0; --sprite)
     {
       if ((_video.enabled & (1u << sprite)) == 0u)
       {
-        continue; // 6502: VIC+&15 -- switched off
+        continue; // VIC+&15 -- switched off
       }
 
       const std::uint8_t pointer = _canvas.Read(static_cast<std::uint16_t>(SPRITE_POINTERS + sprite));
@@ -303,7 +303,7 @@ namespace Elite
       const int expanded = ((_video.expanded & (1u << sprite)) != 0u) ? 2 : 1;
 
       /*
-       * 6502: VIC+&1C, and the mode is NOT read off the definition.
+       * VIC+&1C, and the mode is NOT read off the definition.
        *
        * That is what the port used to do, on a claim that the register is never written; `COMIRQ1`
        * writes it twice a frame and the explosion sprite is the one it moves (§6.155). The

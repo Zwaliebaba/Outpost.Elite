@@ -13,44 +13,44 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the three keys that are not text.
+    /// The three keys that are not text.
     constexpr std::uint8_t KEY_RETURN = 13;
     constexpr std::uint8_t KEY_ESCAPE = 27;
     constexpr std::uint8_t KEY_DELETE = 127;
 
-    /// 6502: the bell, printed in place of a character the line will not take.
+    /// The bell, printed in place of a character the line will not take.
     constexpr std::uint8_t BELL = 7;
 
-    /// 6502: the newline OSW03 ends on.
+    /// The newline OSW03 ends on.
     constexpr std::uint8_t NEWLINE = 12;
 
-    /// 6502: the frames `GTNME` waits before it reads a key.
+    /// The frames `GTNME` waits before it reads a key.
     constexpr std::uint8_t SETTLE_FRAMES = 8;
 
-    /// 6502: what GTNME lowers the line limit to, and what it puts back.
+    /// What GTNME lowers the line limit to, and what it puts back.
     constexpr std::uint8_t NAME_MAX_LENGTH = 7;
     constexpr std::uint8_t LINE_MAX_LENGTH = 9;
 
-    /// 6502: the extended token "{single cap}COMMANDER'S NAME? ".
+    /// The extended token "{single cap}COMMANDER'S NAME? ".
     constexpr std::uint8_t NAME_PROMPT_TOKEN = 8;
 
-    /// 6502: GTL1 and GTL2 -- eight bytes, counted down from seven inclusive.
+    /// GTL1 and GTL2 -- eight bytes, counted down from seven inclusive.
     constexpr std::size_t NAME_BYTES = COMMANDER_NAME_SIZE;
   } // namespace
 
   LineResult ReadLine(Keyboard& _keys, TextSink& _screen, TextState& _text, Presenter& _present, std::span<std::uint8_t> _buffer,
                       const LineLimits& _limits) noexcept
   {
-    // 6502: purple for what the player types, as gnum does.
-    _text.palette = TEXT_COLOUR_PURPLE; // 6502: MAG2 -- TextPrint.h's, not a second copy (slice 5a-8)
+    // Purple for what the player types, as gnum does.
+    _text.palette = TEXT_COLOUR_PURPLE; // TextPrint.h's, not a second copy (slice 5a-8)
 
-    // 6502: settle for eight frames, then throw away anything already buffered.
+    // Settle for eight frames, then throw away anything already buffered.
     _present.WaitFrames(SETTLE_FRAMES);
     _keys.Flush();
 
     LineResult result{};
 
-    // 6502: OSW0L -- the loop has no counter; it ends on a key, not on a count.
+    // The loop has no counter; it ends on a key, not on a count.
     for (;;)
     {
       const std::uint8_t key = _keys.NextKey();
@@ -58,7 +58,7 @@ namespace Elite
       if (key == KEY_RETURN)
       {
         /*
-         * 6502: OSW03 -- the key stored, the colour back to white, and a newline.
+         * The key stored, the colour back to white, and a newline.
          *
          * The carriage return goes INTO the buffer before the routine leaves, which is what makes a
          * stored name eight bytes ending in 13 rather than a length and seven characters.
@@ -74,7 +74,7 @@ namespace Elite
 
       if (key == KEY_ESCAPE)
       {
-        // 6502: OSW04 -- the colour back, and the carry SET. No newline, and no terminator
+        // The colour back, and the carry SET. No newline, and no terminator
         // written.
         _text.palette = TEXT_COLOUR_WHITE;
         result.escaped = true;
@@ -82,7 +82,7 @@ namespace Elite
       }
 
       /*
-       * 6502: the accept/reject decision, and both answers print.
+       * The accept/reject decision, and both answers print.
        *
        * An accepted character falls past the bell's load through an `EQUB &2C` -- a BIT absolute
        * opcode that swallows the two bytes after it -- so there is ONE call to `CHPR` and what
@@ -93,7 +93,7 @@ namespace Elite
 
       if (key == KEY_DELETE)
       {
-        // 6502: OSW05 -- deleting on an empty line beeps; otherwise the DELETE character itself is
+        // Deleting on an empty line beeps; otherwise the DELETE character itself is
         // printed, which is what moves the cursor.
         if (result.length != 0)
         {
@@ -104,7 +104,7 @@ namespace Elite
       }
       else if (result.length < _limits.maxLength && key >= _limits.lowest && key < _limits.highest)
       {
-        // 6502: three comparisons against `RLINE` -- full, too low, too high. The last is a
+        // Three comparisons against `RLINE` -- full, too low, too high. The last is a
         // carry-set branch, so `RLINE+4` itself is refused and the range excludes '{'.
         if (result.length < _buffer.size())
         {
@@ -120,14 +120,14 @@ namespace Elite
 
   void StoreCommanderName(std::span<std::uint8_t> _buffer, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
   {
-    // 6502: TRNME -- GTL1 copies eight bytes from the line buffer into the name.
+    // GTL1 copies eight bytes from the line buffer into the name.
     for (std::size_t index = 0; index < NAME_BYTES; ++index)
     {
       _name[index] = (index < _buffer.size()) ? _buffer[index] : std::uint8_t{0};
     }
 
     /*
-     * 6502: and then it FALLS INTO TR1, which copies the same eight bytes straight back.
+     * And then it FALLS INTO TR1, which copies the same eight bytes straight back.
      *
      * Redundant here and not a mistake: TR1 is GTNME's "nothing was typed" path and TRNME simply
      * sits above it in the same block of bytes. Reproduced because a caller of TRNME gets both
@@ -147,7 +147,7 @@ namespace Elite
 
   void LoadCommanderName(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, std::span<std::uint8_t> _buffer) noexcept
   {
-    // 6502: TR1 -- GTL2 copies the same eight bytes the other way.
+    // GTL2 copies the same eight bytes the other way.
     for (std::size_t index = 0; index < NAME_BYTES && index < _buffer.size(); ++index)
     {
       _buffer[index] = _name[index];
@@ -159,7 +159,7 @@ namespace Elite
                               LineLimits& _limits) noexcept
   {
     /*
-     * 6502: GTL3 -- five bytes from in front of the name into the front of `INWK`.
+     * Five bytes from in front of the name into the front of `INWK`.
      *
      * The five bytes before the name are the drive and directory part of the filename, and the
      * whole of INWK becomes what the Kernal is handed. That is file-system state, it belongs with
@@ -167,19 +167,19 @@ namespace Elite
      * has no counterpart here and is deliberately absent rather than forgotten.
      */
 
-    // 6502: the name is shorter than the line the buffer can hold.
+    // The name is shorter than the line the buffer can hold.
     _limits.maxLength = NAME_MAX_LENGTH;
 
-    // 6502: the prompt.
+    // The prompt.
     _extended.Print(NAME_PROMPT_TOKEN);
 
     const LineResult result = ReadLine(_keys, _screen, _text, _present, _buffer, _limits);
 
-    // 6502: and the limit is restored whether a name was typed or not.
+    // And the limit is restored whether a name was typed or not.
     _limits.maxLength = LINE_MAX_LENGTH;
 
     /*
-     * 6502: a length of zero goes to `TR1`; otherwise the length is recorded in `thislong`.
+     * A length of zero goes to `TR1`; otherwise the length is recorded in `thislong`.
      *
      * Nothing typed means the existing name is copied back and kept. `thislong` records the length
      * for TRNME to copy into `oldlong`, which the original's own comment says is never read.

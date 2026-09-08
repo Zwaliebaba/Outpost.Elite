@@ -12,7 +12,7 @@ namespace Elite
   KeyOutcome ActionForKey(std::uint8_t _key, std::uint8_t _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
                           bool _hyperspaceHeld) noexcept
   {
-    // 6502: the six comparisons above `fvw`, which run whether docked or in space.
+    // The six comparisons above `fvw`, which run whether docked or in space.
     if (_key == KEY_STATUS)
     {
       return {KeyAction::StatusMode, 0};
@@ -27,7 +27,7 @@ namespace Elite
     }
     if (_key == KEY_DATA_ON_SYSTEM)
     {
-      // 6502: the only one of these that is TWO calls -- TT111 first, because the data screen
+      // The only one of these that is TWO calls -- TT111 first, because the data screen
       // reads the system TT111 leaves behind rather than finding it itself.
       return {KeyAction::DataOnSystem, 0};
     }
@@ -44,7 +44,7 @@ namespace Elite
       return {KeyAction::Launch, 0};
     }
 
-    // 6502: fvw -- the docked flag's top bit, tested without loading the byte, and BAY sets the
+    // The docked flag's top bit, tested without loading the byte, and BAY sets the
     // whole byte to &FF.
     if ((_dockedFlag & 0x80u) != 0u)
     {
@@ -58,7 +58,7 @@ namespace Elite
       }
       if (_key == KEY_DISK_ACCESS)
       {
-        // 6502: call the disk menu; the carry it returns picks the docking bay or a restart.
+        // Call the disk menu; the carry it returns picks the docking bay or a restart.
         return {KeyAction::DiskAccess, 0};
       }
       if (_key == KEY_SELL_CARGO)
@@ -68,7 +68,7 @@ namespace Elite
     }
     else
     {
-      // 6502: INSP -- one chain of three loads entered at three different points, and a key that
+      // One chain of three loads entered at three different points, and a key that
       // enters high skips the loads below it by falling into a data byte that assembles as a
       // three-byte instruction and swallows them.
       if (_key == KEY_REAR_VIEW)
@@ -86,7 +86,7 @@ namespace Elite
     }
 
     /*
-     * 6502: LABEL_3 -- test the hyperspace key and leave for `hyp` when it is down.
+     * Test the hyperspace key and leave for `hyp` when it is down.
      *
      * The key matrix, not the accumulator. So this fires on H being HELD, whatever key the rest of
      * the routine was given, and the key that was pressed is thrown away.
@@ -96,14 +96,14 @@ namespace Elite
       return {KeyAction::Hyperspace, 0};
     }
 
-    // 6502: NWDAV5 -- the "D" key alone; the view test that follows is T95's own, not this one's.
+    // The "D" key alone; the view test that follows is T95's own, not this one's.
     if (_key == KEY_DISTANCE)
     {
       return {KeyAction::ShowDistance, 0};
     }
 
     /*
-     * 6502: the "F" key -- docked AND on a chart, or nothing happens.
+     * The "F" key -- docked AND on a chart, or nothing happens.
      *
      * "Docked" here is the WHOLE BYTE being non-zero, rather than its top bit being set as the
      * split above tests it. The chart test is the view byte's top two bits.
@@ -118,7 +118,7 @@ namespace Elite
     }
 
     /*
-     * 6502: HME1 -- the crosshair move, and the two ways out of it before anything moves.
+     * The crosshair move, and the two ways out of it before anything moves.
      *
      * Off a chart, or with the hyperspace counter already running, the crosshairs do not move and
      * the routine drops straight into the countdown. The key is stashed in `T1` before the two
@@ -129,14 +129,14 @@ namespace Elite
       return {KeyAction::CountdownOnly, 0};
     }
 
-    // 6502: the "O" key, read back out of `T1` -- and it leaves by a TAIL call, so it is the one
+    // The "O" key, read back out of `T1` -- and it leaves by a TAIL call, so it is the one
     // path through here that does not reach the countdown at all.
     if (_key == KEY_HOME)
     {
       return {KeyAction::HomeCrosshairs, 0};
     }
 
-    // 6502: ee2 -- move the crosshairs, and then fall into the countdown.
+    // Move the crosshairs, and then fall into the countdown.
     return {KeyAction::MoveCrosshairs, 0};
   }
 
