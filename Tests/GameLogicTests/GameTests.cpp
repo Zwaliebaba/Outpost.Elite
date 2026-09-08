@@ -2,11 +2,14 @@
 
 #include "NullSeams.h"
 
+#include "Charts.h"
 #include "Commander.h"
 #include "Controls.h"
 #include "DockedKeys.h"
 #include "Game.h"
+#include "MarketScreen.h"
 #include "SoundEffects.h"
+#include "SystemScreen.h"
 #include "Universe.h"
 
 #include <cstdint>
@@ -177,9 +180,62 @@ namespace GameLogicTests
       bare.game.State().status.hyperspaceCountdown = 15u;
       bare.game.State().status.hyperspaceCounter = 1u;
 
-      bare.game.StepDocked(0u);
+      static_cast<void>(bare.game.StepDocked(0u));
 
       Assert::AreEqual<std::uint32_t>(14u, bare.game.State().status.hyperspaceCountdown, L"a pass with no key still ticks TT107's counter");
+    }
+
+    /*
+     * 6502: MLOOP part 5 on a docked pass -- the Trumbles breed and the delay is asked for
+     * (InputTimer.md T-2).
+     *
+     * `RunLoopTail` is compared against `MLOOP` on docked views with Trumbles aboard in
+     * `GameLoopTests`; what nothing compared until T-2 was whether a DOCKED PASS reached it, and
+     * it did not: the port ran the two countdowns and nothing below them, so a commander who
+     * docked with a Trumble had a hold that stopped breeding at the airlock. The syncs the pass
+     * asks for are the gate `LDA QQ11 / AND PATG / LSR A / BCS plus13` -- bit 0 of the view ANDed
+     * with the option -- so a chart, whose view byte is even, waits even with the names on.
+     */
+    TEST_METHOD(ADockedPassBreedsTheTrumblesAndAsksForItsSyncs)
+    {
+      Bare bare;
+      bare.game.Reset();
+      Elite::Universe& universe = bare.game.State();
+
+      universe.commander.tribbles.lo = 200u;
+      universe.commander.tribbles.hi = 1u;
+      universe.options.authorNames = 0u;
+
+      // 6502: RAND -- a generator with something in it. A bare fixture's is four zeroes, and DORND
+      // over zeroes with the carry clear rolls zero for ever, which is a state the machine is never
+      // in: the loader leaves RAND with whatever the disk read left there.
+      universe.rng.SetState({0x21u, 0x84u, 0x5Fu, 0xC0u});
+
+      std::uint32_t syncs = 0;
+      for (std::uint32_t pass = 0; pass < 64u; ++pass)
+      {
+        syncs += bare.game.StepDocked(0u);
+      }
+      Assert::AreEqual<std::uint32_t>(128u, syncs, L"6502: LDY #2 / JSR DELAY -- two syncs a pass with the names off");
+      Assert::IsTrue(universe.commander.tribbles.hi > 1u || universe.commander.tribbles.lo != 200u,
+                     L"6502: DORND / CMP #220 / ADC #0 -- sixty-four passes breed at least one Trumble");
+
+      /*
+       * 6502: AND PATG / LSR A / BCS plus13 -- bit 0 of the VIEW byte ANDed with the option. Only one
+       * docked view has an odd byte, the Data on System screen at 1, so the names lift the wait
+       * there and nowhere else: the status screen is 8, the charts 64 and 128, and all of them wait
+       * with the names on. Read off the constants rather than assumed; the first draft of this test
+       * had the status screen lifting it.
+       */
+      universe.options.authorNames = 0xFFu;
+      universe.view = Elite::DATA_ON_SYSTEM_VIEW;
+      Assert::AreEqual<std::uint32_t>(0u, bare.game.StepDocked(0u), L"names on, on the one odd view: no wait");
+
+      universe.view = Elite::INVENTORY_VIEW;
+      Assert::AreEqual<std::uint32_t>(2u, bare.game.StepDocked(0u), L"names on, on an even view: the wait stays");
+      universe.view = Elite::LONG_RANGE_CHART_VIEW;
+      Assert::AreEqual<std::uint32_t>(2u, bare.game.StepDocked(0u), L"names on, on a chart: the wait stays");
+      universe.options.authorNames = 0u;
     }
 
     /*
@@ -197,7 +253,7 @@ namespace GameLogicTests
 
       for (std::uint32_t pass = 0; pass < 64u; ++pass)
       {
-        bare.game.StepDocked(0u);
+        static_cast<void>(bare.game.StepDocked(0u));
       }
       Assert::IsTrue(bare.game.Docked(), L"nothing in a keyless docked pass launches the ship");
 

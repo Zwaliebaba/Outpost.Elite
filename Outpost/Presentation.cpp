@@ -180,13 +180,12 @@ namespace Outpost
     return cycles / NTSC_CLOCK_HZ;
   }
 
-  double DockedPassSeconds(std::uint8_t _authorNames) noexcept
+  double DockedPassSeconds(std::uint8_t _syncs) noexcept
   {
-    // 6502: AND PATG / LSR A / BCS plus13 -- bit 0 set skips the wait; the port's docked pass runs
-    // `RunLoopTail`'s gate the same way once InputTimer.md T-2 wires it.
+    // The work between the waits, and the waits the library asked for -- `LDA QQ11 / AND PATG /
+    // LSR A / BCS plus13 / LDY #2 / JSR DELAY` is `RunLoopTail`'s to decide, and it says two or none.
     const double work = static_cast<double>(DOCKED_PASS_CYCLES) / NTSC_CLOCK_HZ;
-    const double syncs = ((_authorNames & 1u) != 0u) ? 0.0 : static_cast<double>(DOCKED_PASS_SYNCS);
-    return work + syncs * NTSC_FRAME_CYCLES / NTSC_CLOCK_HZ;
+    return work + static_cast<double>(_syncs) * NTSC_FRAME_CYCLES / NTSC_CLOCK_HZ;
   }
 
 } // namespace Outpost

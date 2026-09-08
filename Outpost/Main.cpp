@@ -150,9 +150,8 @@ namespace
      *
      * MLOOP's second half polls the keyboard, dispatches, and goes round; every docked screen it
      * reaches ends by blocking in `TT217`, so a docked game costs one present per key. `TT100` runs
-     * a frame first and only then falls into the same poll -- so both halves are paced, the flight
-     * one by what a frame costs and the docked one by `DockedPassSeconds`: two vertical syncs and
-     * four thousand cycles, measured (InputTimer.md T-0), where a flight floor stood in before.
+     * a frame first and then the same poll -- so both halves are paced, the flight one by what a
+     * frame costs and the docked one by the syncs the last pass asked for (InputTimer.md T-0, T-2).
      *
      * The POSITION goes to the dispatch and not the character, which is the whole reason `KeyMap`
      * maps a Windows key to a C64 matrix position: `TT102` compares against 37 for "8" and never
@@ -160,6 +159,7 @@ namespace
      */
     double accumulated = 0.0;
     double dockedLeftover = 0.0;
+    std::uint8_t dockedSyncs = Outpost::DOCKED_PASS_SYNCS; // 6502: what the last docked pass asked DELAY for
     auto last = std::chrono::steady_clock::now();
 
     while (app->shell.Turn())
@@ -183,12 +183,12 @@ namespace
          */
         accumulated = 0.0;
 
-        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::DockedPassSeconds(app->game.State().options.authorNames));
+        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::DockedPassSeconds(dockedSyncs));
         dockedLeftover = docked.leftoverSeconds;
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
-          app->game.StepDocked(app->window.TakePressed()); // 6502: `thiskey`, which is zero when nothing was pressed
+          dockedSyncs = app->game.StepDocked(app->window.TakePressed()); // 6502: `thiskey`, which is zero when nothing was pressed
         }
         continue;
       }

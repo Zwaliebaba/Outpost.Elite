@@ -516,12 +516,13 @@ namespace GameLogicTests
       Assert::AreEqual(3.49, 1.0 / Outpost::FlightFrameSeconds(10), 0.05, L"a full bubble: three and a half frames a second");
       Assert::AreEqual(12.4, 1.0 / Outpost::FlightFrameSeconds(2), 0.1, L"a quiet one: twelve");
 
-      // The docked pass: two vertical syncs and 4,472 cycles, unless PATG's bit 0 lifts the wait.
+      // The docked pass: 4,472 cycles of work and the syncs the library asked for -- two off the
+      // space view unless PATG's bit 0 lifts them, which is `RunLoopTail`'s answer and not this file's.
       const double sync = Outpost::NTSC_FRAME_CYCLES / Outpost::NTSC_CLOCK_HZ;
-      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ + 2.0 * sync, Outpost::DockedPassSeconds(0), 1e-9, L"author names off: the syncs are waited");
-      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ, Outpost::DockedPassSeconds(0xFF), 1e-9, L"author names on: LSR A / BCS skips DELAY");
-      Assert::AreEqual(Outpost::DockedPassSeconds(0), Outpost::DockedPassSeconds(0xFE), 1e-12, L"and it is bit 0 that decides, not the byte");
-      Assert::AreEqual(26.5, 1.0 / Outpost::DockedPassSeconds(0), 0.2, L"twenty-six passes a second on the NTSC frame: two syncs and four milliseconds");
+      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ + 2.0 * sync, Outpost::DockedPassSeconds(2), 1e-9, L"two syncs waited");
+      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ, Outpost::DockedPassSeconds(0), 1e-9, L"and none when the author names lift them");
+      Assert::AreEqual(26.5, 1.0 / Outpost::DockedPassSeconds(Outpost::DOCKED_PASS_SYNCS), 0.2,
+                       L"twenty-six passes a second on the NTSC frame: two syncs and four milliseconds");
     }
 
     /*
