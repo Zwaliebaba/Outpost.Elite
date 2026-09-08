@@ -219,6 +219,9 @@ namespace Elite::Testing
   {
     Cpu6502 cpu;
     cpu.memory = m_memory;
+    // What the read census compares against (M6-b-1). The image is a singleton and outlives every
+    // processor it hands out, so the pointer cannot dangle.
+    cpu.baseImage = &m_memory;
     cpu.a = cpu.x = cpu.y = 0;
     cpu.sp = 0xFD;
     cpu.pc = 0;

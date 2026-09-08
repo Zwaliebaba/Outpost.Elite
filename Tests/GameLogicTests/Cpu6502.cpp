@@ -332,6 +332,41 @@ namespace Elite::Testing
     return static_cast<std::uint16_t>(lo | (hi << 8));
   }
 
+  Cpu6502::ReadCensus& Cpu6502::ReadCensus::Instance() noexcept
+  {
+    static ReadCensus census;
+    return census;
+  }
+
+  /*
+   * M6-b-1. A byte still equal to the base image's is one nothing wrote, so a record keyed on the
+   * write set does not name it; a byte that differs was put there by the test or by an earlier
+   * call on the same machine, and the key covers it.
+   *
+   * Machines with no base image are the ones a test built itself rather than taking from
+   * `OracleImage::Fresh()`. They have no original to depend on, so their reads are not counted at
+   * all rather than being counted as written.
+   */
+  void Cpu6502::CountRead(std::uint16_t _address) const noexcept
+  {
+    if (baseImage == nullptr)
+    {
+      return;
+    }
+    ReadCensus& census = ReadCensus::Instance();
+    ++census.reads;
+    if (memory[_address] == (*baseImage)[_address])
+    {
+      ++census.fromImage;
+      census.addresses.set(_address);
+      if (memory[_address] != 0u)
+      {
+        ++census.fromImageContent;
+        census.contentAddresses.set(_address);
+      }
+    }
+  }
+
   void Cpu6502::Store(std::uint16_t _address, std::uint8_t _value) noexcept
   {
     if (_address >= storeLogLow && _address <= storeLogHigh)
@@ -361,12 +396,16 @@ namespace Elite::Testing
   std::uint16_t Cpu6502::AddrIndirectX() noexcept
   {
     const std::uint8_t base = static_cast<std::uint8_t>(Fetch() + x);
+    NoteRead(base);
+    NoteRead(static_cast<std::uint8_t>(base + 1));
     return static_cast<std::uint16_t>(memory[base] | (memory[static_cast<std::uint8_t>(base + 1)] << 8));
   }
 
   std::uint16_t Cpu6502::AddrIndirectY() noexcept
   {
     const std::uint8_t base = Fetch();
+    NoteRead(base);
+    NoteRead(static_cast<std::uint8_t>(base + 1));
     const std::uint16_t address = static_cast<std::uint16_t>(memory[base] | (memory[static_cast<std::uint8_t>(base + 1)] << 8));
     return Indexed(address, y);
   }
@@ -526,9 +565,9 @@ namespace Elite::Testing
     traps.push_back(Trap{_address, _exit});
   }
 
-  void Cpu6502::AddProbe(std::uint16_t _address, std::function<void(Cpu6502&)> _act)
+  void Cpu6502::AddProbe(std::uint16_t _address, std::function<void(Cpu6502&)> _act, std::uint64_t _identity)
   {
-    probes.push_back(Probe{_address, std::move(_act)});
+    probes.push_back(Probe{_address, std::move(_act), _identity});
   }
 
   bool Cpu6502::Step() noexcept

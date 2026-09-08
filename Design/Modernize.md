@@ -812,6 +812,20 @@ builds on it**: the interpreter records its read set for one pass, and the numbe
 image bytes outside what they wrote is a reading rather than a guess — the same shape as M6-0-f's
 instrument, and for the same reason.
 
+**The measurement, taken 2026-09-08 (§8, M6-b-1).** One pass, 3,224,616 calls, **704,039,505 data
+reads**. Of those, 328,377,761 (46.6%) found a byte still holding the base image's value — but that
+number counts a drawing routine reading a blank screen byte, which is "off the image" and carries
+nothing the original put there. **The number that matters is the non-zero half: 128,023,278 reads
+(18.2%), over 19,112 distinct addresses, in 597,921 calls (18.5% of the corpus).** The other 81.5%
+of calls answer from what the test wrote and from zeros, and a write-set key covers them outright.
+
+So the tail R-g accepts is real and it is a fifth of the corpus, concentrated in the pages the
+original keeps its tables, blueprints and text in. It does not make replay wrong — the recorded
+answer already holds what those reads produced — but it decides two things the ruling was made
+without: how much of the original the fixture's ANSWERS carry (the ADR-001 §5 question), and how
+much of the fixture would silently rot if the image ever moved. Both are the owner's to weigh; the
+number is now on the table rather than under it.
+
 The mutation harness needs no change either way: it runs the suite, and the suite no longer needs an
 oracle to be present — `check_oracle_present` goes with it, and with it the one deliberate failure
 `OracleIsPresent` (R9 closes by construction).
@@ -1898,6 +1912,63 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-b-1: the read census, and the key that was missing a probe.**
+
+§1 R-g accepts a tail — "tests that read image bytes no call ever wrote" — on the condition that
+M6-b sizes it first. This is the reading, and taking it found a defect on the way.
+
+**The instrument.** `Cpu6502` carries a pointer to the base image and classifies every DATA read
+against it: a byte still equal to the image's is one nothing wrote, so a record keyed on the write
+set does not name it; a byte that differs was put there by the test or by an earlier call on the
+same machine, and the key covers it. Instruction fetches are not counted — the original's code by
+definition, and counting it would drown the number — but the two indirect pointer fetches are, since
+a blueprint pointer left in zero page by the image is exactly the dependence being measured. A test
+that wrote a byte the value it already held is counted as an image read, which errs towards
+reporting MORE dependence than there is: the safe direction for a number a ruling will be made on.
+The census rides on `--measure`, which already wanted one whole pass and keeps nothing.
+
+**A byte that is zero is not the same finding as a byte that is not**, and splitting them is what
+turns this from a soft number into a decidable one. A drawing routine reads the screen byte before
+it EORs into it; in a fresh machine that byte is zero because the bitmap is zero, so the read is
+"off the image" while carrying nothing the original put there.
+
+| | reads | share | addresses | calls |
+|---|---|---|---|---|
+| data reads | 704,039,505 | | | 3,224,616 |
+| off the image | 328,377,761 | 46.6% | 30,805 | 1,739,324 |
+| **off the image and not zero** | **128,023,278** | **18.2%** | **19,112** | **597,921 (18.5%)** |
+
+Where the 30,805 fall, as runs of pages: &CF00–&FAFF holds 10,460 of them (93% of that range),
+&4000–&67FF 7,225 (71% — the bitmap, and mostly the zero half), &0400–&20FF 6,178 (83%),
+&B700–&C6FF 3,958 (97%), &9200–&99FF 1,521 (74%). The rest is a long tail of a few hundred.
+
+So the tail is real and it is a fifth of the corpus. It does not make replay wrong; it decides how
+much of the original the fixture's ANSWERS carry and how much of the fixture would rot if the image
+moved. §4.10 carries the number and both are the owner's to weigh.
+
+**AND THE MEASUREMENT FOUND A DEFECT IN THE KEY, WHICH IS THE BETTER HALF OF THIS SLICE.** The
+recorder reported **four collisions** where M6-a-2's pass reported none, and four is not chance: a
+64-bit key over 3.2M calls collides by accident about once in three million runs. `Probe` — which
+arrived with the InputTimer track after M6-a-2 measured — carries a `std::function` that changes the
+machine WHILE the call runs, and `CallDigest` folded nothing about it. `TT217`'s five keyboard
+scripts poke identical machines and differ only in what the probe holds down, so all five keyed as
+one record. A fixture built on that key would have answered four of those calls with the fifth's
+memory and failed somewhere unrelated, which is exactly what `Oracle.h` says the collision counter
+is for.
+
+`Probe` now carries a REQUIRED `identity` — no default, so a new probe site cannot forget — the
+digest folds the count, the addresses and the identities, and the one call site derives its identity
+from the script it replays. Collisions are back to 0 and `distinct` is up by exactly four, which is
+the five scripts becoming five records.
+
+**The general lesson: a call's answer is a function of the machine only while nothing else can
+speak.** The whole-machine digest was sound when the interpreter was the only thing running; a seam
+that lets a fixture run its own code part-way through is outside it by construction, and the key can
+only hold what the caller promises about that code.
+
+460 tests green, all eighteen checks, replay digests unmoved, 97 of 97 mutants still apply.
+3,224,616 calls, 3,177,126 distinct, 0 collisions.
 
 **2026-09-08 — M6-c-18: the last twenty-five, and three that were not renames.**
 

@@ -988,6 +988,21 @@ namespace GameLogicTests
         // ---- the oracle: the matrix changes on every entry to RDKEY --------------------------
         Cpu6502 cpu = oracle.Fresh();
         std::uint32_t scans = 0;
+        /*
+         * What tells this probe from the other four (M6-b-1). Every script pokes the SAME machine
+         * and differs only in what the probe holds down, so the probe's identity has to be the
+         * script itself; the measuring pass reported four key collisions before it was here.
+         */
+        std::uint64_t identity = 1469598103934665603ull;
+        for (const Matrix& scan : script.scans)
+        {
+          identity = (identity ^ 0xFFull) * 1099511628211ull; // the boundary between two scans
+          for (const std::uint8_t held : scan)
+          {
+            identity = (identity ^ held) * 1099511628211ull;
+          }
+        }
+
         cpu.AddProbe(rdkey,
                      [&](Cpu6502& _cpu)
                      {
@@ -1001,7 +1016,8 @@ namespace GameLogicTests
                          _cpu.HoldKey(static_cast<std::uint8_t>(column), static_cast<std::uint8_t>(row));
                        }
                        _cpu.Io(Cpu6502::CIA1_PORT_A) = 0x7Fu;
-                     });
+                     },
+                     identity);
         cpu.AddTrap(delay); // the debounce waits on the raster, which the oracle has not
 
         cpu.memory[qq11] = 0xFFu; // docked, so RDKEY's tail clears the act keys on both machines

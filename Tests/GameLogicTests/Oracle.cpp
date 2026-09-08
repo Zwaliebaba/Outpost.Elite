@@ -113,6 +113,19 @@ namespace Elite::Testing
       const std::uint8_t exit = static_cast<std::uint8_t>(trap.exit);
       FoldValue(digest, exit);
     }
+    /*
+     * The probes, which the first version of this digest left out (M6-b-1). A probe runs the
+     * FIXTURE'S OWN CODE part-way through the call, so two calls that start on the same machine can
+     * answer differently and nothing about the machine says why. What the key can hold is the
+     * caller's identity for the probe; the collision counter is what proves it is enough.
+     */
+    const std::uint32_t probes = static_cast<std::uint32_t>(_cpu.probes.size());
+    FoldValue(digest, probes);
+    for (const Cpu6502::Probe& probe : _cpu.probes)
+    {
+      FoldValue(digest, probe.address);
+      FoldValue(digest, probe.identity);
+    }
     Fold(digest, _cpu.watch.data(), _cpu.watch.size() * sizeof(std::uint16_t));
 
     FoldValue(digest, _cpu.storeLogLow);
@@ -138,7 +151,30 @@ namespace Elite::Testing
     const std::size_t beforeHits = _cpu.trapHits.size();
     const std::size_t beforeStores = _cpu.stores.size();
 
+    Cpu6502::ReadCensus& census = Cpu6502::ReadCensus::Instance();
+    const std::uint64_t beforeReads = census.reads;
+    const std::uint64_t beforeImageReads = census.fromImage;
+    const std::uint64_t beforeContentReads = census.fromImageContent;
+
     const RunResult result = _cpu.Interpret(_address, _maxInstructions, _stopAddress);
+
+    m_totals.reads += census.reads - beforeReads;
+    const std::uint64_t onImage = census.fromImage - beforeImageReads;
+    m_totals.imageReads += onImage;
+    const std::uint64_t onContent = census.fromImageContent - beforeContentReads;
+    m_totals.imageContentReads += onContent;
+    if (onImage != 0ull)
+    {
+      ++m_totals.callsOnImage;
+    }
+    else
+    {
+      ++m_totals.callsPure;
+    }
+    if (onContent != 0ull)
+    {
+      ++m_totals.callsOnContent;
+    }
 
     CallRecord record;
     for (std::size_t at = 0; at < beforeMemory.size(); ++at)
