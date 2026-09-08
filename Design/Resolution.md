@@ -487,15 +487,36 @@ by an EQUALITY rather than by a golden: `TheBootstrapIsTheCanvasDoubledExactly` 
 of them against the resolved canvas.
 
 It still **needs a person with a paint program, and the design still says so rather than pretending
-a tool can draw it — the owner, by ruling (§11.1), on no slice's schedule.** What it no longer needs
-is a tool to start it: `Testing::WritePicturePng` already writes the resolved 640×400 picture as an
-indexed PNG, which is the bootstrap image to paint over. RS-4-art replaces the call to
-`CopyDashboardPicture2x` with an imported table and changes nothing else.
+a tool can draw it — the owner, by ruling (§11.1), on no slice's schedule.**
 
-Two constraints for whoever draws it, which RS-4-art should check on import: only the sixteen
-palette colours, and the positions the twins draw into (the bar troughs, the indicator tracks, the
-missile blocks, the scanner ellipse's interior, the compass disc) left as the background colour, so
-that a dial's unlit steps read as a trough rather than as artwork.
+**CORRECTED AGAIN AT RS-4-art: the table is back, and the argument above is why it was safe to
+bring back.** RS-4 declined `DASHBOARD_IMAGE_2X` because a generated table that is a pure function
+of a table already in the tree is a copy — and that is true for exactly as long as the picture IS
+that function. The art slice's whole purpose is that it stops being one. So `DASHBOARD_PICTURE_2X`
+now holds the plane as sixteen-colour art, four bits a pixel, 35,840 bytes in
+`GameLogic/DashboardPicture2x.cpp`; `CopyDashboardPicture2x` unpacks it and takes no canvas any
+more; and `tools/bitmaps.py` gained it as a fourth sheet, exported as a sixteen-colour BMP and
+imported back. **It is SEEDED with what the computation produced**, so until somebody paints over it
+the copy is real and `TheBootstrapIsTheCanvasDoubledExactly` is what stops it drifting — that test
+is the one to DELETE rather than to fix on the day the art arrives.
+
+Two constraints for whoever draws it. **The first is now a property of the format**: a pixel is a
+nibble, so there is no value it can hold that is not one of the sixteen, and the import refuses a
+colour the palette does not have by exact match. The sixteen are read out of
+`Outpost/Presentation.h` rather than restated in the tool.
+
+**The second needs a sharper statement than it has here, and did not survive being built.** "The
+positions the twins draw into left as the background colour" is vacuous for the bars and the
+indicators: `DIL` STORES rather than exclusive-ors, and so does its twin, so a bar blanks its whole
+trough on every pass and art underneath is overwritten before anybody sees it — a test asserting it
+there fails on art that is harmless, which is what it did, on eight pixels of the shipped picture.
+Where it really bites is the EXCLUSIVE-OR: a blip is XORed onto the plane, so a painted scanner
+interior makes a blip come out `art ^ blip` while erasing still works perfectly and hides it from
+every shape test. Checking THAT needs the set of pixels a blip can land on, and "a blip a real ship
+would produce" is not the same set as "a blip `DrawScannerBlip` will draw if asked" — a sweep of
+raw coordinates puts marks over the whole dashboard. **Left unchecked and stated rather than
+half-built**, which is the honest half of RS-4-art: the constraint is real, the test is not written,
+and the shape it has to have is written down above.
 
 ### 5.4 Sprites
 
@@ -851,7 +872,7 @@ path the layout did not see — are what the estimate cannot price.
 | **RS-2 Ship lines** ✅ **built 2026-09-07 (§13)** | `Bresenham2x`, `ClipLine2x`, `LineHeap2x`, `Doubled`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1). **NOT `Project2x` or `Divide512`** — the premise for them was measured false; they move to RS-3 where the planet needs `DVID3B` twinned anyway. The borders and the loader move there too, for a different reason (§13) | The space-view shadow test green over three ship distances; the wide vertex is the faithful one doubled over all 65,536 values; the half-open line drawer measured against `LOIN` | 3–4 |
 | **RS-3 Planet, sun, dust, beams, rings** ✅ **built 2026-09-07 (§13)** | §4.2 and §4.3, **and everything else the upper region carries**, because a region is native for every screen that draws in it: the border and the rules, `TTX66K`'s wipe and the loader's, the cell palettes, `CLYNS`, and both charts at twice the scale (RS-5 re-flows them). **NOT `ball2x`, `sun2x` or `isqrt`** — all three premises measured false or invisible. **The space-view region flips here**, and this is the first slice a person sees | Shadow tests green on the planet, the sun over three frames of drift, the explosion cloud, the beam and the border; the stardust half-pixel swept over 262,144 cases; the wide line swept over 18,432 lines in both directions | 2–3 |
 | **RS-4 The dashboard** ✅ **built 2026-09-07 (§13)** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, and the bootstrap. **NOT `DASHBOARD_IMAGE_2X`, `bitmaps.py`'s fourth sheet or `bootstrap-2x`** — a generated table that is a pure function of one already in the tree is a copy, so the bootstrap is computed (§5.3). Sprites were already doubled in `Resolve` at RS-0. **The dashboard region flips here, so nothing on the screen is upscaled any more** | The bootstrap equal to the canvas doubled over all 71,680 pixels; the bar sweep over every value at every entry point; the scanner's fraction swept over both signs and every high byte; a whole `DIALS` frame shadow-tested; blips erase by redraw | 3 |
-| **RS-4-art The picture** | The owner redraws the dashboard at 640×112 over the bootstrap PNG (§5.3, ruling §11.1); the import replaces `CopyDashboardPicture2x`'s call and nothing else; no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
+| **RS-4-art The picture** | **Mechanism built.** `DASHBOARD_PICTURE_2X` holds the plane as sixteen-colour art, `CopyDashboardPicture2x` unpacks it, `bitmaps.py` exports and imports it (§5.3). The ART is still the owner's: redraw the dashboard at 640×112 over the exported BMP; no slice waits on it | Mechanism: the self-test round-trips all four sheets, a no-op import changes no byte, and the seed still equals the canvas doubled. Art: a hand-check and a screen golden re-recorded with the diff attached | mechanism done, art owner's |
 | **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the sketch accepted before the table is written (ruling §11.2); the text shadow test green including the no-collision clause; a hand-check | 1 each, 8–10 in all; the charts are two each |
 | **RS-6 Close** ✅ **built 2026-09-08 (§13)** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
 | **Later, optional** | Re-authored 48×42 sprites (§5.4); an aspect-ratio option (ADR-005 §1, unchanged) | — | — |

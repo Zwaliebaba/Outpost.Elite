@@ -65,7 +65,7 @@ namespace GameLogicTests
       Elite::CopyPagesDown(universe->canvas, Elite::DASHBOARD_IMAGE.data(), Elite::DASHBOARD_BITMAP, 8u, 0u);
       Elite::CopyPagesDown(universe->canvas, Elite::DASHBOARD_IMAGE.data() + 8u * 256u,
                            static_cast<std::uint16_t>(Elite::DASHBOARD_BITMAP + 8u * 256u), 1u, 0xC0u);
-      Elite::CopyDashboardPicture2x(universe->picture, universe->canvas);
+      Elite::CopyDashboardPicture2x(universe->picture);
       return universe;
     }
 

@@ -206,10 +206,9 @@ namespace Elite
 
       if (_picture != nullptr)
       {
-        // The same picture on the index plane, decoded through the cells the loader coloured and
-        // doubled (Dashboard2x.h). This is the bootstrap RS-4-art paints over; the twins below draw
-        // over it at twice the detail from here.
-        CopyDashboardPicture2x(*_picture, _canvas);
+        // The same picture on the index plane, as sixteen-colour art at 640x112 (Dashboard2x.h).
+        // The twins below draw over it at twice the detail from here.
+        CopyDashboardPicture2x(*_picture);
       }
 
       ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
