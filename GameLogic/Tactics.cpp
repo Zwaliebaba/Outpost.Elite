@@ -120,7 +120,7 @@ namespace Elite
      * the caller measured -- then decides the throttle.
      */
     /// `_towards` is `XX15`: the unit vector the caller measured, which the two dot products read.
-    void SteerTowards(Universe& _universe, Ports& _ports, UnitVector _towards, std::uint8_t _cnt) noexcept
+    void SteerTowards(Universe& _universe, Ports& _ports, UnitVector _towards, std::uint8_t _offNose) noexcept
     {
       Ship& work = _universe.work;
 
@@ -164,15 +164,15 @@ namespace Elite
        */
       // 6502: .TA152 STA CNT / ... / .TA6 LDA CNT -- `TA152`'s only job is to park the byte its
       // caller measured, so it is this routine's parameter since M2-c-3.
-      const std::uint8_t cnt = _cnt;
-      if ((cnt & 0x80u) == 0u && cnt >= _universe.flight.steerCone)
+      const std::uint8_t offNose = _offNose;
+      if ((offNose & 0x80u) == 0u && offNose >= _universe.flight.steerCone)
       {
         work.acceleration = 3u;
         return;
       }
 
       // 6502: .TA9 AND #%01111111 / CMP #18 / BCC TA10 -- and `TA10` is a bare `RTS`.
-      if (static_cast<std::uint8_t>(cnt & 0x7Fu) < 18u)
+      if (static_cast<std::uint8_t>(offNose & 0x7Fu) < 18u)
       {
         return;
       }
@@ -968,10 +968,10 @@ namespace Elite
      */
     if ((LargestShipAxis(_frame.work, 0u) & 0xE0u) == 0u)
     {
-      const std::uint8_t cnt = _frame.offNose;
+      const std::uint8_t offNose = _frame.offNose;
 
       // 6502: LDX CNT / CPX #160 / BCC TA4 -- and 160 has bit 7 set, so this is also "in front".
-      if (cnt >= 160u)
+      if (offNose >= 160u)
       {
         // 6502: LDY #19 / LDA (XX0),Y / AND #%11111000 / BEQ TA4 -- the blueprint's laser power,
         // and the bottom three bits are the missile count rather than power.
@@ -983,7 +983,7 @@ namespace Elite
           _frame.work.state = With(_frame.work.state, ShipStateBit::Firing);
 
           // 6502: CPX #163 / BCC TA4 -- firing is one cone and HITTING is a tighter one.
-          if (cnt >= 163u)
+          if (offNose >= 163u)
           {
             /*
              * 6502: LDA (XX0),Y / LSR A / JSR OOPS -- half the laser power, and the byte is read

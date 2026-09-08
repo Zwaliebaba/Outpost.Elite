@@ -102,7 +102,7 @@ namespace Elite
           ++vertex;
           point[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
         }
-        const std::uint8_t cnt = vertex; // 6502: STY CNT
+        const std::uint8_t savedVertex = vertex; // 6502: STY CNT
 
         if (_video != nullptr)
         {
@@ -140,7 +140,7 @@ namespace Elite
         std::array<std::uint8_t, 4> seeds{};
         for (std::size_t byte = 0; byte < 4u; ++byte)
         {
-          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(address.Byte(static_cast<std::uint16_t>(3u + byte))) ^ cnt);
+          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(address.Byte(static_cast<std::uint16_t>(3u + byte))) ^ savedVertex);
         }
         _rng.SetState(seeds);
 
@@ -192,7 +192,7 @@ namespace Elite
           }
         }
 
-        vertex = cnt; // 6502: LDY CNT
+        vertex = savedVertex; // 6502: LDY CNT
       } while (vertex < lastVertex);
 
       /*
