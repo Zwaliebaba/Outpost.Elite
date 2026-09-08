@@ -111,10 +111,13 @@ namespace Elite
    * collisions left to think about are between anchors, which are a handful of column ranges on one
    * row. The status screen anchors odd and offsets even; the trade screens do the reverse.
    *
-   * NO `wrapWidth` YET, and section 6.2 lists one. It belongs to the data screen and the briefings,
-   * which are the only screens whose text is justified, and it cannot be written before the sink
-   * that re-wraps exists to read it: a field nothing reads is a claim the code does not keep. The
-   * sub-slice that re-wraps adds it.
+   * THERE IS NO `wrapWidth` AND THERE WILL NOT BE, which section 6.2 records with the measurement.
+   * The design asked the wide sink to re-wrap the data screen and the briefings at 64 columns, and
+   * `DA11` does not merely break a justified line -- it PADS it, widening the gaps until the
+   * thirtieth character is a space. The stream the canvas gets already carries thirty-column
+   * padding, so re-wrapping it wide means re-justifying, and re-justifying means the picture
+   * carrying a different number of SPACE characters from the canvas. That is the one thing no twin
+   * here does. The description gets a column of its own instead, which is a table.
    */
   struct TextLayout
   {
