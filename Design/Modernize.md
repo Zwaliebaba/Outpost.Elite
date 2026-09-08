@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->793 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->736 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-39: `Missions.h` and `Tactics.h` to zero, and one load with two consumers.**
+
+57 sites over two headers: the briefings and the AI. Thirty-third and thirty-fourth at zero. No
+defect this time — three slices running had turned one up and this one did not, which is worth
+saying plainly rather than dressing a routine slice as a discovery.
+
+**The idiom worth naming is a single load serving two different things.** `MT9` loads 1, hands it to
+`DOXC` as a column, and jumps into `TT66`, which reads the SAME accumulator as its view — the store
+in between does not disturb it. `BRIEF`'s opening does it again with a column and a ship's
+distance. That is why `MT9_COLUMN_AND_VIEW` and `BRIEFING_START_DISTANCE` are each one constant
+rather than two, and it is not visible from the port's side at all: two `constexpr` bytes that
+happen to be 1 look like a coincidence unless the comment says they are the same load. Cutting the
+listing here means the prose has to carry the fact that the accumulator survives the store, which is
+the reason and not the spelling.
+
+`BRIEF` sets mission 1's bit by shifting bit 0 out and rotating a set carry back in, where the other
+four mission bits use a plain OR. The two are equivalent on `TP` (the shift preserves bit 7, which
+is the only thing that could have been lost), so the comment records the shape without claiming a
+consequence there isn't one.
+
+`Tactics.h`'s share was the sign-magnitude arithmetic: `DCS1` calling the rest of itself so its body
+runs twice, and `TAS7` building a negated sign by rotating a zero and flipping bit 7. Both keep the
+mechanism — doubling pushes the sign into the carry; the rotate pulls it back and leaves bit 0's
+zero behind, so the addition's carry is clean — and lose the mnemonics.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (35 and 18). `opcode-transcriptions` 793 → 736.
 
 **2026-09-08 — M6-d-38: `Combat.cpp` and `StatusScreen.cpp` to zero, and RED comes before YELLOW.**
 
