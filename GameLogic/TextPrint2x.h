@@ -206,19 +206,20 @@ namespace Elite
    * the equipment heading exactly as the sketch has it.
    */
   inline constexpr std::array<Anchor, 2> STATUS_ANCHORS{{
-    {0, 39, 1, 1, 24, 3, 1},    // the title, moved right to sit over both columns
-    {0, 39, 12, 23, 46, 12, 2}, // "EQUIPMENT:" and the eleven lines under it, as one block
+    {0, 39, 1, 1, 20, 3, 1},    // the title, moved right to sit over both columns
+    {0, 39, 12, 23, 42, 12, 2}, // "EQUIPMENT:" and the eleven lines under it, as one block
   }};
 
-  inline constexpr TextLayout STATUS_LAYOUT{4, 4, 2, STATUS_ANCHORS};
+  inline constexpr TextLayout STATUS_LAYOUT{0, 4, 2, STATUS_ANCHORS};
 
-  static_assert(STATUS_LAYOUT.Map(7, 1).column == 31, "the title clears the left column");
-  static_assert(STATUS_LAYOUT.Map(7, 1).row == 3, "and sits above where the rule would be");
-  static_assert(STATUS_LAYOUT.Map(1, 4).column == 5, "the first label, four cells of margin in");
-  static_assert(STATUS_LAYOUT.Map(1, 4).row == 12, "level with the equipment heading");
-  static_assert(STATUS_LAYOUT.Map(1, 12).column == 47, "which the anchor puts in the right column");
-  static_assert(STATUS_LAYOUT.Map(1, 12).row == 12);
-  static_assert(STATUS_LAYOUT.Map(6, 23).row == 34, "and the last line the list can reach");
+  static_assert(STATUS_LAYOUT.Map(11, 1).column == 31, "the title clears the left column");
+  static_assert(STATUS_LAYOUT.Map(11, 1).row == 3, "and sits above where the rule would be");
+  static_assert(STATUS_LAYOUT.Map(5, 4).column == 5, "the first label, at the canvas cell XC 1 is");
+  static_assert(STATUS_LAYOUT.Map(5, 4).row == 12, "level with the equipment heading");
+  static_assert(STATUS_LAYOUT.Map(5, 12).column == 47, "which the anchor puts in the right column");
+  static_assert(STATUS_LAYOUT.Map(5, 12).row == 12);
+  static_assert(STATUS_LAYOUT.Map(10, 23).column == 52, "the last line, at its indent");
+  static_assert(STATUS_LAYOUT.Map(10, 23).row == 34, "and the last row the list can reach");
 
   /*
    * THE MARKET SCREENS, which are one layout for two entries (slice RS-5-b, sketch accepted
@@ -236,25 +237,27 @@ namespace Elite
    * stays right-aligned exactly as `PrintNumber` left it and the units stay under "UNIT".
    */
   inline constexpr std::array<Anchor, 10> BUY_ANCHORS{{
-    {0, 10, 2, 2, 4, 4, 1},    // "PRODUCT"
-    {11, 15, 2, 2, 31, 4, 1},  // "UNIT", the column of t / kg / g
-    {16, 20, 1, 1, 39, 4, 1},  // "UNIT" from the row above ...
-    {16, 21, 2, 2, 44, 4, 1},  // ... and "PRICE", so the two read as one phrase
-    {21, 30, 1, 1, 52, 4, 1},  // "QUANTITY" from the row above ...
-    {22, 39, 2, 2, 62, 4, 1},  // ... and "FOR SALE"
-    {0, 13, 4, 20, 5, 8, 2},   // the item's name
-    {14, 15, 4, 20, 32, 8, 2}, // its unit
-    {16, 20, 4, 20, 44, 8, 2}, // its price, right-aligned as the canvas has it
-    {21, 39, 4, 20, 61, 8, 2}, // and how much of it is for sale
+    {0, 14, 2, 2, 0, 4, 1},    // "PRODUCT"
+    {15, 19, 2, 2, 30, 4, 1},  // "UNIT", the column of t / kg / g
+    {20, 24, 1, 1, 39, 4, 1},  // "UNIT" from the row above ...
+    {20, 25, 2, 2, 44, 4, 1},  // ... and "PRICE", so the two read as one phrase
+    {25, 34, 1, 1, 52, 4, 1},  // "QUANTITY" from the row above ...
+    {26, 39, 2, 2, 62, 4, 1},  // ... and "FOR SALE"
+    {0, 17, 4, 20, 1, 8, 2},   // the item's name
+    {18, 19, 4, 20, 32, 8, 2}, // its unit
+    {20, 24, 4, 20, 44, 8, 2}, // its price, right-aligned as the canvas has it
+    {25, 39, 4, 20, 61, 8, 2}, // and how much of it is for sale
   }};
 
-  inline constexpr TextLayout BUY_LAYOUT{4, 1, 2, BUY_ANCHORS};
+  inline constexpr TextLayout BUY_LAYOUT{0, 1, 2, BUY_ANCHORS};
 
-  static_assert(BUY_LAYOUT.Map(2, 2).column == 6, "PRODUCT over the item names");
-  static_assert(BUY_LAYOUT.Map(1, 4).column == 6, "which start at wide column 6");
-  static_assert(BUY_LAYOUT.Map(17, 1).row == 4, "the second heading row is folded onto the first");
-  static_assert(BUY_LAYOUT.Map(20, 4).column == 48, "the price still ends where PrintNumber left it");
-  static_assert(BUY_LAYOUT.Map(1, 20).row == 40, "and the seventeenth item is the last row");
+  static_assert(BUY_LAYOUT.Map(6, 2).column == 6, "PRODUCT over the item names");
+  static_assert(BUY_LAYOUT.Map(5, 4).column == 6, "which start at wide column 6");
+  static_assert(BUY_LAYOUT.Map(21, 1).row == 4, "the second heading row is folded onto the first");
+  static_assert(BUY_LAYOUT.Map(21, 1).column == 40, "UNIT ...");
+  static_assert(BUY_LAYOUT.Map(21, 2).column == 45, "... PRICE, one cell along, so the two read as one");
+  static_assert(BUY_LAYOUT.Map(24, 4).column == 48, "the price still ends where PrintNumber left it");
+  static_assert(BUY_LAYOUT.Map(5, 20).row == 40, "and the seventeenth item is the last row");
 
   /*
    * THE INVENTORY SCREEN (slice RS-5-b), which is the status screen's shape for the same reason:
@@ -265,16 +268,17 @@ namespace Elite
    * 23 because seventeen goods plus the large-cargo-bay line is as far down as `TT210` can print.
    */
   inline constexpr std::array<Anchor, 3> INVENTORY_ANCHORS{{
-    {0, 39, 1, 1, 24, 2, 1},  // "INVENTORY", over both columns
-    {0, 39, 4, 5, 5, 6, 2},   // the fuel and cash lines
-    {0, 39, 6, 23, 46, 4, 2}, // the hold itself, in the right-hand column
+    {0, 39, 1, 1, 20, 2, 1},  // "INVENTORY", over both columns
+    {0, 39, 4, 5, 1, 6, 2},   // the fuel and cash lines
+    {0, 39, 6, 23, 42, 4, 2}, // the hold itself, in the right-hand column
   }};
 
-  inline constexpr TextLayout INVENTORY_LAYOUT{4, 1, 2, INVENTORY_ANCHORS};
+  inline constexpr TextLayout INVENTORY_LAYOUT{0, 1, 2, INVENTORY_ANCHORS};
 
-  static_assert(INVENTORY_LAYOUT.Map(1, 4).row == 6, "the fuel line");
-  static_assert(INVENTORY_LAYOUT.Map(1, 7).row == 6, "and the first item, level with it");
-  static_assert(INVENTORY_LAYOUT.Map(1, 7).column == 47, "in the right-hand column");
+  static_assert(INVENTORY_LAYOUT.Map(5, 4).row == 6, "the fuel line");
+  static_assert(INVENTORY_LAYOUT.Map(5, 4).column == 6, "on the left");
+  static_assert(INVENTORY_LAYOUT.Map(5, 7).row == 6, "and the first item, level with it");
+  static_assert(INVENTORY_LAYOUT.Map(5, 7).column == 47, "in the right-hand column");
 
   /*
    * THE EQUIP SHIP SCREEN (slice RS-5-b), whose two columns are the item and its price, and whose
@@ -287,17 +291,53 @@ namespace Elite
    * and a row number that meant "just under the text" at 25 rows does not at 50.
    */
   inline constexpr std::array<Anchor, 4> EQUIP_ANCHORS{{
-    {0, 39, 1, 1, 24, 2, 1},   // "EQUIP SHIP"
-    {0, 20, 3, 16, 8, 8, 2},   // the number and the item, thirteen of them at most
-    {21, 39, 3, 16, 46, 8, 2}, // the price, right-aligned as the canvas has it
-    {0, 39, 20, 23, 8, 38, 2}, // and the prompt, which the offsets would strand at the bottom
+    {0, 39, 1, 1, 20, 2, 1},   // "EQUIP SHIP"
+    {0, 24, 3, 16, 4, 8, 2},   // the number and the item, thirteen of them at most
+    {25, 39, 3, 16, 43, 8, 2}, // the price, right-aligned as the canvas has it
+    {0, 39, 20, 23, 4, 38, 2}, // and the prompt, which the offsets would strand at the bottom
   }};
 
-  inline constexpr TextLayout EQUIP_LAYOUT{4, 1, 2, EQUIP_ANCHORS};
+  inline constexpr TextLayout EQUIP_LAYOUT{0, 1, 2, EQUIP_ANCHORS};
 
-  static_assert(EQUIP_LAYOUT.Map(3, 3).column == 11, "the first item's number");
-  static_assert(EQUIP_LAYOUT.Map(3, 16).row == 34, "the thirteenth item is the last one sold");
-  static_assert(EQUIP_LAYOUT.Map(1, 21).row == 40, "and the prompt sits under the list, not at 43");
+  static_assert(EQUIP_LAYOUT.Map(7, 3).column == 11, "the first item's number");
+  static_assert(EQUIP_LAYOUT.Map(34, 3).column == 52, "and the price, right-aligned to wide 52");
+  static_assert(EQUIP_LAYOUT.Map(7, 16).row == 34, "the thirteenth item is the last one sold");
+  static_assert(EQUIP_LAYOUT.Map(5, 21).row == 40, "and the prompt sits under the list, not at 43");
+
+
+  /*
+   * THE DATA ON SYSTEM SCREEN (slice RS-5-d, sketch accepted 2026-09-08), and it is the one screen
+   * whose `rowStride` is ONE.
+   *
+   * `TT25` already double-spaces itself -- every label/value pair is on an odd canvas row with a
+   * blank one under it, because `TT68` prints a newline after each -- so a stride of 2 would space
+   * it FOUR wide rows apart and leave a screen that is mostly gaps. The offsets keep the game's own
+   * spacing and the anchors do the re-flow.
+   *
+   * THE PAIRS ARE NOT SPLIT, and section 6.3's "columns 4 and 28" cannot be built: `TT25` prints
+   * the colon at canvas column 8 in "Economy:Poor Industrial" and 19 in "Gross Productivity:11520 M
+   * CR", so there is no column RANGE that is "the label" on every line and no rectangle that could
+   * move one. They stay whole on the left.
+   *
+   * THE DESCRIPTION GETS A COLUMN AND NOT A WIDTH, which is section 6.2's `wrapWidth` measurement:
+   * `DA11` pads a justified line as well as breaking it, so the stream already carries thirty-column
+   * spacing and re-wrapping it wide would mean the picture printing different space characters from
+   * the canvas. Thirty characters is a good measure; eighty columns is room to stand it beside the
+   * pairs instead of under them.
+   */
+  inline constexpr std::array<Anchor, 2> DATA_ANCHORS{{
+    {0, 39, 1, 1, 20, 5, 1},    // "DATA ON <system>", over both columns
+    {0, 39, 19, 23, 42, 11, 2}, // the description, beside the pairs and level with the first
+  }};
+
+  inline constexpr TextLayout DATA_LAYOUT{1, 8, 1, DATA_ANCHORS};
+
+  static_assert(DATA_LAYOUT.Map(5, 3).column == 6, "the first pair, on the left");
+  static_assert(DATA_LAYOUT.Map(5, 3).row == 11, "and the description's first line is level with it");
+  static_assert(DATA_LAYOUT.Map(5, 19).column == 47, "the description, in a column of its own");
+  static_assert(DATA_LAYOUT.Map(5, 19).row == 11);
+  static_assert(DATA_LAYOUT.Map(34, 19).column == 76, "whose thirtieth character is still on the grid");
+  static_assert(DATA_LAYOUT.Map(5, 17).row == 25, "the last pair keeps the screen's own spacing");
 
 
   /*
