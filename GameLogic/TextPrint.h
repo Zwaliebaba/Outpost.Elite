@@ -178,14 +178,14 @@ namespace Elite
    * -- it is a label with no callers -- so every real caller wanted the two stores, and slice 3d-c
    * put them back (§6.67).
    *
-   * `_view` is `QQ11`, and it is here for the twin alone: which wide rows the message occupies is
-   * `LayoutForView`'s answer, because a message over the space view sits at the height the original
-   * put it and one on a text screen is packed with the rest (Resolution.md section 6.2). The
-   * faithful routine does not read it.
+   * `_layout` is here for the twin alone: which wide rows the message occupies is the screen's
+   * layout, because a message over the space view sits at the height the original put it and one on
+   * a text screen is packed with the rest (Resolution.md section 6.2). The faithful routine does not
+   * read it, and the default is the space view's -- the screen `CLYNS` is called on most.
    */
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
                         MessageState& _message,
-                        Picture* _picture = nullptr, std::uint8_t _view = 0) noexcept;
+                        Picture* _picture = nullptr, TextLayout _layout = SPACE_VIEW_LAYOUT) noexcept;
 
   /// 6502: LDA #21 / STA YC -- the row CLYNS leaves the cursor on, which is the top of the three it
   /// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.
@@ -230,14 +230,59 @@ namespace Elite
      * have no universe to hand and are comparing the canvas anyway. A printer with nothing attached
      * draws the canvas alone, which is exactly what those fixtures assert.
      *
-     * THE VIEW AND NOT A LAYOUT, because a layout kept here would be a second copy of something the
-     * game already knows, needing a writer on every screen change to stay true. `QQ11` IS the
-     * screen that is up; the layout is read off it per glyph, and there is nothing to keep in step.
+     * THE LAYOUT AND NOT THE VIEW SINCE RS-5-a, and the reason is that `QQ11` does not name a
+     * screen: `STATUS` and `TT213` both call `TRADEMODE` with #8, so the status screen and the
+     * inventory screen are one view and a layout read off the byte cannot tell them apart. The
+     * layout lives in the universe beside the view and is written by `SetUpScreen` in the same
+     * breath as the view, so this is still ONE fact read per glyph with nothing to keep in step.
      */
-    void AttachPicture(Picture* _picture, const std::uint8_t* _view) noexcept
+    void AttachPicture(Picture* _picture, const TextLayout* _layout) noexcept
     {
       m_picture = _picture;
-      m_view = _view;
+      m_layout = _layout;
+    }
+
+    /*
+     * WHERE A LABEL'S RUN STARTS ON THE WIDE SURFACE, and the short-range chart is the only caller
+     * (Resolution.md section 6.3, slice RS-5-e).
+     *
+     * A `TextLayout` maps one faithful cell to one wide cell, per glyph, with nothing remembered in
+     * between -- which is right for text ON a screen and wrong for a LABEL ON A DRAWING. `TT23`
+     * puts a system's name beside its disc by dividing the disc's x by eight; the discs are at
+     * twice their coordinates on this surface, so the name's ORIGIN has to double while its letters
+     * stay eight pixels apart. No function of the cell alone can say that: a column stride doubles
+     * the gaps too and prints "O r r e r e".
+     *
+     * So the routine that knows where the drawing went says so, once, at the same instruction it
+     * already places the cursor at. The run lasts until the cursor leaves its row, which is one
+     * name -- `TT23` prints a name and then a newline, and nothing else is on that row.
+     *
+     * IT IS THE PRINTER'S AND NOT THE UNIVERSE'S, deliberately. `Universe` is copied -- the oracle
+     * round-trips one -- and it is folded into the state hash field by field; a cursor that lives
+     * for one name has no business in either. The printer is built once and outlives every screen.
+     */
+    void SetLabelRun(std::uint8_t _row, std::uint8_t _firstColumn, int _wideColumn) noexcept
+    {
+      m_labelRow = _row;
+      m_labelFirstColumn = _firstColumn;
+      m_labelWideColumn = _wideColumn;
+      m_labelActive = true;
+    }
+
+    /*
+     * The wide cell one glyph goes on: the layout's answer, and then the label run's if one covers
+     * it. `_column` is a CANVAS cell, as everything the layout takes is.
+     */
+    [[nodiscard]] WideCell WideCellFor(std::uint8_t _column, std::uint8_t _row) const noexcept
+    {
+      const WideCell mapped = Layout().Map(_column, _row);
+      if (!m_labelActive || _row != m_labelRow || _column < m_labelFirstColumn)
+      {
+        return mapped;
+      }
+
+      // The letters keep their spacing; only where the run BEGINS has moved.
+      return WideCell{m_labelWideColumn + static_cast<int>(_column) - static_cast<int>(m_labelFirstColumn), mapped.row};
     }
 
     /// 6502: CHPR. Returns the character, as the routine does in A.
@@ -261,15 +306,23 @@ namespace Elite
     /// The layout for whatever screen is up, or the centred default when nothing is attached.
     [[nodiscard]] TextLayout Layout() const noexcept
     {
-      return (m_view != nullptr) ? LayoutForView(*m_view) : CENTRED_LAYOUT;
+      return (m_layout != nullptr) ? *m_layout : CENTRED_LAYOUT;
     }
+
+
 
     Canvas& m_canvas;
     TextState& m_state;
     SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
 
     Picture* m_picture = nullptr;        ///< the second surface, or none -- see `AttachPicture`
-    const std::uint8_t* m_view = nullptr; ///< `QQ11`, read for its layout and never written
+    const TextLayout* m_layout = nullptr; ///< the screen's layout, read and never written
+
+    /// The label run `SetLabelRun` opens, which lasts one row -- see the comment there.
+    bool m_labelActive = false;
+    std::uint8_t m_labelRow = 0;
+    std::uint8_t m_labelFirstColumn = 0;
+    int m_labelWideColumn = 0;
   };
 
   /*

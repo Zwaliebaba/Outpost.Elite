@@ -1,11 +1,21 @@
 # Resolution — the game at 640×400
 
-**Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
-the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
-surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->460 green against the oracle and all <!--count:checks-->19 repository checks
-passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
-where that plan's rules end and obeys them.
+**Status:** **BUILT · 2026-09-08**, in seven slices (RS-0 to RS-6, §13), from a design proposed
+2026-09-07 with eight owner rulings taken the day it was opened — four on the shape (§1) and four on
+what the shape left open (§11). The suite is <!--count:tests-->469 green against the oracle with all
+<!--count:checks-->19 repository checks passing, and what it decided is
+[ADR-008](ADR/ADR-008-the-picture.md).
+
+**This document is now a record of how it was built rather than a plan for building it**, and the
+difference between the two is the point of keeping it: every place measurement moved the design is
+marked **CORRECTED** in the section it belongs to and argued in §13's journal. Five improvements the
+design promised were DECLINED after measurement — `Divide512` and the sun's twin, the compass's
+extra bit, `wrapWidth`, and the short-range chart's label collisions — and each entry says what was
+measured and what it would have cost. One thing is outstanding and it is the owner's: the dashboard
+artwork (§11.1, RS-4-art), which no slice waits on.
+
+Reads after [Modernize.md](Modernize.md), because it starts where that plan's rules end and obeys
+them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
 model — unchanged for the canvas, and §4's "parallel path" is this), ADR-005 (presentation — §1
 amended), ADR-006 and ADR-007 (where the new state lives), Modernize.md §4 and §5 (the layers, the
@@ -540,6 +550,82 @@ is that function and `TextState` is untouched. What the stored cursor was really
 re-wrapping, where the wide column stops being a function of the faithful one; that slice can store
 what it needs when it needs it, and until then there is nothing to keep in step.
 
+**CORRECTED at RS-5-0: an anchor is a RECTANGLE, and the table above's cell-to-cell version cannot
+work.** `Map` is a pure function of the faithful cell — that is what the paragraph above settled —
+so nothing remembers that the E of "EQUIPMENT:" was moved by the time the Q is printed. A cell-to-cell
+table would have to name all ten cells of that heading, and the equipment list's eleven rows of up
+to twenty-four characters would be some two hundred and fifty entries kept in step by hand. An
+`Anchor` is therefore a rectangle of faithful cells relocated to a wide origin, with a row stride of
+its own, and the status screen's whole re-flow is ONE of them:
+
+```cpp
+struct Anchor
+{
+  std::uint8_t firstColumn, lastColumn; // the faithful cells it covers, inclusive
+  std::uint8_t firstRow, lastRow;
+  std::uint8_t wideColumn, wideRow;     // where its top-left cell goes instead
+  std::uint8_t rowStride;               // and how the block's own rows are spread once there
+};
+```
+
+**`wrapWidth` IS DECLINED, and this is the measurement — RULED at RS-5-c.** §6.2 lists it and §6.3
+asks the wide sink to re-wrap the data screen and the briefings at 64 columns, treating a break the
+justifier made as soft. It cannot be done without giving up the property every twin in this track
+rests on, and the reason is that `DA11` does not merely BREAK the line — it PADS it. Elite's
+justification widens the gaps between words until the thirtieth character is a space, so the stream
+the canvas receives already carries the padding for a thirty-column measure:
+
+```
+This planet  is  most  notable
+for  Tibediedian  Arnu  Brandy
+```
+
+Those double spaces are `PadToWidth`'s, not the token's. Re-flowing that to 64 columns without
+re-justifying carries thirty-column padding into a sixty-four-column line, which is ragged text with
+holes in it; re-justifying means the wide surface computing its own `PadToWidth` at 64 and emitting a
+DIFFERENT NUMBER OF SPACE CHARACTERS from the canvas. That breaks the invariant `TheGlyphsAgree`
+tests and the whole of §8.1 rests on — every glyph the canvas has, the picture has at the mapped
+cell, and nothing else — for the two screens where the text is longest and hardest to check by eye.
+What it would buy is a wider paragraph measure. Declined, as RS-4 declined the compass bit, and for
+the same kind of reason: a real improvement that costs the evidence.
+
+**So the description gets a COLUMN instead of a WIDTH.** Thirty characters is a perfectly good
+measure — narrower than a newspaper's — and 80 columns is enough to stand it beside the label/value
+pairs rather than under them. That is a table, which is what every other screen gets.
+
+**The cheap way to keep the no-collision property is OPPOSITE ROW PARITIES.** With `rowStride = 2`
+every unanchored faithful row lands on a wide row of `rowOffset`'s parity; give every anchor the
+other parity and an anchored block can never share a wide row with an unanchored one, which leaves
+only anchor-against-anchor overlaps to think about — a handful of column ranges on one row. Found
+while drafting the trade screens' tables, where the first attempt collided seventeen times on
+exactly that. The status screen anchors odd and offsets even; the trade screens do the reverse.
+
+**EVERY ANCHOR RANGE IS IN CANVAS CELLS, and a range that ends inside a word shears it.** An `XC`
+of 1 is canvas cell 5 — the four cells of margin the game's own loops count — so a range copied off a
+cursor-position dump is four cells left of the text it was meant to cover, and the words at its
+edges come out split: "Radioacti   ve  s". The shadow test cannot see this. A sheared mapping is
+still injective, still puts every canvas glyph on the picture, and still leaves nothing on the
+picture the canvas lacks — all three clauses of §8.1 hold on a screen nobody could read. So §8.1
+gains a fourth: **two canvas cells side by side, both with ink, must land side by side**
+(`PictureTextTests::NothingIsSheared`, run on every screen test). It is the property a table is FOR.
+
+**And a table anchored INTO the centred layout cannot be written at all**, which the collision sweep
+found the first time it was run: a 40-column screen placed at column 20 already covers columns 20 to
+59, so every anchor target inside the wide grid is a cell the offsets already reach. A re-flowed
+screen moves its offsets as well as its blocks. `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOne
+WideCell` sweeps the whole 40×25 grid of every layout in the tree and is Risk R24's tripwire.
+
+**`QQ11` DOES NOT NAME A SCREEN, and the layout is therefore the caller's — RULED at RS-5-a.**
+`LayoutForView` reads the view byte, and the status screen and the inventory screen are both view 8:
+`STATUS` and `TT213` each call `TRADEMODE` with `#8`, so no function of that byte can tell them
+apart. `SetUpScreen` and `SetUpTradeScreen` each gained a four-argument form taking the layout, and
+each screen names its own at the one instruction that already says which screen is starting. The
+layout is stored in `Universe::screenLayout` in the same breath as `QQ11` — one instruction, two
+facts, nothing to drift — and `TextPrinter` reads it per glyph through the pointer that used to
+point at the view. Two overloads rather than a default argument, because the default is a function
+of `_view` and C++ cannot write one parameter's default in terms of another. The field is NOT folded
+into the state hash, for `picture`'s reason: it decides nothing the game does.
+
 **And the offsets are measured in CANVAS CELLS, not in `XC`.** §6.2's original numbers mixed the two:
 the space view's `columnOffset` is given as 24, which is right in `XC` — counted from the view's own
 left edge — and 20 in canvas cells, which is what the clears count because that is what the game's
@@ -574,18 +660,20 @@ accept or redraw (§11) and are not normative until a slice lands them.
 
 | Screen | Layout | What the table cannot do, and the twin that does it |
 |---|---|---|
-| Status (`STATUS`) | Two columns: commander, present system, hyperspace, condition, fuel, cash, rating, on the left 36 columns; the equipment list on the right 36 | Nothing; the equipment list is consecutive rows and an anchor moves its first |
-| Buy / sell / inventory (`TT167`, `TT210`, `TT213`) | The table widened: item, unit, price and quantity at columns 4, 26, 38 and 52; `ListCargo` the same | Nothing |
-| Equip ship (`EQSHP`) | Item at column 4, price at column 44; the laser view prompt on its own line | Nothing |
-| Data on system (`TT25`) | The label/value pairs at columns 4 and 28; the description re-wrapped at `wrapWidth = 64` | **The wide sink re-wraps.** `TT27`'s justifier breaks lines at `JUSTIFIED_LINE_WIDTH` (30) and emits the break as a newline in the character stream. The wide sink treats a break the justifier made (the printer knows, because it made it) as soft and re-wraps at the layout's width; a break from a token is hard. The faithful stream is unchanged |
-| Long-range chart (`TT22`) | The map at 512×256 from cell (8, 4): each system plotted at `(2x, y)`, which is the original's half vertical scale doubled; the title rule and legend above and below | `PlotDot2x` at `(2x, 2 * top + (y & ~1))` — the faithful `y >> 1` doubled is `y` less its low bit, kept so the map is the original's and not a redrawn one; `DrawCrosshairs2x` |
-| Short-range chart (`TT23`) | The full 640×352 above a two-row legend; systems as the planet twin's discs; the fuel circle at twice its radius; **labels no longer collide**, because a name that overlapped its neighbour in 40 columns has room in 80 — the anchor for a label is computed from the 2× position exactly as `TT23` computes it from the 1× one | `DrawSun2x` and `DrawCircle2x` are the planet's (§4.2); the label placement (`TT23` derives a label's column from the disc's x by dividing by eight) has a twin that divides the 2× position by eight |
-| Title (`TITLE`) | The ship centred in a 512×288 view as in flight; "COMMODORE 64 ELITE", the load prompt and the "press space" line at rows 4, 40 and 44 | Nothing beyond the ship, which is `LL9`'s twin |
-| Name entry, save menu (`MT26`, `SVE`) | Prompt and input line centred | Nothing |
-| Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | Text re-wrapped at 64 like the data screen; the Constrictor at the view's centre | The re-wrap, and `LL9`'s twin for the ship |
-| Pause screen (`FREEZE`) | Default layout | Nothing — it prints nothing, it holds the frame |
-| Death (`DEATH2`) | The wreckage in the 2× view, "GAME OVER" where it is | Nothing beyond the space view's twins |
-| Flight views | §6.2 | Nothing |
+| Status (`STATUS`) | **LANDED at RS-5-a**, sketch accepted 2026-09-08. `STATUS_LAYOUT{0, 4, 2}` with two anchors: the title to wide (20, 3), and canvas rows 12 to 23 — "EQUIPMENT:" and the eleven lines under it — to wide (42, 12) at stride 2 | Nothing; the equipment list is one anchored rectangle. **CORRECTED at RS-5-0: not "an anchor moves its first"** — an anchor covers a block, because a per-cell one would leave the rest of each string behind |
+| Buy / market (`TT167`, `TT219`) | **LANDED at RS-5-b**, sketch accepted 2026-09-08. `BUY_LAYOUT{0, 1, 2}` with ten anchors: four fields whose canvas ranges are 0–17, 18–19, 20–24 and 25–39, and six that fold the game's TWO heading rows onto one wide row | Nothing |
+| Inventory (`TT213`) | **LANDED at RS-5-b.** `INVENTORY_LAYOUT{0, 1, 2}`: title, the fuel and cash lines on the left, the hold anchored to wide (42, 4) so its first item is level with the fuel | Nothing |
+| Sell cargo (`TT210` at view 4) | **BLOCKED, and not on this design.** `TT208`'s head — the `TRADEMODE` and the "SELL CARGO" title — is not in the port: `KeyAction::SellCargo` calls `ListCargo` directly, so the sell screen never sets its view, never clears, and has no instruction at which to name a layout. It inherits whatever the previous screen left. Porting `TT208`'s head is a change to the character stream and is not a re-flow's to make | — |
+| Equip ship (`EQSHP`) | **LANDED at RS-5-b.** `EQUIP_LAYOUT{0, 1, 2}`: number and item over canvas columns 0–24, price over 25–39 right-aligned to wide 52, and a fourth anchor that brings `CLYNS`'s row 21 back to wide row 40 from the 43 the offsets would give it | Nothing |
+| Data on system (`TT25`) | **LANDED at RS-5-d**, sketch accepted 2026-09-08: `DATA_LAYOUT{4, 8, 1}` — the only table with `rowStride = 1`, because `TT25` double-spaces itself. **CORRECTED at RS-5-c: a column, not a width, and not two columns of pairs.** The pairs stay whole on the left — their colons are at a different canvas column on every line, so no rectangle can split label from value — and the description moves to a column of its own beside them, at the thirty characters `DA11` justified it to | Nothing. **The wide sink does NOT re-wrap**, and §6.2 carries the measurement: the faithful stream already holds thirty-column PADDING, so re-wrapping means re-justifying, and re-justifying means the picture carrying different space characters from the canvas |
+| Long-range chart (`TT22`) | **LANDED at RS-5-e.** `LONG_RANGE_LAYOUT{0, 19, 1}` with one anchor: the title to wide (20, 4), above the top rule. **CORRECTED: the map does not move.** `ToSpaceViewPoint` already supplies the space view's 64-pixel margin, so the doubled map is at 512×256 from cell (8, 4) — exactly what §6.3 asked a translation to produce. What was wrong was the TEXT, which the centred layout put at wide row 13, in the middle of the map | Nothing. `PlotDot2x` is `PlotPixel2x` and `DrawCrosshairs2x` is `DrawLine2x`; RS-3 built both |
+| Short-range chart (`TT23`) | **LANDED at RS-5-e.** `SHORT_RANGE_LAYOUT{0, 0, 2}` — `rowStride = 2` so every name keeps its disc's height — with one anchor for the title, which must not scale | **`TextPrinter::SetLabelRun`**, and it is the one thing a layout cannot do. A label's ORIGIN must double while its letters stay eight pixels apart; a column stride scales the gaps too and prints "O r r e r e". `TT23` is the only thing that knows where a disc landed, so it says so, once, at the instruction that already places the cursor. **"Labels no longer collide" is DECLINED, measured**: 142 names of 2,668 systems in range across all 256 charts, 0.4 per chart |
+| Title (`TITLE`) | **LANDED at RS-5-g with no table at all.** `TITLE` clears to view 13 and then sets `QQ11` to 0, so `LayoutForView` already hands it the space view's arrangement — and that is what the row asked for. **CORRECTED: rows 2, 30 and 34, not 4, 40 and 44**: the three lines are on canvas rows 1, 15 and 17, measured off the running screen, and the space view's stride puts each at the height the original put it | Nothing |
+| Name entry, save menu (`MT26`, `SVE`) | **BLOCKED, like the sell screen, and for the same reason.** `DiskAccessMenu` sets up no screen: it prints on whatever screen is up and inherits that screen's layout, so there is no instruction at which to name one. Not a re-flow's to fix | — |
+| Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | **LANDED at RS-5-g.** `BRIEFING_LAYOUT{20, 0, 2}` — the space view's arrangement given to a screen `LayoutForView` calls a text screen. A briefing prints justified text OVER a ship drawn at twice its coordinates, so its rows must spread; `CENTRED_LAYOUT` was giving it the "1× centred" block ruling 3 rejected | `LL9`'s twin for the ship, which RS-2 built |
+| Pause screen (`FREEZE`) | **GONE.** `PauseScreen.cpp` and its header were deleted on `main` by InputTimer.md I-0, which turned `FREEZE` inside out into a state the outer loop is in. There is no routine here to re-flow | — |
+| Death (`DEATH2`) | **LANDED at RS-5-g with no table at all.** The screen runs on view 0, so it already has the space view's arrangement: "GAME OVER" lands on wide row 24, centred over a wreckage drawn at twice the scale | Nothing |
+| Flight views | **LANDED at RS-1** — §6.2's `SPACE_VIEW_LAYOUT`, and nothing since has needed changing | Nothing |
 
 Two sketches, so the shape is visible before any table is written. The market screen at 80 columns,
 the frame omitted:
@@ -600,19 +688,39 @@ the frame omitted:
   ...
 ```
 
-And the status screen, two columns where the original had one:
+And the status screen, two columns where the original had one. **ACCEPTED 2026-09-08 and LANDED at
+RS-5-a**; this is the wide grid rendered by running `STATUS` through `STATUS_LAYOUT`, not a drawing,
+with the wide row numbers on the left:
 
 ```
-                            COMMANDER JAMESON
-  ────────────────────────────────────────────────────────────────────────
-  PRESENT SYSTEM      : LAVE            EQUIPMENT:
-  HYPERSPACE SYSTEM   : LAVE              FUEL SCOOPS
-  CONDITION           : DOCKED            E.C.M. SYSTEM
-  FUEL                : 7.0 LIGHT YEARS   FRONT PULSE LASER
-  CASH                : 100.0 CR
-  LEGAL STATUS        : CLEAN
-  RATING              : HARMLESS
+  3 |                               COMMANDER JAMESON                                |
+ 12 |     Present System      :Tibedied             EQUIPMENT:                       |
+ 14 |     Hyperspace System   :Reorte                    Escape Pod                  |
+ 16 |     Condition           :Docked                    Fuel Scoops                 |
+ 18 |     Fuel:7.0 Light Years                           E.C.M.System                |
+ 20 |     Cash:    100.0 Cr                              Energy Bomb                 |
+ 22 |     Legal Status: Fugitive                         Extra Energy Unit           |
+ 24 |     Rating: Above Average                          Docking Computers           |
+ 26 |                                                    Galactic Hyperspace         |
+ 28 |                                                    Front Pulse Laser           |
+ 30 |                                                    Rear Beam Laser             |
+ 32 |                                                    Left Military  Laser        |
+ 34 |                                                    Right Mining  Laser         |
 ```
+
+The body ends on wide row 34 and the dashboard's footprint starts at 36, so the screen finishes
+where the dashboard would begin rather than trailing off. The title is on wide row 3 and not 4
+because `NLIN3`'s rule is drawn at canvas row 19 and its twin is a wide line at row 38, which is
+inside the glyphs of wide row 4. Nothing draws that rule today — `NLIN3`'s is "the canvas's, so a
+caller draws it" and only the two charts have a caller that does, which is a gap in the docked text
+screens older than this track.
+
+**CORRECTED at RS-5-0: the strings above are the printed ones and the first draft's were not.** That
+draft had every label in capitals with the colons in one column, and the screen prints neither: only
+the title and "EQUIPMENT:" are capitals, the first three labels are tabbed to column 21 and the last
+four carry their colon inline, and the spacing inside "Cash:    100.0 Cr" is `PCASH`'s own. The
+strings here were read off the port printing the screen rather than written down from memory, which
+is the standard the paragraph below sets and the draft did not meet.
 
 Nothing in either sketch is a new sentence, a new token or a new order: every string is the one the
 faithful screen prints, in the order it prints it, and the layout only decides the cell. That is the
@@ -745,7 +853,7 @@ path the layout did not see — are what the estimate cannot price.
 | **RS-4 The dashboard** ✅ **built 2026-09-07 (§13)** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, and the bootstrap. **NOT `DASHBOARD_IMAGE_2X`, `bitmaps.py`'s fourth sheet or `bootstrap-2x`** — a generated table that is a pure function of one already in the tree is a copy, so the bootstrap is computed (§5.3). Sprites were already doubled in `Resolve` at RS-0. **The dashboard region flips here, so nothing on the screen is upscaled any more** | The bootstrap equal to the canvas doubled over all 71,680 pixels; the bar sweep over every value at every entry point; the scanner's fraction swept over both signs and every high byte; a whole `DIALS` frame shadow-tested; blips erase by redraw | 3 |
 | **RS-4-art The picture** | The owner redraws the dashboard at 640×112 over the bootstrap PNG (§5.3, ruling §11.1); the import replaces `CopyDashboardPicture2x`'s call and nothing else; no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
 | **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the sketch accepted before the table is written (ruling §11.2); the text shadow test green including the no-collision clause; a hand-check | 1 each, 8–10 in all; the charts are two each |
-| **RS-6 Close** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `outpost-elite-names` re-ceilinged; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
+| **RS-6 Close** ✅ **built 2026-09-08 (§13)** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
 | **Later, optional** | Re-authored 48×42 sprites (§5.4); an aspect-ratio option (ADR-005 §1, unchanged) | — | — |
 
 **Total: roughly 25 sittings plus the artwork**, about a quarter of the port and a third of the
@@ -785,10 +893,10 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 | # | Risk | Mitigation |
 |---|---|---|
 | R23 | **A faithful routine is edited without its twin.** The canvas is right, the tests are green, and the screen drifts — a line drawn from a heap the twin no longer mirrors, a new call site with no twin | `check_twins.py` (§8.6) fails the push; the shadow tests (§8.1) fail the frame; both in CI |
-| R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | The no-collision clause of the text shadow test, run over every docked screen the session tests drive; the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
+| R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOneWideCell` sweeps the whole 40×25 grid of every layout in the tree and fails on the first collision (RS-5-0, and it caught one the day it was written); the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
 | R25 | **The extra bit is wrong and nothing sees it.** A twin that halves to the faithful value at every pixel can still be off by one hi-res pixel everywhere, and the shadow test allows one | The property sweeps of §8.2 on every twin divide and root; a screen golden per scene |
 | R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | §8.4's replay run both ways; T1 as a review rule; and since RS-3 there is no second heap at all — the twins read the faithful bytes, so there is no second pointer to move |
-| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture is part canvas-upscaled and part native, and a screenshot taken then is not the design | `Picture::NativeRegions` is a struct with a `Complete()` test that RS-6 asserts, and `ThePicture::TheRegionsSayWhichSlicesHaveLanded` fails the day every region is native and the fallback is still there; the journal names which regions are native at each slice. **Both regions flipped by RS-4 and `Complete()` now holds — the tripwire has fired and RS-6 is the only slice left that owes anything to it.** **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked. The regions are the two the raster split already makes, and the text layer belongs to the upper one, which flips when RS-3 completes it |
+| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture was part canvas-upscaled and part native, and a screenshot taken then was not the design | **CLOSED at RS-6.** The tripwire was `Picture::NativeRegions` and its `Complete()` test; it fired at RS-4 when both regions turned over, and RS-6 deleted the flags, `UpscaleCell` and the canvas fallback with them. What replaces it is the opposite assertion — `ThePicture::AnUndrawnPictureIsBlankHoweverBusyTheCanvasIs` — which fails if a pixel ever comes from the canvas again. **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked |
 
 ---
 
@@ -798,7 +906,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->460 tests with the oracle present, all passing, and all
+<!--count:tests-->469 tests with the oracle present, all passing, and all
 <!--count:checks-->19 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -882,7 +990,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->460 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->469 tests, green with
 the oracle present, and all <!--count:checks-->nineteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -935,7 +1043,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->460 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->469 tests, green with the
 oracle present, and all <!--count:checks-->nineteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1198,3 +1306,321 @@ canvas pixel is two, and `x_hi` moves in canvas pixels.
 frame lines, the same labels. That is RS-4-art and it is the owner's, on no slice's schedule. And
 nothing is re-flowed — RS-5 is the first slice with a design question in it rather than a
 measurement, and its rulings ask for a sketch per screen before a table is written.
+
+### RS-5-0 — the anchor, and two things the re-flow's mechanism could not do, 2026-09-08
+
+**Built and green: `Anchor`, `TextLayout::anchors`, and the collision sweep.** Nothing moved on the
+screen — no view has a table yet, `CENTRED_LAYOUT` and `SPACE_VIEW_LAYOUT` are what every view still
+gets, and the suite is 454 green with all 18 checks passing. This slice is the mechanism §6.3's
+sub-slices need and nothing else, because every one of those is gated on an accepted sketch
+(ruling §11.2) and building a table before the sketch is building the wrong screen faster.
+
+**AN ANCHOR IS A RECTANGLE, and the design's cell-to-cell version cannot be built.** §6.2 gives one
+as `(fieldColumn, fieldRow) -> (wideColumn, wideRow)`, and a field is not a cell. RS-1 settled that
+`Map` is a pure function of the faithful cell with nothing stored between glyphs, so by the time the
+Q of "EQUIPMENT:" is printed, nothing remembers that its E was moved — a per-cell table has to name
+all ten, and the eleven equipment rows of up to twenty-four characters come to some two hundred and
+fifty entries kept in step by hand. A rectangle relocated to a wide origin, with a row stride of its
+own, says the same thing in one table row, and the whole status re-flow is ONE anchor. The stride is
+the anchor's rather than the layout's because a block that moves usually wants spreading: eleven
+packed rows in the right-hand half of a fifty-row screen leave two thirds of it empty.
+
+**A table anchored INTO the centred layout cannot exist, and the sweep said so on its first run.**
+The collision test was written to protect Risk R24 and immediately failed on its own example:
+`CENTRED_LAYOUT` puts a 40-column screen at column 20, so it already covers columns 20 to 59 and
+every anchor target inside the wide grid is a cell the offsets reach. A re-flowed screen has to move
+its offsets as well as its blocks — which is a constraint on every table §6.3 will write, found in
+minutes by a property test rather than in a week by looking at a screen with two glyphs
+exclusive-ored into one cell.
+
+**`wrapWidth` was not added.** §6.2 lists it and only the data screen and the briefings need it, and
+it cannot be written before the sink that re-wraps exists to read it: a field nothing reads is a
+claim the code does not keep. That sub-slice adds it.
+
+**OPEN, and it gates the first sub-slice: `QQ11` does not name a screen.** `LayoutForView` reads the
+view byte, and `STATUS` and `TT213` both call `TRADEMODE` with `#8` — the status screen and the
+inventory screen are one view. Two ways out, and both are the owner's: one shared table for the two
+(they are the same shape — a heading, a few label lines, a list), or a layout handed to
+`SetUpTradeScreen` beside the view it already takes, at the one instruction that already says which
+screen is starting. The second adds a parameter to a faithful routine and no second copy of the
+game's state, so there is nothing to drift; it is put with the status sketch.
+
+**And the status screen was MEASURED before it was sketched.** §6.3's draft sketch had every label
+in capitals with the colons in one column, and the screen prints neither — only the title and
+"EQUIPMENT:" are capitals, the first three labels tab to column 21 and the last four carry their
+colon inline. The strings in §6.3 are now the ones a fully-fitted commander's screen actually
+prints, read off the port rather than remembered. The design's own line is that every string in a
+sketch is the string the faithful screen prints; a sketch drawn from memory does not meet it.
+
+### RS-5-a — the status screen, the first re-flow, 2026-09-08
+
+**Sketch accepted by the owner and built to.** §6.3 carries the rendered grid rather than the draft
+drawing: it is `STATUS` run through `STATUS_LAYOUT` and printed, so what the design shows and what
+the screen does cannot differ. `STATUS_LAYOUT{4, 4, 2}` with two anchors — the title to wide (24, 3)
+and canvas rows 12 to 23 to wide (46, 12) at stride 2 — is the whole re-flow. `StatusScreen.cpp`
+gained one argument at one call and nothing else; the character stream the seventeen fixtures
+compare is untouched.
+
+**THE LAYOUT IS THE CALLER'S, because `QQ11` does not name a screen.** Ruled by the owner from the
+two choices RS-5-0 put. `SetUpScreen` and `SetUpTradeScreen` each gained a four-argument form; the
+layout is stored in `Universe::screenLayout` in the same breath as `QQ11`, and `TextPrinter` reads
+it through the pointer that used to point at the view. `ClearMessageRows` takes a layout rather than
+a view byte for the same reason. The field is not folded into the state hash, for `picture`'s
+reason, and the replay digest is unchanged.
+
+**Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
+cannot write one parameter's default in terms of another. Every screen without a table of its own
+still gets exactly what it got before, which is why 454 of the 469 tests did not move.
+
+**The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
+row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
+39. Row 3 puts the title above it. Nothing draws that rule today: `NLIN3`'s is "the canvas's, so a
+caller draws it" and only the two charts have a caller that does. That gap is older than this track
+and is not a re-flow's to close, but a layout that ignored it would have to be redrawn the day it is.
+
+**The shadow test needed a BASELINE, which is new.** `TheGlyphsAgree` assumed every inked canvas
+cell was a glyph, which holds for a fixture that drives a printer and fails on cell (0, 0) of any
+real screen: the border and the rules are inked on both surfaces by twins that work in wide
+coordinates and not through a layout. So the test draws the frame first, keeps both surfaces, and
+compares only what changed. Every screen re-flowed after this one wants the same shape.
+
+### RS-5-b — the three trade screens, 2026-09-08
+
+**Sketches accepted and built to: the market list, the inventory, the equipment shop.** Three tables,
+seventeen anchors between them, no twin and no change to any screen routine beyond the argument each
+now passes at the `TRADEMODE` call it already made. §6.3 carries each table's numbers.
+
+**THE MARKET SCREEN'S HEADING IS TWO FAITHFUL ROWS ON ONE WIDE ROW, and that is the first thing in
+this track that 80 columns buys outright.** The game splits its header because "UNIT PRICE" and
+"QUANTITY FOR SALE" do not fit over their columns in forty: canvas row 1 carries "UNIT" and
+"QUANTITY", canvas row 2 carries "PRODUCT UNIT PRICE FOR SALE". Six anchors interleave them on one
+wide row so each phrase lands over the column it heads. Not a word is new — the tokens and their
+order are the game's, and only the cells are the table's — which is exactly the line §6.3 draws.
+
+**The equipment shop's fourth anchor is a new KIND of reason to move something.** `EQSHP` asks its
+question on `CLYNS`'s row 21, which is "just under the text" on a 25-row screen and is nowhere near
+anything on a 50-row one: the offsets put it on wide row 43, thirty rows below a list that ends at
+34. Every anchor before this one moved a block because the screen is WIDER; this one moves it
+because the screen is also TALLER, and a row number chosen for the bottom of a short screen means
+nothing on a long one. Every screen with a `CLYNS` prompt will want the same anchor.
+
+**THE SELL SCREEN IS BLOCKED, and the block is older than this track.** `TT208`'s head — the
+`TRADEMODE` and the "SELL CARGO" title — is not in the port. `KeyAction::SellCargo` calls
+`ListCargo` directly, so the sell screen never sets its view, never clears the screen and has no
+instruction at which to name a layout; it inherits whatever the previous screen left, on both
+surfaces, and always has. Porting that head is a change to the character stream seventeen fixtures
+compare, which is not a re-flow's to make. Recorded in §6.3 as its own row rather than left inside
+the "buy / sell / inventory" one, because the three are not one screen and only two of them could be
+built.
+
+**The screen tests share a `Docked` rig now**, which is what three more of them made worth having:
+a universe with both surfaces wired as `Game` wires them, and a `FillTheHold` for the cargo lists.
+The status screen's test moved onto it in the same change.
+
+### RS-5-c — `wrapWidth` declined, measured, 2026-09-08
+
+**The one thing §6.3 asked for that is not a table cannot be built, and the reason is padding rather
+than breaking.** The design has the wide sink re-wrapping the data screen and the briefings at 64
+columns, treating a break the justifier made as soft. But `DA11` does not merely break a justified
+line — it WIDENS THE GAPS until the thirtieth character is a space, so the stream the canvas receives
+already carries the padding for a thirty-column measure. Re-flowing it to 64 without re-justifying
+carries that padding into a longer line and prints text with holes in it; re-justifying means the
+picture emitting a different number of SPACE characters from the canvas, which breaks the invariant
+`TheGlyphsAgree` and the whole of §8.1 rest on — and breaks it precisely on the two screens whose
+text is longest and least checkable by eye.
+
+**So the field is deleted from the design rather than deferred again.** RS-5-0 left it out because
+nothing read it; this slice says nothing ever will. The description gets a COLUMN instead of a
+WIDTH: thirty characters is a good measure, and eighty columns is enough to stand the paragraph
+beside the label/value pairs rather than under them.
+
+**And §6.3's "label/value pairs at columns 4 and 28" is not expressible either.** `TT25` prints
+"Economy:Poor Industrial" and "Gross Productivity:11520 M CR" with the colon at canvas column 8 in
+one and 19 in the other, so no rectangle splits label from value across the rows: an anchor moves a
+column RANGE, and there is no range that is "the label" on every line. The pairs stay whole on the
+left, which is what the sketch shows.
+
+**Third time this track has declined something the design promised, and the shape is always the
+same**: `Divide512` and the sun's twin at RS-3, the compass bit at RS-4, `wrapWidth` here. Each was a
+real improvement, each was measured, and each cost more evidence than it bought. Written down so the
+next one is recognised faster.
+
+### RS-5-d — the data screen, and the shear that three tests could not see, 2026-09-08
+
+**The data screen landed to its accepted sketch** — `DATA_LAYOUT{1, 8, 1}`, the pairs whole on the
+left, the justified description in a column of its own beside them. It is the only table with
+`rowStride = 1`, because `TT25` double-spaces itself and a stride of 2 would space it four wide rows
+apart.
+
+**AND RS-5-b's TABLES WERE WRONG ON THE SCREEN, which this slice found and fixed.** An anchor covers
+a range of CANVAS columns, and the ranges had been read off a dump of the printer's `XC` — which is
+four cells to the left of the canvas cell a glyph actually lands on. So the market screen's item
+names and the equipment shop's item lines were SHEARED: "Radioacti   ve  s", "Large Cargo   Bay",
+half of each word at the anchor's column and half at the offsets'.
+
+**Three green tests said nothing, and that is the finding.** A sheared mapping is still injective;
+it still puts every canvas glyph on the picture; it still leaves nothing on the picture the canvas
+lacks. All three clauses of §8.1 hold on a screen that is unreadable, because every clause is about
+cells and none is about WORDS. §8.1 gains a fourth: two canvas cells side by side, both with ink,
+must land side by side. Planted against the original mistake it fails in one line and names the
+cells.
+
+**The sketch was supposed to be the check, and the renderer lied to it.** Ruling §11.2 puts an ASCII
+sketch in front of the owner precisely so that a person sees the screen before the table is written
+— and the sketch harness plotted `XC` where it should have plotted `XC + 4`, so the pictures shown
+for RS-5-a and RS-5-b were four columns left of the truth and hid the shear. The harness reads the
+canvas now. A gate is only as good as the instrument behind it, and this one was measuring the wrong
+thing for two slices.
+
+**Everything is re-rendered and re-accepted against the corrected instrument**: the status screen's
+offsets go from 4 to 0 with its anchors from (24, 46) to (20, 42), the three trade tables likewise,
+and every screen now lands exactly where its sketch showed.
+
+### RS-5-e — the two charts, and the label a layout cannot place, 2026-09-08
+
+**NEITHER MAP MOVES, and §6.3's translation was work that did not need doing.** The design has the
+long-range map re-laid at 512×256 from cell (8, 4). It is already there: `ToSpaceViewPoint` supplies
+the space view's 64-pixel margin to every 2× drawing, so the doubled map runs from wide cell 8 and
+the rules with it. Nothing needed an offset, no twin needed a parameter, and the thing that was
+actually wrong was invisible in the design — the chart's TEXT was still on the centred layout, which
+put "GALACTIC CHART 1" at wide row 13, in the middle of its own map. A table fixes it.
+
+**THE SHORT-RANGE CHART NEEDED A MECHANISM, AND `columnStride` WAS NOT IT.** `TT23` puts a name
+beside its disc by dividing the disc's x by eight; the discs are at twice their coordinates, so the
+name's origin must double. The obvious field — a column stride to mirror `rowStride` — was built,
+and it prints `O r r e r e`: `Map` runs per GLYPH, so a stride of 2 doubles the gaps between letters
+as well as the distance to the origin. **A label is a RUN whose start moves and whose letters do
+not**, and no pure function of a cell can express that, which is exactly what §6.2 predicted when it
+said the stored cursor was really for RS-5.
+
+So `TextPrinter::SetLabelRun` is that cursor, in its smallest honest form: the row, the first canvas
+column, and the wide column, set by `TT23` at the instruction that already places `XC`, and cleared
+by the first control code — the newline after the name. It lives in the PRINTER and not the
+universe, because a `Universe` is copied and hashed field by field and a cursor that lasts one name
+belongs in neither.
+
+**"Labels no longer collide" is DECLINED, and this one was measured before it was argued.** `TT23`
+gives a name the row it wants, else the row below, else the row above, and drops it if all three are
+taken. Over all 256 charts of galaxy one: 2,668 systems in range, **142 names lost — 5.3%, or 0.4
+names on an average chart**, with the worst chart losing four; a fifty-row test would recover about
+a hundred of them across all 256. Against that: the twin would be DECIDING which systems are named,
+which is rule T1's line; the picture would carry ink the canvas has not, which §8.1's third clause
+forbids; and `TT23` feeds "was it named" back into the disc's SIZE through the carry `cpl` leaves,
+so a differently-named chart is a differently-DRAWN one. Half a name a chart is not worth any of it.
+
+**Fourth decline of the track**, after `Divide512`, the compass bit and `wrapWidth` — and the first
+where the measurement was of the GAME rather than of the arithmetic.
+
+### RS-5-f — the frame, which made four green screens red, 2026-09-08
+
+**`main` moved under this branch, and the merge was where the constraint appeared.** M6-a's work
+gave `TTX66K` the picture, so a screen change now wipes the wide surface and draws the border on it
+— which is right, and is rule T3 applied to a routine this track had not twinned. It also means the
+wide surface has a FRAME on it for the first time, and four of the five re-flowed screens were
+drawing text underneath it.
+
+**The interior is 8 to 71, measured.** The border fills wide columns 0 to 6 and 73 to 79 with colour
+band and puts its vertical rules on 7 and 72. Sixty-four columns — exactly twice the thirty-two the
+canvas gives `CHPR`, which is the arithmetic that makes the two-column screens work at all: one
+column of text at `columnOffset = 4` occupies 8 to 39 and leaves 40 to 71 for a second, which is why
+every two-column table here anchors its right-hand block to wide column 36.
+
+**Every table moved right by four and every right-hand block moved left by six**, and the design's
+numbers in §6.3 with them. Nothing about the arrangement changed; the screens are the ones the owner
+accepted, inside the frame instead of over it.
+
+**§8.1 gains a fifth clause and the third loses eight columns.** The new one is that no table may put
+a glyph outside 8..71, checked over every layout in the tree — the property that would have caught
+this the moment the border landed rather than four tests later. The collision sweep now runs over the
+32 cells `CHPR` can write rather than all 40, because the eight margin cells carry the frame and can
+never hold a glyph: sweeping them turned two-column tables into an impossible packing — two
+40-column images do not fit in a 64-column interior — for cells that cannot collide.
+
+**The lesson is the same one RS-5-d taught, one level up.** That slice found a test that could not
+see a sheared word; this one found a test that could not see a screen printed under its own border.
+Both times the missing clause was about something the shadow test's cell-by-cell view has no word
+for, and both times the fix was to say the property out loud.
+
+### RS-5-g — the last five rows, three of which were a table that did not need writing, 2026-09-08
+
+**RS-5 is complete.** Every row of §6.3 is landed, blocked with its reason, or gone.
+
+**THREE OF THE LAST FIVE NEEDED NOTHING, and measuring is what showed it.** The title screen, the
+death screen and every flight view run on view 0 or 13, so `LayoutForView` has been handing them the
+space view's arrangement since RS-1 — and that arrangement is exactly what §6.3 asks for: the rows
+spread so a line lands at the height the original put it, over a ship drawn at twice its
+coordinates. The title's three lines are on canvas rows 1, 15 and 17 and land on wide 2, 30 and 34;
+"GAME OVER" lands on wide row 24, centred over the wreckage. §6.3's "rows 4, 40 and 44" was a guess
+and is corrected. A test asserts all of it, because three screens that are right by inheritance are
+three screens a later change to `LayoutForView` would move with nothing to catch it.
+
+**THE BRIEFINGS WERE THE ONE REAL TABLE, and the diagnosis is the interesting part.** `BRIEF`,
+`BRIEF2`, `DEBRIEF` and `BRP` run on view 1, which `LayoutForView` calls a text screen — so the
+briefing was printing as a 40×25 block in the middle of an 80×50 one, which is precisely the "1×
+centred" arrangement ruling 3 rejected as an end state. But a briefing is not a text screen: it
+prints justified text OVER a ship. `BRIEFING_LAYOUT{20, 0, 2}` gives it the space view's treatment
+on a screen that is not the space view, and the 30-column justified block lands centred in the
+frame's interior at wide 25 to 55.
+
+**THE SAVE MENU IS BLOCKED, and it is the sell screen's blockage exactly.** `DiskAccessMenu` sets up
+no screen at all: it prints on whatever screen is up and inherits that screen's layout, so there is
+no instruction at which to name one. Both are the same shape of gap — a screen the port drives
+without ever clearing or claiming the display — and neither is a re-flow's to close.
+
+**AND THE PAUSE SCREEN IS GONE.** `PauseScreen.cpp` and its header were deleted on `main` by
+InputTimer.md's I-0, which turned `FREEZE` inside out into a state the outer loop is in. §6.3's row
+described a routine that no longer exists; it says so now rather than being quietly left true.
+
+**Two of the eleven §6.3 rows are blocked and both blockages are the same defect**, which is worth
+naming once rather than twice: the port has two screens — sell cargo and the save menu — that print
+without setting up a screen. On the canvas that has always meant they draw over whatever was there;
+on the wide surface it means they inherit a layout chosen for something else. Fixing either changes
+the character stream the fixtures compare, so it belongs to the port track and not to this one.
+
+### RS-6 — the close, 2026-09-08
+
+**The scaffolding is down.** `Picture::UpscaleCell`, `NativeRegions`, `Native()` and `SetNative()`
+are deleted, and `Resolve` has two kinds of cell instead of three. What the canvas is still read for
+is the raster state this surface does not hold — the dashboard flag, the energy bomb's mode and
+background, colour RAM, the sprite pointers — and for no pixel at all.
+
+**Risk R27 closes with the OPPOSITE assertion to the one that opened it.** The tripwire was
+`Complete()`, watching for the day every region turned native; it fired at RS-4. What stands in its
+place is `AnUndrawnPictureIsBlankHoweverBusyTheCanvasIs`, which resolves a picture nobody has drawn
+on beside a canvas full of scene and requires that not one pixel crossed. Before this slice it would
+have failed on every pixel of that scene.
+
+**TWO TESTS HAD TO BE REWRITTEN RATHER THAN RETIRED, and the energy bomb's is the interesting one.**
+Both leaned on the fallback to give the two surfaces a shared background. The sprite test now runs
+on two blank surfaces, which is enough: an empty canvas and an empty picture resolve alike
+everywhere, so any difference is a sprite pixel in the wrong place. The bomb's could not be rescued
+that way at all — **doubling a bit and then reading the result in pairs is not the same as reading
+in pairs and then doubling**: `01` doubled is `0011`, which as pairs is `00` and `11`, neither of
+them `01`. The upscale never had this problem because it doubled RESOLVED PIXELS rather than bits.
+So the property is stated directly now: the flag reaches the picture, and the picture's own bits
+resolve as the two-bit reading of themselves. A better test for having been forced to say what it
+means.
+
+**The amendments of §9 are made, with two corrections to the names.** §9 was written before RS-0 and
+calls the object `Elite::Screen` and the field `Universe::screen`; both are `Picture` (RS-0 renamed
+them, because `Universe::screen` was already `ScreenState`). ADR-001 §1 and §4, ADR-002 §4's two
+bullets, ADR-005 §1's presenter and placement bullets, ADR-007's excluded field and Modernize.md
+§4.8 all say `Picture` and `ScreenPresenter`.
+
+**ADR-008 is written in ADR-007's shape**, and its §3 is the part worth having: the five kinds of
+evidence that stand in for an oracle which cannot judge this surface, three of which exist because a
+green test failed to see something — a sheared word, a screen under its own border, and a mapping
+that put two glyphs on one cell.
+
+**`check_outpost.py` needed nothing.** §9 asks for it "over `ScreenPresenter`"; it globs
+`Outpost/*.cpp` and `*.h` and has covered `ScreenPresenter.cpp` since RS-0 created it. Written down
+rather than left as an unticked row, because a check that already does the job is not a task.
+
+**`outpost-elite-names` needed no re-ceiling either.** The count is 63 and this slice moved no
+`Elite::` name across the boundary: the upscale was private to `Picture` and the executable never
+named a region.
+
+**The track is built.** Seven slices, 469 tests, and one thing outstanding that is the owner's: the
+dashboard artwork (§11.1). Five improvements the design promised are declined with the measurement
+that declined each, two screens are blocked on a defect older than this track, and the C64 canvas is
+exactly what it was on the day RS-0 opened — which was the point.

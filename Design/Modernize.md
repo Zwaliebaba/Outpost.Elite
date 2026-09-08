@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->460 tests, oracle present), all <!--count:checks-->nineteen repository checks pass,
+(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->nineteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-comments-->2,911 lines QUOTE the
+references in `GameLogic/`'s comments, of which <!--count:opcode-comments-->2,921 lines QUOTE the
 original's instructions rather than describe its behaviour (M6-d's instrument, 2026-09-08 — the
 shape it asks for, and why naming an instruction is not quoting one, are in `check_modernize.py`); <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
@@ -723,7 +723,7 @@ layout-independent by construction and is the one instrument that sees compositi
 
 ### 4.8 What the executable becomes
 
-`Outpost/` keeps `Window`, `CanvasPresenter`, `SidSynth`, `SoundOutput`, `KeyMap`, `SaveStore` and
+`Outpost/` keeps `Window`, `ScreenPresenter`, `SidSynth`, `SoundOutput`, `KeyMap`, `SaveStore` and
 `Presentation.h`'s pacing, and gains one `Platform` class implementing the four ports. `Main.cpp`
 becomes: create the window and the device, build `Game` over `Platform`, and loop `PlanSteps` →
 `game.Step(input)` → present, with `Guarded` around it — the two hundred lines ADR-004 §1
@@ -1636,7 +1636,7 @@ were safe after M6-f, and none of them waited.
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
 | **M6-f The tree** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py` and the master-count markers removed; ADR-001 §5 and Risk R1 restated; `.gitignore`'s upstream rules dropped. | A fresh clone builds and runs the whole suite with nothing but the repository; `origin-tools` at zero. | 1 |
-| **M6-g ADR-008** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. | Accepted. | 1 |
+| **M6-g ADR-009** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran, and two documents cannot share a number. | Accepted. | 1 |
 
 **Total: roughly 90 sittings**, which is the same order as the port itself took (plan §7), and the
 plan expects the estimate to be wrong in the same direction the port's was: the dense units
@@ -1920,6 +1920,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — the second merge from `main`: the resolution track, and two things it took.**
+
+`main` gained RS-0 to RS-6 whole — the 640×400 surface, built and closed — while this branch ran.
+Twelve commits, and **the code merged without a single conflict**, which is worth recording: M6-c
+renamed identifiers across the drawing files in the same days RS re-flowed every screen through
+them, and the two never touched the same line. All seven conflicts were in `Design/`, and all seven
+were the same two numbers: this branch had 460 tests and nineteen checks, `main` had 469 and
+eighteen. Both facts are true after the merge and both survive — main's prose everywhere, because
+the RS document is now a RECORD rather than a plan, with the check count corrected to nineteen.
+
+**`opcode-comments` went UP, 2,911 → 2,921, and the ratchet said so before anything else did.** That
+is rule 5 working exactly as intended and it is not a regression: eight of the ten are
+`TextPrint2x.h`, a file that did not exist on this branch, and the rest are four single lines against
+two that `Picture.h` LOST. None of it has been through M6-d because M6-d had not started when `main`
+wrote it. So the ceiling is re-baselined to 2,921 with the reason on the record — **imported, not
+regressed** — and M6-d's target moves up with the tree it has to clean. Re-baselining upward is the
+thing rule 5 exists to prevent, so it is worth being plain about why this is the exception: the rule
+stops a SLICE undoing its own progress, and a merge is not a slice.
+
+**M6-g IS ADR-009 NOW.** RS-6 landed `ADR-008-the-picture.md`, and the detachment ADR was scheduled
+under the same number since before the resolution track existed. Two documents cannot share one, and
+the built one keeps it.
+
+469 tests green, all nineteen checks, replay digests unmoved.
 
 **2026-09-08 — M6-d-0: the instrument, and a tension between the row and R20.**
 

@@ -23,6 +23,7 @@
 #include "Stardust.h"
 #include "StartUp.h"
 #include "TextPrint.h"
+#include "TextPrint2x.h"
 #include "Trumbles.h"
 
 namespace Elite
@@ -179,6 +180,23 @@ namespace Elite
 
     std::uint8_t view = 0;      ///< 6502: QQ11 -- which screen is up
     std::uint8_t spaceView = 0; ///< 6502: VIEW -- which way the player is looking, 0 to 3
+
+    /*
+     * Where the 640x400 surface puts this screen's text (Resolution.md section 6.2, slice RS-5-a).
+     *
+     * NOT FOLDED INTO THE STATE HASH, for `picture`'s reason above it: it decides nothing the game
+     * does, only where the second rendering of a frame draws, and folding it would re-record the
+     * replay tables every time a screen is re-flowed.
+     *
+     * IT IS HERE AND NOT COMPUTED FROM `view` BECAUSE `QQ11` DOES NOT NAME A SCREEN. `STATUS` and
+     * `TT213` both call `TRADEMODE` with #8, so the status screen and the inventory screen are one
+     * view and cannot be told apart by the byte. `SetUpScreen` writes this in the same breath as it
+     * writes `view` -- one instruction, two facts, nothing to drift -- and the caller names the
+     * layout at the one place it already names the view.
+     *
+     * The default is the space view's because `view` defaults to 0, which is the space view.
+     */
+    TextLayout screenLayout = SPACE_VIEW_LAYOUT;
 
     /*
      * 6502: INF -- the ship block `LL9` part 1 writes two bytes of directly, as a slot.

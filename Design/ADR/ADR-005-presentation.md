@@ -24,9 +24,11 @@ main loop that ran as fast as the scene allowed.
 
 ### §1 Screen
 
-- **Canvas → texture → quad.** `CanvasPresenter` (in `Outpost/`) owns an `R8_UINT` 320×200
-  texture updated each presented frame from `Game::Frame()` through an upload ring, and a
-  pixel shader that maps index → C64 palette (the 16 VIC-II colours; the dashboard's
+- **Picture → texture → quad.** **Amended 2026-09-08 by the resolution track
+  ([Design/Resolution.md](../Resolution.md), ADR-008): 640×400 for 320×200, `ScreenPresenter` for
+  `CanvasPresenter`, and the window opens at 2×.** `ScreenPresenter` (in `Outpost/`) owns an
+  `R8_UINT` 640×400 texture updated each presented frame from `Game::Frame()` through an upload
+  ring, and a pixel shader that maps index → C64 palette (the 16 VIC-II colours; the dashboard's
   screen-RAM/colour-RAM maps `sdump`/`cdump` are already resolved into indices by the canvas)
   and samples with point filtering.
 - **Integer scale, letterboxed.** The largest integer factor that fits the client area, black
@@ -160,7 +162,9 @@ main loop that ran as fast as the scene allowed.
   occupies cells 4..35 of 40 (two x-units per multicolour pixel, 128 pixels of 160); and
   `ylookup[144]` is exactly character row 18, so the **space view is rows 0..143** and the
   dashboard starts at y 144. Measured by `CanvasSpikeTests.cpp`, and they become constants in
-  `Canvas.h`.
+  `Canvas.h`. **On the picture the same measurements hold doubled**: the view is x 0..511 in cells
+  8..71 of 80, and the dashboard starts at y 288 (`Picture.h`, and the frame's own interior is the
+  reason a re-flowed screen's text stays inside cells 8..71 — Resolution.md §8.1).
 
 ### §2 Sound
 

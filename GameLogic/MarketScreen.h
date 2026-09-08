@@ -102,6 +102,10 @@ namespace Elite
   /// (M6-0-e), which the trap `MarketTests` puts on its label stands in for.
   void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
+  /// The same, naming the 640x400 surface's layout for the screen being started -- `SetUpScreen`'s
+  /// four-argument form, and there for the reason given there (slice RS-5-a).
+  void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept;
+
   /*
    * 6502: TT210 -- list what is in the hold, and on the Sell Cargo screen offer each item for sale.
    *

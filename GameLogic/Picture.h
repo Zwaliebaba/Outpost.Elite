@@ -75,45 +75,6 @@ namespace Elite
     static_assert(BITMAP_SIZE == 32'000u, "the bitmap plane is 640x400 bits");
     static_assert(DASHBOARD_SIZE == 71'680u, "the dashboard plane is 640x112 indices");
 
-    /*
-     * Which parts of the picture this surface draws for itself. Everything else is the canvas,
-     * doubled (Resolution.md section 10, Risk R27).
-     *
-     * TWO REGIONS AND NOT THREE, which is a correction the building made. The design named a third,
-     * "text", and text is not an AREA: it lands over the space view in flight and over the whole
-     * screen when docked, so it cannot be a region of an image. The regions are the two the raster
-     * split already makes, and the text layer belongs to the upper one.
-     *
-     * A REGION FLIPS ONCE, WHICH IS WHAT ORDERS THE SLICES. Between the slice that writes a twin
-     * and the slice that completes its region, the twin's pixels are drawn here and not shown -- so
-     * the intermediate slices are verified by the shadow tests of Resolution.md section 8.1 rather
-     * than by eye, and the picture changes region by region rather than half a picture at a time.
-     * `Complete()` is what the last slice asserts before the canvas fallback is deleted.
-     *
-     * BOTH REGIONS ARE NATIVE SINCE RS-4 AND THE DEFAULTS ARE HOW THEY GOT THERE. There is no
-     * runtime decision here and no setter in the library: which regions are native is a fact about
-     * which slices have been built, so it is stated where a reader looks for it. What RS-3 had to
-     * finish before the upper one could be turned over was more than sections 4.2 and 4.3 named --
-     * the borders and the rules, the screen clears, the cell palettes every one of those bits is
-     * coloured through, the charts, and `CLYNS` -- because a region is native for EVERY screen that
-     * draws in it, not only for the space view it is named after (section 13).
-     *
-     * `Complete()` now holds, which is what RS-6 asserts before deleting `UpscaleCell`. It is not
-     * deleted yet: the canvas fallback is still what a `Picture` nobody has drawn on resolves
-     * through, which is what every test that compares the doubling relies on.
-     */
-    struct NativeRegions
-    {
-      bool spaceView = true; ///< rows 0..287, and every row of a docked screen -- LANDED at RS-3
-      bool dashboard = true; ///< rows 288..399, while the dashboard is shown -- LANDED at RS-4
-
-      [[nodiscard]] constexpr bool Complete() const noexcept
-      {
-        return spaceView && dashboard;
-      }
-      [[nodiscard]] constexpr bool operator==(const NativeRegions&) const noexcept = default;
-    };
-
     // ---- the bitmap plane --------------------------------------------------------------------
 
     /// The byte holding pixel (_x, _y), laid out as the canvas's is at twice the width: character
@@ -235,18 +196,6 @@ namespace Elite
       return m_dashboard;
     }
 
-    // ---- the regions -------------------------------------------------------------------------
-
-    [[nodiscard]] NativeRegions Native() const noexcept
-    {
-      return m_native;
-    }
-
-    void SetNative(NativeRegions _regions) noexcept
-    {
-      m_native = _regions;
-    }
-
     // ---- the picture -------------------------------------------------------------------------
 
     /// Blank every plane. The regions are NOT reset: which slices have landed is a fact about the
@@ -256,17 +205,17 @@ namespace Elite
     /*
      * Write `WIDTH * HEIGHT` colour indices -- what the presenter uploads.
      *
-     * `_canvas` is here for two reasons and both are deliberate. It supplies the raster state this
-     * surface does not hold: the dashboard-shown flag that decides which region the lower rows are,
-     * the energy bomb's mode and background, the colour RAM a multicolour pixel's %11 comes from,
-     * and the sprite pointers. And it supplies the PIXELS of every region that is not native yet,
-     * doubled -- which is what lets the game be played at 640x400 from the first slice, with each
-     * region taken over in turn.
+     * `_canvas` is here for the RASTER STATE this surface does not hold, and since RS-6 for nothing
+     * else: the dashboard-shown flag that decides which region the lower rows are, the energy
+     * bomb's mode and background, the colour RAM a multicolour pixel's %11 comes from, and the
+     * sprite pointers. Every PIXEL is this surface's own.
      *
-     * The doubling reads the canvas through `Canvas::ResolveCell`, which is the decode `Canvas::
-     * Resolve` itself uses. One decode in the tree and not two: two walks over the same bytes kept
-     * in step by hand is the defect ADR-002 section 4 records, where a change to one moved the
-     * picture without moving the other.
+     * IT USED TO SUPPLY PIXELS TOO. Between RS-0 and RS-4 a region with no twins yet was drawn from
+     * the canvas doubled, which is what let the game be played at 640x400 from the first slice while
+     * the twins were built region by region; `NativeRegions` said which regions those were and
+     * `UpscaleCell` did the doubling. Both are gone (Resolution.md section 10, Risk R27) -- the
+     * scaffolding came down when the last region was taken over, which is the whole point of having
+     * written it as scaffolding.
      */
     void Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas) const noexcept;
 
@@ -288,7 +237,6 @@ namespace Elite
     /// One character cell of the picture, each writing eight rows of eight indices `WIDTH` apart.
     /// Three and not one because a cell is one of exactly three things: the canvas doubled, this
     /// surface's own bits through its palette, or a copy out of the dashboard's index plane.
-    void UpscaleCell(std::uint8_t* _out, const Canvas& _canvas, int _column, int _row) const noexcept;
     void ResolveBitmapCell(std::uint8_t* _out, const Canvas& _canvas, int _column, int _row) const noexcept;
     void ResolveDashboardCell(std::uint8_t* _out, int _column, int _row) const noexcept;
 
@@ -313,7 +261,6 @@ namespace Elite
     std::array<std::uint8_t, BITMAP_SIZE> m_bitmap{};
     std::array<CellPalette, CELL_COUNT> m_cells{};
     std::array<std::uint8_t, DASHBOARD_SIZE> m_dashboard{};
-    NativeRegions m_native{};
   };
 
 } // namespace Elite

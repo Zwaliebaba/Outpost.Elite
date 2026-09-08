@@ -296,7 +296,7 @@ namespace Elite
 
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
                         MessageState& _message, Picture* _picture,
-                        std::uint8_t _view) noexcept
+                        TextLayout _layout) noexcept
   {
     // 6502: CLYNS -- LDA #0 / STA DLY / STA de. Whatever message was up is forgotten, which is why
     // `MESS` can clear the screen and then test `DLY` and find it zero (§6.67).
@@ -327,7 +327,7 @@ namespace Elite
 
     if (_picture != nullptr)
     {
-      ClearMessageRows2x(*_picture, LayoutForView(_view));
+      ClearMessageRows2x(*_picture, _layout);
     }
   }
 
@@ -338,6 +338,17 @@ namespace Elite
     if (m_state.caseFlags == 0xFFu)
     {
       return _character;
+    }
+
+    /*
+     * A label run lasts one line and ends at the first control code, which for `TT23` is the
+     * newline after the name (`TextPrinter::SetLabelRun`). Clearing it here rather than trusting the
+     * row to change is what stops a run outliving its screen: the next screen to print on the same
+     * canvas row would otherwise inherit it.
+     */
+    if (_character < 32u)
+    {
+      m_labelActive = false;
     }
 
     if (_character == 7)
@@ -476,7 +487,7 @@ namespace Elite
        * turn an `XC` into a canvas cell.
        */
       const std::uint8_t cell = static_cast<std::uint8_t>(TEXT_FIRST_COLUMN + m_state.column - 1u);
-      PrintGlyph2x(*m_picture, Layout(), cell, m_state.row, drawn, m_state.palette);
+      PrintGlyphAt2x(*m_picture, WideCellFor(cell, m_state.row), drawn, m_state.palette);
     }
   }
 
