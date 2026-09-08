@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->390 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->359 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-48: `Dashboard.h` and `Lasers.cpp` to zero, and the ENTRY POINT is the scale.**
+
+31 sites over two files: the dashboard header and the laser. Fifty-first and fifty-second at zero.
+
+**Two families of code-path reuse are now clear, and this slice adds to both.** `DangerColour`'s
+second path is the SIXTH `EQUB &2C`, and it states the hazard more sharply than the earlier five: a
+port written from a DISASSEMBLY would read those two operand bytes as an absolute address, emit a
+read of `$55A9`, and be right by accident (§6.63). And `DILX`/`DIL` is the third MID-INSTRUCTION
+entry point after `zZ+1` (M6-d-42) and `RE2+2` (M6-d-43) -- the routine opens with four shifts, so
+where a caller jumps in IS the scale: `DILX` divides the reading by sixteen, `DILX+2` by four,
+`DIL-1` by two and `DIL` not at all. All four are used. `DIL-1`, the one that reads like a typo, is
+the speed bar.
+
+So the original has two ways of sharing a body between callers that need different behaviour: a data
+byte that swallows the instruction after it, and an entry point part-way through an instruction.
+Neither survives a port as code; both survive as comments, and both are why M6-d rewrites rather
+than deletes.
+
+`Lasers.cpp` is the carry split §6.65 named, in three consecutive additions. Two of them run on
+`DORND`'s exit carry and are data-dependent -- the beam's convergence point moves a pixel on half the
+frames for no reason the coordinate explains. The third, the eight added to `GNTMP`, runs on a carry
+that is ALWAYS clear, because three bits plus 124 plus at most one is 132 and that cannot carry out
+of a byte. So a shot costs exactly eight, and the same uncleared shape means two different things
+three lines apart.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (45 and 16). `opcode-transcriptions` 390 → 359.
 
 **2026-09-08 — M6-d-47: `LoaderScreen.cpp` and `ShipSlot.cpp` to zero, and seven constants out of
 two.**
