@@ -388,12 +388,14 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->997 lines are an
-instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
+references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
+a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
+<!--count:opcode-transcriptions-->926 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
-`check_modernize.py`); M6-d drives the first to zero and caps the second; <!--count:origin-identifiers-->0 sites in the library, the
+`check_modernize.py`); M6-d drives the listings to zero and caps the quotations; <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1940,6 +1942,58 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-36: `SystemScreen.cpp` and `GameLoop.h` to zero, and a carry nothing clears.**
+
+71 sites over two files: the system data screen and the main loop's header. Twenty-seventh and
+twenty-eighth at zero.
+
+**The pack hunter's type depends on a carry nothing clears, and cutting the listing nearly cut the
+only sentence that said so.** Part 4's `AND #7 / ADC #PACK` reads as a mask and an add, and the
+first rewrite of the header said exactly that. `AND` does not touch the carry, nothing between the
+two instructions clears it, and the version this port follows has no `CLC` there — Elite-A's does,
+which is how the difference shows. So a live carry moves the pack one type along, the port has
+always modelled it (`AddWithCarry(masked, Sidewinder, _frame.carry)`), and the sentence three lines
+below already turns on the same carry. The listing was carrying a reason the prose was not. R20's
+test is not whether the rewritten prose reads completely; it is whether it says everything the
+listing implied, and the way to find out is to go back to the original rather than to re-read the
+paragraph.
+
+**And twice more the same hazard took the other shape: the prose invented a reason the listing had
+not given.** `LDA MJ` became "where the mission flag is read" — `MJ` is the WITCHSPACE flag, and
+`GameLoop.cpp` says so eleven lines from where the header now sits. And a label in `BCS TT205` or
+`BNE TT63` names where the branch GOES, so when the listing is cut the label has to stay on the path
+that reaches it; both rewrites left it sitting on the path that does not. All three were caught
+before the slice landed, by reading the original again rather than the paragraph. The cheap check for a whole file is that every claim the rewrite makes is
+one the source can be asked about.
+
+**A mechanical rename struck prose in M4-c-3 and sat unnoticed through two phases.** `ea6c8cb`
+renamed `carry` to `_frame.carry` and the substitution landed inside a sentence: "so the NEXT pass's
+first `DORND` rotates in the _frame.carry `NWSHP` returned". M6-d-14 reflowed the line above it
+without seeing it. Found by surveying every comment block for a port identifier standing where an
+English word belongs — one hit in the whole of `GameLogic/`, now repaired. Nothing checks for this
+shape of damage, and a rename is the one edit that can produce it everywhere at once.
+
+**`check_modernize.py --update` was escaping `§` on every run.** `json.dumps(..., indent=2)` defaults
+to `ensure_ascii=True`, so each rewrite turned `§4.3.1` in a `slice` field into `\u00a74.3.1` and
+churned a line it had not changed. `ensure_ascii=False`, and the diff for this slice is the two lines
+it should have been. The fourth defect in my own instruments this phase.
+
+The rest of `GameLoop.h` is the cheapest kind of transcription there is: nine of the spawner's rolls
+carried `CMP #220` above `TRUMBLE_BREED_ROLL = 220` and `CMP #35` above `TRADER_ROLL = 35` — the
+listing repeating the value the declaration already holds. Two of the nine were not: 224 is compared
+twice and means two different things, and 200 is compared twice with the second read against a
+rotated byte, and both of those had to survive into the prose.
+
+**And §3's own P12 row was claiming a subset relation that does not hold.** It read "4,103 `6502:`
+references in `GameLogic/`'s comments, of which 926 lines are an instruction LISTING" — but the
+listing counter has read `GameLogic/` **and** `Outpost/` since M6-d-0, deliberately, because R20
+applies to the executable too, and a listing need not carry a `6502:` marker at all. Two counts with
+different scopes, joined by an "of which". The row now says what each one covers. The numbers were
+right; the sentence around them was not, which is the harder kind to notice.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (36 and 21). `opcode-transcriptions` 997 → 926.
 
 **2026-09-08 — M6-d-35: `Explosion.cpp` and `Flight.h` to zero, and 194 is three things.**
 

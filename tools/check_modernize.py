@@ -597,7 +597,9 @@ def write_ratchet(_measured: dict[str, tuple[int, str]]) -> None:
         ],
         "ceilings": ceilings,
     }
-    RATCHET.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    # ensure_ascii=False: the `slice` fields cite the plan by section, so they hold `§`. The
+    # default would escape it to `\u00a7` and every --update would churn lines it did not change.
+    RATCHET.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 # ---- the self-test ---------------------------------------------------------------------------------

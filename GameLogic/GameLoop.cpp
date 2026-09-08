@@ -747,8 +747,7 @@ namespace Elite
         _frame.carry = pack.carry;
 
         // 6502: the spawn, then the count down and round again -- so the NEXT pass's first roll
-        // rotates in the
-        // _frame.carry `NWSHP` returned, not the one the `ADC` above left.
+        // rotates in the carry `NWSHP` returned, not the one the addition above left.
         _frame.carry = Spawn(_frame.bubble, _frame.work, TypeOf(pack.value), _frame.blueprint).created;
       }
 
