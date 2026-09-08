@@ -109,7 +109,7 @@ namespace Elite
       return Product{0, 0, carry};
     }
 
-    const std::uint8_t t1 = static_cast<std::uint8_t>(multiplier - 1);
+    const std::uint8_t decrementedMultiplier = static_cast<std::uint8_t>(multiplier - 1);
 
     std::uint8_t a = 0;
 
@@ -117,7 +117,7 @@ namespace Elite
     // the final shift below completes it.
     for (int step = 0; step < 7; ++step)
     {
-      ShiftAndAddStep(a, low, t1, carry);
+      ShiftAndAddStep(a, low, decrementedMultiplier, carry);
     }
 
     carry = (a & 0x01u) != 0u;
@@ -564,7 +564,7 @@ namespace Elite
   std::uint8_t Arctan(std::uint8_t _numerator, std::uint8_t _denominator) noexcept
   {
     // 6502: LDA P / EOR Q / STA T1 -- the operands' signs, which decide the quadrant at the end.
-    const std::uint8_t t1 = static_cast<std::uint8_t>(_numerator ^ _denominator);
+    const std::uint8_t signs = static_cast<std::uint8_t>(_numerator ^ _denominator);
 
     if (_denominator == 0)
     {
@@ -583,9 +583,9 @@ namespace Elite
       // 6502: AR1 -- the ratio is the wrong way up, so it is inverted and the angle reflected:
       // `STA Q / ... STA P`, and ARS1 divides the old denominator by the new one.
       const RatioAngle ratio = AngleOfRatio(denominator, numerator);
-      const std::uint8_t t = ratio.angle;
+      const std::uint8_t inverseAngle = ratio.angle;
 
-      const std::uint16_t reflected = 64u - t - (ratio.carry ? 0u : 1u);
+      const std::uint16_t reflected = 64u - inverseAngle - (ratio.carry ? 0u : 1u);
       if (reflected >= 0x100u)
       {
         return 63;
@@ -601,10 +601,10 @@ namespace Elite
     }
 
     // 6502: AR4 -- the operands' signs decided the quadrant before any of this ran.
-    if ((t1 & 0x80u) != 0u)
+    if ((signs & 0x80u) != 0u)
     {
-      const std::uint8_t t = angle;
-      const std::uint16_t opposite = 128u - t - (carry ? 0u : 1u);
+      const std::uint8_t firstQuadrant = angle;
+      const std::uint16_t opposite = 128u - firstQuadrant - (carry ? 0u : 1u);
       return static_cast<std::uint8_t>(opposite);
     }
 
@@ -740,8 +740,8 @@ namespace Elite
   {
     // 6502: STA R / AND #127 / STA K+2 -- R keeps the sign, K+2 takes the magnitude.
     const std::uint8_t sign = _value.sgn;
-    KBlock k;
-    k.high = static_cast<std::uint8_t>(_value.sgn & 0x7Fu);
+    KBlock result;
+    result.high = static_cast<std::uint8_t>(_value.sgn & 0x7Fu);
 
     const std::uint8_t magnitude = static_cast<std::uint8_t>(_multiplier & 0x7Fu);
     if (magnitude == 0u)
@@ -759,13 +759,13 @@ namespace Elite
      * One right shift of the whole twenty-four bit magnitude, which seeds the loop with the first
      * bit already in the carry.
      */
-    bool carry = (k.high & 1u) != 0u;
-    k.high = static_cast<std::uint8_t>(k.high >> 1);
+    bool carry = (result.high & 1u) != 0u;
+    result.high = static_cast<std::uint8_t>(result.high >> 1);
 
-    k.mid = static_cast<std::uint8_t>((_value.hi >> 1) | (carry ? 0x80u : 0u));
+    result.mid = static_cast<std::uint8_t>((_value.hi >> 1) | (carry ? 0x80u : 0u));
     carry = (_value.hi & 1u) != 0u;
 
-    k.low = static_cast<std::uint8_t>((_value.lo >> 1) | (carry ? 0x80u : 0u));
+    result.low = static_cast<std::uint8_t>((_value.lo >> 1) | (carry ? 0x80u : 0u));
     carry = (_value.lo & 1u) != 0u;
 
     // 6502: LDA #0 / LDX #24 / .MUL2
@@ -785,7 +785,7 @@ namespace Elite
       carry = (accumulator & 1u) != 0u;
       accumulator = static_cast<std::uint8_t>((accumulator >> 1) | (intoAccumulator ? 0x80u : 0u));
 
-      for (std::uint8_t* const byte : {&k.high, &k.mid, &k.low})
+      for (std::uint8_t* const byte : {&result.high, &result.mid, &result.low})
       {
         const bool next = (*byte & 1u) != 0u;
         *byte = static_cast<std::uint8_t>((*byte >> 1) | (carry ? 0x80u : 0u));
@@ -794,8 +794,8 @@ namespace Elite
     }
 
     // 6502: STA T / LDA R / EOR Q / AND #128 / ORA T / STA K+3 -- the sign is the two operands'.
-    k.top = static_cast<std::uint8_t>(accumulator | ((sign ^ _multiplier) & 0x80u));
-    return k;
+    result.top = static_cast<std::uint8_t>(accumulator | ((sign ^ _multiplier) & 0x80u));
+    return result;
   }
 
   std::uint8_t Normalise(std::span<std::uint8_t, 3> _vector) noexcept
@@ -806,26 +806,26 @@ namespace Elite
      * of them -- see the header.
      */
     const Product first = Square(_vector[0]);
-    std::uint8_t r = first.high;
-    std::uint8_t q = first.low;
+    std::uint8_t totalHigh = first.high;
+    std::uint8_t totalLow = first.low;
 
     bool carry = false;
     for (int axis = 1; axis < 3; ++axis)
     {
       const Product squared = Square(_vector[axis]);
-      const std::uint8_t t = squared.high;
+      const std::uint8_t squareHigh = squared.high;
 
-      const std::uint16_t low = static_cast<std::uint16_t>(squared.low) + q + (carry ? 1u : 0u);
-      q = static_cast<std::uint8_t>(low);
+      const std::uint16_t low = static_cast<std::uint16_t>(squared.low) + totalLow + (carry ? 1u : 0u);
+      totalLow = static_cast<std::uint8_t>(low);
       carry = low > 0xFFu;
 
-      const std::uint16_t high = static_cast<std::uint16_t>(t) + r + (carry ? 1u : 0u);
-      r = static_cast<std::uint8_t>(high);
+      const std::uint16_t high = static_cast<std::uint16_t>(squareHigh) + totalHigh + (carry ? 1u : 0u);
+      totalHigh = static_cast<std::uint8_t>(high);
       carry = high > 0xFFu;
     }
 
     // 6502: JSR LL5 -- Q = sqrt(R Q). The exit carry is not read here.
-    const std::uint8_t length = SquareRoot(r, q).value;
+    const std::uint8_t length = SquareRoot(totalHigh, totalLow).value;
 
     // 6502: LDA XX15,n / JSR TIS2 / STA XX15,n -- each component scaled to a length of 96.
     for (int axis = 0; axis < 3; ++axis)
@@ -931,7 +931,7 @@ namespace Elite
 
     // 6502: LL312new -- the answer is the byte in R, and all that is left is to put it back on
     // the scale the two loops above took it off.
-    KBlock k;
+    KBlock result;
 
     if ((y & 0x80u) != 0u)
     {
@@ -942,28 +942,28 @@ namespace Elite
       {
         const ShiftResult low = RotateLeftValue(a, false);
         a = low.value;
-        const ShiftResult k1 = RotateLeft(k.mid, low.carry);
-        k.mid = k1.value;
-        const ShiftResult k2 = RotateLeft(k.high, k1.carry);
-        k.high = k2.value;
-        k.top = RotateLeft(k.top, k2.carry).value;
+        const ShiftResult shiftedMid = RotateLeft(result.mid, low.carry);
+        result.mid = shiftedMid.value;
+        const ShiftResult shiftedHigh = RotateLeft(result.high, shiftedMid.carry);
+        result.high = shiftedHigh.value;
+        result.top = RotateLeft(result.top, shiftedHigh.carry).value;
         ++y;
       } while (y != 0u);
 
-      k.low = a;
+      result.low = a;
 
       // The sign is ORed in here and STORED on the other two paths, because only this one can
       // have shifted something into K+3 that is worth keeping.
-      k.top = static_cast<std::uint8_t>(k.top | sign);
-      return k;
+      result.top = static_cast<std::uint8_t>(result.top | sign);
+      return result;
     }
 
     if (y == 0u)
     {
       // 6502: DV13 -- the two scalings cancelled, so R is already the answer.
-      k.low = denominatorHigh;
-      k.top = sign;
-      return k;
+      result.low = denominatorHigh;
+      result.top = sign;
+      return result;
     }
 
     // 6502: DVL10 -- Y is positive, so the answer is scaled back DOWN. The top three bytes stay
@@ -975,9 +975,9 @@ namespace Elite
       --y;
     } while (y != 0u);
 
-    k.low = a;
-    k.top = sign;
-    return k;
+    result.low = a;
+    result.top = sign;
+    return result;
   }
 
   Quotient16 DivideWideByLog(std::uint8_t _dividend, std::uint8_t _divisor, std::uint8_t _high) noexcept

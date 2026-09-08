@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->353 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->297 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-11: `Arctan`'s two `T`s, which is why M6-c-7 left it alone.**
+
+56 sites, and the two functions M6-c-7 pulled back out are done properly. **`Arctan` has TWO `T`s in
+disjoint blocks** — the angle of the inverted ratio in the `AR1` branch, and a copy of the answer in
+the quadrant reflection at the end — so a rename keyed to the function renames both to one name, and
+the one it collides with is the `angle` already in scope. That is the defect M6-c-7 shipped and
+reverted. Read as two blocks they are `inverseAngle` and `firstQuadrant`, and `T1` is `signs`, which
+is what the operands' EOR is for.
+
+With them: `MULT12`'s inner `T1` is a `decrementedMultiplier` like every other; `MULT3` and `DVID3`
+each build a `KBlock` called `k`, which is the `result`; `NORM`'s running sum of squares is
+`totalHigh`/`totalLow` with a `squareHigh` per axis; and `MVS4`'s second half takes `otherLow` and
+`otherSign` from the split M6-c-9 made.
+
+**THE LESSON IS THE SCOPE OF A RENAME, NOT THE NAME.** Twice now the unit that needs one map has
+been a BLOCK and not a function, and both times the compiler was silent because the colliding name
+was an outer local. A scoped renamer that stops at the function boundary is the right tool for four
+families out of five and the wrong one here; what caught it both times was the whole suite.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored — the three `arith` mutants that moved at
+M6-c-7 name lines this slice did not touch.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 353 → 297.
 
 **2026-09-08 — M6-c-10: the line drawers, the seed twist, the number printer and the cloud.**
 
