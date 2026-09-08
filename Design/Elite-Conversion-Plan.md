@@ -57,7 +57,10 @@ push (ADR-003, amended). The mutant corpus is 95 edits in sixteen files with a f
 
 ## 1. What we actually have
 
-### 1.1 `MasterFile/` — <!--count:masters-->12 master files, <!--count:master-lines-->5,577 lines, and <!--count:library-includes-->710 files that are not here
+### 1.1 `MasterFile/` — 12 master files, 5,577 lines, and 710 files that were not here
+
+**`MasterFile/` was deleted at M6-f (Modernize.md, 2026-09-08) and the numbers below are history.**
+They carried checked markers while the folder existed; the markers went with it.
 
 | File | Lines | What it is | Port disposition |
 |---|---|---|---|
@@ -141,7 +144,7 @@ is preserved in the history and was true then.
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
 - `tools/` — the label map and table extractors, `c64_source.py`, and the
-  <!--count:checks-->fourteen repository checks CI runs on every push, of <!--count:tools-->16 scripts
+  <!--count:checks-->thirteen repository checks CI runs on every push, of <!--count:tools-->12 scripts
   in the folder.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.

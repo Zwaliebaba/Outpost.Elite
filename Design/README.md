@@ -29,7 +29,7 @@ no longer selecting a joystick the port cannot read, the crowded end and the doc
 while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
 repository** since M6-b-7 -- no assembler, no submodule, no assembled game. The suite is
 **<!--count:tests-->131 tests** and
-CI runs **<!--count:checks-->fourteen repository checks** beside it.
+CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -38,11 +38,12 @@ under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game 
 
 ## The one finding to read first
 
-`MasterFile/` holds the **<!--count:masters-->12 master files** of Mark Moxon's annotated C64
-Elite source (<!--count:master-lines-->5,577 lines). Those masters are almost entirely `INCLUDE`
-lines: they pull in **<!--count:library-includes-->710 distinct library files** plus the font
-binary, and the routine bodies, ship blueprints and token tables all live in those includes
-rather than in the masters. They were not in this repository.
+`MasterFile/` held the **12 master files** of Mark Moxon's annotated C64 Elite source (5,577
+lines), and it was deleted at M6-f on 2026-09-08 along with `Upstream/`. The numbers here are
+history and no longer carry checked markers. Those masters were almost entirely `INCLUDE` lines:
+they pulled in **710 distinct library files** plus the font binary, and the routine bodies, ship
+blueprints and token tables all lived in those includes rather than in the masters. They were not
+in this repository either.
 
 **The count used to read "13 master files ... 5,615 lines" and that counted the FOLDER**, not the
 source: upstream's own `README.md` sits beside the twelve `.asm` files and is 39 lines of
@@ -51,11 +52,10 @@ now marked and checked by `tools/check_counts.py`; the thirteen-file figure is s
 one for the licence exposure, which is every tracked file in the folder, and ADR-001 §5 says so
 there.
 
-**Slice 0a fixed that**: the upstream tree sits at `Upstream/elite-source-code-library`, pinned
-at commit `aa3f7ee`, and all <!--count:includes-->712 include paths resolve. It is a
-**submodule**, not a copy —
-a fresh clone needs `git submodule update --init` before anything here can be built or tested,
-and `tools/c64_source.py --check-all` is the standing proof either way, until M6-f takes both. See
+**Slice 0a fixed that**: the upstream tree sat at `Upstream/elite-source-code-library`, pinned
+at commit `aa3f7ee`, as a **submodule** rather than a copy, and all 712 include paths resolved.
+That is over: M6-f removed the submodule, the masters and the tools that read them, so a fresh
+clone needs nothing but a compiler. See
 [Elite-Conversion-Plan.md §1](Elite-Conversion-Plan.md#1-what-we-actually-have).
 
 ## Reading order

@@ -49,7 +49,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
-| **M6** | **Detach — behind the M6-0 gate, which closed 2026-09-07; M6-a is built and M6-b is blocked on two owner rulings (§4.10, §6).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then the oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
+| **M6** | **Detach — DONE 2026-09-08 except M6-g. The M6-0 gate closed 2026-09-07; M6-a built the recorder; M6-b was then CANCELLED by owner ruling and the oracle deleted instead (§8).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then -- by the ruling of 2026-09-08 -- the 337 comparisons against the original and the interpreter that answered them are DELETED rather than recorded; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
 
 Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
 it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
@@ -91,7 +91,7 @@ Clarified the same day into four rulings:
 | R-c | **The derived data stays**: the generated tables the game cannot run without, and the recorded fixtures the tests cannot run without. That is the accepted residual exposure (Risk R1, restated at M6-f). | Q7 is moot — the label table the bridge needs exists only while the oracle does, and is generated into the test tree for M0-b to M6-a and deleted with it. Q8 stands: `modernize-*` widened one check per commit. |
 | R-e | **"The port was wrong, the record is not needed."** (Ruled 2026-09-06, on the replay.) When a slice finds a defect in the port and fixes it, the replay record follows the fix: it is re-taken with the journal entry naming the defect, and no ADR-001 §6 row is needed for the record to move. What stays forbidden is a record that moves with no defect named — that is a refactor that changed the game. | Rule 1 and M0-c's "when the record may change", below. The journal entry is the audit trail; the oracle suites, which do not move for a fix of this kind unless the defect was theirs too, are the check that the fix is a fix. |
 | R-f | **DISCHARGED UNBUILT 2026-09-08.** The ruling was sound and its subject is gone: a test that made more than two thousand oracle calls was to fold its answers into one digest, and every test under that to keep a full record. Both halves describe a fixture the owner then ruled against building. | The measurement behind it stands and is worth keeping: 73 of the 295 tests that called the oracle made 98.5% of the calls, which is why no record-size threshold helped. Nothing in the tree depends on the ruling. |
-| R-g | **DISCHARGED UNBUILT 2026-09-08, except for the header, which exists and goes.** `labels.py --header` was built and `Tests/GameLogicTests/OracleLabels.h` is in the tree with a `--check` in CI — that half shipped. The other half, keying a record on the write set, has nothing to key. | The header is deleted with the machinery in M6-b-6 rather than kept: R-g's reason for keeping the labels was that "the tests still have to find their routines", and after M6-b-5 no test does. |
+| R-g | **DISCHARGED UNBUILT 2026-09-08, except for the header, which exists and goes.** `labels.py --header` was built and `Tests/GameLogicTests/OracleLabels.h` is in the tree with a `--check` in CI — that half shipped. The other half, keying a record on the write set, has nothing to key. | The header was deleted with the machinery at M6-b-7 rather than kept: R-g's reason for keeping the labels was that "the tests still have to find their routines", and after M6-b-5 no test does. |
 | R-h | **DISCHARGED, ANSWERED 2026-09-08 (M6-b-4).** The fixture's own verbatim figure is 63.9% — 4,340,437 of 6,791,718 bytes — and not the lower number §4.10's caveat predicted. | The ruling did its job: it is the measurement the owner read before ruling that nothing would be committed at all. It is the only one of the three that changed an outcome. |
 | R-i | **DISCHARGED, and the tag deleted with it** (owner ruling 2026-09-08, M6-d-59). R-i split M6-d's ratchet in two — a listing that carries no reason to **zero**, a quotation that IS the reason tagged `6502 quoted:` and capped — because the row's "at zero" and R20's "keeps the instruction sequence as a quotation" cannot both hold of one counter. The split was right to make and the residue turned out to be EMPTY: fifty-eight slices took the tree from 997 listings to zero and not one comment needed the tag. | The cap is zero, so there is nothing for a second counter to hold. `opcode-transcriptions` at zero now carries the whole guarantee with **no exemption** — which is stronger than the split was, and one fewer mechanism to rot. R20 still stands: keep the reason. What M6-d proved is that the reason is always sayable. |
 | R-d | **History is not rewritten by this plan.** Removing the files at the tip is M6-f; whether the history that carried them is rewritten is a separate owner decision and is not scheduled here. | Recorded in R21 (§7) so that it cannot be mistaken for something M6 did. |
@@ -400,8 +400,9 @@ executable and the suite where the port still calls something by its 6502 label 
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); no test loads the assembled original --
 47 files did until M6-b-5 deleted them and the 337 comparisons they carried, and M6-b-7 deleted
 the interpreter and the loader they used, so nothing needs BeebAsm, the submodule or the label
-map (the counter went with them: a count over a header that no longer exists guards nothing); <!--count:origin-tools-->6 of the tools read `Upstream/` or
-`MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
+map (the counter went with them: a count over a header that no longer exists guards nothing); no tool reads `Upstream/` or `MasterFile/` -- six did, and M6-f
+deleted the folders, the three tools that could not survive them and the counter over both; CI
+builds no assembler. This was the port's method, not a defect in
 it, and it is the one pattern that the owner's ruling (§1, R-a to R-d) makes a target: the end state
 builds, tests and reads with none of it present. Until M6 it is also what every other slice is
 measured by, which is why it is counted here and removed last.
@@ -876,12 +877,15 @@ the escape pod. Both are instruments since the M6-0 gate (2026-09-07): the revie
 holds a `Died` and an `Escaped` table beside `Docked` (M6-0-b). The data tables need nothing here: their oracle comparison (`extract_tables.py
 --check` and `TableTests`) was retired on 2026-09-07, and the tables are already the port's own C++.
 
-**What M6 removes, in order**: the label names from identifiers (M6-c), the assembly from the
-comments (M6-d), the markers and the ledger with `inventory.py` and AGENTS.md R7 (M6-e), and then
-`Upstream/`, `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py`,
-`extract_tables.py`'s assembler half, the BeebAsm steps in both CI jobs, and the count markers that
-described the masters (M6-f). ADR-001 §5 and Risk R1 are restated at M6-f to what is then true: the
-tree carries the original's data and the port's own code, and nothing of its source.
+**What M6 removed, in order, and all of it is done**: the label names from identifiers (M6-c),
+the assembly from the comments (M6-d), the markers and the ledger with `inventory.py` and
+AGENTS.md R7 (M6-e), the 337 comparisons against the original and the 32 files that held them
+(M6-b-5), their names and prose (M6-b-6), `Cpu6502`, `OracleImage`, `Oracle`, `OracleLabels.h` and
+the assembler on both CI legs (M6-b-7), and then `Upstream/`, `MasterFile/`, `labels.py`,
+`c64_source.py`, `extract_tables.py`, `golden_diff.py`, `.gitmodules`, `.gitignore`'s upstream
+rules and the count markers that described the masters (M6-f). ADR-001 §5 and Risk R1 are restated
+at M6-f to what is now true: the tree carries the original's data and the port's own code, and
+nothing of its source.
 
 ---
 
@@ -1663,7 +1667,7 @@ were safe after M6-f, and none of them waited.
 | **M6-c Identifiers** ✅ **built 2026-09-08 (§8, seventeen slices)** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** — **DONE**, 58 slices | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. §1 R-i split the scope on 2026-09-08 and is now discharged: the tagged-quotation half went unused and was deleted (M6-d-59). | `opcode-transcriptions` at **zero**, met — 997 → 0 across 116 files, with no exemption left in the counter; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** — **DONE**, 4 slices | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone (15 checks, from 19); `origin-markers` at **zero**, met — 4,103 → 0 in `GameLogic/` and 97 → 0 in `Outpost/`. The residue R-b may still want is 2,702 citations of original NAMES in prose, measured in §8 and left for the owner. | 1 |
-| **M6-f The tree** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py` and the master-count markers removed; ADR-001 §5 and Risk R1 restated; `.gitignore`'s upstream rules dropped. | A fresh clone builds and runs the whole suite with nothing but the repository; `origin-tools` at zero. | 1 |
+| **M6-f The tree** ✅ **built 2026-09-08 (§8)** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `labels.py`, `c64_source.py`, `extract_tables.py`, `golden_diff.py`, `Design/Reference/`, the master-count markers and `.gitignore`'s upstream rules removed; the `origin-tools` counter retired with the folders it counted; ADR-001 §5 and Risk R1 restated. `Cpu6502` and `OracleImage` went a slice earlier, at M6-b-7. | **Met.** A fresh clone builds and runs the whole suite with a compiler and nothing else: no submodule, no assembler, no assembled game. `origin-tools` is not "at zero" but GONE, which is the stronger answer and the same one M6-b-7 gave `oracle-test-files`. | 1 |
 | **M6-g ADR-009** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran, and two documents cannot share a number. | Accepted. | 1 |
 
 **Total: roughly 90 sittings**, which is the same order as the port itself took (plan §7), and the
@@ -1713,6 +1717,42 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-08 — M6-f: `Upstream/` and `MasterFile/` leave the tree.**
+
+The submodule entry, `.gitmodules`, the twelve masters and upstream's `README.md` beside them;
+`labels.py`, `c64_source.py`, `extract_tables.py` and `golden_diff.py`; `Design/Reference/`;
+`.gitignore`'s four blocks of upstream rules; the source-resolver check and the submodule checkout
+from CI. **A fresh clone builds and runs the whole suite with a compiler and nothing else** --
+M6-f's acceptance, met.
+
+**FOUR TOOLS AND NOT THE TWO THE ROW NAMED, and the two extra are worth naming.**
+`extract_tables.py` wrote the generated data tables from the assembled output; with nothing to
+assemble it cannot run, and the tables it wrote are checked in and are the port's own now -- which
+is exactly what §1 R-c calls the accepted residual exposure. `golden_diff.py` read the PNGs a
+failing golden wrote, and both goldens went with the oracle at M6-b-5; it had been orphaned for
+three slices and nothing noticed, which is the argument for a counter over tools rather than a
+list in a document.
+
+**Three counters retired with what they counted.** `masters`, `master-lines`, `masterfile-files`,
+`masterfile-lines`, `includes` and `library-includes` in `check_counts.py`, and `origin-tools` in
+the ratchet. The M6-f row asked for `origin-tools` AT ZERO; it is gone instead, for the reason
+M6-b-7 gave for `oracle-test-files`: a counter over a directory that does not exist guards
+nothing. Sixteen numbers in five documents lost their markers and kept their values, which is
+AGENTS.md §8's rule -- a number that no longer describes the tree is history, and history is not
+edited.
+
+**ADR-001 §5 and Risk R1 are restated rather than replaced.** The reasoning the owner ruled on in
+September stays where it is; both now open with what is true at the tip. **Neither goes green, and
+the reason is the same for both**: the HISTORY still carries all 5,616 lines of `MasterFile/`.
+Deleting at the tip changes what a clone gets, not what a fetch can reach, and whether the history
+is rewritten is an owner decision this plan does not take (§1 R-d, R21). The generated data tables
+stay for the reason they always did -- the game cannot run without them -- and they are as
+derivative as they were.
+
+131 tests green, all thirteen checks. What is left of M6 is `ADR-009` (M6-g), and beside it the
+mutation corpus M6-b-5 measured and did not touch.
+
 
 **2026-09-08 — M6-b-7: the interpreter, the image and the label header. No assembler on either leg.**
 

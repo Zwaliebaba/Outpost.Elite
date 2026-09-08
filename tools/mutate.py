@@ -22,10 +22,11 @@ says what happened.
 SIX THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has already lied.
 
 1. THE BASELINE IS PROVEN BEFORE ANY MUTANT IS BELIEVED. A worktree whose `Upstream/` submodule was
-   empty made every oracle test skip and `OracleIsPresent` fail by design; the harness read only
-   the suite's last line, saw one failure on every run, and reported every mutant as caught
-   (section 6.119). So the unmutated tree is run FIRST and must come back with zero failures. If it
-   does not, this stops and says so rather than producing a number.
+   empty made every comparison against the original skip and `OracleIsPresent` fail by design; the
+   harness read only the suite's last line, saw one failure on every run, and reported every mutant
+   as caught (section 6.119). There is no oracle to be missing since M6-b-7, and the rule stands
+   for every other reason a suite can be red: the unmutated tree is run FIRST and must come back
+   with zero failures. If it does not, this stops rather than producing a number.
 
 2. A TIMEOUT IS A CATCH. Turning `count - 1` into `count - 2` in a loop that stops at zero makes an
    odd count run for ever: the suite times out, no summary line is printed, and a harness looking
@@ -157,24 +158,6 @@ def select(_units: list[dict], _unit: list[str] | None, _ident: str | None) -> l
 
 # ---- the worktree --------------------------------------------------------------------------------
 
-# What the oracle opens, and nothing else: the label map and block manifest, plus the assembled
-# output the manifest points into. Tests/GameLogicTests/OracleImage.cpp is the authority on this
-# list, and it is short enough to copy.
-ORACLE_FILES = [
-    "Design/Reference/Labels.txt",
-    "Design/Reference/Binaries.txt",
-    "Design/Reference/LoaderLabels.txt",
-    "Design/Reference/LoaderBinaries.txt",
-]
-# The whole C64 version directory, 4.4 MB, and not just `3-assembled-output`. The manifest's own
-# rows reach sideways out of it -- `../1-source-files/images/C.CODIALS.bin` is the dashboard image
-# -- so copying only the assembled blocks produced a worktree where `OracleIsPresent` failed and
-# every oracle test skipped, which is §6.119's exact scenario arriving from a new direction. The
-# baseline gate refused it, which is what the gate is for. Copying the directory whole means a
-# later oracle that reads one more file does not silently start skipping.
-ORACLE_DIR = "Upstream/elite-source-code-library/versions/c64"
-
-
 def make_worktree(_at: Path) -> None:
     """A detached worktree carrying the WORKING TREE, with the oracle copied in -- no symlinks.
 
@@ -211,32 +194,10 @@ def make_worktree(_at: Path) -> None:
                      f"would answer about HEAD instead\n{applied.stdout}{applied.stderr}")
         print(f"worktree   carrying {len(pending.stdout.splitlines())} lines of uncommitted diff on top of HEAD")
 
-    for relative in ORACLE_FILES:
-        source = REPO / relative
-        if source.is_file():
-            target = _at / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-
-    source_dir = REPO / ORACLE_DIR
-    if source_dir.is_dir():
-        shutil.copytree(source_dir, _at / ORACLE_DIR, dirs_exist_ok=True)
-
 
 def remove_worktree(_at: Path) -> None:
     subprocess.run(["git", "worktree", "remove", "--force", str(_at)], cwd=REPO, capture_output=True, text=True)
     shutil.rmtree(_at, ignore_errors=True)
-
-
-def check_oracle_present() -> None:
-    """Say up front what section 6.119 found out the expensive way."""
-    missing = [name for name in ORACLE_FILES[:2] if not (REPO / name).is_file()]
-    if missing or not (REPO / ORACLE_DIR).is_dir():
-        sys.exit(
-            "error: the oracle is not assembled in THIS tree, so every oracle test would skip and\n"
-            "       every mutant would look caught (Risk R9, plan section 6.119).\n"
-            "       Run: python tools/labels.py --assemble"
-        )
 
 
 # ---- the runners ---------------------------------------------------------------------------------
@@ -660,7 +621,6 @@ def main(_argv: list[str]) -> int:
         whole_corpus = not arguments.unit and not arguments.ident
         return check_applicable(chosen, load_floor() if whole_corpus else None)
 
-    check_oracle_present()
     say_what_is_measured()
 
     scratch = Path(arguments.worktree) if arguments.worktree else REPO.parent / f".mutate-{os.getpid()}"

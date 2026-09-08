@@ -76,10 +76,8 @@ project configuration for the libraries.
   until M6-e retired that tool. M6-f deletes both.
 - `Upstream/elite-source-code-library` is the upstream tree, a **submodule** pinned at
   `aa3f7ee` (ADR-001 §5, corrected 2026-09-03). **Never edited, never reformatted, never
-  compiled by this solution.** A fresh clone has nothing there until
-  `git submodule update --init` runs, and until it does nothing from slice 1a onward can be built.
-  `inventory.py --check-includes` used to say so in one line; it went with the ledger at M6-e, and
-  M6-f deletes the submodule itself.
+  compiled by this solution** while it was here, and **deleted at M6-f (2026-09-08)** with the
+  masters and the tools that read them. A fresh clone needs a compiler and nothing else.
 - Generated data files (`ShipBlueprintData.cpp`, `TokenTables.cpp`, `SineTable.cpp`,
   `ArctanTable.cpp`, `LogTables.cpp`, `SoundTables.cpp`, `TuneData.cpp`, `Font.cpp`,
   `DashboardImage.cpp`, `SpriteData.cpp`, `Palette.cpp`, `CommanderData.cpp`) are **checked in**,
@@ -119,7 +117,7 @@ prose by M6-d, which is the phase this one was waiting for.
 | `check_modernize.py` | The modernisation ratchet: counts the legacy patterns `Design/Modernize.md` names and fails when any count rises above, or falls below, the ceiling recorded in `modernize_ratchet.json`; `--list` prints the counts, `--update` lowers the ceilings when a slice lands, and a self-test runs first | **Built** (Modernize.md M0-a); in CI |
 | `channel_census.py` | The channel census (Modernize.md M2-a): every routine's reads and writes of the zero-page workspace fields, with a verdict per field; `--check` fails when the table in Modernize.md §4.3 differs from the tree or a field has no verdict; `--report` prints every routine's events | **Built** (Modernize.md M2-a); `--check` in CI |
 | `bitmaps.py` | The three data tables that are pictures -- `FONT_DATA`, `DASHBOARD_IMAGE` and `SPRITE_DEFINITIONS` -- exported to indexed BMP sheets a paint program can edit, and imported back into the byte literals of their generated `.cpp` in place, by array name; a pixel's palette index is its bit value, and `--self-test` proves the round trip is the identity | **Built**; a tool, not a check |
-| `check_all.py` | Runs the <!--count:checks-->fourteen repository checks in CI's order, so a local run cannot leave one out. `check_gamelogic.py`, `check_outpost.py`, `check_modernize.py` and `check_twins.py` each contribute their own `--self-test`; `golden_diff.py`, `bitmaps.py`, `extract_tables.py` and `mutate.py` are tools rather than checks and are not in it. Four `inventory.py` entries went at M6-e with the ledger, and `labels.py --check` at M6-b-7 with the label header it checked | **Built** (plan §6.127) |
+| `check_all.py` | Runs the <!--count:checks-->thirteen repository checks in CI's order, so a local run cannot leave one out. `check_gamelogic.py`, `check_outpost.py`, `check_modernize.py` and `check_twins.py` each contribute their own `--self-test`; `bitmaps.py` and `mutate.py` are tools rather than checks and are not in it. Four `inventory.py` entries went at M6-e with the ledger, `labels.py --check` at M6-b-7 with the label header it checked, and `c64_source.py --check-all` at M6-f with `Upstream/` | **Built** (plan §6.127) |
 
 **The mutation tooling exists as of 2026-09-05, and what it changes is narrower than it looks.**
 `tools/mutants.json` holds the mutants per unit and `tools/mutate.py` runs them against a

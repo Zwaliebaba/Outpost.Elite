@@ -82,11 +82,6 @@
       "ceiling": 0,
       "slack": 0,
       "slice": "M6-c-11: Arctan's two Ts, and the kernel finished"
-    },
-    "origin-tools": {
-      "ceiling": 6,
-      "slack": 0,
-      "slice": "M0-a"
     }
   }
 }
