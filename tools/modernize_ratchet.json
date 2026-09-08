@@ -56,7 +56,7 @@
     "carry-params": {
       "ceiling": 30,
       "slack": 0,
-      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
+      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is §4.3.1)"
     },
     "mutants": {
       "ceiling": 97,
@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 1946,
+      "ceiling": 1928,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M6-d-17: PlanetDraw.cpp's meridians and crater, and the vector the prose named wrong"
     },
     "opcode-quotations": {
       "ceiling": 0,

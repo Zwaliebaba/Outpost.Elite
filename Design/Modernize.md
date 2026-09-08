@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,946 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,928 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-17: `PlanetDraw.cpp`'s meridians and crater, and the vector the prose named
+wrong.**
+
+18 more from `PlanetDraw.cpp`, now at 31 of 89. This is `PLS22`'s ellipse walk, `PL9`'s markings and
+`PL26`'s crater, and rewriting them turned up a comment that had been wrong since it was written.
+
+**The crater slides along the ROOF vector, not the nose.** `PL26` offsets the ellipse from the
+planet's centre and the prose said the offset ran along "its own nose vector", with the far-side test
+described as "the nose pointing away". Both are the roof: the test reads `INWK+20`, the offset starts
+at index 15, and `Ship.h` pins 15..20 to `roofv` — the port has always done the right thing and the
+sentence above it has always said otherwise. It survived because the listing under it (`LDA INWK+20 /
+BMI PL20`) was the part a reader would check, and the listing is right; drop the listing and the
+sentence has to carry the claim on its own, which is when it fails. That is the case for M6-d in one
+comment: a transcription can make a wrong explanation look verified.
+
+Two more of the same kind, kept rather than corrected because they were already right: the equality
+test in front of the greater-or-equal one is what makes the walk's last step INCLUSIVE, so a meridian
+reaching exactly 31 draws its final segment and a crater reaching 64 draws its; and `PLTOG`, the
+detail switch that skips the markings, is never written by anything in this build.
+
+`SetMeridianAngle` has the same fault the other way round: two of its comments say the ROOF vector's
+sign decides which way the meridian starts, and the line under them reads the NOSE — which is what
+`PLS4` reads (`INWK+14`), so again the code is right. Those two lines carry no listing, so they are
+not this slice's sites and are not touched here; noted so the next pass over this file does not have
+to rediscover them.
+
+469 tests green — the five `TheFlightReplay` digests among them, which is what the earlier entries'
+"replay digests unmoved" has always meant — all nineteen checks, 97 of 97 mutants from a full run,
+and no marker lost (149 in this file, before and after). `opcode-transcriptions` 1,946 → 1,928.
 
 **2026-09-08 — M6-d-17a: the mutation harness had been blocked since before M6-c, and one mutant had
 stopped compiling.**
