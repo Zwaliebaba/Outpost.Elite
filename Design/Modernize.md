@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,240 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,118 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,35 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-22: `Flight.cpp` to zero, and a comment that had the shift the wrong way round.**
+
+All 122 of them — 88 on lines of their own and 34 at the end of a line of code, which is the first
+file done since the counter learned to see the second kind. `RES2`, `ZERO`, the launch tunnel, the
+title screen's spinning Cobra, the death scene's wreckage and the escape pod. Sixth file at zero.
+
+**The shift that says "divide" and multiplies.** `PrepareDeathScene` doubles the speed twice, and
+the comment recorded that the upstream source says "divide by 4" — true of the BBC, which shifts the
+other way, and false of this build (§6.117). Rewriting it made the point plainer than the listing
+did: the sentence now says the speed is shifted LEFT and the upstream comment says divide, so the
+disagreement is the subject rather than something a reader has to spot between two mnemonics.
+
+Three more where the prose had to take over a claim the listing was carrying:
+
+- **The wreckage is a plate when the random X was odd** — and NOT, as the upstream comment says,
+  because of the generator called just above. A set carry rotated into the accumulator sits four
+  instructions up, and what it rotates is the roll counter, so the bit that decides is a different
+  random number from the one the comment names (§6.117).
+- **The carry into `Ze`'s first generator call is always clear on the first pass**, because every
+  character leaves through `CHPR` and `CHPR` returns with it clear; on later passes it is what the
+  previous round's own addition left. The old comment proved that by listing the five instructions
+  in between; the new one says they are carry-blind, which is the same claim and survives M6-f.
+- **`FRS1` takes `DELTA` and `MSTG` rather than a speed**, rotating the speed left with the missile
+  lock's top bit as the carry — so a pod leaves at twice your speed plus one, and since `RES2` has
+  just set `DELTA` to 3 it is always 6 or 7 however fast you were going.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, no marker lost (128 in this
+file, before and after). `opcode-transcriptions` 2,240 → 2,118.
 
 **2026-09-08 — M6-d-21: the sixteen, and why R-i's tag stays unused after all.**
 
