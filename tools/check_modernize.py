@@ -221,11 +221,21 @@ MNEMONICS = ("ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CL
 IMPLIED = sorted("BRK CLC CLD CLI CLV DEX DEY INX INY NOP PHA PHP PLA PLP RTI RTS SEC SED SEI TAX TAY TSX "
                  "TXA TXS TYA".split())
 
-# `LDA #0`, `STA SC+1`, `JSR MULTU`, `ASL A`, `BCC label` -- a mnemonic with something after it.
-OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(MNEMONICS) + r")\s+(?:A\b|#|[$&%]|\(|[A-Za-z_.][\w.%+]*)")
+# `LDA #0`, `STA SC+1`, `JSR MULTU`, `ASL A` -- a mnemonic with a real OPERAND after it.
+#
+# THE OPERAND MAY NOT BE AN ENGLISH WORD, and that is the correction M6-d-2 made after the first
+# file: "clears both halves AND the carry" and "expresses that with ROR through the carry flag" both
+# read as an instruction to a looser pattern, and both are prose. A 6502 operand starts with `#`,
+# `$`, `&`, `%` or `(`, or is the accumulator, or is a label -- and every label in this game's source
+# begins with a capital, a digit or a dot. Lowercase after a mnemonic is a sentence carrying on.
+OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(MNEMONICS) + r")\s+(?:A\b|[#$&%(]|[A-Z0-9.][\w.%+,]*)")
 
-# `... / CLC / ...`, or one standing alone inside a quotation.
-OPCODE_IMPLIED = re.compile(r"(?:^|[/`(,]\s*)(?:" + "|".join(IMPLIED) + r")\b\s*(?:[/`).,]|$)")
+# `TXA / CLC` -- an implied-mode instruction needs a SLASH beside it to be a listing.
+#
+# Backticks are not enough: "the `CLC` here looks dead" and "no `CLC` between them" name an
+# instruction in a sentence about behaviour, which is what R20 keeps and what §3 says is not a
+# quotation. A slash is the thing only a transcription has.
+OPCODE_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(IMPLIED) + r")\b|\b(?:" + "|".join(IMPLIED) + r")\s*/)")
 
 COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 
@@ -516,6 +526,7 @@ namespace Elite
   };
   // 6502: LDA #0 / STA SC+1 -- an instruction with an operand, so this line IS a transcription
   // `ORA` touches no flag, and its top BIT is set: prose that NAMES an instruction is not one
+  // it clears both halves AND the carry, and expresses that with ROR through the flag: also prose
   /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
   // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here

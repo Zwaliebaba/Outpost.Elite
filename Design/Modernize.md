@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,921 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,653 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -824,6 +824,21 @@ number counts a drawing routine reading a blank screen byte, which is "off the i
 nothing the original put there. **The number that matters is the non-zero half: 128,023,278 reads
 (18.2%), over 19,112 distinct addresses, in 597,921 calls (18.5% of the corpus).** The other 81.5%
 of calls answer from what the test wrote and from zeros, and a write-set key covers them outright.
+
+**AND THE ANSWER TO R-h, WHICH IS THE NUMBER THAT MATTERS (2026-09-08, §8 M6-b-3).** The recorder
+now asks the sharper question directly: how much of what a record HOLDS is a run of bytes the
+assembled original also holds, verbatim. **8,297,316 of 22,279,497 record memory bytes — 37.2% — in
+1,128,263 runs, the longest of them 2,024 bytes.** A run of two thousand contiguous bytes is not
+arithmetic agreeing with the original by chance; it is a block of the original's content sitting in
+the record.
+
+So the committed fixture would carry roughly 8 MB of the original verbatim, and that is a different
+proposition from "the fixture holds answers, not the image". **One caveat, stated because it cuts the
+owner's way and not mine**: this is the WHOLE corpus, before R-f folds the 73 heavy tests into
+digests. Those tests are the drawing and whole-frame comparisons — the ones whose records are most
+likely to be long runs of screen — so the proportion surviving into the ~25 MB fixture could be
+materially lower. Measuring that needs the digests built first, which is piece (3), which is the
+thing waiting on this ruling.
 
 Where those 19,112 addresses fall says the split did its job: &CF00–&FAFF holds 7,832 of them,
 &0400–&20FF 5,137, &B700–&C6FF 3,947 and &9200–&99FF 1,509 — and **&4000–&67FF, the bitmap, drops
@@ -1924,6 +1939,64 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-b-3: what the answers carry, and it is more than the reads suggested.**
+
+R-h, answered. The recorder indexes the base image by four-byte window and asks of every distinct
+record whether its written bytes appear in the image verbatim. **8,297,316 of 22,279,497 record
+bytes — 37.2% — in 1,128,263 runs, longest 2,024.**
+
+**That is higher than the census implied and the two numbers are not in conflict.** The census said
+18.5% of CALLS read image content; this says 37.2% of BYTES are image content. A call that reads six
+table bytes and writes a screen row copied from the font is one call and hundreds of bytes. The
+first number sized how many answers depend on the original; this one sizes how much of the original
+the answers contain, and only the second is what ADR-001 §5 asks about. **I framed the first as if it
+were the second when I reported it, and it was not.**
+
+The instrument understates rather than overstates, deliberately: a window's candidate list is capped
+at 64, so a byte sequence occurring thousands of times over is measured against the first 64 places
+it could have come from and its longest match can only be missed, never invented.
+
+The caveat that cuts the owner's way is in §4.10: this is the whole corpus, and R-f's digests remove
+exactly the tests whose records are longest. The proportion in the fixture that actually ships could
+be much lower — and measuring that needs the digests, which is the piece waiting on the ruling.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+
+**2026-09-08 — M6-d-2: `Arith.cpp` to zero, and the counter wrong twice on the way.**
+
+The first file, and it corrected the instrument twice before it rewrote anything — which is M6-c-0's
+lesson arriving on schedule.
+
+**A mnemonic followed by an English word is not an instruction.** "clears both halves AND the carry"
+and "expresses that with ROR through the carry flag" both read as a transcription to a pattern that
+takes anything after the mnemonic as an operand. A 6502 operand begins with `#`, `$`, `&`, `%` or
+`(`, or is the accumulator, or is a label — and every label in this source begins with a capital, a
+digit or a dot. Lowercase after a mnemonic is a sentence carrying on.
+
+**Backticks are not a listing either.** "the `CLC` here looks dead" and "no `CLC` between them" name
+an instruction inside a sentence about behaviour, which is what R20 keeps. An implied-mode mnemonic
+needs a SLASH beside it to be a transcription, because a slash is the thing only a listing has.
+
+Together those two are **221 lines** the counter was wrong about, out of 2,921, and every one of
+them is prose. `opcode-transcriptions` 2,921 → 2,653: 221 from the calibration and 44 from this
+file, which is now at zero.
+
+**Rule 4 bit again and the ratchet caught it again.** Forty-two of `Arith.cpp`'s rewrites dropped
+the `// 6502:` marker along with the listing, `origin-markers` fell 4,103 → 4,061, and the check
+said so on the same run. **THE MARKER IS NOT THE TRANSCRIPTION.** M6-d removes the assembly; M6-e
+removes the marker; a slice that does both has done M6-e's work early and without its acceptance.
+All forty-two are back, with the prose after the colon lowercased to match the form the file already
+used — `// 6502: the two antilog exits ...` — which is now the shape the remaining 2,653 follow.
+
+Two of the forty-two were comments I deleted outright because the listing was ALL they held. They
+are back too, saying in prose what the code does, because rule 4 does not have an exception for a
+marker whose line has nothing else on it.
+
+`ar-mu1-clc` re-anchored (rule 3): its `find` quoted a comment line this slice rewrote. 97 of 97.
+
+469 tests green, all nineteen checks, replay digests unmoved.
+`opcode-transcriptions` 2,921 → 2,653.
 
 **2026-09-08 — M6-d-1: the ratchet splits, and the tag is the whole of the design.**
 
