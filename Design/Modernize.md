@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,087 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,056 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,28 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-12: the loop's head and tail, where one flag has two sources.**
+
+31 sites from `GameLoop.cpp`, now at 70 of 101. This is the message countdown, the gun cooling, the
+docked-screen delay and the Trumbles, and the recurring subject is a CARRY WITH TWO SOURCES —
+exactly the shape §6.118's instrument was built for.
+
+The squeak roll is the clearest case and the one the port once got wrong. The flag it rotates in
+comes from the temperature test on a hot cabin and from the count's own top bit on a cool one: two
+paths, two different sources, one roll. The rewrite keeps that as two sentences and drops the four
+instructions, because what a reader has to check is WHICH path supplied the flag, not how.
+
+Two more in the same file: the docked delay's test is a single shift doing both the branch and the
+argument, which is why the option byte is passed rather than a bool; and the Trumble breeding is a
+CARRY added rather than an addition, so the population grows by one about one pass in seven.
+
+The gun countdown is the one place the instruction count itself mattered — it decrements TWICE with a
+zero test between, and that middle test is why it never passes zero. Prose carries it: an odd
+countdown stops at zero, an even one steps through, and a port that subtracted two would go negative.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,087 → 2,056.
 
 **2026-09-08 — M6-d-11: `Tactics.cpp` to zero, and the counter's own residue.**
 
