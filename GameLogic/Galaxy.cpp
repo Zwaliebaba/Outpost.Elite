@@ -58,15 +58,15 @@ namespace Elite
 
   SystemData GenerateSystemData(const SystemSeeds& _seeds) noexcept
   {
-    const std::array<std::uint8_t, 6>& q = _seeds.bytes;
+    const std::array<std::uint8_t, 6>& seeds = _seeds.bytes;
     SystemData data;
 
     // 6502: LDA QQ15+1 / AND #7 -- the economy is three bits of the first seed's high byte.
-    data.economy = static_cast<std::uint8_t>(q[1] & 0x07u);
+    data.economy = static_cast<std::uint8_t>(seeds[1] & 0x07u);
 
     // 6502: LDA QQ15+2 / LSR / LSR / LSR / AND #7 -- and the government is three bits of the
     // second seed's low byte, shifted down.
-    data.government = static_cast<std::uint8_t>((q[2] >> 3) & 0x07u);
+    data.government = static_cast<std::uint8_t>((seeds[2] >> 3) & 0x07u);
 
     /*
      * 6502: LSR A / BNE TT77 -- anarchies and feudal states (government 0 and 1) are forced to a
@@ -84,7 +84,7 @@ namespace Elite
     std::uint8_t tech = static_cast<std::uint8_t>(data.economy ^ 0x07u);
 
     // 6502: LDA QQ15+3 / AND #3 / ADC QQ5 -- carry clear, from the CLC above.
-    AddResult step = AddWithCarry(static_cast<std::uint8_t>(q[3] & 0x03u), tech, false);
+    AddResult step = AddWithCarry(static_cast<std::uint8_t>(seeds[3] & 0x03u), tech, false);
     tech = step.value;
 
     /*

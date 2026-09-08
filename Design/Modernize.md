@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->75 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->52 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-16: `Q`, the divisor that was not always a divisor.**
+
+23 sites and three meanings. `Q` is the original's second operand — the divisor, the multiplier —
+and the arithmetic files spent it that way, but the dashboard borrowed it for something else
+entirely and `GenerateSystemData` borrowed it for a name.
+
+The dashboard's three are all "how much of the bar is still to light", counted DOWN as the blocks
+are filled: `DIL`'s and `DLL10`'s in pixels, so both are `pixelsLeft`, and `DLL24`'s in energy dealt
+sixteen at a time from the top bar, so it is `energyLeft`. Each of the three is a different routine's
+local and none of them ever divides anything.
+
+`GenerateSystemData`'s is not a value at all: `const std::array<std::uint8_t, 6>& q = _seeds.bytes`
+is an ALIAS, and it is called `q` because the original indexes `QQ15`. It is `seeds`, which is what
+every one of its four uses reads as.
+
+`MULT3`'s sweep is the one that really is a second operand, so it takes `multiplier` — the name
+`ArithTests.cpp` settled on at M6-c-13 and the one the port's own signature uses.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 75 → 52.
 
 **2026-09-08 — M6-c-15: `CNT` was five different counters.**
 
