@@ -845,10 +845,10 @@
         {
           "id": "ar-selftest",
           "file": "GameLogic/Arith.cpp",
-          "find": "    for (int step = 0; step < 8; ++step)\n    {\n      ShiftAndAddStep(a, low, t, carry);",
-          "replace": "    for (int step = 0; step < 7; ++step)\n    {\n      ShiftAndAddStep(a, low, t, carry);",
+          "find": "    for (int step = 0; step < 8; ++step)\n    {\n      ShiftAndAddStep(a, low, decrementedMultiplier, carry);",
+          "replace": "    for (int step = 0; step < 7; ++step)\n    {\n      ShiftAndAddStep(a, low, decrementedMultiplier, carry);",
           "expect": "caught",
-          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Seven shift-and-add steps instead of eight leaves every product a bit short, and the exhaustive MULTU sweep cannot miss it. Keep it first.",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Seven shift-and-add steps instead of eight leaves every product a bit short, and the exhaustive MULTU sweep cannot miss it. Keep it first. Re-anchored at M6-c-7, when the kernel's scratch letters took names.",
           "selftest": true
         },
         {
@@ -862,18 +862,18 @@
         {
           "id": "ar-add-carry",
           "file": "GameLogic/Arith.cpp",
-          "find": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, high.carry};",
-          "replace": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, false};",
+          "find": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | valueSign), low.value, high.carry};",
+          "replace": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | valueSign), low.value, false};",
           "expect": "caught",
-          "note": "`ADD`'s same-sign path leaves the carry `ADC T1` produced and `ORA T` does not touch it. Would have hidden: a caller whose next `ADC` runs on the addition's carry getting a clean one instead."
+          "note": "`ADD`'s same-sign path leaves the carry `ADC T1` produced and `ORA T` does not touch it. Would have hidden: a caller whose next `ADC` runs on the addition's carry getting a clean one instead. Re-anchored at M6-c-7, when the kernel's scratch letters took names."
         },
         {
           "id": "ar-ll5-carry",
           "file": "GameLogic/Arith.cpp",
-          "find": "    return Root{q, exitCarry};",
+          "find": "    return Root{root, exitCarry};",
           "replace": "    return Root{q, false};",
           "expect": "caught",
-          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit."
+          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit. Re-anchored at M6-c-7, when the kernel's scratch letters took names."
         }
       ]
     },

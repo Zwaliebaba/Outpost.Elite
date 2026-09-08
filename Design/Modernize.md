@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->788 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->714 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,33 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-7: the kernel's scratch letters, and a filtered run is not a verification.**
+
+`Arith.cpp`'s public shape was already clean — `MultiplyUnsigned(_multiplicand, _multiplier)`,
+`Product{high, low, carry}` — so what was left was locals, and each one needed its own name because
+the byte behind it has none: `T` is the decremented multiplier in `MULT1`, the operands' sign in
+`MULT12`, and a counter seeded with seven set bits in `DVID4`. Ten functions, seventy-four sites,
+one map per function rather than one map: `decrementedMultiplier`, `valueSign`, `valueHigh`,
+`addendMagnitude`, `quotientAndMarkers`, `signs`, `remainingLow`, `root`, `decrementedMagnitude`.
+
+**TWO FUNCTIONS WERE PULLED BACK OUT OF THE SLICE.** `Arctan` already has an `angle` and
+`AngleOfRatio`'s `T` holds one too, so renaming `t` to `angle` there merges two variables into one
+— and it COMPILES, because the outer one is in scope. `ArctanMatchesExhaustively` said
+"expected 95, actual 128" and `ThePlanetMatchesPLANET` differed at screen offset 1765. Their `T`
+stays until a slice reads the routine properly rather than pattern-matching its neighbours.
+
+**AND THE ONLY REASON THAT COST ONE ROUND INSTEAD OF THREE IS THAT THE SECOND RUN WAS UNFILTERED.**
+`run_tests.sh Arith` ran thirteen tests and passed; the two that fail are in
+`LogarithmRoutinesAgainstTheShippedGame` and `ThePlanet`, which the filter does not match. A rename
+slice's blast radius is not the file it edits, so the verification is the whole suite, every time —
+the same lesson `check_all.py` exists for, in a different shape.
+
+Three mutants re-anchored, none dropped (rule 3): `ar-selftest`, `ar-add-carry` and `ar-ll5-carry`
+name `t`, `t` and `q` in their `find`. `mutate.py --check` is 97 of 97.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 788 → 714.
 
 **2026-09-08 — M6-c-6: the oracle's zero page is not the port's, and the counter could not tell.**
 

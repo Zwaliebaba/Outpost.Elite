@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "origin-identifiers": {
-      "ceiling": 788,
+      "ceiling": 714,
       "slack": 0,
-      "slice": "M6-c-6: the oracle's zero page, told apart from the port's own bytes"
+      "slice": "M6-c-7: the arithmetic kernel's scratch letters"
     },
     "oracle-test-files": {
       "ceiling": 47,

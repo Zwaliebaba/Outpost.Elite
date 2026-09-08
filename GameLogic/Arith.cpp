@@ -54,7 +54,7 @@ namespace Elite
   Product MultiplyUnguarded(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept
   {
     // 6502: DEX / STX T -- the decremented multiplier, which the set carry below puts back.
-    const std::uint8_t t = static_cast<std::uint8_t>(_multiplier - 1);
+    const std::uint8_t decrementedMultiplier = static_cast<std::uint8_t>(_multiplier - 1);
 
     std::uint8_t a = 0;
 
@@ -64,7 +64,7 @@ namespace Elite
 
     for (int step = 0; step < 8; ++step)
     {
-      ShiftAndAddStep(a, low, t, carry);
+      ShiftAndAddStep(a, low, decrementedMultiplier, carry);
     }
 
     // The carry is the last `ROR P`'s, and three callers read it before doing anything that would
@@ -94,7 +94,7 @@ namespace Elite
   Product MultiplySigned(std::uint8_t _value, std::uint8_t _multiplier) noexcept
   {
     // The sign of the product is decided up front and re-applied at the very end.
-    const std::uint8_t t = static_cast<std::uint8_t>((_value ^ _multiplier) & 0x80u);
+    const std::uint8_t sign = static_cast<std::uint8_t>((_value ^ _multiplier) & 0x80u);
 
     // P starts as |A| >> 1, and the bit shifted out is the first multiplier bit.
     const std::uint8_t magnitude = static_cast<std::uint8_t>(_value & 0x7Fu);
@@ -127,7 +127,7 @@ namespace Elite
     const ShiftResult rotatedLow = RotateRight(low, carry);
     low = rotatedLow.value;
 
-    return Product{static_cast<std::uint8_t>(a | t), low, rotatedLow.carry};
+    return Product{static_cast<std::uint8_t>(a | sign), low, rotatedLow.carry};
   }
 
   Product SquareUnsigned(std::uint8_t _value) noexcept
@@ -151,27 +151,27 @@ namespace Elite
   AddSignedResult AddSigned(SignMag16 _value, SignMag16 _addend) noexcept
   {
     // 6502: STA T1 / AND #128 / STA T -- the first operand's high byte and its sign.
-    const std::uint8_t t1 = _value.hi;
-    const std::uint8_t t = static_cast<std::uint8_t>(_value.hi & 0x80u);
+    const std::uint8_t valueHigh = _value.hi;
+    const std::uint8_t valueSign = static_cast<std::uint8_t>(_value.hi & 0x80u);
 
-    if (((t ^ _addend.hi) & 0x80u) == 0u)
+    if (((valueSign ^ _addend.hi) & 0x80u) == 0u)
     {
       // Signs agree, so the magnitudes simply add and the shared sign is put back on top.
       const AddResult low = AddWithCarry(_addend.lo, _value.lo, false);
-      const AddResult high = AddWithCarry(_addend.hi, t1, low.carry);
+      const AddResult high = AddWithCarry(_addend.hi, valueHigh, low.carry);
       // 6502: `ORA T` does not touch the carry, so what `ADC T1` produced is what the caller gets.
-      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, high.carry};
+      return AddSignedResult{static_cast<std::uint8_t>(high.value | valueSign), low.value, high.carry};
     }
 
     // 6502: MU8 -- signs differ, so this is a subtraction of magnitudes that may come out
     // negative, in which case the result is negated and marked.
-    std::uint8_t u = static_cast<std::uint8_t>(_addend.hi & 0x7Fu);
+    std::uint8_t addendMagnitude = static_cast<std::uint8_t>(_addend.hi & 0x7Fu);
 
     const std::uint16_t lowDifference = static_cast<std::uint16_t>(_value.lo) - _addend.lo;
     std::uint8_t low = static_cast<std::uint8_t>(lowDifference);
     bool borrowClear = lowDifference < 0x100u;
 
-    const std::uint16_t highDifference = static_cast<std::uint16_t>(t1 & 0x7Fu) - u - (borrowClear ? 0u : 1u);
+    const std::uint16_t highDifference = static_cast<std::uint16_t>(valueHigh & 0x7Fu) - addendMagnitude - (borrowClear ? 0u : 1u);
     std::uint8_t high = static_cast<std::uint8_t>(highDifference);
     borrowClear = highDifference < 0x100u;
 
@@ -181,18 +181,18 @@ namespace Elite
     if (!borrowClear)
     {
       // 6502: the branch that turns a negative difference back into sign-magnitude form.
-      u = high;
+      addendMagnitude = high;
 
       const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(low ^ 0xFFu), 1u, false);
       low = negated.value;
 
-      const std::uint16_t negatedHigh = 0u - u - (negated.carry ? 0u : 1u);
+      const std::uint16_t negatedHigh = 0u - addendMagnitude - (negated.carry ? 0u : 1u);
       high = static_cast<std::uint8_t>(static_cast<std::uint8_t>(negatedHigh) | 0x80u);
       exitCarry = negatedHigh < 0x100u; // 6502: the second `SBC U`
     }
 
     // 6502: MU9 -- fold in the sign the first operand arrived with. `EOR T` leaves the carry.
-    return AddSignedResult{static_cast<std::uint8_t>(high ^ t), low, exitCarry};
+    return AddSignedResult{static_cast<std::uint8_t>(high ^ valueSign), low, exitCarry};
   }
 
   AddSignedResult MultiplyAndAdd(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept
@@ -205,7 +205,7 @@ namespace Elite
 
   Product MultiplyScaled(std::uint8_t _multiplicand, std::uint8_t _value) noexcept
   {
-    const std::uint8_t t = static_cast<std::uint8_t>(_value & 0x80u);
+    const std::uint8_t sign = static_cast<std::uint8_t>(_value & 0x80u);
 
     const std::uint8_t multiplier = static_cast<std::uint8_t>(_value & 0x7Fu);
     if (multiplier == 0)
@@ -215,7 +215,7 @@ namespace Elite
       return Product{0, 0, false};
     }
 
-    const std::uint8_t t1 = static_cast<std::uint8_t>(multiplier - 1);
+    const std::uint8_t decrementedMultiplier = static_cast<std::uint8_t>(multiplier - 1);
 
     std::uint8_t a = 0;
     bool carry = (_multiplicand & 0x01u) != 0u;
@@ -224,7 +224,7 @@ namespace Elite
     // Only five of the eight bits get an addition.
     for (int step = 0; step < 5; ++step)
     {
-      ShiftAndAddStep(a, low, t1, carry);
+      ShiftAndAddStep(a, low, decrementedMultiplier, carry);
     }
 
     // The remaining three are shifted through without one, which is what scales the result down.
@@ -237,7 +237,7 @@ namespace Elite
       carry = rotated.carry;
     }
 
-    return Product{static_cast<std::uint8_t>(a | t), low, carry};
+    return Product{static_cast<std::uint8_t>(a | sign), low, carry};
   }
 
   Product24 MultiplyWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _multiplier) noexcept
@@ -289,14 +289,14 @@ namespace Elite
 
   std::uint8_t DivideBy96(std::uint8_t _value) noexcept
   {
-    const std::uint8_t t = static_cast<std::uint8_t>(_value & 0x80u);
+    const std::uint8_t sign = static_cast<std::uint8_t>(_value & 0x80u);
 
     std::uint8_t a = static_cast<std::uint8_t>(_value & 0x7Fu);
 
     // The counter doubles as the result: it is seeded with seven set bits, and each rotation
     // both shifts a quotient bit in at the bottom and pushes a marker out of the top. When the
     // markers run out the loop is done, so no separate counter is needed.
-    std::uint8_t t1 = 0xFEu;
+    std::uint8_t quotientAndMarkers = 0xFEu;
 
     bool looping = true;
     while (looping)
@@ -310,12 +310,12 @@ namespace Elite
         a = static_cast<std::uint8_t>(a - 96u);
       }
 
-      const ShiftResult counter = RotateLeftValue(t1, quotientBit);
-      t1 = counter.value;
+      const ShiftResult counter = RotateLeftValue(quotientAndMarkers, quotientBit);
+      quotientAndMarkers = counter.value;
       looping = counter.carry;
     }
 
-    return static_cast<std::uint8_t>(t1 | t);
+    return static_cast<std::uint8_t>(quotientAndMarkers | sign);
   }
 
   std::uint8_t MultiplyAddDivide96(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept
@@ -337,7 +337,7 @@ namespace Elite
       return static_cast<std::uint8_t>(sign | 96u);
     }
 
-    std::uint8_t t = 0xFEu;
+    std::uint8_t quotientAndMarkers = 0xFEu;
 
     bool looping = true;
     while (looping)
@@ -350,33 +350,33 @@ namespace Elite
         a = static_cast<std::uint8_t>(a - _divisor);
       }
 
-      const ShiftResult counter = RotateLeftValue(t, quotientBit);
-      t = counter.value;
+      const ShiftResult counter = RotateLeftValue(quotientAndMarkers, quotientBit);
+      quotientAndMarkers = counter.value;
       looping = counter.carry;
     }
 
     // The quotient is then scaled by a shift-and-add rather than a second division.
-    std::uint8_t value = t;
+    std::uint8_t value = quotientAndMarkers;
     value = static_cast<std::uint8_t>(value >> 1);
     value = static_cast<std::uint8_t>(value >> 1);
-    t = value;
+    quotientAndMarkers = value;
 
     // Only the THIRD `LSR`'s carry is read. The first two set it in the original too and nothing
     // between them tests it, so the port wrote all three and used one until slice 5d.
     bool carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
 
-    const AddResult scaled = AddWithCarry(value, t, carry);
-    t = scaled.value;
+    const AddResult scaled = AddWithCarry(value, quotientAndMarkers, carry);
+    quotientAndMarkers = scaled.value;
 
-    return static_cast<std::uint8_t>(sign | t);
+    return static_cast<std::uint8_t>(sign | quotientAndMarkers);
   }
 
   WideQuotient DivideWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _divisor) noexcept
   {
     // 6502: STA P+1 / EOR Q / AND #128 / STA T.
     std::uint8_t high = _high;
-    const std::uint8_t t = static_cast<std::uint8_t>((_high ^ _divisor) & 0x80u);
+    const std::uint8_t sign = static_cast<std::uint8_t>((_high ^ _divisor) & 0x80u);
 
     std::uint8_t a = 0;
 
@@ -413,7 +413,7 @@ namespace Elite
       carry = highStep.carry;
     }
 
-    return WideQuotient{high, low, t};
+    return WideQuotient{high, low, sign};
   }
 
   /*
@@ -681,20 +681,20 @@ namespace Elite
      * are kept as flags here for that reason.
      */
     std::uint8_t y = _high;
-    std::uint8_t s = _low;
+    std::uint8_t remainingLow = _low;
     std::uint8_t x = 0;
-    std::uint8_t q = 0;
+    std::uint8_t root = 0;
     bool exitCarry = false;
 
     for (int round = 0; round < 8; ++round)
     {
       // 6502: CPX Q / BCC LL7 / BNE / CPY #64 / BCC LL7 -- does (Q 0x40) fit into (X Y)?
       bool fits = false;
-      if (x > q)
+      if (x > root)
       {
         fits = true;
       }
-      else if (x == q && y >= 0x40u)
+      else if (x == root && y >= 0x40u)
       {
         fits = true;
       }
@@ -705,19 +705,19 @@ namespace Elite
         // subtraction borrows nothing on its first half.
         const std::uint16_t low = static_cast<std::uint16_t>(y) - 0x40u;
         y = static_cast<std::uint8_t>(low);
-        const std::uint16_t high = static_cast<std::uint16_t>(x) - q - (low < 0x100u ? 0u : 1u);
+        const std::uint16_t high = static_cast<std::uint16_t>(x) - root - (low < 0x100u ? 0u : 1u);
         x = static_cast<std::uint8_t>(high);
       }
 
       // 6502: LL7 -- ROL Q brings in the answer bit, which is the carry the comparison left set
       // exactly when the candidate fitted.
-      q = RotateLeftValue(q, fits).value;
+      root = RotateLeftValue(root, fits).value;
 
       // 6502: two rounds of ASL S / ROL A / ROL A -- two more bits of the radicand into (X Y).
       for (int pair = 0; pair < 2; ++pair)
       {
-        const ShiftResult shifted = RotateLeftValue(s, false);
-        s = shifted.value;
+        const ShiftResult shifted = RotateLeftValue(remainingLow, false);
+        remainingLow = shifted.value;
         const ShiftResult lowHalf = RotateLeftValue(y, shifted.carry);
         y = lowHalf.value;
         const ShiftResult highHalf = RotateLeftValue(x, lowHalf.carry);
@@ -733,13 +733,13 @@ namespace Elite
      * operand -- so the sun's ragged edge is seeded by the last bit to fall out of the square root
      * (§6.55). The tenth dropped flag.
      */
-    return Root{q, exitCarry};
+    return Root{root, exitCarry};
   }
 
   KBlock MultiplySigned24(SignMag24 _value, std::uint8_t _multiplier) noexcept
   {
     // 6502: STA R / AND #127 / STA K+2 -- R keeps the sign, K+2 takes the magnitude.
-    const std::uint8_t r = _value.sgn;
+    const std::uint8_t sign = _value.sgn;
     KBlock k;
     k.high = static_cast<std::uint8_t>(_value.sgn & 0x7Fu);
 
@@ -751,7 +751,7 @@ namespace Elite
     }
 
     // 6502: SEC / SBC #1 / STA T. See the header: the missing one comes back as the carry.
-    const std::uint8_t t = static_cast<std::uint8_t>(magnitude - 1u);
+    const std::uint8_t decrementedMagnitude = static_cast<std::uint8_t>(magnitude - 1u);
 
     /*
      * 6502: LDA P+1 / LSR K+2 / ROR A / STA K+1 / LDA P / ROR A / STA K.
@@ -775,7 +775,7 @@ namespace Elite
       if (carry)
       {
         // 6502: ADC T -- with the carry set, so this adds |Q| rather than |Q| - 1.
-        const std::uint16_t sum = static_cast<std::uint16_t>(accumulator) + t + 1u;
+        const std::uint16_t sum = static_cast<std::uint16_t>(accumulator) + decrementedMagnitude + 1u;
         accumulator = static_cast<std::uint8_t>(sum);
         carry = sum > 0xFFu;
       }
@@ -794,7 +794,7 @@ namespace Elite
     }
 
     // 6502: STA T / LDA R / EOR Q / AND #128 / ORA T / STA K+3 -- the sign is the two operands'.
-    k.top = static_cast<std::uint8_t>(accumulator | ((r ^ _multiplier) & 0x80u));
+    k.top = static_cast<std::uint8_t>(accumulator | ((sign ^ _multiplier) & 0x80u));
     return k;
   }
 
@@ -840,11 +840,11 @@ namespace Elite
   {
     // P(2 1 0) is forced to at least 1, for the same reason Q is: the scaling loop below shifts
     // until a set bit arrives, and an all-zero numerator has none to give it.
-    std::uint8_t p = static_cast<std::uint8_t>(_numerator.lo | 0x01u);
-    std::uint8_t p1 = _numerator.hi;
+    std::uint8_t numeratorLow = static_cast<std::uint8_t>(_numerator.lo | 0x01u);
+    std::uint8_t numeratorHigh = _numerator.hi;
 
     // The sign of the answer, put aside now because the division that follows is on magnitudes.
-    const std::uint8_t t = static_cast<std::uint8_t>((_numerator.sgn ^ _denominator.sgn) & 0x80u);
+    const std::uint8_t sign = static_cast<std::uint8_t>((_numerator.sgn ^ _denominator.sgn) & 0x80u);
 
     // The scale factor, counted UP by the numerator's shifts and DOWN by the denominator's, so
     // what is left at the end is the difference -- and a byte, so it wraps rather than going
@@ -862,10 +862,10 @@ namespace Elite
     // wrong answer. Cheaper to keep than to argue about.
     while (a < 64u)
     {
-      const ShiftResult low = RotateLeftValue(p, false);
-      p = low.value;
-      const ShiftResult middle = RotateLeftValue(p1, low.carry);
-      p1 = middle.value;
+      const ShiftResult low = RotateLeftValue(numeratorLow, false);
+      numeratorLow = low.value;
+      const ShiftResult middle = RotateLeftValue(numeratorHigh, low.carry);
+      numeratorHigh = middle.value;
       const ShiftResult high = RotateLeftValue(a, middle.carry);
       a = high.value;
       ++y;
@@ -875,29 +875,29 @@ namespace Elite
       }
     }
 
-    const std::uint8_t p2 = a;
+    const std::uint8_t numeratorTop = a;
 
     // 6502: DVL6 -- and the denominator up until its top BIT is set. The decrement is at the top
     // of the loop and the test at the bottom, so this always runs at least once.
-    std::uint8_t q = _denominator.lo;
-    std::uint8_t r = _denominator.hi;
+    std::uint8_t denominatorLow = _denominator.lo;
+    std::uint8_t denominatorHigh = _denominator.hi;
     a = static_cast<std::uint8_t>(_denominator.sgn & 0x7Fu);
     do
     {
       --y;
-      const ShiftResult low = RotateLeftValue(q, false);
-      q = low.value;
-      const ShiftResult middle = RotateLeftValue(r, low.carry);
-      r = middle.value;
+      const ShiftResult low = RotateLeftValue(denominatorLow, false);
+      denominatorLow = low.value;
+      const ShiftResult middle = RotateLeftValue(denominatorHigh, low.carry);
+      denominatorHigh = middle.value;
       const ShiftResult high = RotateLeftValue(a, middle.carry);
       a = high.value;
     } while ((a & 0x80u) == 0u);
 
     // 6502: DV9 -- the two top bytes are now as large as they will go, so the ratio can be had
     // from them alone.
-    q = a;
-    r = 254;
-    a = p2;
+    denominatorLow = a;
+    denominatorHigh = 254;
+    a = numeratorTop;
 
     // 6502: LL31new / LL29new -- LL31's body, inlined in the original and a loop here. R is both
     // the answer and the counter: the eight bits shifted in push the seven set bits out, and the
@@ -912,17 +912,17 @@ namespace Elite
       {
         // The numerator has a ninth bit, so the subtraction cannot borrow and the original does
         // not bother testing -- it subtracts and forces the quotient bit with a `SEC`.
-        a = SubtractWithCarry(a, q, true).value;
+        a = SubtractWithCarry(a, denominatorLow, true).value;
         bit = true;
       }
-      else if (a >= q)
+      else if (a >= denominatorLow)
       {
-        a = SubtractWithCarry(a, q, true).value;
+        a = SubtractWithCarry(a, denominatorLow, true).value;
         bit = true;
       }
 
-      const ShiftResult quotient = RotateLeft(r, bit);
-      r = quotient.value;
+      const ShiftResult quotient = RotateLeft(denominatorHigh, bit);
+      denominatorHigh = quotient.value;
       if (!quotient.carry)
       {
         break;
@@ -937,7 +937,7 @@ namespace Elite
     {
       // 6502: DVL8 -- Y came out negative, so the denominator was shifted further than the
       // numerator and the answer is scaled back UP, through all four bytes of K.
-      a = r;
+      a = denominatorHigh;
       do
       {
         const ShiftResult low = RotateLeftValue(a, false);
@@ -954,21 +954,21 @@ namespace Elite
 
       // The sign is ORed in here and STORED on the other two paths, because only this one can
       // have shifted something into K+3 that is worth keeping.
-      k.top = static_cast<std::uint8_t>(k.top | t);
+      k.top = static_cast<std::uint8_t>(k.top | sign);
       return k;
     }
 
     if (y == 0u)
     {
       // 6502: DV13 -- the two scalings cancelled, so R is already the answer.
-      k.low = r;
-      k.top = t;
+      k.low = denominatorHigh;
+      k.top = sign;
       return k;
     }
 
     // 6502: DVL10 -- Y is positive, so the answer is scaled back DOWN. The top three bytes stay
     // zero: nothing shifted right out of the lowest byte can reach them.
-    a = r;
+    a = denominatorHigh;
     do
     {
       a = static_cast<std::uint8_t>(a >> 1);
@@ -976,7 +976,7 @@ namespace Elite
     } while (y != 0u);
 
     k.low = a;
-    k.top = t;
+    k.top = sign;
     return k;
   }
 
