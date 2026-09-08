@@ -116,7 +116,7 @@ namespace Elite
   [[nodiscard]] JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump,
                                        SystemData& _described, MarketState& _market, 
                                        std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld,
-                                       bool _patg) noexcept;
+                                       bool _authorNames) noexcept;
 
   /*
    * 6502: Ghy -- the galactic hyperdrive, which moves you a galaxy on and forgets your crimes.

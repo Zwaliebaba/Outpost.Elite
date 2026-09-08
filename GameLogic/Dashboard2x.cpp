@@ -47,10 +47,10 @@ namespace Elite
       int canvasTop = 0; ///< the canvas row the first store lands on
     };
 
-    [[nodiscard]] DialPlace PlaceOf(std::uint16_t _sc, int _firstRow) noexcept
+    [[nodiscard]] DialPlace PlaceOf(std::uint16_t _screenPointer, int _firstRow) noexcept
     {
-      const int characterRow = _sc / Canvas::ROW_BYTES;
-      const int within = _sc % Canvas::ROW_BYTES;
+      const int characterRow = _screenPointer / Canvas::ROW_BYTES;
+      const int within = _screenPointer % Canvas::ROW_BYTES;
       return DialPlace{(within / 8) * 8, characterRow * 8 + _firstRow};
     }
   } // namespace
@@ -92,12 +92,12 @@ namespace Elite
     }
   }
 
-  void DrawBar2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _sc, int _steps, PixelPattern _ink) noexcept
+  void DrawBar2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _screenPointer, int _steps, PixelPattern _ink) noexcept
   {
     // `DIL` writes rows 2 to 4 of four character cells, so a bar is three canvas rows tall and six
     // hi-res ones. Doubled and not deepened: ruling 1 keeps the dashboard the same share of the
     // screen, so an area doubles (Lines2x.h's second rule).
-    const DialPlace place = PlaceOf(_sc, 2);
+    const DialPlace place = PlaceOf(_screenPointer, 2);
     const std::uint8_t background = _canvas.DashboardChoices((place.canvasTop / 8) * Canvas::CELL_COLUMNS + place.canvasX / 8)[0];
 
     for (int step = 0; step < BAR_STEPS; ++step)
@@ -112,10 +112,10 @@ namespace Elite
     }
   }
 
-  void DrawIndicator2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _sc, int _position) noexcept
+  void DrawIndicator2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _screenPointer, int _position) noexcept
   {
     // `DIL2` writes rows 1 to 4, so this bar is four canvas rows tall where `DIL`'s is three.
-    const DialPlace place = PlaceOf(_sc, 1);
+    const DialPlace place = PlaceOf(_screenPointer, 1);
     const std::uint8_t background = _canvas.DashboardChoices((place.canvasTop / 8) * Canvas::CELL_COLUMNS + place.canvasX / 8)[0];
 
     for (int step = 0; step < BAR_STEPS; ++step)

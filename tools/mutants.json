@@ -239,10 +239,10 @@
         {
           "id": "hyp-ctrl-and",
           "file": "GameLogic/Hyperspace.cpp",
-          "find": "if (_controlHeld && _patg)",
-          "replace": "if (_controlHeld || _patg)",
+          "find": "if (_controlHeld && _authorNames)",
+          "replace": "if (_controlHeld || _authorNames)",
           "expect": "caught",
-          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option. Survived because the sweep passed false for both and `&&` and `||` agree there. The test's own comment said the oracle could not answer `CTRL`; `CTRL` is `LDX #6` falling into `DKS4`, which on the C64 is `LDA KEYLOOK,X / TAX / RTS` over ordinary memory. All four combinations are a dimension of the sweep now (plan section 6.156)."
+          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option. Survived because the sweep passed false for both and `&&` and `||` agree there. The test's own comment said the oracle could not answer `CTRL`; `CTRL` is `LDX #6` falling into `DKS4`, which on the C64 is `LDA KEYLOOK,X / TAX / RTS` over ordinary memory. All four combinations are a dimension of the sweep now (plan section 6.156). Re-anchored at M6-c-5, when `PATG` became `authorNames`."
         },
         {
           "id": "hyp-fuel-zero",

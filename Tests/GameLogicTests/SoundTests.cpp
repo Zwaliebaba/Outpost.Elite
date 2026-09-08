@@ -59,7 +59,7 @@ namespace GameLogicTests
     {
       std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
       std::uint16_t noise, noise2, noiseoff, soflush, beep, comirq1, rastct, bomb;
-      std::uint16_t mupla, mutok, mufor, mudock, musilly, mulie;
+      std::uint16_t mupla, dockingMusicOff, mufor, mudock, musilly, mulie;
       std::uint16_t bdbuff, counter, vibrato2Count, vibrato3Count, bddataptr1, bddataptr3;
       std::uint16_t commandSixTally, voice1Control, voice2Control, voice3Control, restLength, value5;
       std::uint16_t voice2NoteHigh, voice2NoteLow, voice2RaisedHigh, voice2RaisedLow, voice3NoteHigh, voice3NoteLow, voice3RaisedHigh, voice3RaisedLow;
@@ -87,7 +87,7 @@ namespace GameLogicTests
           rastct(_oracle.Label("RASTCT")),
           bomb(_oracle.Label("BOMB")),
           mupla(_oracle.Label("MUPLA")),
-          mutok(_oracle.Label("MUTOK")),
+          dockingMusicOff(_oracle.Label("MUTOK")),
           mufor(_oracle.Label("MUFOR")),
           mudock(_oracle.Label("MUDOCK")),
           musilly(_oracle.Label("MUSILLY")),
@@ -292,7 +292,7 @@ namespace GameLogicTests
     void LoadMusicOptions(Cpu6502& _cpu, const SoundLabels& _at, const Elite::MusicPlayer& _music, std::uint8_t _titleReset)
     {
       _cpu.memory[_at.mupla] = _music.playing;
-      _cpu.memory[_at.mutok] = _music.options.dockingMusicOff;
+      _cpu.memory[_at.dockingMusicOff] = _music.options.dockingMusicOff;
       _cpu.memory[_at.mufor] = _music.options.dockingMusicForced;
       _cpu.memory[_at.mudock] = _music.options.dockingPlaysTheme;
       _cpu.memory[_at.musilly] = _music.options.effectsDuringMusic;

@@ -59,16 +59,16 @@ namespace Elite
     return frames;
   }
 
-  MusicChange NoteMusicSwitch(Universe& _universe, std::uint8_t _mutok, std::uint8_t _dockingComputer) noexcept
+  MusicChange NoteMusicSwitch(Universe& _universe, std::uint8_t _dockingMusicOff, std::uint8_t _dockingComputer) noexcept
   {
     // 6502: LDA MUTOK / CMP MUTOKOLD / BEQ P%+5 -- nothing to do unless the switch moved.
-    if (_mutok == _universe.musicSwitchWas)
+    if (_dockingMusicOff == _universe.musicSwitchWas)
     {
       return MusicChange::None;
     }
 
     // 6502: .MUTOKCH STA MUTOKOLD -- and A is `MUTOK`, so the record is of the NEW setting.
-    _universe.musicSwitchWas = _mutok;
+    _universe.musicSwitchWas = _dockingMusicOff;
 
     /*
      * 6502: EOR #&FF / AND auto / BMI april16.
@@ -77,7 +77,7 @@ namespace Elite
      * bit 7; the `AND` then requires the docking computer to be flying. Only that combination
      * starts it -- everything else falls into `stopbd`.
      */
-    const std::uint8_t started = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_mutok ^ 0xFFu) & _dockingComputer);
+    const std::uint8_t started = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_dockingMusicOff ^ 0xFFu) & _dockingComputer);
     return ((started & 0x80u) != 0u) ? MusicChange::StartNow : MusicChange::Stop;
   }
 

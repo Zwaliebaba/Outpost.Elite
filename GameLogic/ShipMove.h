@@ -81,7 +81,7 @@ namespace Elite
    * EOR #128` hands `MAD` the same magnitude with the opposite sign, because these are
    * sign-magnitude numbers and negating one is a single bit.
    */
-  void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
+  void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept;
 
   /*
    * 6502: MVS5 -- rotate a PAIR of coordinates by a sixteenth, for the ship's own roll and pitch.
@@ -96,7 +96,7 @@ namespace Elite
    * what stops the rotation from growing without bound. `TIDY` (through `NORM`) is what puts the
    * length back.
    */
-  void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept;
+  void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _signMask2) noexcept;
 
   /*
    * 6502: TIS3, which FALLS INTO DVIDT -- one component of the third orientation vector, worked out
@@ -147,7 +147,7 @@ namespace Elite
    * to carry into the byte above it. A port that stored it would be writing a fourth byte nothing
    * reads, and one that skipped the addition would lose the carry.
    */
-  void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
+  void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept;
 
   /*
    * WHAT `MVEIT` REACHES OUTSIDE ITSELF IS NOTHING, and this comment is where the last of it was.

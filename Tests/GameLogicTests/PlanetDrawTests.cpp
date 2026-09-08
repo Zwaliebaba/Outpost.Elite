@@ -114,7 +114,7 @@ namespace GameLogicTests
       }
     }
 
-    void SeedBallHeap(Cpu6502& _cpu, Elite::PlanetSunState& _state, const HeapLabels& _at, std::uint32_t _seed, std::uint8_t _lsp)
+    void SeedBallHeap(Cpu6502& _cpu, Elite::PlanetSunState& _state, const HeapLabels& _at, std::uint32_t _seed, std::uint8_t _ballHeapTop)
     {
       std::uint32_t bits = _seed;
       for (std::size_t at = 0; at < Elite::BALL_HEAP_SIZE; ++at)
@@ -131,8 +131,8 @@ namespace GameLogicTests
         _cpu.memory[static_cast<std::uint16_t>(_at.lsy2 + at)] = y;
       }
 
-      _state.ballHeapTop = _lsp;
-      _cpu.memory[_at.ballHeapTop] = _lsp;
+      _state.ballHeapTop = _ballHeapTop;
+      _cpu.memory[_at.ballHeapTop] = _ballHeapTop;
     }
 
     void CompareHeaps(const Cpu6502& _cpu, const Elite::PlanetSunState& _state, const HeapLabels& _at, const std::wstring& _where)
