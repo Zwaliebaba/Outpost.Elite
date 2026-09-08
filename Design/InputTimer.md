@@ -107,7 +107,7 @@ half is the original's and the *edge* half is the port's invention.
 Severity: **A** a player hits it in normal play and it is wrong; **B** wrong but rare or documented;
 **C** not modern, no player-visible defect today.
 
-### I-1 (A) — `NextKey` is a queue pop; `TT217` is release-then-press with a debounce
+### I-1 (A) — `NextKey` is a queue pop; `TT217` is release-then-press with a debounce — **built 2026-09-08, §9**
 
 The original, C64 branch of `tt217.asm`:
 
@@ -765,3 +765,24 @@ moving the crosshairs -- the pass is its two syncs, so the docked half runs at j
 the blank rate, and `Main.cpp` paces it by `DockedPassSeconds` where the flight floor stood in.
 Finding T-5 is closed for the flight and the docked pass; `TT16`'s sync per crosshair step is
 recorded as a constant for T-1. ADR-005 §3 carries the numbers. Three tests, the suite at 412.
+
+**2026-09-08 — I-1 built: `TT217` is `Elite::ReadKey`, and the queue is gone.** The routine in
+`Controls.cpp` is the three waits and the look-up; `ControlsTests::TheBlockingReadMatchesTT217`
+compares it against the original with the CIA matrix changing on every scan -- the interpreter
+gained `AddProbe`, an address that runs a fixture's code and is then executed, because a matrix set
+once cannot reach the second wait -- over five scripts, on the character, `thiskey`, the logger and
+the scan count. `GameShell::NextKey` is the routine; `Window` has no queue: `TakePressed` answers
+the newest genuine press since the last step, and a `WM_KEYDOWN` with lParam's bit 30 set is an
+auto-repeat and moves only the held table. `FLKB` was read at last: `LDA #15 / TAX / RTS` on this
+build, a flush of nothing, so `Flush` stays a method the fixtures count and the executable answers
+with nothing. **One departure from §5.2, said plainly**: `Keyboard::NextKey` stays on the port. The
+market, the line editor, the disk menu and the briefings are compared over scripted CHARACTERS
+with `TT217` answered by hand on both machines, and a port of `Held` alone would have rewritten
+every one of those fixtures to script matrices for a comparison that already exists; the port
+shrinks to `Held` in I-2, when `InputFrame` is the thing a fixture scripts. `Main.cpp` fell to 238
+lines and the ceiling follows it. **Two ceilings went UP, and are said here**: `outpost-elite-names`
+61 → 62, because the executable now calls `Elite::ReadKey` where it ran a queue of its own -- the
+direction Modernize.md §4.8 wants, measured by a counter that cannot tell a seam from a routine --
+and `origin-markers` 4,091 → 4,097, because R7 puts `6502:` markers on a ported routine and rule 5
+says the count only falls; a port that lands before M6-e cannot satisfy both, and the six markers
+are the routine's, not a comment's.

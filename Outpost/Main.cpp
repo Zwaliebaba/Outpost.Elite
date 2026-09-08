@@ -124,10 +124,7 @@ namespace
     {
       // 6502: `thiskey`, and ZERO IS A KEY -- `TT102` runs every pass, which is how the hyperspace
       // countdown ticks whether or not the player touched anything (§6.159).
-      std::uint8_t key = 0;
-      (void)_app.window.TakeKey(key);
-
-      if (!_app.game.Step(key))
+      if (!_app.game.Step(_app.window.TakePressed()))
       {
         return; // 6502: `M%` left the flight half, or `DK4` froze it
       }
@@ -191,9 +188,7 @@ namespace
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
-          std::uint8_t key = 0;
-          (void)app->window.TakeKey(key); // 6502: `thiskey`, which is zero when nothing is held
-          app->game.StepDocked(key);
+          app->game.StepDocked(app->window.TakePressed()); // 6502: `thiskey`, which is zero when nothing was pressed
         }
         continue;
       }

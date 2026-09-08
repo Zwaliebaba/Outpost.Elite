@@ -19,12 +19,14 @@
 #include "Tokens.h"
 #include "Universe.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <span>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -889,6 +891,168 @@ namespace GameLogicTests
       // Two thirds of the sweep press a cursor key, and a sweep where nothing ever moved would
       // agree with the game about doing nothing -- §6.36's rule, applied to a five-bit input.
       Assert::AreEqual<std::uint32_t>(24u, moved, L"the cases that press a cursor key all moved");
+    }
+
+    /*
+     * 6502: TT217 -- the blocking read, compared with the keys CHANGING under it (InputTimer.md I-1).
+     *
+     * `TT217` is three waits: two frames of debounce, a scan that must find nothing, a scan that
+     * must find something. A fixture that sets the matrix once cannot reach the second wait, so
+     * this one changes what the CIA holds on every entry to `RDKEY` -- a probe on the interpreter
+     * -- and the port's keyboard changes what `Held` answers on every walk, from the same script.
+     * Both sides then agree on the character, on `thiskey`, on the logger the last scan left, and
+     * on how many scans it took, which is the count of waits.
+     *
+     * The cases are the three things the executable's queue got wrong: a key held when the prompt
+     * appears is not the answer; a key held for many scans is one answer; and two keys at once
+     * give the lowest-numbered, because the walk counts down.
+     */
+    TEST_METHOD(TheBlockingReadMatchesTT217)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t tt217 = oracle.Label("TT217");
+      const std::uint16_t rdkey = oracle.Label("RDKEY");
+      const std::uint16_t klo = oracle.Label("KLO");
+      const std::uint16_t thiskey = oracle.Label("thiskey");
+      const std::uint16_t qq11 = oracle.Label("QQ11");
+      const std::uint16_t jstk = oracle.Label("JSTK");
+      const std::uint16_t delay = oracle.Label("DELAY");
+
+      using Matrix = std::vector<std::uint8_t>; ///< the positions held during one scan
+      struct Script
+      {
+        const char* what;
+        std::vector<Matrix> scans; ///< one entry per scan; the last repeats for ever
+        std::uint8_t expected;     ///< the character `TRANTABLE` gives
+        std::uint32_t scanCount;   ///< how many scans the routine takes to answer
+      };
+
+      constexpr std::uint8_t A = 54;      // C64 "A"
+      constexpr std::uint8_t EIGHT = 37;  // C64 "8"
+      constexpr std::uint8_t RETURN = 63; // C64 RETURN
+      constexpr std::uint8_t SPACE = 4;   // C64 Space
+
+      const Script SCRIPTS[] = {
+        {"nothing, then A", {{}, {A}}, 0x41u, 2u},
+        {"8 held on entry, released, then RETURN", {{EIGHT}, {}, {}, {RETURN}}, 13u, 4u},
+        {"A held for three scans, released, then Space", {{A}, {A}, {A}, {}, {}, {SPACE}}, 0x20u, 6u},
+        {"A and Space together: the lowest position wins", {{}, {A, SPACE}}, 0x20u, 2u},
+        {"a long wait for the press", {{}, {}, {}, {}, {}, {}, {}, {RETURN}}, 13u, 8u},
+      };
+
+      /// The port's matrix: what `Held` answers changes on every walk, from the script. A walk is
+      /// counted at its first key, which is the top of the logger because the scan counts down.
+      constexpr std::size_t WALK_START = std::tuple_size_v<Elite::KeyLogger> - 1u;
+      struct ScriptedMatrix final : NullSeams
+      {
+        const std::vector<Matrix>* scans = nullptr;
+        std::uint32_t walks = 0;
+        std::uint32_t presents = 0;
+        std::uint32_t framesWaited = 0;
+
+        [[nodiscard]] bool Held(std::size_t _key) override
+        {
+          if (_key == WALK_START)
+          {
+            ++walks;
+          }
+          const std::size_t at = (walks == 0u) ? 0u : std::min<std::size_t>(walks - 1u, scans->size() - 1u);
+          for (const std::uint8_t held : (*scans)[at])
+          {
+            if (held == _key)
+            {
+              return true;
+            }
+          }
+          return false;
+        }
+        void Present() override
+        {
+          ++presents;
+        }
+        void WaitFrames(std::uint8_t _frames) override
+        {
+          framesWaited += _frames;
+        }
+      };
+
+      for (const Script& script : SCRIPTS)
+      {
+        const std::wstring where = Widen(std::string("TT217 (") + script.what + ")");
+
+        // ---- the oracle: the matrix changes on every entry to RDKEY --------------------------
+        Cpu6502 cpu = oracle.Fresh();
+        std::uint32_t scans = 0;
+        cpu.AddProbe(rdkey,
+                     [&](Cpu6502& _cpu)
+                     {
+                       const std::size_t at = std::min<std::size_t>(scans, script.scans.size() - 1u);
+                       ++scans;
+                       _cpu.keysDown.fill(0u);
+                       for (const std::uint8_t held : script.scans[at])
+                       {
+                         const std::size_t column = (0x40u - held) >> 3;
+                         const std::size_t row = (0x40u - held) & 0x07u;
+                         _cpu.HoldKey(static_cast<std::uint8_t>(column), static_cast<std::uint8_t>(row));
+                       }
+                       _cpu.Io(Cpu6502::CIA1_PORT_A) = 0x7Fu;
+                     });
+        cpu.AddTrap(delay); // the debounce waits on the raster, which the oracle has not
+
+        cpu.memory[qq11] = 0xFFu; // docked, so RDKEY's tail clears the act keys on both machines
+        cpu.memory[jstk] = 0u;
+        for (std::size_t slot = 0; slot < 65u; ++slot)
+        {
+          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = 0xFFu; // a logger the first scan must clear
+        }
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(tt217, 200'000);
+        Assert::IsTrue(run.completed, (where + L": the original returned").c_str());
+
+        // ---- the port: the same script, one entry per walk -----------------------------------
+        ScriptedMatrix matrix;
+        matrix.scans = &script.scans;
+
+        struct Discard final : Elite::TextSink
+        {
+          void Put(std::uint8_t) override {}
+        } discard;
+        Elite::Universe universe;
+        universe.view = 0xFFu;
+        universe.keys.fill(0xFFu);
+        Elite::CharacterPrinter characters{discard, universe.sentences};
+        Elite::TokenPrinter printer{characters, universe.text};
+        Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer, characters, characters, sid, extended, matrix, matrix, matrix};
+
+        const std::uint8_t character = Elite::ReadKey(universe, ports);
+
+        Assert::AreEqual<std::uint32_t>(script.expected, character, (where + L": the character").c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, character, (where + L": A on return").c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.x, character, (where + L": and X, which TAX copies").c_str());
+        Assert::AreEqual<std::uint32_t>(script.scanCount, scans, (where + L": scans on the original").c_str());
+        Assert::AreEqual<std::uint32_t>(scans, matrix.walks, (where + L": and the same number of walks on the port").c_str());
+
+        // The last scan's logger, and `thiskey`, which the port's logger index 0 does not hold --
+        // so it is read off the port as the lowest held position of the answering scan.
+        for (std::size_t slot = 0; slot < universe.keys.size(); ++slot)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(klo + slot)], universe.keys[slot],
+                           (where + L": KEYLOOK+" + std::to_wstring(slot)).c_str());
+        }
+        Assert::AreEqual<std::uint32_t>(Elite::KEY_TRANSLATION[cpu.memory[thiskey]], character, (where + L": TRANTABLE of thiskey").c_str());
+
+        // Every scan but the answering one on the port's `.t2` loop was preceded by a present, and
+        // every pass round `.t` by two frames of debounce: the waits are the port's and are counted.
+        Assert::IsTrue(matrix.framesWaited >= 2u, (where + L": the debounce ran at least once").c_str());
+        Assert::AreEqual<std::uint32_t>(0u, matrix.framesWaited % 2u, (where + L": and in twos").c_str());
+      }
     }
   };
 

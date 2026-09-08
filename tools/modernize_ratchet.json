@@ -34,14 +34,14 @@
       "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 243,
+      "ceiling": 238,
       "slack": 0,
-      "slice": "InputTimer.md S-1: three lines of platform composition -- the settings file -- raised the ceiling, deliberately and journaled"
+      "slice": "InputTimer.md I-1: the press queue goes and the dispatch takes one press a step"
     },
     "outpost-elite-names": {
-      "ceiling": 61,
+      "ceiling": 62,
       "slack": 0,
-      "slice": "M6-0-h-3: FlightSession stops answering DOCKIT"
+      "slice": "InputTimer.md I-1: the executable calls Elite::ReadKey in place of its own queue -- raised by one, journaled"
     },
     "effects-seams": {
       "ceiling": 5,
@@ -74,9 +74,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4091,
+      "ceiling": 4097,
       "slack": 0,
-      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
+      "slice": "InputTimer.md I-1: TT217 ported, and R7 puts six markers on a port -- raised by six, journaled"
     },
     "oracle-test-files": {
       "ceiling": 47,
