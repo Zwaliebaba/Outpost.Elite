@@ -1027,10 +1027,10 @@
         {
           "id": "sp-selftest",
           "file": "GameLogic/Spawn.cpp",
-          "find": "    _universe.work.rollCounter = 0xFFu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum",
-          "replace": "    _universe.work.rollCounter = 0x7Fu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum",
+          "find": "    _universe.work.rollCounter = 0xFFu; // 6502: the roll counter, at maximum",
+          "replace": "    _universe.work.rollCounter = 0x7Fu; // 6502: the roll counter, at maximum",
           "expect": "caught",
-          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The station's roll counter at 127 instead of 255 is one byte in the block NWSPS is compared on. Keep it first.",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The station's roll counter at 127 instead of 255 is one byte in the block NWSPS is compared on. Keep it first. Re-anchored at M6-d-25, when the comment beside it lost its listing.",
           "selftest": true
         },
         {

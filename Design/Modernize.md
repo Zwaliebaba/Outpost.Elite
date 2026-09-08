@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,943 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,872 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,38 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-25: `Spawn.cpp` to zero, and three carries that leave a routine.**
+
+All 71, over `KILLSHP`'s heap compaction, `NWSPS`, `SOLAR`, the debris seeds and `FRS1`/`SFS1`.
+Ninth file at zero. The subject of this file is a carry crossing a call boundary, three times over,
+and in each case the listing showed the instruction and the sentence beside it had to carry why it
+matters.
+
+**The planet's distance from the player depends on whether the bounty was odd.** `SOLAR` halves
+`FIST` and the bit shifted out is not discarded: `ZINF` touches no flag, so the addition that builds
+the planet's z runs on it (§6.58). Nobody designed that. It is what happens when a routine is
+written straight through without clearing the carry, and it is in every copy of the game ever sold.
+
+The other two are the same mechanism deliberately used:
+
+- **`fq1` collects `MSTG`'s bit 7 four instructions after it was shifted out**, which is how the
+  missile target's top bit reaches the new ship's speed byte (§6.121).
+- **The carry into `SFS1`'s generator call is SET every time**, because reaching that line means the
+  lower of two comparisons did not borrow and the push in between leaves the flag alone. The port
+  had `false` there once and the oracle disagreed about the generator's own state — the only place a
+  wrong carry into `DORND` shows.
+
+And one that is simply a good joke: **a swarm whose count reaches a multiple of 256 stops breeding**,
+because only the low byte is tested.
+
+One mutant re-anchored (rule 3): `sp-selftest`'s `find` quoted the station roll counter's comment,
+which lost its listing here.
+
+469 tests green, all nineteen checks, and **97 of 97 mutants over a run that carried this slice** —
+the first since M6-d-16 whose subject was the tree being committed rather than the one before it,
+which is M6-d-25a's whole subject. No marker lost (71 in this file, before and after).
+`opcode-transcriptions` 1,943 → 1,872.
 
 **2026-09-08 — M6-d-25a: the mutation harness measured the previous commit, and said so every
 time.**
