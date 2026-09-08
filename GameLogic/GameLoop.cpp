@@ -492,7 +492,7 @@ namespace Elite
         _frame.work.rollCounter = static_cast<std::uint8_t>(kind.value | 0x6Fu);
 
         /*
-         * 6502: LDA SSPR / BNE MTT1 -- inside the station's sphere nothing drifts in.
+         * 6502: inside the station's sphere nothing drifts in.
          *
          * THE BRANCH IS THIS `if` AND NOT A FLAG. `toPart3` decided, four hundred lines above,
          * whether this block runs at all; setting it again here would be read by nothing, because
@@ -502,11 +502,10 @@ namespace Elite
         if (_frame.bubble.StationPresent() == 0u)
         {
           /*
-           * 6502: TXA / BCS MTT2 / AND #31 / ORA #16 / STA INWK+27 / BCC MTT3, and `.MTT2 ORA
-           * #%01111111 / STA INWK+30`.
+           * 6502: MTT2 and MTT3 -- the carry decides whether the byte becomes a pitch or a speed.
            *
-           * The _frame.carry decides whether the byte becomes a speed or a pitch, and `BCC MTT3` after a
-           * path that cannot have set the _frame.carry is an unconditional jump.
+           * The branch onwards sits after a path that cannot have set the carry, so it is an
+           * unconditional jump written as a conditional one.
            */
           const std::uint8_t x = kind.previous;
           if (_frame.carry)
@@ -518,24 +517,26 @@ namespace Elite
             _frame.work.speed = static_cast<std::uint8_t>((x & 31u) | 16u);
           }
 
-          // 6502: .MTT3 JSR DORND / CMP #252 / BCC thongs.
+          // 6502: MTT3 -- a roll against 252 decides a hermit from ordinary junk.
           const RngResult cargo = _frame.rng.Next(_frame.carry);
           _frame.carry = cargo.carry;
 
           if (cargo.value >= HERMIT_ROLL)
           {
-            // 6502: LDA #HER / STA INWK+32 / BNE whips -- and `HER` is 15, so the `BNE` is a JMP.
+            // 6502: the hermit's own type goes in the AI byte, and since that type is 15 the branch
+            // to `whips` is unconditional.
             _frame.work.ai = Byte(ShipType::RockHermit);
             pendingType = ShipType::RockHermit;
           }
           else
           {
             /*
-             * 6502: .thongs CMP #10 / AND #1 / ADC #OIL.
+             * 6502: thongs -- the roll compared against 10, masked to one bit, and added to the
+             * canister's type.
              *
-             * The `CMP #10` sets the _frame.carry and its ANSWER IS NEVER TESTED -- it is there to feed
-             * the `ADC` below, so a byte of 10 or more adds one. With `AND #1` giving 0 or 1 the
-             * type is 5, 6 or 7: a canister, an alloy plate or an asteroid.
+             * THE COMPARISON'S ANSWER IS NEVER TESTED. It is there only to set the carry the
+             * addition then takes, so a roll of 10 or more adds one; with the mask giving 0 or 1
+             * the type is 5, 6 or 7 -- a canister, an alloy plate or an asteroid.
              */
             const bool ten = cargo.value >= 10u;
             const AddResult junkType = AddWithCarry(static_cast<std::uint8_t>(cargo.value & 1u), Byte(ShipType::Canister), ten);
@@ -548,13 +549,14 @@ namespace Elite
     }
 
     /*
-     * 6502: .whips JSR NWSHP -- and where it goes next depends on WHICH `JSR NWSHP` it was.
+     * 6502: whips -- and where it goes next depends on WHICH of the two spawn calls it was.
      *
-     * There are two, and they fall into different places. Part 2's is at `.whips`, three bytes
-     * above `.MTT1`, so the loner's pass carries on into part 3. Part 1's is the last instruction
-     * of `.MTT4` and the next byte is `.TT100`, so the TRADER's pass goes back to the top of the
-     * loop -- another `JSR M%`, another `DEC DLY / DEC MCNT`, and then `ytq` sends it to `MLOOP`
-     * with `MCNT` at 255. The port had one `Spawn` for both and continued into part 3 from either,
+     * There are two, and they fall into different places. Part 2's is at `whips`, three bytes above
+     * `MTT1`, so the loner's pass carries on into part 3. Part 1's is the last instruction of
+     * `MTT4` and the next byte is `TT100`, so the TRADER's pass goes back to the top of the loop --
+     * another flight frame, another turn of both countdowns, and then `ytq` sends it to `MLOOP`
+     * with the main counter at 255. The port had one `Spawn` for both and continued into part 3
+     * from either,
      * which gave a trader's pass a police roll the game never makes (M6-a-1; the coverage review
      * named `MTT4` a gap and the first fixture to roll one found this).
      */
@@ -569,16 +571,16 @@ namespace Elite
   /*
    * ---- part 3: the police -----------------------------------------------------------------------
    *
-   * 6502: .MTT1 LDA SSPR / BEQ P%+5 / .MLOOPS JMP MLOOP -- and `BEQ P%+5` steps over a three-byte
-   * `JMP`, so a station in range sends the pass back to the top: no police inside the safe zone,
-   * and parts 4, 5 and 6 do not run either.
+   * 6502: MTT1 -- the station test, whose branch steps over a three-byte jump, so a station in
+   * range sends the pass back to the top: no police inside the safe zone, and parts 4, 5 and 6 do
+   * not run either.
    */
   [[nodiscard]] SpawnPass SpawnPolice(SpawnFrame& _frame) noexcept
   {
     /*
-     * 6502: .MTT1 LDA SSPR / BEQ P%+5 / .MLOOPS JMP MLOOP -- part 3, the police.
+     * 6502: MTT1 and MLOOPS -- part 3, the police.
      *
-     * `BEQ P%+5` steps over a three-byte `JMP`, so a station in range sends the pass BACK to the
+     * The branch steps over a three-byte jump, so a station in range sends the pass BACK to the
      * top: no police spawn inside the safe zone, and parts 5 and 6 do not run either.
      */
     if (_frame.bubble.StationPresent() != 0u)
@@ -587,16 +589,15 @@ namespace Elite
     }
 
     /*
-     * 6502: JSR BAD / ASL A / LDX MANY+COPS / BEQ P%+5 / ORA FIST / STA T.
+     * 6502: the contraband penalty doubled, with the legal status folded in conditionally.
      *
      * What the hold is worth in trouble, doubled, and the legal status ORed in ONLY IF there is
-     * already a Viper about -- `BEQ P%+5` skips the two-byte `ORA` and the two-byte `STA`... no:
-     * it skips `ORA FIST` (2 bytes) and lands on `STA T` (2 bytes), because P%+5 counts from the
-     * branch. So a clean bubble stores the doubled cargo alone.
+     * already a Viper about: the branch steps over the fold and lands on the store, so a clean
+     * bubble keeps the doubled cargo alone.
      */
     const std::uint8_t penalty = ContrabandPenalty(_frame.commander);
     const ShiftResult doubled = {static_cast<std::uint8_t>(penalty << 1u), (penalty & 0x80u) != 0u};
-    _frame.carry = doubled.carry; // 6502: ASL A -- and nothing between here and `Ze` touches the flag
+    _frame.carry = doubled.carry; // 6502: nothing between the doubling and `Ze` touches the flag
 
     std::uint8_t threshold = doubled.value;
     if (_frame.bubble.Count(ShipType::Viper) != 0u)
@@ -604,24 +605,24 @@ namespace Elite
       threshold = static_cast<std::uint8_t>(doubled.value | _frame.commander.legalStatus);
     }
 
-    // 6502: JSR Ze / CMP #136 / BEQ fothg -- one byte in 256 goes to the Cougar path.
+    // 6502: Ze, then one byte in 256 goes to the `fothg` path.
     RngResult debris = SeedDebris(_frame.work, _frame.rng, _frame.carry);
-    _frame.carry = debris.value == COUGAR_BYTE; // 6502: CMP #136
+    _frame.carry = debris.value == COUGAR_BYTE; // 6502: and the comparison sets the flag
 
     if (debris.value == COUGAR_BYTE)
     {
       /*
-       * 6502: .fothg LDA K%+6 / AND #%00111110 / BNE fothg2 -- byte 6 of the PLANET's block, which
-       * is the low byte of its z coordinate, masked to five bits. Non-zero and this is a Thargoid
-       * after all; zero and it is the Cougar, which is the rarest thing in the game.
+       * 6502: fothg -- byte 6 of the PLANET's block, the low byte of its z coordinate, masked to
+       * five bits. Non-zero and this is a Thargoid after all; zero and it is the Cougar, which is
+       * the rarest thing in the game.
        */
       if ((_frame.bubble.blocks[0].z.lo & 0x3Eu) != 0u)
       {
         static_cast<void>(SpawnThargoidPair(_frame.bubble, _frame.work, _frame.rng, _frame.blueprint, _frame.carry)); // 6502: fothg2
-        return SpawnPass::Ended; // 6502: .mj1 JMP MLOOP
+        return SpawnPass::Ended; // 6502: mj1
       }
 
-      // 6502: LDA #18 / STA INWK+27 / LDA #%01111001 / STA INWK+32 / LDA #COU / BNE focoug.
+      // 6502: focoug -- a fixed speed and AI byte, and then the Cougar itself.
       _frame.work.speed = 18u;
       _frame.work.ai = 0x79u;
       static_cast<void>(Spawn(_frame.bubble, _frame.work, ShipType::Cougar, _frame.blueprint));
@@ -629,21 +630,21 @@ namespace Elite
     }
 
     /*
-     * 6502: CMP T / BCS P%+7 / LDA #COPS / JSR NWSHP.
+     * 6502: the roll against the threshold, and the branch skips the spawn entirely.
      *
-     * `P%+7` counts from the branch: two bytes of `BCS`, then `LDA #COPS` (2) and `JSR NWSHP` (3)
-     * make five, so the branch skips BOTH. A roll at or above the threshold means no policeman.
+     * It steps over five bytes, which is the type load and the call together, so a roll at or above
+     * the threshold means no policeman at all.
      */
-    _frame.carry = debris.value >= threshold; // 6502: CMP T
+    _frame.carry = debris.value >= threshold; // 6502: the threshold comparison
     if (!_frame.carry)
     {
-      // 6502: LDA #COPS / JSR NWSHP -- and `NWSHP` returns its own _frame.carry, which is the flag any
-      // later `DORND` on this path rotates in.
+      // 6502: the Viper itself -- and the spawn returns its own carry, which is the flag any later
+      // roll on this path rotates in.
       _frame.carry = Spawn(_frame.bubble, _frame.work, ShipType::Viper, _frame.blueprint).created;
     }
 
-    // 6502: LDA MANY+COPS / BNE MLOOPS -- and this reads the count AFTER the spawn, so one Viper
-    // in the bubble ends the pass whether it arrived just now or was already there.
+    // 6502: the count is read AFTER the spawn, so one Viper in the bubble ends the pass whether it
+    // arrived just now or was already there.
     if (_frame.bubble.Count(ShipType::Viper) != 0u)
     {
       return SpawnPass::Ended;
@@ -655,15 +656,15 @@ namespace Elite
   /*
    * ---- part 4: the encounter counter, and what it lets through ---------------------------------
    *
-   * 6502: .DEC EV / BPL MLOOPS / INC EV -- a rate limit: it counts down and only a pass that takes
-   * it negative gets any further, and then it is put back so the next pass tries again.
+   * 6502: the encounter counter is a rate limit -- it counts down, only a pass that takes it
+   * negative gets any further, and then it is put back so the next pass tries again.
    */
   [[nodiscard]] SpawnPass SpawnEncounter(SpawnFrame& _frame) noexcept
   {
     /*
-     * 6502: part 4. .DEC EV / BPL MLOOPS / INC EV -- the encounter counter, which is a rate limit:
-     * it counts down and only a pass that takes it negative gets any further, and then it is put
-     * back so the next pass tries again.
+     * 6502: part 4 -- the encounter counter, which is a rate limit: it counts down, only a pass
+     * that takes it negative gets any further, and then it is put back so the next pass tries
+     * again.
      */
     --_frame.encounters;
     if ((_frame.encounters & 0x80u) == 0u)
@@ -672,26 +673,24 @@ namespace Elite
     }
     ++_frame.encounters;
 
-    // 6502: LDA TP / AND #%00001100 / CMP #%00001000 / BNE nopl -- mission 1 at stage 2, which is
-    // when the Thargoids start hunting you.
+    // 6502: mission 1 at stage 2, which is when the Thargoids start hunting you.
     const std::uint8_t stage = static_cast<std::uint8_t>(_frame.commander.missionProgress & 0x0Cu);
-    _frame.carry = stage >= 0x08u; // 6502: CMP #%00001000, and the flag outlives the BNE
+    _frame.carry = stage >= 0x08u; // 6502: and the flag outlives the branch that reads it
 
     if (stage == 0x08u)
     {
-      // 6502: JSR DORND / CMP #200 / BCC nopl / .fothg2 JSR GTHG.
+      // 6502: a roll against 200, and `fothg2` is the Thargoid pair.
       const RngResult thargoid = _frame.rng.Next(_frame.carry);
-      _frame.carry = thargoid.value >= THARGOID_ROLL; // 6502: CMP #200
+      _frame.carry = thargoid.value >= THARGOID_ROLL; // 6502: the roll's threshold
       if (_frame.carry)
       {
         static_cast<void>(SpawnThargoidPair(_frame.bubble, _frame.work, _frame.rng, _frame.blueprint, _frame.carry));
-        return SpawnPass::Ended; // 6502: .mj1 JMP MLOOP
+        return SpawnPass::Ended; // 6502: mj1
       }
     }
 
     /*
-     * 6502: .nopl JSR DORND / LDY gov / BEQ LABEL_2 / CMP #90 / BCS MLOOPS / AND #7 / CMP gov /
-     * BCC MLOOPS.
+     * 6502: nopl -- a roll, gated on the government except in anarchy.
      *
      * Anarchy -- government 0 -- always spawns. Everywhere else needs a byte under 90 AND its low
      * three bits to reach the government's own number, so a corporate state is nearly safe.
@@ -701,12 +700,13 @@ namespace Elite
 
     if (_frame.current.government != 0u)
     {
-      _frame.carry = law.value >= GOVERNMENT_ROLL; // 6502: CMP #90
+      _frame.carry = law.value >= GOVERNMENT_ROLL; // 6502: the roll's own threshold
       if (_frame.carry)
       {
         return SpawnPass::Ended;
       }
-      // 6502: AND #7 / CMP gov / BCC MLOOPS -- and this compare is the one `Ze` below rotates in.
+      // 6502: the low three bits against the government, and this comparison is the one `Ze` below
+      // rotates in.
       _frame.carry = static_cast<std::uint8_t>(law.value & 7u) >= _frame.current.government;
       if (!_frame.carry)
       {
@@ -714,7 +714,7 @@ namespace Elite
       }
     }
 
-    // 6502: .LABEL_2 JSR Ze / CMP #100 / BCS mt1 -- above 100 it is a pack of pirates.
+    // 6502: LABEL_2 -- `Ze` again, and a roll above 100 is a pack of pirates.
     //
     // `Ze` IS CALLED TWICE, once in part 3 and once here, and the port had ONE variable for both
     // because it was one function. Part 3's roll is dead by the time this runs -- every read of it
@@ -726,7 +726,8 @@ namespace Elite
     if (_frame.carry)
     {
       /*
-       * 6502: .mt1 AND #3 / STA EV / STA XX13 / .mt3 ... DEC XX13 / BPL mt3.
+       * 6502: mt1 and mt3 -- two bits of the roll become both the encounter counter and the loop's
+       * own count, which is then walked down.
        *
        * The low two bits become BOTH the encounter counter and the loop count, so a pass that
        * spawns four pirates also sets the longest cooldown. One to four of them, and each is
@@ -745,7 +746,8 @@ namespace Elite
         const AddResult pack = AddWithCarry(masked, Byte(ShipType::Sidewinder), _frame.carry);
         _frame.carry = pack.carry;
 
-        // 6502: JSR NWSHP / DEC XX13 / BPL mt3 -- so the NEXT pass's first `DORND` rotates in the
+        // 6502: the spawn, then the count down and round again -- so the NEXT pass's first roll
+        // rotates in the
         // _frame.carry `NWSHP` returned, not the one the `ADC` above left.
         _frame.carry = Spawn(_frame.bubble, _frame.work, TypeOf(pack.value), _frame.blueprint).created;
       }
@@ -755,35 +757,33 @@ namespace Elite
     }
 
     /*
-     * 6502: INC EV / AND #3 / ADC #CYL2 / TAY / JSR THERE / BCC NOCON -- a lone bounty hunter, and
-     * `THERE` is asked whether this is the Constrictor's system.
+     * 6502: a lone bounty hunter, and `THERE` is asked whether this is the Constrictor's system.
      */
     ++_frame.encounters;
     const AddResult hunter = AddWithCarry(static_cast<std::uint8_t>(debris.value & 3u), Byte(ShipType::CobraMk3Pirate), _frame.carry);
     _frame.carry = hunter.carry;
     const std::uint8_t y = hunter.value;
 
-    // 6502: JSR THERE -- and its answer IS the _frame.carry, so the flag survives into what follows.
+    // 6502: THERE -- and its answer IS the carry, so the flag survives into what follows.
     _frame.carry = AtConstrictorSystem(_frame.commander);
 
     bool constrictor = false;
     if (_frame.carry)
     {
       /*
-       * 6502: LDA #%11111001 / STA INWK+32 / LDA TP / AND #%00000011 / LSR A / BCC NOCON /
-       * ORA MANY+CON / BEQ YESCON.
+       * 6502: the AI byte, then the mission stage shifted, then the bubble's own count.
        *
        * The AI byte is set BEFORE the mission test, so a hunter in that system is hostile whether
-       * or not it turns out to be the Constrictor. Then mission 1 has to be at stage 1 -- the
-       * `LSR` puts bit 0 in the _frame.carry -- and the Constrictor must not already be in the bubble.
+       * or not it turns out to be the Constrictor. Then mission 1 has to be at stage 1 -- the shift
+       * puts bit 0 in the carry -- and the Constrictor must not already be in the bubble.
        */
       _frame.work.ai = 0xF9u;
 
       const std::uint8_t stage = static_cast<std::uint8_t>(_frame.commander.missionProgress & 3u);
       const ShiftResult shifted = {static_cast<std::uint8_t>(stage >> 1u), (stage & 1u) != 0u};
 
-      // 6502: LSR A -- and `ORA`, `BEQ`, `LDA` and `STA` all leave the flag alone, so this is what
-      // the `DORND` down in `NOCON` rotates in.
+      // 6502: the shift's own bit, and everything between here and `NOCON` leaves the flag alone,
+      // so this is what that roll rotates in.
       _frame.carry = shifted.carry;
 
       if (_frame.carry)
@@ -800,13 +800,12 @@ namespace Elite
     else
     {
       /*
-       * 6502: .NOCON LDA #%00000100 / STA NEWB / JSR DORND / CMP #200 / ROL A / ORA #%11000000 /
-       * STA INWK+32 / TYA / EQUB &2C.
+       * 6502: NOCON -- hostile traits, a rolled AI byte, and the type falling through.
        *
-       * `EQUB &2C` is `BIT abs`, which swallows the two bytes of `LDA #CON` that follow -- so the
-       * `TYA` reaches `focoug` with the type `LABEL_2` computed and the Constrictor's `LDA` is
-       * stepped over. The `CMP #200` is again there only for its CARRY, which `ROL A` shifts into
-       * bit 0 of the AI byte.
+       * The routine ends on the assembler trick that hides one instruction inside another's
+       * operand, so the type computed at `LABEL_2` reaches `focoug` and the Constrictor's own load
+       * is stepped over. The comparison before it is again there only for its CARRY, which the
+       * rotate shifts into bit 0 of the AI byte.
        */
       _frame.work.traits = Mask(TraitBit::Hostile);
       const RngResult ai = _frame.rng.Next(_frame.carry);
@@ -816,15 +815,15 @@ namespace Elite
       hunterType = TypeOf(y);
     }
 
-    // 6502: .focoug JSR NWSHP / .mj1 JMP MLOOP.
+    // 6502: focoug spawns it, and `mj1` ends the pass.
     static_cast<void>(Spawn(_frame.bubble, _frame.work, hunterType, _frame.blueprint));
     return SpawnPass::Ended;
   }
 
   SpawnOutcome RunSpawning(Universe& _universe, bool _carryIn) noexcept
   {
-    // 6502: LDA MJ / BNE ytq -- nothing spawns in witchspace, because witchspace has no system to
-    // spawn from. `MJP` puts the Thargoids there itself.
+    // 6502: ytq -- nothing spawns in witchspace, because witchspace has no system to spawn from.
+    // `MJP` puts the Thargoids there itself.
     if (_universe.status.midJump != 0u)
     {
       return SpawnOutcome::Ended;
