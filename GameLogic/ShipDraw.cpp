@@ -289,20 +289,20 @@ namespace Elite
       // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
       // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
       // answer and not of the first product. 6502: STA Q / JSR FMLTU / STA T ... STA S.
-      SignMag16 total{MultiplyByLog(_geometry.xx16[base], magnitude[0], false).value,
-                      static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1])};
+      SignMag16 total{MultiplyByLog(_geometry.scaledOrientation[base], magnitude[0], false).value,
+                      static_cast<std::uint8_t>(sign[0] ^ _geometry.scaledOrientation[base + 1])};
 
       // 6502: STA Q / JSR FMLTU / STA Q -- the second product goes straight back over its own
       // multiplier, and `LL38` combines it with the total under the two signs.
-      std::uint8_t term = MultiplyByLog(_geometry.xx16[base + 2], magnitude[1], false).value;
-      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3]), term, total);
+      std::uint8_t term = MultiplyByLog(_geometry.scaledOrientation[base + 2], magnitude[1], false).value;
+      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(sign[1] ^ _geometry.scaledOrientation[base + 3]), term, total);
       total = SignMag16{combined.value, combined.sign}; // 6502: STA T ... LDA T / STA R
 
-      term = MultiplyByLog(_geometry.xx16[base + 4], magnitude[2], false).value;
-      combined = CombineSigned(static_cast<std::uint8_t>(sign[2] ^ _geometry.xx16[base + 5]), term, total);
+      term = MultiplyByLog(_geometry.scaledOrientation[base + 4], magnitude[2], false).value;
+      combined = CombineSigned(static_cast<std::uint8_t>(sign[2] ^ _geometry.scaledOrientation[base + 5]), term, total);
 
-      _geometry.xx12[vector * 2u] = combined.value;
-      _geometry.xx12[vector * 2u + 1u] = combined.sign;
+      _geometry.dotProducts[vector * 2u] = combined.value;
+      _geometry.dotProducts[vector * 2u + 1u] = combined.sign;
     }
   }
 
@@ -544,9 +544,9 @@ namespace Elite
       }
 
       // Both x coordinates past 255: the high bytes minus one are still positive.
-      _geometry.xx12[2] = static_cast<std::uint8_t>(_line.second.xHigh - 1u);
+      _geometry.dotProducts[2] = static_cast<std::uint8_t>(_line.second.xHigh - 1u);
       const std::uint8_t left = static_cast<std::uint8_t>(_line.first.xHigh - 1u);
-      if (((left | _geometry.xx12[2]) & 0x80u) == 0u)
+      if (((left | _geometry.dotProducts[2]) & 0x80u) == 0u)
       {
         return true;
       }
@@ -554,12 +554,12 @@ namespace Elite
       // And both below the bottom. The `CMP #Y*2` is only there for its carry -- the byte it
       // produces is thrown away and the `SBC #0` under it is what gets kept.
       const SubResult firstLow = SubtractWithCarry(_line.first.yLow, SPACE_VIEW_BOTTOM, true);
-      _geometry.xx12[2] = SubtractWithCarry(_line.first.yHigh, 0, firstLow.carry).value;
+      _geometry.dotProducts[2] = SubtractWithCarry(_line.first.yHigh, 0, firstLow.carry).value;
 
       const SubResult secondLow = SubtractWithCarry(_line.second.yLow, SPACE_VIEW_BOTTOM, true);
       const std::uint8_t second = SubtractWithCarry(_line.second.yHigh, 0, secondLow.carry).value;
 
-      return ((second | _geometry.xx12[2]) & 0x80u) == 0u;
+      return ((second | _geometry.dotProducts[2]) & 0x80u) == 0u;
     }
 
     /// 6502: LL115 to LL114 -- the line's gradient, scaled so that both differences fit in a byte,
@@ -567,24 +567,24 @@ namespace Elite
     [[nodiscard]] Slope MeasureSlope(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
     {
       const SubResult acrossLow = SubtractWithCarry(_line.second.xLow, _line.first.xLow, true);
-      _geometry.xx12[2] = acrossLow.value;
+      _geometry.dotProducts[2] = acrossLow.value;
       const SubResult acrossHigh = SubtractWithCarry(_line.second.xHigh, _line.first.xHigh, acrossLow.carry);
-      _geometry.xx12[3] = acrossHigh.value;
+      _geometry.dotProducts[3] = acrossHigh.value;
 
       const SubResult downLow = SubtractWithCarry(_line.second.yLow, _line.first.yLow, true);
-      _geometry.xx12[4] = downLow.value;
+      _geometry.dotProducts[4] = downLow.value;
       const SubResult downHigh = SubtractWithCarry(_line.second.yHigh, _line.first.yHigh, downLow.carry);
-      _geometry.xx12[5] = downHigh.value;
+      _geometry.dotProducts[5] = downHigh.value;
 
       // The direction of the slope, which is the two differences' signs EOR'd -- taken now, because
       // both are about to be made positive. 6502: STA S, and `LL116` stores it in `XX12+3`.
-      const std::uint8_t direction = static_cast<std::uint8_t>(downHigh.value ^ _geometry.xx12[3]);
+      const std::uint8_t direction = static_cast<std::uint8_t>(downHigh.value ^ _geometry.dotProducts[3]);
 
-      if ((_geometry.xx12[5] & 0x80u) != 0u)
+      if ((_geometry.dotProducts[5] & 0x80u) != 0u)
       {
-        const SubResult low = SubtractWithCarry(0, _geometry.xx12[4], true);
-        _geometry.xx12[4] = low.value;
-        _geometry.xx12[5] = SubtractWithCarry(0, _geometry.xx12[5], low.carry).value;
+        const SubResult low = SubtractWithCarry(0, _geometry.dotProducts[4], true);
+        _geometry.dotProducts[4] = low.value;
+        _geometry.dotProducts[5] = SubtractWithCarry(0, _geometry.dotProducts[5], low.carry).value;
       }
 
       // The x difference's high byte is negated into the ACCUMULATOR and never stored back. That
@@ -592,24 +592,24 @@ namespace Elite
       // overwrites it with the slope direction from S. Writing the magnitude back is an equivalent
       // mutation and the sweep says so -- which is the only reason this comment is right, because
       // the first version of it claimed the opposite with a plausible argument attached (§6.29).
-      std::uint8_t high = _geometry.xx12[3];
+      std::uint8_t high = _geometry.dotProducts[3];
       if ((high & 0x80u) != 0u)
       {
-        const SubResult low = SubtractWithCarry(0, _geometry.xx12[2], true);
-        _geometry.xx12[2] = low.value;
-        high = SubtractWithCarry(0, _geometry.xx12[3], low.carry).value;
+        const SubResult low = SubtractWithCarry(0, _geometry.dotProducts[2], true);
+        _geometry.dotProducts[2] = low.value;
+        high = SubtractWithCarry(0, _geometry.dotProducts[3], low.carry).value;
       }
 
       // 6502: LL111 / LL112 -- halve both until each fits in one byte.
-      while (high != 0u || _geometry.xx12[5] != 0u)
+      while (high != 0u || _geometry.dotProducts[5] != 0u)
       {
         const bool intoAcross = (high & 0x01u) != 0u;
         high = static_cast<std::uint8_t>(high >> 1);
-        _geometry.xx12[2] = RotateRight(_geometry.xx12[2], intoAcross).value;
+        _geometry.dotProducts[2] = RotateRight(_geometry.dotProducts[2], intoAcross).value;
 
-        const bool intoDown = (_geometry.xx12[5] & 0x01u) != 0u;
-        _geometry.xx12[5] = static_cast<std::uint8_t>(_geometry.xx12[5] >> 1);
-        _geometry.xx12[4] = RotateRight(_geometry.xx12[4], intoDown).value;
+        const bool intoDown = (_geometry.dotProducts[5] & 0x01u) != 0u;
+        _geometry.dotProducts[5] = static_cast<std::uint8_t>(_geometry.dotProducts[5] >> 1);
+        _geometry.dotProducts[4] = RotateRight(_geometry.dotProducts[4], intoDown).value;
       }
 
       /*
@@ -621,15 +621,15 @@ namespace Elite
        * frame's `Q` (M2-b, §8; risk R22). `R`, the quotient, is the gradient the helpers take as a
        * value since M2-c-2.
        */
-      if (_geometry.xx12[2] >= _geometry.xx12[4])
+      if (_geometry.dotProducts[2] >= _geometry.dotProducts[4])
       {
-        _math.q = _geometry.xx12[2];
-        return Slope{DivideByLog(_geometry.xx12[4], _math.q).value, direction, 0};
+        _math.q = _geometry.dotProducts[2];
+        return Slope{DivideByLog(_geometry.dotProducts[4], _math.q).value, direction, 0};
       }
 
       // 6502: LL114 -- steep, so `T` comes out as 255.
-      _math.q = _geometry.xx12[4];
-      return Slope{DivideByLog(_geometry.xx12[2], _math.q).value, direction, 0xFFu};
+      _math.q = _geometry.dotProducts[4];
+      return Slope{DivideByLog(_geometry.dotProducts[2], _math.q).value, direction, 0xFFu};
     }
 
   } // namespace
@@ -679,8 +679,8 @@ namespace Elite
     // 6502: LL116 -- the gradient and its direction, where LL118 and LL120/LL123 read them. They
     // are the `Slope` value since M2-c-2; the two bytes are still written because `XX12` is what
     // the original works in and M2-c-3 is what takes it.
-    _geometry.xx12[2] = slope.gradient;
-    _geometry.xx12[3] = slope.direction;
+    _geometry.dotProducts[2] = slope.gradient;
+    _geometry.dotProducts[3] = slope.direction;
 
     const bool nearEndOnScreen = result.ends != 0u && (result.ends & 0x80u) == 0u;
     if (!nearEndOnScreen)
@@ -730,17 +730,17 @@ namespace Elite
       for (int byte = 5; byte >= 0; --byte)
       {
         const std::size_t at = static_cast<std::size_t>(byte);
-        _geometry.xx16[at] = bytes[SHIP_SIDE_OFFSET + at];
-        _geometry.xx16[at + 6u] = bytes[SHIP_ROOF_OFFSET + at];
-        _geometry.xx16[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
+        _geometry.scaledOrientation[at] = bytes[SHIP_SIDE_OFFSET + at];
+        _geometry.scaledOrientation[at + 6u] = bytes[SHIP_ROOF_OFFSET + at];
+        _geometry.scaledOrientation[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
       }
 
       constexpr std::uint8_t SCALE = 197; // 6502: LDA #197 / STA Q
       for (int index = 16; index >= 0; index -= 2)
       {
         const std::size_t at = static_cast<std::size_t>(index);
-        const ShiftResult raised = RotateLeftValue(_geometry.xx16[at], false);
-        _geometry.xx16[at] = DivideByLog(RotateLeft(_geometry.xx16[at + 1u], raised.carry).value, SCALE).value;
+        const ShiftResult raised = RotateLeftValue(_geometry.scaledOrientation[at], false);
+        _geometry.scaledOrientation[at] = DivideByLog(RotateLeft(_geometry.scaledOrientation[at + 1u], raised.carry).value, SCALE).value;
       }
     }
 
@@ -749,12 +749,12 @@ namespace Elite
     /// rotation, which is why there is a transpose rather than a second routine.
     void TransposeOrientation(GeometryWorkspace& _geometry) noexcept
     {
-      std::swap(_geometry.xx16[2], _geometry.xx16[6]);
-      std::swap(_geometry.xx16[3], _geometry.xx16[7]);
-      std::swap(_geometry.xx16[4], _geometry.xx16[12]);
-      std::swap(_geometry.xx16[5], _geometry.xx16[13]);
-      std::swap(_geometry.xx16[10], _geometry.xx16[14]);
-      std::swap(_geometry.xx16[11], _geometry.xx16[15]);
+      std::swap(_geometry.scaledOrientation[2], _geometry.scaledOrientation[6]);
+      std::swap(_geometry.scaledOrientation[3], _geometry.scaledOrientation[7]);
+      std::swap(_geometry.scaledOrientation[4], _geometry.scaledOrientation[12]);
+      std::swap(_geometry.scaledOrientation[5], _geometry.scaledOrientation[13]);
+      std::swap(_geometry.scaledOrientation[10], _geometry.scaledOrientation[14]);
+      std::swap(_geometry.scaledOrientation[11], _geometry.scaledOrientation[15]);
     }
 
     /// 6502: LL89 -- the dot product of a face's normal in XX12 with the position in XX15, whose SIGN
@@ -763,15 +763,15 @@ namespace Elite
     std::uint8_t FaceVisibility(Vector16 _vector, const GeometryWorkspace& _geometry) noexcept
     {
       // 6502: STA Q / JSR FMLTU / STA T ... STA S -- the first product and the sign it is summed under.
-      SignMag16 total{MultiplyByLog(_vector.x.lo, _geometry.xx12[0], false).value,
-                      static_cast<std::uint8_t>(_geometry.xx12[1] ^ _vector.x.hi)};
+      SignMag16 total{MultiplyByLog(_vector.x.lo, _geometry.dotProducts[0], false).value,
+                      static_cast<std::uint8_t>(_geometry.dotProducts[1] ^ _vector.x.hi)};
 
-      std::uint8_t term = MultiplyByLog(_vector.y.lo, _geometry.xx12[2], false).value;
-      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(_geometry.xx12[3] ^ _vector.y.hi), term, total);
+      std::uint8_t term = MultiplyByLog(_vector.y.lo, _geometry.dotProducts[2], false).value;
+      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(_geometry.dotProducts[3] ^ _vector.y.hi), term, total);
       total = SignMag16{combined.value, combined.sign};
 
-      term = MultiplyByLog(_vector.z.lo, _geometry.xx12[4], false).value;
-      combined = CombineSigned(static_cast<std::uint8_t>(_vector.z.hi ^ _geometry.xx12[5]), term, total);
+      term = MultiplyByLog(_vector.z.lo, _geometry.dotProducts[4], false).value;
+      combined = CombineSigned(static_cast<std::uint8_t>(_vector.z.hi ^ _geometry.dotProducts[5]), term, total);
 
       // `BIT S / BMI P%+4 / LDA #0` -- the branch skips the zero, so a negative S keeps the answer.
       return ((combined.sign & 0x80u) != 0u) ? combined.value : std::uint8_t{0};
@@ -844,7 +844,7 @@ namespace Elite
     /// an edge not worth drawing. 6502: the four `LDA XX2,X / BNE` tests in parts 6 and 10.
     bool EitherFaceVisible(const GeometryWorkspace& _geometry, std::uint8_t _pair) noexcept
     {
-      return _geometry.xx2[static_cast<std::size_t>(_pair & 0x0Fu)] != 0u || _geometry.xx2[static_cast<std::size_t>(_pair >> 4)] != 0u;
+      return _geometry.faceVisible[static_cast<std::size_t>(_pair & 0x0Fu)] != 0u || _geometry.faceVisible[static_cast<std::size_t>(_pair >> 4)] != 0u;
     }
 
   } // namespace
@@ -989,8 +989,8 @@ namespace Elite
     // Blueprint byte 6 is a vertex's offset in XX3, and 255 there means "this one did not
     // project". The laser line in part 9 reads it back and gives up when it is still 255.
     const std::uint8_t laserVertex = _render.blueprint.laserVertex;
-    _render.geometry.xx3[laserVertex] = 255;
-    _render.geometry.xx3[static_cast<std::size_t>(laserVertex) + 1u] = 255;
+    _render.geometry.projectedVertices[laserVertex] = 255;
+    _render.geometry.projectedVertices[static_cast<std::size_t>(laserVertex) + 1u] = 255;
 
     // z divided by sixteen into (A T), and then by another eight. The `ROR A` after the fourth
     // `LSR A` picks up the carry that shift left, so the two halves are one number and not two.
@@ -1028,7 +1028,7 @@ namespace Elite
     {
       _render.position[static_cast<std::size_t>(byte)] = position[static_cast<std::size_t>(byte)];
     }
-    _render.geometry.xx2[15] = 255;
+    _render.geometry.faceVisible[15] = 255;
   }
 
   /// ---- parts 4 and 5: which faces can be seen --------------------------------------------------
@@ -1042,7 +1042,7 @@ namespace Elite
       // can be built out of them.
       for (int face = faceBytes >> 2; face >= 0; --face)
       {
-        _render.geometry.xx2[static_cast<std::size_t>(face)] = 255;
+        _render.geometry.faceVisible[static_cast<std::size_t>(face)] = 255;
       }
       _render.detail = 0;
     }
@@ -1074,12 +1074,12 @@ namespace Elite
       DotProducts(Vector16{SignMag16{_render.position[0], _render.position[2]}, SignMag16{_render.position[3], _render.position[5]},
                            SignMag16{_render.position[6], _render.position[8]}},
                   _render.geometry);
-      _render.position[0] = _render.geometry.xx12[0];
-      _render.position[2] = _render.geometry.xx12[1];
-      _render.position[3] = _render.geometry.xx12[2];
-      _render.position[5] = _render.geometry.xx12[3];
-      _render.position[6] = _render.geometry.xx12[4];
-      _render.position[8] = _render.geometry.xx12[5];
+      _render.position[0] = _render.geometry.dotProducts[0];
+      _render.position[2] = _render.geometry.dotProducts[1];
+      _render.position[3] = _render.geometry.dotProducts[2];
+      _render.position[5] = _render.geometry.dotProducts[3];
+      _render.position[6] = _render.geometry.dotProducts[4];
+      _render.position[8] = _render.geometry.dotProducts[5];
 
       // 6502: LDY #4 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #17 / LDA (XX0),Y / ADC XX0+1 /
       // STA V+1 -- V is the faces, and in this port it is `at`: the blueprint carries them as a
@@ -1090,21 +1090,21 @@ namespace Elite
         // 6502: LL86 -- a face whose own distance is under the ship's is taken as visible without
         // the arithmetic.
         const std::uint8_t flags = _render.blueprint.faces[at];
-        _render.geometry.xx12[1] = flags;
+        _render.geometry.dotProducts[1] = flags;
 
         if ((flags & 0x1Fu) < _render.detail)
         {
-          _render.geometry.xx2[static_cast<std::size_t>(at >> 2)] = 255;
+          _render.geometry.faceVisible[static_cast<std::size_t>(at >> 2)] = 255;
           at = static_cast<std::uint8_t>(at + 4u);
           continue;
         }
 
         // 6502: LL87 -- the face's normal, with its three sign bits spread out by doubling.
-        _render.geometry.xx12[3] = static_cast<std::uint8_t>(flags << 1);
-        _render.geometry.xx12[5] = static_cast<std::uint8_t>(flags << 2);
-        _render.geometry.xx12[0] = _render.blueprint.faces[at + 1u];
-        _render.geometry.xx12[2] = _render.blueprint.faces[at + 2u];
-        _render.geometry.xx12[4] = _render.blueprint.faces[at + 3u];
+        _render.geometry.dotProducts[3] = static_cast<std::uint8_t>(flags << 1);
+        _render.geometry.dotProducts[5] = static_cast<std::uint8_t>(flags << 2);
+        _render.geometry.dotProducts[0] = _render.blueprint.faces[at + 1u];
+        _render.geometry.dotProducts[2] = _render.blueprint.faces[at + 2u];
+        _render.geometry.dotProducts[4] = _render.blueprint.faces[at + 3u];
 
         Vector16 normal; // 6502: XX15's six bytes, the face's normal plus the ship's position
 
@@ -1128,9 +1128,9 @@ namespace Elite
           std::uint8_t scale = shifts;
           for (;;)
           {
-            std::uint8_t first = _render.geometry.xx12[0];
-            std::uint8_t second = _render.geometry.xx12[2];
-            std::uint8_t third = _render.geometry.xx12[4];
+            std::uint8_t first = _render.geometry.dotProducts[0];
+            std::uint8_t second = _render.geometry.dotProducts[2];
+            std::uint8_t third = _render.geometry.dotProducts[4];
             for (std::uint8_t left = scale; left != 0u; --left)
             {
               first = static_cast<std::uint8_t>(first >> 1);
@@ -1140,18 +1140,18 @@ namespace Elite
 
             // 6502: STA R / LDA XX12+5 / STA S / LDA XX18+6 / STA Q / LDA XX18+8 / JSR LL38, and the
             // same for x and y: each is the halved coordinate under the ship's sign, plus the vertex.
-            const SignedSum alongZ = CombineSigned(_render.position[8], _render.position[6], SignMag16{third, _render.geometry.xx12[5]});
+            const SignedSum alongZ = CombineSigned(_render.position[8], _render.position[6], SignMag16{third, _render.geometry.dotProducts[5]});
             if (!alongZ.carry)
             {
               normal.z = SignMag16{alongZ.value, alongZ.sign};
 
-              const SignedSum alongX = CombineSigned(_render.position[2], _render.position[0], SignMag16{first, _render.geometry.xx12[1]});
+              const SignedSum alongX = CombineSigned(_render.position[2], _render.position[0], SignMag16{first, _render.geometry.dotProducts[1]});
               if (!alongX.carry)
               {
                 normal.x = SignMag16{alongX.value, alongX.sign};
 
                 const SignedSum alongY =
-                  CombineSigned(_render.position[5], _render.position[3], SignMag16{second, _render.geometry.xx12[3]});
+                  CombineSigned(_render.position[5], _render.position[3], SignMag16{second, _render.geometry.dotProducts[3]});
                 if (!alongY.carry)
                 {
                   normal.y = SignMag16{alongY.value, alongY.sign};
@@ -1168,7 +1168,7 @@ namespace Elite
           }
         }
 
-        _render.geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(normal, _render.geometry);
+        _render.geometry.faceVisible[static_cast<std::size_t>(at >> 2)] = FaceVisibility(normal, _render.geometry);
         at = static_cast<std::uint8_t>(at + 4u);
       } while (at < faceBytes); // 6502: XX20
     }
@@ -1209,23 +1209,23 @@ namespace Elite
                     _render.geometry);
 
         // 6502: XX15's six bytes again, now as x in (2 1 0) and y in (5 4 3).
-        SignMag24 across = PlaceVertexAxis(_render.geometry.xx12[0], _render.geometry.xx12[1], _render.work, SHIP_X_OFFSET);
-        SignMag24 down = PlaceVertexAxis(_render.geometry.xx12[2], _render.geometry.xx12[3], _render.work, SHIP_Y_OFFSET);
+        SignMag24 across = PlaceVertexAxis(_render.geometry.dotProducts[0], _render.geometry.dotProducts[1], _render.work, SHIP_X_OFFSET);
+        SignMag24 down = PlaceVertexAxis(_render.geometry.dotProducts[2], _render.geometry.dotProducts[3], _render.work, SHIP_Y_OFFSET);
 
         // 6502: LL55 / LL56 / LL140 -- and z, which is a plain sixteen-bit add or subtract with a
         // floor of four rather than a sign-magnitude one, because a vertex behind the player has
         // to be pulled in front of it before anything is divided by it. `(U T)` is this loop's own
         // since M2-c-3.
         SignMag16 depth{}; // 6502: (U T) -- the vertex's distance
-        if ((_render.geometry.xx12[5] & 0x80u) == 0u)
+        if ((_render.geometry.dotProducts[5] & 0x80u) == 0u)
         {
-          const AddResult sum = AddWithCarry(_render.geometry.xx12[4], _render.work.z.lo, false);
+          const AddResult sum = AddWithCarry(_render.geometry.dotProducts[4], _render.work.z.lo, false);
           depth.lo = sum.value;
           depth.hi = AddWithCarry(_render.work.z.hi, 0, sum.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(_render.work.z.lo, _render.geometry.xx12[4], true);
+          const SubResult low = SubtractWithCarry(_render.work.z.lo, _render.geometry.dotProducts[4], true);
           depth.lo = low.value;
           const SubResult high = SubtractWithCarry(_render.work.z.hi, 0, low.carry);
           depth.hi = high.value;
@@ -1279,16 +1279,16 @@ namespace Elite
         {
           // 6502: LL62 -- 128 - (U R), for a vertex to the left of centre.
           const SubResult low = SubtractWithCarry(128, projectedX.low, true);
-          _render.geometry.xx3[x] = low.value;
+          _render.geometry.projectedVertices[x] = low.value;
           ++x;
-          _render.geometry.xx3[x] = SubtractWithCarry(0, projectedX.high, low.carry).value;
+          _render.geometry.projectedVertices[x] = SubtractWithCarry(0, projectedX.high, low.carry).value;
         }
         else
         {
           const AddResult low = AddWithCarry(projectedX.low, 128, false);
-          _render.geometry.xx3[x] = low.value;
+          _render.geometry.projectedVertices[x] = low.value;
           ++x;
-          _render.geometry.xx3[x] = AddWithCarry(projectedX.high, 0, low.carry).value;
+          _render.geometry.projectedVertices[x] = AddWithCarry(projectedX.high, 0, low.carry).value;
         }
 
         // 6502: LL66 -- and the same again for y, with U cleared first because `LL28` does not
@@ -1308,16 +1308,16 @@ namespace Elite
         {
           // 6502: LL70 -- below the centre of the view.
           const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, false);
-          _render.geometry.xx3[x] = low.value;
+          _render.geometry.projectedVertices[x] = low.value;
           ++x;
-          _render.geometry.xx3[x] = AddWithCarry(0, projectedY.high, low.carry).value;
+          _render.geometry.projectedVertices[x] = AddWithCarry(0, projectedY.high, low.carry).value;
         }
         else
         {
           const SubResult low = SubtractWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, true);
-          _render.geometry.xx3[x] = low.value;
+          _render.geometry.projectedVertices[x] = low.value;
           ++x;
-          _render.geometry.xx3[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
+          _render.geometry.projectedVertices[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
         }
 
       }
@@ -1372,24 +1372,24 @@ namespace Elite
 
       const std::size_t muzzle = _render.blueprint.laserVertex;
       Line16 beam;
-      beam.first.xLow = _render.geometry.xx3[muzzle];
-      beam.first.xHigh = _render.geometry.xx3[muzzle + 1u];
+      beam.first.xLow = _render.geometry.projectedVertices[muzzle];
+      beam.first.xHigh = _render.geometry.projectedVertices[muzzle + 1u];
 
       // Both bytes are tested by incrementing them, so 255 -- which is what part 2 wrote there and
       // what a vertex that did not project leaves -- is the one value that means "no laser".
       if (static_cast<std::uint8_t>(beam.first.xLow + 1u) != 0u && static_cast<std::uint8_t>(beam.first.xHigh + 1u) != 0u)
       {
-        beam.first.yLow = _render.geometry.xx3[muzzle + 2u];
-        beam.first.yHigh = _render.geometry.xx3[muzzle + 3u];
+        beam.first.yLow = _render.geometry.projectedVertices[muzzle + 2u];
+        beam.first.yHigh = _render.geometry.projectedVertices[muzzle + 3u];
         beam.second.xLow = 0;
         beam.second.xHigh = 0;
 
         // 6502: the far end's y is `XX12(1 0)`, which is where `LL145` reads it and where the port
         // keeps writing it: `XX12` is `LL9`'s frame until M2-c-3.
-        _render.geometry.xx12[1] = 0;
-        _render.geometry.xx12[0] = _render.work.z.lo;
-        beam.second.yLow = _render.geometry.xx12[0];
-        beam.second.yHigh = _render.geometry.xx12[1];
+        _render.geometry.dotProducts[1] = 0;
+        _render.geometry.dotProducts[0] = _render.work.z.lo;
+        beam.second.yLow = _render.geometry.dotProducts[0];
+        beam.second.yHigh = _render.geometry.dotProducts[1];
 
         // The laser fires towards the player, so the far end is the origin -- and to the left of
         // it when the ship is to the left, which is the whole of this `DEC`.
@@ -1437,18 +1437,18 @@ namespace Elite
         const std::size_t to = _render.blueprint.edges[walker + 3u];
 
         Line16 edge;
-        edge.first.xHigh = _render.geometry.xx3[from + 1u];
-        edge.first.xLow = _render.geometry.xx3[from];
-        edge.first.yLow = _render.geometry.xx3[from + 2u];
-        edge.first.yHigh = _render.geometry.xx3[from + 3u];
-        edge.second.xLow = _render.geometry.xx3[to];
+        edge.first.xHigh = _render.geometry.projectedVertices[from + 1u];
+        edge.first.xLow = _render.geometry.projectedVertices[from];
+        edge.first.yLow = _render.geometry.projectedVertices[from + 2u];
+        edge.first.yHigh = _render.geometry.projectedVertices[from + 3u];
+        edge.second.xLow = _render.geometry.projectedVertices[to];
 
         // 6502: `XX12(1 0)` again -- the far end's y, in `LL9`'s frame until M2-c-3.
-        _render.geometry.xx12[1] = _render.geometry.xx3[to + 3u];
-        _render.geometry.xx12[0] = _render.geometry.xx3[to + 2u];
-        edge.second.yHigh = _render.geometry.xx12[1];
-        edge.second.yLow = _render.geometry.xx12[0];
-        edge.second.xHigh = _render.geometry.xx3[to + 1u];
+        _render.geometry.dotProducts[1] = _render.geometry.projectedVertices[to + 3u];
+        _render.geometry.dotProducts[0] = _render.geometry.projectedVertices[to + 2u];
+        edge.second.yHigh = _render.geometry.dotProducts[1];
+        edge.second.yLow = _render.geometry.dotProducts[0];
+        edge.second.xHigh = _render.geometry.projectedVertices[to + 1u];
 
         // 6502: `LL147` is entered with `XX15+5` in the accumulator, and `SWAP` accumulates across
         // the edges rather than being zeroed for each.

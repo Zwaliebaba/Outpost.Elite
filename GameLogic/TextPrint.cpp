@@ -68,7 +68,7 @@ namespace Elite
     }
 
     // 6502: TT30. XX17 counts the digits down; U becomes the position the point falls at.
-    std::uint8_t xx17 = 11;
+    std::uint8_t digitsLeft = 11;
     u = static_cast<std::uint8_t>(11u - u);
     ++u;
 
@@ -144,14 +144,14 @@ namespace Elite
         --t;
       }
 
-      --xx17;
-      if ((xx17 & 0x80u) != 0u)
+      --digitsLeft;
+      if ((digitsLeft & 0x80u) != 0u)
       {
         // 6502: rT10 -- eleven digits done, and `U` goes back as the routine leaves it.
         return u;
       }
 
-      if (xx17 == 0 && _withPoint)
+      if (digitsLeft == 0 && _withPoint)
       {
         // 6502: PLP / BCC -- the carry that was stashed at the top decides this, which is why it
         // was stashed rather than tested there.

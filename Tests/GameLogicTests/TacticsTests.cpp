@@ -740,9 +740,9 @@ namespace GameLogicTests
       _universe.universe.flight.mainLoopCounter = 0u;
 
       // 6502: XX2 -- the face visibility of the last ship drawn, which `DOCKIT` reads as `K3+10`.
-      for (std::size_t face = 0; face < _universe.universe.geometry.xx2.size(); ++face)
+      for (std::size_t face = 0; face < _universe.universe.geometry.faceVisible.size(); ++face)
       {
-        _universe.universe.geometry.xx2[face] = 0u;
+        _universe.universe.geometry.faceVisible[face] = 0u;
       }
     }
 
@@ -773,9 +773,9 @@ namespace GameLogicTests
       {
         _cpu.memory[static_cast<std::uint16_t>(_at.rand + byte)] = _universe.seed[byte];
       }
-      for (std::size_t face = 0; face < _universe.universe.geometry.xx2.size() && face < 14u; ++face)
+      for (std::size_t face = 0; face < _universe.universe.geometry.faceVisible.size() && face < 14u; ++face)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + face)] = _universe.universe.geometry.xx2[face];
+        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + face)] = _universe.universe.geometry.faceVisible[face];
       }
 
       const std::uint16_t block = static_cast<std::uint16_t>(_at.kPercent + _universe.slot * Elite::SHIP_BLOCK_SIZE);
@@ -1421,7 +1421,7 @@ namespace GameLogicTests
              * drawn, and the only thing standing between an NPC and a completed docking (§6.125).
              * Both answers are swept, because a port that ignored the byte would agree on one.
              */
-            universe.universe.geometry.xx2[10] = faces;
+            universe.universe.geometry.faceVisible[10] = faces;
 
             PushTacticsUniverse(cpu, universe, at);
             cpu.memory[static_cast<std::uint16_t>(at.k3 + 10u)] = faces;

@@ -301,10 +301,10 @@ namespace Elite
       segment.second.xHigh = _state.k6[1];
 
       // 6502: `XX12(1 0)` -- the far end's y, which `LL145` reads there and `LL9`'s frame owns.
-      _geometry.xx12[0] = _state.k6[2];
-      _geometry.xx12[1] = _state.k6[3];
-      segment.second.yLow = _geometry.xx12[0];
-      segment.second.yHigh = _geometry.xx12[1];
+      _geometry.dotProducts[0] = _state.k6[2];
+      _geometry.dotProducts[1] = _state.k6[3];
+      segment.second.yLow = _geometry.dotProducts[0];
+      segment.second.yHigh = _geometry.dotProducts[1];
 
       const ClipResult clipped = ClipLine(segment, _geometry, _math, _clip);
       Line line = clipped.line;
@@ -589,10 +589,10 @@ namespace Elite
     // 6502: PLS5 -- two of PLS1 into the second half of the ellipse's axes.
     AxisResult axis = DivideAxisByZ(_ship, _math, _at);
     const std::uint8_t second = axis.value; // 6502: STA K2+2
-    _geometry.xx16[2] = axis.sign;
+    _geometry.scaledOrientation[2] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
-    _geometry.xx16[3] = axis.sign;
+    _geometry.scaledOrientation[3] = axis.sign;
     return {second, axis.value}; // 6502: (K2+2, K2+3)
   }
 
@@ -622,7 +622,7 @@ namespace Elite
 
       // 6502: LDX CNT2 / CPX #33 / LDA #0 / ROR A / STA XX16+5 -- the sign for this quarter, as a
       // bit rotated straight out of the comparison.
-      _geometry.xx16[5] = (cnt2 >= 33u) ? 0x80u : 0x00u;
+      _geometry.scaledOrientation[5] = (cnt2 >= 33u) ? 0x80u : 0x00u;
 
       // 6502: the same table a quarter-turn on -- the cosine -- against the second axis. `K+2` and
       // `P` were the scratch these waited in.
@@ -640,12 +640,12 @@ namespace Elite
        * axis on the wrong side of the planet.
        */
       const AddResult stepped = AddWithCarry(cnt2, 15u, second.carry);
-      _geometry.xx16[4] = (static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u) ? 0x80u : 0x00u;
+      _geometry.scaledOrientation[4] = (static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u) ? 0x80u : 0x00u;
 
       // 6502: the two `ADD`s, each combining a product with the axis sign it belongs to: (A P) is
       // the first-axis sign over the cosine product, (S R) the second-axis sign over the sine's.
-      AddSignedResult sum = AddSigned(SignMag16{second.value, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[0])},
-                                      SignMag16{firstAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[2])});
+      AddSignedResult sum = AddSigned(SignMag16{second.value, static_cast<std::uint8_t>(_geometry.scaledOrientation[4] ^ _geometry.scaledOrientation[0])},
+                                      SignMag16{firstAcross, static_cast<std::uint8_t>(_geometry.scaledOrientation[5] ^ _geometry.scaledOrientation[2])});
       std::uint8_t offsetHigh = sum.high; // 6502: T -- this loop's own since M2-c-3
       std::uint8_t low = sum.low;
       bool carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
@@ -667,8 +667,8 @@ namespace Elite
       _state.k6[1] = AddWithCarry(offsetHigh, _centre.x1, xLow.carry).value;
 
       // 6502: LDA K / STA R / ... / LDA K+2 / STA P / ... / JSR ADD -- the other pair of products.
-      sum = AddSigned(SignMag16{secondDown, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[1])},
-                      SignMag16{secondAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[3])});
+      sum = AddSigned(SignMag16{secondDown, static_cast<std::uint8_t>(_geometry.scaledOrientation[4] ^ _geometry.scaledOrientation[1])},
+                      SignMag16{secondAcross, static_cast<std::uint8_t>(_geometry.scaledOrientation[5] ^ _geometry.scaledOrientation[3])});
       offsetHigh = static_cast<std::uint8_t>(sum.high ^ 0x80u);
       low = sum.low;
       carry = sum.carry; // 6502: `EOR #%10000000 / STA T / BPL PL43` -- again no flag is touched
@@ -754,11 +754,11 @@ namespace Elite
       AxisResult axis = DivideAxisByZ(_ship, _math, 9);
       axes.firstX = axis.value;
       _math.k2Low = axis.value; // 6502: STA K2 -- and `MV40` reads this byte a frame later (§8)
-      _geometry.xx16[0] = axis.sign;
+      _geometry.scaledOrientation[0] = axis.sign;
 
       axis = DivideAxisByZ(_ship, _math, axis.at);
       axes.firstY = axis.value;
-      _geometry.xx16[1] = axis.sign;
+      _geometry.scaledOrientation[1] = axis.sign;
 
       std::tie(axes.secondX, axes.secondY) = LoadTwoAxes(_ship, _math, _geometry, 15);
       DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre, axes, meridian);
@@ -806,19 +806,19 @@ namespace Elite
     AxisResult axis = DivideAxisByZ(_ship, _math, 9);
     axes.firstX = static_cast<std::uint8_t>(axis.value >> 1);
     _math.k2Low = axes.firstX; // 6502: STA K2 -- `MV40`'s byte again (§8)
-    _geometry.xx16[0] = axis.sign;
+    _geometry.scaledOrientation[0] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
     axes.firstY = static_cast<std::uint8_t>(axis.value >> 1);
-    _geometry.xx16[1] = axis.sign;
+    _geometry.scaledOrientation[1] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, 21);
     axes.secondX = static_cast<std::uint8_t>(axis.value >> 1);
-    _geometry.xx16[2] = axis.sign;
+    _geometry.scaledOrientation[2] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
     axes.secondY = static_cast<std::uint8_t>(axis.value >> 1);
-    _geometry.xx16[3] = axis.sign;
+    _geometry.scaledOrientation[3] = axis.sign;
 
     // 6502: LDA #64 / STA TGT / LDA #0 / STA CNT2 / JMP PLS22 -- a whole turn, from zero.
     DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre, axes, 0, 64);

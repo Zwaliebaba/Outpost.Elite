@@ -958,8 +958,8 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx16 = oracle.Label("XX16");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t scaledOrientation = oracle.Label("XX16");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t ll51 = oracle.Label("LL51");
 
       // The hand-picked block first, then the generated sweep. The generator is an LCG so the
@@ -1008,8 +1008,8 @@ namespace GameLogicTests
         }
         for (std::size_t byte = 0; byte < 18u; ++byte)
         {
-          geometry.xx16[byte] = block[6u + byte];
-          cpu.memory[static_cast<std::uint16_t>(xx16 + byte)] = block[6u + byte];
+          geometry.scaledOrientation[byte] = block[6u + byte];
+          cpu.memory[static_cast<std::uint16_t>(scaledOrientation + byte)] = block[6u + byte];
         }
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll51, 200'000);
@@ -1020,7 +1020,7 @@ namespace GameLogicTests
         const std::wstring where = Widen("LL51 case " + std::to_string(compared));
         for (std::size_t byte = 0; byte < 6u; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(dotProducts + byte)], geometry.dotProducts[byte],
                            (where + L": XX12+" + std::to_wstring(byte)).c_str());
         }
 
@@ -1030,7 +1030,7 @@ namespace GameLogicTests
         {
           const std::size_t base = product * 6u;
           const std::uint8_t firstSign = static_cast<std::uint8_t>(vector[1] ^ block[6u + base + 1u]) & 0x80u;
-          if ((geometry.xx12[product * 2u + 1u] & 0x80u) != firstSign)
+          if ((geometry.dotProducts[product * 2u + 1u] & 0x80u) != firstSign)
           {
             ++flipped;
           }
@@ -1065,7 +1065,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t rr = oracle.Label("R");
       const std::uint16_t ss = oracle.Label("S");
@@ -1096,8 +1096,8 @@ namespace GameLogicTests
                   {
                     Cpu6502 cpu = oracle.Fresh();
 
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 2)] = gradient;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 3)] = direction;
                     cpu.memory[tt] = steep;
                     cpu.memory[rr] = r;
                     cpu.memory[ss] = s;
@@ -1180,7 +1180,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t tt = oracle.Label("T");
       const std::uint16_t ll118 = oracle.Label("LL118");
@@ -1220,8 +1220,8 @@ namespace GameLogicTests
                     }
                     Elite::Point16 moved{x1Low, x1High, y1Low, y1High};
 
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
-                    cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 2)] = gradient;
+                    cpu.memory[static_cast<std::uint16_t>(dotProducts + 3)] = direction;
                     cpu.memory[tt] = steep;
                     const Elite::Slope slope{gradient, direction, steep};
 
@@ -1300,7 +1300,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t xx15 = oracle.Label("XX15");
-      const std::uint16_t xx12 = oracle.Label("XX12");
+      const std::uint16_t dotProducts = oracle.Label("XX12");
       const std::uint16_t xx13 = oracle.Label("XX13");
       const std::uint16_t swap = oracle.Label("SWAP");
       const std::uint16_t clippingOff = oracle.Label("dontclip");
@@ -1362,10 +1362,10 @@ namespace GameLogicTests
                 const Elite::Line16 line{{block[0], block[1], block[2], block[3]},
                                          {block[4], block[5], static_cast<std::uint8_t>(y2), static_cast<std::uint8_t>(y2 >> 8)}};
 
-                cpu.memory[xx12] = static_cast<std::uint8_t>(y2);
-                cpu.memory[static_cast<std::uint16_t>(xx12 + 1)] = static_cast<std::uint8_t>(y2 >> 8);
-                geometry.xx12[0] = static_cast<std::uint8_t>(y2);
-                geometry.xx12[1] = static_cast<std::uint8_t>(y2 >> 8);
+                cpu.memory[dotProducts] = static_cast<std::uint8_t>(y2);
+                cpu.memory[static_cast<std::uint16_t>(dotProducts + 1)] = static_cast<std::uint8_t>(y2 >> 8);
+                geometry.dotProducts[0] = static_cast<std::uint8_t>(y2);
+                geometry.dotProducts[1] = static_cast<std::uint8_t>(y2 >> 8);
 
                 cpu.memory[clippingOff] = off;
                 cpu.memory[swap] = seededSwap;
@@ -1421,7 +1421,7 @@ namespace GameLogicTests
                  */
                 for (std::size_t byte = 2; byte < 6u; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(dotProducts + byte)], geometry.dotProducts[byte],
                                    (where + L": XX12+" + std::to_wstring(byte)).c_str());
                 }
                 Assert::AreEqual(cpu.memory[xx13], clipped.ends, (where + L": XX13").c_str());
@@ -1571,8 +1571,8 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
       const std::uint16_t xx0 = oracle.Label("XX0");
-      const std::uint16_t xx2 = oracle.Label("XX2");
-      const std::uint16_t xx3 = oracle.Label("XX3");
+      const std::uint16_t faceVisible = oracle.Label("XX2");
+      const std::uint16_t projectedVertices = oracle.Label("XX3");
       const std::uint16_t inf = oracle.Label("INF");
       const std::uint16_t type = oracle.Label("TYPE");
       const std::uint16_t ll9 = oracle.Label("LL9");
@@ -1715,11 +1715,11 @@ namespace GameLogicTests
             // XX3's compared range, cleared on both sides so an unwritten byte cannot pass by luck.
             for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = 0;
+              cpu.memory[static_cast<std::uint16_t>(projectedVertices + byte)] = 0;
             }
             for (std::uint16_t byte = 0; byte < 16u; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(xx2 + byte)] = 0;
+              cpu.memory[static_cast<std::uint16_t>(faceVisible + byte)] = 0;
             }
 
             std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
@@ -1801,12 +1801,12 @@ namespace GameLogicTests
             const std::size_t firstFlag = ((placement.state & 0x20u) != 0u) ? 4u : 2u;
             for (std::size_t byte = firstFlag; byte < 14u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx2 + byte)], geometry.xx2[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(faceVisible + byte)], geometry.faceVisible[byte],
                                (where + L": XX2+" + std::to_wstring(byte)).c_str());
             }
             for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx3 + byte)], geometry.xx3[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(projectedVertices + byte)], geometry.projectedVertices[byte],
                                (where + L": XX3+" + std::to_wstring(byte)).c_str());
             }
 

@@ -492,7 +492,7 @@ namespace GameLogicTests
         {
           cpu.memory[static_cast<std::uint16_t>(many + kind)] = universe.bubble.counts[kind];
         }
-        universe.geometry.xx2[10] = item.faces;
+        universe.geometry.faceVisible[10] = item.faces;
         cpu.memory[static_cast<std::uint16_t>(k3 + 10u)] = item.faces;
         const std::array<std::uint8_t, 4> seed = {0x3Cu, 0xA5u, 0x5Au, 0xC3u};
         for (std::size_t byte = 0; byte < seed.size(); ++byte)

@@ -1296,7 +1296,7 @@ namespace Elite
      *
      * What it guards is the ship DOCKING: bit 7 of `NEWB` is "take this out of the bubble".
      */
-    if (_universe.geometry.xx2[10] != 0u)
+    if (_universe.geometry.faceVisible[10] != 0u)
     {
       return;
     }

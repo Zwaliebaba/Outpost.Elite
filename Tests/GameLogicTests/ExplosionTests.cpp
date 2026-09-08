@@ -462,7 +462,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t xx3 = oracle.Label("XX3");
+      const std::uint16_t projectedVertices = oracle.Label("XX3");
       const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t doexp = oracle.Label("DOEXP");
       const std::uint16_t screenBase = ScreenBase(oracle);
@@ -517,8 +517,8 @@ namespace GameLogicTests
           for (std::uint16_t byte = 0; byte < 192u; ++byte)
           {
             const std::uint8_t value = (byte < vertices.size()) ? vertices[byte] : std::uint8_t{0};
-            cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = value;
-            geometry.xx3[byte] = value;
+            cpu.memory[static_cast<std::uint16_t>(projectedVertices + byte)] = value;
+            geometry.projectedVertices[byte] = value;
           }
 
           std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();

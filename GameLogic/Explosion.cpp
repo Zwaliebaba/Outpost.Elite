@@ -378,7 +378,7 @@ namespace Elite
     do
     {
       const std::size_t at = static_cast<std::size_t>(index) - 7u;
-      _heap.Write(address.Byte(static_cast<std::uint16_t>(index)), (at < _geometry.xx3.size()) ? _geometry.xx3[at] : std::uint8_t{0});
+      _heap.Write(address.Byte(static_cast<std::uint16_t>(index)), (at < _geometry.projectedVertices.size()) ? _geometry.projectedVertices[at] : std::uint8_t{0});
       --index;
     } while (index != 6u);
 

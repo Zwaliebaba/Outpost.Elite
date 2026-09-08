@@ -43,7 +43,7 @@ END = "<!--census:end-->"
 WORKSPACES: dict[str, list[str]] = {
     "MathWorkspace": ["q", "k2Low"],
     "DrawWorkspace": ["sc"],
-    "GeometryWorkspace": ["xx16", "xx12", "xx2", "xx3"],
+    "GeometryWorkspace": ["scaledOrientation", "dotProducts", "faceVisible", "projectedVertices"],
     "ClipState": ["clippingOff"],
     "Projection": ["x", "x1", "y", "y1"],
     "K3Block": ["*"],
@@ -53,8 +53,8 @@ WORKSPACES: dict[str, list[str]] = {
 LABELS: dict[str, str] = {
     "MathWorkspace.q": "Q", "MathWorkspace.k2Low": "K2",
     "DrawWorkspace.sc": "SC(1 0)",
-    "GeometryWorkspace.xx16": "XX16", "GeometryWorkspace.xx12": "XX12", "GeometryWorkspace.xx2": "XX2",
-    "GeometryWorkspace.xx3": "XX3",
+    "GeometryWorkspace.scaledOrientation": "XX16", "GeometryWorkspace.dotProducts": "XX12", "GeometryWorkspace.faceVisible": "XX2",
+    "GeometryWorkspace.projectedVertices": "XX3",
     "ClipState.clippingOff": "dontclip",
     "Projection.x": "K3", "Projection.x1": "K3+1", "Projection.y": "K4", "Projection.y1": "K4+1",
     "K3Block.*": "K3 to K3+9",
@@ -76,10 +76,10 @@ VERDICTS: dict[str, str] = {
     # ---- DrawWorkspace: the dashboard's screen cursor, all that is left of it after M2-c-2 --------
     "DrawWorkspace.sc": "**State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch.",
     # ---- GeometryWorkspace: LL9's four stage results ---------------------------------------------
-    "GeometryWorkspace.xx16": "**Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are.",
-    "GeometryWorkspace.xx12": "**Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1.",
-    "GeometryWorkspace.xx2": "**Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals.",
-    "GeometryWorkspace.xx3": "**Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader.",
+    "GeometryWorkspace.scaledOrientation": "**Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are.",
+    "GeometryWorkspace.dotProducts": "**Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1.",
+    "GeometryWorkspace.faceVisible": "**Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals.",
+    "GeometryWorkspace.projectedVertices": "**Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader.",
     # ---- ClipState -------------------------------------------------------------------------------
     "ClipState.clippingOff": "**State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it.",
     # ---- Projection -----------------------------------------------------------------------------
