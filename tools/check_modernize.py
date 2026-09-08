@@ -262,13 +262,21 @@ COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 
 
 def _is_transcription(_line: str) -> bool:
-    """Does this comment line QUOTE instructions, rather than name one in a sentence?"""
-    if not (OPCODE_OPERAND.search(_line) or OPCODE_IMPLIED.search(_line)):
+    """Does this comment line QUOTE instructions, rather than name one in a sentence?
+
+    EVERY test reads the comment's BODY. The comment's own `//` is a slash, and an implied-mode
+    instruction needs a slash beside it to be a listing -- so `// CLC, in spite of the DFAULT above`
+    read as a quoted `CLC` purely because the delimiter sat next to it. That was invisible while
+    every such comment carried a `6502:` marker between the two; M6-e-3 removed the markers and
+    three sentences turned into listings that had never changed. The body test was already here for
+    LISTING_CONTEXT, with a comment saying exactly this; it belongs on all of them.
+    """
+    body = COMMENT_LINE.sub("", _line, count=1)
+    if not (OPCODE_OPERAND.search(body) or OPCODE_IMPLIED.search(body)):
         return False
-    if UNAMBIGUOUS_OPERAND.search(_line) or UNAMBIGUOUS_IMPLIED.search(_line):
+    if UNAMBIGUOUS_OPERAND.search(body) or UNAMBIGUOUS_IMPLIED.search(body):
         return True
-    # The comment's own `//` is a slash, so the context test reads the BODY and not the marker.
-    return bool(LISTING_CONTEXT.search(COMMENT_LINE.sub("", _line, count=1)))
+    return bool(LISTING_CONTEXT.search(body))
 
 
 def _opcode_lines(_root: Path):

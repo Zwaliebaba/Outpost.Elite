@@ -15,16 +15,16 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the cash prints to nine digits, one of which is after the point.
+    /// The cash prints to nine digits, one of which is after the point.
     constexpr std::uint8_t CASH_WIDTH = 9;
 
-    /// 6502: the carriage return that ends the commander's name.
+    /// The carriage return that ends the commander's name.
     constexpr std::uint8_t NAME_TERMINATOR = 13;
 
-    /// 6502: recursive token 66, " CR", which csh prints after the number.
+    /// Recursive token 66, " CR", which csh prints after the number.
     constexpr std::uint8_t CREDITS_TOKEN = 226;
 
-    /// 6502: "FUEL", "LIGHT YEARS" and the cash line.
+    /// "FUEL", "LIGHT YEARS" and the cash line.
     constexpr std::uint8_t FUEL_TOKEN = 105;
     constexpr std::uint8_t LIGHT_YEARS_TOKEN = 195;
     constexpr std::uint8_t CASH_LINE_TOKEN = 119;
@@ -44,7 +44,7 @@ namespace Elite
       PrintCurrentSystem();
       return;
     case 3:
-      // 6502: JMP cpl -- the selected system, from QQ15, and printing it twists the seeds.
+      // JMP cpl -- the selected system, from QQ15, and printing it twists the seeds.
       (void)PrintSystemName(m_printer, m_selected);
       return;
     case 4:
@@ -61,7 +61,7 @@ namespace Elite
   void StateTokens::PrintCash(TextSink& _sink)
   {
     /*
-     * 6502: csh -- the four cash bytes copied into `K`, printed nine wide with a decimal point,
+     * The four cash bytes copied into `K`, printed nine wide with a decimal point,
      * then token 226 loaded and a FALL THROUGH INTO `plf`.
      *
      * The fall-through is the part a reading misses. `csh` ends on that load with no jump, and the
@@ -76,10 +76,10 @@ namespace Elite
     NumberBytes value{};
     for (std::size_t index = 0; index < 4; ++index)
     {
-      value[index] = m_commander.cash.Byte(index); // 6502: CASH to CASH+3, most significant first
+      value[index] = m_commander.cash.Byte(index); // CASH to CASH+3, most significant first
     }
 
-    (void)PrintNumber(_sink, value, CASH_WIDTH, true); // 6502: BPRNT, nine wide, with the point
+    (void)PrintNumber(_sink, value, CASH_WIDTH, true); // BPRNT, nine wide, with the point
 
     PrintThenNewline(m_printer, CREDITS_TOKEN);
   }
@@ -87,7 +87,7 @@ namespace Elite
   void StateTokens::PrintGalaxyNumber(TextSink& _sink)
   {
     /*
-     * 6502: tal -- the galaxy number stepped up and printed by `pr2`.
+     * The galaxy number stepped up and printed by `pr2`.
      *
      * One-based on screen and zero-based in the block, which is why the INX is here and not at
      * every call site. The CLC is the "no decimal point" argument to pr2 rather than arithmetic.
@@ -99,7 +99,7 @@ namespace Elite
   void StateTokens::PrintCurrentSystem()
   {
     /*
-     * 6502: ypl -- witchspace leaves at once; otherwise the swap, `cpl`, and a FALL THROUGH into
+     * Witchspace leaves at once; otherwise the swap, `cpl`, and a FALL THROUGH into
      * the swap again.
      *
      * One swap loop used twice: once by JSR to put the current system's seeds where cpl reads them,
@@ -132,7 +132,7 @@ namespace Elite
   void StateTokens::PrintCommanderName(TextSink& _sink)
   {
     /*
-     * 6502: cmn -- QUL4 walks the name until it meets the terminator.
+     * QUL4 walks the name until it meets the terminator.
      *
      * The terminator is a carriage return rather than a length, and the loop's own bound is Y
      * wrapping to zero -- so a name with no carriage return in it would print 256 characters and
@@ -155,7 +155,7 @@ namespace Elite
   void StateTokens::PrintFuelAndCash(TextSink& _sink)
   {
     /*
-     * 6502: fwl -- the fuel heading, the tenths printed with a decimal point, "LIGHT YEARS" through
+     * The fuel heading, the tenths printed with a decimal point, "LIGHT YEARS" through
      * `plf`, then a FALL THROUGH into PCASH, which loads 119 and branches into `TT27`.
      *
      * That last instruction is a branch used as a jump: A has just been loaded with 119, which is
@@ -167,7 +167,7 @@ namespace Elite
      */
     PrintThenColon(m_printer, FUEL_TOKEN);
 
-    // 6502: the fuel is in tenths of a light year, so it prints with a decimal point in a width of
+    // The fuel is in tenths of a light year, so it prints with a decimal point in a width of
     // three.
     PrintByteValue(_sink, m_commander.fuel.tenths, true);
 

@@ -15,7 +15,7 @@ namespace Elite
 
   namespace
   {
-    /// 6502: byte 5 of the blueprint -- how many bytes of line heap a type needs. Through the table
+    /// Byte 5 of the blueprint -- how many bytes of line heap a type needs. Through the table
     /// as it stands rather than the assembled one, because the station's entry is written (`NWSPS`).
     [[nodiscard]] std::uint8_t HeapSizeFor(const Bubble& _bubble, ShipType _type) noexcept
     {
@@ -26,13 +26,13 @@ namespace Elite
 
   void KillShip(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept
   {
-    // 6502: the slot compared against `MSTG` -- the player's missile was chasing this one, so it
+    // The slot compared against `MSTG` -- the player's missile was chasing this one, so it
     // is unlocked and the player told.
     if (_universe.bubble.missileTarget == _slot)
     {
-      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: ABORT with GREEN2 -- the indicator's own green
+      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // ABORT with GREEN2 -- the indicator's own green
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 200,
-                  _universe.view, &_universe.picture); // 6502: MESS with token 200
+                  _universe.view, &_universe.picture); // MESS with token 200
     }
 
     const ShipType type = TypeOf(_universe.bubble.slots[_slot]);
@@ -40,7 +40,7 @@ namespace Elite
     if (type == ShipType::Station)
     {
       /*
-       * 6502: KS4 -- the space station is the one death that changes the system rather than the
+       * The space station is the one death that changes the system rather than the
        * bubble. Nothing shuffles: the slot list is cut back, the station indicator goes out, and
        * a SUN is created in its place, because a system without a station still has to have
        * something for the player to fly towards.
@@ -48,13 +48,13 @@ namespace Elite
       ClearShip(_universe.work);
       ClearSunHeap(_universe.heaps);
 
-      // 6502: both stores take the zero `FLFLLS` left in the accumulator -- and `SSPR` is
+      // Both stores take the zero `FLFLLS` left in the accumulator -- and `SSPR` is
       // `MANY+SST`, so the second is what takes the station out of the type counts (§6.58).
       _universe.bubble.slots[1] = 0;
       _universe.bubble.Count(ShipType::Station) = 0;
       ToggleStationIndicator(_universe.canvas, &_universe.picture);
 
-      // 6502: NWSHP with a sun -- and `XX0` is passed rather than kept locally even though this
+      // NWSHP with a sun -- and `XX0` is passed rather than kept locally even though this
       // call cannot reach the store: the type is negative, so the branch jumps past it. Passing it
       // is what stops the next caller of this path from inheriting the bug `NWSPS` exposed.
       _universe.work.y.sgn = 6;
@@ -62,7 +62,7 @@ namespace Elite
       return;
     }
 
-    // 6502: killing the Constrictor is the end of the first mission, and it is scored as 256
+    // Killing the Constrictor is the end of the first mission, and it is scored as 256
     // kills rather than one.
     if (type == ShipType::Constrictor)
     {
@@ -70,38 +70,38 @@ namespace Elite
       ++_universe.commander.kills.hi;
     }
 
-    // 6502: lll -- the rock hermit counts as junk despite its type, which is the same extra
+    // The rock hermit counts as junk despite its type, which is the same extra
     // comparison `NWSHP` has.
     if (IsJunk(type))
     {
       --_universe.bubble.junk;
     }
 
-    // 6502: KS7 -- the type's own count steps down.
+    // The type's own count steps down.
     if (Byte(type) < _universe.bubble.counts.size())
     {
       --_universe.bubble.counts[Byte(type)];
     }
 
     /*
-     * 6502: the dead ship's heap pointer plus its own size, as a sixteen-bit addition into `P`.
+     * The dead ship's heap pointer plus its own size, as a sixteen-bit addition into `P`.
      *
      * `P(1 0)` starts at the TOP of the dead ship's heap block -- its own pointer plus its own
      * size -- and comes down by each surviving ship's size in turn. So it is always pointing at
      * where the next ship's heap belongs, and when the walk ends it is the new `SLSP`.
      */
-    // 6502: the top of the dead ship's run, which is a sixteen-bit addition in two bytes there
+    // The top of the dead ship's run, which is a sixteen-bit addition in two bytes there
     // and one here.
     HeapOffset top = _universe.bubble.blocks[_slot].heap.Byte(HeapSizeFor(_universe.bubble, type));
 
-    // 6502: KSL1 -- every slot above the dead one comes down by one, and its heap with it.
+    // Every slot above the dead one comes down by one, and its heap with it.
     for (std::size_t into = _slot; into + 1u < _universe.bubble.slots.size(); ++into)
     {
       const ShipType moved = TypeOf(_universe.bubble.slots[into + 1u]);
       _universe.bubble.slots[into] = Byte(moved);
       if (moved == ShipType::None)
       {
-        break; // 6502: KS2 -- the end of the list
+        break; // The end of the list
       }
 
       const std::uint8_t size = HeapSizeFor(_universe.bubble, moved);
@@ -119,7 +119,7 @@ namespace Elite
       destination = source;
       destination.heap = top;
 
-      // 6502: KSL3 -- the copy runs DOWNWARDS in index, which is what makes an overlapping move
+      // The copy runs DOWNWARDS in index, which is what makes an overlapping move
       // safe when the destination is below the source.
       for (std::uint8_t byte = size; byte-- > 0u;)
       {
@@ -132,7 +132,7 @@ namespace Elite
     }
 
     /*
-     * 6502: KS2 -- and every missile in the bubble has to be renumbered.
+     * KS2 -- and every missile in the bubble has to be renumbered.
      *
      * A locked missile keeps its target in `INWK+32` as `%1ttttttt` with the slot shifted up one,
      * so the comparison is against the slot the target used to be in. Below the dead one, nothing
@@ -144,7 +144,7 @@ namespace Elite
       const ShipType moved = TypeOf(_universe.bubble.slots[slot]);
       if (moved == ShipType::None)
       {
-        break; // 6502: KS3
+        break;
       }
       if (moved != ShipType::Missile)
       {
@@ -154,38 +154,38 @@ namespace Elite
       const std::uint8_t ai = _universe.bubble.blocks[slot].ai;
       if (!Has(ai, AiBit::Active))
       {
-        continue; // 6502: KSL4 -- not locked on anything
+        continue; // Not locked on anything
       }
 
       const std::uint8_t target = MissileTargetOf(ai);
       if (target < _slot)
       {
-        continue; // 6502: KSL4, from below the dead slot
+        continue; // KSL4, from below the dead slot
       }
       if (target == _slot)
       {
-        _universe.bubble.blocks[slot].ai = 0; // 6502: KS6
+        _universe.bubble.blocks[slot].ai = 0;
         continue;
       }
 
-      // 6502: one off the target, doubled, with the top bit back on -- and the subtraction runs
+      // One off the target, doubled, with the top bit back on -- and the subtraction runs
       // on the carry the comparison left SET.
       _universe.bubble.blocks[slot].ai = MissileAiFor(static_cast<std::uint8_t>(target - 1u));
     }
 
-    // 6502: KS3 -- and the heap's bottom is wherever the walk left `P`.
+    // KS3 -- and the heap's bottom is wherever the walk left `P`.
     _universe.bubble.heapBottom = top;
   }
 
   NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: SOS1 -- the missile indicators reset, then 127 into both turn counters.
+    // The missile indicators reset, then 127 into both turn counters.
     ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture);
     _universe.work.rollCounter = 127;
     _universe.work.pitchCounter = 127;
 
     /*
-     * 6502: one bit of `tek` ORed with 128 and handed straight to `NWSHP`.
+     * One bit of `tek` ORed with 128 and handed straight to `NWSHP`.
      *
      * One bit of the system's tech level becomes one bit of the ship type, so a planet is 128 or
      * 130 -- and that is the whole of how Elite decides whether a world gets meridians or a
@@ -198,18 +198,18 @@ namespace Elite
 
   NewShip AddStation(Universe& _universe, Ports& _ports) noexcept
   {
-    ToggleStationIndicator(_universe.canvas, &_universe.picture); // 6502: SPBLB
+    ToggleStationIndicator(_universe.canvas, &_universe.picture);
 
-    // 6502: the AI byte: hostile, and AI enabled.
+    // The AI byte: hostile, and AI enabled.
     _universe.work.ai = Mask(AiBit::Active, AiBit::HasEcm);
 
-    _universe.work.pitchCounter = 0u;   // 6502: zero into the pitch counter
-    _universe.work.traits = 0u;           // 6502: NEWB, which `NWSHP` ORs into rather than sets
-    _universe.bubble.slots[1] = 0u;     // 6502: FRIN+1 -- and slot 1 is the SUN's
-    _universe.work.rollCounter = 0xFFu; // 6502: the roll counter, at maximum
+    _universe.work.pitchCounter = 0u;   // Zero into the pitch counter
+    _universe.work.traits = 0u;           // NEWB, which `NWSHP` ORs into rather than sets
+    _universe.bubble.slots[1] = 0u;     // FRIN+1 -- and slot 1 is the SUN's
+    _universe.work.rollCounter = 0xFFu; // The roll counter, at maximum
 
     /*
-     * 6502: NwS1 three times, from index 10.
+     * NwS1 three times, from index 10.
      *
      * `NwS1` flips the top bit of one byte and steps the index on by two, so the three calls
      * reach 10, 12 and 14 -- the high bytes of the nose vector's three components. Flipping bit 7
@@ -221,7 +221,7 @@ namespace Elite
     nose.z.hi = static_cast<std::uint8_t>(nose.z.hi ^ 0x80u);
 
     /*
-     * 6502: the Coriolis's address stored unconditionally, then the Dodo's over it above tech 10.
+     * The Coriolis's address stored unconditionally, then the Dodo's over it above tech 10.
      *
      * `spasto` is the Coriolis's address, which `BEGIN` copied out of this same table at boot --
      * so on the port's immutable region it is simply the table's own entry. The store happens
@@ -235,29 +235,29 @@ namespace Elite
       _universe.bubble.stationType = ShipType::Dodo;
     }
 
-    // 6502: the sun's heap address, which the slot above has just been emptied of. `NWSHP` skips
+    // The sun's heap address, which the slot above has just been emptied of. `NWSHP` skips
     // its own allocation for a station, so this is the pointer the block keeps.
     _universe.work.heap = HeapOffset::FromAddress(SUN_HEAP_ADDRESS);
 
     return AddShip(_universe.bubble, _universe.work, ShipType::Station,
-                   _universe.flight.blueprint); // 6502: the station's type, and no return -- it falls in
+                   _universe.flight.blueprint); // The station's type, and no return -- it falls in
   }
 
   void BuildSystem(Universe& _universe, Ports& _ports, bool _carryIn) noexcept
   {
-    // 6502: only the LOW byte is tested, so a swarm whose count has reached a multiple of 256
+    // Only the LOW byte is tested, so a swarm whose count has reached a multiple of 256
     // stops breeding until it moves off one.
     if (_universe.commander.tribbles.lo != 0u)
     {
       /*
-       * 6502: two cargo bays zeroed -- the Trumbles eat the food and the narcotics, and
+       * Two cargo bays zeroed -- the Trumbles eat the food and the narcotics, and
        * only those two.
        */
       _universe.commander.cargoHold[0] = 0;
       _universe.commander.cargoHold[6u] = 0;
 
       /*
-       * 6502: four random bits added to the low byte, a floor forced on, and the pair doubled.
+       * Four random bits added to the low byte, a floor forced on, and the pair doubled.
        *
        * A population model in nine instructions. The addition runs on `DORND`'s exit carry, the
        * forced floor stops a pair dying out, and the doubling grows the swarm every jump -- so what
@@ -283,7 +283,7 @@ namespace Elite
     }
 
     /*
-     * 6502: nobirths -- the bounty byte shifted right. Half of whatever the player is wanted for
+     * The bounty byte shifted right. Half of whatever the player is wanted for
      * is forgiven at every jump, which is why a fugitive can fly himself clean given enough
      * hyperspace fuel.
      *
@@ -297,7 +297,7 @@ namespace Elite
     _universe.commander.legalStatus = static_cast<std::uint8_t>(bounty >> 1);
 
     /*
-     * 6502: ZINF, then the planet's position from the system's own seed bytes.
+     * ZINF, then the planet's position from the system's own seed bytes.
      *
      * `QQ15+1 AND 3 + 3` is a distance between three and six, and the ROR of it into `INWK+2` and
      * `INWK+5` puts the planet off to one side by half of that -- so every system's planet sits in
@@ -313,7 +313,7 @@ namespace Elite
 
     (void)AddPlanetOrSun(_universe, _ports);
 
-    // 6502: the sun, from two more seed bytes, and its type is 129 rather than 128 -- the bottom
+    // The sun, from two more seed bytes, and its type is 129 rather than 128 -- the bottom
     // bit is what `PLANET` tests to send it to `SUN` instead of `PL9`.
     _universe.work.z.sgn = static_cast<std::uint8_t>((_universe.current.seeds.bytes[3] & 0x07u) | 0x81u);
     const std::uint8_t across = static_cast<std::uint8_t>(_universe.current.seeds.bytes[5] & 0x03u);
@@ -325,7 +325,7 @@ namespace Elite
     const NewShip sun = AddShip(_universe.bubble, _universe.work, ShipType::Sun, _universe.flight.blueprint);
 
     /*
-     * 6502: and there is no `RTS`. `SOLAR` runs straight on into `NWSTARS`, so arriving in a
+     * And there is no `RTS`. `SOLAR` runs straight on into `NWSTARS`, so arriving in a
      * system fills the stardust field, takes every ship off the screen and resets both line heaps
      * as part of the same call (§6.58).
      *
@@ -338,29 +338,29 @@ namespace Elite
 
   RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept
   {
-    ClearShip(_work); // 6502: ZINF -- and it leaves the carry as it found it
+    ClearShip(_work); // ZINF -- and it leaves the carry as it found it
 
-    const RngResult first = _rng.Next(_carryIn); // 6502: DORND
+    const RngResult first = _rng.Next(_carryIn);
 
-    // 6502: the x sign, and the copy parked in `T1` is dead here: nothing between this and the
+    // The x sign, and the copy parked in `T1` is dead here: nothing between this and the
     // return reads it.
     _work.x.sgn = static_cast<std::uint8_t>(first.value & 0x80u);
 
-    // 6502: the y sign comes from X, which is the PREVIOUS random byte and not this one.
+    // The y sign comes from X, which is the PREVIOUS random byte and not this one.
     _work.y.sgn = static_cast<std::uint8_t>(first.previous & 0x80u);
 
-    // 6502: one distance, stored into all three axes.
+    // One distance, stored into all three axes.
     _work.x.hi = DEBRIS_DISTANCE;
     _work.y.hi = DEBRIS_DISTANCE;
     _work.z.hi = DEBRIS_DISTANCE;
 
-    // 6502: the previous random byte compared against 245, doubled with that carry, and the top
+    // The previous random byte compared against 245, doubled with that carry, and the top
     // two bits forced on.
     const bool aggressive = first.previous >= DEBRIS_AI_THRESHOLD;
     const std::uint8_t rolled = static_cast<std::uint8_t>((first.previous << 1) | (aggressive ? 1u : 0u));
     _work.ai = With(rolled, AiBit::Active, AiBit::Hostile);
 
-    // 6502: and no return -- it falls into `DORND2`, which clears the carry in front of `DORND`.
+    // And no return -- it falls into `DORND2`, which clears the carry in front of `DORND`.
     // So the second byte always rotates a clear carry in, whatever the doubling above shifted out.
     return _rng.Next(false);
   }
@@ -368,29 +368,29 @@ namespace Elite
   NewShip AddDebris(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
                     const Blueprint*& _blueprint) noexcept
   {
-    _work.nose.z.hi = DEBRIS_ORIENTATION;                                    // 6502: &60 into the nose's z
-    _work.side.x.hi = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: the same with its top bit on, into the side's x
+    _work.nose.z.hi = DEBRIS_ORIENTATION;                                    // &60 into the nose's z
+    _work.side.x.hi = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // The same with its top bit on, into the side's x
 
-    // 6502: the speed ROTATED rather than shifted, so the carry comes in at the bottom.
+    // The speed ROTATED rather than shifted, so the carry comes in at the bottom.
     _work.speed = static_cast<std::uint8_t>((_speed << 1) | (_carryIn ? 1u : 0u));
 
-    return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: the type into A, then NWSHP
+    return AddShip(_bubble, _work, _shipType, _blueprint); // The type into A, then NWSHP
   }
 
   NewShip SpawnShipAhead(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, std::uint8_t _missileTarget,
                          const Blueprint*& _blueprint) noexcept
   {
-    ClearShip(_work); // 6502: ZINF
+    ClearShip(_work);
 
-    // 6502: 14 is 28 shifted right, so the two distances are one constant. The shift also clears
+    // 14 is 28 shifted right, so the two distances are one constant. The shift also clears
     // the carry, which the fold below does not use.
     _work.y.lo = SPAWN_AHEAD_X;
     _work.z.lo = SPAWN_AHEAD_Z;
 
-    _work.y.sgn = 0x80u; // 6502: below us, so it appears in the view
+    _work.y.sgn = 0x80u; // Below us, so it appears in the view
 
     /*
-     * 6502: the missile target doubled into the AI byte, with the active bit forced on.
+     * The missile target doubled into the AI byte, with the active bit forced on.
      *
      * The doubling puts the target slot into the AI byte's aggression field and pushes `MSTG`'s
      * BIT 7 into the carry, where `fq1`'s own rotate collects it four instructions later (§6.121).
@@ -398,12 +398,12 @@ namespace Elite
     const bool carry = (_missileTarget & 0x80u) != 0u;
     _work.ai = MissileAiFor(_missileTarget);
 
-    return AddDebris(_bubble, _work, _shipType, _speed, carry, _blueprint); // 6502: no JSR -- a fall into `fq1`
+    return AddDebris(_bubble, _work, _shipType, _speed, carry, _blueprint); // No JSR -- a fall into `fq1`
   }
 
   void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept
   {
-    // 6502: the amount doubled into `R` and its sign rotated into the accumulator, then MVT1.
+    // The amount doubled into `R` and its sign rotated into the accumulator, then MVT1.
     const std::uint8_t doubled = static_cast<std::uint8_t>(_amount << 1u);
     const std::uint8_t sign = static_cast<std::uint8_t>((_amount & 0x80u) != 0u ? 0x80u : 0x00u);
 
@@ -413,42 +413,42 @@ namespace Elite
   NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType, std::uint8_t _aiFlag,
                          ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
-    // 6502: the AI byte kept in `T1` and the caller's state pushed.
+    // The AI byte kept in `T1` and the caller's state pushed.
     // `T1` is this routine's own since M2-c-3: `FRS1` parks the byte across the copy below and
     // reads it back twenty instructions later, and nothing else touches it in between.
-    const std::uint8_t aiFlag = _aiFlag; // 6502: T1
+    const std::uint8_t aiFlag = _aiFlag;
     const Blueprint* const savedBlueprint = _blueprint;
 
-    // 6502: FRL2 -- the whole block swapped with the parent's, a byte at a time.
+    // The whole block swapped with the parent's, a byte at a time.
     const Ship saved = _work;
     _work = _bubble.blocks[_parent];
 
-    // 6502: `TYPE` holds the PARENT's type, which `MVEIT` left there, and not the type being
+    // `TYPE` holds the PARENT's type, which `MVEIT` left there, and not the type being
     // created.
     if (_parentType == ShipType::Station)
     {
-      _work.speed = STATION_CHILD_SPEED; // 6502: 32 into the speed
+      _work.speed = STATION_CHILD_SPEED; // 32 into the speed
 
-      // 6502: SFS2 three times -- out along the station's own axes,
+      // SFS2 three times -- out along the station's own axes,
       // so a ship leaves through the slot rather than out of the middle of the hull.
       MoveShipAlongAxis(_work, _work.nose.x.hi, 0u);
       MoveShipAlongAxis(_work, _work.nose.y.hi, 3u);
       MoveShipAlongAxis(_work, _work.nose.z.hi, 6u);
     }
 
-    // 6502: rx -- the AI byte back, then bit 0 of the roll counter cleared by a shift each way,
+    // The AI byte back, then bit 0 of the roll counter cleared by a shift each way,
     // which is what makes the new ship's roll damp rather than lock.
     _work.ai = aiFlag;
     _work.rollCounter = static_cast<std::uint8_t>(_work.rollCounter & 0xFEu);
 
     /*
-     * 6502: two comparisons bracketing the cargo range, plate to
+     * Two comparisons bracketing the cargo range, plate to
      * splinter, and only that range is given a random tumble.
      */
     if (IsWreckage(_shipType))
     {
       /*
-       * 6502: a random byte doubled into the pitch counter, and four bits of the previous one
+       * A random byte doubled into the pitch counter, and four bits of the previous one
        * into the speed.
        *
        * AND THE CARRY GOING IN IS SET, every time. Reaching this line means the lower comparison
@@ -462,15 +462,15 @@ namespace Elite
       _work.pitchCounter = static_cast<std::uint8_t>(roll.value << 1u);
       _work.speed = static_cast<std::uint8_t>(roll.previous & 0x0Fu);
 
-      // 6502: &FF rotated right into the roll counter, and the carry it rotates in comes from the
+      // &FF rotated right into the roll counter, and the carry it rotates in comes from the
       // doubling above -- so the pitch counter's sign is bit 7 of the byte that set the roll.
       const bool carry = (roll.value & 0x80u) != 0u;
       _work.rollCounter = static_cast<std::uint8_t>((0xFFu >> 1u) | (carry ? 0x80u : 0x00u));
     }
 
-    const NewShip made = AddShip(_bubble, _work, _shipType, _blueprint); // 6502: NOIL -- NWSHP
+    const NewShip made = AddShip(_bubble, _work, _shipType, _blueprint); // NWSHP
 
-    // 6502: FRL3 -- everything pulled back off the stack and copied back.
+    // Everything pulled back off the stack and copied back.
     _work = saved;
     _blueprint = savedBlueprint;
 
@@ -480,7 +480,7 @@ namespace Elite
   NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType,
                          const Blueprint*& _blueprint) noexcept
   {
-    // 6502: the escape pod's type and AI byte, and then straight into `SFS1`.
+    // The escape pod's type and AI byte, and then straight into `SFS1`.
     return SpawnChildShip(_bubble, _work, _rng, _parent, _parentType, SPAWN_CHILD_AI, ShipType::EscapePod, _blueprint);
   }
 

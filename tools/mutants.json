@@ -473,8 +473,8 @@
         {
           "id": "mi-pause2-loop",
           "file": "GameLogic/Missions.cpp",
-          "find": "      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
-          "replace": "      while (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
+          "find": "      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)\n      {\n        return; // .newyearseve RTS\n      }\n    }\n  }",
+          "replace": "      while (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key == 0u)\n      {\n      }\n      return; // .newyearseve RTS\n    }\n  }",
           "expect": "caught",
           "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so an empty second scan re-checks for a release the routine has already had. The mutant turns that into a do-while, which is the reading everybody has first. It shows only when the keyboard goes empty, empty, PRESSED: the real routine treats that third scan as 'still held' and goes round again, and the do-while takes it as the answer. Two scans apart, and nothing is drawn, so the scan count is the only instrument -- which is why the script counts calls in a byte that cannot wrap. The first version of this mutant was `continue` against an inner `while`, and those two ARE the same loop."
         },
@@ -521,8 +521,8 @@
         {
           "id": "mi-tp-set",
           "file": "GameLogic/Missions.cpp",
-          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: BRIS",
-          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: BRIS",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports);",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports);",
           "expect": "caught",
           "note": "The shift-set-rotate trio sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
@@ -593,8 +593,8 @@
         {
           "id": "mi-second-inc",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: the ship climbs one row a frame",
-          "replace": "      // 6502: the ship climbs one row a frame",
+          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // The ship climbs one row a frame",
+          "replace": "      // The ship climbs one row a frame",
           "expect": "caught",
           "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
@@ -609,8 +609,8 @@
         {
           "id": "mi-dead-counter",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: BR2 -- the high byte follows",
-          "replace": "    }\n\n    // 6502: BR2 -- the high byte follows",
+          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // The high byte follows",
+          "replace": "    }\n\n    // The high byte follows",
           "expect": "caught",
           "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
@@ -793,8 +793,8 @@
         {
           "id": "cs-ll9-carry-hit",
           "file": "GameLogic/FlightLoop.cpp",
-          "find": "carry = true; // 6502: the flag `HITCH` sets, which nothing on the way to `MA47` touches",
-          "replace": "carry = false; // 6502: the flag `HITCH` sets, which nothing on the way to `MA47` touches",
+          "find": "carry = true; // The flag `HITCH` sets, which nothing on the way to `MA47` touches",
+          "replace": "carry = false; // The flag `HITCH` sets, which nothing on the way to `MA47` touches",
           "expect": "caught",
           "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'in the sights, already dead' is that ship, and its RAND is compared -- 'on top of us' is not, because MVEIT takes the player's speed off z before HITCH looks, and the generator was not compared by the frame tests until this mutant survived (2026-09-06)."
         }
@@ -992,8 +992,8 @@
         {
           "id": "pd-pl44-clc",
           "file": "GameLogic/PlanetDraw.cpp",
-          "find": "      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
-          "replace": "      extent.offScreen = true;\n      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
+          "find": "      return extent; // PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
+          "replace": "      extent.offScreen = true;\n      return extent; // PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
           "expect": "caught",
           "note": "A circle whose top is above the screen is ON screen -- `BMI PL44` lands on a `CLC`, not on a rejection (plan section 6.45). Would have hidden: a planet vanishing the moment its top edge left the view."
         },
@@ -1027,8 +1027,8 @@
         {
           "id": "sp-selftest",
           "file": "GameLogic/Spawn.cpp",
-          "find": "    _universe.work.rollCounter = 0xFFu; // 6502: the roll counter, at maximum",
-          "replace": "    _universe.work.rollCounter = 0x7Fu; // 6502: the roll counter, at maximum",
+          "find": "    _universe.work.rollCounter = 0xFFu; // The roll counter, at maximum",
+          "replace": "    _universe.work.rollCounter = 0x7Fu; // The roll counter, at maximum",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The station's roll counter at 127 instead of 255 is one byte in the block NWSPS is compared on. Keep it first. Re-anchored at M6-d-25, when the comment beside it lost its listing.",
           "selftest": true
@@ -1128,7 +1128,7 @@
         {
           "id": "game-selftest",
           "file": "GameLogic/Game.cpp",
-          "find": "    PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held\n    return syncs;",
+          "find": "    PressKey(_key); // `thiskey`, which is zero when nothing is held\n    return syncs;",
           "replace": "    static_cast<void>(_key);\n    return syncs;",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. A docked pass that never dispatches its key never ticks TT107's countdown, and ADockedPassWithNoKeyStillRunsTheCountdown reads the counter. Keep it first.",

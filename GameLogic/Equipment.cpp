@@ -24,30 +24,30 @@ namespace Elite
 
   namespace
   {
-    /// 6502: column 12, then two tokens through `spc` and `NLIN3` -- "EQUIP SHIP".
+    /// Column 12, then two tokens through `spc` and `NLIN3` -- "EQUIP SHIP".
     constexpr std::uint8_t TITLE_COLUMN = 12;
     constexpr std::uint8_t EQUIP_TOKEN = 207;
     constexpr std::uint8_t SHIP_TOKEN = 185;
 
-    /// 6502: the item names run from token 105 ("FUEL") to token 118 ("MINING LASER").
+    /// The item names run from token 105 ("FUEL") to token 118 ("MINING LASER").
     constexpr std::uint8_t ITEM_NAME_BASE = 104;
 
-    /// 6502: the price column, six digits with a point, through `TT11`.
+    /// The price column, six digits with a point, through `TT11`.
     constexpr std::uint8_t PRICE_COLUMN = 25;
     constexpr std::uint8_t PRICE_DIGITS = 6;
 
-    /// 6502: the two tokens `prq` complains with -- "ITEM?" and "CASH?".
+    /// The two tokens `prq` complains with -- "ITEM?" and "CASH?".
     constexpr std::uint8_t ITEM_TOKEN = 127;
     constexpr std::uint8_t CASH_TOKEN = 197;
 
-    /// 6502: recursive token 145, "PRESENT".
+    /// Recursive token 145, "PRESENT".
     constexpr std::uint8_t PRESENT_TOKEN = 31;
 
-    /// 6502: the cash line `dn` prints after a successful purchase.
+    /// The cash line `dn` prints after a successful purchase.
     constexpr std::uint8_t CASH_LINE_TOKEN = 119;
 
     /*
-     * 6502: the tech level plus three, capped at fourteen.
+     * The tech level plus three, capped at fourteen.
      *
      * How many items this station sells, and the cap is the odd part: eleven goes to eleven and
      * twelve goes to FOURTEEN, so no station in the game offers exactly twelve or thirteen items.
@@ -56,27 +56,27 @@ namespace Elite
     constexpr std::uint8_t TECH_CAP_TEST = 12;
     constexpr std::uint8_t TECH_CAP_VALUE = 14;
 
-    /// 6502: the item numbers those four lasers occupy in PRXS, which is what refund reads.
+    /// The item numbers those four lasers occupy in PRXS, which is what refund reads.
     constexpr std::uint8_t PULSE_ITEM = 4;
     constexpr std::uint8_t BEAM_ITEM = 5;
     constexpr std::uint8_t MILITARY_ITEM = 12;
     constexpr std::uint8_t MINING_ITEM = 13;
 
-     /// 6502: pres -- four missiles is the maximum, and the fifth is "ALL".
+     /// Four missiles is the maximum, and the fifth is "ALL".
     constexpr std::uint8_t ALL_TOKEN = 124;
     constexpr std::uint8_t MAX_MISSILES = 5;
 
-    /// 6502: `CRGO` holds two more than the tonnage, so a large bay is 37 (§6.15).
+    /// `CRGO` holds two more than the tonnage, so a large bay is 37 (§6.15).
     constexpr std::uint8_t LARGE_HOLD_CAPACITY = 37;
 
-    /// 6502: the energy bomb is stored as 127, not as 1.
+    /// The energy bomb is stored as 127, not as 1.
     constexpr std::uint8_t ENERGY_BOMB_FITTED = 0x7F;
 
-    /// 6502: the tokens `pres` names the offending item with.
+    /// The tokens `pres` names the offending item with.
     constexpr std::uint8_t LARGE_CARGO_TOKEN = 107;
     constexpr std::uint8_t FUEL_SCOOPS_TOKEN = 111;
 
-    /// 6502: qv -- the tech level at which the list is long enough to need the screen cleared.
+    /// The tech level at which the list is long enough to need the screen cleared.
     constexpr std::uint8_t MENU_CLEARS_SCREEN_AT = 8;
     constexpr std::uint8_t MENU_FIRST_ROW = 16;
     constexpr std::uint8_t MENU_LAST_ROW = 20;
@@ -85,7 +85,7 @@ namespace Elite
     constexpr std::uint8_t VIEW_TOKEN = 175;
     constexpr int VIEW_COUNT = 4;
 
-    /// 6502: a two-byte entry in PRXS, low byte first.
+    /// A two-byte entry in PRXS, low byte first.
     [[nodiscard]] std::uint16_t PriceAt(std::uint8_t _item) noexcept
     {
       const std::size_t at = static_cast<std::size_t>(_item) * 2u;
@@ -95,7 +95,7 @@ namespace Elite
 
   std::uint16_t FuelPrice(LightYearsTenths _fuel) noexcept
   {
-    // 6502: seventy tenths less the tank, doubled -- two credits a light year -- and the store
+    // Seventy tenths less the tank, doubled -- two credits a light year -- and the store
     // is into the TABLE, one byte wide, so a tank emptier than 70 tenths would wrap. It cannot
     // be: `QQ14` is capped at 70.
     const std::uint8_t missing = static_cast<std::uint8_t>(FULL_TANK.tenths - _fuel.tenths);
@@ -104,14 +104,14 @@ namespace Elite
 
   std::uint16_t EquipmentPrice(std::uint8_t _item, LightYearsTenths _fuel) noexcept
   {
-    // 6502: prx -- the item number doubled into the price table. Entry 0 is the one `EQSHP` wrote.
+    // The item number doubled into the price table. Entry 0 is the one `EQSHP` wrote.
     return (_item == 0) ? FuelPrice(_fuel) : PriceAt(_item);
   }
 
   std::uint8_t ChooseView(Universe& _universe, Ports& _ports) noexcept
   {
     /*
-     * 6502: qv -- the screen is cleared only at tech level 8 and above.
+     * The screen is cleared only at tech level 8 and above.
      *
      * The screen is cleared only at tech level 8 and above, because below that the equipment list
      * is short enough not to reach row 16 where the menu starts.
@@ -122,7 +122,7 @@ namespace Elite
     }
 
     /*
-     * 6502: qv1 -- rows 16 to 19, with the cursor row itself as the loop counter.
+     * Rows 16 to 19, with the cursor row itself as the loop counter.
      *
      * The loop counter IS the cursor row: it prints the digit from YC and the view name from
      * YC + 80, and INCYC is what advances it. So a routine that moved the cursor differently would
@@ -133,17 +133,17 @@ namespace Elite
     {
       _universe.text.column = MENU_COLUMN;
 
-      // 6502: the row turned into a digit -- rows 16 to 19 print "0" to "3".
+      // The row turned into a digit -- rows 16 to 19 print "0" to "3".
       PrintThenSpace(_ports.printer,
                      static_cast<std::uint8_t>(AddWithCarry(_universe.text.row, static_cast<std::uint8_t>('0' - 16), false).value));
 
-      // 6502: the row plus 80 as a token -- "FRONT", "REAR", "LEFT", "RIGHT".
+      // The row plus 80 as a token -- "FRONT", "REAR", "LEFT", "RIGHT".
       _ports.printer.Print(static_cast<std::uint8_t>(_universe.text.row + VIEW_NAME_BASE));
 
       MoveCursorDown(_universe.text);
     }
 
-    // 6502: qv2 -- the rows cleared, token 175 through `prq`, a key read, and "0" taken off it.
+    // The rows cleared, token 175 through `prq`, a key read, and "0" taken off it.
     ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
                        &_universe.picture, _universe.screenLayout);
     for (;;)
@@ -157,7 +157,7 @@ namespace Elite
         return view;
       }
 
-      // 6502: back to qv2 -- and there is no way out of this loop but a valid view.
+      // Back to qv2 -- and there is no way out of this loop but a valid view.
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
                        &_universe.picture, _universe.screenLayout);
     }
@@ -169,7 +169,7 @@ namespace Elite
     const Laser existing = mount;
 
     /*
-     * 6502: ref3 -- an empty mount is refunded nothing, and the chain of comparisons is skipped
+     * An empty mount is refunded nothing, and the chain of comparisons is skipped
      * entirely rather than falling through to the mining laser's price.
      */
     if (existing.Fitted())
@@ -188,38 +188,38 @@ namespace Elite
         item = MILITARY_ITEM;
       }
 
-      // 6502: `prx` then `MCASH` -- the old laser's price back, whatever the new one costs.
+      // `prx` then `MCASH` -- the old laser's price back, whatever the new one costs.
       ReceiveCash(_commander, EquipmentPrice(item, _fuel));
     }
 
-    // 6502: ref3 -- the new laser into the mount.
+    // The new laser into the mount.
     mount = _fitted;
   }
 
   void EquipShipScreen(Universe& _universe, Ports& _ports) noexcept
   {
     /*
-     * 6502: et11 jumps back to `EQSHP` -- the screen redraws itself after every purchase, so
+     * et11 jumps back to `EQSHP` -- the screen redraws itself after every purchase, so
      * this is a loop rather than a routine that returns. Every other exit leaves it.
      */
     for (;;)
     {
-      // 6502: TRADEMODE on view 32, which sets the cursor and the case flags too, and the
+      // TRADEMODE on view 32, which sets the cursor and the case flags too, and the
       // screen's own layout for the wide surface (Resolution.md section 6.2, slice RS-5-b).
       SetUpTradeScreen(_universe, _ports, EQUIP_SHIP_VIEW, EQUIP_LAYOUT);
 
-      // 6502: column 12, then the two title tokens through `spc` and `NLIN3`.
+      // Column 12, then the two title tokens through `spc` and `NLIN3`.
       _universe.text.column = TITLE_COLUMN;
       PrintThenSpace(_ports.printer, EQUIP_TOKEN);
       _ports.printer.Print(SHIP_TOKEN);
 
-      // 6502: sentence case and a line down, written out rather than called through `TT69`, so
+      // Sentence case and a line down, written out rather than called through `TT69`, so
       // no newline comes with it.
       _ports.printer.SetCaseFlags(0x80);
       MoveCursorDown(_universe.text);
 
       /*
-       * 6502: the tech level plus three, capped at fourteen, into both `Q` and `QQ25`, with `Q`
+       * The tech level plus three, capped at fourteen, into both `Q` and `QQ25`, with `Q`
        * then stepped up.
        *
        * `QQ25` is the highest item number `gnum` will accept, and `Q` is one more because the
@@ -233,47 +233,47 @@ namespace Elite
 
       const LightYearsTenths fuel = _universe.commander.fuel;
 
-      // 6502: EQL1 -- the index starts at 1 and counts up to `Q`, so the fuel line is item 1 on
+      // The index starts at 1 and counts up to `Q`, so the fuel line is item 1 on
       // screen and item 0 in the table.
       for (std::uint8_t item = 1; item <= highest; ++item)
       {
         PrintNewline(_ports.printer);
 
-        // 6502: the number through `pr2`, three wide, then a space.
+        // The number through `pr2`, three wide, then a space.
         PrintByteValue(_ports.characters, item, false);
         PrintSpace(_ports.printer);
 
-        // 6502: the item number plus 104, printed as a token.
+        // The item number plus 104, printed as a token.
         _ports.printer.Print(static_cast<std::uint8_t>(ITEM_NAME_BASE + item));
 
-        // 6502: `prx-3` for the price, then column 25 and six digits with a point.
+        // `prx-3` for the price, then column 25 and six digits with a point.
         const std::uint16_t price = EquipmentPrice(static_cast<std::uint8_t>(item - 1u), fuel);
         _universe.text.column = PRICE_COLUMN;
         PrintValue(_ports.characters, price, PRICE_DIGITS, true);
       }
 
-      // 6502: the rows cleared, token 127 through `prq`, then `gnum`.
+      // The rows cleared, token 127 through `prq`, then `gnum`.
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
                        &_universe.picture, _universe.screenLayout);
       PrintThenQuestion(_ports.printer, ITEM_TOKEN);
 
       const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, highest);
 
-      // 6502: `gnum` jumps to `BAY2` -- a letter leaves without a beep and without the docking
+      // `gnum` jumps to `BAY2` -- a letter leaves without a beep and without the docking
       // bay's usual route.
       if (entry.outcome == DigitResult::LeaveScreen)
       {
         return;
       }
 
-      // 6502: BEQ bay / BCS bay -- nothing entered, or too large, and out with no sound.
+      // BEQ bay / BCS bay -- nothing entered, or too large, and out with no sound.
       if (entry.value == 0 || entry.outcome == DigitResult::TooBig)
       {
         return;
       }
 
       /*
-       * 6502: a subtraction of ZERO here is a subtraction of ONE.
+       * A subtraction of ZERO here is a subtraction of ONE.
        *
        * The carry is clear, because the branch above it did not fire, so `A - 0 - (1 - C)` is A - 1.
        * That turns the number the player typed into the table's item number, and it is the whole
@@ -281,12 +281,12 @@ namespace Elite
        */
       const std::uint8_t item = static_cast<std::uint8_t>(entry.value - 1u);
 
-      // 6502: column 2, then a line down.
+      // Column 2, then a line down.
       _universe.text.column = 2;
       MoveCursorDown(_universe.text);
 
       /*
-       * 6502: eq -- the price through `prx` and `LCASH`; a borrow complains with token 197.
+       * The price through `prx` and `LCASH`; a borrow complains with token 197.
        *
        * The money goes first. Everything below that finds the item already fitted hands it back.
        */
@@ -299,7 +299,7 @@ namespace Elite
       }
 
       /*
-       * 6502: et0 through et10 -- thirteen comparisons, and Y walking alongside them.
+       * et0 through et10 -- thirteen comparisons, and Y walking alongside them.
        *
        * Y is the token `pres` complains with, and it is threaded through the chain rather than set
        * at each branch: 107 at et1, 111 at et5, and a step up at the top of et6, et7, et8, etA,
@@ -310,13 +310,13 @@ namespace Elite
       std::uint8_t complaint = 0;
       bool alreadyFitted = false;
 
-      // 6502: BNE et0 -- item 0 is fuel, and a full tank is not an error.
+      // BNE et0 -- item 0 is fuel, and a full tank is not an error.
       if (item == 0)
       {
         _universe.commander.fuel = FULL_TANK;
       }
 
-      // 6502: et0 -- item 1, the missile.
+      // Item 1, the missile.
       if (!alreadyFitted && item == 1)
       {
         const std::uint8_t missiles = static_cast<std::uint8_t>(_universe.commander.missiles + 1u);
@@ -328,11 +328,11 @@ namespace Elite
         else
         {
           _universe.commander.missiles = missiles;
-          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture); // 6502: JSR msblob
+          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture); // JSR msblob
         }
       }
 
-      // 6502: et1 -- token 107, then item 2, the large cargo bay.
+      // Token 107, then item 2, the large cargo bay.
       if (!alreadyFitted)
       {
         complaint = LARGE_CARGO_TOKEN;
@@ -349,7 +349,7 @@ namespace Elite
         }
       }
 
-      // 6502: et2 -- item 3, and the token's step is INSIDE this branch rather than before it.
+      // Item 3, and the token's step is INSIDE this branch rather than before it.
       if (!alreadyFitted && item == 3)
       {
         ++complaint;
@@ -363,14 +363,14 @@ namespace Elite
         }
       }
 
-      // 6502: et3 and et4 -- the pulse and beam lasers, which touch neither Y nor the pres path.
+      // Et3 and et4 -- the pulse and beam lasers, which touch neither Y nor the pres path.
       if (!alreadyFitted && (item == 4 || item == 5))
       {
         const std::uint8_t view = ChooseView(_universe, _ports);
         Refund(_universe.commander, view, (item == 4) ? LASER_PULSE : LASER_BEAM, fuel);
       }
 
-      // 6502: et5 -- token 111, item 6, and the ONLY branch that falls into `pres` rather than
+      // Token 111, item 6, and the ONLY branch that falls into `pres` rather than
       // jumping to it: a fitted scoop branches away and leaves the fall-through as the error path.
       if (!alreadyFitted)
       {
@@ -389,7 +389,7 @@ namespace Elite
       }
 
       /*
-       * 6502: et6 through et10 -- six items whose flags sit consecutively, each preceded by an
+       * Et6 through et10 -- six items whose flags sit consecutively, each preceded by an
        * unconditional INY.
        */
       struct Fitting
@@ -402,9 +402,9 @@ namespace Elite
       // The member pointer goes FIRST so the two bytes share its tail rather than each taking a
       // word of their own. Nothing outside this function sees the layout; `item` is still the key.
       static constexpr std::array<Fitting, 5> FITTINGS = {{
-        {&Commander::escapePod, 7, 0xFF}, // 6502: ESCP stepped down from zero
+        {&Commander::escapePod, 7, 0xFF}, // ESCP stepped down from zero
         {&Commander::energyBomb, 8, ENERGY_BOMB_FITTED},
-        {&Commander::energyUnit, 9, 1}, // 6502: ENGY stepped up, from a known zero
+        {&Commander::energyUnit, 9, 1}, // ENGY stepped up, from a known zero
         {&Commander::dockingComputer, 10, 0xFF},
         {&Commander::galacticDrive, 11, 0xFF},
       }};
@@ -430,7 +430,7 @@ namespace Elite
         }
       }
 
-      // 6502: et9 and et10 -- the military and mining lasers, each preceded by its own INY.
+      // Et9 and et10 -- the military and mining lasers, each preceded by its own INY.
       if (!alreadyFitted)
       {
         ++complaint;
@@ -448,7 +448,7 @@ namespace Elite
       }
 
       /*
-       * 6502: pres -- the token kept in `K`, the price refunded through `prx` and `MCASH`, then
+       * The token kept in `K`, the price refunded through `prx` and `MCASH`, then
        * the token and "PRESENT" printed, and on into `err`.
        *
        * The refund uses `prx` with A as it stands, which by this point is the ITEM NUMBER -- so the
@@ -459,13 +459,13 @@ namespace Elite
         ReceiveCash(_universe.commander, EquipmentPrice(item, fuel));
         PrintThenSpace(_ports.printer, complaint);
         _ports.printer.Print(PRESENT_TOKEN);
-        // 6502: dn2 -- a beep, then fifty frames of `DELAY`
+        // A beep, then fifty frames of `DELAY`
         (void)Beep(_universe.sound, false);
         _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
         return;
       }
 
-      // 6502: et11 -- `dn`, which prints the cash and falls into `dn2`, then back to `EQSHP`.
+      // `dn`, which prints the cash and falls into `dn2`, then back to `EQSHP`.
       PrintSpace(_ports.printer);
       PrintThenSpace(_ports.printer, CASH_LINE_TOKEN);
       (void)Beep(_universe.sound, false);

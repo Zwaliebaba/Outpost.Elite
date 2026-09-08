@@ -69,9 +69,9 @@
       "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
     },
     "origin-markers": {
-      "ceiling": 2701,
+      "ceiling": 18,
       "slack": 0,
-      "slice": "M6-e-2: Outpost/ and GameLogic/'s headers -- 1,462 markers removed by the classifier"
+      "slice": "M6-e-3: GameLogic/'s sources -- 2,683 markers, eight mutants re-anchored, and the detector was counting the comment's own slash"
     },
     "opcode-transcriptions": {
       "ceiling": 0,
