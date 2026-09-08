@@ -521,10 +521,10 @@
         {
           "id": "mi-tp-set",
           "file": "GameLogic/Missions.cpp",
-          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS",
-          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: BRIS",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: BRIS",
           "expect": "caught",
-          "note": "`LSR TP / SEC / ROL TP` sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not."
+          "note": "The shift-set-rotate trio sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
         {
           "id": "mi-brief3-and",
@@ -593,10 +593,10 @@
         {
           "id": "mi-second-inc",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
-          "replace": "      // 6502: LDX INWK+3",
+          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: the ship climbs one row a frame",
+          "replace": "      // 6502: the ship climbs one row a frame",
           "expect": "caught",
-          "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
+          "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
         {
           "id": "mi-height-clamp",
@@ -609,10 +609,10 @@
         {
           "id": "mi-dead-counter",
           "file": "GameLogic/Missions.cpp",
-          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: .BR2 INC INWK+7",
-          "replace": "    }\n\n    // 6502: .BR2 INC INWK+7",
+          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: BR2 -- the high byte follows",
+          "replace": "    }\n\n    // 6502: BR2 -- the high byte follows",
           "expect": "caught",
-          "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows."
+          "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows. Re-anchored at M6-d-29, when the comment inside the `find` lost its listing."
         },
         {
           "id": "mi-inwk7",

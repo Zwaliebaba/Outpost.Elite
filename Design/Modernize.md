@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,676 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,560 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,35 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-29: `Controls.cpp` and `Missions.cpp` to zero, and one load doing three jobs.**
+
+116 sites over two files — the first slice to take two, because the overhead of a slice is the suite
+and the mutation run and neither cares how many files moved. Thirteenth and fourteenth at zero.
+
+**`DOXC` and `DOYC` store and return, and a store does not touch the accumulator.** `Missions.cpp`
+leans on that three times, and the third is the clearest: `LDA #1` is loaded once and the same 1
+becomes the text column, the ship's distance and `TT66`'s view argument, with two calls in between.
+Reading a `JSR` as a boundary the accumulator does not cross gets all three wrong, which is why the
+comment says so rather than showing the four instructions and hoping.
+
+Two more from `Missions.cpp`, both about a bit:
+
+- **Setting bit 0 of `TP` is a shift, a set-carry and a rotate**, not a fold — the same answer
+  written for a machine whose author preferred shifts, and every other bit ends where it started.
+- **Picking up the plans forgets mission 1 entirely**, because the store that sets the new state
+  clears the whole low nibble first.
+
+And from `Controls.cpp`: **the roll and the pitch are not the same shape.** The roll doubles its
+counter, uses the OLD sign for direction and the NEW sign to ask whether the request overflowed;
+the pitch has no second sign test and no large-request path at all.
+
+Three mutants re-anchored (rule 3), all three because their `find` reached across a comment this
+slice rewrote — `mi-tp-set`, `mi-second-inc` and `mi-dead-counter`. That is the most in one slice so
+far, and it is a direct consequence of taking two files at once: a bigger diff crosses more anchors.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (56 and 65). `opcode-transcriptions` 1,676 → 1,560.
 
 **2026-09-08 — M6-d-28: `ShipDraw.cpp` to zero, and rule 4's FIFTH shape.**
 

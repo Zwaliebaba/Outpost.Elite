@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 1676,
+      "ceiling": 1560,
       "slack": 0,
-      "slice": "M6-d-28: ShipDraw.cpp to zero, and rule 4's fifth shape"
+      "slice": "M6-d-29: Controls.cpp and Missions.cpp to zero, and one load doing three jobs"
     },
     "opcode-quotations": {
       "ceiling": 0,
