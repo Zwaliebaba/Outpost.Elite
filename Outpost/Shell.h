@@ -1,6 +1,6 @@
 #pragma once
 
-#include "CanvasPresenter.h"
+#include "ScreenPresenter.h"
 #include "Window.h"
 
 #include "Canvas.h"
@@ -53,7 +53,7 @@ namespace Outpost
   class GameShell final : public Elite::Presenter, public Elite::Keyboard
   {
   public:
-    GameShell(Window& _window, CanvasPresenter& _presenter) noexcept
+    GameShell(Window& _window, ScreenPresenter& _presenter) noexcept
       : m_window(_window),
         m_presenter(_presenter)
     {
@@ -64,6 +64,7 @@ namespace Outpost
     void AttachUniverse(Elite::Universe& _universe) noexcept
     {
       m_canvas = &_universe.canvas;
+      m_picture = &_universe.picture;
       m_view = &_universe.view;
     }
 
@@ -226,8 +227,12 @@ namespace Outpost
     [[noreturn]] void Abandon();
 
     Window& m_window;
-    CanvasPresenter& m_presenter;
+    ScreenPresenter& m_presenter;
     Elite::Canvas* m_canvas = nullptr; ///< attached by `AttachUniverse`
+
+    /// The 640x400 picture this presents, and the canvas above is what it presents it FROM until
+    /// every region draws itself (Resolution.md §3.3). Both, because neither is the other's copy.
+    Elite::Picture* m_picture = nullptr;
 
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;

@@ -43,6 +43,9 @@
     <ClInclude Include="Canvas.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Picture.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="Colours.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -53,6 +56,9 @@
       <Filter>Canvas</Filter>
     </ClInclude>
     <ClInclude Include="TextPrint.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="TextPrint2x.h">
       <Filter>Text</Filter>
     </ClInclude>
     <ClInclude Include="Galaxy.h">
@@ -80,6 +86,15 @@
       <Filter>Universe</Filter>
     </ClInclude>
     <ClInclude Include="ShipDraw.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="ShipDraw2x.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Lines2x.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Dashboard2x.h">
       <Filter>Canvas</Filter>
     </ClInclude>
     <ClInclude Include="LineHeap.h">
@@ -223,6 +238,9 @@
     <ClCompile Include="Canvas.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
+    <ClCompile Include="Picture.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
     <ClCompile Include="LoaderScreen.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
@@ -230,6 +248,9 @@
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="TextPrint.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="TextPrint2x.cpp">
       <Filter>Text</Filter>
     </ClCompile>
     <ClCompile Include="Galaxy.cpp">
@@ -302,6 +323,15 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="ShipDraw.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipDraw2x.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Lines2x.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Dashboard2x.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="SoundEffects.cpp">

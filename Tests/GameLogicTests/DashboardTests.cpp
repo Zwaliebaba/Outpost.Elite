@@ -439,7 +439,7 @@ namespace GameLogicTests
       {
         const char* what;
         const char* label;
-        void (*toggle)(Elite::Canvas&);
+        void (*toggle)(Elite::Canvas&, Elite::Picture*);
       };
       const Bulb BULBS[] = {
         {"ECBLB", "ECBLB", &Elite::ToggleEcmIndicator},
@@ -460,7 +460,7 @@ namespace GameLogicTests
           {
             const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label(bulb.label), 200);
             Assert::IsTrue(run.completed, L"the bulb returned");
-            bulb.toggle(canvas);
+            bulb.toggle(canvas, nullptr);
           }
 
           const std::wstring where = Widen(std::string(bulb.what) + " x" + std::to_string(times));

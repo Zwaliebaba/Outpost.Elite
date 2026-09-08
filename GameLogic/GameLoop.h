@@ -203,11 +203,32 @@ namespace Elite
   NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, const Blueprint*& _blueprint, bool _carryIn) noexcept;
 
   /*
+   * Where a spawning pass left the loop (Modernize.md M6-a-1).
+   *
+   * SIX PATHS END `JMP MLOOP` AND ONE DOES NOT, AND THE ONE IS PART 1's. `.MTT4` finishes
+   * `JSR NWSHP` and falls through into the instruction after it, which is `.TT100` -- the TOP of
+   * part 2, not the part-3 label further down the same file. So spawning a trader costs a second
+   * flight frame and a second `DEC DLY / DEC MCNT` before the pass reaches `MLOOP`, and parts 3
+   * and 4 do not run at all on that pass: no police, no bounty hunters, no Thargoid.
+   *
+   * The port returned to part 3 there until M6-a-1, because the header above reads "part 1 ends
+   * `JSR NWSHP` and continues into part 2" and part 2's file holds part 3's label as well. The
+   * addresses settle it -- `MTT4` is &84C3, `TT100` is &84ED and `MTT1` is &8562 -- and the
+   * annotation says it in words: "add a new ship of type A to the local bubble and fall through
+   * into the main game loop again".
+   */
+  enum class SpawnOutcome : std::uint8_t
+  {
+    Ended,     ///< 6502: JMP MLOOP -- the pass carries on into part 5
+    Restarted, ///< 6502: part 1's `JSR NWSHP` falling into `.TT100` -- another flight frame first
+  };
+
+  /*
    * Main game loop parts 1 to 4: everything that arrives in the bubble on its own.
    *
    * `_carryIn` is the flag the first `DORND` rotates in, which is whatever `Main.cpp` reached the
    * spawner with -- §6.121 is the reason it is a parameter rather than an assumption.
    */
-  void RunSpawning(Universe& _universe, bool _carryIn) noexcept;
+  [[nodiscard]] SpawnOutcome RunSpawning(Universe& _universe, bool _carryIn) noexcept;
 
 } // namespace Elite

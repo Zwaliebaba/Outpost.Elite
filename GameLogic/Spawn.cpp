@@ -32,7 +32,7 @@ namespace Elite
     {
       AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: JSR ABORT with GREEN2 -- the indicator's own green
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 200,
-                  _universe.view); // 6502: LDA #200 / JSR MESS
+                  _universe.view, &_universe.picture); // 6502: LDA #200 / JSR MESS
     }
 
     const ShipType type = TypeOf(_universe.bubble.slots[_slot]);
@@ -52,7 +52,7 @@ namespace Elite
       // `MANY+SST`, so this one store is what takes the station out of the type counts (§6.58).
       _universe.bubble.slots[1] = 0;
       _universe.bubble.Count(ShipType::Station) = 0;
-      ToggleStationIndicator(_universe.canvas);
+      ToggleStationIndicator(_universe.canvas, &_universe.picture);
 
       // 6502: LDA #129 / JSR NWSHP -- and `XX0` is passed rather than kept locally even though this
       // call cannot reach the store: the type is negative, so `BMI NW2` jumps past it. Passing it
@@ -180,7 +180,7 @@ namespace Elite
   NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: SOS1 -- JSR msblob / LDA #127 / STA INWK+29 / STA INWK+30.
-    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles);
+    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture);
     _universe.work.rollCounter = 127;
     _universe.work.pitchCounter = 127;
 
@@ -198,7 +198,7 @@ namespace Elite
 
   NewShip AddStation(Universe& _universe, Ports& _ports) noexcept
   {
-    ToggleStationIndicator(_universe.canvas); // 6502: JSR SPBLB
+    ToggleStationIndicator(_universe.canvas, &_universe.picture); // 6502: JSR SPBLB
 
     // 6502: LDX #%10000001 / STX INWK+32 -- the AI byte: hostile, and AI enabled.
     _universe.work.ai = Mask(AiBit::Active, AiBit::HasEcm);
@@ -334,7 +334,7 @@ namespace Elite
      * created, which it always is, and clear only if the bubble had no room for it.
      */
     SeedStardustAndClearShips(_universe.canvas, _universe.dust, _universe.rng, _universe.heaps, _universe.bubble, _universe.work,
-                              _universe.flight, _universe.view, sun.created);
+                              _universe.flight, _universe.view, sun.created, &_universe.picture);
   }
 
   RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept

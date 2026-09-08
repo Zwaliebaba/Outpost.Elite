@@ -39,9 +39,9 @@
       "slice": "InputTimer.md I-1: the press queue goes and the dispatch takes one press a step"
     },
     "outpost-elite-names": {
-      "ceiling": 62,
+      "ceiling": 63,
       "slack": 0,
-      "slice": "InputTimer.md I-1: the executable calls Elite::ReadKey in place of its own queue -- raised by one, journaled"
+      "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "effects-seams": {
       "ceiling": 5,
@@ -74,9 +74,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4097,
+      "ceiling": 4103,
       "slack": 0,
-      "slice": "InputTimer.md I-1: TT217 ported, and R7 puts six markers on a port -- raised by six, journaled"
+      "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "oracle-test-files": {
       "ceiling": 47,

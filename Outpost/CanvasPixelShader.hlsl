@@ -5,8 +5,9 @@ float4 PsMain(Vertex input) : SV_Target
   // An integer Load rather than a Sample, which is why there is no sampler and no filtering state
   // anywhere in the presenter: at an integer scale this is the C64's picture with each pixel
   // repeated, and point sampling is a consequence of the lookup rather than a state to set.
-  int2 texel = int2(input.uv * float2(320.0, 200.0));
-  texel = clamp(texel, int2(0, 0), int2(319, 199));
+  int2 size = int2(gImageSize);
+  int2 texel = int2(input.uv * float2(size));
+  texel = clamp(texel, int2(0, 0), size - int2(1, 1));
 
   uint index = CanvasTexture.Load(int3(texel, 0)) & 15u;
 

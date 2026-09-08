@@ -3,20 +3,26 @@
 #include "ViewChange.h"
 
 #include "Charts.h"
+#include "Dashboard2x.h"
 #include "FlightLoop.h"
+#include "Lines2x.h"
 #include "LookupTables.h"
 
 namespace Elite
 {
 
-  void ZeroPageDown(Canvas& _canvas, std::uint16_t _pageBase, std::uint8_t _first) noexcept
+  void ZeroPageDown(Canvas& _canvas, std::uint16_t _pageBase, std::uint8_t _first, Picture* _picture) noexcept
   {
     std::uint8_t y = _first;
 
     do
     {
       _canvas.Write(static_cast<std::uint16_t>(_pageBase + y), 0u); // 6502: .ZEL1k STA (SC),Y
-      y = static_cast<std::uint8_t>(y - 1u);                        // 6502: DEY
+      if (_picture != nullptr)
+      {
+        WriteBitmapByte2x(*_picture, static_cast<std::uint16_t>(_pageBase + y), 0u, false);
+      }
+      y = static_cast<std::uint8_t>(y - 1u); // 6502: DEY
     } while (y != 0u); // 6502: BNE ZEL1k
   }
 
@@ -47,13 +53,17 @@ namespace Elite
     }
   }
 
-  void DrawScreenRule(Canvas& _canvas, std::uint8_t _row) noexcept
+  void DrawScreenRule(Canvas& _canvas, std::uint8_t _row, Picture* _picture) noexcept
   {
     // 6502: STX Y1 / LDX #0 / STX X1 / DEX / STX X2 / JMP HLOIN -- a tail call.
     DrawHorizontalLine(_canvas, 0u, 255u, _row);
+    if (_picture != nullptr)
+    {
+      DrawCanvasRow2x(*_picture, 0u, 255u, _row);
+    }
   }
 
-  void ToggleVerticalEdge(Canvas& _canvas, std::uint16_t _cell, std::uint8_t _pattern, std::uint8_t _rows) noexcept
+  void ToggleVerticalEdge(Canvas& _canvas, std::uint16_t _cell, std::uint8_t _pattern, std::uint8_t _rows, Picture* _picture) noexcept
   {
     std::uint16_t cell = _cell;
 
@@ -65,25 +75,33 @@ namespace Elite
 
         // 6502: LDA R2 / EOR (SC),Y / STA (SC),Y -- an EOR, so twice puts it back.
         _canvas.Write(at, static_cast<std::uint8_t>(_canvas.Read(at) ^ _pattern));
+        if (_picture != nullptr)
+        {
+          WriteBitmapByte2x(*_picture, at, _pattern, true);
+        }
       }
 
       cell = static_cast<std::uint16_t>(cell + 0x140u); // 6502: SC += &140, one character row
     }
   }
 
-  void DrawFullBorder(Canvas& _canvas) noexcept
+  void DrawFullBorder(Canvas& _canvas, Picture* _picture) noexcept
   {
-    DrawScreenRule(_canvas, BOTTOM_RULE_ROW); // 6502: LDX #199 / JSR BOXS
+    DrawScreenRule(_canvas, BOTTOM_RULE_ROW, _picture); // 6502: LDX #199 / JSR BOXS
 
     // 6502: LDA #&FF / STA SCBASE+&1F1F -- the corner byte the rule stops one short of. The
     // canvas is laid out from SCBASE contiguously, so the address IS the offset.
     _canvas.Write(BOTTOM_RIGHT_CORNER, 0xFFu);
+    if (_picture != nullptr)
+    {
+      WriteBitmapByte2x(*_picture, BOTTOM_RIGHT_CORNER, 0xFFu, false);
+    }
 
     // 6502: LDX #25 / EQUB &2C -- and 25 is what falls through into `BOX2` (§6.79).
-    DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN);
+    DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN, _picture);
   }
 
-  void DrawColourBand(Canvas& _canvas, std::uint16_t _cell) noexcept
+  void DrawColourBand(Canvas& _canvas, std::uint16_t _cell, Picture* _picture) noexcept
   {
     std::uint16_t cell = _cell;
 
@@ -93,33 +111,41 @@ namespace Elite
       {
         // 6502: LDA #%11111111 / STA (SC),Y -- a STORE, unlike `BOXS2` above it.
         _canvas.Write(static_cast<std::uint16_t>(cell + offset), 0xFFu);
+        if (_picture != nullptr)
+        {
+          WriteBitmapByte2x(*_picture, static_cast<std::uint16_t>(cell + offset), 0xFFu, false);
+        }
       }
 
       cell = static_cast<std::uint16_t>(cell + 0x140u);
     }
   }
 
-  void DrawColourBands(Canvas& _canvas) noexcept
+  void DrawColourBands(Canvas& _canvas, Picture* _picture) noexcept
   {
-    DrawColourBand(_canvas, 0u);       // 6502: LDX #LO(SCBASE) / LDY #HI(SCBASE) / JSR BLUEBANDS
-    DrawColourBand(_canvas, 37u * 8u); // 6502: SCBASE+37*8, and it FALLS INTO BLUEBANDS
+    DrawColourBand(_canvas, 0u, _picture);       // 6502: LDX #LO(SCBASE) / LDY #HI(SCBASE) / JSR BLUEBANDS
+    DrawColourBand(_canvas, 37u * 8u, _picture); // 6502: SCBASE+37*8, and it FALLS INTO BLUEBANDS
   }
 
-  void DrawBorder(Canvas& _canvas, std::uint8_t _rows) noexcept
+  void DrawBorder(Canvas& _canvas, std::uint8_t _rows, Picture* _picture) noexcept
   {
     const std::uint8_t t = _rows; // 6502: STX T -- the kernel's byte, a local since M2-b
 
     // 6502: LDY #LO(SCBASE+3*8) / STY SC / LDY #HI(SCBASE+3*8) / LDA #%00000011 / JSR BOXS2.
-    ToggleVerticalEdge(_canvas, 3u * 8u, 0x03u, _rows);
+    ToggleVerticalEdge(_canvas, 3u * 8u, 0x03u, _rows, _picture);
 
     // 6502: the same again at cell 36 with the opposite two pixels, and the count comes back out
     // of `T2` rather than out of X -- `BOXS2` leaves X at zero.
-    ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, t);
+    ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, t, _picture);
 
     // 6502: LDA #1 / STA SCBASE+&118 -- one byte, in cell 35 of the top character row.
     _canvas.Write(0x118u, 1u);
+    if (_picture != nullptr)
+    {
+      WriteBitmapByte2x(*_picture, 0x118u, 1u, false);
+    }
 
-    DrawScreenRule(_canvas, 0u); // 6502: LDX #0, and it falls into BOXS
+    DrawScreenRule(_canvas, 0u, _picture); // 6502: LDX #0, and it falls into BOXS
   }
 
   void ForgetScannerBlips(Bubble& _bubble) noexcept
@@ -154,10 +180,11 @@ namespace Elite
   }
 
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map) noexcept
+                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video, MemoryMap& _map,
+                     Picture* _picture) noexcept
   {
     // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
-    DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW);
+    DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW, _picture);
 
     _screen.colourBank = COLOUR_BANK_DASHBOARD; // 6502: LDA #&91 / STA abraxas
     _screen.bitmapMode = BITMAP_MODE_DASHBOARD; // 6502: LDA #%11010000 / STA caravanserai
@@ -176,14 +203,22 @@ namespace Elite
       CopyPagesDown(_canvas, DASHBOARD_IMAGE.data(), DASHBOARD_BITMAP, 8u, 0u);
       CopyPagesDown(_canvas, DASHBOARD_IMAGE.data() + 8u * 256u, static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 256u), 1u, 0xC0u);
 
+      if (_picture != nullptr)
+      {
+        // The same picture on the index plane, decoded through the cells the loader coloured and
+        // doubled (Dashboard2x.h). This is the bootstrap RS-4-art paints over; the twins below draw
+        // over it at twice the detail from here.
+        CopyDashboardPicture2x(*_picture, _canvas);
+      }
+
       ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
 
       // 6502: JSR DIALS -- all seven dials and the compass, on a dashboard that has just arrived
       // as a picture with every bar empty.
-      DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble);
+      DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble, _picture);
     }
 
-    DrawColourBands(_canvas);     // 6502: .nearlyxmas JSR BLUEBAND
+    DrawColourBands(_canvas, _picture); // 6502: .nearlyxmas JSR BLUEBAND
     HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
 
     _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
@@ -191,7 +226,7 @@ namespace Elite
 
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
                          const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video,
-                         MemoryMap& _map, std::uint8_t _view) noexcept
+                         MemoryMap& _map, std::uint8_t _view, Picture* _picture) noexcept
   {
     /*
      * 6502: LDA #&04 / STA SC / LDA #&60 / STA SC+1 / LDX #24 / .BOL3 LDA #&10 / LDY #31 /
@@ -207,6 +242,12 @@ namespace Elite
       for (int offset = 31; offset >= 0; --offset)
       {
         _canvas.Write(static_cast<std::uint16_t>(cell + offset), TEXT_COLOUR_WHITE);
+      }
+      if (_picture != nullptr)
+      {
+        // The four wide cells each of those thirty-two becomes. The offset is a SCREEN RAM address,
+        // so the canvas cell is what it is past `SCREEN_CELLS`.
+        SetCellRun2x(*_picture, static_cast<int>(cell - Canvas::SCREEN_CELLS), 32, TEXT_COLOUR_WHITE);
       }
       cell = static_cast<std::uint16_t>(cell + 40u);
     }
@@ -224,13 +265,17 @@ namespace Elite
     const std::uint16_t dashboardPage = static_cast<std::uint16_t>(DASHBOARD_BITMAP & 0xFF00u);
     for (; page < dashboardPage; page = static_cast<std::uint16_t>(page + 256u))
     {
-      ZeroWholePage(_canvas, page);
+      ZeroWholePage(_canvas, page, _picture);
     }
 
     // 6502: LDY #LO(DLOC%)-1 / JSR ZES2k / STA (SC),Y -- the partial page, and then by hand the one
     // byte `ZES2k` walks past because it stops at zero rather than through it.
-    ZeroPageDown(_canvas, page, static_cast<std::uint8_t>((DASHBOARD_BITMAP & 0xFFu) - 1u));
+    ZeroPageDown(_canvas, page, static_cast<std::uint8_t>((DASHBOARD_BITMAP & 0xFFu) - 1u), _picture);
     _canvas.Write(page, 0u);
+    if (_picture != nullptr)
+    {
+      WriteBitmapByte2x(*_picture, page, 0u, false);
+    }
 
     _text.column = 1u; // 6502: LDA #1 / STA XC
     _text.row = 1u;    // 6502: STA YC
@@ -239,7 +284,7 @@ namespace Elite
     // so the space view and view 13 never reach anything below this.
     if (_view == 0u || _view == 13u)
     {
-      ShowDashboard(_canvas, _draw, _screen, _bubble, _flight, _status, _fuel, _compass, _video, _map);
+      ShowDashboard(_canvas, _draw, _screen, _bubble, _flight, _status, _fuel, _compass, _video, _map, _picture);
       return;
     }
 
@@ -250,7 +295,7 @@ namespace Elite
     // first loop left it, so this clears the dashboard's part of the bitmap as well.
     for (; page < Canvas::SCREEN_CELLS; page = static_cast<std::uint16_t>(page + 256u))
     {
-      ZeroWholePage(_canvas, page);
+      ZeroWholePage(_canvas, page, _picture);
     }
 
     _compass.pattern = PixelPattern::Blank; // 6502: LDX #0 / STX COMC
@@ -258,7 +303,7 @@ namespace Elite
     _text.column = 1u;                      // 6502: INX / STX XC
     _text.row = 1u;                         // 6502: STX YC
 
-    DrawColourBands(_canvas);     // 6502: JSR BLUEBAND
+    DrawColourBands(_canvas, _picture); // 6502: JSR BLUEBAND
     ForgetScannerBlips(_bubble);  // 6502: JSR zonkscanners
     HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
 
@@ -266,6 +311,10 @@ namespace Elite
     for (int offset = 31; offset >= 0; --offset)
     {
       _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 4u + offset), 0x70u);
+    }
+    if (_picture != nullptr)
+    {
+      SetCellRun2x(*_picture, 4, 32, CellPalette::Of(0x70u));
     }
 
     // 6502: LDX QQ11 / CPX #2 / BEQ BOX / CPX #64 / BEQ BOX / CPX #128 / BEQ BOX -- three views
@@ -276,15 +325,23 @@ namespace Elite
       {
         _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 0x54u + offset), 0x70u);
       }
+      if (_picture != nullptr)
+      {
+        SetCellRun2x(*_picture, 0x54, 32, CellPalette::Of(0x70u));
+      }
     }
 
-    DrawScreenRule(_canvas, 199u); // 6502: .BOX LDX #199 / JSR BOXS
+    DrawScreenRule(_canvas, 199u, _picture); // 6502: .BOX LDX #199 / JSR BOXS
 
     _canvas.Write(0x1F1Fu, 0xFFu); // 6502: LDA #&FF / STA SCBASE+&1F1F
+    if (_picture != nullptr)
+    {
+      WriteBitmapByte2x(*_picture, 0x1F1Fu, 0xFFu, false);
+    }
 
     // 6502: LDX #25 / EQUB &2C -- and the `&2C` eats `BOX2`'s own `LDX #18`, so the border is the
     // whole screen's height rather than the space view's (§6.79).
-    DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN);
+    DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN, _picture);
   }
 
   void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
@@ -365,7 +422,7 @@ namespace Elite
 
       // 6502: JMP NWSTARS -- a whole new field, because there was no space view to keep.
       SeedStardustAndClearShips(_universe.canvas, _universe.dust, _universe.rng, _universe.heaps, _universe.bubble, _universe.work,
-                                _universe.flight, _universe.view, false);
+                                _universe.flight, _universe.view, false, &_universe.picture);
       return;
     }
 
@@ -381,10 +438,11 @@ namespace Elite
 
     // 6502: JSR FLIP -- the dust is MIRRORED rather than replaced, which is why the stars look
     // familiar for a moment after a view change.
-    FlipStardust(_universe.canvas, _universe.dust);
+    FlipStardust(_universe.canvas, _universe.dust, &_universe.picture);
 
     // 6502: JSR WPSHPS, and then it falls into SIGHT.
-    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view);
+    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view,
+                  &_universe.picture);
 
     DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video, _universe.memoryMap);
   }

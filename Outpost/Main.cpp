@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "CanvasPresenter.h"
+#include "ScreenPresenter.h"
 #include "FlightSession.h"
 #include "Presentation.h"
 #include "SaveStore.h"
@@ -44,10 +44,10 @@
 namespace
 {
 
-  /// The window opens at this scale, which is 960x600 -- large enough to read on a modern display
-  /// and small enough to fit inside one. The player can resize; the viewport follows.
-  constexpr int INITIAL_SCALE = 3;
-
+  /// The window opens at this scale, which is 1280x800 (Resolution.md ruling 11.3). TWO and not
+  /// three because the image is 640x400 since RS-0, so 3x is 1920x1200 and misses a 1080p display.
+  /// The player can resize; the viewport takes the largest integer scale that fits.
+  constexpr int INITIAL_SCALE = 2;
   /*
    * The platform, and one `Elite::Game` on the other side of it.
    *
@@ -78,7 +78,7 @@ namespace
     App& operator=(const App&) = delete;
 
     Outpost::Window window;
-    Outpost::CanvasPresenter presenter;
+    Outpost::ScreenPresenter presenter;
 
     /*
      * The SID, and NEITHER the effect buffer nor the player is here: `universe.sound` is what

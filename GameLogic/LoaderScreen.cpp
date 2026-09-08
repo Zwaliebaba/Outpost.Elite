@@ -2,6 +2,7 @@
 
 #include "LoaderScreen.h"
 
+#include "Lines2x.h"
 #include "LookupTables.h"
 #include "TextPrint.h"
 
@@ -26,7 +27,7 @@ namespace Elite
      * rows of the text view's block and `LOOP11` does 18 of the space view's, and the seven rows
      * of difference are the dashboard, whose colours come from `sdump` instead.
      */
-    void ColourBorderBox(Canvas& _canvas, std::uint16_t _block, int _rows) noexcept
+    void ColourBorderBox(Canvas& _canvas, std::uint16_t _block, int _rows, Picture* _picture) noexcept
     {
       for (int row = 0; row < _rows; ++row)
       {
@@ -37,10 +38,27 @@ namespace Elite
         _canvas.Write(static_cast<std::uint16_t>(base + BORDER_RIGHT_CELL), SCREEN_YELLOW_ON_BLACK);
         _canvas.Write(static_cast<std::uint16_t>(base + BORDER_LEFT_CELL), SCREEN_YELLOW_ON_BLACK);
 
+        /*
+         * The picture keeps ONE cell grid and it mirrors the FIRST block (ADR-002 section 4): that
+         * is the block `zebop` points at for the whole screen, and the dashboard's own block is the
+         * index plane's business rather than a palette's. So `LOOP11`'s pass over the second block
+         * has no twin, and only `LOOP10`'s over the first does.
+         */
+        const int cellRow = (_block == Canvas::SCREEN_CELLS) ? row : -1;
+        if (_picture != nullptr && cellRow >= 0)
+        {
+          SetCellBlock2x(*_picture, BORDER_RIGHT_CELL, cellRow, SCREEN_YELLOW_ON_BLACK);
+          SetCellBlock2x(*_picture, BORDER_LEFT_CELL, cellRow, SCREEN_YELLOW_ON_BLACK);
+        }
+
         // 6502: DEY / LDA #&00 / .frogl STA (ZP),Y / DEY / BPL frogl -- cells 2, 1 and 0.
         for (int cell = BORDER_LEFT_CELL - 1; cell >= 0; --cell)
         {
           _canvas.Write(static_cast<std::uint16_t>(base + cell), SCREEN_BLACK_ON_BLACK);
+          if (_picture != nullptr && cellRow >= 0)
+          {
+            SetCellBlock2x(*_picture, cell, cellRow, SCREEN_BLACK_ON_BLACK);
+          }
         }
 
         // 6502: LDY #37 / STA (ZP),Y / INY / STA (ZP),Y / INY / STA (ZP),Y -- and written out
@@ -49,12 +67,16 @@ namespace Elite
         for (int cell = BORDER_RIGHT_CELL + 1; cell < Canvas::CELL_COLUMNS; ++cell)
         {
           _canvas.Write(static_cast<std::uint16_t>(base + cell), SCREEN_BLACK_ON_BLACK);
+          if (_picture != nullptr && cellRow >= 0)
+          {
+            SetCellBlock2x(*_picture, cell, cellRow, SCREEN_BLACK_ON_BLACK);
+          }
         }
       }
     }
   } // namespace
 
-  void SetUpLoaderScreen(Canvas& _canvas) noexcept
+  void SetUpLoaderScreen(Canvas& _canvas, Picture* _picture) noexcept
   {
     /*
      * 6502: part 5's first loop -- LDA #0 / LDX #&40 / .LOOP2 ... CPX #&60 / BNE LOOP2.
@@ -66,6 +88,10 @@ namespace Elite
     for (std::uint16_t offset = 0; offset < Canvas::BITMAP_SIZE; ++offset)
     {
       _canvas.Write(offset, 0u);
+      if (_picture != nullptr)
+      {
+        WriteBitmapByte2x(*_picture, offset, 0u, false);
+      }
     }
 
     /*
@@ -79,6 +105,10 @@ namespace Elite
     {
       _canvas.Write(cell, TEXT_COLOUR_WHITE); // 6502: LDA #&10
     }
+    if (_picture != nullptr)
+    {
+      SetCellRun2x(*_picture, 0, Canvas::CELL_COLUMNS * Canvas::CELL_ROWS, TEXT_COLOUR_WHITE);
+    }
 
     // 6502: ZP = SCBASE+&2400+&2D0, (A ZP2) = sdump, JSR mvsm -- 280 bytes, the dashboard's own
     // seven rows of the SPACE VIEW's block. The text views never show them, which is why only
@@ -89,10 +119,10 @@ namespace Elite
     }
 
     // 6502: LDX #25 / .LOOP10 -- the border box down the text view's block, all 25 rows.
-    ColourBorderBox(_canvas, Canvas::SCREEN_CELLS, Canvas::CELL_ROWS);
+    ColourBorderBox(_canvas, Canvas::SCREEN_CELLS, Canvas::CELL_ROWS, _picture);
 
     // 6502: LDX #18 / .LOOP11 -- and down the space view's block, which stops at the dashboard.
-    ColourBorderBox(_canvas, Canvas::DASHBOARD_CELLS, Canvas::DASHBOARD_CELL_ROW);
+    ColourBorderBox(_canvas, Canvas::DASHBOARD_CELLS, Canvas::DASHBOARD_CELL_ROW, _picture);
 
     /*
      * 6502: LDA #&70 / LDY #31 / .LOOP16 STA &63C4,Y / DEY / BPL LOOP16.
@@ -105,6 +135,10 @@ namespace Elite
     for (int offset = 31; offset >= 0; --offset)
     {
       _canvas.Write(static_cast<std::uint16_t>(bottomRow + offset), SCREEN_YELLOW_ON_BLACK);
+    }
+    if (_picture != nullptr)
+    {
+      SetCellRun2x(*_picture, 24 * Canvas::CELL_COLUMNS + 4, 32, SCREEN_YELLOW_ON_BLACK);
     }
 
     /*

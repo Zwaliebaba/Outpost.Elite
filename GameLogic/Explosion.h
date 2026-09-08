@@ -4,6 +4,7 @@
 #include "Canvas.h"
 #include "LineHeap.h"
 #include "MemoryMap.h"
+#include "Picture.h"
 #include "Rng.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
@@ -120,10 +121,10 @@ namespace Elite
    * next `DORND` anywhere in the game runs on the result.
    */
   void DrawExplosionParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                              const Bubble& _bubble) noexcept;
+                              const Bubble& _bubble, Picture* _picture = nullptr) noexcept;
 
   void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                                        const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept;
+                                        const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
@@ -146,6 +147,6 @@ namespace Elite
    * grew -- through `PTCLS2`, so the burst sprite appears once and is never moved again.
    */
   void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
-                          const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept;
+                          const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture = nullptr) noexcept;
 
 } // namespace Elite

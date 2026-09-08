@@ -180,6 +180,18 @@ namespace Elite
      * becomes a colour, and that is where `Colour` starts -- `ResolveCell` masks this one on the way
      * out, exactly as the VIC-II does on the way in.
      */
+    /*
+     * The four colours one MULTICOLOUR cell can show, in the order its two bits select them:
+     * background, high nibble of screen RAM, low nibble, colour RAM.
+     *
+     * Lifted for the 640x400 dashboard (Resolution.md section 5), which is an index plane: a twin
+     * there holds a `PixelPattern` -- four two-bit codes -- and has to turn it into a colour, and
+     * the only honest place to get one is the cell the faithful store lands in. `_cell` is a cell
+     * number 0..999, and the block is the DASHBOARD's, which is the only block that is ever read
+     * in this mode (ADR-002 section 4).
+     */
+    [[nodiscard]] std::array<std::uint8_t, 4> DashboardChoices(int _cell) const noexcept;
+
     [[nodiscard]] std::uint8_t CellColour(int _cell) const noexcept
     {
       return m_colourCells[_cell];
@@ -311,6 +323,23 @@ namespace Elite
     void Resolve(std::span<std::uint8_t> _out) const noexcept;
 
     /*
+     * ONE character cell of that image: eight rows of eight indices, `_stride` apart.
+     *
+     * Public because `Elite::Picture` reads it (Design/Resolution.md section 3.3). Until the 640x400
+     * surface draws a region for itself, that region's pixels are THIS decode doubled -- and the
+     * decode has to be the same one `Resolve` runs, not a second one beside it. Two walks over the
+     * same bytes kept in step by hand is the defect ADR-002 section 4 records, where the port
+     * decoded the bitmap in one mode and hashed it in another and every glyph came out as stripes
+     * with the whole suite green.
+     *
+     * It takes a CELL and not a pixel because everything that decides the decode is per cell: which
+     * block of screen RAM colours it, whether the raster split has put it in multicolour, and which
+     * background register supplies %00. A per-pixel entry point would have to answer all three
+     * again for every pixel.
+     */
+    void ResolveCell(int _cellColumn, int _cellRow, std::uint8_t* _out, int _stride) const noexcept;
+
+    /*
      * The same image with the hardware SPRITES composited over it (ADR-005 section 1).
      *
      * An OVERLOAD rather than a defaulted argument, because the two callers mean different things
@@ -355,6 +384,30 @@ namespace Elite
     std::array<Colour, 2> m_explosionColour = {Colour::Red, Colour::Black};
     bool m_dashboardShown = false;
   };
+
+  /*
+   * The eight hardware sprites, over an image something has already resolved (ADR-005 §1).
+   *
+   * No origin marker on it, and deliberately: it names no label. This is the VIC-II's documented
+   * blit rather than a routine of the game's, which is why ADR-005 §1 records it as the one drawing
+   * in the port with no oracle behind it.
+   *
+   * A free function over an output of a stated size, rather than a step inside `Canvas::Resolve`,
+   * because `Elite::Picture` composites the SAME sprites over its own image at twice the geometry
+   * (Design/Resolution.md §3.3) and a second copy of the blit is a second thing to keep in step.
+   * The canvas calls it with a scale of one and the screen with two.
+   *
+   * `_scale` multiplies the VIC-II's own x/y expand flag rather than replacing it, so an expanded
+   * sprite on the 640x400 surface is four output pixels to a sprite dot and an ordinary one is two.
+   * `_splitRow` is where the raster interrupt reprograms the sprite registers -- the top of the
+   * dashboard in whichever surface's rows.
+   *
+   * `_canvas` supplies the sprite POINTERS, which are screen-RAM bytes, and the two registers the
+   * split rewrites; `_video` supplies the rest. Both surfaces read the same ones, because they are
+   * game state and there is only one game.
+   */
+  void CompositeSprites(std::span<std::uint8_t> _out, int _width, int _height, int _splitRow, int _scale, const Canvas& _canvas,
+                        const VideoState& _video) noexcept;
 
   /*
    * 6502: X1, Y1, X2, Y2 -- a line, as `LOIN` takes it: the first four bytes of `XX15`.
@@ -408,6 +461,29 @@ namespace Elite
   [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /*
+   * What the two conversions at the top of `PIXEL2` leave -- a point in the space view's own
+   * screen coordinates, and the early exit.
+   *
+   * LIFTED OUT OF `PlotRelativePixel` FOR THE PICTURE'S SAKE (Resolution.md RS-3), the same way
+   * `Canvas::ResolveCell` was lifted for it at RS-0. The wide mark sits at twice this point plus
+   * the bit the stardust's fraction byte holds, and computing the point twice in two files is how
+   * two files come to disagree. Nothing about the faithful routine changes: it calls this and then
+   * calls `PIXEL`, which is what it did inline.
+   */
+  struct SpaceViewPoint
+  {
+    std::uint8_t x = 0;     ///< `X1` as `PIXEL` receives it, measured from the view's left edge
+    std::uint8_t y = 0;     ///< `Y1` as `PIXEL` receives it, measured down
+    bool offScreen = false; ///< the `CMP #72 / BCS PX4` exit -- more than 72 rows from the centre
+  };
+
+  /// `PIXEL2`'s `EOR #%01111111 / ADC #1 / EOR #%10000000` on x and its `LDA #73 / SBC T` on y.
+  /// The y half carries the borrow the x half did not clear, which is why negative zero and
+  /// negative one are the same row; the marker and the reasoning are on the body in `Lines.cpp`.
+  [[nodiscard]] SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept;
+
+
+  /*
    * 6502: what `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.
    *
    * The scanner's stick is drawn by walking on from where the dot finished rather than by plotting
@@ -452,6 +528,21 @@ namespace Elite
     Line ends;
     bool swapped = false; ///< 6502: SWAP
   };
+
+  /*
+   * `LOIN`'s slope, as a byte of two-hundred-and-fifty-sixths: the `LL28`-shaped divide at `LI3`
+   * and `LIfudge`. The marker and the reasoning are on the body in `Lines.cpp`.
+   *
+   * IT IS A LOGARITHM-TABLE LOOKUP AND NOT A DIVISION, which is the whole reason it is declared
+   * here rather than left in `Lines.cpp`'s anonymous namespace. The 640x400 picture draws each line
+   * a second time (Resolution.md section 4.1), and a twin that used an exact slope would draw a
+   * DIFFERENT line -- measured, over 18,432 lines, at up to three canvas pixels away from the one
+   * the game draws. So the twin runs this, on the same two magnitudes, and gets the same line.
+   *
+   * Lifted at RS-3 for that reason, as `PIXEL2`'s conversion was above it. Nothing about the
+   * faithful routine changes: it calls this where it had the body.
+   */
+  [[nodiscard]] std::uint8_t LineSlope(std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
   /// 6502: LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
   /// alternates between each cell's two colours. The shipped code unrolls it into thirty-two

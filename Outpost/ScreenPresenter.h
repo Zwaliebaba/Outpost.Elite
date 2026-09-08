@@ -15,6 +15,7 @@
 namespace Elite
 {
   class Canvas;
+  class Picture;
   struct VideoState;
 } // namespace Elite
 
@@ -22,10 +23,16 @@ namespace Outpost
 {
 
   /*
-   * The canvas on the screen (slice 2e, ADR-005 section 1).
+   * The picture on the display (slice 2e, ADR-005 section 1; 640x400 since Resolution.md RS-0).
    *
-   * The canvas is 320x200 COLOUR INDICES, not pixels, so the texture is `R8_UINT` and the palette
-   * lookup happens in the pixel shader. That is one byte per pixel uploaded instead of four, and
+   * It presents `Elite::Picture` and not `Elite::Canvas`, and the two are not alternatives: the
+   * canvas is the C64's own screen memory and stays the surface every oracle test, golden and
+   * recorded fixture compares, while the screen is the 640x400 rendering of the same frame that a
+   * person sees. `Screen::Resolve` takes both, because the raster state and every region no twin
+   * draws yet are the canvas's (Resolution.md section 3.3).
+   *
+   * The image is COLOUR INDICES, not pixels, so the texture is `R8_UINT` and the palette lookup
+   * happens in the pixel shader. That is one byte per pixel uploaded instead of four, and
    * more to the point it is the only representation in which a change of palette is a change of
    * sixteen root constants rather than a re-upload of the frame.
    *
@@ -39,20 +46,20 @@ namespace Outpost
    * three vertices. The shaders are compiled at runtime from the string at the top of the .cpp,
    * which keeps the project file free of an HLSL build step for twenty lines of shader.
    */
-  class CanvasPresenter
+  class ScreenPresenter
   {
   public:
-    CanvasPresenter() = default;
-    ~CanvasPresenter();
+    ScreenPresenter() = default;
+    ~ScreenPresenter();
 
-    CanvasPresenter(const CanvasPresenter&) = delete;
-    CanvasPresenter& operator=(const CanvasPresenter&) = delete;
+    ScreenPresenter(const ScreenPresenter&) = delete;
+    ScreenPresenter& operator=(const ScreenPresenter&) = delete;
 
     /// Throws through `winrt::check_hresult`; the composition root catches and reports.
     void Create(HWND _window);
 
     /*
-     * Resolve the canvas, upload it, draw it letterboxed and present on the vertical blank.
+     * Resolve the screen, upload it, draw it letterboxed and present on the vertical blank.
      *
      * THIS IS WHERE THE LOOP WAITS. `Present(1, 0)` blocks until the display is ready for the
      * frame, which is what paces the whole program -- there is no timer and no sleep anywhere in
@@ -65,7 +72,8 @@ namespace Outpost
      * argument: the title screen and every docked screen present before a flight session exists,
      * and a default-constructed `VideoState` would be a lie about registers nothing has written.
      */
-    [[nodiscard]] bool Present(const Elite::Canvas& _canvas, const Elite::VideoState* _video, int _clientWidth, int _clientHeight);
+    [[nodiscard]] bool Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
+                               int _clientWidth, int _clientHeight);
 
     /// The client area changed. Cheap and idempotent; a zero-sized client (a minimised window) is
     /// ignored rather than resized to, because `ResizeBuffers` rejects it.
@@ -130,6 +138,12 @@ namespace Outpost
     int m_height = 0;
 
     std::array<std::uint32_t, 16> m_palette = {};
+
+    /// The image's size, handed to the shader as two more root constants beside the palette rather
+    /// than written into the HLSL. A resolution is then one pair of constants in one place; a
+    /// literal in a shader is exactly the number that rots unnoticed (AGENTS.md section 6).
+    std::array<std::uint32_t, 2> m_imageSize = {};
+
     std::vector<std::uint8_t> m_resolved;
   };
 

@@ -37,11 +37,15 @@ namespace GameLogicTests
    * up with a different generator state even when the bubble happens to look the same -- which is
    * why `RAND` is compared as carefully as the ships are (§6.121).
    */
+  /// Flat memory the game never touches, where the patched top of the loop counts its arrivals --
+  /// the same address and the same trick `FlightLoopTests` uses for `DEATH`, `DOENTRY` and `ESCAPE`.
+  constexpr std::uint16_t TT100_PROBE = 0xFFF1;
+
   TEST_CLASS(TheMainGameLoop)
   {
     struct Labels
     {
-      std::uint16_t entry = 0, mloop = 0, gthg = 0, there = 0;
+      std::uint16_t entry = 0, mloop = 0, tt100 = 0, gthg = 0, there = 0;
       std::uint16_t frin = 0, kPercent = 0, many = 0, junk = 0, slsp = 0;
       std::uint16_t inwk = 0, rand = 0, xx0 = 0;
       std::uint16_t mj = 0, ev = 0, tp = 0, gov = 0, fist = 0, qq20 = 0;
@@ -53,6 +57,9 @@ namespace GameLogicTests
         // begins. There is no label on it because nothing jumps to it -- part 2 falls in.
         entry = static_cast<std::uint16_t>(_oracle.Label("ytq") + 3u);
         mloop = _oracle.Label("MLOOP");
+        // 6502: `.TT100` is the byte after part 1's `JSR NWSHP`, so a trader's pass arrives here
+        // rather than at `MLOOP`. The fixture patches it (M6-a-1) and reads which door was used.
+        tt100 = _oracle.Label("TT100");
         gthg = _oracle.Label("GTHG");
         there = _oracle.Label("THERE");
         frin = _oracle.Label("FRIN");
@@ -229,7 +236,12 @@ namespace GameLogicTests
             {
               // 6502: the fall-through into part 2's `LDA MJ`, which is slice 4c-a. The port has to
               // run it too or the comparison is against a machine that did more work.
-              Elite::RunSpawning(universe.universe, false);
+              //
+              // AND IT HAS TO END AT `MLOOP`. Part 1's tail falls back into `.TT100` and another
+              // `JSR M%` (M6-a-1), which this fixture's oracle would run and its port could not --
+              // so the assertion says that this seed rolls no trader rather than leaving it to luck.
+              Assert::IsTrue(Elite::RunSpawning(universe.universe, false) == Elite::SpawnOutcome::Ended,
+                             (context + L": the spawning pass ended at MLOOP").c_str());
             }
 
             CompareState(cpu, universe.universe, where, context);
@@ -580,16 +592,30 @@ namespace GameLogicTests
         {"a busy bubble", {128u, 129u, 11u, 17u, 5u, 7u}, 2u, 1u, 0u, 10u, 5u, 0u, 0u, 0u, 0u, 0u},
       };
 
-      // Four generator states, because one seed exercises one path through a routine that is all
-      // rolls -- the lesson of section 6.124.
+      /*
+       * Six generator states, because one seed exercises one path through a routine that is all
+       * rolls -- the lesson of section 6.124.
+       *
+       * THE LAST TWO ARE CHOSEN AND NOT ARBITRARY (M6-a-1). Reaching part 1 at all takes three
+       * rolls in a row to agree: the first under 35, then a `DORND` for the position, then a
+       * `DORND` whose OVERFLOW flag is set -- and of the four seeds above, three stop at the 35
+       * and the fourth rolls an asteroid, so `MTT4` was reached by nothing in the suite and the
+       * coverage review said so. These two reach it and then part from each other at `BMI nodo`:
+       * `0x61` spawns an Anaconda minding its own business, with `NEWB` bit 4 set and an AI byte
+       * of 246, and `0x53` a Cobra Mk III with neither, whose type is 11 or 13 depending on the
+       * carry the fixture came in with.
+       */
       const std::array<std::uint8_t, 4> SEEDS[] = {
         {0x00u, 0x00u, 0x00u, 0x00u},
         {0x9Cu, 0x17u, 0x4Bu, 0xE3u},
         {0xFFu, 0xFEu, 0x01u, 0x80u},
         {0x2Au, 0x7Fu, 0xC3u, 0x11u},
+        {0x61u, 0x51u, 0x64u, 0xC6u},
+        {0x53u, 0x61u, 0x56u, 0xBCu},
       };
 
       std::uint32_t compared = 0;
+      std::uint32_t restarted = 0;
       std::set<std::string> outcomes;
 
       for (const Situation& one : SITUATIONS)
@@ -654,6 +680,24 @@ namespace GameLogicTests
 
             cpu.c = carryIn != 0u;
 
+            /*
+             * 6502: `.MTT4 ... JSR NWSHP` and then `.TT100` -- the trader's pass goes back to the
+             * top of the loop, not on to part 3 (M6-a-1).
+             *
+             * `TT100` is `JSR M%`, a whole flight frame, and this fixture has no frame to run: the
+             * top of the loop is patched with a counter and a jump to the stop address, so the run
+             * ends where the game's pass would have left parts 1 to 4 and the probe says by which
+             * door. The port's `SpawnOutcome` is compared against it below.
+             */
+            cpu.memory[TT100_PROBE] = 0u;
+            const std::uint8_t backToTheTop[] = {0xEEu,
+                                                 static_cast<std::uint8_t>(TT100_PROBE & 0xFFu),
+                                                 static_cast<std::uint8_t>(TT100_PROBE >> 8),
+                                                 0x4Cu,
+                                                 static_cast<std::uint8_t>(at.mloop & 0xFFu),
+                                                 static_cast<std::uint8_t>(at.mloop >> 8)};
+            cpu.Load(at.tt100, backToTheTop, sizeof(backToTheTop));
+
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.entry, 400'000, at.mloop);
             Assert::IsTrue(run.completed, L"the spawner reached MLOOP");
 
@@ -678,10 +722,14 @@ namespace GameLogicTests
             std::uint8_t& encounters = spawning.explosions;
             encounters = one.encounters;
 
-            Elite::RunSpawning(spawning, carryIn != 0u);
+            const Elite::SpawnOutcome outcome = Elite::RunSpawning(spawning, carryIn != 0u);
 
             const std::wstring where =
               WidenText(std::string("spawn: ") + one.what + " seed " + std::to_string(seed[0]) + " carry " + std::to_string(carryIn));
+
+            Assert::AreEqual<std::uint32_t>(cpu.memory[TT100_PROBE], outcome == Elite::SpawnOutcome::Restarted ? 1u : 0u,
+                                            (where + L": whether the pass fell back into TT100").c_str());
+            restarted += (outcome == Elite::SpawnOutcome::Restarted) ? 1u : 0u;
 
             CompareBubble(cpu, bubble, heap, at, where);
 
@@ -712,10 +760,12 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(17u * 4u * 2u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::uint32_t>(17u * 6u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(outcomes.size() >= 10u, L"and it reached at least ten different bubbles");
-      Logger::WriteMessage(
-        ("spawner: " + std::to_string(compared) + " cases, " + std::to_string(outcomes.size()) + " distinct bubbles").c_str());
+      Assert::IsTrue(restarted > 0u, L"and `MTT4` was reached, which nothing in the suite did before M6-a-1");
+      Logger::WriteMessage(("spawner: " + std::to_string(compared) + " cases, " + std::to_string(outcomes.size()) +
+                            " distinct bubbles, " + std::to_string(restarted) + " traders back to TT100")
+                             .c_str());
     }
   };
 
