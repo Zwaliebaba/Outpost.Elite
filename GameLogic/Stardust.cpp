@@ -18,8 +18,8 @@ namespace Elite
 
   ScaledDivision DivideSpeedBy(const FlightState& _flight, std::uint8_t _divisor) noexcept
   {
-    // 6502: STA Q, then DVID4. Its exit carry is the divide's saturation flag and only `SPS2`
-    // reads it -- the stardust follows this with `LSR P`, which makes its own (§6.60).
+    // 6502: the divisor into `Q`, then `DVID4`. Its exit carry is the divide's saturation flag and
+    // only `SPS2` reads it -- the stardust halves the result next, which makes its own (§6.60).
     return DivideAndScale(_flight.speed, _divisor);
   }
 
@@ -30,13 +30,13 @@ namespace Elite
 
   Product MultiplyByHeight(const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept
   {
-    // 6502: LDA SY,Y / STA Y1 -- and the mover reads the same byte back as the height's high half.
+    // 6502: the height into `Y1`, and the mover reads the same byte back as its high half.
     return MultiplyMagnitude(_dust.y[_at], _multiplier);
   }
 
   Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept
   {
-    // 6502: LDX ALP1, then MULTS-2's `STX P` and MULTS.
+    // 6502: the roll magnitude into X, then `MULTS-2` stores it and falls into `MULTS`.
     return MultiplyScaled(_flight.rollMagnitude, _value);
   }
 
@@ -45,20 +45,20 @@ namespace Elite
                             std::uint8_t _downLow) noexcept
   {
     const AddSignedResult sum = AddSigned(_value, _addend);
-    _dust.yLow[_at] = sum.low; // 6502: STX SYL,Y
+    _dust.yLow[_at] = sum.low; // 6502: into SYL
     (void)PlotRelativePixel(_canvas, _across, _down, _distance);
     if (_picture != nullptr)
     {
       PlotRelativePixel2x(*_picture, _across, _down, _acrossLow, _downLow, _distance);
     }
-    return sum.high; // 6502: STA YY+1
+    return sum.high; // 6502: into YY+1
   }
 
   void FlipStardust(Canvas& _canvas, Stardust& _dust, Picture* _picture) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
-      // 6502: LDA SY,Y / STA Y1 ... LDA SX,Y / STA Y1 / STA SY,Y / ... STA X1 / STA SX,Y / LDA SZ,Y / STA ZZ.
+      // 6502: the two coordinates swapped through the plotter's own bytes, and the distance read.
       const std::uint8_t was = _dust.y[at];
       _dust.y[at] = _dust.x[at];
       _dust.x[at] = was;
@@ -77,8 +77,8 @@ namespace Elite
   namespace
   {
 
-    /// 6502: the `LSR P / ROR A` pair the front and rear views open with -- two shifts of a
-    /// sixteen-bit value held across P and A, which halve the reciprocal of the distance twice.
+    /// 6502: the shift pair the front and rear views open with -- two shifts of a sixteen-bit
+    /// value held across P and A, which halve the reciprocal of the distance twice.
     /// P is the whole part `DVID4` left and A the fraction it returned; what comes back is the
     /// halved fraction and the last bit out of it, which the front view's subtraction runs on.
     ShiftResult HalveTwice(ScaledDivision _step) noexcept
@@ -94,8 +94,8 @@ namespace Elite
       return rotated;
     }
 
-    /// 6502: `ASL P / ROL A / STA T / LDA #0 / ROR A / ORA T` -- the front and rear views both end
-    /// their pitch step with this, which doubles (A P) and folds the bit that fell off the top back
+    /// 6502: the front and rear views both end their pitch step the same way, doubling (A P) and
+    /// folding the bit that fell off the top back
     /// in as a sign. What comes out is the (A P) the `ADD` after it takes.
     SignMag16 DoubleAndFold(Product _product) noexcept
     {
@@ -120,26 +120,26 @@ namespace Elite
       const std::uint8_t wasDownLow = _dust.yLow[at];
 
       // 6502: STL1 -- the speed over the distance, halved twice, is how far this speck moves.
-      // The `ORA #1` stops a distant speck dividing by zero further down.
+      // Forcing bit 0 on stops a distant speck dividing by zero further down.
       const ShiftResult halved = HalveTwice(DivideSpeedByDistance(_flight, _dust, at));
-      const std::uint8_t scale = static_cast<std::uint8_t>(halved.value | 1u); // 6502: ORA #1 / STA Q
+      const std::uint8_t scale = static_cast<std::uint8_t>(halved.value | 1u); // 6502: the bit forced on, into Q
 
       // The speck comes towards you, so its distance falls by four times the speed. The borrow
-      // this subtraction runs on is the one the second `ROR A` above left, not a `SEC`.
+      // this subtraction runs on is the one the second rotate above left, not a set one.
       const SubResult zLow = SubtractWithCarry(_dust.zLow[at], _flight.speedTimes4Low, halved.carry);
       _dust.zLow[at] = zLow.value;
-      std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ -- the distance it WAS, which is what the erase plots at
+      std::uint8_t distance = _dust.z[at]; // 6502: into ZZ -- the distance it WAS, which the erase plots at
       _dust.z[at] = SubtractWithCarry(_dust.z[at], _flight.speedTimes4High, zLow.carry).value;
 
       // Its height and its distance across, each scaled by how much closer it now is. `X1` and
       // `Y1` are the speck's old position, staged for the erase (M2-c: locals).
-      std::uint8_t y1 = _dust.y[at]; // 6502: MLU1's STA Y1
+      std::uint8_t y1 = _dust.y[at]; // 6502: MLU1 stages it in `Y1`
       const Product height = MultiplyByHeight(_dust, at, scale);
       const AddResult yLow = AddWithCarry(height.low, _dust.yLow[at], height.carry);
-      // 6502: STA R ... STA S -- the height is the (S R) the roll's first `ADD` runs on.
+      // 6502: the height is the (S R) the roll's first `ADD` runs on.
       const SignMag16 heightSum{yLow.value, AddWithCarry(y1, height.high, yLow.carry).value}; // 6502: YY(1 0)
 
-      std::uint8_t x1 = _dust.x[at]; // 6502: STA X1
+      std::uint8_t x1 = _dust.x[at]; // 6502: staged in `X1`
       const Product across = MultiplyMagnitude(x1, scale);
       const AddResult xLow = AddWithCarry(across.low, _dust.xLow[at], across.carry);
       SignMag16 x{xLow.value, AddWithCarry(x1, across.high, xLow.carry).value}; // 6502: XX(1 0)
@@ -147,22 +147,22 @@ namespace Elite
       // 6502: the roll, as two multiply-and-adds with the signs crossed over.
       Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.rollSignFlipped));
       AddSignedResult sum = AddSigned(rolled.Pair(), heightSum);
-      SignMag16 y{sum.low, sum.high}; // 6502: STA YY+1 / STX YY
+      SignMag16 y{sum.low, sum.high}; // 6502: into YY, both bytes
 
-      // 6502: JSR MLS2 -- (S R) = XX(1 0), then MLS1 and the `ADD`.
+      // 6502: MLS2 -- (S R) = XX(1 0), then `MLS1` and the `ADD`.
       rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.rollSign));
       sum = AddSigned(rolled.Pair(), x);
       x = SignMag16{sum.low, sum.high};
 
-      // And the pitch: 6502: LDX BET1 / ... / JSR MULTS-2 / STA Q / JSR MUT2 -- (S R) = XX(1 0)
-      // again, and `MULT1` squares the pitch term, because `STA Q` left it in A (§6.44).
+      // And the pitch: 6502: `MUT2` with (S R) = XX(1 0) again, and `MULT1` squares the pitch
+      // term, because the store into `Q` left it in the accumulator (§6.44).
       const std::uint8_t pitch = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y.hi ^ _flight.pitchSignFlipped)).high;
       const Product pitched = MultiplySigned(pitch, pitch);
       sum = AddSigned(DoubleAndFold(pitched), x);
       x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
-      // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / EOR #128 / JSR PIX1.
+      // 6502: PIX1 with (S R) = YY(1 0), a zero low byte, and the pitch rate's sign flipped.
       y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.pitchRate ^ 0x80u)}, y, x1, y1, distance,
                           _picture, wasAcrossLow, wasDownLow);
 
@@ -173,7 +173,7 @@ namespace Elite
 
       /*
        * Three kill tests, and WHICH of them fires decides the carry the first `DORND` below runs
-       * on: the two `CMP #120 / BCS` tests arrive with it set and the `CMP #16 / BCC` with it
+       * on: the two tests against 120 arrive with it set and the one against 16 with it
        * clear. The generator takes the carry as an operand, so the speck that replaces one which
        * drifted sideways is a different speck from the one replacing a speck that came too close.
        */
@@ -236,9 +236,8 @@ namespace Elite
       const std::uint8_t wasAcrossLow = _dust.xLow[at];
       const std::uint8_t wasDownLow = _dust.yLow[at];
 
-      // 6502: STL6 -- the same opening as the front view, down to the `ORA #1`. The carry the
-      // second `ROR A` leaves is not read: the front view's next instruction is an `SBC`, and this
-      // one's is a `JSR`.
+      // 6502: STL6 -- the same opening as the front view, down to the bit forced on. The carry the
+      // second rotate leaves is not read: the front view subtracts next, and this one calls.
       const std::uint8_t scale = static_cast<std::uint8_t>(HalveTwice(DivideSpeedByDistance(_flight, _dust, at)).value | 1u);
 
       /*
@@ -247,23 +246,23 @@ namespace Elite
        * the coordinates are done in the other order, the roll's two sign bytes are swapped, the
        * pitch is not negated, and both kill tests are different. Two routines, deliberately.
        */
-      std::uint8_t x1 = _dust.x[at]; // 6502: STA X1 -- the old position, staged for the erase (M2-c: locals)
+      std::uint8_t x1 = _dust.x[at]; // 6502: staged in `X1` -- the old position, for the erase (M2-c: locals)
       const Product across = MultiplyMagnitude(x1, scale);
       const SubResult xLow = SubtractWithCarry(_dust.xLow[at], across.low, across.carry);
       const SubResult xHigh = SubtractWithCarry(x1, across.high, xLow.carry);
       SignMag16 x{xLow.value, xHigh.value}; // 6502: XX(1 0)
 
-      std::uint8_t y1 = _dust.y[at]; // 6502: MLU1's STA Y1
+      std::uint8_t y1 = _dust.y[at]; // 6502: MLU1 stages it in `Y1`
       const Product height = MultiplyByHeight(_dust, at, scale);
       const SubResult yLow = SubtractWithCarry(_dust.yLow[at], height.low, height.carry);
       const SubResult yHigh = SubtractWithCarry(y1, height.high, yLow.carry);
-      // 6502: STA R ... STA S -- the height is the (S R) the roll's first `ADD` runs on.
+      // 6502: the height is the (S R) the roll's first `ADD` runs on.
       const SignMag16 heightSum{yLow.value, yHigh.value}; // 6502: YY(1 0)
 
-      // 6502: `ADC DELT4` -- on the borrow the subtraction above left, with no `CLC` between them.
+      // 6502: the speed added on the borrow the subtraction above left, with no clear between them.
       const AddResult zLow = AddWithCarry(_dust.zLow[at], _flight.speedTimes4Low, yHigh.carry);
       _dust.zLow[at] = zLow.value;
-      std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ
+      std::uint8_t distance = _dust.z[at]; // 6502: into ZZ
       _dust.z[at] = AddWithCarry(_dust.z[at], _flight.speedTimes4High, zLow.carry).value;
 
       // The roll, and the two sign bytes are the other way round from the front view's -- which is
@@ -272,16 +271,16 @@ namespace Elite
       AddSignedResult sum = AddSigned(rolled.Pair(), heightSum);
       SignMag16 y{sum.low, sum.high};
 
-      // 6502: JSR MLS2 -- (S R) = XX(1 0), then MLS1 and the `ADD`.
+      // 6502: MLS2 -- (S R) = XX(1 0), then `MLS1` and the `ADD`.
       rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.rollSignFlipped));
       sum = AddSigned(rolled.Pair(), x);
       x = SignMag16{sum.low, sum.high};
 
       /*
        * And the pitch, where the two routines diverge further than a sign: `STARS1` squares the
-       * pitch term (`STA Q / JSR MUT2` leaves A holding what it just stored), and this one
-       * multiplies it by the negated x instead -- 6502: STA Q / LDA XX+1 / STA S / EOR #128 /
-       * JSR MUT1, which is (S R) = XX(1 0) and then `MULT1`. The port keeps both as written
+       * pitch term (the store into `Q` leaves the accumulator holding what it just stored), and
+       * this one multiplies it by the negated x instead -- 6502: `MUT1` with (S R) = XX(1 0) and
+       * the sign flipped, then `MULT1`. The port keeps both as written
        * (ADR-003).
        */
       const std::uint8_t pitch = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y.hi ^ _flight.pitchSignFlipped)).high;
@@ -290,7 +289,7 @@ namespace Elite
       x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
-      // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / JSR PIX1.
+      // 6502: PIX1 with (S R) = YY(1 0), a zero low byte, and the pitch rate unflipped.
       y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.pitchRate}, y, x1, y1, distance, _picture, wasAcrossLow, wasDownLow);
 
       x1 = x.hi;
@@ -335,8 +334,8 @@ namespace Elite
           x1 = RotateRight(252u, side).value;
           _dust.x[at] = x1;
 
-          // The `ROR A` above left carry clear -- 252 has no bottom bit -- and the generator reads
-          // it.
+          // The rotate above left the carry clear -- 252 has no bottom bit -- and the generator
+          // reads it.
           roll = _rng.Next(false);
           y1 = roll.value;
           _dust.y[at] = roll.value;
@@ -386,7 +385,7 @@ namespace Elite
                             Picture* _picture) noexcept
   {
     /*
-     * 6502: LDA #0 / CPX #2 / ROR A / STA RAT / EOR #%10000000 / STA RAT2.
+     * 6502: the comparison against 2 rotated into the top bit of a zero, and its complement.
      *
      * X is the view ALREADY DECREMENTED -- `STARS` reaches here through a `DEX` -- so the
      * comparison is against the left view (2) rather than against 2 as a view number, and the
@@ -414,20 +413,20 @@ namespace Elite
        * replaced ever gets a new distance. Sideways, everything slides across at a rate set by how
        * far away it is, and nothing else.
        */
-      std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ
-      const ScaledDivision step = DivideSpeedBy(_flight, static_cast<std::uint8_t>(_dust.z[at] >> 3)); // 6502: JSR DV41
-      _dust.keptQuotient = step.whole;                                                                          // 6502: LDA P / STA newzp
+      std::uint8_t distance = _dust.z[at]; // 6502: into ZZ
+      const ScaledDivision step = DivideSpeedBy(_flight, static_cast<std::uint8_t>(_dust.z[at] >> 3)); // 6502: DV41
+      _dust.keptQuotient = step.whole;                                                                          // 6502: out of P, into newzp
 
-      // 6502: EOR RAT2 / STA S -- (S R) is the step with the view's sign over it, R being the
-      // fraction `DVID4` left; and (A P) is the particle's x.
+      // 6502: (S R) is the step with the view's sign folded over it, R being the fraction `DVID4`
+      // left; and (A P) is the particle's x.
       const SignMag16 sideways{step.fraction, static_cast<std::uint8_t>(step.whole ^ _flight.signMask2)};
-      std::uint8_t x1 = _dust.x[at]; // 6502: STA X1 -- the old position, staged for the erase (M2-c: locals)
+      std::uint8_t x1 = _dust.x[at]; // 6502: staged in `X1` -- the old position, for the erase (M2-c: locals)
       AddSignedResult sum = AddSigned(SignMag16{_dust.xLow[at], x1}, sideways);
-      const SignMag16 stepped = sum.Pair(); // 6502: STA S / STX R
+      const SignMag16 stepped = sum.Pair(); // 6502: into (S R)
 
       // The pitch, twice: once into the x it has just stepped and once into the y.
-      std::uint8_t y1 = _dust.y[at]; // 6502: STA Y1
-      Product pitched = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y1 ^ _flight.pitchSign)); // 6502: JSR MULTS-2
+      std::uint8_t y1 = _dust.y[at]; // 6502: staged in `Y1`
+      Product pitched = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y1 ^ _flight.pitchSign)); // 6502: MULTS-2
       sum = AddSigned(pitched.Pair(), stepped);
       SignMag16 x{sum.low, sum.high}; // 6502: XX(1 0)
 
@@ -435,7 +434,7 @@ namespace Elite
       sum = AddSigned(pitched.Pair(), SignMag16{_dust.yLow[at], y1});
       SignMag16 y{sum.low, sum.high}; // 6502: YY(1 0)
 
-      // And the roll, as one scale factor used by both multiply-accumulates. 6502: STA Q.
+      // And the roll, as one scale factor used by both multiply-accumulates (6502: it lives in `Q`).
       const std::uint8_t roll = MultiplyScaled(_flight.rollMagnitude, static_cast<std::uint8_t>(sum.high ^ _flight.rollSign)).high;
 
       sum = MultiplyAndAdd(static_cast<std::uint8_t>(x.hi ^ 0x80u), roll, x);
@@ -443,7 +442,7 @@ namespace Elite
       _dust.xLow[at] = sum.low;
 
       sum = MultiplyAndAdd(y.hi, roll, y);
-      // 6502: STA S / STX R / LDA #0 / STA P / LDA ALPHA / JSR PIX1.
+      // 6502: PIX1 with the pair in (S R), a zero low byte, and the roll rate.
       y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.rollRate}, sum.Pair(), x1, y1, distance, _picture, wasAcrossLow,
                           wasDownLow);
 
@@ -451,9 +450,9 @@ namespace Elite
       x1 = x.hi;
 
       /*
-       * 6502: AND #%01111111 / EOR #%01111111 / CMP newzp / BCC KILL2 / BEQ KILL2.
+       * 6502: KILL2 -- the magnitude taken from 127 and compared against the step.
        *
-       * The `EOR` after the `AND` is 127 minus the magnitude, so what is being compared is how much
+       * Complementing after masking is 127 minus the magnitude, so what is compared is how much
        * ROOM the speck has left against how far it moves in a frame -- a speck that would step off
        * the side next frame is replaced this one. `newzp` is the step, which is why it had to be
        * kept: nothing else in the loop still holds it by the time the test runs.
@@ -472,7 +471,7 @@ namespace Elite
         _dust.y[at] = y.hi;
         y1 = y.hi;
 
-        // 6502: CMP #116 / BCS ST5 -- and no test on the distance at all, because it has not
+        // 6502: ST5 -- 116 or more, and no test on the distance at all, because it has not
         // changed.
         if ((y.hi & 0x7Fu) >= 116u)
         {
@@ -505,7 +504,7 @@ namespace Elite
           _dust.y[at] = y1;
         }
 
-        // 6502: STF1 -- and a distance, which both paths share. The `ORA #8` keeps it off the
+        // 6502: STF1 -- and a distance, which both paths share. Forcing bit 3 keeps it off the
         // player's face.
         roll = _rng.Next(roll.carry);
         distance = static_cast<std::uint8_t>(roll.value | 8u);
@@ -521,13 +520,13 @@ namespace Elite
       }
     }
 
-    // 6502: the loop leaves through `BEQ ST2`, so the angles are put back on the way out.
+    // 6502: the loop leaves through ST2, so the angles are put back on the way out.
     FlipRollAndPitch(_flight);
   }
 
   void MoveStardust(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view, Picture* _picture) noexcept
   {
-    // 6502: STARS -- LDX VIEW / BEQ STARS1 / DEX / BNE ST11 / JMP STARS6 / .ST11 JMP STARS2.
+    // 6502: STARS -- the view picks STARS1, STARS6 or STARS2, through ST11.
     if (_view == 0u)
     {
       MoveStardustAhead(_canvas, _flight, _dust, _rng, _picture);

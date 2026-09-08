@@ -35,7 +35,7 @@ namespace Elite
     /// 6502: the long-range chart sits 24 rows down the screen; the short-range one starts at the top.
     constexpr std::uint8_t LONG_RANGE_TOP = 24;
 
-    /// 6502: CMP #152 / LDA #151 -- the lowest row the long-range chart's crosshair may reach.
+    /// 6502: the lowest row the long-range chart's crosshair may reach, clamped to one below.
     constexpr std::uint8_t LONG_RANGE_BOTTOM = 152;
 
     /// 6502: the tests at TT184 and TT186 -- how far a system may be and still appear.
@@ -45,7 +45,7 @@ namespace Elite
     /// 6502: XX1 -- 25 bytes of the ship workspace, borrowed as one flag per character row.
     constexpr std::size_t LABEL_ROWS = 25;
 
-    /// 6502: CPY #3 / BCC TT187 -- a system whose row is above this gets neither name nor disc.
+    /// 6502: TT187 -- a system whose row is above this gets neither name nor disc.
     constexpr std::uint8_t FIRST_LABELLED_ROW = 3;
 
     /*
@@ -71,7 +71,7 @@ namespace Elite
     constexpr std::uint8_t RANGE_TOKEN = 202;
     constexpr std::uint8_t DOCKED_TOKEN = 205;
 
-    /// 6502: LDA #15 -- fifteen counts, in both bytes of QQ22.
+    /// 6502: fifteen counts, in both bytes of `QQ22`.
     constexpr std::uint8_t COUNTDOWN_START = 15;
 
     /// 6502: bit 7 of QQ11.
@@ -80,8 +80,8 @@ namespace Elite
       return (_view & 0x80u) != 0u;
     }
 
-    /// 6502: SEC / SBC / BCS / EOR #255 / ADC #1 -- the difference, made positive. The carry is
-    /// clear when the negate is reached, which is what makes the ADC add exactly one.
+    /// 6502: the difference, made positive by complementing and adding one when it borrowed. The
+    /// carry is clear when that negation is reached, which is what makes the addition add one.
     [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _first, std::uint8_t _second) noexcept
     {
       const std::uint16_t difference = static_cast<std::uint16_t>(_first) - _second;
@@ -96,11 +96,11 @@ namespace Elite
 
   std::uint8_t StepCoordinate(std::uint8_t _value, std::uint8_t _step) noexcept
   {
-    // 6502: CLC / ADC QQ19+3 -- the move, and the carry it produces is the whole test.
+    // 6502: the move, and the carry it produces is the whole test.
     const AddResult moved = AddWithCarry(_value, _step, false);
 
     /*
-     * 6502: LDX QQ19+3 / BMI TT124 / BCC TT125 / RTS, then TT124: BCC TT180.
+     * 6502: TT124, TT125 and TT180 -- the step's sign first, then the addition's carry.
      *
      * A positive step that carried has run off the top of the galaxy; a negative one that did NOT
      * carry has run off the bottom. Either way the original returns without storing, so the
@@ -117,7 +117,7 @@ namespace Elite
 
   void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view, Picture* _picture) noexcept
   {
-    // 6502: LDA #24 / LDX QQ11 / BPL TT178 / LDA #0 -- the long-range chart is 24 rows down.
+    // 6502: TT178 -- the long-range chart is 24 rows down and the short-range one is not.
     const std::uint8_t top = ShortRange(_view) ? std::uint8_t{0} : LONG_RANGE_TOP;
 
     // 6502: TT84 / TT85 -- the horizontal stroke, saturating at both ends of the screen.
@@ -142,7 +142,7 @@ namespace Elite
     stroke.y1 = AddWithCarry(clippedTop, top, false).value;
 
     /*
-     * 6502: LDA QQ19+1 / CLC / ADC QQ19+2 / ADC QQ19+5.
+     * 6502: the y, the half-height and the chart's top, added in that order.
      *
      * The second addition has no CLC of its own, so a crosshair whose bottom edge wrapped past
      * 255 arrives one row further down than the sum says. That carry is the difference between a
@@ -151,7 +151,7 @@ namespace Elite
     const AddResult below = AddWithCarry(_at.y, _at.size, false);
     const AddResult bottom = AddWithCarry(below.value, top, below.carry);
 
-    // 6502: CMP #152 / BCC TT87 / LDX QQ11 / BMI TT87 / LDA #151 -- the clamp is the long-range
+    // 6502: TT87 -- the clamp is the long-range
     // chart's only, because the short-range chart has nothing printed below it.
     stroke.y2 = (bottom.value >= LONG_RANGE_BOTTOM && !ShortRange(_view)) ? std::uint8_t{LONG_RANGE_BOTTOM - 1} : bottom.value;
 
@@ -190,7 +190,7 @@ namespace Elite
       return;
     }
 
-    // 6502: ASL A / ASL A / CLC / ADC #104 -- four times the scale, and the CLC is present here.
+    // 6502: four times the scale, and the carry IS cleared here.
     at.x = AddWithCarry(static_cast<std::uint8_t>(dx << 2), SHORT_RANGE_CENTRE_X, false).value;
 
     const std::uint8_t dy = static_cast<std::uint8_t>(_view.cursorY - _view.homeY);
@@ -206,11 +206,11 @@ namespace Elite
 
   void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY, Picture* _picture) noexcept
   {
-    // 6502: JSR TT103 -- the lines are drawn by EOR, so this erases the crosshair that is there.
+    // 6502: TT103 -- the lines are drawn by EOR, so this erases the crosshair that is there.
     DrawTargetCrosshairs(_canvas, _view, _picture);
 
     /*
-     * 6502: DEY / TYA / EOR #255 -- the vertical step arrives negated, because a key that means
+     * 6502: the vertical step arrives negated, because a key that means
      * "up" on the chart means "down the screen". The port takes both steps as the routine finally
      * uses them and leaves the negation to the caller that reads the keyboard.
      */
@@ -249,20 +249,20 @@ namespace Elite
 
       circle.x = at.x;
 
-      // 6502: LDA QQ19+1 / CLC / ADC #24 -- the circle is drawn against the chart's own origin,
+      // 6502: the chart's top added -- the circle is drawn against the chart's own origin,
       // which the crosshair above reached through a separate addition.
       circle.y = AddWithCarry(at.y, LONG_RANGE_TOP, false).value;
       circle.radius = static_cast<std::uint8_t>(_view.fuel.tenths >> 2);
     }
 
-    // 6502: LDX #2 / STX STP -- the circle is walked in steps of two, which is what makes it
+    // 6502: a step of two -- the circle is walked in twos, which is what makes it
     // sixty-four segments rather than the smoother sixteen the planets use.
     circle.step = 2;
 
     {
       /*
-       * 6502: TT128 -- STA K3 / STA K4 / STX K3+1 / STX K4+1 / INX / STX LSP / LDX #2 / STX STP /
-       * JMP CIRCLE2, and it is a CALL now rather than a seam (M3-b-1b).
+       * 6502: TT128 -- the centre, the heap pointer and the step, then `CIRCLE2`; and it is a
+       * CALL now rather than a seam (M3-b-1b).
        *
        * `LSP` goes to ONE rather than to zero: the ball heap's first byte is not a line, so an
        * empty heap is a pointer of 1 and a `LSP` of 0 would make `BLINE`'s first segment
@@ -278,7 +278,7 @@ namespace Elite
 
   void DrawTitleRule(Canvas& _canvas, TextState& _text, Picture* _picture) noexcept
   {
-    // 6502: LDA #23 / JSR INCYC / (fall into NLIN2) -- the cursor moves down one line FIRST, and
+    // 6502: INCYC and then the fall into NLIN2 -- the cursor moves down one line FIRST, and
     // the increment is INCYC's own; the 23 is where the rule goes and nothing else.
     ++_text.row;
     DrawSeparator(_canvas, LONG_RANGE_RULE_TOP, _picture);
@@ -286,7 +286,7 @@ namespace Elite
 
   void DrawSeparator(Canvas& _canvas, std::uint8_t _y, Picture* _picture) noexcept
   {
-    // 6502: NLIN2 -- LDX #0 / STX X1 / DEX / STX X2, so the line runs to 255 rather than to the
+    // 6502: NLIN2 -- the ends are 0 and 255, so the line runs to 255 rather than to the
     // edge of the drawing area, and its right end lands in the margin.
     const Line rule{0u, _y, 255u, _y};
     (void)DrawLine(_canvas, rule);
@@ -298,28 +298,28 @@ namespace Elite
 
   void DrawLongRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
   {
-    // 6502: LDA #7 / JSR DOXC / LDA #199 / JSR TT27 -- the title, seven cells in.
+    // 6502: column 7, then token 199 -- the title, seven cells in.
     _universe.text.column = 7;
     _ports.printer.Print(TITLE_LONG_RANGE);
 
-    // 6502: JSR NLIN -- the rule under the title, and then a second rule at 152, under the chart.
+    // 6502: NLIN -- the rule under the title, and then a second rule at 152, under the chart.
     DrawTitleRule(_universe.canvas, _universe.text, &_universe.picture);
     DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM, &_universe.picture);
 
-    // 6502: JSR TT14 -- the fuel circle, before the dots rather than after.
+    // 6502: TT14 -- the fuel circle, before the dots rather than after.
     DrawFuelRange(_universe, _view);
 
     /*
      * 6502: TT83 -- 256 systems, and each one is a single PIXEL call.
      *
      * The x coordinate is the seed byte itself, the y is another seed byte halved, and the SIZE
-     * comes from a third: `ORA #%01010000` turns QQ15+4 into something PIXEL reads as a distance,
-     * so a system's dot is large or small according to a byte that means nothing else.
+     * comes from a third: forcing two bits on turns `QQ15+4` into something `PIXEL` reads as a
+     * distance, so a system's dot is large or small according to a byte that means nothing else.
      */
     SystemSeeds seeds = _galaxy;
     for (int system = 0; system < 256; ++system)
     {
-      const std::uint8_t distance = static_cast<std::uint8_t>(seeds.bytes[4] | 0x50u); // 6502: STA ZZ
+      const std::uint8_t distance = static_cast<std::uint8_t>(seeds.bytes[4] | 0x50u); // 6502: into ZZ
       const std::uint8_t y = AddWithCarry(static_cast<std::uint8_t>(seeds.bytes[1] >> 1), LONG_RANGE_TOP, false).value;
       PlotPixel(_universe.canvas, seeds.bytes[3], y, distance);
       // The map's dots are eight-bit chart coordinates with nothing under them, so the wide dot is
@@ -336,14 +336,14 @@ namespace Elite
                            TextPrinter* _wideLabels) noexcept
   {
     /*
-     * 6502: LDA #7 / JSR DOXC / LDA #190 / JSR NLIN3.
+     * 6502: column 7, then token 190 through `NLIN3`.
      *
      * The 190 is the TITLE TOKEN, not a row. NLIN3 prints whatever is in A and then falls into
      * NLIN4, which loads 19 for itself -- so this chart's rule is at 19 and the long-range one's
      * is at 23, and neither number appears at the call site. NLIN4 also skips the INCYC that NLIN
      * does, so the cursor does not move here.
      */
-    // 6502: TT23's opening `LDA #199 / STA Yx2M1 / STA dontclip` -- the clipper's limits, lifted
+    // 6502: TT23 opens by pushing `Yx2M1` and `dontclip` to 199 -- the clipper's limits, lifted
     // for the length of the routine because the discs go below the space view's floor.
     _universe.heaps.lowestVisibleRow = CHART_SCREEN_BOTTOM;
     _universe.clip.clippingOff = CHART_SCREEN_BOTTOM;
@@ -356,7 +356,7 @@ namespace Elite
     DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
 
     /*
-     * 6502: EE3 -- LDX #24 / STA XX1,X, counting down.
+     * 6502: EE3 -- twenty-five bytes cleared, counting down from 24.
      *
      * Twenty-five bytes of the SHIP workspace, one per character row, marking which rows already
      * carry a name. It is scratch and nothing else: the flight model has not started and will
@@ -374,7 +374,7 @@ namespace Elite
       if (AbsoluteDifference(x, _view.homeX) < SHORT_RANGE_SPAN_X && AbsoluteDifference(y, _view.homeY) < SHORT_RANGE_SPAN_Y)
       {
         /*
-         * 6502: ASL A / ASL A / ADC #104, and below ASL A / ADC #90.
+         * 6502: four times the x plus 104, and below twice the y plus 90.
          *
          * NEITHER of these has a CLC, unlike the pair in TT105 that map the same galaxy onto the
          * same screen. So the carry the last shift produced is added in, and a system far enough
@@ -390,18 +390,18 @@ namespace Elite
         const ShiftResult dy1 = RotateLeft(dy, false);
         const std::uint8_t screenY = AddWithCarry(dy1.value, SHORT_RANGE_CENTRE_Y, dy1.carry).value;
 
-        // 6502: LSR / LSR / LSR / CLC / ADC #1 -- the cell the name starts in.
+        // 6502: the x divided by eight plus one -- the cell the name starts in.
         _universe.text.column = AddWithCarry(static_cast<std::uint8_t>(screenX >> 3), 1, false).value;
 
         /*
-         * 6502: LDX XX1,Y / BEQ EE4 / INY / LDX XX1,Y / BEQ EE4 / DEY / DEY / LDX XX1,Y / BNE ee1.
+         * 6502: EE4 -- this row, then the one below it, then the one above.
          *
          * The name goes on its own row if that is free, else the row below, else the row above.
          * If all three are taken the system still gets its disc but no name -- which is why a
          * crowded chart has anonymous systems rather than overlapping text.
          */
         /*
-         * 6502: LSR / LSR / LSR / TAY.
+         * 6502: the row's pixel coordinate divided by eight, into Y.
          *
          * The third shift leaves bit 2 of the row's pixel coordinate in the carry, and on the path
          * where no name is printed nothing clears it before the addition that sizes the disc. So a
@@ -442,7 +442,7 @@ namespace Elite
         {
           _universe.text.row = static_cast<std::uint8_t>(row);
 
-          // 6502: CPY #3 / BCC TT187 -- too near the top, so the system is skipped ENTIRELY. The
+          // 6502: TT187 -- too near the top, so the system is skipped ENTIRELY. The
           // branch goes past the disc as well as past the name.
           if (row < FIRST_LABELLED_ROW)
           {
@@ -483,7 +483,7 @@ namespace Elite
         if (drawDisc)
         {
           /*
-           * 6502: LDA QQ15+5 / AND #1 / ADC #2.
+           * 6502: one bit of a seed byte added to 2 -- a radius of two or three.
            *
            * AND does not touch the carry, and nothing between here and the branch that arrived
            * clears it -- so the disc's size is a masked seed bit PLUS two PLUS a carry left over
@@ -496,7 +496,8 @@ namespace Elite
            */
           const std::uint8_t radius = AddWithCarry(static_cast<std::uint8_t>(seeds.bytes[5] & 0x01u), 2, carry).value;
           /*
-           * 6502: TT23's ee1 -- JSR FLFLLS / JSR SUN / JSR FLFLLS, a call since M3-b-1b.
+           * 6502: TT23's ee1 -- the heap cleared, the sun drawn, the heap cleared again; a call
+           * since M3-b-1b.
            *
            * The sun is drawn and then FORGOTTEN, twice over: the heap is cleared before so that
            * `SUN` has nothing to erase, and cleared after so that the next disc does not rub this
@@ -520,7 +521,7 @@ namespace Elite
 
   void PrintRangeError(TokenPrinter& _printer) noexcept
   {
-    // 6502: TT147 -- LDA #202 / JSR TT27 / LDA #'?' / JMP TT27.
+    // 6502: TT147 -- token 202 and a question mark.
     _printer.Print(RANGE_TOKEN);
     _printer.Print('?');
   }
@@ -528,7 +529,7 @@ namespace Elite
   void PrintCountdown(TextSink& _sink, TextState& _text, std::uint8_t _count) noexcept
   {
     /*
-     * 6502: ee3 -- LDA #1 / JSR DOXC / JSR DOYC.
+     * 6502: ee3 -- one loaded, then both cursor calls.
      *
      * One load feeding two calls: DOXC takes the accumulator and DOYC takes it again, unchanged.
      * So the countdown always sits at (1, 1) and neither cursor is the caller's to choose.
@@ -536,7 +537,7 @@ namespace Elite
     _text.column = 1;
     _text.row = 1;
 
-    // 6502: LDY #0 / CLC / LDA #3 / JMP TT11 -- three digits, no point, and the value arrives in
+    // 6502: `TT11` with three digits and no point, and the value arrives in
     // X with Y as its high byte, which is always zero here.
     PrintValue(_sink, _count, 3, false);
   }
@@ -544,8 +545,8 @@ namespace Elite
   NearestSystem SelectNearestSystem(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _sentences,
                                     MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy, Picture* _picture) noexcept
   {
-    // 6502: hm -- JSR TT103 / JSR TT111 / JSR TT103 / JMP CLYNS. The first call rubs the crosshair
-    // out, because LOIN draws by EOR and drawing it twice is how it moves.
+    // 6502: hm -- the crosshair off, the nearest system found, the crosshair on, then `CLYNS`. The
+    // first call rubs it out, because `LOIN` draws by EOR and drawing it twice is how it moves.
     DrawTargetCrosshairs(_canvas, _view, _picture);
 
     const NearestSystem nearest = FindNearestSystem(_galaxy, _view.cursorX, _view.cursorY, _view.homeX, _view.homeY);
@@ -554,7 +555,7 @@ namespace Elite
 
     DrawTargetCrosshairs(_canvas, _view, _picture);
 
-    // 6502: JMP CLYNS, which is `ClearMessageRows` and was a seam until M3-b-3b.
+    // 6502: CLYNS, as a tail call; it is `ClearMessageRows` and was a seam until M3-b-3b.
     ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view));
 
     return nearest;
@@ -567,24 +568,24 @@ namespace Elite
     if (_jump.docked != 0)
     {
       /*
-       * 6502: dockEd -- JSR CLYNS / LDA #15 / JSR DOXC / LDA #205 / JMP DETOK.
+       * 6502: dockEd -- the rows cleared, column 15, then token 205 through `DETOK`.
        *
        * The message is an EXTENDED token, which is why this routine needs both printers: the rest
        * of hyp prints recursive ones.
        */
-      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view)); // 6502: JSR CLYNS
+      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view)); // 6502: CLYNS
       _text.column = 15;
       _extended.Print(DOCKED_TOKEN);
       return JumpOutcome::Docked;
     }
 
-    // 6502: LDA QQ22+1 / BEQ / RTS -- a countdown already running swallows the key.
+    // 6502: a countdown already running swallows the key.
     if (_jump.countdown != 0)
     {
       return JumpOutcome::Busy;
     }
 
-    // 6502: JSR CTRL / BMI Ghy -- the galactic hyperdrive, which reads the equipment the commander
+    // 6502: Ghy -- the galactic hyperdrive, which reads the equipment the commander
     // is carrying and so lands with slice 2d.
     if (_jump.controlHeld)
     {
@@ -603,7 +604,7 @@ namespace Elite
     }
     else if ((_view.view & 0xC0u) == 0u)
     {
-      // 6502: AND #%11000000 / BNE / RTS -- neither chart is showing, so there is nothing selected.
+      // 6502: the view's top two bits -- neither chart is showing, so nothing is selected.
       return JumpOutcome::Busy;
     }
     else
@@ -613,14 +614,14 @@ namespace Elite
       _jump.target = nearest.seeds;
     }
 
-    // 6502: TTX111 -- LDA QQ8 / ORA QQ8+1 / BNE / RTS. A distance of zero is the system you are
+    // 6502: TTX111 -- a distance of zero is the system you are
     // already in, and the key does nothing at all -- not even a message.
     if (_jump.distance == 0)
     {
       return JumpOutcome::AlreadyThere;
     }
 
-    // 6502: LDA #7 / JSR DOXC, then row 23 on a chart and 17 in space.
+    // 6502: column 7, then row 23 on a chart and 17 in space.
     _text.column = 7;
     _text.row = (_view.view != 0) ? std::uint8_t{23} : std::uint8_t{17};
 
@@ -628,7 +629,7 @@ namespace Elite
     _printer.Print(HYPERSPACE_TOKEN);
 
     /*
-     * 6502: LDA QQ8+1 / BNE goTT147 / LDA QQ14 / CMP QQ8 / BCS.
+     * 6502: goTT147 -- the distance's high byte first, then the fuel against its low byte.
      *
      * Two tests, not one. Anything 256 tenths or further fails on its HIGH byte before the fuel is
      * looked at, so a system 25.6 light years away is out of range with a full tank -- and says the
@@ -645,10 +646,10 @@ namespace Elite
     SystemSeeds naming = _jump.target;
     PrintSystemName(_printer, naming);
 
-    // 6502: wW / wW2 -- LDA #15 / STA QQ22+1 / STA QQ22 / TAX / JMP ee3. Both bytes of the
-    // countdown take the same value, and the one that is printed is the one in X.
+    // 6502: wW and wW2 -- fifteen into both bytes of the countdown, then `ee3`. The one that is
+    // printed is the one left in X.
     _jump.countdown = COUNTDOWN_START;
-    _jump.counter = COUNTDOWN_START; // 6502: STA QQ22 -- the tick within a step, not only the number shown
+    _jump.counter = COUNTDOWN_START; // 6502: into QQ22 -- the tick within a step, not only the number shown
     PrintCountdown(_extended.Characters(), _text, COUNTDOWN_START);
     return JumpOutcome::CountingDown;
   }
@@ -660,7 +661,7 @@ namespace Elite
 
     for (int system = 0; system < 256; ++system)
     {
-      // 6502: JSR MT14 -- justification on, so the name goes into the buffer rather than the
+      // 6502: MT14 -- justification on, so the name goes into the buffer rather than the
       // screen. This is the whole trick, and it is why the search needed slice 1c-c-b.
       _characters.State().justify = 0x80;
       _characters.State().bufferLength = 0;
@@ -671,8 +672,9 @@ namespace Elite
       const std::size_t length = _characters.State().bufferLength;
 
       /*
-       * 6502: LDX DTW5 / LDA INWK+5,X / CMP #13 -- the typed name must END where the printed one
-       * does. A shorter or longer entry fails on this one comparison rather than on the letters.
+       * 6502: the buffer's length indexes into the typed name, and the byte there must be a
+       * carriage return: the typed name must END where the printed one does. A shorter or longer
+       * entry fails on this one comparison rather than on the letters.
        */
       if (length < _typed.size() && _typed[length] == 13)
       {
@@ -697,7 +699,7 @@ namespace Elite
           _view.cursorX = seeds.bytes[3];
           _view.cursorY = seeds.bytes[1];
 
-          // 6502: JSR MT15 -- justification off again, and the buffer thrown away.
+          // 6502: MT15 -- justification off again, and the buffer thrown away.
           _characters.State().justify = 0;
           _characters.State().bufferLength = 0;
           return true;
