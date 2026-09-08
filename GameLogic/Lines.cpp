@@ -313,7 +313,7 @@ namespace Elite
       const bool goingUp = _line.y1 >= _line.y2;
       const std::uint16_t rowAddress = static_cast<std::uint16_t>(Canvas::RowOffset(_line.y1));
 
-      ScreenPointer sc;
+      ScreenPointer screenPointer;
       std::uint8_t y = 0;
 
       /*
@@ -337,9 +337,9 @@ namespace Elite
         // 6502: the AC19 block. SC is the row plus the byte within it, Y the pixel row in the cell.
         const AddResult base =
           AddWithCarry(static_cast<std::uint8_t>(_line.x1 & 0xF8u), static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
-        sc.low = base.value;
+        screenPointer.low = base.value;
         const AddResult top = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry);
-        sc.high = top.value;
+        screenPointer.high = top.value;
         carry = top.carry;
         y = static_cast<std::uint8_t>(_line.y1 & 0x07u);
       }
@@ -351,18 +351,18 @@ namespace Elite
          * tests it is a BNE. The port keeps the bias rather than normalising it, because SC's low
          * byte is what the carry chain reads.
          */
-        sc.high = static_cast<std::uint8_t>(rowAddress >> 8);
+        screenPointer.high = static_cast<std::uint8_t>(rowAddress >> 8);
         const AddResult base =
           AddWithCarry(static_cast<std::uint8_t>(_line.x1 & 0xF8u), static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
-        sc.low = base.value;
+        screenPointer.low = base.value;
         if (base.carry)
         {
-          ++sc.high;
+          ++screenPointer.high;
         }
-        carry = sc.Subtract(0xF7u, false);
+        carry = screenPointer.Subtract(0xF7u, false);
         if (!carry)
         {
-          --sc.high;
+          --screenPointer.high;
         }
         y = static_cast<std::uint8_t>((_line.y1 & 0x07u) ^ 0xF8u);
       }
@@ -393,7 +393,7 @@ namespace Elite
       {
         if (!skipFirst)
         {
-          _canvas.ExclusiveOr(sc.At(y), PIXEL_MASK_TABLE[bit]);
+          _canvas.ExclusiveOr(screenPointer.At(y), PIXEL_MASK_TABLE[bit]);
         }
         skipFirst = false;
 
@@ -416,8 +416,8 @@ namespace Elite
             --y;
             if ((y & 0x80u) != 0u)
             {
-              const bool noBorrow = sc.Subtract(0x40u, carry);
-              sc.high = SubtractWithCarry(sc.high, 1u, noBorrow).value;
+              const bool noBorrow = screenPointer.Subtract(0x40u, carry);
+              screenPointer.high = SubtractWithCarry(screenPointer.high, 1u, noBorrow).value;
               y = 7;
             }
           }
@@ -427,8 +427,8 @@ namespace Elite
             ++y;
             if (y == 0)
             {
-              const bool over = sc.Add(0x3Fu, carry);
-              sc.high = AddWithCarry(sc.high, 1u, over).value;
+              const bool over = screenPointer.Add(0x3Fu, carry);
+              screenPointer.high = AddWithCarry(screenPointer.high, 1u, over).value;
               y = 0xF8u;
             }
           }
@@ -445,10 +445,10 @@ namespace Elite
            * than the slope alone would take it.
            */
           bit = 0;
-          carry = sc.Add(8u, false);
+          carry = screenPointer.Add(8u, false);
           if (carry)
           {
-            ++sc.high;
+            ++screenPointer.high;
           }
         }
       }
@@ -476,11 +476,11 @@ namespace Elite
 
       const std::uint16_t rowAddress = static_cast<std::uint16_t>(Canvas::RowOffset(_line.y1));
 
-      ScreenPointer sc;
+      ScreenPointer screenPointer;
       const AddResult base =
         AddWithCarry(static_cast<std::uint8_t>(_line.x1 & 0xF8u), static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
-      sc.low = base.value;
-      sc.high = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry).value;
+      screenPointer.low = base.value;
+      screenPointer.high = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry).value;
 
       std::uint8_t y = static_cast<std::uint8_t>(_line.y1 & 0x07u);
       std::uint8_t mask = PIXEL_MASK_TABLE[_line.x1 & 0x07u];
@@ -509,7 +509,7 @@ namespace Elite
       {
         if (!skipFirst)
         {
-          _canvas.ExclusiveOr(sc.At(y), mask);
+          _canvas.ExclusiveOr(screenPointer.At(y), mask);
         }
         skipFirst = false;
 
@@ -526,9 +526,9 @@ namespace Elite
         --y;
         if ((y & 0x80u) != 0u)
         {
-          const bool noBorrow = sc.Subtract(0x3Fu, carry);
-          const SubResult high = SubtractWithCarry(sc.high, 1u, noBorrow);
-          sc.high = high.value;
+          const bool noBorrow = screenPointer.Subtract(0x3Fu, carry);
+          const SubResult high = SubtractWithCarry(screenPointer.high, 1u, noBorrow);
+          screenPointer.high = high.value;
           carry = high.carry;
           y = 7;
         }
@@ -548,10 +548,10 @@ namespace Elite
             if (fellOut)
             {
               mask = 0x80u;
-              carry = sc.Add(8u, false);
+              carry = screenPointer.Add(8u, false);
               if (carry)
               {
-                ++sc.high;
+                ++screenPointer.high;
               }
             }
           }
@@ -563,9 +563,9 @@ namespace Elite
             if (fellOut)
             {
               mask = 0x01u;
-              if (!sc.Subtract(0x07u, false))
+              if (!screenPointer.Subtract(0x07u, false))
               {
-                --sc.high;
+                --screenPointer.high;
               }
             }
           }

@@ -20,7 +20,7 @@ namespace Elite
   {
     // 6502: STA Q, then DVID4. Its exit carry is the divide's saturation flag and only `SPS2`
     // reads it -- the stardust follows this with `LSR P`, which makes its own (§6.60).
-    return DivideAndScale(_flight.delta, _divisor);
+    return DivideAndScale(_flight.speed, _divisor);
   }
 
   ScaledDivision DivideSpeedByDistance(const FlightState& _flight, const Stardust& _dust, std::uint8_t _at) noexcept
@@ -37,7 +37,7 @@ namespace Elite
   Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept
   {
     // 6502: LDX ALP1, then MULTS-2's `STX P` and MULTS.
-    return MultiplyScaled(_flight.alp1, _value);
+    return MultiplyScaled(_flight.rollMagnitude, _value);
   }
 
   std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend, std::uint8_t _across,
@@ -126,10 +126,10 @@ namespace Elite
 
       // The speck comes towards you, so its distance falls by four times the speed. The borrow
       // this subtraction runs on is the one the second `ROR A` above left, not a `SEC`.
-      const SubResult zLow = SubtractWithCarry(_dust.zLow[at], _flight.delt4, halved.carry);
+      const SubResult zLow = SubtractWithCarry(_dust.zLow[at], _flight.speedTimes4Low, halved.carry);
       _dust.zLow[at] = zLow.value;
       std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ -- the distance it WAS, which is what the erase plots at
-      _dust.z[at] = SubtractWithCarry(_dust.z[at], _flight.delt4Next, zLow.carry).value;
+      _dust.z[at] = SubtractWithCarry(_dust.z[at], _flight.speedTimes4High, zLow.carry).value;
 
       // Its height and its distance across, each scaled by how much closer it now is. `X1` and
       // `Y1` are the speck's old position, staged for the erase (M2-c: locals).
@@ -145,25 +145,25 @@ namespace Elite
       SignMag16 x{xLow.value, AddWithCarry(x1, across.high, xLow.carry).value}; // 6502: XX(1 0)
 
       // 6502: the roll, as two multiply-and-adds with the signs crossed over.
-      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.alp2Next));
+      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.rollSignFlipped));
       AddSignedResult sum = AddSigned(rolled.Pair(), heightSum);
       SignMag16 y{sum.low, sum.high}; // 6502: STA YY+1 / STX YY
 
       // 6502: JSR MLS2 -- (S R) = XX(1 0), then MLS1 and the `ADD`.
-      rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.alp2));
+      rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.rollSign));
       sum = AddSigned(rolled.Pair(), x);
       x = SignMag16{sum.low, sum.high};
 
       // And the pitch: 6502: LDX BET1 / ... / JSR MULTS-2 / STA Q / JSR MUT2 -- (S R) = XX(1 0)
       // again, and `MULT1` squares the pitch term, because `STA Q` left it in A (§6.44).
-      const std::uint8_t pitch = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(y.hi ^ _flight.bet2Next)).high;
+      const std::uint8_t pitch = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y.hi ^ _flight.pitchSignFlipped)).high;
       const Product pitched = MultiplySigned(pitch, pitch);
       sum = AddSigned(DoubleAndFold(pitched), x);
       x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
       // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / EOR #128 / JSR PIX1.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.beta ^ 0x80u)}, y, x1, y1, distance,
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.pitchRate ^ 0x80u)}, y, x1, y1, distance,
                           _picture, wasAcrossLow, wasDownLow);
 
       // 6502: the three kill tests. A speck that has drifted more than 120 either way, or come
@@ -261,19 +261,19 @@ namespace Elite
       const SignMag16 heightSum{yLow.value, yHigh.value}; // 6502: YY(1 0)
 
       // 6502: `ADC DELT4` -- on the borrow the subtraction above left, with no `CLC` between them.
-      const AddResult zLow = AddWithCarry(_dust.zLow[at], _flight.delt4, yHigh.carry);
+      const AddResult zLow = AddWithCarry(_dust.zLow[at], _flight.speedTimes4Low, yHigh.carry);
       _dust.zLow[at] = zLow.value;
       std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ
-      _dust.z[at] = AddWithCarry(_dust.z[at], _flight.delt4Next, zLow.carry).value;
+      _dust.z[at] = AddWithCarry(_dust.z[at], _flight.speedTimes4High, zLow.carry).value;
 
       // The roll, and the two sign bytes are the other way round from the front view's -- which is
       // the whole of what makes the dust roll the opposite way when you look behind you.
-      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.alp2));
+      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.rollSign));
       AddSignedResult sum = AddSigned(rolled.Pair(), heightSum);
       SignMag16 y{sum.low, sum.high};
 
       // 6502: JSR MLS2 -- (S R) = XX(1 0), then MLS1 and the `ADD`.
-      rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.alp2Next));
+      rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.rollSignFlipped));
       sum = AddSigned(rolled.Pair(), x);
       x = SignMag16{sum.low, sum.high};
 
@@ -284,14 +284,14 @@ namespace Elite
        * JSR MUT1, which is (S R) = XX(1 0) and then `MULT1`. The port keeps both as written
        * (ADR-003).
        */
-      const std::uint8_t pitch = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(y.hi ^ _flight.bet2Next)).high;
+      const std::uint8_t pitch = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y.hi ^ _flight.pitchSignFlipped)).high;
       const Product pitched = MultiplySigned(static_cast<std::uint8_t>(x.hi ^ 0x80u), pitch);
       sum = AddSigned(DoubleAndFold(pitched), x);
       x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
       // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / JSR PIX1.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.beta}, y, x1, y1, distance, _picture, wasAcrossLow, wasDownLow);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.pitchRate}, y, x1, y1, distance, _picture, wasAcrossLow, wasDownLow);
 
       x1 = x.hi;
       _dust.x[at] = x.hi;
@@ -373,11 +373,11 @@ namespace Elite
      */
     void FlipRollAndPitch(FlightState& _flight) noexcept
     {
-      _flight.alpha = static_cast<std::uint8_t>(_flight.alpha ^ _flight.rat);
-      _flight.alp2 = static_cast<std::uint8_t>(_flight.alp2 ^ _flight.rat);
-      _flight.alp2Next = static_cast<std::uint8_t>(_flight.alp2 ^ 0x80u);
-      _flight.bet2 = static_cast<std::uint8_t>(_flight.bet2 ^ _flight.rat);
-      _flight.bet2Next = static_cast<std::uint8_t>(_flight.bet2 ^ 0x80u);
+      _flight.rollRate = static_cast<std::uint8_t>(_flight.rollRate ^ _flight.signMask);
+      _flight.rollSign = static_cast<std::uint8_t>(_flight.rollSign ^ _flight.signMask);
+      _flight.rollSignFlipped = static_cast<std::uint8_t>(_flight.rollSign ^ 0x80u);
+      _flight.pitchSign = static_cast<std::uint8_t>(_flight.pitchSign ^ _flight.signMask);
+      _flight.pitchSignFlipped = static_cast<std::uint8_t>(_flight.pitchSign ^ 0x80u);
     }
 
   } // namespace
@@ -393,8 +393,8 @@ namespace Elite
      * carry it leaves is set for the right view and clear for the left.
      */
     const std::uint8_t index = static_cast<std::uint8_t>(_view - 1u);
-    _flight.rat = (index >= 2u) ? 0x80u : 0x00u;
-    _flight.rat2 = static_cast<std::uint8_t>(_flight.rat ^ 0x80u);
+    _flight.signMask = (index >= 2u) ? 0x80u : 0x00u;
+    _flight.signMask2 = static_cast<std::uint8_t>(_flight.signMask ^ 0x80u);
 
     FlipRollAndPitch(_flight);
 
@@ -420,23 +420,23 @@ namespace Elite
 
       // 6502: EOR RAT2 / STA S -- (S R) is the step with the view's sign over it, R being the
       // fraction `DVID4` left; and (A P) is the particle's x.
-      const SignMag16 sideways{step.fraction, static_cast<std::uint8_t>(step.whole ^ _flight.rat2)};
+      const SignMag16 sideways{step.fraction, static_cast<std::uint8_t>(step.whole ^ _flight.signMask2)};
       std::uint8_t x1 = _dust.x[at]; // 6502: STA X1 -- the old position, staged for the erase (M2-c: locals)
       AddSignedResult sum = AddSigned(SignMag16{_dust.xLow[at], x1}, sideways);
       const SignMag16 stepped = sum.Pair(); // 6502: STA S / STX R
 
       // The pitch, twice: once into the x it has just stepped and once into the y.
       std::uint8_t y1 = _dust.y[at]; // 6502: STA Y1
-      Product pitched = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(y1 ^ _flight.bet2)); // 6502: JSR MULTS-2
+      Product pitched = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y1 ^ _flight.pitchSign)); // 6502: JSR MULTS-2
       sum = AddSigned(pitched.Pair(), stepped);
       SignMag16 x{sum.low, sum.high}; // 6502: XX(1 0)
 
-      pitched = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(sum.high ^ _flight.bet2Next));
+      pitched = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(sum.high ^ _flight.pitchSignFlipped));
       sum = AddSigned(pitched.Pair(), SignMag16{_dust.yLow[at], y1});
       SignMag16 y{sum.low, sum.high}; // 6502: YY(1 0)
 
       // And the roll, as one scale factor used by both multiply-accumulates. 6502: STA Q.
-      const std::uint8_t roll = MultiplyScaled(_flight.alp1, static_cast<std::uint8_t>(sum.high ^ _flight.alp2)).high;
+      const std::uint8_t roll = MultiplyScaled(_flight.rollMagnitude, static_cast<std::uint8_t>(sum.high ^ _flight.rollSign)).high;
 
       sum = MultiplyAndAdd(static_cast<std::uint8_t>(x.hi ^ 0x80u), roll, x);
       x.hi = sum.high;
@@ -444,7 +444,7 @@ namespace Elite
 
       sum = MultiplyAndAdd(y.hi, roll, y);
       // 6502: STA S / STX R / LDA #0 / STA P / LDA ALPHA / JSR PIX1.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.alpha}, sum.Pair(), x1, y1, distance, _picture, wasAcrossLow,
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.rollRate}, sum.Pair(), x1, y1, distance, _picture, wasAcrossLow,
                           wasDownLow);
 
       _dust.x[at] = x.hi;
@@ -492,7 +492,7 @@ namespace Elite
           // names, at any height.
           y1 = roll.value;
           _dust.y[at] = roll.value;
-          x1 = static_cast<std::uint8_t>(115u | _flight.rat);
+          x1 = static_cast<std::uint8_t>(115u | _flight.signMask);
           _dust.x[at] = x1;
         }
         else
@@ -501,7 +501,7 @@ namespace Elite
           // roll's sign, so dust replaced while you are rolling comes in on the side it left.
           x1 = roll.value;
           _dust.x[at] = roll.value;
-          y1 = static_cast<std::uint8_t>(110u | _flight.alp2Next);
+          y1 = static_cast<std::uint8_t>(110u | _flight.rollSignFlipped);
           _dust.y[at] = y1;
         }
 

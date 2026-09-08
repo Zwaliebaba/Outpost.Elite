@@ -176,20 +176,20 @@ namespace Elite
    */
   struct FlightState
   {
-    std::uint8_t alpha = 0;    ///< 6502: ALPHA -- roll, signed
-    std::uint8_t alp1 = 0;     ///< 6502: ALP1 -- its magnitude
-    std::uint8_t alp2 = 0;     ///< 6502: ALP2 -- its sign
-    std::uint8_t alp2Next = 0; ///< 6502: ALP2+1 -- the sign flipped, which MVEIT uses as well
-    std::uint8_t beta = 0;     ///< 6502: BETA -- pitch, signed
-    std::uint8_t bet1 = 0;     ///< 6502: BET1 -- its magnitude
-    std::uint8_t bet2 = 0;     ///< 6502: BET2 -- its sign
-    std::uint8_t bet2Next = 0; ///< 6502: BET2+1 -- flipped, which the stardust uses as ALP2+1 is used
-    std::uint8_t delta = 0;    ///< 6502: DELTA -- the player's speed
+    std::uint8_t rollRate = 0;    ///< 6502: ALPHA -- roll, signed
+    std::uint8_t rollMagnitude = 0;     ///< 6502: ALP1 -- its magnitude
+    std::uint8_t rollSign = 0;     ///< 6502: ALP2 -- its sign
+    std::uint8_t rollSignFlipped = 0; ///< 6502: ALP2+1 -- the sign flipped, which MVEIT uses as well
+    std::uint8_t pitchRate = 0;     ///< 6502: BETA -- pitch, signed
+    std::uint8_t pitchMagnitude = 0;     ///< 6502: BET1 -- its magnitude
+    std::uint8_t pitchSign = 0;     ///< 6502: BET2 -- its sign
+    std::uint8_t pitchSignFlipped = 0; ///< 6502: BET2+1 -- flipped, which the stardust uses as ALP2+1 is used
+    std::uint8_t speed = 0;    ///< 6502: DELTA -- the player's speed
 
     /// 6502: DELT4(1 0) -- the speed times four, as sixteen bits. The stardust subtracts it from
     /// every particle's z on every frame, which is what makes the stars stream past.
-    std::uint8_t delt4 = 0;
-    std::uint8_t delt4Next = 0;
+    std::uint8_t speedTimes4Low = 0;
+    std::uint8_t speedTimes4High = 0;
 
     /// 6502: MCNT and XSAV -- the main loop counter and the slot being moved. `MVEIT` uses their
     /// EOR to spread expensive work across iterations, so that `TIDY` runs on one ship every
@@ -213,8 +213,8 @@ namespace Elite
     /// 6502: RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
     /// masks. Two routines, two meanings, the same two bytes; they are never live together because
     /// `PLUT` runs when the view changes and `MVS5` while a ship moves.
-    std::uint8_t rat = 0;
-    std::uint8_t rat2 = 0;
+    std::uint8_t signMask = 0;
+    std::uint8_t signMask2 = 0;
 
     /*
      * 6502: CNT2 -- how wide a cone counts as "pointing at it", and the third byte of the same

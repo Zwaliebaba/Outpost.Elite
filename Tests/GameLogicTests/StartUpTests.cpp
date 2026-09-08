@@ -693,7 +693,7 @@ namespace GameLogicTests
          */
         Assert::AreEqual(cpu.memory[oracle.Label("TYPE")], Elite::Byte(universe.flight.type), (where + L": TYPE").c_str());
         Assert::AreEqual(cpu.memory[oracle.Label("JSTK")], universe.options.joystick, (where + L": JSTK").c_str());
-        Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], universe.flight.delta, (where + L": DELTA").c_str());
+        Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], universe.flight.speed, (where + L": DELTA").c_str());
         Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
         Assert::AreEqual(cpu.memory[oracle.Label("CNT2")], universe.flight.steerCone, (where + L": CNT2").c_str());
         Assert::AreEqual(cpu.memory[oracle.Label("QQ11")], universe.view, (where + L": QQ11").c_str());

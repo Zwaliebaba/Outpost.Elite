@@ -55,7 +55,7 @@ namespace GameLogicTests
       std::uint16_t yy = 0, t = 0, k = 0, k3 = 0, k4 = 0, p = 0;
       std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, clippingOff = 0;
       std::uint16_t k5 = 0, k6 = 0, circleStep = 0, flag = 0, cnt = 0, xx13 = 0, dotProducts = 0;
-      std::uint16_t inwk = 0, k2 = 0, scaledOrientation = 0, tgt = 0, cnt2 = 0, planetDetail = 0, sun = 0;
+      std::uint16_t inwk = 0, k2 = 0, scaledOrientation = 0, tgt = 0, coneWidth = 0, planetDetail = 0, sun = 0;
       std::uint16_t qq11 = 0;
       std::uint16_t screen = 0;
 
@@ -91,7 +91,7 @@ namespace GameLogicTests
         k2 = _oracle.Label("K2");
         scaledOrientation = _oracle.Label("XX16");
         tgt = _oracle.Label("TGT");
-        cnt2 = _oracle.Label("CNT2");
+        coneWidth = _oracle.Label("CNT2");
         planetDetail = _oracle.Label("PLTOG");
         sun = _oracle.Label("SUN");
         qq11 = _oracle.Label("QQ11");

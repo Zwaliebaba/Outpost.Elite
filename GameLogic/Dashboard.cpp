@@ -90,7 +90,7 @@ namespace Elite
       const std::uint8_t byte = static_cast<std::uint8_t>(pattern & PatternByte(ink));
       for (std::uint8_t within = 0; within < 3u; ++within)
       {
-        _canvas.Write(static_cast<std::uint16_t>(_draw.sc + row + within), byte);
+        _canvas.Write(static_cast<std::uint16_t>(_draw.screenPointer + row + within), byte);
       }
 
       /*
@@ -115,11 +115,11 @@ namespace Elite
        * step. The ink is `DIL`'s own: the danger flash is `PZW`'s decision (rule T1).
        */
       const int wide = (_shifts >= 1) ? static_cast<int>(_value >> (_shifts - 1)) : 2 * static_cast<int>(_value);
-      DrawBar2x(*_picture, _canvas, _draw.sc, (wide > 32) ? 32 : wide, ink);
+      DrawBar2x(*_picture, _canvas, _draw.screenPointer, (wide > 32) ? 32 : wide, ink);
     }
 
     // 6502: DL6 -- SC += 320, one character row down, ready for the next dial.
-    _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
+    _draw.screenPointer = static_cast<std::uint16_t>(_draw.screenPointer + 0x140u);
   }
 
   void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, Picture* _picture, std::uint8_t _wideValue) noexcept
@@ -152,7 +152,7 @@ namespace Elite
       // 6502: DLL12 -- four stores down the character cell.
       for (std::uint8_t within = 0; within < 4u; ++within)
       {
-        _canvas.Write(static_cast<std::uint16_t>(_draw.sc + row + within), byte);
+        _canvas.Write(static_cast<std::uint16_t>(_draw.screenPointer + row + within), byte);
       }
 
       // 6502: TYA / CLC / ADC #5 / TAY -- Y is on the block's last row, so this is eight in all.
@@ -170,10 +170,10 @@ namespace Elite
       // The lit block is the value itself: each of the four blocks absorbs four, so a value under
       // sixteen lights fat pixel `value` and anything else lights nothing. Thirty-two slots here,
       // and the same rule.
-      DrawIndicator2x(*_picture, _canvas, _draw.sc, (_wideValue < 32u) ? static_cast<int>(_wideValue) : -1);
+      DrawIndicator2x(*_picture, _canvas, _draw.screenPointer, (_wideValue < 32u) ? static_cast<int>(_wideValue) : -1);
     }
 
-    _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
+    _draw.screenPointer = static_cast<std::uint16_t>(_draw.screenPointer + 0x140u);
   }
 
   void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette, Picture* _picture) noexcept
@@ -272,14 +272,14 @@ namespace Elite
     // ---- part 1: the speed bar ------------------------------------------------------------------
 
     // 6502: LDA #LO(DLOC%+8*30) / STA SC / ... -- thirty character cells into the dashboard.
-    _draw.sc = static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 30u);
+    _draw.screenPointer = static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 30u);
 
     // 6502: JSR PZW / STX K+1 / STA K -- the danger colour in K and yellow in K+1.
     const DangerColours danger = DangerColour(_flight.mainLoopCounter, _status.damageFlash);
     const DialColours speedColours{danger.a, danger.x};
 
     // 6502: LDA #14 / STA T1, then LDA DELTA / JSR DIL-1.
-    DrawBar(_canvas, _draw, _flight.delta, 1, 14u, speedColours, _picture);
+    DrawBar(_canvas, _draw, _flight.speed, 1, 14u, speedColours, _picture);
 
     // ---- part 2: roll and pitch -----------------------------------------------------------------
 
@@ -294,7 +294,7 @@ namespace Elite
      * The roll magnitude quartered, its sign put back, and then the sign FLIPPED -- because the
      * indicator moves the other way from the roll.
      */
-    const std::uint8_t roll = static_cast<std::uint8_t>(((_flight.alp1 >> 2) | _flight.alp2) ^ 0x80u);
+    const std::uint8_t roll = static_cast<std::uint8_t>(((_flight.rollMagnitude >> 2) | _flight.rollSign) ^ 0x80u);
 
     /*
      * And the same again with ONE fewer shift, which is the bit the dial throws away.
@@ -305,7 +305,7 @@ namespace Elite
      * (Resolution.md section 5.1, and rule T2: the same arithmetic at twice the scale).
      */
     constexpr SignMag16 WIDE_CENTRE{0u, 16u};
-    const std::uint8_t wideRoll = static_cast<std::uint8_t>(((_flight.alp1 >> 1) | _flight.alp2) ^ 0x80u);
+    const std::uint8_t wideRoll = static_cast<std::uint8_t>(((_flight.rollMagnitude >> 1) | _flight.rollSign) ^ 0x80u);
 
     DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, roll}, INDICATOR_CENTRE).high, _picture,
                   AddSigned(SignMag16{0u, wideRoll}, WIDE_CENTRE).high);
@@ -323,8 +323,8 @@ namespace Elite
      * `SP2` was equivalent. Constant does not mean invisible, and which of the two it is depends on
      * the instruction rather than on the flag (§6.65).
      */
-    std::uint8_t pitch = _flight.beta;
-    if (_flight.bet1 != 0u)
+    std::uint8_t pitch = _flight.pitchRate;
+    if (_flight.pitchMagnitude != 0u)
     {
       pitch = SubtractWithCarry(pitch, 1u, false).value;
     }
@@ -405,7 +405,7 @@ namespace Elite
     // ---- part 4: the shields, the fuel, the temperatures and the altitude ------------------------
 
     // 6502: LDA #LO(DLOC%+8*6) / STA SC / ... -- back to the left-hand column.
-    _draw.sc = static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 6u);
+    _draw.screenPointer = static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 6u);
 
     // 6502: LDA #YELLOW / STA K / STA K+1 -- both colours the same, so the shields and the fuel do
     // not flash whatever `T1` says -- and `T1` is still part 3's 3.

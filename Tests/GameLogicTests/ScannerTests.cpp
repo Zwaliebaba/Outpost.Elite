@@ -60,7 +60,7 @@ namespace GameLogicTests
     /// Every zero-page byte the two routines read or write, plus the bitmap base.
     struct Labels
     {
-      std::uint16_t inwk = 0, type = 0, qq11 = 0, col = 0, x1 = 0, y1 = 0, x2 = 0, sc = 0;
+      std::uint16_t inwk = 0, type = 0, qq11 = 0, col = 0, x1 = 0, y1 = 0, x2 = 0, screenPointer = 0;
       std::uint16_t comx = 0, comy = 0, comc = 0, k3 = 0, kPercent = 0, frin = 0, many = 0;
       std::uint16_t p = 0, q = 0, t = 0, screen = 0;
 
@@ -73,7 +73,7 @@ namespace GameLogicTests
         x1 = _oracle.Label("X1");
         y1 = _oracle.Label("Y1");
         x2 = _oracle.Label("X2");
-        sc = _oracle.Label("SC");
+        screenPointer = _oracle.Label("SC");
         comx = _oracle.Label("COMX");
         comy = _oracle.Label("COMY");
         comc = _oracle.Label("COMC");

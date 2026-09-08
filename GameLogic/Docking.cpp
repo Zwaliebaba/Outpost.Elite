@@ -173,7 +173,7 @@ namespace Elite
      * in the original -- ALPHA, BETA, ALP1 and BET1, the roll and pitch -- and RES2 has already
      * zeroed them, which is presumably why.
      */
-    _universe.flight.delta = 0;
+    _universe.flight.speed = 0;
     _universe.status.laserTemperature = 0;
     _universe.status.hyperspaceCountdown = 0;
     _universe.status.forwardShield = 0xFF;

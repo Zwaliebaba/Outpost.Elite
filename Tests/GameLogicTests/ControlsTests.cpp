@@ -250,16 +250,16 @@ namespace GameLogicTests
       const std::uint16_t jstk = oracle.Label("JSTK");
       const std::uint16_t djd = oracle.Label("DJD");
       const std::uint16_t autoPilot = oracle.Label("auto");
-      const std::uint16_t delta = oracle.Label("DELTA");
+      const std::uint16_t speedByte = oracle.Label("DELTA");
       const std::uint16_t type = oracle.Label("TYPE");
       const std::uint16_t frin = oracle.Label("FRIN");
       const std::uint16_t many = oracle.Label("MANY");
       const std::uint16_t kPercent = oracle.Label("K%");
       const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t k3 = oracle.Label("K3");
-      const std::uint16_t rat = oracle.Label("RAT");
-      const std::uint16_t rat2 = oracle.Label("RAT2");
-      const std::uint16_t cnt2 = oracle.Label("CNT2");
+      const std::uint16_t signMask = oracle.Label("RAT");
+      const std::uint16_t signMask2 = oracle.Label("RAT2");
+      const std::uint16_t coneWidth = oracle.Label("CNT2");
 
       /*
        * 6502: the bubble `DOCKIT` steers by, since M6-0-h-3 -- the real autopilot runs on both
@@ -307,7 +307,7 @@ namespace GameLogicTests
         std::uint8_t docking, joystick, recentre;
         std::uint8_t roll, pitch;
         std::uint8_t keys;     ///< bits 0-3: KY3, KY4, KY5, KY6 held
-        std::uint8_t delta;    ///< 6502: DELTA going in, which `auton` hands `DOCKIT` in `INWK+27`
+        std::uint8_t speed;    ///< 6502: DELTA going in, which `auton` hands `DOCKIT` in `INWK+27`
         std::uint8_t approach; ///< an index into `APPROACHES`, for the docking computer
         std::uint8_t faces;    ///< 6502: K3+10, the last drawn ship's eleventh face, which `DOCKIT` reads
       };
@@ -502,9 +502,9 @@ namespace GameLogicTests
         universe.rng.SetState(seed);
         // 6502: RAT, RAT2, CNT2 -- `DOCKIT` writes all three on entry, so a value nothing else
         // writes is how "the autopilot ran" is read off the state on both sides.
-        cpu.memory[rat] = 0x55u;
-        cpu.memory[rat2] = 0x55u;
-        cpu.memory[cnt2] = 0x55u;
+        cpu.memory[signMask] = 0x55u;
+        cpu.memory[signMask2] = 0x55u;
+        cpu.memory[coneWidth] = 0x55u;
 
         Elite::KeyLogger keys{};
         keys[Elite::KEY_ROLL_LEFT] = ((item.keys & 1u) != 0u) ? 0xFFu : 0u;
@@ -535,7 +535,7 @@ namespace GameLogicTests
         cpu.memory[djd] = item.recentre;
         cpu.memory[jstx] = item.roll;
         cpu.memory[jsty] = item.pitch;
-        cpu.memory[delta] = item.delta;
+        cpu.memory[speedByte] = item.speed;
         cpu.memory[type] = 0u;
 
         cpu.ClearTrapHits();
@@ -559,10 +559,10 @@ namespace GameLogicTests
         universe.options.joystick = item.joystick;
 
         universe.flight = Elite::FlightState{};
-        universe.flight.delta = item.delta;
+        universe.flight.speed = item.speed;
         universe.flight.type = Elite::ShipType::None;
-        universe.flight.rat = 0x55u;
-        universe.flight.rat2 = 0x55u;
+        universe.flight.signMask = 0x55u;
+        universe.flight.signMask2 = 0x55u;
         universe.flight.steerCone = 0x55u;
 
         universe.work = work;
@@ -577,15 +577,15 @@ namespace GameLogicTests
         const std::wstring where = Widen("DOKEY(auto " + std::to_string(item.docking) + ", JSTK " + std::to_string(item.joystick) +
                                          ", DJD " + std::to_string(item.recentre) + ", JSTX " + std::to_string(item.roll) + ", JSTY " +
                                          std::to_string(item.pitch) + ", keys " + std::to_string(item.keys) + ", DELTA " +
-                                         std::to_string(item.delta) + ", " + approach.what + ", faces " + std::to_string(item.faces) + ")");
+                                         std::to_string(item.speed) + ", " + approach.what + ", faces " + std::to_string(item.faces) + ")");
 
         Assert::AreEqual(cpu.memory[jstx], control.roll, (where + L": JSTX").c_str());
         Assert::AreEqual(cpu.memory[jsty], control.pitch, (where + L": JSTY").c_str());
-        Assert::AreEqual(cpu.memory[delta], flight.delta, (where + L": DELTA").c_str());
+        Assert::AreEqual(cpu.memory[speedByte], flight.speed, (where + L": DELTA").c_str());
         Assert::AreEqual(cpu.memory[type], Elite::Byte(flight.type), (where + L": TYPE").c_str());
-        Assert::AreEqual(cpu.memory[rat], flight.rat, (where + L": RAT").c_str());
-        Assert::AreEqual(cpu.memory[rat2], flight.rat2, (where + L": RAT2").c_str());
-        Assert::AreEqual(cpu.memory[cnt2], flight.steerCone, (where + L": CNT2").c_str());
+        Assert::AreEqual(cpu.memory[signMask], flight.signMask, (where + L": RAT").c_str());
+        Assert::AreEqual(cpu.memory[signMask2], flight.signMask2, (where + L": RAT2").c_str());
+        Assert::AreEqual(cpu.memory[coneWidth], flight.steerCone, (where + L": CNT2").c_str());
 
         for (std::size_t slot = 0; slot < keys.size(); ++slot)
         {
@@ -599,8 +599,8 @@ namespace GameLogicTests
         }
 
         Assert::AreEqual<std::uint32_t>(1u, board.scans, (where + L": one keyboard scan").c_str());
-        Assert::AreEqual(item.docking != 0u, flight.rat2 != 0x55u, (where + L": the autopilot ran only when it is on").c_str());
-        autopilotRan += (flight.rat2 != 0x55u) ? 1u : 0u;
+        Assert::AreEqual(item.docking != 0u, flight.signMask2 != 0x55u, (where + L": the autopilot ran only when it is on").c_str());
+        autopilotRan += (flight.signMask2 != 0x55u) ? 1u : 0u;
         if (item.docking != 0u)
         {
           pressedFaster += (keys[Elite::KEY_SPEED_UP] != 0u) ? 1u : 0u;
@@ -616,7 +616,7 @@ namespace GameLogicTests
           recentredByStick += (control.roll == 128u && control.pitch == 128u) ? 1u : 0u;
         }
         bigRollRequests += (item.docking != 0u && control.roll == 64u) ? 1u : 0u;
-        clampedSpeed += (item.docking != 0u && flight.delta == 22u) ? 1u : 0u;
+        clampedSpeed += (item.docking != 0u && flight.speed == 22u) ? 1u : 0u;
       }
 
       Logger::WriteMessage(("DOKEY: " + std::to_string(cases.size()) + " cases; the autopilot ran " + std::to_string(autopilotRan) +

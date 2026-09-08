@@ -546,7 +546,7 @@ namespace GameLogicTests
     /// The bytes `RES2`, `RESET` and `TT110` write that the shared `Where` does not name.
     struct LaunchWhere
     {
-      std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
+      std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, rollSignFlipped, pitchSign, pitchSignFlipped;
       std::uint16_t col2, clippingOff, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
       std::uint16_t inwk, legalStatus, circleStep, res2, reset, tt110, noise;
 
@@ -558,9 +558,9 @@ namespace GameLogicTests
         mstg = _oracle.Label("MSTG");
         jstx = _oracle.Label("JSTX");
         jsty = _oracle.Label("JSTY");
-        alp2Next = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
-        bet2 = _oracle.Label("BET2");
-        bet2Next = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
+        rollSignFlipped = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
+        pitchSign = _oracle.Label("BET2");
+        pitchSignFlipped = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
         col2 = _oracle.Label("COL2");
         clippingOff = _oracle.Label("dontclip");
         yx2m1 = _oracle.Label("Yx2M1");
@@ -621,9 +621,9 @@ namespace GameLogicTests
       _cpu.memory[_to.jstx] = _leaving.universe.control.roll;
       _cpu.memory[_to.jsty] = _leaving.universe.control.pitch;
       _cpu.memory[_to.autoByte] = _leaving.universe.control.dockingComputer;
-      _cpu.memory[_to.alp2Next] = universe.flight.alp2Next;
-      _cpu.memory[_to.bet2] = universe.flight.bet2;
-      _cpu.memory[_to.bet2Next] = universe.flight.bet2Next;
+      _cpu.memory[_to.rollSignFlipped] = universe.flight.rollSignFlipped;
+      _cpu.memory[_to.pitchSign] = universe.flight.pitchSign;
+      _cpu.memory[_to.pitchSignFlipped] = universe.flight.pitchSignFlipped;
       _cpu.memory[_to.col2] = universe.text.palette.Byte();
       _cpu.memory[_to.clippingOff] = _leaving.universe.clip.clippingOff;
       _cpu.memory[_to.yx2m1] = universe.heaps.lowestVisibleRow;
@@ -666,9 +666,9 @@ namespace GameLogicTests
       same(_to.jstx, _leaving.universe.control.roll, L"JSTX");
       same(_to.jsty, _leaving.universe.control.pitch, L"JSTY");
       same(_to.autoByte, _leaving.universe.control.dockingComputer, L"auto");
-      same(_to.alp2Next, universe.flight.alp2Next, L"ALP2+1");
-      same(_to.bet2, universe.flight.bet2, L"BET2");
-      same(_to.bet2Next, universe.flight.bet2Next, L"BET2+1");
+      same(_to.rollSignFlipped, universe.flight.rollSignFlipped, L"ALP2+1");
+      same(_to.pitchSign, universe.flight.pitchSign, L"BET2");
+      same(_to.pitchSignFlipped, universe.flight.pitchSignFlipped, L"BET2+1");
       same(_to.col2, universe.text.palette.Byte(), L"COL2");
       same(_to.clippingOff, _leaving.universe.clip.clippingOff, L"dontclip");
       same(_to.yx2m1, universe.heaps.lowestVisibleRow, L"Yx2M1");
@@ -986,12 +986,12 @@ namespace GameLogicTests
       const std::uint16_t tt66 = oracle.Label("TT66");
       const std::uint16_t det1 = oracle.Label("DET1");
       const std::uint16_t lasct = oracle.Label("LASCT");
-      const std::uint16_t delta = oracle.Label("DELTA");
+      const std::uint16_t speed = oracle.Label("DELTA");
 
       Cpu6502 cpu = oracle.Fresh();
       cpu.AddTrap(oracle.Label("EXNO3"));
       cpu.AddTrap(tt66);
-      cpu.memory[delta] = 3u; // 6502: what `RES2` leaves, and what the two `ASL`s work on
+      cpu.memory[speed] = 3u; // 6502: what `RES2` leaves, and what the two `ASL`s work on
 
       cpu.a = cpu.x = cpu.y = 0;
       cpu.sp = 0xFD;
@@ -1026,7 +1026,7 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint8_t>(0x60u, cpu.memory[det1], L"DET1 is a bare RTS on this build");
 
       // 6502: ASL DELTA / ASL DELTA -- a SHIFT LEFT twice, whatever the comment says.
-      Assert::AreEqual<std::uint8_t>(12u, cpu.memory[delta], L"DELTA is multiplied by four, not divided");
+      Assert::AreEqual<std::uint8_t>(12u, cpu.memory[speed], L"DELTA is multiplied by four, not divided");
 
       (void)lasct;
     }
@@ -1137,7 +1137,7 @@ namespace GameLogicTests
 
       Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.universe.status.laserCount, (where + L": LASCT").c_str());
       Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], leaving.universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
-      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], leaving.universe.flight.delta, (where + L": DELTA").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], leaving.universe.flight.speed, (where + L": DELTA").c_str());
     }
 
     /*
@@ -1248,7 +1248,7 @@ namespace GameLogicTests
       }
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.keys[64], L"and the byte above U%'s range is untouched");
       Assert::AreEqual<std::uint8_t>(0u, leaving.universe.status.laserCount, L"LASCT counted down to zero");
-      Assert::IsTrue(leaving.universe.flight.delta <= 1u, L"STA DELTA stopped the ship before the loop ran");
+      Assert::IsTrue(leaving.universe.flight.speed <= 1u, L"STA DELTA stopped the ship before the loop ran");
     }
 
     /*

@@ -907,10 +907,10 @@
         {
           "id": "sm-mv43-sense",
           "file": "GameLogic/ShipMove.cpp",
-          "find": "    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) != 0u)",
-          "replace": "    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) == 0u)",
+          "find": "    if (((k2.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) != 0u)",
+          "replace": "    if (((k2.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) == 0u)",
           "expect": "caught",
-          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found."
+          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found. Re-anchored at M6-c-4, when `BET2` became `pitchSign`."
         },
         {
           "id": "sm-mltu2-carry",

@@ -65,7 +65,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t zes1k = oracle.Label("ZES1k");
       const std::uint16_t zes2k = oracle.Label("ZES2k");
-      const std::uint16_t sc = oracle.Label("SC");
+      const std::uint16_t screenPointer = oracle.Label("SC");
       const std::uint16_t screen = ScreenBase(oracle);
       const std::uint8_t screenPage = static_cast<std::uint8_t>(screen >> 8);
 
@@ -94,7 +94,7 @@ namespace GameLogicTests
           Elite::Canvas canvas;
           FillScreens(cpu, canvas, screen, 0x7Eu);
 
-          cpu.memory[sc] = 0u;
+          cpu.memory[screenPointer] = 0u;
           cpu.x = static_cast<std::uint8_t>(screenPage + page);
           cpu.y = first;
           Assert::IsTrue(cpu.CallSubroutine(zes2k, 5'000).completed, L"ZES2k returned");
@@ -127,7 +127,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t mvblockK = oracle.Label("mvblockK");
       const std::uint16_t mvbllop = oracle.Label("mvbllop");
-      const std::uint16_t sc = oracle.Label("SC");
+      const std::uint16_t screenPointer = oracle.Label("SC");
       const std::uint16_t v = oracle.Label("V");
       const std::uint16_t screen = ScreenBase(oracle);
 
@@ -142,8 +142,8 @@ namespace GameLogicTests
       // 6502: LDX #8 / V = DSTORE% / SC = DLOC% / JSR mvblockK.
       cpu.memory[v] = static_cast<std::uint8_t>(store & 0xFFu);
       cpu.memory[static_cast<std::uint16_t>(v + 1)] = static_cast<std::uint8_t>(store >> 8);
-      cpu.memory[sc] = static_cast<std::uint8_t>(destination & 0xFFu);
-      cpu.memory[static_cast<std::uint16_t>(sc + 1)] = static_cast<std::uint8_t>(destination >> 8);
+      cpu.memory[screenPointer] = static_cast<std::uint8_t>(destination & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(screenPointer + 1)] = static_cast<std::uint8_t>(destination >> 8);
       cpu.x = 8u;
       Assert::IsTrue(cpu.CallSubroutine(mvblockK, 60'000).completed, L"mvblockK returned");
 
@@ -218,7 +218,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t boxs2 = oracle.Label("BOXS2");
-      const std::uint16_t sc = oracle.Label("SC");
+      const std::uint16_t screenPointer = oracle.Label("SC");
       const std::uint16_t screen = ScreenBase(oracle);
 
       struct Case
@@ -241,7 +241,7 @@ namespace GameLogicTests
         FillScreens(cpu, canvas, screen, 0x66u);
 
         const std::uint16_t address = static_cast<std::uint16_t>(screen + item.cell);
-        cpu.memory[sc] = static_cast<std::uint8_t>(address & 0xFFu);
+        cpu.memory[screenPointer] = static_cast<std::uint8_t>(address & 0xFFu);
         cpu.a = item.pattern;
         cpu.y = static_cast<std::uint8_t>(address >> 8);
         cpu.x = item.rows;
@@ -438,7 +438,7 @@ namespace GameLogicTests
 
       struct At
       {
-        std::uint16_t abraxas, caravanserai, dflag, delta, alp1, alp2, beta, bet1;
+        std::uint16_t abraxas, caravanserai, dflag, speed, rollMagnitude, rollSign, pitchRate, pitchMagnitude;
         std::uint16_t energy, fsh, ash, qq14, cabtmp, gntmp, altit, mcnt, flh, qq11;
         std::uint16_t comx, comy, comc, many, kPercent, frin, t2;
       } at{};
@@ -446,11 +446,11 @@ namespace GameLogicTests
       at.abraxas = oracle.Label("abraxas");
       at.caravanserai = oracle.Label("caravanserai");
       at.dflag = oracle.Label("DFLAG");
-      at.delta = oracle.Label("DELTA");
-      at.alp1 = oracle.Label("ALP1");
-      at.alp2 = oracle.Label("ALP2");
-      at.beta = oracle.Label("BETA");
-      at.bet1 = oracle.Label("BET1");
+      at.speed = oracle.Label("DELTA");
+      at.rollMagnitude = oracle.Label("ALP1");
+      at.rollSign = oracle.Label("ALP2");
+      at.pitchRate = oracle.Label("BETA");
+      at.pitchMagnitude = oracle.Label("BET1");
       at.energy = oracle.Label("ENERGY");
       at.fsh = oracle.Label("FSH");
       at.ash = oracle.Label("ASH");
@@ -482,7 +482,7 @@ namespace GameLogicTests
           FillScreens(cpu, canvas, screen, 0x00u);
 
           const std::uint8_t READINGS[] = {14u, 5u, 128u, 200u, 3u, 180u, 90u, 60u, 40u, 100u, 70u, 120u, 0xFFu};
-          const std::uint16_t WHERE[] = {at.delta, at.alp1, at.alp2,   at.beta,  at.bet1,  at.energy, at.fsh,
+          const std::uint16_t WHERE[] = {at.speed, at.rollMagnitude, at.rollSign,   at.pitchRate,  at.pitchMagnitude,  at.energy, at.fsh,
                                          at.ash,   at.qq14, at.cabtmp, at.gntmp, at.altit, at.flh};
           for (std::size_t index = 0; index < 13u; ++index)
           {
@@ -535,11 +535,11 @@ namespace GameLogicTests
           screenState.dashboardShown = already;
 
           Elite::FlightState flight;
-          flight.delta = READINGS[0];
-          flight.alp1 = READINGS[1];
-          flight.alp2 = READINGS[2];
-          flight.beta = READINGS[3];
-          flight.bet1 = READINGS[4];
+          flight.speed = READINGS[0];
+          flight.rollMagnitude = READINGS[1];
+          flight.rollSign = READINGS[2];
+          flight.pitchRate = READINGS[3];
+          flight.pitchMagnitude = READINGS[4];
           flight.mainLoopCounter = counter;
 
           Elite::FlightStatus status;

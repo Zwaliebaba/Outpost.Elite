@@ -42,7 +42,7 @@ END = "<!--census:end-->"
 # The workspaces and their fields, as the headers declare them.
 WORKSPACES: dict[str, list[str]] = {
     "MathWorkspace": ["q", "k2Low"],
-    "DrawWorkspace": ["sc"],
+    "DrawWorkspace": ["screenPointer"],
     "GeometryWorkspace": ["scaledOrientation", "dotProducts", "faceVisible", "projectedVertices"],
     "ClipState": ["clippingOff"],
     "Projection": ["x", "x1", "y", "y1"],
@@ -52,7 +52,7 @@ WORKSPACES: dict[str, list[str]] = {
 # What the 6502 called each field, for the table.
 LABELS: dict[str, str] = {
     "MathWorkspace.q": "Q", "MathWorkspace.k2Low": "K2",
-    "DrawWorkspace.sc": "SC(1 0)",
+    "DrawWorkspace.screenPointer": "SC(1 0)",
     "GeometryWorkspace.scaledOrientation": "XX16", "GeometryWorkspace.dotProducts": "XX12", "GeometryWorkspace.faceVisible": "XX2",
     "GeometryWorkspace.projectedVertices": "XX3",
     "ClipState.clippingOff": "dontclip",
@@ -74,7 +74,7 @@ VERDICTS: dict[str, str] = {
     "MathWorkspace.q": "**The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`.",
     "MathWorkspace.k2Low": "**One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3.",
     # ---- DrawWorkspace: the dashboard's screen cursor, all that is left of it after M2-c-2 --------
-    "DrawWorkspace.sc": "**State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch.",
+    "DrawWorkspace.screenPointer": "**State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch.",
     # ---- GeometryWorkspace: LL9's four stage results ---------------------------------------------
     "GeometryWorkspace.scaledOrientation": "**Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are.",
     "GeometryWorkspace.dotProducts": "**Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1.",

@@ -603,7 +603,7 @@ namespace Elite
     // `CNT2` the angle this walk is at; both are locals since M2-c-3, and `CNT2` comes in as the
     // start `PLS4` or `PL26` chose while `TGT` comes in as where to stop.
     std::uint8_t cnt = 0; // 6502: CNT
-    std::uint8_t cnt2 = _angle;
+    std::uint8_t coneWidth = _angle;
     _state.flag = 0xFF;
 
     for (;;)
@@ -616,17 +616,17 @@ namespace Elite
        */
       // 6502: LDA SNE,X / STA Q / LDA K2+2 / JSR FMLTU / STA R / LDA K2+3 / JSR FMLTU / STA K --
       // the first axis against the sine, both halves; `R` and `K` were the scratch they waited in.
-      const std::uint8_t sine = SINE_TABLE[cnt2 & 0x1Fu];
+      const std::uint8_t sine = SINE_TABLE[coneWidth & 0x1Fu];
       const std::uint8_t firstAcross = MultiplyByLog(_axes.secondX, sine, false).value;
       const std::uint8_t secondAcross = MultiplyByLog(_axes.secondY, sine, false).value;
 
       // 6502: LDX CNT2 / CPX #33 / LDA #0 / ROR A / STA XX16+5 -- the sign for this quarter, as a
       // bit rotated straight out of the comparison.
-      _geometry.scaledOrientation[5] = (cnt2 >= 33u) ? 0x80u : 0x00u;
+      _geometry.scaledOrientation[5] = (coneWidth >= 33u) ? 0x80u : 0x00u;
 
       // 6502: the same table a quarter-turn on -- the cosine -- against the second axis. `K+2` and
       // `P` were the scratch these waited in.
-      const AddResult quarter = AddWithCarry(cnt2, 16u, false);
+      const AddResult quarter = AddWithCarry(coneWidth, 16u, false);
       const std::uint8_t cosine = SINE_TABLE[quarter.value & 0x1Fu];
       const std::uint8_t secondDown = MultiplyByLog(_axes.firstY, cosine, false).value;
       const LogProduct second = MultiplyByLog(_axes.firstX, cosine, false);
@@ -639,7 +639,7 @@ namespace Elite
        * is when the value reached 33. Getting that round the wrong way puts every meridian's second
        * axis on the wrong side of the planet.
        */
-      const AddResult stepped = AddWithCarry(cnt2, 15u, second.carry);
+      const AddResult stepped = AddWithCarry(coneWidth, 15u, second.carry);
       _geometry.scaledOrientation[4] = (static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u) ? 0x80u : 0x00u;
 
       // 6502: the two `ADD`s, each combining a product with the axis sign it belongs to: (A P) is
@@ -694,7 +694,7 @@ namespace Elite
         return;
       }
 
-      cnt2 = static_cast<std::uint8_t>((cnt2 + _state.circleStep) & 0x3Fu);
+      coneWidth = static_cast<std::uint8_t>((coneWidth + _state.circleStep) & 0x3Fu);
     }
   }
 

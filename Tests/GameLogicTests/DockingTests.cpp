@@ -309,7 +309,7 @@ namespace GameLogicTests
        */
       universe.heaps.circleStep = 4u;
 
-      universe.flight.delta = 0x5C;
+      universe.flight.speed = 0x5C;
       universe.status.laserTemperature = 0x5C;
       universe.status.hyperspaceCountdown = 0x5C;
       universe.status.forwardShield = 0x5C;
@@ -341,7 +341,7 @@ namespace GameLogicTests
        * still occupied is a `RES2` that did not run.
        */
       Assert::AreEqual<std::uint8_t>(0u, universe.bubble.slots[0], L"RES2 emptied the bubble");
-      Assert::AreEqual<std::uint8_t>(0u, universe.flight.delta, L"and stopped the ship");
+      Assert::AreEqual<std::uint8_t>(0u, universe.flight.speed, L"and stopped the ship");
 
       Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.circleStep, L"LAUN stored the step");
       /*
@@ -366,7 +366,7 @@ namespace GameLogicTests
       Assert::AreEqual(frames, effects.frames, L"how long the pause is");
       Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, frames, L"forty-four vertical syncs");
 
-      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], universe.flight.delta, L"DELTA");
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], universe.flight.speed, L"DELTA");
       Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], universe.status.laserTemperature, L"GNTMP");
       Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1)], universe.status.hyperspaceCountdown, L"QQ22+1");
       Assert::AreEqual(cpu.memory[oracle.Label("FSH")], universe.status.forwardShield, L"FSH");

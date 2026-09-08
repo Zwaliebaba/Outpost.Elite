@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,149 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,675 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,143 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -522,7 +522,7 @@ never global.
 |---|---|---|---|---|---|
 | `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
 | `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | FoldIntoStateHash, MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
-| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
+| `DrawWorkspace.screenPointer` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
 | `GeometryWorkspace.scaledOrientation` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, FoldIntoStateHash, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
 | `GeometryWorkspace.dotProducts` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility, FoldIntoStateHash | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
 | `GeometryWorkspace.faceVisible` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, FoldIntoStateHash, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
@@ -1885,6 +1885,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-4: the rates, and a rename that quietly wrote an address into a speed.**
+
+The biggest family so far: 532 sites. `ALPHA` and `BETA` are `rollRate` and `pitchRate`, with
+`ALP1`/`ALP2`/`ALP2+1` as `rollMagnitude`, `rollSign` and `rollSignFlipped` and `BET1`/`BET2`/`BET2+1`
+the same for the pitch; `DELTA` is `speed` and `DELT4(1 0)` is `speedTimes4Low`/`speedTimes4High`;
+`RAT` and `RAT2` are `signMask` and `signMask2`, which is what `PLUT` writes them as and what
+`MVS5` leaves behind; `CNT2` is `coneWidth` — how wide a cone counts as pointing at something — and
+`SC(1 0)` is `screenPointer`.
+
+**`CNT` IS NOT IN THIS SLICE AND THAT IS DELIBERATE.** It is three different things in three files —
+the angle round a circle in `PlanetDraw`, a count of drops in `FlightLoop`, an XOR seed in
+`Explosion` — so it needs a name per site, not a name. It goes with the zero-page scratch, where
+every name needs the same treatment.
+
+**AND THE SUITE CAUGHT A RENAME WRITING AN ADDRESS INTO A BYTE.** `SpawnTests` held
+`const std::uint16_t delta = oracle.Label("DELTA")` beside a loop variable already called `speed`,
+so `cpu.memory[delta] = speed` became `cpu.memory[speed] = speed` — the label's own address seeded
+into the game's speed byte — and `TheShipAheadMatchesFRS1` failed on ship byte 27 immediately.
+`ControlsTests` had the same collision and did NOT fail, because there the value came from
+`item.speed` and only the reader was confusing. Both label holders are `speedByte` now, which is the
+rule when the port's name for a byte is already taken in the scope that addresses it: the bridge
+local keeps the port's word and adds what it holds.
+
+**The mutant was re-anchored, not dropped** (rule 3): `sm-mv43-sense` names `flight.bet2` in its
+`find`, and it names `flight.pitchSign` now, with the note saying when it moved.
+`mutate.py --check` is 95 of 95.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,675 → 1,143.
 
 **2026-09-08 — M6-c-3: the `XX` workspace, named for what each block holds.**
 
