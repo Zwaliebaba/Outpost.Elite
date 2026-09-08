@@ -784,8 +784,8 @@ namespace Elite
      * 6502: CMP #CON / BCC BURN / LDA LAS / CMP #(Armlas AND 127) / BNE MA14+2 / LSR LAS / LSR LAS.
      *
      * A Constrictor or anything above it is immune to everything but a military laser, and takes a
-     * QUARTER of even that. `Armlas AND 127` is 23, which is the power `MA68` stored after masking
-     * the top bit off -- so the comparison is against the masked value and not against `Armlas`.
+     * QUARTER of even that. The comparison is against the MASKED power -- 23, which is what `MA68`
+     * stored once the top bit came off -- and not against the laser's own byte.
      */
     if (_type >= ShipType::Constrictor)
     {
@@ -796,10 +796,10 @@ namespace Elite
 
       power = static_cast<std::uint8_t>(power >> 1u);
       power = static_cast<std::uint8_t>(power >> 1u);
-      _universe.status.laserPower = power; // 6502: LSR LAS twice, in place
+      _universe.status.laserPower = power; // 6502: quartered in place
     }
 
-    // 6502: .BURN LDA INWK+35 / SEC / SBC LAS / BCS MA14 -- it survived with what is left.
+    // 6502: BURN -- the power comes off its energy, and no borrow means it survived.
     const SubResult left = SubtractWithCarry(_universe.work.energy, power, true);
     if (left.carry)
     {
@@ -809,27 +809,26 @@ namespace Elite
     _universe.work.state = With(_universe.work.state, ShipStateBit::Killed);
 
     /*
-     * 6502: LDA TYPE / CMP #AST / BNE nosp / LDA LAS / CMP #Mlas / BNE nosp / JSR DORND / LDX #SPL /
-     * AND #3 / JSR SPIN2.
+     * 6502: `nosp` and the splinter roll above it -- what a killed ship leaves behind.
      *
      * ONLY a mining laser splits an asteroid, and only an asteroid splits. Everything else drops
      * whatever `SPIN` decides from its blueprint, which is not random at all (§6.74).
      *
      * THE THREE ROLLS BELOW RUN ON A CARRY THE TWO COMPARES SET, and the port passed `false` to
-     * all three until M2-d (§8). The flag arriving here is CLEAR -- `ASL INWK+31 / SEC / ROR
-     * INWK+31` above shifts the zero the `ASL` put in bit 0 straight back out -- and then each
-     * `CMP` overwrites it, so what `SPIN` and the splinter roll rotate into `DORND` is "was the
-     * type at least an asteroid" or "was the laser at least a mining one", and the second `SPIN`
-     * runs on what the first one left. It changes the generator, so it changes what is dropped.
+     * all three until M2-d (§8). The flag arriving here is CLEAR -- marking the ship killed shifts
+     * a zero into bit 0 and straight back out -- and then each comparison overwrites it, so what
+     * `SPIN` and the splinter roll rotate into the generator is "was the type at least an
+     * asteroid" or "was the laser at least a mining one", and the second `SPIN` runs on what the
+     * first one left. It changes the generator, so it changes what is dropped.
      */
     bool carry;
     if (_type != ShipType::Asteroid)
     {
-      carry = Byte(_type) >= Byte(ShipType::Asteroid); // 6502: CMP #AST, then `BNE nosp`
+      carry = Byte(_type) >= Byte(ShipType::Asteroid); // 6502: the type compare, then `nosp`
     }
     else if (power != LASER_MINING.Power())
     {
-      carry = power >= LASER_MINING.Power(); // 6502: CMP #Mlas, then `BNE nosp`
+      carry = power >= LASER_MINING.Power(); // 6502: the laser compare, then `nosp`
     }
     else
     {
@@ -838,12 +837,12 @@ namespace Elite
       carry = PerformDrop(_universe, PlanItems(ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u), roll.carry));
     }
 
-    // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time,
-    // and the second on the carry the first left.
+    // 6502: nosp -- plate then canister, in that order, every time, and the second on the carry
+    // the first left.
     carry = PerformDrop(_universe, PlanDebris(_universe.rng, _blueprint, ShipType::AlloyPlate, carry));
     static_cast<void>(PerformDrop(_universe, PlanDebris(_universe.rng, _blueprint, ShipType::Canister, carry)));
 
-    // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
+    // 6502: EXNO2 -- and what `MA14` stores is what the sound routine left behind (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
     return {true, RecordKill(_universe, _ports, _type)};
   }
@@ -851,7 +850,7 @@ namespace Elite
   /*
    * ---- part 7: is it touching us? -------------------------------------------------------------
    *
-   * 6502: LDA INWK+31 / AND #%10100000 / JSR MAS4 / BNE MA65.
+   * 6502: the state bits masked and handed to `MAS4`, with one branch on the result.
    *
    * ONE TEST DOES FOUR JOBS. `MAS4` ORs the three high bytes into whatever it is handed, so seeding
    * it with the "exploding or dead" bits means a ship that is far away on any axis, or already
@@ -867,7 +866,7 @@ namespace Elite
   {
     Clear,     ///< 6502: MA65 -- far away on some axis, or exploding, or already killed
     Docking,   ///< 6502: ISDK -- the station, close enough to try
-    Scoopable, ///< 6502: the `BST AND INWK+5` path -- under us, with fuel scoops fitted
+    Scoopable, ///< 6502: the scoops-and-below path -- under us, with fuel scoops fitted
     Collision, ///< 6502: MA58 -- close, intact, and not one of the above
   };
 
@@ -880,7 +879,7 @@ namespace Elite
       return Contact::Clear;
     }
 
-    // 6502: LDA INWK / ORA INWK+3 / ORA INWK+6 / BMI MA65 -- and A survives to the `AND` below.
+    // 6502: the three low bytes ORed, tested for sign -- and the result survives to the mask below.
     const std::uint8_t low = static_cast<std::uint8_t>(_work.x.lo | _work.y.lo | _work.z.lo);
     if ((low & 0x80u) != 0u || _isBody)
     {
@@ -889,7 +888,7 @@ namespace Elite
 
     if (_type == ShipType::Station)
     {
-      return Contact::Docking; // 6502: CPX #SST / BEQ ISDK
+      return Contact::Docking; // 6502: ISDK
     }
 
     if ((low & 0xC0u) != 0u || _type == ShipType::Missile)
@@ -898,11 +897,11 @@ namespace Elite
     }
 
     /*
-     * 6502: LDA BST / AND INWK+5 / BPL MA58.
+     * 6502: the scoops byte masked against the ship's y sign.
      *
-     * `BST` is &FF with fuel scoops fitted and byte 5 is the ship's y sign, so the `AND` is "we have
-     * scoops AND it is below us" -- scooping only works on things that come up from underneath.
-     * Anything else at this range is a collision.
+     * `BST` is &FF with fuel scoops fitted and byte 5 is the ship's y sign, so the mask asks "we
+     * have scoops AND it is below us" -- scooping only works on things that come up from
+     * underneath. Anything else at this range is a collision.
      */
     const std::uint8_t under = static_cast<std::uint8_t>(_commander.fuelScoops & _work.y.sgn);
     return ((under & 0x80u) != 0u) ? Contact::Scoopable : Contact::Collision;
@@ -911,18 +910,18 @@ namespace Elite
   /*
    * ---- part 8: scooping it up -------------------------------------------------------------------
    *
-   * 6502: CPX #OIL / BEQ oily / LDY #0 / LDA (XX0),Y / LSR A x4 / BEQ MA58 / ADC #1.
+   * 6502: the blueprint's first byte shifted down four places, then one added.
    *
-   * AND THE `ADC` TAKES THE FOURTH `LSR`'s CARRY, which is bit 3 of the blueprint's first byte.
-   * `BEQ MA58` sits between them and tests A without touching the flags, so what lands in the hold
-   * is the top nibble plus one plus a bit of the bottom nibble (§6.89). A cargo canister skips all
-   * of that and rolls for a random item instead.
+   * AND THE ADDITION TAKES THE FOURTH SHIFT'S CARRY, which is bit 3 of that byte. The zero test
+   * between them reads the value without touching the flags, so what lands in the hold is the top
+   * nibble plus one plus a bit of the bottom nibble (§6.89). A cargo canister skips all of that and
+   * rolls for a random item instead.
    */
   enum class ScoopResult : std::uint8_t
   {
     Stowed,   ///< it is in the hold and `NEWB` bit 7 is set, so part 12 takes the ship away
-    HoldFull, ///< 6502: BCS MA59 -- `tnpr1` said no, which is a bounce rather than damage
-    Crashed,  ///< 6502: BEQ MA58 -- nothing worth scooping, so it is a collision after all
+    HoldFull, ///< 6502: MA59 -- `tnpr1` said no, which is a bounce rather than damage
+    Crashed,  ///< 6502: MA58 -- nothing worth scooping, so it is a collision after all
   };
 
   [[nodiscard]] ScoopResult ScoopCargo(Universe& _universe, Ports& _ports, ShipType _type) noexcept
@@ -932,10 +931,10 @@ namespace Elite
 
     if (_type == ShipType::Canister)
     {
-      // 6502: .oily JSR DORND / AND #7 -- and the carry it rolls in is SET, because the only way
-      // here is `CPX #OIL / BEQ oily`, and a compare that finds its operand equal sets it. The
-      // port passed a clear one until 2026-09-06, hidden behind a comparison that skipped the
-      // generator on every frame that also seeded a cloud (§6.157).
+      // 6502: `oily` rolls for the item -- and the carry it rolls in is SET, because the only way
+      // here is off a comparison that found its operand equal, which sets the flag. The port passed
+      // a clear one until 2026-09-06, hidden behind a comparison that skipped the generator on
+      // every frame that also seeded a cloud (§6.157).
       item = static_cast<std::uint8_t>(_universe.rng.Next(true).value & 7u);
     }
     else
@@ -944,30 +943,30 @@ namespace Elite
       const std::uint8_t worth = static_cast<std::uint8_t>(nibble >> 4u);
       if (worth == 0u)
       {
-        return ScoopResult::Crashed; // 6502: BEQ MA58 -- nothing worth scooping
+        return ScoopResult::Crashed; // 6502: MA58 -- nothing worth scooping
       }
 
       item = static_cast<std::uint8_t>(worth + 1u + ((nibble & 0x08u) != 0u ? 1u : 0u));
     }
 
-    // 6502: .slvy2 JSR tnpr1 / LDY #78 / BCS MA59 -- `tnpr1` stores the item and asks for ONE.
+    // 6502: slvy2 -- `tnpr1` stores the item and asks whether ONE more will fit.
     if (!CargoFits(commander, item, 1u))
     {
       return ScoopResult::HoldFull;
     }
 
-    // 6502: LDY QQ29 / ADC QQ20,Y / STA QQ20,Y -- A is the 1 `tnpr` pushed and popped, and the
-    // carry is clear because that is how the `BCS` was not taken.
+    // 6502: the one unit `tnpr` pushed and popped, added into the hold -- and the carry is clear,
+    // because a clear carry is how the branch above was not taken.
     std::uint8_t& held = commander.cargoHold[item];
     const AddResult stored = AddWithCarry(1u, held, false);
     held = stored.value;
 
-    // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
+    // 6502: the item's name token, on the carry the store above left behind.
     const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
     ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view, &_universe.picture);
 
-    // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
-    // canister is removed by part 12 rather than by anything here.
+    // 6502: bit 7 of `NEWB` is "take it out of the bubble", so a scooped canister is removed by
+    // part 12 rather than by anything here.
     _universe.work.traits = With(_universe.work.traits, TraitBit::Remove);
     return ScoopResult::Stowed;
   }
@@ -984,7 +983,7 @@ namespace Elite
   enum class DockingTest : std::uint8_t
   {
     Arrived, ///< 6502: GOIN -- all four passed
-    TooFast, ///< 6502: .MA62 CMP #5 / JMP DEATH
+    TooFast, ///< 6502: MA62 -- too fast to survive the miss
     Bumped,  ///< 6502: MA67 -- a miss slow enough to survive, which part 10 charges for
   };
 
@@ -994,7 +993,7 @@ namespace Elite
 
     if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
     {
-      (void)LoadPlanetAxes(_universe.bubble, _universe.axes);          // 6502: JSR SPS1
+      (void)LoadPlanetAxes(_universe.bubble, _universe.axes);          // 6502: SPS1
       const UnitVector towards = NormaliseAxes(_universe.axes).vector; // the fall-through
 
       if (towards.z >= DOCK_MINIMUM_ALIGNMENT && static_cast<std::uint8_t>(_universe.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
@@ -1003,7 +1002,7 @@ namespace Elite
       }
     }
 
-    // 6502: .MA62 LDA DELTA / CMP #5 / BCC MA67 -- fast enough and you are dead.
+    // 6502: MA62 -- fast enough and you are dead.
     return (_universe.flight.speed >= DOCK_SURVIVABLE_SPEED) ? DockingTest::TooFast : DockingTest::Bumped;
   }
 
@@ -1013,7 +1012,8 @@ namespace Elite
    * Three entries into one call, and this enumerates them. `MA59` is a full hold, which is not
    * damage at all -- the thing bounces off and the frame carries on. `MA67` is a slow bump into the
    * station, worth five. `MA58` is everything else, and its damage is HALF THE OTHER SHIP'S OWN
-   * ENERGY: `LDA INWK+35 / SEC / ROR A`, which is also where `OOPS`'s carry comes from (§6.87).
+   * ENERGY -- a rotate right through a set carry, which is also where `OOPS`'s carry comes from
+   * (§6.87).
    */
   enum class Impact : std::uint8_t
   {
@@ -1023,7 +1023,7 @@ namespace Elite
     Crashed, ///< 6502: MA58 -- everything else
   };
 
-  /// Answers whether the player survived it. False is `JMP DEATH` out of `OOPS`.
+  /// Answers whether the player survived it. False is the jump to `DEATH` out of `OOPS`.
   [[nodiscard]] bool SurviveImpact(Universe& _universe, Ports& _ports, Ship& _block, Impact _impact) noexcept
   {
     if (_impact == Impact::None)
@@ -1033,11 +1033,11 @@ namespace Elite
 
     if (_impact == Impact::Bounced)
     {
-      // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the only way
-      // here: a full hold is exactly the carry the capacity test leaves.
+      // 6502: MA59 -- and the carry is SET, because part 8's branch is the only way here: a full
+      // hold is exactly the carry the capacity test leaves.
       (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, true);
-      _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA60
-      // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
+      _universe.work.state = MarkKilled(_universe.work.state); // 6502: MA60
+      // 6502: MA61 -- and marking it killed has just set bit 7, so the branch is always taken.
       return true;
     }
 
@@ -1046,29 +1046,30 @@ namespace Elite
 
     if (_impact == Impact::Bumped)
     {
-      _universe.flight.speed = 1u;    // 6502: .MA67 LDA #1 / STA DELTA
-      damage = DOCK_SURVIVABLE_SPEED; // 6502: LDA #5 -- and the carry is the `BCC`'s, so clear
+      _universe.flight.speed = 1u;    // 6502: MA67 -- the bump slows you to one
+      damage = DOCK_SURVIVABLE_SPEED; // 6502: and the carry is the speed test's, so clear
     }
     else
     {
-      _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA58
+      _universe.work.state = MarkKilled(_universe.work.state); // 6502: MA58
       const ShiftResult halved = RotateRight(_universe.work.energy, true);
       damage = halved.value;
       carry = halved.carry;
     }
 
-    // 6502: .MA63 JSR OOPS / JSR EXNO3 -- and `OOPS` makes the same noise itself on the path that
-    // survives, so a hit that costs the banks is heard twice.
+    // 6502: MA63 -- and `OOPS` makes the same noise itself on the path that survives, so a hit
+    // that costs the banks is heard twice.
     if (!TakeDamage(_universe, _ports, _block, damage, carry))
     {
       return false;
     }
 
     /*
-     * 6502: .MA63 JSR OOPS / JSR EXNO3 -- and the carry into `EXNO3` is the one `OOPS` left.
+     * 6502: MA63 -- the carry into the explosion sound is the one `OOPS` left.
      *
-     * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the `BCS`
-     * was taken, so it is SET. Nothing between the two calls touches the flag.
+     * `OOPS` ends by adding into the energy banks and branching on the result, and reaching here
+     * at all means the carry branch was taken, so it is SET. Nothing between the two calls touches
+     * the flag.
      */
     (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, true);
     return true;
@@ -1077,18 +1078,18 @@ namespace Elite
   /*
    * ---- part 11: our laser, and the scanner --------------------------------------------------------
    *
-   * 6502: .MA26 LDA NEWB / BPL P%+5 / JSR SCAN.
+   * 6502: MA26 -- the blip is drawn when `NEWB`'s top bit is set.
    *
    * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing two
    * jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
    */
   struct Aim
   {
-    /// 6502: LDA QQ11 / BNE MA15 -- a chart on screen skips the aiming AND the `JSR LL9` below it.
+    /// 6502: a chart on screen skips the aiming AND the ship drawing below it.
     bool draws;
 
     /*
-     * The carry `JSR LL9` is reached with, which `LL9` reads on exactly one path: a ship that
+     * The carry `LL9` is reached with, which it reads on exactly one path: a ship that
      * arrives killed, not yet exploding and not on the screen seeds its cloud's first `DORND` on it
      * (§6.157). Every arrival at `MA8` is traced in the body, and each one is a flag some routine
      * left rather than one this part sets.
@@ -1103,46 +1104,45 @@ namespace Elite
       DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view, &_universe.picture);
     }
 
-    if (_universe.view != 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
+    if (_universe.view != 0u) // 6502: MA15 -- a chart means no drawing at all
     {
       return {false, false};
     }
 
-    FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView); // 6502: JSR PLUT
+    FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView); // 6502: PLUT
 
-    if (!IsHit(_universe.work, *_universe.flight.blueprint, _type)) // 6502: JSR HITCH / BCC MA8
+    if (!IsHit(_universe.work, *_universe.flight.blueprint, _type)) // 6502: HITCH
     {
-      return {true, false}; // 6502: BCC MA8 -- not in the sights, and `HITCH` cleared it saying so
+      return {true, false}; // 6502: MA8 -- not in the sights, and `HITCH` cleared the flag saying so
     }
 
-    bool carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it
+    bool carry = true; // 6502: the flag `HITCH` sets, which nothing on the way to `MA47` touches
 
-    // 6502: LDA MSAR / BEQ MA47 / JSR BEEP / LDX XSAV / LDY #RED2 / JSR ABORT2 -- an armed missile
-    // locks onto whatever the sights are on, and the indicator turns red. `BEEP` is `NOISE`, whose
-    // exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are stores and register moves and
-    // leave it alone.
+    // 6502: an armed missile locks onto whatever the sights are on, and the indicator turns red.
+    // `BEEP` is `NOISE`, whose exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are
+    // stores and register moves and leave it alone.
     if (_universe.status.missileArmed != 0u)
     {
-      // The flag going IN is the one two lines above -- `HITCH`'s `SEC`, which `LDA MSAR` and `BEQ`
-      // do not touch. `NOISE` hands it straight back when the sound is switched off, so passing
-      // `false` here (which the port did until M2-d) changed the carry `LL9` seeds an explosion
-      // cloud on, on a silent build (§8).
+      // The flag going IN is the one two lines above -- the one `HITCH` set, which reading and
+      // testing the armed byte do not touch. `NOISE` hands it straight back when the sound is
+      // switched off, so passing `false` here (which the port did until M2-d) changed the carry
+      // `LL9` seeds an explosion cloud on, on a silent build (§8).
       carry = PlaySoundEffect(_universe.sound, SoundEffect::Beep, carry).carry;
       SetMissileTarget(_universe, _universe.commander.missiles, _universe.flight.slot, MISSILE_LOCKED);
     }
 
-    // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
+    // 6502: MA47 -- no laser firing this frame, so nothing is damaged.
     if (_universe.status.laserPower != 0u)
     {
       const LaserHit hit = ApplyLaserHit(_universe, _ports, *_universe.flight.blueprint, _type);
       if (hit.stores)
       {
-        _universe.work.energy = hit.energy; // 6502: .MA14 STA INWK+35
+        _universe.work.energy = hit.energy; // 6502: MA14
       }
 
-      // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF is
-      // this ship's block here, the one the loop is on, so the slot is XSAV's. Every laser path ends
-      // in this call, so its exit carry is the one `LL9` gets.
+      // 6502: `MA14+2` -- the anger call, which both skip-the-store paths land on too. `INF` is
+      // this ship's block here, the one the loop is on, so the slot is `XSAV`'s. Every laser path
+      // ends in this call, so its exit carry is the one `LL9` gets.
       carry = Anger(_universe.bubble, _universe.flight, _universe.flight.slot, _type);
     }
 
@@ -1152,14 +1152,14 @@ namespace Elite
   /*
    * ---- part 12: what is written back, and what is removed ----------------------------------------
    *
-   * 6502: .MA15 LDY #35 / LDA INWK+35 / STA (INF),Y -- the energy goes back on every path, and byte
-   * 31 only on the path that keeps the ship. That asymmetry is the routine: a ship being removed has
-   * its block shuffled away by `KILLSHP`, so writing its state would be wasted.
+   * 6502: MA15 -- the energy goes back on every path, and byte 31 only on the path that keeps the
+   * ship. That asymmetry is the routine: a ship being removed has its block shuffled away by
+   * `KILLSHP`, so writing its state would be wasted.
    */
   enum class KillOutcome : std::uint8_t
   {
-    Kept,    ///< 6502: .MA27 -- the state byte goes back and the index advances
-    Removed, ///< 6502: .KS1 -- `KILLSHP`, and the index does NOT advance
+    Kept,    ///< 6502: MA27 -- the state byte goes back and the index advances
+    Removed, ///< 6502: KS1 -- `KILLSHP`, and the index does NOT advance
   };
 
   [[nodiscard]] KillOutcome RetireShip(Universe& _universe, Ports& _ports, Ship& _block, ShipType _type, bool _isBody) noexcept
