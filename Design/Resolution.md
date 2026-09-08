@@ -1,11 +1,21 @@
 # Resolution — the game at 640×400
 
-**Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
-the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
-surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->470 green against the oracle and all <!--count:checks-->18 repository checks
-passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
-where that plan's rules end and obeys them.
+**Status:** **BUILT · 2026-09-08**, in seven slices (RS-0 to RS-6, §13), from a design proposed
+2026-09-07 with eight owner rulings taken the day it was opened — four on the shape (§1) and four on
+what the shape left open (§11). The suite is <!--count:tests-->469 green against the oracle with all
+<!--count:checks-->18 repository checks passing, and what it decided is
+[ADR-008](ADR/ADR-008-the-picture.md).
+
+**This document is now a record of how it was built rather than a plan for building it**, and the
+difference between the two is the point of keeping it: every place measurement moved the design is
+marked **CORRECTED** in the section it belongs to and argued in §13's journal. Five improvements the
+design promised were DECLINED after measurement — `Divide512` and the sun's twin, the compass's
+extra bit, `wrapWidth`, and the short-range chart's label collisions — and each entry says what was
+measured and what it would have cost. One thing is outstanding and it is the owner's: the dashboard
+artwork (§11.1, RS-4-art), which no slice waits on.
+
+Reads after [Modernize.md](Modernize.md), because it starts where that plan's rules end and obeys
+them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
 model — unchanged for the canvas, and §4's "parallel path" is this), ADR-005 (presentation — §1
 amended), ADR-006 and ADR-007 (where the new state lives), Modernize.md §4 and §5 (the layers, the
@@ -843,7 +853,7 @@ path the layout did not see — are what the estimate cannot price.
 | **RS-4 The dashboard** ✅ **built 2026-09-07 (§13)** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, and the bootstrap. **NOT `DASHBOARD_IMAGE_2X`, `bitmaps.py`'s fourth sheet or `bootstrap-2x`** — a generated table that is a pure function of one already in the tree is a copy, so the bootstrap is computed (§5.3). Sprites were already doubled in `Resolve` at RS-0. **The dashboard region flips here, so nothing on the screen is upscaled any more** | The bootstrap equal to the canvas doubled over all 71,680 pixels; the bar sweep over every value at every entry point; the scanner's fraction swept over both signs and every high byte; a whole `DIALS` frame shadow-tested; blips erase by redraw | 3 |
 | **RS-4-art The picture** | The owner redraws the dashboard at 640×112 over the bootstrap PNG (§5.3, ruling §11.1); the import replaces `CopyDashboardPicture2x`'s call and nothing else; no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
 | **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the sketch accepted before the table is written (ruling §11.2); the text shadow test green including the no-collision clause; a hand-check | 1 each, 8–10 in all; the charts are two each |
-| **RS-6 Close** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `outpost-elite-names` re-ceilinged; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
+| **RS-6 Close** ✅ **built 2026-09-08 (§13)** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
 | **Later, optional** | Re-authored 48×42 sprites (§5.4); an aspect-ratio option (ADR-005 §1, unchanged) | — | — |
 
 **Total: roughly 25 sittings plus the artwork**, about a quarter of the port and a third of the
@@ -886,7 +896,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 | R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOneWideCell` sweeps the whole 40×25 grid of every layout in the tree and fails on the first collision (RS-5-0, and it caught one the day it was written); the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
 | R25 | **The extra bit is wrong and nothing sees it.** A twin that halves to the faithful value at every pixel can still be off by one hi-res pixel everywhere, and the shadow test allows one | The property sweeps of §8.2 on every twin divide and root; a screen golden per scene |
 | R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | §8.4's replay run both ways; T1 as a review rule; and since RS-3 there is no second heap at all — the twins read the faithful bytes, so there is no second pointer to move |
-| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture is part canvas-upscaled and part native, and a screenshot taken then is not the design | `Picture::NativeRegions` is a struct with a `Complete()` test that RS-6 asserts, and `ThePicture::TheRegionsSayWhichSlicesHaveLanded` fails the day every region is native and the fallback is still there; the journal names which regions are native at each slice. **Both regions flipped by RS-4 and `Complete()` now holds — the tripwire has fired and RS-6 is the only slice left that owes anything to it.** **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked. The regions are the two the raster split already makes, and the text layer belongs to the upper one, which flips when RS-3 completes it |
+| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture was part canvas-upscaled and part native, and a screenshot taken then was not the design | **CLOSED at RS-6.** The tripwire was `Picture::NativeRegions` and its `Complete()` test; it fired at RS-4 when both regions turned over, and RS-6 deleted the flags, `UpscaleCell` and the canvas fallback with them. What replaces it is the opposite assertion — `ThePicture::AnUndrawnPictureIsBlankHoweverBusyTheCanvasIs` — which fails if a pixel ever comes from the canvas again. **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked |
 
 ---
 
@@ -896,7 +906,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->470 tests with the oracle present, all passing, and all
+<!--count:tests-->469 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -980,7 +990,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->470 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->469 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -1033,7 +1043,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->470 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->469 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1360,7 +1370,7 @@ reason, and the replay digest is unchanged.
 
 **Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
 cannot write one parameter's default in terms of another. Every screen without a table of its own
-still gets exactly what it got before, which is why 454 of the 470 tests did not move.
+still gets exactly what it got before, which is why 454 of the 469 tests did not move.
 
 **The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
 row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
@@ -1566,3 +1576,51 @@ naming once rather than twice: the port has two screens — sell cargo and the s
 without setting up a screen. On the canvas that has always meant they draw over whatever was there;
 on the wide surface it means they inherit a layout chosen for something else. Fixing either changes
 the character stream the fixtures compare, so it belongs to the port track and not to this one.
+
+### RS-6 — the close, 2026-09-08
+
+**The scaffolding is down.** `Picture::UpscaleCell`, `NativeRegions`, `Native()` and `SetNative()`
+are deleted, and `Resolve` has two kinds of cell instead of three. What the canvas is still read for
+is the raster state this surface does not hold — the dashboard flag, the energy bomb's mode and
+background, colour RAM, the sprite pointers — and for no pixel at all.
+
+**Risk R27 closes with the OPPOSITE assertion to the one that opened it.** The tripwire was
+`Complete()`, watching for the day every region turned native; it fired at RS-4. What stands in its
+place is `AnUndrawnPictureIsBlankHoweverBusyTheCanvasIs`, which resolves a picture nobody has drawn
+on beside a canvas full of scene and requires that not one pixel crossed. Before this slice it would
+have failed on every pixel of that scene.
+
+**TWO TESTS HAD TO BE REWRITTEN RATHER THAN RETIRED, and the energy bomb's is the interesting one.**
+Both leaned on the fallback to give the two surfaces a shared background. The sprite test now runs
+on two blank surfaces, which is enough: an empty canvas and an empty picture resolve alike
+everywhere, so any difference is a sprite pixel in the wrong place. The bomb's could not be rescued
+that way at all — **doubling a bit and then reading the result in pairs is not the same as reading
+in pairs and then doubling**: `01` doubled is `0011`, which as pairs is `00` and `11`, neither of
+them `01`. The upscale never had this problem because it doubled RESOLVED PIXELS rather than bits.
+So the property is stated directly now: the flag reaches the picture, and the picture's own bits
+resolve as the two-bit reading of themselves. A better test for having been forced to say what it
+means.
+
+**The amendments of §9 are made, with two corrections to the names.** §9 was written before RS-0 and
+calls the object `Elite::Screen` and the field `Universe::screen`; both are `Picture` (RS-0 renamed
+them, because `Universe::screen` was already `ScreenState`). ADR-001 §1 and §4, ADR-002 §4's two
+bullets, ADR-005 §1's presenter and placement bullets, ADR-007's excluded field and Modernize.md
+§4.8 all say `Picture` and `ScreenPresenter`.
+
+**ADR-008 is written in ADR-007's shape**, and its §3 is the part worth having: the five kinds of
+evidence that stand in for an oracle which cannot judge this surface, three of which exist because a
+green test failed to see something — a sheared word, a screen under its own border, and a mapping
+that put two glyphs on one cell.
+
+**`check_outpost.py` needed nothing.** §9 asks for it "over `ScreenPresenter`"; it globs
+`Outpost/*.cpp` and `*.h` and has covered `ScreenPresenter.cpp` since RS-0 created it. Written down
+rather than left as an unticked row, because a check that already does the job is not a task.
+
+**`outpost-elite-names` needed no re-ceiling either.** The count is 63 and this slice moved no
+`Elite::` name across the boundary: the upscale was private to `Picture` and the executable never
+named a region.
+
+**The track is built.** Seven slices, 469 tests, and one thing outstanding that is the owner's: the
+dashboard artwork (§11.1). Five improvements the design promised are declined with the measurement
+that declined each, two screens are blocked on a defect older than this track, and the C64 canvas is
+exactly what it was on the day RS-0 opened — which was the point.

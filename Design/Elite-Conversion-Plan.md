@@ -135,7 +135,7 @@ is preserved in the history and was true then.
   two worlds' plumbing, and reach <!--count:outpost-elite-names-->63 `Elite::` names between them.
   It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
   owner ruling). It launches, flies, fights, docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->470 tests in <!--count:test-files-->61 files: the 6502 interpreter with its cycle counter,
+- `Tests/GameLogicTests/` — <!--count:tests-->469 tests in <!--count:test-files-->61 files: the 6502 interpreter with its cycle counter,
   its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
   and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
@@ -6786,6 +6786,18 @@ wanted: window/fullscreen and scale options; key remapping and gamepad; a "fixed
 (`NRU%`, others found on the way); PAL/NTSC timing option; save-slot UI; then the things that
 change the game (higher internal resolution for lines, smoother iteration rate). Each is gated
 on the fidelity suites staying green with the option *off*.
+
+**One of them is built, ahead of the rest and by owner ruling: the resolution.**
+[Resolution.md](Resolution.md) presents the game at 640×400 — the dashboard redrawn at twice its
+detail, the space view at twice the line resolution with the same field of view, 8×8 text on an
+80×50 grid with every docked screen re-flowed — and it is **not an option**, which is what lets it
+land before the fidelity suites are free of the oracle. The canvas stays exactly as it was and is
+what every oracle test, golden and fixture reads; the picture is drawn beside it by a twin of every
+drawing routine and is never presented in its place, so the gate above ("green with the option
+*off*") is met by there being no option and no change to the thing the suites compare. Built in
+seven slices 2026-09-07/08, recorded in ADR-008. **Sequencing**: RS-0 to RS-4 ran before
+Modernize.md's M6-c and M6-d; M6-a and M6-b were free to go at any time, because the track asks the
+original nothing.
 
 **What is NOT this phase is the modernisation of the program**, which has its own plan and is
 most of the way through it: [Modernize.md](Modernize.md) restructures the code with no behavioural
