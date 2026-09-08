@@ -112,8 +112,13 @@ namespace Elite
 
   void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
-    SetUpScreen(_universe, _ports, _view); // 6502: JSR TT66
-    _ports.keyboard.Flush();               // 6502: JMP FLKB
+    SetUpTradeScreen(_universe, _ports, _view, LayoutForView(_view));
+  }
+
+  void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept
+  {
+    SetUpScreen(_universe, _ports, _view, _layout); // 6502: JSR TT66
+    _ports.keyboard.Flush();                        // 6502: JMP FLKB
   }
 
   void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept
@@ -161,7 +166,7 @@ namespace Elite
         {
           // 6502: JSR CLYNS.
           ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.view);
+                       &_universe.picture, _universe.screenLayout);
 
           // 6502: LDA #204 / JSR TT27 -- "QUANTITY OF ".
           _ports.printer.Print(QUANTITY_OF_TOKEN);

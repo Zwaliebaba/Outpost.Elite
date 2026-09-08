@@ -296,7 +296,7 @@ namespace Elite
 
   void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended,
                         MessageState& _message, Picture* _picture,
-                        std::uint8_t _view) noexcept
+                        TextLayout _layout) noexcept
   {
     // 6502: CLYNS -- LDA #0 / STA DLY / STA de. Whatever message was up is forgotten, which is why
     // `MESS` can clear the screen and then test `DLY` and find it zero (§6.67).
@@ -327,7 +327,7 @@ namespace Elite
 
     if (_picture != nullptr)
     {
-      ClearMessageRows2x(*_picture, LayoutForView(_view));
+      ClearMessageRows2x(*_picture, _layout);
     }
   }
 

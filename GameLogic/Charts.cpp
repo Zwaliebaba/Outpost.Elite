@@ -535,7 +535,7 @@ namespace Elite
     DrawTargetCrosshairs(_canvas, _view, _picture);
 
     // 6502: JMP CLYNS, which is `ClearMessageRows` and was a seam until M3-b-3b.
-    ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, _view.view);
+    ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view));
 
     return nearest;
   }
@@ -552,7 +552,7 @@ namespace Elite
        * The message is an EXTENDED token, which is why this routine needs both printers: the rest
        * of hyp prints recursive ones.
        */
-      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, _view.view); // 6502: JSR CLYNS
+      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view)); // 6502: JSR CLYNS
       _text.column = 15;
       _extended.Print(DOCKED_TOKEN);
       return JumpOutcome::Docked;

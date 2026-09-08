@@ -1,14 +1,24 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "Canvas.h"
+#include "Commander.h"
+#include "ExtendedTokens.h"
+#include "MarketScreen.h"
 #include "Picture.h"
+#include "Ports.h"
+#include "StateTokens.h"
+#include "StatusScreen.h"
 #include "TextPrint.h"
 #include "TextPrint2x.h"
 #include "Tokens.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -83,16 +93,34 @@ namespace GameLogicTests
      * wide cell. Returns the first failure, because a mapping that is wrong is wrong everywhere and
      * a test that printed every case would print nothing anybody reads.
      */
-    std::wstring TheGlyphsAgree(const Canvas& _canvas, const Picture& _picture, TextLayout _layout)
+    /*
+     * `_before` is a screen with its FURNITURE on it and no text -- the border, the rules, whatever
+     * `TT66` drew -- and every cell that has not changed since is skipped by both walks.
+     *
+     * It is needed the moment a real screen is driven rather than a printer: the frame is inked on
+     * both surfaces by twins that work in wide coordinates and not through a layout, so a walk that
+     * treated every inked canvas cell as a glyph would fail on cell (0, 0) of any screen at all.
+     * Passing the same surfaces twice compares everything, which is what a printer-only fixture
+     * wants.
+     */
+    std::wstring TheGlyphsAgree(const Canvas& _canvas, const Picture& _picture, TextLayout _layout, const Canvas& _before,
+                                const Picture& _beforePicture)
     {
       std::set<int> occupied;
+
+      const auto canvasChanged = [&](int _column, int _row) {
+        return CanvasCell(_canvas, _column, _row) != CanvasCell(_before, _column, _row);
+      };
+      const auto pictureChanged = [&](int _column, int _row) {
+        return PictureCell(_picture, _column, _row) != PictureCell(_beforePicture, _column, _row);
+      };
 
       for (int row = 0; row < Canvas::CELL_ROWS; ++row)
       {
         for (int column = 0; column < Canvas::CELL_COLUMNS; ++column)
         {
           const std::array<std::uint8_t, 8> ink = CanvasCell(_canvas, column, row);
-          if (Blank(ink))
+          if (Blank(ink) || (&_before != &_canvas && !canvasChanged(column, row)))
           {
             continue;
           }
@@ -125,7 +153,7 @@ namespace GameLogicTests
       {
         for (int column = 0; column < Picture::CELL_COLUMNS; ++column)
         {
-          if (Blank(PictureCell(_picture, column, row)))
+          if (Blank(PictureCell(_picture, column, row)) || (&_beforePicture != &_picture && !pictureChanged(column, row)))
           {
             continue;
           }
@@ -140,20 +168,33 @@ namespace GameLogicTests
       return {};
     }
 
+    /// The whole of both surfaces, for a fixture that drew nothing but text.
+    std::wstring TheGlyphsAgree(const Canvas& _canvas, const Picture& _picture, TextLayout _layout)
+    {
+      return TheGlyphsAgree(_canvas, _picture, _layout, _canvas, _picture);
+    }
+
     /// A printer wired to both surfaces, as `Game` wires its own.
     struct Printers
     {
       Canvas canvas;
       Picture picture;
       Elite::TextState text;
-      std::uint8_t view = 0;
+      Elite::TextLayout layout;
       Elite::TextPrinter printer{canvas, text};
 
       explicit Printers(std::uint8_t _view)
-        : view(_view)
+        : layout(Elite::LayoutForView(_view))
       {
         text.palette = Elite::TEXT_COLOUR_WHITE;
-        printer.AttachPicture(&picture, &view);
+        printer.AttachPicture(&picture, &layout);
+      }
+
+      explicit Printers(Elite::TextLayout _layout)
+        : layout(_layout)
+      {
+        text.palette = Elite::TEXT_COLOUR_WHITE;
+        printer.AttachPicture(&picture, &layout);
       }
 
       void Print(const std::string& _text)
@@ -234,6 +275,95 @@ namespace GameLogicTests
     }
 
     /*
+     * THE STATUS SCREEN, re-flowed, against the screen the game prints (slice RS-5-a).
+     *
+     * The whole re-flow is a table, so what has to be shown is that the table is the ONLY thing
+     * that moved: the faithful screen is drawn on the canvas exactly as it always was, every glyph
+     * of it is on the wide surface at the cell `STATUS_LAYOUT` names, and the wide surface has
+     * nothing the canvas does not account for. `TheGlyphsAgree` is all three clauses at once.
+     *
+     * A fully-fitted commander, because that is the worst case for the anchored block: seven pieces
+     * of equipment and four lasers is eleven lines, which is as far down as the list can reach.
+     */
+    TEST_METHOD(TheStatusScreenLandsWhereItsTableSaysAndNowhereElse)
+    {
+      Elite::Universe universe;
+      universe.commander = Elite::DefaultCommander();
+      Elite::Commander& commander = universe.commander;
+      commander.legalStatus = 60; // a fugitive, the longest of the three
+      commander.kills.lo = 100;
+      commander.escapePod = 1;
+      commander.fuelScoops = 1;
+      commander.ecm = 1;
+      commander.energyBomb = 1;
+      commander.energyUnit = 1;
+      commander.dockingComputer = 1;
+      commander.galacticDrive = 1;
+      commander.lasers[0].byte = 15;  // pulse
+      commander.lasers[1].byte = 143; // beam
+      commander.lasers[2].byte = 151; // military
+      commander.lasers[3].byte = 50;  // mining
+
+      Elite::TextState& text = universe.text;
+      text.palette = Elite::TEXT_COLOUR_WHITE;
+      Elite::TextPrinter screen{universe.canvas, text};
+      screen.AttachPicture(&universe.picture, &universe.screenLayout);
+
+      Elite::CharacterPrinter characters(screen, universe.sentences);
+      characters.State().sentenceStart = 0xFF;
+      Elite::TokenPrinter printer(characters, text);
+      printer.SetCaseFlags(0);
+
+      const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
+      universe.current.seeds = commander.galaxySeeds;
+      universe.selectedSeeds = commander.galaxySeeds;
+      Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name),
+                                universe.current.seeds, universe.selectedSeeds, false);
+      printer.SetValueTokens(&values);
+
+      Elite::ExtendedTokenPrinter extended(characters, printer, universe.rng);
+      NullSeams nulls;
+      Elite::SidWriteLog sid;
+      Elite::Ports ports{printer, characters, screen, sid, extended, nulls, nulls, nulls};
+
+      /*
+       * The frame first, on its own, so that the comparison below is over the TEXT alone. `STATUS`
+       * opens with `TRADEMODE`, which redraws the same border and the same rules; running it once
+       * here gives a baseline those cells match exactly, and everything that differs afterwards is
+       * a glyph.
+       */
+      Elite::SetUpTradeScreen(universe, ports, Elite::INVENTORY_VIEW, Elite::STATUS_LAYOUT);
+      const Canvas frame = universe.canvas;
+      const Picture framePicture = universe.picture;
+
+      const Elite::ShipCondition condition{1, 0, 0, 255}; // docked, so the condition line is "Docked"
+      Elite::StatusScreen(universe, ports, condition);
+
+      // The screen chose its own table, which is the whole point of the layout parameter: the view
+      // byte says 8, and 8 is also the inventory screen.
+      Assert::AreEqual<std::uint32_t>(Elite::INVENTORY_VIEW, universe.view, L"the view is still the game's");
+      Assert::AreEqual<std::uint32_t>(Elite::STATUS_LAYOUT.rowOffset, universe.screenLayout.rowOffset,
+                                      L"and the layout is the status screen's, not LayoutForView's");
+
+      const std::wstring wrong = TheGlyphsAgree(universe.canvas, universe.picture, Elite::STATUS_LAYOUT, frame, framePicture);
+      Assert::IsTrue(wrong.empty(), wrong.c_str());
+
+      // And the three cells the sketch is made of, stated as numbers so that a table edited by
+      // accident fails here rather than on somebody's screen.
+      const Elite::WideCell title = Elite::STATUS_LAYOUT.Map(7, 1);
+      Assert::AreEqual(31, title.column, L"the title, over both columns");
+      Assert::AreEqual(3, title.row, L"above where NLIN3's rule would fall");
+
+      const Elite::WideCell heading = Elite::STATUS_LAYOUT.Map(1, 12);
+      Assert::AreEqual(47, heading.column, L"EQUIPMENT: in the right-hand column");
+      Assert::AreEqual(12, heading.row, L"level with the first label line");
+
+      const Elite::WideCell lastItem = Elite::STATUS_LAYOUT.Map(6, 23);
+      Assert::AreEqual(52, lastItem.column, L"the last equipment line, at its indent");
+      Assert::AreEqual(34, lastItem.row, L"and two wide rows below the one before it");
+    }
+
+    /*
      * THE PROPERTY EVERY PER-SCREEN TABLE HAS TO KEEP -- Risk R24's tripwire, and the reason it is
      * a test rather than an assertion in the header: nothing about an `Anchor` stops it naming a
      * wide cell the offsets already reach, and two faithful cells landing on one wide cell would
@@ -255,8 +385,9 @@ namespace GameLogicTests
       // exercising the anchor path and not two rigid transforms.
       static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
 
-      const std::array<Named, 3> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
+      const std::array<Named, 4> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
                                           {L"the space view", Elite::SPACE_VIEW_LAYOUT},
+                                          {L"the status screen", Elite::STATUS_LAYOUT},
                                           {L"an anchored table", Elite::TextLayout{4, 8, 2, ANCHORS}}}};
 
       for (const Named& named : LAYOUTS)

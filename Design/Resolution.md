@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->454 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->455 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -564,14 +564,16 @@ found the first time it was run: a 40-column screen placed at column 20 already 
 screen moves its offsets as well as its blocks. `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOne
 WideCell` sweeps the whole 40×25 grid of every layout in the tree and is Risk R24's tripwire.
 
-**OPEN, and it gates the first sub-slice: `QQ11` does not name a screen.** `LayoutForView` reads the
-view byte, and the status screen and the inventory screen are both view 8 — `STATUS` and `TT213`
-each call `TRADEMODE` with `#8`. So the two cannot be given different tables by the mechanism as
-designed. The choices are one shared table for both (they are the same shape: a heading, a few
-label lines, a list), or a layout handed to `SetUpTradeScreen` beside the view it already takes, at
-the one instruction that already says which screen is starting. The second is a parameter on a
-faithful routine and not a second copy of the game's state, so it does not drift; it is put with the
-status screen's sketch rather than settled here.
+**`QQ11` DOES NOT NAME A SCREEN, and the layout is therefore the caller's — RULED at RS-5-a.**
+`LayoutForView` reads the view byte, and the status screen and the inventory screen are both view 8:
+`STATUS` and `TT213` each call `TRADEMODE` with `#8`, so no function of that byte can tell them
+apart. `SetUpScreen` and `SetUpTradeScreen` each gained a four-argument form taking the layout, and
+each screen names its own at the one instruction that already says which screen is starting. The
+layout is stored in `Universe::screenLayout` in the same breath as `QQ11` — one instruction, two
+facts, nothing to drift — and `TextPrinter` reads it per glyph through the pointer that used to
+point at the view. Two overloads rather than a default argument, because the default is a function
+of `_view` and C++ cannot write one parameter's default in terms of another. The field is NOT folded
+into the state hash, for `picture`'s reason: it decides nothing the game does.
 
 **And the offsets are measured in CANVAS CELLS, not in `XC`.** §6.2's original numbers mixed the two:
 the space view's `columnOffset` is given as 24, which is right in `XC` — counted from the view's own
@@ -607,7 +609,7 @@ accept or redraw (§11) and are not normative until a slice lands them.
 
 | Screen | Layout | What the table cannot do, and the twin that does it |
 |---|---|---|
-| Status (`STATUS`) | Two columns: commander, present system, hyperspace, condition, fuel, cash, legal status, rating on the left; the equipment list on the right | Nothing; the equipment list is one anchored rectangle — rows 12 to 23, whole width — moved right and spread. **CORRECTED at RS-5-0: not "an anchor moves its first"** — an anchor covers a block, because a per-cell one would leave the rest of each string behind |
+| Status (`STATUS`) | **LANDED at RS-5-a**, sketch accepted 2026-09-08. `STATUS_LAYOUT{4, 4, 2}` with two anchors: the title to wide (24, 3), and canvas rows 12 to 23 — "EQUIPMENT:" and the eleven lines under it — to wide (46, 12) at stride 2 | Nothing; the equipment list is one anchored rectangle. **CORRECTED at RS-5-0: not "an anchor moves its first"** — an anchor covers a block, because a per-cell one would leave the rest of each string behind |
 | Buy / sell / inventory (`TT167`, `TT210`, `TT213`) | The table widened: item, unit, price and quantity at columns 4, 26, 38 and 52; `ListCargo` the same | Nothing |
 | Equip ship (`EQSHP`) | Item at column 4, price at column 44; the laser view prompt on its own line | Nothing |
 | Data on system (`TT25`) | The label/value pairs at columns 4 and 28; the description re-wrapped at `wrapWidth = 64` | **The wide sink re-wraps.** `TT27`'s justifier breaks lines at `JUSTIFIED_LINE_WIDTH` (30) and emits the break as a newline in the character stream. The wide sink treats a break the justifier made (the printer knows, because it made it) as soft and re-wraps at the layout's width; a break from a token is hard. The faithful stream is unchanged |
@@ -633,19 +635,32 @@ the frame omitted:
   ...
 ```
 
-And the status screen, two columns where the original had one:
+And the status screen, two columns where the original had one. **ACCEPTED 2026-09-08 and LANDED at
+RS-5-a**; this is the wide grid rendered by running `STATUS` through `STATUS_LAYOUT`, not a drawing,
+with the wide row numbers on the left:
 
 ```
-                            COMMANDER JAMESON
-  ────────────────────────────────────────────────────────────────────────
-  Present System      :Lave              EQUIPMENT:
-  Hyperspace System   :Lave                    Fuel Scoops
-  Condition           :Docked                  E.C.M.System
-  Fuel:7.0 Light Years                         Front Pulse Laser
-  Cash:    100.0 Cr
-  Legal Status: Clean
-  Rating: Harmless
+  3 |                               COMMANDER JAMESON                                |
+ 12 |     Present System      :Tibedied             EQUIPMENT:                       |
+ 14 |     Hyperspace System   :Reorte                    Escape Pod                  |
+ 16 |     Condition           :Docked                    Fuel Scoops                 |
+ 18 |     Fuel:7.0 Light Years                           E.C.M.System                |
+ 20 |     Cash:    100.0 Cr                              Energy Bomb                 |
+ 22 |     Legal Status: Fugitive                         Extra Energy Unit           |
+ 24 |     Rating: Above Average                          Docking Computers           |
+ 26 |                                                    Galactic Hyperspace         |
+ 28 |                                                    Front Pulse Laser           |
+ 30 |                                                    Rear Beam Laser             |
+ 32 |                                                    Left Military  Laser        |
+ 34 |                                                    Right Mining  Laser         |
 ```
+
+The body ends on wide row 34 and the dashboard's footprint starts at 36, so the screen finishes
+where the dashboard would begin rather than trailing off. The title is on wide row 3 and not 4
+because `NLIN3`'s rule is drawn at canvas row 19 and its twin is a wide line at row 38, which is
+inside the glyphs of wide row 4. Nothing draws that rule today — `NLIN3`'s is "the canvas's, so a
+caller draws it" and only the two charts have a caller that does, which is a gap in the docked text
+screens older than this track.
 
 **CORRECTED at RS-5-0: the strings above are the printed ones and the first draft's were not.** That
 draft had every label in capitals with the colons in one column, and the screen prints neither: only
@@ -838,7 +853,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->454 tests with the oracle present, all passing, and all
+<!--count:tests-->455 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -922,7 +937,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->454 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->455 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -975,7 +990,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->454 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->455 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1283,3 +1298,35 @@ in capitals with the colons in one column, and the screen prints neither — onl
 colon inline. The strings in §6.3 are now the ones a fully-fitted commander's screen actually
 prints, read off the port rather than remembered. The design's own line is that every string in a
 sketch is the string the faithful screen prints; a sketch drawn from memory does not meet it.
+
+### RS-5-a — the status screen, the first re-flow, 2026-09-08
+
+**Sketch accepted by the owner and built to.** §6.3 carries the rendered grid rather than the draft
+drawing: it is `STATUS` run through `STATUS_LAYOUT` and printed, so what the design shows and what
+the screen does cannot differ. `STATUS_LAYOUT{4, 4, 2}` with two anchors — the title to wide (24, 3)
+and canvas rows 12 to 23 to wide (46, 12) at stride 2 — is the whole re-flow. `StatusScreen.cpp`
+gained one argument at one call and nothing else; the character stream the seventeen fixtures
+compare is untouched.
+
+**THE LAYOUT IS THE CALLER'S, because `QQ11` does not name a screen.** Ruled by the owner from the
+two choices RS-5-0 put. `SetUpScreen` and `SetUpTradeScreen` each gained a four-argument form; the
+layout is stored in `Universe::screenLayout` in the same breath as `QQ11`, and `TextPrinter` reads
+it through the pointer that used to point at the view. `ClearMessageRows` takes a layout rather than
+a view byte for the same reason. The field is not folded into the state hash, for `picture`'s
+reason, and the replay digest is unchanged.
+
+**Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
+cannot write one parameter's default in terms of another. Every screen without a table of its own
+still gets exactly what it got before, which is why 454 of the 455 tests did not move.
+
+**The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
+row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
+39. Row 3 puts the title above it. Nothing draws that rule today: `NLIN3`'s is "the canvas's, so a
+caller draws it" and only the two charts have a caller that does. That gap is older than this track
+and is not a re-flow's to close, but a layout that ignored it would have to be redrawn the day it is.
+
+**The shadow test needed a BASELINE, which is new.** `TheGlyphsAgree` assumed every inked canvas
+cell was a glyph, which holds for a fixture that drives a printer and fails on cell (0, 0) of any
+real screen: the border and the rules are inked on both surfaces by twins that work in wide
+coordinates and not through a layout. So the test draws the frame first, keeps both surfaces, and
+compares only what changed. Every screen re-flowed after this one wants the same shape.
