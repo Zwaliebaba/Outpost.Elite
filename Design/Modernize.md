@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->413 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
+(<!--count:tests-->414 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -236,7 +236,7 @@ Three instruments are in place and every slice below leans on them:
 - **The whole-bitmap comparisons**: `TITLE`, `TT110`, the dashboard, the planet and the stardust
   suites compare the whole `SCBASE` region byte for byte. They see composition where the per-routine
   tests see routines.
-- **The mutants**: <!--count:mutants-->95 recorded edits in <!--count:mutant-files-->sixteen files,
+- **The mutants**: <!--count:mutants-->97 recorded edits in <!--count:mutant-files-->seventeen files,
   each anchored to a line of source that must match exactly once, each expected to be caught or
   recorded as an equivalent with its proof. `mutate.py --check` runs in CI; the run itself works
   through the portable runner on Linux (`--runner portable`). **The floor (M6-0-g)**: `mutants.json`

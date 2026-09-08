@@ -706,11 +706,10 @@ namespace Elite
     }
 
     /*
-     * The frames part 5 asks to wait for are DROPPED here, and saying so is better than pretending
-     * otherwise. `JSR DELAY` is two vertical syncs on a docked screen, and this is the FLIGHT
-     * pass -- `QQ11` is zero on every call that reaches here, so the option's branch is never the
-     * one that waits. `StepDocked` is where it would matter, and that pass is paced by the caller
-     * rather than by vsync counts (ADR-005 §3).
+     * The frames part 5 asks to wait for are DROPPED here, and honestly: `JSR DELAY` is two vertical
+     * syncs on a docked screen, and this is the FLIGHT pass -- `QQ11` is zero on every call that
+     * reaches here, so the option's branch is never the one that waits. `StepDocked` is where it
+     * matters, and it returns them to the caller since InputTimer.md T-2.
      */
     static_cast<void>(RunLoopTail(m_universe, m_ports, m_universe.commander, m_universe.options.authorNames, false));
 
@@ -751,23 +750,24 @@ namespace Elite
    * rather than through the key it was handed. So a pass with no key is `MoveCrosshairs` on a chart
    * and `CountdownOnly` everywhere else, through `ActionForKey`'s own fall-through (§6.115).
    */
-  void Game::StepDocked(std::uint8_t _key) noexcept
+  std::uint8_t Game::StepDocked(std::uint8_t _key) noexcept
   {
     /*
-     * 6502: MLOOP's head, which a docked pass reaches too -- the two countdowns sit ABOVE part 5's
-     * `LDA QQ11` gate, and everything below it is about the space view.
+     * 6502: MLOOP -- part 5 WHOLE, on a docked pass as on a flying one (InputTimer.md T-2).
      *
-     * It is `CoolTheGuns` and not a copy: `RunLoopTail` runs the same function on a flying pass, so
-     * the arithmetic has one home (§6.146). What a docked pass still does NOT run is the REST of
-     * part 5 -- the author-names delay and the Trumble breeding, both of which the original reaches
-     * while docked. That gap is named rather than closed here; it needs `RunLoopTail`'s frame count
-     * plumbed into the docked pace.
+     * Until T-2 this ran `CoolTheGuns` alone and named the rest as a gap: the author-names delay
+     * and the Trumble breeding are below the two countdowns and the original reaches both while
+     * docked. `RunLoopTail` is the routine, compared against `MLOOP` on docked views with Trumbles
+     * aboard, and what it answers is the syncs the pass asked `DELAY` for -- which the executable
+     * waits, now that it is told. `DIALS` is skipped inside it because the view is not the space
+     * view, which is the original's own gate.
      */
-    CoolTheGuns(m_universe.status);
+    const std::uint8_t syncs = RunLoopTail(m_universe, m_ports, m_universe.commander, m_universe.options.authorNames, false); // docked
 
     m_universe.crosshairStep = ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held
+    return syncs;
   }
 
 } // namespace Elite

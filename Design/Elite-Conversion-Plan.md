@@ -135,7 +135,7 @@ is preserved in the history and was true then.
   two worlds' plumbing, and reach <!--count:outpost-elite-names-->62 `Elite::` names between them.
   It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
   owner ruling). It launches, flies, fights, docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->413 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter,
+- `Tests/GameLogicTests/` — <!--count:tests-->414 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter,
   its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
   and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
@@ -179,8 +179,8 @@ to head this list is gone, and so is the item below it:
    to compare against.
 3. ~~**Two live mutation survivors.**~~ **Closed 2026-09-06** (§6.156). Every unit is at zero
    and the not-caught entries left in `tools/mutants.json` are recorded EQUIVALENTS with the
-   proof on them, which is a measurement and not debt — <!--count:mutants-->95 mutants in
-   <!--count:mutant-files-->sixteen files since Modernize.md M6-0-g (2026-09-07), which also put
+   proof on them, which is a measurement and not debt — <!--count:mutants-->97 mutants in
+   <!--count:mutant-files-->seventeen files since Modernize.md M6-0-g (2026-09-07), which also put
    a floor under the corpus: fourteen files that must each carry a caught mutant, enforced by
    `mutate.py --check`. **R13 does not close on it**: every tally
    published before `mutate.py` existed is still an assertion nobody can re-run, and that half of

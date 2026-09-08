@@ -323,7 +323,7 @@ those is a cycle count read off the interpreter. Modernize.md's M6-b takes the l
 CI and M6-f deletes it; after M6-b the cost model is frozen at whatever it holds, forever. This is the one item in this document
 that has a deadline rather than a priority.
 
-### T-6 (C) — Frames the library asks for and the executable drops
+### T-6 (C) — Frames the library asks for and the executable drops — **the docked pass built 2026-09-08 as T-2, §9**
 
 `RunLoopTail` returns the two vertical syncs part 5 asks for on a docked pass and `Game::Step`
 discards them (correctly, on the flight pass); `StepDocked` does not run `RunLoopTail` at all, so
@@ -786,3 +786,17 @@ direction Modernize.md §4.8 wants, measured by a counter that cannot tell a sea
 and `origin-markers` 4,091 → 4,097, because R7 puts `6502:` markers on a ported routine and rule 5
 says the count only falls; a port that lands before M6-e cannot satisfy both, and the six markers
 are the routine's, not a comment's.
+
+**2026-09-08 — T-2 built: the docked pass runs part 5 whole, and asks for its syncs.**
+`Game::StepDocked` runs `RunLoopTail` -- the routine `GameLoopTests` already compared against
+`MLOOP` on docked views with Trumbles aboard -- where it ran `CoolTheGuns` alone, so a commander
+who docks with a Trumble has a hold that goes on breeding, and it returns the vertical syncs the
+pass asked `DELAY` for. `Main.cpp` prices the next pass by that answer through `DockedPassSeconds`,
+which takes the syncs rather than the option byte now. Reading the gate off the constants found
+the first draft of this journal wrong: `AND PATG / LSR A` tests bit 0 of the VIEW byte ANDed with
+the option, and the only docked view with an odd byte is the Data on System screen at 1 -- the
+status screen is 8 and the charts 64 and 128 -- so the author names lift the wait on that one
+screen and nowhere else. `GameTests` drives sixty-four passes with a Trumble aboard and the three
+views; the replay never runs a docked pass, so no digest moves; `mutants.json` gains a `game` unit
+with its selftest and the docked tail, the corpus's first mutants on a CALL rather than an
+operation.

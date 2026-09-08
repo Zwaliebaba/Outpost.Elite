@@ -73,8 +73,15 @@ namespace Elite
      */
     [[nodiscard]] bool Step(std::uint8_t _key) noexcept;
 
-    /// 6502: MLOOP's tail on a docked pass -- the countdowns, `TT17` and `TT102`, once.
-    void StepDocked(std::uint8_t _key) noexcept;
+    /*
+     * 6502: MLOOP on a docked pass -- part 5 whole, then `TT17` and `TT102`, once.
+     *
+     * Answers the VERTICAL SYNCS the pass asked `DELAY` for -- two off the space view, unless the
+     * view byte is odd and `PATG` is set, which is `RunLoopTail`'s own answer -- so the executable can pace
+     * the next pass by what this one waited (InputTimer.md T-2). It ran the two countdowns alone
+     * until T-2, so the Trumbles did not breed while docked and the wait was priced from a constant.
+     */
+    [[nodiscard]] std::uint8_t StepDocked(std::uint8_t _key) noexcept;
 
     /*
      * `StepPaused` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, owner ruling 2026-09-08).

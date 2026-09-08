@@ -245,17 +245,18 @@ namespace Outpost
    * How long a DOCKED pass takes, and it is two vertical syncs and almost nothing else.
    *
    * 6502: `MLOOP` with `QQ12` set -- the guns cool, `DIALS` is skipped, `LDA QQ11 / AND PATG / LSR A
-   * / BCS plus13 / LDY #2 / JSR DELAY` waits TWO vertical syncs unless the author-names option is
-   * on, the Trumbles breed, `TT17` scans the keyboard, and `TT102` dispatches `thiskey`, which on
+   * / BCS plus13 / LDY #2 / JSR DELAY` waits TWO vertical syncs unless the view byte is odd AND the
+   * author-names option is on -- which only the Data on System screen, at 1, ever is -- the
+   * Trumbles breed, `TT17` scans the keyboard, and `TT102` dispatches `thiskey`, which on
    * a pass with no key falls through `TT107`'s countdown and returns. Measured by
    * `FlightLoopTests::TheDockedPassCostsWhatItCosts` (InputTimer.md T-0) with `DELAY` and `WSCAN`
    * trapped, on the status screen with no key held: 4,472 cycles, 4,591 with Trumbles aboard,
    * 2,746 on the long-range chart and up to 5,691 on the short-range chart with a cursor key
    * held. So the pass is 4 ms of work and 40 ms of waiting at PAL, and the docked half runs at
    * a little under HALF THE VERTICAL-SYNC RATE -- 22 passes a second on a PAL machine, 26 on NTSC
-   * -- which is what paces the hyperspace countdown and the chart crosshairs. With the author
-   * names switched on there is no wait and the same pass runs at 228 a second; that is the
-   * original's behaviour and the model follows it.
+   * -- which is what paces the hyperspace countdown and the chart crosshairs. On the one screen
+   * where the names lift the wait the same pass runs at 228 a second; that is the original's
+   * behaviour and the model follows it, because `Game::StepDocked` says which it was.
    *
    * Until InputTimer.md T-1 builds the simulated vertical blank, the syncs are priced at the NTSC
    * frame the rest of this file and `SoundOutput` use. The port paced the docked half at the
@@ -263,7 +264,7 @@ namespace Outpost
    */
   inline constexpr std::uint32_t DOCKED_PASS_CYCLES = 4'472;
 
-  /// 6502: LDY #2 / JSR DELAY -- the two syncs a docked pass waits, unless `PATG`'s bit 0 is set.
+  /// 6502: LDY #2 / JSR DELAY -- the two syncs a docked pass waits, unless `QQ11 AND PATG` is odd.
   inline constexpr std::uint8_t DOCKED_PASS_SYNCS = 2;
 
   /// 6502: TT16's `JSR WSCAN` -- one more sync on a chart pass that moves the crosshairs, so they
@@ -273,8 +274,8 @@ namespace Outpost
   /// 6502: the VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
   inline constexpr double NTSC_FRAME_CYCLES = 65.0 * 263.0;
 
-  /// How long one docked pass should take, in seconds, given `PATG` -- `_authorNames`, whose bit 0
-  /// is what the `LSR A / BCS` tests.
-  [[nodiscard]] double DockedPassSeconds(std::uint8_t _authorNames) noexcept;
+  /// How long one docked pass should take, in seconds, given the syncs the last pass asked `DELAY`
+  /// for -- `Game::StepDocked`'s answer, two or none (InputTimer.md T-2).
+  [[nodiscard]] double DockedPassSeconds(std::uint8_t _syncs) noexcept;
 
 } // namespace Outpost

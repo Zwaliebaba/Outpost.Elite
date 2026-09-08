@@ -215,8 +215,9 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   frames a second in a full fight, which is the slowdown the game shipped with. The sun and the
   station cost differently and the row is their midpoint. The docked pass is not paced by a
   flight floor any more: `MLOOP` with `QQ12` set is two vertical syncs (`LDY #2 / JSR DELAY`,
-  unless `PATG`'s bit 0) around 4,472 cycles of work, so the docked half runs at just under half
-  the sync rate, and `DockedPassSeconds` says so. `TT16`'s extra sync per crosshair step is
+  unless `QQ11 AND PATG` is odd, which only the Data on System screen with the names on is)
+  around 4,472 cycles of work, so the docked half runs at just under half the sync rate, and
+  `DockedPassSeconds` prices the syncs `Game::StepDocked` asked for (T-2). `TT16`'s extra sync per crosshair step is
   recorded and waits for the simulated blank (T-1) to be honoured.
 
 - **The title screen is cycle-budgeted as well. Added 2026-09-05.** `TITLE`
