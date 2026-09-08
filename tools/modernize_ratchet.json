@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 30,
+      "ceiling": 0,
       "slack": 0,
-      "slice": "M6-d-57: eleven files to zero, and the tail is now thirty sites over nineteen files"
+      "slice": "M6-d-58: the last nineteen files -- opcode-transcriptions reaches ZERO, and M6-d's row is met"
     },
     "opcode-quotations": {
       "ceiling": 0,

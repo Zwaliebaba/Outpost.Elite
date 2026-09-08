@@ -12,9 +12,9 @@ namespace Elite
    * believed for six slices. The conversion plan's row said "`SETL1` is NOT one of them: it is
    * self-modifying code inside a raster interrupt handler and belongs behind a seam like the
    * sound", `Controls.h` repeated it, and `VideoState.h` gave it as the reason this byte could
-   * never live here. The routine is eight instructions and none of them writes code:
-   *
-   *     SEI / STA L1M / LDA l1 / AND #%11111000 / ORA L1M / STA l1 / CLI / RTS
+   * never live here. The routine is EIGHT INSTRUCTIONS and none of them writes code: disable
+   * interrupts, store the requested mode, read the processor port, mask off its low three bits,
+   * OR the mode in, store it back, re-enable interrupts, return.
    *
    * `l1` is address &0001, which on a 6510 is the processor's own port -- bits 0 to 2 are LORAM,
    * HIRAM and CHAREN, and they decide what the 64K address space holds. The `SEI`/`CLI` bracket is

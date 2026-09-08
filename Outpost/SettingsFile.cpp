@@ -16,7 +16,7 @@ namespace Outpost
   {
     constexpr const char* FILE_NAME = "Settings.txt";
 
-    /// 6502: the two values `DKS3` left in a byte -- `EOR #&FF` flips the lot, so it is 0 or 255.
+    /// 6502: the two values `DKS3` left in a byte -- it flips every bit, so it is 0 or 255.
     constexpr std::uint8_t SET = 0xFF;
     constexpr std::uint8_t CLEAR = 0x00;
 

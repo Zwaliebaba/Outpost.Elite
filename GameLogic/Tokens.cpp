@@ -46,7 +46,7 @@ namespace Elite
     constexpr std::uint8_t PHRASE_AFTER_PAIRS = 160;
     constexpr std::uint8_t PHRASE_FIRST = 96;
 
-    /// 6502: crlf -- LDA #21 / JSR DOXC. Where control code 9 puts the cursor before its colon.
+    /// 6502: crlf -- where control code 9 puts the cursor before its colon.
     constexpr std::uint8_t CONTROL_CODE_9_COLUMN = 21;
 
     /// Characters 14 to 31 are phrases in disguise; this is the offset that maps them.
@@ -97,7 +97,7 @@ namespace Elite
 
     if (_token == 9)
     {
-      // 6502: crlf -- LDA #21 / JSR DOXC / JMP TT73. Tab to column 21, then a colon.
+      // 6502: crlf -- tab to column 21, then a colon, the second half a tail call.
       m_text.column = CONTROL_CODE_9_COLUMN;
       Print(':');
       return;

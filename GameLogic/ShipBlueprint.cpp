@@ -7,8 +7,8 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDA (XX0),Y -- one byte of the region, by ADDRESS. Outside the region it reads zero,
-    /// which is what the old `ShipByte` did and what `NO_BLUEPRINT` keeps.
+    /// 6502: one byte of the region, read INDIRECTLY through `XX0` -- so by ADDRESS. Outside the
+    /// region it reads zero, which is what the old `ShipByte` did and what `NO_BLUEPRINT` keeps.
     [[nodiscard]] std::uint8_t RegionByte(std::uint16_t _address) noexcept
     {
       const std::uint32_t offset = static_cast<std::uint32_t>(_address) - SHIP_DATA_BASE;
@@ -82,8 +82,9 @@ namespace Elite
         std::array<Blueprint, SHIP_TYPE_COUNT + 1u> table{};
         for (std::uint8_t type = 1; type <= SHIP_TYPE_COUNT; ++type)
         {
-          // 6502: ASL A / TAY / LDA XX21-1,Y / ... / LDA XX21-2,Y. The doubling is the two bytes an
-          // address takes; the -1 and -2 are what make the table one-based.
+          // 6502: the type doubled and used as an index, then two bytes fetched below the table's
+          // base. The doubling is the two bytes an address takes; the -1 and -2 are what make the
+          // table one-based.
           const std::uint16_t entry = static_cast<std::uint16_t>(SHIP_DATA_BASE + (type - 1u) * 2u);
           const std::uint16_t address = static_cast<std::uint16_t>(RegionByte(entry) | (RegionByte(static_cast<std::uint16_t>(entry + 1u)) << 8));
           table[type] = (address == 0u) ? NO_BLUEPRINT : ParseBlueprint(TypeOf(type), address);

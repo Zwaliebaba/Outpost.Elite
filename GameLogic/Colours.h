@@ -31,8 +31,8 @@ namespace Elite
    *   - Colour RAM's nibble, the background register, and each sprite's own colour register ARE
    *     one index, and those are what this type is for.
    *
-   * AND THE REGISTERS TAKE FOUR BITS, WHICH IS WHY `ColourOf` EXISTS. `STA VIC+&21` writes eight
-   * bits and the chip latches the low four; the game relies on that -- `COMIRQ1` increments
+   * AND THE REGISTERS TAKE FOUR BITS, WHICH IS WHY `ColourOf` EXISTS. A store to the background
+   * register writes eight bits and the chip latches the low four; the game relies on that --
    * `welcome` while the energy bomb burns and stores the running count straight into the register,
    * so the byte on its way there is a counter and only becomes a colour when the hardware masks it.
    * Every conversion from a byte to a `Colour` goes through `ColourOf`, and that is the port's

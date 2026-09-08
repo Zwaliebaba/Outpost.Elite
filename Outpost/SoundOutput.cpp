@@ -90,7 +90,7 @@ namespace Outpost
   }
 
   /*
-   * 6502: LDA #%00001111 / STA SID+&18, out of `COLD` -- the master volume, set once at boot.
+   * 6502: the SID's master volume set to 15 out of `COLD` -- set once at boot.
    *
    * NOTHING IN THE EFFECT PLAYER EVER WRITES IT. `SOINT` programs the three voices and never
    * touches register &18, so every sound in the game is played at whatever volume something else

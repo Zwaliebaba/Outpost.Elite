@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->30 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->0 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,51 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-58: the last nineteen files. `opcode-transcriptions` reaches ZERO and M6-d's
+row is met.**
+
+30 sites over nineteen files -- `Dashboard2x.cpp`, `Galaxy.h`, `Lines2x.h`, `LookupTables.cpp`,
+`LookupTables.h`, `ShipBlueprint.cpp`, `ShipBlueprint.h`, `StateTokens.h`, `SystemScreen.h`,
+`Tokens.cpp`, `Outpost/Presentation.cpp`, `Colours.h`, `LineHeap.h`, `MemoryMap.cpp`, `MemoryMap.h`,
+`Stardust.h`, `Outpost/SettingsFile.cpp`, `Outpost/SoundOutput.cpp` and `Outpost/SoundOutput.h`.
+All 116 files at zero.
+
+**`opcode-quotations` is 0 and R-i's `6502 quoted:` tag was never used, in 58 slices.** That is the
+finding of the whole phase and it is the owner's to rule on before M6-e closes the ledger. R-i split
+the ratchet in two on the expectation that some comments could not be rewritten without losing their
+reason, and gave those a tag so the residue would be visible and capped rather than argued per site.
+The residue is empty. The hardest cases the tree had all cleared with prose: `Hyperspace.h`'s
+mid-instruction entry point, `Arith.h`'s four dropped-flag arguments, `EraseShip`'s three-way carry,
+`OUCH`'s carry arriving from a sound routine, `MVTRIBS`'s two generator calls with deliberately
+different carries, and -- last of all, in this slice -- `MemoryMap.h`, whose whole argument is "the
+routine is eight instructions and none of them writes code" and which had the eight listed as its
+evidence. Naming what the eight DO is shorter, says the same thing, and can be checked against the
+port after `Upstream/` is gone, which the listing cannot. **The cap can be set to zero, and R-i's
+tag can be deleted with it.**
+
+**One instruction listing lives where the counter cannot see it, and there is exactly one.** A sweep
+of every string literal in `GameLogic/` and `Outpost/` for a mnemonic with an operand found a single
+hit: a `static_assert` message reading "AND #3 is what indexes the directions", four lines under a
+comment this slice had just rewritten to say "two bits are what index them". Made consistent. The
+counter reads COMMENTS, which is what M6-d's row asks of it, and that is the right scope -- but it
+is worth writing down that the scope has an edge and where the edge was.
+
+**The phase in numbers.** 997 sites over 116 files at M6-d-0; 0 over 0 now, across fifty-eight
+slices. Six errors in landed prose found and fixed along the way, every one of them in a sentence a
+listing was decorating and none of them in code: two miscounts, two misplaced citations, an
+off-by-one in a word, and a sentence that changed convention mid-breath. Three defects in the
+instruments, all found by the work rather than by a check: `--update` would raise a ceiling, the
+harness's subject line under-reported twice, and `apply` across two calls could replace the wrong
+line. Five idiom families named and documented where the code is, because after M6-f the port is the
+only place they can live: the data byte that assembles as an instruction and swallows the next one;
+the mid-instruction entry point whose address IS the parameter; the constant that is one thing in
+the original and several in the port; the flag set at a distance; and -- twice -- the original's own
+commentary being wrong for this build.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved. `opcode-transcriptions` 30 → **0**.
+
 
 **2026-09-08 — M6-d-57: eleven files to zero, and the tail is now thirty sites over nineteen
 files.**

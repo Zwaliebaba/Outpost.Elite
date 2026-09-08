@@ -55,12 +55,13 @@ namespace Elite
    * 2x of: PlotPixel -- a distance-graded mark at a point in the WIDE VIEW's coordinates.
    *
    * `_distance` is `ZZ` and is the faithful byte, unscaled: which of the two shapes is drawn is
-   * `PIXEL`'s decision and not the twin's (rule T1). Only ONE of its two comparisons reaches this:
-   * `CMP #144` and `CMP #80` pick between one mark and one mark, so the far case and the middle
-   * case are the same drawing and the twin has one test where the faithful routine has two.
+   * `PIXEL`'s decision and not the twin's (rule T1). Only ONE of its two comparisons reaches
+   * this: the thresholds at 144 and 80 pick between one mark and one mark, so the far case and
+   * the middle case are the same drawing and the twin has one test where the faithful routine
+   * has two.
    *
    * The second row of a near mark goes ABOVE, except on the top row of a character cell where it
-   * goes below -- `PIXEL`'s own `DEY / BPL PX3 / LDY #1`, on THIS surface's cell grid rather than
+   * goes below -- `PIXEL`'s own decrement and its guard, on THIS surface's cell grid rather than
    * the canvas's, so that a mark stays inside one cell's palette here exactly as it does there.
    */
   /// 2x of: PlotPixel

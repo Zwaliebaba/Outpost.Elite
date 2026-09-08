@@ -89,7 +89,7 @@ namespace Elite
   static_assert(EXTENT<decltype(LINE_RIGHT_MASK_TABLE)> == EXTENT<decltype(PIXEL_MASK_TABLE)>,
                 "and by the same x within the byte the pixel masks use");
 
-  // 6502: the four tables `COMIRQ1` indexes at `LDX RASTCT` -- one entry per half of the split.
+  // 6502: the four tables `COMIRQ1` indexes by `RASTCT` -- one entry per half of the split.
   static_assert(EXTENT<decltype(RASTER_NEXT_LINE_TABLE)> == 2u, "the raster split has two halves");
   static_assert(EXTENT<decltype(RASTER_SPRITE_MULTICOLOUR_TABLE)> == EXTENT<decltype(RASTER_NEXT_LINE_TABLE)>, "and so does santana");
   static_assert(EXTENT<decltype(RASTER_SPRITE_COLOUR_TABLE)> == EXTENT<decltype(RASTER_NEXT_LINE_TABLE)>, "and lotus");
@@ -139,8 +139,8 @@ namespace Elite
   static_assert(EXTENT<decltype(TRUMBLE_COUNT_TABLE)> == EXTENT<decltype(TRUMBLE_SPRITE_TABLE)>,
                 "the two Trumble tables are indexed by the same population");
 
-  // 6502: TRIBDIR and TRIBDIRH -- "four entries because `AND #3` is what indexes them".
-  static_assert(EXTENT<decltype(TRUMBLE_DIRECTION_TABLE)> == 4u, "AND #3 is what indexes the directions");
+  // 6502: TRIBDIR and TRIBDIRH -- "four entries because two bits are what index them".
+  static_assert(EXTENT<decltype(TRUMBLE_DIRECTION_TABLE)> == 4u, "two bits are what index the directions");
   static_assert(EXTENT<decltype(TRUMBLE_DIRECTION_HIGH_TABLE)> == EXTENT<decltype(TRUMBLE_DIRECTION_TABLE)>,
                 "and the high half is the same table");
 
