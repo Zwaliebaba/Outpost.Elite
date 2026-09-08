@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,030 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,986 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-14: `GameLoop.cpp` to zero, and under two thousand.**
+
+44 more and the file is done: 101 sites, none left. **Four files are now at zero** — `Arith.cpp`,
+`FlightLoop.cpp`, `Tactics.cpp` and `GameLoop.cpp` — and the count is **1,986**, under two thousand
+for the first time and down 935 from where the instrument started.
+
+Parts 3 and 4 of the spawner finish the carry chain M6-d-13 began, and the shape holds: a comparison
+whose ANSWER is never tested, sitting there only to set the flag the next instruction consumes. The
+junk type is the clearest — a roll compared against ten, and the comparison's result feeds an
+addition rather than a branch, so a roll of ten or more picks the next type up. Written as prose that
+is one sentence; written as instructions it looks like a test with no consumer.
+
+Three more kept whole: the police threshold folds the legal status in **only** when a Viper is
+already about, and the branch that skips the fold lands on the store; the Viper count is read AFTER
+the spawn, so one in the bubble ends the pass whether it just arrived or was already there; and the
+bounty hunter's tail ends on the same assembler trick as the laser's, hiding one instruction inside
+another's operand so the type computed earlier survives.
+
+**The tooling note from this slice is about EDITING, not about the port.** Two batches failed their
+own uniqueness assertion — one line appeared twice in the file, and a later attempt used line numbers
+that earlier edits in the same pass had already shifted. Both failed ATOMICALLY and wrote nothing,
+which is the property that made them cheap: the fix was to find the duplicated line by content after
+the other edits had landed, not to guess at offsets. A patch that half-applies is worse than one that
+refuses.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,030 → 1,986.
 
 **2026-09-08 — M6-d-13: the spawner, where the accumulator changes meaning mid-routine.**
 
