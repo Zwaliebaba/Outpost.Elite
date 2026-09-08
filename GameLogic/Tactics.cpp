@@ -279,7 +279,7 @@ namespace Elite
     // 6502: MVT3 adds this ship's coordinate, so K is now this ship minus the other.
     const KBlockSum sum = AddShipCoordinateToK(_work, difference, _at);
 
-    // 6502: STA K3+2,X, and the A it stores is the sign byte `MVT3` left in the register.
+    // 6502: the sign byte `MVT3` left behind is what gets stored.
     _axes[_at + 2u] = sum.value.top;
     _axes[_at + 1u] = sum.value.high;
     _axes[_at] = sum.value.mid;
@@ -435,7 +435,7 @@ namespace Elite
   /*
    * ---- part 1: the missile ----------------------------------------------------------------------
    *
-   * 6502: CPX #MSL / BEQ TA18 -- and `TA18` is in PART 1, which is not the beginning.
+   * 6502: the missile test sends it to `TA18`, which is in PART 1 and not the beginning.
    *
    * EVERY BRANCH ANSWERS and none of them steers, which is why the port has no line for part 4's
    * missile test: the two branches that fall through in the original call
@@ -582,7 +582,7 @@ namespace Elite
       return Tactic::Done;
     }
 
-    // 6502: .TA35 LDA INWK / ORA INWK+3 / ORA INWK+6 / BNE TA87 / LDA #80 / JSR OOPS.
+    // 6502: TA35 -- a missile dying right beside us costs 80, which is survivable.
     if (static_cast<std::uint8_t>(_frame.work.x.lo | _frame.work.y.lo | _frame.work.z.lo) == 0u)
     {
       if (!TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], COLLISION_DAMAGE, false))
@@ -657,7 +657,7 @@ namespace Elite
       launch = ShipType::Viper;
     }
 
-    // 6502: .TN6 LDA #%11110001 / JMP SFS1 -- hostile, aggressive, and out of the slot.
+    // 6502: TN6 -- hostile, aggressive, and out of the slot.
     (void)SpawnChildShip(_frame.universe.bubble, _frame.work, _frame.universe.rng, _frame.slot, _frame.type, STATION_LAUNCH_AI, launch,
                          _frame.universe.flight.blueprint);
     return Tactic::Done;
@@ -805,7 +805,7 @@ namespace Elite
     /*
      * ---- part 4: is it an Anaconda, is it scared, has it lost its nerve ------------------------
      *
-     * 6502: the missile test that sends part 4 to `TA20`, AND THE PORT HAS NO LINE FOR IT.
+     * 6502: the missile test that sends part 4 to `TA20` -- THE PORT HAS NO LINE FOR IT.
      *
      * In the original a missile reaches part 4 by falling out of `TN4` and `TA19`, and this test
      * is what sends it to `TA20`. The port does not arrive here that way: every branch of part 1's
@@ -877,19 +877,19 @@ namespace Elite
     {
       if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= _frame.work.energy)
       {
-        // 6502: JSR DORND / CMP #230 / BCC ta3 -- the carry is the `CMP INWK+35` above, and
+        // 6502: a roll against 230, and the carry going in is the energy comparison's above --
         // reaching here means it did not borrow.
         const RngResult flee = _frame.universe.rng.Next(true);
         if (flee.value >= 230u)
         {
-          // 6502: LDX TYPE / LDA E%-1,X / BPL ta3 -- bit 7 of the default `NEWB` for this _frame.type is
-          // "carries an escape pod", so only a ship that HAS one bails out.
+          // 6502: bit 7 of the default trait byte for this type is "carries an escape pod", so only
+          // a ship that HAS one bails out.
           const std::uint8_t defaults = DefaultNewbFor(_frame.type);
           if ((defaults & 0x80u) != 0u)
           {
             /*
-             * 6502: LDA NEWB / AND #%11110000 / STA NEWB / LDY #36 / STA (INF),Y / LDA #0 /
-             * STA INWK+32 / JMP SESCP.
+             * 6502: the trait byte masked to its top nibble, written to both copies, the AI byte
+             * cleared, and then `SESCP`.
              *
              * The abandoned hull keeps only the top nibble of its flags and is written back to the
              * SLOT as well as to `INWK` -- the one place in `TACTICS` that writes both copies --
@@ -904,8 +904,8 @@ namespace Elite
             return Tactic::Done;
           }
 
-          // 6502: BPL ta3 -- the ship has no escape pod, so it falls out of the test with the
-          // `CMP #230` still standing in the carry.
+          // 6502: the ship has no escape pod, so it falls out of the test with the roll's own
+          // comparison still standing in the carry.
           fellFromFleeTest = true;
         }
       }
@@ -914,30 +914,29 @@ namespace Elite
     /*
      * ---- part 5: does it fire ------------------------------------------------------------------
      *
-     * 6502: .ta3 LDA INWK+31 / AND #%00000111 / BEQ TA3 / STA T / JSR DORND / AND #31 / CMP T /
-     * BCS TA3 -- the bottom three bits of the state byte are how many missiles the ship has, and
+     * 6502: ta3 -- the bottom three bits of the state byte are how many missiles the ship has, and
      * the chance of it firing one is that count out of thirty-two.
      *
-     * `fightsOn` is `TA7`'s first `BCC TA3` jumping clean over this part -- see the comment there.
+     * `fightsOn` is `TA7`'s first branch jumping clean over this part -- see the comment there.
      */
     const std::uint8_t missiles = MissilesOf(_frame.work.state);
     if (!fightsOn && missiles != 0u)
     {
-      // 6502: STA T -- the count is parked for one instruction and read back as `CMP T`, which
-      // is `missiles` here: `TACTICS`'s own byte since M2-c-3.
+      // 6502: the count is parked for one instruction and compared back, which is `missiles` here:
+      // `TACTICS`'s own byte since M2-c-3.
 
-      // 6502: .ta3 ... STA T / JSR DORND -- and `ta3` has two entrances. `BCC ta3` from either
-      // energy compare arrives with the carry CLEAR; falling out of the escape-pod test arrives
-      // with `CMP #230`'s, which is SET. `AND` and `STA` leave the flag alone either way.
+      // 6502: `ta3` has two entrances. Arriving from either energy comparison means the carry is
+      // CLEAR; falling out of the escape-pod test means it is the flee roll's, which is SET. The
+      // masking and storing between them leave the flag alone either way.
       const RngResult chance = _frame.universe.rng.Next(fellFromFleeTest);
 
-      // 6502: LDA ECMA / BNE TA3 -- an ECM running stops the launch, and the missile is not spent.
+      // 6502: an E.C.M. running stops the launch, and the missile is not spent.
       if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && _frame.universe.status.ecmCountdown == 0u)
       {
-        --_frame.work.state; // 6502: DEC INWK+31
+        --_frame.work.state; // 6502: one missile off the count
 
-        // 6502: LDA TYPE / CMP #THG / BNE TA16 / LDX #TGL / LDA INWK+32 / JMP SFS1 -- a Thargoid
-        // launches a Thargon and passes ITS OWN AI byte on, which is why Thargons arrive hostile.
+        // 6502: a Thargoid launches a Thargon and passes ITS OWN AI byte on, which is why Thargons
+        // arrive hostile.
         if (_frame.type == ShipType::Thargoid)
         {
           (void)SpawnChildShip(_frame.universe.bubble, _frame.work, _frame.universe.rng, _frame.slot, _frame.type, _frame.work.ai,
@@ -945,7 +944,7 @@ namespace Elite
           return Tactic::Done;
         }
 
-        // 6502: .TA16 JMP SFRMIS -- and it answers, because a full bubble means no missile.
+        // 6502: TA16 -- and it answers, because a full bubble means no missile.
         if (SpawnChildShip(_frame.universe.bubble, _frame.work, _frame.universe.rng, _frame.slot, _frame.type, SPAWN_CHILD_AI,
                            ShipType::Missile, _frame.universe.flight.blueprint)
               .created)
@@ -961,37 +960,36 @@ namespace Elite
     /*
      * ---- part 6: does its laser hit us ---------------------------------------------------------
      *
-     * 6502: .TA3 LDA #0 / JSR MAS4 / AND #%11100000 / BNE TA4 -- too far away on any axis and
-     * nothing can be fired.
+     * 6502: TA3 -- too far away on any axis and nothing can be fired.
      */
     if ((LargestShipAxis(_frame.work, 0u) & 0xE0u) == 0u)
     {
       const std::uint8_t offNose = _frame.offNose;
 
-      // 6502: LDX CNT / CPX #160 / BCC TA4 -- and 160 has bit 7 set, so this is also "in front".
+      // 6502: 160 has bit 7 set, so this test is also "in front".
       if (offNose >= 160u)
       {
-        // 6502: LDY #19 / LDA (XX0),Y / AND #%11111000 / BEQ TA4 -- the blueprint's laser power,
-        // and the bottom three bits are the missile count rather than power.
+        // 6502: the blueprint's laser power, whose bottom three bits are the missile count rather
+        // than power.
         const std::uint8_t laser = static_cast<std::uint8_t>(_frame.universe.flight.blueprint->weapons & 0xF8u);
         if (laser != 0u)
         {
-          // 6502: LDA INWK+31 / ORA #%01000000 / STA INWK+31 -- bit 6 is "firing", which is what
-          // draws the line from its nose in part 11 of the flight loop.
+          // 6502: bit 6 is "firing", which is what draws the line from its nose in part 11 of the
+          // flight loop.
           _frame.work.state = With(_frame.work.state, ShipStateBit::Firing);
 
-          // 6502: CPX #163 / BCC TA4 -- firing is one cone and HITTING is a tighter one.
+          // 6502: firing is one cone and HITTING is a tighter one.
           if (offNose >= 163u)
           {
             /*
-             * 6502: LDA (XX0),Y / LSR A / JSR OOPS -- half the laser power, and the byte is read
-             * AGAIN unmasked, so the missile count in its bottom three bits is part of the damage.
+             * 6502: half the laser power into `OOPS` -- and the byte is read AGAIN unmasked, so the
+             * missile count in its bottom three bits is part of the damage.
              *
-             * AND THE `LSR` IS ALSO THE CARRY. `OOPS` opens `STA T ... LDA FSH / SBC T`, and the
-             * only thing between the shift and that subtraction is the `JSR`, so bit 0 of the
-             * blueprint's byte 19 decides whether the player loses one more unit of shield than
-             * the arithmetic says (§6.125). Found by a sweep that put the ship BESIDE us rather
-             * than in front, which is the only geometry in it that reaches this line.
+             * AND THE HALVING IS ALSO THE CARRY. `OOPS` subtracts the damage from the shields, and
+             * nothing between the shift and that subtraction touches the flag, so bit 0 of the
+             * blueprint's byte 19 decides whether the player loses one more unit of shield than the
+             * arithmetic says (§6.125). Found by a sweep that put the ship BESIDE us rather than in
+             * front, which is the only geometry in it that reaches this line.
              */
             const std::uint8_t power = _frame.universe.flight.blueprint->weapons;
             const std::uint8_t damage = static_cast<std::uint8_t>(power >> 1u);
@@ -1000,10 +998,10 @@ namespace Elite
               return Tactic::Fatal;
             }
 
-            --_frame.work.acceleration; // 6502: DEC INWK+28 -- it slows down as it fires
+            --_frame.work.acceleration; // 6502: it slows down as it fires
 
-            // 6502: LDA ECMA / BNE TA9-1 -- and `TA9-1` is the `RTS` one byte before `TA9`, so an
-            // ECM running silences the hit and returns rather than skipping the sound (§6.125).
+            // 6502: `TA9-1` is the return one byte before `TA9`, so an E.C.M. running silences the
+            // hit and RETURNS rather than skipping the sound (§6.125).
             if (_frame.universe.status.ecmCountdown != 0u)
             {
               return Tactic::Done;
@@ -1026,8 +1024,7 @@ namespace Elite
     /*
      * ---- part 7: steer --------------------------------------------------------------------------
      *
-     * 6502: .TA4 LDA INWK+7 / CMP #3 / BCS TA5 / LDA INWK+1 / ORA INWK+4 / AND #%11111110 /
-     * BEQ TA15 -- a ship that is very close steers WITHOUT the reversal below, which is what stops
+     * 6502: TA4 -- a ship that is very close steers WITHOUT the reversal below, which is what stops
      * it turning away the moment it arrives.
      */
     bool reverse = true;
@@ -1037,10 +1034,10 @@ namespace Elite
     }
     else
     {
-      // 6502: .TA5 JSR DORND / ORA #%10000000 / CMP INWK+32 / BCS TA15 -- a random byte with bit 7
-      // forced on, against the AI byte: the more aggressive the ship, the more often it presses in.
-      // 6502: .TA5 JSR DORND -- reached from `CMP #3 / BCS TA5`, whose carry is set, or by falling
-      // past the `BEQ TA15` below it, where the `AND` left the flag as the compare set it.
+      // 6502: TA5 -- a random byte with bit 7 forced on, against the AI byte: the more aggressive
+      // the ship, the more often it presses in.
+      // 6502: TA5 is reached from the distance comparison, whose carry is set, or by falling past
+      // the test below it, where the masking left the flag as that comparison set it.
       const RngResult press = _frame.universe.rng.Next(_frame.work.z.hi >= 3u);
       if (With(press.value, AiBit::Active) >= _frame.work.ai)
       {
@@ -1050,39 +1047,40 @@ namespace Elite
 
     if (reverse)
     {
-      // 6502: .TA20 JSR TAS6 / LDA CNT / EOR #%10000000 / .TA152 STA CNT -- turn the vector round
-      // and flip the sign of how far off it is, which is how a ship backs away.
+      // 6502: TA20 into TA152 -- turn the vector round and flip the sign of how far off it is,
+      // which is how a ship backs away.
       SteerTowards(_frame.universe, _frame.ports, NegateVector(_frame.towards), static_cast<std::uint8_t>(_frame.offNose ^ 0x80u));
       return Tactic::Done;
     }
 
-    SteerTowards(_frame.universe, _frame.ports, _frame.towards, _frame.offNose); // 6502: .TA15, entered with `CNT` already set
+    SteerTowards(_frame.universe, _frame.ports, _frame.towards, _frame.offNose); // 6502: TA15, with `CNT` already set
     return Tactic::Done;
   }
 
   /*
    * 6502: TACTICS -- one pass of a ship's AI, as the parts it always had (M4-c).
    *
-   * Each part ANSWERS and this performs: `TN2`'s `JMP DOCKIT` is a call here, where the delegation
+   * Each part ANSWERS and this performs: `TN2`'s hand-off to `DOCKIT` is a call here, where the
+   * delegation
    * is visible, rather than a tail call whose boolean was passed through.
    */
   bool RunTactics(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept
   {
     TacticFrame frame{_universe, _ports, _universe.work, _universe.axes, _universe.flight.type, _slot};
 
-    // 6502: .TACTICS LDA #3 / STA RAT / LDA #4 / STA RAT2 / LDA #22 / STA CNT2 -- and `DOCKIT`
-    // overwrites all three, which is the whole difference between flying and being flown.
+    // 6502: TACTICS sets its three steering constants, and `DOCKIT` overwrites all three -- which
+    // is the whole difference between flying and being flown.
     _universe.flight.signMask = TACTICS_RAT;
     _universe.flight.signMask2 = TACTICS_RAT2;
     _universe.flight.steerCone = TACTICS_CNT2;
 
     Tactic tactic = Tactic::Steer;
 
-    if (frame.type == ShipType::Missile) // 6502: CPX #MSL / BEQ TA18
+    if (frame.type == ShipType::Missile) // 6502: TA18
     {
       tactic = DecideMissile(frame);
     }
-    else if (frame.type == ShipType::Station) // 6502: CPX #SST / BNE TA13
+    else if (frame.type == ShipType::Station) // 6502: the station test, and TA13 is everything else
     {
       tactic = DecideStation(frame);
     }
@@ -1102,7 +1100,7 @@ namespace Elite
     switch (tactic)
     {
     case Tactic::Docking:
-      // 6502: .TN2 JMP DOCKIT -- a tail call in the original and a call here, so that the one
+      // 6502: TN2 hands off to `DOCKIT` -- a tail call in the original and a call here, so the one
       // path where `TACTICS` hands the ship to another routine is visible at the top level. It
       // cannot kill the player, so there is nothing to hand back (M4-c-2).
       RunDockingComputer(_universe, _ports, _slot);
@@ -1122,14 +1120,13 @@ namespace Elite
     Ship& work = _universe.work;
     K3Block& axes = _universe.axes;
 
-    // 6502: LDA #6 / STA RAT2 / LSR A / STA RAT / LDA #29 / STA CNT2 -- and `RAT` is the six
-    // shifted, not a second constant.
+    // 6502: the docking constants, and the turn rate is the tolerance halved rather than a second
+    // constant.
     _universe.flight.signMask2 = DOCKING_RAT2;
     _universe.flight.signMask = static_cast<std::uint8_t>(DOCKING_RAT2 >> 1u);
     _universe.flight.steerCone = DOCKING_CNT2;
 
-    // 6502: LDA SSPR / BNE P%+5 / .GOPLS JMP GOPL -- no station in the bubble, so steer at the
-    // planet and stop pretending to dock.
+    // 6502: GOPLS -- no station in the bubble, so steer at the planet and stop pretending to dock.
     if (_universe.bubble.StationPresent() == 0u)
     {
       AimAtPlanet(_universe, _ports);
@@ -1138,9 +1135,8 @@ namespace Elite
 
     (void)SubtractStationAxes(_universe.bubble, work, axes); // 6502: JSR VCSU1
 
-    // 6502: LDA K3+2 / ORA K3+5 / ORA K3+8 / AND #%01111111 / BNE GOPLS -- any axis whose HIGH
-    // byte has magnitude at all means the station is far away, and the sign is masked off because
-    // a station behind you is still close.
+    // 6502: any axis whose HIGH byte has magnitude at all means the station is far away, and the
+    // sign is masked off because a station behind you is still close.
     if ((static_cast<std::uint8_t>(axes[2] | axes[5] | axes[8]) & 0x7Fu) != 0u)
     {
       AimAtPlanet(_universe, _ports);
@@ -1148,7 +1144,7 @@ namespace Elite
     }
 
     /*
-     * 6502: JSR TA2 / LDA Q / STA K -- and `Q` is what `NORM` left, the vector's LENGTH.
+     * 6502: `TA2` runs and its `Q` is kept -- and `Q` is what `NORM` left, the vector's LENGTH.
      *
      * `TA2` is the tail of `TAS2` (the shifting loop is skipped because the test above has just
      * proved the coordinates are small), and it falls into `NORM`, which divides by the length it
@@ -1158,15 +1154,15 @@ namespace Elite
     const std::uint8_t distance = BuildUnitVector(axes).length;
 
     /*
-     * 6502: JSR TAS2 -- and this is a SECOND normalisation, of the same `K3`, immediately after the
+     * 6502: `TAS2` -- and this is a SECOND normalisation, of the same `K3`, immediately after the
      * first. `TA2` skipped the shifting loop; `TAS2` runs it, so the vector `XX15` ends up holding
      * is the shifted one and not the one the length was taken from. The port did the first call and
      * not the second, and every docking approach came out on the wrong branch (§6.125).
      */
     const UnitVector towards = NormaliseAxes(axes).vector;
 
-    // 6502: LDY #10 / JSR TAS4 / BMI PH1 / CMP #35 / BCC PH1 -- the STATION's nose against the
-    // vector to it, so this asks "am I in front of the slot", and anything else goes to `PH1`.
+    // 6502: the STATION's nose against the vector to it, so this asks "am I in front of the slot",
+    // and anything else goes to `PH1`.
     const AddSignedResult alongSlot = DotProductWithShip(_universe.bubble.blocks[1], towards, ORIENTATION_NOSE);
 
     bool fineApproach = false;
@@ -1178,16 +1174,15 @@ namespace Elite
     }
     else
     {
-      // 6502: LDY #10 / JSR TAS3 / CMP #&A2 / BCS PH3 -- OUR nose against the same vector, so this
-      // asks "am I pointing at it", and &A2 is a wide enough cone to fly straight in.
+      // 6502: OUR nose against the same vector, so this asks "am I pointing at it", and &A2 is a
+      // wide enough cone to fly straight in.
       const AddSignedResult ourNose = DotProductWithShip(work, towards, ORIENTATION_NOSE);
       if (ourNose.high >= 0xA2u)
       {
         fineApproach = true;
       }
-      // 6502: LDA K / CMP #157 / BCC PH2 / LDA TYPE / BMI PH3 -- close enough and it is the fine
-      // approach for a NEGATIVE type, which is the player's own computer (`auton` stores 224 in
-      // `TYPE`); a ship keeps turning towards the slot instead.
+      // 6502: close enough and it is the fine approach for a NEGATIVE type, which is the player's
+      // own computer (`auton` parks 224 in `TYPE`); a ship keeps turning towards the slot instead.
       else if (distance >= 157u && IsBody(_universe.flight.type))
       {
         fineApproach = true;
@@ -1197,7 +1192,7 @@ namespace Elite
     if (wideApproach)
     {
       /*
-       * 6502: .PH1 JSR VCSU1 / JSR DCS1 / JSR DCS1 / JSR TAS2 / JSR TAS6 / JMP TA151.
+       * 6502: PH1 -- the vector taken again, offset twice, normalised, turned round, and steered.
        *
        * The vector is taken again from scratch and `DCS1` runs TWICE -- and `DCS1` itself runs its
        * body twice (§6.121), so the docking point ends up eight nose vectors in front of the slot
@@ -1213,44 +1208,45 @@ namespace Elite
 
     if (!fineApproach)
     {
-      // 6502: .PH2 JSR TAS6 / JSR TA151, and then it FALLS INTO `PH22` rather than returning.
+      // 6502: PH2 -- turn the vector round and steer, and then it FALLS INTO `PH22` rather than
+      // returning.
       AimAlongNose(_universe, _ports, NegateVector(towards));
       HaltAndTurn(work);
       return;
     }
 
     /*
-     * 6502: .PH3 -- the fine approach, and the first thing it does is throw the turn rate away.
+     * 6502: PH3 -- the fine approach, and the first thing it does is throw the turn rate away.
      *
-     * `LDX #0 / STX RAT2 / STX INWK+30` means no pitch and no tolerance: from here the ship is
+     * Clearing the tolerance and the pitch counter means no pitch and no cone: from here the ship is
      * lined up and the corrections are made by hand below rather than by the shared steering.
      */
     _universe.flight.signMask2 = 0u;
     work.pitchCounter = 0u;
 
-    // 6502: LDA TYPE / BPL PH32 -- and a NEGATIVE type is the player's own docking computer, which
-    // `auton` marks by storing &E0 in `TYPE`. A ship being flown in by the AI skips all of this.
+    // 6502: PH32 -- a NEGATIVE type is the player's own docking computer, which `auton` marks by
+    // parking &E0 in `TYPE`. A ship being flown in by the AI skips all of this.
     if (IsBody(_universe.flight.type))
     {
       /*
-       * 6502: EOR XX15 / EOR XX15+1 / ASL A / LDA #2 / ROR A / STA INWK+29.
+       * 6502: the three signs folded together and rotated onto a constant two.
        *
-       * Three signs folded together -- the type's, the x component's and the y's -- and the `ASL`
-       * pushes the result into the carry so the `ROR` can put it back on top. `ROR` of a 2 is a
-       * ONE with the carry above it, so the roll is always magnitude one and all this arithmetic
-       * decides is its direction.
+       * Three signs are exclusive-ored -- the type's, the x component's and the y's -- and a shift
+       * up pushes the result into the carry so the rotate can put it back on top. Rotating a two
+       * right gives a ONE with the carry above it, so the roll is always magnitude one and all this
+       * arithmetic decides is its direction.
        */
       const std::uint8_t folded = static_cast<std::uint8_t>(Byte(_universe.flight.type) ^ towards.x ^ towards.y);
       work.rollCounter = static_cast<std::uint8_t>((2u >> 1u) | ((folded & 0x80u) != 0u ? 0x80u : 0x00u));
 
-      // 6502: LDA XX15 / ASL A / CMP #12 / BCS PH22 -- too far off sideways, so stop and turn.
+      // 6502: too far off sideways, so stop and turn.
       if (static_cast<std::uint8_t>(towards.x << 1u) >= 12u)
       {
         HaltAndTurn(work);
         return;
       }
 
-      // 6502: LDA XX15+1 / ASL A / LDA #2 / ROR A / STA INWK+30 -- the same shape for the pitch.
+      // 6502: the same shape again for the pitch.
       work.pitchCounter = static_cast<std::uint8_t>((2u >> 1u) | ((towards.y & 0x80u) != 0u ? 0x80u : 0x00u));
 
       if (static_cast<std::uint8_t>(towards.y << 1u) >= 12u)
@@ -1260,31 +1256,30 @@ namespace Elite
       }
     }
 
-    // 6502: .PH32 STX INWK+29 -- and X is still the zero from `PH3`, so the roll the block above
-    // may have set is thrown away again for a ship that is lined up.
+    // 6502: PH32 -- the index is still the zero `PH3` left, so the roll the block above may have
+    // set is thrown away again for a ship that is lined up.
     work.rollCounter = 0u;
 
-    // 6502: LDA INWK+22 / STA XX15 ... -- the ship's own SIDE vector into `XX15`, which is asking
-    // "is the station's roof lined up with my side", the last thing that has to match to fit
-    // through a slot.
+    // 6502: the ship's own SIDE vector into `XX15`, which is asking "is the station's roof lined up
+    // with my side", the last thing that has to match to fit through a slot.
     const UnitVector side{work.side.x.hi, work.side.y.hi, work.side.z.hi};
 
-    // 6502: LDY #16 / JSR TAS4 / ASL A / CMP #66 / BCS TN11.
+    // 6502: the dot product doubled and compared, and past 66 it goes to `TN11`.
     const AddSignedResult roll = DotProductWithShip(_universe.bubble.blocks[1], side, ORIENTATION_ROOF);
     if (static_cast<std::uint8_t>(roll.high << 1u) >= 66u)
     {
-      // 6502: .TN11 INC INWK+28 / LDA #%01111111 / STA INWK+29 / BNE TN13 -- roll as hard as the
-      // byte allows and speed up, which is how a ship spins itself into line with the slot.
+      // 6502: TN11 -- roll as hard as the byte allows and speed up, which is how a ship spins
+      // itself into line with the slot.
       ++work.acceleration;
       work.rollCounter = 0x7Fu;
     }
     else
     {
-      HaltAndTurn(work); // 6502: JSR PH22, and this one is a `JSR` -- it comes back
+      HaltAndTurn(work); // 6502: PH22, and this one is CALLED -- it comes back
     }
 
     /*
-     * 6502: .TN13 LDA K3+10 / BNE TNRTS / ASL NEWB / SEC / ROR NEWB.
+     * 6502: TN13 -- one byte of `K3` guards the whole thing, and past it bit 7 of `NEWB` is set.
      *
      * THE BYTE NOBODY GAVE IT (§6.125). `K3` is `SKIP 0` and names the first byte of `XX2`, which
      * is `SKIP 14` and is `LL9`'s face-visibility array, so `K3+10` is the visibility of the
@@ -1299,8 +1294,8 @@ namespace Elite
       return;
     }
 
-    // 6502: ASL NEWB / SEC / ROR NEWB -- the same three-instruction "set bit 7" as `TA873`, and
-    // the same mistake: the shifts cancel (§6.126).
+    // 6502: the same three-instruction "set bit 7" as `TA873`, and the same mistake: the shifts
+    // cancel (§6.126).
     work.traits = With(work.traits, TraitBit::Remove);
   }
 
