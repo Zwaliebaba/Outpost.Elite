@@ -81,7 +81,7 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const DrawWorkspace& _draw) noexcept
     {
-      _into.Word(_draw.sc);
+      _into.Word(_draw.screenPointer);
     }
 
     void FoldIntoStateHash(Folder& _into, const MathWorkspace& _math) noexcept
@@ -234,23 +234,23 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const FlightState& _flight) noexcept
     {
-      _into.Byte(_flight.alpha);
-      _into.Byte(_flight.alp1);
-      _into.Byte(_flight.alp2);
-      _into.Byte(_flight.alp2Next);
-      _into.Byte(_flight.beta);
-      _into.Byte(_flight.bet1);
-      _into.Byte(_flight.bet2);
-      _into.Byte(_flight.bet2Next);
-      _into.Byte(_flight.delta);
-      _into.Byte(_flight.delt4);
-      _into.Byte(_flight.delt4Next);
+      _into.Byte(_flight.rollRate);
+      _into.Byte(_flight.rollMagnitude);
+      _into.Byte(_flight.rollSign);
+      _into.Byte(_flight.rollSignFlipped);
+      _into.Byte(_flight.pitchRate);
+      _into.Byte(_flight.pitchMagnitude);
+      _into.Byte(_flight.pitchSign);
+      _into.Byte(_flight.pitchSignFlipped);
+      _into.Byte(_flight.speed);
+      _into.Byte(_flight.speedTimes4Low);
+      _into.Byte(_flight.speedTimes4High);
       _into.Byte(_flight.mainLoopCounter);
       _into.Byte(_flight.slot);
       _into.Byte(static_cast<std::uint8_t>(_flight.type));
       _into.Word(_flight.blueprint != nullptr ? _flight.blueprint->address : std::uint16_t{0}); // 6502: XX0
-      _into.Byte(_flight.rat);
-      _into.Byte(_flight.rat2);
+      _into.Byte(_flight.signMask);
+      _into.Byte(_flight.signMask2);
       _into.Byte(_flight.steerCone);
     }
 

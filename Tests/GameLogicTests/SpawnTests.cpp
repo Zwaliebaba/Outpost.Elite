@@ -838,7 +838,7 @@ namespace GameLogicTests
       const SpawnLabels at(oracle);
       const std::uint16_t frs1 = oracle.Label("FRS1");
       const std::uint16_t mstg = oracle.Label("MSTG");
-      const std::uint16_t delta = oracle.Label("DELTA");
+      const std::uint16_t speedByte = oracle.Label("DELTA");
 
       const std::uint8_t TARGETS[] = {0u, 1u, 3u, 0x7Fu, 0x80u, 0xC0u, 0xFFu};
       const std::uint8_t SPEEDS[] = {0u, 1u, 12u, 27u, 0xFFu};
@@ -866,7 +866,7 @@ namespace GameLogicTests
             SeedBubble(cpu, bubble, heap, at, fleet);
 
             cpu.memory[mstg] = target;
-            cpu.memory[delta] = speed;
+            cpu.memory[speedByte] = speed;
 
             Elite::Ship work{};
             std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();

@@ -50,7 +50,7 @@ namespace GameLogicTests
       std::uint16_t inwk = 0, k3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
       std::uint16_t q = 0, r = 0, s = 0, u = 0, k = 0;
       std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, legalStatus = 0, slsp = 0;
-      std::uint16_t cnt = 0, cnt2 = 0, rat = 0, rat2 = 0, junk = 0;
+      std::uint16_t cnt = 0, coneWidth = 0, signMask = 0, signMask2 = 0, junk = 0;
       std::uint16_t energy = 0, fsh = 0, ash = 0, dly = 0;
       std::uint16_t tally = 0, tallyl = 0;
 
@@ -72,9 +72,9 @@ namespace GameLogicTests
         tally = _oracle.Label("TALLY");
         tallyl = _oracle.Label("TALLYL");
         cnt = _oracle.Label("CNT");
-        cnt2 = _oracle.Label("CNT2");
-        rat = _oracle.Label("RAT");
-        rat2 = _oracle.Label("RAT2");
+        coneWidth = _oracle.Label("CNT2");
+        signMask = _oracle.Label("RAT");
+        signMask2 = _oracle.Label("RAT2");
         junk = _oracle.Label("JUNK");
         inwk = _oracle.Label("INWK");
         k3 = _oracle.Label("K3");
@@ -843,8 +843,8 @@ namespace GameLogicTests
                          (_where + L": RAND+" + std::to_wstring(byte)).c_str());
       }
 
-      Assert::AreEqual(_cpu.memory[_at.rat], _universe.universe.flight.rat, (_where + L": RAT").c_str());
-      Assert::AreEqual(_cpu.memory[_at.rat2], _universe.universe.flight.rat2, (_where + L": RAT2").c_str());
+      Assert::AreEqual(_cpu.memory[_at.signMask], _universe.universe.flight.signMask, (_where + L": RAT").c_str());
+      Assert::AreEqual(_cpu.memory[_at.signMask2], _universe.universe.flight.signMask2, (_where + L": RAT2").c_str());
       Assert::AreEqual(_cpu.memory[_at.junk], _universe.universe.bubble.junk, (_where + L": JUNK").c_str());
 
       // What `OOPS` spends, which is the half of a collision that a seam count cannot show.

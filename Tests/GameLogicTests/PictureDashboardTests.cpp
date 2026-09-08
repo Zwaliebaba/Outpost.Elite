@@ -160,14 +160,14 @@ namespace GameLogicTests
         {
           auto universe = WithDashboard();
           Elite::DrawWorkspace draw;
-          draw.sc = static_cast<std::uint16_t>(Elite::DASHBOARD_BITMAP + 8u * 30u);
+          draw.screenPointer = static_cast<std::uint16_t>(Elite::DASHBOARD_BITMAP + 8u * 30u);
 
-          const std::uint16_t sc = draw.sc;
+          const std::uint16_t screenPointer = draw.screenPointer;
           Elite::DrawBar(universe->canvas, draw, static_cast<std::uint8_t>(value), shifts, 255u,
                          Elite::DialColours{Elite::DIAL_NORMAL, Elite::PixelPattern::Blank}, &universe->picture);
 
-          const int characterRow = sc / Canvas::ROW_BYTES;
-          const int leftX = ((sc % Canvas::ROW_BYTES) / 8) * 8;
+          const int characterRow = screenPointer / Canvas::ROW_BYTES;
+          const int leftX = ((screenPointer % Canvas::ROW_BYTES) / 8) * 8;
           const int row = characterRow * 8 + 2;
 
           const std::vector<std::uint8_t> narrow = ResolveCanvas(universe->canvas);
@@ -203,14 +203,14 @@ namespace GameLogicTests
       {
         auto universe = WithDashboard();
         Elite::DrawWorkspace draw;
-        draw.sc = static_cast<std::uint16_t>(Elite::DASHBOARD_BITMAP + 8u * 30u);
-        const std::uint16_t sc = draw.sc;
+        draw.screenPointer = static_cast<std::uint16_t>(Elite::DASHBOARD_BITMAP + 8u * 30u);
+        const std::uint16_t screenPointer = draw.screenPointer;
 
         Elite::DrawBar(universe->canvas, draw, static_cast<std::uint8_t>(value), 0, 255u,
                        Elite::DialColours{Elite::DIAL_NORMAL, Elite::PixelPattern::Blank}, &universe->picture);
 
-        const int leftX = ((sc % Canvas::ROW_BYTES) / 8) * 8;
-        const int row = (sc / Canvas::ROW_BYTES) * 8 + 2;
+        const int leftX = ((screenPointer % Canvas::ROW_BYTES) / 8) * 8;
+        const int row = (screenPointer / Canvas::ROW_BYTES) * 8 + 2;
 
         const std::vector<std::uint8_t> narrow = ResolveCanvas(universe->canvas);
         Assert::AreEqual(value, CanvasInkOnRow(narrow, universe->canvas, row, leftX, leftX + 32) / 2, L"the faithful energy bar moved");
@@ -339,11 +339,11 @@ namespace GameLogicTests
     {
       auto universe = WithDashboard();
 
-      universe->flight.delta = 22u;
-      universe->flight.alp1 = 12u;
-      universe->flight.alp2 = 0u;
-      universe->flight.beta = 5u;
-      universe->flight.bet1 = 5u;
+      universe->flight.speed = 22u;
+      universe->flight.rollMagnitude = 12u;
+      universe->flight.rollSign = 0u;
+      universe->flight.pitchRate = 5u;
+      universe->flight.pitchMagnitude = 5u;
       universe->flight.mainLoopCounter = 0u; // one pass in four draws everything
       universe->status.energy = 200u;
       universe->status.forwardShield = 190u;

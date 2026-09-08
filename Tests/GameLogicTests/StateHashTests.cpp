@@ -102,7 +102,7 @@ namespace GameLogicTests
     {
       auto port = std::make_unique<FlightPort>();
       Assert::AreEqual(Elite::HashState(port->universe), port->game.StateHash());
-      port->universe.flight.delta = static_cast<std::uint8_t>(port->universe.flight.delta + 1u);
+      port->universe.flight.speed = static_cast<std::uint8_t>(port->universe.flight.speed + 1u);
       Assert::AreEqual(Elite::HashState(port->universe), port->game.StateHash(), L"the game hashed something other than its state");
     }
   };

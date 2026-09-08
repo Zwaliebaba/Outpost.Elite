@@ -445,11 +445,11 @@ namespace GameLogicTests
      * the screens always agreed -- but the digest hashed the port's invention, so it moves with the
      * fix, under Modernize.md rule 1's second case.
      */
-    cells.push_back(Direct(L"DELTA", _at.delta, _universe.flight.delta, CellScope::Image));
-    cells.push_back(Direct(L"ALP1", _at.alp1, _universe.flight.alp1, CellScope::Image));
-    cells.push_back(Direct(L"ALP2", _at.alp2, _universe.flight.alp2, CellScope::Image));
-    cells.push_back(Direct(L"BETA", _at.beta, _universe.flight.beta, CellScope::Image));
-    cells.push_back(Direct(L"BET1", _at.bet1, _universe.flight.bet1, CellScope::Image));
+    cells.push_back(Direct(L"DELTA", _at.speed, _universe.flight.speed, CellScope::Image));
+    cells.push_back(Direct(L"ALP1", _at.rollMagnitude, _universe.flight.rollMagnitude, CellScope::Image));
+    cells.push_back(Direct(L"ALP2", _at.rollSign, _universe.flight.rollSign, CellScope::Image));
+    cells.push_back(Direct(L"BETA", _at.pitchRate, _universe.flight.pitchRate, CellScope::Image));
+    cells.push_back(Direct(L"BET1", _at.pitchMagnitude, _universe.flight.pitchMagnitude, CellScope::Image));
     cells.push_back(Direct(L"ENERGY", _at.energy, _universe.status.energy, CellScope::Image));
     cells.push_back(Direct(L"FSH", _at.fsh, _universe.status.forwardShield, CellScope::Image));
     cells.push_back(Direct(L"ASH", _at.ash, _universe.status.aftShield, CellScope::Image));

@@ -135,9 +135,9 @@ namespace Elite
        * the two masks flattened it to a sign. So the magnitude decides whether to pitch at all and
        * the sign decides which way, out of one measurement read twice.
        */
-      if (static_cast<std::uint8_t>(roof.high << 1u) >= _universe.flight.rat2)
+      if (static_cast<std::uint8_t>(roof.high << 1u) >= _universe.flight.signMask2)
       {
-        work.pitchCounter = static_cast<std::uint8_t>(_universe.flight.rat | work.pitchCounter);
+        work.pitchCounter = static_cast<std::uint8_t>(_universe.flight.signMask | work.pitchCounter);
       }
 
       // 6502: .TA11 LDA INWK+29 / ASL A / CMP #32 / BCS TA6 -- a ship already rolling hard is left
@@ -150,9 +150,9 @@ namespace Elite
         const AddSignedResult side = DotProductWithShip(work, _towards, ORIENTATION_SIDE);
         work.rollCounter = static_cast<std::uint8_t>((((side.high ^ work.pitchCounter) & 0x80u) ^ 0x80u));
 
-        if (static_cast<std::uint8_t>(side.high << 1u) >= _universe.flight.rat2)
+        if (static_cast<std::uint8_t>(side.high << 1u) >= _universe.flight.signMask2)
         {
-          work.rollCounter = static_cast<std::uint8_t>(_universe.flight.rat | work.rollCounter);
+          work.rollCounter = static_cast<std::uint8_t>(_universe.flight.signMask | work.rollCounter);
         }
       }
 
@@ -199,7 +199,7 @@ namespace Elite
       const AddSignedResult nose = DotProductWithShip(_universe.work, _towards, ORIENTATION_NOSE);
       if (nose.high >= 0x98u)
       {
-        _universe.flight.rat2 = 0u;
+        _universe.flight.signMask2 = 0u;
       }
 
       SteerTowards(_universe, _ports, _towards, nose.high); // 6502: .ttt JMP TA152
@@ -1074,8 +1074,8 @@ namespace Elite
 
     // 6502: .TACTICS LDA #3 / STA RAT / LDA #4 / STA RAT2 / LDA #22 / STA CNT2 -- and `DOCKIT`
     // overwrites all three, which is the whole difference between flying and being flown.
-    _universe.flight.rat = TACTICS_RAT;
-    _universe.flight.rat2 = TACTICS_RAT2;
+    _universe.flight.signMask = TACTICS_RAT;
+    _universe.flight.signMask2 = TACTICS_RAT2;
     _universe.flight.steerCone = TACTICS_CNT2;
 
     Tactic tactic = Tactic::Steer;
@@ -1126,8 +1126,8 @@ namespace Elite
 
     // 6502: LDA #6 / STA RAT2 / LSR A / STA RAT / LDA #29 / STA CNT2 -- and `RAT` is the six
     // shifted, not a second constant.
-    _universe.flight.rat2 = DOCKING_RAT2;
-    _universe.flight.rat = static_cast<std::uint8_t>(DOCKING_RAT2 >> 1u);
+    _universe.flight.signMask2 = DOCKING_RAT2;
+    _universe.flight.signMask = static_cast<std::uint8_t>(DOCKING_RAT2 >> 1u);
     _universe.flight.steerCone = DOCKING_CNT2;
 
     // 6502: LDA SSPR / BNE P%+5 / .GOPLS JMP GOPL -- no station in the bubble, so steer at the
@@ -1227,7 +1227,7 @@ namespace Elite
      * `LDX #0 / STX RAT2 / STX INWK+30` means no pitch and no tolerance: from here the ship is
      * lined up and the corrections are made by hand below rather than by the shared steering.
      */
-    _universe.flight.rat2 = 0u;
+    _universe.flight.signMask2 = 0u;
     work.pitchCounter = 0u;
 
     // 6502: LDA TYPE / BPL PH32 -- and a NEGATIVE type is the player's own docking computer, which

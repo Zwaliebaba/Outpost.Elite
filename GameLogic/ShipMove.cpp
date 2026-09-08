@@ -473,7 +473,7 @@ namespace Elite
     {
       // 6502: LDA DELTA / STA R / LDA #128 / LDX #6 / JSR MVT1 -- z -= the player's speed. The 128 is
       // a sign and nothing else, which is why this is the unmasked entry point.
-      AddToShipCoordinate(_work, 128, _flight.delta, 6u, false);
+      AddToShipCoordinate(_work, 128, _flight.speed, 6u, false);
 
       // 6502: LDA TYPE / AND #&81 / CMP #&81 / BNE P%+3 / RTS -- the SUN, and only the sun, stops
       // here. It has no orientation to rotate.
@@ -483,15 +483,15 @@ namespace Elite
       }
 
       // 6502: LDY #9 / JSR MVS4, three times -- the nose, roof and side vectors by the player's turn.
-      RotateShipVector(_work, 9u, _flight.alpha, _flight.beta);
-      RotateShipVector(_work, 15u, _flight.alpha, _flight.beta);
-      RotateShipVector(_work, 21u, _flight.alpha, _flight.beta);
+      RotateShipVector(_work, 9u, _flight.rollRate, _flight.pitchRate);
+      RotateShipVector(_work, 15u, _flight.rollRate, _flight.pitchRate);
+      RotateShipVector(_work, 21u, _flight.rollRate, _flight.pitchRate);
 
       // 6502: `MVS4`'s last `STA Q` is BETA, and nothing below writes `Q` -- so for a ship the loop
       // moves and does not go on to draw, this is the frame's Q, which the altitude check reads
       // (`EndFlightFrame`). The kernel keeps its scratch since M2-b; this one byte is kept for that
       // reader.
-      _math.q = _flight.beta;
+      _math.q = _flight.pitchRate;
 
       /*
        * 6502: the ship's own roll, at INWK+30, then its pitch at INWK+29.
@@ -509,7 +509,7 @@ namespace Elite
       for (int which = 0; which < 2; ++which)
       {
         std::uint8_t& counter = (which == 0) ? _work.pitchCounter : _work.rollCounter; // 6502: INWK+30, then INWK+29
-        _flight.rat2 = static_cast<std::uint8_t>(counter & 0x80u);
+        _flight.signMask2 = static_cast<std::uint8_t>(counter & 0x80u);
 
         const std::uint8_t magnitude = static_cast<std::uint8_t>(counter & 0x7Fu);
         if (magnitude == 0u)
@@ -518,13 +518,13 @@ namespace Elite
         }
 
         const SubResult damped = SubtractWithCarry(magnitude, 0, magnitude >= 127u);
-        counter = static_cast<std::uint8_t>(damped.value | _flight.rat2);
+        counter = static_cast<std::uint8_t>(damped.value | _flight.signMask2);
 
         // 6502: LDX #15 / LDY #9 / JSR MVS5, three times over -- the orientation vectors turned
         // against the ship's own roll or pitch.
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, vectors[which][0], _flight.rat2);
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, vectors[which][1], _flight.rat2);
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 4u, vectors[which][2], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, vectors[which][0], _flight.signMask2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, vectors[which][1], _flight.signMask2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 4u, vectors[which][2], _flight.signMask2);
       }
 
       /*
@@ -566,7 +566,7 @@ namespace Elite
       // rejoin at MV45.
       if (IsBody(flight.type))
       {
-        MovePlanetOrSun(work, _universe.math, flight.alpha, flight.beta);
+        MovePlanetOrSun(work, _universe.math, flight.rollRate, flight.pitchRate);
         MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view, &_universe.picture);
         return true;
       }
@@ -639,16 +639,16 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
      * reused for the next multiply, and both are locals here.
      */
     // 6502: LDX ALP1 / JSR MLTU2-2 -- (A P+1 P) = (~x_lo, x_hi) * alp1, then MVT6 on y.
-    Product24 wide = MultiplyWide(work.x.hi, static_cast<std::uint8_t>(work.x.lo ^ 0xFFu), flight.alp1);
+    Product24 wide = MultiplyWide(work.x.hi, static_cast<std::uint8_t>(work.x.lo ^ 0xFFu), flight.rollMagnitude);
     const SignMag24 k2 =
-      AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.alp2Next ^ work.x.sgn)}, 3u);
+      AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.rollSignFlipped ^ work.x.sgn)}, 3u);
 
     // 6502: LDX BET1 / JSR MLTU2-2 -- and the same on z, with K2's low byte complemented into P.
-    wide = MultiplyWide(k2.hi, static_cast<std::uint8_t>(k2.lo ^ 0xFFu), flight.bet1);
-    work.z = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(k2.sgn ^ flight.bet2)}, 6u);
+    wide = MultiplyWide(k2.hi, static_cast<std::uint8_t>(k2.lo ^ 0xFFu), flight.pitchMagnitude);
+    work.z = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(k2.sgn ^ flight.pitchSign)}, 6u);
 
     // 6502: JSR MLTU2 -- Q is still BET1, and ITS CARRY is what the arithmetic below runs on.
-    wide = MultiplyWide(work.z.hi, static_cast<std::uint8_t>(work.z.lo ^ 0xFFu), flight.bet1);
+    wide = MultiplyWide(work.z.hi, static_cast<std::uint8_t>(work.z.lo ^ 0xFFu), flight.pitchMagnitude);
     work.y.sgn = k2.sgn;
 
     /*
@@ -659,7 +659,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
      * every other sign test in this file. Reading it the natural way put the ship's y coordinate one
      * out on the first iteration, which is how it was found.
      */
-    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) != 0u)
+    if (((k2.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) != 0u)
     {
       /*
        * 6502: `LDA P+1 / ADC K2+1` with NO `CLC`. It runs on the carry `MLTU2` left, because
@@ -689,8 +689,8 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
     }
 
     // 6502: MV44 -- LDX ALP1 / ... / JSR MVT6 -- x = x + alpha * y.
-    wide = MultiplyWide(work.y.hi, static_cast<std::uint8_t>(work.y.lo ^ 0xFFu), flight.alp1);
-    work.x = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.alp2 ^ work.y.sgn)}, 0u);
+    wide = MultiplyWide(work.y.hi, static_cast<std::uint8_t>(work.y.lo ^ 0xFFu), flight.rollMagnitude);
+    work.x = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.rollSign ^ work.y.sgn)}, 0u);
 
     MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view, &_universe.picture); // 6502: falls into MV45
     return true;
@@ -708,8 +708,8 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
       vector.x.lo = vector.z.lo;
       vector.z.lo = low;
 
-      const std::uint8_t high = static_cast<std::uint8_t>(vector.x.hi ^ _flight.rat);
-      vector.x.hi = static_cast<std::uint8_t>(vector.z.hi ^ _flight.rat2);
+      const std::uint8_t high = static_cast<std::uint8_t>(vector.x.hi ^ _flight.signMask);
+      vector.x.hi = static_cast<std::uint8_t>(vector.z.hi ^ _flight.signMask2);
       vector.z.hi = high;
     }
 
@@ -747,15 +747,15 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
     // 6502: PU2 -- `LDA #0 / CPX #2 / ROR A` puts the comparison's carry into bit 7 of a zero, so
     // RAT2 is the sign mask for the right view and RAT for the left. One instruction less than an
     // `if`, and the reason the two masks are always each other's complement.
-    _flight.rat2 = (which >= 2u) ? std::uint8_t{0x80} : std::uint8_t{0x00};
-    _flight.rat = static_cast<std::uint8_t>(_flight.rat2 ^ 0x80u);
+    _flight.signMask2 = (which >= 2u) ? std::uint8_t{0x80} : std::uint8_t{0x00};
+    _flight.signMask = static_cast<std::uint8_t>(_flight.signMask2 ^ 0x80u);
 
     // The position, whose low and high bytes swap plainly and whose signs swap with a flip.
     std::swap(_work.x.lo, _work.z.lo);
     std::swap(_work.x.hi, _work.z.hi);
 
-    const std::uint8_t sign = static_cast<std::uint8_t>(_work.x.sgn ^ _flight.rat);
-    _work.x.sgn = static_cast<std::uint8_t>(_work.z.sgn ^ _flight.rat2);
+    const std::uint8_t sign = static_cast<std::uint8_t>(_work.x.sgn ^ _flight.signMask);
+    _work.x.sgn = static_cast<std::uint8_t>(_work.z.sgn ^ _flight.signMask2);
     _work.z.sgn = sign;
 
     SwapVectorAxes(_work, _flight, 9);

@@ -380,19 +380,19 @@ namespace GameLogicTests
 
       for (std::uint32_t value = 0; value < 256; ++value)
       {
-        for (std::uint32_t delta = 0; delta < 256; ++delta)
+        for (std::uint32_t speed = 0; speed < 256; ++speed)
         {
           Cpu6502 cpu = oracle.Fresh();
-          cpu.memory[step] = static_cast<std::uint8_t>(delta);
+          cpu.memory[step] = static_cast<std::uint8_t>(speed);
           cpu.a = static_cast<std::uint8_t>(value);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           Assert::IsTrue(cpu.CallSubroutine(routine, 1'000).completed, L"TT123 should return");
 
-          const std::uint8_t ours = Elite::StepCoordinate(static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(delta));
+          const std::uint8_t ours = Elite::StepCoordinate(static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(speed));
           Assert::AreEqual<std::uint32_t>(cpu.memory[result], ours,
-                                          (L"TT123(" + std::to_wstring(value) + L", " + std::to_wstring(delta) + L")").c_str());
-          if (ours == static_cast<std::uint8_t>(value) && delta != 0)
+                                          (L"TT123(" + std::to_wstring(value) + L", " + std::to_wstring(speed) + L")").c_str());
+          if (ours == static_cast<std::uint8_t>(value) && speed != 0)
           {
             ++refused;
           }

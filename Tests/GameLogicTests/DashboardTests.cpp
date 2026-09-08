@@ -55,15 +55,15 @@ namespace GameLogicTests
 
     struct Labels
     {
-      std::uint16_t sc = 0, col = 0, k = 0, q = 0, r = 0, p = 0, s = 0, t1 = 0, dotProducts = 0;
-      std::uint16_t mcnt = 0, flh = 0, ecma = 0, ecmp = 0, alp1 = 0, alp2 = 0, beta = 0, bet1 = 0;
-      std::uint16_t delta = 0;
+      std::uint16_t screenPointer = 0, col = 0, k = 0, q = 0, r = 0, p = 0, s = 0, t1 = 0, dotProducts = 0;
+      std::uint16_t mcnt = 0, flh = 0, ecma = 0, ecmp = 0, rollMagnitude = 0, rollSign = 0, pitchRate = 0, pitchMagnitude = 0;
+      std::uint16_t speed = 0;
       std::uint16_t fsh = 0, ash = 0, energy = 0, cabtmp = 0, gntmp = 0, altit = 0, qq14 = 0;
       std::uint16_t qq11 = 0, many = 0, kPercent = 0, comx = 0, comy = 0, comc = 0, screen = 0;
 
       explicit Labels(const OracleImage& _oracle)
       {
-        sc = _oracle.Label("SC");
+        screenPointer = _oracle.Label("SC");
         col = _oracle.Label("COL");
         k = _oracle.Label("K");
         q = _oracle.Label("Q");
@@ -76,11 +76,11 @@ namespace GameLogicTests
         flh = _oracle.Label("FLH");
         ecma = _oracle.Label("ECMA");
         ecmp = _oracle.Label("ECMP");
-        alp1 = _oracle.Label("ALP1");
-        alp2 = _oracle.Label("ALP2");
-        beta = _oracle.Label("BETA");
-        bet1 = _oracle.Label("BET1");
-        delta = _oracle.Label("DELTA");
+        rollMagnitude = _oracle.Label("ALP1");
+        rollSign = _oracle.Label("ALP2");
+        pitchRate = _oracle.Label("BETA");
+        pitchMagnitude = _oracle.Label("BET1");
+        speed = _oracle.Label("DELTA");
         fsh = _oracle.Label("FSH");
         ash = _oracle.Label("ASH");
         energy = _oracle.Label("ENERGY");
@@ -289,8 +289,8 @@ namespace GameLogicTests
 
               FillScreens(cpu, canvas, at.screen, 0x3Cu);
 
-              cpu.memory[at.sc] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
-              cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
+              cpu.memory[at.screenPointer] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
+              cpu.memory[static_cast<std::uint16_t>(at.screenPointer + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
               cpu.memory[at.t1] = threshold;
               cpu.memory[at.k] = Elite::PatternByte(pair[0]);
               cpu.memory[static_cast<std::uint16_t>(at.k + 1)] = Elite::PatternByte(pair[1]);
@@ -299,7 +299,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(address, 20'000);
               Assert::IsTrue(run.completed, L"DIL returned");
 
-              draw.sc = start;
+              draw.screenPointer = start;
               Elite::DrawBar(canvas, draw, static_cast<std::uint8_t>(value), entry.shifts, threshold, Elite::DialColours{pair[0], pair[1]});
 
               const std::wstring where = Widen(std::string(entry.what) + "(" + std::to_string(value) + ", T1=" + std::to_string(threshold) +
@@ -312,8 +312,8 @@ namespace GameLogicTests
               // 6502: SC comes out one character row further down, which is how four calls in a row
               // draw four dials.
               const std::uint16_t exit =
-                static_cast<std::uint16_t>((cpu.memory[at.sc] | (cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] << 8)) - at.screen);
-              Assert::AreEqual<std::uint32_t>(exit, draw.sc, (where + L": SC on the way out").c_str());
+                static_cast<std::uint16_t>((cpu.memory[at.screenPointer] | (cpu.memory[static_cast<std::uint16_t>(at.screenPointer + 1)] << 8)) - at.screen);
+              Assert::AreEqual<std::uint32_t>(exit, draw.screenPointer, (where + L": SC on the way out").c_str());
 
               colours.insert(cpu.memory[at.col]); // the colour the ORIGINAL picked, so the sweep still counts four
               ++compared;
@@ -351,14 +351,14 @@ namespace GameLogicTests
 
         FillScreens(cpu, canvas, at.screen, 0xA7u);
 
-        cpu.memory[at.sc] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
+        cpu.memory[at.screenPointer] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(at.screenPointer + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
         cpu.a = static_cast<std::uint8_t>(value);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(dil2, 20'000);
         Assert::IsTrue(run.completed, L"DIL2 returned");
 
-        draw.sc = start;
+        draw.screenPointer = start;
         Elite::DrawIndicator(canvas, draw, static_cast<std::uint8_t>(value));
 
         const std::wstring where = Widen("DIL2(" + std::to_string(value) + ")");
@@ -366,8 +366,8 @@ namespace GameLogicTests
         // `Q` is `DIL2`'s own since M2-c: the countdown that finds the lit block, and 255 after it.
 
         const std::uint16_t exit =
-          static_cast<std::uint16_t>((cpu.memory[at.sc] | (cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] << 8)) - at.screen);
-        Assert::AreEqual<std::uint32_t>(exit, draw.sc, (where + L": SC on the way out").c_str());
+          static_cast<std::uint16_t>((cpu.memory[at.screenPointer] | (cpu.memory[static_cast<std::uint16_t>(at.screenPointer + 1)] << 8)) - at.screen);
+        Assert::AreEqual<std::uint32_t>(exit, draw.screenPointer, (where + L": SC on the way out").c_str());
       }
 
       Assert::IsTrue(drawn > 0u, L"the indicator was actually drawn");
@@ -617,7 +617,7 @@ namespace GameLogicTests
       struct Case
       {
         const char* what;
-        std::uint8_t delta, alp1, alp2, beta, bet1;
+        std::uint8_t speed, rollMagnitude, rollSign, pitchRate, pitchMagnitude;
         std::uint8_t energy, fsh, ash, fuel, cabtmp, gntmp, altit;
         std::uint8_t flash;
       };
@@ -680,10 +680,10 @@ namespace GameLogicTests
             FillScreens(cpu, canvas, at.screen, 0x00u);
 
             const std::uint8_t READINGS[][2] = {
-              {0u, item.delta}, {1u, item.alp1}, {2u, item.alp2},   {3u, item.beta},   {4u, item.bet1},   {5u, item.energy}, {6u, item.fsh},
+              {0u, item.speed}, {1u, item.rollMagnitude}, {2u, item.rollSign},   {3u, item.pitchRate},   {4u, item.pitchMagnitude},   {5u, item.energy}, {6u, item.fsh},
               {7u, item.ash},   {8u, item.fuel}, {9u, item.cabtmp}, {10u, item.gntmp}, {11u, item.altit}, {12u, item.flash},
             };
-            const std::uint16_t WHERE[] = {at.delta, at.alp1, at.alp2,   at.beta,  at.bet1,  at.energy, at.fsh,
+            const std::uint16_t WHERE[] = {at.speed, at.rollMagnitude, at.rollSign,   at.pitchRate,  at.pitchMagnitude,  at.energy, at.fsh,
                                            at.ash,   at.qq14, at.cabtmp, at.gntmp, at.altit, at.flh};
             for (const auto& reading : READINGS)
             {
@@ -727,11 +727,11 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"DIALS returned");
 
             Elite::FlightState flight;
-            flight.delta = item.delta;
-            flight.alp1 = item.alp1;
-            flight.alp2 = item.alp2;
-            flight.beta = item.beta;
-            flight.bet1 = item.bet1;
+            flight.speed = item.speed;
+            flight.rollMagnitude = item.rollMagnitude;
+            flight.rollSign = item.rollSign;
+            flight.pitchRate = item.pitchRate;
+            flight.pitchMagnitude = item.pitchMagnitude;
             flight.mainLoopCounter = counter;
 
             Elite::FlightStatus status;

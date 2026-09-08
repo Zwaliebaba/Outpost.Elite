@@ -96,21 +96,21 @@ namespace Elite
      * the pitch always starts straight.
      */
     _universe.control.pitch = CONTROL_CENTRE;
-    _universe.flight.alp2 = CONTROL_CENTRE;
-    _universe.flight.bet2 = CONTROL_CENTRE;
+    _universe.flight.rollSign = CONTROL_CENTRE;
+    _universe.flight.pitchSign = CONTROL_CENTRE;
 
     // 6502: ASL A -- 128 doubles to zero, which is where the next six stores get their value.
-    _universe.flight.beta = 0u;
-    _universe.flight.bet1 = 0u;
-    _universe.flight.alp2Next = 0u;
-    _universe.flight.bet2Next = 0u;
+    _universe.flight.pitchRate = 0u;
+    _universe.flight.pitchMagnitude = 0u;
+    _universe.flight.rollSignFlipped = 0u;
+    _universe.flight.pitchSignFlipped = 0u;
     _universe.flight.mainLoopCounter = 0u;
     _universe.trumbles.count = 0u;
 
     // 6502: LDA #3 / STA DELTA / STA ALPHA / STA ALP1 -- one load, three meanings.
-    _universe.flight.delta = LAUNCH_ROLL;
-    _universe.flight.alpha = LAUNCH_ROLL;
-    _universe.flight.alp1 = LAUNCH_ROLL;
+    _universe.flight.speed = LAUNCH_ROLL;
+    _universe.flight.rollRate = LAUNCH_ROLL;
+    _universe.flight.rollMagnitude = LAUNCH_ROLL;
 
     _universe.text.palette = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
     _universe.clip.clippingOff = 0u;                  // 6502: LDA #0 / STA dontclip
@@ -152,13 +152,13 @@ namespace Elite
      * counters, `ECMA` and the roll's two sign bytes -- not the text cursor the upstream comment
      * names, which is the BBC's layout at those addresses.
      */
-    _universe.flight.beta = 0u;
-    _universe.flight.bet1 = 0u;
+    _universe.flight.pitchRate = 0u;
+    _universe.flight.pitchMagnitude = 0u;
     _universe.status.hyperspaceCountdown = 0u;
     _universe.status.hyperspaceCounter = 0u;
     _universe.status.ecmCountdown = 0u;
-    _universe.flight.alp1 = 0u;
-    _universe.flight.alp2 = 0u;
+    _universe.flight.rollMagnitude = 0u;
+    _universe.flight.rollSign = 0u;
 
     /*
      * 6502: TXA / STA QQ12 / LDX #2 / .REL5 STA FSH,X / DEX / BPL REL5.
@@ -279,7 +279,7 @@ namespace Elite
       _universe.work.z.hi = static_cast<std::uint8_t>(_universe.work.z.hi + 1u);
       (void)AddStation(_universe, _ports); // 6502: JSR NWSPS
 
-      _universe.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
+      _universe.flight.speed = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
 
       // 6502: JSR BAD / ORA FIST / STA FIST -- the fine is levied by leaving, not by being scanned.
       _universe.commander.legalStatus = static_cast<std::uint8_t>(ContrabandPenalty(_universe.commander) | _universe.commander.legalStatus);
@@ -370,7 +370,7 @@ namespace Elite
      */
 
     // 6502: .BRBR2 LDY #0 / STY DELTA / STY JSTK.
-    _universe.flight.delta = 0u;
+    _universe.flight.speed = 0u;
     _universe.options.joystick = 0u;
 
     _universe.text.row = TITLE_PROMPT_ROW;     // 6502: LDA #15 / STA YC
@@ -450,7 +450,7 @@ namespace Elite
 
     // 6502: ASL DELTA / ASL DELTA -- and the upstream comment says "divide by 4", which is the
     // BBC's `LSR`. This build SHIFTS LEFT twice, so the speed is multiplied (§6.117).
-    _universe.flight.delta = static_cast<std::uint8_t>(_universe.flight.delta << 2);
+    _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed << 2);
 
     /*
      * 6502: LDX #24 / JSR DET1 / JSR TT66.
@@ -540,7 +540,7 @@ namespace Elite
       const ShipType type = plate ? ShipType::AlloyPlate : ShipType::Canister;
 
       // 6502: JSR fq1 -- and the carry it takes into its `ROL A` is the one `BCC D3` just tested.
-      const NewShip made = AddDebris(_universe.bubble, _universe.work, type, _universe.flight.delta, plate, _universe.flight.blueprint);
+      const NewShip made = AddDebris(_universe.bubble, _universe.work, type, _universe.flight.speed, plate, _universe.flight.blueprint);
 
       // 6502: JSR DORND / AND #%10000000 / LDY #31 / STA (INF),Y -- half the wreckage is already
       // dead, which is what makes some of it explode as it goes past. The carry it rotates in is
@@ -561,7 +561,7 @@ namespace Elite
     ClearFlightKeys(_universe.keys); // 6502: JSR U%
 
     // 6502: STA DELTA -- and A is the zero `U%` left in it, so we stop dead.
-    _universe.flight.delta = 0u;
+    _universe.flight.speed = 0u;
 
     /*
      * 6502: JSR M% / JSR NOSPRITES / .D2 JSR M% / DEC LASCT / BNE D2.
@@ -622,11 +622,11 @@ namespace Elite
      * doing, plus one if no missile was locked -- and `RES2` has just set `DELTA` to 3, so it is
      * always 6 or 7 whatever you were doing when you punched out.
      */
-    NewShip abandoned = SpawnShipAhead(_universe.bubble, _universe.work, ShipType::CobraMk3, _universe.flight.delta,
+    NewShip abandoned = SpawnShipAhead(_universe.bubble, _universe.work, ShipType::CobraMk3, _universe.flight.speed,
                                        _universe.bubble.missileTarget, _universe.flight.blueprint);
     if (!abandoned.created)
     {
-      abandoned = SpawnShipAhead(_universe.bubble, _universe.work, ShipType::CobraMk3Pirate, _universe.flight.delta,
+      abandoned = SpawnShipAhead(_universe.bubble, _universe.work, ShipType::CobraMk3Pirate, _universe.flight.speed,
                                  _universe.bubble.missileTarget, _universe.flight.blueprint);
     }
 

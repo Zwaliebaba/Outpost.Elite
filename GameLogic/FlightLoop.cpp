@@ -295,7 +295,7 @@ namespace Elite
   void FireMissile(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: LDX #MSL / JSR FRS1 / BCC FR1 -- a full bubble means the missile stays on the rail.
-    if (!SpawnShipAhead(_universe.bubble, _universe.work, ShipType::Missile, _universe.flight.delta, _universe.bubble.missileTarget,
+    if (!SpawnShipAhead(_universe.bubble, _universe.work, ShipType::Missile, _universe.flight.speed, _universe.bubble.missileTarget,
                         _universe.flight.blueprint)
            .created)
     {
@@ -372,9 +372,9 @@ namespace Elite
     // 6502: TXA / EOR #%10000000 / TAY / AND #%10000000 / STA ALP2 / STX JSTX / EOR #%10000000 /
     // STA ALP2+1 -- the rate turned into a sign and a magnitude, and the sign kept both ways round.
     const std::uint8_t rollSigned = static_cast<std::uint8_t>(roll ^ 0x80u);
-    _universe.flight.alp2 = static_cast<std::uint8_t>(rollSigned & 0x80u);
+    _universe.flight.rollSign = static_cast<std::uint8_t>(rollSigned & 0x80u);
     _universe.control.roll = roll;
-    _universe.flight.alp2Next = static_cast<std::uint8_t>(_universe.flight.alp2 ^ 0x80u);
+    _universe.flight.rollSignFlipped = static_cast<std::uint8_t>(_universe.flight.rollSign ^ 0x80u);
 
     // 6502: TYA / BPL P%+7 / EOR #%11111111 / CLC / ADC #1 -- the magnitude, negated if it is on the
     // far side of the centre.
@@ -401,8 +401,8 @@ namespace Elite
       rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u);
     }
 
-    _universe.flight.alp1 = rollMagnitude; // 6502: STA ALP1
-    _universe.flight.alpha = static_cast<std::uint8_t>(rollMagnitude | _universe.flight.alp2);
+    _universe.flight.rollMagnitude = rollMagnitude; // 6502: STA ALP1
+    _universe.flight.rollRate = static_cast<std::uint8_t>(rollMagnitude | _universe.flight.rollSign);
 
     // ---- part 2: the pitch, which is not the same shape ------------------------------------------
 
@@ -414,8 +414,8 @@ namespace Elite
     // STA BET2 -- the two sign bytes are written the OTHER way round from the roll's.
     const std::uint8_t pitchSigned = static_cast<std::uint8_t>(pitch ^ 0x80u);
     _universe.control.pitch = pitch;
-    _universe.flight.bet2Next = static_cast<std::uint8_t>(pitchSigned & 0x80u);
-    _universe.flight.bet2 = static_cast<std::uint8_t>(_universe.flight.bet2Next ^ 0x80u);
+    _universe.flight.pitchSignFlipped = static_cast<std::uint8_t>(pitchSigned & 0x80u);
+    _universe.flight.pitchSign = static_cast<std::uint8_t>(_universe.flight.pitchSignFlipped ^ 0x80u);
 
     // 6502: TYA / BPL P%+4 / EOR #%11111111 -- and no negate-by-adding-one here, because the `ADC`
     // below does it.
@@ -440,8 +440,8 @@ namespace Elite
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude >> 1u);
     }
 
-    _universe.flight.bet1 = pitchMagnitude; // 6502: STA BET1
-    _universe.flight.beta = static_cast<std::uint8_t>(pitchMagnitude | _universe.flight.bet2);
+    _universe.flight.pitchMagnitude = pitchMagnitude; // 6502: STA BET1
+    _universe.flight.pitchRate = static_cast<std::uint8_t>(pitchMagnitude | _universe.flight.pitchSign);
   }
 
   /*
@@ -456,19 +456,19 @@ namespace Elite
     Commander& commander = _universe.commander;
 
     // 6502: LDA KY2 / BEQ MA17 / LDA DELTA / CMP #40 / BCS MA17 / INC DELTA -- forty is the ceiling.
-    if (_universe.keys[KEY_SPEED_UP] != 0u && _universe.flight.delta < 40u)
+    if (_universe.keys[KEY_SPEED_UP] != 0u && _universe.flight.speed < 40u)
     {
-      _universe.flight.delta = static_cast<std::uint8_t>(_universe.flight.delta + 1u);
+      _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed + 1u);
     }
 
     // 6502: .MA17 LDA KY1 / BEQ MA4 / DEC DELTA / BNE MA4 / INC DELTA -- and one is the floor, so
     // the ship never stops dead.
     if (_universe.keys[KEY_SLOW_DOWN] != 0u)
     {
-      _universe.flight.delta = static_cast<std::uint8_t>(_universe.flight.delta - 1u);
-      if (_universe.flight.delta == 0u)
+      _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed - 1u);
+      if (_universe.flight.speed == 0u)
       {
-        _universe.flight.delta = 1u;
+        _universe.flight.speed = 1u;
       }
     }
 
@@ -602,17 +602,17 @@ namespace Elite
     // ---- part 3's tail: the guns -----------------------------------------------------------------
 
     _universe.status.laserPower = 0u; // 6502: .MA68 LDA #0 / STA LAS
-    _universe.flight.delt4 = 0u;      // 6502: STA DELT4
+    _universe.flight.speedTimes4Low = 0u;      // 6502: STA DELT4
 
     // 6502: LDA DELTA / LSR A / ROR DELT4 / LSR A / ROR DELT4 / STA DELT4+1 -- the speed as a
     // sixteen-bit value the stardust subtracts, which is DELTA shifted up six places.
     {
-      ShiftResult step = RotateRight(_universe.flight.delta, false);
-      ShiftResult low = RotateRight(_universe.flight.delt4, step.carry);
+      ShiftResult step = RotateRight(_universe.flight.speed, false);
+      ShiftResult low = RotateRight(_universe.flight.speedTimes4Low, step.carry);
       step = RotateRight(step.value, false);
       low = RotateRight(low.value, step.carry);
-      _universe.flight.delt4 = low.value;
-      _universe.flight.delt4Next = step.value;
+      _universe.flight.speedTimes4Low = low.value;
+      _universe.flight.speedTimes4High = step.value;
     }
 
     // 6502: LDA LASCT / BNE MA3 -- a pulse laser's countdown, which is why it cannot be held down.
@@ -1008,7 +1008,7 @@ namespace Elite
     }
 
     // 6502: .MA62 LDA DELTA / CMP #5 / BCC MA67 -- fast enough and you are dead.
-    return (_universe.flight.delta >= DOCK_SURVIVABLE_SPEED) ? DockingTest::TooFast : DockingTest::Bumped;
+    return (_universe.flight.speed >= DOCK_SURVIVABLE_SPEED) ? DockingTest::TooFast : DockingTest::Bumped;
   }
 
   /*
@@ -1050,7 +1050,7 @@ namespace Elite
 
     if (_impact == Impact::Bumped)
     {
-      _universe.flight.delta = 1u;    // 6502: .MA67 LDA #1 / STA DELTA
+      _universe.flight.speed = 1u;    // 6502: .MA67 LDA #1 / STA DELTA
       damage = DOCK_SURVIVABLE_SPEED; // 6502: LDA #5 -- and the carry is the `BCC`'s, so clear
     }
     else
@@ -1684,7 +1684,7 @@ namespace Elite
        */
       if (commander.fuelScoops != 0u)
       {
-        const ShiftResult scooped = RotateRight(_universe.flight.delt4Next, false);
+        const ShiftResult scooped = RotateRight(_universe.flight.speedTimes4High, false);
         commander.fuel = commander.fuel.Scooped(scooped.value, scooped.carry);
 
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_SCOOPS_ON,

@@ -53,8 +53,8 @@ namespace GameLogicTests
     {
       std::uint16_t sx = 0, sxl = 0, sy = 0, syl = 0, sz = 0, szl = 0, nostm = 0;
       std::uint16_t xx = 0, yy = 0, keptQuotient = 0, rand = 0;
-      std::uint16_t alpha = 0, alp1 = 0, alp2 = 0, beta = 0, bet1 = 0, bet2 = 0;
-      std::uint16_t delta = 0, delt4 = 0, rat = 0, rat2 = 0;
+      std::uint16_t rollRate = 0, rollMagnitude = 0, rollSign = 0, pitchRate = 0, pitchMagnitude = 0, pitchSign = 0;
+      std::uint16_t speed = 0, speedTimes4Low = 0, signMask = 0, signMask2 = 0;
       std::uint16_t p = 0, q = 0, r = 0, s = 0, t = 0, x1 = 0, y1 = 0, zz = 0;
       std::uint16_t view = 0, screen = 0;
 
@@ -71,16 +71,16 @@ namespace GameLogicTests
         yy = _oracle.Label("YY");
         keptQuotient = _oracle.Label("newzp");
         rand = _oracle.Label("RAND");
-        alpha = _oracle.Label("ALPHA");
-        alp1 = _oracle.Label("ALP1");
-        alp2 = _oracle.Label("ALP2");
-        beta = _oracle.Label("BETA");
-        bet1 = _oracle.Label("BET1");
-        bet2 = _oracle.Label("BET2");
-        delta = _oracle.Label("DELTA");
-        delt4 = _oracle.Label("DELT4");
-        rat = _oracle.Label("RAT");
-        rat2 = _oracle.Label("RAT2");
+        rollRate = _oracle.Label("ALPHA");
+        rollMagnitude = _oracle.Label("ALP1");
+        rollSign = _oracle.Label("ALP2");
+        pitchRate = _oracle.Label("BETA");
+        pitchMagnitude = _oracle.Label("BET1");
+        pitchSign = _oracle.Label("BET2");
+        speed = _oracle.Label("DELTA");
+        speedTimes4Low = _oracle.Label("DELT4");
+        signMask = _oracle.Label("RAT");
+        signMask2 = _oracle.Label("RAT2");
         p = _oracle.Label("P");
         q = _oracle.Label("Q");
         r = _oracle.Label("R");
@@ -149,7 +149,7 @@ namespace GameLogicTests
     /// measured.
     struct Flight
     {
-      std::uint8_t delta, delt4, delt4Next, alpha, alp1, alp2, beta, bet1, bet2;
+      std::uint8_t speed, speedTimes4Low, speedTimes4High, rollRate, rollMagnitude, rollSign, pitchRate, pitchMagnitude, pitchSign;
       const wchar_t* what;
     };
 
@@ -169,32 +169,32 @@ namespace GameLogicTests
 
     void SeedFlight(Cpu6502& _cpu, Elite::FlightState& _state, const DustLabels& _at, const Flight& _flight)
     {
-      const std::uint8_t alp2Next = static_cast<std::uint8_t>(_flight.alp2 ^ 0x80u);
-      const std::uint8_t bet2Next = static_cast<std::uint8_t>(_flight.bet2 ^ 0x80u);
+      const std::uint8_t rollSignFlipped = static_cast<std::uint8_t>(_flight.rollSign ^ 0x80u);
+      const std::uint8_t pitchSignFlipped = static_cast<std::uint8_t>(_flight.pitchSign ^ 0x80u);
 
-      _cpu.memory[_at.delta] = _flight.delta;
-      _cpu.memory[_at.delt4] = _flight.delt4;
-      _cpu.memory[static_cast<std::uint16_t>(_at.delt4 + 1)] = _flight.delt4Next;
-      _cpu.memory[_at.alpha] = _flight.alpha;
-      _cpu.memory[_at.alp1] = _flight.alp1;
-      _cpu.memory[_at.alp2] = _flight.alp2;
-      _cpu.memory[static_cast<std::uint16_t>(_at.alp2 + 1)] = alp2Next;
-      _cpu.memory[_at.beta] = _flight.beta;
-      _cpu.memory[_at.bet1] = _flight.bet1;
-      _cpu.memory[_at.bet2] = _flight.bet2;
-      _cpu.memory[static_cast<std::uint16_t>(_at.bet2 + 1)] = bet2Next;
+      _cpu.memory[_at.speed] = _flight.speed;
+      _cpu.memory[_at.speedTimes4Low] = _flight.speedTimes4Low;
+      _cpu.memory[static_cast<std::uint16_t>(_at.speedTimes4Low + 1)] = _flight.speedTimes4High;
+      _cpu.memory[_at.rollRate] = _flight.rollRate;
+      _cpu.memory[_at.rollMagnitude] = _flight.rollMagnitude;
+      _cpu.memory[_at.rollSign] = _flight.rollSign;
+      _cpu.memory[static_cast<std::uint16_t>(_at.rollSign + 1)] = rollSignFlipped;
+      _cpu.memory[_at.pitchRate] = _flight.pitchRate;
+      _cpu.memory[_at.pitchMagnitude] = _flight.pitchMagnitude;
+      _cpu.memory[_at.pitchSign] = _flight.pitchSign;
+      _cpu.memory[static_cast<std::uint16_t>(_at.pitchSign + 1)] = pitchSignFlipped;
 
-      _state.delta = _flight.delta;
-      _state.delt4 = _flight.delt4;
-      _state.delt4Next = _flight.delt4Next;
-      _state.alpha = _flight.alpha;
-      _state.alp1 = _flight.alp1;
-      _state.alp2 = _flight.alp2;
-      _state.alp2Next = alp2Next;
-      _state.beta = _flight.beta;
-      _state.bet1 = _flight.bet1;
-      _state.bet2 = _flight.bet2;
-      _state.bet2Next = bet2Next;
+      _state.speed = _flight.speed;
+      _state.speedTimes4Low = _flight.speedTimes4Low;
+      _state.speedTimes4High = _flight.speedTimes4High;
+      _state.rollRate = _flight.rollRate;
+      _state.rollMagnitude = _flight.rollMagnitude;
+      _state.rollSign = _flight.rollSign;
+      _state.rollSignFlipped = rollSignFlipped;
+      _state.pitchRate = _flight.pitchRate;
+      _state.pitchMagnitude = _flight.pitchMagnitude;
+      _state.pitchSign = _flight.pitchSign;
+      _state.pitchSignFlipped = pitchSignFlipped;
     }
 
     /// The bytes the side views WRITE. `ST2` turns the roll and the pitch over on the way in and back
@@ -203,13 +203,13 @@ namespace GameLogicTests
     void CompareFlight(const Cpu6502& _cpu, const Elite::FlightState& _state, const DustLabels& _at, const std::wstring& _where)
     {
       const std::pair<std::uint16_t, std::uint8_t> BYTES[] = {
-        {_at.alpha, _state.alpha},
-        {_at.alp2, _state.alp2},
-        {static_cast<std::uint16_t>(_at.alp2 + 1), _state.alp2Next},
-        {_at.bet2, _state.bet2},
-        {static_cast<std::uint16_t>(_at.bet2 + 1), _state.bet2Next},
-        {_at.rat, _state.rat},
-        {_at.rat2, _state.rat2},
+        {_at.rollRate, _state.rollRate},
+        {_at.rollSign, _state.rollSign},
+        {static_cast<std::uint16_t>(_at.rollSign + 1), _state.rollSignFlipped},
+        {_at.pitchSign, _state.pitchSign},
+        {static_cast<std::uint16_t>(_at.pitchSign + 1), _state.pitchSignFlipped},
+        {_at.signMask, _state.signMask},
+        {_at.signMask2, _state.signMask2},
       };
       static const wchar_t* NAMES[] = {L"ALPHA", L"ALP2", L"ALP2+1", L"BET2", L"BET2+1", L"RAT", L"RAT2"};
 
@@ -289,10 +289,10 @@ namespace GameLogicTests
             // Everything each wrapper might read, on the oracle's side; the port's side is what the
             // movers hand each routine as a value since M2-b.
             SeedField(cpu, dust, at, 12, 0x51F3A2C9u + operand);
-            cpu.memory[at.delta] = operand;
-            flight.delta = operand;
-            cpu.memory[at.alp1] = operand;
-            flight.alp1 = operand;
+            cpu.memory[at.speed] = operand;
+            flight.speed = operand;
+            cpu.memory[at.rollMagnitude] = operand;
+            flight.rollMagnitude = operand;
             cpu.memory[at.q] = operand;
             cpu.memory[at.p] = a;
             cpu.memory[at.r] = operand;

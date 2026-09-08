@@ -185,7 +185,7 @@ namespace Elite
       work.side.x.hi = static_cast<std::uint8_t>(96u | 0x80u);
       flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
 
-      work.speed = flight.delta; // 6502: LDA DELTA / STA INWK+27
+      work.speed = flight.speed; // 6502: LDA DELTA / STA INWK+27
 
       // 6502: JSR DOCKIT -- over the block `auton` just built in `INWK`, whose slot is 0: `INF`
       // points at the player's own block on this path, which is what `DOCKIT` steers.
@@ -193,7 +193,7 @@ namespace Elite
 
       // 6502: LDA INWK+27 / CMP #22 / BCC P%+4 / LDA #22 / STA DELTA -- the autopilot is not
       // allowed to fly faster than 22, whatever it asked for.
-      flight.delta = (work.speed < 22u) ? work.speed : std::uint8_t{22u};
+      flight.speed = (work.speed < 22u) ? work.speed : std::uint8_t{22u};
 
       // 6502: LDA #&FF / LDX #(KY1-KLO) / LDY INWK+28 / BEQ DK11 / BMI P%+4 / LDX #(KY2-KLO) /
       // STA KLO,X -- the acceleration becomes "?" held down or Space held down, and neither if it
