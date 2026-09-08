@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,175 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,144 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-10: the disposition walk and the combat rolls.**
+
+31 more, and `Tactics.cpp` is at 57 of 163. This is part 3's walk down the trait byte and part 4's
+rolls, and the shape that keeps recurring is **a bit position and what it means**, which prose says
+better than a shift does: bit 1 is "bounty hunter" and only turns on you above a legal status of 40;
+bit 3 is "runs away when the station is near"; bit 4 is "docking".
+
+Three sites carried an argument rather than a description, and all three survive:
+
+- **The two flee branches do not go to the same place.** One lands on the capital `TA3`, which is
+  part SIX, so a healthy ship jumps clean over part five and never launches a missile; the other
+  lands on the lower-case `ta3`, which IS part five. The port ran both into part five and a mutation
+  is what said so (§6.153). Case-sensitive labels are the entire finding, so both names stay.
+- **The Anaconda's fall-through arrives with a different carry** from the type comparison's, and the
+  port's one expression covers both paths only because the second is reachable solely on equality.
+  That argument is three sentences and no instructions.
+- **A dead copy of `TA20` once stood in part 4** and a surviving mutant found it, because no missile
+  ever reaches that line. The entry keeps why the mutation mattered without the instruction it
+  flipped.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,175 → 2,144.
 
 **2026-09-08 — M6-d-9: the missile's death, the station's launches, and rule 4's fourth shape.**
 

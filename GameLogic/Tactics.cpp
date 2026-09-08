@@ -667,18 +667,18 @@ namespace Elite
    * ---- part 3: what kind of ship this is, and whether it wants anything to do with us ------------
    *
    * 6502: `TA13` to `TA19` -- the hermit, the energy regrowth, the Thargon whose Thargoid is dead,
-   * and then `TA14`'s walk down `NEWB`: trader, bounty hunter, hostile, docking, station-shy. It
+   * and then `TA14`'s walk down the trait byte: trader, bounty hunter, hostile, docking,
+   * station-shy. It
    * ends by setting `K3` from the ship's own position and leaving `XX15` and `CNT` in the frame,
    * which is what parts 4 to 7 steer on.
    */
   [[nodiscard]] Tactic DecideDisposition(TacticFrame& _frame) noexcept
   {
-    // 6502: .TA13 CPX #HER / BNE TA17 -- a rock hermit is an asteroid until it is shot at, and
-    // then it is a pirate.
+    // 6502: TA13 -- a rock hermit is an asteroid until it is shot at, and then it is a pirate.
     if (_frame.type == ShipType::RockHermit)
     {
-      // 6502: JSR DORND / CMP #200 / BCC TA22 -- and the carry is `CPX #HER`'s, which a hermit
-      // satisfies with equality, so it is set.
+      // 6502: a roll of 200 or more, and the carry going in is the hermit comparison's, which a
+      // hermit satisfies with equality, so it is set.
       const RngResult roll = _frame.universe.rng.Next(Byte(_frame.type) >= Byte(ShipType::RockHermit));
       if (roll.value < 200u)
       {
@@ -686,8 +686,8 @@ namespace Elite
       }
 
       /*
-       * 6502: LDX #0 / STX INWK+32 / LDX #%00100100 / STX NEWB / AND #3 / ADC #SH3 / TAX /
-       * JSR TN6 / LDA #0 / STA INWK+32 / RTS.
+       * 6502: the AI byte cleared, the traits set, a pirate chosen and launched, and the AI byte
+       * cleared again.
        *
        * The AI byte is cleared BEFORE the spawn and again after it, because `SFS1` copies `INWK`
        * into the new ship: clearing it first is what stops the pirate inheriting the hermit's AI,
@@ -696,7 +696,8 @@ namespace Elite
       _frame.work.ai = 0u;
       _frame.work.traits = HERMIT_PIRATE_NEWB;
 
-      // 6502: AND #3 / ADC #SH3 -- and the carry is the `CMP #200`'s, which is SET on this path.
+      // 6502: two bits of the roll plus the base type -- and the carry added in is the roll
+      // comparison's, which is SET on this path.
       const ShipType pirate = TypeOf(static_cast<std::uint8_t>((roll.value & 3u) + Byte(ShipType::Sidewinder) + 1u));
       (void)SpawnChildShip(_frame.universe.bubble, _frame.work, _frame.universe.rng, _frame.slot, _frame.type, STATION_LAUNCH_AI, pirate,
                            _frame.universe.flight.blueprint);
@@ -705,28 +706,27 @@ namespace Elite
       return Tactic::Done;
     }
 
-    // 6502: .TA17 LDY #14 / LDA INWK+35 / CMP (XX0),Y / BCS TA21 / INC INWK+35 -- energy regrows
-    // one unit a turn up to the blueprint's maximum, which is why a damaged ship you leave alone
-    // is a whole ship when you come back.
+    // 6502: TA17 -- energy regrows one unit a turn up to the blueprint's maximum, which is why a
+    // damaged ship you leave alone is a whole ship when you come back.
     if (_frame.work.energy < _frame.universe.flight.blueprint->maxEnergy)
     {
       ++_frame.work.energy;
     }
 
-    // 6502: .TA21 CPX #TGL / BNE TA14 / LDA MANY+THG / BNE TA14 -- a Thargon whose Thargoid is
-    // dead loses its AI and half its speed, and drifts.
+    // 6502: TA21 -- a Thargon whose Thargoid is dead loses its AI and half its speed, and drifts.
     if (_frame.type == ShipType::Thargon && _frame.universe.bubble.Count(ShipType::Thargoid) == 0u)
     {
-      _frame.work.ai = Without(_frame.work.ai, AiBit::HasEcm);                // 6502: LSR INWK+32 / ASL INWK+32
-      _frame.work.speed = static_cast<std::uint8_t>(_frame.work.speed >> 1u); // 6502: LSR INWK+27
-      return Tactic::Done;                                                    // 6502: .TA22 RTS
+      _frame.work.ai = Without(_frame.work.ai, AiBit::HasEcm);                // 6502: shifted down and back
+      _frame.work.speed = static_cast<std::uint8_t>(_frame.work.speed >> 1u); // 6502: and the speed halved
+      return Tactic::Done;                                                    // 6502: TA22
     }
 
     /*
-     * 6502: .TA14 JSR DORND / LDA NEWB / LSR A / BCC TN1 / CPX #50 / BCS TA22.
+     * 6502: TA14 -- a roll, then the trait byte shifted to test its lowest bit.
      *
-     * The `DORND`'s A is thrown away and its X is not: `CPX #50` reads the PREVIOUS random byte.
-     * Bit 0 of `NEWB` is "trader", and a trader with a roll of 50 or more simply carries on --
+     * The roll's accumulator is thrown away and its index register is not: the comparison reads
+     * the PREVIOUS random byte. Bit 0 of the trait byte is "trader", and a trader with a roll of
+     * 50 or more simply carries on --
      * which is why traders mostly ignore you and occasionally do not.
      */
     const RngResult roll = _frame.universe.rng.Next(Byte(_frame.type) >= Byte(ShipType::Thargon));
@@ -738,9 +738,8 @@ namespace Elite
     }
     flags = static_cast<std::uint8_t>(flags >> 1u);
 
-    // 6502: .TN1 LSR A / BCC TN2 / LDX FIST / CPX #40 / BCC TN2 / LDA NEWB / ORA #%00000100 /
-    // STA NEWB / LSR A / LSR A -- bit 1 is "bounty hunter", and it only turns on you once your
-    // legal status is over 40. The two `LSR`s put the shifted copy back in step.
+    // 6502: TN1 -- bit 1 is "bounty hunter", and it only turns on you once your legal status is
+    // over 40. The two extra shifts afterwards put the walking copy back in step.
     if ((flags & 1u) != 0u && _frame.universe.commander.legalStatus >= BOUNTY_HUNTER_FIST)
     {
       _frame.work.traits = With(_frame.work.traits, TraitBit::Hostile);
@@ -751,44 +750,42 @@ namespace Elite
       flags = static_cast<std::uint8_t>(flags >> 1u);
     }
 
-    // 6502: .TN2 LSR A / BCS TN3 -- bit 2 is "hostile", and a ship that is NOT hostile is either
-    // docking or minding its own business.
+    // 6502: TN2 -- bit 2 is "hostile", and a ship that is NOT hostile is either docking or minding
+    // its own business.
     if ((flags & 1u) == 0u)
     {
       flags = static_cast<std::uint8_t>(flags >> 1u);
 
-      // 6502: LSR A / LSR A / BCC GOPL / JMP DOCKIT -- bit 4 is "docking".
+      // 6502: bit 4 is "docking", and the alternative is `GOPL`.
       if ((static_cast<std::uint8_t>(flags >> 1u) & 1u) != 0u)
       {
         return Tactic::Docking;
       }
 
-      AimAtPlanet(_frame.universe, _frame.ports); // 6502: .GOPL JSR SPS1 / JMP TA151
+      AimAtPlanet(_frame.universe, _frame.ports); // 6502: GOPL, through SPS1 into TA151
       return Tactic::Done;
     }
     flags = static_cast<std::uint8_t>(flags >> 1u);
 
-    // 6502: .TN3 LSR A / BCC TN4 / LDA SSPR / BEQ TN4 / LDA INWK+32 / AND #%10000001 / STA INWK+32
-    // -- bit 3 is "runs away when the station is near", so a pirate near a station keeps its AI
-    // enabled and its target and drops everything else.
+    // 6502: TN3 -- bit 3 is "runs away when the station is near", so a pirate near a station keeps
+    // its AI enabled and its target and drops everything else.
     if ((flags & 1u) != 0u && _frame.universe.bubble.StationPresent() != 0u)
     {
       _frame.work.ai = static_cast<std::uint8_t>(_frame.work.ai & Mask(AiBit::Active, AiBit::HasEcm));
     }
 
-    // 6502: .TN4 LDX #8 / .TAL1 LDA INWK,X / STA K3,X / DEX / BPL TAL1 -- the ship's own position
-    // is the vector to us, because we are the origin.
+    // 6502: TN4 and TAL1 -- the ship's own position is the vector to us, because we are the origin.
     const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _frame.work.ToBytes();
     for (std::size_t byte = 0; byte < 9u; ++byte)
     {
       _frame.axes[byte] = position[byte];
     }
 
-    // 6502: .TA19 JSR TAS2 / LDY #10 / JSR TAS3 / STA CNT, and then part 4.
+    // 6502: TA19 -- the vector normalised, the nose dot product taken, and then part 4.
     _frame.towards = NormaliseAxes(_frame.axes).vector;
     const AddSignedResult nose = DotProductWithShip(_frame.work, _frame.towards, ORIENTATION_NOSE);
-    // 6502: STA CNT -- how far off the nose the target is. `TACTICS`'s own since M2-c-3: parts 4
-    // to 8 read it and `TA152` takes it as an argument.
+    // 6502: CNT -- how far off the nose the target is. `TACTICS`'s own since M2-c-3: parts 4 to 8
+    // read it and `TA152` takes it as an argument.
     _frame.offNose = nose.high;
 
     return Tactic::Steer;
@@ -798,8 +795,9 @@ namespace Elite
    * ---- parts 4, 5 and 6: is it scared, does it fire, does its laser hit us -----------------------
    *
    * THE THREE ARE ONE FUNCTION and the reason is two booleans. `fightsOn` is `TA7`'s first
-   * `BCC TA3` jumping clean over part 5, and `fellFromFleeTest` is the carry `CMP #230` leaves for
-   * the `DORND` in it -- both are live from part 4 into part 5, so a split between them would need
+   * the flee branch jumping clean over part 5, and `fellFromFleeTest` is the carry that branch's
+   * comparison leaves for the roll in it -- both are live from part 4 into part 5, so a split
+   * between them would need
    * them as parameters to say what a local already says (§6.85's rule, applied a second time).
    */
   [[nodiscard]] Tactic DecideCombat(TacticFrame& _frame) noexcept
@@ -807,7 +805,7 @@ namespace Elite
     /*
      * ---- part 4: is it an Anaconda, is it scared, has it lost its nerve ------------------------
      *
-     * 6502: LDA TYPE / CMP #MSL / BNE P%+5 / JMP TA20, AND THE PORT HAS NO LINE FOR IT.
+     * 6502: the missile test that sends part 4 to `TA20`, AND THE PORT HAS NO LINE FOR IT.
      *
      * In the original a missile reaches part 4 by falling out of `TN4` and `TA19`, and this test
      * is what sends it to `TA20`. The port does not arrive here that way: every branch of part 1's
@@ -815,23 +813,23 @@ namespace Elite
      * `SteerMissileTowardsTarget`, which is `TA19` AND this branch inlined -- see its comment.
      *
      * So a copy of `TA20` stood here as well, and it was unreachable. `tools/mutate.py` is what
-     * said so: `ta20-eor` flipped the `EOR #%10000000` in this copy and nothing in a 1,800-case
+     * said so: `ta20-eor` flipped the sign inversion in this copy and nothing in a 1,800-case
      * sweep noticed, because no missile has ever reached this line (plan §6.152). Removed rather
      * than left, because dead code no mutation can reach is exactly what a surviving mutant is
      * for finding.
      */
 
-    // 6502: CMP #ANA / BNE TN7 / JSR DORND / CMP #200 / BCC TN7 -- an Anaconda spawns its escort.
+    // 6502: an Anaconda spawns its escort, on a roll of 200 or more.
     bool anacondaFellThrough = false;
     if (_frame.type == ShipType::Anaconda)
     {
-      // 6502: CMP #ANA / BNE TN7 / JSR DORND -- and the compare is what sets the carry, which for
-      // an Anaconda is equality and therefore SET.
+      // 6502: the type comparison is what sets the carry going into the roll, and for an Anaconda
+      // it compares equal, so it is SET.
       const RngResult first = _frame.universe.rng.Next(Byte(_frame.type) >= Byte(ShipType::Anaconda));
       if (first.value >= 200u)
       {
-        // 6502: JSR DORND / LDX #WRM / CMP #100 / BCS P%+4 / LDX #SH3 / JMP TN6 -- the carry is
-        // `CMP #200`'s, and reaching here means it did not borrow.
+        // 6502: a second roll picks which escort, and the carry going in is the first roll's
+        // comparison -- reaching here means it did not borrow.
         const RngResult second = _frame.universe.rng.Next(true);
         const ShipType escort = (second.value >= 100u) ? ShipType::Worm : ShipType::Sidewinder;
         (void)SpawnChildShip(_frame.universe.bubble, _frame.work, _frame.universe.rng, _frame.slot, _frame.type, STATION_LAUNCH_AI, escort,
@@ -839,35 +837,35 @@ namespace Elite
         return Tactic::Done;
       }
 
-      // 6502: BCC TN7 -- the roll was under 200, so the Anaconda carries on as an ordinary ship
-      // and arrives at `TN7` with the carry CLEAR rather than with the _frame.type compare's.
+      // 6502: the roll was under 200, so the Anaconda carries on as an ordinary ship and arrives
+      // at `TN7` with the carry CLEAR rather than with the type comparison's.
       anacondaFellThrough = true;
     }
 
-    // 6502: .TN7 JSR DORND / CMP #250 / BCC TA7 / JSR DORND / ORA #104 / STA INWK+29 -- six times
-    // in 256 a ship rolls for no reason at all, which is most of what makes a dogfight look alive.
+    // 6502: TN7 -- six times in 256 a ship rolls for no reason at all, which is most of what makes
+    // a dogfight look alive.
     {
-      // 6502: .TN7 JSR DORND -- reached either from `CMP #ANA / BNE TN7`, whose carry is
-      // `TYPE >= ANA`, or from the Anaconda's own `CMP #200 / BCC TN7`, whose carry is clear. The
-      // second is only taken when the first compare was EQUAL, so `TYPE >= ANA` covers neither
-      // path wrongly: an Anaconda that falls through arrives with the carry clear.
+      // 6502: TN7 is reached either from the type comparison, whose carry is "type at least an
+      // Anaconda", or from the Anaconda's own roll test, whose carry is clear. The second is only
+      // taken when the first compared EQUAL, so the one expression covers neither path wrongly: an
+      // Anaconda that falls through arrives with the carry clear.
       const RngResult chance = _frame.universe.rng.Next(anacondaFellThrough ? false : (Byte(_frame.type) >= Byte(ShipType::Anaconda)));
       if (chance.value >= 250u)
       {
-        // 6502: JSR DORND / ORA #104 -- the carry is `CMP #250`'s, set by definition here.
+        // 6502: a second roll ORed with 104, and the carry is the first comparison's, set by
+        // definition here.
         const RngResult amount = _frame.universe.rng.Next(true);
         _frame.work.rollCounter = static_cast<std::uint8_t>(amount.value | 104u);
       }
     }
 
     /*
-     * 6502: .TA7 LDY #14 / LDA (XX0),Y / LSR A / CMP INWK+35 / BCC TA3 -- energy above half the
-     * blueprint's maximum and the ship fights on. Below an EIGHTH (`LSR` twice more) it may run,
-     * and `DORND / CMP #230` is how often.
+     * 6502: TA7 -- energy above half the blueprint's maximum and the ship fights on. Below an
+     * EIGHTH, two more shifts down, it may run, and a roll against 230 is how often.
      *
-     * AND THE TWO BRANCHES DO NOT GO TO THE SAME PLACE. `BCC TA3` here is the CAPITAL label, which
-     * is part SIX -- so a ship with more than half its energy jumps over part five and never
-     * launches a missile at all. `BCC ta3` below is the lower-case one, which is part five. The
+     * AND THE TWO BRANCHES DO NOT GO TO THE SAME PLACE. The one here is the CAPITAL `TA3`, which is
+     * part SIX -- so a ship with more than half its energy jumps over part five and never launches
+     * a missile at all. The one below is the lower-case `ta3`, which is part five. The
      * port ran both of them into part five, so a healthy ship could fire; `ta-half` is the
      * mutation that survived long enough to say so (§6.153).
      */
