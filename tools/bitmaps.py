@@ -8,20 +8,31 @@ carries the pixels out to a BMP a paint program can open and back in again:
     FONT_DATA            96 characters of 8x8, one bit per pixel, laid out 16 across and 6 down
     DASHBOARD_IMAGE      the dashboard picture, 40 cells by 7 rows, two bits per pixel (160x56)
     SPRITE_DEFINITIONS   seven hardware sprites side by side, each in a 24-pixel-wide slot
+    DASHBOARD_PICTURE_2X the 640x112 dashboard the player sees, four bits per pixel, real colours
 
     python tools/bitmaps.py --list                        # the arrays it knows and their sheets
     python tools/bitmaps.py export [--out DIR] [NAME ...] # write DIR/NAME.bmp for each (default: all)
     python tools/bitmaps.py import NAME FILE.bmp          # rewrite NAME's bytes in its .cpp from FILE
     python tools/bitmaps.py --self-test                   # prove export then import is the identity
 
-WHAT A PIXEL MEANS. A pixel's palette index IS its bit value: 0 or 1 in a hi-res picture, 0 to 3 in
-a multicolour one. The colours in the palette are only there to make the bits visible in an editor
--- they are not the colours the game shows, because on the C64 those live in screen RAM and colour
-RAM per cell and in the sprite colour registers, none of which is in these arrays (see
-`DASHBOARD_SCREEN_COLOURS` and `VideoState.h`). So an editor must paint with the palette's own four
-colours and nothing else: the import maps every pixel back to a bit value by EXACT colour match and
-refuses a colour that is not in the palette, naming the pixel. Save as indexed or as 24-bit, either
-imports; what matters is the colours.
+WHAT A PIXEL MEANS, AND IT IS NOT THE SAME ANSWER FOR EVERY SHEET.
+
+For the three C64 arrays a pixel's palette index IS its BIT VALUE: 0 or 1 in a hi-res picture, 0 to
+3 in a multicolour one. The colours in their palette are only there to make the bits visible in an
+editor -- they are not the colours the game shows, because on the C64 those live in screen RAM and
+colour RAM per cell and in the sprite colour registers, none of which is in those arrays (see
+`DASHBOARD_SCREEN_COLOURS` and `VideoState.h`).
+
+`DASHBOARD_PICTURE_2X` IS THE OTHER KIND. It is the port's own art rather than C64 memory, four bits
+a pixel, and its index IS A REAL COLOUR -- one of the sixteen the shell displays. So its sheet is
+painted in the colours the game will show, and those sixteen are READ from `Outpost/Presentation.h`
+rather than restated here: a second opinion about what colour 7 looks like is exactly the copy this
+tool exists to avoid, and it would drift silently, because a BMP painted in the old sixteen would
+still import.
+
+Either way an editor must paint with that sheet's own palette and nothing else: the import maps
+every pixel back by EXACT colour match and refuses a colour the palette does not have, naming the
+pixel. Save as indexed or as 24-bit, either imports; what matters is the colours.
 
 MULTICOLOUR PIXELS ARE EXPORTED AT THEIR OWN RESOLUTION. On the hardware a multicolour pixel is two
 screen columns wide, so the dashboard and the Trumbles look half as wide here as on screen. The
@@ -59,16 +70,52 @@ GAME_LOGIC = REPO / "GameLogic"
 
 HI_RES = 1  # one bit per pixel, eight pixels a byte, most significant bit leftmost
 MULTICOLOUR = 2  # two bits per pixel, four pixels a byte, most significant pair leftmost
+INDEXED = 4  # four bits per pixel, two pixels a byte, high nibble leftmost -- a colour, not a bit value
 
-# The palette every sheet is written with, index = bit value. Chosen to be told apart at a glance
-# and nothing more: 0 is the background, 1 is ink, and 2 and 3 are the two other multicolour
-# choices. They are not the game's colours, and the module docstring says why.
-PALETTE: list[tuple[int, int, int]] = [
+# The palette the three C64 sheets are written with, index = bit value. Chosen to be told apart at
+# a glance and nothing more: 0 is the background, 1 is ink, and 2 and 3 are the two other
+# multicolour choices. They are not the game's colours, and the module docstring says why.
+BIT_VALUE_PALETTE: list[tuple[int, int, int]] = [
     (0x00, 0x00, 0x00),  # %00 -- background
     (0xFF, 0xFF, 0xFF),  # %01 -- ink
     (0xFF, 0x77, 0x77),  # %10
     (0x70, 0xA4, 0xFF),  # %11
 ]
+
+PRESENTATION = REPO / "Outpost" / "Presentation.h"
+COLOUR_RE = re.compile(r"\{\s*0x([0-9A-Fa-f]{2})\s*,\s*0x([0-9A-Fa-f]{2})\s*,\s*0x([0-9A-Fa-f]{2})\s*\}")
+
+_GAME_PALETTE: list[tuple[int, int, int]] = []
+
+
+def game_palette() -> list[tuple[int, int, int]]:
+    """The sixteen colours the shell displays, parsed out of `Outpost/Presentation.h`.
+
+    `C64_PALETTE` is the one table that says what a colour index looks like, and a sheet whose
+    pixels ARE colours has to be painted in those. Read rather than copied, and read lazily, so
+    that the three C64 sheets still export on a tree where this file has moved -- only the sheet
+    that needs the sixteen pays for them.
+    """
+    global _GAME_PALETTE
+    if _GAME_PALETTE:
+        return _GAME_PALETTE
+    if not PRESENTATION.is_file():
+        sys.exit(f"error: {PRESENTATION} does not exist -- this tool reads the game's palette from it")
+    text = PRESENTATION.read_text(encoding="utf-8")
+    start = text.find("C64_PALETTE")
+    if start < 0:
+        sys.exit(f"error: {PRESENTATION} does not define C64_PALETTE -- this tool reads the palette from it")
+    end = text.find("}};", start)
+    if end < 0:
+        sys.exit(f"error: {PRESENTATION}: the initializer of C64_PALETTE is not closed")
+    colours = [(int(r, 16), int(g, 16), int(b, 16)) for r, g, b in COLOUR_RE.findall(text[start:end])]
+    if len(colours) != 16:
+        sys.exit(f"error: {PRESENTATION}: C64_PALETTE holds {len(colours)} colours, expected 16")
+    if len(set(colours)) != 16:
+        sys.exit(f"error: {PRESENTATION}: two entries of C64_PALETTE are the same colour, so a sheet painted "
+                 f"in them could not be imported back")
+    _GAME_PALETTE = colours
+    return _GAME_PALETTE
 
 
 class Block:
@@ -108,7 +155,7 @@ class Bitmap:
     """One array, the file that holds it, and how its bytes tile a sheet."""
 
     def __init__(self, _identifier: str, _file: str, _length: int, _width: int, _height: int, _blocks: list[Block],
-                 _summary: str):
+                 _summary: str, _game_colours: bool = False):
         self.identifier = _identifier
         self.file = _file
         self.length = _length
@@ -116,6 +163,13 @@ class Bitmap:
         self.height = _height
         self.blocks = _blocks
         self.summary = _summary
+        self.game_colours = _game_colours
+
+    @property
+    def palette(self) -> list[tuple[int, int, int]]:
+        """What this sheet is painted in: the game's sixteen if its pixels are colours, and the
+        four bit-value markers if they are bits."""
+        return game_palette() if self.game_colours else BIT_VALUE_PALETTE
 
     @property
     def path(self) -> Path:
@@ -127,6 +181,13 @@ def cell_grid(_count: int, _across: int, _bits: int) -> list[Block]:
     order, in which a cell's eight bytes are consecutive and the cells run left to right and then
     down. The font and the dashboard picture are both this shape."""
     return [Block((index % _across) * (8 // _bits), (index // _across) * 8, 1, 8, _bits, index * 8, 1) for index in range(_count)]
+
+
+def index_plane(_width: int, _height: int, _bits: int) -> list[Block]:
+    """One rectangle, rows running top to bottom with no cell order at all -- the shape a plane of
+    colour indices has, as against the C64's cell-major bitmap memory."""
+    per_byte = 8 // _bits
+    return [Block(0, 0, _width // per_byte, _height, _bits, 0, _width // per_byte)]
 
 
 def sprite_row(_modes: list[int]) -> list[Block]:
@@ -147,6 +208,9 @@ BITMAPS = [
     Bitmap("SPRITE_DEFINITIONS", "SpriteData.cpp", 448, 7 * 24, 21,
            sprite_row([HI_RES, HI_RES, HI_RES, HI_RES, HI_RES, MULTICOLOUR, MULTICOLOUR]),
            "four laser sights, the explosion cloud (hi-res, 24 wide) and two Trumbles (multicolour, 12 wide)"),
+    Bitmap("DASHBOARD_PICTURE_2X", "DashboardPicture2x.cpp", 35840, 640, 112, index_plane(640, 112, INDEXED),
+           "the 640x112 dashboard as sixteen-colour art -- the port's own, in the game's own colours",
+           _game_colours=True),
 ]
 
 
@@ -228,7 +292,8 @@ def pack(_bitmap: Bitmap, _pixels: list[list[int]], _current: bytes) -> bytes:
                     bit_value = line[x]
                     if bit_value >> block.bits:
                         sys.exit(f"error: pixel ({x}, {block.y + row}) has value {bit_value}, and that part of "
-                                 f"{_bitmap.identifier} is hi-res -- only the first two palette colours are allowed there")
+                                 f"{_bitmap.identifier} holds {block.bits} bits a pixel -- only the first "
+                                 f"{1 << block.bits} palette colours are allowed there")
                     value = (value << block.bits) | bit_value
                 data[block.offset(row, column)] = value
     return bytes(data)
@@ -247,26 +312,31 @@ def row_stride(_width: int, _bits_per_pixel: int) -> int:
     return ((_width * _bits_per_pixel + 31) // 32) * 4
 
 
-def encode_bmp(_pixels: list[list[int]], _bits_per_pixel: int = 8) -> bytes:
-    """An 8-bit indexed BMP with the four-entry palette, bottom-up as the format prefers. 24-bit
-    is here for the self-test, which proves the import reads a true-colour save too."""
+def encode_bmp(_pixels: list[list[int]], _palette: list[tuple[int, int, int]], _bits_per_pixel: int = 8) -> bytes:
+    """An 8-bit indexed BMP with this sheet's palette, bottom-up as the format prefers. 24-bit is
+    here for the self-test, which proves the import reads a true-colour save too.
+
+    EIGHT BITS EVEN FOR A FOUR-BIT SHEET, and deliberately: what a pixel is worth in the ARRAY is
+    the block's business (`bits`), and what it is worth in the FILE is only a question of which
+    depth every paint program opens without complaining. The palette is what carries the meaning,
+    and a sixteen-entry one at 8bpp says exactly what a sixteen-entry one at 4bpp would."""
     height = len(_pixels)
     width = len(_pixels[0])
     stride = row_stride(width, _bits_per_pixel)
     palette = b""
     if _bits_per_pixel == 8:
-        palette = b"".join(struct.pack("<BBBB", b, g, r, 0) for r, g, b in PALETTE)
+        palette = b"".join(struct.pack("<BBBB", b, g, r, 0) for r, g, b in _palette)
     rows = []
     for line in reversed(_pixels):
         if _bits_per_pixel == 8:
             row = bytes(line)
         else:
-            row = b"".join(struct.pack("<BBB", *reversed(PALETTE[value])) for value in line)
+            row = b"".join(struct.pack("<BBB", *reversed(_palette[value])) for value in line)
         rows.append(row.ljust(stride, b"\0"))
     pixel_data = b"".join(rows)
     offset = FILE_HEADER.size + INFO_HEADER_SIZE + len(palette)
     info = INFO_HEADER.pack(INFO_HEADER_SIZE, width, height, 1, _bits_per_pixel, BI_RGB, len(pixel_data), 2835, 2835,
-                            len(PALETTE) if palette else 0, 0)
+                            len(_palette) if palette else 0, 0)
     return FILE_HEADER.pack(b"BM", offset + len(pixel_data), 0, 0, offset) + info + palette + pixel_data
 
 
@@ -335,7 +405,7 @@ def to_bit_values(_rows: list[list[tuple[int, int, int]]], _bitmap: Bitmap, _wha
     not have -- the first few of them, so a stray anti-aliased edge is found rather than guessed at."""
     if len(_rows) != _bitmap.height or len(_rows[0]) != _bitmap.width:
         sys.exit(f"error: {_what} is {len(_rows[0])}x{len(_rows)}, and {_bitmap.identifier} is {_bitmap.width}x{_bitmap.height}")
-    lookup = {colour: index for index, colour in enumerate(PALETTE)}
+    lookup = {colour: index for index, colour in enumerate(_bitmap.palette)}
     strays: list[str] = []
     pixels: list[list[int]] = []
     for y, row in enumerate(_rows):
@@ -349,7 +419,7 @@ def to_bit_values(_rows: list[list[tuple[int, int, int]]], _bitmap: Bitmap, _wha
             line.append(index)
         pixels.append(line)
     if strays:
-        wanted = ", ".join(f"#{r:02X}{g:02X}{b:02X}" for r, g, b in PALETTE)
+        wanted = ", ".join(f"#{r:02X}{g:02X}{b:02X}" for r, g, b in _bitmap.palette)
         sys.exit(f"error: {_what} uses colours that are not in the palette ({wanted}):\n  " + "\n  ".join(strays))
     return pixels
 
@@ -368,7 +438,7 @@ def do_export(_names: list[str], _out: Path) -> int:
     _out.mkdir(parents=True, exist_ok=True)
     for bitmap in bitmaps:
         target = _out / f"{bitmap.identifier}.bmp"
-        target.write_bytes(encode_bmp(unpack(bitmap, read_array(bitmap))))
+        target.write_bytes(encode_bmp(unpack(bitmap, read_array(bitmap)), bitmap.palette))
         print(f"wrote  {target}  ({bitmap.width}x{bitmap.height})")
     return 0
 
@@ -387,7 +457,13 @@ def do_import(_name: str, _source: Path) -> int:
     changed = sum(1 for before, after in zip(current, data) if before != after)
     bitmap.path.write_text(replace_array(text, bitmap, data), encoding="utf-8", newline="\n")
     print(f"wrote  {bitmap.path.relative_to(REPO)}  ({changed} of {bitmap.length} bytes changed)")
-    print(f"NOTE   {bitmap.identifier} now differs from the original's; extract_tables.py --pictures puts it back")
+    if bitmap.game_colours:
+        # There is nothing to put this one back FROM. It is the port's own art, no extractor knows
+        # it, and the seed it started life with was the bootstrap -- so version control is the only
+        # way back, and saying so is more use than naming a command that would do nothing.
+        print(f"NOTE   {bitmap.identifier} is the port's own art; nothing regenerates it, so keep the BMP")
+    else:
+        print(f"NOTE   {bitmap.identifier} now differs from the original's; extract_tables.py --pictures puts it back")
     return 0
 
 
@@ -423,7 +499,8 @@ def do_self_test() -> int:
         pixels = unpack(bitmap, data)
         check(pack(bitmap, pixels, data) == data, f"{bitmap.identifier}: unpack then pack is not the identity")
         for depth in (8, 24):
-            decoded = to_bit_values(decode_bmp(encode_bmp(pixels, depth), f"{bitmap.identifier} at {depth} bpp"), bitmap, "self-test")
+            blob = encode_bmp(pixels, bitmap.palette, depth)
+            decoded = to_bit_values(decode_bmp(blob, f"{bitmap.identifier} at {depth} bpp"), bitmap, "self-test")
             check(decoded == pixels, f"{bitmap.identifier}: through a {depth}-bit BMP the sheet came back different")
 
         text = bitmap.path.read_text(encoding="utf-8")
@@ -432,7 +509,7 @@ def do_self_test() -> int:
         # A one-pixel change lands in exactly one byte, and comes back out.
         block = bitmap.blocks[0]
         altered = [list(line) for line in pixels]
-        altered[block.y][block.x] ^= 1
+        altered[block.y][block.x] ^= 1  # inside every block's range, since even a hi-res one has two values
         repacked = pack(bitmap, altered, data)
         check(sum(1 for a, b in zip(repacked, data) if a != b) == 1, f"{bitmap.identifier}: one pixel did not change one byte")
         check(unpack(bitmap, repacked) == altered, f"{bitmap.identifier}: the changed pixel did not survive a round trip")
@@ -446,20 +523,38 @@ def do_self_test() -> int:
         bad = Path(folder) / "bad.bmp"
         stray = [list(line) for line in font_pixels]
         stray[0][0] = 2
-        bad.write_bytes(encode_bmp(stray))
+        bad.write_bytes(encode_bmp(stray, font.palette))
         try:
             pack(font, to_bit_values(decode_bmp(bad.read_bytes(), "bad"), font, "bad"), read_array(font))
             check(False, "a multicolour value in a hi-res block was accepted")
         except SystemExit as error:
-            check("hi-res" in str(error), "the hi-res refusal did not say why")
+            check("1 bits a pixel" in str(error), "the bit-depth refusal did not say why")
 
-        blob = bytearray(encode_bmp(font_pixels, 24))
+        blob = bytearray(encode_bmp(font_pixels, font.palette, 24))
         blob[-1] ^= 0x01  # one channel of one pixel, off by one
         try:
             to_bit_values(decode_bmp(bytes(blob), "off-by-one"), font, "off-by-one")
             check(False, "a colour outside the palette was accepted")
         except SystemExit as error:
             check("not in the palette" in str(error), "the palette refusal did not say why")
+
+    # THE SIXTEEN-COLOUR SHEET IS PAINTED IN THE COLOURS THE SHELL SHOWS, and this is the assertion
+    # that keeps the two ends together: every colour its palette offers is one `Presentation.h`
+    # defines, in the same order, so an index painted in a BMP is the index the game draws.
+    art = find_bitmap("DASHBOARD_PICTURE_2X")
+    check(art.palette == game_palette(), "the art sheet is not painted in the game's palette")
+    check(len(art.palette) == 16, "the game's palette is not sixteen colours")
+    check(all(value < 16 for line in unpack(art, read_array(art)) for value in line),
+          "a pixel of the art is outside the sixteen colours")
+
+    # And a colour that is IN the game's palette but not in the bit-value one imports into the art
+    # sheet and would be refused by the others -- which is what having two palettes is for.
+    art_pixels = unpack(art, read_array(art))
+    recoloured = [list(line) for line in art_pixels]
+    recoloured[0][0] = 15
+    blob = encode_bmp(recoloured, art.palette)
+    check(to_bit_values(decode_bmp(blob, "art"), art, "art")[0][0] == 15,
+          "colour 15 did not survive the art sheet's round trip")
 
     if failures:
         print(f"\nFAIL  {failures} self-test(s) failed")

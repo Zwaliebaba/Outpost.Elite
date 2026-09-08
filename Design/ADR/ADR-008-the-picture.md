@@ -33,7 +33,10 @@ original still means what it meant.
 ### §1 One surface beside the canvas, and it is VIC-II-shaped
 
 `Elite::Picture` is 640×400: a bitmap plane of 32,000 bytes for the upper region, an 80×50 grid of
-cell palettes beside it, and a 640×112 plane of colour INDICES for the dashboard. It is
+cell palettes beside it, and a 640×112 plane of colour INDICES for the dashboard. Since RS-4-art
+that lower plane is filled from `DASHBOARD_PICTURE_2X`, the port's own sixteen-colour art, rather
+than decoded from `DASHBOARD_IMAGE` — the picture below the split is no longer a function of
+anything the C64 shipped (Resolution.md §5.3). It is
 VIC-II-shaped rather than a framebuffer because the game *erases by drawing again* — every ship
 line, every blip, every message is removed by exclusive-oring it a second time — so the upper
 surface has to be a bit plane or erasure stops working. The dashboard is an index plane because
@@ -155,4 +158,4 @@ predates this track.
 | The picture is excluded from the state hash | Built | ADR-007, `GameLogic/StateHash.cpp` |
 | Every docked screen is re-flowed | Built, two blocked | Resolution.md §6.3 |
 | The upscale is gone | Built at RS-6 | `GameLogic/Picture.cpp` |
-| The dashboard is redrawn at 640×112 | **Owner's, outstanding** | Resolution.md §11.1, RS-4-art |
+| The dashboard is redrawn at 640×112 | **Mechanism built; the art is the owner's, outstanding** | Resolution.md §5.3 and §11.1, `GameLogic/DashboardPicture2x.cpp`, `tools/bitmaps.py` |

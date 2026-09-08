@@ -6,10 +6,27 @@
 #include "ShipSlot.h"
 #include "ShipType.h"
 
+#include <array>
 #include <cstdint>
 
 namespace Elite
 {
+
+  /*
+   * The dashboard picture at 640x112, as sixteen-colour art (Resolution.md 5.3, ruling 11.1).
+   *
+   * TWO PIXELS TO A BYTE, THE LEFT ONE IN THE HIGH NIBBLE, in rows of `DASHBOARD_PICTURE_2X_ROW_BYTES`
+   * running top to bottom. Four bits rather than eight because a pixel is one of the sixteen colours
+   * `Elite::Colour` names, and a nibble makes "only the sixteen" a property of the format instead of
+   * a rule somebody has to remember: there is no value a byte of this table can hold that is not a
+   * colour. `tools/bitmaps.py` is what edits it.
+   */
+  inline constexpr std::size_t DASHBOARD_PICTURE_2X_ROW_BYTES = Picture::WIDTH / 2;
+  inline constexpr std::size_t DASHBOARD_PICTURE_2X_BYTES = DASHBOARD_PICTURE_2X_ROW_BYTES * Picture::DASHBOARD_HEIGHT;
+
+  static_assert(DASHBOARD_PICTURE_2X_BYTES == 35'840u, "640x112 pixels, two to a byte");
+
+  extern const std::array<std::uint8_t, DASHBOARD_PICTURE_2X_BYTES> DASHBOARD_PICTURE_2X;
 
   /*
    * The 640x400 picture's dashboard (Design/Resolution.md section 5, slice RS-4).
@@ -69,9 +86,15 @@ namespace Elite
    * faithful picture upscaled, plus a tool command to produce it. **CORRECTED at RS-4**: a
    * generated table that is a pure function of a table already in the tree is a copy, and this
    * repository has spent three slices removing copies that two people have to keep in step. The
-   * bootstrap is computed where it is needed instead, from `DASHBOARD_IMAGE` through the canvas's
-   * own decode -- the same pixels, no second file, and `WritePicturePng` already hands the owner a
-   * PNG to paint over. RS-4-art replaces this call with an imported table; nothing else changes.
+   * bootstrap was computed where it was needed instead, from `DASHBOARD_IMAGE` through the canvas's
+   * own decode -- the same pixels and no second file.
+   *
+   * **AND AT RS-4-art THE TABLE ARRIVED AFTER ALL**, because the argument above holds only while
+   * the picture IS a pure function of `DASHBOARD_IMAGE`, and the whole point of the art slice is
+   * that it stops being one. `CopyDashboardPicture2x` no longer calls this; it copies
+   * `DASHBOARD_PICTURE_2X`. What remains true is that the table is SEEDED with what this function
+   * produced, so until somebody paints over it the copy is real and
+   * `TheBootstrapIsTheCanvasDoubledExactly` is what stops it drifting.
    *
    * It is ALSO what a palette change twins to. `MSBAR` writes a screen-RAM byte and the bulbs
    * exclusive-or one, and what that does on the hardware is recolour whatever bits are already in
@@ -81,8 +104,15 @@ namespace Elite
    */
   void ResolveDashboardCell2x(Picture& _picture, const Canvas& _canvas, int _cellColumn, int _cellRow) noexcept;
 
-  /// The whole dashboard, cell by cell: `wantdials`' picture copy, doubled into the plane.
-  void CopyDashboardPicture2x(Picture& _picture, const Canvas& _canvas) noexcept;
+  /*
+   * `wantdials`' picture copy, on the plane: `DASHBOARD_PICTURE_2X` unpacked into it.
+   *
+   * IT TAKES NO CANVAS ANY MORE, which is the visible half of RS-4-art. While the plane was decoded
+   * from `DASHBOARD_IMAGE` this needed the cells the loader had coloured; a table of art needs
+   * nothing but itself, and a parameter kept for symmetry would say the picture still follows the
+   * canvas when it no longer does.
+   */
+  void CopyDashboardPicture2x(Picture& _picture) noexcept;
 
   /*
    * 2x of: DrawBar -- one dial, at thirty-two steps of two hi-res pixels.
