@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,525 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,250 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,41 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-6: `FlightLoop.cpp` to zero, and the counter's third and largest correction.**
+
+The file is done: 199 sites, none left. But **63 of the drop in this slice is rewriting and 212 is
+the counter admitting it was wrong**, and the second number is the one worth reading.
+
+**`AND` IS A MNEMONIC AND ALSO A CONJUNCTION, AND THIS TREE WRITES ITS FINDINGS IN CAPITALS.** "IT IS
+NOT SELF-MODIFYING CODE AND IT IS NOT IN AN INTERRUPT HANDLER", "TWO LOOPS AND ONE COUNTER", "THE X
+AXIS IS SIXTEEN BITS AND THE Y AXIS IS EIGHT" — to a pattern that takes any capitalised token after
+a mnemonic as an operand, every one of those is an instruction. So are "SIXTEEN-BIT COMPARE" (`BIT`,
+hyphen-bounded) and every emphatic sentence containing `SEC`, `INC` or `DEC`. **203 lines of the port
+read that way**, and the count was inflated by them from the moment the instrument was written.
+
+The fix is scoped to the seven mnemonics that are English words — `AND`, `BIT`, `SEC`, `INC`, `DEC`,
+`BRK`, `TAX` — which now need LISTING CONTEXT, a `6502:` marker or a `/` on the line. The other
+forty-nine still count on shape alone. A broader rule was tried first and rejected: requiring context
+of EVERY mnemonic excluded 551 lines, and a random sample showed it throwing away genuine backticked
+quotations along with the prose.
+
+**The residual is stated rather than hidden.** A lone `AND #31` quoted mid-sentence is no longer
+counted. That is a QUOTATION under R-i, not a transcription, so the ratchet simply will not force it
+to be tagged — an under-count, and the safe direction, because the alternative is a ratchet that
+cannot reach zero without mangling two hundred good sentences.
+
+**THREE CORRECTIONS, ALL DOWNWARD, IS A PATTERN THAT DESERVES SUSPICION** and it got some: this one
+was checked on two random samples across the whole tree, not on the lines in front of me, precisely
+because the convenient direction and the correct direction agreed. The self-test now pins a sample of
+each kind so a fourth drift has to break it.
+
+The last eight sites were rewritten BY LINE NUMBER after two failed string matches on indentation.
+Worth recording as a tool note: when a patch is a comment rewrite and the anchor is the comment
+itself, the line number is the more reliable address.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,525 → 2,250 (212 calibration, 63 rewriting).
 
 **2026-09-08 — M6-d-5: the combat half of the frame, and the labels that earn their keep.**
 

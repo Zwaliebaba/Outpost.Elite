@@ -221,6 +221,21 @@ MNEMONICS = ("ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CL
 IMPLIED = sorted("BRK CLC CLD CLI CLV DEX DEY INX INY NOP PHA PHP PLA PLP RTI RTS SEC SED SEI TAX TAY TSX "
                  "TXA TXS TYA".split())
 
+# Seven mnemonics are also ordinary English words, and this tree writes its findings in CAPITALS.
+#
+# "IT IS NOT SELF-MODIFYING CODE AND IT IS NOT IN AN INTERRUPT HANDLER" and "TWO LOOPS AND ONE
+# COUNTER" are sentences; to a pattern that takes any capitalised token after a mnemonic as an
+# operand they are instructions. 203 lines of the port read that way, which is the third correction
+# this counter has needed and the largest.
+#
+# So these seven need LISTING CONTEXT -- a `6502:` marker or a `/` separator on the same line -- and
+# the other forty-nine count on shape alone. The cost is that a lone `AND #31` quoted mid-sentence
+# is not counted; that is a QUOTATION under §1 R-i rather than a transcription, so the ratchet
+# simply does not force it to be tagged. Under-counting prose is the safe direction: the alternative
+# is a ratchet that cannot reach zero without mangling two hundred good sentences.
+AMBIGUOUS = "AND BIT SEC INC DEC BRK TAX".split()
+LISTING_CONTEXT = re.compile(r"6502:|/")
+
 # `LDA #0`, `STA SC+1`, `JSR MULTU`, `ASL A` -- a mnemonic with a real OPERAND after it.
 #
 # THE OPERAND MAY NOT BE AN ENGLISH WORD, and that is the correction M6-d-2 made after the first
@@ -237,7 +252,15 @@ OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(MNEMONICS) + r")\s+(?:A\b|[#$&%(
 # quotation. A slash is the thing only a transcription has.
 OPCODE_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(IMPLIED) + r")\b|\b(?:" + "|".join(IMPLIED) + r")\s*/)")
 
+# The same two, over the mnemonics that cannot be mistaken for English.
+_PLAIN = [m for m in MNEMONICS if m not in AMBIGUOUS]
+_PLAIN_IMPLIED = [m for m in IMPLIED if m not in AMBIGUOUS]
+UNAMBIGUOUS_OPERAND = re.compile(r"\b(?:" + "|".join(_PLAIN) + r")\s+(?:A\b|[#$&%(]|[A-Z0-9.][\w.%+,]*)")
+UNAMBIGUOUS_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(_PLAIN_IMPLIED) + r")\b|\b(?:"
+                                 + "|".join(_PLAIN_IMPLIED) + r")\s*/)")
+
 COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
+
 
 # The tag that makes a quotation DELIBERATE (§1 R-i, ruled 2026-09-08).
 #
@@ -250,6 +273,16 @@ COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 #
 # Not `6502:` -- that is the marker M6-e removes, and `\b6502:` does not match this.
 QUOTED_TAG = re.compile(r"\b6502 quoted:")
+
+
+def _is_transcription(_line: str) -> bool:
+    """Does this comment line QUOTE instructions, rather than name one in a sentence?"""
+    if not (OPCODE_OPERAND.search(_line) or OPCODE_IMPLIED.search(_line)):
+        return False
+    if UNAMBIGUOUS_OPERAND.search(_line) or UNAMBIGUOUS_IMPLIED.search(_line):
+        return True
+    # The comment's own `//` is a slash, so the context test reads the BODY and not the marker.
+    return bool(LISTING_CONTEXT.search(COMMENT_LINE.sub("", _line, count=1)))
 
 
 def _opcode_lines(_root: Path):
@@ -267,7 +300,7 @@ def _opcode_lines(_root: Path):
             continue
         for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
             for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
-                if COMMENT_LINE.match(line) and (OPCODE_OPERAND.search(line) or OPCODE_IMPLIED.search(line)):
+                if COMMENT_LINE.match(line) and _is_transcription(line):
                     yield line, bool(QUOTED_TAG.search(line))
 
 
@@ -527,6 +560,7 @@ namespace Elite
   // 6502: LDA #0 / STA SC+1 -- an instruction with an operand, so this line IS a transcription
   // `ORA` touches no flag, and its top BIT is set: prose that NAMES an instruction is not one
   // it clears both halves AND the carry, and expresses that with ROR through the flag: also prose
+  // TWO LOOPS AND ONE COUNTER, and the mode is decided INSIDE the loop: a sentence, not a listing
   /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
   // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
