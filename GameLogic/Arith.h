@@ -33,7 +33,7 @@ namespace Elite
      * and the risk was written from the BBC commentary. The frame's `Q` is compared against the
      * game's over six bubble shapes by `TheFramesOwnQReachesTheAltitude`.
      */
-    std::uint8_t q = 0;
+    std::uint8_t lastDivisor = 0;
 
     /*
      * 6502: K2 -- the BOTTOM BYTE of the second four-byte block, and only that byte.

@@ -124,8 +124,8 @@ namespace Elite
      * slice 2 and already ported: the third outward pointer this slice has found, after `dontclip`
      * and `Yx2M1`.
      */
-    std::array<std::uint8_t, 4> k5{};
-    std::array<std::uint8_t, 4> k6{};
+    std::array<std::uint8_t, 4> segmentStart{};
+    std::array<std::uint8_t, 4> segmentEnd{};
     std::uint8_t circleStep = 0;
     std::uint8_t flag = 0;
 

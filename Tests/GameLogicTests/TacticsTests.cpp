@@ -47,10 +47,10 @@ namespace GameLogicTests
 
     struct Labels
     {
-      std::uint16_t inwk = 0, k3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
-      std::uint16_t q = 0, r = 0, s = 0, u = 0, k = 0;
+      std::uint16_t inwk = 0, zeroPageK3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
+      std::uint16_t zeroPageQ = 0, zeroPageR = 0, zeroPageS = 0, zeroPageU = 0, zeroPageK = 0;
       std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, legalStatus = 0, slsp = 0;
-      std::uint16_t cnt = 0, coneWidth = 0, signMask = 0, signMask2 = 0, junk = 0;
+      std::uint16_t zeroPageCnt = 0, coneWidth = 0, signMask = 0, signMask2 = 0, junk = 0;
       std::uint16_t energy = 0, fsh = 0, ash = 0, dly = 0;
       std::uint16_t tally = 0, tallyl = 0;
 
@@ -71,23 +71,23 @@ namespace GameLogicTests
         dly = _oracle.Label("DLY");
         tally = _oracle.Label("TALLY");
         tallyl = _oracle.Label("TALLYL");
-        cnt = _oracle.Label("CNT");
+        zeroPageCnt = _oracle.Label("CNT");
         coneWidth = _oracle.Label("CNT2");
         signMask = _oracle.Label("RAT");
         signMask2 = _oracle.Label("RAT2");
         junk = _oracle.Label("JUNK");
         inwk = _oracle.Label("INWK");
-        k3 = _oracle.Label("K3");
+        zeroPageK3 = _oracle.Label("K3");
         kPercent = _oracle.Label("K%");
         v = _oracle.Label("V");
         x1 = _oracle.Label("X1");
         y1 = _oracle.Label("Y1");
         x2 = _oracle.Label("X2");
-        q = _oracle.Label("Q");
-        r = _oracle.Label("R");
-        s = _oracle.Label("S");
-        u = _oracle.Label("U");
-        k = _oracle.Label("K");
+        zeroPageQ = _oracle.Label("Q");
+        zeroPageR = _oracle.Label("R");
+        zeroPageS = _oracle.Label("S");
+        zeroPageU = _oracle.Label("U");
+        zeroPageK = _oracle.Label("K");
       }
     };
 
@@ -116,7 +116,7 @@ namespace GameLogicTests
     {
       for (std::size_t byte = 0; byte < _axes.size(); ++byte)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + byte)] = _axes[byte];
+        _cpu.memory[static_cast<std::uint16_t>(_at.zeroPageK3 + byte)] = _axes[byte];
       }
     }
 
@@ -126,7 +126,7 @@ namespace GameLogicTests
     {
       for (std::size_t byte = 0; byte < 9u; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.k3 + byte)], _axes[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.zeroPageK3 + byte)], _axes[byte],
                          (_where + L": K3+" + std::to_wstring(byte)).c_str());
       }
     }
@@ -267,9 +267,9 @@ namespace GameLogicTests
                 cpu.memory[at.x1] = vector.x;
                 cpu.memory[at.y1] = vector.y;
                 cpu.memory[at.x2] = vector.z;
-                cpu.memory[at.q] = 0x5Au;
-                cpu.memory[at.r] = 0x5Au;
-                cpu.memory[at.s] = 0x5Au;
+                cpu.memory[at.zeroPageQ] = 0x5Au;
+                cpu.memory[at.zeroPageR] = 0x5Au;
+                cpu.memory[at.zeroPageS] = 0x5Au;
 
                 cpu.y = which;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine((station != 0) ? tas4 : tas3, 20'000);
@@ -775,7 +775,7 @@ namespace GameLogicTests
       }
       for (std::size_t face = 0; face < _universe.universe.geometry.faceVisible.size() && face < 14u; ++face)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + face)] = _universe.universe.geometry.faceVisible[face];
+        _cpu.memory[static_cast<std::uint16_t>(_at.zeroPageK3 + face)] = _universe.universe.geometry.faceVisible[face];
       }
 
       const std::uint16_t block = static_cast<std::uint16_t>(_at.kPercent + _universe.slot * Elite::SHIP_BLOCK_SIZE);
@@ -1424,7 +1424,7 @@ namespace GameLogicTests
             universe.universe.geometry.faceVisible[10] = faces;
 
             PushTacticsUniverse(cpu, universe, at);
-            cpu.memory[static_cast<std::uint16_t>(at.k3 + 10u)] = faces;
+            cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + 10u)] = faces;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dockit, 400'000);
             Assert::IsTrue(run.completed, L"DOCKIT returned");
@@ -1443,7 +1443,7 @@ namespace GameLogicTests
             // a local since M2-c, so the port leaves whatever was there.
             for (std::size_t byte = 0; byte < 9u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], universe.universe.axes[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)], universe.universe.axes[byte],
                                (context + L": K3+" + std::to_wstring(byte)).c_str());
             }
 

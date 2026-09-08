@@ -441,7 +441,7 @@ namespace GameLogicTests
         universe->heap.Write(work.heap.Byte(static_cast<std::uint16_t>(7u + byte)), VERTICES[byte]);
       }
 
-      universe->math.q = 24u;
+      universe->math.lastDivisor = 24u;
       Elite::DrawExplosionParticles(universe->canvas, universe->math, universe->rng, work, universe->heap, universe->bubble,
                                     &universe->picture);
 

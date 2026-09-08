@@ -176,8 +176,8 @@ namespace GameLogicTests
     cells.push_back(Direct(L"SUNX", _at.sunx, _universe.heaps.sunX, CellScope::Compared));
     cells.push_back(Direct(L"SUNX+1", static_cast<std::uint16_t>(_at.sunx + 1u), _universe.heaps.sunXNext, CellScope::Compared));
     cells.push_back(Direct(L"Yx2M1", _at.yx2m1, _universe.heaps.lowestVisibleRow, CellScope::Compared));
-    Run(cells, L"K5", _at.k5, _universe.heaps.k5.data(), _universe.heaps.k5.size(), CellScope::Image);
-    Run(cells, L"K6", _at.k6, _universe.heaps.k6.data(), _universe.heaps.k6.size(), CellScope::Image);
+    Run(cells, L"K5", _at.zeroPageK5, _universe.heaps.segmentStart.data(), _universe.heaps.segmentStart.size(), CellScope::Image);
+    Run(cells, L"K6", _at.zeroPageK6, _universe.heaps.segmentEnd.data(), _universe.heaps.segmentEnd.size(), CellScope::Image);
     cells.push_back(Direct(L"STP", _at.circleStep, _universe.heaps.circleStep, CellScope::Compared));
     cells.push_back(Direct(L"FLAG", _at.flag, _universe.heaps.flag, CellScope::Compared));
     cells.push_back(Direct(L"PLTOG", _at.planetDetail, _universe.heaps.planetDetail, CellScope::Compared));

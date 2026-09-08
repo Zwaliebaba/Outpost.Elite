@@ -291,7 +291,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t gnum = oracle.Label("gnum");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t r = oracle.Label("R");
+      const std::uint16_t zeroPageR = oracle.Label("R");
       const std::uint16_t col2 = oracle.Label("COL2");
       const std::uint16_t dasc = oracle.Label("DASC");
 
@@ -375,7 +375,7 @@ namespace GameLogicTests
         // ---- compare -----------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
-        Assert::AreEqual(cpu.memory[r], entry.value, (where + L": the number in R").c_str());
+        Assert::AreEqual(cpu.memory[zeroPageR], entry.value, (where + L": the number in R").c_str());
         Assert::AreEqual(cpu.memory[col2], text.palette.Byte(), (where + L": the text colour on exit").c_str());
 
         /*

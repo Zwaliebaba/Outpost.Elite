@@ -177,7 +177,7 @@ namespace GameLogicTests
        * produced is the screen, the heap and the sprite seam, all compared. `P`, `R` and `S` went
        * the same way with M2-b.
        */
-      same("Q", _math.q);
+      same("Q", _math.lastDivisor);
 
       // `ZZ` and `Y1` are the particle loop's own since M2-c -- the distance each particle is
       // plotted at and the row it landed on -- and what they produced is the screen comparison.

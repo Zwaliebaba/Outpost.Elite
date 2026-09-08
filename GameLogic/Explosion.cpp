@@ -60,7 +60,7 @@ namespace Elite
        * whatever the frame last left there as its radicand's low byte (§8, R22). `DOEXP` runs
        * inside `LL9` part 9, so on a frame whose last ship exploded this is that byte.
        */
-      _math.q = _heap.Read(address);
+      _math.lastDivisor = _heap.Read(address);
 
       /*
        * 6502: byte 1, the cloud counter, turned into a particle count.
@@ -153,7 +153,7 @@ namespace Elite
           const std::uint8_t distance = _rng.NextRepeatable().value;
 
           // 6502: LDA K3+1 / STA R / LDA K3 / JSR EXS1 -- the vertex's y, against the cloud in Q.
-          const ExplosionOffset offsetY = OffsetByCloud(_rng, k3[0], k3[1], _math.q);
+          const ExplosionOffset offsetY = OffsetByCloud(_rng, k3[0], k3[1], _math.lastDivisor);
 
           if (offsetY.high != 0u || offsetY.low >= EXPLOSION_PARTICLE_BOTTOM)
           {
@@ -169,7 +169,7 @@ namespace Elite
           {
             const std::uint8_t y1 = offsetY.low; // 6502: STX Y1
 
-            const ExplosionOffset offsetX = OffsetByCloud(_rng, k3[2], k3[3], _math.q);
+            const ExplosionOffset offsetX = OffsetByCloud(_rng, k3[2], k3[3], _math.lastDivisor);
 
             if (offsetX.high == 0u)
             {
@@ -312,7 +312,7 @@ namespace Elite
       carry = forced.carry;
     }
 
-    _math.q = scaled; // 6502: STA Q -- the distance the cloud size is divided by
+    _math.lastDivisor = scaled; // 6502: STA Q -- the distance the cloud size is divided by
 
     const std::uint8_t cloudCounter = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
     const AddResult grown = AddWithCarry(cloudCounter, 4u, carry);
@@ -334,7 +334,7 @@ namespace Elite
      * branch on it. `ASL R / ROL A` three times shifts the sixteen-bit answer up rather than the
      * byte, which is why R is a workspace byte here and not a discarded remainder.
      */
-    const ScaledDivision divided = DivideAndScale(grown.value, _math.q);
+    const ScaledDivision divided = DivideAndScale(grown.value, _math.lastDivisor);
 
     std::uint8_t size = divided.whole;
     if (size >= 0x1Cu)

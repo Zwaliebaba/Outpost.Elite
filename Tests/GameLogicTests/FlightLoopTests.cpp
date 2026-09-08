@@ -50,7 +50,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t mas2 = oracle.Label("MAS2");
-      const std::uint16_t m = oracle.Label("m");
+      const std::uint16_t zeroPageM = oracle.Label("m");
       const std::uint16_t kPercent = oracle.Label("K%");
 
       Cpu6502 cpu = oracle.Fresh();
@@ -79,7 +79,7 @@ namespace GameLogicTests
               cpu.a = static_cast<std::uint8_t>(seedByte);
               cpu.y = static_cast<std::uint8_t>(slot * Elite::SHIP_BLOCK_SIZE);
 
-              const Elite::Testing::RunResult run = cpu.CallSubroutine(viaM ? m : mas2, 500);
+              const Elite::Testing::RunResult run = cpu.CallSubroutine(viaM ? zeroPageM : mas2, 500);
               Assert::IsTrue(run.completed, L"MAS2 returned");
 
               const std::uint8_t ours =
@@ -399,7 +399,7 @@ namespace GameLogicTests
       const std::uint16_t spin = oracle.Label("SPIN");
       const std::uint16_t spin2 = oracle.Label("SPIN2");
       const std::uint16_t sfs1 = oracle.Label("SFS1");
-      const std::uint16_t cnt = oracle.Label("CNT");
+      const std::uint16_t zeroPageCnt = oracle.Label("CNT");
       const std::uint16_t xx0 = oracle.Label("XX0");
       const std::uint16_t rand = oracle.Label("RAND");
 
@@ -442,7 +442,7 @@ namespace GameLogicTests
           // which only a sweep that varies it can see.
           const bool carryIn = (count & 1u) != 0u;
           cpu.ClearTrapHits();
-          cpu.memory[cnt] = 0xEEu;
+          cpu.memory[zeroPageCnt] = 0xEEu;
           cpu.a = static_cast<std::uint8_t>(count);
           cpu.x = type;
           cpu.z = (count == 0u); // what the caller's own `AND` has just left behind
@@ -489,7 +489,7 @@ namespace GameLogicTests
             }
 
             cpu.ClearTrapHits();
-            cpu.memory[cnt] = 0xEEu;
+            cpu.memory[zeroPageCnt] = 0xEEu;
             cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
             cpu.y = type;
@@ -2184,7 +2184,7 @@ namespace GameLogicTests
            * -- it is scratch, and M2-c took all of it but this byte and one other -- so the sweep
            * mirrors it by hand, the way `CompareFrames` mirrors `RAND`.
            */
-          frame.universe.math.q = static_cast<std::uint8_t>(seeded);
+          frame.universe.math.lastDivisor = static_cast<std::uint8_t>(seeded);
 
           const std::wstring where = WidenText("MA23 (planet at " + std::to_string(distance) + ", Q " + std::to_string(seeded) + ")");
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail,

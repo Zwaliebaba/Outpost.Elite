@@ -1605,7 +1605,7 @@ namespace Elite
            * game rather than argued about, by `TheFramesOwnQReachesTheAltitude` over six bubble
            * shapes and by `TheAltitudeMatchesMA23` with the byte seeded on both sides (§8).
            */
-          _universe.status.altitude = SquareRoot(above.value, _universe.math.q).value;
+          _universe.status.altitude = SquareRoot(above.value, _universe.math.lastDivisor).value;
         }
       }
     }

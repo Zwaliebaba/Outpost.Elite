@@ -83,8 +83,8 @@ namespace GameLogicTests
       }
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t routine = oracle.Label("BPRNT");
-      const std::uint16_t k = oracle.Label("K");
-      const std::uint16_t u = oracle.Label("U");
+      const std::uint16_t zeroPageK = oracle.Label("K");
+      const std::uint16_t zeroPageU = oracle.Label("U");
 
       const std::uint32_t values[] = {0u,        1u,        9u,         10u,        99u,         100u,       999u,    1000u,
                                       1234u,     9999u,     10000u,     65535u,     65536u,      123456u,    999999u, 1000000u,
@@ -101,11 +101,11 @@ namespace GameLogicTests
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(oracle.Label("DASC"));
 
-            cpu.memory[k] = static_cast<std::uint8_t>(value >> 24);
-            cpu.memory[k + 1] = static_cast<std::uint8_t>(value >> 16);
-            cpu.memory[k + 2] = static_cast<std::uint8_t>(value >> 8);
-            cpu.memory[k + 3] = static_cast<std::uint8_t>(value);
-            cpu.memory[u] = static_cast<std::uint8_t>(digits);
+            cpu.memory[zeroPageK] = static_cast<std::uint8_t>(value >> 24);
+            cpu.memory[zeroPageK + 1] = static_cast<std::uint8_t>(value >> 16);
+            cpu.memory[zeroPageK + 2] = static_cast<std::uint8_t>(value >> 8);
+            cpu.memory[zeroPageK + 3] = static_cast<std::uint8_t>(value);
+            cpu.memory[zeroPageU] = static_cast<std::uint8_t>(digits);
             cpu.a = cpu.x = cpu.y = 0;
             cpu.sp = 0xFD;
             cpu.c = withPoint;
@@ -130,7 +130,7 @@ namespace GameLogicTests
 
             // 6502: `U` as the routine leaves it -- `SV1` prints the competition number at whatever
             // width the last `BPRNT` left there, so the byte is part of the answer (M2-c).
-            Assert::AreEqual(cpu.memory[u], left, (Widen(context) + L": U on the way out").c_str());
+            Assert::AreEqual(cpu.memory[zeroPageU], left, (Widen(context) + L": U on the way out").c_str());
             ++compared;
           }
         }

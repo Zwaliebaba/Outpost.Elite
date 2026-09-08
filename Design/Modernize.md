@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,084 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->788 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -520,7 +520,7 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
+| `MathWorkspace.lastDivisor` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
 | `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | FoldIntoStateHash, MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
 | `DrawWorkspace.screenPointer` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
 | `GeometryWorkspace.scaledOrientation` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, FoldIntoStateHash, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
@@ -1898,6 +1898,33 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-6: the oracle's zero page is not the port's, and the counter could not tell.**
+
+296 sites, and the slice is one distinction. `MathWorkspace::q` is the PORT's byte — the one nine
+routines write before a divide and `MA23` reads as its radicand's low byte a frame later — and it is
+`lastDivisor`, which is what it holds and what makes the altitude quirk read as a quirk. But
+fourteen test files ALSO have a `q`, and theirs is a `std::uint16_t` holding the ADDRESS of the
+original's `Q`, seven of them in an `ArithTests` struct actually called `Scratch`.
+
+**A field initialised from `_oracle.Label("Q")` addresses the original's zero page, and there is no
+port name to borrow for it**: `Q` is a divisor in one routine and a multiplicand in the next, which
+is the whole reason this family is last. So those fields say what they are — `zeroPageQ`,
+`zeroPageK3`, `zeroPageCnt` — rather than pretending to a meaning the byte does not have. The rule is
+mechanical (the initialiser names the label) and it moved 47 fields across fifteen files in one
+pass. It is the same ruling as `Cpu6502`, which models a 6502 and keeps the processor's names, one
+level down: this is the zero page rather than the registers.
+
+**AND THE TWO KINDS SAT IN THE SAME FILES, WHICH IS HOW THIS WENT WRONG TWICE.** A blanket `.q`
+turned `at.q` — the oracle's address — into `at.lastDivisor`; and the bridge pass then turned
+`state.k5` — the PORT's ellipse segment — into `state.zeroPageK5`. The compiler caught both, four
+files apart, and the fix is the distinction rather than the spelling: `PlanetSunState`'s pair is
+`segmentStart` and `segmentEnd` (the segment's start and end, four bytes each because both
+coordinates are sixteen bits), and `Where`'s two are the addresses of `K5` and `K6`.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,084 → 788, and what is left is locals: 166 `q`, 122 `k`, 112 `s` and the rest,
+almost all of them inside `Arith.cpp` and its sweep, `ShipMove.cpp` and the line drawers.
 
 **2026-09-08 — M6-c-5: fifty-nine sites four slices had walked past, because a parameter wears a prefix.**
 
