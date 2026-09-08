@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->588 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->546 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,43 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-43: `DockedKeys.h` and `Controls.h` to zero, and my own rewrite made a
+transcription twice.**
+
+42 sites over two headers: the docked key dispatch and the flight controls. Forty-first and
+forty-second at zero.
+
+**The counter caught two sites the rewrite itself created, and both were the word "bit" in
+capitals.** `QQ12` is tested two ways, and saying so wants a contrast between one bit and the whole
+byte. "reads BIT 7" and then "reads the TOP BIT ALONE" both read to the instrument as the `BIT`
+instruction with an operand. `BIT` is already in the ambiguous set, so the guard should have saved
+them — except the guard asks for a slash or a `6502:` in the body, and "docked/flight" supplies the
+slash. That is exactly the hole M6-d-33 recorded for `AND`, where a file path supplied it; this is
+the second word to fall through and the first time a REWRITE, rather than an inherited comment,
+created a site.
+
+No fifth calibration. Restricting `BIT` the way `AND` was restricted would exclude "BIT 7" and would
+still admit "BIT ALONE" and "BIT SEVEN", because a real `BIT` operand and a capitalised English word
+are the same shape — and unlike `AND`, this instruction has no immediate mode to key on. The cure
+was the prose: "reads its top bit and NOTHING ELSE" says the same thing, is clearer, and does not
+collide. Worth carrying into M6-e as a property of the instrument rather than a defect: the guard
+under-counts by design and over-counts when a slash wanders into the sentence, and the second is
+cheap to fix one line at a time.
+
+**`EQUB &2C` again, for the third slice running.** The three view keys reach `LOOK1` by falling
+through two of them, so which view you get depends on where the jump landed rather than on any
+comparison — the same trick `OSW0L` uses to share one print call between an accepted key and a bell
+(M6-d-41). Three appearances in three slices makes it the original's standard way of sharing a tail,
+and the byte stays in all three because the byte is the mechanism.
+
+`Controls.h` also carries `RE2+2`, which is a MID-INSTRUCTION entry point in the same family as
+`zZ+1` (M6-d-42): `BUMP2` and `REDU2` each end by branching into the other's middle, and one of the
+two targets is the second byte of a two-byte branch. Three entry points between two routines and not
+one of them a label a caller uses.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (42 and 51). `opcode-transcriptions` 588 → 546.
 
 **2026-09-08 — M6-d-42: `Docking.cpp` and `Hyperspace.h` to zero, and the hardest case for R-i's tag
 did not need it.**

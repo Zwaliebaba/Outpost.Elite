@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 588,
+      "ceiling": 546,
       "slack": 0,
-      "slice": "M6-d-42: Docking.cpp and Hyperspace.h to zero, and the hardest case for R-i's tag did not need it"
+      "slice": "M6-d-43: DockedKeys.h and Controls.h to zero, and my own rewrite made a transcription twice"
     },
     "opcode-quotations": {
       "ceiling": 0,
