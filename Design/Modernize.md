@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->460 tests, oracle present), all <!--count:checks-->eighteen repository checks pass,
+(<!--count:tests-->460 tests, oracle present), all <!--count:checks-->nineteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -818,6 +818,12 @@ number counts a drawing routine reading a blank screen byte, which is "off the i
 nothing the original put there. **The number that matters is the non-zero half: 128,023,278 reads
 (18.2%), over 19,112 distinct addresses, in 597,921 calls (18.5% of the corpus).** The other 81.5%
 of calls answer from what the test wrote and from zeros, and a write-set key covers them outright.
+
+Where those 19,112 addresses fall says the split did its job: &CF00–&FAFF holds 7,832 of them,
+&0400–&20FF 5,137, &B700–&C6FF 3,947 and &9200–&99FF 1,509 — and **&4000–&67FF, the bitmap, drops
+out of the list entirely.** 7,225 of its addresses are read off the image and almost none of them
+hold anything, which is exactly the drawing-routine-reads-a-blank-screen case the non-zero test was
+put there to remove.
 
 So the tail R-g accepts is real and it is a fifth of the corpus, concentrated in the pages the
 original keeps its tables, blueprints and text in. It does not make replay wrong — the recorded
@@ -1912,6 +1918,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-b-2: the labels become a header, and the tests stop reading a file to find a
+routine.**
+
+R-g's other half. A test finds its routine by name, so the ~1,900 names have to outlive `Upstream/`
+— they are metadata about the original on the same footing as the extracted data tables, and R-c's
+"the label table goes with the oracle" was the part Q7 got wrong.
+
+`tools/labels.py --header` writes `Tests/GameLogicTests/OracleLabels.h`: three `constexpr` tables of
+`{name, address}`, 1,927 for the game, 34 for the loader and 1 for the sprites, sorted by name and
+written a line at a time so regenerating it on another machine produces the same bytes. **Names and
+numbers only.** The image is the original's CODE and stays out, which is what keeps ADR-001 §5 true
+through M6-f.
+
+`--check` is the nineteenth repository check. It re-derives the tables from `Design/Reference/` and
+fails if the committed header disagrees, naming the first five lines that differ. **It SKIPS rather
+than fails when those tables are absent**, and that is the whole design: absent is the normal state
+of a fresh clone and the PERMANENT state after M6-f. A check that demanded the original be present
+would be a check that has to be deleted later, which is the opposite of what this phase is for.
+
+`OracleImage` now takes its labels from the header instead of from `Design/Reference/*Labels.txt`,
+so its three instances name a table rather than a filename. `ReadTable` stays for the binaries: the
+IMAGE is a different question and is still loaded from the assembled blocks until M6-b-4 removes the
+need for it.
+
+460 tests green, all nineteen checks, replay digests unmoved.
 
 **2026-09-08 — M6-b-1: the read census, and the key that was missing a probe.**
 

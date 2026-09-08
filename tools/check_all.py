@@ -37,6 +37,7 @@ CHECKS: list[list[str]] = [
     ["check_modernize.py"],
     ["mutate.py", "--check"],
     ["c64_source.py", "--check-all"],
+    ["labels.py", "--check"],
     ["inventory.py", "--strict"],
     ["inventory.py", "--check-homes"],
     ["inventory.py", "--self-test"],

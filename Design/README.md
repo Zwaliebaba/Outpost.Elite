@@ -29,7 +29,7 @@ no longer selecting a joystick the port cannot read, the crowded end and the doc
 while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->460 tests** and
-CI runs **<!--count:checks-->eighteen repository checks** beside it.
+CI runs **<!--count:checks-->nineteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
