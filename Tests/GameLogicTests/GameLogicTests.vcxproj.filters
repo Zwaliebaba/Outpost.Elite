@@ -13,40 +13,19 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="NullSeams.h" />
-    <ClInclude Include="Cpu6502.h">
-      <Filter>Oracle</Filter>
-    </ClInclude>
-    <ClInclude Include="Oracle.h">
-      <Filter>Oracle</Filter>
-    </ClInclude>
-    <ClInclude Include="OracleImage.h">
-      <Filter>Oracle</Filter>
-    </ClInclude>
-    <ClInclude Include="OracleLabels.h">
-      <Filter>Oracle</Filter>
-    </ClInclude>
     <ClInclude Include="FlightPort.h">
       <Filter>Oracle</Filter>
     </ClInclude>
     <ClInclude Include="FlightUniverse.h">
       <Filter>Oracle</Filter>
     </ClInclude>
-    <ClInclude Include="UniverseImage.h">
+    <ClInclude Include="StateCells.h">
       <Filter>Oracle</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
-    <ClCompile Include="Cpu6502.cpp">
-      <Filter>Oracle</Filter>
-    </ClCompile>
-    <ClCompile Include="Oracle.cpp">
-      <Filter>Oracle</Filter>
-    </ClCompile>
-    <ClCompile Include="OracleImage.cpp">
-      <Filter>Oracle</Filter>
-    </ClCompile>
-    <ClCompile Include="UniverseImage.cpp">
+    <ClCompile Include="StateCells.cpp">
       <Filter>Oracle</Filter>
     </ClCompile>
     <ClCompile Include="ArithTests.cpp">

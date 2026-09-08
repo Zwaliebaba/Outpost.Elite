@@ -74,7 +74,6 @@ CLASS_HEAD = re.compile(r"\b(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[
 PURE_VIRTUAL = re.compile(r"\)\s*(?:const\s*)?(?:noexcept\s*)?=\s*0\s*;")
 ELITE_NAME = re.compile(r"\bElite::([A-Za-z_]\w*)")
 ORIGIN_MARKER = re.compile(r"\b6502:")
-ORACLE_USE = re.compile(r"\bOracleImage\b|\bOracleMissing\b")
 ORIGIN_PATH = re.compile(r"\bUpstream\b|\bMasterFile\b")
 
 
@@ -475,13 +474,6 @@ def count_origin_identifiers(_root: Path) -> int:
     return total
 
 
-def count_oracle_test_files(_root: Path) -> int:
-    """P12 -- test translation units that load the assembled original through OracleImage."""
-    tests = _root / "Tests" / "GameLogicTests"
-    return len([path for path in sorted(tests.glob("*Tests.cpp"))
-                if ORACLE_USE.search(strip_comments(path.read_text(encoding="utf-8", errors="replace")))])
-
-
 def count_origin_tools(_root: Path) -> int:
     """P12 -- scripts in tools/ that read Upstream/ or MasterFile/ (this one reads neither)."""
     total = 0
@@ -511,7 +503,10 @@ COUNTERS = {
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
     "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments -- no exemption"),
     "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
-    "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
+    # `oracle-test-files` WAS HERE AND IS NOT ANY MORE (M6-b-7): it counted the test translation
+    # units that loaded the assembled original, and it reached zero when the tests went. A counter
+    # over a header that no longer exists guards nothing -- a file that included it would not
+    # compile -- so it goes with the header rather than sitting at zero for ever.
     "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
 }
 
@@ -678,8 +673,6 @@ SAMPLE_MUTANTS = {
     ]
 }
 
-SAMPLE_ORACLE_TEST = "#include \"OracleImage.h\"\nTEST_CLASS(A) { TEST_METHOD(B) { OracleImage::Instance(); } };\n"
-SAMPLE_PLAIN_TEST = "// OracleImage only in a comment\nTEST_CLASS(C) { TEST_METHOD(D) { } };\n"
 SAMPLE_ORIGIN_TOOL = "# Upstream in a comment does not count\nROOT = REPO / \"Upstream\" / \"elite-source-code-library\"\n"
 SAMPLE_PLAIN_TOOL = "# MasterFile mentioned only here\nprint(1)\n"
 
@@ -699,7 +692,6 @@ EXPECTED = {
     "origin-markers": 7,
     "origin-identifiers": 5,
     "opcode-transcriptions": 5,
-    "oracle-test-files": 1,
     "origin-tools": 1,
 }
 
@@ -718,8 +710,6 @@ def self_test() -> list[str]:
         (root / "Outpost" / "Main.cpp").write_text(SAMPLE_MAIN, encoding="utf-8")
         (root / "tools" / "mutants.json").write_text(json.dumps(SAMPLE_MUTANTS), encoding="utf-8")
         (root / "Tests" / "GameLogicTests").mkdir(parents=True)
-        (root / "Tests" / "GameLogicTests" / "ATests.cpp").write_text(SAMPLE_ORACLE_TEST, encoding="utf-8")
-        (root / "Tests" / "GameLogicTests" / "BTests.cpp").write_text(SAMPLE_PLAIN_TEST, encoding="utf-8")
         (root / "tools" / "labels.py").write_text(SAMPLE_ORIGIN_TOOL, encoding="utf-8")
         (root / "tools" / "check_docs.py").write_text(SAMPLE_PLAIN_TOOL, encoding="utf-8")
 

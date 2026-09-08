@@ -26,10 +26,10 @@ ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is built, 202
 [InputTimer.md](InputTimer.md) are built beside M6-a — the pause screen removed and its thirteen
 settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one press, the fire key
 no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
-while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **A fresh clone needs
-`git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->131 tests** and
-CI runs **<!--count:checks-->fifteen repository checks** beside it.
+while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
+repository** since M6-b-7 -- no assembler, no submodule, no assembled game. The suite is
+**<!--count:tests-->131 tests** and
+CI runs **<!--count:checks-->fourteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -55,7 +55,7 @@ there.
 at commit `aa3f7ee`, and all <!--count:includes-->712 include paths resolve. It is a
 **submodule**, not a copy —
 a fresh clone needs `git submodule update --init` before anything here can be built or tested,
-and `tools/inventory.py --check-includes` is the standing proof either way. See
+and `tools/c64_source.py --check-all` is the standing proof either way, until M6-f takes both. See
 [Elite-Conversion-Plan.md §1](Elite-Conversion-Plan.md#1-what-we-actually-have).
 
 ## Reading order

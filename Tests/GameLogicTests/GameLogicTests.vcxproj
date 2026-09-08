@@ -102,14 +102,10 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Cpu6502.h" />
-    <ClInclude Include="Oracle.h" />
-    <ClInclude Include="OracleImage.h" />
-    <ClInclude Include="OracleLabels.h" />
     <ClInclude Include="FlightPort.h" />
     <ClInclude Include="FlightUniverse.h" />
     <ClInclude Include="NullSeams.h" />
-    <ClInclude Include="UniverseImage.h" />
+    <ClInclude Include="StateCells.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -119,9 +115,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Cpu6502.cpp" />
-    <ClCompile Include="Oracle.cpp" />
-    <ClCompile Include="OracleImage.cpp" />
     <ClCompile Include="ArithTests.cpp" />
     <ClCompile Include="RngTests.cpp" />
     <ClCompile Include="TokenTests.cpp" />
@@ -130,7 +123,7 @@
     <ClCompile Include="TextPrintTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
     <ClCompile Include="GameTests.cpp" />
-    <ClCompile Include="UniverseImage.cpp" />
+    <ClCompile Include="StateCells.cpp" />
     <ClCompile Include="StateHashTests.cpp" />
     <ClCompile Include="FlightReplayTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
