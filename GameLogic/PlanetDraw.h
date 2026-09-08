@@ -260,7 +260,7 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                                           MathWorkspace& _math, ClipState& _clip, const Projection& _centre, SignMag16 _offset,
-                                          std::uint8_t _cnt, bool _carryIn, Picture* _picture = nullptr) noexcept;
+                                          std::uint8_t _angle, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: CIRCLE2 -- walk a whole circle, sixty-four steps at most, `STP` at a time.

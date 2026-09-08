@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->104 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->75 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-15: `CNT` was five different counters.**
+
+29 sites and five meanings, which is what a name like `CNT` costs: the original had one zero-page
+byte and every routine that wanted a counter used it, so a rename keyed to the NAME would have made
+five unrelated things share a sixth.
+
+`CIRCLE2`'s and `PLS22`'s is the angle a walk round a circle is at — `DrawBallLine` advances it by
+the circle's step and hands it back, so its parameter is `_angle` and `DrawBall`'s local is `angle`.
+`DrawEllipse`'s is the same value with a complication: `_angle` there is ALREADY the start the
+caller chose and `_target` is where to stop, so the running one is `atAngle` and the three read as
+the triple they are.
+
+`TA152`'s is the nose dot product, and the port had already named it: part 6 of the same file reads
+`_frame.offNose` into a local called `cnt` two hundred lines from a parameter called `_cnt` holding
+the identical byte. Both are `offNose` now and the file says so twice.
+
+The other two are plain. `SPL`'s counts ships still to make, so it is `remaining`; `DOEXP`'s is the
+heap index parked across the sprite work and EORed into the cloud's seeds on the way past, so it is
+`savedVertex` — and `vertex`, the name it wanted, is the index it was saved from.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 104 → 75.
 
 **2026-09-08 — M6-c-14: the `K` blocks, across the four files that share one.**
 

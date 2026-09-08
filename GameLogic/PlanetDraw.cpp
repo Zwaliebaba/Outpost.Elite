@@ -273,7 +273,7 @@ namespace Elite
   }
 
   std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                            const Projection& _centre, SignMag16 _offset, std::uint8_t _cnt, bool _carryIn, Picture* _picture) noexcept
+                            const Projection& _centre, SignMag16 _offset, std::uint8_t _angle, bool _carryIn, Picture* _picture) noexcept
   {
     // 6502: TXA / ADC K4 / STA K6+2 / LDA K4+1 / ADC T / STA K6+3 -- the segment's far end, as an
     // offset from the circle's centre, and both halves run on the caller's carry. `X` and `T` are
@@ -366,7 +366,7 @@ namespace Elite
 
     // 6502: BL7 -- this segment's end is the next one's start, and the angle moves on.
     _state.segmentStart = _state.segmentEnd;
-    return AddWithCarry(_cnt, _state.circleStep, false).value;
+    return AddWithCarry(_angle, _state.circleStep, false).value;
   }
 
   namespace
@@ -402,7 +402,7 @@ namespace Elite
     // 6502: LDX #&FF / STX FLAG / INX / STX CNT. `CNT` is the angle this walk is at, `CIRCLE2`'s
     // own since M2-c-3: `BLINE` advances it and hands it back, which is what the loop below reads.
     _state.flag = 0xFF;
-    std::uint8_t cnt = 0;
+    std::uint8_t angle = 0;
 
     bool carry = _carryIn;
 
@@ -415,11 +415,11 @@ namespace Elite
        * back by hand; that is what the two `CMP #33` tests do. 33 rather than 32 because what is
        * being compared is a count the loop has already stepped.
        */
-      const LogProduct sine = MultiplyBySine(_radius, cnt, carry);
+      const LogProduct sine = MultiplyBySine(_radius, angle, carry);
       std::uint8_t across = sine.value;
       std::uint8_t high = 0; // 6502: T -- the offset's high byte, this loop's own since M2-c-3
 
-      carry = cnt >= 33u; // 6502: LDX CNT / CPX #33
+      carry = angle >= 33u; // 6502: LDX CNT / CPX #33
       if (carry)
       {
         const Negated negated = NegateWide(across, carry);
@@ -435,7 +435,7 @@ namespace Elite
 
       // 6502: LDA CNT / CLC / ADC #16 / JSR FMLTU2 -- the same table a quarter-turn on, which is
       // the cosine.
-      const AddResult quarter = AddWithCarry(cnt, 16u, false);
+      const AddResult quarter = AddWithCarry(angle, 16u, false);
       const LogProduct cosine = MultiplyBySine(_radius, quarter.value, false);
       std::uint8_t down = cosine.value;
       high = 0;
@@ -448,7 +448,7 @@ namespace Elite
        * is the sixteen above -- so the quarter-turn is only a quarter-turn when the multiply
        * produced something (§6.50).
        */
-      const AddResult stepped = AddWithCarry(cnt, 15u, cosine.carry);
+      const AddResult stepped = AddWithCarry(angle, 15u, cosine.carry);
       carry = static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u;
       if (carry)
       {
@@ -460,8 +460,8 @@ namespace Elite
 
       // 6502: PL38 -- and the segment is drawn, with the y offset still in X.
       const std::uint8_t reached =
-        DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{down, high}, cnt, carry, _picture);
-      cnt = reached;
+        DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{down, high}, angle, carry, _picture);
+      angle = reached;
 
       // 6502: CMP #65 / BCS P%+5 / JMP PLL3 -- sixty-four steps of one, or eight of eight.
       if (reached >= 65u)
@@ -602,7 +602,7 @@ namespace Elite
     // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG. `CNT` is `BLINE`'s segment counter and
     // `CNT2` the angle this walk is at; both are locals since M2-c-3, and `CNT2` comes in as the
     // start `PLS4` or `PL26` chose while `TGT` comes in as where to stop.
-    std::uint8_t cnt = 0; // 6502: CNT
+    std::uint8_t atAngle = 0; // 6502: CNT
     std::uint8_t coneWidth = _angle;
     _state.flag = 0xFF;
 
@@ -684,8 +684,8 @@ namespace Elite
 
       // 6502: PL43 -- and the segment, with the y offset in X.
       const std::uint8_t reached =
-        DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{low, offsetHigh}, cnt, carry, _picture);
-      cnt = reached;
+        DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{low, offsetHigh}, atAngle, carry, _picture);
+      atAngle = reached;
 
       // 6502: CMP TGT / BEQ P%+4 / BCS PL40 -- the `BEQ` is what makes the last step INCLUSIVE, so
       // a meridian reaching exactly 31 draws its final segment and a crater reaching 64 draws its.

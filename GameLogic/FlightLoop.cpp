@@ -141,7 +141,7 @@ namespace Elite
       return _drop.carryIfNone;
     }
 
-    std::uint8_t cnt = _drop.count;
+    std::uint8_t remaining = _drop.count;
     for (;;)
     {
       /*
@@ -156,8 +156,8 @@ namespace Elite
                                         _drop.aiFlag, _drop.type, _universe.flight.blueprint)
                            .created;
 
-      cnt = static_cast<std::uint8_t>(cnt - 1u); // 6502: DEC CNT
-      if (cnt == 0u)                             // 6502: BNE spl+2
+      remaining = static_cast<std::uint8_t>(remaining - 1u); // 6502: DEC CNT
+      if (remaining == 0u)                             // 6502: BNE spl+2
       {
         return carry;
       }
