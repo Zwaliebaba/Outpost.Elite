@@ -5,6 +5,7 @@
 #include "Scanner.h"
 
 #include "Combat.h"
+#include "Lines2x.h"
 #include "Market.h"
 #include "Music.h"
 #include "PlanetDraw.h"
@@ -119,17 +120,18 @@ namespace Elite
     // only because it was lit, and the test is what keeps the two in step.
     if (_universe.bubble.Count(ShipType::Station) != 0u)
     {
-      ToggleStationIndicator(_universe.canvas);
+      ToggleStationIndicator(_universe.canvas, &_universe.picture);
     }
 
     // 6502: LDA ECMA / BEQ yu / JSR ECMOF.
     if (_universe.status.ecmCountdown != 0u)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound);
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture);
     }
 
     // 6502: .yu JSR WPSHPS -- rub every ship off the screen and forget both line heaps.
-    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view);
+    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view,
+                  &_universe.picture);
 
     ClearBubbleState(_universe, _ports); // 6502: JSR ZERO
 
@@ -213,7 +215,8 @@ namespace Elite
     _universe.view = saved;
 
     // 6502: falls into HFS1.
-    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
+    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present,
+                        &_universe.picture);
   }
 
   void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept
@@ -290,7 +293,8 @@ namespace Elite
        * `STP` is still the 8 `LAUN` stored, which is the second half of §6.94's answer: the step
        * IS written on this path, by the routine the port had left as a stub (§6.109).
        */
-      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
+      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present,
+                        &_universe.picture);
     }
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
@@ -457,15 +461,17 @@ namespace Elite
     SetUpScreen(_universe, _ports, DEATH_VIEW);
 
     // 6502: JSR BOX -- the SAME border again, and `BOX2` EORs, so drawing it twice rubs it out.
-    DrawFullBorder(_universe.canvas);
+    DrawFullBorder(_universe.canvas, &_universe.picture);
 
     // 6502: LDA #0 / STA SCBASE+&1F1F / STA SCBASE+&118 -- the two bytes `BOX` STORES instead of
     // EORing, which a second pass therefore cannot remove.
     _universe.canvas.Write(BOTTOM_RIGHT_CORNER, 0u);
     _universe.canvas.Write(BORDER_TOP_RIGHT, 0u);
+    WriteBitmapByte2x(_universe.picture, BOTTOM_RIGHT_CORNER, 0u, false);
+    WriteBitmapByte2x(_universe.picture, BORDER_TOP_RIGHT, 0u, false);
 
     // 6502: JSR nWq -- a whole new stardust field over the cleared screen.
-    SeedStardustField(_universe.canvas, _universe.dust, _universe.rng, false);
+    SeedStardustField(_universe.canvas, _universe.dust, _universe.rng, false, &_universe.picture);
 
     // 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, then the sign.
     _universe.text.row = GAME_OVER_ROW;
@@ -651,7 +657,7 @@ namespace Elite
 
     // 6502: JSR SCAN -- and it is drawn ONCE, after the loop, so the blip the animation left
     // on the scanner is erased rather than added to. `SCAN` is an EOR.
-    DrawScannerBlip(_universe.canvas, _universe.work, _universe.flight.type, _universe.view);
+    DrawScannerBlip(_universe.canvas, _universe.work, _universe.flight.type, _universe.view, &_universe.picture);
 
     // 6502: LDA #0 / LDX #16 / .ESL2 STA QQ20,X / DEX / BPL ESL2 -- SEVENTEEN bytes, because the
     // loop runs from 16 down THROUGH zero.

@@ -9,13 +9,13 @@ namespace Outpost
   /*
    * The arithmetic behind the window, kept apart from the window (slice 2e).
    *
-   * ADR-005 section 1 asks for a 320x200 index texture, a palette lookup and an integer scale with
+   * ADR-005 section 1 asks for an index texture, a palette lookup and an integer scale with
    * black bars. Two of those three are decisions rather than API calls, and decisions can be
-   * tested on a machine with no GPU -- so they are here, and `CanvasPresenter` is left with the
+   * tested on a machine with no GPU -- so they are here, and `ScreenPresenter` is left with the
    * Direct3D and nothing to get wrong that a test could have caught.
    *
    * That split is not tidiness. Everything in this file is verified by the suite on both legs;
-   * everything in `CanvasPresenter.cpp` and `Window.cpp` is verified by compiling. Knowing which
+   * everything in `ScreenPresenter.cpp` and `Window.cpp` is verified by compiling. Knowing which
    * half a bug can be in is worth the extra header.
    */
 
@@ -66,12 +66,15 @@ namespace Outpost
   [[nodiscard]] std::array<std::uint32_t, 16> PaletteAsRgba() noexcept;
 
   /*
-   * Where the 320x200 image goes inside a client area of _width by _height.
+   * Where the 640x400 image goes inside a client area of _width by _height.
    *
    * ADR-005 section 1: the largest INTEGER factor that fits, centred, black bars around it. Integer
-   * because the image is 320 columns of hard-edged pixels and a fractional scale with point
+   * because the image is 640 columns of hard-edged pixels and a fractional scale with point
    * sampling gives some of them two screen columns and some three -- which on a screen full of
    * one-pixel lines is not a subtle artefact.
+   *
+   * The aspect stays 8:5 with square pixels: 640x400 is 320x200 doubled and nothing about the shape
+   * of the picture changes (Resolution.md ruling 11.4). ADR-005's 5:4 or 4:3 option is untouched.
    *
    * A client area too small for even 1x still gets 1x rather than nothing: a window being dragged
    * narrow should clip, not go blank, and a zero-sized viewport is a Direct3D error rather than a
@@ -93,7 +96,7 @@ namespace Outpost
     [[nodiscard]] bool operator==(const Viewport&) const = default;
   };
 
-  [[nodiscard]] Viewport FitCanvas(int _clientWidth, int _clientHeight) noexcept;
+  [[nodiscard]] Viewport FitPicture(int _clientWidth, int _clientHeight) noexcept;
 
   /*
    * How many steps to run for the time that has passed, and how much time is left over.

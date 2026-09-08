@@ -4,6 +4,7 @@
 
 #include "Canvas.h"
 #include "Dashboard.h"
+#include "Picture.h"
 #include "Rng.h"
 
 namespace Elite
@@ -48,7 +49,7 @@ namespace Elite
    * `ADC`. The port returns it rather than guessing.
    */
   [[nodiscard]] bool FireLaser(Canvas& _canvas, Rng& _rng, LaserBurst& _burst, FlightStatus& _status,
-                               std::uint8_t _view, bool _carryIn) noexcept;
+                               std::uint8_t _view, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: LASLI2 -- draw the four lines without firing, which is how the beam is rubbed out.
@@ -56,6 +57,7 @@ namespace Elite
    * `LDA QQ11 / BNE LASLI-1` -- and `LASLI-1` is the byte before the routine, which is the previous
    * one's `RTS` borrowed as a branch target. So a chart on screen means no laser at all.
    */
-  [[nodiscard]] bool DrawLaserLines(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _view) noexcept;
+  [[nodiscard]] bool DrawLaserLines(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _view,
+                                    Picture* _picture = nullptr) noexcept;
 
 } // namespace Elite

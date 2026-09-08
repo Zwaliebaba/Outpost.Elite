@@ -4,7 +4,7 @@
 
 #include "KeyMap.h"
 
-#include "Canvas.h"
+#include "Picture.h"
 
 namespace Outpost
 {
@@ -56,7 +56,7 @@ namespace Outpost
     // size, which is what CreateWindowEx takes. Asking for the outer size directly would give a
     // client area smaller than the canvas by the frame, and the first thing the player would see is
     // a letterboxed picture in a window sized for an unletterboxed one.
-    RECT wanted{0, 0, Elite::Canvas::WIDTH * _scale, Elite::Canvas::HEIGHT * _scale};
+    RECT wanted{0, 0, Elite::Picture::WIDTH * _scale, Elite::Picture::HEIGHT * _scale};
     const DWORD style = WS_OVERLAPPEDWINDOW;
     if (AdjustWindowRectEx(&wanted, style, FALSE, 0) == 0)
     {

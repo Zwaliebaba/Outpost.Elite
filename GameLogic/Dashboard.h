@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "Canvas.h"
+#include "Picture.h"
 #include "Commander.h"
 #include "Scanner.h"
 #include "SoundEffects.h"
@@ -178,7 +179,7 @@ namespace Elite
   };
 
   void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,
-               DialColours _colours) noexcept;
+               DialColours _colours, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: DIL2 -- the roll and pitch indicators, which are one lit pixel rather than a bar.
@@ -190,7 +191,10 @@ namespace Elite
    * The `ADC #&3F` at the end has no `CLC` and does not need one: the only way out of the loop is a
    * `CPY #30` that did not branch, so the carry is set and the add is 320 rather than 64.
    */
-  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value) noexcept;
+  /// `_wideValue` is the twin's slot, which the caller derives: the roll has a bit under `alp1 >> 2`
+  /// to recover and the pitch has none (Dashboard2x.h). The faithful routine does not read it.
+  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, Picture* _picture = nullptr,
+                     std::uint8_t _wideValue = 0) noexcept;
 
   /*
    * 6502: DIALS parts 1 to 4 -- the whole dashboard, and it ends `JMP COMPAS`.
@@ -207,7 +211,7 @@ namespace Elite
    * the cursor the dials advance between them.
    */
   void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel,
-                 Compass& _compass, const Bubble& _bubble) noexcept;
+                 Compass& _compass, const Bubble& _bubble, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: MSBAR -- set missile indicator X to the colour in Y.
@@ -218,7 +222,7 @@ namespace Elite
    *
    * It leaves Y at zero, which the original's callers rely on and which nothing here does.
    */
-  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette) noexcept;
+  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: msblob -- redraw all four indicators from `NOMSL`.
@@ -229,7 +233,7 @@ namespace Elite
    * for a full rail, because X starts at four and a rail holds four, so the black loop is skipped
    * entirely; and it never fires for an empty one either, because X reaches zero first.
    */
-  void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept;
+  void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: BLACK2, RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM
@@ -261,10 +265,10 @@ namespace Elite
   void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, CellPalette _palette) noexcept;
 
   /// 6502: ECBLB -- toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
-  void ToggleEcmIndicator(Canvas& _canvas) noexcept;
+  void ToggleEcmIndicator(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   /// 6502: SPBLB -- the same for the space station bulb, seventeen cells to the right.
-  void ToggleStationIndicator(Canvas& _canvas) noexcept;
+  void ToggleStationIndicator(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   // `MISSILE_GREEN` WAS HERE AND WAS `MISSILE_READY` UNDER A SECOND NAME: both were `GREEN2`, &57, one
   // for `msblob`'s indicator and one for the byte `KILLSHP` hands `ABORT`. Slice 5a-8 kept the one.
@@ -298,7 +302,7 @@ namespace Elite
    */
   /// `_carryIn` because `ECBLB2` touches no flag on its way to `NOISE`, so what the sound sees
   /// is what this routine was called with (§6.118).
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn) noexcept;
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: ECMOF -- stop the E.C.M.: clear both flags, put the bulb out, silence the hum.
@@ -313,6 +317,6 @@ namespace Elite
    * branch to as a cheap return -- `BNE ECMOF-1`. Nothing to port, but it means `ECMOF` cannot be
    * moved without breaking two routines that never mention it.
    */
-  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound) noexcept;
+  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, Picture* _picture = nullptr) noexcept;
 
 } // namespace Elite

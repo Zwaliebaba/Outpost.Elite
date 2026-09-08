@@ -1,10 +1,11 @@
 #include "pch.h"
 
-#include "CanvasPresenter.h"
+#include "ScreenPresenter.h"
 
 #include "VideoState.h"
 
 #include "Canvas.h"
+#include "Picture.h"
 
 /*
  * The shaders, compiled BY THE BUILD.
@@ -42,12 +43,12 @@ namespace Outpost
     }
   } // namespace
 
-  CanvasPresenter::~CanvasPresenter()
+  ScreenPresenter::~ScreenPresenter()
   {
     Destroy();
   }
 
-  void CanvasPresenter::Destroy() noexcept
+  void ScreenPresenter::Destroy() noexcept
   {
     if (m_device)
     {
@@ -97,7 +98,7 @@ namespace Outpost
     }
   }
 
-  void CanvasPresenter::Create(HWND _window)
+  void ScreenPresenter::Create(HWND _window)
   {
     UINT factoryFlags = 0;
 
@@ -169,29 +170,29 @@ namespace Outpost
     D3D12_HEAP_PROPERTIES defaultHeap{};
     defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
-    D3D12_RESOURCE_DESC canvas{};
-    canvas.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    canvas.Width = Elite::Canvas::WIDTH;
-    canvas.Height = Elite::Canvas::HEIGHT;
-    canvas.DepthOrArraySize = 1;
-    canvas.MipLevels = 1;
-    canvas.Format = DXGI_FORMAT_R8_UINT;
-    canvas.SampleDesc.Count = 1;
-    canvas.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    canvas.Flags = D3D12_RESOURCE_FLAG_NONE;
+    D3D12_RESOURCE_DESC picture{};
+    picture.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    picture.Width = Elite::Picture::WIDTH;
+    picture.Height = Elite::Picture::HEIGHT;
+    picture.DepthOrArraySize = 1;
+    picture.MipLevels = 1;
+    picture.Format = DXGI_FORMAT_R8_UINT;
+    picture.SampleDesc.Count = 1;
+    picture.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    picture.Flags = D3D12_RESOURCE_FLAG_NONE;
 
     winrt::check_hresult(m_device->CreateCommittedResource(
-      &defaultHeap, D3D12_HEAP_FLAG_NONE, &canvas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(m_texture.put())));
+      &defaultHeap, D3D12_HEAP_FLAG_NONE, &picture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(m_texture.put())));
 
     /*
      * The upload buffer's rows are padded to 256 bytes, which is why the copy below is a loop
-     * rather than one memcpy: 320 bytes of canvas row become 512 bytes of upload row. Asking the
+     * rather than one memcpy: 640 bytes of image row become 768 bytes of upload row. Asking the
      * device for the footprint rather than computing it is what keeps that alignment a fact rather
      * than an assumption.
      */
     UINT64 uploadBytes = 0;
     UINT64 rowBytes = 0;
-    m_device->GetCopyableFootprints(&canvas, 0, 1, 0, &m_footprint, &m_footprintRows, &rowBytes, &uploadBytes);
+    m_device->GetCopyableFootprints(&picture, 0, 1, 0, &m_footprint, &m_footprintRows, &rowBytes, &uploadBytes);
 
     D3D12_HEAP_PROPERTIES uploadHeap{};
     uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -244,7 +245,9 @@ namespace Outpost
     parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     parameters[1].Constants.ShaderRegister = 0;
     parameters[1].Constants.RegisterSpace = 0;
-    parameters[1].Constants.Num32BitValues = 16;
+    // Sixteen palette words and then the image's width and height, which the shader needs to turn
+    // a uv into a texel and which is therefore stated once, here, rather than in the HLSL.
+    parameters[1].Constants.Num32BitValues = 18;
     parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC signature{};
@@ -308,12 +311,13 @@ namespace Outpost
     }
 
     m_palette = PaletteAsRgba();
-    m_resolved.resize(static_cast<std::size_t>(Elite::Canvas::WIDTH) * Elite::Canvas::HEIGHT);
+    m_imageSize = {static_cast<std::uint32_t>(Elite::Picture::WIDTH), static_cast<std::uint32_t>(Elite::Picture::HEIGHT)};
+    m_resolved.resize(static_cast<std::size_t>(Elite::Picture::WIDTH) * Elite::Picture::HEIGHT);
 
     CreateRenderTargets();
   }
 
-  void CanvasPresenter::CreateRenderTargets()
+  void ScreenPresenter::CreateRenderTargets()
   {
     D3D12_CPU_DESCRIPTOR_HANDLE handle = m_renderTargetHeap->GetCPUDescriptorHandleForHeapStart();
     for (UINT frame = 0; frame < FRAME_COUNT; ++frame)
@@ -330,7 +334,7 @@ namespace Outpost
     m_height = static_cast<int>(description.Height);
   }
 
-  void CanvasPresenter::Resize(int _clientWidth, int _clientHeight)
+  void ScreenPresenter::Resize(int _clientWidth, int _clientHeight)
   {
     // A minimised window has a zero client area and ResizeBuffers refuses it. Skipping is correct
     // rather than a workaround: there is nothing to present to, and the next real WM_SIZE resizes.
@@ -359,36 +363,40 @@ namespace Outpost
     CreateRenderTargets();
   }
 
-  bool CanvasPresenter::Present(const Elite::Canvas& _canvas, const Elite::VideoState* _video, int _clientWidth, int _clientHeight)
+  bool ScreenPresenter::Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
+                                int _clientWidth, int _clientHeight)
   {
     if (!m_device || _clientWidth <= 0 || _clientHeight <= 0)
     {
       return true;
     }
 
-    const Viewport view = FitCanvas(m_width, m_height);
+    const Viewport view = FitPicture(m_width, m_height);
 
     // 6502: what the VIC-II put on the wire -- the bitmap, and then the eight sprites over it
     // (ADR-005 §1). With no registers to composite from this is the bitmap alone, which is what
     // every golden hash asserts and what the loader screen and title show.
+    //
+    // The CANVAS goes in beside the screen because the screen holds no raster state and, until the
+    // last resolution slice, no pixels of its own for some regions (Resolution.md §3.3).
     if (_video != nullptr)
     {
-      _canvas.Resolve(m_resolved, *_video);
+      _picture.Resolve(m_resolved, _canvas, *_video);
     }
     else
     {
-      _canvas.Resolve(m_resolved);
+      _picture.Resolve(m_resolved, _canvas);
     }
 
     winrt::check_hresult(m_allocators[m_frameIndex]->Reset());
     winrt::check_hresult(m_commands->Reset(m_allocators[m_frameIndex].get(), m_pipeline.get()));
 
-    // Row by row, because the upload heap's pitch is padded to 256 bytes and the canvas's is not.
+    // Row by row, because the upload heap's pitch is padded to 256 bytes and the image's is not.
     std::uint8_t* destination = m_uploadMemory[m_frameIndex] + m_footprint.Offset;
     for (UINT row = 0; row < m_footprintRows; ++row)
     {
       std::memcpy(destination + static_cast<std::size_t>(row) * m_footprint.Footprint.RowPitch,
-                  m_resolved.data() + static_cast<std::size_t>(row) * Elite::Canvas::WIDTH, Elite::Canvas::WIDTH);
+                  m_resolved.data() + static_cast<std::size_t>(row) * Elite::Picture::WIDTH, Elite::Picture::WIDTH);
     }
 
     D3D12_RESOURCE_BARRIER toCopy = Transition(m_texture.get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -450,6 +458,7 @@ namespace Outpost
     m_commands->SetGraphicsRootSignature(m_rootSignature.get());
     m_commands->SetGraphicsRootDescriptorTable(0, m_textureHeap->GetGPUDescriptorHandleForHeapStart());
     m_commands->SetGraphicsRoot32BitConstants(1, 16, m_palette.data(), 0);
+    m_commands->SetGraphicsRoot32BitConstants(1, 2, m_imageSize.data(), 16);
     m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     m_commands->DrawInstanced(3, 1, 0, 0);
 
@@ -474,7 +483,7 @@ namespace Outpost
     return true;
   }
 
-  void CanvasPresenter::WaitForGpu()
+  void ScreenPresenter::WaitForGpu()
   {
     if (!m_queue || !m_fence || m_fenceEvent == nullptr)
     {
@@ -499,7 +508,7 @@ namespace Outpost
     }
   }
 
-  void CanvasPresenter::MoveToNextFrame()
+  void ScreenPresenter::MoveToNextFrame()
   {
     const UINT64 submitted = m_fenceValues[m_frameIndex];
     winrt::check_hresult(m_queue->Signal(m_fence.get(), submitted));

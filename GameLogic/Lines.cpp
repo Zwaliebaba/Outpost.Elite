@@ -54,11 +54,12 @@ namespace Elite
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(cell + subRow), mask);
   }
 
-  bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept
+  SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept
   {
     /*
-     * 6502: PIXEL2. The coordinates arrive as sign-magnitude offsets from the centre of the space
-     * view, and come out as screen coordinates: x measured from the left edge, y downwards.
+     * 6502: PIXEL2's two conversions. The coordinates arrive as sign-magnitude
+     * offsets from the centre of the space view, and come out as screen coordinates: x measured
+     * from the left edge, y downwards.
      *
      * The x conversion is the sign-magnitude idiom this codebase keeps running into: negate the
      * magnitude by EOR #%01111111 and adding one, then flip bit 7 to move the origin from the
@@ -77,9 +78,7 @@ namespace Elite
     // the top or bottom of the space view, and the routine simply returns.
     if ((_down & 0x7Fu) >= 72u) // 6502: LDA Y1
     {
-      // 6502: CMP #Y / BCS PX4 -- the branch was taken, so the carry it left is SET, and `PX4` is
-      // a bare `RTS`.
-      return true;
+      return SpaceViewPoint{x, 0u, true};
     }
 
     /*
@@ -107,9 +106,21 @@ namespace Elite
     }
 
     // 6502: STA T / LDA #73 / SBC T -- 73 rather than 72, because the borrow is usually taken.
-    const std::uint8_t y = static_cast<std::uint8_t>(73u - magnitude - (carry ? 0u : 1u));
+    return SpaceViewPoint{x, static_cast<std::uint8_t>(73u - magnitude - (carry ? 0u : 1u)), false};
+  }
 
-    PlotPixel(_canvas, x, y, _distance);
+  bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept
+  {
+    const SpaceViewPoint point = ToSpaceViewPoint(_across, _down);
+
+    if (point.offScreen)
+    {
+      // The `CMP #Y / BCS PX4` branch was taken, so the carry it left is SET and `PX4` is a bare
+      // `RTS`.
+      return true;
+    }
+
+    PlotPixel(_canvas, point.x, point.y, _distance);
 
     /*
      * 6502: `PIXEL`'s exit carry, and it is exactly `ZZ >= 80`.
@@ -273,30 +284,6 @@ namespace Elite
       }
     };
 
-    /// 6502: the LIlog chain in LOIN, and the LIloG chain in its steep half -- 256 * A / Q through
-    /// the logarithm tables, saturating at 255. The same shape as LL28's body, but this copy stores
-    /// nothing in `widget` and takes the operands in registers, so it is written out rather than
-    /// shared: a helper that had to grow a flag to say whether it scribbles on zero page would be
-    /// worse than two readable copies.
-    [[nodiscard]] std::uint8_t Slope(std::uint8_t _numerator, std::uint8_t _denominator) noexcept
-    {
-      if (_numerator == 0)
-      {
-        return 0;
-      }
-
-      const SubResult low = SubtractWithCarry(LOG_LOW_TABLE[_numerator], LOG_LOW_TABLE[_denominator], true);
-      const bool useOddTable = (low.value & 0x80u) != 0u;
-
-      const SubResult high = SubtractWithCarry(LOG_TABLE[_numerator], LOG_TABLE[_denominator], low.carry);
-      if (high.carry)
-      {
-        return 255;
-      }
-
-      return useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value];
-    }
-
     /*
      * 6502: STPX and everything it reaches -- the shallow case, where the line moves further across
      * than it does up or down, so it plots one pixel per column and steps rows when the accumulator
@@ -321,7 +308,7 @@ namespace Elite
       }
 
       // 6502: LI3 -- the slope, as a fraction of a row per column.
-      _q2 = Slope(_q2, _p2);
+      _q2 = LineSlope(_q2, _p2);
 
       const bool goingUp = _line.y1 >= _line.y2;
       const std::uint16_t rowAddress = static_cast<std::uint16_t>(Canvas::RowOffset(_line.y1));
@@ -501,7 +488,7 @@ namespace Elite
       // 6502: LDX P2 / BEQ LIfudge -- a vertical line keeps a slope of zero rather than dividing.
       if (_p2 != 0)
       {
-        _p2 = Slope(_p2, _q2);
+        _p2 = LineSlope(_p2, _q2);
       }
 
       // 6502: LIfudge -- SEC / LDX Q2 / INX, then the direction test.
@@ -594,6 +581,30 @@ namespace Elite
       }
     }
   } // namespace
+
+  /// 6502: the LIlog chain in LOIN, and the LIloG chain in its steep half -- 256 * A / Q through
+  /// the logarithm tables, saturating at 255. The same shape as LL28's body, but this copy stores
+  /// nothing in `widget` and takes the operands in registers, so it is written out rather than
+  /// shared: a helper that had to grow a flag to say whether it scribbles on zero page would be
+  /// worse than two readable copies.
+  std::uint8_t LineSlope(std::uint8_t _numerator, std::uint8_t _denominator) noexcept
+  {
+    if (_numerator == 0)
+    {
+      return 0;
+    }
+
+    const SubResult low = SubtractWithCarry(LOG_LOW_TABLE[_numerator], LOG_LOW_TABLE[_denominator], true);
+    const bool useOddTable = (low.value & 0x80u) != 0u;
+
+    const SubResult high = SubtractWithCarry(LOG_TABLE[_numerator], LOG_TABLE[_denominator], low.carry);
+    if (high.carry)
+    {
+      return 255;
+    }
+
+    return useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value];
+  }
 
   DrawnLine DrawLine(Canvas& _canvas, Line _line) noexcept
   {

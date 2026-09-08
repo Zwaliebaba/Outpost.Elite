@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "Picture.h"
 #include "VideoState.h"
 
 #include "Colours.h"
@@ -35,7 +36,7 @@ namespace Elite
    * 35 of rows 0 to 23 and deliberately leaves the four cells either side and the bottom row
    * alone, which is exactly the part the loader coloured.
    */
-  void SetUpLoaderScreen(Canvas& _canvas) noexcept;
+  void SetUpLoaderScreen(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: the Elite loader's part 4 -- the VIC-II registers the game inherits and never sets.

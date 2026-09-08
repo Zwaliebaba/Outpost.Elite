@@ -39,9 +39,9 @@
       "slice": "M6-0-h-3: FlightSession is no longer lent the ports"
     },
     "outpost-elite-names": {
-      "ceiling": 61,
+      "ceiling": 62,
       "slack": 0,
-      "slice": "M6-0-h-3: FlightSession stops answering DOCKIT"
+      "slice": "Resolution.md RS-0: Elite::Picture is the surface the app presents, so the app names one more type"
     },
     "effects-seams": {
       "ceiling": 5,
@@ -74,7 +74,7 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4143,
+      "ceiling": 4142,
       "slack": 0,
       "slice": "M6-0-e: NLIN, TRADEMODE and DK4's store carry their labels as routines of their own"
     },

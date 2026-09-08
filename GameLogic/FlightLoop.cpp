@@ -301,7 +301,7 @@ namespace Elite
     {
       // 6502: .FR1 LDA #201 / JMP MESS -- "MISSILE JAMMED".
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_MISSILE_JAMMED,
-                  _universe.view);
+                  _universe.view, &_universe.picture);
       return;
     }
 
@@ -492,7 +492,7 @@ namespace Elite
     if ((_universe.bubble.missileTarget & 0x80u) != 0u && _universe.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
     {
       _universe.status.missileArmed = _universe.keys[KEY_ARM_MISSILE];
-      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED);
+      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED, &_universe.picture);
     }
 
     /*
@@ -567,7 +567,7 @@ namespace Elite
          * carry across the flight loop, so false is what it can honestly supply, and the sound
          * comparison excludes this effect by name rather than pretending to agree.
          */
-        StartEcm(_universe.canvas, _universe.status, _universe.sound, false);
+        StartEcm(_universe.canvas, _universe.status, _universe.sound, false, &_universe.picture);
       }
     }
 
@@ -670,7 +670,7 @@ namespace Elite
     const bool heard = PlaySoundEffect(_universe.sound, sound, carryIn).carry;
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
-    (void)FireLaser(_universe.canvas, _universe.rng, _universe.burst, _universe.status, _universe.view, heard);
+    (void)FireLaser(_universe.canvas, _universe.rng, _universe.burst, _universe.status, _universe.view, heard, &_universe.picture);
 
     // 6502: PLA / BPL ma1 / LDA #0 / .ma1 AND #%11111010 / STA LASCT -- a beam laser gets no
     // countdown at all, which is what lets it be held down.
@@ -968,7 +968,7 @@ namespace Elite
 
     // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
     const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view, &_universe.picture);
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
     // canister is removed by part 12 rather than by anything here.
@@ -1104,7 +1104,7 @@ namespace Elite
   {
     if (Has(_universe.work.newb, NewbBit::Remove))
     {
-      DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view);
+      DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view, &_universe.picture);
     }
 
     if (_universe.view != 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
@@ -1208,7 +1208,7 @@ namespace Elite
            * player's balance printed in flight -- and `MESS` then stores that zero in `MCH`, so the
            * next message within twenty frames erases this one by printing the balance again.
            */
-          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 0u, _universe.view);
+          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 0u, _universe.view, &_universe.picture);
         }
       }
 
@@ -1382,7 +1382,7 @@ namespace Elite
      */
     if (_universe.status.viewLaser != 0u && _universe.status.laserCount < LASER_ERASE_LIMIT)
     {
-      (void)DrawLaserLines(_universe.canvas, _universe.burst, _universe.view);
+      (void)DrawLaserLines(_universe.canvas, _universe.burst, _universe.view, &_universe.picture);
       _universe.status.viewLaser = 0u;
     }
 
@@ -1410,7 +1410,7 @@ namespace Elite
 
     if (stop)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound); // 6502: .MA70 JSR ECMOF
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture); // 6502: .MA70 JSR ECMOF
     }
 
     /*
@@ -1420,7 +1420,7 @@ namespace Elite
      */
     if (_universe.view == 0u)
     {
-      MoveStardust(_universe.canvas, _universe.flight, _universe.dust, _universe.rng, _universe.spaceView);
+      MoveStardust(_universe.canvas, _universe.flight, _universe.dust, _universe.rng, _universe.spaceView, &_universe.picture);
     }
 
     return LoopOutcome::Continued;
@@ -1513,7 +1513,7 @@ namespace Elite
 
     if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
     {
-      EraseSun(_universe.canvas, _universe.heaps); // 6502: JSR WPLS
+      EraseSun(_universe.canvas, _universe.heaps, &_universe.picture); // 6502: JSR WPLS
 
       // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
       // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
@@ -1557,7 +1557,7 @@ namespace Elite
       if (ENERGY_WARNING >= _universe.status.energy)
       {
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                    static_cast<std::uint8_t>(ENERGY_WARNING << 1u), _universe.view);
+                    static_cast<std::uint8_t>(ENERGY_WARNING << 1u), _universe.view, &_universe.picture);
       }
 
       /*
@@ -1615,7 +1615,7 @@ namespace Elite
       if (_universe.control.dockingComputer != 0u)
       {
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_DOCKING_ON,
-                    _universe.view);
+                    _universe.view, &_universe.picture);
       }
     }
     else if (_counter == STEP_CABIN_TEMPERATURE)
@@ -1688,7 +1688,7 @@ namespace Elite
         commander.fuel = commander.fuel.Scooped(scooped.value, scooped.carry);
 
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_SCOOPS_ON,
-                    _universe.view);
+                    _universe.view, &_universe.picture);
       }
     }
 

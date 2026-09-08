@@ -43,6 +43,10 @@ namespace Elite
       m_extended(m_characters, m_recursive, m_universe.rng),
       m_ports{m_recursive, m_characters, m_characters, m_sid, m_extended, _present, _keyboard, _store}
   {
+    // Resolution.md RS-1: the printer draws the 640x400 surface beside the canvas, and reads `QQ11`
+    // for the layout that says where. Attached here because this is where both first exist.
+    m_screen.AttachPicture(&m_universe.picture, &m_universe.view);
+
     m_recursive.SetValueTokens(&m_values);
     m_extended.SetGame(m_universe, m_ports); // 6502: DT3 -- a control code that leaves is the library's
 
@@ -88,7 +92,7 @@ namespace Elite
      * draws exactly what it should and the screen stays black -- the border box, the dashboard
      * picture and all seven dials included.
      */
-    SetUpLoaderScreen(m_universe.canvas);
+    SetUpLoaderScreen(m_universe.canvas, &m_universe.picture);
 
     // 6502: NA% -- the commander the disk menu's "load" compares against, and the one SVE writes.
     SaveCommander(m_universe.commander, m_universe.commanderName, m_universe.commanderFile);
@@ -356,12 +360,12 @@ namespace Elite
        */
       ChartView chart = ChartOf();
 
-      DrawTargetCrosshairs(m_universe.canvas, chart);
+      DrawTargetCrosshairs(m_universe.canvas, chart, &m_universe.picture);
       CrosshairsToCurrentSystem(m_universe);
 
       chart.cursorX = m_universe.crosshairX;
       chart.cursorY = m_universe.crosshairY;
-      DrawTargetCrosshairs(m_universe.canvas, chart);
+      DrawTargetCrosshairs(m_universe.canvas, chart, &m_universe.picture);
       return;
     }
 
@@ -377,7 +381,7 @@ namespace Elite
        */
       ChartView chart = ChartOf();
 
-      MoveCrosshairs(m_universe.canvas, chart, m_universe.crosshairStep.x, m_universe.crosshairStep.y);
+      MoveCrosshairs(m_universe.canvas, chart, m_universe.crosshairStep.x, m_universe.crosshairStep.y, &m_universe.picture);
 
       m_universe.crosshairX = chart.cursorX;
       m_universe.crosshairY = chart.cursorY;
@@ -463,7 +467,8 @@ namespace Elite
       JumpState jump = JumpOf();
 
       const JumpOutcome decided = RequestHyperspace(m_universe.canvas, m_recursive, m_extended, m_universe.text, m_universe.sentences,
-                                                    m_universe.message, chart, jump, m_universe.commander.galaxySeeds);
+                                                    m_universe.message, chart, jump, m_universe.commander.galaxySeeds,
+                                                    &m_universe.picture);
 
       m_universe.status.hyperspaceCountdown = jump.countdown;
       m_universe.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
