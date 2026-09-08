@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->404 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
+(<!--count:tests-->408 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -316,7 +316,7 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
-`Outpost/Main.cpp` is <!--count:main-lines-->240 lines and every one of them is the platform: the
+`Outpost/Main.cpp` is <!--count:main-lines-->243 lines and every one of them is the platform: the
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches

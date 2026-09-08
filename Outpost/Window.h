@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <string>
 
 namespace Outpost
 {
@@ -89,6 +90,10 @@ namespace Outpost
     /// True once, if the client area has changed since the last time this was asked. The presenter
     /// resizes its buffers on it.
     [[nodiscard]] bool TakeResize() noexcept;
+
+    /// A diagnostic the player should read before the game goes on -- a settings line it could not
+    /// use, for instance -- as a box owned by this window. An empty text shows nothing.
+    void Warn(const std::string& _text) const noexcept;
 
   private:
     static LRESULT CALLBACK Dispatch(HWND, UINT, WPARAM, LPARAM) noexcept;

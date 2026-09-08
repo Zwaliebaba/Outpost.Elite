@@ -303,4 +303,13 @@ namespace Outpost
     return resized;
   }
 
+  void Window::Warn(const std::string& _text) const noexcept
+  {
+    if (_text.empty())
+    {
+      return;
+    }
+    MessageBoxA(m_window, _text.c_str(), "Elite", MB_OK | MB_ICONWARNING);
+  }
+
 } // namespace Outpost
