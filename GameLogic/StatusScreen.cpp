@@ -6,6 +6,7 @@
 #include "Ports.h"
 #include "Universe.h"
 #include "MarketScreen.h"
+#include "TextPrint2x.h"
 #include "ViewChange.h"
 
 /*
@@ -129,8 +130,14 @@ namespace Elite
 
   void StatusScreen(Universe& _universe, Ports& _ports, const ShipCondition& _condition) noexcept
   {
-    // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW);
+    /*
+     * 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
+     *
+     * The layout is this screen's own and is named here because nothing downstream could work it
+     * out: `TT213` starts the inventory screen with the same #8, so the view byte the game keeps
+     * says "a trade screen" and not "the status screen" (Resolution.md section 6.2, RS-5-a).
+     */
+    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW, STATUS_LAYOUT);
 
     /*
      * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.

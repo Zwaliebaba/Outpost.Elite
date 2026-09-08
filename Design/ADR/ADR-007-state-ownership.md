@@ -255,6 +255,16 @@ the seconds, the files, the device). **And a byte in `Universe` gets a cell in `
   `Elite::HashState` instead**, a library-native fold over `Universe` recorded beside the label hash
   until M6-f, with `StateHashTests` holding the fold to the label table's cells; `Mode` was M4-d's,
   for §2's reason. Each was a named follow-on rather than a gap discovered later.
+- **`Universe::picture` is the one field the state hash excludes, and by design** (2026-09-08, the
+  resolution track). It is the 640×400 rendering of the same frame that `ScreenPresenter` uploads —
+  a SECOND drawing of what the canvas already holds, produced by twins the resolution slices keep
+  changing. Folding it would re-record every replay table on a thinner sun or a redrawn crosshair,
+  none of which is a change to the game. What proves the exclusion is not a hole is §8.4's replay:
+  it runs with the twins present and absent and requires the same digest, so a twin that leaked
+  into the game would fail even though the hash cannot see the surface it drew on. The reason is
+  written out in [Design/Resolution.md](../Resolution.md) §3.4 and beside the fold in
+  `StateHash.cpp`. `Universe::screenLayout` is excluded with it, for the same reason: it decides
+  where that surface puts text and nothing the game does.
 - **Two seams survive M3 deliberately** — `TextSink` and `ValueTokens` are the text system's own
   polymorphism, not platform (Modernize.md §4.5) — **and two because a comparison is blocked**:
   `ShipDrawEffects` on the emulator's flat memory, `SpawnChildEffects` on M4-a's typed stage result.

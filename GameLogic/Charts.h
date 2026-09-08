@@ -192,7 +192,13 @@ namespace Elite
    * A system whose row comes out below three is skipped entirely, name and disc together, because
    * the test that rejects it branches past both.
    */
-  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept;
+  /// `_wideLabels` is the printer that draws the 640x400 surface, and it is here for the twin
+  /// alone: only this routine knows where a system's disc landed, so only this routine can say
+  /// where its name goes (`TextPrinter::SetLabelRun`, Resolution.md section 6.3). A null printer is
+  /// a chart drawn on the canvas alone, which is what every fixture that does not compare the
+  /// picture passes.
+  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy,
+                           TextPrinter* _wideLabels = nullptr) noexcept;
 
   /*
    * `ChartEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).

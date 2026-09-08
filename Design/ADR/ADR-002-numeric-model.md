@@ -93,14 +93,20 @@ up as wrong prices in a system three galaxies away.
      each half of the split screen in its own mode: on the game screen one bit is one pixel and
      takes the cell's high or low nibble; on the dashboard each two bits are one pixel doubled
      horizontally, selecting background, either nibble, or colour RAM. **ADR-005 is unaffected**
-     — the seam is unchanged and the resolve simply lives inside `Canvas`.
+     — the seam is unchanged and the resolve simply lives inside `Canvas`. **`Picture::Resolve()`
+     produces the 640×400 one ADR-005 §1 uploads** ([Design/Resolution.md](../Resolution.md), and
+     ADR-008); it reads the canvas for raster state — the dashboard flag, the energy bomb's mode
+     and background, colour RAM, the sprite pointers — and for no pixel.
    - **The logical coordinate space is unchanged**: the space view is x ∈ [0,255] over
      y ∈ [0,143], centred on `X = 128`, `Y = 72`, and all line and circle arithmetic runs in it
      with the original's algorithms (`LOIN`'s seven variants, `CIRCLE2`'s step table). One
      x-unit is one pixel on the game screen and half a doubled pixel on the dashboard; either
      way the view sits four character cells in from the left, so x 0..255 covers cells 4..35 of
-     40 and spans the same 256 columns of the resolved image. Sub-pixel accuracy, anti-aliasing and higher internal
-     resolution stay phase-6 items that would fork the drawing code rather than change it.
+     40 and spans the same 256 columns of the resolved image. Higher internal resolution is built as
+     the parallel path [Design/Resolution.md](../Resolution.md) §4 describes — a twin per drawing
+     routine, computing coordinates and never deciding — so the drawing code is joined rather than
+     forked. Sub-pixel accuracy and anti-aliasing are not built, and are not phase-6 items either:
+     the twins draw the same shapes at twice the scale, with hard pixels.
 
 5. **Erase-by-XOR is available.** `Canvas` provides XOR plotting, and the line heaps are ported,
    because `LL9` and `SUN` use the heap contents to decide what to erase. Whether the executable

@@ -23,6 +23,7 @@
 #include "StartUp.h"
 #include "StatusScreen.h"
 #include "SystemScreen.h"
+#include "TextPrint2x.h"
 #include "ViewChange.h"
 
 namespace Elite
@@ -45,7 +46,7 @@ namespace Elite
   {
     // Resolution.md RS-1: the printer draws the 640x400 surface beside the canvas, and reads `QQ11`
     // for the layout that says where. Attached here because this is where both first exist.
-    m_screen.AttachPicture(&m_universe.picture, &m_universe.view);
+    m_screen.AttachPicture(&m_universe.picture, &m_universe.screenLayout);
 
     m_recursive.SetValueTokens(&m_values);
     m_extended.SetGame(m_universe, m_ports); // 6502: DT3 -- a control code that leaves is the library's
@@ -182,7 +183,7 @@ namespace Elite
       universe.heaps.lowestVisibleRow = CHART_SCREEN_BOTTOM;
       universe.clip.clippingOff = CHART_SCREEN_BOTTOM;
 
-      DrawShortRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds);
+      DrawShortRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds, &m_screen);
 
       universe.clip.clippingOff = 0u;
       universe.heaps.lowestVisibleRow = SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
@@ -196,7 +197,11 @@ namespace Elite
   /// the chart itself.
   void Game::ShowChart(std::uint8_t _view)
   {
-    SetUpScreen(m_universe, m_ports, _view);
+    // Each chart's own layout for the wide surface: the long-range chart's title has to clear the
+    // rule the map is drawn under, and the short-range chart's labels have to scale with the discs
+    // they name (Resolution.md section 6.3, slice RS-5-e).
+    SetUpScreen(m_universe, m_ports, _view,
+                (_view == SHORT_RANGE_CHART_VIEW) ? SHORT_RANGE_LAYOUT : LONG_RANGE_LAYOUT);
     DrawChart();
   }
 
@@ -245,7 +250,9 @@ namespace Elite
     }
 
     case KeyAction::MarketPrice:
-      SetUpTradeScreen(m_universe, m_ports, BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
+      // 6502: TT167's TRADEMODE -- TT66 and FLKB. The same table as the buy screen, because it is
+      // the same table: `TT167` and `TT219` print one market list between them.
+      SetUpTradeScreen(m_universe, m_ports, BUY_CARGO_VIEW, BUY_LAYOUT);
       PrintMarketScreen(m_recursive, m_characters, m_universe.text, m_universe.current.economy, m_universe.market, false);
       return;
 

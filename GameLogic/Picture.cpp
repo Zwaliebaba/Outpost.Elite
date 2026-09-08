@@ -66,17 +66,20 @@ namespace Elite
     for (int row = 0; row < CELL_ROWS; ++row)
     {
       const bool dashboardRow = dashboardShown && (row >= DASHBOARD_CELL_ROW);
-      const bool native = dashboardRow ? m_native.dashboard : m_native.spaceView;
 
       for (int column = 0; column < CELL_COLUMNS; ++column)
       {
         std::uint8_t* out = _out.data() + static_cast<std::size_t>(row) * 8 * WIDTH + static_cast<std::size_t>(column) * 8;
 
-        if (!native)
-        {
-          UpscaleCell(out, _canvas, column, row);
-        }
-        else if (dashboardRow)
+        /*
+         * TWO KINDS OF CELL AND NOT THREE SINCE RS-6. The third was the canvas doubled, drawn for
+         * whatever region had no twins yet, and there is no such region any more: every pixel on
+         * this surface is drawn at 640x400 by a twin of the routine that drew the canvas's
+         * (Resolution.md section 10, Risk R27). What the canvas is still read for is the raster
+         * state below and inside `ResolveBitmapCell` -- the dashboard flag, the energy bomb's mode
+         * and background, and the colour RAM a multicolour pixel's %11 comes from.
+         */
+        if (dashboardRow)
         {
           ResolveDashboardCell(out, column, row);
         }
@@ -95,40 +98,6 @@ namespace Elite
     // The same eight hardware sprites over the same bitmap, at twice the coordinates and from the
     // same definitions (ADR-005 §1, Resolution.md §3.3 and §5.4). One blit serves both surfaces.
     CompositeSprites(_out, WIDTH, HEIGHT, SPACE_VIEW_HEIGHT, 2, _canvas, _video);
-  }
-
-  void Picture::UpscaleCell(std::uint8_t* _out, const Canvas& _canvas, int _column, int _row) const noexcept
-  {
-    /*
-     * The region has no content of its own yet, so its pixels are the canvas's, doubled.
-     *
-     * THIS IS THE SCAFFOLDING AND IT IS TEMPORARY BY DESIGN. It is what lets the game be played at
-     * 640x400 from the first slice while the twins are built region by region, and the last slice
-     * deletes it once `NativeRegions::Complete()` holds (Resolution.md §10, Risk R27). Until then a
-     * screenshot is part native and part upscaled, and the journal says which parts.
-     *
-     * It goes through `Canvas::ResolveCell` rather than decoding the bytes again, so that the thing
-     * being doubled is the picture the oracle compares and not a second reading of it.
-     */
-    const Quarter quarter = QuarterOf(_column, _row);
-
-    std::array<std::uint8_t, 64> cell{};
-    _canvas.ResolveCell(quarter.cellColumn, quarter.cellRow, cell.data(), 8);
-
-    for (int down = 0; down < QUARTER; ++down)
-    {
-      const std::uint8_t* source = cell.data() + static_cast<std::size_t>(quarter.downIn + down) * 8 + quarter.acrossIn;
-
-      for (int repeat = 0; repeat < 2; ++repeat)
-      {
-        std::uint8_t* line = _out + static_cast<std::size_t>(down * 2 + repeat) * WIDTH;
-        for (int across = 0; across < QUARTER; ++across)
-        {
-          line[across * 2] = source[across];
-          line[across * 2 + 1] = source[across];
-        }
-      }
-    }
   }
 
   void Picture::ResolveBitmapCell(std::uint8_t* _out, const Canvas& _canvas, int _column, int _row) const noexcept

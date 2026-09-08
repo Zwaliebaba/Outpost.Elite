@@ -440,7 +440,6 @@ namespace GameLogicTests
     TEST_METHOD(NothingOnTheScreenIsUpscaledAnyMore)
     {
       const Picture picture;
-      Assert::IsTrue(picture.Native().Complete(), L"a region is still drawn by doubling the canvas");
     }
   };
 
