@@ -28,14 +28,15 @@ namespace Elite
   /*
    * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggled.
    *
-   * `DKS3` toggles a byte between 0 and &FF with `EOR #&FF`. On this build it walks the block as
-   * `DAMP,Y` and compares the key against `TGINT,Y`, a table of key codes in block order -- the
-   * `DAMP-&40,X` of the BBC, indexed straight from the key code, is what an earlier version of this
-   * comment described, and it is not here. The screen that did the walking was `DK4`, which `DOKEY`
-   * falls into every frame; it was ported as slice 4e and removed by owner ruling on 2026-09-08
-   * (InputTimer.md I-0), so the executable's settings file writes these now. TWO OF THE THREE READ
-   * BACKWARDS: `DAMP` non-zero means damping is OFF and `DJD` non-zero means auto-recentre is OFF,
-   * because the options are phrased as the thing being disabled. `JSTK` is the plain way round.
+   * `DKS3` toggles a byte between 0 and &FF by flipping all eight bits. On this build it walks the
+   * block as `DAMP,Y` and compares the key against `TGINT,Y`, a table of key codes in block order
+   * -- the `DAMP-&40,X` of the BBC, indexed straight from the key code, is what an earlier version
+   * of this comment described, and it is not here. The screen that did the walking was `DK4`,
+   * which `DOKEY` falls into every frame; it was ported as slice 4e and removed by owner ruling on
+   * 2026-09-08 (InputTimer.md I-0), so the executable's settings file writes these now. TWO OF THE
+   * THREE READ BACKWARDS: `DAMP` non-zero means damping is OFF and `DJD` non-zero means
+   * auto-recentre is OFF, because the options are phrased as the thing being disabled. `JSTK` is
+   * the plain way round.
    *
    * The block holds ten more the port keeps elsewhere or not yet -- `DNOIZ` is the sound's, `FLH`
    * is `FlightStatus`'s damage flash, `JSTGY` inverts the joystick's Y axis (read inside `RDKEY`,
@@ -80,10 +81,10 @@ namespace Elite
    * 6502: BUMP2 -- add `_amount` to a control rate, clamping at 255 and re-centring on the way.
    *
    * `REDU2` is its mirror and the two are ONE routine spread over two files that call into each
-   * other: `BUMP2` ends `BPL djd1`, and `djd1` is inside `REDU2`; `REDU2` ends `BPL RE2+2`, and
-   * `RE2` is inside `BUMP2`. `RE2+2` is also a MID-INSTRUCTION address -- `RE2` is `BPL djd1`, two
-   * bytes, so `RE2+2` is the `LDA T / RTS` after it. Three entries between two routines, and none
-   * of them is a label a caller uses.
+   * other: `BUMP2` ends by branching to `djd1`, which is inside `REDU2`; `REDU2` ends by branching
+   * to `RE2+2`, which is inside `BUMP2`. `RE2+2` is also a MID-INSTRUCTION address -- `RE2` is a
+   * two-byte branch, so `RE2+2` is the load and return after it. Three entries between two
+   * routines, and none of them is a label a caller uses.
    *
    * The re-centring is the point. Bumping a rate that lands in the LEFT half of the slider means
    * the player is pushing back through the middle, so with auto-recentre configured the rate jumps
@@ -98,11 +99,12 @@ namespace Elite
   /*
    * 6502: REDU2 -- subtract `_amount` from a control rate, clamping at 1 and re-centring.
    *
-   * AND THE CLAMP HAS A HOLE. `SBC` leaves the carry SET when it did not borrow, so `BCS RE3`
-   * skips the `LDX #1` whenever the value was greater than or equal to the amount -- including
-   * when they are equal, which produces ZERO. The routine's own documentation says the rate runs
-   * from 1 to 255. `DOKEY` calls it with `_amount` = 14, so a rate of exactly 14 becomes 0, and the
-   * next pass of `cntr` bumps it back to 1. Reachable, harmless, and not what the comment says.
+   * AND THE CLAMP HAS A HOLE. The subtraction leaves the carry SET when it did not borrow, so the
+   * branch to `RE3` skips the clamp to 1 whenever the value was greater than or equal to the
+   * amount -- including when they are equal, which produces ZERO. The routine's own documentation
+   * says the rate runs from 1 to 255. `DOKEY` calls it with `_amount` = 14, so a rate of exactly 14
+   * becomes 0, and the next pass of `cntr` bumps it back to 1. Reachable, harmless, and not what
+   * the comment says.
    */
   [[nodiscard]] std::uint8_t ReduceControl(std::uint8_t _value, std::uint8_t _amount, std::uint8_t _recentreDisabled) noexcept;
 
@@ -119,20 +121,20 @@ namespace Elite
   /*
    * 6502: U% -- clear the flight keys, which is NOT `ZEKTRAN` however much it looks like one.
    *
-   * `LDA #0 / LDY #56 / .DKL3 STA KLO,Y / DEY / BNE DKL3 / STA KL`. It walks DOWN to one, so it
-   * clears `KLO+1` to `KLO+56` -- fifty-six bytes of sixty-five, and `ZEKTRAN` clears the lot.
+   * `DKL3` walks DOWN to one, so it clears `KLO+1` to `KLO+56` -- fifty-six bytes of sixty-five,
+   * and `ZEKTRAN` clears the lot.
    * The nine it leaves alone are `KLO+0` and the eight above `KY20`. `DEATH` is the only caller:
    * the keys are wiped before the death sequence runs the flight loop, so nothing the player was
    * holding when they died steers the wreckage.
    *
-   * THE `STA KL` AFTER THE LOOP IS NOT `KLO+0`. On the BBC `KL` and `KLO` are the same table, so
-   * the store is the loop's missing zeroth byte; on the C64 `KL` is a separate byte at &441 that
+   * THE STORE TO `KL` AFTER THE LOOP IS NOT `KLO+0`. On the BBC `KL` and `KLO` are the same table,
+   * so the store is the loop's missing zeroth byte; on the C64 `KL` is a separate byte at &441 that
    * `DK4` writes `thiskey` into and NOTHING reads, so the store clears dead memory and the port
    * has no byte to clear for it (§6.117). The first version of this routine cleared `KLO+0` for
    * it, which the shipped game does not.
    */
-  /// 6502: LDY #56 -- the highest index `U%` clears; the lowest is 1, because `DEY / BNE` stops
-  /// before zero.
+  /// 6502: the highest index `U%` clears; the lowest is 1, because the loop's decrement-and-branch
+  /// stops before zero.
   inline constexpr std::size_t FLIGHT_KEYS_CLEARED = 56;
 
   void ClearFlightKeys(KeyLogger& _keys) noexcept;
@@ -166,10 +168,10 @@ namespace Elite
   /*
    * 6502: CTRL -- and it is a key-logger entry like the five above, not a modifier.
    *
-   * `CTRL` is one instruction, `LDX #6`, falling into `DKS4` (`LDA KEYLOOK,X / TAX / RTS`), so
-   * "is CTRL held" is `KEYLOOK+6` and nothing more exotic -- `keylook.asm` names that byte "CTRL
-   * is being pressed (KLO+&6)". Both readers test it with `BMI`, which is true because `RDKEY`
-   * leaves a held key at 255.
+   * `CTRL` is one instruction -- a load of 6 into X -- falling into `DKS4`, which reads that entry
+   * of the logger and returns it, so "is CTRL held" is `KEYLOOK+6` and nothing more exotic --
+   * `keylook.asm` names that byte "CTRL is being pressed (KLO+&6)". Both readers test its SIGN,
+   * which is true because `RDKEY` leaves a held key at 255.
    *
    * IT IS HERE BECAUSE THE PORT BELIEVED OTHERWISE. `Main.cpp` carried "CTRL is a MODIFIER, which
    * `Window` and `KeyMap` do not report -- they deliver matrix positions, and Ctrl is not one",
@@ -178,9 +180,9 @@ namespace Elite
    */
   inline constexpr std::size_t KEY_CONTROL = 0x06; ///< 6502: KLO+&6 -- CTRL, read by `hyp` and `TT18`
 
-  /// 6502: HINT -- "H", the matrix position `TT102` tests with `BIT KLO+HINT` to reach `hyp`. It is
-  /// read as a key HELD, not as the key that was pressed (`DockedKeys.h`), so the caller of the
-  /// dispatch reads it off the matrix the way `JumpOf` reads CTRL (§6.159).
+  /// 6502: HINT -- "H", the matrix position `TT102` tests directly to reach `hyp`. It is read as a
+  /// key HELD, not as the key that was pressed (`DockedKeys.h`), so the caller of the dispatch
+  /// reads it off the matrix the way `JumpOf` reads CTRL (§6.159).
   inline constexpr std::size_t KEY_HYPERSPACE = 0x23;
 
   /// 6502: what `TT17` leaves in X and Y -- one signed step per axis, four times as big with
@@ -200,13 +202,13 @@ namespace Elite
    * player is always here.
    *
    * THE Y AXIS IS INVERTED AND THE `EOR` IS WHERE. Both axes start at 1 and become &FF when a SHIFT
-   * is held, by `ORA`ing the shift entries -- and then the y one is `EOR #%11111110`, which turns 1
-   * into &FF and &FF into 1. So the unshifted cursor key moves y NEGATIVE and the shifted one moves
-   * it positive, the opposite way round from x.
+   * is held, by ORing in the shift entries -- and then the y one is exclusive-ORed with &FE, which
+   * turns 1 into &FF and &FF into 1. So the unshifted cursor key moves y NEGATIVE and the shifted
+   * one moves it positive, the opposite way round from x.
    */
   [[nodiscard]] CrosshairStep ReadCrosshairKeys(const KeyLogger& _keys) noexcept;
 
-  /// 6502: LDA #14 -- what `DOKEY` bumps and reduces the rates by on every pass.
+  /// 6502: what `DOKEY` bumps and reduces the rates by on every pass.
   inline constexpr std::uint8_t CONTROL_STEP = 14;
 
   /*
@@ -234,7 +236,7 @@ namespace Elite
   public:
     virtual ~Keyboard() = default;
 
-    /// 6502: the matrix walk's `LDA &DC01` for one row -- is key `_key` down right now?
+    /// 6502: the matrix walk's read of one row -- is key `_key` down right now?
     [[nodiscard]] virtual bool Held(std::size_t _key) = 0;
 
     /*
@@ -249,8 +251,8 @@ namespace Elite
      */
     [[nodiscard]] virtual std::uint8_t NextKey() = 0;
 
-    /// 6502: FLKB -- on the C64 build `LDA #15 / TAX / RTS`, left over from the second processor's
-    /// OSBYTE call: it flushes nothing. Still a method, because the fixtures compare WHERE the game
+    /// 6502: FLKB -- three instructions on the C64 build that flush nothing, left over from the
+    /// second processor's OSBYTE call. Still a method, because the fixtures compare WHERE the game
     /// reaches it; the executable answers it with nothing (InputTimer.md I-1).
     virtual void Flush() = 0;
 
@@ -285,8 +287,8 @@ namespace Elite
   /*
    * 6502: RDKEY -- the whole routine, over a `Keyboard` that answers only which keys are down.
    *
-   * THE LOGGER IS CLEARED AND THEN DECREMENTED, not stored into: `JSR ZEKTRAN` zeroes all
-   * sixty-five bytes and the walk does `DEC KEYLOOK,X`, so a held key reads 255. Everything
+   * THE LOGGER IS CLEARED AND THEN DECREMENTED, not stored into: `ZEKTRAN` zeroes all sixty-five
+   * bytes and the walk DECREMENTS the entry it hits, so a held key reads 255. Everything
    * downstream tests for non-zero -- but `DOKEY` also WRITES this array when the docking computer
    * is flying, and a scan that stored rather than cleared would leave the autopilot's synthetic
    * presses standing for ever.
@@ -297,7 +299,7 @@ namespace Elite
   [[nodiscard]] TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view,
                                       Keyboard& _keyboard) noexcept;
 
-  /// 6502: TT217's `LDY #2 / JSR DELAY` -- the two vertical syncs of debounce before each wait.
+  /// 6502: TT217's own wait -- the two vertical syncs of debounce before each scan.
   inline constexpr std::uint8_t TT217_DEBOUNCE_FRAMES = 2;
 
   /*
@@ -305,7 +307,7 @@ namespace Elite
    *
    * THE ROUTINE IS THREE WAITS AND A TABLE LOOK-UP, and the port had none of the waits. `.t` waits
    * two vertical syncs, scans, and goes back to the top while ANY key is held; `.t2` scans until a
-   * key is held; then `LDA TRANTABLE,X` turns `thiskey` into the character every docked screen
+   * key is held; then a table look-up turns `thiskey` into the character every docked screen
    * compares against. So a key that was down when the prompt appeared is discarded, a key held
    * down produces ONE character however long it is held, and two presses need a release between
    * them. The executable's `NextKey` was a queue Windows filled on every auto-repeat, which is how
@@ -330,11 +332,11 @@ namespace Elite
    * `ControlEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-3).
    *
    * It was "the one thing `DOKEY`'s flight half reaches that is neither memory nor the keyboard" --
-   * 6502: DOKEY's `auton` path -- 6502: JSR DOCKIT, the docking autopilot, which reads the ship block and writes `INWK+27` to
-   * `INWK+30` -- an acceleration and three rates -- and which M4-c-2 made `Elite::RunDockingComputer`
-   * (`Tactics.h`). Every implementer of the seam made that one call; `ReadFlightControls` makes it
-   * itself now, and the `DOKEY` sweep runs the real autopilot over a seeded bubble on both machines
-   * instead of scripting its four answers through the seam.
+   * 6502: DOKEY's `auton` path -- 6502: the docking autopilot, which reads the ship block and
+   * writes `INWK+27` to `INWK+30` -- an acceleration and three rates -- and which M4-c-2 made
+   * `Elite::RunDockingComputer` (`Tactics.h`). Every implementer of the seam made that one call;
+   * `ReadFlightControls` makes it itself now, and the `DOKEY` sweep runs the real autopilot over a
+   * seeded bubble on both machines instead of scripting its four answers through the seam.
    */
 
   /*
@@ -350,10 +352,10 @@ namespace Elite
    * autopilot from the player. The exception is a large roll request, where it writes `JSTX`
    * directly AND clears the key it would otherwise have pressed.
    *
-   * `ASL INWK+29` is doing three jobs at once: it doubles the request, its carry out is the old
-   * sign (which picks the key), and the `BIT` after it reads the NEW sign (which decides whether
-   * the request is large enough to bypass the keys). Reading it as a shift alone gets the direction
-   * right and the magnitude wrong.
+   * THE SHIFT OF `INWK+29` is doing three jobs at once: it doubles the request, its carry out is
+   * the old sign (which picks the key), and the `BIT` after it reads the NEW sign (which decides
+   * whether the request is large enough to bypass the keys). Reading it as a shift alone gets the
+   * direction right and the magnitude wrong.
    *
    * The routine ends by falling into `DK4`, the docked dispatcher, which is not this unit's.
    */
@@ -386,9 +388,9 @@ namespace Elite
    * Three of its four methods were VIC-II register writes, and ADR-005 §1 decided in slice 3d that
    * they belong in `VideoState` -- `ApplySightColour`, `ApplySpritesEnabled` and `ApplyMaskSprites`
    * have been the one-line bodies behind them ever since. `MaskSprites` stays a call of its own for
-   * the reason it always had: part 15's `LDA VIC+&15 / AND #.. / STA VIC+&15` is a read-modify-write
-   * the game makes because it does not know how many Trumble sprites are showing, so it is not a
-   * `SetSpritesEnabled` with a computed argument.
+   * the reason it always had: part 15 READS `VIC+&15`, masks it and writes it back -- a
+   * read-modify-write the game makes because it does not know how many Trumble sprites are
+   * showing, so it is not a `SetSpritesEnabled` with a computed argument.
    *
    * THE FOURTH IS WHY THE OTHER THREE HAD TO WAIT, and the reason it gave was wrong. `SetRasterMode`
    * was `SETL1`, which this port believed for six slices to be "self-modifying code inside the
@@ -409,10 +411,10 @@ namespace Elite
    * a seam, which would have thrown away two thirds of it and left `LOOK1` -- which falls into
    * this -- uncomparable (§6.73).
    *
-   * WITH NO LASER ON THIS VIEW IT WRITES NOTHING TO THE CANVAS. `LDA LASER,Y / BEQ SIG3` skips
-   * both pointers AND the colour, so the sprite keeps whatever pointer it had and is switched off
-   * instead. A port that wrote a pointer of 160 and then disabled the sprite would look the same
-   * on screen and differ on every byte.
+   * WITH NO LASER ON THIS VIEW IT WRITES NOTHING TO THE CANVAS. A zero in the mount's laser byte
+   * branches to `SIG3`, skipping both pointers AND the colour, so the sprite keeps whatever pointer
+   * it had and is switched off instead. A port that wrote a pointer of 160 and then disabled the
+   * sprite would look the same on screen and differ on every byte.
    */
   void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view,
                        VideoState& _video, MemoryMap& _map) noexcept;

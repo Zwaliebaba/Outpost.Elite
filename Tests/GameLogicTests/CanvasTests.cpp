@@ -96,12 +96,12 @@ namespace GameLogicTests
       }
     }
 
-    std::wstring Context(const wchar_t* _what, std::uint32_t _a, std::uint32_t _b, std::uint32_t _c = 0xFFFFFFFFu)
+    std::wstring Context(const wchar_t* _what, std::uint32_t _first, std::uint32_t _second, std::uint32_t _third = 0xFFFFFFFFu)
     {
-      std::wstring text = std::wstring(_what) + L" (" + std::to_wstring(_a) + L", " + std::to_wstring(_b);
-      if (_c != 0xFFFFFFFFu)
+      std::wstring text = std::wstring(_what) + L" (" + std::to_wstring(_first) + L", " + std::to_wstring(_second);
+      if (_third != 0xFFFFFFFFu)
       {
-        text += L", " + std::to_wstring(_c);
+        text += L", " + std::to_wstring(_third);
       }
       return text + L")";
     }

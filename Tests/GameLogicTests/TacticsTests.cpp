@@ -47,10 +47,10 @@ namespace GameLogicTests
 
     struct Labels
     {
-      std::uint16_t inwk = 0, k3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
-      std::uint16_t q = 0, r = 0, s = 0, u = 0, k = 0;
-      std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, fist = 0, slsp = 0;
-      std::uint16_t cnt = 0, cnt2 = 0, rat = 0, rat2 = 0, junk = 0;
+      std::uint16_t inwk = 0, zeroPageK3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
+      std::uint16_t zeroPageQ = 0, zeroPageR = 0, zeroPageS = 0, zeroPageU = 0, zeroPageK = 0;
+      std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, legalStatus = 0, slsp = 0;
+      std::uint16_t zeroPageCnt = 0, coneWidth = 0, signMask = 0, signMask2 = 0, junk = 0;
       std::uint16_t energy = 0, fsh = 0, ash = 0, dly = 0;
       std::uint16_t tally = 0, tallyl = 0;
 
@@ -63,7 +63,7 @@ namespace GameLogicTests
         xx0 = _oracle.Label("XX0");
         type = _oracle.Label("TYPE");
         ecma = _oracle.Label("ECMA");
-        fist = _oracle.Label("FIST");
+        legalStatus = _oracle.Label("FIST");
         slsp = _oracle.Label("SLSP");
         energy = _oracle.Label("ENERGY");
         fsh = _oracle.Label("FSH");
@@ -71,23 +71,23 @@ namespace GameLogicTests
         dly = _oracle.Label("DLY");
         tally = _oracle.Label("TALLY");
         tallyl = _oracle.Label("TALLYL");
-        cnt = _oracle.Label("CNT");
-        cnt2 = _oracle.Label("CNT2");
-        rat = _oracle.Label("RAT");
-        rat2 = _oracle.Label("RAT2");
+        zeroPageCnt = _oracle.Label("CNT");
+        coneWidth = _oracle.Label("CNT2");
+        signMask = _oracle.Label("RAT");
+        signMask2 = _oracle.Label("RAT2");
         junk = _oracle.Label("JUNK");
         inwk = _oracle.Label("INWK");
-        k3 = _oracle.Label("K3");
+        zeroPageK3 = _oracle.Label("K3");
         kPercent = _oracle.Label("K%");
         v = _oracle.Label("V");
         x1 = _oracle.Label("X1");
         y1 = _oracle.Label("Y1");
         x2 = _oracle.Label("X2");
-        q = _oracle.Label("Q");
-        r = _oracle.Label("R");
-        s = _oracle.Label("S");
-        u = _oracle.Label("U");
-        k = _oracle.Label("K");
+        zeroPageQ = _oracle.Label("Q");
+        zeroPageR = _oracle.Label("R");
+        zeroPageS = _oracle.Label("S");
+        zeroPageU = _oracle.Label("U");
+        zeroPageK = _oracle.Label("K");
       }
     };
 
@@ -116,7 +116,7 @@ namespace GameLogicTests
     {
       for (std::size_t byte = 0; byte < _axes.size(); ++byte)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + byte)] = _axes[byte];
+        _cpu.memory[static_cast<std::uint16_t>(_at.zeroPageK3 + byte)] = _axes[byte];
       }
     }
 
@@ -126,7 +126,7 @@ namespace GameLogicTests
     {
       for (std::size_t byte = 0; byte < 9u; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.k3 + byte)], _axes[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.zeroPageK3 + byte)], _axes[byte],
                          (_where + L": K3+" + std::to_wstring(byte)).c_str());
       }
     }
@@ -267,9 +267,9 @@ namespace GameLogicTests
                 cpu.memory[at.x1] = vector.x;
                 cpu.memory[at.y1] = vector.y;
                 cpu.memory[at.x2] = vector.z;
-                cpu.memory[at.q] = 0x5Au;
-                cpu.memory[at.r] = 0x5Au;
-                cpu.memory[at.s] = 0x5Au;
+                cpu.memory[at.zeroPageQ] = 0x5Au;
+                cpu.memory[at.zeroPageR] = 0x5Au;
+                cpu.memory[at.zeroPageS] = 0x5Au;
 
                 cpu.y = which;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine((station != 0) ? tas4 : tas3, 20'000);
@@ -431,7 +431,7 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       std::uint32_t angered = 0;
 
-      for (const std::uint8_t newb : NEWBS)
+      for (const std::uint8_t traits : NEWBS)
       {
         for (const std::uint8_t ai : AI)
         {
@@ -452,7 +452,7 @@ namespace GameLogicTests
                 bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
               }
               bubble.blocks[SLOT].ai = ai;
-              bubble.blocks[SLOT].newb = newb;
+              bubble.blocks[SLOT].traits = traits;
 
               /*
                * THE STATION'S HOSTILE BIT STARTS CLEAR, and the first version of this sweep did
@@ -460,7 +460,7 @@ namespace GameLogicTests
                * already has bit 2 set, so `AN2`'s `ORA #%00000100` changed nothing and a mutation
                * that skipped `AN2` altogether agreed on every case (§6.124).
                */
-              bubble.blocks[1].newb = Elite::Without(bubble.blocks[1].newb, Elite::NewbBit::Hostile);
+              bubble.blocks[1].traits = Elite::Without(bubble.blocks[1].traits, Elite::TraitBit::Hostile);
 
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
@@ -484,7 +484,7 @@ namespace GameLogicTests
               flight.type = Elite::TypeOf(loopType);
               const bool carry = Elite::Anger(bubble, flight, SLOT, called);
 
-              const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
+              const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(traits) + " AI " + std::to_string(ai) + " TYPE " +
                                                    std::to_string(loopType) + " called " + std::to_string(Elite::Byte(called)));
 
               // The exit carry is an output: part 11 falls from `JSR ANGRY` into `JSR LL9`, and a
@@ -499,7 +499,7 @@ namespace GameLogicTests
                                    (where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
                 }
               }
-              angered += Elite::Has(bubble.blocks[1].newb, Elite::NewbBit::Hostile) ? 1u : 0u;
+              angered += Elite::Has(bubble.blocks[1].traits, Elite::TraitBit::Hostile) ? 1u : 0u;
               ++compared;
             }
           }
@@ -725,7 +725,7 @@ namespace GameLogicTests
         _universe.universe.bubble.blocks[slot].state = 0u;
         _universe.universe.bubble.blocks[slot].heap = Elite::HeapOffset{}; // address 0, as ZINF leaves it
         _universe.universe.bubble.blocks[slot].energy = 20u;
-        _universe.universe.bubble.blocks[slot].newb = subject ? _where.flags : 0u;
+        _universe.universe.bubble.blocks[slot].traits = subject ? _where.flags : 0u;
       }
 
       _universe.universe.bubble.Count(Elite::ShipType::Station) = _stations;
@@ -740,9 +740,9 @@ namespace GameLogicTests
       _universe.universe.flight.mainLoopCounter = 0u;
 
       // 6502: XX2 -- the face visibility of the last ship drawn, which `DOCKIT` reads as `K3+10`.
-      for (std::size_t face = 0; face < _universe.universe.geometry.xx2.size(); ++face)
+      for (std::size_t face = 0; face < _universe.universe.geometry.faceVisible.size(); ++face)
       {
-        _universe.universe.geometry.xx2[face] = 0u;
+        _universe.universe.geometry.faceVisible[face] = 0u;
       }
     }
 
@@ -773,9 +773,9 @@ namespace GameLogicTests
       {
         _cpu.memory[static_cast<std::uint16_t>(_at.rand + byte)] = _universe.seed[byte];
       }
-      for (std::size_t face = 0; face < _universe.universe.geometry.xx2.size() && face < 14u; ++face)
+      for (std::size_t face = 0; face < _universe.universe.geometry.faceVisible.size() && face < 14u; ++face)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + face)] = _universe.universe.geometry.xx2[face];
+        _cpu.memory[static_cast<std::uint16_t>(_at.zeroPageK3 + face)] = _universe.universe.geometry.faceVisible[face];
       }
 
       const std::uint16_t block = static_cast<std::uint16_t>(_at.kPercent + _universe.slot * Elite::SHIP_BLOCK_SIZE);
@@ -785,7 +785,7 @@ namespace GameLogicTests
       _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1)] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint->address >> 8u);
       _cpu.memory[_at.type] = Elite::Byte(_universe.universe.flight.type);
       _cpu.memory[_at.ecma] = _universe.ecm;
-      _cpu.memory[_at.fist] = _universe.legal;
+      _cpu.memory[_at.legalStatus] = _universe.legal;
       _cpu.memory[_at.energy] = _universe.universe.status.energy;
       _cpu.memory[_at.fsh] = _universe.universe.status.forwardShield;
       _cpu.memory[_at.ash] = _universe.universe.status.aftShield;
@@ -843,8 +843,8 @@ namespace GameLogicTests
                          (_where + L": RAND+" + std::to_wstring(byte)).c_str());
       }
 
-      Assert::AreEqual(_cpu.memory[_at.rat], _universe.universe.flight.rat, (_where + L": RAT").c_str());
-      Assert::AreEqual(_cpu.memory[_at.rat2], _universe.universe.flight.rat2, (_where + L": RAT2").c_str());
+      Assert::AreEqual(_cpu.memory[_at.signMask], _universe.universe.flight.signMask, (_where + L": RAT").c_str());
+      Assert::AreEqual(_cpu.memory[_at.signMask2], _universe.universe.flight.signMask2, (_where + L": RAT2").c_str());
       Assert::AreEqual(_cpu.memory[_at.junk], _universe.universe.bubble.junk, (_where + L": JUNK").c_str());
 
       // What `OOPS` spends, which is the half of a collision that a seam count cannot show.
@@ -889,7 +889,7 @@ namespace GameLogicTests
         const char* what;
         std::uint8_t type;
         std::uint8_t ai;    ///< 6502: INWK+32
-        std::uint8_t newb;  ///< 6502: INWK+36
+        std::uint8_t traits;  ///< 6502: INWK+36
         std::uint8_t state; ///< 6502: INWK+31
         std::uint8_t energy;
         std::uint8_t ecm;
@@ -1087,7 +1087,7 @@ namespace GameLogicTests
             universe.universe.work.state = one.state;
             universe.universe.work.ai = one.ai;
             universe.universe.work.energy = one.energy;
-            universe.universe.work.newb = one.newb;
+            universe.universe.work.traits = one.traits;
             universe.universe.bubble.blocks[2] = universe.universe.work;
 
             /*
@@ -1245,8 +1245,8 @@ namespace GameLogicTests
       std::vector<Approach> ladder;
       for (int magnitude = 0x60; magnitude <= 0xFE; magnitude += 8)
       {
-        const std::uint8_t m = static_cast<std::uint8_t>(magnitude);
-        ladder.push_back({"diagonal ladder", m, 0u, m, 0u, m, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
+        const std::uint8_t magnitudeByte = static_cast<std::uint8_t>(magnitude);
+        ladder.push_back({"diagonal ladder", magnitudeByte, 0u, magnitudeByte, 0u, magnitudeByte, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
       }
       /*
        * SKEWED, because a uniform diagonal cannot produce every length. `TA2` halves each component
@@ -1259,9 +1259,9 @@ namespace GameLogicTests
       {
         for (int skew = -4; skew <= 4; skew += 2)
         {
-          const std::uint8_t m = static_cast<std::uint8_t>(magnitude);
+          const std::uint8_t magnitudeByte = static_cast<std::uint8_t>(magnitude);
           const std::uint8_t skewed = static_cast<std::uint8_t>(magnitude + skew);
-          ladder.push_back({"diagonal ladder", m, 0u, skewed, 0u, m, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
+          ladder.push_back({"diagonal ladder", magnitudeByte, 0u, skewed, 0u, magnitudeByte, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
         }
       }
 
@@ -1401,7 +1401,7 @@ namespace GameLogicTests
              * bit 6. With the byte zero the two are the same answer, and the mutation that made it
              * an `ORA` survived a thousand cases (§6.126). It varies per case so the shift shows.
              */
-            universe.universe.work.newb = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
+            universe.universe.work.traits = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
 
             universe.universe.bubble.blocks[1].nose.x.hi = approach.nose;
             universe.universe.bubble.blocks[1].nose.y.hi = approach.noseY;
@@ -1421,10 +1421,10 @@ namespace GameLogicTests
              * drawn, and the only thing standing between an NPC and a completed docking (§6.125).
              * Both answers are swept, because a port that ignored the byte would agree on one.
              */
-            universe.universe.geometry.xx2[10] = faces;
+            universe.universe.geometry.faceVisible[10] = faces;
 
             PushTacticsUniverse(cpu, universe, at);
-            cpu.memory[static_cast<std::uint16_t>(at.k3 + 10u)] = faces;
+            cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + 10u)] = faces;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dockit, 400'000);
             Assert::IsTrue(run.completed, L"DOCKIT returned");
@@ -1443,7 +1443,7 @@ namespace GameLogicTests
             // a local since M2-c, so the port leaves whatever was there.
             for (std::size_t byte = 0; byte < 9u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], universe.universe.axes[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)], universe.universe.axes[byte],
                                (context + L": K3+" + std::to_wstring(byte)).c_str());
             }
 
@@ -1460,7 +1460,7 @@ namespace GameLogicTests
              */
             outcomes.insert(std::to_string(universe.universe.work.speed) + "," + std::to_string(universe.universe.work.acceleration) + "," +
                             std::to_string(universe.universe.work.rollCounter) + "," + std::to_string(universe.universe.work.pitchCounter) +
-                            "," + std::to_string(universe.universe.work.newb));
+                            "," + std::to_string(universe.universe.work.traits));
             ++compared;
           }
         }

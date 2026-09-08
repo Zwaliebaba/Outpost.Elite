@@ -22,6 +22,9 @@
     <ClInclude Include="OracleImage.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="OracleLabels.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
     <ClInclude Include="GoldenCanvas.h">
       <Filter>Oracle</Filter>
     </ClInclude>

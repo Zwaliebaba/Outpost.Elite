@@ -63,10 +63,10 @@ namespace GameLogicTests
       std::uint16_t qq15 = 0;
       std::uint16_t qq19 = 0;
       std::uint16_t qq21 = 0;
-      std::uint16_t k = 0;
-      std::uint16_t k3 = 0;
+      std::uint16_t zeroPageK = 0;
+      std::uint16_t zeroPageK3 = 0;
       std::uint16_t k4 = 0;
-      std::uint16_t stp = 0;
+      std::uint16_t circleStep = 0;
       std::uint16_t qq8 = 0;
       std::uint16_t qq12 = 0;
       std::uint16_t qq22 = 0;
@@ -85,10 +85,10 @@ namespace GameLogicTests
           qq15(_oracle.Label("QQ15")),
           qq19(_oracle.Label("QQ19")),
           qq21(_oracle.Label("QQ21")),
-          k(_oracle.Label("K")),
-          k3(_oracle.Label("K3")),
+          zeroPageK(_oracle.Label("K")),
+          zeroPageK3(_oracle.Label("K3")),
           k4(_oracle.Label("K4")),
-          stp(_oracle.Label("STP")),
+          circleStep(_oracle.Label("STP")),
           qq8(_oracle.Label("QQ8")),
           qq12(_oracle.Label("QQ12")),
           qq22(_oracle.Label("QQ22")),
@@ -380,19 +380,19 @@ namespace GameLogicTests
 
       for (std::uint32_t value = 0; value < 256; ++value)
       {
-        for (std::uint32_t delta = 0; delta < 256; ++delta)
+        for (std::uint32_t speed = 0; speed < 256; ++speed)
         {
           Cpu6502 cpu = oracle.Fresh();
-          cpu.memory[step] = static_cast<std::uint8_t>(delta);
+          cpu.memory[step] = static_cast<std::uint8_t>(speed);
           cpu.a = static_cast<std::uint8_t>(value);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           Assert::IsTrue(cpu.CallSubroutine(routine, 1'000).completed, L"TT123 should return");
 
-          const std::uint8_t ours = Elite::StepCoordinate(static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(delta));
+          const std::uint8_t ours = Elite::StepCoordinate(static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(speed));
           Assert::AreEqual<std::uint32_t>(cpu.memory[result], ours,
-                                          (L"TT123(" + std::to_wstring(value) + L", " + std::to_wstring(delta) + L")").c_str());
-          if (ours == static_cast<std::uint8_t>(value) && delta != 0)
+                                          (L"TT123(" + std::to_wstring(value) + L", " + std::to_wstring(speed) + L")").c_str());
+          if (ours == static_cast<std::uint8_t>(value) && speed != 0)
           {
             ++refused;
           }
@@ -656,7 +656,7 @@ namespace GameLogicTests
             // 6502: K3, K4, K and STP -- what `TT14` hands `CIRCLE2`, and the circle it draws with
             // them. The trap came off with the seam in M3-b-1b, so the pixels are the comparison
             // and these four say WHERE a disagreement is if one turns up.
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.stp], universe.heaps.stp, (where + L": STP").c_str());
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.circleStep], universe.heaps.circleStep, (where + L": STP").c_str());
             CompareScreens(cpu, zp.screen, universe.canvas, where);
             ++compared;
           }
@@ -772,7 +772,7 @@ namespace GameLogicTests
           // SUN takes its centre in K3 and K4 and its radius in K, so the values have to be
           // snapshotted as each call happens -- by the time the chart is finished they hold
           // whatever the last system left.
-          cpu.watch = {zp.k3, zp.k4, zp.k, 0};
+          cpu.watch = {zp.zeroPageK3, zp.k4, zp.zeroPageK, 0};
           LoadSeeds(cpu, zp.qq21, galaxy);
           SeedChart(cpu, zp, chart);
           SeedAfterScreenReset(cpu, oracle);

@@ -22,17 +22,17 @@ namespace Elite
     /// 6502: the priority a stopped voice is left with, which any effect beats.
     constexpr std::uint8_t PRIORITY_FREE = 0;
 
-    /// 6502: SBC #16 -- one step of the sustain volume, which is the byte's high nibble.
+    /// 6502: one step of the sustain volume, which is the byte's high nibble.
     constexpr std::uint8_t SUSTAIN_STEP = 16;
 
-    /// 6502: EOR #%00000100 -- the pulse width's wobble.
+    /// 6502: the pulse width's wobble, one bit folded each pass.
     constexpr std::uint8_t PULSE_WIDTH_FLIP = 0x04u;
 
     /// 6502: sfxbeep.
     constexpr std::uint8_t EFFECT_BEEP = 5;
 
     /*
-     * 6502: LDA SFXPR,Y -- with Y possibly carrying bit 7, so possibly past the table's sixteen.
+     * 6502: the priority table read with Y possibly carrying bit 7, so possibly past its sixteen.
      *
      * The table is extracted to 136 bytes because 135 is the largest index the game reaches; anything
      * beyond that is not a read the shipped game makes and answers zero, `LineHeap::Read`'s rule.
@@ -52,22 +52,22 @@ namespace Elite
     [[nodiscard]] NoiseResult MakeNoise(SoundBuffer& _buffer, std::uint8_t _effect, bool _carryIn, bool _pitched, std::uint8_t _sustain,
                                  std::uint8_t _frequency) noexcept
     {
-      // 6502: LDA DNOIZ / BNE SOUR1 -- and SOUR1 is an RTS, so the carry is whatever it was.
+      // 6502: SOUR1 is a bare return, so with sound off the carry is whatever it was.
       if (_buffer.soundOff != 0u)
       {
         return {_carryIn, _buffer.soundOff}; // 6502: A still holds `DNOIZ`, and `SOUR1` is a bare RTS
       }
 
-      // 6502: LDX #2 / INY / STY XX15+2 / DEY -- the effect number plus one, UNMASKED.
+      // 6502: the effect number plus one, kept UNMASKED, and the voice index from 2.
       std::size_t voice = 2;
       const std::uint8_t effectPlusOne = static_cast<std::uint8_t>(_effect + 1u);
 
-      // 6502: LDA SFXPR,Y / LSR A / BCS SOUX9 -- the priority byte's bit 0 says whether to look for
-      // a voice already playing this effect. Read before the mask, so index 135 is reachable.
+      // 6502: the priority byte's bit 0 says whether to look for a voice already playing this
+      // effect. Read before the mask, so index 135 is reachable.
       bool found = false;
       if ((PriorityAt(_effect) & 0x01u) == 0u)
       {
-        // 6502: .SOUX7 LDA SOFLG,X / AND #%00111111 / CMP XX15+2 / BEQ SOUX6 / DEX / BPL SOUX7.
+        // 6502: SOUX7 -- each voice's flag masked to six bits and compared, counting down.
         for (int candidate = 2; candidate >= 0; --candidate)
         {
           if ((_buffer.flag[static_cast<std::size_t>(candidate)] & FLAG_EFFECT_MASK) == effectPlusOne)
@@ -82,10 +82,10 @@ namespace Elite
       if (!found)
       {
         /*
-         * 6502: .SOUX9 LDX #0 / LDA SOPR / CMP SOPR+1 / BCC SOUX1 / INX / LDA SOPR+1 / .SOUX1 CMP SOPR+2 /
-         * BCC P%+4 / LDX #2.
+         * 6502: SOUX9 and SOUX1 -- the three priorities compared in pairs to find the lowest.
          *
-         * The lowest priority of the three, and the ties go the way the comparisons fall: `BCC` is
+         *
+         * The lowest priority of the three, and the ties go the way the comparisons fall: a clear
          * "strictly less", so voice 2 wins a tie with voice 1 and voice 3 wins a tie with either.
          */
         voice = 0;
@@ -101,35 +101,35 @@ namespace Elite
         }
       }
 
-      // 6502: .SOUX6 TYA / AND #%01111111 / TAY -- the flag comes off here and not before.
+      // 6502: SOUX6 -- the flag comes off here and not before.
       const std::uint8_t effect = static_cast<std::uint8_t>(_effect & 0x7Fu);
 
-      // 6502: LDA SFXPR,Y / CMP SOPR,X / BCC SOUR1 -- a failed comparison, so the carry is CLEAR.
+      // 6502: a priority below the voice's own goes back to SOUR1, so the carry is CLEAR.
       const std::uint8_t priority = PriorityAt(effect);
       if (priority < _buffer.priority[voice])
       {
-        return {false, priority}; // 6502: A is the `LDA SFXPR,Y` the failed `CMP` was made on
+        return {false, priority}; // 6502: A is the priority byte the failed comparison was made on
       }
 
-      // 6502: SEI / STA SOPR,X -- and the interrupt lock is what the port's single thread gives.
+      // 6502: the interrupt lock around the store is what the port's single thread gives.
       _buffer.priority[voice] = priority;
 
-      // 6502: BVS SOUX4 / LDA SFXSUS,Y / EQUB &CD / .SOUX4 LDA XX15 / STA SOSUS,X.
+      // 6502: SOUX4 -- the sustain from the table, or the caller's when entered through `NOISE2`.
       _buffer.sustain[voice] = _pitched ? _sustain : EFFECT_SUSTAIN_TABLE[effect];
 
-      _buffer.counter[voice] = EFFECT_COUNT_TABLE[effect];                    // 6502: LDA SFXCNT,Y / STA SOCNT,X
-      _buffer.frequencyChange[voice] = EFFECT_FREQUENCY_CHANGE_TABLE[effect]; // 6502: LDA SFXFRCH,Y / STA SOFRCH,X
-      _buffer.control[voice] = EFFECT_CONTROL_TABLE[effect];                  // 6502: LDA SFXCR,Y / STA SOCR,X
+      _buffer.counter[voice] = EFFECT_COUNT_TABLE[effect];                    // 6502: into SOCNT
+      _buffer.frequencyChange[voice] = EFFECT_FREQUENCY_CHANGE_TABLE[effect]; // 6502: into SOFRCH
+      _buffer.control[voice] = EFFECT_CONTROL_TABLE[effect];                  // 6502: into SOCR
 
-      // 6502: BVS SOUX5 / LDA SFXFQ,Y / EQUB &CD / .SOUX5 LDA XX15+1 / STA SOFRQ,X.
+      // 6502: SOUX5 -- the frequency from the table, or the caller's, the same way.
       _buffer.frequency[voice] = _pitched ? _frequency : EFFECT_FREQUENCY_TABLE[effect];
 
-      _buffer.attack[voice] = EFFECT_ATTACK_TABLE[effect];          // 6502: LDA SFXATK,Y / STA SOATK,X
-      _buffer.volumeRate[voice] = EFFECT_VOLUME_RATE_TABLE[effect]; // 6502: LDA SFXVCH,Y / STA SOVCH,X
+      _buffer.attack[voice] = EFFECT_ATTACK_TABLE[effect];          // 6502: into SOATK
+      _buffer.volumeRate[voice] = EFFECT_VOLUME_RATE_TABLE[effect]; // 6502: into SOVCH
 
-      // 6502: INY / TYA / ORA #%10000000 / STA SOFLG,X / CLI / SEC / RTS.
+      // 6502: the effect number plus one with bit 7 forced on, into the flag, and out with the carry set.
       _buffer.flag[voice] = static_cast<std::uint8_t>((effect + 1u) | FLAG_NEW);
-      return {true, _buffer.flag[voice]}; // 6502: A is the byte `STA SOFLG,X` just wrote
+      return {true, _buffer.flag[voice]}; // 6502: A is the byte the store just wrote
     }
 
     /// 6502: SEVENS,Y -- the voice's register base.
@@ -139,8 +139,8 @@ namespace Elite
     }
 
     /*
-     * 6502: .SOUX2 CLC / CLD / ADC SOFRQ,Y / STA SOFRQ,Y / PHA / LSR A / LSR A / STA SID+&1,X / PLA /
-     * ASL A x6 / STA SID,X / LDA PULSEW / STA SID+&3,X.
+     * 6502: SOUX2 -- the change added to the voice's frequency, and the sixteen-bit result
+     * split across the SID's two registers, with the pulse width after it.
      *
      * `_change` is what A holds on arrival: the frequency change for a running effect, zero for a new
      * one. The frequency byte's top six bits go to the high register and its bottom two to the top of
@@ -167,20 +167,20 @@ namespace Elite
   NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, SoundEffect _effect, std::uint8_t _sustain, std::uint8_t _frequency,
                                      bool _carryIn) noexcept
   {
-    // 6502: NOISE2 -- BIT SOUR1 / STA XX15 / STX XX15+1 / EQUB &50, into NOISE with V set.
+    // 6502: NOISE2 -- the sustain and frequency staged, then into `NOISE` with the overflow set.
     return MakeNoise(_buffer, static_cast<std::uint8_t>(_effect), _carryIn, true, _sustain, _frequency);
   }
 
   NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept
   {
-    // 6502: BEEP -- LDY #sfxbeep / BNE NOISE.
+    // 6502: BEEP -- the beep effect, as a branch into `NOISE`.
     return PlaySoundEffect(_buffer, SoundEffect::Beep, _carryIn);
   }
 
   void StopSoundEffect(SoundBuffer& _buffer, SoundEffect _effect) noexcept
   {
-    // 6502: NOISEOFF -- LDX #3 / INY / STY XX15+2, then SOUL1: DEX / BMI SOUR1 / LDA SOFLG,X /
-    // AND #%00111111 / CMP XX15+2 / BNE SOUL1 / LDA #1 / STA SOCNT,X / RTS.
+    // 6502: NOISEOFF and SOUL1 -- the three voices searched for this effect, and the one that
+    // matches has its counter set to 1 so the next pass kills it.
     const std::uint8_t effectPlusOne = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_effect) + 1u);
     for (int voice = 2; voice >= 0; --voice)
     {
@@ -194,7 +194,7 @@ namespace Elite
 
   void FlushSoundEffects(SoundBuffer& _buffer) noexcept
   {
-    // 6502: SOFLUSH -- LDY #3 / LDA #1 / .SOUL2 STA SOCNT-1,Y / DEY / BNE SOUL2.
+    // 6502: SOFLUSH and SOUL2 -- every counter to 1, so the next pass kills all three.
     for (std::uint8_t& counter : _buffer.counter)
     {
       counter = 1u;
@@ -203,14 +203,14 @@ namespace Elite
 
   void RunSoundEffects(SoundBuffer& _buffer, SidWriteLog& _log) noexcept
   {
-    // 6502: LDY #2, and SOUL8 down to voice 0.
+    // 6502: SOUL8 -- voice 2 down to voice 0.
     for (int index = 2; index >= 0; --index)
     {
       const std::size_t voice = static_cast<std::size_t>(index);
       const std::uint8_t flag = _buffer.flag[voice];
 
       /*
-       * 6502: LDA SOFLG,Y / BEQ SOUL3b.
+     * 6502: SOUL3b -- a silent voice takes the OTHER exit.
        *
        * A silent voice takes the OTHER exit: SOUL3b steps down and, past voice 1, returns from the
        * interrupt without reaching the pulse-width flip. So a frame on which voice 1 is silent leaves
@@ -230,8 +230,8 @@ namespace Elite
       if ((flag & FLAG_NEW) != 0u)
       {
         /*
-         * 6502: .SOUL4 -- LDA SEVENS,Y / STA SOUX3+1, then LDA #0 / LDX #6 / .SOUX3 STA SID,X / DEX /
-         * BPL SOUX3.
+         * 6502: SOUL4 and SOUX3 -- the voice's base address written into the store's own operand,
+         * then seven registers zeroed.
          *
          * The store is self-modified to the voice's base, and the loop zeroes the seven registers from
          * the top down. Seven writes of zero, in that order, and the first of them is what puts the
@@ -242,56 +242,56 @@ namespace Elite
           _log.Add(static_cast<std::uint8_t>(base + reg), 0u);
         }
 
-        // 6502: LDX SEVENS,Y / LDA SOCR,Y / STA SID+&4,X / LDA SOATK,Y / STA SID+&5,X / LDA SOSUS,Y /
-        // STA SID+&6,X / LDA #0 -- and then SOUX2 with A = 0.
+        // 6502: the control, attack and sustain bytes into the voice's registers, and then
+        // `SOUX2` with a change of zero.
         _log.Add(static_cast<std::uint8_t>(base + SID_CONTROL), _buffer.control[voice]);
         _log.Add(static_cast<std::uint8_t>(base + SID_ATTACK_DECAY), _buffer.attack[voice]);
         _log.Add(static_cast<std::uint8_t>(base + SID_SUSTAIN_RELEASE), _buffer.sustain[voice]);
         WriteFrequency(_buffer, _log, voice, 0u);
 
-        // 6502: .SOUL5 LDA SOFLG,Y / BMI SOUL6 -- .SOUL6 AND #%01111111 / STA SOFLG,Y, then SOUL3.
+        // 6502: SOUL5 and SOUL6 -- the new-voice bit comes off the flag, then `SOUL3`.
         _buffer.flag[voice] = static_cast<std::uint8_t>(flag & ~FLAG_NEW);
       }
       else
       {
-        // 6502: LDX SEVENS,Y / LDA SOFRCH,Y / BEQ SOUL5 / BNE SOUX2.
+        // 6502: a non-zero change goes to SOUX2, and zero to SOUL5.
         if (_buffer.frequencyChange[voice] != 0u)
         {
           WriteFrequency(_buffer, _log, voice, _buffer.frequencyChange[voice]);
         }
 
-        // 6502: .SOUL5 LDA SOFLG,Y / BMI SOUL6 -- not taken -- TYA / TAX.
+        // 6502: SOUL5, with the new-voice bit already clear, so the branch is not taken.
 
-        // 6502: DEC SOPR,X / BNE P%+5 / INC SOPR,X -- down, but a priority that reaches zero is put
-        // back to one. A priority that WAS zero goes to 255, which the BNE does not catch.
+        // 6502: the priority stepped down, but one that reaches zero is put back to one. A
+        // priority that WAS zero goes to 255, which that test does not catch.
         _buffer.priority[voice] = static_cast<std::uint8_t>(_buffer.priority[voice] - 1u);
         if (_buffer.priority[voice] == 0u)
         {
           _buffer.priority[voice] = 1u;
         }
 
-        // 6502: DEC SOCNT,X / BEQ SOKILL.
+        // 6502: SOKILL -- the counter stepped down, and zero kills the voice.
         _buffer.counter[voice] = static_cast<std::uint8_t>(_buffer.counter[voice] - 1u);
         if (_buffer.counter[voice] == 0u)
         {
-          // 6502: .SOKILL LDX SEVENS,Y / LDA SOCR,Y / AND #%11111110 / STA SID+&4,X / LDA #0 /
-          // STA SOFLG,Y / STA SOPR,Y / BEQ SOUL3.
+          // 6502: SOKILL -- the control byte's gate bit cleared, then the flag and priority
+          // zeroed, and on to `SOUL3`.
           _log.Add(static_cast<std::uint8_t>(base + SID_CONTROL), static_cast<std::uint8_t>(_buffer.control[voice] & 0xFEu));
           _buffer.flag[voice] = 0u;
           _buffer.priority[voice] = PRIORITY_FREE;
         }
         else if ((_buffer.counter[voice] & _buffer.volumeRate[voice]) == 0u)
         {
-          // 6502: LDA SOSUS,Y / SEC / SBC #16 / STA SOSUS,Y / LDX SEVENS,Y / STA SID+&6,X.
+          // 6502: one step off the sustain, into the voice's own byte and into the register.
           _buffer.sustain[voice] = static_cast<std::uint8_t>(_buffer.sustain[voice] - SUSTAIN_STEP);
           _log.Add(static_cast<std::uint8_t>(base + SID_SUSTAIN_RELEASE), _buffer.sustain[voice]);
         }
-        // 6502: LDA SOCNT,X / AND SOVCH,Y / BNE SOUL3 -- otherwise nothing more for this voice.
+        // 6502: the counter masked by the volume rate -- otherwise nothing more for this voice.
       }
-      // 6502: .SOUL3 DEY / BMI P%+5 / JMP SOUL8.
+      // 6502: SOUL3 -- the voice index down, and back to `SOUL8` until it goes negative.
     }
 
-    // 6502: LDA PULSEW / EOR #%00000100 / STA PULSEW -- reached only through SOUL3, see above.
+    // 6502: the pulse width's bit folded -- reached only through `SOUL3`, see above.
     _buffer.pulseWidth = static_cast<std::uint8_t>(_buffer.pulseWidth ^ PULSE_WIDTH_FLIP);
   }
 

@@ -68,7 +68,7 @@ namespace Elite
    * two and the damage flash is 3d-d's -- so 3d-b reads them and 3d-d fills them in.
    *
    * THREE OF THEM ARE NOT DIALS. `ECMP` joined in 3d-d-i -- it is `ECMA`'s other half, whether the
-   * E.C.M. running is ours or somebody else's, and `ECMOF` clears the pair with a single `LDA #0`,
+   * E.C.M. running is ours or somebody else's, and `ECMOF` clears the pair out of a single zero,
    * which is the shape a struct field and a reference parameter between them would have hidden.
    * `LAS2` and `MJ` joined in 3d-d-iii-a because `TTX66` clears the first and `WARP` reads the
    * second, and neither had anywhere else to be: both are one byte of per-flight state with a
@@ -85,7 +85,7 @@ namespace Elite
      * 6502: MULIE -- "this `RESET` came from the title screen", and nothing in `GameLogic` reads it.
      *
      * `TITLE` sets it, calls `RESET`, and clears it again; the only reader in the whole build is
-     * `stopbd`, whose first two instructions are `BIT MULIE / BMI itsoff` -- so the guard exists to
+   * `stopbd`, whose first two instructions test its SIGN and leave -- so the guard exists to
      * stop the title screen's reset from silencing the music it has just started. `stopbd` is
      * phase 5's, which leaves this a byte the port carries and does not act on, the same shape as
      * `ScreenState::hyperspaceEffect`.
@@ -149,10 +149,10 @@ namespace Elite
    * yellow too -- so with the damage flash on, the danger colour alternates every eight passes of
    * the main loop, and with it off the dial is steady red.
    *
-   * ITS SECOND PATH IS SPELLED AS DATA. `BEQ P%+4 / TXA / EQUB &2C / LDA #RED / RTS`: the `&2C` is
-   * `BIT abs`, whose two operand bytes ARE the `LDA #RED` that follows, so falling into it skips
-   * the load and branching past it performs it. One instruction hidden in an addressing mode, and
-   * a port written from a disassembly would emit a read of `$55A9` and be right by accident
+   * ITS SECOND PATH IS SPELLED AS DATA. A branch skips two bytes into an `EQUB &2C`, and the `&2C`
+   * is `BIT abs`, whose two operand bytes ARE the load of RED that follows, so falling into it
+   * skips the load and branching past it performs it. One instruction hidden in an addressing mode,
+   * and a port written from a disassembly would emit a read of `$55A9` and be right by accident
    * (§6.63).
    */
   [[nodiscard]] DangerColours DangerColour(std::uint8_t _mainLoopCounter, std::uint8_t _damageFlash) noexcept;
@@ -160,7 +160,7 @@ namespace Elite
   /*
    * 6502: DILX and DIL -- one bar, sixteen steps wide, and FOUR ENTRY POINTS.
    *
-   * The routine opens with four `LSR A` and then `.DIL`, so where a caller jumps in IS the scale:
+   * The routine opens with four shifts and then `.DIL`, so where a caller jumps in IS the scale:
    * `DILX` divides the reading by sixteen, `DILX+2` by four, `DIL-1` by two, and `DIL` not at all.
    * All four are used, so this takes the shift count rather than pretending there is one routine
    * (§6.63) -- and `DIL-1`, the one that reads like a typo, is the speed bar.
@@ -188,8 +188,9 @@ namespace Elite
    * every other block is blank. Once the lit block is drawn, `Q` is set to 255 so no later block
    * can match, which is a loop exit spelled as data.
    *
-   * The `ADC #&3F` at the end has no `CLC` and does not need one: the only way out of the loop is a
-   * `CPY #30` that did not branch, so the carry is set and the add is 320 rather than 64.
+   * The addition of &3F at the end has no `CLC` and does not need one: the only way out of the loop
+   * is a compare against 30 that did not branch, so the carry is set and the add is 320 rather than
+   * 64.
    */
   /// `_wideValue` is the twin's slot, which the caller derives: the roll has a bit under `alp1 >> 2`
   /// to recover and the pitch has none (Dashboard2x.h). The faithful routine does not read it.
@@ -197,11 +198,11 @@ namespace Elite
                      std::uint8_t _wideValue = 0) noexcept;
 
   /*
-   * 6502: DIALS parts 1 to 4 -- the whole dashboard, and it ends `JMP COMPAS`.
+   * 6502: DIALS parts 1 to 4 -- the whole dashboard, and it ends by jumping into `COMPAS`.
    *
    * One fall-through chain of four files, so the compass is not something the caller does next: it
    * is the last thing `DIALS` does. Part 3 is the energy bars and runs on ONE PASS IN FOUR
-   * (`LDA MCNT / AND #3 / BNE dec27`, and `dec27` is `TT26`'s own `RTS` borrowed as a branch
+   * (the counter masked to two bits, and `dec27` is `TT26`'s own `RTS` borrowed as a branch
    * target), so three passes in four draw the other three parts and the compass alone.
    *
    * Part 3's four energy bars are dealt into `XX12`, the same four zero-page bytes `LL51` writes
@@ -217,8 +218,9 @@ namespace Elite
    * 6502: MSBAR -- set missile indicator X to the colour in Y.
    *
    * A colour cell and not a drawing: the missiles are four character blocks in the second block of
-   * screen RAM and this writes one palette byte. `DEX / TXA / INX / EOR #3` turns missile 1 to 4
-   * into cell 3 down to 0, so they fill from the right.
+   * screen RAM and this writes one palette byte. The index is stepped down, moved across, stepped
+   * back and EORed with 3, which turns missile 1 to 4 into cell 3 down to 0, so they fill from the
+   * right.
    *
    * It leaves Y at zero, which the original's callers rely on and which nothing here does.
    */
@@ -229,9 +231,9 @@ namespace Elite
    *
    * TWO LOOPS AND ONE COUNTER. `.ss` walks X down from four drawing black until it MEETS `NOMSL`,
    * then falls into `.SAL8`, which carries on down the same X drawing green -- so the split point
-   * is the count and neither loop knows how many it will draw. `CPX NOMSL / BEQ SAL8` never fires
-   * for a full rail, because X starts at four and a rail holds four, so the black loop is skipped
-   * entirely; and it never fires for an empty one either, because X reaches zero first.
+   * is the count and neither loop knows how many it will draw. The compare against `NOMSL` never
+   * fires for a full rail, because X starts at four and a rail holds four, so the black loop is
+   * skipped entirely; and it never fires for an empty one either, because X reaches zero first.
    */
   void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles, Picture* _picture = nullptr) noexcept;
 
@@ -253,15 +255,15 @@ namespace Elite
   /*
    * 6502: ABORT2 -- point the leftmost missile at slot X, and recolour its indicator.
    *
-   * `STY MSAR` STORES ZERO, not the colour it was handed: `MSBAR` ends `LDY #0`, and the store
-   * three instructions later reads that rather than the Y the caller passed. So every call clears
-   * "the missile is seeking a lock" whatever colour it sets the light to -- which is a register
-   * side effect surviving a `JSR`, and the reason `SetMissileIndicator` is documented as leaving
-   * Y at zero even though nothing in the port needs it to (§6.68).
+   * THE STORE INTO `MSAR` WRITES ZERO, not the colour it was handed: `MSBAR` ends by zeroing Y, and
+   * the store three instructions later reads that rather than the Y the caller passed. So every
+   * call clears "the missile is seeking a lock" whatever colour it sets the light to -- which is a
+   * register side effect surviving a `JSR`, and the reason `SetMissileIndicator` is documented as
+   * leaving Y at zero even though nothing in the port needs it to (§6.68).
    */
   void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept;
 
-  /// 6502: ABORT -- `LDX #&FF` and then straight into `ABORT2`: no target, so the lock is off.
+  /// 6502: ABORT -- a target of &FF and then straight into `ABORT2`: no target, so the lock is off.
   void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, CellPalette _palette) noexcept;
 
   /// 6502: ECBLB -- toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
@@ -288,9 +290,9 @@ namespace Elite
    * `SOINT` is the only thing that touches the SID, it runs once a frame from `COMIRQ1`, and the
    * platform is what calls it. So `Universe::sound` is the buffer and the port is the TICK.
    *
-   * `PlaySound`'s carry survives the seam and is the reason it answered a `bool`: `NOISE` ends
-   * `SEC / RTS` on the path that gives the effect a voice and `CLC / RTS` on the path that refuses,
-   * and `LASLI`'s opening `DORND` rolls that flag into its own answer (§6.86, §6.99).
+   * `PlaySound`'s carry survives the seam and is the reason it answered a `bool`: `NOISE` ends by
+   * SETTING the carry on the path that gives the effect a voice and clearing it on the path that
+   * refuses, and `LASLI`'s opening `DORND` rolls that flag into its own answer (§6.86, §6.99).
    * `PlaySoundEffect` answers the same `bool` for the same reason.
    */
 
@@ -310,11 +312,11 @@ namespace Elite
    * The counterpart to `StartEcm` and not its mirror image. Starting it sets `ECMA` alone and
    * leaves `ECMP` to the caller; stopping it clears both. And `ECBLB` is a TOGGLE, so this puts
    * the bulb out only because the bulb was lit -- called with the E.C.M. already off it lights it.
-   * The game never does that: `RES2` guards its call with `LDA ECMA / BEQ yu`, and flight loop
+   * The game never does that: `RES2` guards its call on `ECMA` being non-zero, and flight loop
    * part 16 only reaches it once the countdown has run down or the energy has run out.
    *
    * The byte before it is an `RTS` belonging to the routine above, which `NO3` and `SFRMIS` both
-   * branch to as a cheap return -- `BNE ECMOF-1`. Nothing to port, but it means `ECMOF` cannot be
+   * branch to as a cheap return. Nothing to port, but it means `ECMOF` cannot be
    * moved without breaking two routines that never mention it.
    */
   void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, Picture* _picture = nullptr) noexcept;

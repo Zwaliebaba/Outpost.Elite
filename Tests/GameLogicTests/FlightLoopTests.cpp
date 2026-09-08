@@ -50,7 +50,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t mas2 = oracle.Label("MAS2");
-      const std::uint16_t m = oracle.Label("m");
+      const std::uint16_t zeroPageM = oracle.Label("m");
       const std::uint16_t kPercent = oracle.Label("K%");
 
       Cpu6502 cpu = oracle.Fresh();
@@ -79,7 +79,7 @@ namespace GameLogicTests
               cpu.a = static_cast<std::uint8_t>(seedByte);
               cpu.y = static_cast<std::uint8_t>(slot * Elite::SHIP_BLOCK_SIZE);
 
-              const Elite::Testing::RunResult run = cpu.CallSubroutine(viaM ? m : mas2, 500);
+              const Elite::Testing::RunResult run = cpu.CallSubroutine(viaM ? zeroPageM : mas2, 500);
               Assert::IsTrue(run.completed, L"MAS2 returned");
 
               const std::uint8_t ours =
@@ -399,7 +399,7 @@ namespace GameLogicTests
       const std::uint16_t spin = oracle.Label("SPIN");
       const std::uint16_t spin2 = oracle.Label("SPIN2");
       const std::uint16_t sfs1 = oracle.Label("SFS1");
-      const std::uint16_t cnt = oracle.Label("CNT");
+      const std::uint16_t zeroPageCnt = oracle.Label("CNT");
       const std::uint16_t xx0 = oracle.Label("XX0");
       const std::uint16_t rand = oracle.Label("RAND");
 
@@ -442,7 +442,7 @@ namespace GameLogicTests
           // which only a sweep that varies it can see.
           const bool carryIn = (count & 1u) != 0u;
           cpu.ClearTrapHits();
-          cpu.memory[cnt] = 0xEEu;
+          cpu.memory[zeroPageCnt] = 0xEEu;
           cpu.a = static_cast<std::uint8_t>(count);
           cpu.x = type;
           cpu.z = (count == 0u); // what the caller's own `AND` has just left behind
@@ -489,7 +489,7 @@ namespace GameLogicTests
             }
 
             cpu.ClearTrapHits();
-            cpu.memory[cnt] = 0xEEu;
+            cpu.memory[zeroPageCnt] = 0xEEu;
             cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
             cpu.y = type;
@@ -788,7 +788,7 @@ namespace GameLogicTests
     struct LoopWhere
     {
       std::uint16_t jstx, jsty, autoByte, damp, djd, jstk;
-      std::uint16_t alpha, alp2Next, bet2, bet2Next, delt4;
+      std::uint16_t rollRate, rollSignFlipped, pitchSign, pitchSignFlipped, speedTimes4Low;
       std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
@@ -804,11 +804,11 @@ namespace GameLogicTests
         damp = _oracle.Label("DAMP");
         djd = _oracle.Label("DJD");
         jstk = _oracle.Label("JSTK");
-        alpha = _oracle.Label("ALPHA");
-        alp2Next = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
-        bet2 = _oracle.Label("BET2");
-        bet2Next = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
-        delt4 = _oracle.Label("DELT4");
+        rollRate = _oracle.Label("ALPHA");
+        rollSignFlipped = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
+        pitchSign = _oracle.Label("BET2");
+        pitchSignFlipped = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
+        speedTimes4Low = _oracle.Label("DELT4");
         las = _oracle.Label("LAS");
         lasct = _oracle.Label("LASCT");
         lasx = _oracle.Label("LASX");
@@ -916,8 +916,8 @@ namespace GameLogicTests
         universe.status.missileArmed = 0u;
         universe.status.ecmOurs = 0u;
         universe.bubble.missileTarget = 0xFFu;
-        universe.flight.delt4 = 0u;
-        universe.flight.delt4Next = 0u;
+        universe.flight.speedTimes4Low = 0u;
+        universe.flight.speedTimes4High = 0u;
         universe.control.roll = 128u;
         universe.control.pitch = 128u;
       }
@@ -940,12 +940,12 @@ namespace GameLogicTests
       _cpu.memory[_loop.djd] = _frame.universe.options.recentreDisabled;
       _cpu.memory[_loop.jstk] = _frame.universe.options.joystick;
 
-      _cpu.memory[_loop.alpha] = universe.flight.alpha;
-      _cpu.memory[_loop.alp2Next] = universe.flight.alp2Next;
-      _cpu.memory[_loop.bet2] = universe.flight.bet2;
-      _cpu.memory[_loop.bet2Next] = universe.flight.bet2Next;
-      _cpu.memory[_loop.delt4] = universe.flight.delt4;
-      _cpu.memory[static_cast<std::uint16_t>(_loop.delt4 + 1u)] = universe.flight.delt4Next;
+      _cpu.memory[_loop.rollRate] = universe.flight.rollRate;
+      _cpu.memory[_loop.rollSignFlipped] = universe.flight.rollSignFlipped;
+      _cpu.memory[_loop.pitchSign] = universe.flight.pitchSign;
+      _cpu.memory[_loop.pitchSignFlipped] = universe.flight.pitchSignFlipped;
+      _cpu.memory[_loop.speedTimes4Low] = universe.flight.speedTimes4Low;
+      _cpu.memory[static_cast<std::uint16_t>(_loop.speedTimes4Low + 1u)] = universe.flight.speedTimes4High;
 
       _cpu.memory[_loop.las] = universe.status.laserPower;
       _cpu.memory[_loop.lasct] = universe.status.laserCount;
@@ -970,12 +970,12 @@ namespace GameLogicTests
       same(_loop.jsty, _frame.universe.control.pitch, L"JSTY");
       same(_loop.autoByte, _frame.universe.control.dockingComputer, L"auto");
 
-      same(_loop.alpha, universe.flight.alpha, L"ALPHA");
-      same(_loop.alp2Next, universe.flight.alp2Next, L"ALP2+1");
-      same(_loop.bet2, universe.flight.bet2, L"BET2");
-      same(_loop.bet2Next, universe.flight.bet2Next, L"BET2+1");
-      same(_loop.delt4, universe.flight.delt4, L"DELT4");
-      same(static_cast<std::uint16_t>(_loop.delt4 + 1u), universe.flight.delt4Next, L"DELT4+1");
+      same(_loop.rollRate, universe.flight.rollRate, L"ALPHA");
+      same(_loop.rollSignFlipped, universe.flight.rollSignFlipped, L"ALP2+1");
+      same(_loop.pitchSign, universe.flight.pitchSign, L"BET2");
+      same(_loop.pitchSignFlipped, universe.flight.pitchSignFlipped, L"BET2+1");
+      same(_loop.speedTimes4Low, universe.flight.speedTimes4Low, L"DELT4");
+      same(static_cast<std::uint16_t>(_loop.speedTimes4Low + 1u), universe.flight.speedTimes4High, L"DELT4+1");
 
       same(_loop.las, universe.status.laserPower, L"LAS");
       same(_loop.lasct, universe.status.laserCount, L"LASCT");
@@ -1403,7 +1403,7 @@ namespace GameLogicTests
         for (std::uint8_t keys = 0; keys < 4u; ++keys)
         {
           Frame frame(speed + keys * 101u);
-          frame.universe.flight.delta = speed;
+          frame.universe.flight.speed = speed;
           frame.universe.keys[Elite::KEY_SPEED_UP] = ((keys & 1u) != 0u) ? 0xFFu : 0u;
           frame.universe.keys[Elite::KEY_SLOW_DOWN] = ((keys & 2u) != 0u) ? 0xFFu : 0u;
 
@@ -1891,7 +1891,7 @@ namespace GameLogicTests
         std::uint8_t nose;  ///< 6502: INWK+14 -- nosev_z_hi, against 214
         Planet planet;      ///< 6502: XX15+2 after `SPS1`, against 89
         std::uint8_t roof;  ///< 6502: INWK+16 -- roofv_x_hi, against 80 once the sign is masked
-        std::uint8_t delta; ///< 6502: DELTA -- five and over turns a failed dock into `JMP DEATH`
+        std::uint8_t speed; ///< 6502: DELTA -- five and over turns a failed dock into `JMP DEATH`
         Elite::LoopOutcome exit;
       };
 
@@ -1953,16 +1953,16 @@ namespace GameLogicTests
         station.roof.x.hi = item.roof;
         station.side.y.hi = 96u; // a third axis, so the blueprint is projected from a real frame
         station.energy = 200u;
-        station.newb = item.hostile ? Elite::Mask(Elite::NewbBit::Hostile) : std::uint8_t{0};
+        station.traits = item.hostile ? Elite::Mask(Elite::TraitBit::Hostile) : std::uint8_t{0};
         // 6502: LDA #LO(LSO) / STA INWK+33 -- `NWSPS` hands the station the SUN's heap (§6.112).
         station.heap = Elite::HeapOffset::FromAddress(Elite::SUN_HEAP_ADDRESS);
 
-        universe.flight.delta = item.delta;
+        universe.flight.speed = item.speed;
         universe.flight.mainLoopCounter = 0u;
-        universe.flight.alpha = 0u;
-        universe.flight.alp2Next = 0u;
-        universe.flight.bet2 = 0u;
-        universe.flight.bet2Next = 0u;
+        universe.flight.rollRate = 0u;
+        universe.flight.rollSignFlipped = 0u;
+        universe.flight.pitchSign = 0u;
+        universe.flight.pitchSignFlipped = 0u;
 
         const std::wstring where = WidenText(std::string("ISDK (") + item.what + ")");
         const Elite::LoopOutcome outcome = CompareFrames(frame, oracle, at, loop, where, Reach::Ships);
@@ -2095,7 +2095,7 @@ namespace GameLogicTests
           frame.universe.commander.fuel.tenths = 40u;
           frame.universe.commander.tribbles.lo = 0x40u;
           frame.universe.commander.tribbles.hi = 0x21u;
-          frame.universe.flight.delt4Next = 0xC0u;
+          frame.universe.flight.speedTimes4High = 0xC0u;
 
           const std::wstring where =
             WidenText("MA33 (sun at " + std::to_string(distance) + (scoops != 0u ? ", scoops fitted)" : ", no scoops)"));
@@ -2184,7 +2184,7 @@ namespace GameLogicTests
            * -- it is scratch, and M2-c took all of it but this byte and one other -- so the sweep
            * mirrors it by hand, the way `CompareFrames` mirrors `RAND`.
            */
-          frame.universe.math.q = static_cast<std::uint8_t>(seeded);
+          frame.universe.math.lastDivisor = static_cast<std::uint8_t>(seeded);
 
           const std::wstring where = WidenText("MA23 (planet at " + std::to_string(distance) + ", Q " + std::to_string(seeded) + ")");
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail,

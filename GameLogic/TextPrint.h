@@ -72,12 +72,12 @@ namespace Elite
    *
    * It carried one method, `ClearScreen`, and the header said it was "the one thing CHPR does that
    * the library still cannot do for itself" because `TT66` reaches the dashboard, the sprites, the
-   * border and the colour bands. THAT WAS THE WRONG ROUTINE. `clss` is `JSR TT66simp`, and
+   * border and the colour bands. THAT WAS THE WRONG ROUTINE. `clss` calls `TT66simp`, and
    * `TT66simp` is a bitmap wipe of rows 1 to 23 and a cursor home -- `ClearTextArea` above, ported
    * and compared against the shipped routine since slice 2a. It is §6.73 for the eleventh time and
    * the defect it was hiding is in §8.
    *
-   * `Beep` WAS THE OTHER AND WENT IN M3-b-2b. Character 7 is `R5`, which is `JSR BEEP`, and `BEEP`
+   * `Beep` WAS THE OTHER AND WENT IN M3-b-2b. Character 7 is `R5`, which calls `BEEP`, and `BEEP`
    * has been `Elite::Beep` over a `SoundBuffer` since slice 5a -- so the printer takes the buffer
    * and rings the bell itself. Every caller on this side drops the carry it answers with, which is
    * why the call discards it.
@@ -104,11 +104,11 @@ namespace Elite
    * point is printed at all -- pr6 clears it, pr5 leaves it as the caller had it. `_digits` is `U`,
    * how many digits fall after the decimal point.
    *
-   * RETURNS WHAT IT LEAVES IN `U`. The routine rewrites the byte as it works (`LDA #11 / SEC / SBC U
-   * / STA U / INC U`), and `SV1` prints the competition number with no `U` of its own -- so the
-   * width that print gets is whatever the last `BPRNT` left, and `SaveScreen` carries the byte for
-   * that one reader. `TT11` sets `U` before every other print, and the port's copies of those are
-   * their own locals, which is a gap this comment names and M2-c did not close (§8, M2-c).
+   * RETURNS WHAT IT LEAVES IN `U`. The routine rewrites the byte as it works -- eleven less `U`,
+   * stored back and stepped up -- and `SV1` prints the competition number with no `U` of its own,
+   * so width that print gets is whatever the last `BPRNT` left, and `SaveScreen` carries the byte
+   * for that one reader. `TT11` sets `U` before every other print, and the port's copies of those
+   * are their own locals, which is a gap this comment names and M2-c did not close (§8, M2-c).
    */
   [[nodiscard]] std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept;
 
@@ -150,13 +150,13 @@ namespace Elite
    * flight state and phase 3's. So this is the half of the routine that GameLogic owns, and the
    * seam a screen is entered through (`TradeScreenEffects::ClearToView`) is this plus that.
    *
-   * QQ17 IS WRITTEN TWICE AND THE SECOND ONE WINS. Near the top the routine does `LDA #128 / STA
-   * QQ17 / STA DTW2`, and its LAST five bytes are `LDX #1 / STX XC / STX YC / DEX / STX QQ17` -- so
-   * the state a caller sees is QQ17 = 0, ALL CAPS, while DTW2 keeps the 128. Reading the first
-   * store and stopping there is an easy mistake to make and this port nearly made it: the upstream
-   * source packs the routine across three numbered lines and the tail is on the third.
-   * `TheScreenSeamsMatchTheShippedRoutines` runs the shipped TT66 and compares every byte of text
-   * state against this, which is the only reason the question is settled rather than argued.
+   * QQ17 IS WRITTEN TWICE AND THE SECOND ONE WINS. Near the top the routine puts 128 into both
+   * `QQ17` and `DTW2`, and its LAST five bytes set the cursor to (1, 1) and step X down to zero
+   * into `QQ17` -- so the state a caller sees is QQ17 = 0, ALL CAPS, while DTW2 keeps the 128.
+   * Reading the first store and stopping there is an easy mistake to make and this port nearly made
+   * it: the upstream source packs the routine across three numbered lines and the tail is on the
+   * third. `TheScreenSeamsMatchTheShippedRoutines` runs the shipped TT66 and compares every byte of
+   * text state against this, which is the only reason the question is settled rather than argued.
    */
   void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept;
 
@@ -172,7 +172,7 @@ namespace Elite
    * extended printer that no sentence is in progress, and the message CLYNS is clearing for starts
    * one.
    *
-   * THIS USED TO BE `CLYNS2` UNDER `CLYNS`'S NAME. `CLYNS` opens `LDA #0 / STA DLY / STA de` and
+   * THIS USED TO BE `CLYNS2` UNDER `CLYNS`'S NAME. `CLYNS` opens by zeroing `DLY` and `de` and
    * then falls into `CLYNS2`; the port implemented the second and called it the first, because when
    * it was written the message counters had nowhere to live. Nothing in the library calls `CLYNS2`
    * -- it is a label with no callers -- so every real caller wanted the two stores, and slice 3d-c
@@ -187,7 +187,7 @@ namespace Elite
                         MessageState& _message,
                         Picture* _picture = nullptr, TextLayout _layout = SPACE_VIEW_LAYOUT) noexcept;
 
-  /// 6502: LDA #21 / STA YC -- the row CLYNS leaves the cursor on, which is the top of the three it
+  /// 6502: the row CLYNS leaves the cursor on, which is the top of the three it
   /// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.
   inline constexpr std::uint8_t MESSAGE_ROW = 21;
 
@@ -289,9 +289,9 @@ namespace Elite
     std::uint8_t Print(std::uint8_t _character) noexcept;
 
     /*
-     * The screen is where DASC sends a character it is not buffering, so this is a TextSink for
-     * the same reason DASC is: `JMP CHPR` is the last instruction on that path. Handing one of
-     * these to a CharacterPrinter wires the two text systems to the canvas exactly as the game
+     * The screen is where DASC sends a character it is not buffering, so this is a TextSink for the
+     * same reason DASC is: the jump into `CHPR` is the last instruction on that path. Handing one
+     * of these to a CharacterPrinter wires the two text systems to the canvas exactly as the game
      * wires them.
      */
     void Put(std::uint8_t _character) noexcept override
@@ -313,7 +313,7 @@ namespace Elite
 
     Canvas& m_canvas;
     TextState& m_state;
-    SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
+    SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s call to BEEP fills
 
     Picture* m_picture = nullptr;        ///< the second surface, or none -- see `AttachPicture`
     const TextLayout* m_layout = nullptr; ///< the screen's layout, read and never written
@@ -344,18 +344,18 @@ namespace Elite
    * round.
    */
 
-  /// 6502: INCYC -- INC YC. The whole routine.
+  /// 6502: INCYC -- one step down the rows. The whole routine.
   void MoveCursorDown(TextState& _text) noexcept;
 
   /*
    * 6502: TT60 -- and it is a chain of four routines, each falling into the next.
    *
-   * TT60 (`JSR TT27`) falls into TTX69 (`JSR INCYC`), which falls into TT69 (set sentence case),
-   * which falls into TT67 (print a newline). The assembled addresses are 27268, 27271, 27274 and
-   * 27278 -- three bytes, three bytes, four bytes, with no RTS anywhere in them. So `JSR TT60`
-   * prints a token, moves the cursor down a row, switches to sentence case AND prints a newline,
-   * which is two vertical movements rather than one and is what puts the blank line under the
-   * inventory screen's title.
+   * TT60 prints a token and falls into TTX69, which moves the cursor down and falls into TT69,
+   * which sets sentence case and falls into TT67, which prints a newline. The assembled addresses
+   * are 27268, 27271, 27274 and 27278 -- three bytes, three bytes, four bytes, with no RTS anywhere
+   * in them. So a call to `TT60` prints a token, moves the cursor down a row, switches to sentence
+   * case AND prints a newline, which is two vertical movements rather than one and is what puts the
+   * blank line under the inventory screen's title.
    */
   void PrintTitleLine(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 
@@ -363,7 +363,7 @@ namespace Elite
   /// next row, sets sentence case and prints a newline, so it is TWO vertical movements.
   void MoveDownAndNewline(TokenPrinter& _printer, TextState& _text) noexcept;
 
-  /// 6502: plf2 -- JSR plf / LDA #6 / JMP DOXC. A token, a newline, then indent to column six.
+  /// 6502: plf2 -- `plf` and then an indent to column six. A token, a newline, then the indent.
   void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 
 } // namespace Elite

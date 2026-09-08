@@ -218,7 +218,7 @@ namespace GameLogicTests
     struct MissionWhere
     {
       std::uint16_t pause, pas1, pause2, bris, mt27, mt28, rdkey, detok, delay, gcnt, xc, yc, ll9, dovdu19, nosprites;
-      std::uint16_t alpha, alp2Next, bet2, bet2Next, typeByte, xsav, inf, kPercent;
+      std::uint16_t rollRate, rollSignFlipped, pitchSign, pitchSignFlipped, typeByte, xsav, inf, kPercent;
       std::uint16_t brief, brief2, brief3, brp, debrief, debrief2, tbrief, bay, yesno, tp, mcnt, slsp;
 
       explicit MissionWhere(const OracleImage& _oracle)
@@ -246,10 +246,10 @@ namespace GameLogicTests
          * rotation rates, the type of the ship being moved, the slot it came from, and `INF`,
          * which is the pointer `LL9` part 1 writes two bytes of the block through.
          */
-        alpha = _oracle.Label("ALPHA");
-        alp2Next = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
-        bet2 = _oracle.Label("BET2");
-        bet2Next = static_cast<std::uint16_t>(bet2 + 1u);
+        rollRate = _oracle.Label("ALPHA");
+        rollSignFlipped = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
+        pitchSign = _oracle.Label("BET2");
+        pitchSignFlipped = static_cast<std::uint16_t>(pitchSign + 1u);
         typeByte = _oracle.Label("TYPE");
         xsav = _oracle.Label("XSAV");
         inf = _oracle.Label("INF");
@@ -358,17 +358,17 @@ namespace GameLogicTests
       {
         _cpu.memory[address] = _universe.universe.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
-      _cpu.memory[_at.lsp] = _universe.universe.heaps.lsp;
+      _cpu.memory[_at.ballHeapTop] = _universe.universe.heaps.ballHeapTop;
 
       // 6502: SLSP -- the bottom of the ship line heap, which `NWSHP` allocates downwards from.
       _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() & 0xFFu);
       _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] =
         static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() >> 8);
 
-      _cpu.memory[_to.alpha] = _universe.universe.flight.alpha;
-      _cpu.memory[_to.alp2Next] = _universe.universe.flight.alp2Next;
-      _cpu.memory[_to.bet2] = _universe.universe.flight.bet2;
-      _cpu.memory[_to.bet2Next] = _universe.universe.flight.bet2Next;
+      _cpu.memory[_to.rollRate] = _universe.universe.flight.rollRate;
+      _cpu.memory[_to.rollSignFlipped] = _universe.universe.flight.rollSignFlipped;
+      _cpu.memory[_to.pitchSign] = _universe.universe.flight.pitchSign;
+      _cpu.memory[_to.pitchSignFlipped] = _universe.universe.flight.pitchSignFlipped;
       _cpu.memory[_to.typeByte] = Elite::Byte(_universe.universe.flight.type);
       _cpu.memory[_to.xsav] = _slot;
 

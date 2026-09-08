@@ -60,9 +60,9 @@ namespace GameLogicTests
     /// Every zero-page byte the two routines read or write, plus the bitmap base.
     struct Labels
     {
-      std::uint16_t inwk = 0, type = 0, qq11 = 0, col = 0, x1 = 0, y1 = 0, x2 = 0, sc = 0;
-      std::uint16_t comx = 0, comy = 0, comc = 0, k3 = 0, kPercent = 0, frin = 0, many = 0;
-      std::uint16_t p = 0, q = 0, t = 0, screen = 0;
+      std::uint16_t inwk = 0, type = 0, qq11 = 0, col = 0, x1 = 0, y1 = 0, x2 = 0, screenPointer = 0;
+      std::uint16_t comx = 0, comy = 0, comc = 0, zeroPageK3 = 0, kPercent = 0, frin = 0, many = 0;
+      std::uint16_t zeroPageP = 0, zeroPageQ = 0, zeroPageT = 0, screen = 0;
 
       explicit Labels(const OracleImage& _oracle)
       {
@@ -73,17 +73,17 @@ namespace GameLogicTests
         x1 = _oracle.Label("X1");
         y1 = _oracle.Label("Y1");
         x2 = _oracle.Label("X2");
-        sc = _oracle.Label("SC");
+        screenPointer = _oracle.Label("SC");
         comx = _oracle.Label("COMX");
         comy = _oracle.Label("COMY");
         comc = _oracle.Label("COMC");
-        k3 = _oracle.Label("K3");
+        zeroPageK3 = _oracle.Label("K3");
         kPercent = _oracle.Label("K%");
         frin = _oracle.Label("FRIN");
         many = _oracle.Label("MANY");
-        p = _oracle.Label("P");
-        q = _oracle.Label("Q");
-        t = _oracle.Label("T");
+        zeroPageP = _oracle.Label("P");
+        zeroPageQ = _oracle.Label("Q");
+        zeroPageT = _oracle.Label("T");
 
         // 6502: SCBASE, an assembler constant rather than a label -- ylookup's first entry is it
         // plus the space view's four-cell left margin.
@@ -505,7 +505,7 @@ namespace GameLogicTests
 
               for (std::size_t byte = 0; byte < 10u; ++byte)
               {
-                cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)] = axes[byte];
+                cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)] = axes[byte];
               }
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(tas2, 20'000);
@@ -519,13 +519,13 @@ namespace GameLogicTests
               // M2-c, so the scribble above stays where the port put it and the original's is not compared.
               for (std::size_t byte = 0; byte < 9u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], axes[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)], axes[byte],
                                  (where + L": K3+" + std::to_wstring(byte)).c_str());
               }
               Assert::AreEqual(cpu.memory[at.x1], normalised.vector.x, (where + L": XX15").c_str());
               Assert::AreEqual(cpu.memory[at.y1], normalised.vector.y, (where + L": XX15+1").c_str());
               Assert::AreEqual(cpu.memory[at.x2], normalised.vector.z, (where + L": XX15+2").c_str());
-              Assert::AreEqual(cpu.memory[at.q], normalised.length, (where + L": Q, the length NORM leaves").c_str());
+              Assert::AreEqual(cpu.memory[at.zeroPageQ], normalised.length, (where + L": Q, the length NORM leaves").c_str());
               ++compared;
             }
           }
@@ -563,7 +563,7 @@ namespace GameLogicTests
         {
           cpu.a = static_cast<std::uint8_t>(value);
           cpu.c = carryIn;
-          cpu.memory[at.q] = 0x5Au; // SPS2 sets Q itself
+          cpu.memory[at.zeroPageQ] = 0x5Au; // SPS2 sets Q itself
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(sps2, 20'000);
           Assert::IsTrue(run.completed, L"SPS2 returned");
@@ -628,7 +628,7 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < 10u; ++byte)
         {
           axes[byte] = static_cast<std::uint8_t>(0xA5u + byte);
-          cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)] = axes[byte];
+          cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)] = axes[byte];
         }
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(sps1, 20'000);
@@ -639,7 +639,7 @@ namespace GameLogicTests
         const std::wstring where = Widen("SPS1 seed " + std::to_string(seed));
         for (std::size_t byte = 0; byte < 9u; ++byte) // K3+9 is TAS2's local since M2-c
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], axes[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)], axes[byte],
                            (where + L": K3+" + std::to_wstring(byte)).c_str());
         }
         Assert::AreEqual(cpu.memory[at.x1], towards.x, (where + L": XX15").c_str());
@@ -692,7 +692,7 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < 10u; ++byte)
         {
           axes[byte] = static_cast<std::uint8_t>(0x3Cu + byte);
-          cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)] = axes[byte];
+          cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)] = axes[byte];
         }
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(sps4, 20'000);
@@ -703,7 +703,7 @@ namespace GameLogicTests
         const std::wstring where = Widen("SPS4 seed " + std::to_string(seed));
         for (std::size_t byte = 0; byte < 9u; ++byte) // K3+9 is TAS2's local since M2-c
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], axes[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + byte)], axes[byte],
                            (where + L": K3+" + std::to_wstring(byte)).c_str());
         }
         Assert::AreEqual(cpu.memory[at.x1], towards.x, (where + L": XX15").c_str());

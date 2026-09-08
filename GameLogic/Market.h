@@ -138,12 +138,11 @@ namespace Elite
   /*
    * 6502: BAD -- what the hold is worth in trouble, from three of its seventeen slots.
    *
-   * `LDA QQ20+3 / CLC / ADC QQ20+6 / ASL A / ADC QQ20+10`: slaves and narcotics together,
-   * DOUBLED, and then firearms at face value. So a tonne of slaves costs twice what a tonne of
-   * firearms does, and the doubling is a shift of the sum rather than two multiplications --
-   * which also means it wraps at 128 rather than saturating, and a hold with 128 tonnes of
-   * narcotics in it would come out innocent. The hold cannot carry that much, so the wrap is
-   * unreachable.
+   * Slaves and narcotics are added together and the SUM is doubled, then firearms are added at face
+   * value. So a tonne of slaves costs twice what a tonne of firearms does, and the doubling is a
+   * shift of the sum rather than two multiplications -- which also means it wraps at 128 rather
+   * than saturating, and a hold with 128 tonnes of narcotics in it would come out innocent. The
+   * hold cannot carry that much, so the wrap is unreachable.
    *
    * `TT110` ORs the answer into `FIST` on every launch, so the fine is levied by leaving the
    * station rather than by being scanned.
@@ -194,20 +193,20 @@ namespace Elite
   /*
    * What one keystroke did to a number the player is typing.
    *
-   * 6502: gnum's exits -- and there are FOUR labels for six outcomes, which is why this enum has
-   * six entries. `OUT` is the only way out of the number-building path, and it begins `LDA #&10 /
-   * STA COL2 / LDA R / RTS`: neither LDA nor STA touches the carry, so the carry a caller reads is
-   * whichever comparison branched to OUT.
+   * 6502: gnum's exits -- and there are FOUR labels for six outcomes, which is why this enum has six
+   * entries. `OUT` is the only way out of the number-building path, and it restores the colour and
+   * loads the value before returning: neither the load nor the store touches the carry, so the carry
+   * a caller reads is whichever comparison branched to `OUT`.
    *
-   *   BCC OUT   (the key was below '0')      carry CLEAR -- the number is finished
-   *   BCS OUT   (the value reached 26)       carry SET   -- too big
-   *   BCS OUT   (the value passed QQ25)      carry SET   -- too big
-   *   NWDAV1/3  ("Y" or "N")                 carry CLEAR, because JSR TT26 exits CLC
-   *   falling out of the twelve-key loop     carry CLEAR, same reason
+   *   the key was below '0'                     carry CLEAR -- the number is finished
+   *   the value reached 26                      carry SET   -- too big
+   *   the value passed `QQ25`                   carry SET   -- too big
+   *   NWDAV1/3  ("Y" or "N")                    carry CLEAR, because `TT26` exits with it clear
+   *   falling out of the twelve-key loop        carry CLEAR, same reason
    *
-   * That distinction is load-bearing: the buy screen's `JSR gnum / BCS TQ4` re-asks for a quantity
-   * on a set carry and accepts the number on a clear one. Reporting one `Complete` for both would
-   * give a port that silently accepts a purchase the original refuses.
+   * That distinction is load-bearing: the buy screen re-asks for a quantity on a SET carry and
+   * accepts the number on a clear one. Reporting one `Complete` for both would give a port that
+   * silently accepts a purchase the original refuses.
    */
   enum class DigitResult
   {
@@ -225,19 +224,18 @@ namespace Elite
    * The loop around this is a keyboard read, so the loop belongs with the key dispatch and the step
    * is what can be compared. Four things about the step are worth knowing.
    *
-   * The multiply by ten is `ASL A / STA T / ASL A / ASL A / ADC T / ADC S` -- twice, kept, times
-   * eight, add the kept copy back, add the digit -- and NEITHER addition has a `CLC`. Each takes
-   * the carry the shift or addition before it produced.
+   * The multiply by ten is a doubling, a kept copy, two more doublings, the copy added back and
+   * then the digit -- and NEITHER addition has a `CLC`. Each takes the carry the shift or addition
+   * before it produced.
    *
    * "Y" and "N" are accepted whenever the value so far is ZERO, not only on the first keystroke.
-   * So typing 0 and then Y is accepted, because `LDX R / BNE` cannot tell them apart.
+   * So typing 0 and then Y is accepted, because the test for zero cannot tell them apart.
    *
    * A value of 26 or more refuses further digits. That is a cap on the NUMBER OF DIGITS by
    * proxy -- three digits cannot be typed past 26 -- rather than a cap on the quantity.
    *
-   * And the finished number may EXCEED what is available: `CMP QQ25 / BEQ TT226 / BCS OUT` lets an
-   * equal value carry on and a larger one finish, so the caller has to check. It is the buy screen
-   * that says no, not this.
+   * And the finished number may EXCEED what is available: an EQUAL value carries on and a larger
+   * one finishes, so the caller has to check. It is the buy screen that says no, not this.
    */
   /*
    * 6502: R -- the number typed so far, and what the key did to it (M5-a-3).
@@ -267,7 +265,7 @@ namespace Elite
    * TypeDigit above is one step of this; here is the loop around it. Three things it owns rather
    * than the step:
    *
-   * TWELVE keys, from `LDX #12 / STX T1`. Twelve accepted digits in a row fall out of the loop into
+   * TWELVE keys, from a counter of twelve. Twelve accepted digits in a row fall out of the loop into
    * OUT, so the number ends without the player pressing anything to end it. Since a value of 26 or
    * more refuses further digits, the twelfth key is only reachable by typing digits that keep the
    * value under 26 -- zeros, in practice.
@@ -275,9 +273,9 @@ namespace Elite
    * THE ECHO. `TT226` prints the key through TT26, and so do the "Y" and "N" paths, so what the
    * player typed appears on screen. The exits that end the number do not echo.
    *
-   * THE COLOUR. `LDA #MAG2 / STA COL2` on entry and `LDA #&10 / STA COL2` at OUT, so the digits are
-   * typed in purple and the screen goes back to white afterwards -- and it does that on EVERY exit,
-   * including the ones that abandon the number.
+   * THE COLOUR. Purple on entry and white at `OUT`, so the digits are typed in purple and the
+   * screen goes back to white afterwards -- and it does that on EVERY exit, including the ones that
+   * abandon the number.
    */
   [[nodiscard]] NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept;
 

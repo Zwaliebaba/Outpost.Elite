@@ -78,14 +78,14 @@ namespace Elite::Testing
         offset += block;
       }
 
-      std::uint32_t a = 1;
-      std::uint32_t b = 0;
+      std::uint32_t sum = 1;
+      std::uint32_t sumOfSums = 0;
       for (const std::uint8_t byte : _raw)
       {
-        a = (a + byte) % 65521;
-        b = (b + a) % 65521;
+        sum = (sum + byte) % 65521;
+        sumOfSums = (sumOfSums + sum) % 65521;
       }
-      AppendBigEndian(out, (b << 16) | a);
+      AppendBigEndian(out, (sumOfSums << 16) | sum);
       return out;
     }
 

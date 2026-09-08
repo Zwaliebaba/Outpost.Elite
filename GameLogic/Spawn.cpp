@@ -15,7 +15,7 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDY #5 / LDA (XX0),Y -- how many bytes of line heap a type needs. Through the table
+    /// 6502: byte 5 of the blueprint -- how many bytes of line heap a type needs. Through the table
     /// as it stands rather than the assembled one, because the station's entry is written (`NWSPS`).
     [[nodiscard]] std::uint8_t HeapSizeFor(const Bubble& _bubble, ShipType _type) noexcept
     {
@@ -26,13 +26,13 @@ namespace Elite
 
   void KillShip(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept
   {
-    // 6502: STX XX4 / LDA MSTG / CMP XX4 / BNE KS5 -- the player's missile was chasing this one,
-    // so it is unlocked and the player told.
+    // 6502: the slot compared against `MSTG` -- the player's missile was chasing this one, so it
+    // is unlocked and the player told.
     if (_universe.bubble.missileTarget == _slot)
     {
-      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: JSR ABORT with GREEN2 -- the indicator's own green
+      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: ABORT with GREEN2 -- the indicator's own green
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 200,
-                  _universe.view, &_universe.picture); // 6502: LDA #200 / JSR MESS
+                  _universe.view, &_universe.picture); // 6502: MESS with token 200
     }
 
     const ShipType type = TypeOf(_universe.bubble.slots[_slot]);
@@ -48,22 +48,22 @@ namespace Elite
       ClearShip(_universe.work);
       ClearSunHeap(_universe.heaps);
 
-      // 6502: STA FRIN+1 / STA SSPR, both with the zero `FLFLLS` left in A -- and `SSPR` is
-      // `MANY+SST`, so this one store is what takes the station out of the type counts (§6.58).
+      // 6502: both stores take the zero `FLFLLS` left in the accumulator -- and `SSPR` is
+      // `MANY+SST`, so the second is what takes the station out of the type counts (§6.58).
       _universe.bubble.slots[1] = 0;
       _universe.bubble.Count(ShipType::Station) = 0;
       ToggleStationIndicator(_universe.canvas, &_universe.picture);
 
-      // 6502: LDA #129 / JSR NWSHP -- and `XX0` is passed rather than kept locally even though this
-      // call cannot reach the store: the type is negative, so `BMI NW2` jumps past it. Passing it
+      // 6502: NWSHP with a sun -- and `XX0` is passed rather than kept locally even though this
+      // call cannot reach the store: the type is negative, so the branch jumps past it. Passing it
       // is what stops the next caller of this path from inheriting the bug `NWSPS` exposed.
       _universe.work.y.sgn = 6;
       (void)AddShip(_universe.bubble, _universe.work, ShipType::Sun, _universe.flight.blueprint);
       return;
     }
 
-    // 6502: CPX #CON / BNE lll -- killing the Constrictor is the end of the first mission, and it
-    // is scored as 256 kills rather than one.
+    // 6502: killing the Constrictor is the end of the first mission, and it is scored as 256
+    // kills rather than one.
     if (type == ShipType::Constrictor)
     {
       _universe.commander.missionProgress = static_cast<std::uint8_t>(_universe.commander.missionProgress | 0x02u);
@@ -77,22 +77,21 @@ namespace Elite
       --_universe.bubble.junk;
     }
 
-    // 6502: KS7 -- DEC MANY,X.
+    // 6502: KS7 -- the type's own count steps down.
     if (Byte(type) < _universe.bubble.counts.size())
     {
       --_universe.bubble.counts[Byte(type)];
     }
 
     /*
-     * 6502: LDY #5 / LDA (XX0),Y / LDY #33 / CLC / ADC (INF),Y / STA P / INY / LDA (INF),Y /
-     * ADC #0 / STA P+1.
+     * 6502: the dead ship's heap pointer plus its own size, as a sixteen-bit addition into `P`.
      *
      * `P(1 0)` starts at the TOP of the dead ship's heap block -- its own pointer plus its own
      * size -- and comes down by each surviving ship's size in turn. So it is always pointing at
      * where the next ship's heap belongs, and when the walk ends it is the new `SLSP`.
      */
-    // 6502: LDY #33 / LDA (INF),Y / CLC / ADC T / STA P / INY / LDA (INF),Y / ADC #0 / STA P+1 --
-    // the top of the dead ship's run, which is sixteen-bit addition in two bytes and one here.
+    // 6502: the top of the dead ship's run, which is a sixteen-bit addition in two bytes there
+    // and one here.
     HeapOffset top = _universe.bubble.blocks[_slot].heap.Byte(HeapSizeFor(_universe.bubble, type));
 
     // 6502: KSL1 -- every slot above the dead one comes down by one, and its heap with it.
@@ -102,7 +101,7 @@ namespace Elite
       _universe.bubble.slots[into] = Byte(moved);
       if (moved == ShipType::None)
       {
-        break; // 6502: BNE P%+5 / JMP KS2 -- the end of the list
+        break; // 6502: KS2 -- the end of the list
       }
 
       const std::uint8_t size = HeapSizeFor(_universe.bubble, moved);
@@ -120,8 +119,8 @@ namespace Elite
       destination = source;
       destination.heap = top;
 
-      // 6502: KSL3 -- LDY T / DEY / LDA (K),Y / STA (P),Y / TYA / BNE KSL3. Downwards in index,
-      // which is what makes an overlapping move safe when the destination is below the source.
+      // 6502: KSL3 -- the copy runs DOWNWARDS in index, which is what makes an overlapping move
+      // safe when the destination is below the source.
       for (std::uint8_t byte = size; byte-- > 0u;)
       {
         _universe.heap.Write(top.Byte(byte), _universe.heap.Read(was.Byte(byte)));
@@ -145,7 +144,7 @@ namespace Elite
       const ShipType moved = TypeOf(_universe.bubble.slots[slot]);
       if (moved == ShipType::None)
       {
-        break; // 6502: BEQ KS3
+        break; // 6502: KS3
       }
       if (moved != ShipType::Missile)
       {
@@ -155,13 +154,13 @@ namespace Elite
       const std::uint8_t ai = _universe.bubble.blocks[slot].ai;
       if (!Has(ai, AiBit::Active))
       {
-        continue; // 6502: BPL KSL4 -- not locked on anything
+        continue; // 6502: KSL4 -- not locked on anything
       }
 
       const std::uint8_t target = MissileTargetOf(ai);
       if (target < _slot)
       {
-        continue; // 6502: BCC KSL4
+        continue; // 6502: KSL4, from below the dead slot
       }
       if (target == _slot)
       {
@@ -169,7 +168,8 @@ namespace Elite
         continue;
       }
 
-      // 6502: SBC #1 / ASL A / ORA #%10000000, and the SBC runs on the carry `CMP` left SET.
+      // 6502: one off the target, doubled, with the top bit back on -- and the subtraction runs
+      // on the carry the comparison left SET.
       _universe.bubble.blocks[slot].ai = MissileAiFor(static_cast<std::uint8_t>(target - 1u));
     }
 
@@ -179,13 +179,13 @@ namespace Elite
 
   NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: SOS1 -- JSR msblob / LDA #127 / STA INWK+29 / STA INWK+30.
+    // 6502: SOS1 -- the missile indicators reset, then 127 into both turn counters.
     ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture);
     _universe.work.rollCounter = 127;
     _universe.work.pitchCounter = 127;
 
     /*
-     * 6502: LDA tek / AND #%00000010 / ORA #%10000000 / JMP NWSHP.
+     * 6502: one bit of `tek` ORed with 128 and handed straight to `NWSHP`.
      *
      * One bit of the system's tech level becomes one bit of the ship type, so a planet is 128 or
      * 130 -- and that is the whole of how Elite decides whether a world gets meridians or a
@@ -198,20 +198,20 @@ namespace Elite
 
   NewShip AddStation(Universe& _universe, Ports& _ports) noexcept
   {
-    ToggleStationIndicator(_universe.canvas, &_universe.picture); // 6502: JSR SPBLB
+    ToggleStationIndicator(_universe.canvas, &_universe.picture); // 6502: SPBLB
 
-    // 6502: LDX #%10000001 / STX INWK+32 -- the AI byte: hostile, and AI enabled.
+    // 6502: the AI byte: hostile, and AI enabled.
     _universe.work.ai = Mask(AiBit::Active, AiBit::HasEcm);
 
-    _universe.work.pitchCounter = 0u;   // 6502: LDX #0 / STX INWK+30 -- the pitch counter
-    _universe.work.newb = 0u;           // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
-    _universe.bubble.slots[1] = 0u;     // 6502: STX FRIN+1 -- and slot 1 is the SUN's
-    _universe.work.rollCounter = 0xFFu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
+    _universe.work.pitchCounter = 0u;   // 6502: zero into the pitch counter
+    _universe.work.traits = 0u;           // 6502: NEWB, which `NWSHP` ORs into rather than sets
+    _universe.bubble.slots[1] = 0u;     // 6502: FRIN+1 -- and slot 1 is the SUN's
+    _universe.work.rollCounter = 0xFFu; // 6502: the roll counter, at maximum
 
     /*
-     * 6502: LDX #10 / JSR NwS1, three times.
+     * 6502: NwS1 three times, from index 10.
      *
-     * `NwS1` is `LDA INWK,X / EOR #%10000000 / STA INWK,X / INX / INX / RTS`, so the three calls
+     * `NwS1` flips the top bit of one byte and steps the index on by two, so the three calls
      * reach 10, 12 and 14 -- the high bytes of the nose vector's three components. Flipping bit 7
      * of each negates the vector, which turns the station to face the way you have just come.
      */
@@ -221,7 +221,7 @@ namespace Elite
     nose.z.hi = static_cast<std::uint8_t>(nose.z.hi ^ 0x80u);
 
     /*
-     * 6502: LDA spasto / STA XX21+2*SST-2 ... LDA tek / CMP #10 / BCC notadodo / LDA XX21+2*DOD-2.
+     * 6502: the Coriolis's address stored unconditionally, then the Dodo's over it above tech 10.
      *
      * `spasto` is the Coriolis's address, which `BEGIN` copied out of this same table at boot --
      * so on the port's immutable region it is simply the table's own entry. The store happens
@@ -235,39 +235,37 @@ namespace Elite
       _universe.bubble.stationType = ShipType::Dodo;
     }
 
-    // 6502: LDA #LO(LSO) / STA INWK+33 / LDA #HI(LSO) / STA INWK+34 -- the sun's heap, which the
-    // slot above has just been emptied of. `NWSHP` skips its own allocation for a station, so this
-    // is the pointer the block keeps.
+    // 6502: the sun's heap address, which the slot above has just been emptied of. `NWSHP` skips
+    // its own allocation for a station, so this is the pointer the block keeps.
     _universe.work.heap = HeapOffset::FromAddress(SUN_HEAP_ADDRESS);
 
     return AddShip(_universe.bubble, _universe.work, ShipType::Station,
-                   _universe.flight.blueprint); // 6502: LDA #SST, and no RTS -- it falls in
+                   _universe.flight.blueprint); // 6502: the station's type, and no return -- it falls in
   }
 
   void BuildSystem(Universe& _universe, Ports& _ports, bool _carryIn) noexcept
   {
-    // 6502: LDA TRIBBLE / BEQ nobirths -- only the LOW byte is tested, so a swarm whose count has
-    // reached a multiple of 256 stops breeding until it moves off one.
+    // 6502: only the LOW byte is tested, so a swarm whose count has reached a multiple of 256
+    // stops breeding until it moves off one.
     if (_universe.commander.tribbles.lo != 0u)
     {
       /*
-       * 6502: LDA #0 / STA QQ20 / STA QQ20+6 -- the Trumbles eat the food and the narcotics, and
+       * 6502: two cargo bays zeroed -- the Trumbles eat the food and the narcotics, and
        * only those two.
        */
       _universe.commander.cargoHold[0] = 0;
       _universe.commander.cargoHold[6u] = 0;
 
       /*
-       * 6502: JSR DORND / AND #15 / ADC TRIBBLE / ORA #4 / ROL A / STA TRIBBLE /
-       * ROL TRIBBLE+1 / BPL P%+5 / ROR TRIBBLE+1.
+       * 6502: four random bits added to the low byte, a floor forced on, and the pair doubled.
        *
-       * A population model in nine instructions. The `ADC` runs on `DORND`'s exit carry, the
-       * `ORA #4` stops a pair dying out, and the `ROL` doubles the swarm every jump -- so what
-       * starts as two Trumbles fills the hold in about six. The `BPL` guard undoes the high
-       * byte's shift when it would go negative, which is the only thing bounding it.
+       * A population model in nine instructions. The addition runs on `DORND`'s exit carry, the
+       * forced floor stops a pair dying out, and the doubling grows the swarm every jump -- so what
+       * starts as two Trumbles fills the hold in about six. The guard on the high byte undoes its
+       * shift when it would go negative, which is the only thing bounding it.
        */
-      // The entry carry is the caller's: `LDA TRIBBLE / BEQ / LDA #0 / STA QQ20 / STA QQ20+6`
-      // touches no flag between `SOLAR`'s first instruction and this call.
+      // The entry carry is the caller's: the population test and the two cargo stores above touch
+      // no flag between `SOLAR`'s first instruction and this call.
       const RngResult roll = _universe.rng.Next(_carryIn);
       const AddResult grown = AddWithCarry(static_cast<std::uint8_t>(roll.value & 0x0Fu), _universe.commander.tribbles.lo, roll.carry);
       const ShiftResult doubled = RotateLeftValue(static_cast<std::uint8_t>(grown.value | 0x04u), grown.carry);
@@ -285,10 +283,11 @@ namespace Elite
     }
 
     /*
-     * 6502: nobirths -- LSR FIST. Half of whatever the player is wanted for is forgiven at every
-     * jump, which is why a fugitive can fly himself clean given enough hyperspace fuel.
+     * 6502: nobirths -- the bounty byte shifted right. Half of whatever the player is wanted for
+     * is forgiven at every jump, which is why a fugitive can fly himself clean given enough
+     * hyperspace fuel.
      *
-     * And the bit it shifts out is not discarded. `ZINF` touches no flag, so the `ADC #3` below
+     * And the bit it shifts out is not discarded. `ZINF` touches no flag, so the addition below
      * runs on it: **the planet's distance from the player depends on whether their bounty was
      * odd** (§6.58). Nobody designed that; it is what happens when a routine is written straight
      * through without a `CLC`, and it is in every copy of the game ever sold.
@@ -298,7 +297,7 @@ namespace Elite
     _universe.commander.legalStatus = static_cast<std::uint8_t>(bounty >> 1);
 
     /*
-     * 6502: JSR ZINF, then the planet's position from the system's own seed bytes.
+     * 6502: ZINF, then the planet's position from the system's own seed bytes.
      *
      * `QQ15+1 AND 3 + 3` is a distance between three and six, and the ROR of it into `INWK+2` and
      * `INWK+5` puts the planet off to one side by half of that -- so every system's planet sits in
@@ -339,61 +338,62 @@ namespace Elite
 
   RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept
   {
-    ClearShip(_work); // 6502: JSR ZINF -- and it leaves the carry as it found it
+    ClearShip(_work); // 6502: ZINF -- and it leaves the carry as it found it
 
-    const RngResult first = _rng.Next(_carryIn); // 6502: JSR DORND
+    const RngResult first = _rng.Next(_carryIn); // 6502: DORND
 
-    // 6502: STA T1 / AND #%10000000 / STA INWK+2 -- the x sign, and `T1` is dead here: nothing
-    // between this and the `RTS` reads it.
+    // 6502: the x sign, and the copy parked in `T1` is dead here: nothing between this and the
+    // return reads it.
     _work.x.sgn = static_cast<std::uint8_t>(first.value & 0x80u);
 
-    // 6502: TXA / AND #%10000000 / STA INWK+5 -- and X is the PREVIOUS random byte, not this one.
+    // 6502: the y sign comes from X, which is the PREVIOUS random byte and not this one.
     _work.y.sgn = static_cast<std::uint8_t>(first.previous & 0x80u);
 
-    // 6502: LDA #25 / STA INWK+1 / STA INWK+4 / STA INWK+7 -- one distance in all three axes.
+    // 6502: one distance, stored into all three axes.
     _work.x.hi = DEBRIS_DISTANCE;
     _work.y.hi = DEBRIS_DISTANCE;
     _work.z.hi = DEBRIS_DISTANCE;
 
-    // 6502: TXA / CMP #245 / ROL A / ORA #%11000000 / STA INWK+32.
+    // 6502: the previous random byte compared against 245, doubled with that carry, and the top
+    // two bits forced on.
     const bool aggressive = first.previous >= DEBRIS_AI_THRESHOLD;
     const std::uint8_t rolled = static_cast<std::uint8_t>((first.previous << 1) | (aggressive ? 1u : 0u));
     _work.ai = With(rolled, AiBit::Active, AiBit::Hostile);
 
-    // 6502: and no RTS -- it falls into `DORND2`, which is a `CLC` in front of `DORND`. So the
-    // second byte always rotates a clear carry in, whatever the `ROL A` above shifted out.
+    // 6502: and no return -- it falls into `DORND2`, which clears the carry in front of `DORND`.
+    // So the second byte always rotates a clear carry in, whatever the doubling above shifted out.
     return _rng.Next(false);
   }
 
   NewShip AddDebris(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
                     const Blueprint*& _blueprint) noexcept
   {
-    _work.nose.z.hi = DEBRIS_ORIENTATION;                                    // 6502: LDA #&60 / STA INWK+14
-    _work.side.x.hi = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: ORA #128 / STA INWK+22
+    _work.nose.z.hi = DEBRIS_ORIENTATION;                                    // 6502: &60 into the nose's z
+    _work.side.x.hi = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: the same with its top bit on, into the side's x
 
-    // 6502: LDA DELTA / ROL A / STA INWK+27 -- a ROTATE, so the carry comes in at the bottom.
+    // 6502: the speed ROTATED rather than shifted, so the carry comes in at the bottom.
     _work.speed = static_cast<std::uint8_t>((_speed << 1) | (_carryIn ? 1u : 0u));
 
-    return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: TXA / JMP NWSHP
+    return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: the type into A, then NWSHP
   }
 
   NewShip SpawnShipAhead(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, std::uint8_t _missileTarget,
                          const Blueprint*& _blueprint) noexcept
   {
-    ClearShip(_work); // 6502: JSR ZINF
+    ClearShip(_work); // 6502: ZINF
 
-    // 6502: LDA #28 / STA INWK+3 / LSR A / STA INWK+6 -- and the 14 is the 28 shifted, so the two
-    // distances are one constant. `LSR` also clears the carry, which the `ORA` below does not use.
+    // 6502: 14 is 28 shifted right, so the two distances are one constant. The shift also clears
+    // the carry, which the fold below does not use.
     _work.y.lo = SPAWN_AHEAD_X;
     _work.z.lo = SPAWN_AHEAD_Z;
 
-    _work.y.sgn = 0x80u; // 6502: LDA #%10000000 / STA INWK+5 -- below us, so it appears in the view
+    _work.y.sgn = 0x80u; // 6502: below us, so it appears in the view
 
     /*
-     * 6502: LDA MSTG / ASL A / ORA #%10000000 / STA INWK+32.
+     * 6502: the missile target doubled into the AI byte, with the active bit forced on.
      *
-     * The `ASL` doubles the target slot into the AI byte's aggression field and pushes `MSTG`'s
-     * BIT 7 into the carry, where `fq1`'s `ROL A` collects it four instructions later (§6.121).
+     * The doubling puts the target slot into the AI byte's aggression field and pushes `MSTG`'s
+     * BIT 7 into the carry, where `fq1`'s own rotate collects it four instructions later (§6.121).
      */
     const bool carry = (_missileTarget & 0x80u) != 0u;
     _work.ai = MissileAiFor(_missileTarget);
@@ -403,7 +403,7 @@ namespace Elite
 
   void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept
   {
-    // 6502: ASL A / STA R / LDA #0 / ROR A / JMP MVT1 -- R is the doubled magnitude and A the sign.
+    // 6502: the amount doubled into `R` and its sign rotated into the accumulator, then MVT1.
     const std::uint8_t doubled = static_cast<std::uint8_t>(_amount << 1u);
     const std::uint8_t sign = static_cast<std::uint8_t>((_amount & 0x80u) != 0u ? 0x80u : 0x00u);
 
@@ -413,45 +413,47 @@ namespace Elite
   NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType, std::uint8_t _aiFlag,
                          ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
-    // 6502: STA T1 / TXA / PHA / LDA XX0 / PHA ... -- the AI byte kept and the caller's state saved.
+    // 6502: the AI byte kept in `T1` and the caller's state pushed.
     // `T1` is this routine's own since M2-c-3: `FRS1` parks the byte across the copy below and
     // reads it back twenty instructions later, and nothing else touches it in between.
     const std::uint8_t aiFlag = _aiFlag; // 6502: T1
     const Blueprint* const savedBlueprint = _blueprint;
 
-    // 6502: LDY #NI%-1 / .FRL2 LDA INWK,Y / STA XX3,Y / LDA (INF),Y / STA INWK,Y / DEY / BPL FRL2.
+    // 6502: FRL2 -- the whole block swapped with the parent's, a byte at a time.
     const Ship saved = _work;
     _work = _bubble.blocks[_parent];
 
-    // 6502: LDA TYPE / CMP #SST / BNE rx -- the PARENT's type, which `MVEIT` left in `TYPE`, and
-    // not the type being created.
+    // 6502: `TYPE` holds the PARENT's type, which `MVEIT` left there, and not the type being
+    // created.
     if (_parentType == ShipType::Station)
     {
-      _work.speed = STATION_CHILD_SPEED; // 6502: LDA #32 / STA INWK+27
+      _work.speed = STATION_CHILD_SPEED; // 6502: 32 into the speed
 
-      // 6502: LDX #0 / LDA INWK+10 / JSR SFS2, and twice more -- out along the station's own axes,
+      // 6502: SFS2 three times -- out along the station's own axes,
       // so a ship leaves through the slot rather than out of the middle of the hull.
       MoveShipAlongAxis(_work, _work.nose.x.hi, 0u);
       MoveShipAlongAxis(_work, _work.nose.y.hi, 3u);
       MoveShipAlongAxis(_work, _work.nose.z.hi, 6u);
     }
 
-    // 6502: .rx LDA T1 / STA INWK+32 / LSR INWK+29 / ASL INWK+29 -- the AI byte, then bit 0 of the
-    // roll counter cleared, which is what makes the new ship's roll damp rather than lock.
+    // 6502: rx -- the AI byte back, then bit 0 of the roll counter cleared by a shift each way,
+    // which is what makes the new ship's roll damp rather than lock.
     _work.ai = aiFlag;
     _work.rollCounter = static_cast<std::uint8_t>(_work.rollCounter & 0xFEu);
 
     /*
-     * 6502: TXA / CMP #SPL+1 / BCS NOIL / CMP #PLT / BCC NOIL -- the cargo range, plate to
+     * 6502: two comparisons bracketing the cargo range, plate to
      * splinter, and only that range is given a random tumble.
      */
     if (IsWreckage(_shipType))
     {
       /*
-       * 6502: JSR DORND / ASL A / STA INWK+30 / TXA / AND #%00001111 / STA INWK+27.
+       * 6502: a random byte doubled into the pitch counter, and four bits of the previous one
+       * into the speed.
        *
-       * AND THE CARRY GOING IN IS SET, every time. Reaching this line means `CMP #PLT` did not
-       * borrow -- that is what `BCC NOIL` just tested -- and `PHA` leaves the flag alone, so the
+       * AND THE CARRY GOING IN IS SET, every time. Reaching this line means the lower comparison
+       * did not borrow -- that is what the branch just tested -- and the push leaves the flag
+       * alone, so the
        * generator's first rotate takes a one. The port had `false` here and the oracle disagreed on
        * the generator's own state, which is the only place a wrong carry into `DORND` shows
        * (§6.121).
@@ -460,15 +462,15 @@ namespace Elite
       _work.pitchCounter = static_cast<std::uint8_t>(roll.value << 1u);
       _work.speed = static_cast<std::uint8_t>(roll.previous & 0x0Fu);
 
-      // 6502: LDA #&FF / ROR A / STA INWK+29 -- and the carry it rotates in is the `ASL A` above,
-      // so the pitch counter's sign is bit 7 of the random byte that set the roll.
+      // 6502: &FF rotated right into the roll counter, and the carry it rotates in comes from the
+      // doubling above -- so the pitch counter's sign is bit 7 of the byte that set the roll.
       const bool carry = (roll.value & 0x80u) != 0u;
       _work.rollCounter = static_cast<std::uint8_t>((0xFFu >> 1u) | (carry ? 0x80u : 0x00u));
     }
 
-    const NewShip made = AddShip(_bubble, _work, _shipType, _blueprint); // 6502: .NOIL JSR NWSHP
+    const NewShip made = AddShip(_bubble, _work, _shipType, _blueprint); // 6502: NOIL -- NWSHP
 
-    // 6502: PLA / STA INF+1 ... / .FRL3 LDA XX3,X / STA INWK,X -- everything put back.
+    // 6502: FRL3 -- everything pulled back off the stack and copied back.
     _work = saved;
     _blueprint = savedBlueprint;
 
@@ -478,7 +480,7 @@ namespace Elite
   NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType,
                          const Blueprint*& _blueprint) noexcept
   {
-    // 6502: LDX #ESC / LDA #%11111110, and then straight into `SFS1`.
+    // 6502: the escape pod's type and AI byte, and then straight into `SFS1`.
     return SpawnChildShip(_bubble, _work, _rng, _parent, _parentType, SPAWN_CHILD_AI, ShipType::EscapePod, _blueprint);
   }
 

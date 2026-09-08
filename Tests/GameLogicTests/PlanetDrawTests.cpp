@@ -51,11 +51,11 @@ namespace GameLogicTests
 
     struct HeapLabels
     {
-      std::uint16_t lso = 0, lsx2 = 0, lsy2 = 0, lsp = 0, sunx = 0, yx2m1 = 0;
-      std::uint16_t yy = 0, t = 0, k = 0, k3 = 0, k4 = 0, p = 0;
-      std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, dontclip = 0;
-      std::uint16_t k5 = 0, k6 = 0, stp = 0, flag = 0, cnt = 0, xx13 = 0, xx12 = 0;
-      std::uint16_t inwk = 0, k2 = 0, xx16 = 0, tgt = 0, cnt2 = 0, pltog = 0, sun = 0;
+      std::uint16_t lso = 0, lsx2 = 0, lsy2 = 0, ballHeapTop = 0, sunx = 0, yx2m1 = 0;
+      std::uint16_t yy = 0, zeroPageT = 0, zeroPageK = 0, zeroPageK3 = 0, k4 = 0, zeroPageP = 0;
+      std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, clippingOff = 0;
+      std::uint16_t zeroPageK5 = 0, zeroPageK6 = 0, circleStep = 0, flag = 0, zeroPageCnt = 0, xx13 = 0, dotProducts = 0;
+      std::uint16_t inwk = 0, zeroPageK2 = 0, scaledOrientation = 0, tgt = 0, coneWidth = 0, planetDetail = 0, sun = 0;
       std::uint16_t qq11 = 0;
       std::uint16_t screen = 0;
 
@@ -64,35 +64,35 @@ namespace GameLogicTests
         lso = _oracle.Label("LSO");
         lsx2 = _oracle.Label("LSX2");
         lsy2 = _oracle.Label("LSY2");
-        lsp = _oracle.Label("LSP");
+        ballHeapTop = _oracle.Label("LSP");
         sunx = _oracle.Label("SUNX");
         yx2m1 = _oracle.Label("Yx2M1");
         yy = _oracle.Label("YY");
-        t = _oracle.Label("T");
-        k = _oracle.Label("K");
-        k3 = _oracle.Label("K3");
+        zeroPageT = _oracle.Label("T");
+        zeroPageK = _oracle.Label("K");
+        zeroPageK3 = _oracle.Label("K3");
         k4 = _oracle.Label("K4");
-        p = _oracle.Label("P");
+        zeroPageP = _oracle.Label("P");
         x1 = _oracle.Label("X1");
         y1 = _oracle.Label("Y1");
         x2 = _oracle.Label("X2");
         y2 = _oracle.Label("Y2");
         swap = _oracle.Label("SWAP");
         type = _oracle.Label("TYPE");
-        dontclip = _oracle.Label("dontclip");
-        k5 = _oracle.Label("K5");
-        k6 = _oracle.Label("K6");
-        stp = _oracle.Label("STP");
+        clippingOff = _oracle.Label("dontclip");
+        zeroPageK5 = _oracle.Label("K5");
+        zeroPageK6 = _oracle.Label("K6");
+        circleStep = _oracle.Label("STP");
         flag = _oracle.Label("FLAG");
-        cnt = _oracle.Label("CNT");
+        zeroPageCnt = _oracle.Label("CNT");
         xx13 = _oracle.Label("XX13");
-        xx12 = _oracle.Label("XX12");
+        dotProducts = _oracle.Label("XX12");
         inwk = _oracle.Label("INWK");
-        k2 = _oracle.Label("K2");
-        xx16 = _oracle.Label("XX16");
+        zeroPageK2 = _oracle.Label("K2");
+        scaledOrientation = _oracle.Label("XX16");
         tgt = _oracle.Label("TGT");
-        cnt2 = _oracle.Label("CNT2");
-        pltog = _oracle.Label("PLTOG");
+        coneWidth = _oracle.Label("CNT2");
+        planetDetail = _oracle.Label("PLTOG");
         sun = _oracle.Label("SUN");
         qq11 = _oracle.Label("QQ11");
 
@@ -114,7 +114,7 @@ namespace GameLogicTests
       }
     }
 
-    void SeedBallHeap(Cpu6502& _cpu, Elite::PlanetSunState& _state, const HeapLabels& _at, std::uint32_t _seed, std::uint8_t _lsp)
+    void SeedBallHeap(Cpu6502& _cpu, Elite::PlanetSunState& _state, const HeapLabels& _at, std::uint32_t _seed, std::uint8_t _ballHeapTop)
     {
       std::uint32_t bits = _seed;
       for (std::size_t at = 0; at < Elite::BALL_HEAP_SIZE; ++at)
@@ -131,8 +131,8 @@ namespace GameLogicTests
         _cpu.memory[static_cast<std::uint16_t>(_at.lsy2 + at)] = y;
       }
 
-      _state.lsp = _lsp;
-      _cpu.memory[_at.lsp] = _lsp;
+      _state.ballHeapTop = _ballHeapTop;
+      _cpu.memory[_at.ballHeapTop] = _ballHeapTop;
     }
 
     void CompareHeaps(const Cpu6502& _cpu, const Elite::PlanetSunState& _state, const HeapLabels& _at, const std::wstring& _where)
@@ -149,7 +149,7 @@ namespace GameLogicTests
         Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.lsy2 + at)], _state.BallY(static_cast<std::uint8_t>(at)),
                          (_where + L": LSY2+" + std::to_wstring(at)).c_str());
       }
-      Assert::AreEqual(_cpu.memory[_at.lsp], _state.lsp, (_where + L": LSP").c_str());
+      Assert::AreEqual(_cpu.memory[_at.ballHeapTop], _state.ballHeapTop, (_where + L": LSP").c_str());
     }
 
     std::uint32_t CompareScreens(const Cpu6502& _cpu, std::uint16_t _base, const Elite::Canvas& _canvas, const std::wstring& _where)
@@ -401,7 +401,7 @@ namespace GameLogicTests
       std::uint32_t marked = 0;
       std::uint32_t compared = 0;
 
-      for (const std::uint8_t lsp : {0, 1, 2, 9, 40, 128, 255})
+      for (const std::uint8_t ballHeapTop : {0, 1, 2, 9, 40, 128, 255})
       {
         for (const std::uint8_t flag : {0x00u, 0x01u, 0xFFu})
         {
@@ -409,7 +409,7 @@ namespace GameLogicTests
           Elite::Canvas canvas;
           Elite::PlanetSunState state;
 
-          SeedBallHeap(cpu, state, at, 0x3FCD0841u + lsp, lsp);
+          SeedBallHeap(cpu, state, at, 0x3FCD0841u + ballHeapTop, ballHeapTop);
           state.SetBallX(0, flag);
           cpu.memory[at.lsx2] = flag;
 
@@ -421,12 +421,12 @@ namespace GameLogicTests
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(wpls2, 8'000'000);
           Assert::IsTrue(run.completed, L"WPLS2 returned");
-          Logger::WriteMessage(("WPLS2 lsp=" + std::to_string(lsp) + " flag=" + std::to_string(flag) + ": " +
+          Logger::WriteMessage(("WPLS2 lsp=" + std::to_string(ballHeapTop) + " flag=" + std::to_string(flag) + ": " +
                                 std::to_string(run.instructions) + " instructions")
                                  .c_str());
           Elite::EraseBall(canvas, state);
 
-          const std::wstring where = Widen("WPLS2 lsp=" + std::to_string(lsp) + " flag=" + std::to_string(flag));
+          const std::wstring where = Widen("WPLS2 lsp=" + std::to_string(ballHeapTop) + " flag=" + std::to_string(flag));
           /*
            * `X1`, `Y1`, `X2`, `Y2` and `SWAP` are the walk's own since M2-c-2: it hands each segment
            * to `LOIN` and takes the ends back from it (`DrawnLine`), which the canvas sweep pins
@@ -536,13 +536,13 @@ namespace GameLogicTests
               centre.y = static_cast<std::uint8_t>(y);
               centre.y1 = static_cast<std::uint8_t>(y >> 8);
   
-              state.yx2M1 = bottom;
+              state.lowestVisibleRow = bottom;
 
-              cpu.memory[at.k3] = centre.x;
-              cpu.memory[static_cast<std::uint16_t>(at.k3 + 1)] = centre.x1;
+              cpu.memory[at.zeroPageK3] = centre.x;
+              cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + 1)] = centre.x1;
               cpu.memory[at.k4] = centre.y;
               cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = centre.y1;
-              cpu.memory[at.k] = radius;
+              cpu.memory[at.zeroPageK] = radius;
               cpu.memory[at.yx2m1] = bottom;
 
               Assert::IsTrue(cpu.CallSubroutine(chkon, 20'000).completed, L"CHKON returned");
@@ -558,8 +558,8 @@ namespace GameLogicTests
               // an on-screen answer alone, so those paths are the contract.
               if (!off)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.p + 1)], extent.bottom, (where + L": P+1").c_str());
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.p + 2)], extent.bottomHigh, (where + L": P+2").c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageP + 1)], extent.bottom, (where + L": P+1").c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageP + 2)], extent.bottomHigh, (where + L": P+2").c_str());
               }
 
               visible += off ? 0u : 1u;
@@ -627,22 +627,22 @@ namespace GameLogicTests
             centre.y = static_cast<std::uint8_t>(y);
             centre.y1 = static_cast<std::uint8_t>(y >> 8);
 
-            state.yx2M1 = 143;
+            state.lowestVisibleRow = 143;
 
             // `CIRCLE2` opens by zeroing `CNT`, which a sweep that leaves it at zero anyway cannot
             // measure (§6.48). The byte is `CIRCLE2`'s own local since M2-c-3, so the oracle is
             // still seeded non-zero -- if the port failed to start its walk at zero the segments
             // would come out at the wrong angles and the screen and heap would say so.
-            cpu.memory[at.cnt] = 200;
+            cpu.memory[at.zeroPageCnt] = 200;
 
-            cpu.memory[at.k3] = centre.x;
-            cpu.memory[static_cast<std::uint16_t>(at.k3 + 1)] = centre.x1;
+            cpu.memory[at.zeroPageK3] = centre.x;
+            cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + 1)] = centre.x1;
             cpu.memory[at.k4] = centre.y;
             cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = centre.y1;
-            cpu.memory[at.k] = radius;
+            cpu.memory[at.zeroPageK] = radius;
             cpu.memory[at.yx2m1] = 143;
-            cpu.memory[at.dontclip] = 0;
-            clip.dontclip = 0;
+            cpu.memory[at.clippingOff] = 0;
+            clip.clippingOff = 0;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(circle, 8'000'000);
             Assert::IsTrue(run.completed, L"CIRCLE returned");
@@ -656,12 +656,12 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK5 + byte)], state.segmentStart[byte],
                                (where + L": K5+" + std::to_wstring(byte)).c_str());
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)], state.k6[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK6 + byte)], state.segmentEnd[byte],
                                (where + L": K6+" + std::to_wstring(byte)).c_str());
             }
-            Assert::AreEqual(cpu.memory[at.stp], state.stp, (where + L": STP").c_str());
+            Assert::AreEqual(cpu.memory[at.circleStep], state.circleStep, (where + L": STP").c_str());
             Assert::AreEqual(cpu.memory[at.flag], state.flag, (where + L": FLAG").c_str());
 
             refused += off ? 1u : 0u;
@@ -705,7 +705,7 @@ namespace GameLogicTests
       {
         for (const bool carryIn : {false, true})
         {
-          for (const std::uint8_t lsp : {1, 2, 40})
+          for (const std::uint8_t ballHeapTop : {1, 2, 40})
           {
             for (const std::uint8_t xIn : {0u, 5u, 128u, 250u})
             {
@@ -724,7 +724,7 @@ namespace GameLogicTests
                 Elite::ClipState clip;
                 Elite::Projection centre;
 
-                SeedBallHeap(cpu, state, at, 0x51F3A2C9u + lsp, lsp);
+                SeedBallHeap(cpu, state, at, 0x51F3A2C9u + ballHeapTop, ballHeapTop);
 
                 const std::uint8_t ENDS[3][8] = {
                   {30, 0, 90, 0, 200, 0, 60, 0},  // both ends on screen
@@ -732,14 +732,14 @@ namespace GameLogicTests
                   {200, 8, 90, 0, 250, 9, 60, 0}, // both ends off the same side
                 };
                 const std::uint8_t* const ends = ENDS[shape];
-                const std::uint8_t k5[4] = {ends[0], ends[1], ends[2], ends[3]};
-                const std::uint8_t k6[4] = {ends[4], ends[5], ends[6], ends[7]};
+                const std::uint8_t zeroPageK5[4] = {ends[0], ends[1], ends[2], ends[3]};
+                const std::uint8_t zeroPageK6[4] = {ends[4], ends[5], ends[6], ends[7]};
                 for (std::size_t byte = 0; byte < 4u; ++byte)
                 {
-                  state.k5[byte] = k5[byte];
-                  state.k6[byte] = k6[byte];
-                  cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)] = k5[byte];
-                  cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)] = k6[byte];
+                  state.segmentStart[byte] = zeroPageK5[byte];
+                  state.segmentEnd[byte] = zeroPageK6[byte];
+                  cpu.memory[static_cast<std::uint16_t>(at.zeroPageK5 + byte)] = zeroPageK5[byte];
+                  cpu.memory[static_cast<std::uint16_t>(at.zeroPageK6 + byte)] = zeroPageK6[byte];
                 }
 
                 centre.y = 72;
@@ -748,17 +748,17 @@ namespace GameLogicTests
                 // segment counter `BLINE` advances and hands back.
                 constexpr std::uint8_t OFFSET_HIGH = 0;
                 constexpr std::uint8_t CNT_IN = 12;
-                state.stp = 4;
+                state.circleStep = 4;
                 state.flag = flag;
 
                 cpu.memory[at.k4] = 72;
                 cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = 0;
-                cpu.memory[at.t] = OFFSET_HIGH;
-                cpu.memory[at.cnt] = CNT_IN;
-                cpu.memory[at.stp] = 4;
+                cpu.memory[at.zeroPageT] = OFFSET_HIGH;
+                cpu.memory[at.zeroPageCnt] = CNT_IN;
+                cpu.memory[at.circleStep] = 4;
                 cpu.memory[at.flag] = flag;
-                cpu.memory[at.dontclip] = 0;
-                clip.dontclip = 0;
+                cpu.memory[at.clippingOff] = 0;
+                clip.clippingOff = 0;
 
                 cpu.x = static_cast<std::uint8_t>(xIn);
                 cpu.c = carryIn;
@@ -770,16 +770,16 @@ namespace GameLogicTests
                                                              carryIn);
 
                 const std::wstring where =
-                  Widen("BLINE flag=" + std::to_string(flag) + " carry=" + std::to_string(carryIn ? 1 : 0) + " lsp=" + std::to_string(lsp) +
+                  Widen("BLINE flag=" + std::to_string(flag) + " carry=" + std::to_string(carryIn ? 1 : 0) + " lsp=" + std::to_string(ballHeapTop) +
                         " x=" + std::to_string(xIn) + " shape=" + std::to_string(shape));
                 Assert::AreEqual(cpu.a, got, (where + L": the returned CNT").c_str());
                 marked += CompareScreens(cpu, at.screen, canvas, where);
                 CompareHeaps(cpu, state, at, where);
                 for (std::size_t byte = 0; byte < 4u; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK5 + byte)], state.segmentStart[byte],
                                    (where + L": K5+" + std::to_wstring(byte)).c_str());
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)], state.k6[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK6 + byte)], state.segmentEnd[byte],
                                    (where + L": K6+" + std::to_wstring(byte)).c_str());
                 }
                 Assert::AreEqual(cpu.memory[at.flag], state.flag, (where + L": FLAG").c_str());
@@ -952,12 +952,12 @@ namespace GameLogicTests
               }
 
               cpu.memory[at.type] = type;
-              cpu.memory[at.pltog] = detail;
+              cpu.memory[at.planetDetail] = detail;
               cpu.memory[at.yx2m1] = 143;
-              cpu.memory[at.dontclip] = 0;
-              state.pltog = detail;
-              state.yx2M1 = 143;
-              clip.dontclip = 0;
+              cpu.memory[at.clippingOff] = 0;
+              state.planetDetail = detail;
+              state.lowestVisibleRow = 143;
+              clip.clippingOff = 0;
 
               // §6.36: `TGT` is 31 only if a meridian was walked and 64 only if a crater was, so
               // seeding it to neither is what turns "the screens agree" into "and something ran".
@@ -977,9 +977,9 @@ namespace GameLogicTests
               CompareHeaps(cpu, state, at, label);
 
               const std::pair<std::uint16_t, std::uint8_t> BYTES[] = {
-                {at.k3, centre.x},   {static_cast<std::uint16_t>(at.k3 + 1), centre.x1},
+                {at.zeroPageK3, centre.x},   {static_cast<std::uint16_t>(at.zeroPageK3 + 1), centre.x1},
                 {at.k4, centre.y},   {static_cast<std::uint16_t>(at.k4 + 1), centre.y1},
-                {at.stp, state.stp}, {at.flag, state.flag},
+                {at.circleStep, state.circleStep}, {at.flag, state.flag},
               };
               // `CNT`, `CNT2` and `TGT` were compared here until M2-c-3 and are the ellipse walk's
               // own now -- where it is, what angle it is at, and where it stops. `BLINE` returns
@@ -998,17 +998,17 @@ namespace GameLogicTests
               // `K2`'s bottom byte alone since M2-c-3: the other three are the ellipse's axes and
               // travel as an `EllipseAxes` value, while this one outlives the frame on purpose --
               // `MV40` reads it for the carry of its first addition without ever writing it (§8).
-              Assert::AreEqual(cpu.memory[at.k2], math.k2Low, (label + L": K2").c_str());
+              Assert::AreEqual(cpu.memory[at.zeroPageK2], math.k2Low, (label + L": K2").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK5 + byte)], state.segmentStart[byte],
                                  (label + L": K5+" + std::to_wstring(byte)).c_str());
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)], state.k6[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.zeroPageK6 + byte)], state.segmentEnd[byte],
                                  (label + L": K6+" + std::to_wstring(byte)).c_str());
               }
               for (std::size_t byte = 0; byte < 6u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.xx16 + byte)], geometry.xx16[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.scaledOrientation + byte)], geometry.scaledOrientation[byte],
                                  (label + L": XX16+" + std::to_wstring(byte)).c_str());
               }
 
@@ -1143,7 +1143,7 @@ namespace GameLogicTests
         cpu.memory[at.sunx] = state.sunX;
         cpu.memory[static_cast<std::uint16_t>(at.sunx + 1)] = state.sunXNext;
 
-        state.yx2M1 = 143;
+        state.lowestVisibleRow = 143;
         cpu.memory[at.yx2m1] = 143;
 
         std::uint16_t x = drift.x;
@@ -1159,11 +1159,11 @@ namespace GameLogicTests
           centre.y1 = static_cast<std::uint8_t>(y >> 8);
 
 
-          cpu.memory[at.k3] = centre.x;
-          cpu.memory[static_cast<std::uint16_t>(at.k3 + 1)] = centre.x1;
+          cpu.memory[at.zeroPageK3] = centre.x;
+          cpu.memory[static_cast<std::uint16_t>(at.zeroPageK3 + 1)] = centre.x1;
           cpu.memory[at.k4] = centre.y;
           cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = centre.y1;
-          cpu.memory[at.k] = radius;
+          cpu.memory[at.zeroPageK] = radius;
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(sun, 20'000'000);
           Assert::IsTrue(run.completed, L"SUN returned");
@@ -1188,7 +1188,7 @@ namespace GameLogicTests
 
           // `K2`'s bottom byte alone since M2-c-3 -- the radius squared's low half, which `SUN`
           // reads back inside the row loop and `MV40` reads a frame later (§8).
-          Assert::AreEqual(cpu.memory[at.k2], math.k2Low, (label + L": K2").c_str());
+          Assert::AreEqual(cpu.memory[at.zeroPageK2], math.k2Low, (label + L": K2").c_str());
 
           // A frame that found something already on the heap is one that took the difference path.
           if (frame > 0)

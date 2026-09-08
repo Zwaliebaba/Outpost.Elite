@@ -20,7 +20,8 @@ namespace Elite
     /// FONT + (character - 32) * 8, which is where FONT_DATA starts.
     constexpr std::uint16_t FONT_BASE = 0x0B00;
 
-    /// 6502: LDX #10 / ASL A / ASL A / BCC / LDX #12 / ASL A / BCC / INX.
+    /// 6502: the high byte starts at 10 and steps to 12 or 13 as the character's top bits shift
+    /// out.
     [[nodiscard]] std::uint16_t GlyphPointer(std::uint8_t _character) noexcept
     {
       std::uint8_t high = 0x0A;
@@ -51,28 +52,29 @@ namespace Elite
    */
   std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept
   {
-    std::uint8_t u = _digits; // 6502: U, which the routine rewrites and leaves
+    std::uint8_t pointPosition = _digits; // 6502: U, which the routine rewrites and leaves
     /*
-     * 6502: LDX #11 / STX T / PHP / BCC TT30.
+     * 6502: TT30 -- the width set to 11, the carry STASHED on the stack, and a branch past two
+     * decrements.
      *
      * BCC skips the two decrements when the carry is CLEAR, so they happen for a number that IS
      * getting a decimal point -- the point occupies one of the eleven positions, so both the
      * leading-zero counter and the width lose one to pay for it. Reading the branch the other way
      * round shifts the padding by two characters and puts the point where a digit belongs.
      */
-    std::uint8_t t = 11;
+    std::uint8_t width = 11;
     if (_withPoint)
     {
-      --t;
-      --u;
+      --width;
+      --pointPosition;
     }
 
     // 6502: TT30. XX17 counts the digits down; U becomes the position the point falls at.
-    std::uint8_t xx17 = 11;
-    u = static_cast<std::uint8_t>(11u - u);
-    ++u;
+    std::uint8_t digitsLeft = 11;
+    pointPosition = static_cast<std::uint8_t>(11u - pointPosition);
+    ++pointPosition;
 
-    std::uint8_t s = 0;
+    std::uint8_t printedYet = 0;
     std::uint8_t digit = 0;
 
     for (;;)
@@ -89,11 +91,11 @@ namespace Elite
           remainder[index] = static_cast<std::uint8_t>(difference);
           noBorrow = difference < 0x100u;
         }
-        const std::uint16_t top = static_cast<std::uint16_t>(s) - 0x17u - (noBorrow ? 0u : 1u);
+        const std::uint16_t top = static_cast<std::uint16_t>(printedYet) - 0x17u - (noBorrow ? 0u : 1u);
 
         if (top >= 0x100u)
         {
-          // 6502: BCC TT37 -- it did not fit, so this digit is done.
+          // 6502: TT37 -- it did not fit, so this digit is done.
           break;
         }
 
@@ -101,7 +103,7 @@ namespace Elite
         {
           _value[static_cast<std::size_t>(index)] = remainder[index];
         }
-        s = static_cast<std::uint8_t>(top);
+        printedYet = static_cast<std::uint8_t>(top);
         ++digit;
       }
 
@@ -113,18 +115,18 @@ namespace Elite
       bool print = true;
       std::uint8_t character = 0;
 
-      if (digit != 0 || t == 0)
+      if (digit != 0 || width == 0)
       {
         // 6502: TT32 -- a digit, and from here on zeros are digits too.
-        t = 0;
+        width = 0;
         character = static_cast<std::uint8_t>(digit + 0x30u);
       }
       else
       {
-        --u;
-        if ((u & 0x80u) == 0u)
+        --pointPosition;
+        if ((pointPosition & 0x80u) == 0u)
         {
-          // 6502: BPL TT34 -- still inside the number's own width, so nothing is printed at all.
+          // 6502: TT34 -- still inside the number's own width, so nothing is printed at all.
           print = false;
         }
         else
@@ -138,22 +140,23 @@ namespace Elite
         _sink.Put(character);
       }
 
-      // 6502: TT34 -- DEC T / BPL / INC T, which is a decrement that will not go below zero.
-      if (t != 0)
+      // 6502: TT34 -- a decrement guarded by a branch, so the width will not go below zero.
+      if (width != 0)
       {
-        --t;
+        --width;
       }
 
-      --xx17;
-      if ((xx17 & 0x80u) != 0u)
+      --digitsLeft;
+      if ((digitsLeft & 0x80u) != 0u)
       {
         // 6502: rT10 -- eleven digits done, and `U` goes back as the routine leaves it.
-        return u;
+        return pointPosition;
       }
 
-      if (xx17 == 0 && _withPoint)
+      if (digitsLeft == 0 && _withPoint)
       {
-        // 6502: PLP / BCC -- the carry that was stashed at the top decides this, which is why it
+        // 6502: the carry PULLED BACK off the stack decides this, which is why it was stashed at
+        // the top rather than tested there.
         // was stashed rather than tested there.
         _sink.Put('.');
       }
@@ -174,7 +177,7 @@ namespace Elite
           _value[static_cast<std::size_t>(index)] = shifted.value;
           carry = shifted.carry;
         }
-        s = RotateLeftValue(s, carry).value;
+        printedYet = RotateLeftValue(printedYet, carry).value;
       };
 
       shiftLeft();
@@ -182,7 +185,7 @@ namespace Elite
       {
         copy[index] = _value[static_cast<std::size_t>(index)];
       }
-      copyHigh = s;
+      copyHigh = printedYet;
 
       shiftLeft();
       shiftLeft();
@@ -194,7 +197,7 @@ namespace Elite
         _value[static_cast<std::size_t>(index)] = sum.value;
         carry = sum.carry;
       }
-      s = AddWithCarry(copyHigh, s, carry).value;
+      printedYet = AddWithCarry(copyHigh, printedYet, carry).value;
 
       digit = 0;
     }
@@ -202,15 +205,15 @@ namespace Elite
 
   void PrintValue(TextSink& _sink, std::uint16_t _value, std::uint8_t _digits, bool _withPoint) noexcept
   {
-    // 6502: TT11 -- STA U / LDA #0 / STA K / STA K+1 / STY K+2 / STX K+3. Only the low two bytes
-    // carry a value; the caller's sixteen bits arrive in Y and X.
+    // 6502: TT11 -- the digit count kept and the block zeroed. Only the low two bytes carry a
+    // value; the caller's sixteen bits arrive in Y and X.
     const NumberBytes value = {0u, 0u, static_cast<std::uint8_t>(_value >> 8), static_cast<std::uint8_t>(_value)};
     (void)PrintNumber(_sink, value, _digits, _withPoint);
   }
 
   void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexcept
   {
-    // 6502: pr2 -- LDA #3 / LDY #0, so three digits and the byte in X.
+    // 6502: pr2 -- three digits, and the byte arrives in X.
     PrintValue(_sink, _value, 3, _withPoint);
   }
 
@@ -233,7 +236,7 @@ namespace Elite
       }
     }
 
-    // 6502: INY / STY XC / STY YC -- Y reached zero on the way out, so this is (1, 1).
+    // 6502: Y reached zero on the way out and is stepped once, so this is (1, 1).
     _state.column = 1;
     _state.row = 1;
   }
@@ -271,17 +274,17 @@ namespace Elite
 
   void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept
   {
-    // 6502: JSR MT2 -- LDA #32 / STA DTW1 / LDA #0 / STA DTW6. Sentence case for the extended
-    // printer: bit 5 is what lowers a letter, and DTW6 is the override that forces it always.
+    // 6502: MT2 -- sentence case for the extended printer: bit 5 is what lowers a letter, and
+    // `DTW6` is the override that forces it always.
     _extended.lowerCaseBits = 32;
     _extended.alwaysLower = 0;
 
-    // 6502: LDA #128 / STA QQ17 / STA DTW2 -- and only DTW2 keeps it. See the header: the routine's
-    // last five bytes put QQ17 back to zero.
+    // 6502: 128 into both `QQ17` and `DTW2` -- and only `DTW2` keeps it. See the header: the
+    // routine's last five bytes put `QQ17` back to zero.
     _extended.sentenceStart = SENTENCE_CASE;
 
     /*
-     * 6502: LDX #1 / STX XC / STX YC / DEX / STX QQ17.
+     * 6502: the cursor to (1, 1), then X stepped down to zero and stored into `QQ17`.
      *
      * QQ17 WAS ASSIGNED TWICE HERE until M5-e-2c, because the port kept one 6502 byte in two
      * places -- the token printer's copy and the `TextState` byte CHPR reads for 255 -- and every
@@ -298,12 +301,13 @@ namespace Elite
                         MessageState& _message, Picture* _picture,
                         TextLayout _layout) noexcept
   {
-    // 6502: CLYNS -- LDA #0 / STA DLY / STA de. Whatever message was up is forgotten, which is why
-    // `MESS` can clear the screen and then test `DLY` and find it zero (§6.67).
+    // 6502: CLYNS -- whatever message was up is forgotten, which is why `MESS` can clear the
+    // screen and then test `DLY` and find it zero (§6.67).
     _message.delay = 0;
     _message.append = 0;
 
-    // 6502: CLYNS2 -- LDA #255 / STA DTW2 / LDA #128 / STA QQ17 / LDA #21 / STA YC / LDA #1 / STA XC.
+    // 6502: CLYNS2 -- the measuring flag to 255, sentence case on, and the cursor to row 21,
+    // column 1.
     _extended.sentenceStart = 0xFF;
     _text.caseFlags = SENTENCE_CASE;
     _text.row = MESSAGE_ROW;
@@ -333,8 +337,8 @@ namespace Elite
 
   std::uint8_t TextPrinter::Print(std::uint8_t _character) noexcept
   {
-    // 6502: LDY QQ17 / CPY #255 / BEQ RR4S -- 255 suppresses output entirely, and the token
-    // printer sets it that way while it is measuring rather than printing.
+    // 6502: RR4S -- a `QQ17` of 255 suppresses output entirely, and the token printer sets it that
+    // way while it is measuring rather than printing.
     if (m_state.caseFlags == 0xFFu)
     {
       return _character;
@@ -353,7 +357,7 @@ namespace Elite
 
     if (_character == 7)
     {
-      // 6502: R5 -- JSR BEEP, whose carry `dn2`, `R5` and `DK4` all drop.
+      // 6502: R5 -- the beep, whose carry `dn2`, `R5` and `DK4` all drop.
       if (m_sound != nullptr)
       {
         (void)Beep(*m_sound, false);
@@ -390,8 +394,8 @@ namespace Elite
 
   void TextPrinter::PrintGlyph(std::uint8_t _character) noexcept
   {
-    // 6502: LDA XC / CMP #31 / BCS RRX2 -- past the right margin, so wrap instead of printing.
-    // The character is lost rather than carried to the next line; the original does not re-enter.
+    // 6502: RRX2 -- past the right margin, so wrap instead of printing. The character is lost
+    // rather than carried to the next line; the original does not re-enter.
     if (m_state.column >= 31)
     {
       m_state.column = 1;
@@ -402,8 +406,8 @@ namespace Elite
     if (m_state.row >= 24)
     {
       /*
-       * 6502: JMP clss -- `JSR TT66simp`, then `LDA K3 / JMP RRafter`, which is the character
-       * printed again on the fresh screen.
+       * 6502: clss -- `TT66simp`, then the character reloaded and printed again on the fresh
+       * screen through `RRafter`.
        *
        * IT IS `TT66simp` AND NOT `TT66`, and until M3-b-4a this was a seam the executable answered
        * with the whole of `TT66` -- the palette, the dashboard, the sprites, the border and `QQ11`
@@ -433,10 +437,10 @@ namespace Elite
     if (_character == 127)
     {
       /*
-       * 6502: DEC XC / DEC SCH / LDY #248 / JSR ZESNEW -- delete. Stepping the pointer's high byte
-       * down and the index up to 248 is a way of subtracting eight without touching the low byte,
-       * and ZESNEW then zeroes the eight bytes it lands on. So the cell to the left is blanked
-       * outright rather than being drawn over, which is the one place the text code does not EOR.
+       * 6502: the delete path. Stepping the pointer's high byte down and the index up to 248 is a
+       * way of subtracting eight without touching the low byte, and ZESNEW then zeroes the eight
+       * bytes it lands on. So the cell to the left is blanked outright rather than being drawn
+       * over, which is the one place the text code does not EOR.
        */
       --m_state.column;
       const std::uint16_t previous = static_cast<std::uint16_t>(offset - 8u);
@@ -474,8 +478,8 @@ namespace Elite
       m_canvas.ExclusiveOr(static_cast<std::uint16_t>(offset + row), bits);
     }
 
-    // 6502: LDY YC / celllook / LDY XC / LDA COL2 / STA (SC),Y -- the cell's colour, written after
-    // the cursor moved, which is what makes the three-cell offset in celllook come out right.
+    // 6502: celllook -- the cell's colour, written after the cursor moved, which is what makes the
+    // three-cell offset in `celllook` come out right.
     m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.palette);
 
     if (m_picture != nullptr)

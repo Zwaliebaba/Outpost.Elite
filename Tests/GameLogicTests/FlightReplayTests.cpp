@@ -378,7 +378,7 @@ namespace GameLogicTests
       // Phase three: a hostile Viper straight ahead, and the laser at it.
       {
         Elite::Universe& universe = _port.universe;
-        const Elite::NewShip viper = Elite::SpawnShipAhead(universe.bubble, universe.work, Elite::ShipType::Viper, universe.flight.delta,
+        const Elite::NewShip viper = Elite::SpawnShipAhead(universe.bubble, universe.work, Elite::ShipType::Viper, universe.flight.speed,
                                                            universe.bubble.missileTarget, universe.flight.blueprint); // 6502: FRS1
         trace.viperCreated = viper.created;
         if (viper.created)

@@ -69,7 +69,7 @@ namespace Outpost
      * whatever the last ship put there (§6.90). The last ship the game drew before the docking bay
      * is the title screen's Cobra Mk III, so that is what the pointer would hold.
      */
-    m_universe->heaps.stp = LAST_CIRCLE_STEP;
+    m_universe->heaps.circleStep = LAST_CIRCLE_STEP;
     m_universe->flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
     // 6502: the loader's part 4 -- the sprite positions, sizes and colours the game inherits and
