@@ -205,6 +205,52 @@ def count_inventory_stale_files(_root: Path) -> int:
     return stale
 
 
+# ---- M6-d's instrument: the assembly transcribed in comments -------------------------------------
+#
+# The 6502's 56 mnemonics, split by addressing mode, because the two need different tests.
+#
+# A mnemonic ALONE is not a transcription. "`ORA` touches no flag" and "its top BIT is set" are
+# prose about behaviour that happen to name an instruction, and R20 says a reason is what M6-d keeps.
+# What M6-d removes is the QUOTATION: an instruction with its operand, or a run of implied-mode
+# instructions separated by slashes. So the counter asks for instruction SHAPE, not for a word.
+MNEMONICS = ("ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CLV CMP CPX CPY DEC DEX DEY "
+             "EOR INC INX INY JMP JSR LDA LDX LDY LSR NOP ORA PHA PHP PLA PLP ROL ROR RTI RTS SBC SEC SED "
+             "SEI STA STX STY TAX TAY TSX TXA TXS TYA").split()
+
+# The ones that take no operand, so shape has to come from what surrounds them instead.
+IMPLIED = sorted("BRK CLC CLD CLI CLV DEX DEY INX INY NOP PHA PHP PLA PLP RTI RTS SEC SED SEI TAX TAY TSX "
+                 "TXA TXS TYA".split())
+
+# `LDA #0`, `STA SC+1`, `JSR MULTU`, `ASL A`, `BCC label` -- a mnemonic with something after it.
+OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(MNEMONICS) + r")\s+(?:A\b|#|[$&%]|\(|[A-Za-z_.][\w.%+]*)")
+
+# `... / CLC / ...`, or one standing alone inside a quotation.
+OPCODE_IMPLIED = re.compile(r"(?:^|[/`(,]\s*)(?:" + "|".join(IMPLIED) + r")\b\s*(?:[/`).,]|$)")
+
+COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
+
+
+def count_opcode_comments(_root: Path) -> int:
+    """P12 -- comment lines in `GameLogic/` that QUOTE the original's instructions (M6-d).
+
+    Counted per LINE and not per instruction, because a rewrite replaces lines: a run of six
+    instructions across two comment lines is two sites to rewrite, not six.
+
+    `Design/` is not read. The plan's own journal quotes assembly deliberately and is history --
+    M6-d's row says so -- and a counter that read it could never reach zero.
+    """
+    total = 0
+    for folder in ("GameLogic", "Outpost"):
+        here = _root / folder
+        if not here.is_dir():
+            continue
+        for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
+            for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
+                if COMMENT_LINE.match(line) and (OPCODE_OPERAND.search(line) or OPCODE_IMPLIED.search(line)):
+                    total += 1
+    return total
+
+
 def count_origin_markers(_root: Path) -> int:
     """P12 -- `6502:` references in GameLogic/ -- the `//` markers inventory.py reads and the `*`-prefixed
     ones inside block comments alike -- read from the RAW text because they are comments."""
@@ -363,6 +409,7 @@ COUNTERS = {
     "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
+    "opcode-comments": (count_opcode_comments, "P12: comment lines quoting the original's instructions"),
     "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
     "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
@@ -446,6 +493,9 @@ namespace Elite
     Byte& lo;
     Byte& hi;
   };
+  // 6502: LDA #0 / STA SC+1 -- an instruction with an operand, so this line IS a transcription
+  // `ORA` touches no flag, and its top BIT is set: prose that NAMES an instruction is not one
+  /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
   // k3 and q here are a COMMENT and are not counted either
   std::uint8_t m_alp2 = 0;                                  // a member's prefix is stripped before the match
@@ -507,8 +557,9 @@ EXPECTED = {
     "mutants": 3,
     "mutant-files": 2,
     "inventory-stale-files": 1,
-    "origin-markers": 2,
+    "origin-markers": 4,
     "origin-identifiers": 5,
+    "opcode-comments": 2,
     "oracle-test-files": 1,
     "origin-tools": 1,
 }
