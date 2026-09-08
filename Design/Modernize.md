@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,144 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,087 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,35 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-11: `Tactics.cpp` to zero, and the counter's own residue.**
+
+57 more and the file is done: 163 sites, none left. Three files are now at zero — `Arith.cpp`,
+`FlightLoop.cpp` and `Tactics.cpp` — and they were the three largest.
+
+The docking computer is the densest part of the phase so far and every finding in it survived:
+
+- **`DOCKIT` normalises the same vector TWICE**, and the second call is not redundant. `TA2` skips
+  the shifting loop and `TAS2` runs it, so the vector steered along is the shifted one while the
+  DISTANCE came from the unshifted one. The port made the first call and not the second, and every
+  approach came out on the wrong branch (§6.125).
+- **`K3+10` is a byte nobody gave it.** It names the eleventh face-visibility flag of the last ship
+  drawn, because two workspaces overlap; the upstream commentary says outright that it does not know
+  what the byte holds. What it guards is the ship actually docking.
+- **The roll's magnitude is always one** and all the sign arithmetic decides is its direction —
+  rotating a two right gives a one with the carry above it.
+
+**THE LAST TWO SITES WERE THE COUNTER'S OWN RESIDUE, not the port's.** One line reads
+"…`TA20`, AND THE PORT HAS NO LINE FOR IT" — a `6502:` marker plus the house style's capitals, which
+is exactly the shape M6-d-6's calibration was scoped to allow through, since an ambiguous mnemonic
+on a marker line is normally a real listing. The other quotes a single instruction in a sentence.
+**Neither was reworded to satisfy the ratchet at the cost of the prose**: the first says the same
+thing with a dash instead of a conjunction, the second names the hand-off rather than the jump. Had
+either needed its meaning bent to reach zero, the right answer would have been the tag and a note
+here, not a worse sentence.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,144 → 2,087.
 
 **2026-09-08 — M6-d-10: the disposition walk and the combat rolls.**
 
