@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->714 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->526 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,22 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-8: the sweeps' operands, named for the routine each one drives.**
+
+188 sites, and no judgement needed once the question was asked the right way round: a sweep's loop
+variable is called `p` or `q` because the ORIGINAL called the byte it writes `P` or `Q`, and what it
+actually is, is the routine's operand. So the name comes from the call three lines below the loop —
+`Elite::MultiplyUnsigned(p, q)` makes them `multiplicand` and `multiplier`, `Elite::Arctan(p, q)`
+makes them `numerator` and `denominator`, `Elite::SquareRoot(r, q)` makes them `radicandHigh` and
+`radicandLow`, and every `DivideBy…` makes its `q` a `divisor`. Thirteen test methods, each with its
+own map, because the same `q` is a multiplier in one and a divisor in the next.
+
+`MarketScreenTests` went with them: 63 of its 65 sites were two range-for variables over
+`Situation` and `Scenario`, which are `situation` and `scenario`.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 714 → 526.
 
 **2026-09-08 — M6-c-7: the kernel's scratch letters, and a filtered run is not a verification.**
 
