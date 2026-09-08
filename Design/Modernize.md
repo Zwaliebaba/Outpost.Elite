@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,986 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,963 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-15: the sun's rows and the circle's heap.**
+
+23 sites from `PlanetDraw.cpp`, now at 66 of 89. The subject here is a HEAP with two conventions in
+it, and the comments that matter are the ones describing the conventions rather than the instructions
+that maintain them.
+
+Three survive intact:
+
+- **Entry 0 of the sun heap is never zeroed by the clearing loop**, because the loop stops at 1 —
+  and then the index falls to 255 and that is what lands in it. One byte carrying two meanings, kept
+  apart by nothing but the loop's bound.
+- **A break in the ball heap starts a new run rather than ending one**, which is how a circle that
+  leaves the screen comes back as several polylines instead of one with a chord across it. The start
+  point is written only after a break, which makes a run of N segments N+1 points.
+- **The clipper may hand its endpoints back reversed**, so the heap has to store them in the order
+  the walk produced them, not the order they were drawn in.
+
+`pd-pl44-clc` re-anchored (rule 3), the third mutant this phase to have quoted a comment M6-d
+rewrote. The pattern is entirely predictable now: a mutant whose `find` reaches into a comment moves
+whenever that comment is touched, and re-anchoring is always right, because what the mutant is
+pinning is the code beside the prose and not the prose.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 1,986 → 1,963.
 
 **2026-09-08 — M6-d-14: `GameLoop.cpp` to zero, and under two thousand.**
 
