@@ -509,52 +509,53 @@ namespace Elite
                                   _frame.axes[4] | _frame.axes[7]);
       if (distant != 0u)
       {
-        // 6502: .TA64 JSR DORND / CMP #16 / BCS TA19S -- one time in sixteen the missile checks
-        // whether its target still has an ECM, and the rest of the time it just steers.
-        // 6502: .TA64 JSR DORND -- and the carry is the one `VCSUB`'s last `MVT3` exited with,
-        // seven instructions of `ORA` and `AND` earlier, none of which touches the flag (§6.126).
+        // 6502: TA64 -- one time in sixteen the missile checks whether its target still has an
+        // E.C.M., and the rest of the time it just steers.
+        // 6502: and the carry going into the roll is the one `VCSUB`'s last `MVT3` exited with:
+        // everything between them is masking, which touches no flag (§6.126).
         const RngResult roll = _frame.universe.rng.Next(vectorCarry);
         if (roll.value < 16u)
         {
           /*
-           * 6502: .M32 LDY #32 / LDA (V),Y / LSR A / BCS P%+5 / .TA19S JMP TA19 / JMP ECBLB2.
+           * 6502: M32 and TA19S -- the target's AI byte shifted, and the branch chooses between
+           * steering and setting the E.C.M. off.
            *
-           * `BCS P%+5` skips a THREE-byte instruction, so a SET bit 0 -- "this ship has an ECM"
-           * -- skips the jump to the steering and lands on the jump to `ECBLB2`. The port had the
-           * test the other way round, so a missile set off the ECM of every target that did not
-           * have one and steered at the ones that did (§6.126).
+           * The branch steps over a three-byte jump, so a SET bit 0 -- "this ship has an E.C.M." --
+           * skips the jump to the steering and lands on the one to `ECBLB2`. The port had the test
+           * the other way round, so a missile set off the E.C.M. of every target that did not have
+           * one and steered at the ones that did (§6.126).
            */
           if (Has(_frame.universe.bubble.blocks[target].ai, AiBit::HasEcm))
           {
-            // The carry is SET here, and `JMP ECBLB2` touches nothing on the way: `BCS` is only
-            // taken when `LSR A` shifted a 1 out, which is the bit this branch tested. `ECBLB2`
-            // hands it straight to `NOISE`, whose only use for it is the value it returns when
-            // the sound is switched off -- so it is unobservable, and the port passed `false`
-            // until M2-d read the branch (§8).
+            // The carry is SET here and nothing on the way to `ECBLB2` touches it: the branch is
+            // only taken when the shift moved a 1 out, which is the bit it tested. `ECBLB2` hands
+            // the flag straight to `NOISE`, whose only use for it is the value it returns when the
+            // sound is switched off -- so it is unobservable, and the port passed `false` until
+            // M2-d read the branch (§8).
             StartEcm(_frame.universe.canvas, _frame.universe.status, _frame.universe.sound, true, &_frame.universe.picture);
             return Tactic::Done;
           }
         }
 
-        // 6502: JMP TA19 -- steer at the target, whose vector `VCSUB` has just left in `K3`, and
-        // then part 4 again: this is a missile, so `TA20`.
+        // 6502: TA19 -- steer at the target, whose vector `VCSUB` has just left in `K3`, and then
+        // part 4 again: this is a missile, so `TA20`.
         SteerMissileTowardsTarget(_frame.universe, _frame.ports);
         return Tactic::Done;
       }
 
-      // 6502: LDA INWK+32 / CMP #%10000010 / BEQ TA352 -- a missile that has reached the ship in
-      // slot 1 dies rather than exploding, because slot 1 is the station.
+      // 6502: a missile whose AI byte names slot 1 dies rather than exploding, because slot 1 is
+      // the station.
       destroyed = (_frame.work.ai == MissileAiFor(1u));
 
       if (!destroyed)
       {
         /*
-         * 6502: LDY #31 / LDA (V),Y / BIT M32+1 / BNE TA35 / ORA #%10000000 / STA (V),Y.
+         * 6502: the target's state byte tested, then marked killed if it is not already a wreck.
          *
-         * `BIT M32+1` READS AN INSTRUCTION AS DATA. `M32` is `LDY #32`, so `M32+1` is the &20
-         * operand -- a constant 32, tested against the target's state byte. Bit 5 of that byte is
-         * "already exploding", and &20 is bit 5, so this is "do not blow up a wreck" written as a
-         * `BIT` against the middle of an instruction (§6.125).
+         * THE TEST READS AN INSTRUCTION AS DATA. What it tests against is the OPERAND of the load
+         * at `M32` -- a constant 32 sitting in the middle of an instruction. Bit 5 of the state
+         * byte is "already exploding", and 32 is bit 5, so this is "do not blow up a wreck"
+         * written by pointing at a byte of code (§6.125).
          */
         Ship& victim = _frame.universe.bubble.blocks[target];
         if (!Has(victim.state, ShipStateBit::Exploding))
@@ -566,8 +567,7 @@ namespace Elite
 
     if (destroyed)
     {
-      // 6502: .TA352 LDA INWK / ORA INWK+3 / ORA INWK+6 / BNE TA872 / LDA #80 / JSR OOPS -- a
-      // missile dying right beside us still hurts, and 80 is a survivable amount.
+      // 6502: TA352 -- a missile dying right beside us still hurts, and 80 is survivable.
       if (static_cast<std::uint8_t>(_frame.work.x.lo | _frame.work.y.lo | _frame.work.z.lo) == 0u)
       {
         if (!TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], COLLISION_DAMAGE, false))
@@ -576,10 +576,9 @@ namespace Elite
         }
       }
 
-      // 6502: .TA872 LDX #PLT / BNE TA353 -- and `TA353` is `JSR EXNO2` with X as the _frame.type, so
-      // the explosion is scored as though a plate had been destroyed.
+      // 6502: TA872 and TA353 -- the explosion is scored as though a plate had been destroyed.
       RecordKill(_frame.universe, _frame.ports, ShipType::AlloyPlate);
-      MarkAsKilled(_frame.work); // 6502: .TA873 -- falls straight through from `TA353`
+      MarkAsKilled(_frame.work); // 6502: TA873 -- falls straight through from `TA353`
       return Tactic::Done;
     }
 
@@ -592,8 +591,8 @@ namespace Elite
       }
     }
 
-    // 6502: .TA87 LDA INWK+32 / AND #%01111111 / LSR A / TAX / .TA353 JSR EXNO2 -- the TARGET's
-    // slot becomes the _frame.type handed to `EXNO2`, which is what makes a big ship a loud explosion.
+    // 6502: TA87 into TA353 -- the TARGET's slot, halved out of the AI byte, becomes the type
+    // handed to `EXNO2`, which is what makes a big ship a loud explosion.
     RecordKill(_frame.universe, _frame.ports, TypeOf(MissileTargetOf(_frame.work.ai)));
     MarkAsKilled(_frame.work);
     return Tactic::Done;
@@ -602,42 +601,42 @@ namespace Elite
   /*
    * ---- part 2: the station, which does not fly but LAUNCHES --------------------------------------
    *
-   * 6502: CPX #SST / BNE TA13. Which ship it launches depends on whether the player has made it
-   * angry, and every path here is finished with the ship for this frame.
+   * 6502: the station test, and `TA13` is where everything else goes. Which ship it launches
+   * depends on whether the player has made it angry, and every path here is finished with the
+   * ship for this frame.
    */
   [[nodiscard]] Tactic DecideStation(TacticFrame& _frame) noexcept
   {
     /*
-     * 6502: CPX #SST / BNE TA13 -- a station does not fly, it LAUNCHES, and which ship it launches
-     * depends on whether the player has made it angry.
+     * 6502: a station does not fly, it LAUNCHES, and which ship it launches depends on whether the
+     * player has made it angry.
      */
     /*
      * THE TEST IS THE CALLER'S AND THE GUARD IS GONE (slice 5d). `RunTactics` dispatches on the
      * type, so this routine was re-testing it and falling off its own end when the answer was no
      * -- which is undefined behaviour for a function that returns a `Tactic`, unreachable only
-     * because of a caller the compiler cannot see. `CPX #SST / BNE TA13` is one test in the
-     * original and it is one test here, at the dispatch.
+     * because of a caller the compiler cannot see. The station test is one test in the original
+     * and it is one test here, at the dispatch.
      */
     ShipType launch = ShipType::None;
 
-    // 6502: LDA NEWB / AND #%00000100 / BNE TN5 -- the hostile bit `ANGRY` sets.
+    // 6502: the hostile bit `ANGRY` sets.
     if (!Has(_frame.work.traits, TraitBit::Hostile))
     {
-      // 6502: LDA MANY+SHU+1 / BNE TA1 -- one Transporter at a time, and `MANY+SHU+1` is the
-      // count of the _frame.type ABOVE the Shuttle because the two are launched as a pair.
+      // 6502: one Transporter at a time, and the count read is the one for the type ABOVE the
+      // Shuttle, because the two are launched as a pair.
       if (_frame.universe.bubble.Count(ShipType::Transporter) != 0u)
       {
         return Tactic::Done;
       }
 
       /*
-       * 6502: JSR DORND / CMP #253 / BCC TA1 / AND #1 / ADC #SHU-1 / TAX -- three times in 256,
-       * and the coin flip picks the Shuttle or the Transporter.
+       * 6502: three times in 256, and a coin flip picks the Shuttle or the Transporter.
        *
-       * AND THE CARRY GOING IN IS `CPX #SST`'s, from eleven instructions earlier: nothing between
-       * that compare and this call touches the flag, and a station is equal to `SST`, so it is
-       * always SET (§6.125). The `ADC` below reads it a second time, which is why the constant is
-       * `SHU-1` and not `SHU`.
+       * AND THE CARRY GOING IN IS THE STATION TEST'S, from eleven instructions earlier: nothing
+       * between that comparison and this call touches the flag, and a station compares equal, so
+       * it is always SET (§6.125). The addition below reads it a second time, which is why the
+       * constant it adds is one short.
        */
       const RngResult roll = _frame.universe.rng.Next(Byte(_frame.type) >= Byte(ShipType::Station));
       if (roll.value < 253u)
@@ -648,8 +647,8 @@ namespace Elite
     }
     else
     {
-      // 6502: .TN5 JSR DORND / CMP #240 / BCC TA1 / LDA MANY+COPS / CMP #4 / BCS TA22 -- and the
-      // carry is `CPX #SST`'s again, by the same argument.
+      // 6502: TN5 -- sixteen times in 256, and only while the police are under strength. The carry
+      // going in is the station test's again, by the same argument.
       const RngResult roll = _frame.universe.rng.Next(Byte(_frame.type) >= Byte(ShipType::Station));
       if (roll.value < 240u || _frame.universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)
       {

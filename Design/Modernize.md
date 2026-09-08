@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,197 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,175 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-9: the missile's death, the station's launches, and rule 4's fourth shape.**
+
+22 more, and `Tactics.cpp` is at 88 of 163.
+
+Two sites in this stretch are the reason the port is right where it once was wrong, and both keep
+their argument in prose:
+
+- **The E.C.M. branch steps over a three-byte jump**, so a SET bit — "this ship has an E.C.M." —
+  skips the steering and lands on the E.C.M. instead. The port had it the other way round, and a
+  missile set off the E.C.M. of every target that did not have one (§6.126). The rewrite says which
+  bit the branch tests and where each side of it goes; the byte count of the instruction it steps
+  over is what makes that true, so it stays as a sentence rather than an opcode.
+- **The wreck test reads an instruction as data.** What it tests against is the OPERAND of a load
+  sitting a few bytes earlier — a constant 32 in the middle of an instruction, which is bit 5, which
+  is "already exploding" (§6.125). That has to survive, and it does, without quoting either
+  instruction: "written by pointing at a byte of code" is the finding.
+
+**RULE 4'S FOURTH SHAPE: MERGING TWO MARKED BLOCKS INTO ONE.** `TA64` carried two consecutive
+comments, each opening `// 6502:` — one for what the routine does and one for the carry it inherits.
+Folding them into a single paragraph read better and lost a marker; `origin-markers` went 4,103 →
+4,102 and the ratchet said so. The two are split again, because the rule is about the COUNT and not
+about the prose, and M6-e is where markers go.
+
+Four shapes now, all found by the same counter: deleting a whole comment, rewriting a block's opening
+line, dropping an inline trailing marker, and merging two blocks. The rule that covers all four is
+one sentence — **a `6502:` marker leaves at M6-e and at no other time** — and the ratchet is what
+enforces it, slice after slice, whatever new way there is to break it.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants.
+`opcode-transcriptions` 2,197 → 2,175.
 
 **2026-09-08 — M6-d-8: the anger chain and the missile's own logic.**
 
