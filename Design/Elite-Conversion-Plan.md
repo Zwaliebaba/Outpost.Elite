@@ -141,7 +141,7 @@ is preserved in the history and was true then.
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
 - `tools/` — the label map and table extractors, `c64_source.py`, and the
-  <!--count:checks-->eighteen repository checks CI runs on every push, of <!--count:tools-->17 scripts
+  <!--count:checks-->nineteen repository checks CI runs on every push, of <!--count:tools-->17 scripts
   in the folder.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.
