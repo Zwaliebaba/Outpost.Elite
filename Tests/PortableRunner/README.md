@@ -5,10 +5,9 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # <!--count:tests-->469 tests, about a minute from cold
+Tests/PortableRunner/run_tests.sh        # <!--count:tests-->131 tests, about half a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # and which oracle labels each test ran
-python tools/inventory.py --coverage x64/Debug/coverage.txt           # read against the ledger's Port rows (M6-0-f)
 Tests/PortableRunner/run_tests.sh --measure                           # every call to the interpreter, counted and sized
 Tests/PortableRunner/run_tests.sh --record out.fixture Galaxy         # and kept, as a fixture (M6-a-2)
 ```
