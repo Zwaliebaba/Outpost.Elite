@@ -386,7 +386,9 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->0 sites in the library, the
+references in `GameLogic/`'s comments, of which <!--count:opcode-comments-->2,911 lines QUOTE the
+original's instructions rather than describe its behaviour (M6-d's instrument, 2026-09-08 — the
+shape it asks for, and why naming an instruction is not quoting one, are in `check_modernize.py`); <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1918,6 +1920,35 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-0: the instrument, and a tension between the row and R20.**
+
+M6-c's lesson applies again: the counter comes first, because "opcode-shaped comment line" is not
+one thing and a ratchet is only as honest as what it counts.
+
+**A mnemonic ALONE is not a transcription.** "`ORA` touches no flag", "its top BIT is set", "no
+`RTS` -- it falls into `DK4`" are prose ABOUT behaviour that happen to name an instruction, and R20
+says the reason is exactly what M6-d keeps. What M6-d removes is the QUOTATION. So the counter asks
+for instruction SHAPE — a mnemonic with an operand after it, or an implied-mode one standing inside
+a slash-separated run — and not for a word in capitals. The two readings differ by 228 lines out of
+3,074, and every one of the 228 is a sentence rather than a listing.
+
+**The tree holds 2,911 of them** across `GameLogic/` and `Outpost/`. `Design/` is not counted: the
+plan's own journal quotes assembly deliberately, the row says it is history and left alone, and a
+counter that read it could never reach zero.
+
+**AND HERE IS THE TENSION, WHICH IS THE OWNER'S TO SETTLE.** The row's acceptance is "a ratchet
+counter over opcode-shaped comment lines AT ZERO". R20's mitigation is "a comment that cannot be
+rewritten without losing its reason KEEPS THE INSTRUCTION SEQUENCE AS A QUOTATION". Both cannot hold
+at once: a kept quotation is a counted line. Either the ratchet's floor is zero and R20's escape
+hatch is never used, or the floor is whatever the escape hatch legitimately needs and "at zero" was
+written before anyone had looked at the corpus.
+
+Nothing is rewritten until that is answered, because it decides what 2,911 rewrites are aiming at.
+The instrument is committed either way: under both readings the number has to come down, and under
+both it is this number that comes down.
+
+460 tests green, all nineteen checks, replay digests unmoved.
 
 **2026-09-08 — M6-b-2: the labels become a header, and the tests stop reading a file to find a
 routine.**
