@@ -799,4 +799,5 @@ status screen is 8 and the charts 64 and 128 -- so the author names lift the wai
 screen and nowhere else. `GameTests` drives sixty-four passes with a Trumble aboard and the three
 views; the replay never runs a docked pass, so no digest moves; `mutants.json` gains a `game` unit
 with its selftest and the docked tail, the corpus's first mutants on a CALL rather than an
-operation.
+operation. Run on the committed head through the portable runner against a 414-green baseline:
+2 of 2 caught, none survived, none equivalent.
