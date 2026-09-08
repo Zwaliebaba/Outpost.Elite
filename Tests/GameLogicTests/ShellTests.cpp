@@ -659,22 +659,41 @@ namespace GameLogicTests
         {0x37, '7', "7"},
         {0x38, '8', "8"},
         {0x39, '9', "9"},
+        {0x30, '0', "0 -- the digit no screen wants and the line editor does"},
 
-        // The letters, every one of which is the letter the C64 key carries.
+        /*
+         * The letters -- ALL TWENTY-SIX, which is what the line editor needs and what the map was
+         * missing until the commander's name could not be typed. Fourteen of them were bound
+         * because a control watches them; the other twelve had no position at all, so `MT26` saw
+         * character 0, found it outside "!" to "z" and beeped. Asserted as the whole alphabet
+         * rather than as the twelve that were added, so that losing any letter fails here.
+         */
         {0x41, 'A', "A -- fire"},
+        {0x42, 'B', "B"},
         {0x43, 'C', "C -- docking computer"},
         {0x44, 'D', "D"},
         {0x45, 'E', "E -- E.C.M."},
         {0x46, 'F', "F"},
+        {0x47, 'G', "G"},
         {0x48, 'H', "H"},
+        {0x49, 'I', "I"},
         {0x4A, 'J', "J -- in-system jump"},
+        {0x4B, 'K', "K"},
+        {0x4C, 'L', "L"},
         {0x4D, 'M', "M -- fire missile"},
         {0x4E, 'N', "N"},
         {0x4F, 'O', "O"},
         {0x50, 'P', "P -- cancel docking"},
+        {0x51, 'Q', "Q"},
+        {0x52, 'R', "R"},
+        {0x53, 'S', "S -- and the C64's dive"},
         {0x54, 'T', "T -- target missile"},
         {0x55, 'U', "U -- unarm missile"},
+        {0x56, 'V', "V"},
+        {0x57, 'W', "W"},
+        {0x58, 'X', "X -- and the C64's climb"},
         {0x59, 'Y', "Y"},
+        {0x5A, 'Z', "Z"},
 
         // The steering keys, whose characters are the C64 keys they stand in for.
         {0x25, ',', "Left -- the C64's \"<\""},
@@ -884,12 +903,19 @@ namespace GameLogicTests
      * which the layout moved to "." and then left unbound -- and it is the one key the GAME NAMES
      * in its own text, in "PRESS SPACE OR FIRE, COMMANDER.". `TITLE` takes any key, so an unbound
      * Space meant the title screen ignored the only press a player is told to make.
+     *
+     * THE PITCH PAIR IS THE EIGHTH AND NINTH, and they arrived from the other end: "S" and "X"
+     * had to be bound so that the line editor could type them, and the positions those two
+     * letters translate to ARE `KY6` and `KY5`. So the dive and the climb are now reachable from
+     * an arrow and from the letter the C64 player used, which is one key moved by the modern
+     * layout and one key put back rather than a new choice.
      */
     TEST_METHOD(OnlyTheMovedScreensAndSpaceAreBoundTwice)
     {
       const std::set<std::uint8_t> ALLOWED_ALIASES = {
         Elite::KEY_LONG_RANGE, Elite::KEY_SHORT_RANGE, Elite::KEY_DATA_ON_SYSTEM, Elite::KEY_MARKET_PRICE,
-        Elite::KEY_STATUS,     Elite::KEY_INVENTORY,   Elite::KEY_SPEED_UP,
+        Elite::KEY_STATUS,     Elite::KEY_INVENTORY,   Elite::KEY_SPEED_UP,       Elite::KEY_PITCH_UP,
+        Elite::KEY_PITCH_DOWN,
       };
 
       std::set<int> virtualKeys;
@@ -958,7 +984,7 @@ namespace GameLogicTests
       // A key that aims nothing says so, which is what `Window::PressKey` tests before it stores.
       Assert::AreEqual<std::uint32_t>(Outpost::NO_KEY, Outpost::CursorKeysFor(0x41).axis, L"A does not aim");
 
-      Assert::AreEqual<std::uint8_t>(Outpost::NO_KEY, Outpost::C64KeyFor(0x5A), L"Z is not bound");
+      Assert::AreEqual<std::uint8_t>(Outpost::NO_KEY, Outpost::C64KeyFor(0x7A), L"F11 is not bound");
       Assert::AreEqual<std::uint8_t>(0, Outpost::CharacterFor(Outpost::NO_KEY), L"and nothing pressed translates to nothing printable");
     }
   };

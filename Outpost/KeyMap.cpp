@@ -122,6 +122,12 @@ namespace Outpost
       {0x38, Elite::KEY_STATUS, "8 -- status, F5's digit"},             // VK_8
       {0x39, Elite::KEY_INVENTORY, "9 -- inventory, F6's digit"},       // VK_9
 
+      /*
+       * AND ZERO, which no screen and no control wants and the line editor does. It is the same
+       * kind of row as the twelve letters below: a position that exists only so the key types.
+       */
+      {0x30, 29, "0"}, // VK_0
+
       // The letter keys the game names as constants.
       {0x44, Elite::KEY_DISTANCE, "D -- distance to system"}, // VK_D
       {0x46, Elite::KEY_FIND_SYSTEM, "F -- find system"},     // VK_F
@@ -129,6 +135,36 @@ namespace Outpost
       {0x4F, Elite::KEY_HOME, "O -- crosshairs home"},        // VK_O
       {0x59, Elite::KEY_YES_INTERNAL, "Y -- yes"},            // VK_Y
       {0x4E, 0x19, "N -- no"},                                // VK_N
+
+      /*
+       * AND THE REST OF THE ALPHABET, WHICH IS THE LINE EDITOR'S ROW AND NOTHING ELSE'S.
+       *
+       * Every letter above is bound because the GAME watches that key -- "T" targets a missile,
+       * "D" asks for a distance -- and while that was the whole list, the twelve letters no
+       * control uses had no matrix position at all. `MT26` reads the CHARACTER `TRANTABLE` gives
+       * the position, so an unbound key arrived as 0, fell outside the editor's "!" to "z" and
+       * rang the bell instead of appearing. The commander's name could not contain B, G, I, K, L,
+       * Q, R, S, V, W, X or Z -- and JAMESON, the name the screen itself offers, was one a player
+       * could not type back.
+       *
+       * The positions are `TRANTABLE`'s own, so this is not a second opinion about what a key
+       * types; it is the rows that were never written. Two of them are already bound from the
+       * other side: "S" and "X" are the C64's dive and climb, which the modern layout moved to
+       * the arrows, so binding the letters gives those two controls their original keys back as
+       * well as making the letters typeable.
+       */
+      {0x42, 36, "B"},                                    // VK_B
+      {0x47, 38, "G"},                                    // VK_G
+      {0x49, 31, "I"},                                    // VK_I
+      {0x4B, 27, "K"},                                    // VK_K
+      {0x4C, 22, "L"},                                    // VK_L
+      {0x51, 2, "Q"},                                     // VK_Q
+      {0x52, 47, "R"},                                    // VK_R
+      {0x53, Elite::KEY_PITCH_DOWN, "S -- and the dive"}, // VK_S, 6502: KY6
+      {0x56, 33, "V"},                                    // VK_V
+      {0x57, 55, "W"},                                    // VK_W
+      {0x58, Elite::KEY_PITCH_UP, "X -- and the climb"},  // VK_X, 6502: KY5
+      {0x5A, 52, "Z"},                                    // VK_Z
 
       /*
        * The disk menu's "@". A PC keyboard has no C64 "@" key; VK_OEM_3 is where it sits on a UK
