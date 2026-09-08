@@ -721,7 +721,7 @@ namespace Elite
     // is behind the `fothg` branch, which returns -- so this is a fresh local and not the frame's
     // (M4-c-3).
     const RngResult debris = SeedDebris(_frame.work, _frame.rng, _frame.carry);
-    _frame.carry = debris.value >= PIRATE_ROLL; // 6502: CMP #100
+    _frame.carry = debris.value >= PIRATE_ROLL; // 6502: the carry the comparison against 100 leaves
 
     if (_frame.carry)
     {
@@ -795,7 +795,7 @@ namespace Elite
     ShipType hunterType = ShipType::None;
     if (constrictor)
     {
-      hunterType = ShipType::Constrictor; // 6502: .YESCON LDA #CON
+      hunterType = ShipType::Constrictor; // 6502: YESCON
     }
     else
     {
@@ -836,7 +836,7 @@ namespace Elite
     const SpawnPass first = SpawnTraderOrLoner(frame); // 6502: parts 1 and 2
     if (first == SpawnPass::Restarted)
     {
-      return SpawnOutcome::Restarted; // 6502: the fall-through past part 1's `JSR NWSHP`
+      return SpawnOutcome::Restarted; // 6502: the fall-through past part 1's call to `NWSHP`
     }
     if (first == SpawnPass::Ended)
     {

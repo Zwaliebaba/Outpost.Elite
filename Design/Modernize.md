@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,256 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,240 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-21: the sixteen, and why R-i's tag stays unused after all.**
+
+The sites M6-d-20 exposed in the three files that had been called done. `Tactics.cpp`, `GameLoop.cpp`
+and `PlanetDraw.cpp` are now at zero against the widened counter, and so are `Arith.cpp` and
+`FlightLoop.cpp`, which never had any. Five files, and this time the claim is measured with the
+instrument that reads both kinds of comment.
+
+**M6-d-20 expected two of these to need R-i's tag. Neither does, and the reason applies to the whole
+phase.** The two are `PlanetDraw.cpp`'s
+`` `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's `` and its twin four blocks down —
+comments whose entire content is an instruction sequence and the flag it does not touch. That looks
+like R20's case: the sequence IS the reason. It is not, and what settles it is **M6-f**. A listing
+kept so a reader can check it against the original is kept for a check that will not exist — the
+original leaves the tree in the same phase. What has to survive is the CLAIM, and "the store and the
+branch touch no flag, so ADD's carry survives" carries it whole, in fewer words, and stays checkable
+against the port itself.
+
+So R20's exception is narrower than it looked. It is not "the reason is about instructions" — that
+describes most of this file. It is "prose cannot state the reason at all", and after twenty slices
+nothing has met it. `opcode-quotations` stays 0 and the cap R-i asks for may honestly be zero; the
+tag still earns its place as the thing that would make a kept quotation VISIBLE rather than
+asserted, which is what R-i was for.
+
+Tagging would also have cost a marker, which is worth recording: `QUOTED_TAG` is deliberately not
+`\b6502:`, so a tagged line is not an origin marker and `origin-markers` would have fallen by two.
+Nothing here needed it, and the count is unmoved at 4,103.
+
+469 tests green, all nineteen checks, 97 of 97 mutants from a full run, markers unmoved.
+`opcode-transcriptions` 2,256 → 2,240.
 
 **2026-09-08 — M6-d-20: the counter had been reading half the comments.**
 

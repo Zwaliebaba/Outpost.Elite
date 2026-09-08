@@ -1133,7 +1133,7 @@ namespace Elite
       return;
     }
 
-    (void)SubtractStationAxes(_universe.bubble, work, axes); // 6502: JSR VCSU1
+    (void)SubtractStationAxes(_universe.bubble, work, axes); // 6502: VCSU1
 
     // 6502: any axis whose HIGH byte has magnitude at all means the station is far away, and the
     // sign is masked off because a station behind you is still close.

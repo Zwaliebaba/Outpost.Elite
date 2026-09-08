@@ -644,7 +644,7 @@ namespace Elite
                                       SignMag16{firstAcross, static_cast<std::uint8_t>(_geometry.scaledOrientation[5] ^ _geometry.scaledOrientation[2])});
       std::uint8_t offsetHigh = sum.high; // 6502: T -- this loop's own since M2-c-3
       std::uint8_t low = sum.low;
-      bool carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
+      bool carry = sum.carry; // 6502: the store and the branch touch no flag, so ADD's carry survives
 
       // 6502: a positive total branches straight past this; a negative one is negated into a
       // sixteen-bit value first, the same block `CIRCLE2` has twice.
@@ -667,7 +667,7 @@ namespace Elite
                       SignMag16{secondAcross, static_cast<std::uint8_t>(_geometry.scaledOrientation[5] ^ _geometry.scaledOrientation[3])});
       offsetHigh = static_cast<std::uint8_t>(sum.high ^ 0x80u);
       low = sum.low;
-      carry = sum.carry; // 6502: `EOR #%10000000 / STA T / BPL PL43` -- again no flag is touched
+      carry = sum.carry; // 6502: the flip, the store and the branch again touch no flag
 
       if ((offsetHigh & 0x80u) != 0u)
       {
@@ -712,7 +712,7 @@ namespace Elite
 
     if (DrawCircle(_canvas, _state, _geometry, _math, _clip, _centre, _radius.low, _picture))
     {
-      return; // 6502: BCS PL20 -- CHKON refused it
+      return; // 6502: PL20 -- CHKON refused it
     }
 
     // 6502: a radius whose middle byte is set needed two bytes, which is a planet filling the
@@ -751,7 +751,7 @@ namespace Elite
       EllipseAxes axes;
       AxisResult axis = DivideAxisByZ(_ship, _math, 9);
       axes.firstX = axis.value;
-      _math.k2Low = axis.value; // 6502: STA K2 -- and `MV40` reads this byte a frame later (§8)
+      _math.k2Low = axis.value; // 6502: into K2, and `MV40` reads this byte a frame later (§8)
       _geometry.scaledOrientation[0] = axis.sign;
 
       axis = DivideAxisByZ(_ship, _math, axis.at);
@@ -805,7 +805,7 @@ namespace Elite
     EllipseAxes axes;
     AxisResult axis = DivideAxisByZ(_ship, _math, 9);
     axes.firstX = static_cast<std::uint8_t>(axis.value >> 1);
-    _math.k2Low = axes.firstX; // 6502: STA K2 -- `MV40`'s byte again (§8)
+    _math.k2Low = axes.firstX; // 6502: into K2 again -- `MV40`'s byte (§8)
     _geometry.scaledOrientation[0] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
@@ -935,7 +935,7 @@ namespace Elite
     }
     else if (at >= _radius)
     {
-      at = _radius; // 6502: BCC PLF5 not taken, so PLF4
+      at = _radius; // 6502: the branch to PLF5 not taken, so PLF4
       sign = 0;
     }
 
@@ -988,7 +988,7 @@ namespace Elite
       const std::uint8_t widthHigh = SubtractWithCarry(radiusSquared.high, vSquared.high, widthLow.carry).value;
 
       const Root root = SquareRoot(widthHigh, widthLow.value);
-      _math.lastDivisor = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
+      _math.lastDivisor = root.value; // 6502: what LL5 leaves in Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
 
       // 6502: the ragged edge -- a random byte masked by `CNT` and added to the half-width -- and
       // it saturates at 255 rather than wrapping round to nothing. The generator runs on the carry
@@ -1146,15 +1146,15 @@ namespace Elite
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
       RngResult roll = _rng.Next(carry);
-      const std::uint8_t distance = static_cast<std::uint8_t>(roll.value | 8u); // 6502: STA ZZ
+      const std::uint8_t distance = static_cast<std::uint8_t>(roll.value | 8u); // 6502: ZZ
       _dust.z[at] = distance;
 
       roll = _rng.Next(roll.carry);
-      _dust.x[at] = roll.value; // 6502: STA SX,Y / STA X1
+      _dust.x[at] = roll.value; // 6502: SX,Y and X1, both
       const std::uint8_t x1 = roll.value;
 
       roll = _rng.Next(roll.carry);
-      _dust.y[at] = roll.value; // 6502: STA SY,Y / STA Y1
+      _dust.y[at] = roll.value; // 6502: SY,Y and Y1, both
       const std::uint8_t y1 = roll.value;
 
       carry = PlotRelativePixel(_canvas, x1, y1, distance);
@@ -1177,11 +1177,11 @@ namespace Elite
       const ShipType type = TypeOf(_bubble.slots[slot]);
       if (type == ShipType::None)
       {
-        break; // 6502: BEQ WS2 -- the first empty slot ends the list
+        break; // 6502: WS2 -- the first empty slot ends the list
       }
       if (IsBody(type))
       {
-        continue; // 6502: BMI WS1 -- the planet and the sun have no blip and no line heap
+        continue; // 6502: WS1 -- the planet and the sun have no blip and no line heap
       }
 
       // 6502: thirty-two bytes copied out of the slot, not the whole block: the AI byte, the heap

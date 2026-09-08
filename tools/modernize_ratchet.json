@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 2256,
+      "ceiling": 2240,
       "slack": 0,
-      "slice": "M6-d-20: the counter only read comments that START a line, and 359 sites sat at the end of one -- a RE-BASE upward, not a regression"
+      "slice": "M6-d-21: the sixteen the widened counter found in five files already called done"
     },
     "opcode-quotations": {
       "ceiling": 0,
