@@ -273,13 +273,13 @@ namespace GameLogicTests
            * planes must differ, which is the fraction arriving. Compared as whole planes because
            * the blip's colour is exclusive-ored into whatever the picture already held.
            */
-          const std::span<const std::uint8_t> a = both[0]->picture.Dashboard();
-          const std::span<const std::uint8_t> b = both[1]->picture.Dashboard();
+          const std::span<const std::uint8_t> first = both[0]->picture.Dashboard();
+          const std::span<const std::uint8_t> second = both[1]->picture.Dashboard();
 
           bool planesDiffer = false;
-          for (std::size_t at = 0; at < a.size() && !planesDiffer; ++at)
+          for (std::size_t at = 0; at < first.size() && !planesDiffer; ++at)
           {
-            planesDiffer = a[at] != b[at];
+            planesDiffer = first[at] != second[at];
           }
 
           for (std::uint16_t at = Elite::DASHBOARD_BITMAP; at < Canvas::BITMAP_SIZE; ++at)

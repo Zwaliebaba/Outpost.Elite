@@ -115,10 +115,10 @@ namespace GameLogicTests
       return true;
     }
 
-    std::wstring Context(const wchar_t* _what, std::uint32_t _a, std::uint32_t _b, std::uint32_t _c)
+    std::wstring Context(const wchar_t* _what, std::uint32_t _item, std::uint32_t _economy, std::uint32_t _random)
     {
-      return std::wstring(_what) + L" (item " + std::to_wstring(_a) + L", economy " + std::to_wstring(_b) + L", randomiser " +
-             std::to_wstring(_c) + L")";
+      return std::wstring(_what) + L" (item " + std::to_wstring(_item) + L", economy " + std::to_wstring(_economy) + L", randomiser " +
+             std::to_wstring(_random) + L")";
     }
   } // namespace
 

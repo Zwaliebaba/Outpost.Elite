@@ -269,7 +269,7 @@ counted. `tools/check_modernize.py` counts them and **fails the build if any cou
 ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
 ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
 
-**P1 — The register-shaped calling convention.** <!--count:register-params-->13 parameters in
+**P1 — The register-shaped calling convention.** <!--count:register-params-->11 parameters in
 `GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
 6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
 a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->52 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->25 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,41 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-17: `B`, and the one slice that moves two ratchets.**
+
+27 sites and six meanings, and only two of them descend from the original at all.
+
+`MVS4`'s and `MV40`'s sweeps really do sweep `ALPHA` and `BETA`, and the port's own signatures say
+what those are: `RotateShipVector(_work, _y, _rollRate, _pitchRate)`. The label holders in those
+tests are already `rollRate` and `pitchRate`, so the swept values are `roll` and `pitch` and the
+lines that poke them read as the sentence they are.
+
+The other four are `a` and `b` because that is what a second operand is called in arithmetic, not
+because the original has a `B`. `AbsoluteDifference` takes a `_first` and a `_second`; `GoldenCanvas`
+computes Adler-32, whose two running totals are a `sum` and a `sumOfSums`; two more `Context`
+helpers join `ArithTests`' at M6-c-13, with `MarketTests`' taking `_item`, `_economy` and `_random`
+from the message it formats; and `PictureDashboardTests` compares two dashboard planes, so `first`
+and `second`.
+
+**THIS SLICE MOVES TWO RATCHETS AND THAT IS DELIBERATE.** `AddWithCarry(std::uint8_t _a,
+std::uint8_t _b, bool _carryIn)` is a pair: renaming `_b` and leaving `_a` would have made the
+signature worse, not better, so both moved — `_value` with `_addend` for the add and `_value` with
+`_amount` for the subtract. `_a` was one of P1's register-shaped parameters, so `register-params`
+falls 13 → 11 in the same commit. Rule 8 asks for one PATTERN per slice, not one counter; the
+pattern here is a binary operator's two operands, and half of it happened to be P1's.
+
+**A range that starts inside a block comment renames nothing.** `PictureDashboardTests`' first pass
+reported "unchanged" and the reason is the hazard `code_only` already documents from the other side:
+the comment above the declaration contains "the blip's colour", and to a renamer that walks from the
+middle of a comment that apostrophe opens a character literal which then swallows every site after
+it. The tool now refuses a range whose first line is inside a comment rather than silently doing
+nothing.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 52 → 25, `register-params` 13 → 11.
 
 **2026-09-08 — M6-c-16: `Q`, the divisor that was not always a divisor.**
 

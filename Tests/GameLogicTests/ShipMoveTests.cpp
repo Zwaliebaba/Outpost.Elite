@@ -287,9 +287,9 @@ namespace GameLogicTests
       std::uint32_t compared = 0;
       for (const std::uint8_t vector : VECTORS)
       {
-        for (const std::uint8_t a : ANGLES)
+        for (const std::uint8_t roll : ANGLES)
         {
-          for (const std::uint8_t b : ANGLES)
+          for (const std::uint8_t pitch : ANGLES)
           {
             for (const std::uint8_t seed : EDGES)
             {
@@ -303,17 +303,17 @@ namespace GameLogicTests
                 cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)] = value;
                 PokeShip(work, vector + byte, value);
               }
-              cpu.memory[rollRate] = a;
-              cpu.memory[pitchRate] = b;
+              cpu.memory[rollRate] = roll;
+              cpu.memory[pitchRate] = pitch;
 
               cpu.y = vector;
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs4);
               Assert::IsTrue(run.completed, L"MVS4 returned");
 
-              Elite::RotateShipVector(work, vector, a, b);
+              Elite::RotateShipVector(work, vector, roll, pitch);
 
-              const std::wstring where = Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(a) +
-                                               ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
+              const std::wstring where = Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(roll) +
+                                               ", beta=" + std::to_string(pitch) + ", seed=" + std::to_string(seed) + ")");
               for (std::uint8_t byte = 0; byte < 6u; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)], PeekShip(work, vector + byte),
@@ -544,9 +544,9 @@ namespace GameLogicTests
       const std::vector<std::uint8_t> TURNS = {0, 1, 3, 127, 128, 129, 131, 255};
 
       std::uint32_t compared = 0;
-      for (const std::uint8_t a : TURNS)
+      for (const std::uint8_t roll : TURNS)
       {
-        for (const std::uint8_t b : TURNS)
+        for (const std::uint8_t pitch : TURNS)
         {
           for (const std::uint8_t seed : EDGES)
           {
@@ -566,16 +566,16 @@ namespace GameLogicTests
               shipBytes[offset] = value;
             }
             work = Elite::Ship::FromBytes(shipBytes);
-            cpu.memory[rollRate] = a;
-            cpu.memory[pitchRate] = b;
+            cpu.memory[rollRate] = roll;
+            cpu.memory[pitchRate] = pitch;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mv40);
             Assert::IsTrue(run.completed, L"MV40 reached MV45");
 
-            Elite::MovePlanetOrSun(work, math, a, b);
+            Elite::MovePlanetOrSun(work, math, roll, pitch);
 
             const std::wstring where =
-              Widen("MV40(alpha=" + std::to_string(a) + ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
+              Widen("MV40(alpha=" + std::to_string(roll) + ", beta=" + std::to_string(pitch) + ", seed=" + std::to_string(seed) + ")");
             for (std::uint8_t offset = 0; offset < 9u; ++offset)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],

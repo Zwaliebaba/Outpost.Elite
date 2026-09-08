@@ -148,9 +148,9 @@ namespace Elite
   namespace
   {
     /// 6502: the EOR #255 / ADC #1 that follows a borrow -- a negate reached with carry clear.
-    [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _a, std::uint8_t _b) noexcept
+    [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _first, std::uint8_t _second) noexcept
     {
-      const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b;
+      const std::uint16_t difference = static_cast<std::uint16_t>(_first) - _second;
       const std::uint8_t value = static_cast<std::uint8_t>(difference);
       if (difference < 0x100u)
       {

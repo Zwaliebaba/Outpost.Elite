@@ -81,9 +81,9 @@ namespace Elite
 
     /// 6502: SEC / SBC / BCS / EOR #255 / ADC #1 -- the difference, made positive. The carry is
     /// clear when the negate is reached, which is what makes the ADC add exactly one.
-    [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _a, std::uint8_t _b) noexcept
+    [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _first, std::uint8_t _second) noexcept
     {
-      const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b;
+      const std::uint16_t difference = static_cast<std::uint16_t>(_first) - _second;
       const std::uint8_t value = static_cast<std::uint8_t>(difference);
       if (difference < 0x100u)
       {

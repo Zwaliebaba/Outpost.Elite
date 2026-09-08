@@ -9,7 +9,7 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 13,
+      "ceiling": 11,
       "slack": 0,
       "slice": "M3-b-3a: DrawLaserSights takes the state, not a _view plus a seam"
     },
@@ -79,7 +79,7 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "origin-identifiers": {
-      "ceiling": 52,
+      "ceiling": 25,
       "slack": 0,
       "slice": "M6-c-11: Arctan's two Ts, and the kernel finished"
     },
