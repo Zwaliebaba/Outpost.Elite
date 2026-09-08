@@ -248,7 +248,7 @@ namespace Elite
 
   /// (A P) = P * |A|, scaled: only five of the eight bits get an addition and the
   /// remaining three are shifted through, which divides the result down. Used where one operand
-  /// is known to be small. (6502: MU6 is its zero exit, which clears P and P+1; nothing reads the
+  /// is known to be small. (`MU6` is its zero exit, which clears P and P+1; nothing reads the
   /// second byte, so the port has no field for it.)
   [[nodiscard]] Product MultiplyScaled(std::uint8_t _multiplicand, std::uint8_t _value) noexcept;
 

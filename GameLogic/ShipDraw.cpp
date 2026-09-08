@@ -291,7 +291,7 @@ namespace Elite
 
       // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
       // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
-      // answer and not of the first product (6502: `LL38`).
+      // answer and not of the first product (`LL38`).
       SignMag16 total{MultiplyByLog(_geometry.scaledOrientation[base], magnitude[0], false).value,
                       static_cast<std::uint8_t>(sign[0] ^ _geometry.scaledOrientation[base + 1])};
 
@@ -580,7 +580,7 @@ namespace Elite
       _geometry.dotProducts[5] = downHigh.value;
 
       // The direction of the slope, which is the two differences' signs EOR'd -- taken now, because
-      // both are about to be made positive. 6502: `LL116` stores it in `XX12+3`.
+      // both are about to be made positive. `LL116` stores it in `XX12+3`.
       const std::uint8_t direction = static_cast<std::uint8_t>(downHigh.value ^ _geometry.dotProducts[3]);
 
       if ((_geometry.dotProducts[5] & 0x80u) != 0u)
@@ -844,7 +844,7 @@ namespace Elite
     }
 
     /// Whether the two faces a nibble pair names are both invisible, which is what makes a vertex or
-    /// an edge not worth drawing. 6502: the four visibility tests in parts 6 and 10.
+    /// an edge not worth drawing: the four visibility tests in parts 6 and 10.
     bool EitherFaceVisible(const GeometryWorkspace& _geometry, std::uint8_t _pair) noexcept
     {
       return _geometry.faceVisible[static_cast<std::size_t>(_pair & 0x0Fu)] != 0u || _geometry.faceVisible[static_cast<std::size_t>(_pair >> 4)] != 0u;

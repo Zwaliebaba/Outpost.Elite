@@ -75,10 +75,10 @@ namespace Elite
    * It was "what the start sequence reaches for outside GameLogic", and every one of its methods
    * turned out to be the library's: `ResetUniverse` and `ResetShip` (`RESET`, `RES2`) went in
    * M3-b-1e, `StartTheme` and `StopTheme` in M3-b-2b, `ShowDockingTunnel` when `LAUN` was ported
-   * (§6.109), `ScanTitleKeys` in M3-b-3d -- 6502: RDKEY, whose answer `TitleKey` lives in
+   * (§6.109), `ScanTitleKeys` in M3-b-3d -- `RDKEY`, whose answer `TitleKey` lives in
    * `Controls.h` beside `ScanKeyboard` -- and `WaitFrames` to `Presenter` in M3-b-3b,
-   * `ClearKeyLogger` in M6-0-h-1 -- 6502: ZEKTRAN, which is `Universe::keys` zeroed by its
-   * callers -- and `ShowTitleScreen` last: 6502: TITLE is `Elite::ShowTitleShip` (`Flight.h`),
+   * `ClearKeyLogger` in M6-0-h-1 -- `ZEKTRAN`, which is `Universe::keys` zeroed by its
+   * callers -- and `ShowTitleScreen` last: `TITLE` is `Elite::ShowTitleShip` (`Flight.h`),
    * and the executable had answered the seam by forwarding to it since §6.107. `BR1` calls it
    * directly rather than through anything, and a fixture that drives the start sequence runs the
    * title screen for real and ends it the way a player does -- with a key held.

@@ -84,7 +84,7 @@ namespace Elite
   /// The `Y1` it stages is the speck's own height, which the movers read from the speck (M2-c).
   [[nodiscard]] Product MultiplyByHeight(const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept;
 
-  /// P = ALP1, then `MULTS`. (6502: MULTS-2 is the same without the `LDX`, reached by
+  /// P = ALP1, then `MULTS`. (`MULTS-2` is the same without the `LDX`, reached by
   /// the movers with the multiplier already in X -- which is `MultiplyScaled` called directly.)
   [[nodiscard]] Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept;
 

@@ -146,7 +146,7 @@ namespace Elite
   // are `Universe`'s, and the keyboard, the line editor's two waits and the store are `Ports`'.
   // It went in M3-a-3, and `GameStart` went with it because it held one.
 
-  /// How the menu ended. 6502: which label it reached, and the carry it left.
+  /// How the menu ended: which label it reached, and the carry it left.
   enum class DiskMenuOutcome
   {
     Left,   ///< Any key but 1 to 4, and CLC
@@ -212,8 +212,8 @@ namespace Elite
    * THE TWO COMMANDERS ARE BOTH ARGUMENTS, and keeping them apart is the whole reason this reads
    * the way it does.
    *
-   *   `_block` and `_name`   6502: TP and NAME -- the commander being played
-   *   `_image`               6502: NA% -- the last saved commander, as a file
+   *   `_block` and `_name`   `TP` and `NAME` -- the commander being played
+   *   `_image`               `NA%` -- the last saved commander, as a file
    *
    * Nothing in the menu writes the live commander except DFAULT. A load fills the IMAGE and returns
    * with the carry set so the caller will run DFAULT; TRNME renames the IMAGE; JAMESON overwrites

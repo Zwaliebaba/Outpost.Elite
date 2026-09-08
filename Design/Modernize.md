@@ -387,7 +387,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->18 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->0 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
 <!--count:opcode-transcriptions-->0 comment lines are an instruction LISTING (M6-d's instrument,
@@ -1941,6 +1941,45 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-e-4: the last 55, by hand. `origin-markers` reaches ZERO and M6-e's row is
+met.**
+
+Eighteen embedded markers in `GameLogic/` and thirty-seven in `Outpost/`, thirty-four of them in one
+file. `origin-markers` 18 → **0**; `Outpost/` is at zero too, which the counter does not read.
+
+**`KeyMap.cpp`'s table was a content decision rather than a strip.** Its rows read
+`// VK_LEFT,       6502: KY3, C64 "<"` -- the Windows key, the original's KY label, and the key the
+C64 player pressed. The file's own header said why: "so the row can be read against `KEYLOOK`
+without opening two files". **After M6-f there is no `KEYLOOK` to read it against**, so the label
+loses the job it was doing and the C64 key does not. The label goes, the C64 key stays where the two
+differ, and the header now says that is what a row holds. Twenty-one rows kept a C64 key; ten
+function-key rows had nothing but the label and are down to the Windows key alone.
+
+**One of the fifty-five was not embedded at all.** `*m_view = _view; // 6502: the view byte alone` is
+an ordinary trailing comment; the classifier read the `*` of the DEREFERENCE as a block-comment
+continuation and gave up. Worth knowing rather than fixing: the tool's job was to find what needed a
+person, and a false positive there costs a hand edit while a false negative costs a broken sentence.
+It was tuned in the safe direction on purpose.
+
+**THE RESIDUE, measured, because R-b says "every trace of the original goes" and this is what is
+left.** The markers are gone; the original's NAMES are not. 2,702 citations of routine and variable
+names survive in comments -- `LL9` 74 times, `MVEIT` 54, `NWSHP` 54, `XX0` 54 -- across 480 distinct
+names in 136 files. **They are not what M6-e removes and were never counted by anything.** They are
+load-bearing in a way the markers were not: M6-d spent fifty-eight slices writing prose whose whole
+method is to say WHERE a behaviour comes from and WHY, and "the carry `EE51` returned" or "`NWSPS`
+evicts the sun before it takes the heap" cannot be said without the name. The comments around them
+define what each one does, so the names are the port's own vocabulary rather than pointers into a
+tree that is about to go.
+
+Whether that satisfies R-b is the owner's to rule on and it is not M6-e's row to decide. Removing
+them is not a sweep -- it is rewriting two thousand sentences to say "the routine that spawns a
+ship" where they now say `NWSHP`, which would be a phase of its own and would make the prose worse.
+Recorded here so the ruling is made on a number rather than an impression.
+
+469 tests green, all fifteen checks, 97 of 97 anchors applying, the code proved identical by the
+`code_only` comparison. `origin-markers` **0**.
+
 
 **2026-09-08 — M6-e-3: `GameLogic/`'s sources. 2,683 markers, eight mutants re-anchored, and the
 detector was counting the comment's own slash.**

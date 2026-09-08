@@ -154,7 +154,7 @@ namespace Elite
       sum = AddSigned(rolled.Pair(), x);
       x = SignMag16{sum.low, sum.high};
 
-      // And the pitch: 6502: `MUT2` with (S R) = XX(1 0) again, and `MULT1` squares the pitch
+      // And the pitch: `MUT2` with (S R) = XX(1 0) again, and `MULT1` squares the pitch
       // term, because the store into `Q` left it in the accumulator (§6.44).
       const std::uint8_t pitch = MultiplyScaled(_flight.pitchMagnitude, static_cast<std::uint8_t>(y.hi ^ _flight.pitchSignFlipped)).high;
       const Product pitched = MultiplySigned(pitch, pitch);
@@ -279,7 +279,7 @@ namespace Elite
       /*
        * And the pitch, where the two routines diverge further than a sign: `STARS1` squares the
        * pitch term (the store into `Q` leaves the accumulator holding what it just stored), and
-       * this one multiplies it by the negated x instead -- 6502: `MUT1` with (S R) = XX(1 0) and
+       * this one multiplies it by the negated x instead -- `MUT1` with (S R) = XX(1 0) and
        * the sign flipped, then `MULT1`. The port keeps both as written
        * (ADR-003).
        */
@@ -434,7 +434,7 @@ namespace Elite
       sum = AddSigned(pitched.Pair(), SignMag16{_dust.yLow[at], y1});
       SignMag16 y{sum.low, sum.high};
 
-      // And the roll, as one scale factor used by both multiply-accumulates (6502: it lives in `Q`).
+      // And the roll, as one scale factor used by both multiply-accumulates (it lives in `Q`).
       const std::uint8_t roll = MultiplyScaled(_flight.rollMagnitude, static_cast<std::uint8_t>(sum.high ^ _flight.rollSign)).high;
 
       sum = MultiplyAndAdd(static_cast<std::uint8_t>(x.hi ^ 0x80u), roll, x);

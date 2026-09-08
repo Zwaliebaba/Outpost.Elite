@@ -131,7 +131,7 @@ namespace Outpost
      */
     if (m_flight == nullptr || m_ports == nullptr)
     {
-      *m_view = _view; // 6502: the view byte alone, all that can be done without the universe
+      *m_view = _view; // The view byte alone, all that can be done without the universe
       return;
     }
 
@@ -283,7 +283,7 @@ namespace Outpost
 
   /*
    * `ShowTitleScreen` WAS HERE AND IS NOT ANY MORE (M6-0-h-2). It was a forward to
-   * `Elite::ShowTitleShip` -- 6502: TITLE, ported in full since §6.107 -- and `BR1` makes the
+   * `Elite::ShowTitleShip` -- `TITLE`, ported in full since §6.107 -- and `BR1` makes the
    * call itself, which is what the original's own call to `TITLE` is.
    */
 
