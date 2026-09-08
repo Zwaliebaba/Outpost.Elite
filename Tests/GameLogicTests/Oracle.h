@@ -145,6 +145,20 @@ namespace Elite::Testing
       std::uint64_t collisions = 0; ///< distinct inputs that produced different answers: must be 0
       std::uint64_t bucketCalls[BUCKETS] = {};
       std::uint64_t bucketBytes[BUCKETS] = {};
+
+      /*
+       * The read census (M6-b-1), which sizes the tail §1 R-g accepts. `imageReads` counts data
+       * reads of a byte nothing had written, so a record keyed on the write set does not name it;
+       * `callsOnImage` counts the calls that made at least one, which is the number that says how
+       * much of the corpus answers from the original rather than from its inputs. `callsPure` is
+       * its complement and is the fraction a write-set key covers outright.
+       */
+      std::uint64_t reads = 0;
+      std::uint64_t imageReads = 0;
+      std::uint64_t imageContentReads = 0; ///< of those, the ones where the image's byte is not zero
+      std::uint64_t callsOnImage = 0;
+      std::uint64_t callsOnContent = 0;
+      std::uint64_t callsPure = 0;
     };
 
     /// The record size at which `Keep` stops keeping. Zero keeps everything, which is what the
