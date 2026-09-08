@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,452 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,350 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-31: `Charts.cpp` and `Stardust.cpp` to zero, and which kill test fired.**
+
+102 sites over two files: both charts, the crosshair, the fuel circle, the system search, and all
+three stardust movers. Seventeenth and eighteenth at zero.
+
+**Which of three kill tests fires decides the carry the next random byte runs on.** A speck that
+drifted sideways and a speck that came too close both get replaced, but the two tests against 120
+arrive at the generator with the carry SET and the one against 16 arrives with it CLEAR — and the
+generator takes the carry as an operand. So the speck that replaces one is a different speck from
+the one that replaces the other, and nothing about the code says so except the flag.
+
+Two more from the same file:
+
+- **`STARS1` squares its pitch term and `STARS6` does not.** The first stores into `Q` and calls the
+  multiply with the accumulator still holding what it stored; the second multiplies by the negated
+  x. Two routines that look like one routine written twice, deliberately different (ADR-003).
+- **The rear view's second halving leaves a carry nobody reads**, where the front view's next
+  instruction is a subtraction that does. Same opening, different consequence.
+
+And from `Charts.cpp`: **a system's dot is large or small according to a byte that means nothing
+else.** The x is a seed byte, the y another halved, and the SIZE comes from a third with two bits
+forced on so that `PIXEL` reads it as a distance.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (70 and 59). `opcode-transcriptions` 1,452 → 1,350.
 
 **2026-09-08 — M6-d-30: `Market.cpp` and `Scanner.cpp` to zero, and a blip one pixel to the right.**
 
