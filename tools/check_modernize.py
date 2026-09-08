@@ -243,7 +243,21 @@ LISTING_CONTEXT = re.compile(r"6502:|/")
 # read as an instruction to a looser pattern, and both are prose. A 6502 operand starts with `#`,
 # `$`, `&`, `%` or `(`, or is the accumulator, or is a label -- and every label in this game's source
 # begins with a capital, a digit or a dot. Lowercase after a mnemonic is a sentence carrying on.
-OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(MNEMONICS) + r")\s+(?:A\b|[#$&%(]|[A-Z0-9.][\w.%+,]*)")
+# `AND` IS TIGHTER THAN THE REST, and this is the fourth calibration of this counter (M6-d-33).
+#
+# `AND` is a conjunction, and this tree writes its findings in capitals, so "AND IT IS NOT THE
+# COMMON ONE" and "WHAT IS NOT HERE AND WHY" read as instructions to a pattern that takes any
+# capitalised token as an operand. The ambiguous-mnemonic guard does not save them: it asks for a
+# slash or a `6502:` in the body, and a file path -- `library/common/.../tt17.asm`, `&DC00`/`&DC01`
+# -- supplies one.
+#
+# So `AND` counts only with an IMMEDIATE-style operand. The tree has 221 occurrences of `AND`
+# followed by a bare token and exactly seven are real (`AND PATG`, `AND COL`, `AND VIC+&10`); every
+# one of those seven shares its line with an unambiguous mnemonic that flags it anyway, so nothing
+# is lost. Eight prose lines stop being counted, and each of them is quoted in section 8's M6-d-33.
+_AND_LESS = [m for m in MNEMONICS if m != "AND"]
+OPCODE_OPERAND = re.compile(r"\b(?:" + "|".join(_AND_LESS) + r")\s+(?:A\b|[#$&%(]|[A-Z0-9.][\w.%+,]*)"
+                            r"|\bAND\s+(?:A\b|[#$&%(])")
 
 # `TXA / CLC` -- an implied-mode instruction needs a SLASH beside it to be a listing.
 #
@@ -612,6 +626,8 @@ namespace Elite
   // TWO LOOPS AND ONE COUNTER, and the mode is decided INSIDE the loop: a sentence, not a listing
   /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
   // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
+  /// 6502: AND #63 -- an immediate operand, so the AND alone makes this line a listing
+  /// 6502: the mask is `&DC00`/`&DC01` AND ONLY that -- capitals after AND, and a slash: still prose
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
   // k3 and q here are a COMMENT and are not counted either
   std::uint8_t m_alp2 = 0;                                  // a member's prefix is stripped before the match
@@ -675,9 +691,9 @@ EXPECTED = {
     "mutants": 3,
     "mutant-files": 2,
     "inventory-stale-files": 1,
-    "origin-markers": 5,
+    "origin-markers": 7,
     "origin-identifiers": 5,
-    "opcode-transcriptions": 3,
+    "opcode-transcriptions": 4,
     "opcode-quotations": 1,
     "oracle-test-files": 1,
     "origin-tools": 1,
