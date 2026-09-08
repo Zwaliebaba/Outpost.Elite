@@ -96,6 +96,7 @@ namespace Elite
     // 6502: TT170 -- the cold start. It ends by pressing "8" for the player and entering the docked
     // half of the main loop, which is why there is no separate "draw the first screen" step.
     const ForcedKey begun = ResetAndStartGame(m_universe, m_ports, false);
+    SettleJoystick();
     if (begun.loop == MainLoop::Docked)
     {
       // 6502: the market is rolled on arrival rather than by the start sequence, and the market
@@ -517,6 +518,26 @@ namespace Elite
   }
 
   /*
+   * The original's `TITLE` ends `BIT KY7 / BMI TL3 / BCC TLL2 / INC JSTK` -- the fire key leaves `JSTK` set, and
+   * that is the joystick question answered "yes" (Design/InputTimer.md §5.1, slice I-3).
+   *
+   * THE ROUTINE IS THE ORIGINAL'S AND STAYS SO; this runs AFTER it, outside anything the oracle
+   * compares. The port has no CIA port A to read a stick from, so a `JSTK` the platform cannot
+   * honour put `DOKEY` into its joystick branch -- both rates snapped to centre whenever their keys
+   * were up, and the damping a keyboard player gets never ran (InputTimer.md I-4). Until the
+   * platform answers `HasJoystick`, the fire key on the title screen is a key like any other; when
+   * it does, nothing here runs and the original's rule returns unchanged. The byte itself stays in
+   * `Universe` and in the digest.
+   */
+  void Game::SettleJoystick() noexcept
+  {
+    if (!m_ports.keyboard.HasJoystick())
+    {
+      m_universe.options.joystick = 0u; // JSTK: keyboard
+    }
+  }
+
+  /*
    * 6502: the six `JMP` targets `DOENTRY` chooses between, and `EN6`'s `JMP BAY`.
    *
    * A function rather than six lines in the switch because `BRIEF` needs the briefing ship's slot
@@ -619,6 +640,7 @@ namespace Elite
       ResetShipAndBubble(m_universe, m_ports); // 6502: DEATH2's JSR RES2
 
       const ForcedKey begun = StartGame(m_universe, m_ports, false);
+      SettleJoystick();
       Perform(begun.outcome);
       return;
     }

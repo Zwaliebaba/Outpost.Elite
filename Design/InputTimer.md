@@ -741,3 +741,10 @@ disk: four tests, the suite back at 408. **One rule bent, and said here rather t
 says the `main-lines` ceiling only goes down. It is raised from 240 to 243 in the same commit,
 because the lines are platform composition and P6 is about game state and dispatch, and the
 alternative was contorting the call onto one line to fit a counter.
+
+**2026-09-08 — I-3 built: the fire key cannot select a joystick.** `Keyboard::HasJoystick`, not
+pure and false by default, and `Game::SettleJoystick` after `ResetAndStartGame` and after `DEATH`'s
+`StartGame`: `JSTK` is cleared unless the platform has a stick. `TITLE` is untouched and its oracle
+comparison unmoved; `GameTests` drives a fire-key title both ways. The replay dismisses its title
+screens with RETURN, so `JSTK` was already zero in the record and no digest moves. ADR-005 §4 has
+the ruling.
