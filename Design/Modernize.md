@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,739 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,676 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-28: `ShipDraw.cpp` to zero, and rule 4's FIFTH shape.**
+
+All 63, across `LL9`'s eleven parts, the clipper, the slope arithmetic and the explosion seed.
+Twelfth file at zero, and the longest file in the tree at 1,552 lines.
+
+**A `6502:` marker in the MIDDLE of a sentence.** Two comments here end their prose and then add the
+listing after a full stop — "…the sign of the answer and not of the first product. 6502: STA Q / JSR
+FMLTU / STA T … STA S." Rewriting them by cutting the listing cut the marker with it, and
+`origin-markers` fell 130 → 128 on the same run that took the transcriptions to zero. The ratchet
+caught it, as it has caught the four shapes before it.
+
+The four already recorded were: deleting a whole comment (M6-c-18), rewriting a block's opening line
+(M6-d-2), dropping an inline trailing marker where the listing was the whole comment (M6-d-3), and
+merging two marked blocks into one (M6-d-9). **The fifth is a marker that is not at the start of
+what it marks**, and it is the least visible of the five, because every instinct while rewriting says
+the listing is at the end and the prose is what to keep. Both markers are back, one as `(6502:
+`LL38`)` inside the parenthesis the sentence already wanted.
+
+Kept from the file itself: the entry to the slope routine shifts BOTH ends once before the loop, and
+the loop's own test shifts again before testing — so a gradient of zero gets TWO shifts and not one,
+which the port had wrong until the mutation sweep said otherwise.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, and 130
+markers in this file before and after — after the fix. `opcode-transcriptions` 1,739 → 1,676.
 
 **2026-09-08 — M6-d-27: `MarketScreen.cpp` to zero, and a branch used as a jump.**
 
