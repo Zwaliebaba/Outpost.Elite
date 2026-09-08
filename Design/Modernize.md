@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->683 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->633 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-41: `ExtendedTokens.cpp` and `NameEntry.cpp` to zero, and the byte that IS the
+reason.**
+
+50 sites over two files: the extended-token printer with its justifier, and the line editor.
+Thirty-seventh and thirty-eighth at zero.
+
+**`EQUB &2C` stayed, and it is the clearest example yet of where R20's line falls.** `OSW0L` prints
+the key it accepted or a bell it did not, and there is exactly ONE call to `CHPR` for both: the
+accepted path falls past the bell's load through a byte assembled as `EQUB &2C`, which the processor
+reads as `BIT` with a two-byte absolute address and which therefore swallows the load. Naming the
+opcode is not transcription here — the *value of that byte* is the whole mechanism, and prose that
+said "the accepted path skips the bell" would be describing a consequence and hiding the cause. The
+same paragraph's other half went the other way: `BCC OSW0L` became "the branch back to the loop",
+because what matters is that it ALWAYS branches (`CHPR` returns with the carry clear) and not which
+mnemonic spells it. One paragraph, both sides of the rule.
+
+The rest of both files was label-and-listing over text plumbing — `DAS1`, `DA2`, `DA6`, `DA11`,
+`MT15`, `MT17`, `MT19`, `TRNME`, `TR1`, `GTL1` to `GTL3` — a name, then the loop under it. Each
+keeps its name and loses the transcription. `NameEntry.cpp`'s note that `thislong` is copied into
+`oldlong` "which the original's own comment says is never read" was already right; M6-d-37 confirmed
+it from the other end, and the two now agree without either having been written to match.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (48 and 24). `opcode-transcriptions` 683 → 633.
 
 **2026-09-08 — M6-d-40: `Galaxy.cpp` and `Spawn.h` to zero, and two constants that are one.**
 
