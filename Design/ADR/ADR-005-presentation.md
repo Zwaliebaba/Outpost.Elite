@@ -208,6 +208,17 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   end — where the original slows down most, and where the slowdown is part of the difficulty —
   is not measured yet and is paced at the one-ship cost (§6.114).
 
+- **The crowded end and the docked pass are measured, 2026-09-08 (Design/InputTimer.md T-0),
+  while the interpreter is still in the tree.** `FLIGHT_FRAME_COSTS` is four rows keyed by
+  occupied slots, planet and sun included, linear between them: 47,784 cycles empty, 82,236 with
+  the planet and its companion, 150,113 with three fighters, 293,354 with eight — three and a half
+  frames a second in a full fight, which is the slowdown the game shipped with. The sun and the
+  station cost differently and the row is their midpoint. The docked pass is not paced by a
+  flight floor any more: `MLOOP` with `QQ12` set is two vertical syncs (`LDY #2 / JSR DELAY`,
+  unless `PATG`'s bit 0) around 4,472 cycles of work, so the docked half runs at just under half
+  the sync rate, and `DockedPassSeconds` says so. `TT16`'s extra sync per crosshair step is
+  recorded and waits for the simulated blank (T-1) to be honoured.
+
 - **The title screen is cycle-budgeted as well. Added 2026-09-05.** `TITLE`
   is not driven by the vertical sync — §6.17's scan found `WSCAN` called from `DELAY`,
   `TT16+7` and `FREEZE` and nowhere else — so its ship turns at whatever rate a 6510 gets

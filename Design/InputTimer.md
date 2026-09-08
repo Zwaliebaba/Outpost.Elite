@@ -312,7 +312,7 @@ is what `DELAY` will use once T-1 is fixed, so the decision has to be taken then
 decision (§7), not a technical one: the GMA85 variant `elite-build-options.asm` configures is the
 question.
 
-### T-5 (A for sequencing) — What is unmeasured has to be measured before M6-b
+### T-5 (A for sequencing) — What is unmeasured has to be measured before M6-b — **built 2026-09-08 as T-0, §9**
 
 `FlightFrameSeconds` is two bands because the crowded bubble could not be timed (`TACTICS` does not
 return for a station in the fixture); the docked pass is paced at the empty-bubble *flight* cost as
@@ -748,3 +748,20 @@ pure and false by default, and `Game::SettleJoystick` after `ResetAndStartGame` 
 comparison unmoved; `GameTests` drives a fire-key title both ways. The replay dismisses its title
 screens with RETURN, so `JSTK` was already zero in the record and no digest moves. ADR-005 §4 has
 the ruling.
+
+**2026-09-08 — T-0 built: the crowded end and the docked pass, measured.** `Seed`'s station never
+returned because its block was random; a sane station at 0x08 dead ahead returns in seventy
+thousand cycles, so `FlightLoopTests::TheCrowdedFrameCostsWhatItCosts` builds seven bubbles by hand
+-- the planet at 0x20, the sun at 0x60 or the station at 0x08, fighters straight ahead at 0x0C --
+and times the SECOND frame of each, the one that draws and erases. The rows, in cycles: planet
+alone 29,016; planet and sun 93,974; planet and station 70,498; with three fighters 162,487 (sun)
+and 137,740 (station); with eight 305,693 and 281,016. `FLIGHT_FRAME_COSTS` is the midpoint of
+sun and station at 2, 5 and 10 slots with §6.114's empty row kept, linear between; a fighter is
+about 21,000 cycles, the AI adds one percent, and position matters more than count (the same eight
+at 0x04 cost 366,000 and at 0x30 177,000). **The docked pass is a different animal**:
+`TheDockedPassCostsWhatItCosts` runs `MLOOP` past its `TXS` to `FRCE`'s `JMP MLOOP` with `DELAY` and
+`WSCAN` trapped and finds 4,472 cycles of work on the status screen, 2,746 on a chart and 5,691
+moving the crosshairs -- the pass is its two syncs, so the docked half runs at just under half
+the blank rate, and `Main.cpp` paces it by `DockedPassSeconds` where the flight floor stood in.
+Finding T-5 is closed for the flight and the docked pass; `TT16`'s sync per crosshair step is
+recorded as a constant for T-1. ADR-005 §3 carries the numbers. Three tests, the suite at 412.

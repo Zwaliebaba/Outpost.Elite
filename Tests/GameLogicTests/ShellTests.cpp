@@ -489,6 +489,42 @@ namespace GameLogicTests
     }
 
     /*
+     * The flight frame's cost curve and the docked pass, straight off InputTimer.md T-0's
+     * measurement -- pinned here the way the title curve is, so that a row cannot drift from the
+     * number it was read from without a test saying so.
+     */
+    TEST_METHOD(TheFlightFrameAndTheDockedPassArePacedByWhatTheyCost)
+    {
+      // The rows: the empty bubble of §6.114, and T-0's midpoints of the sun and station scenes.
+      Assert::AreEqual(47'784.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(0), 1e-9, L"an empty bubble");
+      Assert::AreEqual(82'236.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(2), 1e-9, L"the planet and its companion");
+      Assert::AreEqual(150'113.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(5), 1e-9, L"and three fighters");
+      Assert::AreEqual(293'354.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(10), 1e-9, L"and eight");
+
+      // Linear between rows -- a fighter costs about 21,000 cycles -- and flat past the last.
+      Assert::AreEqual((82'236.0 + 150'113.0) / 2.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(3) + (Outpost::FlightFrameSeconds(4) - Outpost::FlightFrameSeconds(3)) / 2.0, 1e-9,
+                       L"the rows are joined by straight lines");
+      Assert::AreEqual(Outpost::FlightFrameSeconds(10), Outpost::FlightFrameSeconds(255), 1e-12, L"the bubble cannot hold more than ten");
+      for (int ships = 1; ships <= 10; ++ships)
+      {
+        Assert::IsTrue(Outpost::FlightFrameSeconds(static_cast<std::uint8_t>(ships)) > Outpost::FlightFrameSeconds(static_cast<std::uint8_t>(ships - 1)),
+                       (L"a fuller bubble is never cheaper, at " + std::to_wstring(ships)).c_str());
+      }
+
+      // The game slows to three frames a second in a fight of eight, which is the difficulty §6.17
+      // said the port had to keep.
+      Assert::AreEqual(3.49, 1.0 / Outpost::FlightFrameSeconds(10), 0.05, L"a full bubble: three and a half frames a second");
+      Assert::AreEqual(12.4, 1.0 / Outpost::FlightFrameSeconds(2), 0.1, L"a quiet one: twelve");
+
+      // The docked pass: two vertical syncs and 4,472 cycles, unless PATG's bit 0 lifts the wait.
+      const double sync = Outpost::NTSC_FRAME_CYCLES / Outpost::NTSC_CLOCK_HZ;
+      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ + 2.0 * sync, Outpost::DockedPassSeconds(0), 1e-9, L"author names off: the syncs are waited");
+      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ, Outpost::DockedPassSeconds(0xFF), 1e-9, L"author names on: LSR A / BCS skips DELAY");
+      Assert::AreEqual(Outpost::DockedPassSeconds(0), Outpost::DockedPassSeconds(0xFE), 1e-12, L"and it is bit 0 that decides, not the byte");
+      Assert::AreEqual(26.5, 1.0 / Outpost::DockedPassSeconds(0), 0.2, L"twenty-six passes a second on the NTSC frame: two syncs and four milliseconds");
+    }
+
+    /*
      * ADR-005 section 3: a fixed timestep, and steps are never SILENTLY skipped or doubled.
      *
      * The clamp is the part worth testing hardest. A breakpoint or a closed laptop lid leaves the

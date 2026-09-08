@@ -25,7 +25,7 @@ it, the replay reaching death and the escape pod, a coverage instrument CI reads
 ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is next**: the four gaps the
 instrument named, then the recorder. **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->409 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->412 tests** and
 CI runs **<!--count:checks-->sixteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
