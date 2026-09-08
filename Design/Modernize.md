@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->235 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->176 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,30 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-13: the arithmetic sweeps take the port's own parameter names.**
+
+59 sites in `ArithTests.cpp`, and this one needed no invention at all: the port's signatures already
+name every operand. `AddSigned(SignMag16 _value, SignMag16 _addend)`, so the sweep's `p`/`r`/`s` are
+`valueLow`, `addendLow` and `addendHigh`; `MultiplyAndAdd(_value, _multiplier, _addend)`, so `MAD`'s
+`q` is the `multiplier`; `DivideWide(_high, _low, _divisor)`, so `DVIDT`'s `q` is the `divisor`; and
+`CombineSigned(_termSign, _term, _total)`, so `LL38`'s three are `term`, `totalLow` and `totalHigh`.
+Where a sweep's variables ALREADY read as what they feed — `multiplicand` against `multiplier` in
+the `MULT1` block — nothing changed, and those blocks are why `multiplier` and `divisor` were the
+names to reach for: this file settled on them nine test methods ago.
+
+The edge-case table is the same rename one level in: `Case` is a struct of four bytes and its
+initialisers are positional, so its fields move with the sweep they mirror.
+
+Also `Context(_what, _a, _b)`, the failure-message helper forty assertions call — `_first` and
+`_second`, because it takes whatever pair the caller is comparing and its `_b` was the vocabulary's
+`B` by accident rather than by descent.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored: the `ar-*` mutants name lines in
+`GameLogic/Arith.cpp`, which this slice does not touch.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 235 → 176.
 
 **2026-09-08 — M6-c-12: the divide sweeps say which operand they are sweeping.**
 

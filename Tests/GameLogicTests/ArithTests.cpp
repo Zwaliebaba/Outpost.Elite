@@ -73,9 +73,9 @@ namespace GameLogicTests
       return true;
     }
 
-    std::wstring Context(const wchar_t* _what, std::uint32_t _a, std::uint32_t _b)
+    std::wstring Context(const wchar_t* _what, std::uint32_t _first, std::uint32_t _second)
     {
-      return std::wstring(_what) + L" with inputs " + std::to_wstring(_a) + L" and " + std::to_wstring(_b);
+      return std::wstring(_what) + L" with inputs " + std::to_wstring(_first) + L" and " + std::to_wstring(_second);
     }
 
     /// A small deterministic generator, so a failure is reproducible from its iteration number.
@@ -382,13 +382,13 @@ namespace GameLogicTests
       {
         const std::uint32_t sample = NextSample(state);
         const std::uint8_t a = static_cast<std::uint8_t>(sample);
-        const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
-        const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
-        const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+        const std::uint8_t valueLow = static_cast<std::uint8_t>(sample >> 8);
+        const std::uint8_t addendHigh = static_cast<std::uint8_t>(sample >> 16);
+        const std::uint8_t addendLow = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.zeroPageP] = p;
-        cpu.memory[zp.zeroPageS] = s;
-        cpu.memory[zp.zeroPageR] = r;
+        cpu.memory[zp.zeroPageP] = valueLow;
+        cpu.memory[zp.zeroPageS] = addendHigh;
+        cpu.memory[zp.zeroPageR] = addendLow;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -397,7 +397,7 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"ADD should return");
 
-        const AddSignedResult actual = Elite::AddSigned(SignMag16{p, a}, SignMag16{r, s});
+        const AddSignedResult actual = Elite::AddSigned(SignMag16{valueLow, a}, SignMag16{addendLow, addendHigh});
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
@@ -426,9 +426,9 @@ namespace GameLogicTests
       struct Case
       {
         std::uint8_t a;
-        std::uint8_t p;
-        std::uint8_t s;
-        std::uint8_t r;
+        std::uint8_t valueLow;
+        std::uint8_t addendHigh;
+        std::uint8_t addendLow;
       };
 
       const Case cases[] = {
@@ -447,9 +447,9 @@ namespace GameLogicTests
 
       for (const Case& item : cases)
       {
-        cpu.memory[zp.zeroPageP] = item.p;
-        cpu.memory[zp.zeroPageS] = item.s;
-        cpu.memory[zp.zeroPageR] = item.r;
+        cpu.memory[zp.zeroPageP] = item.valueLow;
+        cpu.memory[zp.zeroPageS] = item.addendHigh;
+        cpu.memory[zp.zeroPageR] = item.addendLow;
         cpu.a = item.a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -458,10 +458,10 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed);
 
-        const AddSignedResult actual = Elite::AddSigned(SignMag16{item.p, item.a}, SignMag16{item.r, item.s});
+        const AddSignedResult actual = Elite::AddSigned(SignMag16{item.valueLow, item.a}, SignMag16{item.addendLow, item.addendHigh});
 
-        const std::wstring where = L" for A=" + std::to_wstring(item.a) + L" P=" + std::to_wstring(item.p) + L" S=" +
-                                   std::to_wstring(item.s) + L" R=" + std::to_wstring(item.r);
+        const std::wstring where = L" for A=" + std::to_wstring(item.a) + L" P=" + std::to_wstring(item.valueLow) + L" S=" +
+                                   std::to_wstring(item.addendHigh) + L" R=" + std::to_wstring(item.addendLow);
         Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.x, actual.low, (L"low byte" + where).c_str());
       }
@@ -489,13 +489,13 @@ namespace GameLogicTests
       {
         const std::uint32_t sample = NextSample(state);
         const std::uint8_t a = static_cast<std::uint8_t>(sample);
-        const std::uint8_t q = static_cast<std::uint8_t>(sample >> 8);
-        const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
-        const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+        const std::uint8_t multiplier = static_cast<std::uint8_t>(sample >> 8);
+        const std::uint8_t addendHigh = static_cast<std::uint8_t>(sample >> 16);
+        const std::uint8_t addendLow = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.zeroPageQ] = q;
-        cpu.memory[zp.zeroPageS] = s;
-        cpu.memory[zp.zeroPageR] = r;
+        cpu.memory[zp.zeroPageQ] = multiplier;
+        cpu.memory[zp.zeroPageS] = addendHigh;
+        cpu.memory[zp.zeroPageR] = addendLow;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -504,7 +504,7 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"MAD should return");
 
-        const AddSignedResult actual = Elite::MultiplyAndAdd(a, q, SignMag16{r, s});
+        const AddSignedResult actual = Elite::MultiplyAndAdd(a, multiplier, SignMag16{addendLow, addendHigh});
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
@@ -601,12 +601,12 @@ namespace GameLogicTests
       {
         const std::uint32_t sample = NextSample(state);
         const std::uint8_t a = static_cast<std::uint8_t>(sample);
-        const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
-        const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
+        const std::uint8_t valueLow = static_cast<std::uint8_t>(sample >> 8);
+        const std::uint8_t multiplier = static_cast<std::uint8_t>(sample >> 16);
 
-        cpu.memory[zp.zeroPageP] = p;
+        cpu.memory[zp.zeroPageP] = valueLow;
         cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)] = 0;
-        cpu.memory[zp.zeroPageQ] = q;
+        cpu.memory[zp.zeroPageQ] = multiplier;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -615,7 +615,7 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"MLTU2 should return");
 
-        const Elite::Product24 product = Elite::MultiplyWide(a, p, q);
+        const Elite::Product24 product = Elite::MultiplyWide(a, valueLow, multiplier);
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, product.high, (L"high byte" + where).c_str());
@@ -723,11 +723,11 @@ namespace GameLogicTests
         const std::uint32_t sample = NextSample(state);
         const std::uint8_t a = static_cast<std::uint8_t>(sample);
         const std::uint8_t x = static_cast<std::uint8_t>(sample >> 8);
-        const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
-        const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+        const std::uint8_t addendHigh = static_cast<std::uint8_t>(sample >> 16);
+        const std::uint8_t addendLow = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.zeroPageS] = s;
-        cpu.memory[zp.zeroPageR] = r;
+        cpu.memory[zp.zeroPageS] = addendHigh;
+        cpu.memory[zp.zeroPageR] = addendLow;
         cpu.a = a;
         cpu.x = x;
         cpu.y = 0;
@@ -737,7 +737,7 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"TIS1 should return");
 
-        const std::uint8_t result = Elite::MultiplyAddDivide96(a, x, SignMag16{r, s});
+        const std::uint8_t result = Elite::MultiplyAddDivide96(a, x, SignMag16{addendLow, addendHigh});
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
@@ -765,12 +765,12 @@ namespace GameLogicTests
       {
         const std::uint32_t sample = NextSample(state);
         const std::uint8_t a = static_cast<std::uint8_t>(sample);
-        const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
-        const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
+        const std::uint8_t valueLow = static_cast<std::uint8_t>(sample >> 8);
+        const std::uint8_t divisor = static_cast<std::uint8_t>(sample >> 16);
 
-        cpu.memory[zp.zeroPageP] = p;
+        cpu.memory[zp.zeroPageP] = valueLow;
         cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)] = 0;
-        cpu.memory[zp.zeroPageQ] = q;
+        cpu.memory[zp.zeroPageQ] = divisor;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -779,7 +779,7 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"DVIDT should return");
 
-        const Elite::WideQuotient result = Elite::DivideWide(a, p, q);
+        const Elite::WideQuotient result = Elite::DivideWide(a, valueLow, divisor);
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, result.Signed(), (L"result" + where).c_str());
@@ -882,13 +882,13 @@ namespace GameLogicTests
       {
         const std::uint32_t sample = NextSample(state);
         const std::uint8_t a = static_cast<std::uint8_t>(sample);
-        const std::uint8_t s = static_cast<std::uint8_t>(sample >> 8);
-        const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
-        const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+        const std::uint8_t totalHigh = static_cast<std::uint8_t>(sample >> 8);
+        const std::uint8_t term = static_cast<std::uint8_t>(sample >> 16);
+        const std::uint8_t totalLow = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.zeroPageS] = s;
-        cpu.memory[zp.zeroPageQ] = q;
-        cpu.memory[zp.zeroPageR] = r;
+        cpu.memory[zp.zeroPageS] = totalHigh;
+        cpu.memory[zp.zeroPageQ] = term;
+        cpu.memory[zp.zeroPageR] = totalLow;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -897,7 +897,7 @@ namespace GameLogicTests
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"LL38 should return");
 
-        const Elite::SignedSum result = Elite::CombineSigned(a, q, SignMag16{r, s});
+        const Elite::SignedSum result = Elite::CombineSigned(a, term, SignMag16{totalLow, totalHigh});
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, result.value, (L"result" + where).c_str());
