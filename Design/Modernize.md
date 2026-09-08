@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->856 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->793 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,40 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-38: `Combat.cpp` and `StatusScreen.cpp` to zero, and RED comes before YELLOW.**
+
+63 sites over two files: the damage and kill paths, and the status screen. Thirty-first and
+thirty-second at zero.
+
+**The condition tokens are not in the order the comment gave them.** `CONDITION_BASE`'s header read
+"the base of the three condition tokens, "Docked", "Green", "Yellow", "Red"" — four names for three
+tokens, in an order that is wrong. A recursive token is its argument less 160 (`TT47`'s `SBC #160`,
+reached with the carry set from the compare above it), so 230 is token 70 "GREEN", **231 is 71
+"RED"** and 232 is 72 "YELLOW"; "DOCKED" is extended token 205 and not in the run at all. The code
+was right throughout — healthy energy sets the carry and adds two, landing on YELLOW — and only the
+prose had the order backwards, which is exactly the arrangement that makes an error survive: the
+sentence names the constants in the reader's expected order and the arithmetic quietly does
+something else.
+
+**A second miscount in the same file: the flag walk reaches four bytes and the comment claimed
+five.** The loop runs tokens 113 to 116 over `BOMB`, `ENGY`, `DKCMP` and `GHYP`; `ESCP` is the byte
+after them and is printed above, on its own flag. The comment listed it as a fifth, which would be
+a double print if anyone acted on it.
+
+Both were found the same way as M6-d-36's three: by taking each claim the rewrite would carry
+forward and asking the original rather than the paragraph. That is now the routine, and it has
+turned up something in each of the last three slices.
+
+The rest was carry arguments, which are the transcriptions hardest to cut without losing the
+reason. `PlayHitSound`'s explanation of why the carry into `NOISE2` is always clear is *about* four
+shifts, and `TakeDamage`'s is about a rotate that drops bit 0 into the carry; both keep the
+mechanism and lose the mnemonics, because the mechanism is the reason and the mnemonics are not.
+`OO3`'s trap — the zero branch jumping forward PAST the carry branch onto the jump to `DEATH`, so
+energy landing exactly on zero kills a player whose addition carried — survives intact.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (25 and 31). `opcode-transcriptions` 856 → 793.
 
 **2026-09-08 — M6-d-37: `SaveGame.cpp` and `Music.cpp` to zero, and a store nothing reads.**
 

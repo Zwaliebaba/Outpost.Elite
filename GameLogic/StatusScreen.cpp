@@ -18,28 +18,30 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDA #7 / JSR DOXC and LDA #126 / JSR NLIN3 -- the title, whose rule is the canvas's.
+    /// 6502: the title's column and its token, whose rule is the canvas's.
     constexpr std::uint8_t TITLE_COLUMN = 7;
     constexpr std::uint8_t TITLE_TOKEN = 126;
 
-    /// 6502: LDA #230 -- the base of the three condition tokens, "Docked", "Green", "Yellow", "Red".
+    /// 6502: the base of the three condition tokens. Recursive tokens are the argument less 160,
+    /// so 230 is token 70 "GREEN", 231 is 71 "RED" and 232 is 72 "YELLOW" -- RED BEFORE YELLOW,
+    /// which is why the healthy branch is the one that adds two. "DOCKED" is not in this run.
     constexpr std::uint8_t CONDITION_BASE = 230;
 
-    /// 6502: CPY #128 -- the energy level below which the condition is Red rather than Yellow.
+    /// 6502: the energy level below which the condition is Red rather than Yellow.
     constexpr std::uint8_t LOW_ENERGY = 128;
 
-    /// 6502: LDA #125 / JSR spc and LDA #19 -- "LEGAL STATUS:" and the base of the three answers.
+    /// 6502: "LEGAL STATUS:" and the base of the three answers.
     constexpr std::uint8_t LEGAL_HEADING_TOKEN = 125;
     constexpr std::uint8_t LEGAL_BASE = 19;
 
-    /// 6502: CPY #50 -- fugitive at fifty, offender below it.
+    /// 6502: fugitive at fifty, offender below it.
     constexpr std::uint8_t FUGITIVE_AT = 50;
 
-    /// 6502: LDA #16 / JSR spc -- "RATING:", then the rating itself at 21 + the shift count.
+    /// 6502: "RATING:", then the rating itself at 21 plus the shift count.
     constexpr std::uint8_t RATING_HEADING_TOKEN = 16;
     constexpr std::uint8_t RATING_BASE = 21;
 
-    /// 6502: LDA #18 / JSR plf2 -- "EQUIPMENT:".
+    /// 6502: "EQUIPMENT:".
     constexpr std::uint8_t EQUIPMENT_HEADING_TOKEN = 18;
 
     /// 6502: the three pieces of equipment with flags of their own, and their tokens.
@@ -47,11 +49,12 @@ namespace Elite
     constexpr std::uint8_t FUEL_SCOOPS_TOKEN = 111;
     constexpr std::uint8_t ECM_TOKEN = 108;
 
-    /// 6502: LDA #113 / STA XX4 / stqv ... CMP #117 / BCC stqv -- the four consecutive flags at BOMB.
+    /// 6502: stqv -- the four consecutive flags at BOMB, walked from token 113 up to but not
+    /// including 117.
     constexpr std::uint8_t BOMB_GROUP_FIRST_TOKEN = 113;
     constexpr std::uint8_t BOMB_GROUP_LAST_TOKEN = 117;
 
-    /// 6502: ADC #96 -- "FRONT", "REAR", "LEFT", "RIGHT" for the four laser mounts.
+    /// 6502: "FRONT", "REAR", "LEFT", "RIGHT" for the four laser mounts.
     constexpr std::uint8_t VIEW_NAME_BASE = 96;
     constexpr int LASER_MOUNTS = 4;
 
@@ -60,7 +63,7 @@ namespace Elite
     constexpr std::uint8_t MILITARY_TOKEN = 117;
     constexpr std::uint8_t MINING_TOKEN = 118;
 
-    /// 6502: LDA #205 / JSR DETOK -- "DOCKED", which is an EXTENDED token rather than a recursive one.
+    /// 6502: "DOCKED", which goes through `DETOK` -- an EXTENDED token rather than a recursive one.
     constexpr std::uint8_t DOCKED_TOKEN = 205;
 
     /*
@@ -76,8 +79,8 @@ namespace Elite
     {
       const std::uint8_t high = static_cast<std::uint8_t>(_kills >> 8);
 
-      // 6502: st4 -- LDX #9 / CMP #25 / BCS st3 / DEX / CMP #10 / BCS st3 / DEX / CMP #2 / BCS st3 /
-      // DEX / BNE st3. The last DEX leaves 6 and the BNE is therefore always taken.
+      // 6502: st4 -- a rating starting at 9 and stepped down once for each threshold the high byte
+      // misses. The last step leaves 6 and its branch is therefore always taken.
       if (high != 0)
       {
         if (high >= 25u)
@@ -95,7 +98,7 @@ namespace Elite
         return 6;
       }
 
-      // 6502: TAX (X = 0) / LDA TALLY / LSR A / LSR A / INX / LSR A / BNE P%-2.
+      // 6502: two shifts, then one at a time with the count going up, until the byte is zero.
       std::uint8_t value = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_kills) >> 2);
       std::uint8_t shifts = 0;
       do
@@ -131,7 +134,7 @@ namespace Elite
   void StatusScreen(Universe& _universe, Ports& _ports, const ShipCondition& _condition) noexcept
   {
     /*
-     * 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
+     * 6502: TRADEMODE on view 8, which sets the cursor and the case flags too.
      *
      * The layout is this screen's own and is named here because nothing downstream could work it
      * out: `TT213` starts the inventory screen with the same #8, so the view byte the game keeps
@@ -140,7 +143,7 @@ namespace Elite
     SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW, STATUS_LAYOUT);
 
     /*
-     * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.
+     * 6502: TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.
      *
      * It is called for what it leaves behind rather than for anything it draws, which is why its
      * result goes straight into the selected system rather than being read here.
@@ -149,25 +152,26 @@ namespace Elite
                                                 _universe.commander.systemX, _universe.commander.systemY)
                                 .seeds;
 
-    // 6502: LDA #7 / JSR DOXC / LDA #126 / JSR NLIN3 -- the rule itself is the canvas's.
+    // 6502: column 7, then token 126 through `NLIN3` -- the rule itself is the canvas's.
     _universe.text.column = TITLE_COLUMN;
     _ports.printer.Print(TITLE_TOKEN);
 
     /*
-     * 6502: LDA #15 / LDY QQ12 / BNE wearedocked.
+     * 6502: a token loaded, the docked flag read, and a branch to `wearedocked`.
      *
-     * The `LDA #15` is dead: docked, `wearedocked` loads its own token; in space, `LDA #230`
-     * overwrites it four instructions later. The original's own comment calls it "left over from
-     * the cassette version", and it is not reproduced.
+     * That first token, 15, is DEAD: docked, `wearedocked` loads its own; in space, the condition
+     * base overwrites it four instructions later. The original's own comment calls it "left over
+     * from the cassette version", and it is not reproduced.
      */
     if (_condition.docked != 0)
     {
-      // 6502: wearedocked -- JSR DETOK / JSR TT67K / JMP st6+3.
+      // 6502: wearedocked -- the token, a newline, and straight on to the legal status.
       _ports.tokens.Print(DOCKED_TOKEN);
 
       /*
-       * 6502: TT67K -- LDA #12 falling straight into CHPR, so the newline goes through the CHARACTER
-       * printer rather than through TT27. TT67, two routines away, is the one that goes via TT27.
+       * 6502: TT67K -- a carriage return falling straight into CHPR, so the newline goes through
+       * the CHARACTER printer rather than through TT27. TT67, two routines away, is the one that
+       * goes via TT27.
        *
        * The two are NOT interchangeable in principle: TT27's path clears the "first letter seen"
        * bit when it prints a non-letter, and CHPR does not touch QQ17 at all. So swapping them
@@ -185,11 +189,11 @@ namespace Elite
     else
     {
       /*
-       * 6502: LDA #230 / LDY JUNK / LDX FRIN+2,Y / BEQ st6 / LDY ENERGY / CPY #128 / ADC #1.
+       * 6502: st6 -- the condition base, the first slot past the junk, and the energy compared.
        *
-       * Green when the first slot past the junk is empty. Otherwise the carry from `CPY #128` picks
-       * between Yellow and Red, and the ADC adds one MORE than it looks like it does -- `ADC #1`
-       * with the carry set adds two.
+       * Green when the first slot past the junk is empty. Otherwise the carry that comparison
+       * leaves picks between Red and Yellow, and the addition of one adds one MORE than it looks
+       * like it does: with the carry set it adds two.
        */
       std::uint8_t condition = CONDITION_BASE;
       if (_condition.firstShip != 0)
@@ -202,11 +206,11 @@ namespace Elite
       PrintThenNewline(_ports.printer, condition);
     }
 
-    // 6502: st6+3 -- LDA #125 / JSR spc.
+    // 6502: st6+3 -- the heading and a space.
     PrintThenSpace(_ports.printer, LEGAL_HEADING_TOKEN);
 
     /*
-     * 6502: LDA #19 / LDY FIST / BEQ st5 / CPY #50 / ADC #1.
+     * 6502: st5 -- the legal base, the status byte, and the same fifty compared.
      *
      * Clean, Offender or Fugitive, and the same trick: the comparison's carry is what makes the
      * third one reachable at all.
@@ -219,14 +223,14 @@ namespace Elite
     }
     PrintThenNewline(_ports.printer, legal);
 
-    // 6502: LDA #16 / JSR spc / ... / st3: TXA / CLC / ADC #21 / JSR plf.
+    // 6502: st3 -- the heading and a space, then 21 plus the rating.
     PrintThenSpace(_ports.printer, RATING_HEADING_TOKEN);
     PrintThenNewline(_ports.printer, static_cast<std::uint8_t>(RATING_BASE + Rating(_universe.commander.kills.Value())));
 
-    // 6502: LDA #18 / JSR plf2.
+    // 6502: the heading, indented.
     PrintThenIndent(_ports.printer, _universe.text, EQUIPMENT_HEADING_TOKEN);
 
-    // 6502: LDA ESCP / BEQ P%+7 / LDA #112 / JSR plf2, and the same shape twice more.
+    // 6502: a flag tested and its token printed if set, and the same shape twice more.
     if (_universe.commander.escapePod != 0)
     {
       PrintThenIndent(_ports.printer, _universe.text, ESCAPE_POD_TOKEN);
@@ -241,15 +245,16 @@ namespace Elite
     }
 
     /*
-     * 6502: LDA #113 / STA XX4 / stqv: TAY / LDX BOMB-113,Y / BEQ P%+5 / JSR plf2 / INC XX4 ...
+     * 6502: stqv -- four flags walked by their token number.
      *
      * Four flags that happen to be consecutive in the block -- the energy bomb, the energy unit,
      * the docking computer and the galactic hyperdrive -- walked by using the TOKEN NUMBER as the
      * index and subtracting 113 from the base address. So the loop counter and the thing printed
      * are the same byte, which is why there is no separate table.
      */
-    // The walk is over BYTES from BOMB, so it goes through the codec: the five it reaches are the bomb,
-    // the energy unit, the docking computer, the galactic hyperdrive and the escape pod.
+    // The walk is over BYTES from BOMB, so it goes through the codec: the FOUR it reaches are the
+    // bomb, the energy unit, the docking computer and the galactic hyperdrive. The escape pod is
+    // the byte after them and is printed above, on its own flag.
     const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> equipment = _universe.commander.ToBytes();
     for (std::uint8_t token = BOMB_GROUP_FIRST_TOKEN; token < BOMB_GROUP_LAST_TOKEN; ++token)
     {
@@ -260,7 +265,7 @@ namespace Elite
       }
     }
 
-    // 6502: LDX #0 / st: STX CNT / LDY LASER,X / BEQ st1 / ... / CPX #4 / BCC st.
+    // 6502: st -- the four mounts walked, skipping any that holds nothing.
     for (int mount = 0; mount < LASER_MOUNTS; ++mount)
     {
       const Laser laser = _universe.commander.lasers[static_cast<std::size_t>(mount)];
@@ -269,7 +274,7 @@ namespace Elite
         continue;
       }
 
-      // 6502: TXA / CLC / ADC #96 / JSR spc -- the mount's name and a space.
+      // 6502: the mount number plus 96 -- the mount's name and a space.
       PrintThenSpace(_ports.printer, static_cast<std::uint8_t>(VIEW_NAME_BASE + mount));
       PrintThenIndent(_ports.printer, _universe.text, LaserToken(laser));
     }
