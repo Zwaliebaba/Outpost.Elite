@@ -25,16 +25,10 @@
     <ClInclude Include="OracleLabels.h">
       <Filter>Oracle</Filter>
     </ClInclude>
-    <ClInclude Include="GoldenCanvas.h">
-      <Filter>Oracle</Filter>
-    </ClInclude>
     <ClInclude Include="FlightPort.h">
       <Filter>Oracle</Filter>
     </ClInclude>
     <ClInclude Include="FlightUniverse.h">
-      <Filter>Oracle</Filter>
-    </ClInclude>
-    <ClInclude Include="ShipBytes.h">
       <Filter>Oracle</Filter>
     </ClInclude>
     <ClInclude Include="UniverseImage.h">
@@ -58,19 +52,10 @@
     <ClCompile Include="ArithTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="Cpu6502Tests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="OracleTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="RngTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="TokenTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="ExtendedTokenTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="CanvasSpikeTests.cpp">
@@ -82,15 +67,6 @@
     <ClCompile Include="TextPrintTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="GoldenCanvas.cpp">
-      <Filter>Oracle</Filter>
-    </ClCompile>
-    <ClCompile Include="GoldenTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="NumberTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="GalaxyTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
@@ -100,40 +76,16 @@
     <ClCompile Include="MarketTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="MissionTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="RasterTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="SidRenderTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="MarketScreenTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="StateTokenTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="NameEntryTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="SaveGameTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="SystemScreenTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="SaveStoreTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="DockedKeyTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="StartUpTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="DockingTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="DockedSessionTests.cpp">
@@ -146,30 +98,6 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ShipMoveTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="ShipDrawTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="SoundTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="SpawnTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="PlanetDrawTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="ScannerTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="HyperspaceTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="ExplosionTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="GameLoopTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="PictureTests.cpp">
@@ -187,49 +115,22 @@
     <ClCompile Include="PictureDashboardTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="TacticsTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="TrumbleTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="UniverseImageTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="StateHashTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="FlightReplayTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="MessageTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="LaserTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="FlightLoopTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="CombatTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="LaunchTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="ControlsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="VideoStateTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ViewChangeTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="DashboardTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="StardustTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
@@ -247,13 +148,7 @@
     <ClCompile Include="..\..\Outpost\SidSynth.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="ChartTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
     <ClCompile Include="CommanderTests.cpp">
-      <Filter>Suites</Filter>
-    </ClCompile>
-    <ClCompile Include="CycleTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
   </ItemGroup>

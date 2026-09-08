@@ -3,10 +3,11 @@
 **Status:** **Accepted in scope · opened 2026-09-06, §1's questions ruled the same day** (all eight, and a
 ninth the owner added: the port is DETACHED from the original at the end — the oracle, the assembler
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
-§4 set for phase 6 is met**: every oracle
-suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->fifteen repository checks pass,
-and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
+§4 set for phase 6 was met on 2026-09-08, the day before the oracle left**: every oracle suite,
+every whole-bitmap comparison and the docked replay were green on the faithful build, 469 tests
+with the original beside them, all fifteen repository checks passing, and every recorded mutant
+caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->131 tests now, and
+what it can still say is M6-b's subject rather than the gate's. Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
 **Depends on:** ADR-001 (fidelity — unchanged), ADR-002 (numeric model — unchanged), ADR-003 (the
@@ -89,9 +90,9 @@ Clarified the same day into four rulings:
 | R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. **AND NOT THE NAMES IN PROSE** — scoped by owner ruling 2026-09-08, on M6-e-4's measurement. | M6-c, M6-d and M6-e; done, except `MasterFile/` and `Upstream/`, which are M6-f. M2 and M4 renamed as they went so that M6-c was a sweep of what was left. AGENTS.md R7 and §7 were amended when M6-e landed. **The ruling**: 2,702 citations of original routine and variable names survive in comments (480 distinct, 136 files), and they STAY. They are the port's own vocabulary rather than pointers into a tree that is going: the comments around each one define what it does, and the prose M6-d spent 58 slices building says WHERE a behaviour comes from — "the carry `EE51` returned", "`NWSPS` evicts the sun before it takes the heap" — which cannot be said without the name. Removing them would be a phase of its own and would cost the precision that was the point. This row is met when `MasterFile/` and `Upstream/` leave. |
 | R-c | **The derived data stays**: the generated tables the game cannot run without, and the recorded fixtures the tests cannot run without. That is the accepted residual exposure (Risk R1, restated at M6-f). | Q7 is moot — the label table the bridge needs exists only while the oracle does, and is generated into the test tree for M0-b to M6-a and deleted with it. Q8 stands: `modernize-*` widened one check per commit. |
 | R-e | **"The port was wrong, the record is not needed."** (Ruled 2026-09-06, on the replay.) When a slice finds a defect in the port and fixes it, the replay record follows the fix: it is re-taken with the journal entry naming the defect, and no ADR-001 §6 row is needed for the record to move. What stays forbidden is a record that moves with no defect named — that is a refactor that changed the game. | Rule 1 and M0-c's "when the record may change", below. The journal entry is the audit trail; the oracle suites, which do not move for a fix of this kind unless the defect was theirs too, are the check that the fix is a fix. |
-| R-f | **The sweeps answer with a digest; everything else keeps its record.** (Ruled 2026-09-08, on M6-a-2's measurement.) A test that makes more than two thousand calls to the oracle stops comparing against it case by case and folds its own answers into one digest, compared against one recorded number; every test under that keeps a full input-to-answer record. | 73 of the 295 tests that call the oracle change shape in M6-b; the fixture is about 25 MB rather than 222. What is bought is diagnosis and not fidelity — a fixture of either kind pins what the tests asked on the day it was recorded — so it is spent where debugging is hard (the drawing, whole-frame and composition comparisons) and saved where a bisect against the previous commit finds the case (the arithmetic sweeps). §4.10 carries the measurement. |
-| R-g | **The labels become constants; the assembled image never enters the tree.** (Ruled 2026-09-08, with R-f.) `tools/labels.py` emits the ~1,900 addresses as a generated header — metadata about the original on the same footing as the extracted data tables — and the record's key stops being taken over the base image and is taken over what the test WROTE, which needs a write set in the interpreter. | This is the half of R-c that Q7 got wrong: the label table does NOT go with the oracle, because the tests still have to find their routines. The 64 KB image is the original's CODE and stays out, so ADR-001 §5's "nothing derived from `Upstream/` is uploaded" holds through M6-f. The risk the ruling accepts is an unsized tail of tests that read image bytes no call ever wrote; M6-b measures it before it builds on it. |
-| R-h | **What the fixture CARRIES is measured before it is committed.** (Ruled 2026-09-08, on M6-b-1's census.) The census counted image DEPENDENCE — 18.5% of calls read a non-zero byte nothing wrote — and that is an upper bound, not the quantity ADR-001 §5 turns on: a byte read from a table may be consumed into a computation rather than reaching the recorded answer. So the recorder measures how much of the answers is VERBATIM image content, and piece (3) waits on that number. | One more recording pass and a small change to `RecordingOracle`. The ruling is deliberately narrow: it does not reopen R-f or R-g, it supplies the one fact those two were ruled without. §4.10 carries the result. |
+| R-f | **DISCHARGED UNBUILT 2026-09-08.** The ruling was sound and its subject is gone: a test that made more than two thousand oracle calls was to fold its answers into one digest, and every test under that to keep a full record. Both halves describe a fixture the owner then ruled against building. | The measurement behind it stands and is worth keeping: 73 of the 295 tests that called the oracle made 98.5% of the calls, which is why no record-size threshold helped. Nothing in the tree depends on the ruling. |
+| R-g | **DISCHARGED UNBUILT 2026-09-08, except for the header, which exists and goes.** `labels.py --header` was built and `Tests/GameLogicTests/OracleLabels.h` is in the tree with a `--check` in CI — that half shipped. The other half, keying a record on the write set, has nothing to key. | The header is deleted with the machinery in M6-b-6 rather than kept: R-g's reason for keeping the labels was that "the tests still have to find their routines", and after M6-b-5 no test does. |
+| R-h | **DISCHARGED, ANSWERED 2026-09-08 (M6-b-4).** The fixture's own verbatim figure is 63.9% — 4,340,437 of 6,791,718 bytes — and not the lower number §4.10's caveat predicted. | The ruling did its job: it is the measurement the owner read before ruling that nothing would be committed at all. It is the only one of the three that changed an outcome. |
 | R-i | **DISCHARGED, and the tag deleted with it** (owner ruling 2026-09-08, M6-d-59). R-i split M6-d's ratchet in two — a listing that carries no reason to **zero**, a quotation that IS the reason tagged `6502 quoted:` and capped — because the row's "at zero" and R20's "keeps the instruction sequence as a quotation" cannot both hold of one counter. The split was right to make and the residue turned out to be EMPTY: fifty-eight slices took the tree from 997 listings to zero and not one comment needed the tag. | The cap is zero, so there is nothing for a second counter to hold. `opcode-transcriptions` at zero now carries the whole guarantee with **no exemption** — which is stronger than the split was, and one fewer mechanism to rot. R20 still stands: keep the reason. What M6-d proved is that the reason is always sayable. |
 | R-d | **History is not rewritten by this plan.** Removing the files at the tip is M6-f; whether the history that carried them is rewritten is a separate owner decision and is not scheduled here. | Recorded in R21 (§7) so that it cannot be mistaken for something M6 did. |
 
@@ -396,9 +397,9 @@ why naming an instruction is not quoting one are in `check_modernize.py`). M6-d 
 it has NO EXEMPTION: R-i's `6502 quoted:` tag went unused through all fifty-eight slices and was
 deleted with the phase (owner ruling, M6-d-59), so every listing in a comment is a violation. <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
-2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
-units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
-submodule and the label map; <!--count:origin-tools-->6 of the tools read `Upstream/` or
+2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->0 of the test translation
+units load the assembled original through `OracleImage` -- 47 did until M6-b-5 deleted them and
+the 337 comparisons they carried, so no test needs BeebAsm, the submodule or the label map; <!--count:origin-tools-->6 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
 it, and it is the one pattern that the owner's ruling (§1, R-a to R-d) makes a target: the end state
 builds, tests and reads with none of it present. Until M6 it is also what every other slice is
@@ -1657,7 +1658,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-g Mutants to a stated floor** ✅ **built 2026-09-07 (§8)** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** ✅ **built 2026-09-08 (§8, two sittings)** | **M6-a-1**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. **M6-a-2**: the `Oracle` seam, at `Cpu6502::CallSubroutine` and not at §4.10's `Call(label, State)`, which no test's shape would have fitted; `LiveOracle`; `RecordingOracle` with a measuring mode and a fixture writer; the corpus measured. **THE ROW'S LAST CLAUSE IS ANSWERED RATHER THAN BUILT, and the answer is a question for the owner**: a threshold on record size saves the wrong thing, because the 222.4 MB is 3.2 million small calls and not a few big records (§4.10). Committing a fixture waits on the ruling M6-b now needs. | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. The suite runs green through the recorder (454 of 454) and two recording runs of one suite produced byte-identical files. **The "fixtures are committed" clause is NOT met and is withdrawn rather than fudged**: what to commit is the ruling, and §4.10 says what it costs either way. | 3 |
-| **M6-b Fixtures answer — scope set by §1 R-f and R-g, ruled 2026-09-08** | Four pieces, and the first is a measurement: **(1)** the interpreter records its READ set for one pass, so the tail R-g accepts — tests that read image bytes no call ever wrote — is a number before anything is built on it; **(2)** the key moves off the base image and onto what the test wrote, and `tools/labels.py --header` emits the addresses as generated constants with a `--check`; **(3)** the 73 tests over two thousand oracle calls fold their answers into a digest each, and `RecordingOracle` writes the ~25 MB fixture; **(4)** `RecordedOracle` serves the suite, `LiveOracle` and the BeebAsm steps leave CI, `OracleIsPresent` is retired and `mutate.py`'s oracle check goes (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged; the fixture committed and a second recording run byte-identical to it. | 2 for the mechanism, plus roughly 3 for the 73 tests and the read-set measurement |
+| **M6-b The oracle goes** — **CANCELLED AND REPLACED 2026-09-08 by owner ruling**; M6-b-5 built | The row was four pieces of recording: a read-set census, a write-set key with `labels.py --header`, the 73 sweeps folding into digests, and `RecordedOracle` serving a ~25 MB fixture. **None of it is built and none of it will be.** The owner asked "why bother" after M6-b-4 measured what the fixture would carry, was given the argument for building it, and ruled the other way: the interpreter, the image and the 337 tests that compare against them are deleted instead. **M6-b-5** (§8) took the suite from 469 tests to 131 and `oracle-test-files` from 47 to 0; **M6-b-6** takes the machinery — `Cpu6502`, `OracleImage`, `Oracle`, `OracleLabels.h`, `UniverseImage`, the runner's recording modes and the assembler in CI. | The suite green with nothing but the repository: no BeebAsm, no submodule, no label map, no fixture. **What is knowingly given up is written down rather than glossed**: every behaviour the original was still pinning is pinned by nothing afterwards (R19), and most of the mutation corpus M6-0-g built for this moment loses the tests that caught it (§8, M6-b-5). | 2 |
 | **M6-c Identifiers** ✅ **built 2026-09-08 (§8, seventeen slices)** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** — **DONE**, 58 slices | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. §1 R-i split the scope on 2026-09-08 and is now discharged: the tagged-quotation half went unused and was deleted (M6-d-59). | `opcode-transcriptions` at **zero**, met — 997 → 0 across 116 files, with no exemption left in the counter; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** — **DONE**, 4 slices | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone (15 checks, from 19); `origin-markers` at **zero**, met — 4,103 → 0 in `GameLogic/` and 97 → 0 in `Outpost/`. The residue R-b may still want is 2,702 citations of original NAMES in prose, measured in §8 and left for the owner. | 1 |
@@ -1711,6 +1712,62 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-08 — M6-b-5: the oracle's tests go. 469 → 131, and the reason is an owner ruling.**
+
+"I want to get rid of the oracle. Why bother?" -- asked after M6-b-4 measured what a committed
+fixture would carry, and answered by the owner against this document's recommendation, which was to
+build the 25 MB fixture R-f and R-g had already scoped. The ruling stands and the rest of M6-b is
+cancelled: nothing is recorded, and what the original was answering is deleted instead.
+
+**THE DELETION IS NOT "DELETE THE FILES THAT INCLUDE THE ORACLE", and that mattered.** Two
+instruments were built and both are wrong on their own. Counting REFERENCES -- does the test, or a
+helper it calls, name `Cpu6502` or `OracleImage`? -- deletes `TheStationSurvivesTheLaunch`, whose
+fixture holds a `Cpu6502` and whose twenty assertions are all about the port: the station in the
+bubble, the heap it drew through, the pixels on the canvas. Counting ASSERTIONS -- does any
+`Assert::` argument name an oracle-side value? -- keeps
+`SignedMultiplyIntoScratchMatchesExhaustively`, whose one assertion is inside a loop and whose
+comparison is in a helper. A test stays only where the two agree; the eleven they disagreed about
+were read. Six of those disagreements were `PlotPixel`, `DrawHorizontalLine`, `Launch`,
+`MarketPrice`, `SetUpScreen` and `printer` -- library calls the first instrument mis-parsed as
+helpers -- and five were `Compare`, `CompareSequence`, `RunAndCompare`, `CompareEveryToken` and
+`CompareThroughDasc`, which are the real thing. `OracleMissing()` says nothing either way: it is a
+skip guard, and `TheHeaderExtentAgreesWithTheLayoutExceptWhereItFamouslyDoesNot` calls it and then
+compares the port's blueprint headers against the port's own layout, so it stays with the guard
+deleted.
+
+**What went**: 337 tests in 32 files deleted whole and 17 files trimmed -- the arithmetic sweeps,
+the drawing (ships, planets, the sun, the ball heap), the whole flight frame, tactics, the missions,
+the spawns, the sound and the music, the tokens and the extended tokens, the Trumbles, the charts,
+the market, the scanner, the dashboard, the cycle model and the interpreter's own tests.
+
+**What stays**: 131 tests. The picture layer's fifty-three (RS-0 to RS-6, which never had an
+oracle), the scripted replay's five and the state hash's four, the shell's arithmetic, key map and
+settings file, the video state, the save store, the docked session, the `Game` object, the raster
+split minus its one comparison, and the twenty-odd port-only assertions that were living inside
+oracle files. `check_all.py` is green on all fifteen checks; the suite runs in half a minute
+where it took a minute.
+
+**THE MUTATION CORPUS IS THE CASUALTY AND IS MEASURED RATHER THAN LEFT TO ROT.** M6-0-g built it
+for exactly this moment -- "after M6-b a fixture says what the tests ASKED and a mutant is the only
+instrument that says whether a test would NOTICE" -- and the deletion takes most of it with the
+tests. Of the thirteen units, the filters now select: `tactics` 7 → 0, `hyperspace` 6 → 0,
+`missions` 12 → 0, `spawn` 6 → 0, `trumbles` 9 → 0, `rng` 5 → 1, `arith` 24 → 1, `shipmove` 10 → 1,
+`planetdraw` 24 → 3, `cloud-seed` 18 → 2, `flight` 17 → 6, `raster` 8 → 7, `game` 6 → 6. Rule 3
+says a mutant is re-anchored and never dropped, and for most of these there is nothing left to
+anchor to. `mutate.py --check` still passes because it only proves the find-strings apply; the
+`tests` tripwire fires on a real run. **The corpus is not touched in this slice** -- what to do
+with it is a decision of its own and is M6-b-6's.
+
+**Not done here, on purpose, and both are named so they cannot be forgotten.** The PROSE in the
+seventeen trimmed files still describes the suites that were deleted -- `ArithTests`'s head comment
+opens "the arithmetic kernel against the shipped routines", and five classes are still called
+`...AgainstTheShippedGame` or `RngAgainstOracle` with nothing to compare against. And `Cpu6502`,
+`OracleImage`, `Oracle`, `OracleLabels.h`, `UniverseImage` and `FlightUniverse.h`'s oracle half are
+still in the tree, unused by any test but still compiled. Keeping this diff to one thing -- which
+tests exist -- is what makes ten thousand deleted lines reviewable; the names and the comments are
+M6-b-6 and the machinery is M6-b-7.
+
 
 **2026-09-08 — Beside M6-a: six slices of [InputTimer.md](InputTimer.md), journaled there (§9).**
 They are that plan's and not this one's, and they touch this plan's ledger in four places worth
