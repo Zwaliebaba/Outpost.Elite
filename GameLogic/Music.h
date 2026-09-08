@@ -58,11 +58,19 @@ namespace Elite
    * `startbd` writes and `BDENTRY` reads. `pointer` and `restart` are `BDdataptr1`/`2` and
    * `BDdataptr3`/`4`: the read position and the position command 9 rewinds to.
    *
-   * THE VIBRATO NAMES ARE THE ORIGINAL'S AND THEY ARE BACKWARDS. `voice2lo1` holds the byte written
-   * to SID+&8, which is the frequency's HIGH register, and `voice2hi1` the one written to SID+&7,
-   * the LOW. The 32 the vibrato adds goes into `voice2hi2` with a carry into `voice2lo2`, which is
-   * a sixteen-bit add of 32 to the frequency once the names are read the other way round. They are
-   * kept as named because the ledger and the oracle test name them.
+   * THE VIBRATO NAMES WERE THE ORIGINAL'S AND THE ORIGINAL'S ARE BACKWARDS, so M6-c stopped keeping
+   * them. `voice2lo1` held the byte written to SID+&8, which is the frequency's HIGH register, and
+   * `voice2hi1` the one written to SID+&7, the LOW; the 32 the vibrato adds went into `voice2hi2`
+   * with a carry into `voice2lo2`, which is a sixteen-bit add of 32 to the frequency once the names
+   * are read the other way round. The four pairs are `voice2NoteHigh`/`voice2NoteLow` for the note
+   * as the tune wrote it and `voice2RaisedHigh`/`voice2RaisedLow` for the copy 32 above it, and
+   * voice 3's the same with 37 -- so the carry now reads as a carry between a low byte and a high
+   * one. Each field carries the byte it was, so the map back to the original is unchanged.
+   *
+   * `commandSixTally` is `value0`, which command 6 increments and NOTHING READS -- named for what
+   * fills it, because there is nothing else to name it for. `voice1Control` to `voice3Control` are
+   * `value1` to `value3`, the three control registers command 13 loads and `BDlab21` writes back
+   * one less than; `restLength` is `value4`, the interrupts command 8 rests for.
    */
   struct MusicPlayer
   {
@@ -71,26 +79,26 @@ namespace Elite
 
     std::uint8_t buffer = 0;   ///< 6502: BDBUFF -- the nibbles not yet processed
     std::uint8_t counter = 0;  ///< 6502: counter -- interrupts of rest left
-    std::uint8_t vibrato2 = 0; ///< 6502: vibrato2
-    std::uint8_t vibrato3 = 0; ///< 6502: vibrato3
+    std::uint8_t vibrato2Count = 0; ///< 6502: vibrato2
+    std::uint8_t vibrato3Count = 0; ///< 6502: vibrato3
 
     std::uint16_t pointer = 0; ///< 6502: BDdataptr1(1 0), as an offset into MUSIC_DATA
     std::uint16_t restart = 0; ///< 6502: BDdataptr3(1 0), the same
 
-    std::uint8_t value0 = 0; ///< 6502: value0 -- command 6 counts it and nothing reads it
-    std::uint8_t value1 = 0; ///< 6502: value1 -- voice 1's control register, from command 13
-    std::uint8_t value2 = 0; ///< 6502: value2 -- voice 2's
-    std::uint8_t value3 = 0; ///< 6502: value3 -- voice 3's
-    std::uint8_t value4 = 0; ///< 6502: value4 -- the rest length, from command 12
+    std::uint8_t commandSixTally = 0; ///< 6502: value0 -- command 6 counts it and nothing reads it
+    std::uint8_t voice1Control = 0; ///< 6502: value1 -- voice 1's control register, from command 13
+    std::uint8_t voice2Control = 0; ///< 6502: value2 -- voice 2's
+    std::uint8_t voice3Control = 0; ///< 6502: value3 -- voice 3's
+    std::uint8_t restLength = 0; ///< 6502: value4 -- the rest length, from command 12
 
-    std::uint8_t voice2lo1 = 0; ///< 6502: voice2lo1
-    std::uint8_t voice2hi1 = 0; ///< 6502: voice2hi1
-    std::uint8_t voice2lo2 = 0; ///< 6502: voice2lo2
-    std::uint8_t voice2hi2 = 0; ///< 6502: voice2hi2
-    std::uint8_t voice3lo1 = 0; ///< 6502: voice3lo1
-    std::uint8_t voice3hi1 = 0; ///< 6502: voice3hi1
-    std::uint8_t voice3lo2 = 0; ///< 6502: voice3lo2
-    std::uint8_t voice3hi2 = 0; ///< 6502: voice3hi2
+    std::uint8_t voice2NoteHigh = 0; ///< 6502: voice2lo1
+    std::uint8_t voice2NoteLow = 0; ///< 6502: voice2hi1
+    std::uint8_t voice2RaisedHigh = 0; ///< 6502: voice2lo2
+    std::uint8_t voice2RaisedLow = 0; ///< 6502: voice2hi2
+    std::uint8_t voice3NoteHigh = 0; ///< 6502: voice3lo1
+    std::uint8_t voice3NoteLow = 0; ///< 6502: voice3hi1
+    std::uint8_t voice3RaisedHigh = 0; ///< 6502: voice3lo2
+    std::uint8_t voice3RaisedLow = 0; ///< 6502: voice3hi2
 
     /*
      * 6502: the operand of the BEQ at BDbeqmod1 / BDbeqmod2 -- which half of the vibrato routine

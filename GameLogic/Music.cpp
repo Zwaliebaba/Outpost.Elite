@@ -75,19 +75,19 @@ namespace Elite
     {
       const std::uint8_t high = FetchByte(_music);
       _log.Add(VOICE_2_FREQUENCY_HIGH, high);
-      _music.voice2lo1 = high;
-      _music.voice2lo2 = high;
+      _music.voice2NoteHigh = high;
+      _music.voice2RaisedHigh = high;
 
       const std::uint8_t low = FetchByte(_music);
       _log.Add(VOICE_2_FREQUENCY_LOW, low);
-      _music.voice2hi1 = low;
-      _music.voice2hi2 = low;
+      _music.voice2NoteLow = low;
+      _music.voice2RaisedLow = low;
 
-      const std::uint16_t raised = static_cast<std::uint16_t>(VIBRATO_RISE_VOICE_2 + _music.voice2hi2);
-      _music.voice2hi2 = static_cast<std::uint8_t>(raised);
+      const std::uint16_t raised = static_cast<std::uint16_t>(VIBRATO_RISE_VOICE_2 + _music.voice2RaisedLow);
+      _music.voice2RaisedLow = static_cast<std::uint8_t>(raised);
       if (raised > 0xFFu)
       {
-        _music.voice2lo2 = static_cast<std::uint8_t>(_music.voice2lo2 + 1u);
+        _music.voice2RaisedHigh = static_cast<std::uint8_t>(_music.voice2RaisedHigh + 1u);
       }
     }
 
@@ -96,19 +96,19 @@ namespace Elite
     {
       const std::uint8_t high = FetchByte(_music);
       _log.Add(VOICE_3_FREQUENCY_HIGH, high);
-      _music.voice3lo1 = high;
-      _music.voice3lo2 = high;
+      _music.voice3NoteHigh = high;
+      _music.voice3RaisedHigh = high;
 
       const std::uint8_t low = FetchByte(_music);
       _log.Add(VOICE_3_FREQUENCY_LOW, low);
-      _music.voice3hi1 = low;
-      _music.voice3hi2 = low;
+      _music.voice3NoteLow = low;
+      _music.voice3RaisedLow = low;
 
-      const std::uint16_t raised = static_cast<std::uint16_t>(VIBRATO_RISE_VOICE_3 + _music.voice3hi2);
-      _music.voice3hi2 = static_cast<std::uint8_t>(raised);
+      const std::uint16_t raised = static_cast<std::uint16_t>(VIBRATO_RISE_VOICE_3 + _music.voice3RaisedLow);
+      _music.voice3RaisedLow = static_cast<std::uint8_t>(raised);
       if (raised > 0xFFu)
       {
-        _music.voice3lo2 = static_cast<std::uint8_t>(_music.voice3lo2 + 1u);
+        _music.voice3RaisedHigh = static_cast<std::uint8_t>(_music.voice3RaisedHigh + 1u);
       }
     }
 
@@ -133,9 +133,9 @@ namespace Elite
       {
         return;
       }
-      _log.Add(VOICE_1_CONTROL, static_cast<std::uint8_t>(_music.value1 - 1u));
-      _log.Add(VOICE_2_CONTROL, static_cast<std::uint8_t>(_music.value2 - 1u));
-      _log.Add(VOICE_3_CONTROL, static_cast<std::uint8_t>(_music.value3 - 1u));
+      _log.Add(VOICE_1_CONTROL, static_cast<std::uint8_t>(_music.voice1Control - 1u));
+      _log.Add(VOICE_2_CONTROL, static_cast<std::uint8_t>(_music.voice2Control - 1u));
+      _log.Add(VOICE_3_CONTROL, static_cast<std::uint8_t>(_music.voice3Control - 1u));
     }
 
     /*
@@ -152,21 +152,21 @@ namespace Elite
     void Vibrato(MusicPlayer& _music, SidWriteLog& _log) noexcept
     {
       // 6502: INC vibrato3 / LDA #5 / CMP vibrato3 / .BDbeqmod2 BEQ.
-      _music.vibrato3 = static_cast<std::uint8_t>(_music.vibrato3 + 1u);
-      if (_music.vibrato3 == VIBRATO_PERIOD_VOICE_3)
+      _music.vibrato3Count = static_cast<std::uint8_t>(_music.vibrato3Count + 1u);
+      if (_music.vibrato3Count == VIBRATO_PERIOD_VOICE_3)
       {
-        _music.vibrato3 = 0u;
+        _music.vibrato3Count = 0u;
         if (_music.vibrato3Raised)
         {
           // The unlabelled half: the raised copy, and the operand back to the labelled one.
-          _log.Add(VOICE_3_FREQUENCY_HIGH, _music.voice3lo2);
-          _log.Add(VOICE_3_FREQUENCY_LOW, _music.voice3hi2);
+          _log.Add(VOICE_3_FREQUENCY_HIGH, _music.voice3RaisedHigh);
+          _log.Add(VOICE_3_FREQUENCY_LOW, _music.voice3RaisedLow);
         }
         else
         {
           // The labelled half, BDlab23: the note's own frequency, and the operand to the other.
-          _log.Add(VOICE_3_FREQUENCY_HIGH, _music.voice3lo1);
-          _log.Add(VOICE_3_FREQUENCY_LOW, _music.voice3hi1);
+          _log.Add(VOICE_3_FREQUENCY_HIGH, _music.voice3NoteHigh);
+          _log.Add(VOICE_3_FREQUENCY_LOW, _music.voice3NoteLow);
         }
         _music.vibrato3Raised = !_music.vibrato3Raised;
         EndPass(_music, _log);
@@ -174,20 +174,20 @@ namespace Elite
       }
 
       // 6502: INC vibrato2 / LDA #4 / CMP vibrato2 / .BDbeqmod1 BEQ.
-      _music.vibrato2 = static_cast<std::uint8_t>(_music.vibrato2 + 1u);
-      if (_music.vibrato2 == VIBRATO_PERIOD_VOICE_2)
+      _music.vibrato2Count = static_cast<std::uint8_t>(_music.vibrato2Count + 1u);
+      if (_music.vibrato2Count == VIBRATO_PERIOD_VOICE_2)
       {
-        _music.vibrato2 = 0u;
+        _music.vibrato2Count = 0u;
         if (_music.vibrato2Raised)
         {
-          _log.Add(VOICE_2_FREQUENCY_HIGH, _music.voice2lo2);
-          _log.Add(VOICE_2_FREQUENCY_LOW, _music.voice2hi2);
+          _log.Add(VOICE_2_FREQUENCY_HIGH, _music.voice2RaisedHigh);
+          _log.Add(VOICE_2_FREQUENCY_LOW, _music.voice2RaisedLow);
         }
         else
         {
           // BDlab24, the labelled half.
-          _log.Add(VOICE_2_FREQUENCY_HIGH, _music.voice2lo1);
-          _log.Add(VOICE_2_FREQUENCY_LOW, _music.voice2hi1);
+          _log.Add(VOICE_2_FREQUENCY_HIGH, _music.voice2NoteHigh);
+          _log.Add(VOICE_2_FREQUENCY_LOW, _music.voice2NoteLow);
         }
         _music.vibrato2Raised = !_music.vibrato2Raised;
       }
@@ -298,8 +298,8 @@ namespace Elite
     // 6502: BDENTRY -- LDA #0 / STA BDBUFF / STA counter / STA vibrato2 / STA vibrato3.
     _music.buffer = 0u;
     _music.counter = 0u;
-    _music.vibrato2 = 0u;
-    _music.vibrato3 = 0u;
+    _music.vibrato2Count = 0u;
+    _music.vibrato3Count = 0u;
 
     // 6502: LDX #&18 / .BDloop2 STA SID,X / DEX / BNE BDloop2 -- and the BNE stops at 1, so the first
     // register is the one this does not zero.
@@ -362,37 +362,37 @@ namespace Elite
       {
       case 1: // 6502: BDRO1
         SetVoice1Frequency(_music, _log);
-        GateVoice(_log, VOICE_1_CONTROL, _music.value1);
+        GateVoice(_log, VOICE_1_CONTROL, _music.voice1Control);
         break;
 
       case 2: // 6502: BDRO2
         SetVoice2Frequency(_music, _log);
-        GateVoice(_log, VOICE_2_CONTROL, _music.value2);
+        GateVoice(_log, VOICE_2_CONTROL, _music.voice2Control);
         break;
 
       case 3: // 6502: BDRO3
         SetVoice3Frequency(_music, _log);
-        GateVoice(_log, VOICE_3_CONTROL, _music.value3);
+        GateVoice(_log, VOICE_3_CONTROL, _music.voice3Control);
         break;
 
       case 4: // 6502: BDRO4
         SetVoice1Frequency(_music, _log);
         SetVoice2Frequency(_music, _log);
-        GateVoice(_log, VOICE_1_CONTROL, _music.value1);
-        GateVoice(_log, VOICE_2_CONTROL, _music.value2);
+        GateVoice(_log, VOICE_1_CONTROL, _music.voice1Control);
+        GateVoice(_log, VOICE_2_CONTROL, _music.voice2Control);
         break;
 
       case 5: // 6502: BDRO5
         SetVoice1Frequency(_music, _log);
         SetVoice2Frequency(_music, _log);
         SetVoice3Frequency(_music, _log);
-        GateVoice(_log, VOICE_1_CONTROL, _music.value1);
-        GateVoice(_log, VOICE_2_CONTROL, _music.value2);
-        GateVoice(_log, VOICE_3_CONTROL, _music.value3);
+        GateVoice(_log, VOICE_1_CONTROL, _music.voice1Control);
+        GateVoice(_log, VOICE_2_CONTROL, _music.voice2Control);
+        GateVoice(_log, VOICE_3_CONTROL, _music.voice3Control);
         break;
 
       case 6: // 6502: BDRO6 -- INC value0.
-        _music.value0 = static_cast<std::uint8_t>(_music.value0 + 1u);
+        _music.commandSixTally = static_cast<std::uint8_t>(_music.commandSixTally + 1u);
         break;
 
       case 7: // 6502: BDRO7 -- the three attack/decay registers, then the three sustain/release.
@@ -415,7 +415,7 @@ namespace Elite
         [[fallthrough]];
 
       case 8: // 6502: BDRO8 -- LDA value4 / STA counter / JMP BDirqhere.
-        _music.counter = _music.value4;
+        _music.counter = _music.restLength;
         if (_music.counter != 0u)
         {
           _music.counter = static_cast<std::uint8_t>(_music.counter - 1u);
@@ -440,13 +440,13 @@ namespace Elite
         break;
 
       case 12: // 6502: BDRO12
-        _music.value4 = FetchByte(_music);
+        _music.restLength = FetchByte(_music);
         break;
 
       case 13: // 6502: BDRO13
-        _music.value1 = FetchByte(_music);
-        _music.value2 = FetchByte(_music);
-        _music.value3 = FetchByte(_music);
+        _music.voice1Control = FetchByte(_music);
+        _music.voice2Control = FetchByte(_music);
+        _music.voice3Control = FetchByte(_music);
         break;
 
       case 14: // 6502: BDRO14 -- volume and filter mode, filter control, filter cut-off high.
