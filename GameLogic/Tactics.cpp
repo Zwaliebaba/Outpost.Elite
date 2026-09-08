@@ -284,15 +284,15 @@ namespace Elite
     _axes[_at + 1u] = sum.value.high;
     _axes[_at] = sum.value.mid;
 
-    // 6502: `LDY`, `LDA` and `STA` leave the flag alone, so what `MVT3` exited with is what the
-    // caller gets.
+    // 6502: the loads and stores that follow leave the flag alone, so what `MVT3` exited with is
+    // what the caller gets.
     return sum.carry;
   }
 
   bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes) noexcept
   {
-    // 6502: LDY #2 / JSR TAS1 / LDY #5 / JSR TAS1 / LDY #8, and the last one is a fall-through, so
-    // the carry the third leaves is the routine's.
+    // 6502: TAS1 on each of the three axes, and the last is a fall-through, so the carry the third
+    // leaves is the routine's.
     (void)SubtractShipAxis(_other, _work, _axes, 0u);
     (void)SubtractShipAxis(_other, _work, _axes, 3u);
     return SubtractShipAxis(_other, _work, _axes, 6u);
@@ -300,27 +300,27 @@ namespace Elite
 
   bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes) noexcept
   {
-    // 6502: LDA #LO(K%+NI%) / STA V / LDA #HI(K%+NI%), and then straight into `VCSUB`.
+    // 6502: the station's block address parked, and then straight into `VCSUB`.
     return SubtractShipAxes(_bubble.blocks[1], _work, _axes);
   }
 
   AddSignedResult DotProductWithShip(const Ship& _block, UnitVector _vector, std::uint8_t _at) noexcept
   {
-    // 6502: LDX INWK,Y / STX Q / LDA XX15 / JSR MULT12 -- (S R) = vect_x * XX15. Y is 10, 16 or
-    // 22: the HIGH byte of the vector's x, so the vector is the one starting a byte earlier.
+    // 6502: MULT12 gives the first product. The index is 10, 16 or 22 -- the HIGH byte of the
+    // vector's x -- so the vector is the one starting a byte earlier.
     const Vector16& vector = _block.VectorAt(static_cast<std::uint8_t>(_at - 1u));
     const Product first = MultiplySigned(_vector.x, vector.x.hi);
 
-    // 6502: LDX INWK+2,Y / STX Q / LDA XX15+1 / JSR MAD / STA S / STX R.
+    // 6502: MAD folds in the second axis and keeps the running sum.
     const AddSignedResult second = MultiplyAndAdd(_vector.y, vector.y.hi, first.Pair());
 
-    // 6502: LDX INWK+4,Y / STX Q / LDA XX15+2, and no `JSR` -- it falls into `MAD`.
+    // 6502: the third axis, and no call -- it falls into `MAD`.
     return MultiplyAndAdd(_vector.z, vector.z.hi, second.Pair());
   }
 
   UnitVector NegateVector(UnitVector _vector) noexcept
   {
-    // 6502: three EOR #%10000000s over XX15, XX15+1 and XX15+2.
+    // 6502: the sign bit flipped on each of the three components.
     _vector.x = static_cast<std::uint8_t>(_vector.x ^ 0x80u);
     _vector.y = static_cast<std::uint8_t>(_vector.y ^ 0x80u);
     _vector.z = static_cast<std::uint8_t>(_vector.z ^ 0x80u);
@@ -331,12 +331,13 @@ namespace Elite
   {
     const Ship& station = _bubble.blocks[1];
 
-    // 6502: JSR P%+3 -- the body twice, so each subtraction is the nose vector times four.
+    // 6502: the routine calls its own body, so it runs twice and each subtraction is the nose
+    // vector times four.
     for (int pass = 0; pass < 2; ++pass)
     {
-      OffsetAxis(_axes, station.nose.x.hi, 0u); // 6502: LDA K%+NI%+10 / LDX #0 / JSR TAS7
-      OffsetAxis(_axes, station.nose.y.hi, 3u); // 6502: LDA K%+NI%+12 / LDX #3 / JSR TAS7
-      OffsetAxis(_axes, station.nose.z.hi, 6u); // 6502: LDA K%+NI%+14 / LDX #6, a fall-through
+      OffsetAxis(_axes, station.nose.x.hi, 0u); // 6502: TAS7 on x
+      OffsetAxis(_axes, station.nose.y.hi, 3u); // 6502: TAS7 on y
+      OffsetAxis(_axes, station.nose.z.hi, 6u); // 6502: and z, as a fall-through
     }
   }
 
@@ -344,50 +345,50 @@ namespace Elite
   {
     Ship& station = _bubble.blocks[1];
 
-    // 6502: .AN2 LDA K%+NI%+36 / ORA #%00000100 / STA K%+NI%+36 -- the station is always slot 1,
-    // so this is a fixed address in the original and a fixed index here. None of it touches the
-    // carry, so what `CMP #SST` left is what every path out of here still holds.
+    // 6502: AN2 -- the station is always slot 1, so this is a fixed address in the original and a
+    // fixed index here. None of it touches the carry, so what the station comparison left is what
+    // every path out of here still holds.
     const auto angerStation = [&station]() noexcept { station.traits = With(station.traits, TraitBit::Hostile); };
 
-    // 6502: CMP #SST -- and the flag it sets is the routine's exit on two of the three paths.
+    // 6502: the station comparison, whose flag is the routine's exit on two of the three paths.
     const bool comparedToStation = _type >= ShipType::Station;
 
     if (_type == ShipType::Station)
     {
-      angerStation(); // 6502: CMP #SST / BEQ AN2, and AN2 returns -- nothing else happens
+      angerStation(); // 6502: AN2 returns straight away -- nothing else happens
       return comparedToStation;
     }
 
     Ship& ship = _bubble.blocks[_slot];
 
-    // 6502: LDY #36 / LDA (INF),Y / AND #%00100000 / BEQ P%+5 / JSR AN2 -- and it is a `JSR`, so
-    // an ally of the station angers the station AND carries on being angered itself.
+    // 6502: the innocent bit tested, and `AN2` is CALLED rather than jumped to -- so an ally of the
+    // station angers the station AND carries on being angered itself.
     if (Has(ship.traits, TraitBit::Innocent))
     {
       angerStation();
     }
 
-    // 6502: LDY #32 / LDA (INF),Y / BEQ HI1 -- and `HI1` is a bare `RTS` inside `HITCH`. A ship
+    // 6502: the AI byte tested, and the branch lands on a bare return borrowed from `HITCH`. A ship
     // with no AI byte is left entirely alone: no acceleration, no dive, no hostile flag.
     if (ship.ai == 0u)
     {
       return comparedToStation;
     }
 
-    ship.ai = With(ship.ai, AiBit::Active); // 6502: ORA #%10000000 / STA (INF),Y
+    ship.ai = With(ship.ai, AiBit::Active); // 6502: the AI byte's top bit set
 
-    // 6502: LDY #28 / LDA #2 / STA (INF),Y / ASL A / LDY #30 / STA (INF),Y -- and the `ASL` of a 2
-    // clears the carry, which the compare below then overwrites on every path.
+    // 6502: two into the acceleration and four into the pitch counter -- and doubling a two clears
+    // the carry, which the compare below then overwrites on every path.
     ship.acceleration = ANGRY_ACCELERATION;
     ship.pitchCounter = static_cast<std::uint8_t>(ANGRY_ACCELERATION << 1u);
 
-    // 6502: LDA TYPE / CMP #CYL / BCC AN3 -- the LOOP's type byte, not the one in A.
+    // 6502: the LOOP's type byte compared against the Cobra, not the one in the accumulator.
     const bool comparedToCobra = _flight.type >= ShipType::CobraMk3;
     if (comparedToCobra)
     {
       ship.traits = With(ship.traits, TraitBit::Hostile);
     }
-    return comparedToCobra; // 6502: .AN3 RTS, on the flag `CMP #CYL` left
+    return comparedToCobra; // 6502: AN3 returns on the flag that comparison left
   }
 
   /*
@@ -395,16 +396,16 @@ namespace Elite
    * had a `bool` (M4-c).
    *
    * `RunTactics` returned "did the player survive", which conflated three different things: a ship
-   * finished with for this frame (`TA22`'s `RTS`), the player killed by `OOPS` reaching `DEATH`,
-   * and `TN2`'s `JMP DOCKIT` handing the ship to a different routine altogether. The third was
+   * finished with for this frame (`TA22`'s return), the player killed by `OOPS` reaching `DEATH`,
+   * and `TN2` handing the ship to `DOCKIT`, a different routine altogether. The third was
    * hidden as a tail call whose boolean was passed straight through.
    */
   enum class Tactic : std::uint8_t
   {
     Steer,   ///< fall through to the next part, and eventually to `TA4`'s steering
-    Done,    ///< 6502: .TA22 RTS -- this ship is finished with for the frame
+    Done,    ///< 6502: TA22 -- this ship is finished with for the frame
     Fatal,   ///< 6502: OOPS reaching DEATH -- the PLAYER died, and the frame ends
-    Docking, ///< 6502: .TN2's JMP DOCKIT -- the docking computer flies this ship instead
+    Docking, ///< 6502: TN2 hands off to DOCKIT -- the docking computer flies this ship instead
   };
 
   /*
@@ -437,51 +438,51 @@ namespace Elite
    * 6502: CPX #MSL / BEQ TA18 -- and `TA18` is in PART 1, which is not the beginning.
    *
    * EVERY BRANCH ANSWERS and none of them steers, which is why the port has no line for part 4's
-   * `CMP #MSL / JMP TA20`: the two branches that fall through in the original call
+   * missile test: the two branches that fall through in the original call
    * `SteerMissileTowardsTarget`, which is `TA19` and that branch inlined.
    */
   [[nodiscard]] Tactic DecideMissile(TacticFrame& _frame) noexcept
   {
     /*
-     * 6502: CPX #MSL / BEQ TA18 -- and `TA18` is in PART 1, which is not the beginning. A missile
-     * has its own logic and rejoins the common tail only through `TA19` or `TA34`.
+     * 6502: the missile test sends it to `TA18`, which is in PART 1 and not the beginning. A
+     * missile has its own logic and rejoins the common tail only through `TA19` or `TA34`.
      */
     // THE TEST IS THE CALLER'S AND THE GUARD IS GONE (slice 5d) -- see `DecideStation` for why.
-    // 6502: .TA18 LDA ECMA / BNE TA352 -- an ECM going off destroys the missile without anybody
-    // having to hit it, and `TA352` is how a missile dies.
+    // 6502: TA18 -- an E.C.M. going off destroys the missile without anybody having to hit it, and
+    // `TA352` is how a missile dies.
     bool destroyed = _frame.universe.status.ecmCountdown != 0u;
 
     if (!destroyed)
     {
-      // 6502: LDA INWK+32 / ASL A / BMI TA34 -- bit 6 of the AI byte says the missile is aimed at
-      // US, and the `ASL` reads it by moving it into bit 7.
+      // 6502: bit 6 of the AI byte says the missile is aimed at US, and the shift up is how the
+      // sign test gets to read it.
       if (Has(_frame.work.ai, AiBit::AimedAtPlayer))
       {
         /*
-         * 6502: .TA34 LDA #0 / JSR MAS4 / BEQ P%+5 / JMP TN4 -- how far away the missile is, and
-         * a missile that is not yet touching us goes back to the common steering at `TN4`.
+         * 6502: TA34 -- how far away the missile is, and one that is not yet touching us goes back
+         * to the common steering at `TN4`.
          */
         if (LargestShipAxis(_frame.work, 0u) != 0u)
         {
-          // 6502: .TN4 LDX #8 / .TAL1 LDA INWK,X / STA K3,X -- the missile's own position becomes
-          // the vector to steer along, because the thing it is chasing is at the origin: us.
+          // 6502: TN4 and TAL1 -- the missile's own position becomes the vector to steer along,
+          // because the thing it is chasing is at the origin: us.
           const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _frame.work.ToBytes();
           for (std::size_t byte = 0; byte < 9u; ++byte)
           {
             _frame.axes[byte] = position[byte];
           }
 
-          // 6502: .TA19, and then part 4 -- which sends a missile to `TA20`.
+          // 6502: TA19, and then part 4 -- which sends a missile to `TA20`.
           SteerMissileTowardsTarget(_frame.universe, _frame.ports);
           return Tactic::Done;
         }
 
         /*
-         * 6502: JSR TA873 / JSR EXNO3 / LDA #250 / JMP OOPS -- it has arrived. The missile is
+         * 6502: TA873, the explosion, and 250 damage into `OOPS` -- it has arrived. The missile is
          * marked dead, the explosion is heard, and 250 is nearly always fatal.
          *
-         * AND THE CARRY `EXNO3` LEAVES IS `OOPS`'s, which is §6.87 a second time: `LDA #250`
-         * touches no flag, so `OOPS`'s `SBC` subtracts on whatever `NOISE` returned. The port
+         * AND THE CARRY THE EXPLOSION LEAVES IS `OOPS`'s, which is §6.87 a second time: loading the
+         * damage touches no flag, so `OOPS` subtracts on whatever `NOISE` returned. The port
          * passed false here while `PlaySound` was a seam whose answer was discarded (M3-b-2a);
          * a missile that arrives while the explosion is refused a voice costs one more point
          * of shield than one that gets one.
@@ -492,15 +493,14 @@ namespace Elite
                                                                                                                             : Tactic::Fatal;
       }
 
-      // 6502: LSR A / TAX / LDA UNIV,X / STA V / LDA UNIV+1,X / JSR VCSUB -- the missile's TARGET
-      // slot, out of the AI byte it has been carrying since `FRS1` doubled `MSTG` into it.
+      // 6502: the missile's TARGET slot, halved out of the AI byte it has been carrying since
+      // `FRS1` doubled the lock into it, then `VCSUB` against that ship.
       const std::uint8_t target = MissileTargetOf(_frame.work.ai);
       const bool vectorCarry = SubtractShipAxes(_frame.universe.bubble.blocks[target], _frame.work, _frame.axes);
 
       /*
-       * 6502: LDA K3+2 / ORA K3+5 / ORA K3+8 / AND #%01111111 / ORA K3+1 / ORA K3+4 / ORA K3+7 /
-       * BNE TA64 -- the three high bytes with their signs masked OR the three middle bytes, so
-       * this is "is the target still further away than 256 units on any axis".
+       * 6502: the three high bytes with their signs masked, ORed with the three middle bytes, so
+       * this asks "is the target still further away than 256 units on any axis".
        */
       // NOT `far`: that is a macro in <windows.h>, like `near`, and `check_gamelogic.py` exists
       // to say so (AGENTS.md §5).

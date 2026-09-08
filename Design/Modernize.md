@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,223 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,197 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,25 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-8: the anger chain and the missile's own logic.**
+
+26 more, and `Tactics.cpp` is at 110 of 163. This is `ANGRY`, the dot product helper, the docking
+offset and part 1 — the missile — and almost all of it rewrote mechanically, which is the point
+worth recording after the care M6-d-7 needed: **most of this corpus really is decoration, and the
+sites that carry an argument are the minority.**
+
+Three that were not decoration:
+
+- **`AN2` is CALLED rather than jumped to**, so an ally of the station angers the station AND
+  carries on being angered itself. The distinction is the whole behaviour and it lives in one word.
+- **A ship with no AI byte is left entirely alone** — the branch lands on a bare return borrowed from
+  another routine, which is why nothing after it runs.
+- **The missile's target slot is halved out of its AI byte**, because `FRS1` doubled the lock into it
+  when the missile was made. Two routines and a shift, and the sentence has to carry all three.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,223 → 2,197.
 
 **2026-09-08 — M6-d-7: `Tactics.cpp`'s geometry, and a finding that must not be paraphrased away.**
 
