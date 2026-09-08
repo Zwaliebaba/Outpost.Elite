@@ -51,7 +51,7 @@ namespace Elite
       {
         // 6502: JSR CLYNS -- a text screen's message is in the bottom rows. A seam until M3-b-3b.
         ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.view);
+                       &_universe.picture, _universe.screenLayout);
       }
       else
       {

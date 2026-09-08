@@ -240,6 +240,19 @@ namespace Elite
   void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
   /*
+   * The same, with the 640x400 surface's layout for the screen being started (slice RS-5-a).
+   *
+   * TWO OVERLOADS AND NOT A DEFAULT ARGUMENT, because the default is a function OF `_view` and C++
+   * cannot write one parameter's default in terms of another: the three-argument form is
+   * `LayoutForView(_view)`, which is what every screen without a table of its own wants.
+   *
+   * The layout is the CALLER's because `QQ11` does not name a screen -- `STATUS` and `TT213` are
+   * both view 8 -- so the one place that knows which screen is starting is the one that says so.
+   * It is stored beside the view, in the same breath, and read per glyph from there.
+   */
+  void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept;
+
+  /*
    * 6502: LOOK1 -- change the view, with `LQ` and `LO2` as its other two paths.
    *
    * THREE EXITS AND THEY DO DIFFERENT AMOUNTS OF WORK. On a non-space screen it sets the view,

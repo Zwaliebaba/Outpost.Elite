@@ -346,7 +346,16 @@ namespace Elite
 
   void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
+    SetUpScreen(_universe, _ports, _view, LayoutForView(_view));
+  }
+
+  void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept
+  {
     _universe.view = _view; // 6502: .TT66 STA QQ11, and then it falls into TTX66
+
+    // Where the wide surface puts this screen's text. Not the game's, and written here so that it
+    // cannot be a screen behind the view it belongs to (Resolution.md section 6.2).
+    _universe.screenLayout = _layout;
 
     // 6502: JSR MT2 -- LDA #32 / STA DTW1 / LDA #0 / STA DTW6. Sentence case for the extended
     // printer, which is the first thing a new screen is put back to.

@@ -3,6 +3,7 @@
 #include "Charts.h"
 
 #include "Lines2x.h"
+#include "Picture.h"
 
 #include "EliteTypes.h"
 
@@ -331,7 +332,8 @@ namespace Elite
     DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
   }
 
-  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
+  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy,
+                           TextPrinter* _wideLabels) noexcept
   {
     /*
      * 6502: LDA #7 / JSR DOXC / LDA #190 / JSR NLIN3.
@@ -452,6 +454,24 @@ namespace Elite
             _ports.printer.SetCaseFlags(0x80);
 
             /*
+             * Where the name goes on the 640x400 surface (Resolution.md section 6.3, slice RS-5-e).
+             *
+             * `TT23` puts a name beside its disc by dividing the disc's x by eight; the disc is
+             * drawn at twice that x plus the space view's margin, so its wide cell is
+             * `(2 * screenX + SPACE_VIEW_MARGIN) / 8`, and the name sits one cell right of it as it
+             * does on the canvas. This is the only place that knows both numbers, which is why it
+             * is the place that says so -- a layout maps one cell at a time and cannot move a run's
+             * origin without moving its letters apart.
+             */
+            if (_wideLabels != nullptr)
+            {
+              const int discCell = (2 * static_cast<int>(screenX) + Picture::SPACE_VIEW_MARGIN) / 8;
+              _wideLabels->SetLabelRun(static_cast<std::uint8_t>(row),
+                                       static_cast<std::uint8_t>(TEXT_FIRST_COLUMN + _universe.text.column),
+                                       discCell + 1);
+            }
+
+            /*
              * 6502: JSR cpl, and the carry it returns is the one the ADC below consumes. The CPY
              * that guarded this branch set the carry, and cpl's last seed twist then overwrote it.
              */
@@ -535,7 +555,7 @@ namespace Elite
     DrawTargetCrosshairs(_canvas, _view, _picture);
 
     // 6502: JMP CLYNS, which is `ClearMessageRows` and was a seam until M3-b-3b.
-    ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, _view.view);
+    ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view));
 
     return nearest;
   }
@@ -552,7 +572,7 @@ namespace Elite
        * The message is an EXTENDED token, which is why this routine needs both printers: the rest
        * of hyp prints recursive ones.
        */
-      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, _view.view); // 6502: JSR CLYNS
+      ClearMessageRows(_canvas, _printer, _text, _sentences, _message, _picture, LayoutForView(_view.view)); // 6502: JSR CLYNS
       _text.column = 15;
       _extended.Print(DOCKED_TOKEN);
       return JumpOutcome::Docked;

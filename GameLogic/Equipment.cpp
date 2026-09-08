@@ -2,6 +2,8 @@
 
 #include "Equipment.h"
 
+#include "TextPrint2x.h"
+
 #include "Dashboard.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
@@ -143,7 +145,7 @@ namespace Elite
 
     // 6502: JSR CLYNS / qv2: LDA #175 / JSR prq / JSR TT217 / SEC / SBC #'0' / CMP #4 / BCC qv3.
     ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.view);
+                       &_universe.picture, _universe.screenLayout);
     for (;;)
     {
       PrintThenQuestion(_ports.printer, VIEW_TOKEN);
@@ -157,7 +159,7 @@ namespace Elite
 
       // 6502: JSR CLYNS / JMP qv2 -- and there is no way out of this loop but a valid view.
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.view);
+                       &_universe.picture, _universe.screenLayout);
     }
   }
 
@@ -202,8 +204,9 @@ namespace Elite
      */
     for (;;)
     {
-      // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-      SetUpTradeScreen(_universe, _ports, EQUIP_SHIP_VIEW);
+      // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too, and the
+      // screen's own layout for the wide surface (Resolution.md section 6.2, slice RS-5-b).
+      SetUpTradeScreen(_universe, _ports, EQUIP_SHIP_VIEW, EQUIP_LAYOUT);
 
       // 6502: LDA #12 / JSR DOXC / LDA #207 / JSR spc / LDA #185 / JSR NLIN3.
       _universe.text.column = TITLE_COLUMN;
@@ -250,7 +253,7 @@ namespace Elite
 
       // 6502: JSR CLYNS / LDA #127 / JSR prq / JSR gnum.
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.view);
+                       &_universe.picture, _universe.screenLayout);
       PrintThenQuestion(_ports.printer, ITEM_TOKEN);
 
       const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, highest);

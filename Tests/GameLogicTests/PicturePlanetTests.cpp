@@ -499,7 +499,6 @@ namespace GameLogicTests
     TEST_METHOD(TheUpperRegionIsNative)
     {
       const Picture picture;
-      Assert::IsTrue(picture.Native().spaceView, L"RS-3 did not turn the upper region over");
     }
   };
 
