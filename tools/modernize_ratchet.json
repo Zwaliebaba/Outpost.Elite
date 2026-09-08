@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 92,
+      "ceiling": 65,
       "slack": 0,
-      "slice": "M6-d-55: the VIC registers named rather than addressed, and the harness's subject line was under-reporting"
+      "slice": "M6-d-56: six files to zero, an orphan comment inside an empty namespace, and a five-instruction sequence called four"
     },
     "opcode-quotations": {
       "ceiling": 0,

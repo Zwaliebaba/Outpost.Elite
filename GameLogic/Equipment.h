@@ -31,7 +31,8 @@ namespace Elite
   [[nodiscard]] std::uint16_t EquipmentPrice(std::uint8_t _item, LightYearsTenths _fuel) noexcept;
 
   /*
-   * 6502: the four instructions before EQL1 -- LDA #70 / SEC / SBC QQ14 / ASL A / STA PRXS.
+   * 6502: the fuel price, computed at the top of `EQSHP` -- 70 minus the tank, doubled, stored
+   * as the table's first entry.
    *
    * Fuel is the only price the game computes, and it computes it into the TABLE rather than into a
    * variable: what you pay is what is missing from the tank, at two credits a light year, and the
@@ -67,12 +68,12 @@ namespace Elite
    *
    *   * Nothing entered, or a number too large: straight to the docking bay, no sound.
    *   * An item already fitted, or not enough cash: a one-line complaint, a beep, and out.
-   *   * A letter: gnum's `JMP BAY2`, which leaves without going through either.
+   *   * A letter: gnum's exit to `BAY2`, which leaves without going through either.
    *
    * WHAT THE STATION SELLS is `tek + 3`, capped at 14 -- so a tech level 0 system sells the first
-   * three items and anything from tech level 9 up sells all thirteen. The cap is `CMP #12 / BCC /
-   * LDA #14`, which jumps from 11 to 14 rather than counting up, so no station ever sells exactly
-   * twelve or thirteen items.
+   * three items and anything from tech level 9 up sells all thirteen. The cap replaces anything
+   * of 12 or more with 14, jumping from 11 straight to 14 rather than counting up, so no station
+   * ever sells exactly twelve or thirteen items.
    *
    * THE PRICE IS TAKEN BEFORE THE ITEM IS CHECKED. `JSR eq` subtracts, and the "already fitted"
    * branches then hand it back with MCASH -- so buying an escape pod you already own moves the

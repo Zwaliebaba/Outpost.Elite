@@ -42,8 +42,8 @@ namespace Elite
    * THE PLATFORM ARRIVES AS FOUR REFERENCES, which is `Ports` minus the four members that are this
    * library's own: the token printer, the character printer, the sink and the extended printer are
    * built HERE, over the universe, because nothing about them is the platform's. A `ControlEffects`
-   * arrived beside them until M6-0-h-3 -- 6502: JSR DOCKIT, which was never in `Ports` (§4.5) and
-   * is a library call now.
+   * arrived beside them until M6-0-h-3 -- 6502: the call to `DOCKIT`, which was never in `Ports`
+   * (§4.5) and is a library call now.
    */
   class Game
   {
@@ -109,16 +109,18 @@ namespace Elite
     /*
      * 6502: QQ12 -- which half of the main loop the game is in (M4-d).
      *
-     * `FRCE` is `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` -- a two-way dispatch on a byte the
-     * game keeps -- so both values are the game's own. A THIRD, `Paused`, was the port's from M4-d
-     * until InputTimer.md I-0: `FREEZE` turned inside out into a state the outer loop was in. It
-     * went with the pause screen (owner ruling 2026-09-08); a windowed player's pause is the
-     * executable stopping the steps while the window is inactive (InputTimer.md §5.9).
+     * `FRCE` is a two-way dispatch on that byte -- ZERO leaves for `TT100` and non-zero for
+     * `MLOOP`, and the branch reads backwards, so the note beside it in the original source is
+     * the BBC form's and says the opposite (see `StartUp.h`). Both values are the game's own. A
+     * THIRD, `Paused`, was the port's from M4-d until InputTimer.md I-0: `FREEZE` turned inside
+     * out into a state the outer loop was in. It went with the pause screen (owner ruling
+     * 2026-09-08); a windowed player's pause is the executable stopping the steps while the
+     * window is inactive (InputTimer.md §5.9).
      */
     enum class Mode : std::uint8_t
     {
-      Flight, ///< 6502: QQ12 = 0 -- `FRCE`'s `JMP TT100`
-      Docked, ///< 6502: QQ12 non-zero -- `FRCE`'s `JMP MLOOP`
+      Flight, ///< 6502: QQ12 = 0 -- `FRCE` leaves for `TT100`
+      Docked, ///< 6502: QQ12 non-zero -- `FRCE` leaves for `MLOOP`
     };
 
     [[nodiscard]] Mode ModeNow() const noexcept

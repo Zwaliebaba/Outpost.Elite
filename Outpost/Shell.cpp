@@ -19,12 +19,6 @@
 namespace Outpost
 {
 
-  namespace
-  {
-    /// 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
-
-  } // namespace
-
   bool GameShell::Turn()
   {
     /*
@@ -137,7 +131,7 @@ namespace Outpost
      */
     if (m_flight == nullptr || m_ports == nullptr)
     {
-      *m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
+      *m_view = _view; // 6502: the view byte alone, all that can be done without the universe
       return;
     }
 
@@ -165,8 +159,9 @@ namespace Outpost
 
   void GameShell::Flush()
   {
-    // 6502: FLKB -- `LDA #15 / TAX / RTS` on this build, a flush of nothing; the window has had no
-    // queue to empty since InputTimer.md I-1, so the answer is the original's.
+    // 6502: FLKB -- a load, a register transfer and a return on this build, a flush of nothing;
+    // the window has had no queue to empty since InputTimer.md I-1, so the answer is the
+    // original's.
   }
 
   bool GameShell::Held(std::size_t _key)
@@ -247,10 +242,10 @@ namespace Outpost
      */
     /*
      * AND THE WAIT, WHICH IS THE POINT. `TITLE` runs `MVEIT` and `LL9` and comes straight back
-     * round -- there is no `JSR WSCAN` anywhere in it (§6.17) -- so the ship turns at whatever rate
-     * a 6510 gets through those two, which `CycleTests` measures at 121,276 cycles: 8.43 turns a
-     * second. Presenting once per turn made the display decide instead, and on a 165 Hz panel the
-     * ship span twenty times too fast (§6.110).
+     * round -- there is no wait for vertical sync anywhere in it (§6.17) -- so the ship turns at
+     * whatever rate a 6510 gets through those two, which `CycleTests` measures at 121,276
+     * cycles: 8.43 turns a second. Presenting once per turn made the display decide instead, and
+     * on a 165 Hz panel the ship span twenty times too fast (§6.110).
      *
      * SO THIS PRESENTS UNTIL A TURN IS DUE, and the frames in between are the same picture -- which
      * is exactly what the VIC-II was doing while the 6510 computed the next one. The accumulator is
@@ -289,7 +284,7 @@ namespace Outpost
   /*
    * `ShowTitleScreen` WAS HERE AND IS NOT ANY MORE (M6-0-h-2). It was a forward to
    * `Elite::ShowTitleShip` -- 6502: TITLE, ported in full since §6.107 -- and `BR1` makes the
-   * call itself now, which is what `JSR TITLE` is.
+   * call itself, which is what the original's own call to `TITLE` is.
    */
 
   // ---- the control codes that leave the text system ------------------------------------------------

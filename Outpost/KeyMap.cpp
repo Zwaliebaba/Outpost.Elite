@@ -51,11 +51,11 @@ namespace Outpost
       /*
        * AND SPACE, WHICH IS THE ONE KEY THE GAME NAMES IN ITS OWN TEXT.
        *
-       * "PRESS SPACE OR FIRE, COMMANDER." is token 7, and `TITLE` waits for it: `JSR RDKEY / BIT
-       * KY7 / BMI TL3 / BCC TLL2` loops until the fire button or ANY key. Any key is what the
-       * shell does too -- and Space was not one, because the layout above moved speed onto "." and
-       * left nothing on the key the prompt asks for. The title screen ignored the one press a
-       * player is told to make.
+       * "PRESS SPACE OR FIRE, COMMANDER." is token 7, and `TITLE` waits for it by scanning the
+       * keyboard and looping until the fire button or ANY key. Any key is what the shell does
+       * too -- and Space was not one, because the layout above moved speed onto "." and left
+       * nothing on the key the prompt asks for. The title screen ignored the one press a player
+       * is told to make.
        *
        * It maps to position 4, which IS the C64's Space, so this is the original's binding rather
        * than an invented one: it dismisses every "press space" prompt AND increases speed in
@@ -176,7 +176,7 @@ namespace Outpost
       /*
        * CTRL, WHICH IS A POSITION AND NOT A MODIFIER, and this row is the whole of the fix.
        *
-       * `CTRL` is `LDX #6` falling into `DKS4`, so the game asks for key-logger entry 6 exactly
+       * `CTRL` loads 6 and falls into `DKS4`, so the game asks for key-logger entry 6 exactly
        * the way it asks for "A" or "T" -- `keylook.asm` calls that byte "CTRL is being pressed
        * (KLO+&6)". `Main.cpp` had recorded the opposite ("Ctrl is not a matrix position") and
        * the galactic hyperdrive, built in slice 4c-b, was unreachable on the strength of it.
@@ -224,12 +224,12 @@ namespace Outpost
      * C64, for no extra binding at all.
      *
      * AND THE Y PAIR IS THE OTHER WAY ROUND FROM THE X PAIR, which looks like a slip and is not.
-     * `TT17` ends the y axis with `EOR #%11111110`, so the UNSHIFTED key steps `QQ10` by -1 and
-     * the shifted one by +1 -- and `QQ10` grows DOWNWARDS on both charts, because a system's screen
-     * row is its y halved. Unshifted therefore moves the crosshairs UP the screen, and the arrow
-     * that means "up" to a player is the one that must not press shift. Measured on the chart
-     * rather than reasoned about: the first version had them the obvious way round and the
-     * crosshairs went the wrong way.
+     * `TT17` ends the y axis with an exclusive OR that flips every bit but the lowest, so the
+     * UNSHIFTED key steps `QQ10` by -1 and the shifted one by +1 -- and `QQ10` grows DOWNWARDS
+     * on both charts, because a system's screen row is its y halved. Unshifted therefore moves
+     * the crosshairs UP the screen, and the arrow that means "up" to a player is the one that
+     * must not press shift. Measured on the chart rather than reasoned about: the first version
+     * had them the obvious way round and the crosshairs went the wrong way.
      */
     struct CursorBinding
     {
@@ -285,8 +285,9 @@ namespace Outpost
 
   std::uint8_t CharacterFor(std::uint8_t _c64Key) noexcept
   {
-    // 6502: LDA TRANTABLE,X -- and X cannot exceed 64, because that is what RDKEY produces. A key
-    // outside the table is not a key the hardware could have reported.
+    // 6502: the translation table, indexed by the key number -- and the index cannot exceed 64,
+    // because that is what RDKEY produces. A key outside the table is not a key the hardware
+    // could have reported.
     if (_c64Key >= Elite::KEY_TRANSLATION.size())
     {
       return 0;

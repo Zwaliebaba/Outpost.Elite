@@ -18,14 +18,14 @@ namespace Elite
    * printer every docked screen uses.
    */
 
-  /// 6502: LDA #16 / STA YC -- the row a message uses on the space view. Every other view keeps
-  /// whatever `CLYNS` left, which is 21, because the `BIT` eats the store (§6.66).
+  /// 6502: the row a message uses on the space view. Every other view keeps whatever `CLYNS`
+  /// left, which is 21, because a data byte swallows the store (§6.66).
   inline constexpr std::uint8_t MESSAGE_ROW_SPACE_VIEW = 16;
 
   /// 6502: recursive token 93, " DESTROYED", which `mes9` appends when `de` says to.
   inline constexpr std::uint8_t TOKEN_DESTROYED = 253;
 
-  /// 6502: LDY #20 / STY DLY -- twenty frames, which is how long a message stays up.
+  /// 6502: DLY set to twenty frames, which is how long a message stays up.
   inline constexpr std::uint8_t MESSAGE_FRAMES = 20;
 
   /*
@@ -40,13 +40,14 @@ namespace Elite
   /*
    * 6502: MESS -- put a message on screen, and me1, which erases the old one first.
    *
-   * `me1` is `STX DLY / PHA / LDA MCH / JSR mes9 / PLA` and then falls into `MESS`, so "erase the
-   * one that is up and show this one" is one instruction stream rather than two calls.
+   * `me1` stores the new delay, saves the new token, erases the message currently up, restores
+   * the token and then falls into `MESS` -- so "erase the one that is up and show this one" is
+   * one instruction stream rather than two calls.
    *
-   * THE ROW IS 16 ON THE SPACE VIEW AND 21 EVERYWHERE ELSE, and the second of those is not what the
-   * source says. `LDA #25 / EQUB &2C / .infrontvw / STA YC` puts the `BIT` where it eats the STORE
-   * rather than the load, so the 25 is loaded and thrown away and the row is whatever `CLYNS` left
-   * (§6.66). Reproduced, not fixed (ADR-003).
+   * THE ROW IS 16 ON THE SPACE VIEW AND 21 EVERYWHERE ELSE, and the second of those is not what
+   * the source says. A data byte assembling as a three-byte instruction sits where it swallows
+   * the STORE rather than the load, so the 25 is loaded and thrown away and the row is whatever
+   * `CLYNS` left (§6.66). Reproduced, not fixed (ADR-003).
    */
   void ShowMessage(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended, MessageState& _message,
                    std::uint8_t _token, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
