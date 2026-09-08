@@ -67,22 +67,22 @@ namespace Elite
     const Ship& block = _bubble.blocks[_slot];
 
     // 6502: LDA K%+1,Y / JSR SQUA2 / STA R.
-    std::uint8_t r = SquareUnsigned(block.x.hi).high;
+    std::uint8_t running = SquareUnsigned(block.x.hi).high;
 
     // 6502: LDA K%+4,Y / JSR SQUA2 / ADC R / BCS MA30 -- the `ADC` reads `SQUA2`'s exit carry, and
     // that carry is never set (§6.70), so this is the plain addition it looks like.
     const Product second = SquareUnsigned(block.y.hi);
-    const AddResult sum = AddWithCarry(second.high, r, second.carry);
+    const AddResult sum = AddWithCarry(second.high, running, second.carry);
     if (sum.carry)
     {
       return 0xFFu; // 6502: MA30 -- LDA #&FF
     }
 
-    r = sum.value; // 6502: STA R
+    running = sum.value; // 6502: STA R
 
     // 6502: LDA K%+7,Y / JSR SQUA2 / ADC R / BCC P%+4 -- and the branch skips the saturation.
     const Product third = SquareUnsigned(block.z.hi);
-    const AddResult total = AddWithCarry(third.high, r, third.carry);
+    const AddResult total = AddWithCarry(third.high, running, third.carry);
 
     return total.carry ? 0xFFu : total.value;
   }

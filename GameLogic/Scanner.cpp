@@ -379,8 +379,9 @@ namespace Elite
     _compass.x = AddWithCarry(across.offset, 195u, across.carry).value;
 
     const CompassOffset down = ScaleToCompass(_towards.y);
-    const std::uint8_t t = down.offset; // 6502: STX T -- and T is this routine's own (M2-c)
-    _compass.y = SubtractWithCarry(156u, t, down.carry).value;
+    // 6502: STX T / LDA #156 / SBC T -- the original parks `ScaleToCompass`'s X before it can
+    // subtract from a literal; the port subtracts the value where it stands.
+    _compass.y = SubtractWithCarry(156u, down.offset, down.carry).value;
 
     // 6502: LDA #YELLOW / LDX XX15+2 / BPL P%+4 / LDA #GREEN / STA COMC.
     _compass.pattern = ((_towards.z & 0x80u) != 0u) ? COMPASS_BEHIND : COMPASS_AHEAD;

@@ -129,14 +129,14 @@ namespace Elite
 
   void DrawBorder(Canvas& _canvas, std::uint8_t _rows, Picture* _picture) noexcept
   {
-    const std::uint8_t t = _rows; // 6502: STX T -- the kernel's byte, a local since M2-b
-
     // 6502: LDY #LO(SCBASE+3*8) / STY SC / LDY #HI(SCBASE+3*8) / LDA #%00000011 / JSR BOXS2.
     ToggleVerticalEdge(_canvas, 3u * 8u, 0x03u, _rows, _picture);
 
+    // 6502: STX T -- the original parks the count in the kernel's byte because `BOXS2` clobbers X.
+    // The port passes it, so there is nothing to park and nothing to read back.
     // 6502: the same again at cell 36 with the opposite two pixels, and the count comes back out
     // of `T2` rather than out of X -- `BOXS2` leaves X at zero.
-    ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, t, _picture);
+    ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, _rows, _picture);
 
     // 6502: LDA #1 / STA SCBASE+&118 -- one byte, in cell 35 of the top character row.
     _canvas.Write(0x118u, 1u);

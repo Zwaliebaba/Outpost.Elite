@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->25 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1610,7 +1610,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** ✅ **built 2026-09-08 (§8, two sittings)** | **M6-a-1**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. **M6-a-2**: the `Oracle` seam, at `Cpu6502::CallSubroutine` and not at §4.10's `Call(label, State)`, which no test's shape would have fitted; `LiveOracle`; `RecordingOracle` with a measuring mode and a fixture writer; the corpus measured. **THE ROW'S LAST CLAUSE IS ANSWERED RATHER THAN BUILT, and the answer is a question for the owner**: a threshold on record size saves the wrong thing, because the 222.4 MB is 3.2 million small calls and not a few big records (§4.10). Committing a fixture waits on the ruling M6-b now needs. | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. The suite runs green through the recorder (454 of 454) and two recording runs of one suite produced byte-identical files. **The "fixtures are committed" clause is NOT met and is withdrawn rather than fudged**: what to commit is the ruling, and §4.10 says what it costs either way. | 3 |
 | **M6-b Fixtures answer — scope set by §1 R-f and R-g, ruled 2026-09-08** | Four pieces, and the first is a measurement: **(1)** the interpreter records its READ set for one pass, so the tail R-g accepts — tests that read image bytes no call ever wrote — is a number before anything is built on it; **(2)** the key moves off the base image and onto what the test wrote, and `tools/labels.py --header` emits the addresses as generated constants with a `--check`; **(3)** the 73 tests over two thousand oracle calls fold their answers into a digest each, and `RecordingOracle` writes the ~25 MB fixture; **(4)** `RecordedOracle` serves the suite, `LiveOracle` and the BeebAsm steps leave CI, `OracleIsPresent` is retired and `mutate.py`'s oracle check goes (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged; the fixture committed and a second recording run byte-identical to it. | 2 for the mechanism, plus roughly 3 for the 73 tests and the read-set measurement |
-| **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
+| **M6-c Identifiers** ✅ **built 2026-09-08 (§8, seventeen slices)** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
 | **M6-f The tree** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py` and the master-count markers removed; ADR-001 §5 and Risk R1 restated; `.gitignore`'s upstream rules dropped. | A fresh clone builds and runs the whole suite with nothing but the repository; `origin-tools` at zero. | 1 |
@@ -1898,6 +1898,40 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-18: the last twenty-five, and three that were not renames.**
+
+`origin-identifiers` is **ZERO**. Seventeen slices, 2,290 sites, no test moved and no digest moved.
+
+The last twenty-five split three ways. Ten were ordinary: `SumOfSquares`' `R` is the `running` total
+of three squares; `MVT1`'s and `MVT6`'s sweeps take `valueLow` and `valueMid` from
+`AddToShipCoordinate`'s and `AddShipCoordinateToP`'s own signatures; and `DOCKIT`'s ladder builds a
+`magnitudeByte` from its `int magnitude`, which is all that copy has ever been.
+
+**Three of the six `T`s were not renames at all.** `ClipSunRow` opened with
+`const std::uint8_t t = _halfWidth;` and then used `_halfWidth` directly four lines later;
+`DrawBorder` did the same with `_rows`; `SetCompassDot` did it with `down.offset`, one line under a
+sibling that reads `across.offset` where it stands. All three are the original's zero-page byte
+surviving as a copy the port has no use for: `STX T` exists because `BOXS2` clobbers X and because
+`SBC` cannot subtract from a literal. Deleting the copy is what "renamed for what it holds" means
+when what it holds is something that already has a name.
+
+**And that deletion broke rule 4 before it was caught.** Two of the three carried a `// 6502:`
+marker, `origin-markers` fell 4,103 → 4,101, and the ratchet said so on the same run. The markers are
+back, attached to the code that now does the work and rewritten to say what the original parked and
+why the port does not — which is the sentence M6-d will want anyway. **The lesson: a ratchet that
+only goes down still catches a slice going down the WRONG counter.** Rule 5 permits the fall; rule 4
+forbids this particular one; the pair of them is what noticed.
+
+The block renamer's new guard fired twice in this slice on `TacticsTests.cpp` — both loops sit under
+a block comment, and both times the range I reached for started inside one. It is the cheapest check
+in the tool and it has now paid for itself three times.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored across all seventeen slices; six mutants
+moved earlier in the phase and every one was re-anchored, never dropped (rule 3).
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 25 → **0**. M6-c is done.
 
 **2026-09-08 — M6-c-17: `B`, and the one slice that moves two ratchets.**
 
