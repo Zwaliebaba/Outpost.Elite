@@ -63,8 +63,8 @@ namespace GameLogicTests
       std::uint16_t qq15 = 0;
       std::uint16_t qq19 = 0;
       std::uint16_t qq21 = 0;
-      std::uint16_t k = 0;
-      std::uint16_t k3 = 0;
+      std::uint16_t zeroPageK = 0;
+      std::uint16_t zeroPageK3 = 0;
       std::uint16_t k4 = 0;
       std::uint16_t circleStep = 0;
       std::uint16_t qq8 = 0;
@@ -85,8 +85,8 @@ namespace GameLogicTests
           qq15(_oracle.Label("QQ15")),
           qq19(_oracle.Label("QQ19")),
           qq21(_oracle.Label("QQ21")),
-          k(_oracle.Label("K")),
-          k3(_oracle.Label("K3")),
+          zeroPageK(_oracle.Label("K")),
+          zeroPageK3(_oracle.Label("K3")),
           k4(_oracle.Label("K4")),
           circleStep(_oracle.Label("STP")),
           qq8(_oracle.Label("QQ8")),
@@ -772,7 +772,7 @@ namespace GameLogicTests
           // SUN takes its centre in K3 and K4 and its radius in K, so the values have to be
           // snapshotted as each call happens -- by the time the chart is finished they hold
           // whatever the last system left.
-          cpu.watch = {zp.k3, zp.k4, zp.k, 0};
+          cpu.watch = {zp.zeroPageK3, zp.k4, zp.zeroPageK, 0};
           LoadSeeds(cpu, zp.qq21, galaxy);
           SeedChart(cpu, zp, chart);
           SeedAfterScreenReset(cpu, oracle);

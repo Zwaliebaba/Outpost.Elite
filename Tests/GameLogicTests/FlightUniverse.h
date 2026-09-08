@@ -415,7 +415,7 @@ namespace GameLogicTests
   {
     std::uint16_t frin, kPercent, many, inwk, sx, sxl, sy, syl, sz, szl, nostm;
     std::uint16_t lso, lsx2, ballHeapTop, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
-    std::uint16_t lsy2, sunx, yx2m1, k5, k6, circleStep, flag, planetDetail, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
+    std::uint16_t lsy2, sunx, yx2m1, zeroPageK5, zeroPageK6, circleStep, flag, planetDetail, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
     std::uint16_t dtw3, dtw4, dtw5, dtw8;
     std::uint16_t dly, de, las2, qq22, viewByte, qq11, mj, junk, ev, rand;
     std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
@@ -485,8 +485,8 @@ namespace GameLogicTests
       lsy2 = _oracle.Label("LSY2");
       sunx = _oracle.Label("SUNX");
       yx2m1 = _oracle.Label("Yx2M1");
-      k5 = _oracle.Label("K5");
-      k6 = _oracle.Label("K6");
+      zeroPageK5 = _oracle.Label("K5");
+      zeroPageK6 = _oracle.Label("K6");
       circleStep = _oracle.Label("STP");
       flag = _oracle.Label("FLAG");
       planetDetail = _oracle.Label("PLTOG");

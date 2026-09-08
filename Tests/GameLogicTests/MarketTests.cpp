@@ -441,8 +441,8 @@ namespace GameLogicTests
         return;
       }
       const OracleImage& oracle = OracleImage::Instance();
-      const std::uint16_t p = oracle.Label("P");
-      const std::uint16_t q = oracle.Label("Q");
+      const std::uint16_t zeroPageP = oracle.Label("P");
+      const std::uint16_t zeroPageQ = oracle.Label("Q");
 
       std::uint32_t compared = 0;
       for (std::uint32_t price = 0; price < 256; ++price)
@@ -450,8 +450,8 @@ namespace GameLogicTests
         for (const std::uint32_t quantity : {0u, 1u, 2u, 3u, 17u, 64u, 100u, 127u, 128u, 200u, 255u})
         {
           Cpu6502 cpu = oracle.Fresh();
-          cpu.memory[p] = static_cast<std::uint8_t>(price);
-          cpu.memory[q] = static_cast<std::uint8_t>(quantity);
+          cpu.memory[zeroPageP] = static_cast<std::uint8_t>(price);
+          cpu.memory[zeroPageQ] = static_cast<std::uint8_t>(quantity);
           cpu.a = cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           Assert::IsTrue(cpu.CallSubroutine(oracle.Label("GCASH"), 10'000).completed, L"GCASH should return");
@@ -724,7 +724,7 @@ namespace GameLogicTests
       const std::uint16_t tt226 = oracle.Label("TT226");
       const std::uint16_t nwdav1 = oracle.Label("NWDAV1");
       const std::uint16_t nwdav3 = oracle.Label("NWDAV3");
-      const std::uint16_t r = oracle.Label("R");
+      const std::uint16_t zeroPageR = oracle.Label("R");
       const std::uint16_t qq25 = oracle.Label("QQ25");
 
       std::array<std::uint32_t, 6> outcomes{};
@@ -742,7 +742,7 @@ namespace GameLogicTests
             // DASC reaches the screen. Trapping it keeps the stepping on gnum's own instructions,
             // and the trap clears the carry because that is what DASC does.
             cpu.AddTrap(oracle.Label("DASC"), Cpu6502::TrapExit::ClearCarry);
-            cpu.memory[r] = static_cast<std::uint8_t>(value);
+            cpu.memory[zeroPageR] = static_cast<std::uint8_t>(value);
             cpu.memory[qq25] = static_cast<std::uint8_t>(available);
             cpu.a = static_cast<std::uint8_t>(key);
             cpu.x = cpu.y = 0;
@@ -816,7 +816,7 @@ namespace GameLogicTests
                                        std::to_wstring(available) + L")";
             Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(gameResult), static_cast<std::uint32_t>(ourResult),
                                             (where + L": the exit").c_str());
-            Assert::AreEqual<std::uint32_t>(cpu.memory[r], ours, (where + L": the accumulator").c_str());
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zeroPageR], ours, (where + L": the accumulator").c_str());
 
             ++outcomes[static_cast<std::size_t>(ourResult)];
             ++compared;

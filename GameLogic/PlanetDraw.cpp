@@ -279,8 +279,8 @@ namespace Elite
     // offset from the circle's centre, and both halves run on the caller's carry. `X` and `T` are
     // the two halves of that offset and both are parameters since M2-c-3.
     const AddResult low = AddWithCarry(_offset.lo, _centre.y, _carryIn);
-    _state.k6[2] = low.value;
-    _state.k6[3] = AddWithCarry(_centre.y1, _offset.hi, low.carry).value;
+    _state.segmentEnd[2] = low.value;
+    _state.segmentEnd[3] = AddWithCarry(_centre.y1, _offset.hi, low.carry).value;
 
     // 6502: LDA FLAG / BEQ BL1 / INC FLAG. The first segment of a circle has a start and no end
     // yet, so it goes straight to the break rather than being drawn.
@@ -293,16 +293,16 @@ namespace Elite
     {
       // 6502: BL1 -- the eight bytes of the two endpoints into the clipper's own workspace.
       Line16 segment;
-      segment.first.xLow = _state.k5[0];
-      segment.first.xHigh = _state.k5[1];
-      segment.first.yLow = _state.k5[2];
-      segment.first.yHigh = _state.k5[3];
-      segment.second.xLow = _state.k6[0];
-      segment.second.xHigh = _state.k6[1];
+      segment.first.xLow = _state.segmentStart[0];
+      segment.first.xHigh = _state.segmentStart[1];
+      segment.first.yLow = _state.segmentStart[2];
+      segment.first.yHigh = _state.segmentStart[3];
+      segment.second.xLow = _state.segmentEnd[0];
+      segment.second.xHigh = _state.segmentEnd[1];
 
       // 6502: `XX12(1 0)` -- the far end's y, which `LL145` reads there and `LL9`'s frame owns.
-      _geometry.dotProducts[0] = _state.k6[2];
-      _geometry.dotProducts[1] = _state.k6[3];
+      _geometry.dotProducts[0] = _state.segmentEnd[2];
+      _geometry.dotProducts[1] = _state.segmentEnd[3];
       segment.second.yLow = _geometry.dotProducts[0];
       segment.second.yHigh = _geometry.dotProducts[1];
 
@@ -365,7 +365,7 @@ namespace Elite
     }
 
     // 6502: BL7 -- this segment's end is the next one's start, and the angle moves on.
-    _state.k5 = _state.k6;
+    _state.segmentStart = _state.segmentEnd;
     return AddWithCarry(_cnt, _state.circleStep, false).value;
   }
 
@@ -430,8 +430,8 @@ namespace Elite
 
       // 6502: PL37 -- and the centre added on, sixteen bits at a time.
       const AddResult xLow = AddWithCarry(across, _centre.x, carry);
-      _state.k6[0] = xLow.value;
-      _state.k6[1] = AddWithCarry(_centre.x1, high, xLow.carry).value;
+      _state.segmentEnd[0] = xLow.value;
+      _state.segmentEnd[1] = AddWithCarry(_centre.x1, high, xLow.carry).value;
 
       // 6502: LDA CNT / CLC / ADC #16 / JSR FMLTU2 -- the same table a quarter-turn on, which is
       // the cosine.
@@ -663,8 +663,8 @@ namespace Elite
 
       // 6502: PL42 -- the centre added on.
       const AddResult xLow = AddWithCarry(low, _centre.x, carry);
-      _state.k6[0] = xLow.value;
-      _state.k6[1] = AddWithCarry(offsetHigh, _centre.x1, xLow.carry).value;
+      _state.segmentEnd[0] = xLow.value;
+      _state.segmentEnd[1] = AddWithCarry(offsetHigh, _centre.x1, xLow.carry).value;
 
       // 6502: LDA K / STA R / ... / LDA K+2 / STA P / ... / JSR ADD -- the other pair of products.
       sum = AddSigned(SignMag16{secondDown, static_cast<std::uint8_t>(_geometry.scaledOrientation[4] ^ _geometry.scaledOrientation[1])},
@@ -989,7 +989,7 @@ namespace Elite
       const std::uint8_t widthHigh = SubtractWithCarry(radiusSquared.high, vSquared.high, widthLow.carry).value;
 
       const Root root = SquareRoot(widthHigh, widthLow.value);
-      _math.q = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
+      _math.lastDivisor = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
 
       // 6502: JSR DORND / AND CNT / CLC / ADC Q / BCC PLF44 / LDA #255 -- the ragged edge, and it
       // saturates rather than wrapping round to nothing. The generator runs on the carry `LL5`

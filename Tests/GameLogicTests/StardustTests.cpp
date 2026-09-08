@@ -55,7 +55,7 @@ namespace GameLogicTests
       std::uint16_t xx = 0, yy = 0, keptQuotient = 0, rand = 0;
       std::uint16_t rollRate = 0, rollMagnitude = 0, rollSign = 0, pitchRate = 0, pitchMagnitude = 0, pitchSign = 0;
       std::uint16_t speed = 0, speedTimes4Low = 0, signMask = 0, signMask2 = 0;
-      std::uint16_t p = 0, q = 0, r = 0, s = 0, t = 0, x1 = 0, y1 = 0, zz = 0;
+      std::uint16_t zeroPageP = 0, zeroPageQ = 0, zeroPageR = 0, zeroPageS = 0, zeroPageT = 0, x1 = 0, y1 = 0, zz = 0;
       std::uint16_t view = 0, screen = 0;
 
       explicit DustLabels(const OracleImage& _oracle)
@@ -81,11 +81,11 @@ namespace GameLogicTests
         speedTimes4Low = _oracle.Label("DELT4");
         signMask = _oracle.Label("RAT");
         signMask2 = _oracle.Label("RAT2");
-        p = _oracle.Label("P");
-        q = _oracle.Label("Q");
-        r = _oracle.Label("R");
-        s = _oracle.Label("S");
-        t = _oracle.Label("T");
+        zeroPageP = _oracle.Label("P");
+        zeroPageQ = _oracle.Label("Q");
+        zeroPageR = _oracle.Label("R");
+        zeroPageS = _oracle.Label("S");
+        zeroPageT = _oracle.Label("T");
         x1 = _oracle.Label("X1");
         y1 = _oracle.Label("Y1");
         zz = _oracle.Label("ZZ");
@@ -293,10 +293,10 @@ namespace GameLogicTests
             flight.speed = operand;
             cpu.memory[at.rollMagnitude] = operand;
             flight.rollMagnitude = operand;
-            cpu.memory[at.q] = operand;
-            cpu.memory[at.p] = a;
-            cpu.memory[at.r] = operand;
-            cpu.memory[at.s] = a;
+            cpu.memory[at.zeroPageQ] = operand;
+            cpu.memory[at.zeroPageP] = a;
+            cpu.memory[at.zeroPageR] = operand;
+            cpu.memory[at.zeroPageS] = a;
             cpu.memory[at.xx] = operand;
             cpu.memory[static_cast<std::uint16_t>(at.xx + 1)] = a;
 
@@ -395,17 +395,17 @@ namespace GameLogicTests
 
             const std::wstring where = std::wstring(name) + L"(a=" + std::to_wstring(a) + L", x=" + std::to_wstring(operand) + L")";
             Assert::AreEqual(cpu.a, got, (where + L": A").c_str());
-            Assert::AreEqual(cpu.memory[at.p], low, (where + L": P").c_str());
+            Assert::AreEqual(cpu.memory[at.zeroPageP], low, (where + L": P").c_str());
             // `Y1` is `MLU1`'s own store of the speck's height since M2-c; the movers read the same
             // byte out of the field, and the product above is what the wrapper answers with.
             if (positionStaged)
             {
-              Assert::AreEqual(cpu.memory[at.r], operand, (where + L": R is XX").c_str());
-              Assert::AreEqual(cpu.memory[at.s], a, (where + L": S is XX+1").c_str());
+              Assert::AreEqual(cpu.memory[at.zeroPageR], operand, (where + L": R is XX").c_str());
+              Assert::AreEqual(cpu.memory[at.zeroPageS], a, (where + L": S is XX+1").c_str());
             }
             else if (which == 5)
             {
-              Assert::AreEqual(cpu.memory[at.r], operand, (where + L": R is XX").c_str());
+              Assert::AreEqual(cpu.memory[at.zeroPageR], operand, (where + L": R is XX").c_str());
             }
             ++compared;
           }

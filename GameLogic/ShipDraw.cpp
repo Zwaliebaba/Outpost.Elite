@@ -48,7 +48,7 @@ namespace Elite
     // dot that is the frame's Q the altitude check reads (`EndFlightFrame`). The kernel keeps its
     // scratch since M2-b; this byte is recomputed here for that one reader, and `K` is the block
     // this routine returns since M2-c-3.
-    _math.q = ScaledDivisorTop(distance);
+    _math.lastDivisor = ScaledDivisorTop(distance);
     return DivideSigned24(_numerator, distance);
   }
 
@@ -453,7 +453,7 @@ namespace Elite
     /// `_math` takes the leftover `Q` with it: see `SlopeStep::divisorLeft`.
     void AddStep(SlopeStep _step, std::uint8_t& _low, std::uint8_t& _high, MathWorkspace& _math) noexcept
     {
-      _math.q = _step.divisorLeft;
+      _math.lastDivisor = _step.divisorLeft;
       const AddResult sum = AddWithCarry(_step.low, _low, false);
       _low = sum.value;
       _high = AddWithCarry(_step.high, _high, sum.carry).value;
@@ -623,13 +623,13 @@ namespace Elite
        */
       if (_geometry.dotProducts[2] >= _geometry.dotProducts[4])
       {
-        _math.q = _geometry.dotProducts[2];
-        return Slope{DivideByLog(_geometry.dotProducts[4], _math.q).value, direction, 0};
+        _math.lastDivisor = _geometry.dotProducts[2];
+        return Slope{DivideByLog(_geometry.dotProducts[4], _math.lastDivisor).value, direction, 0};
       }
 
       // 6502: LL114 -- steep, so `T` comes out as 255.
-      _math.q = _geometry.dotProducts[4];
-      return Slope{DivideByLog(_geometry.dotProducts[2], _math.q).value, direction, 0xFFu};
+      _math.lastDivisor = _geometry.dotProducts[4];
+      return Slope{DivideByLog(_geometry.dotProducts[2], _math.lastDivisor).value, direction, 0xFFu};
     }
 
   } // namespace
@@ -1264,7 +1264,7 @@ namespace Elite
         // well as read here because, for the last vertex of the last ship drawn, it is the frame's Q
         // the altitude check reads (`EndFlightFrame`) -- unless the clipper writes it after.
         const std::uint8_t distance = depth.lo;
-        _render.math.q = distance;
+        _render.math.lastDivisor = distance;
         Quotient16 projectedX{depth.hi, 0};
         if (across.lo < distance)
         {

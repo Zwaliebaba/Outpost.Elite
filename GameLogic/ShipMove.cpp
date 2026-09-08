@@ -454,7 +454,7 @@ namespace Elite
 
     // 6502: LDA ALPHA / STA Q was the last store to `Q` above, and for the SUN -- which `MV45` sends
     // straight back -- it is the frame's Q, the byte the altitude check reads (`EndFlightFrame`).
-    _math.q = _rollRate;
+    _math.lastDivisor = _rollRate;
 
     // 6502: JMP MV45 -- back into MVEIT's tail, which the caller runs.
   }
@@ -491,7 +491,7 @@ namespace Elite
       // moves and does not go on to draw, this is the frame's Q, which the altitude check reads
       // (`EndFlightFrame`). The kernel keeps its scratch since M2-b; this one byte is kept for that
       // reader.
-      _math.q = _flight.pitchRate;
+      _math.lastDivisor = _flight.pitchRate;
 
       /*
        * 6502: the ship's own roll, at INWK+30, then its pitch at INWK+29.

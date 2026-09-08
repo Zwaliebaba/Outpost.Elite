@@ -42,22 +42,22 @@ namespace GameLogicTests
     /// Zero-page addresses, resolved once from the label table.
     struct Scratch
     {
-      std::uint16_t p = 0;
-      std::uint16_t q = 0;
-      std::uint16_t r = 0;
-      std::uint16_t s = 0;
-      std::uint16_t t = 0;
-      std::uint16_t t1 = 0;
-      std::uint16_t u = 0;
+      std::uint16_t zeroPageP = 0;
+      std::uint16_t zeroPageQ = 0;
+      std::uint16_t zeroPageR = 0;
+      std::uint16_t zeroPageS = 0;
+      std::uint16_t zeroPageT = 0;
+      std::uint16_t zeroPageT1 = 0;
+      std::uint16_t zeroPageU = 0;
 
       explicit Scratch(const OracleImage& _oracle)
-        : p(_oracle.Label("P")),
-          q(_oracle.Label("Q")),
-          r(_oracle.Label("R")),
-          s(_oracle.Label("S")),
-          t(_oracle.Label("T")),
-          t1(_oracle.Label("T1")),
-          u(_oracle.Label("U"))
+        : zeroPageP(_oracle.Label("P")),
+          zeroPageQ(_oracle.Label("Q")),
+          zeroPageR(_oracle.Label("R")),
+          zeroPageS(_oracle.Label("S")),
+          zeroPageT(_oracle.Label("T")),
+          zeroPageT1(_oracle.Label("T1")),
+          zeroPageU(_oracle.Label("U"))
       {
       }
     };
@@ -107,8 +107,8 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageP] = static_cast<std::uint8_t>(p);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           cpu.c = false;
@@ -136,7 +136,7 @@ namespace GameLogicTests
            * documentation of a dependency, not a correction of a defect.
            */
           Assert::IsFalse(cpu.c, Context(L"the game's carry is always clear", p, q).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], product.low, Context(L"low byte", p, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], product.low, Context(L"low byte", p, q).c_str());
 
           // The product really is the product -- a check the oracle cannot give us, since it
           // would be agreeing with itself.
@@ -166,7 +166,7 @@ namespace GameLogicTests
         // calling it that way either.
         for (std::uint32_t x = 1; x < 256; ++x)
         {
-          cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
+          cpu.memory[zp.zeroPageP] = static_cast<std::uint8_t>(p);
           cpu.a = 0;
           cpu.x = static_cast<std::uint8_t>(x);
           cpu.y = 0;
@@ -183,7 +183,7 @@ namespace GameLogicTests
           // The carry the final `ROR P` leaves, which the stardust reads in the very next
           // instruction and which this port dropped until it did (§6.42).
           Assert::AreEqual(cpu.c, product.carry, Context(L"carry", p, x).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], product.low, Context(L"low byte", p, x).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], product.low, Context(L"low byte", p, x).c_str());
         }
       }
     }
@@ -207,7 +207,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -219,7 +219,7 @@ namespace GameLogicTests
           const Product product = Elite::MultiplySigned(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q));
 
           Assert::AreEqual<std::uint32_t>(cpu.a, product.high, Context(L"high byte", a, q).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], product.low, Context(L"low byte", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], product.low, Context(L"low byte", a, q).c_str());
           Assert::AreEqual(cpu.c, product.carry, Context(L"exit carry", a, q).c_str());
         }
       }
@@ -244,7 +244,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -255,8 +255,8 @@ namespace GameLogicTests
 
           const SignMag16 pair = Elite::MultiplySigned(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q)).Pair();
 
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.s], pair.hi, Context(L"S", a, q).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], pair.lo, Context(L"R", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageS], pair.hi, Context(L"S", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageR], pair.lo, Context(L"R", a, q).c_str());
         }
       }
     }
@@ -278,7 +278,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -294,7 +294,7 @@ namespace GameLogicTests
           // The carry the final `ROR P` leaves, which the stardust reads in the very next
           // instruction and which this port dropped until it did (§6.42).
           Assert::AreEqual(cpu.c, product.carry, Context(L"carry", a, q).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], product.low, Context(L"low byte", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], product.low, Context(L"low byte", a, q).c_str());
         }
       }
     }
@@ -334,7 +334,7 @@ namespace GameLogicTests
                                                         : Elite::SquareUnsigned(static_cast<std::uint8_t>(value));
 
           Assert::AreEqual<std::uint32_t>(cpu.a, squared.high, Context(L"high byte", value, 0).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], squared.low, Context(L"low byte", value, 0).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], squared.low, Context(L"low byte", value, 0).c_str());
 
           // 6502: the exit carry, which `MAS3` reads in an `ADC` with no `CLC` (§6.70). The sweep
           // was already exhaustive, so widening the model cost this one line -- §6.42 for the fifth
@@ -386,9 +386,9 @@ namespace GameLogicTests
         const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
         const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.p] = p;
-        cpu.memory[zp.s] = s;
-        cpu.memory[zp.r] = r;
+        cpu.memory[zp.zeroPageP] = p;
+        cpu.memory[zp.zeroPageS] = s;
+        cpu.memory[zp.zeroPageR] = r;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -447,9 +447,9 @@ namespace GameLogicTests
 
       for (const Case& item : cases)
       {
-        cpu.memory[zp.p] = item.p;
-        cpu.memory[zp.s] = item.s;
-        cpu.memory[zp.r] = item.r;
+        cpu.memory[zp.zeroPageP] = item.p;
+        cpu.memory[zp.zeroPageS] = item.s;
+        cpu.memory[zp.zeroPageR] = item.r;
         cpu.a = item.a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -493,9 +493,9 @@ namespace GameLogicTests
         const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
         const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.q] = q;
-        cpu.memory[zp.s] = s;
-        cpu.memory[zp.r] = r;
+        cpu.memory[zp.zeroPageQ] = q;
+        cpu.memory[zp.zeroPageS] = s;
+        cpu.memory[zp.zeroPageR] = r;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -560,8 +560,8 @@ namespace GameLogicTests
       {
         for (std::uint32_t p = 0; p < 256; ++p)
         {
-          cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
-          cpu.memory[static_cast<std::uint16_t>(zp.p + 1)] = 0;
+          cpu.memory[zp.zeroPageP] = static_cast<std::uint8_t>(p);
+          cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)] = 0;
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -573,7 +573,7 @@ namespace GameLogicTests
           const Product product = Elite::MultiplyScaled(static_cast<std::uint8_t>(p), static_cast<std::uint8_t>(a));
 
           Assert::AreEqual<std::uint32_t>(cpu.a, product.high, Context(L"high byte", a, p).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], product.low, Context(L"low byte", a, p).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], product.low, Context(L"low byte", a, p).c_str());
 
           // The exit carry: the last shift's on the long path, and the entry carry -- clear here --
           // passed through on `MU6`. No caller reads it (`ADD` and `MULT1` set their own).
@@ -604,9 +604,9 @@ namespace GameLogicTests
         const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
         const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
 
-        cpu.memory[zp.p] = p;
-        cpu.memory[static_cast<std::uint16_t>(zp.p + 1)] = 0;
-        cpu.memory[zp.q] = q;
+        cpu.memory[zp.zeroPageP] = p;
+        cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)] = 0;
+        cpu.memory[zp.zeroPageQ] = q;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -619,8 +619,8 @@ namespace GameLogicTests
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, product.high, (L"high byte" + where).c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.p + 1)], product.mid, (L"middle byte" + where).c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], product.low, (L"low byte" + where).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)], product.mid, (L"middle byte" + where).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], product.low, (L"low byte" + where).c_str());
 
         // 6502: the carry the final `ROR P` leaves, which `MVEIT`'s y arithmetic runs on (§6.33).
         Assert::AreEqual(cpu.c, product.carry, (L"carry" + where).c_str());
@@ -654,7 +654,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -726,8 +726,8 @@ namespace GameLogicTests
         const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
         const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.s] = s;
-        cpu.memory[zp.r] = r;
+        cpu.memory[zp.zeroPageS] = s;
+        cpu.memory[zp.zeroPageR] = r;
         cpu.a = a;
         cpu.x = x;
         cpu.y = 0;
@@ -743,7 +743,7 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
 
         // 6502: STX Q -- and Q is left holding X, which `TIDY`'s second and third `MULT12` run on.
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.q], x, (L"Q is TIS1's X on the way out" + where).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageQ], x, (L"Q is TIS1's X on the way out" + where).c_str());
       }
     }
 
@@ -768,9 +768,9 @@ namespace GameLogicTests
         const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
         const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
 
-        cpu.memory[zp.p] = p;
-        cpu.memory[static_cast<std::uint16_t>(zp.p + 1)] = 0;
-        cpu.memory[zp.q] = q;
+        cpu.memory[zp.zeroPageP] = p;
+        cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)] = 0;
+        cpu.memory[zp.zeroPageQ] = q;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -783,8 +783,8 @@ namespace GameLogicTests
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, result.Signed(), (L"result" + where).c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], result.low, (L"P" + where).c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.p + 1)], result.high, (L"P+1" + where).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], result.low, (L"P" + where).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.zeroPageP + 1)], result.high, (L"P+1" + where).c_str());
       }
     }
   };
@@ -813,7 +813,7 @@ namespace GameLogicTests
           // back and `DOEXP` and `CIRCLE2` read it (§6.50).
           const bool carryIn = ((a + q) & 1u) != 0u;
 
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -847,7 +847,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -858,7 +858,7 @@ namespace GameLogicTests
 
           const Elite::Quotient quotient = Elite::DivideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q));
 
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], quotient.value, Context(L"R", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageR], quotient.value, Context(L"R", a, q).c_str());
           Assert::AreEqual<std::uint32_t>(cpu.c ? 1u : 0u, quotient.carry ? 1u : 0u, Context(L"carry", a, q).c_str());
         }
       }
@@ -886,9 +886,9 @@ namespace GameLogicTests
         const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
         const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
 
-        cpu.memory[zp.s] = s;
-        cpu.memory[zp.q] = q;
-        cpu.memory[zp.r] = r;
+        cpu.memory[zp.zeroPageS] = s;
+        cpu.memory[zp.zeroPageQ] = q;
+        cpu.memory[zp.zeroPageR] = r;
         cpu.a = a;
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -901,7 +901,7 @@ namespace GameLogicTests
 
         const std::wstring where = L" at iteration " + std::to_wstring(iteration);
         Assert::AreEqual<std::uint32_t>(cpu.a, result.value, (L"result" + where).c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.s], result.sign, (L"S" + where).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageS], result.sign, (L"S" + where).c_str());
 
         // The carry is the routine's documented overflow flag and `LL9` branches on it, so it is
         // compared here rather than at the one caller that happens to read it.
@@ -927,8 +927,8 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageP] = static_cast<std::uint8_t>(p);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           cpu.c = false;
@@ -952,7 +952,7 @@ namespace GameLogicTests
       }
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t routine = oracle.Label("FMLTU2");
-      const std::uint16_t k = oracle.Label("K");
+      const std::uint16_t zeroPageK = oracle.Label("K");
 
       Cpu6502 cpu = oracle.Fresh();
 
@@ -962,7 +962,7 @@ namespace GameLogicTests
         {
           const bool carryIn = ((a + kValue) & 1u) != 0u;
 
-          cpu.memory[k] = static_cast<std::uint8_t>(kValue);
+          cpu.memory[zeroPageK] = static_cast<std::uint8_t>(kValue);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -1003,7 +1003,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = static_cast<std::uint8_t>(a);
           cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
@@ -1015,8 +1015,8 @@ namespace GameLogicTests
           const Elite::ScaledDivision result = Elite::DivideAndScale(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q));
 
           Assert::AreEqual<std::uint32_t>(cpu.a, result.fraction, Context(L"returned value", a, q).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], result.whole, Context(L"quotient", a, q).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], result.fraction, Context(L"R", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageP], result.whole, Context(L"quotient", a, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageR], result.fraction, Context(L"R", a, q).c_str());
 
           // 6502: the exit carry, which `SPS2` hands to `SP2`'s `ADC #195` and `SBC T` (§6.60).
           // The sweep was already exhaustive, so widening the model cost this one line.
@@ -1048,8 +1048,8 @@ namespace GameLogicTests
       {
         for (std::uint32_t q = 0; q < 256; ++q)
         {
-          cpu.memory[zp.r] = static_cast<std::uint8_t>(r);
-          cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+          cpu.memory[zp.zeroPageR] = static_cast<std::uint8_t>(r);
+          cpu.memory[zp.zeroPageQ] = static_cast<std::uint8_t>(q);
           cpu.a = cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           cpu.c = false;
@@ -1060,7 +1060,7 @@ namespace GameLogicTests
           const Elite::Root root = Elite::SquareRoot(static_cast<std::uint8_t>(r), static_cast<std::uint8_t>(q));
           Assert::AreEqual(cpu.c, root.carry, L"LL5's exit carry, which the sun's DORND runs on");
 
-          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.q], root.value, Context(L"root", r, q).c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.zeroPageQ], root.value, Context(L"root", r, q).c_str());
 
           // The radicand is (R Q), so the answer should be its integer square root.
           const std::uint32_t radicand = (r << 8) | q;

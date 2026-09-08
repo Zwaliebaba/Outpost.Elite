@@ -436,7 +436,7 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
-      const std::uint16_t k3 = oracle.Label("K3");
+      const std::uint16_t zeroPageK3 = oracle.Label("K3");
       const std::uint16_t k4 = oracle.Label("K4");
       const std::uint16_t proj = oracle.Label("PROJ");
 
@@ -479,8 +479,8 @@ namespace GameLogicTests
                       }
 
                       // The sentinel that makes a half-written answer visible.
-                      cpu.memory[k3] = 0xAA;
-                      cpu.memory[static_cast<std::uint16_t>(k3 + 1)] = 0xBB;
+                      cpu.memory[zeroPageK3] = 0xAA;
+                      cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)] = 0xBB;
                       cpu.memory[k4] = 0xCC;
                       cpu.memory[static_cast<std::uint16_t>(k4 + 1)] = 0xDD;
                       screen.x = 0xAA;
@@ -500,8 +500,8 @@ namespace GameLogicTests
 
                       Assert::AreEqual(cpu.c, result.offScreen, (where + L": C").c_str());
                       Assert::AreEqual(cpu.a, result.a, (where + L": A").c_str());
-                      Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
-                      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1, (where + L": K3+1").c_str());
+                      Assert::AreEqual(cpu.memory[zeroPageK3], screen.x, (where + L": K3").c_str());
+                      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)], screen.x1, (where + L": K3+1").c_str());
                       Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
                       Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
@@ -832,7 +832,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t inwk = oracle.Label("INWK");
       const std::uint16_t shppt = oracle.Label("SHPPT");
-      const std::uint16_t k3 = oracle.Label("K3");
+      const std::uint16_t zeroPageK3 = oracle.Label("K3");
       const std::uint16_t k4 = oracle.Label("K4");
       const std::uint16_t screenBase = ScreenBase(oracle);
 
@@ -881,8 +881,8 @@ namespace GameLogicTests
 
       // K3 and K4 start where the machine starts them, and the port has to agree from there --
       // the stale-coordinate path reads them before anything has written them.
-      screen.x = cpu.memory[k3];
-      screen.x1 = cpu.memory[static_cast<std::uint16_t>(k3 + 1)];
+      screen.x = cpu.memory[zeroPageK3];
+      screen.x1 = cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)];
       screen.y = cpu.memory[k4];
       screen.y1 = cpu.memory[static_cast<std::uint16_t>(k4 + 1)];
 
@@ -912,8 +912,8 @@ namespace GameLogicTests
         CompareHeaps(cpu, heap, where);
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
                          (where + L": INWK+31").c_str());
-        Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1, (where + L": K3+1").c_str());
+        Assert::AreEqual(cpu.memory[zeroPageK3], screen.x, (where + L": K3").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 1)], screen.x1, (where + L": K3+1").c_str());
         Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
@@ -1246,7 +1246,7 @@ namespace GameLogicTests
                     // multiply or divide stopped, and the altitude check reads it (§8, R22). `R`
                     // and `S` are the helpers' own since M2-c-2 and are not modelled across the
                     // call.
-                    Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+                    Assert::AreEqual(cpu.memory[qq], math.lastDivisor, (where + L": Q").c_str());
 
                     // Which clamps the inputs asked for, decided from the inputs and not from the
                     // port, so a port that skipped one still counts as having been asked.
@@ -1430,7 +1430,7 @@ namespace GameLogicTests
                 // `Q` is the frame's and survives the call (§8, R22): `LL115` leaves its divisor
                 // and each of `LL118`'s clamps leaves whatever its loop stopped on. `R`, `S` and
                 // `T` are the slope helpers' own since M2-c-2 and are not modelled across it.
-                Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+                Assert::AreEqual(cpu.memory[qq], math.lastDivisor, (where + L": Q").c_str());
 
                 if ((off & 0x80u) != 0u)
                 {

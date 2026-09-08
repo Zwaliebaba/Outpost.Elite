@@ -258,7 +258,7 @@ namespace GameLogicTests
       const std::uint16_t many = oracle.Label("MANY");
       const std::uint16_t kPercent = oracle.Label("K%");
       const std::uint16_t rand = oracle.Label("RAND");
-      const std::uint16_t k3 = oracle.Label("K3");
+      const std::uint16_t zeroPageK3 = oracle.Label("K3");
       const std::uint16_t signMask = oracle.Label("RAT");
       const std::uint16_t signMask2 = oracle.Label("RAT2");
       const std::uint16_t coneWidth = oracle.Label("CNT2");
@@ -496,7 +496,7 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(many + kind)] = universe.bubble.counts[kind];
         }
         universe.geometry.faceVisible[10] = item.faces;
-        cpu.memory[static_cast<std::uint16_t>(k3 + 10u)] = item.faces;
+        cpu.memory[static_cast<std::uint16_t>(zeroPageK3 + 10u)] = item.faces;
         const std::array<std::uint8_t, 4> seed = {0x3Cu, 0xA5u, 0x5Au, 0xC3u};
         for (std::size_t byte = 0; byte < seed.size(); ++byte)
         {
@@ -673,7 +673,7 @@ namespace GameLogicTests
       const std::uint16_t view = oracle.Label("VIEW");
       const std::uint16_t tribble = oracle.Label("TRIBBLE");
       const std::uint16_t tribct = oracle.Label("TRIBCT");
-      const std::uint16_t t = oracle.Label("T");
+      const std::uint16_t zeroPageT = oracle.Label("T");
       const std::uint16_t screen = ScreenBase(oracle);
 
       // 6502: VIC, which is &D000 -- the same address the ship blueprints load at.
@@ -731,7 +731,7 @@ namespace GameLogicTests
 
             cpu.memory[view] = which;
             cpu.memory[tribct] = 0x9Cu;
-            cpu.memory[t] = 0x9Cu;
+            cpu.memory[zeroPageT] = 0x9Cu;
             cpu.Io(vicColour) = 0x00u;
             cpu.Io(vicEnable) = 0x00u;
             cpu.memory[0x0001u] = PORT_SEED; // 6502: l1 -- see the bracket assertion below

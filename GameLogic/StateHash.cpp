@@ -86,7 +86,7 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const MathWorkspace& _math) noexcept
     {
-      _into.Byte(_math.q);
+      _into.Byte(_math.lastDivisor);
       _into.Byte(_math.k2Low);
     }
 
@@ -121,8 +121,8 @@ namespace Elite
       _into.Byte(_heaps.planetDetail);
       _into.Byte(_heaps.v);
       _into.Byte(_heaps.vNext);
-      _into.Bytes(_heaps.k5);
-      _into.Bytes(_heaps.k6);
+      _into.Bytes(_heaps.segmentStart);
+      _into.Bytes(_heaps.segmentEnd);
       _into.Byte(_heaps.circleStep);
       _into.Byte(_heaps.flag);
     }

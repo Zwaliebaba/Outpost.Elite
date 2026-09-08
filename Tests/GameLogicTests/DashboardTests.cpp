@@ -55,7 +55,7 @@ namespace GameLogicTests
 
     struct Labels
     {
-      std::uint16_t screenPointer = 0, col = 0, k = 0, q = 0, r = 0, p = 0, s = 0, t1 = 0, dotProducts = 0;
+      std::uint16_t screenPointer = 0, col = 0, zeroPageK = 0, zeroPageQ = 0, zeroPageR = 0, zeroPageP = 0, zeroPageS = 0, zeroPageT1 = 0, dotProducts = 0;
       std::uint16_t mcnt = 0, flh = 0, ecma = 0, ecmp = 0, rollMagnitude = 0, rollSign = 0, pitchRate = 0, pitchMagnitude = 0;
       std::uint16_t speed = 0;
       std::uint16_t fsh = 0, ash = 0, energy = 0, cabtmp = 0, gntmp = 0, altit = 0, qq14 = 0;
@@ -65,12 +65,12 @@ namespace GameLogicTests
       {
         screenPointer = _oracle.Label("SC");
         col = _oracle.Label("COL");
-        k = _oracle.Label("K");
-        q = _oracle.Label("Q");
-        r = _oracle.Label("R");
-        p = _oracle.Label("P");
-        s = _oracle.Label("S");
-        t1 = _oracle.Label("T1");
+        zeroPageK = _oracle.Label("K");
+        zeroPageQ = _oracle.Label("Q");
+        zeroPageR = _oracle.Label("R");
+        zeroPageP = _oracle.Label("P");
+        zeroPageS = _oracle.Label("S");
+        zeroPageT1 = _oracle.Label("T1");
         dotProducts = _oracle.Label("XX12");
         mcnt = _oracle.Label("MCNT");
         flh = _oracle.Label("FLH");
@@ -291,9 +291,9 @@ namespace GameLogicTests
 
               cpu.memory[at.screenPointer] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
               cpu.memory[static_cast<std::uint16_t>(at.screenPointer + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
-              cpu.memory[at.t1] = threshold;
-              cpu.memory[at.k] = Elite::PatternByte(pair[0]);
-              cpu.memory[static_cast<std::uint16_t>(at.k + 1)] = Elite::PatternByte(pair[1]);
+              cpu.memory[at.zeroPageT1] = threshold;
+              cpu.memory[at.zeroPageK] = Elite::PatternByte(pair[0]);
+              cpu.memory[static_cast<std::uint16_t>(at.zeroPageK + 1)] = Elite::PatternByte(pair[1]);
               cpu.a = static_cast<std::uint8_t>(value);
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(address, 20'000);
