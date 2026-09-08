@@ -103,6 +103,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Cpu6502.h" />
+    <ClInclude Include="Oracle.h" />
     <ClInclude Include="OracleImage.h" />
     <ClInclude Include="GoldenCanvas.h" />
     <ClInclude Include="FlightPort.h" />
@@ -120,6 +121,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Cpu6502.cpp" />
+    <ClCompile Include="Oracle.cpp" />
     <ClCompile Include="OracleImage.cpp" />
     <ClCompile Include="ArithTests.cpp" />
     <ClCompile Include="Cpu6502Tests.cpp" />

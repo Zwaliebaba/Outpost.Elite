@@ -22,9 +22,9 @@ the ADRs brought back into agreement with the tree. **The M6-0 gate closed 2026-
 things the oracle could pin and nothing would pin after it is recorded, among them the interpreter
 banking the I/O page so the start sequence runs on both machines, a whole frame with an explosion in
 it, the replay reaching death and the escape pod, a coverage instrument CI reads against the
-ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is READY and is not what went next** — [Resolution.md](Resolution.md)'s RS-0 did, the same day, and four of the gate's eight rows are what its verification plan rests on (Resolution.md §2). **A fresh clone needs
+ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is built, 2026-09-08**: the four gaps the coverage instrument named are closed — and the first fixture ever to roll a trader found that spawning one sends the pass back to the top of the main loop, where the port went on to part 3 — and the `Oracle` seam is in the tree with the corpus measured at 3.2 million calls and 222 MB. **M6-b is blocked on two owner rulings** and Modernize.md §4.10 states both: what a fixture that answers every test costs, and where the label table and the base image come from once the interpreter goes. In between, [Resolution.md](Resolution.md)'s RS-0 to RS-4 ran (2026-09-07) and four of the gate's eight rows are what their verification rests on (Resolution.md §2). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->452 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->454 tests** and
 CI runs **<!--count:checks-->eighteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits

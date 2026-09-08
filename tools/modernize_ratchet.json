@@ -74,9 +74,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4142,
+      "ceiling": 4149,
       "slack": 0,
-      "slice": "M6-0-e: NLIN, TRADEMODE and DK4's store carry their labels as routines of their own"
+      "slice": "M6-a-1: SpawnOutcome and the TT100 fall-through carry the labels the branch they replace carried (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 48,

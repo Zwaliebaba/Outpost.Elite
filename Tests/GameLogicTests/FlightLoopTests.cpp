@@ -1105,8 +1105,11 @@ namespace GameLogicTests
     /// `_seed` runs after the mirror and before the call: the one hook for a byte `UniverseImage`
     /// does not carry, which since M2-c is `MathWorkspace`'s two (the altitude's `Q`, and `MV40`'s
     /// `K2`). Everything else in the frame goes through the image.
-    void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at, const LoopWhere& _loop, const std::wstring& _context,
-                       Reach _reach = Reach::Opening, const std::function<void(Cpu6502&)>& _seed = {})
+    /// Returns the exit both machines took, which the docking sweep reads and every other caller
+    /// ignores: the assertions below have already established that the two agree on it.
+    Elite::LoopOutcome CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at, const LoopWhere& _loop,
+                                     const std::wstring& _context, Reach _reach = Reach::Opening,
+                                     const std::function<void(Cpu6502&)>& _seed = {})
     {
       Cpu6502 cpu = _oracle.Fresh();
 
@@ -1300,6 +1303,8 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.many + type)], _frame.universe.bubble.counts[type],
                          (_context + L": MANY " + std::to_wstring(type)).c_str());
       }
+
+      return outcome;
     }
   } // namespace
 
@@ -1837,6 +1842,144 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint32_t>(18u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(killed > 0u, L"some bubbles emptied");
+    }
+
+    /*
+     * 6502: ISDK and GOIN -- the four docking checks at the station, and what a failed one costs.
+     *
+     * NO FIXTURE HAD EVER PUT A STATION IN A BUBBLE, so part 9 ran on neither machine and the
+     * coverage review named it a gap (M6-0-f): `ISDK` was run by no test and `GOIN` was only ever
+     * trapped, in `HyperspaceTests`, where the escape pod's `JMP GOIN` is the caller's business.
+     * Each of the four checks is failed on its own here, and both exits from `MA62` are taken --
+     * `DELTA` under five is `MA67`'s bump, which part 10 charges for, and five or more is
+     * `JMP DEATH`.
+     *
+     * THE CHECK THIS BUILD OMITS IS PINNED WITH THEM. The cassette version calls `SPS4` for the
+     * vector to the STATION and refuses a negative z; this one calls `SPS1` for the vector to the
+     * PLANET and compares it UNSIGNED, so a planet BEHIND the player normalises to 96 with bit 7
+     * on and sails past a threshold of 89. "The planet behind us" is that, ported.
+     *
+     * The bubble holds the planet and the station and nothing else, so every exit the frame can
+     * take is one part 9 chose. `MCNT` is zero and the station is slot 1, which makes
+     * `MCNT EOR XSAV AND 15` non-zero and keeps `TIDY` out of the frame: the orientation the case
+     * asks for is the orientation part 9 reads.
+     */
+    TEST_METHOD(TheDockingChecksMatchISDK)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      /// Where the planet sits, which is the third check's only input.
+      enum class Planet
+      {
+        Ahead,  ///< dead ahead, so `XX15+2` normalises to 96
+        Beside, ///< mostly to one side, so the z component falls well under 89
+        Behind, ///< dead astern -- 96 with bit 7 on, which an unsigned `CMP #89` accepts
+      };
+
+      struct Case
+      {
+        const char* what;
+        bool hostile;       ///< 6502: NEWB bit 2 on the station's own block, which `ANGRY` sets
+        std::uint8_t nose;  ///< 6502: INWK+14 -- nosev_z_hi, against 214
+        Planet planet;      ///< 6502: XX15+2 after `SPS1`, against 89
+        std::uint8_t roof;  ///< 6502: INWK+16 -- roofv_x_hi, against 80 once the sign is masked
+        std::uint8_t delta; ///< 6502: DELTA -- five and over turns a failed dock into `JMP DEATH`
+        Elite::LoopOutcome exit;
+      };
+
+      const std::vector<Case> CASES = {
+        {"a clean approach", false, 224, Planet::Ahead, 96, 2, Elite::LoopOutcome::Docked},
+        {"a clean approach at speed", false, 224, Planet::Ahead, 96, 20, Elite::LoopOutcome::Docked},
+        {"the station is hostile", true, 224, Planet::Ahead, 96, 2, Elite::LoopOutcome::Continued},
+        {"hostile, and fast enough to die", true, 224, Planet::Ahead, 96, 20, Elite::LoopOutcome::Died},
+        {"nose down, outside the cone", false, 213, Planet::Ahead, 96, 2, Elite::LoopOutcome::Continued},
+        {"nose down, and fast enough to die", false, 213, Planet::Ahead, 96, 20, Elite::LoopOutcome::Died},
+        {"off the approach line", false, 224, Planet::Beside, 96, 2, Elite::LoopOutcome::Continued},
+        {"off the approach line at speed", false, 224, Planet::Beside, 96, 20, Elite::LoopOutcome::Died},
+        {"rolled across the slot", false, 224, Planet::Ahead, 79, 2, Elite::LoopOutcome::Continued},
+        {"rolled across the slot at speed", false, 224, Planet::Ahead, 79, 20, Elite::LoopOutcome::Died},
+        {"the planet behind us, which this build accepts", false, 224, Planet::Behind, 96, 2, Elite::LoopOutcome::Docked},
+      };
+
+      std::uint32_t docked = 0;
+      std::uint32_t died = 0;
+      std::uint32_t bumped = 0;
+
+      for (const Case& item : CASES)
+      {
+        Frame frame(0x5Bu);
+        Universe& universe = frame.universe;
+
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
+        {
+          universe.bubble.slots[slot] = 0u;
+          universe.bubble.blocks[slot] = Elite::Ship::FromBytes(std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE>{});
+        }
+        for (std::size_t type = 0; type < universe.bubble.counts.size(); ++type)
+        {
+          universe.bubble.counts[type] = 0u;
+        }
+        universe.bubble.junk = 0u;
+        universe.bubble.heapBottom = Elite::HeapOffset::Top();
+
+        // Slot 0, the planet: far enough away that the frame's own movement cannot turn it round.
+        universe.bubble.slots[0] = Elite::Byte(Elite::ShipType::Planet);
+        Elite::Ship& planet = universe.bubble.blocks[0];
+        planet.x.hi = (item.planet == Planet::Beside) ? 0x40u : 0x00u;
+        planet.z.hi = (item.planet == Planet::Beside) ? 0x08u : 0x40u;
+        planet.z.sgn = (item.planet == Planet::Behind) ? 0x80u : 0x00u;
+
+        /*
+         * Slot 1, the station, close enough for part 7 to hand it to part 9.
+         *
+         * `MVEIT` takes `DELTA` off z before part 7 looks, so the low byte is 120 rather than
+         * something smaller: at twenty it comes out at 100, which still has bit 7 clear. Bit 6 is
+         * set and does not matter -- `CPX #SST / BEQ ISDK` is decided before the `AND #%11000000`
+         * that would send anything else away.
+         */
+        universe.bubble.slots[1] = Elite::Byte(Elite::ShipType::Station);
+        universe.bubble.counts[Elite::Byte(Elite::ShipType::Station)] = 1u;
+        Elite::Ship& station = universe.bubble.blocks[1];
+        station.z.lo = 120u;
+        station.nose.z.hi = item.nose;
+        station.roof.x.hi = item.roof;
+        station.side.y.hi = 96u; // a third axis, so the blueprint is projected from a real frame
+        station.energy = 200u;
+        station.newb = item.hostile ? Elite::Mask(Elite::NewbBit::Hostile) : std::uint8_t{0};
+        // 6502: LDA #LO(LSO) / STA INWK+33 -- `NWSPS` hands the station the SUN's heap (§6.112).
+        station.heap = Elite::HeapOffset::FromAddress(Elite::SUN_HEAP_ADDRESS);
+
+        universe.flight.delta = item.delta;
+        universe.flight.mainLoopCounter = 0u;
+        universe.flight.alpha = 0u;
+        universe.flight.alp2Next = 0u;
+        universe.flight.bet2 = 0u;
+        universe.flight.bet2Next = 0u;
+
+        const std::wstring where = WidenText(std::string("ISDK (") + item.what + ")");
+        const Elite::LoopOutcome outcome = CompareFrames(frame, oracle, at, loop, where, Reach::Ships);
+
+        Assert::AreEqual<int>(static_cast<int>(item.exit), static_cast<int>(outcome), (where + L": the exit part 9 chose").c_str());
+
+        docked += (outcome == Elite::LoopOutcome::Docked) ? 1u : 0u;
+        died += (outcome == Elite::LoopOutcome::Died) ? 1u : 0u;
+        bumped += (outcome == Elite::LoopOutcome::Continued) ? 1u : 0u;
+      }
+
+      Assert::IsTrue(docked > 0u, L"GOIN was reached");
+      Assert::IsTrue(died > 0u, L"MA62's JMP DEATH was taken");
+      Assert::IsTrue(bumped > 0u, L"MA62's MA67 was taken");
+
+      Logger::WriteMessage(("\nISDK: " + std::to_string(CASES.size()) + " approaches compared, " + std::to_string(docked) +
+                            " docked, " + std::to_string(died) + " fatal, " + std::to_string(bumped) + " a survivable bump\n")
+                             .c_str());
     }
   };
 
