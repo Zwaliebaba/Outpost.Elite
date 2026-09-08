@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->526 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->453 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,27 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-9: the ship movers, and one local that was two things.**
+
+73 sites over five routines. `AddToShipCoordinate`'s `S` and `T` are a `magnitude` and its `sign`;
+`AddShipCoordinateToK`'s are a `topByte` and its `sign`; `MV40`'s `K` is the coordinate being
+`moved` and its `K2` the copy `parked` while `MULT3` refills the first; `MoveShip`'s `K2` is
+`rolledY`, the y coordinate after the roll.
+
+**AND `MVS4`'s `T` IS TWO VARIABLES, WHICH A RENAME CANNOT EXPRESS.** It holds half the magnitude of
+one high byte, is consumed by the subtraction four lines down, and is then reassigned to another
+value's sign — the original's reuse of one zero-page byte, transcribed. There is no name that is
+true of both, so the local is split: `halfHigh` and `otherSign`, and the compiler is what proves the
+first is dead before the second exists. That is the first place in this phase where the honest
+rename was not a rename, and it is worth naming as a shape rather than as a one-off: a scratch byte
+the original reused is two things and the port should say so.
+
+Two mutants re-anchored, none dropped (rule 3): `sm-mv43-sense` and `sm-mltu2-carry` both name `k2`
+in their `find`, and name `rolledY` now. `mutate.py --check` is 97 of 97.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 526 → 453.
 
 **2026-09-08 — M6-c-8: the sweeps' operands, named for the routine each one drives.**
 

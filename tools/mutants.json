@@ -907,18 +907,18 @@
         {
           "id": "sm-mv43-sense",
           "file": "GameLogic/ShipMove.cpp",
-          "find": "    if (((k2.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) != 0u)",
-          "replace": "    if (((k2.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) == 0u)",
+          "find": "    if (((rolledY.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) != 0u)",
+          "replace": "    if (((rolledY.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) == 0u)",
           "expect": "caught",
-          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found. Re-anchored at M6-c-4, when `BET2` became `pitchSign`."
+          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found. Re-anchored at M6-c-4, when `BET2` became `pitchSign`. Re-anchored at M6-c-9, when `MoveShip`'s `K2` became `rolledY`."
         },
         {
           "id": "sm-mltu2-carry",
           "file": "GameLogic/ShipMove.cpp",
-          "find": "      AddResult sum = AddWithCarry(wide.mid, k2.lo, wide.carry);",
-          "replace": "      AddResult sum = AddWithCarry(wide.mid, k2.lo, false);",
+          "find": "      AddResult sum = AddWithCarry(wide.mid, rolledY.lo, wide.carry);",
+          "replace": "      AddResult sum = AddWithCarry(wide.mid, rolledY.lo, false);",
           "expect": "equivalent",
-          "note": "EQUIVALENT, AND PROVABLY SO. `LDA P+1 / ADC K2+1` has no `CLC` and runs on the carry `MLTU2` left -- but that carry is ALWAYS CLEAR. `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero, and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one; `WideMultiplyMatchesOverASweep` counts the carries the shipped routine leaves over 150,000 samples and asserts the count is zero. The mutant replaces a flag that is never set with `false`, so it survives, and the ADC-without-CLC the port reproduces is safe for a reason rather than by luck. First run 2026-09-07: survived, as an equivalent must."
+          "note": "EQUIVALENT, AND PROVABLY SO. `LDA P+1 / ADC K2+1` has no `CLC` and runs on the carry `MLTU2` left -- but that carry is ALWAYS CLEAR. `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero, and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one; `WideMultiplyMatchesOverASweep` counts the carries the shipped routine leaves over 150,000 samples and asserts the count is zero. The mutant replaces a flag that is never set with `false`, so it survives, and the ADC-without-CLC the port reproduces is safe for a reason rather than by luck. First run 2026-09-07: survived, as an equivalent must. Re-anchored at M6-c-9, when `MoveShip`'s `K2` became `rolledY`."
         },
         {
           "id": "sm-tidy-last-byte",
