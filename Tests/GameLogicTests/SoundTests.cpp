@@ -686,6 +686,127 @@ namespace GameLogicTests
       }
     }
 
+
+    /*
+     * 6502: BDRO6 and BDRO11 -- the two commands neither shipped tune contains (M6-a-1).
+     *
+     * The coverage review named them: `bdro6` increments `value0`, which nothing reads, and
+     * `bdro11` is a `JMP BDRO9` that rewinds the tune, and the Blue Danube and the title theme
+     * between them play neither. So both were ported against the source alone and compared
+     * against the original nowhere, and after M6-b nothing could ever ask it.
+     *
+     * WHAT IS PLAYED IS STILL THE GAME'S OWN DATA. The player is started as `startat` starts it
+     * and then both pointers are moved to a byte inside `comudat` chosen because the nibbles from
+     * there reach those two commands -- the same bytes, the same player, a different entry. A
+     * synthetic tune would need the port to read its notes from somewhere other than `MUSIC_DATA`,
+     * which is a change to the port to suit a test.
+     *
+     * `value4` IS SEEDED, and it has to be. Command 11's rewind is unconditional, so a run of
+     * commands with no rest in it loops for ever -- on the original literally, and in the port
+     * until `COMMANDS_PER_PASS` cuts it off, which is a guard the game has no equivalent of. A
+     * rest length of three is what a tune's own command 12 would have left, and it makes every
+     * pass end where the game's would.
+     */
+    TEST_METHOD(TheCommandsNoTunePlaysMatchBDirqhere)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+      const OracleImage& oracle = OracleImage::Instance();
+      const SoundLabels at(oracle);
+
+      struct Place
+      {
+        std::uint16_t offset; ///< into MUSIC_DATA, which is `musicstart` on the oracle's side
+        const char* what;
+      };
+
+      /*
+       * Measured over the extracted data rather than chosen, and the measurement had to be made ON
+       * THE ORACLE. Command 11's rewind is unconditional, so a run of commands with no rest and no
+       * terminator in it repeats for ever -- and the port's `COMMANDS_PER_PASS` cuts that off after
+       * four thousand commands while the interpreter spins until the fixture's budget runs out. The
+       * port is the wrong instrument for finding an entry that TERMINATES, because it is the one
+       * with the guard; these three complete sixty interrupts on the original and reach commands 6,
+       * 9, 10, 11, 13 and 14 between them, with the pointer never leaving the extracted region.
+       */
+      const Place PLACES[] = {
+        {918u, "6, 9, 10 and 11"},
+        {1511u, "6, 9, 11, 13 and 14"},
+        {2237u, "the same six from the title theme's half of the data"},
+      };
+
+      constexpr std::uint8_t REST = 3;
+      constexpr std::uint32_t TICKS = 60;
+
+      for (const Place& place : PLACES)
+      {
+        Elite::SoundBuffer ours;
+        Elite::MusicPlayer music;
+        Cpu6502 cpu = oracle.Fresh();
+        LoadBuffer(cpu, at, ours);
+        LoadMusicOptions(cpu, at, music, 0u);
+        cpu.LogStores(SID_BASE, static_cast<std::uint16_t>(SID_BASE + 0x18));
+
+        const std::wstring tune = L"comudat+" + std::to_wstring(place.offset);
+
+        // 6502: startat -- the theme, with `april16`'s `SETL1` bracket around `BDENTRY`. Both
+        // machines are put in the same state by the routine the game uses, and then moved.
+        Assert::IsTrue(cpu.CallSubroutine(at.startat, 200'000).completed, (tune + L": the start returned").c_str());
+        Elite::SidWriteLog started;
+        Elite::MemoryMap map;
+        map.port = cpu.memory[0x0001u];
+        Elite::StartTheme(music, map, started);
+        CompareWrites(cpu, started, tune + L" start");
+        CompareMusic(cpu, at, music, tune + L" start");
+
+        // 6502: BDdataptr1, BDdataptr3, value5 and value4 -- the four bytes that say where the
+        // player is and how long a rest lasts, moved on both sides together.
+        music.tuneStart = place.offset;
+        music.pointer = place.offset;
+        music.restart = place.offset;
+        music.value4 = REST;
+        const std::uint16_t address = static_cast<std::uint16_t>(place.offset + at.musicstart);
+        cpu.memory[at.bddataptr1] = static_cast<std::uint8_t>(address & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(at.bddataptr1 + 1u)] = static_cast<std::uint8_t>(address >> 8);
+        cpu.memory[at.bddataptr3] = static_cast<std::uint8_t>(address & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(at.bddataptr3 + 1u)] = static_cast<std::uint8_t>(address >> 8);
+        cpu.memory[at.value5] = static_cast<std::uint8_t>(address & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(at.value5 + 1u)] = static_cast<std::uint8_t>(address >> 8);
+        cpu.memory[at.value4] = REST;
+
+        std::uint32_t writes = 0;
+        for (std::uint32_t tick = 0; tick < TICKS; ++tick)
+        {
+          const std::wstring where = tune + L" tick " + std::to_wstring(tick);
+          RunSoundPass(cpu, at, where);
+
+          Elite::SidWriteLog log;
+          Elite::RunSoundInterrupt(ours, music, log);
+
+          CompareWrites(cpu, log, where);
+          CompareMusic(cpu, at, music, where);
+          CompareBuffer(cpu, at, ours, where);
+          writes += static_cast<std::uint32_t>(log.count);
+        }
+
+        /*
+         * `value0` is command 6's only effect and nothing in the game reads it, so it is also the
+         * only evidence the command ran at all -- which makes this assertion the one that says the
+         * gap is closed rather than merely aimed at.
+         */
+        Assert::IsTrue(music.value0 > 0u, (tune + L": command 6 ran, which is what value0 counts").c_str());
+        Assert::AreEqual<int>(static_cast<int>(place.offset), static_cast<int>(music.restart),
+                              (tune + L": the rewind point never moved").c_str());
+
+        Logger::WriteMessage((std::string("commands at comudat+") + std::to_string(place.offset) + " (" + place.what + "): " +
+                              std::to_string(TICKS) + " interrupts, " + std::to_string(writes) + " register writes, value0 " +
+                              std::to_string(music.value0) + "\n")
+                               .c_str());
+      }
+    }
+
     /// 6502: startbd, stopbd and stopat under every combination of the five flags that gate them.
     TEST_METHOD(StartingAndStoppingObeyTheOptions)
     {

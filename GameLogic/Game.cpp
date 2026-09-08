@@ -701,9 +701,24 @@ namespace Elite
      * 5, which cools the laser, redraws the dials every pass and breeds the Trumbles. §6.138 is
      * why all three are functions with sweeps behind them rather than fragments transcribed here.
      */
-    if (RunLoopHead(m_universe, m_ports) == LoopHead::Spawn)
+    /*
+     * 6502: `.MTT4` falls into `.TT100`, so a trader costs a SECOND flight frame (M6-a-1).
+     *
+     * The loop is written as a loop because that is what the original is -- part 1's tail lands on
+     * the top of part 2, and the top of part 2 is `JSR M%` -- but it runs at most twice: `MCNT` was
+     * zero when the head above decremented it, so the second head takes it to 255 and answers
+     * `SkipSpawning`. The second frame can end the flight like any other, and it is left through
+     * the same door.
+     */
+    while (RunLoopHead(m_universe, m_ports) == LoopHead::Spawn && RunSpawning(m_universe, false) == SpawnOutcome::Restarted)
     {
-      RunSpawning(m_universe, false);
+      const LoopOutcome again = MainFlightLoop(m_universe, m_ports); // 6502: .TT100 JSR M%
+      m_lastOutcome = again;
+      if (again != LoopOutcome::Continued)
+      {
+        Leave(again);
+        return false;
+      }
     }
 
     /*
