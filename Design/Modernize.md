@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->462 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->425 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-46: `StartUp.cpp` and `ViewChange.h` to zero, and `EQUB &2C` decides how tall
+the border is.**
+
+37 sites over two files: the start-up sequence and the screen-change header. Forty-seventh and
+forty-eighth at zero, and the first slice under the new rule — rewrite the site line, then reflow the
+paragraph — went through both files without a single ragged tail to chase.
+
+**The fifth and most consequential `EQUB &2C`.** `BOX2` opens by loading 18 into X. `TTX66K` reaches
+it by falling off its own end through a load of 25 followed by the byte, and the `&2C` assembles as
+`BIT abs` — whose two operand bytes ARE that load of 18. So the fall-through keeps 25 and a call to
+`BOX2` gets 18. A text screen is 25 character rows tall and the space view is 18, and **that entire
+distinction is one byte of data standing in for an instruction**. `BOX` then does it a second time
+for the whole-screen border. With `OSW0L` (M6-d-41), the three view keys (M6-d-43) and `MESS`
+(M6-d-44) that is five instances in four slices, which stops it being a curiosity: it is how this
+program shares a tail between callers that need different constants, and the byte survives every
+rewrite because the byte is the mechanism.
+
+`ZES2k` is the other shape worth keeping: it stores at `_first` and counts DOWN, stopping when the
+index reaches zero, so byte 0 of the page is never touched — `TTX66K` follows the call with a store
+of its own to finish the job. A port that zeroed the whole page would agree with the game everywhere
+except that one byte. `ZES1k`, the entry above it, zeroes the index first and so wraps the count all
+the way round: 0, then 255 down to 1, the whole page out of the same loop.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (26 and 22). `opcode-transcriptions` 462 → 425.
 
 **2026-09-08 — M6-d-45: `Arith.h` and `TextPrint.cpp` to zero, and the file most about instructions
 did not need the tag either.**

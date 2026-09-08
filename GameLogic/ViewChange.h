@@ -39,13 +39,14 @@ namespace Elite
   /*
    * 6502: ZES2k -- zero bytes `_first` down to 1 of the page at `_page`.
    *
-   * NOT THE WHOLE PAGE, and the order is the point. `STA (SC),Y / DEY / BNE` stores at `_first`
+   * NOT THE WHOLE PAGE, and the order is the point. The loop stores at `_first`
    * FIRST and then counts down, stopping when Y reaches zero -- so byte 0 of the page is never
-   * touched. `TTX66K` follows the call with its own `STA (SC),Y` at Y = 0 to finish the job, and a
+   * touched. `TTX66K` follows the call with a store of its own at Y = 0 to finish the job, and a
    * port that zeroed the page would agree with the game everywhere except that one byte.
    *
-   * `ZES1k` is the entry above it: `LDY #0 / STY SC` and then straight in, which makes `_first`
-   * zero and so wraps the count all the way round -- 0, then 255 down to 1, the whole page.
+   * `ZES1k` is the entry above it: Y and the pointer's low byte zeroed and then straight in, which
+   * makes `_first` zero and so wraps the count all the way round -- 0, then 255 down to 1, the
+   * whole page.
    *
    * `_pageBase` is a CANVAS OFFSET and the original's `X` is a page number: `TTX66K` walks X from
    * `HI(SCBASE)` to `HI(DLOC%)`, which is offsets 0, &100, &200 ... here. The translation is the
@@ -64,9 +65,9 @@ namespace Elite
   /*
    * 6502: mvblockK -- copy `_pages` whole pages from `_from` to `_to`, and then `mvbllop`'s tail.
    *
-   * The same count-down shape as `ZES2k`: `LDY #0` and then `LDA (V),Y / STA (SC),Y / DEY / BNE`,
-   * so a page is copied in the order 0, 255, 254 ... 1. The result is a copied page either way and
-   * the trace is not, which matters to a port that compares intermediate state.
+   * The same count-down shape as `ZES2k`: Y starts at zero and the loop reads and stores through
+   * it, so a page is copied in the order 0, 255, 254 ... 1. The result is a copied page either way
+   * and the trace is not, which matters to a port that compares intermediate state.
    *
    * `mvbllop` is the second entry, with Y already set, and `wantdials` uses it to copy the last
    * &C0 bytes of the dashboard after eight whole pages.
@@ -109,13 +110,13 @@ namespace Elite
   /*
    * 6502: BOX2 -- the border: two vertical edges, a byte in the top right, and a rule across row 0.
    *
-   * `_rows` IS SPELLED AS AN ASSEMBLER DIRECTIVE. The routine opens `LDX #18 / STX T2`, and
-   * `TTX66K` reaches it by falling off its own end through `LDX #25 / EQUB &2C` -- the `&2C` is
-   * `BIT abs`, whose two operand bytes ARE the `LDX #18`, so the fall-through keeps 25 and a `JSR
-   * BOX2` gets 18. A text screen is 25 character rows tall and the space view is 18, and that
-   * whole distinction is one byte of data standing in for an instruction (§6.79).
+   * `_rows` IS SPELLED AS AN ASSEMBLER DIRECTIVE. The routine opens by loading 18 into X, and
+   * `TTX66K` reaches it by falling off its own end through a load of 25 followed by `EQUB &2C` --
+   * the `&2C` is `BIT abs`, whose two operand bytes ARE that load of 18, so the fall-through keeps
+   * 25 and a call to `BOX2` gets 18. A text screen is 25 character rows tall and the space view is
+   * 18, and that whole distinction is one byte of data standing in for an instruction (§6.79).
    *
-   * `T` carries the count from the first edge to the second -- `STX T` and then `LDX T`, because
+   * `T` carries the count from the first edge to the second -- stored and reloaded, because
    * `BOXS2` leaves X at zero -- and it is the kernel's byte, a local since M2-b. The port wrote
    * `T2` until M2-c and nothing read it (§8).
    */
@@ -124,21 +125,22 @@ namespace Elite
   /*
    * 6502: BOX -- the whole-screen border, which is `BOX2` with a floor under it.
    *
-   * `LDX #199 / JSR BOXS` rules a line across the bottom pixel row, `STA SCBASE+&1F1F` puts the
-   * byte the rule cannot reach into the bottom right corner, and then `LDX #25 / EQUB &2C` falls
-   * into `BOX2` -- the same `BIT abs` trick §6.79 records, so the border gets 25 rows and not 18.
+   * A load of 199 and a call to `BOXS` rules a line across the bottom pixel row, a store puts the
+   * byte the rule cannot reach into the bottom right corner, and then a load of 25 with the same
+   * `EQUB &2C` after it falls into `BOX2` -- the `BIT abs` trick §6.79 records, so the border gets
+   * 25 rows and not 18.
    *
    * `TT66` does not call this; `DEATH` does, once, over the screen `TT66` has just cleared.
    */
   void DrawFullBorder(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: LDX #18 -- what a `JSR BOX2` gets, which is the space view's height in character rows.
+  /// 6502: what a call to `BOX2` gets, which is the space view's height in character rows.
   inline constexpr std::uint8_t BORDER_ROWS_SPACE_VIEW = 18;
 
-  /// 6502: LDX #25 -- what falling through from `TTX66K` keeps, which is the whole screen.
+  /// 6502: what falling through from `TTX66K` keeps, which is the whole screen.
   inline constexpr std::uint8_t BORDER_ROWS_TEXT_SCREEN = 25;
 
-  /// 6502: LDX #199 -- the bottom pixel row, which `BOX` rules across before it draws the edges.
+  /// 6502: the bottom pixel row, which `BOX` rules across before it draws the edges.
   inline constexpr std::uint8_t BOTTOM_RULE_ROW = 199;
 
   /// 6502: SCBASE+&1F1F -- the bottom right byte, which `BOXS` leaves out because `HLOIN` draws
@@ -176,9 +178,9 @@ namespace Elite
   /*
    * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
    *
-   * It takes what `wantdials` takes because on two of its paths it IS `wantdials`: `LDA QQ11 / BEQ
-   * wantSTEP / CMP #13 / BNE P%+5` tail-jumps there for the space view and for view 13, and the
-   * rest of the routine is the text screens' version of the same job.
+   * It takes what `wantdials` takes because on two of its paths it IS `wantdials`: it tail-jumps
+   * there for the space view and for view 13, and the rest of the routine is the text screens'
+   * version of the same job.
    *
    * THREE SEPARATE CLEARS, in three different shapes. Screen RAM's colour bytes go first, 32 cells
    * a row for 24 rows in steps of 40. Then the BITMAP up to `DLOC%`, page by page through `ZES1k`,
@@ -210,17 +212,18 @@ namespace Elite
    * outside the library, and this one was never true (§6.73's rule, arriving from the other side:
    * a seam scoped before the thing behind it was READ).
    *
-   * `PlaySound` went in M3-b-2a: it was `LDY #sfxboop / JMP NOISE`, the refusal noise `WARP` makes
-   * when it will not warp, and the SECOND declaration of one routine -- `DashboardEffects` having
-   * the other. Both are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and drops
-   * the carry both ways, which is why its caller passed false and discarded the answer (§6.99).
+   * `PlaySound` went in M3-b-2a: it was one load and a jump into `NOISE`, the refusal noise `WARP`
+   * makes when it will not warp, and the SECOND declaration of one routine -- `DashboardEffects`
+   * having the other. Both are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and
+   * drops the carry both ways, which is why its caller passed false and discarded the answer
+   * (§6.99).
    */
 
   // `FlightScreen` was the argument list a screen change took -- twenty-seven references, each one
   // 6502 label. Every byte of it is `Universe`'s since M3-a and the four seams are `Ports`'.
 
   /*
-   * 6502: TT66, which is `STA QQ11` and then falls into TTX66 -- change to a screen and clear it.
+   * 6502: TT66, which stores the view and then falls into TTX66 -- change to a screen and clear it.
    *
    * The port has had HALF of this since slice 2e: `SetUpTextScreen` is the text state and the
    * pixels were left behind `TradeScreenEffects::ClearToView`, because the dashboard, the sprites,
@@ -234,8 +237,8 @@ namespace Elite
    * end, so a caller sees ALL CAPS while `DTW2` keeps the 128. §6.29 records the port nearly
    * shipping the first reading.
    *
-   * The view's name is printed only on the space view, at column 11 of row 1: `LDA VIEW / ORA #&60`
-   * turns 0 to 3 into tokens 96 to 99, then a space, then token 175 -- "VIEW".
+   * The view's name is printed only on the space view, at column 11 of row 1: the view number ORed
+   * with &60 turns 0 to 3 into tokens 96 to 99, then a space, then token 175 -- "VIEW".
    */
   void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
