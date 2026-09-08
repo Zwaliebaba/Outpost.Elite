@@ -86,7 +86,7 @@ Clarified the same day into four rulings:
 | # | Ruling | What it means for the plan |
 |---|---|---|
 | R-a | **Detach at the end, not first.** The oracle stays the judge through M1–M5; a final phase records its answers as checked-in fixtures, replaces every oracle test with a fixture test, and only then deletes the interpreter, the upstream submodule and the masters. | Phase **M6** (§6). Every earlier slice is still measured against the assembled original, which is the only instrument that can say a refactor changed nothing. |
-| R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. | M6-c, M6-d and M6-e. M2 and M4 rename as they go so that M6-c is a sweep of what is left, not a second pass over everything. AGENTS.md R7 and §7 are amended when M6-e lands, not before. |
+| R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. **AND NOT THE NAMES IN PROSE** — scoped by owner ruling 2026-09-08, on M6-e-4's measurement. | M6-c, M6-d and M6-e; done, except `MasterFile/` and `Upstream/`, which are M6-f. M2 and M4 renamed as they went so that M6-c was a sweep of what was left. AGENTS.md R7 and §7 were amended when M6-e landed. **The ruling**: 2,702 citations of original routine and variable names survive in comments (480 distinct, 136 files), and they STAY. They are the port's own vocabulary rather than pointers into a tree that is going: the comments around each one define what it does, and the prose M6-d spent 58 slices building says WHERE a behaviour comes from — "the carry `EE51` returned", "`NWSPS` evicts the sun before it takes the heap" — which cannot be said without the name. Removing them would be a phase of its own and would cost the precision that was the point. This row is met when `MasterFile/` and `Upstream/` leave. |
 | R-c | **The derived data stays**: the generated tables the game cannot run without, and the recorded fixtures the tests cannot run without. That is the accepted residual exposure (Risk R1, restated at M6-f). | Q7 is moot — the label table the bridge needs exists only while the oracle does, and is generated into the test tree for M0-b to M6-a and deleted with it. Q8 stands: `modernize-*` widened one check per commit. |
 | R-e | **"The port was wrong, the record is not needed."** (Ruled 2026-09-06, on the replay.) When a slice finds a defect in the port and fixes it, the replay record follows the fix: it is re-taken with the journal entry naming the defect, and no ADR-001 §6 row is needed for the record to move. What stays forbidden is a record that moves with no defect named — that is a refactor that changed the game. | Rule 1 and M0-c's "when the record may change", below. The journal entry is the audit trail; the oracle suites, which do not move for a fix of this kind unless the defect was theirs too, are the check that the fix is a fix. |
 | R-f | **The sweeps answer with a digest; everything else keeps its record.** (Ruled 2026-09-08, on M6-a-2's measurement.) A test that makes more than two thousand calls to the oracle stops comparing against it case by case and folds its own answers into one digest, compared against one recorded number; every test under that keeps a full input-to-answer record. | 73 of the 295 tests that call the oracle change shape in M6-b; the fixture is about 25 MB rather than 222. What is bought is diagnosis and not fidelity — a fixture of either kind pins what the tests asked on the day it was recorded — so it is spent where debugging is hard (the drawing, whole-frame and composition comparisons) and saved where a bisect against the previous commit finds the case (the arithmetic sweeps). §4.10 carries the measurement. |
@@ -1941,6 +1941,25 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — R-b scoped: the original's NAMES stay in the prose.**
+
+Owner ruling, on M6-e-4's measurement. R-b said "every trace of the original goes" and listed four
+things; the markers, the ledger and the identifiers are gone, and `MasterFile/` and `Upstream/` are
+M6-f's. What the list never named, and what the count found, is 2,702 citations of original routine
+and variable names in comments -- 480 distinct names across 136 files.
+
+**They stay, and R-b now says so.** They are the port's own vocabulary rather than pointers into a
+tree that is going: the comments around each one define what it does, and the prose M6-d spent
+fifty-eight slices building works by saying WHERE a behaviour comes from. "The carry `EE51`
+returned", "`NWSPS` evicts the sun before it takes the heap", "`DFAULT`'s last act is the comparison
+against the third checksum" -- none of those is sayable without the name, and replacing each with a
+description would cost exactly the precision the phase was for.
+
+The row is amended rather than left implying unfinished work, which is the point of writing it down:
+a risk register that says a thing is outstanding when it has been decided is worse than one that
+never mentioned it.
+
 
 **2026-09-08 — M6-e-4: the last 55, by hand. `origin-markers` reaches ZERO and M6-e's row is
 met.**
