@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->115 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->92 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,41 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-55: the VIC registers named rather than addressed, and the harness's subject
+line was under-reporting.**
+
+23 sites over four files -- `Lines2x.cpp`, `VideoState.cpp`, `VideoState.h` and
+`Outpost/FlightSession.cpp`. Seventy-seventh to eightieth at zero, and the first slice to reach into
+`Outpost/`.
+
+**`tools/mutate.py` was naming only some of the files its worktree carries.** The run's subject line
+exists because a tally nobody can attribute is worthless -- M6-d-25a put eight journal entries'
+tallies against the wrong commit, and the line was written to stop that. But its filter was
+`Tests/`, `GameLogic/`, and the files the chosen mutants live in, so `Outpost/FlightSession.cpp`
+was carried and NOT named. The header for this slice listed three files where four were measured. A
+reader checking the line against the slice -- which is exactly the check the line is for -- would
+have concluded the run did not cover the fourth. `make_worktree` applies `git diff HEAD` whole, so
+the filter was never doing anything but hiding. It is gone: the line now names every uncommitted
+file, `tools/` and `Design/` included. **An under-reporting subject line is the disclaimer it
+replaced, one layer down.**
+
+The comment work itself is the shape M6-d-53 described. `VideoState` is nine comments that were a
+store to a VIC address -- `STA VIC+&15`, `STA VIC+&27`, `STA VIC+&17 / STA VIC+&1D` -- and every one
+of them is better as the register's NAME: the sprite enable byte, sprite 0's colour, both expand
+registers. The address is what a reader has to look up; the name is what the code means. The one
+that mattered, part 15's read-modify-write of the enable byte, says so in words now and the fact it
+carries -- that the flight loop cannot compute the new byte because it does not know how many
+Trumble sprites are showing -- was already in the prose.
+
+`Lines2x.cpp` is the twin file and carries NO `6502:` markers by design, so its six sites were
+listings inside comments that exist to explain what the twin does differently. Those read better
+without them: "the swapped entry counts one more and the increment can wrap" is the fact, and
+`LDX P2 / INX / BEQ` was the evidence for it.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (0, 7, 17 and 12). `opcode-transcriptions` 115 → 92.
+
 
 **2026-09-08 — M6-d-54: four more to zero, and a second `apply` on an already-edited file
 overwrote the line above.**

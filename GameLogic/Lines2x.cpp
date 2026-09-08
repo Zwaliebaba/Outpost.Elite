@@ -15,8 +15,8 @@ namespace Elite
     /// A mark is two hi-res pixels wide, which is the two bits `TWOS2` lights at half the size.
     constexpr int MARK_WIDTH = 2;
 
-    /// `PIXEL`'s `CMP #80` -- closer than this and the mark gets a second row. A twin ports no
-    /// label, so the number is named rather than marked.
+    /// `PIXEL` compares the distance with 80 -- closer than this and the mark gets a second row.
+    /// A twin ports no label, so the number is named rather than marked.
     constexpr std::uint8_t NEAR_DISTANCE = 80;
   } // namespace
 
@@ -38,8 +38,8 @@ namespace Elite
     }
 
     /*
-     * The second row goes above -- `PIXEL`'s `DEY / BPL PX3 / LDY #1` -- and on the top row of a character
-     * cell it goes BELOW instead, because decrementing the pixel row would leave the cell.
+     * The second row goes ABOVE, by decrementing the pixel row -- and on the top row of a
+     * character cell it goes BELOW instead, because decrementing would leave the cell.
      *
      * The original does not clamp and neither does this; what differs is whose cell it is. The
      * canvas's rows are eight to a canvas character row and the picture's are eight to a WIDE one,
@@ -83,8 +83,8 @@ namespace Elite
 
   void DrawCanvasRow2x(Picture& _picture, std::uint8_t _x1, std::uint8_t _x2, std::uint8_t _row) noexcept
   {
-    // A line of no length is not drawn at all, and the ends are put the right way round: `HLOIN`'s
-    // `CPX X2 / BEQ HL6` and `BCC HL5`, without the marker a twin may not carry.
+    // A line of no length is not drawn at all, and the ends are put the right way round: `HLOIN`
+    // tests for both, without the marker a twin may not carry.
     const int left = 2 * static_cast<int>((_x1 < _x2) ? _x1 : _x2) + Picture::SPACE_VIEW_MARGIN;
     const int right = 2 * static_cast<int>((_x1 < _x2) ? _x2 : _x1) + Picture::SPACE_VIEW_MARGIN;
     const int top = 2 * static_cast<int>(_row);
@@ -179,9 +179,9 @@ namespace Elite
       const std::uint8_t step = LineSlope(deltaY, deltaX);
       const bool goingUp = _line.y1 >= _line.y2;
 
-      // The swapped entry counts one more (`LDX P2 / INX / BEQ`), so a span of 255 counts 256, wraps
-      // to zero and draws NOTHING. Ninety-six lines of the sweep are that case, and a twin that drew
-      // them anyway put 510 pixels on a blank canvas.
+      // The swapped entry counts one more and the increment can wrap, so a span of 255 counts 256,
+      // wraps to zero and draws NOTHING. Ninety-six lines of the sweep are that case, and a twin
+      // that drew them anyway put 510 pixels on a blank canvas.
       std::uint8_t count = deltaX;
       int skip = 0;
       if (swapped)
@@ -195,7 +195,7 @@ namespace Elite
       }
       else if (!goingUp && deltaX == 0u)
       {
-        return; // the downward entry checks for an empty line (`BEQ LIE0`) and the upward one does not
+        return; // the downward entry checks for an empty line and the upward one does not
       }
 
       int x = 2 * static_cast<int>(_line.x1);
@@ -237,7 +237,7 @@ namespace Elite
     const std::uint8_t step = (deltaX != 0u) ? LineSlope(deltaX, deltaY) : std::uint8_t{0};
     const bool goingRight = SubtractWithCarry(_line.x2, _line.x1, true).carry;
 
-    // `SEC / LDX Q2 / INX`, and then the swapped entry plots and counts one fewer.
+    // The count starts one above the span, and then the swapped entry plots and counts one fewer.
     std::uint8_t count = static_cast<std::uint8_t>(deltaY + 1u);
     int skip = swapped ? 0 : 2;
     if (swapped)

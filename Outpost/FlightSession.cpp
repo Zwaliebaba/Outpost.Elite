@@ -25,16 +25,17 @@ namespace Outpost
      * than in one it could not.
      *
      * **AND IT IS NO LONGER LOAD-BEARING (§6.109).** The routine that writes `STP` on this path is
-     * `LAUN`, which was a stub when §6.95 was written: its `LDA #8` is the step, and both `TT110`
+     * `LAUN`, which was a stub when §6.95 was written: it loads the step with 8, and both `TT110`
      * and `DOENTRY` run it before any circle is drawn. §6.95 diagnosed a missing write as a state
      * the object could not start in, and the honest cause was a routine the port had not built.
-     * The seed stays because §6.95's RULE stands -- a default-constructed flight universe is still a
-     * state the game cannot be in -- but nothing reads this particular byte before `LAUN` sets it.
+     * The seed stays because §6.95's RULE stands -- a default-constructed flight universe is still
+     * a state the game cannot be in -- but nothing reads this particular byte before `LAUN` sets
+     * it.
      */
     constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
 
     /*
-     * 6502: the nine `STA KY12` to `STA KY20` at the tail of `RDKEY`, cleared when `QQ11` says
+     * 6502: the nine key flags `KY12` to `KY20` at the tail of `RDKEY`, cleared when `QQ11` says
      * this is not a space view.
      *
      * The bomb, the pod, the missiles, the E.C.M., the warp and the docking computer are the keys
@@ -46,8 +47,9 @@ namespace Outpost
       Elite::KEY_ECM,         Elite::KEY_WARP,       Elite::KEY_DOCKING_COMPUTER, Elite::KEY_CANCEL_DOCKING,
     };
 
-    /// 6502: AND #%11111101 -- sprite 1, which `RDKEY` switches off on its way past and is not one
-    /// of the four the sights use. The two `SETL1` values are `Elite::MEMORY_MAP_IO` and `_RAM`.
+    /// 6502: the mask that clears sprite 1, which `RDKEY` switches off on its way past and is not
+    /// one of the four the sights use. The two `SETL1` values are `Elite::MEMORY_MAP_IO` and
+    /// `_RAM`.
     constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
   } // namespace
 
@@ -105,9 +107,9 @@ namespace Outpost
      * each of them would have put on the screen; `TickRasterInterrupt` advances `RASTCT` itself, so
      * two calls are a frame however this one is entered.
      *
-     * AND THE COUNT MATTERS RATHER THAN BEING TIDY. `BIT BOMB / INC welcome` sits above the split
-     * test, so a burning bomb moves the background colour on EVERY pass: running this once a frame
-     * would halve the flash rate.
+     * AND THE COUNT MATTERS RATHER THAN BEING TIDY. The bomb test and the colour increment sit
+     * ABOVE the split test, so a burning bomb moves the background colour on EVERY pass: running
+     * this once a frame would halve the flash rate.
      */
     const std::uint8_t bomb = m_universe->commander.energyBomb; // 6502: BOMB
     const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_universe->screen, bomb);
@@ -116,8 +118,8 @@ namespace Outpost
     const Elite::RasterRegisters& spaceView = first.spaceView ? first : second;
     const Elite::RasterRegisters& dashboard = first.spaceView ? second : first;
 
-    // 6502: LDA abraxas / STA VIC+&18 -- and &91 is the dashboard's block, which is also the only
-    // state in which its rows are multicolour.
+    // 6502: `abraxas` into the memory-pointer register -- &91 is the dashboard's block, which is
+    // also the only state in which its rows are multicolour.
     m_universe->canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
     m_universe->canvas.SetBackground(dashboard.background);
 
@@ -162,9 +164,9 @@ namespace Outpost
    */
 
   /*
-   * `RunDockingComputer` WAS HERE AND IS NOT ANY MORE (M6-0-h-3). 6502: JSR DOCKIT from `DOKEY`'s
-   * `auton` path -- one call to `Elite::RunDockingComputer` over slot 0, which `ReadFlightControls`
-   * makes itself now.
+   * `RunDockingComputer` WAS HERE AND IS NOT ANY MORE (M6-0-h-3). 6502: the call to `DOCKIT` from
+   * `DOKEY`'s `auton` path -- one call to `Elite::RunDockingComputer` over slot 0, which
+   * `ReadFlightControls` makes itself now.
    */
 
 } // namespace Outpost
