@@ -81,13 +81,23 @@ namespace Elite
     }
   }
 
-  void CopyDashboardPicture2x(Picture& _picture, const Canvas& _canvas) noexcept
+  void CopyDashboardPicture2x(Picture& _picture) noexcept
   {
-    for (int row = Canvas::DASHBOARD_CELL_ROW; row < Canvas::CELL_ROWS; ++row)
+    /*
+     * The table, unpacked a nibble at a time. `SetDot` takes a SCREEN row, so the plane's row 0 is
+     * `Picture::SPACE_VIEW_HEIGHT` -- the one coordinate mistake this loop could make, and the
+     * reason the offset is added here rather than carried in the table.
+     */
+    for (int y = 0; y < Picture::DASHBOARD_HEIGHT; ++y)
     {
-      for (int column = 0; column < Canvas::CELL_COLUMNS; ++column)
+      const std::uint8_t* row = &DASHBOARD_PICTURE_2X[static_cast<std::size_t>(y) * DASHBOARD_PICTURE_2X_ROW_BYTES];
+      const int screenRow = Picture::SPACE_VIEW_HEIGHT + y;
+
+      for (int x = 0; x < Picture::WIDTH; x += 2)
       {
-        ResolveDashboardCell2x(_picture, _canvas, column, row);
+        const std::uint8_t pair = row[x / 2];
+        _picture.SetDot(x, screenRow, static_cast<std::uint8_t>(pair >> 4));
+        _picture.SetDot(x + 1, screenRow, static_cast<std::uint8_t>(pair & 0x0Fu));
       }
     }
   }

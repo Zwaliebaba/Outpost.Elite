@@ -274,6 +274,7 @@
     <ClCompile Include="ViewChange.cpp" />
     <ClCompile Include="SpriteData.cpp" />
     <ClCompile Include="DashboardImage.cpp" />
+    <ClCompile Include="DashboardPicture2x.cpp" />
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />

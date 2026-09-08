@@ -403,6 +403,9 @@
     <ClCompile Include="DashboardImage.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
+    <ClCompile Include="DashboardPicture2x.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
     <ClCompile Include="Dashboard.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
