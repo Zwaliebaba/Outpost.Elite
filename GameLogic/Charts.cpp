@@ -3,6 +3,7 @@
 #include "Charts.h"
 
 #include "Lines2x.h"
+#include "Picture.h"
 
 #include "EliteTypes.h"
 
@@ -331,7 +332,8 @@ namespace Elite
     DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
   }
 
-  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
+  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy,
+                           TextPrinter* _wideLabels) noexcept
   {
     /*
      * 6502: LDA #7 / JSR DOXC / LDA #190 / JSR NLIN3.
@@ -450,6 +452,24 @@ namespace Elite
           {
             rowUsed[static_cast<std::size_t>(row)] = 0xFF;
             _ports.printer.SetCaseFlags(0x80);
+
+            /*
+             * Where the name goes on the 640x400 surface (Resolution.md section 6.3, slice RS-5-e).
+             *
+             * `TT23` puts a name beside its disc by dividing the disc's x by eight; the disc is
+             * drawn at twice that x plus the space view's margin, so its wide cell is
+             * `(2 * screenX + SPACE_VIEW_MARGIN) / 8`, and the name sits one cell right of it as it
+             * does on the canvas. This is the only place that knows both numbers, which is why it
+             * is the place that says so -- a layout maps one cell at a time and cannot move a run's
+             * origin without moving its letters apart.
+             */
+            if (_wideLabels != nullptr)
+            {
+              const int discCell = (2 * static_cast<int>(screenX) + Picture::SPACE_VIEW_MARGIN) / 8;
+              _wideLabels->SetLabelRun(static_cast<std::uint8_t>(row),
+                                       static_cast<std::uint8_t>(TEXT_FIRST_COLUMN + _universe.text.column),
+                                       discCell + 1);
+            }
 
             /*
              * 6502: JSR cpl, and the carry it returns is the one the ADC below consumes. The CPY

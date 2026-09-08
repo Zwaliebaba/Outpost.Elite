@@ -124,6 +124,14 @@ namespace Elite
     std::uint8_t columnOffset = 0;
     std::uint8_t rowOffset = 0;
     std::uint8_t rowStride = 1;
+
+    /*
+     * NO `columnStride`, AND THE BUILDING IS WHAT SETTLED IT (RS-5-e). The short-range chart needs
+     * a label's ORIGIN to double, because `TT23` puts a name beside its disc and the discs are at
+     * twice their coordinates. A stride cannot do that: `Map` runs per GLYPH, so a column stride of
+     * 2 doubles the gap between the letters as well and prints "O r r e r e". A label is a RUN
+     * whose start moves and whose letters do not, which is what `TextPrinter::SetLabelRun` is.
+     */
     std::span<const Anchor> anchors{};
 
     [[nodiscard]] constexpr WideCell Map(std::uint8_t _column, std::uint8_t _row) const noexcept
@@ -341,6 +349,64 @@ namespace Elite
 
 
   /*
+   * THE TWO CHARTS (slice RS-5-e), and between them they are the only screens whose TEXT has to
+   * know where the DRAWING went.
+   *
+   * NEITHER MAP MOVES, and that is what the measurement found: `ToSpaceViewPoint` already supplies
+   * the space view's 64-pixel margin, so the long-range map is drawn at 512x256 from cell (8, 4)
+   * and the short-range one fills the screen -- exactly what section 6.3 asked a translation to
+   * produce. There is nothing to translate. What was wrong is that the TEXT was on the centred
+   * layout, which put "GALACTIC CHART 1" at wide row 13, in the middle of the map.
+   *
+   * The long-range chart's title goes above the top rule -- canvas row 23 is picture row 46, so
+   * wide row 4 clears it -- and everything else it prints, which is the system name and distance a
+   * crosshair move leaves at the bottom, goes below the bottom rule at picture row 304.
+   */
+  inline constexpr std::array<Anchor, 1> LONG_RANGE_ANCHORS{{
+    {0, 39, 1, 1, 20, 4, 1}, // the title, centred over the map and above the rule at picture row 46
+  }};
+
+  inline constexpr TextLayout LONG_RANGE_LAYOUT{0, 19, 1, LONG_RANGE_ANCHORS};
+
+  static_assert(LONG_RANGE_LAYOUT.Map(11, 1).column == 31, "the title, centred over a map that runs from cell 8");
+  static_assert(LONG_RANGE_LAYOUT.Map(11, 1).row == 4, "and above the top rule");
+  static_assert(LONG_RANGE_LAYOUT.Map(11, 20).row == 39, "and the bottom line clears the lower rule");
+
+  /*
+   * THE SHORT-RANGE CHART, whose labels must follow their discs.
+   *
+   * `TT23` derives a label's cell from its disc: the column is the disc's x divided by eight, the
+   * row its y divided by eight. The discs are drawn at twice their coordinates, so the ROW doubles
+   * with a stride of 2 and every name keeps its disc's height. The COLUMN cannot: a stride runs per
+   * glyph and would space the letters as well, so the label's origin is placed by
+   * `TextPrinter::SetLabelRun`, which `TT23` calls with the wide cell it has just computed the disc
+   * at -- the one thing that knows where the drawing went.
+   *
+   * THE TITLE IS ANCHORED, because the offsets alone would leave it where the centred layout put it
+   * -- and the rule it belongs above is at picture row 38.
+   *
+   * WHAT IS NOT DONE HERE is section 6.3's "labels no longer collide", and it was measured before it
+   * was declined. `TT23` gives a name the row it wants, else the row below, else the row above, and
+   * drops it if all three are taken; over all 256 charts of galaxy one that costs 142 names out of
+   * 2,668 systems in range -- 5.3%, or 0.4 names on an average chart, the worst chart losing four. A
+   * twin that re-ran the test on fifty rows would recover about a hundred across all 256 charts, and
+   * would be DECIDING which systems are named, which is rule T1's line; the picture would carry ink
+   * the canvas has not, which section 8.1's third clause forbids; and `TT23` feeds "was it named"
+   * back into the disc's SIZE through the carry `cpl` leaves, so a differently-named chart is a
+   * differently-DRAWN one. Declined, and cheaply: half a name a chart.
+   */
+  inline constexpr std::array<Anchor, 1> SHORT_RANGE_ANCHORS{{
+    {0, 39, 1, 1, 20, 2, 1}, // the title, above the rule at picture row 38
+  }};
+
+  inline constexpr TextLayout SHORT_RANGE_LAYOUT{0, 0, 2, SHORT_RANGE_ANCHORS};
+
+  static_assert(SHORT_RANGE_LAYOUT.Map(15, 1).row == 2, "the title clears the rule");
+  static_assert(SHORT_RANGE_LAYOUT.Map(15, 1).column == 35, "and is not spaced out by anything");
+  static_assert(SHORT_RANGE_LAYOUT.Map(12, 11).row == 22, "a label's row doubles, so it stays on its disc");
+
+
+  /*
    * `TTX66K`'s own test for which of the two kinds of screen is up, borrowed rather than invented:
    * it branches on `QQ11` being 0 or 13.
    *
@@ -370,6 +436,12 @@ namespace Elite
    */
   void PrintGlyph2x(Picture& _picture, TextLayout _layout, std::uint8_t _column, std::uint8_t _row,
                     std::span<const std::uint8_t, 8> _glyph, CellPalette _palette) noexcept;
+
+  /// The same, on a wide cell already chosen. `PrintGlyph2x` is this with the layout's answer, and
+  /// a caller that has a label run to apply as well works the cell out for itself (`TextPrinter::
+  /// WideCellFor`).
+  void PrintGlyphAt2x(Picture& _picture, WideCell _cell, std::span<const std::uint8_t, 8> _glyph,
+                      CellPalette _palette) noexcept;
 
   /*
    * 2x of: TextPrinter::PrintGlyph's delete path -- blank the cell outright.

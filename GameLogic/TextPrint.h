@@ -242,6 +242,49 @@ namespace Elite
       m_layout = _layout;
     }
 
+    /*
+     * WHERE A LABEL'S RUN STARTS ON THE WIDE SURFACE, and the short-range chart is the only caller
+     * (Resolution.md section 6.3, slice RS-5-e).
+     *
+     * A `TextLayout` maps one faithful cell to one wide cell, per glyph, with nothing remembered in
+     * between -- which is right for text ON a screen and wrong for a LABEL ON A DRAWING. `TT23`
+     * puts a system's name beside its disc by dividing the disc's x by eight; the discs are at
+     * twice their coordinates on this surface, so the name's ORIGIN has to double while its letters
+     * stay eight pixels apart. No function of the cell alone can say that: a column stride doubles
+     * the gaps too and prints "O r r e r e".
+     *
+     * So the routine that knows where the drawing went says so, once, at the same instruction it
+     * already places the cursor at. The run lasts until the cursor leaves its row, which is one
+     * name -- `TT23` prints a name and then a newline, and nothing else is on that row.
+     *
+     * IT IS THE PRINTER'S AND NOT THE UNIVERSE'S, deliberately. `Universe` is copied -- the oracle
+     * round-trips one -- and it is folded into the state hash field by field; a cursor that lives
+     * for one name has no business in either. The printer is built once and outlives every screen.
+     */
+    void SetLabelRun(std::uint8_t _row, std::uint8_t _firstColumn, int _wideColumn) noexcept
+    {
+      m_labelRow = _row;
+      m_labelFirstColumn = _firstColumn;
+      m_labelWideColumn = _wideColumn;
+      m_labelActive = true;
+    }
+
+    /*
+     * The wide cell one glyph goes on: the layout's answer, and then the label run's if one covers
+     * it. `_column` is a CANVAS cell, as everything the layout takes is.
+     */
+    [[nodiscard]] WideCell WideCellFor(std::uint8_t _column, std::uint8_t _row) const noexcept
+    {
+      const WideCell mapped = Layout().Map(_column, _row);
+      if (!m_labelActive || _row != m_labelRow || _column < m_labelFirstColumn)
+      {
+        return mapped;
+      }
+
+      // The letters keep their spacing; only where the run BEGINS has moved.
+      return WideCell{m_labelWideColumn + static_cast<int>(_column) - static_cast<int>(m_labelFirstColumn), mapped.row};
+    }
+
     /// 6502: CHPR. Returns the character, as the routine does in A.
     std::uint8_t Print(std::uint8_t _character) noexcept;
 
@@ -266,12 +309,20 @@ namespace Elite
       return (m_layout != nullptr) ? *m_layout : CENTRED_LAYOUT;
     }
 
+
+
     Canvas& m_canvas;
     TextState& m_state;
     SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
 
     Picture* m_picture = nullptr;        ///< the second surface, or none -- see `AttachPicture`
     const TextLayout* m_layout = nullptr; ///< the screen's layout, read and never written
+
+    /// The label run `SetLabelRun` opens, which lasts one row -- see the comment there.
+    bool m_labelActive = false;
+    std::uint8_t m_labelRow = 0;
+    std::uint8_t m_labelFirstColumn = 0;
+    int m_labelWideColumn = 0;
   };
 
   /*
