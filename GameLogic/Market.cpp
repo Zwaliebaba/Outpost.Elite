@@ -12,7 +12,7 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDX #12 / STX T1 -- how many keys gnum will take before ending the number itself.
+    /// 6502: how many keys `gnum` will take before ending the number itself.
     constexpr int KEY_LIMIT = 12;
   } // namespace
 
@@ -24,11 +24,11 @@ namespace Elite
 
   std::uint8_t EconomyAdjustment(std::uint8_t _gradient, std::uint8_t _economy) noexcept
   {
-    // 6502: AND #%00011111 -- only the magnitude; bit 7 is the direction and is read by the caller.
+    // 6502: only the magnitude; bit 7 is the direction and is read by the caller.
     const std::uint8_t magnitude = static_cast<std::uint8_t>(_gradient & 0x1Fu);
 
-    // 6502: LDY QQ28 / CLC / LDA #0 / TT153: DEY / BMI / ADC $90 / JMP TT153 -- the CLC is outside
-    // the loop, so every addition after the first carries in whatever the one before left.
+    // 6502: TT153 -- the carry is cleared OUTSIDE the loop, so every addition after the first
+    // carries in whatever the one before left.
     std::uint8_t total = 0;
     bool carry = false;
     for (std::uint8_t remaining = _economy; remaining != 0; --remaining)
@@ -44,14 +44,14 @@ namespace Elite
   {
     const MarketItem item = MarketItemAt(_item);
 
-    // 6502: LDA QQ26 / AND QQ23+3 / CLC / ADC QQ23 -- the base, nudged by as much of the market's
-    // random byte as this item's mask lets through.
+    // 6502: the base, nudged by as much of the market's random byte as this item's mask lets
+    // through.
     const std::uint8_t nudged = AddWithCarry(static_cast<std::uint8_t>(_randomiser & item.mask), item.basePrice, false).value;
 
     const std::uint8_t adjustment = EconomyAdjustment(item.gradient, _economy);
 
     /*
-     * 6502: LDA $8F / BMI TT155 -- and here is the sign. A NEGATIVE gradient SUBTRACTS from the
+     * 6502: TT155 -- and here is the sign. A NEGATIVE gradient SUBTRACTS from the
      * price, and the same sign will ADD to the quantity in GenerateMarket. Reading either branch
      * off the other gives an economy that is exactly backwards and entirely plausible.
      *
@@ -64,7 +64,7 @@ namespace Elite
      */
     if ((item.gradient & 0x80u) != 0u)
     {
-      // 6502: TT155 -- LDA QQ24 / SEC / SBC $91.
+      // 6502: TT155 -- the adjustment taken off the price.
       return static_cast<std::uint8_t>(nudged - adjustment);
     }
 
@@ -73,11 +73,11 @@ namespace Elite
 
   void GenerateMarket(Rng& _rng, std::uint8_t _economy, MarketState& _outMarket) noexcept
   {
-    // 6502: JSR DORND / STA QQ26 -- one byte perturbs the whole market.
+    // 6502: one random byte into `QQ26`, and it perturbs the whole market.
     _outMarket.randomiser = _rng.Next(false).value;
 
     /*
-     * 6502: hy9 ... CMP #63 / BCC hy9.
+     * 6502: hy9 -- the loop runs while the index is below 63.
      *
      * The index steps by four and the loop continues while it is below 63, so it runs sixteen
      * times and stops one item short of the seventeen the market screen shows. Alien Items keep
@@ -88,11 +88,10 @@ namespace Elite
       const MarketItem entry = MarketItemAt(item);
       const std::uint8_t adjustment = EconomyAdjustment(entry.gradient, _economy);
 
-      // 6502: LDA QQ23+3,X / AND QQ26 / CLC / ADC QQ23+2,X -- the same nudge as the price uses,
-      // applied to the base quantity instead.
+      // 6502: the same nudge as the price uses, applied to the base quantity instead.
       std::uint8_t quantity = AddWithCarry(static_cast<std::uint8_t>(entry.mask & _outMarket.randomiser), entry.baseQuantity, false).value;
 
-      // 6502: LDY $8F / BMI TT157 -- the sign, the other way round from the price.
+      // 6502: TT157 -- the sign, the other way round from the price.
       if ((entry.gradient & 0x80u) != 0u)
       {
         quantity = AddWithCarry(quantity, adjustment, false).value;
@@ -102,18 +101,18 @@ namespace Elite
         quantity = static_cast<std::uint8_t>(quantity - adjustment);
       }
 
-      // 6502: BPL TT159 / LDA #0 -- a quantity that went negative is nothing, not a large number.
+      // 6502: TT159 -- a quantity that went negative is nothing, not a large number.
       if ((quantity & 0x80u) != 0u)
       {
         quantity = 0;
       }
 
-      // 6502: AND #%00111111 -- the shelf holds at most 63 of anything.
+      // 6502: masked to six bits -- the shelf holds at most 63 of anything.
       _outMarket.availability[item] = static_cast<std::uint8_t>(quantity & 0x3Fu);
     }
 
     /*
-     * 6502: var's LDA #0 / STA AVL+16.
+     * 6502: `var` zeroes the sixteenth availability byte.
      *
      * Alien Items are never for sale, and the original enforces it from inside the routine that
      * works out the economy adjustment -- so it happens once per item, sixteen times over, for a
@@ -164,13 +163,13 @@ namespace Elite
 
   std::uint16_t TotalPrice(std::uint8_t _price, std::uint8_t _quantity) noexcept
   {
-    // 6502: JSR MULTU -- (A P) = P * Q. Which operand is which does not matter to the product, and
+    // 6502: MULTU -- (A P) = P * Q. Which operand is which does not matter to the product, and
     // the callers do not agree on it either.
     const Product product = MultiplyUnsigned(_price, _quantity);
     std::uint8_t high = product.high;
     std::uint8_t low = product.low;
 
-    // 6502: GC2 -- ASL P / ROL A, twice.
+    // 6502: GC2 -- the sixteen-bit pair doubled, twice.
     for (int shift = 0; shift < 2; ++shift)
     {
       const ShiftResult doubled = RotateLeft(low, false);
@@ -183,13 +182,13 @@ namespace Elite
 
   bool CargoFits(const Commander& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept
   {
-    // 6502: LDX #12 / CPX QQ29 / BCC kg.
+    // 6502: kg -- anything past item 12 is measured in kilograms or grams, not tonnes.
     constexpr std::uint8_t LAST_TONNE_ITEM = 12;
 
     if (LAST_TONNE_ITEM < _item)
     {
       /*
-       * 6502: kg -- LDY QQ29 / ADC QQ20,Y / CMP #200.
+       * 6502: kg -- this item's own hold added, and the total compared against 200.
        *
        * The carry is CLEAR here, because the BCC that arrived is what cleared it. And the addition
        * is not checked for overflow, so 200 kilos of gold plus 100 more comes to 44 and fits --
@@ -201,8 +200,8 @@ namespace Elite
     }
 
     /*
-     * 6502: Tml -- ADC QQ20,X for X counting 12 down to 0, with the carry from the CPX above SET on
-     * the first pass and threaded from each addition after that.
+     * 6502: Tml -- the thirteen tonne items added, index 12 down to 0, with the carry from the
+     * comparison above SET on the first pass and threaded from each addition after that.
      */
     bool carry = true;
     std::uint8_t total = _amount;
@@ -214,20 +213,21 @@ namespace Elite
       carry = sum.carry;
     }
 
-    // 6502: ADC TRIBBLE+1 -- and it takes the loop's last carry, not a cleared one.
+    // 6502: the Trumbles' high byte added, and it takes the loop's last carry, not a cleared one.
     total = AddWithCarry(total, _commander.tribbles.hi, carry).value;
 
-    // 6502: CMP CRGO -- carry set means A >= CRGO, which the routine reports as "no room".
+    // 6502: compared against `CRGO` -- a set carry means the total reached it, which the routine
+    // reports as "no room".
     return total < _commander.cargoCapacity;
   }
 
   std::uint8_t ContrabandPenalty(const Commander& _commander) noexcept
   {
-    // 6502: LDA QQ20+3 / CLC / ADC QQ20+6 -- slaves plus narcotics, and the `CLC` is real: this
-    // is the only addition in the routine that does not read a carry it was handed.
+    // 6502: slaves plus narcotics, and the cleared carry here is real: this is the only addition
+    // in the routine that does not read a carry it was handed.
     const AddResult illegal = AddWithCarry(_commander.cargoHold[3], _commander.cargoHold[6], false);
 
-    // 6502: ASL A / ADC QQ20+10 -- the pair doubled, and the shift's carry out is read by the add.
+    // 6502: the pair doubled, and the shift's carry out is read by the addition that follows.
     const ShiftResult doubled = RotateLeftValue(illegal.value, false);
 
     return AddWithCarry(doubled.value, _commander.cargoHold[10], doubled.carry).value;
@@ -235,14 +235,14 @@ namespace Elite
 
   void PrintMarketUnits(TokenPrinter& _printer, CharacterPrinter& _characters, std::uint8_t _gradient) noexcept
   {
-    // 6502: TT152 -- LDA QQ19+1 / AND #%01100000 -- two bits of the gradient, and nothing else in
-    // the byte says what the item is measured in.
+    // 6502: TT152 -- two bits of the gradient, and nothing else in the byte says what the item is
+    // measured in.
     const std::uint8_t units = static_cast<std::uint8_t>(_gradient & 0x60u);
 
     if (units == 0x20u)
     {
-      // 6502: TT161 -- 'k' and then a fall-through into TT16a, whose JMP DASC returns. So "kg" and
-      // no trailing space, unlike the other two.
+      // 6502: TT161 -- 'k' and then a fall-through into TT16a, which returns through `DASC`. So
+      // "kg" and no trailing space, unlike the other two.
       _characters.Put('k');
       _characters.Put('g');
       return;
@@ -252,15 +252,15 @@ namespace Elite
     // through a BCC that DASC's CLC guarantees, the second by falling into it.
     _characters.Put((units == 0u) ? std::uint8_t{'t'} : std::uint8_t{'g'});
 
-    // 6502: TT162 -- LDA #' ' / JMP TT27. Through the TOKEN printer, not through DASC, so the
-    // space is subject to the case flags like any other token character.
+    // 6502: TT162 -- a space through the TOKEN printer, not through `DASC`, so it is subject to
+    // the case flags like any other token character.
     _printer.Print(' ');
   }
 
   void PrintMarketItem(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text, int _item, std::uint8_t _economy,
                        MarketState& _market, bool _misJumped) noexcept
   {
-    // 6502: LDA MJ / BNE TT151q -- in witchspace there is no market, and the line prints nothing.
+    // 6502: TT151q -- in witchspace there is no market, and the line prints nothing.
     if (_misJumped)
     {
       return;
@@ -269,10 +269,11 @@ namespace Elite
     const MarketItem item = MarketItemAt(_item);
 
     /*
-     * 6502: LDA #1 / JSR DOXC / PLA / ADC #&D0 / JSR TT27.
+     * 6502: column 1, then the item number added to &D0 and printed.
      *
-     * The name is token 208 plus the item number, and the ADC has no CLC -- it takes the carry the
-     * second `ASL A` left when the item number was multiplied by four for the table index. With
+     * The name is token 208 plus the item number, and that addition has no clear of the carry in
+     * front of it -- it takes the one the second doubling left when the item number was multiplied
+     * by four for the table index. With
      * seventeen items that shift cannot overflow, so the carry is always clear; the addition is
      * written as one anyway because that is what it is.
      */
@@ -281,13 +282,13 @@ namespace Elite
     const ShiftResult indexTwice = RotateLeft(indexOnce.value, indexOnce.carry);
     _printer.Print(AddWithCarry(static_cast<std::uint8_t>(_item), 0xD0u, indexTwice.carry).value);
 
-    // 6502: LDA #14 / JSR DOXC -- the price column.
+    // 6502: column 14 -- the price column.
     _text.column = 14;
 
     const std::uint8_t price = MarketPrice(_item, _economy, _market.randomiser);
 
     /*
-     * 6502: `var`, which the price above went through, ends `LDA #0 / STA AVL+16`.
+     * 6502: `var`, which the price above went through, ends by zeroing `AVL+16`.
      *
      * So working out ANY price makes Alien Items unavailable, and the seventeenth line of the
      * screen is always a dash however much stock the market was generated with. The port's
@@ -296,12 +297,12 @@ namespace Elite
      */
     _market.availability[MARKET_ITEM_COUNT - 1] = 0;
 
-    // 6502: JSR TT152 -- the units come BEFORE the price is finished being worked out, because the
+    // 6502: TT152 -- the units come BEFORE the price is finished being worked out, because the
     // routine interleaves the printing and the arithmetic.
     PrintMarketUnits(_printer, _characters, item.gradient);
 
     /*
-     * 6502: STA P / LDA #0 / JSR GC2 / SEC / JSR pr5.
+     * 6502: the price through `GC2` and out through `pr5` with the carry set.
      *
      * GC2 is GCASH without the multiply, so the price is quadrupled and printed as five digits with
      * one after the point. That is where the quoted price comes from: the byte holds four-tenths of
@@ -317,12 +318,12 @@ namespace Elite
     }
     PrintValue(_characters, static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | low), 5, true);
 
-    // 6502: LDY QQ19+4 / LDA #5 / LDX AVL,Y / STX QQ25 / CLC / BEQ TT172.
+    // 6502: TT172 -- nothing available, so a dash instead of a number.
     const std::uint8_t available = _market.availability[static_cast<std::size_t>(_item)];
     if (available == 0)
     {
-      // 6502: TT172 -- LDA #25 / JSR DOXC / LDA #45 / JMP TT27. A dash, further right than the
-      // number would have been, so an empty market reads as a column of dashes.
+      // 6502: TT172 -- a dash at column 25, further right than the number would have been, so an
+      // empty market reads as a column of dashes.
       _text.column = 25;
       _printer.Print(45);
       return;
@@ -335,21 +336,21 @@ namespace Elite
   void PrintMarketScreen(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text, std::uint8_t _economy,
                          MarketState& _market, bool _misJumped) noexcept
   {
-    // 6502: LDA #5 / JSR DOXC / LDA #167 / JSR NLIN3 -- the title, and NLIN3's own rule at row 19.
+    // 6502: column 5, then token 167 through `NLIN3` -- the title, and its own rule at row 19.
     // The rule itself is the canvas's; a caller that wants it draws DrawSeparator.
     _text.column = 5;
     _printer.Print(167);
 
-    // 6502: LDA #3 / JSR DOYC / JSR TT163 -- the column headings, which are token 255.
+    // 6502: row 3, then `TT163` -- the column headings, which are token 255.
     _text.row = 3;
     _text.column = 17;
     _printer.Print(255);
 
-    // 6502: LDA #6 / JSR DOYC / LDA #0 / STA QQ29.
+    // 6502: row 6, and the item counter from zero.
     _text.row = 6;
 
     /*
-     * 6502: TT168 -- CMP #17 / BCC TT168, so seventeen lines.
+     * 6502: TT168 -- the loop runs while the counter is below 17, so seventeen lines.
      *
      * GenerateMarket fills only sixteen, so the last line is Alien Items with whatever `var` left
      * in its availability -- which is zero, and prints as a dash. The loop bound and the generator's
@@ -357,11 +358,11 @@ namespace Elite
      */
     for (int item = 0; item < MARKET_ITEM_COUNT; ++item)
     {
-      // 6502: LDX #128 / STX QQ17 -- sentence case for every line, reset each time round.
+      // 6502: sentence case for every line, reset each time round.
       _printer.SetCaseFlags(0x80);
       PrintMarketItem(_printer, _characters, _text, item, _economy, _market, _misJumped);
 
-      // 6502: JSR INCYC.
+      // 6502: INCYC.
       ++_text.row;
     }
   }
@@ -369,7 +370,7 @@ namespace Elite
   TypedDigit TypeDigit(std::uint8_t _value, std::uint8_t _key, std::uint8_t _available) noexcept
   {
     /*
-     * 6502: LDX R / BNE NWDAV2 / CMP #'Y' / BEQ NWDAV1 / CMP #'N' / BEQ NWDAV3.
+     * 6502: NWDAV1, NWDAV2 and NWDAV3 -- the three answers this routine recognises.
      *
      * The test is on the VALUE, not on how many keys have been pressed, so "Y" is still accepted
      * after typing a zero.
@@ -388,7 +389,7 @@ namespace Elite
       }
     }
 
-    // 6502: NWDAV2 -- STA Q / SEC / SBC #'0' / BCC OUT. Anything below '0' ends the number.
+    // 6502: NWDAV2 -- anything below '0' borrows and ends the number.
     if (_key < '0')
     {
       return {DigitResult::Complete, _value};
@@ -396,21 +397,21 @@ namespace Elite
 
     const std::uint8_t digit = static_cast<std::uint8_t>(_key - '0');
 
-    // 6502: CMP #10 / BCS BAY2 -- and a letter does not end the number, it leaves the screen.
+    // 6502: BAY2 -- a letter does not end the number, it leaves the screen.
     if (digit >= 10u)
     {
       return {DigitResult::LeaveScreen, _value};
     }
 
-    // 6502: LDA R / CMP #26 / BCS OUT -- past 26 no further digit is taken, and the carry the CMP
-    // leaves is SET, which is what tells the caller the number was refused rather than finished.
+    // 6502: OUT -- past 26 no further digit is taken, and the carry the comparison leaves is SET,
+    // which is what tells the caller the number was refused rather than finished.
     if (_value >= 26u)
     {
       return {DigitResult::TooBig, _value};
     }
 
     /*
-     * 6502: ASL A / STA T / ASL A / ASL A / ADC T / ADC S.
+     * 6502: doubled and kept, doubled twice more, then the kept copy and the digit added.
      *
      * Twice, kept; times eight; add the kept copy; add the digit. Neither addition clears the carry
      * first, so each takes what the instruction before it left.
@@ -422,7 +423,8 @@ namespace Elite
      * come alive.
      *
      * This is the second dead carry the port has kept rather than simplified; the justification
-     * routine's `LSR SC+1` is the other. Mutation testing finds both, and the answer in each case
+     * routine's own halving of a screen-address high byte is the other. Mutation testing finds
+     * both, and the answer in each case
      * is that the mutation is EQUIVALENT rather than that the test is weak.
      */
     const ShiftResult twice = RotateLeft(_value, false);
@@ -434,7 +436,7 @@ namespace Elite
     _value = withDigit.value;
 
     /*
-     * 6502: CMP QQ25 / BEQ TT226 / BCS OUT.
+     * 6502: TT226 on equal, OUT on greater.
      *
      * A value equal to what is available carries on; one that exceeds it finishes, KEEPING the
      * value. So the number the caller gets can be larger than the market holds, and refusing it is
@@ -450,22 +452,22 @@ namespace Elite
 
   NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept
   {
-    // 6502: LDA #MAG2 / STA COL2 -- purple for what the player types.
+    // 6502: purple for what the player types.
     _text.palette = TEXT_COLOUR_PURPLE; // 6502: MAG2 -- and TextPrint.h's, not a second copy (slice 5a-8)
 
     NumberEntry entry{};
 
-    // 6502: LDX #0 / STX R / LDX #12 / STX T1.
+    // 6502: the value at zero and the key count at twelve.
     for (int remaining = KEY_LIMIT; remaining > 0; --remaining)
     {
-      // 6502: TT223 -- JSR TT217, which does not return until a key is pressed.
+      // 6502: TT223 -- `TT217`, which does not return until a key is pressed.
       const std::uint8_t key = _keys.NextKey();
       const TypedDigit typed = TypeDigit(entry.value, key, _available);
       entry.value = typed.value;
       entry.outcome = typed.outcome;
 
       /*
-       * 6502: TT226's `LDA Q / JSR TT26`, and the same call at the top of NWDAV1 and NWDAV3.
+       * 6502: TT226 echoes the key, and so do NWDAV1 and NWDAV3 at their tops.
        *
        * Only these three echo. The exits that END the number print nothing, which is why a
        * refused quantity leaves the line as the player typed it rather than adding the key that
@@ -482,12 +484,13 @@ namespace Elite
       }
 
       /*
-       * 6502: DEC T1 / BNE TT223, and what happens when it does NOT branch.
+       * 6502: TT223 again while the key count holds, and what happens when it does not.
        *
        * The twelfth accepted key leaves T1 at zero and the loop falls straight into OUT -- so the
        * number ends because the counter ran out, not because the player ended it, and the carry is
-       * whatever the last comparison left. That last comparison is `CMP QQ25 / BEQ TT226`, taken,
-       * which is how TT226 was reached; but TT226's `JSR TT26` clears the carry on the way past.
+       * whatever the last comparison left. That comparison against what is available came out
+       * EQUAL, which is how TT226 was reached; but the echo `TT226` performs clears the carry on
+       * the way past.
        * So the exit is a clear carry: the number is finished and usable.
        */
       if (remaining == 1)
@@ -497,7 +500,7 @@ namespace Elite
     }
 
     /*
-     * 6502: OUT -- LDA #&10 / STA COL2.
+     * 6502: OUT -- the colour put back to white.
      *
      * BAY2 is the one exit that does not pass through OUT, so the colour is left purple when a
      * letter abandons the screen. The screen that follows sets it again, which is presumably why
