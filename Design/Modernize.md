@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->452 tests, oracle present), all <!--count:checks-->eighteen repository checks pass,
+(<!--count:tests-->454 tests, oracle present), all <!--count:checks-->eighteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -254,9 +254,9 @@ What nothing pins: the presenter (R5, by design) and timing (ADR-005 §3, by des
 M6-0 named — a whole frame with an explosion in it, the escape pod and the death sequence in
 composition, eight control codes, and seven routines that were only ever trapped — were on this
 list until 2026-09-07, when the gate closed (§6 Phase M6, §8); the outer loops and the mode machine
-came off it earlier, when M3-c and M4-d moved them into `Game`, which the replay drives. What the
-coverage instrument still names as unreached — `ISDK`, `MTT4`, music commands 6 and 11 — is M6-a's
-first work.
+came off it earlier, when M3-c and M4-d moved them into `Game`, which the replay drives. The four
+the coverage instrument named as unreached — `ISDK` and `GOIN`, `MTT4`, music commands 6 and 11 —
+came off it on 2026-09-08 with M6-a-1, and the review has no gap note left to honour.
 
 ---
 
@@ -383,7 +383,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,142 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,149 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1554,7 +1554,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-f A coverage instrument** ✅ **built 2026-09-07 (§8)** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
 | **M6-0-g Mutants to a stated floor** ✅ **built 2026-09-07 (§8)** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
-| **M6-a Coverage review and the recorder** | **Ready since the gate closed 2026-09-07, and NOT what went next: [Resolution.md](Resolution.md)'s RS-0 did, on 2026-09-07.** That is a scheduling fact rather than a change of plan — the resolution track asks the original nothing, so nothing it does can reach a fixture — and it is written here because "next" is a status, and a status ages worse than a number (AGENTS.md §6). What M6-a's own scope is: first the four gaps M6-0-f's instrument named (`ISDK` and `GOIN` run rather than trapped, a test that rolls `MTT4`, a tune that reaches music commands 6 and 11); then every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
+| **M6-a Coverage review and the recorder** | **M6-a-1 is built, 2026-09-08 (§8)**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. What is left of the row: the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. (The row was READY from the gate closing on 2026-09-07 and was not what went next — [Resolution.md](Resolution.md)'s RS-0 to RS-4 were, and neither track blocks the other because the resolution track asks the original nothing.) | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
 | **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
@@ -1833,6 +1833,64 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-a-1: the four gaps closed, and the trader's pass never went where the port sent it.**
+
+The coverage instrument named four things no test ran (§8, M6-0-f) and they are M6-a's first item,
+because after M6-b a fixture pins what the tests ASKED and nothing can ask again. All four now run
+on both machines, and closing the second of them found a defect the oracle could still settle.
+
+**`ISDK` and `GOIN`.** No fixture had ever put a station in a bubble, so part 9 of the flight loop
+was reached by nothing: `ISDK` was run by no test and `GOIN` only ever trapped, in the escape pod's
+own suite where the docking is the caller's business. `TheDockingChecksMatchISDK` puts the planet
+and a station in the bubble and nothing else, so every exit the frame can take is one part 9 chose,
+and fails each of the four checks on its own -- a hostile station, a nose outside the cone, an
+approach off the line, a roll across the slot -- with `DELTA` on both sides of five so that `MA62`
+takes `MA67`'s bump and `JMP DEATH`. Eleven approaches, three docked, four fatal, four survivable;
+`MCNT` is zero and the station is slot 1, which keeps `TIDY` out of the frame so the orientation the
+case asks for is the orientation part 9 reads. **The check this build omits is pinned with them**:
+the cassette calls `SPS4` for the vector to the STATION and refuses a negative z, and this build
+calls `SPS1` for the vector to the PLANET and compares it UNSIGNED, so a planet dead astern reads
+as 224 and sails past a threshold of 89. There is a case that docks with the planet behind it.
+
+**`MTT4`, and the defect.** Reaching part 1 takes three rolls in a row to agree -- under 35, then a
+position, then an overflow -- and of the four generator seeds the spawner's sweep carried, three
+stopped at the 35 and the fourth rolled an asteroid. Two seeds were chosen against a model of
+`DORND` so that both reach it and then part at `BMI nodo`; sixty of the sweep's 204 cases are
+traders now. **And the first fixture ever to roll one disagreed with the original immediately.**
+`.MTT4` ends `JSR NWSHP` and the next byte is `.TT100` -- the TOP of part 2, where `JSR M%` is --
+so a trader costs a second flight frame and a second `DEC DLY / DEC MCNT`, and parts 3 and 4 do not
+run on that pass at all: no police, no bounty hunters, no Thargoid. The port continued into part 3
+from both of part 2's `JSR NWSHP`s. The addresses settle it (`MTT4` &84C3, `TT100` &84ED, `MTT1`
+&8562) and so does the annotation, which says "fall through into the main game loop again" in
+words. `SpawnPass` gains `Restarted`, `RunSpawning` answers a `SpawnOutcome`, and `Game::Step` runs
+the second frame in a loop that provably runs at most twice -- `MCNT` was zero when the head
+decremented it, so the second head takes it to 255. The fixture patches `TT100` with a counter and
+a jump to the stop address, the way `FlightLoopTests` patches `DEATH`, `DOENTRY` and `ESCAPE`, so
+the run ends where the game's pass would have left parts 1 to 4 and the probe says by which door.
+This is rule 1's second case: the port was wrong, and the record is not needed.
+
+**Music commands 6 and 11.** `bdro6` increments a byte nothing reads and `bdro11` is a
+`JMP BDRO9`, and neither shipped tune contains either. `TheCommandsNoTunePlaysMatchBDirqhere`
+starts the player as `startat` starts it and then moves both pointers to a byte inside `comudat`
+from which the nibbles reach them -- the game's own data and the game's own player, entered
+elsewhere; a synthetic tune would mean the port reading its notes from somewhere other than
+`MUSIC_DATA`, which is changing the port to suit a test. Sixty interrupts at each of three entries,
+compared on every register write and every player byte. **The entries had to be measured on the
+ORACLE and not on the port**, which is the finding worth keeping: command 11's rewind is
+unconditional, so a run of commands with no rest and no terminator repeats for ever -- and the
+port's `COMMANDS_PER_PASS` cuts that off after four thousand commands while the interpreter spins
+until the fixture's budget runs out. The port is the wrong instrument for finding an entry that
+TERMINATES, because it is the one with the guard. `value4` is seeded to three, which is what a
+tune's own command 12 would have left.
+
+454 tests green on the portable runner with the oracle present, all eighteen checks, and the
+review reads 269 stems run and 15 exempted against 265 and 19 -- the four gaps and nothing else.
+The ledger's three `<!--uncovered:-->` notes are replaced by what closed them. `origin-markers`
+4,142 → 4,149, which is rule 5's one allowed direction before M6: the new branch carries the labels
+the branch it replaces carried (rule 4). No mutant's `find` names a line in the two files that
+changed, so nothing was re-anchored; `GameLoop.cpp` has no mutant at all, and the floor of M6-0-g
+does not name it.
 
 **2026-09-07 — M6-0-g: the floor, and twenty-three mutants on the six files that had none.**
 
