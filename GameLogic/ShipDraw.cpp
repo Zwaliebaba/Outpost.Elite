@@ -13,7 +13,7 @@
 
 namespace Elite
 {
-  /// 6502: LDA #18 -- what byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
+  /// 6502: what byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
   inline constexpr std::uint8_t EXPLOSION_COUNTER_START = 18;
 
   namespace
@@ -39,12 +39,12 @@ namespace Elite
 
   KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept
   {
-    // The `ORA #1` is what makes the divide below safe, and it is deliberate rather than defensive:
-    // a ship exactly on the plane of the screen has z_lo = 0, and the difference between dividing
-    // by zero and dividing by one is invisible at this scale.
+    // Forcing bit 0 of the low byte is what makes the divide below safe, and it is deliberate
+    // rather than defensive: a ship exactly on the plane of the screen has z_lo = 0, and the
+    // difference between dividing by zero and dividing by one is invisible at this scale.
     const SignMag24 distance{static_cast<std::uint8_t>(_ship.z.lo | 0x01u), _ship.z.hi, _ship.z.sgn};
 
-    // 6502: DV9's STA Q -- the divide leaves the scaled divisor in `Q`, and for a ship drawn as a
+    // 6502: DV9 -- the divide leaves the scaled divisor in `Q`, and for a ship drawn as a
     // dot that is the frame's Q the altitude check reads (`EndFlightFrame`). The kernel keeps its
     // scratch since M2-b; this byte is recomputed here for that one reader, and `K` is the block
     // this routine returns since M2-c-3.
@@ -80,24 +80,25 @@ namespace Elite
       return ScreenOffset{quotient.low, high, 0, false};
     }
 
-    // 6502: the two's complement negation. `ADC #1` runs with the carry the CPX left CLEAR, so it
-    // adds exactly one -- the one place in this file where the incoming carry is not part of the
-    // sum, and the only one where reading it as `+ 1 + C` would still be right. The original writes
+    // 6502: the two's complement negation. The added one runs with the carry the comparison left
+    // CLEAR, so it adds exactly one -- the one place in this file where the incoming carry is not
+    // part of the sum, and the only one where reading it as `+ 1 + C` would still be right. The
+    // original writes
     // the negated low byte back into `K`; nothing reads it there, and it is the returned value.
     const AddResult low = AddWithCarry(static_cast<std::uint8_t>(quotient.low ^ 0xFFu), 1, false);
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(high ^ 0xFFu), 0, low.carry);
 
-    // 6502: PL44 -- CLC, then PL6's RTS.
+    // 6502: PL44 -- the carry cleared, then PL6's return.
     return ScreenOffset{low.value, negated.value, negated.value, false};
   }
 
   ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept
   {
-    // 6502: LDA INWK / STA P / LDA INWK+1 / STA P+1 / LDA INWK+2 / JSR PLS6 -- the x coordinate.
+    // 6502: PLS6 on the x coordinate.
     const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.x);
     if (across.overflow)
     {
-      // 6502: BCS PL2-1, which is PROJ's own RTS one byte before the next routine begins.
+      // 6502: PL2-1, which is PROJ's own return one byte before the next routine begins.
       return ProjectResult{true, across.a};
     }
 
@@ -131,7 +132,8 @@ namespace Elite
      * offset `_y`. The original walks Y forwards and then back, which is why the entry's four bytes
      * come out at `_y - 1` to `_y + 2` rather than starting where Y is.
      *
-     * Returns false where the original does `BCS nono-2`. That target is a `PLA / PLA` above `nono`
+     * Returns false where the original branches to `nono-2`. That target pulls two bytes off the
+     * stack above `nono`
      * which throws away this routine's own return address, so the failure does not come back here --
      * it returns to SHPPT's caller with the ship marked as not drawn. A bool and an early return say
      * the same thing without needing a stack.
@@ -173,7 +175,7 @@ namespace Elite
       return;
     }
 
-    // A byte, and the comparison is on a byte, because the original's is: `INY / CPY XX20 / BCC`.
+    // A byte, and the comparison is on a byte, because the original's index and limit are bytes.
     // A heap longer than 253 bytes would wrap Y and loop forever here exactly as it does there;
     // the length comes from byte 5 of a blueprint, and the largest of the thirty-three is 157.
     //
@@ -205,24 +207,24 @@ namespace Elite
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
-      return _carryIn; // 6502: BEQ LL10-1 -- a bare RTS, and the flag is the caller's
+      return _carryIn; // 6502: LL10-1 -- a bare return, and the flag is the caller's
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
     DrawShipLines(_canvas, _heap, _ship.heap, _picture);
 
-    // 6502: LL155's exit -- `CMP #4 / BCC LL82` clears it for a heap with no line on it, and the
-    // `CPY XX20 / BCC LL27` that ends the loop leaves it set for every heap that had one.
+    // 6502: LL155's exit -- the test against 4 clears it for a heap with no line on it, and the
+    // comparison that ends the drawing loop leaves it set for every heap that had one.
     return _heap.Read(_ship.heap) >= 4u;
   }
 
   void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept
   {
-    _heap.Write(_run.Byte(1u), EXPLOSION_COUNTER_START); // 6502: LDY #1 / LDA #18 / STA (XX19),Y
-    _heap.Write(_run.Byte(2u), _explosionCount);         // 6502: LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y
+    _heap.Write(_run.Byte(1u), EXPLOSION_COUNTER_START); // 6502: 18 into byte 1 of the heap
+    _heap.Write(_run.Byte(2u), _explosionCount);         // 6502: byte 7 of the blueprint into byte 2
 
-    // 6502: .EE55 INY / JSR DORND / STA (XX19),Y / CPY #6 / BNE EE55 -- the first roll takes the
-    // carry `EE51` left, and each later one the clear that `CPY #6` leaves while Y is under six.
+    // 6502: EE55 -- four random bytes into the heap. The first roll takes the carry `EE51` left,
+    // and each later one the clear the loop's own comparison leaves while the index is under six.
     bool carry = _carryIn;
     for (std::uint16_t byte = 3u; byte <= 6u; ++byte)
     {
@@ -239,7 +241,8 @@ namespace Elite
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
-    // 6502: ORA K3+1 / BNE nono. See the header -- this is not the carry, and the difference is
+    // 6502: the two high bytes ORed together, and anything set goes to nono. See the header -- this
+    // is not the carry, and the difference is
     // visible whenever `PLS6` overflows on its second test rather than its first.
     const bool offScreen = (projected.a | _screen.x1) != 0u || _screen.y >= static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 2);
 
@@ -251,8 +254,8 @@ namespace Elite
     if (offScreen || !StorePoint(_heap, heap, _screen, 2, _screen.y) ||
         !StorePoint(_heap, heap, _screen, 6, AddWithCarry(_screen.y, 1, false).value))
     {
-      // 6502: nono -- LDA #%11110111 / AND XX1+31. Reached four ways, and all four leave the ship
-      // marked as not on the screen.
+      // 6502: nono -- one bit masked out of the state byte. Reached four ways, and all four leave
+      // the ship marked as not on the screen.
       _ship.state = Without(_ship.state, ShipStateBit::OnScreen);
       return;
     }
@@ -280,7 +283,7 @@ namespace Elite
     const std::array<std::uint8_t, 3> magnitude = {_vector.x.lo, _vector.y.lo, _vector.z.lo};
     const std::array<std::uint8_t, 3> sign = {_vector.x.hi, _vector.y.hi, _vector.z.hi};
 
-    // Three vectors of six, and the loop in the original ends on `CMP #17 / BCC`, so it runs for
+    // Three vectors of six, and the loop in the original stops at 17, so it runs for
     // X = 0, 6 and 12 and stops at 18 rather than testing a count.
     for (std::size_t vector = 0; vector < 3u; ++vector)
     {
@@ -288,15 +291,15 @@ namespace Elite
 
       // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
       // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
-      // answer and not of the first product. 6502: STA Q / JSR FMLTU / STA T ... STA S.
+      // answer and not of the first product (6502: `LL38`).
       SignMag16 total{MultiplyByLog(_geometry.scaledOrientation[base], magnitude[0], false).value,
                       static_cast<std::uint8_t>(sign[0] ^ _geometry.scaledOrientation[base + 1])};
 
-      // 6502: STA Q / JSR FMLTU / STA Q -- the second product goes straight back over its own
-      // multiplier, and `LL38` combines it with the total under the two signs.
+      // 6502: the second product goes straight back over its own multiplier, and `LL38` combines
+      // it with the total under the two signs.
       std::uint8_t term = MultiplyByLog(_geometry.scaledOrientation[base + 2], magnitude[1], false).value;
       SignedSum combined = CombineSigned(static_cast<std::uint8_t>(sign[1] ^ _geometry.scaledOrientation[base + 3]), term, total);
-      total = SignMag16{combined.value, combined.sign}; // 6502: STA T ... LDA T / STA R
+      total = SignMag16{combined.value, combined.sign}; // 6502: back through `T` into `R`
 
       term = MultiplyByLog(_geometry.scaledOrientation[base + 4], magnitude[2], false).value;
       combined = CombineSigned(static_cast<std::uint8_t>(sign[2] ^ _geometry.scaledOrientation[base + 5]), term, total);
@@ -308,13 +311,13 @@ namespace Elite
 
   PreparedSlope PrepareSlope(Slope _slope, SignMag16 _distance) noexcept
   {
-    PreparedSlope prepared{_distance, _slope.gradient, 0}; // 6502: LDA XX12+2 / STA Q
+    PreparedSlope prepared{_distance, _slope.gradient, 0}; // 6502: the gradient into Q
 
     const std::uint8_t original = _distance.hi; // 6502: S
     if ((original & 0x80u) != 0u)
     {
-      // (S R) = -(S R). The low byte is `LDA #0 / SEC / SBC R`, and the high byte's `ADC #0` runs
-      // on that subtraction's carry, so the two are one sixteen-bit negation and not two eight-bit
+      // (S R) = -(S R). The low byte is subtracted from zero and the high byte adds nothing on
+      // that subtraction's carry, so the two are one sixteen-bit negation and not two eight-bit
       // ones.
       const SubResult low = SubtractWithCarry(0, _distance.lo, true);
       prepared.magnitude.lo = low.value;
@@ -336,8 +339,8 @@ namespace Elite
       std::uint8_t low = 0;
       std::uint8_t high = 0;
 
-      // `LSR S / ROR R / ASL Q` -- one shift of the multiplicand and one bit off the top of the
-      // multiplier. All three bytes are this routine's own since M2-c-2.
+      // One shift of the multiplicand, rippling through both its bytes, and one bit off the top of
+      // the multiplier. All three bytes are this routine's own since M2-c-2.
       const auto step = [&_prepared]() noexcept
       {
         const bool intoR = (_prepared.magnitude.hi & 0x01u) != 0u;
@@ -351,7 +354,7 @@ namespace Elite
 
       /*
        * The first shift is OUTSIDE the loop, and that is the whole shape of the routine rather than
-       * a detail: the entry does `LSR S / ROR R / ASL Q / BCC LL126`, and `LL126` -- which is where
+       * a detail: the entry shifts both ends once and branches into `LL126`, which -- being where
        * the "have we run out of multiplier" test lives -- shifts again before testing. So a Q of
        * zero still gets TWO shifts, not one, and the port shifted once until the sweep said
        * otherwise.
@@ -413,7 +416,7 @@ namespace Elite
       return SlopeStep{low, high, _prepared.divisor};
     }
 
-    /// 6502: LL133 -- negate (Y X). Both loops exit with the carry clear, so the `ADC #1` adds one.
+    /// 6502: LL133 -- negate (Y X). Both loops exit with the carry clear, so the added one is one.
     SlopeStep NegateStep(SlopeStep _step) noexcept
     {
       const AddResult low = AddWithCarry(static_cast<std::uint8_t>(_step.low ^ 0xFFu), 1, false);
@@ -432,7 +435,7 @@ namespace Elite
 
   SlopeStep StepAlongX(Slope _slope, std::uint8_t _distanceHigh, std::uint8_t _xLow) noexcept
   {
-    // 6502: LL120 -- LDA XX15 / STA R, so whatever the caller left in `R` is dead here.
+    // 6502: LL120 -- `R` is overwritten on entry, so whatever the caller left there is dead.
     const PreparedSlope prepared = PrepareSlope(_slope, SignMag16{_xLow, _distanceHigh});
     const SlopeStep step = (_slope.steep != 0u) ? DivideSlope(prepared) : MultiplySlope(prepared);
     return FinishStep(step, prepared.sign);
@@ -449,7 +452,7 @@ namespace Elite
   {
 
     /// The move every one of `LL118`'s four clamps ends with: add the sixteen-bit step to the OTHER
-    /// coordinate. `TXA / CLC / ADC lo / STA lo` then `TYA / ADC hi / STA hi`.
+    /// coordinate, as a sixteen-bit addition out of the two registers.
     /// `_math` takes the leftover `Q` with it: see `SlopeStep::divisorLeft`.
     void AddStep(SlopeStep _step, std::uint8_t& _low, std::uint8_t& _high, MathWorkspace& _math) noexcept
     {
@@ -477,8 +480,8 @@ namespace Elite
       a = 0;
     }
 
-    // 6502: LL119 -- x1_hi is non-zero and positive, so the point is off the RIGHT edge. The `DEC S`
-    // is what makes the step land on 255 rather than 256.
+    // 6502: LL119 -- x1_hi is non-zero and positive, so the point is off the RIGHT edge. Stepping
+    // the high byte down is what makes the step land on 255 rather than 256.
     if (a != 0u)
     {
       AddStep(StepAlongX(_slope, static_cast<std::uint8_t>(a - 1u), _point.xLow), _point.yLow, _point.yHigh, _math);
@@ -529,7 +532,7 @@ namespace Elite
     }
 
     /// True when both ends are so far off the same side that no part of the line can be on screen.
-    /// 6502: the four `BPL LL109` / `BMI LL109` tests at LL83, which are only reached when neither
+    /// 6502: the four sign tests at LL83, which are only reached when neither
     /// end is on the screen. `XX12+2` is the byte the original works in and `LL115` overwrites it
     /// on every path that gets past here; the port keeps writing it until M2-c-3 takes `XX12`.
     bool BothEndsBeyondTheSameEdge(Line16 _line, GeometryWorkspace& _geometry) noexcept
@@ -551,8 +554,8 @@ namespace Elite
         return true;
       }
 
-      // And both below the bottom. The `CMP #Y*2` is only there for its carry -- the byte it
-      // produces is thrown away and the `SBC #0` under it is what gets kept.
+      // And both below the bottom. The comparison against the view's height is only there for its
+      // carry -- the byte it produces is thrown away and the subtraction under it is what gets kept.
       const SubResult firstLow = SubtractWithCarry(_line.first.yLow, SPACE_VIEW_BOTTOM, true);
       _geometry.dotProducts[2] = SubtractWithCarry(_line.first.yHigh, 0, firstLow.carry).value;
 
@@ -577,7 +580,7 @@ namespace Elite
       _geometry.dotProducts[5] = downHigh.value;
 
       // The direction of the slope, which is the two differences' signs EOR'd -- taken now, because
-      // both are about to be made positive. 6502: STA S, and `LL116` stores it in `XX12+3`.
+      // both are about to be made positive. 6502: `LL116` stores it in `XX12+3`.
       const std::uint8_t direction = static_cast<std::uint8_t>(downHigh.value ^ _geometry.dotProducts[3]);
 
       if ((_geometry.dotProducts[5] & 0x80u) != 0u)
@@ -706,7 +709,7 @@ namespace Elite
     // 6502: LLX117 -- put the other end in the near slot and clip that too.
     SwapEnds(_line);
     MovePointOnScreen(_line.first, slope, _math);
-    result.swap = static_cast<std::uint8_t>(result.swap - 1u); // 6502: DEC SWAP
+    result.swap = static_cast<std::uint8_t>(result.swap - 1u); // 6502: SWAP steps down
 
     result.line = RepackClipped(_line);
     return result;
@@ -714,7 +717,7 @@ namespace Elite
 
   ClipResult ClipLine(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip) noexcept
   {
-    // 6502: LL145 -- LDA #0 / STA SWAP, which `LL147` does not do.
+    // 6502: LL145 -- `SWAP` zeroed, which `LL147` does not do.
     return ClipLineKeepingSwap(_line, _geometry, _math, _clip, 0u, _line.second.xHigh);
   }
 
@@ -722,8 +725,8 @@ namespace Elite
   {
 
     /// 6502: LL15 and LL21 -- copy the ship's three orientation vectors into XX16 and scale each
-    /// magnitude down by 197. The `ASL A` on the magnitude puts its top bit into the carry and the
-    /// `ROL A` on the sign byte rotates it in, so what gets divided is the pair read as nine bits.
+    /// magnitude down by 197. Doubling the magnitude puts its top bit into the carry and the sign
+    /// byte rotates it in, so what gets divided is the pair read as nine bits.
     void ScaleOrientation(const Ship& _work, GeometryWorkspace& _geometry) noexcept
     {
       const std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _work.ToBytes();
@@ -735,7 +738,7 @@ namespace Elite
         _geometry.scaledOrientation[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
       }
 
-      constexpr std::uint8_t SCALE = 197; // 6502: LDA #197 / STA Q
+      constexpr std::uint8_t SCALE = 197; // 6502: 197 into Q
       for (int index = 16; index >= 0; index -= 2)
       {
         const std::size_t at = static_cast<std::size_t>(index);
@@ -762,7 +765,7 @@ namespace Elite
     /// edge-on comes out invisible.
     std::uint8_t FaceVisibility(Vector16 _vector, const GeometryWorkspace& _geometry) noexcept
     {
-      // 6502: STA Q / JSR FMLTU / STA T ... STA S -- the first product and the sign it is summed under.
+      // 6502: the first product, and the sign it is summed under.
       SignMag16 total{MultiplyByLog(_vector.x.lo, _geometry.dotProducts[0], false).value,
                       static_cast<std::uint8_t>(_geometry.dotProducts[1] ^ _vector.x.hi)};
 
@@ -773,7 +776,7 @@ namespace Elite
       term = MultiplyByLog(_vector.z.lo, _geometry.dotProducts[4], false).value;
       combined = CombineSigned(static_cast<std::uint8_t>(_vector.z.hi ^ _geometry.dotProducts[5]), term, total);
 
-      // `BIT S / BMI P%+4 / LDA #0` -- the branch skips the zero, so a negative S keeps the answer.
+      // The sign is tested and the branch skips the zero, so a negative S keeps the answer.
       return ((combined.sign & 0x80u) != 0u) ? combined.value : std::uint8_t{0};
     }
 
@@ -782,9 +785,9 @@ namespace Elite
      * plus or minus the rotated vertex, under the two signs, negated again when the subtraction
      * crossed zero.
      *
-     * The two halves are written differently in the original -- `LDA #1 / SBC XX15` against
-     * `EOR #FF / ADC #1`, and the sign flip on opposite sides of the branch that increments the high
-     * byte -- and they compute the same thing, which is why one function serves both.
+     * The two halves are written differently in the original -- one subtracts from one, the other
+     * complements and adds one, with the sign flip on opposite sides of the branch that increments
+     * the high byte -- and they compute the same thing, which is why one function serves both.
      */
     [[nodiscard]] SignMag24 PlaceVertexAxis(std::uint8_t _productLow, std::uint8_t _productSign, const Ship& _work,
                                             std::size_t _axis) noexcept
@@ -819,8 +822,8 @@ namespace Elite
       const SubResult negated = SubtractWithCarry(1, placed.lo, high.carry);
       placed.lo = negated.value;
 
-      // `BCC P%+4 / INC XX15+1`, so the increment happens when the negation did NOT borrow -- which
-      // is only when the low byte was zero and the carry rippled all the way up.
+      // The increment happens when the negation did NOT borrow -- which is only when the low byte
+      // was zero and the carry rippled all the way up.
       if (negated.carry)
       {
         placed.hi = static_cast<std::uint8_t>(placed.hi + 1u);
@@ -841,7 +844,7 @@ namespace Elite
     }
 
     /// Whether the two faces a nibble pair names are both invisible, which is what makes a vertex or
-    /// an edge not worth drawing. 6502: the four `LDA XX2,X / BNE` tests in parts 6 and 10.
+    /// an edge not worth drawing. 6502: the four visibility tests in parts 6 and 10.
     bool EitherFaceVisible(const GeometryWorkspace& _geometry, std::uint8_t _pair) noexcept
     {
       return _geometry.faceVisible[static_cast<std::size_t>(_pair & 0x0Fu)] != 0u || _geometry.faceVisible[static_cast<std::size_t>(_pair >> 4)] != 0u;
@@ -893,17 +896,17 @@ namespace Elite
   /*
    * ---- part 1: is there anything to draw at all? ------------------------------------------------
    *
-   * Four ways of not being drawn, and the caller performs the two that leave the routine: `LL25`'s
-   * `JMP PLANET` and `LL14`'s `JMP DOEXP` are tail jumps into `PlanetDraw.cpp` and `Explosion.cpp`,
-   * so the stage answers which one rather than making the call. `EE51` and the `EE55` cloud
+   * Four ways of not being drawn, and the caller performs the two that leave the routine: `LL25`
+   * and `LL14` end in tail jumps into `PlanetDraw.cpp` and `Explosion.cpp`, so the stage answers
+   * which one rather than making the call. `EE51` and the `EE55` cloud
    * seeding ARE part 1 and stay.
    */
   enum class Presence : std::uint8_t
   {
     Draw,     ///< fall through to `EE28` -- there is a ship to draw
     Body,     ///< 6502: LL25 -- the planet or the sun, which is a different routine
-    Erased,   ///< 6502: EE51, and `LL14`'s `JMP EE51` -- rubbed out and gone
-    Exploded, ///< 6502: LL14's `JMP DOEXP` -- off the screen and still burning
+    Erased,   ///< 6502: EE51, which `LL14` also jumps to -- rubbed out and gone
+    Exploded, ///< 6502: `LL14`'s other exit, into `DOEXP` -- off the screen and still burning
   };
 
   [[nodiscard]] Presence TestPresence(ShipRender& _render, Ship& _slot, ShipType _type, Rng& _rng, bool _carryIn) noexcept
@@ -917,7 +920,7 @@ namespace Elite
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
     if (Has(_render.work.traits, TraitBit::Remove))
     {
-      // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
+      // 6502: EE51 as a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
       static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture));
       return Presence::Erased;
     }
@@ -934,7 +937,7 @@ namespace Elite
       _slot.acceleration = 0;
       _slot.pitchCounter = 0;
 
-      // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
+      // 6502: EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
       const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture);
       SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
@@ -960,7 +963,7 @@ namespace Elite
       // 6502: LL14.
       if (!Has(_render.work.state, ShipStateBit::Exploding))
       {
-        // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        // 6502: EE51 -- and the flag is `LL9`'s exit
         static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false, &_render.picture));
         return Presence::Erased;
       }
@@ -976,7 +979,7 @@ namespace Elite
    * ---- part 2: how far away is it, and is that too far? ----------------------------------------
    *
    * Writes `XX4` into the frame, and answers whether a dot will do. The caller draws the dot,
-   * because `LL13`'s `JMP SHPPT` is a tail call and this stage's job is the measurement.
+   * because `LL13` ends in a tail jump to `SHPPT` and this stage's job is the measurement.
    */
   enum class Range : std::uint8_t
   {
@@ -992,8 +995,8 @@ namespace Elite
     _render.geometry.projectedVertices[laserVertex] = 255;
     _render.geometry.projectedVertices[static_cast<std::size_t>(laserVertex) + 1u] = 255;
 
-    // z divided by sixteen into (A T), and then by another eight. The `ROR A` after the fourth
-    // `LSR A` picks up the carry that shift left, so the two halves are one number and not two.
+    // z divided by sixteen into (A T), and then by another eight. The rotate after the fourth
+    // shift picks up the carry that shift left, so the two halves are one number and not two.
     std::uint8_t distanceLow = _render.work.z.lo;
     std::uint8_t distanceHigh = _render.work.z.hi;
     for (int shift = 0; shift < 3; ++shift)
@@ -1081,9 +1084,9 @@ namespace Elite
       _render.position[6] = _render.geometry.dotProducts[4];
       _render.position[8] = _render.geometry.dotProducts[5];
 
-      // 6502: LDY #4 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #17 / LDA (XX0),Y / ADC XX0+1 /
-      // STA V+1 -- V is the faces, and in this port it is `at`: the blueprint carries them as a
-      // span, so the pointer set-up is an index starting at zero and nothing else (M4-b).
+      // 6502: `V` is built from bytes 4 and 17 of the blueprint and points at the faces; in this
+      // port it is `at`, because the blueprint carries them as a span, so the pointer set-up is an
+      // index starting at zero and nothing else (M4-b).
       std::uint8_t at = 0;
       do
       {
@@ -1138,8 +1141,8 @@ namespace Elite
               third = static_cast<std::uint8_t>(third >> 1);
             }
 
-            // 6502: STA R / LDA XX12+5 / STA S / LDA XX18+6 / STA Q / LDA XX18+8 / JSR LL38, and the
-            // same for x and y: each is the halved coordinate under the ship's sign, plus the vertex.
+            // 6502: `LL38` on the z pair, and the same for x and y: each is the halved coordinate
+            // under the ship's sign, plus the vertex.
             const SignedSum alongZ = CombineSigned(_render.position[8], _render.position[6], SignMag16{third, _render.geometry.dotProducts[5]});
             if (!alongZ.carry)
             {
@@ -1259,7 +1262,7 @@ namespace Elite
         // than the distance, LL61 when it is not.
         std::uint8_t x = vertexSlot;
 
-        // 6502: LDA T / STA Q -- the distance, and the divide is (U R) = 256 * x / distance. `LL28`
+        // 6502: the distance into `Q`, and the divide is (U R) = 256 * x / distance. `LL28`
         // leaves U as it was, which is the zero the halving loop above ended on. `Q` is written as
         // well as read here because, for the last vertex of the last ship drawn, it is the frame's Q
         // the altitude check reads (`EndFlightFrame`) -- unless the clipper writes it after.
@@ -1416,8 +1419,8 @@ namespace Elite
     std::uint8_t heapLimit = 0; // 6502: T1 -- how many heap bytes this blueprint allows
     std::uint8_t edgeIndex = 0; // 6502: XX17
 
-    // 6502: LDY #3 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #16 / LDA (XX0),Y / ADC XX0+1 /
-    // STA V+1 -- V is the edges, which the blueprint carries as a span; V's index starts at 0.
+    // 6502: `V` is built from bytes 3 and 16 of the blueprint and points at the edges, which the
+    // blueprint carries as a span here; the index starts at 0.
     walker = 0;
     heapLimit = _render.blueprint.heapBytes;
 
@@ -1496,7 +1499,7 @@ namespace Elite
    */
   namespace
   {
-    /// 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
+    /// 6502: `LL14`'s tail jump into `DOEXP` -- age the cloud by one frame and draw it, which is how the last
     /// frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     /// vertices part 8 projected, which `DOEXP` copies onto the ship's line heap on its first frame.
     void DrawExplosion(Universe& _universe) noexcept
@@ -1516,21 +1519,22 @@ namespace Elite
     case Presence::Draw:
       break;
     case Presence::Body:
-      // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
+      // 6502: LL25 -- a tail jump to `PLANET`, taken for a type with bit 7 set. `INWK` is the body
+      // and `TYPE`
       // decides which of the two it is, exactly as the tail jump does.
       DrawPlanetOrSun(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _universe.rng, _universe.work,
                       _universe.projection, _universe.flight.type, &_universe.picture);
       return;
     case Presence::Erased:
-      return; // 6502: EE51 -- and the flag it leaves is `LL9`'s exit, which nothing reads
+      return; // 6502: EE51, and the flag it leaves is `LL9`'s exit, which nothing reads
     case Presence::Exploded:
-      DrawExplosion(_universe); // 6502: LL14's JMP DOEXP
+      DrawExplosion(_universe); // 6502: `LL14`'s tail jump into `DOEXP`
       return;
     }
 
     if (MeasureRange(render) == Range::Dot) // 6502: part 2
     {
-      // 6502: LL13's JMP SHPPT
+      // 6502: `LL13`'s tail jump to `SHPPT`
       DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection, &_universe.picture);
       return;
     }
