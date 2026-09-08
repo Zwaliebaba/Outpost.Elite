@@ -558,6 +558,13 @@ struct Anchor
 };
 ```
 
+**The cheap way to keep the no-collision property is OPPOSITE ROW PARITIES.** With `rowStride = 2`
+every unanchored faithful row lands on a wide row of `rowOffset`'s parity; give every anchor the
+other parity and an anchored block can never share a wide row with an unanchored one, which leaves
+only anchor-against-anchor overlaps to think about — a handful of column ranges on one row. Found
+while drafting the trade screens' tables, where the first attempt collided seventeen times on
+exactly that. The status screen anchors odd and offsets even; the trade screens do the reverse.
+
 **And a table anchored INTO the centred layout cannot be written at all**, which the collision sweep
 found the first time it was run: a 40-column screen placed at column 20 already covers columns 20 to
 59, so every anchor target inside the wide grid is a cell the offsets already reach. A re-flowed

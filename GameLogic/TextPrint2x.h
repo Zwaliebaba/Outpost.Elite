@@ -104,6 +104,13 @@ namespace Elite
    * 40-column screen placed at column 20 already covers columns 20 to 59. A re-flowed screen has
    * to move its offsets as well as its blocks.
    *
+   * AND THE CHEAP WAY TO KEEP IT IS OPPOSITE ROW PARITIES, which is worth knowing before writing a
+   * table rather than after the sweep rejects three of them. With `rowStride = 2`, every unanchored
+   * faithful row lands on a wide row of the same parity as `rowOffset`; give every anchor the other
+   * parity and an anchored block can never share a wide row with an unanchored one, so the only
+   * collisions left to think about are between anchors, which are a handful of column ranges on one
+   * row. The status screen anchors odd and offsets even; the trade screens do the reverse.
+   *
    * NO `wrapWidth` YET, and section 6.2 lists one. It belongs to the data screen and the briefings,
    * which are the only screens whose text is justified, and it cannot be written before the sink
    * that re-wraps exists to read it: a field nothing reads is a claim the code does not keep. The
