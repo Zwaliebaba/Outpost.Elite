@@ -835,12 +835,17 @@ arithmetic agreeing with the original by chance; it is a block of the original's
 the record.
 
 So the committed fixture would carry roughly 8 MB of the original verbatim, and that is a different
-proposition from "the fixture holds answers, not the image". **One caveat, stated because it cuts the
-owner's way and not mine**: this is the WHOLE corpus, before R-f folds the 73 heavy tests into
-digests. Those tests are the drawing and whole-frame comparisons — the ones whose records are most
-likely to be long runs of screen — so the proportion surviving into the ~25 MB fixture could be
-materially lower. Measuring that needs the digests built first, which is piece (3), which is the
-thing waiting on this ruling.
+proposition from "the fixture holds answers, not the image". **That caveat was stated because it cut the
+owner's way, and MEASURING IT SHOWED IT CUTS THE OTHER WAY (M6-b-4, §8).** The 37.2% is the WHOLE
+corpus. The fixture is the 222 tests R-f leaves keeping records, and over those alone it is
+**4,340,437 of 6,791,718 record bytes — 63.9%**. Folding the heavy tests into digests removes the
+arithmetic SWEEPS, whose records are computed answers carrying almost nothing of the original, and
+keeps the drawing, frame and composition comparisons, whose records are screen content, blueprints
+and text. **The digests concentrate the original's content rather than diluting it.** In absolute
+terms the ~24.6 MB fixture would hold **4.34 MB of bytes the assembled original also holds
+contiguously**, in 441,993 runs, the longest still 2,024. The guess that this needed the digests
+built first was wrong: running the light tests ALONE measures exactly the records the fixture would
+hold, whichever of them asks for one first.
 
 Where those 19,112 addresses fall says the split did its job: &CF00–&FAFF holds 7,832 of them,
 &0400–&20FF 5,137, &B700–&C6FF 3,947 and &9200–&99FF 1,509 — and **&4000–&67FF, the bitmap, drops
@@ -1941,6 +1946,46 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-b-4: the fixture's OWN verbatim figure, and the caveat cuts the other way.**
+
+Owner ruling: measure before committing anything. R-h's answer was 37.2% over the whole corpus, and
+§4.10 carried a caveat "stated because it cuts the owner's way" -- that R-f's digests would remove
+the drawing and whole-frame tests, whose records are longest runs of screen, so the fixture's own
+proportion could be materially LOWER. It is materially higher.
+
+| | record bytes | verbatim | share |
+|---|---|---|---|
+| whole corpus (295 tests) | 22,279,497 | 8,297,316 | **37.2%** |
+| the fixture (222 tests that keep records) | 6,791,718 | 4,340,437 | **63.9%** |
+
+**The caveat had the two halves the wrong way round.** The tests R-f folds into digests are the
+ARITHMETIC SWEEPS -- `SignedAdditionMatchesOverASweep` at 200,000 calls, the multiply and divide
+sweeps, `TheControlRatesMatchBUMP2AndREDU2` at 262,144 -- and their records are computed ANSWERS,
+which carry almost nothing of the original. What keeps a full record is the other 222: the drawing,
+frame and composition comparisons, whose records are screen content, blueprints and text. So the
+digests strip out the low-carry half and CONCENTRATE what is left.
+
+In absolute terms: a ~24.6 MB fixture holding **4.34 MB of bytes the assembled original also holds
+contiguously**, in 441,993 runs, the longest still 2,024. That is 17.7% of the whole fixture and
+63.9% of its memory content.
+
+**And the method the caveat assumed was unnecessary.** It said measuring this needed the digests
+built first, which is piece (3), which is the thing waiting on the ruling -- a deadlock. It is not
+one: running the 222 light tests ALONE measures exactly the records the fixture would hold, counted
+once, whichever of them asks for one first. No digest has to exist and no fixture has to be written.
+The runner gained a skip list (`OUTPOST_TEST_SKIP`, one `Suite.Method` per line) because its filter
+is a single substring and cannot say "everything except these"; attributing per-test deltas from one
+pass would have credited a shared record to whichever test ran first, which is an estimate and not
+an answer.
+
+Pass one reproduced §4.10's numbers exactly -- 8,297,316 of 22,279,497, 1,128,263 runs, longest
+2,024 -- which is the check that says the instrument has not drifted since M6-b-3 measured it.
+
+**Nothing was committed to the fixture and piece (3) has not been started.** 469 tests green on a
+plain run, all fifteen checks. The ruling this was for is the owner's: 4.34 MB of the original's own
+content, in runs of up to two thousand contiguous bytes, inside a file this repository would carry.
+
 
 **2026-09-08 — R-b scoped: the original's NAMES stay in the prose.**
 
