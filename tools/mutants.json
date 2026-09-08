@@ -854,8 +854,8 @@
         {
           "id": "ar-mu1-clc",
           "file": "GameLogic/Arith.cpp",
-          "find": "      // overflow to the caller below it.\n      return Product{0, 0, false};",
-          "replace": "      // overflow to the caller below it.\n      return Product{0, 0, true};",
+          "find": "      // drops, and it is what stops a zero multiply looking like an overflow to the caller below.\n      return Product{0, 0, false};",
+          "replace": "      // drops, and it is what stops a zero multiply looking like an overflow to the caller below.\n      return Product{0, 0, true};",
           "expect": "caught",
           "note": "`MU1` is `CLC / STX P / TXA / RTS`: a zero multiplier clears the carry as well as both halves. Would have hidden: a zero multiply reading as an overflow to the three callers that take the carry before setting it."
         },
@@ -972,8 +972,8 @@
         {
           "id": "pd-pl44-clc",
           "file": "GameLogic/PlanetDraw.cpp",
-          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (\u00a76.45).",
-          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (\u00a76.45).",
+          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
+          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
           "expect": "caught",
           "note": "A circle whose top is above the screen is ON screen -- `BMI PL44` lands on a `CLC`, not on a rejection (plan section 6.45). Would have hidden: a planet vanishing the moment its top edge left the view."
         },
