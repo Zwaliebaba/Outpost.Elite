@@ -23,9 +23,9 @@ namespace Elite
 
   std::uint8_t DoubleAndAddCoordinate(Ship& _work, std::uint8_t _from, std::uint8_t _to) noexcept
   {
-    const auto& from = _work.ComponentAt(_from); // 6502: INWK,Y / INWK+1,Y
-    auto& to = _work.PositionAt(_to);            // 6502: INWK,X to INWK+2,X
-    // 6502: LDA INWK,Y / ASL A / STA K+1 / LDA INWK+1,Y / ROL A / STA K+2.
+    const auto& from = _work.ComponentAt(_from); // 6502: the component read as two bytes
+    auto& to = _work.PositionAt(_to);            // 6502: the coordinate written as three
+    // 6502: the component doubled into the block's middle two bytes.
     KBlock total;
     const ShiftResult low = RotateLeftValue(from.lo, false);
     total.mid = low.value;
@@ -33,24 +33,25 @@ namespace Elite
     const ShiftResult high = RotateLeftValue(from.hi, low.carry);
     total.high = high.value;
 
-    // 6502: LDA #0 / ROR A / STA K+3 -- the bit that fell off the top becomes the sign byte, so the
-    // doubling cannot overflow: it widens instead.
+    // 6502: the bit that fell off the top becomes the sign byte, so the doubling cannot overflow:
+    // it widens instead.
     total.top = RotateRight(0u, high.carry).value;
 
     // The exit carry is live only on `VCSUB`'s path out to `TA64` (§6.126). `MVT1` reads `K+3`
     // and stores, so the flag dies here.
-    total = AddShipCoordinateToK(_work, total, _to).value; // 6502: JSR MVT3
+    total = AddShipCoordinateToK(_work, total, _to).value; // 6502: MVT3
 
-    // 6502: STA INWK+2,X -- and A is `K+3`, because every path through `MVT3` ends `STA K+3`.
-    to = total.Coordinate(); // 6502: LDY K+1 / STY INWK,X / LDY K+2 / STY INWK+1,X
+    // 6502: the sign byte is what `MVT3` leaves in the accumulator, because every path through it
+    // ends by storing there.
+    to = total.Coordinate(); // 6502: the block's two middle bytes become the coordinate
 
-    return static_cast<std::uint8_t>(total.top & 0x7Fu); // 6502: AND #%01111111
+    return static_cast<std::uint8_t>(total.top & 0x7Fu); // 6502: the magnitude, sign masked off
   }
 
   std::uint8_t LargestAxisFrom(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept
   {
     /*
-     * 6502: ORA K%+2,Y / ORA K%+5,Y / ORA K%+8,Y / AND #%01111111.
+     * 6502: the three axes' sign bytes ORed together, then the sign masked off.
      *
      * `Y` is a byte offset into `K%` and every caller passes a multiple of the block size, so the
      * port takes the slot instead -- the same substitution `GINF` got, and for the same reason
@@ -66,21 +67,21 @@ namespace Elite
   {
     const Ship& block = _bubble.blocks[_slot];
 
-    // 6502: LDA K%+1,Y / JSR SQUA2 / STA R.
+    // 6502: the x axis squared, and its high byte starts the running total.
     std::uint8_t running = SquareUnsigned(block.x.hi).high;
 
-    // 6502: LDA K%+4,Y / JSR SQUA2 / ADC R / BCS MA30 -- the `ADC` reads `SQUA2`'s exit carry, and
-    // that carry is never set (§6.70), so this is the plain addition it looks like.
+    // 6502: the y axis added in. The add reads the squaring's exit carry, and that carry is never
+    // set (§6.70), so this is the plain addition it looks like.
     const Product second = SquareUnsigned(block.y.hi);
     const AddResult sum = AddWithCarry(second.high, running, second.carry);
     if (sum.carry)
     {
-      return 0xFFu; // 6502: MA30 -- LDA #&FF
+      return 0xFFu; // 6502: MA30 -- saturated
     }
 
-    running = sum.value; // 6502: STA R
+    running = sum.value; // 6502: back into the running total
 
-    // 6502: LDA K%+7,Y / JSR SQUA2 / ADC R / BCC P%+4 -- and the branch skips the saturation.
+    // 6502: the z axis added in, with a branch that skips the saturation.
     const Product third = SquareUnsigned(block.z.hi);
     const AddResult total = AddWithCarry(third.high, running, third.carry);
 
@@ -89,41 +90,40 @@ namespace Elite
 
   std::uint8_t LargestShipAxis(const Ship& _work, std::uint8_t _a) noexcept
   {
-    // 6502: ORA INWK+1 / ORA INWK+4 / ORA INWK+7 -- no mask, unlike `MAS2`.
+    // 6502: the three axes' high bytes ORed together, with no mask -- unlike `MAS2`.
     return static_cast<std::uint8_t>(_a | _work.x.hi | _work.y.hi | _work.z.hi);
   }
 
   std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer, std::uint8_t _dampingDisabled) noexcept
   {
-    // 6502: LDA auto / BNE cnt2 / LDA DAMP / BNE RE1 -- two tests, and only the second returns.
+    // 6502: two tests, and only the second returns.
     if (_dockingComputer == 0u && _dampingDisabled != 0u)
     {
       return _value;
     }
 
-    // 6502: TXA / BPL BUMP -- below the centre, so bump up towards it. `BUMP`'s own `BNE RE1` is
-    // always taken from here, because X < 128 makes X + 1 <= 128.
+    // 6502: below the centre, so bump up towards it. `BUMP`'s own exit branch is always taken from
+    // here, because a value under 128 stays at or under 128 when one is added.
     if ((_value & 0x80u) == 0u)
     {
       return static_cast<std::uint8_t>(_value + 1u);
     }
 
-    // 6502: DEX / BMI RE1 -- at or above the centre, so reduce towards it, unless that has just
-    // crossed the middle.
+    // 6502: at or above the centre, so reduce towards it, unless that has just crossed the middle.
     const std::uint8_t reduced = static_cast<std::uint8_t>(_value - 1u);
     if ((reduced & 0x80u) != 0u)
     {
       return reduced;
     }
 
-    // 6502: fall into `.BUMP INX` -- which only happens from X = 128, so this puts back the 128 the
-    // `DEX` took away and the value sits still.
+    // 6502: falling into `BUMP` only happens from exactly 128, so this puts back what the decrement
+    // took away and the value sits still.
     return static_cast<std::uint8_t>(reduced + 1u);
   }
 
   Drop PlanItems(ShipType _type, std::uint8_t _count, bool _carryIn) noexcept
   {
-    // 6502: .SPIN2 STA CNT, which sets no flags, and `LDA #0` is the AI byte every child gets.
+    // 6502: SPIN2 parks the count without setting flags, and the AI byte every child gets is zero.
     // `CNT` is `PerformDrop`'s loop counter now; what this answers is the number that goes in it.
     //
     // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count,
@@ -134,8 +134,8 @@ namespace Elite
 
   bool PerformDrop(Universe& _universe, const Drop& _drop) noexcept
   {
-    // 6502: .spl BEQ oh -- the test that runs once on entry and never again, because the loop's
-    // back edge is `BNE spl+2`.
+    // 6502: the test runs once on entry and never again, because the loop's back edge re-enters
+    // below it.
     if (_drop.count == 0u)
     {
       return _drop.carryIfNone;
@@ -145,19 +145,19 @@ namespace Elite
     for (;;)
     {
       /*
-       * 6502: LDA #0 / JSR SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
+       * 6502: SFS1, spawning against the ship being processed.
        *
-       * `SFS1` ends `JSR NWSHP` followed by nothing but pulls and stores, so what it leaves in the
-       * carry is `NWSHP`'s: `NW3`'s `CLC` for a full bubble and `NWL3`'s `SEC` for a ship that was
-       * made (M2-d). Until M4-a-1 this was a seam that answered a fixed boolean, so a full bubble
-       * could not be observed here at all.
+       * `SFS1` ends by calling `NWSHP` and then does nothing but pulls and stores, so the carry it
+       * leaves is `NWSHP`'s: CLEAR for a full bubble, SET for a ship that was made (M2-d). Until
+       * M4-a-1 this was a seam that answered a fixed boolean, so a full bubble could not be
+       * observed here at all.
        */
       const bool carry = SpawnChildShip(_universe.bubble, _universe.work, _universe.rng, _universe.flight.slot, _universe.flight.type,
                                         _drop.aiFlag, _drop.type, _universe.flight.blueprint)
                            .created;
 
-      remaining = static_cast<std::uint8_t>(remaining - 1u); // 6502: DEC CNT
-      if (remaining == 0u)                             // 6502: BNE spl+2
+      remaining = static_cast<std::uint8_t>(remaining - 1u); // 6502: CNT counts down
+      if (remaining == 0u) // 6502: the loop's back edge re-enters past the entry test
       {
         return carry;
       }
@@ -166,38 +166,39 @@ namespace Elite
 
   Drop PlanDebris(Rng& _rng, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept
   {
-    // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
-    // except as a count, so half of all calls do nothing.
+    // 6502: nothing else in the routine looks at the roll except its top bit, so half of all calls
+    // do nothing.
     const RngResult roll = _rng.Next(_carryIn);
     if ((roll.value & 0x80u) == 0u)
     {
-      // 6502: BPL oh -- a bare `RTS`, so the carry the caller gets is `DORND`'s own (M2-d). It is
-      // the same answer as a count of zero and it is spelled the same way, which is not a
+      // 6502: `oh` is a bare return, so the carry the caller gets is the generator's own (M2-d).
+      // It is the same answer as a count of zero and it is spelled the same way, which is not a
       // coincidence: `oh` is the one label both paths reach.
       return {_type, 0u, 0u, roll.carry};
     }
 
     /*
-     * 6502: TYA / TAX / LDY #0 / AND (XX0),Y / AND #15.
+     * 6502: the ship type copied between two registers, then masked by the blueprint's first byte.
      *
-     * `TYA / TAX` reads as "copy Y into X", and it is -- but it goes THROUGH A, and the `AND` two
-     * instructions later reads that A rather than the random number `DORND` left there. So the
-     * count is the ship TYPE masked by the blueprint's first byte; the roll decides only whether
-     * anything is dropped at all. The oracle caught the port doing it the obvious way (§6.74).
+     * The copy reads as "move the index across", and it is -- but it goes THROUGH the accumulator,
+     * and the mask two instructions later reads that rather than the random number the generator
+     * left there. So the count is the ship TYPE masked by the blueprint; the roll decides only
+     * whether anything is dropped at all. The oracle caught the port doing it the obvious way
+     * (§6.74).
      */
     const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & _blueprint.cargo & 0x0Fu);
 
-    // 6502: and it falls into SPIN2 -- with `DORND`'s carry, which `AND` did not touch.
+    // 6502: and it falls into SPIN2, with the generator's carry, which the mask did not touch.
     return PlanItems(_type, capped, roll.carry);
   }
 
   bool DrainEnergy(FlightStatus& _status) noexcept
   {
-    // 6502: DEC ENERGY / PHP -- the flag the caller gets is this one, before the `INC` below.
+    // 6502: the flag the caller gets is this one, taken before the floor is restored below.
     _status.energy = static_cast<std::uint8_t>(_status.energy - 1u);
     const bool emptied = _status.energy == 0u;
 
-    // 6502: BNE P%+5 / INC ENERGY / PLP -- one is the floor, and the caller still hears about it.
+    // 6502: one is the floor, and the caller still hears about having reached it.
     if (emptied)
     {
       _status.energy = static_cast<std::uint8_t>(_status.energy + 1u);
@@ -208,23 +209,22 @@ namespace Elite
 
   std::uint8_t RechargeShield(FlightStatus& _status, std::uint8_t _shield) noexcept
   {
-    // 6502: .SHD INX / BEQ SHD-2 -- a full shield is put back and costs nothing.
+    // 6502: a full shield is put back and costs nothing.
     const std::uint8_t raised = static_cast<std::uint8_t>(_shield + 1u);
     if (raised == 0u)
     {
-      return static_cast<std::uint8_t>(raised - 1u); // 6502: SHD-2 is `DEX / RTS`
+      return static_cast<std::uint8_t>(raised - 1u); // 6502: SHD-2 undoes the increment and returns
     }
 
-    // 6502: and no RTS -- it falls into DENGY, so the unit comes out of the banks (§6.83).
+    // 6502: and no return -- it falls into DENGY, so the unit comes out of the banks (§6.83).
     (void)DrainEnergy(_status);
     return raised;
   }
 
   bool WithinRange(const Ship& _work, std::uint8_t _limit) noexcept
   {
-    // 6502: CMP INWK+1 / BCC FA1 / CMP INWK+4 / BCC FA1 / CMP INWK+7 / .FA1 RTS -- and the carry
-    // out of the LAST compare reached is the answer, which is why the two early exits both leave a
-    // clear one.
+    // 6502: the limit compared against each axis in turn, and the carry out of the LAST compare
+    // reached is the answer -- which is why the two early exits both leave a clear one.
     if (_limit < _work.x.hi || _limit < _work.y.hi)
     {
       return false;
@@ -235,50 +235,49 @@ namespace Elite
 
   bool IsHit(const Ship& _work, const Blueprint& _blueprint, ShipType _type) noexcept
   {
-    // 6502: CLC / LDA INWK+8 / BNE HI1 -- the z sign byte, and anything but zero means the ship is
-    // not close enough in front of us to have been hit.
+    // 6502: the z sign byte, and anything but zero means the ship is not close enough in front of
+    // us to have been hit.
     if (_work.z.sgn != 0u)
     {
       return false;
     }
 
-    // 6502: LDA TYPE / BMI HI1 -- the planet and the sun are not shootable.
+    // 6502: the planet and the sun are not shootable.
     if (IsBody(_type))
     {
       return false;
     }
 
-    // 6502: LDA INWK+31 / AND #%00100000 / ORA INWK+1 / ORA INWK+4 / BNE HI1 -- already exploding,
-    // or too far off to either side. Three tests ORed into one branch.
+    // 6502: already exploding, or too far off to either side. Three tests ORed into one branch.
     if (Has(_work.state, ShipStateBit::Exploding) || (_work.x.hi | _work.y.hi) != 0u)
     {
       return false;
     }
 
-    // 6502: LDA INWK / JSR SQUA2 / STA S / LDA P / STA R. `(S R)` is this routine's own since
-    // M2-c-3: nothing between the two squares and the compare below reads either byte.
+    // 6502: x squared into the running area. `(S R)` is this routine's own since M2-c-3: nothing
+    // between the two squares and the compare below reads either byte.
     const Product across = SquareUnsigned(_work.x.lo);
     SignMag16 area{across.low, across.high}; // 6502: (S R)
 
-    // 6502: LDA INWK+3 / JSR SQUA2 / TAX / LDA P / ADC R / STA R / TXA / ADC S / BCS TN10.
+    // 6502: y squared added in, sixteen bits wide, saturating out if it carries.
     const Product down = SquareUnsigned(_work.y.lo);
     const AddResult low = AddWithCarry(down.low, area.lo, across.carry);
     area.lo = low.value;
     const AddResult high = AddWithCarry(down.high, area.hi, low.carry);
     if (high.carry)
     {
-      return false; // 6502: .TN10 CLC / RTS -- too big to compare, which is its own "no"
+      return false; // 6502: TN10 -- too big to compare, which is its own "no"
     }
 
-    area.hi = high.value; // 6502: STA S
+    area.hi = high.value; // 6502: the area's high byte
 
     /*
-     * 6502: LDY #2 / LDA (XX0),Y / CMP S / BNE HI1 / DEY / LDA (XX0),Y / CMP R.
+     * 6502: the blueprint's target area compared against the running one.
      *
-     * A SIXTEEN-BIT COMPARE, HIGH BYTE FIRST, and `BNE HI1` is its early ANSWER rather than an
-     * early no. `HI1` is a bare `RTS`, so the branch returns the carry `CMP S` just set -- which
-     * says whether the blueprint's high byte is the larger. Only equal high bytes need the low
-     * ones compared.
+     * A SIXTEEN-BIT COMPARE, HIGH BYTE FIRST, and the branch out of it is its early ANSWER rather
+     * than an early no. `HI1` is a bare return, so the branch hands back the carry the high-byte
+     * compare just set -- which says whether the blueprint's high byte is the larger. Only equal
+     * high bytes need the low ones compared.
      *
      * The label is shared with four genuine rejections above, which is exactly why the port read
      * it as a fifth and failed on the first case it was given (§6.84).
@@ -294,29 +293,28 @@ namespace Elite
 
   void FireMissile(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: LDX #MSL / JSR FRS1 / BCC FR1 -- a full bubble means the missile stays on the rail.
+    // 6502: a full bubble means the missile stays on the rail.
     if (!SpawnShipAhead(_universe.bubble, _universe.work, ShipType::Missile, _universe.flight.speed, _universe.bubble.missileTarget,
                         _universe.flight.blueprint)
            .created)
     {
-      // 6502: .FR1 LDA #201 / JMP MESS -- "MISSILE JAMMED".
+      // 6502: FR1 -- the jammed-missile message.
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_MISSILE_JAMMED,
                   _universe.view, &_universe.picture);
       return;
     }
 
-    // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's slot and type, not the
-    // missile's.
+    // 6502: the TARGET's slot and type are what anger is raised against, not the missile's.
     const std::uint8_t target = _universe.bubble.missileTarget;
     (void)Anger(_universe.bubble, _universe.flight, target, TypeOf(_universe.bubble.slots[target]));
 
-    // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
+    // 6502: the lock is gone and so is the indicator.
     AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_NONE);
 
-    // 6502: DEC NOMSL -- one fewer on the rail.
+    // 6502: one fewer on the rail.
     _universe.commander.missiles = static_cast<std::uint8_t>(_universe.commander.missiles - 1u);
 
-    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false); // 6502: LDY #sfxwhosh / JMP NOISE
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false); // 6502: the launch effect
   }
 
   /*
@@ -330,7 +328,7 @@ namespace Elite
   void StirTheFrame(Universe& _universe) noexcept
   {
     /*
-     * 6502: LDA K% / STA RAND -- the planet's own x low byte, into the generator, every frame.
+     * 6502: the planet's own x low byte goes into the generator, every frame.
      *
      * Only the FIRST of the four seed bytes, so the other three carry on from wherever the last
      * call left them: this stirs the sequence rather than resetting it.
@@ -340,8 +338,7 @@ namespace Elite
     _universe.rng.SetState(seed);
 
     /*
-     * 6502: LDA TRIBCT / BEQ NOMVETR / JMP MVTRIBS -- and `MVTRIBS` jumps back to `NOMVETR`, so
-     * this is a call written as two jumps (§6.82).
+     * 6502: `MVTRIBS` jumps back to `NOMVETR`, so this is a call written as two jumps (§6.82).
      *
      * `MoveTrumbles` was a seam here until slice 4d-a, for the same reason five others were: the
      * routine on the other side did not exist. It does now, and the seam is deleted rather than
@@ -364,35 +361,34 @@ namespace Elite
   {
     // ---- part 2: the roll ------------------------------------------------------------------------
 
-    // 6502: LDX JSTX / JSR cntr / JSR cntr -- twice, so the roll creeps back by two per frame.
+    // 6502: the damping runs twice, so the roll creeps back by two per frame.
     std::uint8_t roll = _universe.control.roll;
     roll = DampTowardsCentre(roll, _universe.control.dockingComputer, _universe.options.dampingDisabled);
     roll = DampTowardsCentre(roll, _universe.control.dockingComputer, _universe.options.dampingDisabled);
 
-    // 6502: TXA / EOR #%10000000 / TAY / AND #%10000000 / STA ALP2 / STX JSTX / EOR #%10000000 /
-    // STA ALP2+1 -- the rate turned into a sign and a magnitude, and the sign kept both ways round.
+    // 6502: the rate turned into a sign and a magnitude, with the sign kept both ways round.
     const std::uint8_t rollSigned = static_cast<std::uint8_t>(roll ^ 0x80u);
     _universe.flight.rollSign = static_cast<std::uint8_t>(rollSigned & 0x80u);
     _universe.control.roll = roll;
     _universe.flight.rollSignFlipped = static_cast<std::uint8_t>(_universe.flight.rollSign ^ 0x80u);
 
-    // 6502: TYA / BPL P%+7 / EOR #%11111111 / CLC / ADC #1 -- the magnitude, negated if it is on the
-    // far side of the centre.
+    // 6502: the magnitude, negated if it is on the far side of the centre.
     std::uint8_t rollMagnitude = rollSigned;
     if ((rollMagnitude & 0x80u) != 0u)
     {
       rollMagnitude = static_cast<std::uint8_t>((rollMagnitude ^ 0xFFu) + 1u);
     }
 
-    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // 6502: LSR A
-    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // 6502: LSR A
+    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // 6502: one shift down
+    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // 6502: and a second
 
     /*
-     * 6502: CMP #8 / BCS P%+3 / LSR A.
+     * 6502: a third shift, but only below eight.
      *
      * AND THE CARRY THIS LEAVES IS READ BY THE PITCH. Either the compare's, when the magnitude is
-     * eight or more, or the extra shift's bit 0 when it is not -- and the pitch's `ADC #4` below
-     * has no `SEC` or `CLC` before it, with `cntr` touching no flags on any of its paths (§6.85).
+     * eight or more, or the extra shift's low bit when it is not -- and the pitch's add below has
+     * nothing setting or clearing the flag before it, with the damping touching no flags on any of
+     * its paths (§6.85).
      */
     bool carry = rollMagnitude >= 8u;
     if (!carry)
@@ -401,46 +397,45 @@ namespace Elite
       rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u);
     }
 
-    _universe.flight.rollMagnitude = rollMagnitude; // 6502: STA ALP1
+    _universe.flight.rollMagnitude = rollMagnitude; // 6502: ALP1
     _universe.flight.rollRate = static_cast<std::uint8_t>(rollMagnitude | _universe.flight.rollSign);
 
     // ---- part 2: the pitch, which is not the same shape ------------------------------------------
 
-    // 6502: LDX JSTY / JSR cntr -- ONCE, where the roll gets two.
+    // 6502: the damping runs ONCE here, where the roll gets two.
     std::uint8_t pitch = _universe.control.pitch;
     pitch = DampTowardsCentre(pitch, _universe.control.dockingComputer, _universe.options.dampingDisabled);
 
-    // 6502: TXA / EOR #%10000000 / TAY / AND #%10000000 / STX JSTY / STA BET2+1 / EOR #%10000000 /
-    // STA BET2 -- the two sign bytes are written the OTHER way round from the roll's.
+    // 6502: the two sign bytes are written the OTHER way round from the roll's.
     const std::uint8_t pitchSigned = static_cast<std::uint8_t>(pitch ^ 0x80u);
     _universe.control.pitch = pitch;
     _universe.flight.pitchSignFlipped = static_cast<std::uint8_t>(pitchSigned & 0x80u);
     _universe.flight.pitchSign = static_cast<std::uint8_t>(_universe.flight.pitchSignFlipped ^ 0x80u);
 
-    // 6502: TYA / BPL P%+4 / EOR #%11111111 -- and no negate-by-adding-one here, because the `ADC`
-    // below does it.
+    // 6502: the magnitude, complemented if negative -- and no adding one back here, because the
+    // add below does it.
     std::uint8_t pitchMagnitude = pitchSigned;
     if ((pitchMagnitude & 0x80u) != 0u)
     {
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude ^ 0xFFu);
     }
 
-    // 6502: ADC #4 -- on the ROLL's carry, which is the finding above.
+    // 6502: four added, on the ROLL's carry, which is the finding above.
     pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude + 4u + (carry ? 1u : 0u));
 
-    for (int shift = 0; shift < 4; ++shift) // 6502: LSR A four times
+    for (int shift = 0; shift < 4; ++shift) // 6502: four shifts down
     {
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude >> 1u);
     }
 
-    // 6502: CMP #3 / BCS P%+3 / LSR A -- three rather than the roll's eight, so the pitch is
-    // coarser at the low end than the roll is.
+    // 6502: a further shift below three, rather than the roll's eight, so the pitch is coarser at
+    // the low end than the roll is.
     if (pitchMagnitude < 3u)
     {
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude >> 1u);
     }
 
-    _universe.flight.pitchMagnitude = pitchMagnitude; // 6502: STA BET1
+    _universe.flight.pitchMagnitude = pitchMagnitude; // 6502: BET1
     _universe.flight.pitchRate = static_cast<std::uint8_t>(pitchMagnitude | _universe.flight.pitchSign);
   }
 
@@ -455,14 +450,13 @@ namespace Elite
 
     Commander& commander = _universe.commander;
 
-    // 6502: LDA KY2 / BEQ MA17 / LDA DELTA / CMP #40 / BCS MA17 / INC DELTA -- forty is the ceiling.
+    // 6502: forty is the ceiling.
     if (_universe.keys[KEY_SPEED_UP] != 0u && _universe.flight.speed < 40u)
     {
       _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed + 1u);
     }
 
-    // 6502: .MA17 LDA KY1 / BEQ MA4 / DEC DELTA / BNE MA4 / INC DELTA -- and one is the floor, so
-    // the ship never stops dead.
+    // 6502: MA17 -- one is the floor, so the ship never stops dead.
     if (_universe.keys[KEY_SLOW_DOWN] != 0u)
     {
       _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed - 1u);
@@ -472,22 +466,21 @@ namespace Elite
       }
     }
 
-    // 6502: .MA4 LDA KY15 / AND NOMSL / BEQ MA20 -- the AND is the "have we got one" test, so the
-    // key does nothing at all with an empty rail.
+    // 6502: MA4 -- the mask against the rail count is the "have we got one" test, so the key does
+    // nothing at all with an empty rail.
     if ((_universe.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
       AbortMissileLock(_universe, commander.missiles, MISSILE_READY);
-      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: LDY #sfxboop / JSR NOISE
-      _universe.status.missileArmed = 0u;                               // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
+      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: the boop
+      _universe.status.missileArmed = 0u;                               // 6502: which `ABORT` has already done
     }
 
     /*
-     * 6502: .MA20 LDA MSTG / BPL MA25 / LDA KY14 / BEQ MA25 / LDX NOMSL / BEQ MA25 / STA MSAR /
-     * LDY #YELLOW2 / JSR MSBAR.
+     * 6502: MA20 -- arm a missile, if there is no lock and one is on the rail.
      *
-     * `MSTG` is 255 for no lock, so `BPL` skips this whenever there IS one: a missile already
-     * seeking cannot be re-armed. And `STA MSAR` stores the KEY's value rather than a flag of its
-     * own, which is &FF because that is what the scan writes.
+     * `MSTG` is 255 for no lock, so the sign test skips this whenever there IS one: a missile
+     * already seeking cannot be re-armed. And what gets stored is the KEY's value rather than a
+     * flag of its own, which is &FF because that is what the scan writes.
      */
     if ((_universe.bubble.missileTarget & 0x80u) != 0u && _universe.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
     {
@@ -496,12 +489,12 @@ namespace Elite
     }
 
     /*
-     * 6502: .MA25 LDA KY16 / BEQ MA24 / LDA MSTG / BMI MA64 / JSR FRMIS.
+     * 6502: MA25 -- fire the armed missile.
      *
-     * PRESSING "M" WITH NO LOCK SKIPS FIVE OTHER KEYS. `BMI MA64` jumps past the energy bomb, the
-     * docking-computer cancel, the escape pod, the warp and the E.C.M., so a frame in which the
-     * player asks to fire a missile they have not locked is a frame in which none of those five
-     * does anything. Nothing else in the routine branches that far forward.
+     * PRESSING "M" WITH NO LOCK SKIPS FIVE OTHER KEYS. The no-lock branch jumps past the energy
+     * bomb, the docking-computer cancel, the escape pod, the warp and the E.C.M., so a frame in
+     * which the player asks to fire a missile they have not locked is a frame in which none of
+     * those five does anything. Nothing else in the routine branches that far forward.
      */
     bool checkedTheRest = true;
     if (_universe.keys[KEY_FIRE_MISSILE] != 0u)
@@ -518,30 +511,30 @@ namespace Elite
 
     if (checkedTheRest)
     {
-      // 6502: .MA24 LDA KY12 / BEQ MA76 / ASL BOMB / BEQ MA76 -- `BOMB` is a countdown kept as a
-      // shift, so the bomb burns for as many frames as it has bits left.
+      // 6502: MA24 -- `BOMB` is a countdown kept as a shift, so the bomb burns for as many frames
+      // as it has bits left.
       if (_universe.keys[KEY_ENERGY_BOMB] != 0u)
       {
         commander.energyBomb = static_cast<std::uint8_t>(commander.energyBomb << 1u);
 
         if (commander.energyBomb != 0u)
         {
-          // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
-          // that IS the effect: no drawing is involved.
+          // 6502: the upper half of the screen changes mode, and that IS the effect: no drawing is
+          // involved.
           _universe.screen.upperBitmapMode = BOMB_BITMAP_MODE;
           (void)PlaySoundEffect(_universe.sound, SoundEffect::EnergyBomb, false);
         }
       }
 
-      // 6502: .MA76 LDA KY20 / BEQ MA78 / LDA #0 / STA auto / JSR stopbd.
+      // 6502: MA76 -- cancelling the docking computer also stops its music.
       if (_universe.keys[KEY_CANCEL_DOCKING] != 0u)
       {
         _universe.control.dockingComputer = 0u;
         StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
       }
 
-      // 6502: .MA78 LDA KY13 / AND ESCP / BEQ noescp / LDA MJ / BNE noescp / JMP ESCAPE -- and it
-      // does not come back, so the frame ends here.
+      // 6502: MA78 -- the pod needs one fitted and no jump in progress, and the jump out of here
+      // does not come back, so the frame ends.
       if ((_universe.keys[KEY_ESCAPE_POD] & commander.escapePod) != 0u && _universe.status.midJump == 0u)
       {
         return LoopOutcome::Escaped;

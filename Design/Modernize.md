@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,653 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,594 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-3: `FlightLoop.cpp`, and rule 4's third shape.**
+
+59 of the file's 199, and the rewrite is mechanical wherever the comment already ended in a gloss:
+the listing goes, the marker stays, the sentence after the colon does the work it was already doing.
+`SumOfSquares` reads as three axes squared and added rather than as nine instructions; `IsHit` keeps
+its finding — that a sixteen-bit compare's early branch is an ANSWER and not a rejection, which is
+the bug §6.84 records — and loses the seven instructions that finding was wrapped around.
+
+**RULE 4 BIT FOR THE THIRD TIME AND IN A THIRD SHAPE.** M6-c-18 lost markers by deleting whole
+comments; M6-d-2 lost them by rewriting a block's opening line; this time it was the INLINE TRAILING
+marker — `running = sum.value; // 6502: STA R` — where the listing IS the entire comment and there
+is nothing left to attach the marker to once it goes. Seven of them, `origin-markers` 4,103 → 4,096,
+caught on the same run as always.
+
+The answer is the same each time and it is worth stating as a rule rather than rediscovering it:
+**a marker whose comment held nothing but the listing gets prose, not deletion.** `// 6502: back
+into the running total` says where the value goes; `// 6502: CNT counts down` names the byte the
+loop is standing in for. Both are worth more than the instruction they replaced, which is the whole
+premise of M6-d, and neither is M6-e's job to do early.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants.
+`opcode-transcriptions` 2,653 → 2,594.
 
 **2026-09-08 — M6-b-3: what the answers carry, and it is more than the reads suggested.**
 
