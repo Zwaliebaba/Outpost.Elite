@@ -741,6 +741,51 @@ is the one whose scope M6's neighbour changed rather than M6 itself. I-2 goes ar
 paragraph above. I-4 waits for M6-d to finish. I-5 is phase 6 and waits on its own ADR. Nothing
 here is blocked on M6-b, which is where the six that landed had to be.
 
+### What the oracle's removal changes, asked 2026-09-08 and answered against the tree
+
+The rule in the subsection above is "every slice that changes or adds LIBRARY behaviour lands
+before M6-b". Asked whether that had really taken the detachment into account, the tree says: **the
+rule was right about slices and silent about the TESTS they leave behind**, and that is where the
+work is. The sharper rule, which is what §6 should have said from the start, is that the deadline
+is not *changing library behaviour* but **asking the original a question it has not been asked**. A
+fixture holds the answers to questions put while the interpreter was here; a test that asks a new
+one after M6-b fails by design (Modernize.md §4.10, R19), and a test that reads anything the
+recorder does not capture fails for a duller reason.
+
+**T-0's measurements survive, and by M6-a's design rather than by this plan's foresight.**
+`Oracle.h`'s `CallRecord` carries a `cycles` field -- "what the call ADDED, so a caller's own count
+is untouched" -- the recorder writes it (`record.cycles = _cpu.cycles - beforeCycles`) and the
+on-disk format reserves eight bytes for it. `Cpu6502::CallSubroutine` routes through
+`Oracle::Current()`, so `TheCrowdedFrameCostsWhatItCosts` and `TheDockedPassCostsWhatItCosts` replay
+their cycle deltas from the fixture like any other answer. That was not checked when T-0 was
+written and it happened to be true; it is written down here so the next reader does not have to
+rediscover it.
+
+**I-1's test does NOT survive, as written, and this is a task rather than a risk.**
+`ControlsTests::TheBlockingReadMatchesTT217` changes the CIA matrix on every scan through
+`Cpu6502::AddProbe` -- the probe this slice added to the interpreter, because a matrix set once
+cannot reach `TT217`'s second wait -- and then asserts `script.scanCount == scans`, where `scans` is
+incremented **by the probe**. Under a `RecordedOracle` the interpreter never runs, so the probe
+never fires, `scans` is zero and the assertion fails on every script. The fix is small and has a
+deadline: take the oracle's scan count from something the record HOLDS -- `instructions`, or a trap
+hit on `RDKEY` -- and keep `matrix.walks` as the port's side, which is computed live and needs
+nothing. **It must land before M6-b**, and it is as much M6-b's to notice as this plan's, so it is
+named in both places.
+
+**I-2 gains a small deadline it did not have.** The port's own chart rule inside
+`Elite::ScanKeyboard` -- drop the four steering positions while a chart is up, because the modern
+layout gives the arrows two jobs -- is compared against the original **nowhere**:
+`TheFlightControlsMatchDOKEY` runs at the space view, "where `RDKEY` forgets nothing", and the
+`TT217` comparison runs docked. So moving the rule out into the Docked layer (§5.3) needs no oracle
+and can happen at any time. But if I-2 wants to PROVE that removing it makes `ScanKeyboard` match
+`RDKEY` on a chart as well -- a question the original has never been put -- **it has to ask before
+M6-b**, because afterwards there is nothing to ask. That is one scripted case in an existing sweep,
+and it is worth taking while it is free.
+
+**What is genuinely unaffected**: I-4, T-1, T-3, T-4 and I-5. The coroutine conversion changes how
+a test drives the PORT, not what it asks the ORACLE, so the fixtures answer it unchanged; the four
+timing and remapping slices touch `Outpost/` only, which no fixture ever sees.
+
 ### What the plan does to the documents
 
 ADR-005 §3 gains the simulated vertical blank, the auto-pause and the `MachineTiming` default; §4
@@ -905,3 +950,16 @@ is exactly what those phases are for. T-1, T-4, S-1's file and the whole of §5.
 T-5's deadline was M6-b and M6-b is still unbuilt, so the measurements landed with room to spare.
 And the plan's shape -- two tracks, the executable-only slices free of M6 -- held under a
 ninety-three-commit week, which is the property it was written for.
+
+**2026-09-08, later still — "will the oracle going away change things?", asked and run down.** The
+answer is a new subsection in §6 and one defect. §6's rule bound SLICES to M6-b and said nothing
+about the tests they leave behind, and the sharper rule is that a slice's deadline is asking the
+original something it has not been asked. Against that: T-0's cost tests survive, because
+`CallRecord` carries a cycle count and `CallSubroutine` goes through the seam -- true by M6-a's
+design and not by this plan's foresight, and now written down. **I-1's `TheBlockingReadMatchesTT217`
+does not survive**: it asserts on a counter its own interpreter probe increments, and a replayed
+call never runs the interpreter, so the count is zero and every script fails. Fixing it is small --
+read the oracle's scan count out of the record instead -- and it must land before M6-b. And I-2
+gains one free question worth asking while it can be: whether `ScanKeyboard` matches `RDKEY` on a
+chart once the port's own chart rule moves into the key map, which nothing has ever asked the
+original.
