@@ -56,19 +56,21 @@ namespace Elite
   // The bracket around everything below is `MEMORY_MAP_IO` and `MEMORY_MAP_RAM`, which are one pair
   // for the whole library since M3-b-3a: there is one `SETL1` and it is asked for two values.
 
-  /// 6502: LDA MCNT / AND #7 -- one Trumble per pass, so any one of them moves every eighth frame.
+  /// 6502: the main loop counter's low three bits -- one Trumble per pass, so any one of them
+  /// moves every eighth frame.
   inline constexpr std::uint8_t TRUMBLE_TURN_MASK = 7;
 
-  /// 6502: CMP #235 -- above this a Trumble picks a new direction, which is 21 rolls in 256 and so
-  /// a little over 8%. The upstream comment rounds it to "8% of the time".
+  /// 6502: at or above this roll a Trumble picks a new direction, which is 21 values in 256 and
+  /// so a little over 8%. The upstream comment rounds it to "8% of the time".
   inline constexpr std::uint8_t TRUMBLE_TURN_ROLL = 235;
 
-  /// 6502: AND #3 -- the four entries of `TRIBDIR`, and both axes are chosen with the same mask.
+  /// 6502: the roll's low two bits -- the four entries of `TRIBDIR`, and both axes are chosen
+  /// with the same mask.
   inline constexpr std::uint8_t TRUMBLE_DIRECTION_MASK = 3;
 
   /*
-   * 6502: LDA #&48 / STA T / LDA #&01, and CMP #&50 -- the two edges of the screen, in the
-   * nine-bit coordinates a VIC-II sprite has.
+   * 6502: the two edges of the screen, in the nine-bit coordinates a VIC-II sprite has -- built
+   * a byte at a time, low half then high.
    *
    * &148 is 328 and &150 is 336. A sprite whose x has gone negative is put at 328 and one that
    * has reached 336 is put at 0, so the six wander round a cylinder rather than piling up in a
@@ -114,19 +116,19 @@ namespace Elite
   /*
    * 6502: MVTRIBS -- move one Trumble sprite, and which one depends on the frame.
    *
-   * ONE SPRITE PER FRAME, CHOSEN BY THE MAIN LOOP COUNTER. `LDA MCNT / AND #7` counts 0 to 7 and
+   * ONE SPRITE PER FRAME, CHOSEN BY THE MAIN LOOP COUNTER. Its low three bits count 0 to 7 and
    * the routine returns immediately when that is not below `TRIBCT`, so with six Trumbles showing
    * the sprites move on passes 0 to 5 and nothing happens on 6 and 7. Each one therefore moves
    * every eighth frame however many there are, rather than each getting a slower share as more
    * appear.
    *
    * THE SECOND `DORND` RUNS WITH THE CARRY SET, and only the first has it clear. The carry into
-   * the first is the `ASL A` two instructions above -- A is at most 7, so it is clear -- and
-   * `SETL1` in between leaves the flags alone. The second is reached only by falling through
-   * `CMP #235` without branching, which means A was at or above 235 and the compare set the
-   * carry; nothing between there and the call clears it. The generator reads C (§6.118), so the
-   * two calls are not interchangeable and a port that passed the same flag to both is wrong on
-   * the y axis about half the time.
+   * the first comes from a SHIFT two instructions above -- A is at most 7, so the bit shifted out
+   * is zero -- and `SETL1` in between leaves the flags alone. The second is reached only by
+   * falling past the 235 test without branching, which means A was at or above 235 and the
+   * compare set the carry; nothing between there and the call clears it. The generator reads C
+   * (§6.118), so the two calls are not interchangeable and a port that passed the same flag to
+   * both is wrong on the y axis about half the time.
    *
    * THE X AXIS IS SIXTEEN BITS AND THE Y AXIS IS EIGHT. The x velocity is `(TRIBVXH TRIBVX)` and
    * a negative one is &FFFF; the y velocity is one byte of the SAME table, so its -1 is &FF and

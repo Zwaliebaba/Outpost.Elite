@@ -118,10 +118,10 @@ namespace Elite
   /*
    * 6502: DOT -- draw the compass dot where `COMX`, `COMY` and `COMC` say it is.
    *
-   * The colour decides the SHAPE. `CMP #YELLOW / BNE CPIX2` falls through into `CPIX4` when the
-   * target is ahead and branches to `CPIX2` when it is behind, so a dot pointing forwards is a
-   * four-pixel block and one pointing backwards is a two-pixel dash. That is not a separate
-   * decision from the colour: it is the same byte read twice.
+   * The colour decides the SHAPE. Yellow -- the target ahead -- falls through into `CPIX4`, and
+   * anything else branches to `CPIX2`, so a dot pointing forwards is a four-pixel block and one
+   * pointing backwards is a two-pixel dash. That is not a separate decision from the colour: it
+   * is the same byte read twice.
    */
   void DrawCompassDot(Canvas& _canvas, const Compass& _compass, Picture* _picture = nullptr) noexcept;
 
@@ -187,29 +187,31 @@ namespace Elite
    * of the compass, which is A * 2 / 20 with the sign put back on.
    *
    * The twenty is the compass's radius in pixels. The doubling is not a scale factor the divide
-   * then undoes -- it is how the sign gets out of the way: `ASL A` pushes bit 7 into the carry and
-   * `LDA #0 / ROR A` catches it, leaving the magnitude in A with nothing above it.
+   * then undoes -- it is how the sign gets out of the way: a shift left pushes bit 7 into the
+   * carry, and a rotate right into a cleared byte catches it, leaving the magnitude with nothing
+   * above it.
    */
   [[nodiscard]] CompassOffset ScaleToCompass(std::uint8_t _value) noexcept;
 
   /*
    * 6502: SP2 -- put the dot where `XX15` points, and draw it.
    *
-   * `JMP DOT` at the end, so drawing is part of it rather than something the caller does after.
+   * It ends with a tail call to `DOT`, so drawing is part of it rather than something the caller
+   * does after.
    * The colour comes from the sign of the third coordinate alone: ahead is yellow and behind is
    * green, and `DOT` reads that same byte again to decide whether to draw a block or a dash.
    */
   void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: SP1 -- `JSR SPS4` and then a fall-through into `SP2`. Aim the compass at the station
-  /// and draw it.
+  /// 6502: SP1 -- `SPS4` and then a fall-through into `SP2`. Aim the compass at the station and
+  /// draw it.
   void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes,
                            Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: COMPAS -- erase the old dot, work out the new one, draw it.
    *
-   * The first `JSR DOT` is the erase, and it works because everything here is EOR: the dot is
+   * The first call to `DOT` is the erase, and it works because everything here is EOR: the dot is
    * still where the last frame left it, so drawing it again takes it away. That is also why
    * `Compass` has to persist between calls.
    *

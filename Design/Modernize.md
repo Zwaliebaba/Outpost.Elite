@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->141 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->115 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,45 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-54: four more to zero, and a second `apply` on an already-edited file
+overwrote the line above.**
+
+26 sites over four files -- `Explosion.h`, `Trumbles.h`, `Charts.h` and `Scanner.h`.
+Seventy-third to seventy-sixth at zero.
+
+**The method failed in a new way and the tooling could not have caught it.** `apply` takes line
+ranges from ONE snapshot and applies them bottom-up, which is safe within a call. It is not safe
+ACROSS calls: the first pass over `Charts.h` turned one line into two, everything below moved down
+by one, and a follow-up call using the original numbers replaced the wrong line -- deleting the
+`distance` field's declaration and leaving `controlHeld` declared twice. The transcription count
+still read correctly, the marker count still read correctly, and neither says anything about a
+struct losing a member. What found it was reading the file back. The rule is now: **after any
+`apply` on a file, re-read it before choosing any further range in that file.** The compiler would
+have caught this one; the next one might be a comment. `apply` now PRINTS every line it removes, so
+a range taken from stale numbers is visible in the tool's own output rather than only in a diff
+read carefully enough.
+
+A second truncation of the M6-d-52 kind: `Scanner.h`'s `DOT` paragraph is four lines and the survey
+shows two lines of context, so the range was taken from the survey's window and stopped one line
+short, losing "it is the same byte read twice". **Paragraph bounds come from the file, never from
+the survey's context lines.**
+
+Two more instances of FLAGS SET AT A DISTANCE, both in this slice. The explosion counter's add of 4
+has nothing clearing the carry in front of it, so a ship at z_hi 32 or more ages at five a frame and
+a nearer one at four -- sixty frames of explosion or forty-eight, decided by a comparison made for
+another purpose; the upstream comment says only "add 4". And `MVTRIBS` calls the generator twice
+with different carries on purpose: the first is reached after a shift of a value at most 7, so
+clear; the second only by falling past the 235 test, which sets it. The generator reads the carry,
+so the two calls are not interchangeable.
+
+One correction: `TRUMBLE_TURN_ROLL` said "above this a Trumble picks a new direction, which is 21
+rolls in 256". Twenty-one values means 235 to 255 inclusive, so it is AT OR above. The count was
+right and the word was wrong.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (9, 14, 42 and 25). `opcode-transcriptions` 141 → 115.
+
 
 **2026-09-08 — M6-d-53: the raster handler and three headers to zero, where the listing WAS the
 whole comment.**

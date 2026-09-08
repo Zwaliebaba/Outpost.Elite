@@ -58,7 +58,8 @@ namespace Elite
   };
 
   /*
-   * 6502: TT22's `LDA #64 / JSR TT66` and TT23's `LDA #128 / JSR TT66` -- what `QQ11` becomes.
+   * 6502: the view numbers TT22 and TT23 set up with -- 64 for the long-range chart and 128 for
+   * the short -- which is what `QQ11` becomes.
    *
    * The two charts are told apart by BIT 7 everywhere in this file, so the numbers are not
    * arbitrary: `ShortRange` is one `AND #%10000000`, and `IsChartView` in `DockedKeys.h` is the
@@ -68,8 +69,8 @@ namespace Elite
   inline constexpr std::uint8_t SHORT_RANGE_CHART_VIEW = 128;
 
   /*
-   * 6502: TT23's opening `LDA #199 / STA Yx2M1 / STA dontclip`, and the `LDA #0 / STA dontclip /
-   * LDA #2*Y-1 / STA Yx2M1` it ends with.
+   * 6502: what TT23 sets `Yx2M1` and `dontclip` to on the way in, and what it puts back on the
+   * way out.
    *
    * The short-range chart draws system discs down to the bottom of the screen, so it lifts the
    * clipper's limits for the length of the routine and puts them back afterwards.
@@ -162,9 +163,9 @@ namespace Elite
    */
   void DrawSeparator(Canvas& _canvas, std::uint8_t _y, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: NLIN -- LDA #23 / JSR INCYC / NLIN2. The cursor moves down one line and a rule is drawn
-  /// at pixel row 23, in that order; the increment is `INCYC`'s and has nothing to do with the 23.
-  /// One routine rather than two calls at its caller, so that it can be compared as one (M6-0-e).
+  /// 6502: NLIN -- the cursor moves down one line and a rule is drawn at pixel row 23, in that
+  /// order; the increment is `INCYC`'s and has nothing to do with the 23. One routine rather than
+  /// two calls at its caller, so that it can be compared as one (M6-0-e).
   void DrawTitleRule(Canvas& _canvas, TextState& _text, Picture* _picture = nullptr) noexcept;
 
   /*
@@ -175,7 +176,7 @@ namespace Elite
    * Everything after it is here: the title, the two rules, the fuel circle, the 256 dots and the
    * crosshairs.
    *
-   * A system's brightness is its own seed byte: `ORA #%01010000` on QQ15+4 makes a value PIXEL
+   * A system's brightness is its own seed byte: two bits forced into QQ15+4 make a value PIXEL
    * reads as a distance, so the chart's dots vary in size for no reason except what the galaxy
    * happens to contain.
    */
@@ -227,7 +228,7 @@ namespace Elite
     /// (§6.159).
     std::uint8_t counter = 0;
     std::uint16_t distance = 0; ///< 6502: QQ8 -- how far the selected system is, in tenths
-    bool controlHeld = false;   ///< 6502: JSR CTRL / BMI Ghy -- the galactic hyperdrive's key
+    bool controlHeld = false;   ///< 6502: CTRL's answer, by its sign -- the galactic drive key
 
     /// 6502: safehouse -- the seeds of the system being jumped to, saved because the countdown
     /// runs while the player keeps moving the crosshairs.
