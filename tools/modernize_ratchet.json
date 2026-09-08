@@ -81,12 +81,7 @@
     "opcode-transcriptions": {
       "ceiling": 0,
       "slack": 0,
-      "slice": "M6-d-58: the last nineteen files -- opcode-transcriptions reaches ZERO, and M6-d's row is met"
-    },
-    "opcode-quotations": {
-      "ceiling": 0,
-      "slack": 0,
-      "slice": "M0-a"
+      "slice": "M6-d-59: R-i's `6502 quoted:` tag deleted (owner ruling) -- zero now has no exemption"
     },
     "origin-identifiers": {
       "ceiling": 0,

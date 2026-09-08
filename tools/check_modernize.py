@@ -276,17 +276,19 @@ UNAMBIGUOUS_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(_PLAIN_IMPLIED) + r")\
 COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 
 
-# The tag that makes a quotation DELIBERATE (§1 R-i, ruled 2026-09-08).
+# R-i's `6502 quoted:` TAG WAS HERE AND IS NOT ANY MORE (M6-d-59, owner ruling 2026-09-08).
 #
-# M6-d's row wants the ratchet at zero and Risk R20 lets a comment keep its instruction sequence
-# when that sequence IS the reason. Both hold once the counter can tell the two apart, and the only
-# thing that can tell them apart is the author saying which this is. So a kept quotation carries the
-# tag, ON EVERY LINE OF IT: an untagged listing is transcription and goes, a tagged one is counted
-# against a cap you can see. Tagging each line rather than opening a block keeps the rule
-# unambiguous and makes a long quotation cost more to keep, which is the right incentive.
+# R-i split this counter in two on the expectation that some comments could not be rewritten
+# without losing their reason, and gave those a tag so the residue would be visible and capped
+# rather than argued site by site. Fifty-eight slices took the tree from 997 listings to zero and
+# the residue stayed EMPTY: every hard case cleared with prose, the last being `MemoryMap.h`, whose
+# argument is "the routine is eight instructions and none of them writes code" and which had the
+# eight listed as its evidence. Naming what they do is shorter, says the same, and stays checkable
+# against the port once `Upstream/` is gone -- which the listing does not.
 #
-# Not `6502:` -- that is the marker M6-e removes, and `\b6502:` does not match this.
-QUOTED_TAG = re.compile(r"\b6502 quoted:")
+# So the tag and its counter go together, and `opcode-transcriptions` at zero now has NO EXEMPTION:
+# every instruction listing in a comment is a violation, with nothing to opt out of it. That is a
+# stronger guarantee than the split was, and one fewer mechanism to rot.
 
 
 def _is_transcription(_line: str) -> bool:
@@ -300,7 +302,7 @@ def _is_transcription(_line: str) -> bool:
 
 
 def _opcode_lines(_root: Path):
-    """Every comment line in the port that shows instruction shape, with whether it is tagged.
+    """Every comment line in the port that shows instruction shape.
 
     Counted per LINE and not per instruction, because a rewrite replaces lines: a run of six
     instructions across two comment lines is two sites to rewrite, not six.
@@ -318,17 +320,12 @@ def _opcode_lines(_root: Path):
         for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
             for line in comment_lines(path.read_text(encoding="utf-8", errors="replace")):
                 if line and _is_transcription(line):
-                    yield line, bool(QUOTED_TAG.search(line))
+                    yield line
 
 
 def count_opcode_transcriptions(_root: Path) -> int:
-    """P12 -- instruction listings that carry no reason. M6-d drives this one to ZERO."""
-    return sum(1 for _line, tagged in _opcode_lines(_root) if not tagged)
-
-
-def count_opcode_quotations(_root: Path) -> int:
-    """P12 -- instruction sequences kept BECAUSE they are the reason (R20, R-i). Capped, not zero."""
-    return sum(1 for _line, tagged in _opcode_lines(_root) if tagged)
+    """P12 -- instruction listings in comments. M6-d drove this to ZERO and it stays there."""
+    return sum(1 for _line in _opcode_lines(_root))
 
 
 def count_origin_markers(_root: Path) -> int:
@@ -535,8 +532,7 @@ COUNTERS = {
     "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
-    "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments that carry no reason"),
-    "opcode-quotations": (count_opcode_quotations, "P12: instruction sequences kept because they ARE the reason"),
+    "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments -- no exemption"),
     "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
     "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
@@ -664,7 +660,7 @@ namespace Elite
   // it clears both halves AND the carry, and expresses that with ROR through the flag: also prose
   // TWO LOOPS AND ONE COUNTER, and the mode is decided INSIDE the loop: a sentence, not a listing
   /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
-  // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
+  // LDA #1 / STA T -- R-i's tag is gone (M6-d-59) and a listing needs no marker: still counted
   /// 6502: AND #63 -- an immediate operand, so the AND alone makes this line a listing
   /// 6502: the mask is `&DC00`/`&DC01` AND ONLY that -- capitals after AND, and a slash: still prose
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
@@ -732,8 +728,7 @@ EXPECTED = {
     "inventory-stale-files": 1,
     "origin-markers": 7,
     "origin-identifiers": 5,
-    "opcode-transcriptions": 4,
-    "opcode-quotations": 1,
+    "opcode-transcriptions": 5,
     "oracle-test-files": 1,
     "origin-tools": 1,
 }
