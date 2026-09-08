@@ -17,7 +17,11 @@
     "                before any mutant is applied. A filter that selects the wrong tests reports",
     "                survivors for code it never ran, which is worse than no filter at all --",
     "                `hyperspace` was recorded as \"Hyperspace\" and matched three tests in other",
-    "                files whose method names contain the word (plan section 6.147)",
+    "                files whose method names contain the word (plan section 6.147,",
+    "                6.147). The number is a tripwire on the SELECTION, and the two directions do",
+    "                not mean the same thing: a RISE is normally tests that did not exist when the",
+    "                number was written, and is re-based here with the reason in the unit's note; a",
+    "                FALL is a filter that has stopped reaching its own class, and is a bug",
     "  mutant.id     the name the plan uses for it, where the plan named one",
     "  mutant.find   text that must appear EXACTLY ONCE in the file; the run fails loudly if not,",
     "                because a mutant that silently applied nowhere is a mutant reported as caught",
@@ -260,7 +264,7 @@
       "filter": [
         "TheTrumbles"
       ],
-      "tests": 8,
+      "tests": 9,
       "note": [
         "MVTRIBS and the six Trumble sprites (plan section 6.148). Ten mutants, written with the",
         "slice rather than reconstructed from a name, so this unit is a measurement from its first",
@@ -287,7 +291,13 @@
         "`VideoState` gives each sprite a whole sixteen-bit x, so the pair of masks that clear and",
         "set one sprite's bit in a shared register have nothing to mask -- and `tr-spritebit` and",
         "`tr-msb-or` went with it. `tr-sprite-index` and `tr-ninth-bit` cover the store that",
-        "replaced them."
+        "replaced them.",
+        "",
+        "THE COUNT WENT 8 -> 9 (M6-d-17). A filter is a substring of the whole `Suite.Method` name, so",
+        "this one also selects two tests outside the class by their METHOD names, and the second of",
+        "them -- `TheGameObject.ADockedPassBreedsTheTrumblesAndAsksForItsSyncs` -- arrived with T-2 on",
+        "the main track. It breeds trumbles, so the surplus is coverage rather than the `hyperspace`",
+        "mistake happening again."
       ],
       "mutants": [
         {
@@ -388,7 +398,7 @@
         "TheMissionText",
         "TheMissions"
       ],
-      "tests": 9,
+      "tests": 12,
       "note": [
         "The four control codes a mission briefing is made of (plan section 6.149).",
         "",
@@ -405,7 +415,10 @@
         "",
         "SECOND RUN, 2026-09-05, with 4d-c's thirteen added: 25 mutants, 22 caught, 3 survived, and all",
         "three are recorded equivalents. `mi-mt9-view` became one: it was written as a defect and the",
-        "run proved the defect had no effect, because `TT66` writes the same `XC` twice on its own."
+        "run proved the defect had no effect, because `TT66` writes the same `XC` twice on its own.",
+        "",
+        "THE COUNT WENT 9 -> 12 (M6-d-17): `TheMissionText` grew from six tests to nine after the nine",
+        "was recorded. The three in `TheMissions` were counted then and are counted now."
       ],
       "mutants": [
         {
@@ -717,12 +730,15 @@
         "TheFlightFrameShips",
         "TheTacticsVectors"
       ],
-      "tests": 17,
+      "tests": 18,
       "note": [
         "The EE55 cloud seeding, the carries it reads and the two defects the tightened comparison",
         "found beside it (plan section 6.157). Every decision here is a flag: which carry the first",
         "DORND rolls in, what the other three get, what EE51 leaves, what ANGRY leaves, what the",
-        "scooped canister's roll gets. Each mutant flips one and names the oracle test that sees it."
+        "scooped canister's roll gets. Each mutant flips one and names the oracle test that sees it.",
+        "",
+        "THE COUNT WENT 17 -> 18 (M6-d-17): M6-a-1 added `TheFlightFrameShips.TheDockingChecksMatchISDK`",
+        "while closing the fourth coverage gap."
       ],
       "mutants": [
         {
@@ -871,9 +887,9 @@
           "id": "ar-ll5-carry",
           "file": "GameLogic/Arith.cpp",
           "find": "    return Root{root, exitCarry};",
-          "replace": "    return Root{q, false};",
+          "replace": "    return Root{root, false};",
           "expect": "caught",
-          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit. Re-anchored at M6-c-7, when the kernel's scratch letters took names."
+          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit. Re-anchored at M6-c-7, when the kernel's scratch letters took names. M6-c-7 re-anchored the `find` and left the `replace` naming `q`, so the mutant stopped compiling instead of running; M6-d-17 finished the job, which is the first full harness run since."
         }
       ]
     },
@@ -941,7 +957,7 @@
         "TheSun",
         "TheBubbleReset"
       ],
-      "tests": 21,
+      "tests": 24,
       "note": [
         "`PLANET`, `SUN`, `CHKON` and `ZINF` (plan sections 6.40 to 6.57). The mutants are the clamp",
         "`PL82` writes, the branch `CHKON` takes to `PLS6`'s `CLC` rather than `EDGES`'s (section 6.45), and",
@@ -949,7 +965,11 @@
         "",
         "The filters overlap on purpose: `ThePlanet` also selects `ThePlanetLineHeap` and `TheSun` selects",
         "`TheSunLineHeap`, so the twenty-one the tool counts are twelve tests, some run twice. The",
-        "filter gate caught the first record of twelve, which is what the gate is for."
+        "filter gate caught the first record of twelve, which is what the gate is for.",
+        "",
+        "THE COUNT WENT 21 -> 24 (M6-d-17). `PicturePlanetTests.cpp` arrived with RS-3 on the main track",
+        "and its three tests are selected by their METHOD names: two contain `ThePlanet` and one",
+        "`TheSun`. They put the planet and the sun on both surfaces, so the surplus is coverage."
       ],
       "mutants": [
         {
