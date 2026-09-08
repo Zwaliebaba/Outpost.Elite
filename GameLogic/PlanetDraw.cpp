@@ -13,8 +13,8 @@ namespace Elite
 
   SunRow ClipSunRow(PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
   {
-    // 6502: EDGES -- STA T / CLC / ADC YY / STA X2, the right-hand end first. `T` is the kernel's
-    // byte and this routine's own since M2-c-2; `X1` and `X2` are the answer.
+    // 6502: EDGES computes the right-hand end first. `T` is the kernel's byte and this routine's
+    // own since M2-c-2; `X1` and `X2` are the answer.
     SunRow row;
 
     const AddResult right = AddWithCarry(_halfWidth, _centre.lo, false);
@@ -40,8 +40,8 @@ namespace Elite
       return row;
     }
 
-    // 6502: BEQ P%+6 -- a high byte of zero means X2 is already a screen coordinate. Anything
-    // else positive means the line runs off the right, so it is clamped.
+    // 6502: a high byte of zero means the right end is already a screen coordinate. Anything else
+    // positive means the line runs off the right, so it is clamped.
     if (rightHigh.value != 0u)
     {
       row.x2 = 255;
@@ -53,10 +53,10 @@ namespace Elite
 
     if (leftHigh.value == 0u)
     {
-      return row; // 6502: CLC / RTS -- both ends are on screen as they stand.
+      return row; // 6502: both ends are on screen as they stand, and the carry is cleared
     }
 
-    // 6502: ED3.
+    // 6502: ED3 -- the left end needs deciding.
     if ((leftHigh.value & 0x80u) == 0u)
     {
       // Positive and non-zero: the whole line is off the right.
@@ -75,7 +75,7 @@ namespace Elite
   void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row,
                    Picture* _picture) noexcept
   {
-    // 6502: HLOIN2 -- JSR EDGES / STY Y1 / LDA #0 / STA LSO,Y / JMP HLOIN. The carry is dropped.
+    // 6502: HLOIN2 clips the row, clears its heap entry and draws. The carry is dropped.
     const SunRow row = ClipSunRow(_state, _centre, _halfWidth, _row);
 
     if (_row < _state.sun.size())
@@ -83,7 +83,7 @@ namespace Elite
       _state.sun[_row] = 0;
     }
 
-    DrawHorizontalLine(_canvas, row.x1, row.x2, _row); // 6502: STY Y1 / JMP HLOIN
+    DrawHorizontalLine(_canvas, row.x1, row.x2, _row); // 6502: HLOIN
     if (_picture != nullptr)
     {
       DrawCanvasRow2x(*_picture, row.x1, row.x2, _row);
@@ -92,10 +92,10 @@ namespace Elite
 
   void ClearSunHeap(PlanetSunState& _state) noexcept
   {
-    // 6502: FLFLLS -- LDY #199 / LDA #0 / .SAL6 STA LSO,Y / DEY / BNE SAL6 / DEY / STY LSX / RTS.
+    // 6502: FLFLLS and SAL6 -- the heap zeroed from the bottom row upwards.
     //
-    // The loop stops at entry 1, so entry 0 is never zeroed -- and then `DEY` takes Y to 255 and
-    // `STY LSX` puts that in it. One byte, two meanings, and the loop bound is what keeps them
+    // The loop stops at entry 1, so entry 0 is never zeroed -- and then the index falls to 255 and
+    // that is what lands in it. One byte, two meanings, and the loop bound is what keeps them
     // apart.
     for (std::size_t row = _state.sun.size() - 1u; row != 0u; --row)
     {
@@ -106,26 +106,26 @@ namespace Elite
 
   void ClearBallHeap(PlanetSunState& _state) noexcept
   {
-    // 6502: WP1 -- LDA #1 / STA LSP / LDA #&FF / STA LSX2 / RTS.
+    // 6502: WP1 -- the heap top back to one and the first x marked empty.
     _state.ballHeapTop = 1;
     _state.SetBallX(0, 0xFF);
   }
 
   void EraseSun(Canvas& _canvas, PlanetSunState& _state, Picture* _picture) noexcept
   {
-    // 6502: WPLS -- LDA LSX / BMI WPLS-1, and that byte is `WP1`'s own `RTS`. One of the six
-    // backward label-with-offset targets §6.35 counted that land in the file BEFORE the one
-    // naming them, and the second of them to be confirmed by building it.
+    // 6502: WPLS -- a negative first entry branches to `WPLS-1`, which is `WP1`'s own return. One
+    // of the six backward label-with-offset targets §6.35 counted that land in the file BEFORE the
+    // one naming them, and the second of them to be confirmed by building it.
     if ((_state.sun[0] & 0x80u) != 0u)
     {
       return;
     }
 
-    // 6502: LDA SUNX / STA YY / LDA SUNX+1 / STA YY+1 -- `YY(1 0)` is `EDGES`'s centre and a
-    // parameter since M2-c-3; what it holds here is where the sun WAS.
+    // 6502: `YY(1 0)` is `EDGES`'s centre and a parameter since M2-c-3; what it holds here is where
+    // the sun WAS.
     const SignMag16 wasAt{_state.sunX, _state.sunXNext};
 
-    // 6502: LDY #2*Y-1 -- the literal 143, in the same build where `CHKON` reads `Yx2M1`.
+    // 6502: the literal 143, in the same build where `CHKON` reads `Yx2M1`.
     for (std::uint8_t row = SPACE_VIEW_BOTTOM - 1u; row != 0u; --row)
     {
       const std::uint8_t width = _state.sun[row];
@@ -140,8 +140,8 @@ namespace Elite
 
   void EraseBall(Canvas& _canvas, PlanetSunState& _state, Picture* _picture) noexcept
   {
-    // 6502: WPLS2 -- LDY LSX2 / BNE WP1. Entry 0 of the x heap is the flag: `CIRCLE` clears it
-    // when it starts filling, so anything else means there is nothing to rub out.
+    // 6502: WPLS2 -- entry 0 of the x heap is the flag: `CIRCLE` clears it when it starts filling,
+    // so anything else means there is nothing to rub out.
     std::uint8_t at = _state.BallX(0);
     if (at != 0u)
     {
@@ -150,8 +150,9 @@ namespace Elite
     }
 
     /*
-     * 6502: X1, Y1, X2, Y2 -- and the walk STARTS FROM WHATEVER X1 AND Y1 HOLD. A run's first
-     * segment has no predecessor, so when entry 0 is not a break the first `LOIN` draws from the
+     * 6502: the four endpoint bytes -- and the walk STARTS FROM WHATEVER THE FIRST TWO HOLD. A
+     * run's first segment has no predecessor, so when entry 0 is not a break the first `LOIN`
+     * draws from the
      * point the last routine to write those bytes left there. `WS2` makes entry 0 a break, so the
      * game reaches that only through a heap nothing cleared, and `WS2` is what makes entry 0 a
      * break -- so the port starts the walk from a zeroed `Line` rather than from bytes the last
@@ -161,7 +162,7 @@ namespace Elite
 
     while (true)
     {
-      // 6502: WPL1 -- CPY LSP / BCS WP1.
+      // 6502: WPL1 -- past the heap's top and there is nothing left to erase.
       if (at >= _state.ballHeapTop)
       {
         ClearBallHeap(_state);
@@ -196,7 +197,7 @@ namespace Elite
       ++at;
 
       /*
-       * 6502: LDA SWAP / BNE WPL1 -- `LOIN` swaps its endpoints when it draws right-to-left, and
+       * 6502: `LOIN` swaps its endpoints when it draws right-to-left, and
        * when it has, the coordinates in X2/Y2 are no longer this segment's end. So the hand-off to
        * the next segment is SKIPPED, and the next `LOIN` starts from whatever X1/Y1 now hold.
        */
@@ -210,8 +211,8 @@ namespace Elite
 
   void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type, Picture* _picture) noexcept
   {
-    // 6502: PL2 -- LDA TYPE / LSR A / BCS P%+5 / JMP WPLS2 / JMP WPLS. The planet is 128 and the
-    // sun 129, so the bottom bit is the whole of the test and no comparison is needed.
+    // 6502: PL2 -- the planet is 128 and the sun 129, so the bottom bit is the whole of the test
+    // and no comparison is needed.
     if ((Byte(_type) & 0x01u) != 0u)
     {
       EraseSun(_canvas, _state, _picture);
@@ -225,13 +226,13 @@ namespace Elite
   CircleExtent CircleOffScreen(const PlanetSunState& _state, std::uint8_t _radius, const Projection& _centre) noexcept
   {
     CircleExtent extent;
-    // 6502: CHKON. Four sixteen-bit comparisons, and each one's high byte is all that is looked at.
+    // 6502: CHKON -- four sixteen-bit comparisons, and each one's high byte is all that is read.
     const AddResult rightLow = AddWithCarry(_centre.x, _radius, false);
     (void)rightLow;
     const AddResult right = AddWithCarry(_centre.x1, 0u, rightLow.carry);
     if ((right.value & 0x80u) != 0u)
     {
-      extent.offScreen = true; // 6502: PL21 -- SEC / RTS.
+      extent.offScreen = true; // 6502: PL21 -- set the carry and return
       return extent;
     }
 
@@ -258,7 +259,7 @@ namespace Elite
     const SubResult top = SubtractWithCarry(_centre.y1, 0u, topLow.carry);
     if ((top.value & 0x80u) != 0u)
     {
-      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).
+      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)
     }
     if (top.value != 0u)
     {
@@ -266,7 +267,7 @@ namespace Elite
       return extent;
     }
 
-    // 6502: CPX Yx2M1 / RTS -- the carry from the comparison IS the return value.
+    // 6502: the carry from the last comparison IS the return value.
     extent.offScreen = topLow.value >= _state.lowestVisibleRow;
     return extent;
   }
@@ -274,15 +275,14 @@ namespace Elite
   std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                             const Projection& _centre, SignMag16 _offset, std::uint8_t _angle, bool _carryIn, Picture* _picture) noexcept
   {
-    // 6502: TXA / ADC K4 / STA K6+2 / LDA K4+1 / ADC T / STA K6+3 -- the segment's far end, as an
-    // offset from the circle's centre, and both halves run on the caller's carry. `X` and `T` are
-    // the two halves of that offset and both are parameters since M2-c-3.
+    // 6502: the segment's far end, as an offset from the circle's centre, with both halves running
+    // on the caller's carry. The two halves of that offset are parameters since M2-c-3.
     const AddResult low = AddWithCarry(_offset.lo, _centre.y, _carryIn);
     _state.segmentEnd[2] = low.value;
     _state.segmentEnd[3] = AddWithCarry(_centre.y1, _offset.hi, low.carry).value;
 
-    // 6502: LDA FLAG / BEQ BL1 / INC FLAG. The first segment of a circle has a start and no end
-    // yet, so it goes straight to the break rather than being drawn.
+    // 6502: BL1 -- the first segment of a circle has a start and no end yet, so it goes straight to
+    // the break rather than being drawn.
     bool endTheRun = _state.flag != 0u;
     if (endTheRun)
     {
@@ -310,12 +310,12 @@ namespace Elite
 
       if (clipped.rejected)
       {
-        endTheRun = true; // 6502: BCS BL5 -- clipped away entirely
+        endTheRun = true; // 6502: BL5 -- clipped away entirely
       }
       else
       {
-        // 6502: LDA SWAP / BEQ BL9 -- the clipper may hand the ends back the other way round, and
-        // the heap has to hold them in the order the walk produced them.
+        // 6502: BL9 -- the clipper may hand the ends back the other way round, and the heap has to
+        // hold them in the order the walk produced them.
         if (clipped.swap != 0u)
         {
           std::swap(line.x1, line.x2);
@@ -346,8 +346,8 @@ namespace Elite
           DrawLine2x(*_picture, line);
         }
 
-        // 6502: LDA XX13 / BNE BL5 -- an end that had to be moved ends the run too, because the
-        // next segment does not start where this one was drawn to.
+        // 6502: BL5 -- an end that had to be moved ends the run too, because the next segment does
+        // not start where this one was drawn to.
         endTheRun = clipped.ends != 0u;
       }
     }
@@ -372,13 +372,12 @@ namespace Elite
   {
 
     /*
-     * 6502: the `EOR #%11111111 / ADC #0 / TAX / LDA #&FF / ADC #0 / STA T` block, which `CIRCLE2`
-     * has twice and `PLS22` twice more.
+     * 6502: the negate-into-sixteen-bits block, which `CIRCLE2` has twice and `PLS22` twice more.
      *
      * It negates a byte into a sixteen-bit value: the low half two's-complemented and the high half
-     * either 255 or 0 depending on whether the negation carried. The `ADC #0`s run on the carry the
-     * comparison above left, which is SET -- that set bit is the "+1" of the two's complement, and
-     * the block would be wrong without it.
+     * either 255 or 0 depending on whether the negation carried. Both halves add zero on the carry
+     * the comparison above left, which is SET -- that set bit is the "+1" of the two's complement,
+     * and the block would be wrong without it.
      */
     struct Negated
     {
@@ -398,8 +397,8 @@ namespace Elite
   void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                 const Projection& _centre, std::uint8_t _radius, bool _carryIn, Picture* _picture) noexcept
   {
-    // 6502: LDX #&FF / STX FLAG / INX / STX CNT. `CNT` is the angle this walk is at, `CIRCLE2`'s
-    // own since M2-c-3: `BLINE` advances it and hands it back, which is what the loop below reads.
+    // 6502: the flag set and the angle zeroed. `CNT` is the angle this walk is at, `CIRCLE2`'s own
+    // since M2-c-3: `BLINE` advances it and hands it back, which is what the loop below reads.
     _state.flag = 0xFF;
     std::uint8_t angle = 0;
 
@@ -411,8 +410,8 @@ namespace Elite
        * 6502: PLL3 -- the two coordinates, a quarter-turn apart in the same table.
        *
        * `FMLTU2` masks to five bits, so the table is a quarter-wave and the sign has to be put
-       * back by hand; that is what the two `CMP #33` tests do. 33 rather than 32 because what is
-       * being compared is a count the loop has already stepped.
+       * back by hand; that is what the two comparisons against 33 do. 33 rather than 32 because
+       * what is being compared is a count the loop has already stepped.
        */
       const LogProduct sine = MultiplyBySine(_radius, angle, carry);
       std::uint8_t across = sine.value;

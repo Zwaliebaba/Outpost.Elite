@@ -972,8 +972,8 @@
         {
           "id": "pd-pl44-clc",
           "file": "GameLogic/PlanetDraw.cpp",
-          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
-          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
+          "find": "      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
+          "replace": "      extent.offScreen = true;\n      return extent; // 6502: PL44 -- which is `PLS6`'s carry clear, not `EDGES`'s (§6.45)",
           "expect": "caught",
           "note": "A circle whose top is above the screen is ON screen -- `BMI PL44` lands on a `CLC`, not on a rejection (plan section 6.45). Would have hidden: a planet vanishing the moment its top edge left the view."
         },
