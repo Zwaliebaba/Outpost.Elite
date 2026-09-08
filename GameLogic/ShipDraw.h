@@ -54,9 +54,10 @@ namespace Elite
   /*
    * 6502: DVID3B2 -- K(3 2 1 0) = (A P+1 P) / (z_sign z_hi z_lo).
    *
-   * The two-instruction preamble that turns `DVID3B` into "divide by this ship's z", and the
-   * `ORA #1` in it is load-bearing: it is what guarantees the non-zero denominator the divide
-   * needs, and a ship at z = 0 is a real thing the game produces.
+   * The preamble that copies the ship's z into the divisor and so turns `DVID3B` into "divide by
+   * this ship's z". FORCING THE LOW BIT of the z low byte on the way is load-bearing: it is what
+   * guarantees the non-zero denominator the divide needs, and a ship at z = 0 is a real thing the
+   * game produces. (`DVID3B` forces the same bit again on the NUMERATOR, for its own reasons.)
    *
    * Filed under `ShipMove.cpp` by the ledger and built here instead, because what it is ABOUT is
    * the projection -- it exists to divide by a ship's distance, and its callers are `PLS6` here
@@ -65,7 +66,8 @@ namespace Elite
   /// `_numerator` is (A P+1 P) -- a coordinate's shape, the sign in the top byte -- and the
   /// quotient is left in `K`, where `PLS1`, `PLS6` and `PLANET` read it (M2-c takes it further).
   /// Returns `K(3 2 1 0)`, the quotient -- a value since M2-c-3. `_math` is still here for one
-  /// byte: `DV9`'s `STA Q`, which is the frame's `Q` (Modernize.md section 8; risk R22, closed).
+  /// byte: the `Q` that `DV9` writes, which is the frame's `Q` (Modernize.md section 8; risk R22,
+  /// closed).
   KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /*
@@ -112,8 +114,8 @@ namespace Elite
    * name mentions -- see `Arith.h`. It is what makes one pixel a ratio of 1/256, so a ship a
    * quarter of the way to the screen edge is one whose x is an eighth of its z.
    *
-   * The minus on y is an `EOR #128` on the sign byte before the divide, because space has y going
-   * up and the screen has it going down.
+   * The minus on y is the SIGN BIT flipped before the divide, because space has y going up and
+   * the screen has it going down.
    *
    * `_screen` is written a HALF AT A TIME. If x projects and y overflows, K3 has already been
    * stored and K4 has not, and the original leaves it that way; no caller reads either after an
@@ -153,22 +155,23 @@ namespace Elite
    * the bit is known set) and redraws, which erases. If the bit is clear there is nothing there and
    * it returns through `LL10-1`, an `RTS` that belongs to the routine before it.
    *
-   * RETURNS THE CARRY IT EXITS WITH, because the `EE55` block reads it (§6.157). It is not `LOIN`'s:
-   * `LL155` ends `INY / CPY XX20 / BCC LL27 / RTS`, so a heap with lines on it leaves the flag SET
-   * by the compare that ended the loop, whatever the line drawing did before it; a heap under four
-   * bytes leaves `CMP #4 / BCC LL82` -- CLEAR; and a ship that was not on the screen returns through
-   * a bare `RTS` with the flag the caller arrived with, which is `_carryIn`.
+   * RETURNS THE CARRY IT EXITS WITH, because the `EE55` block reads it (§6.157). It is not
+   * `LOIN`'s: `LL155` ends on the COMPARE that terminates its loop, so a heap with lines on it
+   * leaves the flag SET by that compare, whatever the line drawing did before it; a heap under
+   * four bytes leaves it CLEAR, from the length test that sent it away; and a ship that was not
+   * on the screen returns through a bare return with the flag the caller arrived with, which is
+   * `_carryIn`.
    */
   bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: the six instructions after `JSR EE51` in `LL9` part 1, and the `EE55` loop -- set up a
-   * newly killed ship's explosion cloud on its line heap.
+   * 6502: what `LL9` part 1 does after `EE51`, and the `EE55` loop -- set up a newly killed
+   * ship's explosion cloud on its line heap.
    *
-   * Byte 1 is 18, the counter `DOEXP` ages; byte 2 is `(XX0),7`, how many vertices the cloud
-   * blooms from, which arrives as the blueprint's `explosionCount`; bytes 3 to 6 are `DORND`. The
-   * FIRST `DORND` rolls in the carry `EE51` returned, and the other three run on the CLEAR that
-   * `CPY #6` leaves while Y is still under six.
+   * Byte 1 is 18, the counter `DOEXP` ages; byte 2 is the blueprint's seventh byte, how many
+   * vertices the cloud blooms from, which arrives as `explosionCount`; bytes 3 to 6 are `DORND`.
+   * The FIRST `DORND` rolls in the carry `EE51` returned, and the other three run on the CLEAR
+   * that the loop's own index test against six leaves while Y is still under six.
    *
    * THIS WAS A SEAM WITH NOTHING BEHIND IT UNTIL 2026-09-06, on the belief that the carry came out
    * of `LOIN` and could not be known (§6.91). With the six bytes never written, `DOEXP` read byte 2
@@ -203,8 +206,9 @@ namespace Elite
    * holds three vectors of six; `XX12` is at 113 and `K` at 119, six apart, and it holds three
    * results of two.
    *
-   * They are arrays because registers index them -- `LDA XX16,X` and `STA XX12,Y` in `LL51` -- which
-   * is the test for whether a workspace has to be addressable at all (§6.37).
+   * They are arrays because REGISTERS index them -- `LL51` reads `XX16` through X and writes
+   * `XX12` through Y -- which is the test for whether a workspace has to be addressable at all
+   * (§6.37).
    */
   struct GeometryWorkspace
   {
@@ -450,13 +454,13 @@ namespace Elite
 
   /*
    * `ShipDrawEffects` WAS HERE AND IS NOT ANY MORE (M6-0-a-3). It was the two places `LL9` leaves
-   * its own code -- 6502: LL25's `JMP PLANET` and LL14's `JMP DOEXP` -- and it outlived every other
-   * seam for one reason: in a flat oracle image the VIC-II's registers and `XX21` were the same
-   * bytes, so an explosion drawn on the oracle side corrupted the blueprints of the ships drawn
-   * after it (§6.108), and no whole frame with an explosion in it could be compared. `Cpu6502`
-   * banks the I/O page now (M6-0-a-1), the frame fixture draws the cloud (M6-0-a-2), and the two
-   * tail jumps are the calls into `PlanetDraw.cpp` and `Explosion.cpp` they always were. The
-   * `EE55` block was a third seam here until 2026-09-06 and is `SeedExplosionCloud` above.
+   * its own code -- 6502: LL25's tail jump to `PLANET` and LL14's to `DOEXP` -- and it outlived
+   * every other seam for one reason: in a flat oracle image the VIC-II's registers and `XX21` were
+   * the same bytes, so an explosion drawn on the oracle side corrupted the blueprints of the ships
+   * drawn after it (§6.108), and no whole frame with an explosion in it could be compared.
+   * `Cpu6502` banks the I/O page now (M6-0-a-1), the frame fixture draws the cloud (M6-0-a-2), and
+   * the two tail jumps are the calls into `PlanetDraw.cpp` and `Explosion.cpp` they always were.
+   * The `EE55` block was a third seam here until 2026-09-06 and is `SeedExplosionCloud` above.
    */
   struct Universe;
 
@@ -477,12 +481,13 @@ namespace Elite
    * than it is distant is rubbed out and abandoned. Both are `LL9` deciding not to draw, not the
    * caller.
    *
-   * `_carryIn` is for one thing: a ship that arrives here killed and not yet exploding
-   * has its cloud seeded with four `DORND`s, and the first of them rolls in the carry `JSR LL9` was
-   * reached with when the ship was not on the screen to be erased (§6.157). Nothing between `LL9`'s
-   * first instruction and `EE51` touches the flag -- `LDA`, `BIT`, `ORA`, `AND`, stores -- so the
-   * caller's carry is the block's. Part 11 of the flight loop derives it; the title, the briefings
-   * and the escape pod draw ships that are never killed, and pass a value nothing reads.
+   * `_carryIn` is for one thing: a ship that arrives here killed and not yet exploding has its
+   * cloud seeded with four `DORND`s, and the first of them rolls in the carry the CALL to `LL9`
+   * was made with, when the ship was not on the screen to be erased (§6.157). Nothing between
+   * `LL9`'s first instruction and `EE51` touches the flag -- loads, bit tests, ORs, ANDs and
+   * stores -- so the caller's carry is the block's. Part 11 of the flight loop derives it; the
+   * title, the briefings and the escape pod draw ships that are never killed, and pass a value
+   * nothing reads.
    */
   void DrawShip(Universe& _universe, Ship& _slot, bool _carryIn) noexcept;
 
