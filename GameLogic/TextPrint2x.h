@@ -218,6 +218,86 @@ namespace Elite
   static_assert(STATUS_LAYOUT.Map(6, 23).row == 34, "and the last line the list can reach");
 
   /*
+   * THE MARKET SCREENS, which are one layout for two entries (slice RS-5-b, sketch accepted
+   * 2026-09-08): `TT167`'s price list and `TT219`'s buy screen print the same table and get the
+   * same table here.
+   *
+   * WHAT 80 COLUMNS BUYS THIS SCREEN IS ONE HEADING ROW INSTEAD OF TWO. The game splits its header
+   * across canvas rows 1 and 2 because "UNIT PRICE" and "QUANTITY FOR SALE" do not fit over their
+   * columns in forty: row 1 carries "UNIT" and "QUANTITY", row 2 carries "PRODUCT UNIT PRICE FOR
+   * SALE". Six anchors put both rows on ONE wide row, interleaved so that each phrase lands over the
+   * column it heads. Not a word of it is new -- the tokens and their order are the game's, and only
+   * the cells are this table's.
+   *
+   * The four data anchors are the four fields, each a column range moved as a block, so the price
+   * stays right-aligned exactly as `PrintNumber` left it and the units stay under "UNIT".
+   */
+  inline constexpr std::array<Anchor, 10> BUY_ANCHORS{{
+    {0, 10, 2, 2, 4, 4, 1},    // "PRODUCT"
+    {11, 15, 2, 2, 31, 4, 1},  // "UNIT", the column of t / kg / g
+    {16, 20, 1, 1, 39, 4, 1},  // "UNIT" from the row above ...
+    {16, 21, 2, 2, 44, 4, 1},  // ... and "PRICE", so the two read as one phrase
+    {21, 30, 1, 1, 52, 4, 1},  // "QUANTITY" from the row above ...
+    {22, 39, 2, 2, 62, 4, 1},  // ... and "FOR SALE"
+    {0, 13, 4, 20, 5, 8, 2},   // the item's name
+    {14, 15, 4, 20, 32, 8, 2}, // its unit
+    {16, 20, 4, 20, 44, 8, 2}, // its price, right-aligned as the canvas has it
+    {21, 39, 4, 20, 61, 8, 2}, // and how much of it is for sale
+  }};
+
+  inline constexpr TextLayout BUY_LAYOUT{4, 1, 2, BUY_ANCHORS};
+
+  static_assert(BUY_LAYOUT.Map(2, 2).column == 6, "PRODUCT over the item names");
+  static_assert(BUY_LAYOUT.Map(1, 4).column == 6, "which start at wide column 6");
+  static_assert(BUY_LAYOUT.Map(17, 1).row == 4, "the second heading row is folded onto the first");
+  static_assert(BUY_LAYOUT.Map(20, 4).column == 48, "the price still ends where PrintNumber left it");
+  static_assert(BUY_LAYOUT.Map(1, 20).row == 40, "and the seventeenth item is the last row");
+
+  /*
+   * THE INVENTORY SCREEN (slice RS-5-b), which is the status screen's shape for the same reason:
+   * a short left column of numbers and a list that wants a column of its own.
+   *
+   * The hold's anchor starts at wide row 4 so that its first ITEM -- canvas row 7, since row 6 is
+   * the blank `TT69` leaves -- lands on wide row 6, level with the fuel line. It reaches canvas row
+   * 23 because seventeen goods plus the large-cargo-bay line is as far down as `TT210` can print.
+   */
+  inline constexpr std::array<Anchor, 3> INVENTORY_ANCHORS{{
+    {0, 39, 1, 1, 24, 2, 1},  // "INVENTORY", over both columns
+    {0, 39, 4, 5, 5, 6, 2},   // the fuel and cash lines
+    {0, 39, 6, 23, 46, 4, 2}, // the hold itself, in the right-hand column
+  }};
+
+  inline constexpr TextLayout INVENTORY_LAYOUT{4, 1, 2, INVENTORY_ANCHORS};
+
+  static_assert(INVENTORY_LAYOUT.Map(1, 4).row == 6, "the fuel line");
+  static_assert(INVENTORY_LAYOUT.Map(1, 7).row == 6, "and the first item, level with it");
+  static_assert(INVENTORY_LAYOUT.Map(1, 7).column == 47, "in the right-hand column");
+
+  /*
+   * THE EQUIP SHIP SCREEN (slice RS-5-b), whose two columns are the item and its price, and whose
+   * fourth anchor is the interesting one.
+   *
+   * `EQSHP` asks its question on `CLYNS`'s row 21, which is where every message goes and is nowhere
+   * near the list at twice the row spacing -- the offsets would put it on wide row 43, thirty rows
+   * below an item list that ends at 34. The anchor brings it back under the list. This is the first
+   * table to move something for a reason that is not "the screen is wider": it is wider AND taller,
+   * and a row number that meant "just under the text" at 25 rows does not at 50.
+   */
+  inline constexpr std::array<Anchor, 4> EQUIP_ANCHORS{{
+    {0, 39, 1, 1, 24, 2, 1},   // "EQUIP SHIP"
+    {0, 20, 3, 16, 8, 8, 2},   // the number and the item, thirteen of them at most
+    {21, 39, 3, 16, 46, 8, 2}, // the price, right-aligned as the canvas has it
+    {0, 39, 20, 23, 8, 38, 2}, // and the prompt, which the offsets would strand at the bottom
+  }};
+
+  inline constexpr TextLayout EQUIP_LAYOUT{4, 1, 2, EQUIP_ANCHORS};
+
+  static_assert(EQUIP_LAYOUT.Map(3, 3).column == 11, "the first item's number");
+  static_assert(EQUIP_LAYOUT.Map(3, 16).row == 34, "the thirteenth item is the last one sold");
+  static_assert(EQUIP_LAYOUT.Map(1, 21).row == 40, "and the prompt sits under the list, not at 43");
+
+
+  /*
    * `TTX66K`'s own test for which of the two kinds of screen is up, borrowed rather than invented:
    * it branches on `QQ11` being 0 or 13.
    *

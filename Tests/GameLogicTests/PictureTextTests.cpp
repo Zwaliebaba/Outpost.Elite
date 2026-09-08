@@ -4,6 +4,7 @@
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Equipment.h"
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
 #include "Picture.h"
@@ -275,6 +276,49 @@ namespace GameLogicTests
     }
 
     /*
+     * A universe wired to both surfaces, as `Game` wires its own -- what a whole SCREEN needs, as
+     * against the printer `Printers` above gives a glyph test.
+     */
+    struct Docked
+    {
+      Elite::Universe universe;
+      Elite::TextPrinter screen{universe.canvas, universe.text};
+      Elite::CharacterPrinter characters{screen, universe.sentences};
+      Elite::TokenPrinter printer{characters, universe.text};
+      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
+      Elite::StateTokens values;
+      Elite::ExtendedTokenPrinter extended;
+      NullSeams nulls;
+      Elite::SidWriteLog sid;
+      Elite::Ports ports;
+
+      Docked()
+        : values(printer, universe.text, universe.commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name),
+                 universe.current.seeds, universe.selectedSeeds, false),
+          extended(characters, printer, universe.rng),
+          ports{printer, characters, screen, sid, extended, nulls, nulls, nulls}
+      {
+        universe.commander = Elite::DefaultCommander();
+        universe.text.palette = Elite::TEXT_COLOUR_WHITE;
+        universe.current.seeds = universe.commander.galaxySeeds;
+        universe.selectedSeeds = universe.commander.galaxySeeds;
+        characters.State().sentenceStart = 0xFF;
+        printer.SetCaseFlags(0);
+        printer.SetValueTokens(&values);
+        screen.AttachPicture(&universe.picture, &universe.screenLayout);
+      }
+
+      /// Everything in the hold, so a cargo list is as long as it can be.
+      void FillTheHold()
+      {
+        for (std::size_t item = 0; item < universe.commander.cargoHold.size(); ++item)
+        {
+          universe.commander.cargoHold[item] = static_cast<std::uint8_t>(item + 1u);
+        }
+      }
+    };
+
+    /*
      * THE STATUS SCREEN, re-flowed, against the screen the game prints (slice RS-5-a).
      *
      * The whole re-flow is a table, so what has to be shown is that the table is the ONLY thing
@@ -287,9 +331,8 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheStatusScreenLandsWhereItsTableSaysAndNowhereElse)
     {
-      Elite::Universe universe;
-      universe.commander = Elite::DefaultCommander();
-      Elite::Commander& commander = universe.commander;
+      Docked docked;
+      Elite::Commander& commander = docked.universe.commander;
       commander.legalStatus = 60; // a fugitive, the longest of the three
       commander.kills.lo = 100;
       commander.escapePod = 1;
@@ -304,48 +347,27 @@ namespace GameLogicTests
       commander.lasers[2].byte = 151; // military
       commander.lasers[3].byte = 50;  // mining
 
-      Elite::TextState& text = universe.text;
-      text.palette = Elite::TEXT_COLOUR_WHITE;
-      Elite::TextPrinter screen{universe.canvas, text};
-      screen.AttachPicture(&universe.picture, &universe.screenLayout);
-
-      Elite::CharacterPrinter characters(screen, universe.sentences);
-      characters.State().sentenceStart = 0xFF;
-      Elite::TokenPrinter printer(characters, text);
-      printer.SetCaseFlags(0);
-
-      const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-      universe.current.seeds = commander.galaxySeeds;
-      universe.selectedSeeds = commander.galaxySeeds;
-      Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name),
-                                universe.current.seeds, universe.selectedSeeds, false);
-      printer.SetValueTokens(&values);
-
-      Elite::ExtendedTokenPrinter extended(characters, printer, universe.rng);
-      NullSeams nulls;
-      Elite::SidWriteLog sid;
-      Elite::Ports ports{printer, characters, screen, sid, extended, nulls, nulls, nulls};
-
       /*
-       * The frame first, on its own, so that the comparison below is over the TEXT alone. `STATUS`
-       * opens with `TRADEMODE`, which redraws the same border and the same rules; running it once
-       * here gives a baseline those cells match exactly, and everything that differs afterwards is
-       * a glyph.
+       * The frame first, on its own, so that the comparison below is over the TEXT alone. Every
+       * docked screen opens with `TRADEMODE`, which redraws the same border and the same rules;
+       * running it once here gives a baseline those cells match exactly, and everything that
+       * differs afterwards is a glyph.
        */
-      Elite::SetUpTradeScreen(universe, ports, Elite::INVENTORY_VIEW, Elite::STATUS_LAYOUT);
-      const Canvas frame = universe.canvas;
-      const Picture framePicture = universe.picture;
+      Elite::SetUpTradeScreen(docked.universe, docked.ports, Elite::INVENTORY_VIEW, Elite::STATUS_LAYOUT);
+      const Canvas frame = docked.universe.canvas;
+      const Picture framePicture = docked.universe.picture;
 
       const Elite::ShipCondition condition{1, 0, 0, 255}; // docked, so the condition line is "Docked"
-      Elite::StatusScreen(universe, ports, condition);
+      Elite::StatusScreen(docked.universe, docked.ports, condition);
 
       // The screen chose its own table, which is the whole point of the layout parameter: the view
       // byte says 8, and 8 is also the inventory screen.
-      Assert::AreEqual<std::uint32_t>(Elite::INVENTORY_VIEW, universe.view, L"the view is still the game's");
-      Assert::AreEqual<std::uint32_t>(Elite::STATUS_LAYOUT.rowOffset, universe.screenLayout.rowOffset,
+      Assert::AreEqual<std::uint32_t>(Elite::INVENTORY_VIEW, docked.universe.view, L"the view is still the game's");
+      Assert::AreEqual<std::uint32_t>(Elite::STATUS_LAYOUT.rowOffset, docked.universe.screenLayout.rowOffset,
                                       L"and the layout is the status screen's, not LayoutForView's");
 
-      const std::wstring wrong = TheGlyphsAgree(universe.canvas, universe.picture, Elite::STATUS_LAYOUT, frame, framePicture);
+      const std::wstring wrong =
+        TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::STATUS_LAYOUT, frame, framePicture);
       Assert::IsTrue(wrong.empty(), wrong.c_str());
 
       // And the three cells the sketch is made of, stated as numbers so that a table edited by
@@ -361,6 +383,94 @@ namespace GameLogicTests
       const Elite::WideCell lastItem = Elite::STATUS_LAYOUT.Map(6, 23);
       Assert::AreEqual(52, lastItem.column, L"the last equipment line, at its indent");
       Assert::AreEqual(34, lastItem.row, L"and two wide rows below the one before it");
+    }
+
+    /*
+     * THE THREE TRADE SCREENS, each against the screen the game prints (slice RS-5-b).
+     *
+     * The same three clauses as the status screen, over the three tables accepted with it: the
+     * market list, the inventory and the equipment shop. The market screen is the one worth having
+     * a test for beyond the sweep, because its heading is TWO faithful rows folded onto ONE wide
+     * one -- the arrangement that would be silently wrong if an anchor were edited, since both rows
+     * would still be on the grid, just no longer reading as one phrase.
+     */
+    TEST_METHOD(TheMarketScreenFoldsItsTwoHeadingRowsOntoOne)
+    {
+      Docked docked;
+
+      Elite::SetUpTradeScreen(docked.universe, docked.ports, Elite::BUY_CARGO_VIEW, Elite::BUY_LAYOUT);
+      const Canvas frame = docked.universe.canvas;
+      const Picture framePicture = docked.universe.picture;
+
+      Elite::BuyScreen(docked.universe, docked.ports, false);
+
+      Assert::AreEqual<std::uint32_t>(Elite::BUY_LAYOUT.rowOffset, docked.universe.screenLayout.rowOffset,
+                                      L"the buy screen names its own table");
+
+      const std::wstring wrong =
+        TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::BUY_LAYOUT, frame, framePicture);
+      Assert::IsTrue(wrong.empty(), wrong.c_str());
+
+      // The fold: canvas row 1's "UNIT" and canvas row 2's "PRICE" are on ONE wide row, four cells
+      // apart, so they read as the phrase the forty-column screen had to split.
+      const Elite::WideCell unit = Elite::BUY_LAYOUT.Map(17, 1);
+      const Elite::WideCell price = Elite::BUY_LAYOUT.Map(17, 2);
+      Assert::AreEqual(unit.row, price.row, L"the two heading rows land on one");
+      Assert::AreEqual(40, unit.column, L"UNIT ...");
+      Assert::AreEqual(45, price.column, L"... PRICE, one space along");
+
+      // And each heading sits over the column it heads.
+      Assert::AreEqual(Elite::BUY_LAYOUT.Map(1, 4).column, Elite::BUY_LAYOUT.Map(2, 2).column, L"PRODUCT over the names");
+      Assert::AreEqual(Elite::BUY_LAYOUT.Map(20, 4).column, 48, L"and the price still ends where PrintNumber left it");
+    }
+
+    TEST_METHOD(TheInventoryScreenPutsTheHoldInItsOwnColumn)
+    {
+      Docked docked;
+      docked.FillTheHold();
+
+      Elite::SetUpTradeScreen(docked.universe, docked.ports, Elite::INVENTORY_VIEW, Elite::INVENTORY_LAYOUT);
+      const Canvas frame = docked.universe.canvas;
+      const Picture framePicture = docked.universe.picture;
+
+      Elite::InventoryScreen(docked.universe, docked.ports);
+
+      const std::wstring wrong =
+        TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::INVENTORY_LAYOUT, frame, framePicture);
+      Assert::IsTrue(wrong.empty(), wrong.c_str());
+
+      // The first item is level with the fuel line and in the other column, which is the sketch.
+      const Elite::WideCell fuel = Elite::INVENTORY_LAYOUT.Map(1, 4);
+      const Elite::WideCell first = Elite::INVENTORY_LAYOUT.Map(1, 7);
+      Assert::AreEqual(fuel.row, first.row, L"the hold starts level with the fuel");
+      Assert::AreEqual(6, fuel.column, L"the fuel line on the left");
+      Assert::AreEqual(47, first.column, L"and the hold on the right");
+    }
+
+    TEST_METHOD(TheEquipScreenBringsItsPromptBackUnderTheList)
+    {
+      Docked docked;
+
+      Elite::SetUpTradeScreen(docked.universe, docked.ports, Elite::EQUIP_SHIP_VIEW, Elite::EQUIP_LAYOUT);
+      const Canvas frame = docked.universe.canvas;
+      const Picture framePicture = docked.universe.picture;
+
+      Elite::EquipShipScreen(docked.universe, docked.ports);
+
+      const std::wstring wrong =
+        TheGlyphsAgree(docked.universe.canvas, docked.universe.picture, Elite::EQUIP_LAYOUT, frame, framePicture);
+      Assert::IsTrue(wrong.empty(), wrong.c_str());
+
+      /*
+       * `CLYNS`'s row 21 is the point of the fourth anchor. At twice the row spacing the offsets
+       * would put it on wide row 43, thirty rows below a list that ends at 34; the anchor brings it
+       * to 40. A row number that meant "just under the text" at 25 rows does not at 50.
+       */
+      const Elite::WideCell lastItem = Elite::EQUIP_LAYOUT.Map(3, 16);
+      const Elite::WideCell prompt = Elite::EQUIP_LAYOUT.Map(1, 21);
+      Assert::AreEqual(34, lastItem.row, L"the thirteenth item, which is as many as any station sells");
+      Assert::AreEqual(40, prompt.row, L"and the prompt six rows under it rather than at 43");
+      Assert::IsTrue(prompt.row > lastItem.row, L"under the list and not through it");
     }
 
     /*
@@ -385,9 +495,12 @@ namespace GameLogicTests
       // exercising the anchor path and not two rigid transforms.
       static constexpr std::array<Elite::Anchor, 1> ANCHORS{{{0, 39, 12, 23, 46, 16, 2}}};
 
-      const std::array<Named, 4> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
+      const std::array<Named, 7> LAYOUTS{{{L"the centred layout", Elite::CENTRED_LAYOUT},
                                           {L"the space view", Elite::SPACE_VIEW_LAYOUT},
                                           {L"the status screen", Elite::STATUS_LAYOUT},
+                                          {L"the market screens", Elite::BUY_LAYOUT},
+                                          {L"the inventory screen", Elite::INVENTORY_LAYOUT},
+                                          {L"the equip ship screen", Elite::EQUIP_LAYOUT},
                                           {L"an anchored table", Elite::TextLayout{4, 8, 2, ANCHORS}}}};
 
       for (const Named& named : LAYOUTS)

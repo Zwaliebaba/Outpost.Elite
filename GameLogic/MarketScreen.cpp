@@ -2,6 +2,8 @@
 
 #include "MarketScreen.h"
 
+#include "TextPrint2x.h"
+
 #include "EliteTypes.h"
 #include "Ports.h"
 #include "Universe.h"
@@ -123,7 +125,9 @@ namespace Elite
 
   void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept
   {
-    SetUpTradeScreen(_universe, _ports, BUY_CARGO_VIEW); // 6502: LDA #2 / JSR TRADEMODE
+    // 6502: LDA #2 / JSR TRADEMODE. The layout is named here for the reason `StatusScreen` names
+    // its own: nothing downstream could work out which screen view 2 is (Resolution.md section 6.2).
+    SetUpTradeScreen(_universe, _ports, BUY_CARGO_VIEW, BUY_LAYOUT);
 
     _universe.text.column = 1;
     _universe.text.row = 1;
@@ -418,8 +422,13 @@ namespace Elite
 
   void InventoryScreen(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW);
+    /*
+     * 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
+     *
+     * View 8 is the status screen's as well, so the layout is this screen's own and is named here.
+     * That collision is the whole reason `SetUpTradeScreen` takes one (Resolution.md section 6.2).
+     */
+    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW, INVENTORY_LAYOUT);
 
     // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
     _universe.text.column = INVENTORY_TITLE_COLUMN;
