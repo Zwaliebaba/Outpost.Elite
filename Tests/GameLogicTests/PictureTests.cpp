@@ -133,26 +133,6 @@ namespace GameLogicTests
                        L"the view inside the margins is the canvas's, doubled");
     }
 
-    /// The acceptance of RS-0, over a scene with something everywhere in it.
-    TEST_METHOD(WithNoRegionOfItsOwnItIsTheCanvasDoubled)
-    {
-      Canvas canvas;
-      DrawAScene(canvas);
-
-      // The fallback is asked for EXPLICITLY, because the space view stopped defaulting to it at
-      // RS-3. It is still what the dashboard region gets and still what RS-6 deletes, so the
-      // mechanism is tested on a surface that names it rather than on one that happens to have it.
-      Picture picture;
-      picture.SetNative({false, false});
-
-      for (const bool dashboard : {false, true})
-      {
-        canvas.SetDashboardShown(dashboard);
-        const std::wstring wrong = TheCanvasDoubled(ResolveBoth(canvas, picture, nullptr));
-        Assert::IsTrue(wrong.empty(), (std::wstring(dashboard ? L"dashboard shown: " : L"docked screen: ") + wrong).c_str());
-      }
-    }
-
     /*
      * The same with the hardware sprites over it, which is what the presenter actually shows.
      *
@@ -162,11 +142,16 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheSpritesDoubleWithIt)
     {
+      /*
+       * BOTH SURFACES BLANK UNDER THE SPRITES, which is what RS-6 left available and is enough: the
+       * subject is the sprite blit, and an empty canvas and an empty picture resolve to the same
+       * background everywhere, so any difference `TheCanvasDoubled` finds is a sprite pixel in the
+       * wrong place. Before RS-6 this test drew a scene and leaned on the upscale to put it on both;
+       * there is no upscale now, and mirroring the scene by hand would test the mirror.
+       */
       Canvas canvas;
-      DrawAScene(canvas);
       canvas.SetDashboardShown(true);
       Picture picture;
-      picture.SetNative({false, false});
 
       Elite::VideoState video;
       video.enabled = 0b0000'1111u;
@@ -186,19 +171,50 @@ namespace GameLogicTests
       Assert::IsTrue(wrong.empty(), (L"with sprites: " + wrong).c_str());
     }
 
-    /// The energy bomb reinterprets the same bytes as two-bit pairs, and it has to do that to both
-    /// surfaces at once because it is one flag on one canvas (Resolution.md section 3.2).
-    TEST_METHOD(TheEnergyBombReinterpretsBothSurfacesTogether)
+    /*
+     * The energy bomb reinterprets the same bytes as two-bit pairs, and it reaches THIS surface
+     * because the flag it reads is the canvas's (Resolution.md section 3.2).
+     *
+     * IT CANNOT BE TESTED AGAINST THE CANVAS DOUBLED, and the reason is the bomb itself. Doubling a
+     * bit and then reading the result in pairs is not the same as reading in pairs and then
+     * doubling: `01` doubled is `0011`, which as pairs is `00` and `11` -- neither of them `01`. The
+     * upscale never had this problem because it doubled RESOLVED PIXELS rather than bits, and it is
+     * gone. So the property is stated directly: the picture's own bits change colour when the flag
+     * is set, and the colours they change to are the two-bit reading of those same bits.
+     */
+    TEST_METHOD(TheEnergyBombReachesThePictureThroughTheCanvasFlag)
     {
       Canvas canvas;
-      DrawAScene(canvas);
-      canvas.SetSpaceViewMulticolour(true);
-      canvas.SetSpaceViewBackground(6u);
       Picture picture;
-      picture.SetNative({false, false});
 
-      const std::wstring wrong = TheCanvasDoubled(ResolveBoth(canvas, picture, nullptr));
-      Assert::IsTrue(wrong.empty(), (L"with the bomb burning: " + wrong).c_str());
+      // %01 %10 %11 %00 read as pairs, or 0 1 0 1 1 0 0 1 read as bits.
+      picture.WriteBitmap(0, 0b0110'1100u);
+      picture.SetCell(0, 0, Elite::CellPalette{Elite::Colour::White, Elite::Colour::Red});
+      canvas.SetCellColour(0, Elite::ColourIndex(Elite::Colour::Cyan));
+      canvas.SetSpaceViewBackground(Elite::ColourIndex(Elite::Colour::Green));
+
+      std::vector<std::uint8_t> plain(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT);
+      picture.Resolve(plain, canvas);
+
+      canvas.SetSpaceViewMulticolour(true);
+      std::vector<std::uint8_t> bombed(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT);
+      picture.Resolve(bombed, canvas);
+
+      Assert::IsTrue(plain != bombed, L"the bomb's flag did not reach the picture at all");
+
+      // The four pairs of `0b01101100`, in order, through the cell and the canvas's own registers.
+      const std::array<Elite::Colour, 4> expected{Elite::Colour::White, Elite::Colour::Red, Elite::Colour::Cyan,
+                                                  Elite::Colour::Green};
+      for (int pair = 0; pair < 4; ++pair)
+      {
+        const std::uint8_t want = Elite::ColourIndex(expected[static_cast<std::size_t>(pair)]);
+        for (int repeat = 0; repeat < 2; ++repeat)
+        {
+          const std::size_t at = static_cast<std::size_t>(pair) * 2u + static_cast<std::size_t>(repeat);
+          Assert::AreEqual<std::uint32_t>(want, bombed[at],
+                                          (L"pixel " + std::to_wstring(at) + L" of the bombed cell").c_str());
+        }
+      }
     }
 
     /*
@@ -214,7 +230,6 @@ namespace GameLogicTests
       DrawAScene(canvas); // deliberately busy, and none of it should appear
 
       Picture picture;
-      picture.SetNative({true, false});
       picture.SetCell(3, 2, Elite::CellPalette{Elite::Colour::White, Elite::Colour::Blue});
       picture.PlotPoint(25, 17); // cell (3, 2), pixel (1, 1) within it
 
@@ -235,7 +250,6 @@ namespace GameLogicTests
       canvas.SetDashboardShown(true);
 
       Picture picture;
-      picture.SetNative({false, true});
       picture.SetDot(100, 300, 5u);
       picture.SetDot(101, 300, 7u);
 
@@ -259,7 +273,6 @@ namespace GameLogicTests
     TEST_METHOD(PlottingAPointTwiceLeavesTheSurfaceAsItWas)
     {
       Picture picture;
-      picture.SetNative({true, false});
 
       const std::array<std::pair<int, int>, 5> points = {{{0, 0}, {639, 399}, {320, 200}, {7, 8}, {8, 7}}};
       for (const auto& [x, y] : points)
@@ -349,28 +362,52 @@ namespace GameLogicTests
     }
 
     /*
-     * The regions are COMPLETE, which is the state Risk R27's tripwire was waiting for.
+     * THE CANVAS IS NOT A SOURCE OF PIXELS ANY MORE, which is the whole of RS-6 stated as a test.
      *
-     * It fired at RS-4, as designed: from here every pixel of every screen is drawn natively and
-     * `UpscaleCell` has no caller in the game. What it still has is this test and the two below it,
-     * which is deliberate -- RS-6 deletes the fallback, and until it does, the fallback has to keep
-     * working, because a `Picture` asked for it explicitly is how every test that compares the
-     * doubling is written. So the reminder moves to where the work is: section 10's RS-6 row.
+     * Between RS-0 and RS-4 a region with no twins yet was drawn from the canvas doubled, and Risk
+     * R27's tripwire watched for the day that stopped being true. It fired at RS-4; this slice took
+     * the scaffolding down. What replaces the tripwire is the opposite assertion: a picture nobody
+     * has drawn on resolves BLANK, however busy the canvas beside it is. Before RS-6 this test
+     * would have failed on every pixel of the scene.
+     *
+     * `_canvas` is still a parameter of `Resolve`, and still has to be: the dashboard flag, the
+     * energy bomb's mode and background, the colour RAM and the sprite pointers are raster state
+     * this surface does not hold. Pixels are the thing it no longer takes.
      */
-    TEST_METHOD(TheRegionsSayWhichSlicesHaveLanded)
+    TEST_METHOD(AnUndrawnPictureIsBlankHoweverBusyTheCanvasIs)
     {
-      const Picture picture;
-      Assert::IsTrue(picture.Native().spaceView, L"RS-3 completed the upper region and turned it over");
-      Assert::IsTrue(picture.Native().dashboard, L"RS-4 completed the lower one");
-      Assert::IsTrue(picture.Native().Complete(), L"Complete() is what RS-6 asserts before deleting the upscale");
-
-      // And the fallback is still there and still right, which is what RS-6 removes rather than
-      // what it fixes.
       Canvas canvas;
       DrawAScene(canvas);
-      Picture fallback;
-      fallback.SetNative({false, false});
-      Assert::IsTrue(TheCanvasDoubled(ResolveBoth(canvas, fallback, nullptr)).empty(), L"the upscale stopped working before RS-6 removed it");
+
+      const Picture picture; // nothing drawn on it at all
+      const Pictures both = ResolveBoth(canvas, picture, nullptr);
+
+      bool canvasHasInk = false;
+      for (int y = 0; y < Canvas::HEIGHT; ++y)
+      {
+        for (int x = 0; x < Canvas::WIDTH; ++x)
+        {
+          if (both.OnCanvas(x, y) != both.OnCanvas(0, 0))
+          {
+            canvasHasInk = true;
+          }
+        }
+      }
+      Assert::IsTrue(canvasHasInk, L"the scene drew nothing, so the test proves nothing");
+
+      const std::uint8_t blank = both.OnPicture(0, 0);
+      for (int y = 0; y < Picture::HEIGHT; ++y)
+      {
+        for (int x = 0; x < Picture::WIDTH; ++x)
+        {
+          if (both.OnPicture(x, y) != blank)
+          {
+            Assert::Fail((L"picture (" + std::to_wstring(x) + L", " + std::to_wstring(y) +
+                          L") took a pixel from the canvas, which RS-6 removed")
+                           .c_str());
+          }
+        }
+      }
     }
 
     /*
@@ -385,7 +422,6 @@ namespace GameLogicTests
       Elite::Universe universe;
       const std::uint64_t base = Elite::HashState(universe);
 
-      universe.picture.SetNative({true, true});
       universe.picture.PlotPoint(3, 4);
       universe.picture.SetDot(5, 300, 9u);
       universe.picture.SetCell(1, 1, Elite::CellPalette{Elite::Colour::White, Elite::Colour::Red});
