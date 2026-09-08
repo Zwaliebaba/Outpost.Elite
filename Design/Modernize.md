@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,250 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->2,223 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i — the shape it asks for,
 why naming an instruction is not quoting one, and the tag that separates the two, are in
@@ -1939,6 +1939,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-7: `Tactics.cpp`'s geometry, and a finding that must not be paraphrased away.**
+
+27 sites, all in the steering: the axis subtraction, the unit vector, the two dot products that
+decide pitch and roll, and the missile's inverted approach. `Tactics.cpp` is at 136 of 163.
+
+Two of them needed the rewrite to be careful rather than mechanical, and both are places where the
+INSTRUCTION SEQUENCE was the evidence for a claim:
+
+- **The pitch magnitude and its sign come from one measurement read twice.** The original saves the
+  dot product, masks it down to a sign for the counter, then brings the saved byte back to compare
+  its magnitude. Say only "the dot product decides both" and the reader loses why the two readings
+  cannot disagree. The rewrite keeps the ORDER — saved, flattened, brought back — without the five
+  instructions that perform it.
+- **`TA873`'s two shifts cancel**, and that is the whole point of the comment: a shift up followed by
+  a shift back down through a set carry leaves the byte alone and sets bit 7. The port once read it
+  as a shift AND a set, which agreed for a whole slice because the two callers only ever passed
+  zero (§6.126). The rewrite names the two shifts and what they cancel to, because a reader who
+  cannot see that they cancel cannot check the port against them.
+
+Neither needed the tag. **R-i's quotation hatch is still unused at 2,223 sites**, which is worth
+recording: the row's instinct that almost all of this should simply go looks right so far, and the
+cap it will eventually need may be very small.
+
+469 tests green, all nineteen checks, replay digests unmoved, 97 of 97 mutants, no marker lost.
+`opcode-transcriptions` 2,250 → 2,223.
 
 **2026-09-08 — M6-d-6: `FlightLoop.cpp` to zero, and the counter's third and largest correction.**
 
