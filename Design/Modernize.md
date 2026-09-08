@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->633 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->588 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-42: `Docking.cpp` and `Hyperspace.h` to zero, and the hardest case for R-i's tag
+did not need it.**
+
+45 sites over two files: the arrival dispatch and the jump. Thirty-ninth and fortieth at zero.
+
+**`zZ+1` is the strongest candidate for a tagged quotation anywhere in the tree, and prose carries
+it.** `Ghy` branches to `zZ+1` when no galactic drive is fitted. `zZ` is a two-byte instruction that
+loads 96; `zZ+1` therefore addresses its OPERAND; and 96 is &60, which is the opcode for `RTS`. So
+the branch lands inside an instruction and executes its argument as a return — there is no code at
+`zZ+1` at all. The comment said this by quoting `LDA #96` and its assembled bytes `A9 60`, and the
+first rewrite kept the quotation and reached for R-i's `6502 quoted:` tag. It does not need it: "a
+TWO-BYTE instruction that loads 96 into the accumulator, so `zZ+1` addresses its operand — and 96 is
+&60, which is also the opcode for `RTS`" says every part of the argument, and naming an instruction
+in a sentence is not quoting one (R-i). **`opcode-quotations` is still 0**, and the case that looked
+most likely to need the cap is now evidence the cap may end at zero. That is worth the owner's
+attention before M6-e: the tag exists and has never been used.
+
+**A count in the prose was wrong by a factor of three.** `TT18`'s witchspace roll is `CMP #253 /
+BCS`, so 253, 254 and 255 send you there — three values in 256. The `JumpResult` enum eleven lines
+above said "three bytes in 256" and the routine's own header said "one roll in 256". Both describe
+the same compare. Corrected to three, which is what the arithmetic says and what the enum already
+said.
+
+`ptg` is the other shape worth keeping: `COK` shifted right, the carry set, `COK` rotated back left
+is an OR WITH 1 written in three instructions, and it preserves bit 7 precisely because the shift
+moved it down and the rotate moved it back. §6.126 found the mirror of it — shift-left, set,
+rotate-right — mis-ported twice.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (24 and 9). `opcode-transcriptions` 633 → 588.
 
 **2026-09-08 — M6-d-41: `ExtendedTokens.cpp` and `NameEntry.cpp` to zero, and the byte that IS the
 reason.**
