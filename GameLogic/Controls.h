@@ -26,13 +26,14 @@ namespace Elite
    */
 
   /*
-   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggles.
+   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggled.
    *
    * `DKS3` toggles a byte between 0 and &FF with `EOR #&FF`. On this build it walks the block as
    * `DAMP,Y` and compares the key against `TGINT,Y`, a table of key codes in block order -- the
    * `DAMP-&40,X` of the BBC, indexed straight from the key code, is what an earlier version of this
-   * comment described, and it is not here. The screen that does the walking is `DK4`, which `DOKEY`
-   * falls into every frame, and it is not ported yet (slice 4e, §6.120). TWO OF THE THREE READ
+   * comment described, and it is not here. The screen that did the walking was `DK4`, which `DOKEY`
+   * falls into every frame; it was ported as slice 4e and removed by owner ruling on 2026-09-08
+   * (InputTimer.md I-0), so the executable's settings file writes these now. TWO OF THE THREE READ
    * BACKWARDS: `DAMP` non-zero means damping is OFF and `DJD` non-zero means auto-recentre is OFF,
    * because the options are phrased as the thing being disabled. `JSTK` is the plain way round.
    *

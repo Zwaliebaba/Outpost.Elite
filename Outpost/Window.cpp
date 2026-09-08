@@ -204,7 +204,7 @@ namespace Outpost
      *
      * `TT17` reads one cursor key per axis and takes the direction from SHIFT (`KeyMap.h`), so an
      * arrow puts its axis key into the logger and, for two of the four, a shift with it. Both are
-     * held state and neither is a key PRESS: the queue below is what `TT102` dispatches on, and
+     * held state and neither is a key PRESS: the press below is what `TT102` dispatches on, and
      * the crosshairs are moved from the logger by the frame rather than by an event.
      */
     const CursorKeys cursor = CursorKeysFor(static_cast<int>(_virtualKey));

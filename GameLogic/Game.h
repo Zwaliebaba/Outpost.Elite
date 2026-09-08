@@ -35,9 +35,9 @@ namespace Elite
    *
    * SO THE STEPS ARE COUNTED OUTSIDE AND TAKEN INSIDE. `Advance` used to do both, over a `double`
    * accumulator -- and the plan's row said it would move here, which it cannot: ADR-005 §3's
-   * accumulator is floating point by construction. `Step`, `StepDocked` and `StepPaused` each take
-   * ONE key and run ONE pass, and how many passes a wall-clock second is worth stays where the
-   * clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
+   * accumulator is floating point by construction. `Step` and `StepDocked` each take ONE key and run
+   * ONE pass (`StepPaused` went with the pause screen, InputTimer.md I-0), and how many passes a
+   * wall-clock second is worth stays where the clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
    *
    * THE PLATFORM ARRIVES AS FOUR REFERENCES, which is `Ports` minus the four members that are this
    * library's own: the token printer, the character printer, the sink and the extended printer are

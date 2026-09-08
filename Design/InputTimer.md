@@ -1,6 +1,9 @@
 # Input and time — what the port does today, and the plan to modernise both
 
-**Status:** analysis and plan, opened 2026-09-08. Nothing in this document is built. It reads after
+**Status:** analysis and plan, opened 2026-09-08; **six of its twelve slices are built the same day**
+-- I-0, S-1, I-3, T-0, I-1 and T-2, by owner ruling, each recorded in §9 -- and I-2, I-4, I-5,
+T-1, T-3 and T-4 are not. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
+record of what was found; where a finding is closed its heading says so. It reads after
 [Modernize.md](Modernize.md), because it starts from the shape M6-0 left and proposes slices that
 sit beside M6-a; where it touches a decision an ADR owns, it says which ADR changes.
 
@@ -67,7 +70,7 @@ into C++20 coroutines so that the nested pump, the `ExitProcess` and the three c
 
 ---
 
-## 1. Input as it is today
+## 1. Input as it was when this opened (§9 has what the slices changed)
 
 ```
 Windows message            Outpost::Window                 Outpost::GameShell / Main.cpp        Elite::Game
@@ -136,7 +139,7 @@ do and the reason a fast player sees screens go past. The three `FLKB` sites the
 (`NameEntry.cpp:50`, `SystemScreen.cpp:138`, `SetUpTradeScreen`) are not enough, because the
 original never had a queue to empty — its `FLKB` clears a KERNAL buffer `RDKEY` does not read.
 
-### I-2 (B) — `TT102` is dispatched from the edge queue; the original dispatches the held key
+### I-2 (B) — `TT102` is dispatched from the edge queue; the original dispatches the held key — **half closed by I-1**: the dispatch takes one genuine press a step and no repeat; edge against level is still I-2's
 
 `MLOOP` reaches `TT102` with `thiskey`, which `RDKEY` produced from the *matrix* on that pass. The
 port hands it the queue's head. Docked, the difference is invisible except that a held F-key
@@ -174,7 +177,7 @@ The table is kept as the record of what was found. The fix is not the binding: t
 2026-09-08 that the pause functionality may go, and §5.9 removes the screen and gives its thirteen
 settings a home that does not need a frozen game to reach.
 
-### I-4 (B) — The joystick is half gone, and the half that stays is reachable from the keyboard
+### I-4 (B) — The joystick is half gone, and the half that stays is reachable from the keyboard — **built 2026-09-08 as I-3, §9**
 
 `TITLE` (`Flight.cpp:381,434`): `JSTK` is set to `&FF` before the loop and `INC JSTK` runs only
 when the loop is left by a non-fire key. The upstream comment says it plainly: the prompt "reads as
@@ -201,7 +204,7 @@ so the pause screen's letters and the text editor's digits do not have to be the
 (§5.3). Raw Input (`WM_INPUT`) is *not* needed for this; the scan code is in `WM_KEYDOWN`'s
 `lParam` bits 16–24 and that is enough for a game that does not need to distinguish two keyboards.
 
-### I-6 (A) — Focus loss leaves keys held
+### I-6 (A) — Focus loss leaves keys held — **built 2026-09-08 in I-0, §9**
 
 `Window::OnMessage` handles neither `WM_KILLFOCUS`, `WM_ACTIVATE` nor `WM_ACTIVATEAPP`. Alt+Tab
 while holding an arrow leaves `m_held[17]` true until the key is pressed again in this window; the
@@ -237,7 +240,7 @@ byte of `GameLogic`'s behaviour for the same key sequence.
 
 ---
 
-## 3. Time as it is today
+## 3. Time as it was when this opened (§9 has what the slices changed)
 
 ```
 Main.cpp Run()                                     GameShell::Turn()                 CanvasPresenter::Present
@@ -602,11 +605,11 @@ the Windows CI leg (R15).
 
 | Slice | What | Gate | Ratchets and checks touched | Sittings |
 |---|---|---|---|---|
-| **I-0 Remove the pause path, and focus** | §5.9 items 3 and 4: the `PAUSE_KEY` test leaves `Game::Step`; `m_paused`, `Mode::Paused`, `StepPaused` and `Main.cpp`'s paused branch go; `PauseScreen.*` shrinks to `NoteMusicSwitch`; `PauseScreenTests` and the two `GameTests` cases go with what they compared; ledger row 148 and ADR-005 §4 amended. `Window`: clear `m_held` on `WM_KILLFOCUS`/`WM_ACTIVATEAPP(FALSE)`, ignore `WM_SYSKEYDOWN` with Alt held for anything but F10. | Suite green; the replay record checked for `&40` first (§5.9); play: Backspace deletes and does nothing else, Alt+Tab with an arrow held. | `inventory.py --strict` on the row; `check_outpost.py` on `StepPaused`'s removal | 1 |
-| **S-1 Settings file** | §5.9 item 1: `Outpost/Settings.*` reads the thirteen bytes and `DNOIZ` into `Universe` at start-up, defaults the game's, malformed lines reported and ignored (AGENTS.md §5: a user's file is a diagnostic, not a crash). `ShellTests` covers the parser on both legs. | Every byte `OptionBlock` named has a key; a file with each set is honoured; a bad file launches with defaults and a message. | none | 1 |
-| **I-1 `TT217` into the library** | `Elite::ReadKey` over `Keyboard::Held` and `Presenter::WaitFrames`, compared against the oracle's `TT217` on the CIA matrix with held-then-released scripts; `Keyboard::NextKey` removed; `Window::m_pressed` removed; `Main.cpp` derives `thiskey` per step from the held table (lowest held, as `RDKEY`); `ScriptedKeys` and `NullSeams` become held-key scripts with releases. `FLKB` resolved by reading its C64 branch. | Oracle comparison of `ReadKey`; `DockedSessionTests` green with no escape-hatch keys; the replay digest unchanged (no step changed); play: hold RETURN through a save, hold "1" on the buy screen. | `effects-seams` unchanged (`Keyboard` stays a port, smaller); `check_outpost.py` arity on `NextKey`'s removal | 2 |
+| **I-0 Remove the pause path, and focus** ✅ **built 2026-09-08 (§9)** | §5.9 items 3 and 4: the `PAUSE_KEY` test leaves `Game::Step`; `m_paused`, `Mode::Paused`, `StepPaused` and `Main.cpp`'s paused branch go; `PauseScreen.*` shrinks to `NoteMusicSwitch`; `PauseScreenTests` and the two `GameTests` cases go with what they compared; ledger row 148 and ADR-005 §4 amended. `Window`: clear `m_held` on `WM_KILLFOCUS`/`WM_ACTIVATEAPP(FALSE)`, ignore `WM_SYSKEYDOWN` with Alt held for anything but F10. | Suite green; the replay record checked for `&40` first (§5.9); play: Backspace deletes and does nothing else, Alt+Tab with an arrow held. | `inventory.py --strict` on the row; `check_outpost.py` on `StepPaused`'s removal | 1 |
+| **S-1 Settings file** ✅ **built 2026-09-08 (§9)** | §5.9 item 1: `Outpost/Settings.*` reads the thirteen bytes and `DNOIZ` into `Universe` at start-up, defaults the game's, malformed lines reported and ignored (AGENTS.md §5: a user's file is a diagnostic, not a crash). `ShellTests` covers the parser on both legs. | Every byte `OptionBlock` named has a key; a file with each set is honoured; a bad file launches with defaults and a message. | none | 1 |
+| **I-1 `TT217` into the library** ✅ **built 2026-09-08 (§9), with `NextKey` kept on the port for the fixtures** | `Elite::ReadKey` over `Keyboard::Held` and `Presenter::WaitFrames`, compared against the oracle's `TT217` on the CIA matrix with held-then-released scripts; `Keyboard::NextKey` removed; `Window::m_pressed` removed; `Main.cpp` derives `thiskey` per step from the held table (lowest held, as `RDKEY`); `ScriptedKeys` and `NullSeams` become held-key scripts with releases. `FLKB` resolved by reading its C64 branch. | Oracle comparison of `ReadKey`; `DockedSessionTests` green with no escape-hatch keys; the replay digest unchanged (no step changed); play: hold RETURN through a save, hold "1" on the buy screen. | `effects-seams` unchanged (`Keyboard` stays a port, smaller); `check_outpost.py` arity on `NextKey`'s removal | 2 |
 | **I-2 `InputFrame` and the layered map** | `InputFrame` as §5.2; the two `Step`s take it; `Window` produces one per outer turn (held from scan codes for the flight set, edge computed with release); `KeyBinding` gains `scanCode` and `layers`; the Docked layer retires the chart rule from `ScanKeyboard`. | `ShellTests` per-layer completeness; `ControlsTests` for `ScanKeyboard` unchanged on the space view; replay digest unchanged. | `main-lines` (250) — `Main.cpp` shrinks; `outpost-elite-names` (61) may fall, lower the ceiling in the same commit | 2 |
-| **I-3 `JSTK` at the seam** | §5.1: the title's fire test cannot select a joystick until a pad exists; one sentence in ADR-005 §4; `StartUpTests` gains the case. | Oracle comparison of `TITLE` still green (the scripted matrix presses a non-fire key); play: `A` on the title, then fly, damping present. | none | 0.5 |
+| **I-3 `JSTK` at the seam** ✅ **built 2026-09-08 (§9)** | §5.1: the title's fire test cannot select a joystick until a pad exists; one sentence in ADR-005 §4; `StartUpTests` gains the case. | Oracle comparison of `TITLE` still green (the scripted matrix presses a non-fire key); play: `A` on the title, then fly, damping present. | none | 0.5 |
 | **I-4 Coroutines** | §5.4: `Task`, the awaitable `ReadKey`/`WaitFrames`/`Present`/holds, the screens converted, `Run()` a function over `Game` and a `Platform` that answers the four ports; `GameShell` and `FlightSession` absorbed as Modernize.md §4.8 says; `Abandon` deleted. | Every existing comparison green without change to what it asserts; a new `GameLoopTests` case drives `Run()`'s loop through a docked session, a launch, a pause and a close on the Linux leg; the digest unchanged. | `effects-seams` 5 → 4 if `Presenter` and `Keyboard` fold into `Platform`; `main-lines` falls; `aggregate-refs` unchanged (8) | 4–5 |
 | **I-5 Gamepad and remapping** | §5.8 plus a remap file in `LocalAppData`; phase 6, own ADR. | Own ADR's. | — | 3, later |
 
@@ -614,9 +617,9 @@ the Windows CI leg (R15).
 
 | Slice | What | Gate | Ratchets and checks touched | Sittings |
 |---|---|---|---|---|
-| **T-0 Measure while the oracle exists** | `FlightLoopTests`: a crowded-bubble scene with `TACTICS` returning (a station whose AI path terminates, or the station trapped and its cost added from a separate measurement); a scene with the planet; the docked `MLOOP` pass; `TT16`'s `WSCAN`. Recorded as rows of `FLIGHT_FRAME_COSTS` and a new `DOCKED_PASS_COST`, each asserted by a test as the title curve is. | The new rows exist and the tests assert them; §6 journal entry naming the numbers as history. **Before M6-b.** | `check_counts` if any doc states the count | 2 |
+| **T-0 Measure while the oracle exists** ✅ **built 2026-09-08 (§9)** | `FlightLoopTests`: a crowded-bubble scene with `TACTICS` returning (a station whose AI path terminates, or the station trapped and its cost added from a separate measurement); a scene with the planet; the docked `MLOOP` pass; `TT16`'s `WSCAN`. Recorded as rows of `FLIGHT_FRAME_COSTS` and a new `DOCKED_PASS_COST`, each asserted by a test as the title curve is. | The new rows exist and the tests assert them; §6 journal entry naming the numbers as history. **Before M6-b.** | `check_counts` if any doc states the count | 2 |
 | **T-1 `MachineTiming`, `FrameClock`, `Scheduler`** | §5.5, in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated vertical blanks; the stall log; PAL/NTSC as one constant set with the default the owner rules; `SoundOutput` takes the same `MachineTiming`; **auto-pause while inactive** (§5.9 item 2). | `ShellTests` moved and extended (vertical-blank cases, the inactive case plans zero steps and banks nothing); play on a 60 Hz and a high-refresh panel: `dn2`'s beep pause is one second on both at PAL; Alt+Tab away for a minute and back, the game is where it was. | `main-lines`; ADR-005 §3 amended | 2 |
-| **T-2 Honour the dropped frames** | With T-1's tick: `StepDocked` runs `RunLoopTail` and the executable waits its two blanks. | Trumbles breed while docked, compared against the oracle's `MLOOP` on a docked pass; the digest re-taken with a journal entry naming the defect (rule R-e). | `mutants.json` gains a mutant for the docked tail | 1 |
+| **T-2 Honour the dropped frames** ✅ **built 2026-09-08 (§9), ahead of T-1: the syncs are returned and priced, not yet waited on a simulated blank** | With T-1's tick: `StepDocked` runs `RunLoopTail` and the executable waits its two blanks. | Trumbles breed while docked, compared against the oracle's `MLOOP` on a docked pass; the digest re-taken with a journal entry naming the defect (rule R-e). | `mutants.json` gains a mutant for the docked tail | 1 |
 | **T-3 Waitable swap chain** | §5.6: latency-waitable flip model, canvas generation counter, present-on-change, occlusion idle. | Golden screenshot unchanged; CPU at rest with the window hidden. | ADR-005 §1 one paragraph | 1 |
 | **T-4 Audio thread** | §5.7. Optional. | `SidRenderTests` unchanged; no stutter while dragging the title bar. | ADR-005 §2 one paragraph | 1 |
 

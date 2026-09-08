@@ -3,7 +3,7 @@
 **Status:** opened 2026-09-02. **Phases 0 to 5 are built as of 2026-09-05**: the kernel, the whole
 docked game, flight with its 3D pipeline, the sound and music, the ship AI and the autopilot, the
 explosions, the main game loop with hyperspace and the spawning rules, the pause screen with its
-thirteen option toggles, and — closing phase 4 — the three missions and the Trumbles are all ported
+thirteen option toggles (removed again 2026-09-08 by owner ruling, below), and — closing phase 4 — the three missions and the Trumbles are all ported
 and compared against the assembled original. The executable launches, flies, fights, docks, takes a
 briefing and dies. **There is no recorded mutation debt left**: the ship AI's thirteen survivors are
 closed and `python tools/mutate.py --unit tactics` is 16 of 16 — the last one was a defect, `TA7`'s
@@ -23,7 +23,11 @@ things the oracle could pin and nothing would pin after it is recorded, among th
 banking the I/O page so the start sequence runs on both machines, a whole frame with an explosion in
 it, the replay reaching death and the escape pod, a coverage instrument CI reads against the
 ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is next**: the four gaps the
-instrument named, then the recorder. **A fresh clone needs
+instrument named, then the recorder. **Input and time, 2026-09-08**: six slices of
+[InputTimer.md](InputTimer.md) are built beside M6-a — the pause screen removed and its thirteen
+settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one press, the fire key
+no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
+while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->414 tests** and
 CI runs **<!--count:checks-->sixteen repository checks** beside it.
@@ -75,7 +79,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | [002](ADR/ADR-002-numeric-model.md) | Numeric model | **8-bit integer semantics preserved exactly** — same widths, same wraparound, same lookup tables, same RNG — in the space view's 256×144 logical coordinates, on a canvas that holds the C64's own multicolour bitmap and cell-colour planes and resolves to 320×200 indices at the presenter seam (§4, amended 2026-09-03). No floats in game logic. |
 | [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** runs the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. Amended 2026-09-07 (§1, §4): the interpreter banks the I/O page and answers a keyboard matrix, records which labels each test ran, and the mutant corpus has a floor. |
 | [004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | **Our own codebase — nothing lifted from a sibling repository.** `GameLogic` (namespace `Elite`) holds the port, platform-free and deterministic; presentation lives in `Outpost.exe`; tests under `Tests/`. Flat folders, unique PascalCase names, generated data tables checked in, `MasterFile/` and `Upstream/` are reference only. |
-| [005](ADR/ADR-005-presentation.md) | Presentation | **Packaged Win32, no XAML: MSIX stays, WinUI 3 goes.** Raw window, flip-model D3D12 swap chain blitting the indexed canvas at integer scale, XAudio2 with a small SID-style synthesiser. |
+| [005](ADR/ADR-005-presentation.md) | Presentation | **Packaged Win32, no XAML: MSIX stays, WinUI 3 goes.** Raw window, flip-model D3D12 swap chain blitting the indexed canvas at integer scale, XAudio2 with a small SID-style synthesiser. Amended 2026-09-08 (§3, §4): the pause screen removed by owner ruling, the blocking read ported as `TT217`, a joystick only when the platform has one, the crowded end and the docked pass measured. |
 | [006](ADR/ADR-006-modernisation-architecture.md) | Modernisation architecture | **The port becomes a C++ program with no behavioural change**: typed structs with byte codecs, value-in value-out routines, `Universe` and `Game` over four ports, pipelines of named stages, the oracle as judge until recorded fixtures replace it — the architecture [Modernize.md](Modernize.md) builds toward, recorded at M2's opening and amended as phases land. |
 | [007](ADR/ADR-007-state-ownership.md) | State ownership and the replay hash | **`Universe` owns every byte of game state; `Game` owns the dispatch; the executable owns the clock.** Written at M3's close from what was built, including the three places ADR-006 §4 was wrong: three `Step`s rather than one, the count of passes outside because it is floating point, and `Mode` deferred to M4-d. Records what the replay digest does and does not cover, and that it did not move across the phase. |
 

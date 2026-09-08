@@ -114,7 +114,9 @@ namespace Elite
      * §4.5's `Keyboard`, the third of the four to arrive (M3-b-3d), and `SaveStore` under its old
      * name. `keyboard` answers three questions and no more: is this key down, what is the next one
      * (`TT217`, which BLOCKS -- ADR-004 §1's open problem), and empty the buffer (`FLKB`). `RDKEY`
-     * itself is `Elite::ScanKeyboard` and runs in the library over the first of those.
+     * itself is `Elite::ScanKeyboard` and runs in the library over the first of those, and since
+     * InputTimer.md I-1 so does `TT217`: `Elite::ReadKey` is what the executable answers the second
+     * question with, and the method stays for the fixtures that script characters.
      *
      * `keys` AND `entry` WERE HERE UNTIL M3-b-3d and `trade` until M3-b-3b. `KeySource` was one
      * method of this port under another name; `LineEntryEffects` was `DELAY` and `FLKB`, which are

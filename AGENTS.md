@@ -205,6 +205,23 @@ vstest.console.exe x64\Debug\GameLogicTests.dll
 tree; it is not a passing suite. Tests that hand-assemble the routine under test need nothing
 and always run.
 
+**On a Linux box the whole oracle takes four commands**, which is what CI's Ubuntu job does and
+what a hosted session did on 2026-09-08 to build six slices against the original:
+
+```sh
+git submodule update --init                      # the upstream tree, pinned by the gitlink
+git clone https://github.com/stardot/beebasm.git Tools-ext/beebasm && cd Tools-ext/beebasm \
+  && git checkout $BEEBASM_REF && mkdir -p out && g++ -std=c++14 -O2 -o out/beebasm src/*.cpp
+python tools/labels.py --assemble                # the reference build, Labels.txt and Binaries.txt
+Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed -- not N passed, 1 failed
+```
+
+`BEEBASM_REF` is the commit `.github/workflows/build-and-test.yml` pins; `Tools-ext/` is ignored.
+**The assembly rewrites one file inside the submodule** (`COMLOD.unprot.bin` under
+`3-assembled-output`), which `git status` then shows as a modified submodule: restore it with
+`git -C Upstream/elite-source-code-library checkout -- .` and never commit it -- `Upstream/` is
+not ours (§2).
+
 Repository checks:
 
 **Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->sixteen in CI's
