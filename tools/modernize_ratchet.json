@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 1157,
+      "ceiling": 1073,
       "slack": 0,
-      "slice": "M6-d-33: SoundEffects.cpp and FlightLoop.h to zero, and AND is a conjunction"
+      "slice": "M6-d-34: Lines.cpp and Game.cpp to zero, and a carry that walks the screen pointer"
     },
     "opcode-quotations": {
       "ceiling": 0,

@@ -159,7 +159,7 @@ namespace Elite
     jump.countdown = m_universe.status.hyperspaceCountdown;
     jump.counter = m_universe.status.hyperspaceCounter;
     jump.distance = m_universe.jumpDistance;
-    // 6502: JSR CTRL -- key-logger entry 6, read LIVE, because that is when the original reads it.
+    // 6502: CTRL -- key-logger entry 6, read LIVE, because that is when the original reads it.
     jump.controlHeld = m_ports.keyboard.Held(KEY_CONTROL);
     jump.target = m_universe.jumpTarget;
     return jump;
@@ -168,8 +168,8 @@ namespace Elite
   /*
    * 6502: TT22 and TT23 -- draw whichever chart the view says.
    *
-   * TT23 LIFTS THE CLIPPER'S LIMITS AND PUTS THEM BACK. `LDA #199 / STA Yx2M1 / STA dontclip` at
-   * the top and `LDA #0 / STA dontclip / LDA #2*Y-1 / STA Yx2M1` at the bottom, because the
+   * TT23 LIFTS THE CLIPPER'S LIMITS AND PUTS THEM BACK: both bytes pushed to 199 at the top and
+   * put back to zero and the space view's floor at the bottom, because the
    * short-range chart draws system discs below the space view's floor. Both bytes belong to the
    * drawing rather than to the chart, which is why they are set here and not inside `TT23` (§6.45).
    */
@@ -186,14 +186,14 @@ namespace Elite
       DrawShortRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds, &m_screen);
 
       universe.clip.clippingOff = 0u;
-      universe.heaps.lowestVisibleRow = SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
+      universe.heaps.lowestVisibleRow = SPACE_VIEW_BOTTOM; // 6502: the space view's floor again
       return;
     }
 
     DrawLongRangeChart(universe, m_ports, chart, universe.commander.galaxySeeds);
   }
 
-  /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then
+  /// 6502: TT22 and TT23's opening call to `TT66`, which the routines leave to their caller, and then
   /// the chart itself.
   void Game::ShowChart(std::uint8_t _view)
   {
@@ -220,7 +220,7 @@ namespace Elite
     case KeyAction::StatusMode:
     {
       /*
-       * 6502: STATUS's condition -- `LDA QQ12 / BNE st6`, and then `LDY JUNK / LDA FRIN+2,Y`.
+       * 6502: STATUS's condition -- the docked flag first, then the slot two past the junk count.
        *
        * The two middle bytes were zeroes while `InSpace` was unreachable, because docked is the one
        * state in which nothing else is read. They are wired now for the same reason the flight loop
@@ -241,7 +241,7 @@ namespace Elite
 
     case KeyAction::DataOnSystem:
     {
-      // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
+      // 6502: TT111 then TT25 -- the screen reads what the search leaves behind.
       const NearestSystem found = FindNearestSystem(m_universe.commander.galaxySeeds, m_universe.crosshairX, m_universe.crosshairY,
                                                     m_universe.commander.systemX, m_universe.commander.systemY);
       m_universe.selectedSeeds = found.seeds;
@@ -260,9 +260,10 @@ namespace Elite
       BuyScreen(m_universe, m_ports, false);
 
       /*
-       * 6502: BAY2 -- LDA #f9 / JMP FRCE, and the screen reaches it BOTH ways out. A letter gets
-       * there through gnum's `CMP #10 / BCS BAY2`; the seventeenth item gets there through TT222's
-       * `LDA QQ29 / CMP #17 / BCS BAY2`. There is no third exit, which is why this is unconditional.
+       * 6502: BAY2 -- the f9 key forced into the dispatch, and the screen reaches it BOTH ways
+       * out. A letter gets there through `gnum`'s test against 10; the seventeenth item gets
+       * there through `TT222`'s test against 17. There is no third exit, which is why this is
+       * unconditional.
        *
        * `BuyScreen` returns for both rather than jumping, because BAY2 is the DISPATCH'S and the
        * dispatch is here. Without it the buy screen stays on the display after a cancel, so the
@@ -279,7 +280,7 @@ namespace Elite
       ListCargo(m_universe, m_ports, SELL_CARGO_VIEW);
 
       /*
-       * 6502: TT212's `JSR dn2 / JMP BAY2` -- and only the beep is the screen's.
+       * 6502: TT212 calls `dn2` and then jumps to BAY2 -- and only the beep is the screen's.
        *
        * `ListCargo` already makes it, on the exit that runs out of items and not on the one a letter
        * takes; that asymmetry is the original's and stays inside the screen. What is left for the
@@ -299,7 +300,7 @@ namespace Elite
     case KeyAction::DiskAccess:
     {
       const DiskMenuResult menu = DiskAccessMenu(m_universe, m_ports);
-      // 6502: BCC P%+5 / JMP QU5 / JMP BAY -- and QU5 is DFAULT, which installs the loaded image.
+      // 6502: QU5 or BAY -- and QU5 is `DFAULT`, which installs the loaded image.
       if (menu.newCommander)
       {
         (void)LoadCommander(m_universe.commanderFile, m_universe.commander, m_universe.commanderName);
@@ -311,7 +312,7 @@ namespace Elite
       /*
        * 6502: TT110 -- and it is dispatched in BOTH halves of the loop, because `TT102` tests for
        * it ABOVE the docked/flight split. Pressing "1" docked leaves the station; pressing it in
-       * flight falls through `TT110`'s own `LDX QQ12 / BEQ NLUNCH` and is the front view.
+   * flight falls through `TT110`'s own docked test and is the front view.
        *
        * `_selected` comes back written: the launch runs `TT111` for the SEEDS rather than for the
        * distance, because the planet's appearance is generated from the system you are leaving.
@@ -330,12 +331,12 @@ namespace Elite
      * so that adding a phase-4 screen is a compiler error here instead of a key that does nothing.
      */
     case KeyAction::LongRangeChart:
-      // 6502: JMP TT22.
+      // 6502: TT22.
       ShowChart(LONG_RANGE_CHART_VIEW);
       return;
 
     case KeyAction::ShortRangeChart:
-      // 6502: JMP TT23.
+      // 6502: TT23.
       ShowChart(SHORT_RANGE_CHART_VIEW);
       return;
 
@@ -362,7 +363,7 @@ namespace Elite
     case KeyAction::MoveCrosshairs:
     {
       /*
-       * 6502: ee2 -- JSR TT16, and then TT107.
+       * 6502: ee2 -- `TT16`, and then `TT107`.
        *
        * The steps are `TT17`'s, from the key LOGGER rather than from the key that was dispatched:
        * `TT102` is reached every pass of `MLOOP` with whatever `thiskey` holds, including nothing,
@@ -396,20 +397,20 @@ namespace Elite
         return;
       }
 
-      --m_universe.status.hyperspaceCounter; // 6502: DEC QQ22
+      --m_universe.status.hyperspaceCounter; // 6502: QQ22 stepped down
       if (m_universe.status.hyperspaceCounter != 0u)
       {
         return;
       }
 
       PrintCountdown(m_characters, m_universe.text, static_cast<std::uint8_t>(m_universe.status.hyperspaceCountdown - 1u));
-      m_universe.status.hyperspaceCounter = 5u; // 6502: LDA #5 / STA QQ22
+      m_universe.status.hyperspaceCounter = 5u; // 6502: five back into QQ22
       PrintCountdown(m_characters, m_universe.text, m_universe.status.hyperspaceCountdown);
 
-      --m_universe.status.hyperspaceCountdown; // 6502: DEC QQ22+1
+      --m_universe.status.hyperspaceCountdown; // 6502: QQ22+1 stepped down
 
       /*
-       * 6502: BNE t95 / JMP TT18 -- the jump itself, and slice 4c-b is what put it within reach.
+       * 6502: t95, or TT18 -- the jump itself, and slice 4c-b is what put it within reach.
        *
        * `hyp` above starts the countdown and this is where it expires, which is why the player can
        * keep flying while it runs. `PerformJump` says which of its four ends it reached; the launch
@@ -461,14 +462,14 @@ namespace Elite
                                                     &m_universe.picture);
 
       m_universe.status.hyperspaceCountdown = jump.countdown;
-      m_universe.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
+      m_universe.status.hyperspaceCounter = jump.counter; // 6502: into QQ22 -- and it was never copied back (§6.159)
       m_universe.jumpDistance = jump.distance;
       m_universe.jumpTarget = jump.target;
       m_universe.crosshairX = chart.cursorX;
       m_universe.crosshairY = chart.cursorY;
 
       /*
-       * 6502: Ghy -- reached by `hyp`'s `JSR CTRL / BMI Ghy`, which `JumpOf` now answers from the
+       * 6502: Ghy -- reached by `hyp`'s test of `CTRL`, which `JumpOf` now answers from the
        * held-key table. `CTRL` reads key-logger entry 6, so Ctrl-H fits the map the game already
        * has; it was believed to be a modifier the seam could not carry, and was not.
        */
@@ -517,7 +518,7 @@ namespace Elite
   void Game::PressKey(std::uint8_t _key)
   {
     /*
-     * 6502: BIT KLO+HINT -- the dispatch tests whether H is HELD on the matrix, not whether H is the
+     * 6502: the dispatch tests whether H is HELD on the matrix, not whether H is the
      * key that arrived, and `RDKEY` has just filled the logger from the matrix in both loops. So it
      * is read live off the window here, the way `JumpOf` reads CTRL for the galactic drive.
      *
@@ -530,7 +531,8 @@ namespace Elite
   }
 
   /*
-   * The original's `TITLE` ends `BIT KY7 / BMI TL3 / BCC TLL2 / INC JSTK` -- the fire key leaves `JSTK` set, and
+   * The original's `TITLE` ends by testing the fire key and stepping `JSTK` for anything else --
+   * the fire key leaves `JSTK` set, and
    * that is the joystick question answered "yes" (Design/InputTimer.md §5.1, slice I-3).
    *
    * THE ROUTINE IS THE ORIGINAL'S AND STAYS SO; this runs AFTER it, outside anything the oracle
@@ -550,7 +552,7 @@ namespace Elite
   }
 
   /*
-   * 6502: the six `JMP` targets `DOENTRY` chooses between, and `EN6`'s `JMP BAY`.
+   * 6502: the six jump targets `DOENTRY` chooses between, and `EN6`'s jump to `BAY`.
    *
    * A function rather than six lines in the switch because `BRIEF` needs the briefing ship's slot
    * carried into the control code that spins it, and that is one line the other five do not have.
@@ -586,14 +588,14 @@ namespace Elite
 
     case DockingOutcome::DockingBay:
     default:
-      // 6502: EN6 -- JMP BAY, and nothing happened.
+      // 6502: EN6 -- straight to `BAY`, and nothing happened.
       return EnterDockingBay(universe, universe.view, universe.status.hyperspaceCountdown, false);
     }
   }
 
   /*
-   * 6502: the three jumps that leave `M%` and do not come back -- `JMP DOENTRY`, `JMP DEATH` and
-   * `JMP ESCAPE` (§6.82).
+   * 6502: the three jumps that leave `M%` and do not come back -- into `DOENTRY`, `DEATH` and
+   * `ESCAPE` (§6.82).
    *
    * The port hands them back as a `LoopOutcome` because none of them returns; this is where the
    * jump is actually taken. Two of the three are wired and one is refused, and which is which is
@@ -618,7 +620,8 @@ namespace Elite
       /*
        * 6502: the seven exits, and six of them are a briefing (slice 4d-c).
        *
-       * `EN6` is `JMP BAY` and the other six are tail calls into `BRIEF`, `DEBRIEF`, `BRIEF2`,
+       * `EN6` goes straight to `BAY` and the other six are tail calls into `BRIEF`, `DEBRIEF`,
+       * `BRIEF2`,
        * `BRIEF3`, `DEBRIEF2` and `TBRIEF`, each of which ends at `BAY` in its own turn. Until this
        * slice the port took the tail they share and skipped the briefings themselves, which is why
        * a docking that had earned one went straight to the status screen.
@@ -636,20 +639,21 @@ namespace Elite
        * `DEATH` is built (§6.117), so what a player sees on dying is the sequence rather than an immediate restart:
        * the sound, FOUR TIMES the speed, the border rubbed off with its own EOR, a new stardust field, "GAME OVER",
        * five pieces of wreckage and sixty-four iterations of the flight loop to fly them past. `DEATH2` is the tail
-       * -- `JSR RES2` and a fall into `BR1` -- which this already did and still does.
+       * -- `RES2` and a fall into `BR1` -- which this already did and still does.
        *
-       * It said "a quarter-turn of the speed" until 2026-09-05, as did `Flight.h`. `ASL DELTA` twice is a multiply,
+       * It said "a quarter-turn of the speed" until 2026-09-05, as did `Flight.h`. Two doublings are a multiply,
        * the port and its test have always had it right, and four times your last speed is what the debris looks like.
        *
        * Neither routine restores the energy banks. That is the game's behaviour and not an omission here: `RESET`
        * fills them and only the COLD start calls it (ADR-003).
        */
-      // 6502: DEATH's `.D2 JSR M% / DEC LASCT / BNE D2` -- and `Presenter::HoldFlightFrame` is what
-      // shows each of the sixty-five frames for as long as the next takes, which is §6.149's bug
-      // and the reason it is not `Present`. The library counts the ships; `FRIN` is its byte.
+      // 6502: DEATH's D2 loop -- a frame, the counter down, round again -- and
+      // `Presenter::HoldFlightFrame` is what shows each of the sixty-five frames for as long as
+      // the next takes, which is §6.149's bug and the reason it is not `Present`. The library
+      // counts the ships; `FRIN` is its byte.
       Die(m_universe, m_ports);
 
-      ResetShipAndBubble(m_universe, m_ports); // 6502: DEATH2's JSR RES2
+      ResetShipAndBubble(m_universe, m_ports); // 6502: DEATH2's call to RES2
 
       const ForcedKey begun = StartGame(m_universe, m_ports, false);
       SettleJoystick();
@@ -663,13 +667,14 @@ namespace Elite
        * 6502: ESCAPE -- built in slice 4b-a, and this is the last of the three jumps that leave
        * `M%` to be wired (§6.82 named all three; `DOENTRY` and `DEATH` have been wired since 3d).
        *
-       * The routine ends `JMP GOIN`, which is the docking -- so the arrival is the caller's, the
+       * The routine ends by jumping to `GOIN`, which is the docking -- so the arrival is the
+       * caller's, the
        * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
        * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
       AbandonShip(m_universe, m_ports);
 
-      // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
+      // 6502: GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
       StopDockingMusic(m_universe.music, m_universe.status.titleReset, m_universe.sound, m_universe.memoryMap, m_ports.sid);
       Leave(LoopOutcome::Docked);
       return;
@@ -695,7 +700,7 @@ namespace Elite
    */
   bool Game::Step(std::uint8_t _key) noexcept
   {
-    const LoopOutcome outcome = MainFlightLoop(m_universe, m_ports); // 6502: JSR M%
+    const LoopOutcome outcome = MainFlightLoop(m_universe, m_ports); // 6502: M%
     m_lastOutcome = outcome;
     if (outcome != LoopOutcome::Continued)
     {
@@ -716,14 +721,14 @@ namespace Elite
      * 6502: `.MTT4` falls into `.TT100`, so a trader costs a SECOND flight frame (M6-a-1).
      *
      * The loop is written as a loop because that is what the original is -- part 1's tail lands on
-     * the top of part 2, and the top of part 2 is `JSR M%` -- but it runs at most twice: `MCNT` was
+     * the top of part 2, and the top of part 2 is a call to `M%` -- but it runs at most twice: `MCNT` was
      * zero when the head above decremented it, so the second head takes it to 255 and answers
      * `SkipSpawning`. The second frame can end the flight like any other, and it is left through
      * the same door.
      */
     while (RunLoopHead(m_universe, m_ports) == LoopHead::Spawn && RunSpawning(m_universe, false) == SpawnOutcome::Restarted)
     {
-      const LoopOutcome again = MainFlightLoop(m_universe, m_ports); // 6502: .TT100 JSR M%
+      const LoopOutcome again = MainFlightLoop(m_universe, m_ports); // 6502: TT100 -- M% again
       m_lastOutcome = again;
       if (again != LoopOutcome::Continued)
       {
@@ -733,7 +738,7 @@ namespace Elite
     }
 
     /*
-     * The frames part 5 asks to wait for are DROPPED here, and honestly: `JSR DELAY` is two vertical
+     * The frames part 5 asks to wait for are DROPPED here, and honestly: `DELAY` is two vertical
      * syncs on a docked screen, and this is the FLIGHT pass -- `QQ11` is zero on every call that
      * reaches here, so the option's branch is never the one that waits. `StepDocked` is where it
      * matters, and it returns them to the caller since InputTimer.md T-2.
@@ -741,7 +746,7 @@ namespace Elite
     static_cast<void>(RunLoopTail(m_universe, m_ports, m_universe.commander, m_universe.options.authorNames, false));
 
     /*
-     * 6502: and then `MLOOP`'s second half, which the flight loop falls into -- `JSR TT17` and
+     * 6502: and then `MLOOP`'s second half, which the flight loop falls into -- `TT17` and
      * `TT102`, once per frame and AFTER it.
      *
      * The key the caller hands in is a different thing from the key logger `ScanKeyboard` fills:
@@ -756,9 +761,9 @@ namespace Elite
     (void)ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     /*
-     * 6502: `DOKEY` FALLS INTO `DK4`. `LDX thiskey / STX KL` is kept -- the key that arrived, into
-     * byte 0 of the logger, which nothing on this build reads back but the image compares
-     * (M6-0-e). `CPX #&40 / BNE DK2` IS NOT: the pause screen it opened was removed by owner ruling
+     * 6502: `DOKEY` FALLS INTO `DK4`. The key that arrived is stored into byte 0 of the logger,
+     * which nothing on this build reads back but the image compares (M6-0-e). The test for
+     * INST/DEL that follows it IS NOT KEPT: the pause screen it opened was removed by owner ruling
      * on 2026-09-08 (InputTimer.md I-0, §5.9), so INST/DEL carries on to the dispatch like every
      * other key, where `TT102` matches nothing and falls through to the countdown.
      */

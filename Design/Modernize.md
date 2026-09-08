@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,157 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,073 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-34: `Lines.cpp` and `Game.cpp` to zero, and a carry that walks the screen
+pointer.**
+
+84 sites over two files: the pixel plotter, both line drawers, and the game object's dispatch.
+Twenty-third and twenty-fourth at zero.
+
+**A line advances one step further on the iterations where a cell boundary happens to carry.**
+Stepping to the next character cell adds eight to the screen pointer's low byte, and the carry that
+addition leaves is still set when the next iteration adds the slope to the error accumulator. So the
+pointer's arithmetic and the line's arithmetic are not independent — which is why the port keeps the
+pointer as two bytes rather than as a flat offset, and why `DrawShallowLine` threads a carry the
+geometry has no use for.
+
+Two more:
+
+- **The negation of a downward offset adds one, plus NOTHING**, because the comparison above it did
+  not branch and left the carry clear — unlike the x half of the same routine, which clears it
+  explicitly. For y1 = 128 the negation wraps to zero and SETS the carry, so the subtraction does
+  not borrow and the point lands on row 73.
+- **`BAY2` is reached both ways out of the buy screen** — a letter through `gnum`'s test against 10,
+  the seventeenth item through `TT222`'s test against 17 — and there is no third exit, which is why
+  the dispatch takes it unconditionally.
+
+Rule 4 caught one more marker: collapsing a three-line comment took a trailing `// 6502: LDA Y1`
+with it, and `origin-markers` fell 53 → 52 in `Lines.cpp` before the check saw it. Same fifth shape
+as M6-d-28 — a marker that is not at the start of what it marks.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (53 and 63). `opcode-transcriptions` 1,157 → 1,073.
 
 **2026-09-08 — M6-d-33: `SoundEffects.cpp` and `FlightLoop.h` to zero, and `AND` is a conjunction.**
 
