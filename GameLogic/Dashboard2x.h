@@ -95,12 +95,12 @@ namespace Elite
    * It STORES rather than exclusive-ors, as `DIL` does, so the trough is blanked by the same pass
    * that fills the bar and no dial needs an erase.
    */
-  void DrawBar2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _sc, int _steps, PixelPattern _ink) noexcept;
+  void DrawBar2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _screenPointer, int _steps, PixelPattern _ink) noexcept;
 
   /// 2x of: DrawIndicator -- the roll and pitch markers, one lit block of thirty-two. `_position`
   /// is the wide slot, which the caller derives: the roll from `alp1 >> 1` and the pitch by
   /// doubling, for the reason in the header.
-  void DrawIndicator2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _sc, int _position) noexcept;
+  void DrawIndicator2x(Picture& _picture, const Canvas& _canvas, std::uint16_t _screenPointer, int _position) noexcept;
 
   /// 2x of: SetMissileIndicator -- the cell `MSBAR` recoloured, decoded again with its new palette.
   void SetMissileIndicator2x(Picture& _picture, const Canvas& _canvas, std::uint8_t _missile) noexcept;

@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,149 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,143 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->1,084 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1885,6 +1885,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-5: fifty-nine sites four slices had walked past, because a parameter wears a prefix.**
+
+The counter strips `_`, `m_`, `g_` and `sm_` before it matches, because `_alpha` is the same
+carry-over as `alpha` (AGENTS.md §1). **The renamer did not**, so four slices renamed every field
+and every local and left every PARAMETER behind: `_alpha`, `_beta`, `_rat2`, `_sc`, `_patg`, `_lsp`
+and `_mutok` were still there with their callers reading `rollRate` and `pitchRate`. The counter was
+right and the tool was wrong, which is the good way round — a ratchet that cannot reach zero is a
+ratchet doing its job — but it took a per-name listing to see it, because a count going down every
+slice looks like progress whatever it leaves.
+
+`MUTOK` is `dockingMusicOff` with them, which is what `MusicOptions` already called the same byte.
+
+**`SUNX` came out of the vocabulary rather than being renamed.** `sunX` says where the sun's centre
+is; it is a label, and it is also the name anyone would choose. That is the same ruling as `x1`,
+`y1`, `view` and `status`, and it is written beside them in the counter now rather than left as an
+intention in a journal entry.
+
+`hyp-ctrl-and` re-anchored from `_patg` to `_authorNames` (rule 3); `mutate.py --check` is 95 of 95.
+
+454 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 1,143 → 1,084, and what is left is one family: the zero-page scratch bytes and
+`CNT`, which need a name per SITE rather than a name per label.
 
 **2026-09-08 — M6-c-4: the rates, and a rename that quietly wrote an address into a speed.**
 

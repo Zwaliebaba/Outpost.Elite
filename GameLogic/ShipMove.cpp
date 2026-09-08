@@ -164,27 +164,27 @@ namespace Elite
     return _value;
   }
 
-  void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept
+  void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept
   {
     auto& vector = _work.VectorAt(_y); // 6502: INWK,Y -- the vector the routine was entered with
     // 6502: LDA ALPHA / STA Q ... -- Y = Y - alpha * X, and the subtraction is an EOR #128. The
     // `STX P` after each `MAD` is dead: `MULT1` writes P before it reads it.
-    AddSignedResult result = MultiplyAndAdd(static_cast<std::uint8_t>(vector.x.hi ^ 0x80u), _alpha, vector.y);
+    AddSignedResult result = MultiplyAndAdd(static_cast<std::uint8_t>(vector.x.hi ^ 0x80u), _rollRate, vector.y);
     vector.y.hi = result.high;
     vector.y.lo = result.low;
 
     // 6502: X = X + alpha * Y
-    result = MultiplyAndAdd(vector.y.hi, _alpha, vector.x);
+    result = MultiplyAndAdd(vector.y.hi, _rollRate, vector.x);
     vector.x.hi = result.high;
     vector.x.lo = result.low;
 
     // 6502: LDA BETA / STA Q -- Y = Y - beta * Z
-    result = MultiplyAndAdd(static_cast<std::uint8_t>(vector.z.hi ^ 0x80u), _beta, vector.y);
+    result = MultiplyAndAdd(static_cast<std::uint8_t>(vector.z.hi ^ 0x80u), _pitchRate, vector.y);
     vector.y.hi = result.high;
     vector.y.lo = result.low;
 
     // 6502: Z = Z + beta * Y
-    result = MultiplyAndAdd(vector.y.hi, _beta, vector.z);
+    result = MultiplyAndAdd(vector.y.hi, _pitchRate, vector.z);
     vector.z.hi = result.high;
     vector.z.lo = result.low;
   }
@@ -197,7 +197,7 @@ namespace Elite
      * The two halves of the routine are this with the indices swapped, so it is written once. The
      * only difference between them is an extra sign flip, which is `_flip`.
      */
-    [[nodiscard]] AddSignedResult RotateHalf(const Ship& _work, std::uint8_t _from, std::uint8_t _other, std::uint8_t _rat2,
+    [[nodiscard]] AddSignedResult RotateHalf(const Ship& _work, std::uint8_t _from, std::uint8_t _other, std::uint8_t _signMask2,
                                              bool _flip) noexcept
     {
       const auto& from = _work.ComponentAt(_from);   // 6502: INWK,X / INWK+1,X
@@ -229,21 +229,21 @@ namespace Elite
       {
         withSign = static_cast<std::uint8_t>(withSign ^ 0x80u);
       }
-      withSign = static_cast<std::uint8_t>(withSign ^ _rat2);
+      withSign = static_cast<std::uint8_t>(withSign ^ _signMask2);
 
       return AddSigned(SignMag16{p, withSign}, shrunk); // 6502: JSR ADD
     }
   } // namespace
 
-  void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept
+  void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _signMask2) noexcept
   {
     auto& x = _work.ComponentAt(_x); // 6502: the two components MVS5 rotates into each other
     auto& y = _work.ComponentAt(_y);
     // 6502: JSR ADD / STA K+1 / STX K -- the first half is held in K while the second runs.
-    const AddSignedResult first = RotateHalf(_work, _x, _y, _rat2, false);
+    const AddSignedResult first = RotateHalf(_work, _x, _y, _signMask2, false);
 
     // 6502: the same with X and Y swapped, and the EOR #128 that makes it a rotation.
-    const AddSignedResult second = RotateHalf(_work, _y, _x, _rat2, true);
+    const AddSignedResult second = RotateHalf(_work, _y, _x, _signMask2, true);
     y.hi = second.high;
     y.lo = second.low;
 
@@ -359,11 +359,11 @@ namespace Elite
     }
   }
 
-  void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _alpha, std::uint8_t _beta) noexcept
+  void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept
   {
     // 6502: LDA ALPHA / EOR #128 / STA Q / LDA INWK / STA P / LDA INWK+1 / STA P+1 / LDA INWK+2 /
     // JSR MULT3 -- K = -alpha * x.
-    KBlock k = MultiplySigned24(_work.x, static_cast<std::uint8_t>(_alpha ^ 0x80u));
+    KBlock k = MultiplySigned24(_work.x, static_cast<std::uint8_t>(_rollRate ^ 0x80u));
     // Discarded: `MV40` runs a second `MULT3` over this result, so nothing reads the flag (§6.126).
     k = AddShipCoordinateToK(_work, k, 3u).value; // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
 
@@ -380,14 +380,14 @@ namespace Elite
     k2.low = _math.k2Low;
 
     // 6502: LDA BETA / STA Q / LDA K+3 / JSR MULT3 -- K = beta * K2, the coordinate from K+1 up.
-    k = MultiplySigned24(k2.Coordinate(), _beta);
+    k = MultiplySigned24(k2.Coordinate(), _pitchRate);
     k = AddShipCoordinateToK(_work, k, 6u).value; // 6502: LDX #6 / JSR MVT3 -- K = z + beta * K2
 
     // 6502: the new z, and P set up for the multiply that follows.
     _work.z = k.Coordinate();
 
     // 6502: LDA K+3 / EOR #128 / JSR MULT3 -- K = -beta * z', with Q still holding beta.
-    k = MultiplySigned24(SignMag24{k.mid, k.high, static_cast<std::uint8_t>(k.top ^ 0x80u)}, _beta);
+    k = MultiplySigned24(SignMag24{k.mid, k.high, static_cast<std::uint8_t>(k.top ^ 0x80u)}, _pitchRate);
 
     // 6502: LDA K+3 / AND #128 / STA T / EOR K2+3 / BMI MV1 -- which way the two blocks point.
     const std::uint8_t t = static_cast<std::uint8_t>(k.top & 0x80u);
@@ -447,14 +447,14 @@ namespace Elite
     _work.y.sgn = static_cast<std::uint8_t>(high ^ t);
 
     // 6502: LDA ALPHA / STA Q ... / JSR MULT3 / LDX #0 / JSR MVT3 -- x = x + alpha * y'.
-    k = MultiplySigned24(_work.y, _alpha);
+    k = MultiplySigned24(_work.y, _rollRate);
     k = AddShipCoordinateToK(_work, k, 0u).value; // the flag dies at `MV45` (§6.126)
 
     _work.x = k.Coordinate();
 
     // 6502: LDA ALPHA / STA Q was the last store to `Q` above, and for the SUN -- which `MV45` sends
     // straight back -- it is the frame's Q, the byte the altitude check reads (`EndFlightFrame`).
-    _math.q = _alpha;
+    _math.q = _rollRate;
 
     // 6502: JMP MV45 -- back into MVEIT's tail, which the caller runs.
   }

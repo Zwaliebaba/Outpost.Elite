@@ -163,7 +163,7 @@ namespace Elite
 
   JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump, SystemData& _described,
                          MarketState& _market,  std::uint8_t _crosshairX,
-                         std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld, bool _patg) noexcept
+                         std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld, bool _authorNames) noexcept
   {
 
     /*
@@ -205,7 +205,7 @@ namespace Elite
     }
 
     // 6502: .ee5 JSR CTRL / AND PATG / BMI ptg -- the configuration key and the option together.
-    if (_controlHeld && _patg)
+    if (_controlHeld && _authorNames)
     {
       EnterWitchspaceCheating(_universe, _ports, _universe.commander);
       return JumpResult::Witchspace;

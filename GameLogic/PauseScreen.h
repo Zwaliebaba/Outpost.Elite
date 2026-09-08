@@ -99,7 +99,7 @@ namespace Elite
    * comparison is against what the LAST pass saw and not against what the option was before the
    * key. Returns what the caller should do to the player, because the music belongs to phase 5.
    */
-  [[nodiscard]] MusicChange NoteMusicSwitch(Universe& _universe, std::uint8_t _mutok, std::uint8_t _dockingComputer) noexcept;
+  [[nodiscard]] MusicChange NoteMusicSwitch(Universe& _universe, std::uint8_t _dockingMusicOff, std::uint8_t _dockingComputer) noexcept;
 
   /// What the pause screen decided about the key just pressed.
   enum class PauseOutcome : std::uint8_t

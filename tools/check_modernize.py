@@ -246,7 +246,9 @@ ORIGIN_IDENTIFIERS = (
     "sc cnt cnt2 rat rat2 alp1 alp2 bet1 bet2 alpha beta delta delt4 "
     # The named oddities: labels whose names are not words in any language. `frump`, `lotus` and
     # `santana` are the authors' jokes; `ze`, `stp`, `lsp` and `yx2M1` are abbreviations of nothing.
-    "lsp stp ze yx2M1 sunX dontclip newb newzp mutok pltog patg frump fist sprx spry innersec lotus santana "
+    # `SUNX` is NOT here: it is a label, and `sunX` says where the sun's centre is, which is the
+    # test this list applies to everything else (M6-c-5).
+    "lsp stp ze yx2M1 dontclip newb newzp mutok pltog patg frump fist sprx spry innersec lotus santana "
     # The music player's, which are the SID's registers under the player's own numbering.
     "value0 value1 value2 value3 value4 vibrato2 vibrato3 "
     "voice2lo1 voice2hi1 voice2lo2 voice2hi2 voice3lo1 voice3hi1 voice3lo2 voice3hi2"
