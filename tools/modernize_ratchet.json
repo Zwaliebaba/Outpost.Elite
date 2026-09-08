@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 1804,
+      "ceiling": 1739,
       "slack": 0,
-      "slice": "M6-d-26: Dashboard.cpp to zero, and the flag that is constant and load-bearing at once"
+      "slice": "M6-d-27: MarketScreen.cpp to zero, and a branch used as a jump"
     },
     "opcode-quotations": {
       "ceiling": 0,

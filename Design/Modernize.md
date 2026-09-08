@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,804 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,739 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-27: `MarketScreen.cpp` to zero, and a branch used as a jump.**
+
+All 65, over the buy screen, the cargo listing, the sell prompt and the inventory. Eleventh file at
+zero. Almost every site here is a token number or a cursor position, so this is the cheap kind of
+slice — but three of them were carrying an argument.
+
+**`TT163` branches on a condition it has just made certain.** The column is set, 255 is loaded, and
+the branch that follows tests a flag that load has already decided — so it is always taken, and what
+it lands on is the jump inside the space-printing routine two bytes in. A branch used as an
+unconditional jump, to save two bytes over writing one.
+
+Two of the same family:
+
+- **A quantity of ZERO never hears that the hold is full**, because the branch on zero steps over the
+  carry test rather than round it. It costs nothing and buys nothing, which is how the original lets
+  a player press RETURN past an item.
+- **The sell screen prints each line twice**, the second time with printing switched off, purely so
+  that `TT151` leaves the price behind as a side effect. The routine is called for its arithmetic and
+  its output is thrown away.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, no marker lost
+(68 in this file, before and after). `opcode-transcriptions` 1,804 → 1,739.
 
 **2026-09-08 — M6-d-26: `Dashboard.cpp` to zero, and a flag that is constant and load-bearing at
 once.**
