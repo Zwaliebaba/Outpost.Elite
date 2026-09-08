@@ -143,8 +143,9 @@ namespace Elite
       Write(_offset, _palette.Byte());
     }
 
-    /// 6502: EOR (SC),Y / STA (SC),Y -- the only way the drawing code puts anything on screen,
-    /// and the reason drawing a thing twice erases it (plan section 4.6).
+    /// 6502: an exclusive OR against the screen byte, stored back -- the only way the drawing
+    /// code puts anything on screen, and the reason drawing a thing twice erases it (plan
+    /// section 4.6).
     void ExclusiveOr(std::uint16_t _offset, std::uint8_t _mask) noexcept
     {
       if (_offset < SCREEN_SIZE)
@@ -153,7 +154,8 @@ namespace Elite
       }
     }
 
-    /// 6502: EOR #BULBCOL / STA (SC),Y -- the bulbs toggle a PALETTE in and out of screen RAM.
+    /// 6502: the same against a palette constant -- the bulbs toggle a PALETTE in and out of
+    /// screen RAM.
     void ExclusiveOr(std::uint16_t _offset, CellPalette _palette) noexcept
     {
       ExclusiveOr(_offset, _palette.Byte());
@@ -213,14 +215,14 @@ namespace Elite
      * This one is the lower half's, and it is the one the loader sets before any interrupt exists.
      *
      * THE SETTER TAKES A BYTE AND THE GETTER ANSWERS A `Colour`, WHICH IS THE LATCH (slice 5a).
-     * `STA VIC+&21` puts eight bits on the bus and the chip keeps four; the game relies on it,
-     * because `COMIRQ1` increments `welcome` on every pass while the energy bomb burns and stores
-     * the running count straight into the register. After eight frames of bomb that byte is past
-     * 15, and this port resolves the canvas into COLOUR INDICES that the presenter looks up in a
-     * sixteen-entry palette -- so the mask is not tidiness, it is the register. It was missing
-     * until slice 5a and nothing measured it: the oracle holds the same unlatched byte the port
-     * did (`TheRasterInterruptMatchesCOMIRQ1` compares `welcome` at &9C and &FF and agrees), and
-     * no test had ever resolved a canvas with a bomb-flashed background.
+     * A store to the background register puts eight bits on the bus and the chip keeps four; the
+     * game relies on it, because `COMIRQ1` increments `welcome` on every pass while the energy
+     * bomb burns and stores the running count straight into the register. After eight frames of
+     * bomb that byte is past 15, and this port resolves the canvas into COLOUR INDICES that the
+     * presenter looks up in a sixteen-entry palette -- so the mask is not tidiness, it is the
+     * register. It was missing until slice 5a and nothing measured it: the oracle holds the same
+     * unlatched byte the port did (`TheRasterInterruptMatchesCOMIRQ1` compares `welcome` at &9C
+     * and &FF and agrees), and no test had ever resolved a canvas with a bomb-flashed background.
      */
     [[nodiscard]] Colour Background() const noexcept
     {
@@ -451,12 +453,13 @@ namespace Elite
   /// 6502: PIXEL2 -- the same, for a point given in the space view's own sign-magnitude
   /// coordinates relative to the centre. Falls through into PIXEL, so this is that whole path.
   /*
-   * Returns the exit carry, which one caller reads: `nWq` fills the stardust field with
-   * `JSR PIXEL2 / DEY / BNE SAL4` and the next iteration opens with `JSR DORND`, so the generator
-   * runs on whatever the plot left (§6.57). The eleventh dropped flag.
+   * Returns the exit carry, which one caller reads: `nWq` fills the stardust field by calling
+   * `PIXEL2` in a loop whose next iteration opens with `DORND`, so the generator runs on whatever
+   * the plot left (§6.57). The eleventh dropped flag.
    *
-   * The stardust's own movers do NOT read it -- they follow the plot with `JSR DV42`, and `DVID4`
-   * opens with an `ASL` -- so they discard it explicitly rather than by accident.
+   * The stardust's own movers do NOT read it -- they follow the plot with `DV42`, and `DVID4`
+   * opens with a shift that overwrites the flag -- so they discard it explicitly rather than by
+   * accident.
    */
   [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
@@ -474,12 +477,13 @@ namespace Elite
   {
     std::uint8_t x = 0;     ///< `X1` as `PIXEL` receives it, measured from the view's left edge
     std::uint8_t y = 0;     ///< `Y1` as `PIXEL` receives it, measured down
-    bool offScreen = false; ///< the `CMP #72 / BCS PX4` exit -- more than 72 rows from the centre
+    bool offScreen = false; ///< the 72-row exit -- more than 72 rows from the view's centre
   };
 
-  /// `PIXEL2`'s `EOR #%01111111 / ADC #1 / EOR #%10000000` on x and its `LDA #73 / SBC T` on y.
-  /// The y half carries the borrow the x half did not clear, which is why negative zero and
-  /// negative one are the same row; the marker and the reasoning are on the body in `Lines.cpp`.
+  /// `PIXEL2`'s sign-magnitude fold on x -- complement, add one, flip the top bit -- and its
+  /// subtraction from 73 on y. The y half carries the borrow the x half did not clear, which is
+  /// why negative zero and negative one are the same row; the marker and the reasoning are on the
+  /// body in `Lines.cpp`.
   [[nodiscard]] SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept;
 
 
@@ -493,10 +497,11 @@ namespace Elite
    *
    * `address` is ONE sixteen-bit value rather than the two bytes the original keeps, and that is a
    * different judgement from `ScreenPointer`'s in `Lines.cpp`. There the split is load-bearing:
-   * `LOIN` runs `SBC #247` for its own borrow and reads the result. Here both moves are a full
-   * sixteen-bit add or subtract of 320 with the carry into the high byte spelled out (`SEC` on the
-   * way up, a `CPY` that has just set it on the way down) and no exit carry read -- so the pair and
-   * the sixteen-bit value are the same number, not merely the same number in practice.
+   * `LOIN` subtracts 247 from the low byte for its own borrow and reads the result. Here both
+   * moves are a full sixteen-bit add or subtract of 320 with the carry into the high byte spelled
+   * out (an explicit set on the way up, a compare that has just set it on the way down) and no
+   * exit carry read -- so the pair and the sixteen-bit value are the same number, not merely the
+   * same number in practice.
    */
   struct CellCursor
   {
