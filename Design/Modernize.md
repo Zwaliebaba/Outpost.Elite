@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->65 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->30 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,55 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-57: eleven files to zero, and the tail is now thirty sites over nineteen
+files.**
+
+35 sites over eleven files -- `Music.h`, `NameEntry.h`, `ExtendedTokens.h`, `Lasers.h`,
+`LoaderScreen.h`, `Presenter.h`, `Raster.h`, `ShipType.h`, `Universe.h`, `Outpost/Main.cpp` and
+`Outpost/Shell.h`. Eighty-seventh to ninety-seventh at zero.
+
+The widest slice of the phase, and it went without incident, which is the report. Every one of the
+thirty-five was the shape M6-d-53 named: a routine's name, its listing, and prose underneath that
+already carried the reason. `LDA #&70` is "foreground colour 7 over background colour 0"; `LDX
+RASTCT` is "indexed by the raster counter"; `LDA #8 / ADC GNTMP` is "what one shot costs in laser
+heat". The mnemonic was never the fact.
+
+Two places where the LISTING was the last thing standing between the reader and a wrong reading,
+and both are recorded as reasons now. `NameEntry.h`'s beep is the data-byte idiom again -- an
+accepted character reaches the print by falling past the load of the bell character through a byte
+that assembles as a three-byte instruction -- so `OSW0L` has ONE print and what it prints depends on
+which way it arrived. And `Lasers.h`'s three uncleared adds: the convergence point spans NINE rows
+where three random bits alone would give eight, because the coordinate adds ride `DORND`'s exit
+carry, and the heat add cannot carry because three bits plus 124 plus at most one is 132.
+
+`Main.cpp`, `Game.h` and `StartUp.h` now all three say what `FRCE`'s dispatch actually does, which
+is the same fact in the three places a reader meets it. That is deliberate: after M6-f there is no
+listing to go back to.
+
+**And M6-d-55's fix to the harness's subject line was itself incomplete.** The filter went, but the
+line still capped its list at twelve entries and said nothing when it truncated -- so this slice,
+which touches twelve files plus the plan and two tools, got a subject line that stopped at
+`Outpost/Shell.h` and dropped `tools/` entirely. Same defect, one layer down, found the same way:
+counting the lines against the slice. **A line whose whole job is to be checked against something
+must not decide for the reader what fits.** The cap is gone.
+
+**And the ratchet's WRITING side turned out not to be a ratchet.** Rewriting the `FRCE` comment in
+`Outpost/Main.cpp` grew that file by one line, and `--update` moved P6's ceiling from 238 to 239
+without a word. Rule 5 says the numbers only go down; `check_modernize.py` enforces that on the
+READING side -- a count below its ceiling fails and tells you to run `--update` -- and `--update`
+would then happily raise a different count the same slice had pushed up. The only thing that
+noticed was `check_counts.py` complaining that a marked number in this plan no longer matched the
+tree. **Rule 5 was being enforced by a coincidence.** `--update` now refuses to raise a ceiling,
+names the counts that would rise, and exits 1; `--update --raise-ceiling` is how a slice says a
+rise is intended, and owes the journal a reason. The check is `rising_ceilings`, split out so the
+self-test can exercise it without writing to the real file -- a guard nothing proves is a guard
+nobody can rely on, which is the lesson of the counter it protects. The comment was rewritten to
+fit two lines instead, so P6 stayed at 238 and nothing needed raising.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (36, 11, 34, 7, 5, 1, 12, 30, 49, 8 and 8). `opcode-transcriptions` 65 → 30.
+
 
 **2026-09-08 — M6-d-56: six files to zero, an orphan comment inside an empty namespace, and a
 five-instruction sequence called four.**

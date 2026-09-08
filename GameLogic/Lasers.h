@@ -23,7 +23,7 @@ namespace Elite
   inline constexpr std::uint8_t VIEW_CENTRE_X = 128;
   inline constexpr std::uint8_t VIEW_CENTRE_Y = 72;
 
-  /// 6502: LDA #8 / ADC GNTMP -- what one shot costs in laser heat.
+  /// 6502: what one shot costs in laser heat, added to `GNTMP`.
   inline constexpr std::uint8_t LASER_HEAT_PER_SHOT = 8;
 
   /// 6502: LASX and LASY -- where the beams converge this frame, which persists so the next frame
@@ -40,10 +40,11 @@ namespace Elite
    *
    * THREE UNCLEARED ADDS IN NINE INSTRUCTIONS, and §6.65's split runs right through them. The two
    * coordinates read `DORND`'s exit carry, which the generator decides -- so the convergence point
-   * spans NINE rows and nine columns where `AND #7` alone would give eight, and a sweep counting
-   * distinct values is what proves it. The third, `LDA GNTMP / ADC #8`, reads the carry the second
-   * coordinate left, and that one cannot be set: `AND #7` plus 124 plus at most one is 132. So a
-   * shot costs exactly eight heat, and the port asserts that rather than assuming it (§6.68).
+   * spans NINE rows and nine columns where three random bits alone would give eight, and a sweep
+   * counting distinct values is what proves it. The third add, the heat one, reads the carry the
+   * second coordinate left, and that one cannot be set: three bits plus 124 plus at most one is
+   * 132. So a shot costs exactly eight heat, and the port asserts that rather than assuming it
+   * (§6.68).
    *
    * Returns the exit carry, because `LL30` leaves one and the flight loop's next instruction is an
    * `ADC`. The port returns it rather than guessing.
@@ -54,8 +55,8 @@ namespace Elite
   /*
    * 6502: LASLI2 -- draw the four lines without firing, which is how the beam is rubbed out.
    *
-   * `LDA QQ11 / BNE LASLI-1` -- and `LASLI-1` is the byte before the routine, which is the previous
-   * one's `RTS` borrowed as a branch target. So a chart on screen means no laser at all.
+   * A chart on screen sends it to `LASLI-1`, the byte before the routine, which is the previous
+   * one's return borrowed as a branch target. So a chart on screen means no laser at all.
    */
   [[nodiscard]] bool DrawLaserLines(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _view,
                                     Picture* _picture = nullptr) noexcept;

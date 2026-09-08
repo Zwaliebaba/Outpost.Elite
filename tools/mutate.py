@@ -542,8 +542,12 @@ def say_what_is_measured() -> None:
 
     interesting = sorted(dirty)
     if interesting:
+        # ALL of them, and no cap either. The cap was 12, which truncated a twelve-file slice's
+        # subject line without saying so -- the same defect as the filter above, one layer down, and
+        # found the same way: by counting the lines against the slice. A line whose whole job is to
+        # be checked against something must not decide for the reader what fits.
         print("subject: HEAD plus these uncommitted files, which the worktree carries --")
-        for path in interesting[:12]:
+        for path in interesting:
             print(f"        {path}")
         print()
 

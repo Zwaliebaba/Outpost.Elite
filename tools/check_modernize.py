@@ -580,8 +580,45 @@ def check_ratchet(_measured: dict[str, tuple[int, str]]) -> list[str]:
     return complaints
 
 
-def write_ratchet(_measured: dict[str, tuple[int, str]]) -> None:
+def rising_ceilings(_measured: dict[str, tuple[int, str]],
+                    _existing: dict[str, dict[str, int | str]]) -> list[str]:
+    """The counts a rewrite would move UP, which rule 5 does not allow without a reason.
+
+    Split out from `write_ratchet` so the self-test can exercise it without writing to the real
+    ratchet: a guard nothing proves is a guard nobody can rely on, which is the lesson of the
+    counter it protects.
+    """
+    return [
+        f"{name}: {value} is ABOVE the recorded ceiling of {int(_existing[name]['ceiling'])}"
+        for name, (value, _meaning) in sorted(_measured.items())
+        if name in _existing and value > int(_existing[name]["ceiling"])
+    ]
+
+
+def write_ratchet(_measured: dict[str, tuple[int, str]], _raise: bool = False) -> None:
+    """Rewrite the ceilings to the tree -- and REFUSE to raise one unless asked in so many words.
+
+    `--update` used to write whatever it measured, which makes it a snapshot and not a ratchet.
+    Rule 5 says the numbers only go down, and until M6-d-57 nothing enforced that on the writing
+    side: `check_modernize.py` complains when a count sits below its ceiling and tells you to run
+    `--update`, and `--update` would then happily raise a DIFFERENT count that the same slice had
+    pushed up. That is exactly what happened -- a comment rewrite grew `Outpost/Main.cpp` by one
+    line, `--update` moved P6's ceiling from 238 to 239, and the only thing that noticed was
+    `check_counts.py` complaining about a marked number in the plan. Rule 5 was being enforced by a
+    coincidence.
+
+    So a raise is now an error that names the counts and stops. `--update --raise-ceiling` is the
+    way to say a rise is intended, and a slice that needs it has something to justify in its journal
+    entry.
+    """
     existing = load_ratchet()
+    rises = rising_ceilings(_measured, existing)
+    if rises and not _raise:
+        for rise in rises:
+            print(f"      {rise}")
+        sys.exit("error: --update would RAISE a ceiling, and the ratchet only goes down (rule 5).\n"
+                 "       Fix the tree, or pass --raise-ceiling and justify it in the journal entry.")
+
     ceilings: dict[str, dict[str, int | str]] = {}
     for name, (value, _meaning) in _measured.items():
         previous = existing.get(name, {})
@@ -732,6 +769,13 @@ def self_test() -> list[str]:
     for name in measured:
         if name not in EXPECTED:
             complaints.append(f"self-test: {name} has a counter and no expectation")
+
+    # The ratchet's writing side, which went unguarded until M6-d-57 and raised P6's ceiling by one.
+    sample = {"down": (5, ""), "same": (5, ""), "up": (6, ""), "new": (9, "")}
+    held = {"down": {"ceiling": 9}, "same": {"ceiling": 5}, "up": {"ceiling": 5}}
+    rising = rising_ceilings(sample, held)
+    if rising != ["up: 6 is ABOVE the recorded ceiling of 5"]:
+        complaints.append(f"self-test: rising_ceilings answered {rising!r}, expected the one rise")
     return complaints
 
 
@@ -742,6 +786,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="The modernisation ratchet (Design/Modernize.md).")
     parser.add_argument("--list", action="store_true", help="print every count and stop")
     parser.add_argument("--update", action="store_true", help="rewrite the ceilings to the tree as it is")
+    parser.add_argument("--raise-ceiling", action="store_true",
+                        help="with --update, allow a ceiling to go UP -- justify it in the journal entry")
     parser.add_argument("--self-test", action="store_true", help="prove the counters on a synthetic tree, and stop")
     arguments = parser.parse_args()
 
@@ -764,7 +810,7 @@ def main() -> int:
         return 0
 
     if arguments.update:
-        write_ratchet(measured)
+        write_ratchet(measured, arguments.raise_ceiling)
         print(f"OK    {RATCHET.relative_to(REPO).as_posix()} rewritten to the tree: {len(measured)} ceilings")
         return 0
 

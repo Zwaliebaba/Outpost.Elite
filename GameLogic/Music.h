@@ -119,9 +119,10 @@ namespace Elite
   /*
    * 6502: startbd, april16, startat2 -- start the docking music, if the options allow.
    *
-   * `BIT MUDOCK / BMI startat` chooses the theme over the Blue Danube; then `startat2` records the
-   * tune's start, and the checks run: already playing, do nothing; forced on, start regardless;
-   * switched off, do nothing; else start. `BDENTRY` zeroes the chip and `MUPLA` goes to &FF.
+   * The docking-music flag's top bit chooses the theme over the Blue Danube; then `startat2`
+   * records the tune's start, and the checks run: already playing, do nothing; forced on, start
+   * regardless; switched off, do nothing; else start. `BDENTRY` zeroes the chip and `MUPLA`
+   * goes to &FF.
    *
    * THE `MemoryMap` IS `april16`'s `SETL1` BRACKET, and the port did not have it until M3-b-3a:
    * the SID has to be banked in before it can be written and out again afterwards, and while
@@ -150,10 +151,10 @@ namespace Elite
   /*
    * 6502: stopbd -- stop the docking music, unless something says not to.
    *
-   * `BIT MULIE / BMI itsoff`: the title screen sets `_titleReset` around its `RESET` so that the
-   * reset does not silence the theme it has just started. `BIT MUFOR / BMI startbd`: forced music
-   * cannot be stopped, and the routine goes to START it instead, which does nothing if it is
-   * already playing. Otherwise `stopat`.
+   * `MULIE`'s top bit: the title screen sets `_titleReset` around its `RESET` so that the reset
+   * does not silence the theme it has just started. `MUFOR`'s top bit: forced music cannot be
+   * stopped, and the routine goes to START it instead, which does nothing if it is already
+   * playing. Otherwise `stopat`.
    */
   void StopDockingMusic(MusicPlayer& _music, std::uint8_t _titleReset, SoundBuffer& _buffer, MemoryMap& _map,
                         SidWriteLog& _log) noexcept;
@@ -171,8 +172,8 @@ namespace Elite
    * 6502: BDENTRY -- start the tune at `tuneStart`.
    *
    * Clears the nibble buffer, the rest counter and both vibrato counters; zeroes the chip's
-   * registers from &18 down to ONE -- `DEX / BNE`, so register 0 is not touched; points both data
-   * pointers at the start; and sets the volume to fifteen.
+   * registers from &18 down to ONE -- the loop ends on the counter reaching zero, so register 0
+   * is not touched; points both data pointers at the start; and sets the volume to fifteen.
    */
   void BeginTune(MusicPlayer& _music, SidWriteLog& _log) noexcept;
 
