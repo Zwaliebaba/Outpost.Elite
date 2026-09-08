@@ -42,7 +42,7 @@ namespace Elite
    * THE PLATFORM ARRIVES AS FOUR REFERENCES, which is `Ports` minus the four members that are this
    * library's own: the token printer, the character printer, the sink and the extended printer are
    * built HERE, over the universe, because nothing about them is the platform's. A `ControlEffects`
-   * arrived beside them until M6-0-h-3 -- 6502: the call to `DOCKIT`, which was never in `Ports`
+   * arrived beside them until M6-0-h-3 -- the call to `DOCKIT`, which was never in `Ports`
    * (§4.5) and is a library call now.
    */
   class Game

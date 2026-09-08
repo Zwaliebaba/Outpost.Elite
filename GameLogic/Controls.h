@@ -332,7 +332,7 @@ namespace Elite
    * `ControlEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-3).
    *
    * It was "the one thing `DOKEY`'s flight half reaches that is neither memory nor the keyboard" --
-   * DOKEY's `auton` path -- 6502: the docking autopilot, which reads the ship block and
+   * DOKEY's `auton` path -- the docking autopilot, which reads the ship block and
    * writes `INWK+27` to `INWK+30` -- an acceleration and three rates -- and which M4-c-2 made
    * `Elite::RunDockingComputer` (`Tactics.h`). Every implementer of the seam made that one call;
    * `ReadFlightControls` makes it itself now, and the `DOKEY` sweep runs the real autopilot over a

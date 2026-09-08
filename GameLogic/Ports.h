@@ -54,7 +54,7 @@ namespace Elite
 
     /*
      * `ShipDrawEffects& drawing` WAS HERE AND IS NOT ANY MORE (M6-0-a-3), which takes this struct
-     * to NINE. It was `LL9`'s two tail jumps -- 6502: LL25 and LL14 -- and every implementer
+     * to NINE. It was `LL9`'s two tail jumps -- `LL25` and `LL14` -- and every implementer
      * answered them with the same two library calls; `DrawShip` makes those calls itself now that
      * the oracle can run `DOEXP` without its sprite writes landing on `XX21` (`ShipDraw.h`).
      *

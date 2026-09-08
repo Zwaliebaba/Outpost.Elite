@@ -164,7 +164,7 @@ namespace Outpost
    */
 
   /*
-   * `RunDockingComputer` WAS HERE AND IS NOT ANY MORE (M6-0-h-3). 6502: the call to `DOCKIT` from
+   * `RunDockingComputer` WAS HERE AND IS NOT ANY MORE (M6-0-h-3). The call to `DOCKIT` from
    * `DOKEY`'s `auton` path -- one call to `Elite::RunDockingComputer` over slot 0, which
    * `ReadFlightControls` makes itself now.
    */

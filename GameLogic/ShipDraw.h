@@ -454,7 +454,7 @@ namespace Elite
 
   /*
    * `ShipDrawEffects` WAS HERE AND IS NOT ANY MORE (M6-0-a-3). It was the two places `LL9` leaves
-   * its own code -- 6502: LL25's tail jump to `PLANET` and LL14's to `DOEXP` -- and it outlived
+   * its own code -- `LL25`'s tail jump to `PLANET` and LL14's to `DOEXP` -- and it outlived
    * every other seam for one reason: in a flat oracle image the VIC-II's registers and `XX21` were
    * the same bytes, so an explosion drawn on the oracle side corrupted the blueprints of the ships
    * drawn after it (§6.108), and no whole frame with an explosion in it could be compared.
