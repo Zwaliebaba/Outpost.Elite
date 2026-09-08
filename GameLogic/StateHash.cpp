@@ -92,10 +92,10 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const GeometryWorkspace& _geometry) noexcept
     {
-      _into.Bytes(_geometry.xx16);
-      _into.Bytes(_geometry.xx12);
-      _into.Bytes(_geometry.xx2);
-      _into.Bytes(_geometry.xx3);
+      _into.Bytes(_geometry.scaledOrientation);
+      _into.Bytes(_geometry.dotProducts);
+      _into.Bytes(_geometry.faceVisible);
+      _into.Bytes(_geometry.projectedVertices);
     }
 
     void FoldIntoStateHash(Folder& _into, const Stardust& _dust) noexcept

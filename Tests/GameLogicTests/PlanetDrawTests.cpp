@@ -54,8 +54,8 @@ namespace GameLogicTests
       std::uint16_t lso = 0, lsx2 = 0, lsy2 = 0, ballHeapTop = 0, sunx = 0, yx2m1 = 0;
       std::uint16_t yy = 0, t = 0, k = 0, k3 = 0, k4 = 0, p = 0;
       std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, clippingOff = 0;
-      std::uint16_t k5 = 0, k6 = 0, circleStep = 0, flag = 0, cnt = 0, xx13 = 0, xx12 = 0;
-      std::uint16_t inwk = 0, k2 = 0, xx16 = 0, tgt = 0, cnt2 = 0, planetDetail = 0, sun = 0;
+      std::uint16_t k5 = 0, k6 = 0, circleStep = 0, flag = 0, cnt = 0, xx13 = 0, dotProducts = 0;
+      std::uint16_t inwk = 0, k2 = 0, scaledOrientation = 0, tgt = 0, cnt2 = 0, planetDetail = 0, sun = 0;
       std::uint16_t qq11 = 0;
       std::uint16_t screen = 0;
 
@@ -86,10 +86,10 @@ namespace GameLogicTests
         flag = _oracle.Label("FLAG");
         cnt = _oracle.Label("CNT");
         xx13 = _oracle.Label("XX13");
-        xx12 = _oracle.Label("XX12");
+        dotProducts = _oracle.Label("XX12");
         inwk = _oracle.Label("INWK");
         k2 = _oracle.Label("K2");
-        xx16 = _oracle.Label("XX16");
+        scaledOrientation = _oracle.Label("XX16");
         tgt = _oracle.Label("TGT");
         cnt2 = _oracle.Label("CNT2");
         planetDetail = _oracle.Label("PLTOG");
@@ -1008,7 +1008,7 @@ namespace GameLogicTests
               }
               for (std::size_t byte = 0; byte < 6u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.xx16 + byte)], geometry.xx16[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.scaledOrientation + byte)], geometry.scaledOrientation[byte],
                                  (label + L": XX16+" + std::to_wstring(byte)).c_str());
               }
 

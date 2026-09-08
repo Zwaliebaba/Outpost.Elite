@@ -55,7 +55,7 @@ namespace GameLogicTests
 
     struct Labels
     {
-      std::uint16_t sc = 0, col = 0, k = 0, q = 0, r = 0, p = 0, s = 0, t1 = 0, xx12 = 0;
+      std::uint16_t sc = 0, col = 0, k = 0, q = 0, r = 0, p = 0, s = 0, t1 = 0, dotProducts = 0;
       std::uint16_t mcnt = 0, flh = 0, ecma = 0, ecmp = 0, alp1 = 0, alp2 = 0, beta = 0, bet1 = 0;
       std::uint16_t delta = 0;
       std::uint16_t fsh = 0, ash = 0, energy = 0, cabtmp = 0, gntmp = 0, altit = 0, qq14 = 0;
@@ -71,7 +71,7 @@ namespace GameLogicTests
         p = _oracle.Label("P");
         s = _oracle.Label("S");
         t1 = _oracle.Label("T1");
-        xx12 = _oracle.Label("XX12");
+        dotProducts = _oracle.Label("XX12");
         mcnt = _oracle.Label("MCNT");
         flh = _oracle.Label("FLH");
         ecma = _oracle.Label("ECMA");
@@ -720,7 +720,7 @@ namespace GameLogicTests
             // the port's four bytes are `DIALS`'s own array since M2-c.
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(at.xx12 + byte)] = static_cast<std::uint8_t>(0x9Du + byte);
+              cpu.memory[static_cast<std::uint16_t>(at.dotProducts + byte)] = static_cast<std::uint8_t>(0x9Du + byte);
             }
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dials, 200'000);

@@ -934,7 +934,7 @@ namespace GameLogicTests
       const std::uint16_t sfs1 = oracle.Label("SFS1");
       const std::uint16_t sescp = oracle.Label("SESCP");
       const std::uint16_t typeAt = oracle.Label("TYPE");
-      const std::uint16_t xx3 = oracle.Label("XX3");
+      const std::uint16_t projectedVertices = oracle.Label("XX3");
 
       const Elite::ShipType PARENTS[] = {Elite::ShipType::Station, Elite::ShipType::CobraMk3, Elite::ShipType::Asteroid};
 
@@ -1002,7 +1002,7 @@ namespace GameLogicTests
                 {
                   shipBytes[byte] = static_cast<std::uint8_t>(0xC0u + byte);
                   cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = shipBytes[byte];
-                  cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = 0x5Au;
+                  cpu.memory[static_cast<std::uint16_t>(projectedVertices + byte)] = 0x5Au;
                 }
                 work = Elite::Ship::FromBytes(shipBytes);
 

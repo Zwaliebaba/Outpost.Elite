@@ -365,7 +365,7 @@ namespace Elite
 
       // 6502: LDY #0 / .DLL23 STY XX12,X / DEX / BPL DLL23 -- all four cleared before any is read.
       // The four bytes are `XX12`, and this routine's own (M2-c).
-      std::array<std::uint8_t, 4> xx12{};
+      std::array<std::uint8_t, 4> dotProducts{};
 
       /*
        * 6502: LDA ENERGY / LSR A / LSR A / STA Q / .DLL24 SEC / SBC #16 / BCC DLL26 / ...
@@ -381,12 +381,12 @@ namespace Elite
         const SubResult left = SubtractWithCarry(q, 16u, true);
         if (!left.carry)
         {
-          xx12[static_cast<std::size_t>(bar)] = q; // 6502: DLL26
+          dotProducts[static_cast<std::size_t>(bar)] = q; // 6502: DLL26
           break;
         }
 
         q = left.value;
-        xx12[static_cast<std::size_t>(bar)] = 16u;
+        dotProducts[static_cast<std::size_t>(bar)] = 16u;
         --bar;
         if (bar < 0)
         {
@@ -398,7 +398,7 @@ namespace Elite
       // `DILX`, so the bars are drawn unshifted; `P` parks the index and nothing else reads it.
       for (std::uint8_t which = 0; which < 4u; ++which)
       {
-        DrawBar(_canvas, _draw, xx12[which], 0, BAR_THRESHOLD, barColours, _picture);
+        DrawBar(_canvas, _draw, dotProducts[which], 0, BAR_THRESHOLD, barColours, _picture);
       }
     }
 
