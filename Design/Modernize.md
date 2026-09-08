@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->173 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->141 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-53: the raster handler and three headers to zero, where the listing WAS the
+whole comment.**
+
+32 sites over four files -- `Canvas.h`, `Docking.h`, `Tokens.h` and `Raster.cpp`.
+Sixty-ninth to seventy-second at zero.
+
+`Raster.cpp` is the clearest case M6-d has met of the shape R20 was written for. Eight of its
+comments were a load and a store and nothing else -- `LDA zebop,X / STA VIC+&18`, `LDA shango,X /
+STA VIC+&12`, `LDA innersec,X / STA RASTCT` -- and each one is a table indexed by the raster
+counter, written to one register. Saying that is shorter than the listing AND says more, because
+"indexed by the counter" is the fact the whole handler turns on and the listing only implies it.
+The one place a mnemonic really mattered, `BIT BOMB / BPL`, mattered because the test sits ABOVE
+the split and so runs twice a frame -- which the prose already said in the next sentence.
+
+Nothing surprising came out of the four, which is itself the finding: with 141 sites left the tail
+is now overwhelmingly this shape -- a routine's name, its listing, and prose underneath that
+already carries the reason. The listing goes and the paragraph is unchanged.
+
+Two aligned tables were edited row by row and neither reflowed: `Docking.h`'s outcome enum and
+`Canvas.h`'s `SpaceViewPoint`. After M6-d-52 every table row is re-read whole before moving on.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (30, 13, 15 and 8). `opcode-transcriptions` 173 → 141.
+
 
 **2026-09-08 — M6-d-52: four of the widest headers to zero, and a preamble that was eight
 instructions described as two.**
