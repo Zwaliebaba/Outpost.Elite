@@ -276,29 +276,30 @@ namespace Elite
     }
 
     /*
-     * 6502: LDA QQ1 / CMP #33 / BEQ THEX+1.
+     * 6502: the system's y coordinate against 33, and a match branches to `THEX+1`.
      *
-     * `THEX+1` is the `RTS`, one byte past the `CLC` -- so the match returns with the carry that
-     * `CMP #33` left, and an equal compare sets it. Every other path runs the `CLC` and returns
-     * clear. The routine's answer IS the carry and it is never in A.
+     * `THEX+1` is the RETURN, one byte past the carry-clearing instruction -- so a match comes back
+     * with the flag that comparison left, and an equal comparison sets it. Every other path clears
+     * the carry on the way out. The routine's answer IS the carry and is never in a register.
      */
     return _commander.systemY == 33u;
   }
 
   NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, const Blueprint*& _blueprint, bool _carryIn) noexcept
   {
-    // 6502: JSR Ze -- a block at a fixed distance in a random direction, and a second `DORND`
-    // whose answer this routine throws away.
+    // 6502: Ze -- a block at a fixed distance in a random direction, and a second roll whose answer
+    // this routine throws away.
     static_cast<void>(SeedDebris(_work, _rng, _carryIn));
 
-    // 6502: LDA #%11111111 / STA INWK+32 -- hostile, and the fastest AI the byte can express.
+    // 6502: hostile, and the fastest AI the byte can express.
     _work.ai = 0xFFu;
 
-    // 6502: LDA #THG / JSR NWSHP -- and the answer is discarded, because the next line is a JMP.
+    // 6502: the mothership, and its answer is discarded because the next line is a jump.
     static_cast<void>(Spawn(_bubble, _work, ShipType::Thargoid, _blueprint));
 
     /*
-     * 6502: LDA #TGL / JMP NWSHP -- a JMP and not a JSR, so `GTHG` returns the THARGON's answer.
+     * 6502: the escort, reached by a JUMP rather than a call, so `GTHG` returns the THARGON's
+     * answer.
      *
      * A bubble with one slot left gets the mothership and no escort and reports success, because
      * the carry that comes back is the second call's. Reproduced rather than tidied: the caller
@@ -311,23 +312,23 @@ namespace Elite
   /*
    * 6502: what one of `MLOOP`'s spawning parts hands the next (M4-c-3).
    *
-   * Every `JMP MLOOPS` and `JMP MLOOP` in parts 1 to 4 means the same thing -- this pass of the
-   * spawner is over -- and the port spelled all fourteen of them `return;` inside one 430-line
-   * function. Two values, and the fall-through is the other one.
+   * Every jump back to `MLOOP` in parts 1 to 4 means the same thing -- this pass of the spawner is
+   * over -- and the port spelled all fourteen of them `return;` inside one 430-line function. Two
+   * values, and the fall-through is the other one.
    */
   enum class SpawnPass : std::uint8_t
   {
-    Ended,     ///< 6502: .MLOOPS JMP MLOOP -- nothing more happens this pass
+    Ended,     ///< 6502: MLOOPS -- nothing more happens this pass
     Continued, ///< fall through to the next part
-    Restarted, ///< 6502: part 1's tail falling into `.TT100`, which is `SpawnOutcome::Restarted`
+    Restarted, ///< 6502: part 1's tail falling into `TT100`, which is `SpawnOutcome::Restarted`
   };
 
   /*
    * What `MLOOP`'s spawning parts share, in one place (M4-c-3, the shape M4-b gave `LL9`).
    *
    * `carry` IS THE REASON THIS EXISTS. §6.125's finding runs through the whole routine: every
-   * `CMP` overwrites the generator's own flag and the next `DORND` rotates in what the compare
-   * left, so a single boolean is live across all four parts and thirty-odd statements. Passing it
+   * comparison overwrites the generator's own flag and the next roll rotates in what it left, so a
+   * single boolean is live across all four parts and thirty-odd statements. Passing it
    * between four functions would be four more `bool _carryIn` parameters -- P11's pattern, which
    * M2-d spent a slice removing from the headers -- so it travels in the frame instead, where it
    * is one named field rather than four signatures.
@@ -344,23 +345,25 @@ namespace Elite
     std::uint8_t& encounters; ///< 6502: EV -- the encounter counter part 4 rate-limits on
     const Blueprint*& blueprint;
 
-    bool carry = false; ///< 6502: the flag every `DORND` rotates in (§6.125)
+    bool carry = false; ///< 6502: the flag every roll rotates in (§6.125)
   };
 
   /*
    * ---- parts 1 and 2: the trader, and everything that is not one --------------------------------
    *
-   * 6502: JSR DORND / CMP #35 / BCS MTT1, then `BVS MTT4` -- the OVERFLOW flag, which is the one
-   * branch in these four parts that reads it. The two parts are one function because the roll that
-   * chooses between them is the same roll, and `.whips`'s `JSR NWSHP` is the tail both reach.
+   * 6502: a roll decides whether anything arrives, and a second one's OVERFLOW flag decides which
+   * part gets it -- the one branch in these four parts that reads that flag. The two parts are one
+   * function because the roll choosing between them is the same roll, and `whips` is the tail both
+   * reach.
    */
   [[nodiscard]] SpawnPass SpawnTraderOrLoner(SpawnFrame& _frame) noexcept
   {
     /*
-     * 6502: JSR DORND / CMP #35 / BCS MTT1 -- 35 chances in 256 of anything arriving at all.
+     * 6502: 35 chances in 256 of anything arriving at all.
      *
-     * THE COMPARE OVERWRITES THE GENERATOR'S OWN CARRY, and the next `DORND` rotates in what the
-     * compare left rather than what `DORND` returned. §6.125 found six of these in `TACTICS`; this
+     * THE COMPARISON OVERWRITES THE GENERATOR'S OWN CARRY, and the next roll rotates in what the
+     * comparison left rather than what the generator returned. §6.125 found six of these in
+     * `TACTICS`; this
      * routine has nine, and the port had the first two wrong until the oracle disagreed about a
      * trader's AI byte in an empty bubble.
      */
@@ -369,8 +372,8 @@ namespace Elite
 
     bool toPart3 = _frame.carry;
 
-    // 6502: LDA JUNK / CMP #3 / BCS MTT1 -- and junk counts the canisters and the hermits, so a
-    // bubble already littered stops attracting traders. This compare sets the flag too.
+    // 6502: junk counts the canisters and the hermits, so a bubble already littered stops
+    // attracting traders. This comparison sets the flag too.
     if (!toPart3)
     {
       _frame.carry = _frame.bubble.junk >= JUNK_LIMIT;
@@ -379,29 +382,28 @@ namespace Elite
 
     ShipType pendingType = ShipType::None;
     bool spawnPending = false;
-    bool traderPath = false; ///< 6502: `BVS MTT4` was taken, so the tail is part 1's and not part 2's
+    bool traderPath = false; ///< 6502: the overflow branch was taken, so the tail is part 1's
 
     if (!toPart3)
     {
-      // 6502: JSR ZINF / LDA #38 / STA INWK+7 -- a clean block at one fixed distance.
+      // 6502: a clean block at one fixed distance.
       ClearShip(_frame.work);
       _frame.work.z.hi = SPAWN_DISTANCE;
 
       /*
-       * 6502: JSR DORND / STA INWK / STX INWK+3 / AND #%10000000 / STA INWK+2 / TXA /
-       * AND #%10000000 / STA INWK+5 / ROL INWK+1 / ROL INWK+1.
+       * 6502: one roll supplies both low bytes and both signs, then the x high byte is rotated
+       * twice.
        *
-       * One random pair gives the x and y low bytes AND both signs, and then `INWK+1` -- the x high
-       * byte -- is rotated twice through the _frame.carry the second `AND` left. Two rotations of a byte
-       * that `ZINF` has just cleared put the _frame.carry in bit 1, so the x high byte is 0 or 2.
+       * The rotations shift in the carry the masking left, and `ZINF` has just cleared the byte, so
+       * two of them put that flag in bit 1 -- which makes the x high byte 0 or 2 and nothing else.
        */
       const RngResult place = _frame.rng.Next(_frame.carry);
       _frame.work.x.lo = place.value;
       _frame.work.y.lo = place.previous;
       _frame.work.x.sgn = static_cast<std::uint8_t>(place.value & 0x80u);
 
-      // 6502: TXA / AND #%10000000 / STA INWK+5 -- and `AND` does not touch the _frame.carry, so the flag
-      // the two rotations below shift in is still the one `DORND` returned.
+      // 6502: masking does not touch the carry, so the flag the two rotations below shift in is
+      // still the one the generator returned.
       _frame.work.y.sgn = static_cast<std::uint8_t>(place.previous & 0x80u);
       _frame.carry = place.carry;
 
@@ -412,19 +414,19 @@ namespace Elite
       _frame.work.x.hi = rotated.value;
       _frame.carry = rotated.carry;
 
-      // 6502: JSR DORND / BVS MTT4 -- the OVERFLOW flag, which is the one branch in these four
-      // parts that reads it. Set means part 1: a trader.
+      // 6502: the OVERFLOW flag, which is the one branch in these four parts that reads it. Set
+      // means part 1: a trader.
       const RngResult kind = _frame.rng.Next(_frame.carry);
       _frame.carry = kind.carry;
 
       if (kind.overflow)
       {
         /*
-         * 6502: .MTT4 -- part 1, the trader.
+         * 6502: MTT4 -- part 1, the trader.
          *
-         * `LSR A` halves the byte and pushes bit 0 into the _frame.carry; the same value becomes the AI
-         * byte and the roll counter, and the _frame.carry is rotated into `INWK+31` before `AND #31 /
-         * ORA #16` makes a speed between 16 and 31.
+         * The roll is halved, pushing bit 0 into the carry; the same value becomes the AI byte and
+         * the roll counter, and that carry is rotated into the state byte before the low five bits
+         * make a speed between 16 and 31.
          */
         const RngResult trader = _frame.rng.Next(_frame.carry);
         const ShiftResult halved = {static_cast<std::uint8_t>(trader.value >> 1u), (trader.value & 1u) != 0u};
@@ -438,8 +440,8 @@ namespace Elite
         _frame.work.speed = static_cast<std::uint8_t>((halved.value & 31u) | 16u);
 
         /*
-         * 6502: JSR DORND / BMI nodo -- a NEGATIVE byte skips the escort flag entirely, so half
-         * the traders fly with `NEWB` bit 4 set and half with whatever `ZINF` left.
+         * 6502: `nodo` -- a NEGATIVE roll skips the escort flag entirely, so half the traders fly
+         * with the docking trait set and half with whatever `ZINF` left.
          */
         const RngResult escort = _frame.rng.Next(_frame.carry);
         _frame.carry = escort.carry;
@@ -448,13 +450,14 @@ namespace Elite
         if ((a & 0x80u) == 0u)
         {
           /*
-           * 6502: LDA INWK+32 / ORA #%11000000 / STA INWK+32 / LDX #%00010000 / STX NEWB.
+           * 6502: the AI byte gets two more bits set, and the traits become docking.
            *
-           * A IS NOT THE ROLL ANY MORE. `LDA INWK+32` replaced it and the `ORA` changed it again,
-           * so the `AND #2` below -- which chooses the ship type -- runs on the AI BYTE on this
-           * path and on the `DORND` byte on the other. Two different quantities reaching the same
-           * instruction, which is the shape §6.73 keeps finding, and the port had it as the roll
-           * on both paths until the oracle disagreed on the type in an empty bubble.
+           * THE ACCUMULATOR IS NOT THE ROLL ANY MORE. Reading the AI byte replaced it and setting
+           * those bits changed it again, so the mask below -- which chooses the ship type -- runs
+           * on the AI BYTE on this path and on the roll on the other. Two different quantities
+           * reaching the same instruction, which is the shape §6.73 keeps finding, and the port
+           * had it as the roll on both paths until the oracle disagreed on the type in an empty
+           * bubble.
            */
           _frame.work.ai = With(_frame.work.ai, AiBit::Active, AiBit::Hostile);
           _frame.work.traits = Mask(TraitBit::Docking);
@@ -462,21 +465,20 @@ namespace Elite
         }
 
         /*
-         * 6502: AND #2 / ADC #CYL / CMP #HER / BEQ TT100 / JSR NWSHP.
+         * 6502: one bit of the value added to the Cobra's type, then compared against the hermit's.
          *
-         * `CYL` is 11 and the `AND` leaves 0 or 2, so the type is 11 to 14 and `CMP #HER` -- 15 --
+         * The Cobra is 11 and the mask leaves 0 or 2, so the type is 11 to 14 and the hermit's 15
          * CANNOT be equal on this build. The branch back to the top of the loop is dead code here,
-         * and it is transcribed rather than dropped because what makes it dead is two constants
-         * this version happens to choose (§6.121's rule about idioms that look like something
-         * else).
+         * and it is kept rather than dropped because what makes it dead is two constants this
+         * version happens to choose (§6.121's rule about idioms that look like something else).
          */
         const AddResult type = AddWithCarry(static_cast<std::uint8_t>(a & 2u), Byte(ShipType::CobraMk3), _frame.carry);
         _frame.carry = type.carry;
 
         if (TypeOf(type.value) == ShipType::RockHermit)
         {
-          // 6502: BEQ TT100 -- unreachable on the C64 constants, and it is the SAME destination
-          // part 1's fall-through reaches, so it says so rather than pretending the pass ended.
+          // 6502: TT100 -- unreachable on the C64 constants, and it is the SAME destination part
+          // 1's fall-through reaches, so it says so rather than pretending the pass ended.
           return SpawnPass::Restarted;
         }
 
@@ -486,7 +488,7 @@ namespace Elite
       }
       else
       {
-        // 6502: ORA #%01101111 / STA INWK+29 -- a hard roll, on the byte `BVS` did not take.
+        // 6502: a hard roll, built from the byte the overflow branch did not take.
         _frame.work.rollCounter = static_cast<std::uint8_t>(kind.value | 0x6Fu);
 
         /*
