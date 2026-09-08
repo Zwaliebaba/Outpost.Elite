@@ -79,9 +79,9 @@
       "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
     },
     "opcode-transcriptions": {
-      "ceiling": 506,
+      "ceiling": 462,
       "slack": 0,
-      "slice": "M6-d-44: Trumbles.cpp and Messages.cpp to zero, and EQUB &2C for the fourth time"
+      "slice": "M6-d-45: Arith.h and TextPrint.cpp to zero, and the file most about instructions did not need the tag either"
     },
     "opcode-quotations": {
       "ceiling": 0,

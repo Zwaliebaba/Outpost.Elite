@@ -28,19 +28,19 @@ namespace Elite
      * `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte.
      * `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two
      * routines and the clipper's `LL115` and `LL118` write it for that read, as the original's
-     * `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled; it is not -- this
-     * build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154,
-     * and the risk was written from the BBC commentary. The frame's `Q` is compared against the
-     * game's over six bubble shapes by `TheFramesOwnQReachesTheAltitude`.
+     * stores to `Q` do. R22 said `LOIN` was a tenth writer this port never modelled; it is not --
+     * this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at
+     * 154, and the risk was written from the BBC commentary. The frame's `Q` is compared against
+     * the game's over six bubble shapes by `TheFramesOwnQReachesTheAltitude`.
      */
     std::uint8_t lastDivisor = 0;
 
     /*
      * 6502: K2 -- the BOTTOM BYTE of the second four-byte block, and only that byte.
      *
-     * `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its
-     * first addition, so what it gets is whatever the last planet or sun drawer left there a frame
-     * ago (M2-b, section 8). `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is,
+     * `MV40` never writes `K2`, and its first addition READS this byte for that addition's carry,
+     * so what it gets is whatever the last planet or sun drawer left there a frame
+     * ago (M2-b, section 8). `PL9`, `PL26` and `SUN` store to it where the original does,
      * for that read alone; the other three bytes of the block are the ellipse's axes and travel as
      * an `EllipseAxes` value since M2-c-3.
      */
@@ -52,13 +52,13 @@ namespace Elite
   /*
    * 6502: (A P) and the carry -- what the shift-and-add multipliers leave behind.
    *
-   * Every one of them ends on a `ROR P` and neither the `DEX / BNE` above it nor the `RTS` below
-   * touches the carry, so what a caller sees is that rotate's carry out -- the low bit of P before
-   * the last shift. Three callers read it in an `ADC` or `SBC` with no `CLC`/`SEC` in between:
-   * `MVEIT` after `MLTU2`, and the stardust after `MLU1` and `MLU2`. The port returned only the
-   * byte until `MVEIT` came out one adrift in a ship's y coordinate (§6.33), and the stardust
-   * needed the same thing from a different multiplier. The LOW byte was left in `P` until M2-b, for
-   * `ADD` and the stardust to read from the workspace; it is a field now.
+   * Every one of them ends on a rotate of `P`, and neither the count-and-branch above it nor the
+   * return below touches the carry, so what a caller sees is that rotate's carry out -- the low bit
+   * of P before the last shift. Three callers read it in an `ADC` or `SBC` with no `CLC`/`SEC` in
+   * between: `MVEIT` after `MLTU2`, and the stardust after `MLU1` and `MLU2`. The port returned
+   * only the byte until `MVEIT` came out one adrift in a ship's y coordinate (§6.33), and the
+   * stardust needed the same thing from a different multiplier. The LOW byte was left in `P` until
+   * M2-b, for `ADD` and the stardust to read from the workspace; it is a field now.
    */
   struct Product
   {
@@ -93,9 +93,9 @@ namespace Elite
      * 6502: the carry, which `PLS22` reads twice and the port dropped until it did (§6.53).
      *
      * `ADD` has three exits and none of them clears it: the same-sign path leaves whatever
-     * `ADC T1` produced, the `BCS MU9` path leaves it SET by definition, and the negating path
-     * leaves the second `SBC U`'s. `PLS22` then does `STA T / BPL PL42 / ... / .PL42 TXA /
-     * ADC K3`, so a meridian's position on the screen depends on it.
+     * its own addition produced, the `MU9` path leaves it SET by definition, and the negating path
+     * leaves the second subtraction's. `PLS22` then adds `K3` to a value it reached through a sign
+     * test, so a meridian's position on the screen depends on it.
      *
      * The ninth dropped flag, and the field is added rather than the signature changed because
      * every other caller reads `high` and `low` alone.
@@ -130,7 +130,7 @@ namespace Elite
     std::uint8_t low = 0;  ///< 6502: P
     std::uint8_t sign = 0; ///< 6502: T -- the operands' signs, EORed, in bit 7
 
-    /// 6502: LDA P / ORA T -- what the routine returns in A: the low byte with the sign on top.
+    /// 6502: what the routine returns in A: the low byte with the sign ORed on top.
     [[nodiscard]] constexpr std::uint8_t Signed() const noexcept
     {
       return static_cast<std::uint8_t>(low | sign);
@@ -232,11 +232,11 @@ namespace Elite
   /*
    * 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
    *
-   * Returns the carry, because `MAS3` reads it: it sums three squares with `JSR SQUA2 / ADC R` and
-   * no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR, over
-   * every input either entry point can be given, which the exhaustive sweep asserts rather than
-   * argues. `MU1`, taken when A is zero, opens `CLC`; `MU11` ends on a `ROR P` that never carries
-   * out for a square.
+   * Returns the carry, because `MAS3` reads it: it sums three squares, adding `R` after each call
+   * with no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR,
+   * over every input either entry point can be given, which the exhaustive sweep asserts rather
+   * than argues. `MU1`, taken when A is zero, opens by CLEARING the carry; `MU11` ends on a rotate
+   * of `P` that never carries out for a square.
    *
    * So `MAS3` was already right before this was modelled: an `ADC` cannot see a clear carry, which
    * is §6.65's question answered the harmless way. `DVID4`'s carry is the same shape (§6.60);
@@ -291,17 +291,17 @@ namespace Elite
   /*
    * 6502: FMLTU -- A = A * Q / 256, through the logarithm tables.
    *
-   * IT CLOBBERS `P`. The routine opens `STX P` and every one of its four exits ends `LDX P`, so it
-   * preserves the caller's X by parking it in `P` -- and `P` keeps that register value afterwards.
+   * IT CLOBBERS `P`. The routine PARKS X in `P` on the way in and reloads X from it at every one of
+   * its four exits, so it preserves the caller's X -- and `P` keeps that register value afterwards.
    * A port that does not model registers cannot say what X was, so this port has never written it,
    * and the fact is written here rather than lost.
    *
    * Nothing in the shipped build reads `P` after an `FMLTU` without writing it first: the six
    * callers are `MVEIT` part 3, `CIRCLE2` through `FMLTU2`, `LL51`, `PLS22`, `LL9` part 5 and
-   * `EXS1`, and of those only `PLS22` mentions `P` at all -- twice, both `STA P`. So the stale byte
-   * is invisible to the game, and it stopped being invisible to the PORT the moment slice 4b-b
-   * compared `P` after `PTCLS` (§6.144). `EXS1` is the one call site that can prove what X was --
-   * the generator's previous byte, two instructions earlier -- and it writes `P` itself.
+   * `EXS1`, and of those only `PLS22` mentions `P` at all -- twice, and both are stores. So the
+   * stale byte is invisible to the game, and it stopped being invisible to the PORT the moment
+   * slice 4b-b compared `P` after `PTCLS` (§6.144). `EXS1` is the one call site that can prove what
+   * X was -- the generator's previous byte, two instructions earlier -- and it writes `P` itself.
    */
   [[nodiscard]] LogProduct MultiplyByLog(std::uint8_t _value, std::uint8_t _multiplier, bool _carryIn) noexcept;
 
@@ -324,10 +324,10 @@ namespace Elite
    * `S` was used as scratch for the shift count and left there; it is a local now, and `LL28` not
    * touching it is what made that safe in the original.
    *
-   * `_high` IS AN INPUT: the doubling is `ROL U`, which rotates whatever the caller left in `U` up
-   * under the answer. `LL9` clears it before the y divide for exactly that reason, and arrives at
-   * the x divide with the zero its halving loop ended on -- so both callers hand it a zero, and the
-   * sweep hands it something else to prove the rotate is a rotate.
+   * `_high` IS AN INPUT: the doubling is a ROTATE of `U`, which brings whatever the caller left
+   * there up under the answer. `LL9` clears it before the y divide for exactly that reason, and
+   * arrives at the x divide with the zero its halving loop ended on -- so both callers hand it a
+   * zero, and the sweep hands it something else to prove the rotate is a rotate.
    */
   [[nodiscard]] Quotient16 DivideWideByLog(std::uint8_t _dividend, std::uint8_t _divisor, std::uint8_t _high) noexcept;
 
@@ -343,11 +343,11 @@ namespace Elite
    * 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
    * bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
    *
-   * The carry is part of the answer, and `CIRCLE2` is the caller that reads it: `JSR FMLTU2 / TAX /
-   * LDA #0 / STA T / LDA CNT / ADC #15`, with no `CLC`. `FMLTU`'s two antilog exits leave it SET
-   * and its zero exit leaves it CLEAR, so it is data-dependent and not a constant like `MULTU`'s
-   * (§6.43). The eighth dropped flag, and again the exhaustive sweep that already existed verified
-   * the wider model for the price of one line (§6.42).
+   * The carry is part of the answer, and `CIRCLE2` is the caller that reads it: it calls this,
+   * stashes the byte, and then adds 15 to `CNT` with no `CLC`. `FMLTU`'s two antilog exits leave it
+   * SET and its zero exit leaves it CLEAR, so it is data-dependent and not a constant like
+   * `MULTU`'s (§6.43). The eighth dropped flag, and again the exhaustive sweep that already existed
+   * verified the wider model for the price of one line (§6.42).
    */
   [[nodiscard]] LogProduct MultiplyBySine(std::uint8_t _value, std::uint8_t _angle, bool _carryIn) noexcept;
 
@@ -361,10 +361,11 @@ namespace Elite
    * a different routine that happens to share a name.
    *
    * THE EXIT CARRY IS THE LOGARITHM DIVIDE'S, and only the saturating exit sets it. The eight
-   * division steps cannot leave it set: `ASL A / STA P` puts a zero in P's bit 0, and eight
-   * `ROL P`s later that zero is what comes out -- so the carry at the fall-through is always
-   * clear, and what a caller sees is `LL222` or nothing. `SPS2` hands it to an `ADC #195` and an
-   * `SBC T` with no `CLC` or `SEC` between, which is the thirteenth dropped flag (§6.60).
+   * division steps cannot leave it set: the shift that seeds `P` puts a zero in its bit 0, and
+   * eight rotates later that zero is what comes out -- so the carry at the fall-through is always
+   * clear, and what a caller sees is `LL222` or nothing. `SPS2` hands it to an addition of 195 and
+   * a subtraction of `T` with no `CLC` or `SEC` between, which is the thirteenth dropped flag
+   * (§6.60).
    *
    * The shipped C64 build unrolls the eight steps rather than looping; that changes nothing about
    * the result, which is why this reads as a loop.
@@ -391,7 +392,8 @@ namespace Elite
    * The shift-and-add is the usual one with a trick in it worth naming, because it looks like an
    * off-by-one: the routine stores |Q| - 1 in T and then adds it with `ADC` at a point where the
    * carry is always SET, so what actually gets added is |Q|. The subtraction and the carry cancel,
-   * and a port that "corrected" the `SBC #1` would be wrong by one on every partial product.
+   * and a port that "corrected" the subtraction of one would be wrong by one on every partial
+   * product.
    *
    * `MVEIT` reaches this through `MV40`, the path a planet or a sun takes.
    */
@@ -405,12 +407,13 @@ namespace Elite
    * as the rounding in `MVEIT` accumulates.
    *
    * THE ADDITIONS HAVE NO `CLC` BEFORE THEM, which is not an oversight in the original and is the
-   * one thing here a port can quietly get wrong: `LDA P / ADC Q` follows `JSR SQUA`, so whatever
-   * carry `SQUA` exits with is part of the sum. `TheNormaliserMatchesNORM` sweeps the vector space
-   * against the shipped routine, which is what settles it rather than reading the multiplier.
+   * one thing here a port can quietly get wrong: the addition of `Q` to `P` follows the call to
+   * `SQUA`, so whatever carry `SQUA` exits with is part of the sum. `TheNormaliserMatchesNORM`
+   * sweeps the vector space against the shipped routine, which is what settles it rather than
+   * reading the multiplier.
    *
    * RETURNS THE LENGTH, which the original leaves in `Q`: `DOCKIT` reads it after `TA2` falls in
-   * here (`JSR TA2 / LDA Q / STA K`), so it is part of the answer and not scratch.
+   * here, reading `Q` straight into `K`, so it is part of the answer and not scratch.
    */
   [[nodiscard]] std::uint8_t Normalise(std::span<std::uint8_t, 3> _vector) noexcept;
 
@@ -445,11 +448,11 @@ namespace Elite
    *
    * And the denominator loop LOOKS as though its shape matters -- the `DEY` is at the top and the
    * test at the bottom, so it always runs once -- and it does not: A is `S AND %01111111` on entry,
-   * bit 7 is therefore clear, and a while-loop would enter too. The `BMI DV9` commented out above
+   * bit 7 is therefore clear, and a while-loop would enter too. The sign branch commented out above
    * it in the original source could never have branched either. Rewriting the loop as a while is an
    * EQUIVALENT mutation and the sweep does not catch it, which is the honest thing to say about it.
    *
-   * Q MUST BE NON-ZERO. `DVID3B2` guarantees that with an `ORA #1` before it sets Q, and with a
+   * Q MUST BE NON-ZERO. `DVID3B2` guarantees that by forcing bit 0 before it sets Q, and with a
    * zero denominator the original spins forever waiting for a bit that never arrives -- so this
    * does too, rather than inventing an answer the game has never seen.
    */

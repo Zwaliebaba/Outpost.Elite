@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->506 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->462 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-45: `Arith.h` and `TextPrint.cpp` to zero, and the file most about instructions
+did not need the tag either.**
+
+44 sites over two files: the arithmetic header and the text printer. Forty-fifth and forty-sixth at
+zero.
+
+**`Arith.h` is where this port keeps its flag provenance, and every one of those arguments survived
+as prose.** The eighth, ninth, thirteenth and fifteenth dropped flags are all documented in this one
+header, and each is a claim about which instruction LEAVES the carry and which one READS it: the
+multipliers ending on a rotate of `P` so a caller sees that rotate's carry out; `ADD`'s three exits
+none of which clears it; the logarithm divide whose eight steps cannot leave it set because the
+shift that seeds `P` puts a zero in bit 0; `SQUA2`'s always-clear exit. Naming the instructions was
+never the point — WHICH one and IN WHAT ORDER is — and prose says that without quoting. After
+`Hyperspace.h` in M6-d-42, this is the second file whose comments are most about instruction
+behaviour to reach zero with no tagged quotation. `opcode-quotations` is still 0.
+
+**And the method got its fourth tool, because I made the same mistake three times in one slice.**
+Rewriting one line of a paragraph to something longer leaves a ragged tail; reflowing that tail one
+line at a time pushes it down by one each pass, which is a treadmill; and hand-typing the
+continuation loses the prefix on a nested block (a five-space `     * ` came back as three) or
+duplicates a line that was already there (twice). The fix is `reflow(path, lo, hi)` beside
+`apply`: it takes a WHOLE paragraph, keeps its common prefix, and rewraps at a fixed width. It
+refuses a range containing a blank `*` separator, because that mistake merged a header line into
+its own paragraph. **The rule for the remaining slices is: rewrite the SITE line only, then reflow
+the paragraph — never hand-write a continuation.** After `rewrite.apply` (M6-d-31) and the mutation
+worktree carrying the uncommitted diff (M6-d-25a), that is the third time a repeated hand error has
+been answered with a tool rather than with more care.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (63 and 36). `opcode-transcriptions` 506 → 462.
 
 **2026-09-08 — M6-d-44: `Trumbles.cpp` and `Messages.cpp` to zero, and `EQUB &2C` for the fourth
 time.**
