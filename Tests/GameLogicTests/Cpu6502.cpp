@@ -2,6 +2,8 @@
 
 #include "Cpu6502.h"
 
+#include "Oracle.h"
+
 #include <cstring>
 
 namespace Elite::Testing
@@ -1255,6 +1257,13 @@ namespace Elite::Testing
   }
 
   RunResult Cpu6502::CallSubroutine(std::uint16_t _address, std::uint32_t _maxInstructions, std::uint16_t _stopAddress) noexcept
+  {
+    Oracle* const oracle = Oracle::Current();
+    return (oracle != nullptr) ? oracle->Call(*this, _address, _maxInstructions, _stopAddress)
+                               : Interpret(_address, _maxInstructions, _stopAddress);
+  }
+
+  RunResult Cpu6502::Interpret(std::uint16_t _address, std::uint32_t _maxInstructions, std::uint16_t _stopAddress) noexcept
   {
     RunResult result{};
 
