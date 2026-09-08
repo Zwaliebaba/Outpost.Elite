@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,872 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,804 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-26: `Dashboard.cpp` to zero, and a flag that is constant and load-bearing at
+once.**
+
+All 68, over `DIAL`'s four parts, the bar and indicator drawers, the missile blocks and the ECM.
+Tenth file at zero.
+
+**The pitch indicator is offset by two rather than by one, and that is a flag nobody cleared.** The
+subtraction before it has no set of the carry in front of it, so it runs on whatever `DIL2` left --
+and `DIL2` ends by adding one to a screen-address high byte, which cannot carry out. The carry is
+therefore always CLEAR, the subtraction always borrows, and the indicator sits one slot further over
+than the arithmetic reads.
+
+What makes it worth its own paragraph is the comparison the comment already drew: this is the
+fourteenth uncleared flag in the corpus and, unlike the thirteenth, it is LOAD-BEARING. `SP2`'s
+addition of 195 could not see an always-clear carry, so a mutation that assumed a set one there was
+equivalent; here the same assumption moves the indicator. **Constant does not mean invisible**, and
+which of the two a constant flag is depends on what reads it — which is the argument for keeping
+every one of them measured rather than reasoned about.
+
+Also kept: the `&2C` swallow appears a third time, in the danger-colour routine, doing the same job
+it does twice in `ViewChange.cpp` — the yellow path skips the red load because the byte in front of
+it eats the instruction.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, no marker lost
+(67 in this file, before and after). `opcode-transcriptions` 1,872 → 1,804.
 
 **2026-09-08 — M6-d-25: `Spawn.cpp` to zero, and three carries that leave a routine.**
 
