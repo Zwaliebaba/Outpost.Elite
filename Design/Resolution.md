@@ -558,6 +558,31 @@ struct Anchor
 };
 ```
 
+**`wrapWidth` IS DECLINED, and this is the measurement — RULED at RS-5-c.** §6.2 lists it and §6.3
+asks the wide sink to re-wrap the data screen and the briefings at 64 columns, treating a break the
+justifier made as soft. It cannot be done without giving up the property every twin in this track
+rests on, and the reason is that `DA11` does not merely BREAK the line — it PADS it. Elite's
+justification widens the gaps between words until the thirtieth character is a space, so the stream
+the canvas receives already carries the padding for a thirty-column measure:
+
+```
+This planet  is  most  notable
+for  Tibediedian  Arnu  Brandy
+```
+
+Those double spaces are `PadToWidth`'s, not the token's. Re-flowing that to 64 columns without
+re-justifying carries thirty-column padding into a sixty-four-column line, which is ragged text with
+holes in it; re-justifying means the wide surface computing its own `PadToWidth` at 64 and emitting a
+DIFFERENT NUMBER OF SPACE CHARACTERS from the canvas. That breaks the invariant `TheGlyphsAgree`
+tests and the whole of §8.1 rests on — every glyph the canvas has, the picture has at the mapped
+cell, and nothing else — for the two screens where the text is longest and hardest to check by eye.
+What it would buy is a wider paragraph measure. Declined, as RS-4 declined the compass bit, and for
+the same kind of reason: a real improvement that costs the evidence.
+
+**So the description gets a COLUMN instead of a WIDTH.** Thirty characters is a perfectly good
+measure — narrower than a newspaper's — and 80 columns is enough to stand it beside the label/value
+pairs rather than under them. That is a table, which is what every other screen gets.
+
 **The cheap way to keep the no-collision property is OPPOSITE ROW PARITIES.** With `rowStride = 2`
 every unanchored faithful row lands on a wide row of `rowOffset`'s parity; give every anchor the
 other parity and an anchored block can never share a wide row with an unanchored one, which leaves
@@ -621,12 +646,12 @@ accept or redraw (§11) and are not normative until a slice lands them.
 | Inventory (`TT213`) | **LANDED at RS-5-b.** `INVENTORY_LAYOUT{4, 1, 2}`: title, the fuel and cash lines on the left, the hold anchored to wide (46, 4) so its first item is level with the fuel | Nothing |
 | Sell cargo (`TT210` at view 4) | **BLOCKED, and not on this design.** `TT208`'s head — the `TRADEMODE` and the "SELL CARGO" title — is not in the port: `KeyAction::SellCargo` calls `ListCargo` directly, so the sell screen never sets its view, never clears, and has no instruction at which to name a layout. It inherits whatever the previous screen left. Porting `TT208`'s head is a change to the character stream and is not a re-flow's to make | — |
 | Equip ship (`EQSHP`) | **LANDED at RS-5-b.** `EQUIP_LAYOUT{4, 1, 2}`: number and item at wide 8, price right-aligned to 52, and a fourth anchor that brings `CLYNS`'s row 21 back to wide row 40 from the 43 the offsets would give it | Nothing |
-| Data on system (`TT25`) | The label/value pairs at columns 4 and 28; the description re-wrapped at `wrapWidth = 64` | **The wide sink re-wraps.** `TT27`'s justifier breaks lines at `JUSTIFIED_LINE_WIDTH` (30) and emits the break as a newline in the character stream. The wide sink treats a break the justifier made (the printer knows, because it made it) as soft and re-wraps at the layout's width; a break from a token is hard. The faithful stream is unchanged |
+| Data on system (`TT25`) | **CORRECTED at RS-5-c: a column, not a width, and not two columns of pairs.** The pairs stay whole on the left — their colons are at a different canvas column on every line, so no rectangle can split label from value — and the description moves to a column of its own beside them, at the thirty characters `DA11` justified it to | Nothing. **The wide sink does NOT re-wrap**, and §6.2 carries the measurement: the faithful stream already holds thirty-column PADDING, so re-wrapping means re-justifying, and re-justifying means the picture carrying different space characters from the canvas |
 | Long-range chart (`TT22`) | The map at 512×256 from cell (8, 4): each system plotted at `(2x, y)`, which is the original's half vertical scale doubled; the title rule and legend above and below | `PlotDot2x` at `(2x, 2 * top + (y & ~1))` — the faithful `y >> 1` doubled is `y` less its low bit, kept so the map is the original's and not a redrawn one; `DrawCrosshairs2x` |
 | Short-range chart (`TT23`) | The full 640×352 above a two-row legend; systems as the planet twin's discs; the fuel circle at twice its radius; **labels no longer collide**, because a name that overlapped its neighbour in 40 columns has room in 80 — the anchor for a label is computed from the 2× position exactly as `TT23` computes it from the 1× one | `DrawSun2x` and `DrawCircle2x` are the planet's (§4.2); the label placement (`TT23` derives a label's column from the disc's x by dividing by eight) has a twin that divides the 2× position by eight |
 | Title (`TITLE`) | The ship centred in a 512×288 view as in flight; "COMMODORE 64 ELITE", the load prompt and the "press space" line at rows 4, 40 and 44 | Nothing beyond the ship, which is `LL9`'s twin |
 | Name entry, save menu (`MT26`, `SVE`) | Prompt and input line centred | Nothing |
-| Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | Text re-wrapped at 64 like the data screen; the Constrictor at the view's centre | The re-wrap, and `LL9`'s twin for the ship |
+| Briefings and incoming messages (`BRIEF`, `BRIEF2`, `DEBRIEF`, `BRP`) | **CORRECTED at RS-5-c**: not re-wrapped at 64, for the data screen's reason. The justified block is placed as it stands; the Constrictor at the view's centre | `LL9`'s twin for the ship, and nothing for the text |
 | Pause screen (`FREEZE`) | Default layout | Nothing — it prints nothing, it holds the frame |
 | Death (`DEATH2`) | The wreckage in the 2× view, "GAME OVER" where it is | Nothing beyond the space view's twins |
 | Flight views | §6.2 | Nothing |
@@ -1372,3 +1397,31 @@ built.
 **The screen tests share a `Docked` rig now**, which is what three more of them made worth having:
 a universe with both surfaces wired as `Game` wires them, and a `FillTheHold` for the cargo lists.
 The status screen's test moved onto it in the same change.
+
+### RS-5-c — `wrapWidth` declined, measured, 2026-09-08
+
+**The one thing §6.3 asked for that is not a table cannot be built, and the reason is padding rather
+than breaking.** The design has the wide sink re-wrapping the data screen and the briefings at 64
+columns, treating a break the justifier made as soft. But `DA11` does not merely break a justified
+line — it WIDENS THE GAPS until the thirtieth character is a space, so the stream the canvas receives
+already carries the padding for a thirty-column measure. Re-flowing it to 64 without re-justifying
+carries that padding into a longer line and prints text with holes in it; re-justifying means the
+picture emitting a different number of SPACE characters from the canvas, which breaks the invariant
+`TheGlyphsAgree` and the whole of §8.1 rest on — and breaks it precisely on the two screens whose
+text is longest and least checkable by eye.
+
+**So the field is deleted from the design rather than deferred again.** RS-5-0 left it out because
+nothing read it; this slice says nothing ever will. The description gets a COLUMN instead of a
+WIDTH: thirty characters is a good measure, and eighty columns is enough to stand the paragraph
+beside the label/value pairs rather than under them.
+
+**And §6.3's "label/value pairs at columns 4 and 28" is not expressible either.** `TT25` prints
+"Economy:Poor Industrial" and "Gross Productivity:11520 M CR" with the colon at canvas column 8 in
+one and 19 in the other, so no rectangle splits label from value across the rows: an anchor moves a
+column RANGE, and there is no range that is "the label" on every line. The pairs stay whole on the
+left, which is what the sketch shows.
+
+**Third time this track has declined something the design promised, and the shape is always the
+same**: `Divide512` and the sun's twin at RS-3, the compass bit at RS-4, `wrapWidth` here. Each was a
+real improvement, each was measured, and each cost more evidence than it bought. Written down so the
+next one is recognised faster.
