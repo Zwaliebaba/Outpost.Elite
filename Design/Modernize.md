@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->453 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->353 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,24 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-10: the line drawers, the seed twist, the number printer and the cloud.**
+
+100 sites over four files, and each one was a comment away from its own name. `LOIN`'s `P2` and `Q2`
+are the two spans as magnitudes — `deltaX` and `deltaY` — and its `S2` is the Bresenham error seeded
+at half, which is `errorSeed`; `HLOIN`'s `T` is the left end rounded down to its byte (`leftByte`)
+and its `R` the count of whole bytes between the ends (`wholeBytes`). `TwistSeeds` aliased the six
+system seeds as `q` because the original calls them `QQ15`; they are `seed`. `TT11`'s `U` is where
+the decimal point falls (`pointPosition`), its `T` the field width and its `S` the flag that says a
+digit has already been printed. `DOEXP`'s `S` is the vertex's high byte and its `T` the offset's low
+half.
+
+`Lines2x.cpp` moved with `Lines.cpp`, which is the twin rule doing its job in a direction
+`check_twins.py` does not check: the twin's parameters are the faithful routine's, so a rename that
+stopped at one of them would leave two routines that no longer read as a pair.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 453 → 353.
 
 **2026-09-08 — M6-c-9: the ship movers, and one local that was two things.**
 

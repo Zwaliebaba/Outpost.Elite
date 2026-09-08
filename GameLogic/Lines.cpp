@@ -198,8 +198,8 @@ namespace Elite
      * M2-c (§8). The byte is the kernel's and a local since M2-b, and the single-byte path below
      * overwrites it with the right-hand mask before returning, so nothing survives the call.
      */
-    const std::uint8_t t = static_cast<std::uint8_t>(left & 0xF8u);
-    const std::uint8_t span = static_cast<std::uint8_t>((right & 0xF8u) - t);
+    const std::uint8_t leftByte = static_cast<std::uint8_t>(left & 0xF8u);
+    const std::uint8_t span = static_cast<std::uint8_t>((right & 0xF8u) - leftByte);
 
     if (span == 0)
     {
@@ -213,7 +213,7 @@ namespace Elite
       return;
     }
 
-    const std::uint8_t r = static_cast<std::uint8_t>(span >> 3); // 6502: LSR A x3 / STA R
+    const std::uint8_t wholeBytes = static_cast<std::uint8_t>(span >> 3); // 6502: LSR A x3 / STA R
 
     // 6502: TWFR -- the first byte is filled from x rightwards to the end of the byte.
     _canvas.ExclusiveOr(offset, LINE_RIGHT_MASK_TABLE[left & 0x07u]);
@@ -221,7 +221,7 @@ namespace Elite
 
     // 6502: HLL1 -- every whole byte between the ends, which in multicolour terms is four pixels
     // of colour %11 at a time.
-    for (std::uint8_t remaining = static_cast<std::uint8_t>(r - 1u); remaining != 0; --remaining)
+    for (std::uint8_t remaining = static_cast<std::uint8_t>(wholeBytes - 1u); remaining != 0; --remaining)
     {
       _canvas.ExclusiveOr(offset, 0xFFu);
       offset = static_cast<std::uint16_t>(offset + 8u);
@@ -290,7 +290,7 @@ namespace Elite
      * says to.
      */
     /// Returns `SWAP`: whether the ends were exchanged, which `_line` then holds the other way round.
-    bool DrawShallowLine(Canvas& _canvas, Line& _line, std::uint8_t _p2, std::uint8_t _q2, std::uint8_t _s2) noexcept
+    bool DrawShallowLine(Canvas& _canvas, Line& _line, std::uint8_t _deltaX, std::uint8_t _deltaY, std::uint8_t _errorSeed) noexcept
     {
       // 6502: LDX X1 / CPX X2 / BCC LI3 -- draw left to right, swapping the ends if they arrived the
       // other way round. DEC SWAP is what records that, and the record matters: a swapped line does
@@ -308,7 +308,7 @@ namespace Elite
       }
 
       // 6502: LI3 -- the slope, as a fraction of a row per column.
-      _q2 = LineSlope(_q2, _p2);
+      _deltaY = LineSlope(_deltaY, _deltaX);
 
       const bool goingUp = _line.y1 >= _line.y2;
       const std::uint16_t rowAddress = static_cast<std::uint16_t>(Canvas::RowOffset(_line.y1));
@@ -368,20 +368,20 @@ namespace Elite
       }
 
       std::uint8_t bit = static_cast<std::uint8_t>(_line.x1 & 0x07u);
-      std::uint8_t count = _p2;
+      std::uint8_t count = _deltaX;
       bool skipFirst = false;
 
       if (swapped)
       {
         // 6502: LDX P2 / INX / BEQ -- the swapped entry counts one more and enters past the plot.
-        count = static_cast<std::uint8_t>(_p2 + 1u);
+        count = static_cast<std::uint8_t>(_deltaX + 1u);
         if (count == 0)
         {
           return swapped;
         }
         skipFirst = true;
       }
-      else if (!goingUp && _p2 == 0)
+      else if (!goingUp && _deltaX == 0)
       {
         // 6502: LDX P2 / BEQ LIE0 -- the downward entry checks for an empty line and the upward one
         // does not. Not a symmetry the port may impose: upward with P2 = 0 really does plot 256
@@ -404,8 +404,8 @@ namespace Elite
           return swapped;
         }
 
-        const AddResult accumulated = AddWithCarry(_s2, _q2, carry);
-        _s2 = accumulated.value;
+        const AddResult accumulated = AddWithCarry(_errorSeed, _deltaY, carry);
+        _errorSeed = accumulated.value;
         carry = accumulated.carry;
 
         if (carry)
@@ -459,7 +459,7 @@ namespace Elite
      * when the accumulator says to. The mask is carried in R2 and shifted rather than indexed, which
      * is why this half has no bit counter.
      */
-    bool DrawSteepLine(Canvas& _canvas, Line& _line, std::uint8_t _p2, std::uint8_t _q2, std::uint8_t _s2) noexcept
+    bool DrawSteepLine(Canvas& _canvas, Line& _line, std::uint8_t _deltaX, std::uint8_t _deltaY, std::uint8_t _errorSeed) noexcept
     {
       // 6502: CPY Y2 / BCS LI15 -- draw downwards, swapping the ends if needed.
       bool swapped = false;
@@ -486,13 +486,13 @@ namespace Elite
       std::uint8_t mask = PIXEL_MASK_TABLE[_line.x1 & 0x07u];
 
       // 6502: LDX P2 / BEQ LIfudge -- a vertical line keeps a slope of zero rather than dividing.
-      if (_p2 != 0)
+      if (_deltaX != 0)
       {
-        _p2 = LineSlope(_p2, _q2);
+        _deltaX = LineSlope(_deltaX, _deltaY);
       }
 
       // 6502: LIfudge -- SEC / LDX Q2 / INX, then the direction test.
-      std::uint8_t count = static_cast<std::uint8_t>(_q2 + 1u);
+      std::uint8_t count = static_cast<std::uint8_t>(_deltaY + 1u);
       const bool goingRight = SubtractWithCarry(_line.x2, _line.x1, true).carry;
 
       // 6502: LDA SWAP / BEQ LI17 -- unswapped enters past the plot, swapped plots and counts one
@@ -533,8 +533,8 @@ namespace Elite
           y = 7;
         }
 
-        const AddResult accumulated = AddWithCarry(_s2, _p2, carry);
-        _s2 = accumulated.value;
+        const AddResult accumulated = AddWithCarry(_errorSeed, _deltaX, carry);
+        _errorSeed = accumulated.value;
         carry = accumulated.carry;
 
         if (carry)
@@ -611,17 +611,17 @@ namespace Elite
     // 6502: LDA #128 / STA S2 / ASL A / STA SWAP. The shift does three jobs at once: it leaves the
     // accumulator seeded at half, it zeroes the swap flag, and it SETS carry, which is why the
     // subtraction below has no SEC in front of it.
-    const std::uint8_t s2 = 0x80;
+    const std::uint8_t errorSeed = 0x80;
 
     // 6502: LI1, LI2 -- the two spans, as magnitudes. Negating with EOR #255 / ADC #1 works
     // because the branch that reaches it left carry clear.
     SubResult span = SubtractWithCarry(_line.x2, _line.x1, true);
-    const std::uint8_t p2 = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
+    const std::uint8_t deltaX = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
 
     span = SubtractWithCarry(_line.y2, _line.y1, true);
-    const std::uint8_t q2 = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
+    const std::uint8_t deltaY = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
 
-    const bool swapped = (q2 < p2) ? DrawShallowLine(_canvas, _line, p2, q2, s2) : DrawSteepLine(_canvas, _line, p2, q2, s2);
+    const bool swapped = (deltaY < deltaX) ? DrawShallowLine(_canvas, _line, deltaX, deltaY, errorSeed) : DrawSteepLine(_canvas, _line, deltaX, deltaY, errorSeed);
     return DrawnLine{_line, swapped};
   }
 

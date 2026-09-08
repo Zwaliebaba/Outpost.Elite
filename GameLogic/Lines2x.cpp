@@ -146,13 +146,13 @@ namespace Elite
      * exchanged, how many pixels there are, and the slope byte. What the twin does differently is
      * plot TWO pixels where the game plots one, half the size, at half the step.
      */
-    const std::uint8_t s2 = 0x80;
+    const std::uint8_t errorSeed = 0x80;
 
     SubResult span = SubtractWithCarry(_line.x2, _line.x1, true);
-    const std::uint8_t p2 = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
+    const std::uint8_t deltaX = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
 
     span = SubtractWithCarry(_line.y2, _line.y1, true);
-    const std::uint8_t q2 = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
+    const std::uint8_t deltaY = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
 
     /*
      * THE ACCUMULATOR IS THE FAITHFUL ONE AT TWICE THE RATE, and the arithmetic is worth spelling
@@ -163,9 +163,9 @@ namespace Elite
      * where `LOIN` puts it. After two wide steps the wide row is the doubled faithful row or the one
      * beside it, which is what a one-pixel line inside a two-pixel one is.
      */
-    int accumulator = s2;
+    int accumulator = errorSeed;
 
-    if (q2 < p2)
+    if (deltaY < deltaX)
     {
       // `STPX`'s half: the shallow one, one pixel per column.
       bool swapped = false;
@@ -176,24 +176,24 @@ namespace Elite
         std::swap(_line.y1, _line.y2);
       }
 
-      const std::uint8_t step = LineSlope(q2, p2);
+      const std::uint8_t step = LineSlope(deltaY, deltaX);
       const bool goingUp = _line.y1 >= _line.y2;
 
       // The swapped entry counts one more (`LDX P2 / INX / BEQ`), so a span of 255 counts 256, wraps
       // to zero and draws NOTHING. Ninety-six lines of the sweep are that case, and a twin that drew
       // them anyway put 510 pixels on a blank canvas.
-      std::uint8_t count = p2;
+      std::uint8_t count = deltaX;
       int skip = 0;
       if (swapped)
       {
-        count = static_cast<std::uint8_t>(p2 + 1u);
+        count = static_cast<std::uint8_t>(deltaX + 1u);
         if (count == 0u)
         {
           return;
         }
         skip = 2; // the swapped entry plots nothing on its first pass, which is two wide pixels
       }
-      else if (!goingUp && p2 == 0u)
+      else if (!goingUp && deltaX == 0u)
       {
         return; // the downward entry checks for an empty line (`BEQ LIE0`) and the upward one does not
       }
@@ -234,11 +234,11 @@ namespace Elite
     }
 
     // A vertical line keeps a slope of zero rather than dividing, which is `LIfudge`.
-    const std::uint8_t step = (p2 != 0u) ? LineSlope(p2, q2) : std::uint8_t{0};
+    const std::uint8_t step = (deltaX != 0u) ? LineSlope(deltaX, deltaY) : std::uint8_t{0};
     const bool goingRight = SubtractWithCarry(_line.x2, _line.x1, true).carry;
 
     // `SEC / LDX Q2 / INX`, and then the swapped entry plots and counts one fewer.
-    std::uint8_t count = static_cast<std::uint8_t>(q2 + 1u);
+    std::uint8_t count = static_cast<std::uint8_t>(deltaY + 1u);
     int skip = swapped ? 0 : 2;
     if (swapped)
     {

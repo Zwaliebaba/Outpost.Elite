@@ -51,7 +51,7 @@ namespace Elite
    */
   std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept
   {
-    std::uint8_t u = _digits; // 6502: U, which the routine rewrites and leaves
+    std::uint8_t pointPosition = _digits; // 6502: U, which the routine rewrites and leaves
     /*
      * 6502: LDX #11 / STX T / PHP / BCC TT30.
      *
@@ -60,19 +60,19 @@ namespace Elite
      * leading-zero counter and the width lose one to pay for it. Reading the branch the other way
      * round shifts the padding by two characters and puts the point where a digit belongs.
      */
-    std::uint8_t t = 11;
+    std::uint8_t width = 11;
     if (_withPoint)
     {
-      --t;
-      --u;
+      --width;
+      --pointPosition;
     }
 
     // 6502: TT30. XX17 counts the digits down; U becomes the position the point falls at.
     std::uint8_t digitsLeft = 11;
-    u = static_cast<std::uint8_t>(11u - u);
-    ++u;
+    pointPosition = static_cast<std::uint8_t>(11u - pointPosition);
+    ++pointPosition;
 
-    std::uint8_t s = 0;
+    std::uint8_t printedYet = 0;
     std::uint8_t digit = 0;
 
     for (;;)
@@ -89,7 +89,7 @@ namespace Elite
           remainder[index] = static_cast<std::uint8_t>(difference);
           noBorrow = difference < 0x100u;
         }
-        const std::uint16_t top = static_cast<std::uint16_t>(s) - 0x17u - (noBorrow ? 0u : 1u);
+        const std::uint16_t top = static_cast<std::uint16_t>(printedYet) - 0x17u - (noBorrow ? 0u : 1u);
 
         if (top >= 0x100u)
         {
@@ -101,7 +101,7 @@ namespace Elite
         {
           _value[static_cast<std::size_t>(index)] = remainder[index];
         }
-        s = static_cast<std::uint8_t>(top);
+        printedYet = static_cast<std::uint8_t>(top);
         ++digit;
       }
 
@@ -113,16 +113,16 @@ namespace Elite
       bool print = true;
       std::uint8_t character = 0;
 
-      if (digit != 0 || t == 0)
+      if (digit != 0 || width == 0)
       {
         // 6502: TT32 -- a digit, and from here on zeros are digits too.
-        t = 0;
+        width = 0;
         character = static_cast<std::uint8_t>(digit + 0x30u);
       }
       else
       {
-        --u;
-        if ((u & 0x80u) == 0u)
+        --pointPosition;
+        if ((pointPosition & 0x80u) == 0u)
         {
           // 6502: BPL TT34 -- still inside the number's own width, so nothing is printed at all.
           print = false;
@@ -139,16 +139,16 @@ namespace Elite
       }
 
       // 6502: TT34 -- DEC T / BPL / INC T, which is a decrement that will not go below zero.
-      if (t != 0)
+      if (width != 0)
       {
-        --t;
+        --width;
       }
 
       --digitsLeft;
       if ((digitsLeft & 0x80u) != 0u)
       {
         // 6502: rT10 -- eleven digits done, and `U` goes back as the routine leaves it.
-        return u;
+        return pointPosition;
       }
 
       if (digitsLeft == 0 && _withPoint)
@@ -174,7 +174,7 @@ namespace Elite
           _value[static_cast<std::size_t>(index)] = shifted.value;
           carry = shifted.carry;
         }
-        s = RotateLeftValue(s, carry).value;
+        printedYet = RotateLeftValue(printedYet, carry).value;
       };
 
       shiftLeft();
@@ -182,7 +182,7 @@ namespace Elite
       {
         copy[index] = _value[static_cast<std::size_t>(index)];
       }
-      copyHigh = s;
+      copyHigh = printedYet;
 
       shiftLeft();
       shiftLeft();
@@ -194,7 +194,7 @@ namespace Elite
         _value[static_cast<std::size_t>(index)] = sum.value;
         carry = sum.carry;
       }
-      s = AddWithCarry(copyHigh, s, carry).value;
+      printedYet = AddWithCarry(copyHigh, printedYet, carry).value;
 
       digit = 0;
     }
