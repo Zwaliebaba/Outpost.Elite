@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->546 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->506 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-44: `Trumbles.cpp` and `Messages.cpp` to zero, and `EQUB &2C` for the fourth
+time.**
+
+40 sites over two files: the Trumble sprites and the in-flight message printer. Forty-third and
+forty-fourth at zero. Nothing new found; both files were already well explained and the work was
+turning label-and-listing into label-and-reason.
+
+**The fourth `EQUB &2C` is the one where the original's own comments contradict each other.** `MESS`
+loads 25 and follows it with the byte, so the `BIT` swallows the STORE of the row rather than the
+load below it: the 25 goes into the accumulator and is thrown away, and the row stays the 21 that
+`CLYNS` left. The source comments the load as "the text row for the message if this is not a space
+view" and the `EQUB` as "skip the next instruction", and both cannot be true. Ported as it runs
+rather than as it is described (§6.66, ADR-003), and the byte stays in the comment for the same
+reason it stayed in `OSW0L`, `LOOK1` and the view keys: it IS the mechanism.
+
+`Trumbles.cpp` is a carry pair worth keeping straight. The turn index is doubled into Y, and that
+doubling cannot carry out of a value below eight — so the first random call is the carry-clear one.
+The compare against 235 that decides whether the Trumble turns then SETS the carry on the way past,
+and nothing between there and the second random call touches it — so the second is the carry-set
+one. Two calls, two different carries, both determined by arithmetic that is not about randomness at
+all.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (15 and 19). `opcode-transcriptions` 546 → 506.
 
 **2026-09-08 — M6-d-43: `DockedKeys.h` and `Controls.h` to zero, and my own rewrite made a
 transcription twice.**
