@@ -33,8 +33,8 @@ namespace Elite
   inline constexpr std::uint8_t BRIEFING_SHIP_HEIGHT = 80;
 
   /*
-   * 6502: LDA #2 / STA INWK+7 -- and the upstream comment says "Set z_hi = 1", which this build
-   * does not do.
+   * 6502: the briefing ship's z high byte -- and the upstream comment says "Set z_hi = 1", which
+   * this build does not do.
    *
    * The Master and Apple versions load 1; the C64 loads 2, so the briefing ship sits at
    * (z_hi z_lo) = 512 rather than 256 -- twice as far away, and half the size. The comment was
@@ -43,36 +43,35 @@ namespace Elite
    */
   inline constexpr std::uint8_t BRIEFING_SHIP_DISTANCE = 2;
 
-  /// 6502: LDA #216 / JSR DETOK -- "{clear screen}{tab 6}{move to row 10}{all caps}INCOMING
-  /// MESSAGE", which is the token every briefing opens with.
+  /// 6502: the extended token "{clear screen}{tab 6}{move to row 10}{all caps}INCOMING MESSAGE",
+  /// which is what every briefing opens with.
   inline constexpr std::uint8_t INCOMING_MESSAGE_TOKEN = 216;
 
-  /// 6502: LDY #100 / JMP DELAY -- a hundred vertical syncs, so two seconds on PAL and 1.67 on
-  /// NTSC (§6.17).
+  /// 6502: a hundred vertical syncs, so two seconds on PAL and 1.67 on NTSC (§6.17).
   inline constexpr std::uint8_t INCOMING_MESSAGE_FRAMES = 100;
 
   /*
-   * 6502: LDA #1 / JSR DOXC / JMP TT66 -- MT9's column and its view, which are the same byte:
-   * `STA` does not touch A, so `TT66` is entered with the 1 that `DOXC` was given.
+   * 6502: MT9's column and its view are the SAME BYTE: one load, and the store that consumes it
+   * leaves the accumulator alone, so `TT66` is entered with the 1 that `DOXC` was given.
    *
-   * THE `DOXC` IS DEAD AND IS PORTED ANYWAY. `TT66` sets `XC` to 1 itself, twice, and `JMP TT66` is
-   * the next instruction, so nothing can read what `DOXC` wrote. The port went two slices without
-   * the store and was right by accident; `mi-mt9-view` is the mutant that found that out, and it
-   * is recorded as an equivalent rather than as a catch.
+   * THE `DOXC` IS DEAD AND IS PORTED ANYWAY. `TT66` sets `XC` to 1 itself, twice, and the jump to
+   * it is the next instruction, so nothing can read what `DOXC` wrote. The port went two slices
+   * without the store and was right by accident; `mi-mt9-view` is the mutant that found that out,
+   * and it is recorded as an equivalent rather than as a catch.
    */
   inline constexpr std::uint8_t MT9_COLUMN_AND_VIEW = 1;
 
-  /// 6502: MT23's `LDA #10` and MT29's `LDA #6` -- the row each moves to, and the ONLY thing they
-  /// do to the cursor. `DOYC` is `STA YC / RTS`; neither touches the column.
+  /// 6502: the row MT23 and MT29 each move to, and the ONLY thing either does to the cursor.
+  /// `DOYC` stores the row and returns; neither touches the column.
   inline constexpr std::uint8_t MT23_ROW = 10;
   inline constexpr std::uint8_t MT29_ROW = 6;
 
   /*
-   * 6502: MT27's `LDA #217` and MT28's `LDA #220`, both `CLC / ADC GCNT`.
+   * 6502: MT27's token and MT28's, each with the galaxy number added.
    *
    * MT27 is the mission captain's name and MT28 the planet the Constrictor was last seen at, and
-   * both are one token per galaxy. MT27 skips MT28's load with `BNE P%+4`, so the two are one
-   * routine with two entry points and one addition.
+   * both are one token per galaxy. MT27 branches over MT28's load, so the two are one routine with
+   * two entry points and one addition.
    */
   inline constexpr std::uint8_t MISSION_CAPTAIN_TOKEN = 217;
   inline constexpr std::uint8_t MISSION_PLANET_TOKEN = 220;
@@ -96,10 +95,10 @@ namespace Elite
   /*
    * 6502: PAUSE, control code 22 -- spin the ship until a key is pressed, then put it away.
    *
-   * TWO LOOPS AND THE FIRST ONE IS THE INTERESTING ONE. `JSR PAS1 / BNE PAUSE` runs while a key is
-   * being HELD, so the routine first waits for the player to let go of whatever dismissed the
-   * previous page, and only then waits for the next press. Without it one keystroke would dismiss
-   * every remaining page of a briefing in a single frame.
+   * TWO LOOPS AND THE FIRST ONE IS THE INTERESTING ONE. It runs while a key is being HELD, so the
+   * routine first waits for the player to let go of whatever dismissed the previous page, and only
+   * then waits for the next press. Without it one keystroke would dismiss every remaining page of
+   * a briefing in a single frame.
    *
    * IT FALLS INTO MT23, and the port splits that the way the printer already splits codes 23 and
    * 29: the cursor move is here and the two case flags are the printer's. A control-code handler
@@ -110,18 +109,18 @@ namespace Elite
   /*
    * 6502: PAUSE2, control code 24 -- the same wait with no ship in it.
    *
-   * `JSR RDKEY / BNE PAUSE2 / JSR RDKEY / BEQ PAUSE2` and the second branch goes back to the FIRST
-   * scan, not to the second -- so a key that arrives is checked once more for release before the
-   * routine will look for it again. The label after the `RTS` is `newyearseve`, which is the only
-   * clue in the source about when it was written.
+   * Two keyboard scans, and the second branch goes back to the FIRST of them rather than to the
+   * second -- so a key that arrives is checked once more for release before the routine will look
+   * for it again. The label after the `RTS` is `newyearseve`, which is the only clue in the source
+   * about when it was written.
    */
   void WaitForKeyPress(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: BRIS, control code 25 -- "INCOMING MESSAGE" and two seconds of nothing.
    *
-   * `LDA #216 / JSR DETOK / LDY #100 / JMP DELAY`. Token 216 clears the screen itself, so this is
-   * the whole of the transition into a briefing.
+   * Token 216 through `DETOK`, then a hundred syncs. The token clears the screen itself, so this
+   * is the whole of the transition into a briefing.
    */
   void ShowIncomingMessage(Universe& _universe, Ports& _ports) noexcept;
 
@@ -160,7 +159,7 @@ namespace Elite
    */
   void RunControlCode(Universe& _universe, Ports& _ports, std::uint8_t _code) noexcept;
 
-  /// 6502: MT8 -- LDA #6 / JSR DOXC, and the `DTW2` store beside it is the printer's.
+  /// 6502: MT8 -- the column it sets, and the `DTW2` store beside it is the printer's.
   inline constexpr std::uint8_t MT8_COLUMN = 6;
 
   // ---- the missions themselves (slice 4d-c) ---------------------------------------------------
@@ -173,22 +172,22 @@ namespace Elite
    * So the pair is a small state machine, and `BRIEF` and `DEBRIEF` are the two transitions that
    * are not a docking test.
    */
-  inline constexpr std::uint8_t MISSION_1_STARTED = 0x01; ///< 6502: LSR TP / SEC / ROL TP
-  inline constexpr std::uint8_t MISSION_2_STARTED = 0x04; ///< 6502: ORA #%00000100
-  inline constexpr std::uint8_t MISSION_2_PLANS = 0x0A;   ///< 6502: ORA #%00001010, after AND #%11110000
-  inline constexpr std::uint8_t MISSION_2_KEEP = 0xF0;    ///< 6502: AND #%11110000 -- `BRIEF3` clears the low nibble
-  inline constexpr std::uint8_t MISSION_TRUMBLES = 0x10;  ///< 6502: ORA #%00010000
+  inline constexpr std::uint8_t MISSION_1_STARTED = 0x01; ///< 6502: BRIEF shifts bit 0 out and a set carry in
+  inline constexpr std::uint8_t MISSION_2_STARTED = 0x04; ///< 6502: BRIEF2's bit
+  inline constexpr std::uint8_t MISSION_2_PLANS = 0x0A;   ///< 6502: BRIEF3 sets these two, after the mask below
+  inline constexpr std::uint8_t MISSION_2_KEEP = 0xF0;    ///< 6502: BRIEF3 keeps the high nibble and clears the low
+  inline constexpr std::uint8_t MISSION_TRUMBLES = 0x10;  ///< 6502: TBRIEF's bit, set before the offer
 
-  /// 6502: LDA #64 / STA MCNT -- how many frames the Constrictor turns for before it starts to
-  /// move away, and the counter goes on counting DOWN through the second loop without being read.
+  /// 6502: how many frames the Constrictor turns for before it starts to move away, and the
+  /// counter goes on counting DOWN through the second loop without being read.
   inline constexpr std::uint8_t BRIEFING_SPIN_FRAMES = 64;
 
-  /// 6502: LDX #%01111111 -- the roll and pitch counters at maximum with the damping bit clear, so
-  /// the ship turns and keeps turning. Written INSIDE the loop, once per frame.
+  /// 6502: the roll and pitch counters at maximum with the damping bit clear, so the ship turns
+  /// and keeps turning. Written INSIDE the loop, once per frame.
   inline constexpr std::uint8_t BRIEFING_SPIN = 0x7F;
 
-  /// 6502: LDA #1 / JSR DOXC / STA INWK+7 -- one load again, and this one is a column and a
-  /// DISTANCE. `TT66` two instructions later gets the same 1 as its view.
+  /// 6502: one load again, and this one is a column AND a distance. `TT66` two instructions later
+  /// gets the same 1 as its view.
   inline constexpr std::uint8_t BRIEFING_START_DISTANCE = 1;
 
   /// 6502: the tokens each mission prints. 10 and 15 are the Constrictor's briefing and its thank
@@ -200,19 +199,20 @@ namespace Elite
   inline constexpr std::uint8_t MISSION_2_DEBRIEFING = 223;
   inline constexpr std::uint8_t TRUMBLE_OFFER = 199;
 
-  /// 6502: LDX #LO(50000) / LDY #HI(50000) -- 5,000 credits, in the tenths the cash is held in.
-  /// The same number is the reward for mission 1 and the price of a Trumble.
+  /// 6502: 5,000 credits, in the tenths the cash is held in. The same number is the reward for
+  /// mission 1 and the price of a Trumble.
   inline constexpr std::uint16_t MISSION_REWARD = 50000;
 
-  /// 6502: LDA #2 / STA ENGY -- the navy's energy unit, which recharges at three units a pass
-  /// where the shop's does two. Two is the byte and three is what the flight loop makes of it.
+  /// 6502: the navy's energy unit, which recharges at three units a pass where the shop's does
+  /// two. Two is the byte and three is what the flight loop makes of it.
   inline constexpr std::uint8_t NAVY_ENERGY_UNIT = 2;
 
   /*
    * What a mission needs beyond the text: the commander it changes, and the docking bay it ends at.
    *
-   * `BRP` is `JSR DETOK` then `JMP BAY`, and every mission but `TBRIEF`'s refusal is a tail call
-   * into it -- so all seven return the same thing, and it is the forced key `BAY` presses.
+   * `BRP` prints an extended token and jumps to `BAY`, and every mission but `TBRIEF`'s refusal is
+   * a tail call into it -- so all seven return the same thing, and it is the forced key `BAY`
+   * presses.
    */
   // `MissionBay` was the commander, `QQ12`, `QQ11` and `QQ22+1` -- two references and two values,
   // all four `Universe`'s since M3-a-3. What is left is the one argument below: what `KLO+HINT`
@@ -223,8 +223,8 @@ namespace Elite
   /*
    * 6502: BRP -- print an extended token and go to the docking bay.
    *
-   * `JSR DETOK` then `.BAYSTEP JMP BAY`, and `BAYSTEP` is the entry `TBRIEF` uses when the player
-   * turns the Trumble down: it skips the token and goes straight to the bay.
+   * The token, then `BAYSTEP`'s jump to `BAY` -- and `BAYSTEP` is the entry `TBRIEF` uses when the
+   * player turns the Trumble down: it skips the token and goes straight to the bay.
    */
   [[nodiscard]] ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, std::uint8_t _token) noexcept;
 
@@ -242,13 +242,13 @@ namespace Elite
    * second, and a port that stopped decrementing it there would be caught by `MCNT` alone.
    *
    * THE SECOND LOOP INCREMENTS `z_lo` TWICE PER FRAME and tests after each, so the ship recedes at
-   * two units a frame and the exit can be taken on either half. `LSR INWK` halves the x coordinate
-   * every frame at the same time, which is what walks it back to the middle of the screen.
+   * two units a frame and the exit can be taken on either half. The x coordinate is halved every
+   * frame at the same time, which is what walks it back to the middle of the screen.
    *
    * Returns the token `BR2` leaves in the accumulator, which is 10 -- so this is `BRIEF` up to but
    * not including its tail call, and `BriefMission1` below is the whole of it. Split there because
-   * that is where the original splits: `BR2` ends `LDA #10 / BNE BRPS`, and everything after the
-   * branch is `BRP`'s and is shared with four other missions.
+   * that is where the original splits: `BR2` ends by loading the token and branching to `BRPS`,
+   * and everything after the branch is `BRP`'s and is shared with four other missions.
    */
   [[nodiscard]] std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
@@ -262,19 +262,19 @@ namespace Elite
   /*
    * 6502: BRIEF3 -- collect the plans at Ceerdi.
    *
-   * `AND #%11110000 / ORA #%00001010` -- and the `AND` is the interesting half: it clears mission
-   * 1's two bits as well as setting mission 2's, so picking up the plans is also what forgets that
-   * the Constrictor ever happened. Bit 3 is "the plans are aboard".
+   * The mask is the interesting half: keeping only the high nibble clears mission 1's two bits as
+   * well as setting mission 2's, so picking up the plans is also what forgets that the Constrictor
+   * ever happened. Bit 3 is "the plans are aboard".
    */
   [[nodiscard]] ForcedKey CollectPlans(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: DEBRIEF -- finish mission 1 and pay for it.
    *
-   * `LSR TP / ASL TP` clears bit 0 and nothing else, which leaves bit 1 standing: the pair goes
-   * from `%11` to `%10`, which is the state `MissionOnDocking` reads as "finished and paid" and
-   * will not offer again. The commented-out `INC TALLY+1` beside it is in the original source and
-   * is not ported, because it does not run.
+   * Shifting `TP` right and back left clears bit 0 and nothing else, which leaves bit 1 standing:
+   * the pair goes from `%11` to `%10`, which is the state `MissionOnDocking` reads as "finished and
+   * paid" and will not offer again. The commented-out `INC TALLY+1` beside it is in the original
+   * source and is not ported, because it does not run.
    */
   [[nodiscard]] ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
@@ -294,12 +294,12 @@ namespace Elite
    * it is never offered again. Accepting costs 50,000 tenths and `INC TRIBBLE` -- the LOW byte, so
    * the player leaves with one Trumble and the breeding in `MLOOP` does the rest.
    *
-   * `JSR LCASH` AND ITS ANSWER IS DISCARDED. `INC TRIBBLE` follows unconditionally, and `LCASH`
-   * puts the money back when it cannot afford the spend -- so a commander who is short gets the
-   * Trumble for nothing. `MissionOnDocking` mostly prevents that by refusing to offer below a cash
-   * threshold, but that test reads ONE BYTE of a four-byte value (slice 2e), so the band recurs
-   * every 6,553.6 credits and a poor player inside one is offered a free Trumble. Ported rather
-   * than fixed, and recorded in ADR-001 §6.
+   * `LCASH` IS CALLED AND ITS ANSWER IS DISCARDED. The Trumble is added unconditionally, and
+   * `LCASH` puts the money back when it cannot afford the spend -- so a commander who is short
+   * gets the Trumble for nothing. `MissionOnDocking` mostly prevents that by refusing to offer
+   * below a cash threshold, but that test reads ONE BYTE of a four-byte value (slice 2e), so the
+   * band recurs every 6,553.6 credits and a poor player inside one is offered a free Trumble.
+   * Ported rather than fixed, and recorded in ADR-001 §6.
    */
   [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, Keyboard& _keys) noexcept;
 
