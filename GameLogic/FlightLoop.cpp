@@ -26,25 +26,25 @@ namespace Elite
     const auto& from = _work.ComponentAt(_from); // 6502: INWK,Y / INWK+1,Y
     auto& to = _work.PositionAt(_to);            // 6502: INWK,X to INWK+2,X
     // 6502: LDA INWK,Y / ASL A / STA K+1 / LDA INWK+1,Y / ROL A / STA K+2.
-    KBlock k;
+    KBlock total;
     const ShiftResult low = RotateLeftValue(from.lo, false);
-    k.mid = low.value;
+    total.mid = low.value;
 
     const ShiftResult high = RotateLeftValue(from.hi, low.carry);
-    k.high = high.value;
+    total.high = high.value;
 
     // 6502: LDA #0 / ROR A / STA K+3 -- the bit that fell off the top becomes the sign byte, so the
     // doubling cannot overflow: it widens instead.
-    k.top = RotateRight(0u, high.carry).value;
+    total.top = RotateRight(0u, high.carry).value;
 
     // The exit carry is live only on `VCSUB`'s path out to `TA64` (§6.126). `MVT1` reads `K+3`
     // and stores, so the flag dies here.
-    k = AddShipCoordinateToK(_work, k, _to).value; // 6502: JSR MVT3
+    total = AddShipCoordinateToK(_work, total, _to).value; // 6502: JSR MVT3
 
     // 6502: STA INWK+2,X -- and A is `K+3`, because every path through `MVT3` ends `STA K+3`.
-    to = k.Coordinate(); // 6502: LDY K+1 / STY INWK,X / LDY K+2 / STY INWK+1,X
+    to = total.Coordinate(); // 6502: LDY K+1 / STY INWK,X / LDY K+2 / STY INWK+1,X
 
-    return static_cast<std::uint8_t>(k.top & 0x7Fu); // 6502: AND #%01111111
+    return static_cast<std::uint8_t>(total.top & 0x7Fu); // 6502: AND #%01111111
   }
 
   std::uint8_t LargestAxisFrom(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept

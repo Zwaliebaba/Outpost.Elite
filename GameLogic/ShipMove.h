@@ -55,7 +55,7 @@ namespace Elite
     bool carry = false;
   };
 
-  [[nodiscard]] KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _k, std::uint8_t _axis) noexcept;
+  [[nodiscard]] KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _total, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: MVT6 -- (P+1 P+2) = (P+1 P+2) + INWK+X(2), and the sign comes back in A.

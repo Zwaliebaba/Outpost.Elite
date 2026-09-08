@@ -268,15 +268,15 @@ namespace Elite
   {
     // 6502: LDA (V),Y / EOR #%10000000 / STA K+3 -- the other object's sign, negated.
     const SignMag24& axis = _other.PositionAt(_at);
-    KBlock k;
-    k.top = static_cast<std::uint8_t>(axis.sgn ^ 0x80u);
+    KBlock difference;
+    difference.top = static_cast<std::uint8_t>(axis.sgn ^ 0x80u);
 
     // 6502: DEY / LDA (V),Y / STA K+2 / DEY / LDA (V),Y / STA K+1.
-    k.high = axis.hi;
-    k.mid = axis.lo;
+    difference.high = axis.hi;
+    difference.mid = axis.lo;
 
     // 6502: STY U / LDX U / JSR MVT3 -- K = K + INWK+X, so K is now this ship minus the other.
-    const KBlockSum sum = AddShipCoordinateToK(_work, k, _at);
+    const KBlockSum sum = AddShipCoordinateToK(_work, difference, _at);
 
     // 6502: STA K3+2,X, and the A it stores is the sign byte `MVT3` left in the register.
     _axes[_at + 2u] = sum.value.top;

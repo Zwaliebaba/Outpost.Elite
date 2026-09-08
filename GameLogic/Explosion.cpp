@@ -96,11 +96,11 @@ namespace Elite
          * locals here: `DOEXP` is the last thing that happens to a ship in a frame, and every
          * reader of `XX2`, `K3` and `K4` writes them before it reads them.
          */
-        std::array<std::uint8_t, 4> k3{};
+        std::array<std::uint8_t, 4> point{};
         for (int index = 3; index >= 0; --index)
         {
           ++vertex;
-          k3[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
+          point[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
         }
         const std::uint8_t cnt = vertex; // 6502: STY CNT
 
@@ -114,13 +114,13 @@ namespace Elite
            * two branches because a sprite's x really is nine bits wide, and the y test is one
            * because a screen row is not.
            */
-          const AddResult lowX = AddWithCarry(k3[3], spriteX, false);
-          const AddResult highX = AddWithCarry(k3[2], 0, lowX.carry);
+          const AddResult lowX = AddWithCarry(point[3], spriteX, false);
+          const AddResult highX = AddWithCarry(point[2], 0, lowX.carry);
 
           if ((highX.value & 0x80u) == 0u && highX.value < 2u)
           {
-            const AddResult lowY = AddWithCarry(k3[1], spriteY, false);
-            const AddResult highY = AddWithCarry(k3[0], 0, lowY.carry);
+            const AddResult lowY = AddWithCarry(point[1], spriteY, false);
+            const AddResult highY = AddWithCarry(point[0], 0, lowY.carry);
 
             if (highY.value == 0u && lowY.value < EXPLOSION_SPRITE_BOTTOM)
             {
@@ -153,7 +153,7 @@ namespace Elite
           const std::uint8_t distance = _rng.NextRepeatable().value;
 
           // 6502: LDA K3+1 / STA R / LDA K3 / JSR EXS1 -- the vertex's y, against the cloud in Q.
-          const ExplosionOffset offsetY = OffsetByCloud(_rng, k3[0], k3[1], _math.lastDivisor);
+          const ExplosionOffset offsetY = OffsetByCloud(_rng, point[0], point[1], _math.lastDivisor);
 
           if (offsetY.high != 0u || offsetY.low >= EXPLOSION_PARTICLE_BOTTOM)
           {
@@ -169,7 +169,7 @@ namespace Elite
           {
             const std::uint8_t y1 = offsetY.low; // 6502: STX Y1
 
-            const ExplosionOffset offsetX = OffsetByCloud(_rng, k3[2], k3[3], _math.lastDivisor);
+            const ExplosionOffset offsetX = OffsetByCloud(_rng, point[2], point[3], _math.lastDivisor);
 
             if (offsetX.high == 0u)
             {
