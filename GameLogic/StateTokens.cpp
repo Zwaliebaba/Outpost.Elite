@@ -15,16 +15,16 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDA #9 / STA U -- the cash prints to nine digits, one of which is after the point.
+    /// 6502: the cash prints to nine digits, one of which is after the point.
     constexpr std::uint8_t CASH_WIDTH = 9;
 
-    /// 6502: CMP #13 / BEQ -- the carriage return that ends the commander's name.
+    /// 6502: the carriage return that ends the commander's name.
     constexpr std::uint8_t NAME_TERMINATOR = 13;
 
-    /// 6502: LDA #226 -- recursive token 66, " CR", which csh prints after the number.
+    /// 6502: recursive token 66, " CR", which csh prints after the number.
     constexpr std::uint8_t CREDITS_TOKEN = 226;
 
-    /// 6502: LDA #105 / LDA #195 / LDA #119 -- "FUEL", "LIGHT YEARS" and the cash line.
+    /// 6502: "FUEL", "LIGHT YEARS" and the cash line.
     constexpr std::uint8_t FUEL_TOKEN = 105;
     constexpr std::uint8_t LIGHT_YEARS_TOKEN = 195;
     constexpr std::uint8_t CASH_LINE_TOKEN = 119;
@@ -61,10 +61,10 @@ namespace Elite
   void StateTokens::PrintCash(TextSink& _sink)
   {
     /*
-     * 6502: csh -- LDX #3 / pc1: LDA CASH,X / STA K,X / DEX / BPL pc1, then LDA #9 / STA U / SEC /
-     * JSR BPRNT, then LDA #226 and FALL THROUGH INTO plf.
+     * 6502: csh -- the four cash bytes copied into `K`, printed nine wide with a decimal point,
+     * then token 226 loaded and a FALL THROUGH INTO `plf`.
      *
-     * The fall-through is the part a reading misses. `csh` ends on `LDA #226` with no jump, and the
+     * The fall-through is the part a reading misses. `csh` ends on that load with no jump, and the
      * twenty bytes from csh to plf in the assembled build say so exactly -- so the cash is always
      * followed by " CR" AND a newline, and a caller that wanted the bare number would have to print
      * it some other way. Nothing in the game does.
@@ -79,7 +79,7 @@ namespace Elite
       value[index] = m_commander.cash.Byte(index); // 6502: CASH to CASH+3, most significant first
     }
 
-    (void)PrintNumber(_sink, value, CASH_WIDTH, true); // 6502: STA U / SEC / JSR BPRNT
+    (void)PrintNumber(_sink, value, CASH_WIDTH, true); // 6502: BPRNT, nine wide, with the point
 
     PrintThenNewline(m_printer, CREDITS_TOKEN);
   }
@@ -87,7 +87,7 @@ namespace Elite
   void StateTokens::PrintGalaxyNumber(TextSink& _sink)
   {
     /*
-     * 6502: tal -- CLC / LDX GCNT / INX / JMP pr2.
+     * 6502: tal -- the galaxy number stepped up and printed by `pr2`.
      *
      * One-based on screen and zero-based in the block, which is why the INX is here and not at
      * every call site. The CLC is the "no decimal point" argument to pr2 rather than arithmetic.
@@ -99,7 +99,8 @@ namespace Elite
   void StateTokens::PrintCurrentSystem()
   {
     /*
-     * 6502: ypl -- BIT MJ / BMI ypl16 / JSR TT62 / JSR cpl, then FALL THROUGH into TT62 again.
+     * 6502: ypl -- witchspace leaves at once; otherwise the swap, `cpl`, and a FALL THROUGH into
+     * the swap again.
      *
      * One swap loop used twice: once by JSR to put the current system's seeds where cpl reads them,
      * and once by falling into it to put them back. Elegant, and it has a consequence.
@@ -131,7 +132,7 @@ namespace Elite
   void StateTokens::PrintCommanderName(TextSink& _sink)
   {
     /*
-     * 6502: cmn -- LDY #0 / QUL4: LDA NAME,Y / CMP #13 / BEQ / JSR TT26 / INY / BNE QUL4.
+     * 6502: cmn -- QUL4 walks the name until it meets the terminator.
      *
      * The terminator is a carriage return rather than a length, and the loop's own bound is Y
      * wrapping to zero -- so a name with no carriage return in it would print 256 characters and
@@ -154,8 +155,8 @@ namespace Elite
   void StateTokens::PrintFuelAndCash(TextSink& _sink)
   {
     /*
-     * 6502: fwl -- LDA #105 / JSR TT68 / LDX QQ14 / SEC / JSR pr2 / LDA #195 / JSR plf, then FALL
-     * THROUGH into PCASH, which is LDA #119 / BNE TT27.
+     * 6502: fwl -- the fuel heading, the tenths printed with a decimal point, "LIGHT YEARS" through
+     * `plf`, then a FALL THROUGH into PCASH, which loads 119 and branches into `TT27`.
      *
      * That last instruction is a branch used as a jump: A has just been loaded with 119, which is
      * not zero, so the BNE is always taken and saves a byte over a JMP.
@@ -166,8 +167,8 @@ namespace Elite
      */
     PrintThenColon(m_printer, FUEL_TOKEN);
 
-    // 6502: LDX QQ14 / SEC / JSR pr2 -- the fuel is in tenths of a light year, so it prints with a
-    // decimal point in a width of three.
+    // 6502: the fuel is in tenths of a light year, so it prints with a decimal point in a width of
+    // three.
     PrintByteValue(_sink, m_commander.fuel.tenths, true);
 
     PrintThenNewline(m_printer, LIGHT_YEARS_TOKEN);

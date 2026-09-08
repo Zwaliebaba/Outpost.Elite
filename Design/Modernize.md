@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->359 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->304 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-49: four files to zero, and the data-byte idiom is not only `&2C`.**
+
+55 sites over FOUR files -- `TextPrint.h`, `StateTokens.cpp`, `PlanetDraw.h` and `SoundEffects.h`.
+Fifty-third to fifty-sixth at zero, and the widest slice so far: with the tail this shallow the
+per-slice cost is the suite and the harness, so four files cost what two did.
+
+**`NOISE2` uses `EQUB &50`, and it does the same job as `&2C` with a different opcode.** The routine
+sets the OVERFLOW flag by testing a byte that happens to hold &60 -- `BIT` copies bit 6 of its
+operand into V, and &60 is `RTS` -- then enters `NOISE` past its own `CLV`, because an `EQUB &50` is
+a branch-if-overflow-clear that with V set cannot branch and therefore swallows the byte after it.
+Two data-bytes-as-instructions in one routine, and the second is a BRANCH rather than a `BIT abs`.
+So the family named across M6-d-41 to M6-d-48 is not "the `&2C` trick": it is **any opcode whose
+operand bytes are the instruction you want skipped**, and `&2C` is simply the most common member.
+Seven instances now.
+
+`PlanetDraw.h` adds a documentation-versus-build divergence of the kind M6-d-37 found in `oldlong`:
+the upstream header for `CHKON` documents a compare against the LITERAL bottom row, and this build
+assembles a compare against `Yx2M1`, a variable that `TT23` moves to 199 for the short-range chart
+and back to 143 afterwards. Reading the header and not the build gives a port that clips the chart.
+
+`SoundEffects.h` is the file where a sound routine decides a GAME value: `NOISE2` leaves something
+different in the accumulator on each of its three exits -- the flag byte it wrote, the effect's
+priority, or `DNOIZ` -- and the flight loop stores that into a dead ship's energy byte. A port that
+answered only the carry had to invent one, and invented the sustain.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (31, 13, 51 and 39). `opcode-transcriptions` 359 → 304.
 
 **2026-09-08 — M6-d-48: `Dashboard.h` and `Lasers.cpp` to zero, and the ENTRY POINT is the scale.**
 
