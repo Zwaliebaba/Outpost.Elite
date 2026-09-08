@@ -23,6 +23,7 @@
 #include "StartUp.h"
 #include "StatusScreen.h"
 #include "SystemScreen.h"
+#include "TextPrint2x.h"
 #include "ViewChange.h"
 
 namespace Elite
@@ -262,7 +263,9 @@ namespace Elite
     }
 
     case KeyAction::MarketPrice:
-      SetUpTradeScreen(m_universe, m_ports, BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
+      // 6502: TT167's TRADEMODE -- TT66 and FLKB. The same table as the buy screen, because it is
+      // the same table: `TT167` and `TT219` print one market list between them.
+      SetUpTradeScreen(m_universe, m_ports, BUY_CARGO_VIEW, BUY_LAYOUT);
       PrintMarketScreen(m_recursive, m_characters, m_universe.text, m_universe.current.economy, m_universe.market, false);
       return;
 

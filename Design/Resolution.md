@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->455 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->458 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -617,8 +617,10 @@ accept or redraw (§11) and are not normative until a slice lands them.
 | Screen | Layout | What the table cannot do, and the twin that does it |
 |---|---|---|
 | Status (`STATUS`) | **LANDED at RS-5-a**, sketch accepted 2026-09-08. `STATUS_LAYOUT{4, 4, 2}` with two anchors: the title to wide (24, 3), and canvas rows 12 to 23 — "EQUIPMENT:" and the eleven lines under it — to wide (46, 12) at stride 2 | Nothing; the equipment list is one anchored rectangle. **CORRECTED at RS-5-0: not "an anchor moves its first"** — an anchor covers a block, because a per-cell one would leave the rest of each string behind |
-| Buy / sell / inventory (`TT167`, `TT210`, `TT213`) | The table widened: item, unit, price and quantity at columns 4, 26, 38 and 52; `ListCargo` the same | Nothing |
-| Equip ship (`EQSHP`) | Item at column 4, price at column 44; the laser view prompt on its own line | Nothing |
+| Buy / market (`TT167`, `TT219`) | **LANDED at RS-5-b**, sketch accepted 2026-09-08. `BUY_LAYOUT{4, 1, 2}` with ten anchors: four fields at wide 6, 32, 44 (right-aligned to 48) and 61, and six that fold the game's TWO heading rows onto one wide row | Nothing |
+| Inventory (`TT213`) | **LANDED at RS-5-b.** `INVENTORY_LAYOUT{4, 1, 2}`: title, the fuel and cash lines on the left, the hold anchored to wide (46, 4) so its first item is level with the fuel | Nothing |
+| Sell cargo (`TT210` at view 4) | **BLOCKED, and not on this design.** `TT208`'s head — the `TRADEMODE` and the "SELL CARGO" title — is not in the port: `KeyAction::SellCargo` calls `ListCargo` directly, so the sell screen never sets its view, never clears, and has no instruction at which to name a layout. It inherits whatever the previous screen left. Porting `TT208`'s head is a change to the character stream and is not a re-flow's to make | — |
+| Equip ship (`EQSHP`) | **LANDED at RS-5-b.** `EQUIP_LAYOUT{4, 1, 2}`: number and item at wide 8, price right-aligned to 52, and a fourth anchor that brings `CLYNS`'s row 21 back to wide row 40 from the 43 the offsets would give it | Nothing |
 | Data on system (`TT25`) | The label/value pairs at columns 4 and 28; the description re-wrapped at `wrapWidth = 64` | **The wide sink re-wraps.** `TT27`'s justifier breaks lines at `JUSTIFIED_LINE_WIDTH` (30) and emits the break as a newline in the character stream. The wide sink treats a break the justifier made (the printer knows, because it made it) as soft and re-wraps at the layout's width; a break from a token is hard. The faithful stream is unchanged |
 | Long-range chart (`TT22`) | The map at 512×256 from cell (8, 4): each system plotted at `(2x, y)`, which is the original's half vertical scale doubled; the title rule and legend above and below | `PlotDot2x` at `(2x, 2 * top + (y & ~1))` — the faithful `y >> 1` doubled is `y` less its low bit, kept so the map is the original's and not a redrawn one; `DrawCrosshairs2x` |
 | Short-range chart (`TT23`) | The full 640×352 above a two-row legend; systems as the planet twin's discs; the fuel circle at twice its radius; **labels no longer collide**, because a name that overlapped its neighbour in 40 columns has room in 80 — the anchor for a label is computed from the 2× position exactly as `TT23` computes it from the 1× one | `DrawSun2x` and `DrawCircle2x` are the planet's (§4.2); the label placement (`TT23` derives a label's column from the disc's x by dividing by eight) has a twin that divides the 2× position by eight |
@@ -860,7 +862,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->455 tests with the oracle present, all passing, and all
+<!--count:tests-->458 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -944,7 +946,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->455 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->458 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -997,7 +999,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->455 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->458 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1324,7 +1326,7 @@ reason, and the replay digest is unchanged.
 
 **Two overloads and not a default argument**, because the default is `LayoutForView(_view)` and C++
 cannot write one parameter's default in terms of another. Every screen without a table of its own
-still gets exactly what it got before, which is why 454 of the 455 tests did not move.
+still gets exactly what it got before, which is why 454 of the 458 tests did not move.
 
 **The title is on wide row 3 and not 4, and a rule nobody draws is why.** `NLIN3`'s rule is at canvas
 row 19, so its twin is a wide line at row 38 — inside the glyphs of wide row 4, which spans 32 to
@@ -1337,3 +1339,36 @@ cell was a glyph, which holds for a fixture that drives a printer and fails on c
 real screen: the border and the rules are inked on both surfaces by twins that work in wide
 coordinates and not through a layout. So the test draws the frame first, keeps both surfaces, and
 compares only what changed. Every screen re-flowed after this one wants the same shape.
+
+### RS-5-b — the three trade screens, 2026-09-08
+
+**Sketches accepted and built to: the market list, the inventory, the equipment shop.** Three tables,
+seventeen anchors between them, no twin and no change to any screen routine beyond the argument each
+now passes at the `TRADEMODE` call it already made. §6.3 carries each table's numbers.
+
+**THE MARKET SCREEN'S HEADING IS TWO FAITHFUL ROWS ON ONE WIDE ROW, and that is the first thing in
+this track that 80 columns buys outright.** The game splits its header because "UNIT PRICE" and
+"QUANTITY FOR SALE" do not fit over their columns in forty: canvas row 1 carries "UNIT" and
+"QUANTITY", canvas row 2 carries "PRODUCT UNIT PRICE FOR SALE". Six anchors interleave them on one
+wide row so each phrase lands over the column it heads. Not a word is new — the tokens and their
+order are the game's, and only the cells are the table's — which is exactly the line §6.3 draws.
+
+**The equipment shop's fourth anchor is a new KIND of reason to move something.** `EQSHP` asks its
+question on `CLYNS`'s row 21, which is "just under the text" on a 25-row screen and is nowhere near
+anything on a 50-row one: the offsets put it on wide row 43, thirty rows below a list that ends at
+34. Every anchor before this one moved a block because the screen is WIDER; this one moves it
+because the screen is also TALLER, and a row number chosen for the bottom of a short screen means
+nothing on a long one. Every screen with a `CLYNS` prompt will want the same anchor.
+
+**THE SELL SCREEN IS BLOCKED, and the block is older than this track.** `TT208`'s head — the
+`TRADEMODE` and the "SELL CARGO" title — is not in the port. `KeyAction::SellCargo` calls
+`ListCargo` directly, so the sell screen never sets its view, never clears the screen and has no
+instruction at which to name a layout; it inherits whatever the previous screen left, on both
+surfaces, and always has. Porting that head is a change to the character stream seventeen fixtures
+compare, which is not a re-flow's to make. Recorded in §6.3 as its own row rather than left inside
+the "buy / sell / inventory" one, because the three are not one screen and only two of them could be
+built.
+
+**The screen tests share a `Docked` rig now**, which is what three more of them made worth having:
+a universe with both surfaces wired as `Game` wires them, and a `FillTheHold` for the cargo lists.
+The status screen's test moved onto it in the same change.

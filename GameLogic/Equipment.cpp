@@ -2,6 +2,8 @@
 
 #include "Equipment.h"
 
+#include "TextPrint2x.h"
+
 #include "Dashboard.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
@@ -202,8 +204,9 @@ namespace Elite
      */
     for (;;)
     {
-      // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-      SetUpTradeScreen(_universe, _ports, EQUIP_SHIP_VIEW);
+      // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too, and the
+      // screen's own layout for the wide surface (Resolution.md section 6.2, slice RS-5-b).
+      SetUpTradeScreen(_universe, _ports, EQUIP_SHIP_VIEW, EQUIP_LAYOUT);
 
       // 6502: LDA #12 / JSR DOXC / LDA #207 / JSR spc / LDA #185 / JSR NLIN3.
       _universe.text.column = TITLE_COLUMN;
