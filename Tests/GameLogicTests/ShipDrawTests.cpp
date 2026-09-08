@@ -144,41 +144,43 @@ namespace GameLogicTests
       std::uint32_t unscaled = 0;
       std::uint32_t unclassified = 0;
 
-      for (const std::uint8_t p : LOW)
+      for (const std::uint8_t numeratorLow : LOW)
       {
-        for (const std::uint8_t p1 : LOW)
+        for (const std::uint8_t numeratorMid : LOW)
         {
-          for (const std::uint8_t p2 : EDGES)
+          for (const std::uint8_t numeratorHigh : EDGES)
           {
-            for (const std::uint8_t q : EDGES)
+            for (const std::uint8_t denominatorLow : EDGES)
             {
-              for (const std::uint8_t r : EDGES)
+              for (const std::uint8_t denominatorMid : EDGES)
               {
-                for (const std::uint8_t s : EDGES)
+                for (const std::uint8_t denominatorHigh : EDGES)
                 {
-                  if ((q | r | (s & 0x7Fu)) == 0u)
+                  if ((denominatorLow | denominatorMid | (denominatorHigh & 0x7Fu)) == 0u)
                   {
                     continue;
                   }
 
                   Cpu6502 cpu = oracle.Fresh();
 
-                  cpu.memory[pp] = p;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 2)] = p2;
-                  cpu.memory[qq] = q;
-                  cpu.memory[rr] = r;
-                  cpu.memory[ss] = s;
+                  cpu.memory[pp] = numeratorLow;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = numeratorMid;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 2)] = numeratorHigh;
+                  cpu.memory[qq] = denominatorLow;
+                  cpu.memory[rr] = denominatorMid;
+                  cpu.memory[ss] = denominatorHigh;
 
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b);
                   Assert::IsTrue(run.completed, L"DVID3B returned");
 
-                  const Elite::KBlock k = Elite::DivideSigned24(Elite::SignMag24{p, p1, p2}, Elite::SignMag24{q, r, s});
-                  const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
+                  const Elite::KBlock result =
+                    Elite::DivideSigned24(Elite::SignMag24{numeratorLow, numeratorMid, numeratorHigh},
+                                          Elite::SignMag24{denominatorLow, denominatorMid, denominatorHigh});
+                  const std::uint8_t bytes[4] = {result.low, result.mid, result.high, result.top};
 
                   const std::wstring where =
-                    Widen("DVID3B(P=" + std::to_string(p) + "/" + std::to_string(p1) + "/" + std::to_string(p2) +
-                          ", Q=" + std::to_string(q) + ", R=" + std::to_string(r) + ", S=" + std::to_string(s) + ")");
+                    Widen("DVID3B(P=" + std::to_string(numeratorLow) + "/" + std::to_string(numeratorMid) + "/" + std::to_string(numeratorHigh) +
+                          ", Q=" + std::to_string(denominatorLow) + ", R=" + std::to_string(denominatorMid) + ", S=" + std::to_string(denominatorHigh) + ")");
                   for (int byte = 0; byte < 4; ++byte)
                   {
                     Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte],
@@ -201,11 +203,11 @@ namespace GameLogicTests
                   {
                     ++unclassified;
                   }
-                  else if ((k.mid | k.high | (k.top & 0x7Fu)) != 0u || k.low > quotient)
+                  else if ((result.mid | result.high | (result.top & 0x7Fu)) != 0u || result.low > quotient)
                   {
                     ++scaledUp;
                   }
-                  else if (k.low == quotient)
+                  else if (result.low == quotient)
                   {
                     ++unscaled;
                   }
@@ -248,9 +250,9 @@ namespace GameLogicTests
 
       for (const std::uint8_t a : EDGES)
       {
-        for (const std::uint8_t p : LOW)
+        for (const std::uint8_t numeratorLow : LOW)
         {
-          for (const std::uint8_t p1 : LOW)
+          for (const std::uint8_t numeratorMid : LOW)
           {
             for (const std::uint8_t zLow : EDGES)
             {
@@ -270,20 +272,20 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
                     PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
-                  cpu.memory[pp] = p;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
+                  cpu.memory[pp] = numeratorLow;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = numeratorMid;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b2);
                   Assert::IsTrue(run.completed, L"DVID3B2 returned");
 
-                  const Elite::KBlock k = Elite::DivideByShipZ(ship, math, Elite::SignMag24{p, p1, a});
+                  const Elite::KBlock result = Elite::DivideByShipZ(ship, math, Elite::SignMag24{numeratorLow, numeratorMid, a});
 
                   const std::wstring where =
-                    Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
+                    Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(numeratorLow) + "/" + std::to_string(numeratorMid) +
                           ", z=" + std::to_string(zLow) + "/" + std::to_string(zHigh) + "/" + std::to_string(zSign) + ")");
                   // `K(3 2 1 0)` is the value this routine returns since M2-c-3.
-                  const std::uint8_t ours[4] = {k.low, k.mid, k.high, k.top};
+                  const std::uint8_t ours[4] = {result.low, result.mid, result.high, result.top};
                   for (int byte = 0; byte < 4; ++byte)
                   {
                     Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], ours[static_cast<std::size_t>(byte)],
@@ -339,9 +341,9 @@ namespace GameLogicTests
 
       for (const std::uint8_t a : EDGES)
       {
-        for (const std::uint8_t p : LOW)
+        for (const std::uint8_t numeratorLow : LOW)
         {
-          for (const std::uint8_t p1 : LOW)
+          for (const std::uint8_t numeratorMid : LOW)
           {
             for (const std::uint8_t zLow : EDGES)
             {
@@ -359,17 +361,17 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
                     PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
-                  cpu.memory[pp] = p;
-                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
+                  cpu.memory[pp] = numeratorLow;
+                  cpu.memory[static_cast<std::uint16_t>(pp + 1)] = numeratorMid;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(pls6);
                   Assert::IsTrue(run.completed, L"PLS6 returned");
 
-                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, Elite::SignMag24{p, p1, a});
+                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, Elite::SignMag24{numeratorLow, numeratorMid, a});
 
                   const std::wstring where =
-                    Widen("PLS6(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
+                    Widen("PLS6(a=" + std::to_string(a) + ", P=" + std::to_string(numeratorLow) + "/" + std::to_string(numeratorMid) +
                           ", z=" + std::to_string(zLow) + "/" + std::to_string(zHigh) + "/" + std::to_string(zSign) + ")");
 
                   Assert::AreEqual(cpu.c, offset.overflow, (where + L": C").c_str());
@@ -1085,9 +1087,9 @@ namespace GameLogicTests
         {
           for (const std::uint8_t steep : {0x00, 0xFF})
           {
-            for (const std::uint8_t r : EDGES)
+            for (const std::uint8_t distanceLow : EDGES)
             {
-              for (const std::uint8_t s : EDGES)
+              for (const std::uint8_t distanceHigh : EDGES)
               {
                 for (const std::uint8_t x1 : LOW)
                 {
@@ -1099,15 +1101,15 @@ namespace GameLogicTests
                     cpu.memory[static_cast<std::uint16_t>(dotProducts + 2)] = gradient;
                     cpu.memory[static_cast<std::uint16_t>(dotProducts + 3)] = direction;
                     cpu.memory[tt] = steep;
-                    cpu.memory[rr] = r;
-                    cpu.memory[ss] = s;
+                    cpu.memory[rr] = distanceLow;
+                    cpu.memory[ss] = distanceHigh;
                     cpu.memory[xx15] = x1;
 
                     // Since M2-c-2 the three routines take the slope and the distance as values:
                     // `XX12+2`, `XX12+3` and `T` are one `Slope`, `(S R)` is a `SignMag16`, and
                     // `XX15` is the point's own low byte that `LL120` overwrites `R` with.
                     const Elite::Slope slope{gradient, direction, steep};
-                    const Elite::SignMag16 distance{r, s};
+                    const Elite::SignMag16 distance{distanceLow, distanceHigh};
 
                     const std::uint16_t routine = (which == 0) ? ll129 : ((which == 1) ? ll120 : ll123);
                     const Elite::Testing::RunResult run = cpu.CallSubroutine(routine, 200'000);
@@ -1115,8 +1117,8 @@ namespace GameLogicTests
 
                     const std::wstring where =
                       Widen(std::string(which == 0 ? "LL129" : (which == 1 ? "LL120" : "LL123")) + "(XX12+2=" + std::to_string(gradient) +
-                            ", XX12+3=" + std::to_string(direction) + ", T=" + std::to_string(steep) + ", R=" + std::to_string(r) +
-                            ", S=" + std::to_string(s) + ", x1=" + std::to_string(x1) + ")");
+                            ", XX12+3=" + std::to_string(direction) + ", T=" + std::to_string(steep) + ", R=" + std::to_string(distanceLow) +
+                            ", S=" + std::to_string(distanceHigh) + ", x1=" + std::to_string(x1) + ")");
 
                     if (which == 0)
                     {
@@ -1129,7 +1131,7 @@ namespace GameLogicTests
                     else
                     {
                       const Elite::SlopeStep step =
-                        (which == 1) ? Elite::StepAlongX(slope, s, x1) : Elite::StepAlongY(slope, distance);
+                        (which == 1) ? Elite::StepAlongX(slope, distanceHigh, x1) : Elite::StepAlongY(slope, distance);
                       Assert::AreEqual(cpu.x, step.low, (where + L": X").c_str());
                       Assert::AreEqual(cpu.y, step.high, (where + L": Y").c_str());
 
@@ -1491,7 +1493,7 @@ namespace GameLogicTests
       std::uint32_t failed = 0;
       std::uint32_t divided = 0;
 
-      for (std::uint32_t q = 0; q < 256u; ++q)
+      for (std::uint32_t divisor = 0; divisor < 256u; ++divisor)
       {
         for (std::uint32_t a = 0; a < 256u; ++a)
         {
@@ -1499,19 +1501,19 @@ namespace GameLogicTests
 
           // Not zero: `ROL U` brings the old bits back up, so a cleared U would hide a port that
           // dropped the rotate and assigned instead. Since M2-b the incoming U is a parameter.
-          const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + q * 13u) & 0x3Fu);
+          const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + divisor * 13u) & 0x3Fu);
 
-          cpu.memory[qq] = static_cast<std::uint8_t>(q);
+          cpu.memory[qq] = static_cast<std::uint8_t>(divisor);
           cpu.memory[uu] = seededU;
 
           cpu.a = static_cast<std::uint8_t>(a);
           const Elite::Testing::RunResult run = cpu.CallSubroutine(ll61, 100'000);
           Assert::IsTrue(run.completed, L"LL61 returned");
 
-          const Elite::Quotient16 quotient = Elite::DivideWideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q), seededU);
+          const Elite::Quotient16 quotient = Elite::DivideWideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(divisor), seededU);
 
           const std::wstring where =
-            Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(q) + ", U=" + std::to_string(seededU) + ")");
+            Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(divisor) + ", U=" + std::to_string(seededU) + ")");
           Assert::AreEqual(cpu.memory[rr], quotient.low, (where + L": R").c_str());
           Assert::AreEqual(cpu.memory[uu], quotient.high, (where + L": U").c_str());
 

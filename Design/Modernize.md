@@ -386,7 +386,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments; <!--count:origin-identifiers-->297 sites in the library, the
+references in `GameLogic/`'s comments; <!--count:origin-identifiers-->235 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
 2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
@@ -1898,6 +1898,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-c-12: the divide sweeps say which operand they are sweeping.**
+
+62 sites in one file, and all of them are the operands of a sweep. `ShipDrawTests.cpp` sets up five
+of them and every one used to name its loop variables after the workspace bytes the ORACLE is poked
+with, so `DVID3B`'s six-deep nest read `p`, `p1`, `p2`, `q`, `r`, `s` — which says where the bytes go
+and nothing about what they are. They are a numerator and a denominator, three bytes each, so they
+are `numeratorLow`/`Mid`/`High` and `denominatorLow`/`Mid`/`High`, and the `if` that skips the
+denominator that cannot terminate now says so on its face. `DVID3B2` and `PLS6` take the same
+numerator with the denominator coming from a ship's `z`, and the `K` block all three return is the
+`result`. The slope routines' `(S R)` is one distance, so it is `distanceLow`/`distanceHigh`, and
+`LL61`'s swept `Q` is the `divisor`.
+
+**The oracle's own names stay in the failure messages.** `Widen("DVID3B(P=" ...)` still reports
+`P`, `Q`, `R` and `S`, because when this test fails what you do next is find those bytes in the
+original — the message is addressed to the 6502, not to the port. The renamer walks string literals
+verbatim, which is why they survived a pass that changed the identifier feeding each one.
+
+No block needed splitting this time: each sweep is a whole test method and the five maps are
+disjoint. The one line the rename pushed past the file's longest is wrapped rather than left.
+
+`mutate.py --check` is 97 of 97 with nothing re-anchored — no mutant names a line in this file.
+
+460 tests green, all eighteen checks, replay digests unmoved.
+`origin-identifiers` 297 → 235.
 
 **2026-09-08 — M6-c-11: `Arctan`'s two `T`s, which is why M6-c-7 left it alone.**
 
