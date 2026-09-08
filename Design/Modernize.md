@@ -388,7 +388,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
-references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,350 lines are an
+references in `GameLogic/`'s comments, of which <!--count:opcode-transcriptions-->1,252 lines are an
 instruction LISTING carrying no reason and <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1940,6 +1940,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-32: `Hyperspace.cpp` and `Equipment.cpp` to zero, and a branch that lands on an
+operand.**
+
+98 sites over two files: the jump, witchspace, the galactic drive, and the whole of `EQSHP`.
+Nineteenth and twentieth at zero. Also the first slice written with the line-range rewriter — two
+batches in M6-d-31 failed because the `old` half of an exact-match edit had to reproduce a block
+comment's indentation from memory and got it wrong by one column, so the rewriter now takes line
+numbers from the survey and the file supplies its own text.
+
+**With no galactic drive fitted, `Ghy` returns from the middle of an instruction.** The branch goes
+to `zZ+1`, and there is no code at `zZ+1`: `zZ` loads 96, assembled as `A9 60`, so the branch lands
+on the OPERAND and the processor executes &60 as a return. One byte serving as both a literal and an
+instruction, chosen by where you jump into it.
+
+Two more:
+
+- **`LL164` always returns with the carry set, and that is provable rather than measured.** It is
+  `HYPNOISE` then `HFS2`, and `HFS2` has exactly two exits: the doubling that carries out of the
+  byte, taken only with the carry set, and the fall-through past the test against 160, reached only
+  when that branch is not taken and so only with the carry set. Both roads out carry a one — which
+  matters because the random byte after it takes the carry as an operand.
+- **A subtraction of ZERO is a subtraction of ONE**, in `EQSHP`, because the carry is clear where it
+  sits: `A - 0 - (1 - C)`. The item number the player typed becomes the index into the table by an
+  instruction that looks like it does nothing.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved in both files (44 and 55). `opcode-transcriptions` 1,350 → 1,252.
 
 **2026-09-08 — M6-d-31: `Charts.cpp` and `Stardust.cpp` to zero, and which kill test fired.**
 
