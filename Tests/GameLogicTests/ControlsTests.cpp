@@ -1046,7 +1046,8 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(klo + slot)], universe.keys[slot],
                            (where + L": KEYLOOK+" + std::to_wstring(slot)).c_str());
         }
-        Assert::AreEqual<std::uint32_t>(Elite::KEY_TRANSLATION[cpu.memory[thiskey]], character, (where + L": TRANTABLE of thiskey").c_str());
+        Assert::AreEqual<std::uint32_t>(Elite::KEY_TRANSLATION[cpu.memory[thiskey]], character,
+                                        (where + L": TRANTABLE of thiskey").c_str());
 
         // Every scan but the answering one on the port's `.t2` loop was preceded by a present, and
         // every pass round `.t` by two frames of debounce: the waits are the port's and are counted.

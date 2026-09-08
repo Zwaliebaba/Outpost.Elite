@@ -414,8 +414,8 @@ namespace Elite
    * BOTH PATHS ARE HERE. `LDA QQ11 / BNE TT17afterall` chooses between them and they differ in
    * what they hand back rather than in what they do: the space view's returns `thiskey` alone, and
    * a chart's returns `thiskey` with the crosshair steps in X and Y. The port's `TT102` takes its
-   * key from the window's queue, so what is left to return is the steps -- zero on both axes off a
-   * chart, because the cursor keys are read only when one is showing.
+   * key from the window's one press a step, so what is left to return is the steps -- zero on both
+   * axes off a chart, because the cursor keys are read only when one is showing.
    *
    * The joystick half of `TT17afterall` is not ported: `JSTK` is zero for a keyboard player from
    * the moment the title screen is dismissed with a key, and this build has no joystick.

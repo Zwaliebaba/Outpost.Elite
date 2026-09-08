@@ -32,7 +32,7 @@ namespace Elite
    */
 
   /*
-   * 6502: MUTOK, MUFOR, MUDOCK and MUSILLY -- the four music options the pause screen toggles.
+   * 6502: MUTOK, MUFOR, MUDOCK and MUSILLY -- the four music options the pause screen toggled.
    *
    * All four are bit 7 flags (`BIT` and `BMI`), and two read backwards: `MUTOK` set means the
    * docking music is OFF, `MUFOR` set means it is FORCED on and cannot be stopped -- `stopbd` jumps

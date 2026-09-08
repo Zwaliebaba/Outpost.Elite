@@ -117,7 +117,7 @@ Run()                                  6502: BR1 / TT170 / FRCE
  ├─ SetUpLoaderScreen, SaveCommander   the loader's palette, NA%
  ├─ ResetAndStartGame -> ForcedKey     TITLE, RESET, BAY -- the start sequence, in GameLogic
  └─ while (shell.Turn())               one present per turn; the window pumps and blocks on vsync
-      ├─ paused?  AdvancePaused        6502: FREEZE, turned inside out (one pass per key event)
+      ├─ paused?  AdvancePaused        6502: FREEZE, turned inside out (one pass per key event) -- REMOVED 2026-09-08 (InputTimer.md I-0)
       ├─ docked?  N passes of          6502: MLOOP -- paced by PlanSteps on the empty-bubble frame cost
       │            CoolTheGuns / ScanFlightControls / TakeKey / PressKey -> Perform(KeyAction)
       └─ flying:  Advance              6502: TT100
@@ -596,6 +596,7 @@ namespace Elite
                                     │ DOENTRY (+ one of seven briefings)│   │ DEATH
                                     └───────────────────────────────────┘   ▼
              CLR/HOME ◄──── Paused ◄──── pause key (either mode)        Dying ──► Title (DEATH2 → BR1)
+                              (Paused removed 2026-09-08 with the pause screen, InputTimer.md I-0)
                               │ Q                                      ESCAPE → Docked
                               └──────────────────────────────────────► Dying
 ```
@@ -610,7 +611,9 @@ is `TT102`'s second half and belongs beside the first.
 `InputFrame` is plan §2.1's `{ held, pressed }` over the C64 matrix positions `KeyMap` already
 produces, plus the one blocking read the docked screens need (`KeySource::NextKey`), which stays a
 port because a windowed program cannot block and the plan does not change that (§2.1 of the plan,
-`GameShell::NextKey`'s comment).
+`GameShell::NextKey`'s comment). **Since 2026-09-08 the executable answers that read with
+`Elite::ReadKey`, the ported `TT217` (InputTimer.md I-1); the method stays on the port as the
+character source the fixtures script until `InputFrame` exists to script instead (I-2).**
 
 ### 4.5 Four ports
 
@@ -1608,6 +1611,16 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-08 — Beside M6-a: six slices of [InputTimer.md](InputTimer.md), journaled there (§9).**
+They are that plan's and not this one's, and they touch this plan's ledger in four places worth
+naming here: `Game::Mode::Paused` and `StepPaused` are gone with the pause screen (M4-d's third
+state, removed by owner ruling); `Keyboard::NextKey` is answered by `Elite::ReadKey`, the ported
+`TT217`; the ratchet's `main-lines` is 238 and `outpost-elite-names` 62, `origin-markers` 4,097 and
+`mutants` 97 with a `game` unit -- two ceilings ROSE by what a port adds (one library name the
+executable calls, six markers R7 requires), and InputTimer.md §9 says so rather than hiding it; and
+the crowded end of the flight cost model is measured while the interpreter is here, which was the
+one item with an M6-b deadline.
 
 **2026-09-06 — Opened, with the baseline measured rather than asserted.** Suite green on the
 portable runner with the oracle assembled from the submodule (385 of 385); all eleven repository
