@@ -13,6 +13,9 @@ namespace Outpost
   {
     constexpr wchar_t WINDOW_CLASS[] = L"OutpostEliteWindow";
     constexpr wchar_t WINDOW_TITLE[] = L"Elite";
+
+    /// Bit 29 of a WM_SYSKEYDOWN's lParam: the context code, set when Alt is down.
+    constexpr LPARAM ALT_CONTEXT_BIT = LPARAM{1} << 29;
   } // namespace
 
   Window::~Window()
@@ -122,13 +125,21 @@ namespace Outpost
       return 0;
 
     /*
-     * WM_SYSKEYDOWN as well as WM_KEYDOWN, because the function keys reach it when Alt is held
-     * and F10 reaches it always. Falling through to DefWindowProc afterwards is deliberate for
-     * the SYS pair: Alt+F4 has to keep working.
+     * WM_SYSKEYDOWN as well as WM_KEYDOWN, because F10 reaches the window as a SYS message even
+     * with nothing else held. Falling through to DefWindowProc afterwards is deliberate for the
+     * SYS pair: Alt+F4 has to keep working.
+     *
+     * A SYS message WITH ALT DOWN IS NOT A GAME KEY (InputTimer.md I-6). Bit 29 of lParam is the
+     * context code, set when Alt is held, and a chord like Alt+Left is the system's -- letting it
+     * through put the ship into a roll on the way to whatever the chord meant. F10 arrives with
+     * the bit clear, which is why the test is the bit and not the message.
      */
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-      PressKey(_wparam, true);
+      if ((_lparam & ALT_CONTEXT_BIT) == 0)
+      {
+        PressKey(_wparam, true);
+      }
       if (_message == WM_KEYDOWN)
       {
         return 0;
@@ -137,10 +148,29 @@ namespace Outpost
 
     case WM_KEYUP:
     case WM_SYSKEYUP:
+      // A release is always taken, so a key pressed before Alt went down cannot be left held.
       PressKey(_wparam, false);
       if (_message == WM_KEYUP)
       {
         return 0;
+      }
+      break;
+
+    /*
+     * FOCUS LOSS RELEASES EVERY KEY (InputTimer.md I-6). Windows sends no WM_KEYUP to a window
+     * that has lost the keyboard, so an arrow held across Alt+Tab stayed held here until it was
+     * pressed again in this window and the ship rolled until then. WM_ACTIVATEAPP with FALSE
+     * covers the switch to another application and WM_KILLFOCUS the switch within this one; the
+     * queue is emptied too, so nothing pressed on the way out reaches the next prompt.
+     */
+    case WM_KILLFOCUS:
+      ReleaseAllKeys();
+      return 0;
+
+    case WM_ACTIVATEAPP:
+      if (_wparam == FALSE)
+      {
+        ReleaseAllKeys();
       }
       break;
 
@@ -234,6 +264,15 @@ namespace Outpost
       _outWidth = static_cast<int>(client.right - client.left);
       _outHeight = static_cast<int>(client.bottom - client.top);
     }
+  }
+
+  void Window::ReleaseAllKeys() noexcept
+  {
+    for (bool& held : m_held)
+    {
+      held = false;
+    }
+    m_pressed.clear();
   }
 
   bool Window::TakeKey(std::uint8_t& _outKey) noexcept

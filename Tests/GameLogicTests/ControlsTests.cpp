@@ -356,7 +356,8 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       // `DK4` is `.ant`, where the port's `ReadFlightControls` ends; its head -- the key into `KL`
-      // and the pause test -- is `Game::Step`'s and is compared in `PauseScreenTests` (M6-0-e).
+      // -- is `Game::Step`'s, and the pause test after it was removed with the pause screen
+      // (InputTimer.md I-0, owner ruling 2026-09-08; it was compared in `PauseScreenTests`, M6-0-e).
       cpu.AddTrap(oracle.Label("DK4"));
       cpu.AddTrap(oracle.Label("NOISE")); // `DOCKIT` reaches neither; `TacticsTests` traps both too
       cpu.AddTrap(oracle.Label("MESS"));

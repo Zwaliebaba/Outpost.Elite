@@ -25,7 +25,7 @@ it, the replay reaching death and the escape pod, a coverage instrument CI reads
 ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is next**: the four gaps the
 instrument named, then the recorder. **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->408 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->404 tests** and
 CI runs **<!--count:checks-->sixteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
@@ -65,7 +65,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | 4 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
 | 5 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
 | 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06; M0–M5 built 2026-09-06/07, the M6-0 gate closed 2026-09-07, M6-a next): what the port carried from the 6502 as its architecture, measured and ratcheted; the target C++ shape; six phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
-| 7 | [InputTimer.md](InputTimer.md) | **input and time** (analysis and plan, opened 2026-09-08; nothing built): how the keyboard reaches the game today and where it departs from the original's `TT217` and `DK4`, what is left of the joystick, and how the program is paced — one vertical blank of the player's monitor per turn, three accumulators over a cycle-cost model. Twelve slices in two tracks: an `InputFrame` per step, `TT217` ported into the library, a layered key map on scan codes, the pause screen removed by owner ruling and its settings given a file, a single frame clock with a simulated vertical blank, the docked screens as coroutines. One deadline: the cost measurements must be taken before M6-b takes the live oracle out of CI. |
+| 7 | [InputTimer.md](InputTimer.md) | **input and time** (analysis and plan, opened 2026-09-08; its journal in §9 says which slices are built): how the keyboard reaches the game today and where it departs from the original's `TT217` and `DK4`, what is left of the joystick, and how the program is paced — one vertical blank of the player's monitor per turn, three accumulators over a cycle-cost model. Twelve slices in two tracks: an `InputFrame` per step, `TT217` ported into the library, a layered key map on scan codes, the pause screen removed by owner ruling and its settings given a file, a single frame clock with a simulated vertical blank, the docked screens as coroutines. One deadline: the cost measurements must be taken before M6-b takes the live oracle out of CI. |
 
 ## Decisions at a glance
 

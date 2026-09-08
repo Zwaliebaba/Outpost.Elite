@@ -168,19 +168,9 @@ namespace
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
 
-      // 6502: FRCE's `LDA QQ12 / BEQ`, and `FREEZE` above it -- ONE question since M4-d. It was two
-      // tests this file had to keep in the right order (a frozen game is frozen in both halves, so
-      // the pause test comes first); `Game::Mode` is that rule expressed once, where both bytes are.
+      // 6502: FRCE's `LDA QQ12 / BEQ` -- ONE question since M4-d, and two answers since InputTimer.md
+      // I-0: `FREEZE`'s third answer went with the pause screen (owner ruling 2026-09-08).
       const Elite::Game::Mode mode = app->game.ModeNow();
-      if (mode == Elite::Game::Mode::Paused)
-      {
-        std::uint8_t key = 0;
-        if (app->window.TakeKey(key))
-        {
-          app->game.StepPaused(key);
-        }
-        continue;
-      }
 
       if (mode == Elite::Game::Mode::Docked)
       {
