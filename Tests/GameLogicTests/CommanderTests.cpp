@@ -13,18 +13,18 @@ using Elite::Commander;
 using Elite::Field;
 
 /*
- * The commander against the game that saves it (slice 2d).
+ * The commander block, saved and loaded (slice 2d).
  *
- * The two checksums are the whole difficulty. Both thread a carry through seventy-three steps and
- * the second rotates the accumulator through that carry in the middle of each one, so they cannot
- * be checked by reasoning -- only against the routine. They are swept over blocks built to hit
- * every case that matters: the shipped default, all-zeros, all-255, a walking one bit through all
- * 77 bytes, and a spread of pseudo-random blocks.
+ * The two checksums are the whole difficulty: both thread a carry through seventy-three steps and
+ * the second rotates the accumulator through that carry in the middle of each one. They were
+ * swept against the shipped routine over the default block, all-zeros, all-255, a walking bit and
+ * a spread of pseudo-random blocks, and that comparison went with the oracle (M6-b-5).
  *
- * The one place the port deliberately differs is the failure path. DFAULT does not reject a bad
- * block, it hangs -- `BNE doitagain` branches backwards for ever. The last test here establishes
- * that the two nonetheless agree on WHICH blocks are acceptable, by running the shipped routine
- * under an instruction budget and treating "did not finish" as "rejected".
+ * What is left is this slice's OWN criterion rather than the original's: a save and a load come
+ * back to the same commander, over the same sample of blocks. Four bytes are expected to move and
+ * each is the point of the exercise rather than an exception to it -- the competition flags gain
+ * bit 6, which is what a load is for, and of the three checksums the save writes, two are read
+ * back over the caller's block and the third is not, because the copy loop stops one byte short.
  */
 namespace GameLogicTests
 {
@@ -78,13 +78,13 @@ namespace GameLogicTests
     }
   } // namespace
 
-  TEST_CLASS(CommanderAgainstTheShippedGame)
+  TEST_CLASS(TheCommanderBlock)
   {
   public:
     /*
-     * A save and a load must come back to the same commander, which is this slice's own criterion
-     * rather than the oracle's -- and the file that goes in is the one the original would have
-     * written, checked above.
+     * A save and a load must come back to the same commander. This was always this slice's own
+     * criterion rather than the original's, which is why it outlived the comparison beside it: the
+     * three checksums the save writes are checked by the load that reads them back.
      */
     TEST_METHOD(SavingAndLoadingRoundTrips)
     {

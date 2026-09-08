@@ -31,11 +31,13 @@
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 /*
- * Setting up a screen (slice 3d-d-iii-a).
+ * The screen the loader leaves (slice 3d-d-iii-a).
  *
- * Every routine here writes the bitmap, so every comparison is a whole-canvas compare from a
- * screen full of a marker byte. That is what separates "wrote nothing" from "wrote a zero", and
- * three of these routines exist to write zeros.
+ * The whole-canvas comparisons -- every screen set-up run on both machines from a screen full of
+ * a marker byte, so that "wrote nothing" and "wrote a zero" stayed different answers -- went with
+ * the oracle (M6-b-5). What is left is the colour: the loader's screen and the title screen both
+ * come out in the cell colours they are supposed to, which is a property of the port's own
+ * surfaces rather than of the original's memory.
  */
 namespace GameLogicTests
 {

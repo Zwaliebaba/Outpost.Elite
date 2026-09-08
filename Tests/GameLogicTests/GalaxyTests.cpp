@@ -17,13 +17,14 @@ using Elite::SystemData;
 using Elite::SystemSeeds;
 
 /*
- * The universe against the game that generates it (slice 2a).
+ * Where a system description takes its seed from (slice 2a).
  *
- * Elite's 2,048 systems are not stored anywhere: they are six bytes of seed and a twisting rule.
- * That makes this the least forgiving code in the port so far. A wrong carry here does not crash
- * and does not look wrong -- it produces a complete, plausible, self-consistent galaxy that is
- * not Elite's. The only way to know is to check every system, so that is what these do: all
- * eight galaxies, all 256 systems each, every field and every name.
+ * Elite's 2,048 systems are not stored anywhere: they are six bytes of seed and a twisting rule,
+ * and every name and every field of all eight galaxies was compared against the game that
+ * generates them until the oracle went (M6-b-5). This is the half of that seeding a comparison
+ * could not settle: the sweep would have passed with the wrong seed bytes as long as both sides
+ * used the same wrong ones, so the description's generator is checked against the seed bytes
+ * directly.
  */
 namespace GameLogicTests
 {
@@ -42,7 +43,7 @@ namespace GameLogicTests
     };
   } // namespace
 
-  TEST_CLASS(GalaxyAgainstTheShippedGame)
+  TEST_CLASS(TheSystemDescriptions)
   {
   public:
     /*

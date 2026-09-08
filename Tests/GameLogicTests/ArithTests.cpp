@@ -12,23 +12,13 @@ using Elite::Product;
 using Elite::SignMag16;
 
 /*
- * The arithmetic kernel against the shipped routines (slice 1b, ADR-003).
+ * That the scaled divide really divides.
  *
- * Where the whole input space is 16 bits these run exhaustively -- 65,536 comparisons is a
- * fraction of a second and it removes the question of whether the interesting case was the one
- * nobody sampled. ADD takes four bytes of input, so it gets a deterministic sweep plus the
- * edges that actually break sign-magnitude arithmetic: zero, negative zero, and equal
- * magnitudes with opposite signs.
- *
- * One shortcut worth naming: these routines touch only zero page, so a single loaded image is
- * reused across iterations and just the scratch bytes are reset. Copying 64 KB per call would
- * turn an exhaustive sweep into gigabytes of memcpy for no extra confidence.
- *
- * Since M2-b the kernel takes its operands as values and hands back structs, so each comparison
- * here reads the oracle's zero page on one side and a returned field on the other: the low byte
- * the original left in `P` is `Product::low`, the quotient it left in `R` is `Quotient::value`,
- * and so on. What the original leaves in its scratch bytes -- `T`, `T1`, `U`, `widget` -- is not
- * compared, because the port no longer has them.
+ * The exhaustive sweeps against the shipped routines were the whole of this file and went with
+ * the oracle (M6-b-5). What is left is the one assertion that did not depend on it and could not
+ * have been made by comparison at all: `DivideAndScale` agrees with real arithmetic, not just
+ * with the original's answer for the same inputs. Both being wrong the same way is the failure a
+ * comparison cannot see.
  */
 namespace GameLogicTests
 {
@@ -43,7 +33,7 @@ namespace GameLogicTests
 
   } // namespace
 
-  TEST_CLASS(LogarithmRoutinesAgainstTheShippedGame)
+  TEST_CLASS(TheScaledDivide)
   {
   public:
     /*
@@ -55,9 +45,10 @@ namespace GameLogicTests
      * each ROL P hands over the next bit while shifting a quotient bit in behind it. One register
      * being both the dividend and the quotient is the trick the whole routine turns on.
      *
-     * An oracle comparison alone proves the port agrees with the game; this also confirms they are
-     * both right. Only P is checked -- R is a logarithm approximation of the fraction, not an
-     * exact one, and comparing it to real arithmetic would fail on rounding rather than on error.
+     * The comparison against the original proved the port agreed with it; this proves they were
+     * both RIGHT, which is the failure a comparison cannot see. Only the whole part is checked --
+     * the fraction is a logarithm approximation, not an exact one, and holding it to real
+     * arithmetic would fail on rounding rather than on error.
      */
     TEST_METHOD(TheRestoringDivideReallyDivides)
     {

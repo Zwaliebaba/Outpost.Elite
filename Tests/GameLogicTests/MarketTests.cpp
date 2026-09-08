@@ -14,45 +14,23 @@ using Elite::MarketState;
 using Elite::SystemSeeds;
 
 /*
- * The economy against the game that runs it (slice 2c, the price model).
+ * The sign of the economy gradient (slice 2c, the price model).
  *
- * Prices are not stored, so there is nothing to compare against except the routines. Every one
- * of the seventeen goods is checked at every economy the game has, against every value the
- * market's random byte can take -- 34,816 prices -- and then the market generator is run for a
- * real system in every galaxy.
- *
- * The thing being guarded is the sign of the economy gradient, which subtracts from a price and
- * adds to a quantity. Getting it the same way round in both gives a game where agricultural
- * worlds sell machinery cheaply, which is wrong in a way no test of a single number would catch.
+ * Every one of the seventeen goods at every economy against every value of the market's random
+ * byte -- 34,816 prices -- was compared against the routine that computes them, and went with the
+ * oracle (M6-b-5). The one thing left is the one a comparison of numbers could never state: the
+ * gradient subtracts from a price and adds to a quantity, and a port that got both branches the
+ * same way round would give a game where agricultural worlds sell machinery cheaply. That is
+ * asserted directly, with a message that says what it broke.
  */
 namespace GameLogicTests
 {
 
   namespace
   {
-    /*
-     * 6502: CHPR, with the cursor it was called at.
-     *
-     * The market screen's whole job is putting the right thing in the right column, so a comparison
-     * of the characters alone would pass a port that printed every line one cell left. Each character
-     * is stamped with XC and YC as it goes by, on both sides.
-     */
-    struct RecordingSink : public Elite::TextSink
-    {
-      void Put(std::uint8_t _character) override
-      {
-        const std::uint32_t column = (cursor != nullptr) ? cursor->column : 0u;
-        const std::uint32_t row = (cursor != nullptr) ? cursor->row : 0u;
-        stamped.push_back(static_cast<std::uint32_t>(_character) | (column << 8) | (row << 16));
-      }
-
-      Elite::TextState* cursor = nullptr;
-      std::vector<std::uint32_t> stamped;
-    };
-
   } // namespace
 
-  TEST_CLASS(MarketAgainstTheShippedGame)
+  TEST_CLASS(TheEconomyGradient)
   {
   public:
     /*

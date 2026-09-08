@@ -12,16 +12,14 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Canvas;
 
 /*
- * The pixel primitives against the game that drew them (slice 1d-a).
+ * What the pixel primitives must hold whatever they draw (slice 1d-a).
  *
- * The comparison here is stronger than the arithmetic slices got. Those compared a return value;
- * this compares the WHOLE SCREEN -- all 0x2800 bytes of bitmap and both cell-colour planes --
- * after every call. So a routine that draws the right pixel and also scribbles somewhere else
- * fails, which is the failure the drawing code is most likely to have.
- *
- * That is only possible because the canvas holds the same bytes in the same order the original's
- * memory does (ADR-002 section 4). If it held resolved colours this would be a translation with
- * its own bugs, and it could not represent what the game writes at all (ADR-002 section 7).
+ * The whole-screen comparisons against the game that drew them -- all 0x2800 bytes of bitmap and
+ * both cell-colour planes, after every call -- were this file and went with the oracle (M6-b-5).
+ * Three assertions did not depend on it and are stronger for standing alone: every primitive
+ * undoes itself when drawn twice, which is what makes the game's EOR drawing erasable at all, and
+ * the two resolves put each pixel pair in the colour its cell says, in both of the modes the
+ * screen is ever in.
  */
 namespace GameLogicTests
 {
@@ -32,23 +30,9 @@ namespace GameLogicTests
     /// first entry, which is SCBASE plus the space view's four-cell left margin.
     constexpr std::uint16_t SPACE_VIEW_MARGIN = 0x20;
 
-    std::wstring Widen(const std::string& _text)
-    {
-      return std::wstring(_text.begin(), _text.end());
-    }
-
-    std::wstring Context(const wchar_t* _what, std::uint32_t _first, std::uint32_t _second, std::uint32_t _third = 0xFFFFFFFFu)
-    {
-      std::wstring text = std::wstring(_what) + L" (" + std::to_wstring(_first) + L", " + std::to_wstring(_second);
-      if (_third != 0xFFFFFFFFu)
-      {
-        text += L", " + std::to_wstring(_third);
-      }
-      return text + L")";
-    }
   } // namespace
 
-  TEST_CLASS(CanvasAgainstTheShippedGame)
+  TEST_CLASS(TheCanvasPrimitives)
   {
   public:
     /// Drawing anything twice puts the screen back exactly as it was. LL9 and SUN decide what to

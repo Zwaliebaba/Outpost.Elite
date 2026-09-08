@@ -9,7 +9,7 @@
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 /*
- * A measurement, not a port. Read this before slice 1d writes a line of Canvas.cpp.
+ * A measurement, not a port. Written before slice 1d wrote a line of `Canvas.cpp`.
  *
  * ADR-002 section 4 fixes the canvas as "320x200 logical pixels, one byte per pixel holding a
  * C64 colour index". That was asserted rather than derived, and the drawing code does not
@@ -17,29 +17,18 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * two bits each, with the colours for %01 and %10 coming from a per-8x8-cell byte in screen RAM
  * and %11 from colour RAM. Every drawing routine EORs whole BYTES into that bitmap.
  *
- * The question this file exists to settle is whether an index-per-pixel canvas can reproduce
- * those writes. The tests ask the shipped game rather than reasoning about it: each one snapshots
- * the bitmap, calls a routine, and reports what actually changed -- it does not model the
- * routine's address arithmetic, because a spike that assumes the answer measures nothing. Each
- * logs what it saw, so the finding can be read off a test run and written into an ADR-002
- * amendment, and each asserts what must hold, so this does not decay into a log nobody notices
- * going stale.
- *
- * DELETE THIS FILE when slice 1d closes. Its findings belong in ADR-002 and in Canvas.h's
- * commentary; a spike that outlives its slice becomes furniture nobody dares move.
+ * The spike settled that by asking the shipped game rather than reasoning about it -- snapshot
+ * the bitmap, call a routine, report what changed -- and its findings are in ADR-002 and in
+ * `Canvas.h`'s commentary, where they were always going to end up. Those measurements went with
+ * the oracle (M6-b-5). What is left is the guard on the reasoning itself: `IsMulticolourAligned`
+ * and `PixelCode` are four lines each, every conclusion the spike drew rests on them, and nobody
+ * would think to test them.
  */
 namespace GameLogicTests
 {
 
   namespace
   {
-    /// 6502: SCBASE -- the bitmap base, and 0x2000 bytes long. It is an assembler constant rather
-    /// than a label, so it is not in the label map; ylookup's first entry is SCBASE plus the space
-    /// view's left margin, and deriving it from there measures the margin at the same time.
-    constexpr std::uint16_t SPACE_VIEW_MARGIN = 0x20;
-    constexpr std::uint16_t BITMAP_SIZE = 0x2000;
-    constexpr std::uint16_t SCREEN_RAM_OFFSET = 0x2000;
-
     /// A multicolour byte holds four two-bit pixels. A mask is ALIGNED when every bit it sets falls
     /// inside one pixel's pair, and STRADDLES when it sets one bit of one pixel and one of the next.
     /// A straddling mask cannot be expressed as "plot colour C at pixel P", which is the whole
@@ -54,20 +43,6 @@ namespace GameLogicTests
     {
       return static_cast<std::uint8_t>((_byte >> (6 - 2 * _index)) & 0x03);
     }
-
-    /// One byte the routine under test changed, found by comparison rather than by predicting where
-    /// the routine would write.
-    struct Change
-    {
-      std::uint16_t address = 0;
-      std::uint8_t before = 0;
-      std::uint8_t after = 0;
-
-      [[nodiscard]] std::uint8_t Mask() const noexcept
-      {
-        return static_cast<std::uint8_t>(before ^ after);
-      }
-    };
 
   } // namespace
 

@@ -27,12 +27,13 @@ using Elite::Keyboard;
 using Elite::TokenPrinter;
 
 /*
- * Saving and loading a commander, against the game (slice 2d).
+ * The save menu and the store under it (slice 2d).
  *
- * The C64's `SVE` is the disk access menu rather than a file write, and the only instructions in
- * the whole flow that touch a device are two Kernal calls. Everything before them -- the save
- * count, the three checksums, the competition number -- is arithmetic with an oracle, and this is
- * the comparison of it.
+ * The C64's `SVE` is a disk access menu rather than a file write, and everything before the two
+ * Kernal calls -- the save count, the three checksums, the competition number -- was arithmetic
+ * compared against the original until the oracle went (M6-b-5). What is left is the part that
+ * never had one: the yes/no prompt takes only Y and N and ignores every other key, and a round
+ * trip through a store reports every failure the store can have rather than losing one.
  */
 namespace GameLogicTests
 {
@@ -133,7 +134,7 @@ namespace GameLogicTests
 
   } // namespace
 
-  TEST_CLASS(SavingACommanderMatchesTheShippedGame)
+  TEST_CLASS(TheSaveMenuAndItsStore)
   {
   public:
     /*
@@ -235,87 +236,6 @@ namespace GameLogicTests
    */
   namespace
   {
-    /// 6502: KERNALSVE = &FFD8 and KERNALLOAD = &FFD5. Constants in the source, not labels.
-    constexpr std::uint16_t KERNAL_SAVE = 0xFFD8;
-    constexpr std::uint16_t KERNAL_LOAD = 0xFFD5;
-
-    /// 6502: TAP% = &CF00 -- the staging area LOD reads into before copying to NA%+8.
-    constexpr std::uint16_t TAPE_BUFFER = 0xCF00;
-
-    /// The commander the fixture's device hands back, which is deliberately not the default one.
-    Commander FileCommander()
-    {
-      Commander block = Elite::DefaultCommander();
-      block.cash.tenths = (123456);
-      block.fuel.tenths = 42;
-      block.galaxyNumber = 3;
-      block.saveCount = 0x60;
-      block.kills.hi = 0x11;
-      return block;
-    }
-
-    std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> FileImage()
-    {
-      static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> WHOEVER = {'X', 'X', 'X', 13, 0, 0, 0, 0};
-      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> file{};
-      Elite::SaveCommander(FileCommander(), WHOEVER, file);
-      return file;
-    }
-
-    /// The port's side of the Kernal: one file, and the two ways it can go wrong.
-    class DeviceStore : public Elite::CommanderStore
-    {
-    public:
-      bool Write(std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _name,
-                 std::span<const std::uint8_t, Elite::COMMANDER_FILE_SIZE> _file) override
-      {
-        for (std::size_t index = 0; index < _name.size(); ++index)
-        {
-          wroteName[index] = _name[index];
-        }
-        for (std::size_t index = 0; index < _file.size(); ++index)
-        {
-          wrote[index] = _file[index];
-        }
-        ++writes;
-        return !failDevice;
-      }
-
-      bool Read(std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _name,
-                std::span<std::uint8_t, Elite::COMMANDER_FILE_SIZE> _outFile) override
-      {
-        for (std::size_t index = 0; index < _name.size(); ++index)
-        {
-          readName[index] = _name[index];
-        }
-        ++reads;
-        if (failDevice)
-        {
-          return false;
-        }
-        const auto file = FileImage();
-        for (std::size_t index = 0; index < _outFile.size(); ++index)
-        {
-          _outFile[index] = file[index];
-        }
-        // 6502: the first byte of the block, which LOD tests for bit 7 and nothing else. Only the
-        // FIRST read is spoiled, so a script can pick the wrong file and then the right one.
-        if (badFile && reads == 1)
-        {
-          _outFile[Elite::COMMANDER_NAME_SIZE] = static_cast<std::uint8_t>(_outFile[Elite::COMMANDER_NAME_SIZE] | 0x80u);
-        }
-        return true;
-      }
-
-      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> wrote{};
-      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> wroteName{};
-      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> readName{};
-      int writes = 0;
-      int reads = 0;
-      bool failDevice = false;
-      bool badFile = false;
-    };
-
     /// 6502: DELAY, recorded rather than performed. `FLKB` was here until M3-b-3d and is counted
     /// by `ScriptedKeys`, which is the port that answers it now.
     class MenuEffects : public Elite::Presenter
@@ -329,36 +249,6 @@ namespace GameLogicTests
         ++waits;
       }
       int waits = 0;
-    };
-
-    /// Every character with the cursor it was printed at, exactly as the docked screens compare.
-    struct StampedSink : public Elite::TextSink
-    {
-      void Put(std::uint8_t _character) override
-      {
-        const std::uint32_t column = (cursor != nullptr) ? cursor->column : 0u;
-        const std::uint32_t row = (cursor != nullptr) ? cursor->row : 0u;
-        stamped.push_back(static_cast<std::uint32_t>(_character) | (column << 8) | (row << 16));
-      }
-
-      Elite::TextState* cursor = nullptr;
-      std::vector<std::uint32_t> stamped;
-    };
-
-    /// What one run of the shipped SVE left behind.
-    struct ShippedMenu
-    {
-      bool completed = false;
-      bool carry = false;
-      std::size_t keysTaken = 0;
-      int reads = 0;
-      int writes = 0;
-      std::vector<std::uint32_t> printed;
-      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
-      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};
-      Commander block;
-      std::uint8_t disk = 0;
-      std::array<std::uint8_t, 4> competition{}; ///< 6502: K to K+3
     };
 
   } // namespace
