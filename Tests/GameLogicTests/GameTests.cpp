@@ -5,7 +5,6 @@
 #include "Commander.h"
 #include "Controls.h"
 #include "DockedKeys.h"
-#include "PauseScreen.h"
 #include "Game.h"
 #include "SoundEffects.h"
 #include "Universe.h"
@@ -21,8 +20,8 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * WHAT THIS IS FOR IS THE SHAPE RATHER THAN THE ARITHMETIC. Every routine `Game` calls is compared
  * against the shipped original by its own suite, over sweeps this could not improve on; what none
  * of them can see is whether the OBJECT that calls them is wired up -- whether `Reset` reaches the
- * cold start, whether a docked pass dispatches a key, whether the pause key freezes the game and
- * a second one thaws it. That was eight hundred lines in `Outpost/Main.cpp` until M3-c, in the one
+ * cold start, whether a docked pass dispatches a key, whether the key that used to freeze the
+ * game is an ordinary key now. That was eight hundred lines in `Outpost/Main.cpp` until M3-c, in the one
  * file no Linux runner compiles, and the answer to "does it still work" was the Windows job and a
  * human looking at a screen.
  *
@@ -89,7 +88,6 @@ namespace GameLogicTests
       bare.game.Reset();
 
       Assert::IsTrue(bare.game.Docked(), L"TT170 ends by entering the docked half");
-      Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"nothing has pressed COPY");
 
       const Elite::Commander& commander = bare.game.State().commander;
       Assert::AreEqual<std::uint32_t>(Elite::DefaultCommander().fuel.tenths, commander.fuel.tenths, L"NA% -- the default commander's fuel");
@@ -103,27 +101,22 @@ namespace GameLogicTests
     }
 
     /*
-     * 6502: DK4's `CPX #&40 / BNE DK2` -- the pause key, and the key that leaves.
+     * 6502: DK4's `CPX #&40` -- INST/DEL, which froze the game until InputTimer.md I-0 (owner
+     * ruling 2026-09-08) and is an ordinary key now.
      *
-     * `FREEZE` is a LOOP in the original and a state here, so the thing worth asserting is that the
-     * state goes both ways: a game that entered it and could not leave would look exactly like one
-     * that had never entered it, from the outside of a windowed build.
+     * The pause screen was the port's `Mode::Paused`, a state the outer loop could enter and, with
+     * the resume key unbound, never leave. What is worth asserting after its removal is the other
+     * direction: the key still reaches `DK4`'s `STX KL`, and the batch of steps carries on.
      */
-    TEST_METHOD(ThePauseKeyFreezesTheGameAndTheResumeKeyThawsIt)
+    TEST_METHOD(TheOldPauseKeyIsAnOrdinaryKey)
     {
       Bare bare;
       bare.game.Reset();
 
-      Assert::IsFalse(bare.game.Step(Elite::PAUSE_KEY), L"the pause key ends the batch of steps");
-      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"and freezes the game");
-      Assert::AreEqual<std::uint8_t>(Elite::PAUSE_KEY, bare.game.State().keys[0], L"6502: STX KL -- the key that arrived, in byte 0 of the logger");
-
-      // 6502: CPX #&0D -- and `DK2`'s `RTS`. A key `FREEZE` does not know leaves it frozen.
-      bare.game.StepPaused(0u);
-      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"an unknown key is one pass round FREEZE and no more");
-
-      bare.game.StepPaused(Elite::RESUME_KEY);
-      Assert::IsTrue(bare.game.ModeNow() != Elite::Game::Mode::Paused, L"and the resume key thaws it");
+      constexpr std::uint8_t INST_DEL = 0x40; // 6502: the key `DK4` compared against
+      Assert::IsTrue(bare.game.Step(INST_DEL), L"INST/DEL no longer ends the batch of steps");
+      Assert::AreEqual<std::uint8_t>(INST_DEL, bare.game.State().keys[0], L"6502: STX KL -- the key that arrived, in byte 0 of the logger");
+      Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Docked, L"and the game is where it was");
     }
 
     /*

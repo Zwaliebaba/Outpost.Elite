@@ -81,10 +81,11 @@ namespace Elite
      * `PL9` is its one reader. Its one WRITER is the pause screen: `DKS3` walks the configuration
      * block as `DAMP,Y` against the key table `TGINT`, and offset 9 is this byte behind the "P"
      * key -- an indexed store, which is why an earlier version of this comment, written from a
-     * search for `STA PLTOG`, said the byte had no writer at all (§6.120). The pause screen is not
-     * ported yet (slice 4e), so for now the byte holds whatever the loader left at 7439 and is
-     * initialised from the image rather than defaulted here: a port that assumed "off" would draw
-     * featureless planets for ever.
+     * search for `STA PLTOG`, said the byte had no writer at all (§6.120). The pause screen was
+     * ported as slice 4e and removed by owner ruling on 2026-09-08 (InputTimer.md I-0), so the
+     * executable's settings file is the writer now; the byte still holds whatever the loader left
+     * at 7439 and is initialised from the image rather than defaulted here: a port that assumed
+     * "off" would draw featureless planets for ever.
      */
     std::uint8_t pltog = 0;
 

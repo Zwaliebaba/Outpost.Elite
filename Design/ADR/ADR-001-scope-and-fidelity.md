@@ -38,7 +38,10 @@ done at once, because the second has no definition of "correct" until the first 
    §1 R-a to R-d, Phase M6). Every clause of this ADR stands until that phase amends §5 for real.)* Resolution, smoothing,
    input remapping, gamepad, save UI, timing options — none is designed in this corpus. The
    gate for starting phase 6 is: every oracle suite, every golden and the replay suite green on
-   the faithful build.
+   the faithful build. **One original feature is removed ahead of that phase by owner ruling,
+   2026-09-08: the pause screen, recorded in ADR-005 §4 and Design/InputTimer.md §5.9.** It is a
+   removal and not an option, so "green with the option off" cannot apply to it; the suites are
+   green without it and the ledger row says what went.
 5. **Licence posture — owner ruling, 2026-09-02.** The upstream repository states it is
    provided with no licence, for reading and forking only, on an educational and non-profit
    basis; the code is copyright D. Braben and I. Bell, the commentary Mark Moxon. The owner has

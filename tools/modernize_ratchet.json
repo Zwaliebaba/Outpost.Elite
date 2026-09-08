@@ -34,9 +34,9 @@
       "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 250,
+      "ceiling": 240,
       "slack": 0,
-      "slice": "M6-0-h-3: FlightSession is no longer lent the ports"
+      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
     },
     "outpost-elite-names": {
       "ceiling": 61,
@@ -74,14 +74,14 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4143,
+      "ceiling": 4091,
       "slack": 0,
-      "slice": "M6-0-e: NLIN, TRADEMODE and DK4's store carry their labels as routines of their own"
+      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
     },
     "oracle-test-files": {
-      "ceiling": 48,
+      "ceiling": 47,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
     },
     "origin-tools": {
       "ceiling": 7,

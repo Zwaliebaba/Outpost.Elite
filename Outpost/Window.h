@@ -104,6 +104,9 @@ namespace Outpost
 
     void PressKey(WPARAM _virtualKey, bool _down) noexcept;
 
+    /// Every key up and the queue empty: what focus loss means, because no WM_KEYUP follows it.
+    void ReleaseAllKeys() noexcept;
+
     /*
      * How many key presses are remembered. The game consumes one per blocking read and the pump
      * produces one per press, so the queue is normally empty or has one thing in it; the cap is

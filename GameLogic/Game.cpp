@@ -129,34 +129,16 @@ namespace Elite
   }
 
   /*
-   * 6502: DAMP through MUSILLY -- the thirteen configuration bytes, in the assembler's order.
+   * `OptionsOf` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, 2026-09-08).
    *
-   * THE ORDER IS THE ONLY DEFINITION THERE IS of which key toggles which option (§6.139), so this
-   * function is the whole of the port's statement of it and `TheTogglesMatchDKS3` is what proves
-   * the statement right. Six of the thirteen live in structs that other slices own, which is why
-   * this is pointers rather than a struct of its own: making them contiguous would touch
-   * eighty-seven call sites to buy what a sweep already establishes.
+   * 6502: DAMP through MUSILLY -- the thirteen configuration bytes in the assembler's order, which
+   * was the only definition of which pause-screen key toggled which option (§6.139). The screen is
+   * gone by owner ruling and the executable's settings file names the thirteen by field instead:
+   * `options.dampingDisabled`, `.recentreDisabled`, `.authorNames`, `status.damageFlash`,
+   * `joystickGeometry`, `joystickEnabled`, `options.joystick`, `music.options.dockingMusicOff`,
+   * `useDisk`, `heaps.pltog`, `music.options.dockingMusicForced`, `.dockingPlaysTheme` and
+   * `.effectsDuringMusic` (InputTimer.md S-1).
    */
-  OptionBlock Game::OptionsOf()
-  {
-    ControlOptions& controls = m_universe.options;
-    MusicOptions& tunes = m_universe.music.options;
-    return OptionBlock{
-      &controls.dampingDisabled,      // 6502: DAMP
-      &controls.recentreDisabled,     // 6502: DJD
-      &controls.authorNames,          // 6502: PATG
-      &m_universe.status.damageFlash, // 6502: FLH
-      &m_universe.joystickGeometry,   // 6502: JSTGY
-      &m_universe.joystickEnabled,    // 6502: JSTE
-      &controls.joystick,             // 6502: JSTK
-      &tunes.dockingMusicOff,         // 6502: MUTOK
-      &m_universe.useDisk,            // 6502: DISK
-      &m_universe.heaps.pltog,        // 6502: PLTOG
-      &tunes.dockingMusicForced,      // 6502: MUFOR
-      &tunes.dockingPlaysTheme,       // 6502: MUDOCK
-      &tunes.effectsDuringMusic,      // 6502: MUSILLY
-    };
-  }
 
   /*
    * 6502: QQ12, QQ22, QQ8 and safehouse -- what `hyp` and `TT18` read besides the chart.
@@ -726,19 +708,13 @@ namespace Elite
     (void)ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     /*
-     * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
-     * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
-     * freezes the game and everything else carries on to the dispatch.
+     * 6502: `DOKEY` FALLS INTO `DK4`. `LDX thiskey / STX KL` is kept -- the key that arrived, into
+     * byte 0 of the logger, which nothing on this build reads back but the image compares
+     * (M6-0-e). `CPX #&40 / BNE DK2` IS NOT: the pause screen it opened was removed by owner ruling
+     * on 2026-09-08 (InputTimer.md I-0, §5.9), so INST/DEL carries on to the dispatch like every
+     * other key, where `TT102` matches nothing and falls through to the countdown.
      */
-    // 6502: LDX thiskey / STX KL -- the key that arrived, into byte 0 of the logger, which nothing
-    // on this build reads back but the image compares (M6-0-e).
     m_universe.keys[0] = _key;
-
-    if (_key == PAUSE_KEY)
-    {
-      m_paused = true;
-      return false;
-    }
 
     PressKey(_key);
     return true;
@@ -770,52 +746,6 @@ namespace Elite
     m_universe.crosshairStep = ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held
-  }
-
-  /*
-   * 6502: FREEZE -- the loop the game is in while it is paused, one pass per key.
-   *
-   * The original does not return until CLR/HOME and reads the keyboard itself. A windowed program
-   * has to keep pumping messages, so the loop is turned inside out: the caller calls this instead
-   * of `Step` while `Paused` is set, and each key it delivers is one pass round `FREEZE`. Nothing
-   * is drawn and nothing moves, which is what freezing is.
-   */
-  void Game::StepPaused(std::uint8_t _key) noexcept
-  {
-    const PausePass pass = PressPauseKey(m_universe, OptionsOf(), m_universe.control.dockingComputer, _key);
-
-    /*
-     * 6502: JSR MUTOKCH -- the `Stop` answer goes through `stopbd`, which starts the music again
-     * when `MUFOR` is set, so the two answers are not "on" and "off" -- they are "start it now" and
-     * "ask `stopbd`".
-     */
-    if (pass.music == MusicChange::StartNow)
-    {
-      StartDockingMusicNow(m_universe.music, m_universe.memoryMap, m_ports.sid);
-    }
-    else if (pass.music == MusicChange::Stop)
-    {
-      StopDockingMusic(m_universe.music, m_universe.status.titleReset, m_universe.sound, m_universe.memoryMap, m_ports.sid);
-    }
-
-    /*
-     * The twenty frames per toggle are DROPPED, and saying so is better than pretending. `JSR
-     * DELAY` is there to stop one key press flipping a switch twenty times while the player holds
-     * it; this loop is driven by key EVENTS from the window, which repeat at the system's rate and
-     * not at the frame's, so the debounce the delay provides is already there.
-     */
-    static_cast<void>(pass.delayFrames);
-
-    if (pass.outcome == PauseOutcome::Resumed)
-    {
-      m_paused = false; // 6502: CPX #&0D -- and `DK2`'s `RTS`
-    }
-    else if (pass.outcome == PauseOutcome::Quit)
-    {
-      // 6502: CPX #&07 / JMP DEATH2 -- which does not come back, so neither does the pause.
-      m_paused = false;
-      Leave(LoopOutcome::Died);
-    }
   }
 
 } // namespace Elite

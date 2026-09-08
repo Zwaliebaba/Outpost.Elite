@@ -263,6 +263,16 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   docked screens (`RDKEY`, `TT217`); the port's `InputFrame` carries both level and edge bits so
   both idioms port unchanged (plan §2.1).
 
+- **The pause screen is removed. Owner ruling 2026-09-08 (Design/InputTimer.md §5.9, slice I-0).**
+  `DK4`'s `CPX #&40` froze the game on INST/DEL and `FREEZE` was the only settings interface the
+  game had: thirteen toggles, two sound keys and a quit to the title. The port had it as
+  `Game::Mode::Paused` and could enter it and not leave it, because CLR/HOME was never bound
+  (InputTimer.md I-3). The ruling removes the screen rather than binding its keys: INST/DEL is an
+  ordinary key, the thirteen bytes are set at start-up from the executable's settings file
+  (InputTimer.md S-1), and a windowed player's pause is the executable stopping the steps while
+  the window is inactive (§3, to be built as InputTimer.md T-1). This is the first deliberate
+  removal of an original FEATURE rather than of a hardware read, and ADR-001 §4 points here.
+
 ### §5 The window and the application shell
 
 **Superseded 2026-09-03 by owner ruling: do not strip WinUI, ignore it and proceed.** The

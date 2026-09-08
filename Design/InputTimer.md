@@ -709,3 +709,21 @@ a library. It does not build the gamepad or the remap file; it
 makes them platform-only. It does not measure the rendering pipeline's own cost on the PC, because
 nothing here is CPU-bound — the outer loop's expense is the wait it is supposed to be doing. And it
 does not touch the sound's clock, which is the one clock in the program that was already right.
+
+---
+
+## 9. Journal
+
+**2026-09-08 — I-0 built: the pause path goes, and focus loss releases the keys.** `PauseScreen.*`,
+`OptionTables.cpp` (`TGINT`) and `PauseScreenTests.cpp` are deleted; `Game::Step` keeps `DK4`'s
+`STX KL` and loses its `CPX #&40`; `Mode::Paused`, `m_paused`, `StepPaused` and `OptionsOf` go, and
+`Main.cpp`'s paused branch with them. `MUTOKOLD` stays in `Universe` unwritten, because it is in the
+digest and removing a hashed byte would move every recorded checkpoint for no defect. The replay's
+scripted keys were checked for `&40` first: none, so the record is untouched and the suite is 404
+green with the oracle present, four fewer than before, one pause test replaced by
+`TheOldPauseKeyIsAnOrdinaryKey`. `Window` releases every key on `WM_KILLFOCUS` and on
+`WM_ACTIVATEAPP(FALSE)`, and a `WM_SYSKEYDOWN` with Alt's context bit set is not a game key; F10
+still is, because F10 arrives with the bit clear. The window half compiles only on the Windows
+leg, and `check_outpost.py` is what read it here. Ledger rows 32 and 148, ADR-005 §4 and ADR-001
+§4 say what went; three ratchet ceilings fell (`main-lines`, `origin-markers`,
+`oracle-test-files`) and are lowered in the same commit.
