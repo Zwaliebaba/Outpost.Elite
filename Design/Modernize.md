@@ -390,7 +390,7 @@ the call site rather than buried in the routine. §4.7 is the table and §8 the 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->211 comment lines are an instruction LISTING carrying no reason and
+<!--count:opcode-transcriptions-->173 comment lines are an instruction LISTING carrying no reason and
 <!--count:opcode-quotations-->0 are a sequence kept
 because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
 the comments that END a line rather than start one — the shape it asks for,
@@ -1942,6 +1942,46 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-d-52: four of the widest headers to zero, and a preamble that was eight
+instructions described as two.**
+
+38 sites over four files -- `Combat.h`, `StartUp.h`, `MarketScreen.h` and `ShipDraw.h`.
+Sixty-fifth to sixty-eighth at zero.
+
+**A fourth miscount, and this one was in the sentence the listing was decorating.** `ShipDraw.h`
+called `DVID3B2`'s preamble "the two-instruction preamble" while naming an instruction inside it;
+on this build it is EIGHT -- the numerator's high byte stored, then the ship's z low, high and sign
+copied into `Q`, `R` and `S`, with the low bit forced on the way. The count is gone rather than
+corrected, because what the preamble DOES is the fact worth keeping and the number never was.
+Worth noting while there: `DVID3B` forces the same low bit a second time on the NUMERATOR, so a
+reader who finds one of the two and stops has the wrong one for "guarantees a non-zero
+denominator".
+
+**The original's own commentary can be wrong, and that is a fact about the original.** `FRCE`'s
+re-entry test reads `LDA QQ12 / BEQ P%+5 / JMP MLOOP`, so it is being IN SPACE -- QQ12 zero -- that
+steps over the jump and reaches `TT100`. The annotation beside that branch says "if we are docked",
+which is the BBC form's text carried over unchanged onto a branch that was inverted for this
+build. `StartUp.h` now says so in as many words. Once `Upstream/` is gone the port is the only
+place that knowledge can live, and it is exactly the kind of thing a future reader would otherwise
+rediscover by getting it wrong first.
+
+**Where an instruction really is the reason, the reason is sayable.** Four hard cases went this
+slice: `EraseShip`'s three-way carry (a loop's terminating compare leaves it set, a length test
+leaves it clear, a bare return leaves the caller's), `OUCH`'s carry arriving from a sound routine
+reached by a branch that is really a jump, `LL9`'s explosion seed rolling in the carry the call was
+made with, and the projection's minus-on-y being a sign bit flipped. None needed R-i's quotation
+tag. `opcode-quotations` is still 0 and the tag has still never been used.
+
+Method note: the M6-d-50 rule earned its keep immediately. Replacing a row of an ALIGNED TABLE in
+`MarketScreen.h` truncated "and both halves exist:" to "and both halves", and the following line
+went on with the second half of a sentence that no longer had a first. Caught by re-reading the
+block rather than by any check -- there is no check for this, which is the argument for reading
+every rewritten paragraph whole.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (12, 21, 6 and 60). `opcode-transcriptions` 211 → 173.
+
 
 **2026-09-08 — M6-d-51: the commander and its file to zero, and three citations that were wrong in
 ways only the original could show.**
