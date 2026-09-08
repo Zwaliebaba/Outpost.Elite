@@ -218,7 +218,7 @@ namespace Elite
 
   ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept
   {
-    const std::uint8_t s = _high; // 6502: STA S -- the high byte of the vertex, kept for the tail
+    const std::uint8_t vertexHigh = _high; // 6502: STA S -- the high byte of the vertex, kept for the tail
 
     // 6502: the inlined copy of DORND2 -- the C64 spells the routine out here rather than calling
     // it, which changes the timing and nothing else.
@@ -238,12 +238,12 @@ namespace Elite
       // 6502: EX5 -- the negative half. The carry is SET here BECAUSE the branch was taken, and
       // `FMLTU` passes an entry carry straight through on its two zero exits, so it matters.
       const LogProduct product = MultiplyByLog(doubled.value, _size, true);
-      const std::uint8_t t = product.value;
+      const std::uint8_t offsetLow = product.value;
 
       // 6502: LDA R / SBC T / TAX / LDA S / SBC #0 -- and the borrow going in is whatever `FMLTU`
       // left, not a `SEC`.
-      const SubResult low = SubtractWithCarry(_low, t, product.carry);
-      const SubResult high = SubtractWithCarry(s, 0, low.carry);
+      const SubResult low = SubtractWithCarry(_low, offsetLow, product.carry);
+      const SubResult high = SubtractWithCarry(vertexHigh, 0, low.carry);
       return ExplosionOffset{high.value, low.value};
     }
 
@@ -251,7 +251,7 @@ namespace Elite
     // carry the other way round. §6.42 recorded this call as one of the two that read it.
     const LogProduct product = MultiplyByLog(doubled.value, _size, false);
     const AddResult low = AddWithCarry(product.value, _low, product.carry);
-    const AddResult high = AddWithCarry(s, 0, low.carry);
+    const AddResult high = AddWithCarry(vertexHigh, 0, low.carry);
     return ExplosionOffset{high.value, low.value};
   }
 
@@ -288,7 +288,7 @@ namespace Elite
      * bit 7 must be clear -- z_hi under 32 shifted twice cannot reach 128 -- and so leaves it
      * CLEAR and the cloud ages by four.
      */
-    std::uint8_t t = _work.z.lo; // 6502: T -- `DOEXP`'s own since M2-c-3, the low half of the scale
+    std::uint8_t scaleLow = _work.z.lo; // 6502: T -- `DOEXP`'s own since M2-c-3, the low half of the scale
     std::uint8_t scaled = _work.z.hi;
     bool carry = scaled >= 32u;
 
@@ -300,8 +300,8 @@ namespace Elite
     {
       for (int pass = 0; pass < 2; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(t, false); // 6502: ASL T
-        t = low.value;
+        const ShiftResult low = RotateLeftValue(scaleLow, false); // 6502: ASL T
+        scaleLow = low.value;
         scaled = RotateLeftValue(scaled, low.carry).value; // 6502: ROL A
       }
 

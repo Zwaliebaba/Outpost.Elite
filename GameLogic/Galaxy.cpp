@@ -10,12 +10,12 @@ namespace Elite
 
   bool TwistSeeds(SystemSeeds& _seeds) noexcept
   {
-    std::array<std::uint8_t, 6>& q = _seeds.bytes;
+    std::array<std::uint8_t, 6>& seed = _seeds.bytes;
 
     // 6502: LDA QQ15 / CLC / ADC QQ15+2 / TAX, then the high halves with the carry between them.
     // X and Y hold s0 + s1 across the shuffle below, which is why they are computed first.
-    const AddResult low = AddWithCarry(q[0], q[2], false);
-    const AddResult high = AddWithCarry(q[1], q[3], low.carry);
+    const AddResult low = AddWithCarry(seed[0], seed[2], false);
+    const AddResult high = AddWithCarry(seed[1], seed[3], low.carry);
 
     /*
      * The shuffle, in the original's order. s1's high byte is written before its low byte, and
@@ -23,18 +23,18 @@ namespace Elite
      * adding the old s2 rather than the new s1, and would generate a different universe that still
      * looked entirely plausible.
      */
-    q[0] = q[2];
-    q[1] = q[3];
-    q[3] = q[5];
-    q[2] = q[4];
+    seed[0] = seed[2];
+    seed[1] = seed[3];
+    seed[3] = seed[5];
+    seed[2] = seed[4];
 
-    const AddResult sumLow = AddWithCarry(low.value, q[2], false);
-    q[4] = sumLow.value;
+    const AddResult sumLow = AddWithCarry(low.value, seed[2], false);
+    seed[4] = sumLow.value;
 
     // 6502: TYA / ADC QQ15+3 / STA QQ15+5 / RTS -- the last instruction that touches the carry, so
     // this is what the routine leaves in it.
-    const AddResult sumHigh = AddWithCarry(high.value, q[3], sumLow.carry);
-    q[5] = sumHigh.value;
+    const AddResult sumHigh = AddWithCarry(high.value, seed[3], sumLow.carry);
+    seed[5] = sumHigh.value;
     return sumHigh.carry;
   }
 
