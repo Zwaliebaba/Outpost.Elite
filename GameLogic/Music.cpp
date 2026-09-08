@@ -19,14 +19,14 @@ namespace Elite
       return (_flag & 0x80u) != 0u;
     }
 
-    /// 6502: LDA #%00001111 / STA SID+&18 -- full volume, no filter.
+    /// 6502: the volume register's low nibble -- full volume, no filter.
     constexpr std::uint8_t FULL_VOLUME = 0x0Fu;
 
     /// 6502: the vibrato periods, in interrupts, as the GMA release has them.
     constexpr std::uint8_t VIBRATO_PERIOD_VOICE_3 = 5;
     constexpr std::uint8_t VIBRATO_PERIOD_VOICE_2 = 4;
 
-    /// 6502: LDA #32 and LDA #37 -- how far above the note each voice's vibrato frequency sits.
+    /// 6502: how far above the note each voice's vibrato frequency sits.
     constexpr std::uint8_t VIBRATO_RISE_VOICE_2 = 32;
     constexpr std::uint8_t VIBRATO_RISE_VOICE_3 = 37;
 
@@ -46,7 +46,7 @@ namespace Elite
     constexpr std::uint8_t VOICE_3_CONTROL = 0x12;
 
     /*
-     * 6502: BDlab19 -- INC BDdataptr1 / BNE BDskipme1 / INC BDdataptr1+1 / LDA (BDdataptr1),Y.
+     * 6502: BDlab19 -- the data pointer stepped, carrying into its high byte, and then read.
      *
      * Pre-increment, then read. The pointer is sixteen bits and wraps as the original's does; a read
      * past the extracted region answers zero, which is `LineHeap::Read`'s rule and never a read the
@@ -68,8 +68,8 @@ namespace Elite
     /*
      * 6502: BDlab5 -- voice 2's frequency, and the two copies the vibrato alternates between.
      *
-     * `CLC / CLD / LDA #32 / ADC voice2hi2 / STA voice2hi2 / BCC / INC voice2lo2`: the second copy is
-     * the first plus 32, as a sixteen-bit number whose low byte is the one called "hi".
+     * The second copy is the first plus 32, the addition carrying into the other byte: a sixteen-bit
+     * number whose low byte is the one called "hi".
      */
     void SetVoice2Frequency(MusicPlayer& _music, SidWriteLog& _log) noexcept
     {
@@ -112,8 +112,8 @@ namespace Elite
       }
     }
 
-    /// 6502: BDlab4, BDlab6, BDlab8 -- STY SID+n / STA SID+n with Y zero: the gate goes down and
-    /// then the control register is written, which is what re-triggers the envelope.
+    /// 6502: BDlab4, BDlab6, BDlab8 -- a zero into the control register and then the value, so the
+    /// gate goes down before it goes up, which is what re-triggers the envelope.
     void GateVoice(SidWriteLog& _log, std::uint8_t _register, std::uint8_t _control) noexcept
     {
       _log.Add(_register, 0u);
@@ -123,9 +123,9 @@ namespace Elite
     /*
      * 6502: BDlab21 -- the end of every pass.
      *
-     * `LDX counter / CPX #0 / BNE BDexitirq`: on the pass where the rest has just run out, every
-     * voice's control register is written with its value minus one -- bit 0 off, the gate down --
-     * so the notes release before the next command sounds. Every other pass ends here doing nothing.
+     * On the pass where the rest counter has just reached zero, every voice's control register is
+     * written with its value minus one -- bit 0 off, the gate down -- so the notes release before
+     * the next command sounds. Every other pass ends here doing nothing.
      */
     void EndPass(const MusicPlayer& _music, SidWriteLog& _log) noexcept
     {
@@ -151,7 +151,7 @@ namespace Elite
      */
     void Vibrato(MusicPlayer& _music, SidWriteLog& _log) noexcept
     {
-      // 6502: INC vibrato3 / LDA #5 / CMP vibrato3 / .BDbeqmod2 BEQ.
+      // 6502: BDbeqmod2 -- voice 3's counter stepped and compared against its period.
       _music.vibrato3Count = static_cast<std::uint8_t>(_music.vibrato3Count + 1u);
       if (_music.vibrato3Count == VIBRATO_PERIOD_VOICE_3)
       {
@@ -173,7 +173,7 @@ namespace Elite
         return;
       }
 
-      // 6502: INC vibrato2 / LDA #4 / CMP vibrato2 / .BDbeqmod1 BEQ.
+      // 6502: BDbeqmod1 -- voice 2's counter stepped and compared against its period.
       _music.vibrato2Count = static_cast<std::uint8_t>(_music.vibrato2Count + 1u);
       if (_music.vibrato2Count == VIBRATO_PERIOD_VOICE_2)
       {
@@ -198,8 +198,10 @@ namespace Elite
     /*
      * 6502: startat2 and what follows it -- the checks every start goes through.
      *
-     * `STA value5 / STX value5+1`, then `BIT MUPLA / BMI itsoff`, `BIT MUFOR / BMI april16`,
-     * `BIT MUTOK / BMI itsoff`, and `april16` is `SETL1 / JSR BDENTRY / LDA #&FF / STA MUPLA`.
+     * The start address is stored FIRST, so a call that then declines to play still remembers it.
+     * Then three tests in order: already playing means do nothing; forced means play regardless of
+     * the option; otherwise the "no docking music" option decides. `april16` maps the I/O page in,
+     * starts the tune and marks it playing.
      */
     void StartAt(MusicPlayer& _music, std::uint16_t _tuneStart, MemoryMap& _map, SidWriteLog& _log) noexcept
     {
@@ -220,19 +222,19 @@ namespace Elite
 
   void StartDockingMusicNow(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
-    // 6502: .april16 LDA #%101 / JSR SETL1 -- the I/O page in, so the SID exists to be written.
+    // 6502: april16 -- the I/O page in, so the SID exists to be written.
     SetMemoryMap(_map, MEMORY_MAP_IO);
 
-    BeginTune(_music, _log); // 6502: JSR BDENTRY
-    _music.playing = 0xFFu;  // 6502: LDA #&FF / STA MUPLA
+    BeginTune(_music, _log); // 6502: BDENTRY
+    _music.playing = 0xFFu;  // 6502: MUPLA set
 
-    // 6502: BNE coffeeex -- LDA #%100 / JMP SETL1, shared with `stopat`'s exit.
+    // 6502: coffeeex -- the map back to RAM, shared with `stopat`'s exit.
     SetMemoryMap(_map, MEMORY_MAP_RAM);
   }
 
   void StartDockingMusic(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
-    // 6502: startbd -- BIT MUDOCK / BMI startat / LDA #LO(musicstart) / LDX #HI(musicstart).
+    // 6502: startbd -- the "docking plays the theme" option picks which of the two tunes starts.
     if (IsSet(_music.options.dockingPlaysTheme))
     {
       StartTheme(_music, _map, _log);
@@ -243,20 +245,21 @@ namespace Elite
 
   void StartTheme(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
-    // 6502: startat -- LDA #LO(THEME-1) / LDX #HI(THEME-1) / BNE startat2.
+    // 6502: startat -- the theme's address, one byte back because the fetch pre-increments.
     StartAt(_music, MUSIC_THEME_OFFSET, _map, _log);
   }
 
   void StopDockingMusic(MusicPlayer& _music, std::uint8_t _titleReset, SoundBuffer& _buffer, MemoryMap& _map,
                         SidWriteLog& _log) noexcept
   {
-    // 6502: stopbd -- BIT MULIE / BMI itsoff.
+    // 6502: stopbd -- a RESET reached from inside `TITLE` stops nothing, so the title music
+    // survives it.
     if (IsSet(_titleReset))
     {
       return;
     }
 
-    // 6502: BIT MUFOR / BMI startbd -- forced music is not stopped, it is started.
+    // 6502: forced music is not stopped, it is started.
     if (IsSet(_music.options.dockingMusicForced))
     {
       StartDockingMusic(_music, _map, _log);
@@ -268,57 +271,58 @@ namespace Elite
 
   void StopMusic(MusicPlayer& _music, SoundBuffer& _buffer, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
-    // 6502: stopat -- BIT MUPLA / BPL itsoff.
+    // 6502: stopat -- nothing to stop unless it is playing.
     if (!IsSet(_music.playing))
     {
       return;
     }
 
-    // 6502: JSR SOFLUSH / LDA #%101 / JSR SETL1 / LDA #0 / STA MUPLA.
+    // 6502: the effects flushed, the I/O page in, and `MUPLA` cleared.
     FlushSoundEffects(_buffer);
     SetMemoryMap(_map, MEMORY_MAP_IO);
     _music.playing = 0u;
 
-    // 6502: LDX #&18 / SEI / .coffeeloop STA SID,X / DEX / BPL coffeeloop -- twenty-five zeros, from
-    // the top register down to the first.
+    // 6502: coffeeloop -- twenty-five zeros with interrupts off, from the top register down to the
+    // first.
     for (int reg = SID_REGISTER_COUNT - 1; reg >= 0; --reg)
     {
       _log.Add(static_cast<std::uint8_t>(reg), 0u);
     }
 
-    // 6502: LDA #%00001111 / STA SID+&18 / CLI.
+    // 6502: the volume back to full, and interrupts on again.
     _log.Add(SID_VOLUME, FULL_VOLUME);
 
-    // 6502: .coffeeex LDA #%100 / JMP SETL1 -- the map back, and `april16` shares this exit.
+    // 6502: coffeeex -- the map back to RAM, and `april16` shares this exit.
     SetMemoryMap(_map, MEMORY_MAP_RAM);
   }
 
   void BeginTune(MusicPlayer& _music, SidWriteLog& _log) noexcept
   {
-    // 6502: BDENTRY -- LDA #0 / STA BDBUFF / STA counter / STA vibrato2 / STA vibrato3.
+    // 6502: BDENTRY -- the buffer, the rest counter and both vibrato counters zeroed.
     _music.buffer = 0u;
     _music.counter = 0u;
     _music.vibrato2Count = 0u;
     _music.vibrato3Count = 0u;
 
-    // 6502: LDX #&18 / .BDloop2 STA SID,X / DEX / BNE BDloop2 -- and the BNE stops at 1, so the first
-    // register is the one this does not zero.
+    // 6502: BDloop2 -- the registers zeroed from the top down, and the loop STOPS AT 1, so the
+    // first register is the one this does not clear.
     for (int reg = SID_REGISTER_COUNT - 1; reg >= 1; --reg)
     {
       _log.Add(static_cast<std::uint8_t>(reg), 0u);
     }
 
-    // 6502: LDA value5 / STA BDdataptr1 / STA BDdataptr3 / LDA value5+1 / STA BDdataptr2 / STA BDdataptr4.
+    // 6502: the start address into both pointer pairs -- the one that reads and the one that
+    // restarts.
     _music.pointer = _music.tuneStart;
     _music.restart = _music.tuneStart;
 
-    // 6502: LDA #%00001111 / STA SID+&18 / RTS.
+    // 6502: the volume to full on the way out.
     _log.Add(SID_VOLUME, FULL_VOLUME);
   }
 
   void RunMusic(MusicPlayer& _music, SidWriteLog& _log) noexcept
   {
-    // 6502: LDY #0 / CPY counter / BEQ BDskip1 / DEC counter / JMP BDlab1.
+    // 6502: a non-zero rest counter comes down by one and the pass ends there.
     if (_music.counter != 0u)
     {
       _music.counter = static_cast<std::uint8_t>(_music.counter - 1u);
@@ -329,8 +333,7 @@ namespace Elite
     for (std::uint32_t commands = 0; commands < COMMANDS_PER_PASS; ++commands)
     {
       /*
-       * 6502: .BDskip1 LDA BDBUFF / CMP #&10 / BCS BDLABEL2 / TAX / BNE BDLABEL / JSR BDlab19 /
-       * STA BDBUFF / .BDLABEL2 AND #&0F / TAX / .BDLABEL LDA BDBUFF / LSR x4 / STA BDBUFF.
+       * 6502: BDskip1, BDLABEL and BDLABEL2 -- where the next command comes from.
        *
        * Three ways in: a buffer with a high nibble goes straight to the mask; a buffer holding one
        * nibble is the command as it stands; an empty buffer fetches a byte first. All three end by
@@ -351,8 +354,8 @@ namespace Elite
       }
       _music.buffer = static_cast<std::uint8_t>(_music.buffer >> 4);
 
-      // 6502: BDJMPTBL, BDJMPTBH -- the jump table, which is the switch below. `LDA BDJMPTBL-1,X`
-      // with X = 0 reads past the table's start into code, which the shipped tunes never do.
+      // 6502: BDJMPTBL, BDJMPTBH -- the jump table, which is the switch below. Indexing it with
+      // X = 0 reads past its start into code, which the shipped tunes never do.
       if (command == 0u)
       {
         return;
@@ -406,7 +409,8 @@ namespace Elite
 
       case 15:
         /*
-         * 6502: BDRO15 -- LDA BDBUFF / SEC / ROL A / ASL A / ASL A / ASL A / STA BDBUFF, then BDRO8.
+         * 6502: BDRO15 -- a 1 rotated in at the bottom and shifted up three, so the buffer gains an
+         * 8 below whatever it held, and then BDRO8.
          *
          * Command 8 is slid into the buffer's low nibble ahead of whatever was there, so the rest
          * below is taken twice: once now and once when the inserted 8 is processed.
@@ -414,7 +418,7 @@ namespace Elite
         _music.buffer = static_cast<std::uint8_t>((_music.buffer << 4) | 0x08u);
         [[fallthrough]];
 
-      case 8: // 6502: BDRO8 -- LDA value4 / STA counter / JMP BDirqhere.
+      case 8: // 6502: BDRO8 -- the rest length into the counter, then the vibrato and out.
         _music.counter = _music.restLength;
         if (_music.counter != 0u)
         {
@@ -425,7 +429,7 @@ namespace Elite
         break; // 6502: a rest of zero falls straight back into BDskip1
 
       case 9:  // 6502: BDRO9
-      case 11: // 6502: BDRO11 -- JMP BDRO9
+      case 11: // 6502: BDRO11 -- which is a jump to BDRO9
         _music.buffer = 0u;
         _music.pointer = _music.restart;
         break;
@@ -463,7 +467,8 @@ namespace Elite
 
   void RunSoundInterrupt(SoundBuffer& _buffer, MusicPlayer& _music, SidWriteLog& _log) noexcept
   {
-    // 6502: BIT MUPLA / BPL SOINT / JSR BDirqhere / BIT MUSILLY / BMI SOINT / JMP coffee.
+    // 6502: the music runs first when it is playing, and the "effects during music" option decides
+    // whether the effects run after it.
     if (IsSet(_music.playing))
     {
       RunMusic(_music, _log);
