@@ -733,6 +733,14 @@ T3 deleted from ADR-008 §2 with the sentence saying why; §1's byte count corre
 the Status table's T3 row marked deleted at RN-1 with the date. Platform.md §5's three rendering
 rows ✅. `check_docs.py`, `check_counts.py`. No code.
 
+**BUILT — the first half 2026-09-09 with RN-0 (§1's byte count, §4's backdrop, the Status split) and
+the second the same day with RN-1's second commit (T3).** One thing the step did not ask for and the
+deletion needed: §2 says what REPLACED T3, because a rule with a known weakness — Rendering.md's
+R-5, "no cheap test" — was not deleted to leave a gap. `check_twins.py`'s rule 4 fails both ways,
+which T3 never could, so R-5 closes here rather than lapsing. The Status table also gains the
+boundary as a built row, since a reader arriving at T3's deletion needs to see the thing that made
+it safe.
+
 ### 2.6 I-2 — `InputFrame`, event accumulation, the layered map (library and executable; 2 sittings, three commits)
 
 **Goal.** One struct per step carries the keys; a tap between steps is never lost; the map gains

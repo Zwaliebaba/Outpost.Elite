@@ -96,11 +96,11 @@ carries it.
 | Rendering R-2 | Docked screens and the dashboard art are drawn once per view change | **stands** | §3.4: the backdrop surface |
 | Rendering R-3, R-8 | The erase feeds the RNG — narrowed by R-8 to heap metadata (`_heap.Read(_ship.heap) >= 4u`) | **stands** | §3.4: the canvas keeps its erases; §4 D1 prices removing them |
 | Rendering R-4 | The picture is not in the state hash; T1 measured by `TheReplayIsTheSameWithNoTwins` | **closed 2026-09-09** | the licence for §3.4 |
-| Rendering R-5 | T3 ("every erase has a twin erase") has no cheap test | **stands** until RN-2 deletes the rule | §5 RN-2 |
+| Rendering R-5 | T3 ("every erase has a twin erase") has no cheap test | **closed 2026-09-09**: RN-1 deleted the rule and RN-2 recorded it. What replaced it does have a cheap test — `check_twins.py` rule 4, failing both ways | §5 RN-2, §10 |
 | Rendering R-6 | The picture's evidence is byte-shaped; a non-bit-plane picture rewrites five test files | **stands** | §4 D1's bill, §9 |
 | Rendering R-7, R-9, R-10 | Most of the dashboard is stored not XORed; the heap is a spawn limiter; the sun is differential, the rings rewind | **stand** | §3.4 and D1: what a one-surface program keeps |
 | Rendering RN-0 | The backdrop/frame split; the gate `ThePictureIsAsRecorded` | **part-built** — gate in, split not; 74 sites classified, 3 open | §5 RN-0 (finish); the 3 sites in §3.4 |
-| Rendering RN-1, RN-2 | The frame boundary; ADR-008 amended | **unbuilt** | §5, same names |
+| Rendering RN-1, RN-2 | The frame boundary; ADR-008 amended | **built 2026-09-09** | §5, same names; §10 |
 | Rendering ~~RN-3~~ to ~~RN-5~~ | Display list, per-primitive colour, dirty rectangles | **declined 2026-09-08**, kept | §9, still declined; D1 is what would reopen them |
 | InputTimer I-1, I-3, I-4, I-6 | The queue pop; the pause screen unleavable; the joystick half gone; keys held across focus loss | **built** (I-1, I-0, I-3, I-0) | history |
 | InputTimer I-2 | `TT102` dispatched from an edge where the original dispatches the held key | **stands**, half closed by I-1 | §3.3, §5 I-2 |
@@ -391,10 +391,15 @@ becomes a rendered frame. What this design adds is *where* the boundary is.
   them, and a default that changes a checkpoint is wrong and is moved to the other surface. **None
   of the three records makes a hyperspace jump**, so RN-0 records one more checkpoint through
   `DrawHyperspaceRings` before the rings' default is trusted.
-- **Erase twins become drops** at RN-1: the picture arm of `EraseShip`, `EraseSun`, `EraseBall`,
-  `ErasePlanetOrSun`, the stardust's erase, `COMPAS`'s first dot, `me1`'s re-print, `TT103`'s first
-  crosshair and the laser beam's second draw. `check_twins.py` gains its fourth table,
-  `ERASE_NEEDS_NO_TWIN`, with a reason per entry. **T3 is then deleted rather than tested** (RN-2).
+- **Erase twins become drops** at RN-1. **BUILT 2026-09-09, and the list above was both too long and
+  too short.** Too long: `COMPAS`'s first dot, `me1`'s re-print and `TT103`'s first crosshair write
+  the BACKDROP after RN-0, which is never cleared, so their erases still work and still need their
+  twins. Too short: it named routines, and the property is what matters — anything that erases by
+  redrawing its own geometry. Seven went: `EraseShip`, `EraseSun`, `EraseBall`, the stardust's first
+  plot, the laser beam's second draw, the explosion cloud's second draw, and **`LL9` part 9**, which
+  is one line inside `OpenHeapRun` and appears in no list of erases anywhere. `check_twins.py` gains
+  its fourth table, `ERASE_NEEDS_NO_TWIN`, with a reason per entry, and a rule 4 that fails both
+  ways. **T3 is then deleted rather than tested** (RN-2, done).
 - **The dashboard's index plane is not cleared**; it is stored-not-XORed already (R-7) and the bars,
   blips and compass re-emit onto it. A dirty flag per region is the cheap half of Rendering.md's
   declined RN-5 and is all that is needed.
@@ -581,7 +586,7 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 | **T-3** ✅ **built 2026-09-09 (§10)** | §3.7: the waitable object, latency one, **resolve**-on-change over `Picture::ResolveSignature` (not present-on-change — see §3.7 and §10), occlusion idle | The picture's own goldens unchanged; the signature's own test; **owner's, outstanding**: PresentMon before and after on a scripted key, and CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** ✅ **built 2026-09-09 (§10)** | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
 | **RN-1** ✅ **built 2026-09-09 (§10)** | the boundary in `GameLogic/Frame.h`, nineteen sites through it; the clear on and LAZY, and the frame **cleared**, not refreshed from the backdrop (that would ghost); **seven** erase twins become drops, the seventh being `LL9` part 9's, which no list had; the tunnel's rings move to the backdrop; `check_twins.py`'s fourth table and its rule 4 | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
-| **RN-2** ◐ **the RN-0 half amended 2026-09-09** | §1 says two surfaces and 215,364 bytes; §4 names the backdrop; the Status table carries the split. **T3 is NOT deleted**: it stays in force until RN-1's second commit turns the clear on, because the rule and the clear are only equal to each other | `check_docs.py`; the ADR's Status table | — | 0.5 |
+| **RN-2** ✅ **built 2026-09-09 (§10)** | §1 says two surfaces and 215,364 bytes; §4 names the backdrop; the Status table carries the split and the boundary. **T3 is deleted**, in §2 and in the Status table, with what replaced it named in both — `check_twins.py`'s rule 4, which unlike T3 has a check that fails both ways | `check_docs.py`; the ADR's Status table | — | 0.5 |
 | **I-2** `InputFrame` and the layered map | §3.3: the struct, the two `Step`s over it, `Window` producing one per turn from scan codes with events accumulated into it, the layers, `NextKey` and `Flush` off the port. **Two commits**: the signature with the same keys, then the meaning | All three digests unmoved after the first commit; I-6's tests and `DockedSessionTests` after the second, with the level-against-edge answer journaled; `ShellTests` per-layer completeness | `outpost-elite-names` (<!--count:outpost-elite-names-->62) may fall; `effects-seams` unchanged | 2 |
 | **I-4** Coroutines and `Platform` | §3.5 and §3.1: `Task`, the awaitables, the thirty-six routines converted in groups, `Run()` a function over `Game` and `Platform`, `GameShell` and `FlightSession` absorbed, `Abandon` deleted | Every existing comparison green without change to what it asserts; the `GameLoopTests` case of §3.9 on the Linux leg; all digests unmoved | `effects-seams` 5 → 4 or 3; `main-lines` falls | 4–5 |
 | **T-4** Sound | §3.6: the interrupt under the scheduler, the log ring, the chip on the callback thread | `SidRenderTests` unchanged; the zero-delivery replay unmoved and the record re-taken with delivery, journaled as rule 1's first case; no stutter while dragging the title bar | ADR-005 §2 one paragraph | 1–2 |
@@ -1120,6 +1125,18 @@ deleted from `SetCell` and from `SetDot`.
 **`CLEAR_THE_FRAME` is gone.** A `constexpr bool` that is now always true is scaffolding, and
 scaffolding left up is read as structure.
 
+**2026-09-09 — RN-2, the other half: T3 is deleted.** ADR-008 §2 records the deletion rather than
+the rule, and says what replaced it: an erase the frame boundary replaces has NO twin, held by
+`check_twins.py`'s rule 4 and its `ERASE_NEEDS_NO_TWIN` table. **The replacement is a better rule
+than the one it replaces for a reason worth keeping**: T3 was the one rule in the ADR with no cheap
+test, which is Rendering.md's risk R-5 — a missing erase looks like a smear three frames later —
+and rule 4 fails in both directions, so it cannot go quietly wrong. R-5 closes with it.
+
+The Status table gains the boundary as a built row beside T3's deletion, and §5's three rendering
+rows are ✅. The count of dropped twins is SEVEN everywhere it appears, not six, and the seventh is
+named, because the whole lesson of the slice is that a list of routines called "erase" was never
+going to be the right instrument.
+
 ---
 
 ## 11. Every ADR read against this design, 2026-09-09
@@ -1152,7 +1169,7 @@ changes a slice's order; three things changed a slice's content.
 | 007 §1, §6 | `Universe` is a plain aggregate with no virtual; a byte of state gets a cell unless named | The arena and the tasks live on `Game`; the backdrop joins `picture`'s named exception (§3.4) | corrected today |
 | 007 §2 | Three `Step`s, not one; the count of passes stays outside; the death sequence stays synchronous | `Advance` consumes a budget and calls the three (§3.1); the count stays outside for the clock's reason; `Die` becomes a task and the clause is amended at I-4 with `TheDeathIsAsRecorded` as evidence (§3.5, §7) | corrected today |
 | 007 §4, 009 §3 | A record moves in exactly two cases | T-4 is the first case with a proof column; RN-6 is a third case and D1 asks for it | held |
-| 008 §1, §2 | VIC-II-shaped for the erase; T1 to T4 | The shape stays through RN-2 with its reason lapsed, which RN-2 records; T3 goes; T1 and T2 bind every twin until RN-6 | held |
+| 008 §1, §2 | VIC-II-shaped for the erase; T1 to T4 | The shape stays through RN-2 with its reason lapsed, which RN-2 records; **T3 went at RN-1's second commit and RN-2 recorded it**; T1 and T2 bind every twin until RN-6 | held |
 | 008 §4 | The picture is excluded from the hash; the twins-absent replay proves it | The licence for every rendering slice; the backdrop inherits it; `TheReplayIsTheSameWithNoTwins` gates RN-1 | held |
 | 009 §2 | What pins the port — and `ThePictureIsAsRecorded` is not yet in its table | Every rendering gate here is that record; P-0 adds it to the table | held |
 | 009 §4 | "New behaviour must say what it IS and assert it" | Every gate in §5 is an equality the tree can take today, none a comparison | held |

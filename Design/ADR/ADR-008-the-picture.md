@@ -9,7 +9,7 @@ replay run with the twins present and absent — and this ADR asserted it as *th
 never been built, from RS-0 onwards. **It is built now**, so the clause stands again with the
 history of its falsehood beside it rather than tidied away; T1 is measured and Resolution.md's R26
 closes with it. The search that found the gap is [Rendering.md](../Archive/Rendering.md) §11.3. **No
-decision in this ADR moved**: the correction was always to a statement about evidence. **Amended 2026-09-09 (owner rulings on [Platform.md](../Platform.md) §12): the backdrop surface joins §4's exclusion; T3 is deleted at RN-2; and this ADR is SUPERSEDED at RN-6, when the canvas is retired and the picture is the one surface.**
+decision in this ADR moved**: the correction was always to a statement about evidence. **Amended 2026-09-09 (owner rulings on [Platform.md](../Platform.md) §12): the backdrop surface joins §4's exclusion; T3 is deleted at RN-2; and this ADR is SUPERSEDED at RN-6, when the canvas is retired and the picture is the one surface.** **RN-2 CLOSED 2026-09-09: T3 is deleted, in §2 and in the Status table, and what replaced it is named in both.**
 **Depends on:** ADR-001 (fidelity — the game does not change, and §1 now says which surface is the
 verification view), ADR-002 §4 (the canvas and its resolve), ADR-003 (the oracle judges the canvas
 and cannot judge this), ADR-005 §1 (which this amends: 640×400 for 320×200, `ScreenPresenter` for
@@ -78,13 +78,24 @@ Four rules follow and each was earned:
   a wide chart that named more systems would be *deciding*.
 - **T2 — precision comes from upstream at twice the scale, never from interpolation.** A twin may
   use a byte the faithful routine discarded (the scanner's `x_lo`); it may not invent one.
-- **T3 — every erase has a twin erase.** The one rule with no test that can catch its absence
-  cheaply, because a missing erase looks like a smear three frames later. **It is on its way out and
-  is not out yet**: Platform.md's RN-1 gives the frame a boundary and clears it each pass, after
-  which a twin erase does not rub last pass's ship out, it DRAWS it onto an empty surface. RN-1's
-  first commit put the boundary in place with the clear switched off; T3 goes with the second, which
-  turns the clear on and drops the six frame-side erase twins in the same breath. Until then every
-  erase still needs its twin and `check_twins.py` still holds them to it.
+- **T3 — every erase has a twin erase. DELETED 2026-09-09 at RN-1's second commit, and replaced
+  rather than dropped.** It was right for as long as the picture was never cleared: the game erases
+  by drawing again, so a twin had to erase too, and it was the one rule with no test that could
+  catch its absence cheaply, because a missing erase looks like a smear three frames later.
+  Platform.md's RN-1 gives the frame a boundary and clears it at every present, and on a cleared
+  surface a twin erase does not rub last pass's ship out — it DRAWS it, onto an empty frame, as a
+  ghost. **The rule that takes its place is the opposite one and it does have a test**: an erase the
+  frame boundary replaces has NO twin, `check_twins.py`'s rule 4 and its `ERASE_NEEDS_NO_TWIN` table
+  name each one with a reason, and the check fails both ways — put the twin back and it fails,
+  delete the routine's canvas drawing and the entry is reported stale.
+
+  **Seven twins went, and the seventh is why this rule could never have been a list.** Six were
+  named in advance (`EraseShip`, the stardust's first plot, the laser beam's second draw, `EraseSun`,
+  `EraseBall`, the explosion cloud's second draw); the seventh is one line inside `LL9` part 9,
+  which opens a ship's heap run by drawing last pass's ship a second time and is called
+  `OpenHeapRun`. No search for routines named "erase" would have found it. The property is what
+  holds, not the list: **anything that erases by redrawing its own geometry cancels itself on a
+  cleared frame.**
 - **T4 — a twin carries `/// 2x of:` and never a `// 6502:` marker.** It ports no routine, so a
   marker would claim a label it does not have. `tools/check_twins.py` enforces the pairing.
 
@@ -207,5 +218,6 @@ predates this track.
 | The dashboard is redrawn at 640×112 | **Mechanism built; the art is the owner's, outstanding** | Resolution.md §5.3 and §11.1, `GameLogic/DashboardPicture2x.cpp`, `tools/bitmaps.py` |
 | T1 — the twins consume nothing the game notices | **Built 2026-09-09**, a month after §3 said so: `TheReplayIsTheSameWithNoTwins` takes all three digests with the twins switched off and they do not move. Asserted, not measured, from RS-0 until then | §3 above, `FlightReplayTests.cpp`, Resolution.md §8.4, Rendering.md §11.3 |
 | The picture is two surfaces, composited by exclusive-or | **Built at RN-0, 2026-09-09.** 54 sites write the backdrop and 28 the frame, the two counts overlapping by the wipe, which reaches both; every digest the tree holds was unmoved by the split, and two whole-frame tables were recorded before the sites moved so they say what it preserved | §1 above, Platform.md §10, `GameLogic/Picture.cpp` |
-| T3 — every erase has a twin erase | Built as a rule, never testable — **still in force, and due out at RN-1's second commit**, not its first. The boundary exists (`GameLogic/Frame.h`) with the clear switched off; T3 goes when the clear goes on, because the two are only equal to each other | §2 above, Platform.md §5 RN-1 |
+| T3 — every erase has a twin erase | **DELETED 2026-09-09 at RN-1's second commit**, where the frame's clear went on: the two were only ever equal to each other. Replaced by `check_twins.py`'s rule 4 — an erase the boundary replaces has no twin — which unlike T3 has a check that fails both ways. Seven twins went, one of them (`LL9` part 9) in no list anywhere | §2 above, Platform.md §5 RN-1, §10 |
+| The frame has a boundary at the present, and it is lazy | **Built at RN-1, 2026-09-09.** `Elite::EndFrame` marks and the next write that lands clears, so a presenter or a checkpoint reading between two passes sees the frame that was just finished rather than a blank one. The tunnel's rings moved to the backdrop at the same commit, because they accumulate until `LOOK1` wipes the screen and RN-0 had classified them by the wrong question | Platform.md §3.4 and §10, `GameLogic/Frame.h` |
 | The canvas is retired and this ADR is superseded | **Ruled 2026-09-09** (owner, Platform.md D1): built at that track's RN-6, last, after RN-2 and I-4, on the narrowing proof ADR-007 §4 names. §1's shape, §2's twin rule and §3's canvas-shaped evidence lapse with the canvas; the picture's whole-frame record (ADR-009 §2) is the pixels' reference from then on, and ADR-010 records what replaces this document | Platform.md §4 D1, §5 RN-6 |
