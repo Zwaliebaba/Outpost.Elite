@@ -9,10 +9,13 @@ Two things to read before you start:
    indexes them; they are normative, and where this file and an ADR disagree, the ADR wins on
    *what* to build and this file wins on *how it is spelled*.
 
-**What this repository is.** A C++ port of Commodore 64 Elite, from the annotated 6502 source
-in [MasterFile/](MasterFile/) and [Upstream/](Upstream/). The port is faithful first and
-modernised later ([ADR-001](Design/ADR/ADR-001-scope-and-fidelity.md)); the assembled original
-is the test oracle ([ADR-003](Design/ADR/ADR-003-verification.md)).
+**What this repository is.** A C++ port of Commodore 64 Elite, written from the annotated 6502
+source that used to sit in `MasterFile/` and `Upstream/`. The port is faithful first and modernised
+later ([ADR-001](Design/ADR/ADR-001-scope-and-fidelity.md)); the assembled original **was** the test
+oracle ([ADR-003](Design/ADR/ADR-003-verification.md)) until **M6-f deleted both trees and the
+interpreter on 2026-09-08**. What pins the port now is
+[ADR-009](Design/ADR/ADR-009-detachment.md) §2, and a fresh clone needs a compiler and nothing
+else — no submodule, no assembler, no assembled game.
 
 **This is a greenfield tree. Nothing is grandfathered.** The rules below apply to every line
 from the first one. The one exception is the vendored upstream assembler source, which is not
@@ -96,12 +99,12 @@ says why the code is the shape it is.
 | `NeuronCore/` | Foundation static library: the shared precompiled-header content and `Debug.h`'s assert/trace family. No game semantics. | Yes |
 | `GameLogic/` | **The port.** Namespace `Elite`. Deterministic, no window, no GPU, no audio device, no clock, no file system, no float. Draws into an in-memory canvas and emits sound events. | Yes |
 | `Outpost/` | The executable: composition root, window, D3D12 canvas presenter, SID synthesiser, key map, save store. The only project that knows both the game and the platform. | Yes |
-| `Tests/GameLogicTests/` | MSVC CppUnitTest DLL: the 6502 interpreter (with the 6510 port banking and the CIA keyboard matrix the start sequence needs, and the per-address coverage bits), the oracle fixture, and the suites. | Yes |
+| `Tests/GameLogicTests/` | MSVC CppUnitTest DLL: the suites, the replay digests and the state-cell walk. **The 6502 interpreter and the oracle went at M6-b-5/M6-f** (ADR-009 §1); what pins behaviour now is ADR-009 §2. | Yes |
 | `Tests/PortableRunner/` | The same suite under g++: three shim headers, a generator and a shell script. Compiles the test files unmodified — see its own README. | Yes |
-| `Design/` | ADRs, the conversion plan, the source inventory, the risk register. | Yes — see §7 |
-| `MasterFile/` | The 13 annotated master `.asm` files. **Reference only** — never compiled, never on an include path. | **No** |
-| `Upstream/` | The vendored upstream source tree, pinned by commit. **Not ours.** | **No — never edit, never reformat** |
-| `tools/` | Repository checkers and the data extractors. | Yes |
+| `Design/` | ADRs, the conversion plan, the risk register, and the design notes. The source inventory was here until M6-e deleted it. | Yes — see §7 |
+| ~~`MasterFile/`~~ | The 13 annotated master `.asm` files. **Deleted at M6-f, 2026-09-08** (ADR-009 §1). Still in the history, and still carrying the copyright Risk R1 names. | — |
+| ~~`Upstream/`~~ | The vendored upstream source tree, a submodule pinned by commit. **Deleted at M6-f**, so none of it is at the tip and none of it was ever in this history. | — |
+| `tools/` | Repository checkers. The data extractors that read the original (`labels.py`, `c64_source.py`, `extract_tables.py`, `inventory.py`, `golden_diff.py`) went at M6-e/M6-f. | Yes |
 | `x64/`, `.vs/`, `*.user`, `Generated Files/` | Build and IDE output. | **No — and never commit them** |
 
 **Project dependencies, and the edges run one way:**
@@ -142,8 +145,9 @@ columns, no tabs, `namespace` contents indented, pointer binds left** (`std::uin
 Include order is **not** sorted automatically and is grouped by hand: `pch.h` first, then
 Windows headers, then SDK headers, then project headers, then the standard library.
 
-Format the lines you write. Do not reformat files you are only passing through, and **never
-reformat anything under `Upstream/` or `MasterFile/`.**
+Format the lines you write. Do not reformat files you are only passing through. *(The rule that
+followed here — never reformat anything under `Upstream/` or `MasterFile/` — retired with those
+trees at M6-f; the checklist item in §8 goes with it.)*
 
 ---
 
@@ -244,7 +248,7 @@ what is gone is the reconciliation against a ledger that no longer exists.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->131 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->133 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
@@ -427,6 +431,4 @@ the test result file. Do not add an upload that changes that.
 - [ ] `GameLogic` gained no clock, no randomness, no float, no Win32 call.
 - [ ] `tools/check_docs.py` runs.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
-- [ ] Tests for the layer you touched were run, and you said which, and whether the oracle was
-      present.
-- [ ] Nothing under `Upstream/` or `MasterFile/` changed.
+- [ ] Tests for the layer you touched were run, and you said which.

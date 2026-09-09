@@ -472,8 +472,13 @@ namespace Elite
     // EORing, which a second pass therefore cannot remove.
     _universe.canvas.Write(BOTTOM_RIGHT_CORNER, 0u);
     _universe.canvas.Write(BORDER_TOP_RIGHT, 0u);
-    WriteBitmapByte2x(_universe.picture, BOTTOM_RIGHT_CORNER, 0u, false);
-    WriteBitmapByte2x(_universe.picture, BORDER_TOP_RIGHT, 0u, false);
+    // Guarded explicitly: these two twins take the surface by REFERENCE, so there is no null for
+    // `DrawingTwins` to test and section 8.4's switch has to be read here.
+    if (_universe.picture.Drawing())
+    {
+      WriteBitmapByte2x(_universe.picture, BOTTOM_RIGHT_CORNER, 0u, false);
+      WriteBitmapByte2x(_universe.picture, BORDER_TOP_RIGHT, 0u, false);
+    }
 
     // A whole new stardust field over the cleared screen.
     SeedStardustField(_universe.canvas, _universe.dust, _universe.rng, false, &_universe.picture);

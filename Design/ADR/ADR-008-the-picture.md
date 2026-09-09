@@ -4,6 +4,12 @@
 actually built rather than from what [Design/Resolution.md](../Resolution.md) planned — the two
 differ in a dozen places and each is recorded in that document's journal with the measurement that
 moved it.
+**CORRECTED · 2026-09-09.** §3's closing sentence claimed an instrument that did not exist — the
+replay run with the twins present and absent — and this ADR asserted it as *the* proof of T1. It had
+never been built, from RS-0 onwards. **It is built now**, so the clause stands again with the
+history of its falsehood beside it rather than tidied away; T1 is measured and Resolution.md's R26
+closes with it. The search that found the gap is [Rendering.md](../Rendering.md) §11.3. **No
+decision in this ADR moved**: the correction was always to a statement about evidence.
 **Depends on:** ADR-001 (fidelity — the game does not change, and §1 now says which surface is the
 verification view), ADR-002 §4 (the canvas and its resolve), ADR-003 (the oracle judges the canvas
 and cannot judge this), ADR-005 §1 (which this amends: 640×400 for 320×200, `ScreenPresenter` for
@@ -84,6 +90,22 @@ test failed to see something*:
 And **the replay runs with the twins present and absent and requires the same digest**, which is
 what proves T1 rather than asserting it.
 
+**THIS CLAUSE WAS FALSE WHEN WRITTEN AND IS TRUE SINCE 2026-09-09.** From RS-0 until then the run
+did not exist: `ELITE_SCREEN_SHADOW`, the test-only define Resolution.md §8.4 names, appeared
+nowhere in `GameLogic/`, `Outpost/`, `Tests/`, either project file or the portable runner — its only
+occurrence in the repository was inside the sentence describing it — and `FlightReplayTests.cpp` ran
+its three digests once, twins present. RS-0's acceptance row reads "§8.4 green with nothing to twin
+yet", which is how a clause can pass at the moment it is written and never be built afterwards. **So
+this ADR published an assertion as a proof for a month**, and that is the part worth remembering:
+§3 opens by saying three of its five clauses were added "because a green test failed to see
+something", and this was a sixth thing no test saw — in the one clause that claimed to be the
+measurement.
+
+It is now `TheReplayIsTheSameWithNoTwins`, and all three digests are identical with the twins
+switched off. The mechanism is a runtime switch (`Picture::SetDrawing`, and the one guard every twin
+shares, `DrawingTwins`) rather than the compile-time define the design named, for the reason
+Resolution.md §8.4 records. [Rendering.md](../Rendering.md) §11.3 has the search that found the gap.
+
 ### §4 The picture is not in the state hash
 
 `Universe::picture` and `Universe::screenLayout` are the fields `Elite::HashState` excludes
@@ -159,3 +181,5 @@ predates this track.
 | Every docked screen is re-flowed | Built, two blocked | Resolution.md §6.3 |
 | The upscale is gone | Built at RS-6 | `GameLogic/Picture.cpp` |
 | The dashboard is redrawn at 640×112 | **Mechanism built; the art is the owner's, outstanding** | Resolution.md §5.3 and §11.1, `GameLogic/DashboardPicture2x.cpp`, `tools/bitmaps.py` |
+| T1 — the twins consume nothing the game notices | **Built 2026-09-09**, a month after §3 said so: `TheReplayIsTheSameWithNoTwins` takes all three digests with the twins switched off and they do not move. Asserted, not measured, from RS-0 until then | §3 above, `FlightReplayTests.cpp`, Resolution.md §8.4, Rendering.md §11.3 |
+| T3 — every erase has a twin erase | Built as a rule, never testable — and **due for deletion**: Rendering.md's RN-1 gives the picture a frame boundary, after which there are no erases to pair | §2 above, Rendering.md §6 |

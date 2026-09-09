@@ -10,7 +10,7 @@ closed and `python tools/mutate.py --unit tactics` is 16 of 16 — the last one 
 first `BCC` jumping to part SIX so that a ship above half energy never launches a missile (plan
 §6.152, §6.153) and so are the hyperspace jump's last two, so **every recorded mutant in the corpus
 is caught or a proved equivalent** (§6.156). **What is left needs a person, not a slice**: one
-hand-checked screenshot for the presenter, which is the only part of the picture no oracle reaches,
+hand-checked screenshot for the presenter, which is the only part of the picture no test reaches,
 and a written answer from the rights holders for 0e. Plan §1.2 has them. Two items left that list on
 2026-09-06 — ADR-005 §1's raster effects, built as slice 4f, where the hyperspace tearing turned out
 not to exist in this build at all (§6.155); and the missing goldens, three of which were already
@@ -22,17 +22,17 @@ the ADRs brought back into agreement with the tree. **The M6-0 gate closed 2026-
 things the oracle could pin and nothing would pin after it is recorded, among them the interpreter
 banking the I/O page so the start sequence runs on both machines, a whole frame with an explosion in
 it, the replay reaching death and the escape pod, a coverage instrument CI reads against the
-ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is built, 2026-09-08**: the four gaps the coverage instrument named are closed — and the first fixture ever to roll a trader found that spawning one sends the pass back to the top of the main loop, where the port went on to part 3 — and the `Oracle` seam is in the tree with the corpus measured at 3.2 million calls and 222 MB. **M6-b is blocked on two owner rulings** and Modernize.md §4.10 states both: what a fixture that answers every test costs, and where the label table and the base image come from once the interpreter goes. In between, [Resolution.md](Resolution.md)'s RS-0 to RS-4 ran (2026-09-07) and four of the gate's eight rows are what their verification rests on (Resolution.md §2). **Input and time, 2026-09-08**: six slices of
+ledger's *Port* rows, and a mutant floor of fourteen files. **M6 CLOSED on 2026-09-08, and [ADR-009](ADR/ADR-009-detachment.md) is what it decided.** M6-a built the recorder and measured the corpus at 3.2 million calls; M6-b was scoped to commit a fixture from it. The owner asked "why bother?", read the corpus's recommendation to build one, and ruled the other way — so the oracle went with nothing put in its place. `Cpu6502`, `Oracle`, `OracleImage`, `Upstream/`, `MasterFile/`, `labels.py` and `inventory.py` are deleted, the `// 6502:` markers reached zero, and the suite went 469 tests to 131. What pins the port now is ADR-009 §2's four instruments, and a fresh clone needs a compiler and nothing else. Beside it, [Resolution.md](Resolution.md)'s RS-0 to RS-6 ran (2026-09-07/08) and the 640×400 picture is built. **Input and time, 2026-09-08**: six slices of
 [InputTimer.md](InputTimer.md) are built beside M6-a — the pause screen removed and its thirteen
 settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one press, the fire key
 no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
-while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
+while the oracle was still here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
 repository** since M6-b-7 -- no assembler, no submodule, no assembled game. The suite is
-**<!--count:tests-->131 tests** and
+**<!--count:tests-->133 tests** and
 CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
-The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
-under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
+The task this corpus planned: take the annotated 6502 source of **Commodore 64 Elite** that sat
+under `MasterFile/` until M6-f removed it, and produce a modern C++ port of the game inside the
 `Outpost` solution, on the same engineering conventions as the sibling repositories
 (Outpost.Frontier, Outpost.Warzone).
 
@@ -47,10 +47,10 @@ in this repository either.
 
 **The count used to read "13 master files ... 5,615 lines" and that counted the FOLDER**, not the
 source: upstream's own `README.md` sits beside the twelve `.asm` files and is 39 lines of
-Markdown. `inventory.py` had been printing twelve since the day it was written. Both numbers are
-now marked and checked by `tools/check_counts.py`; the thirteen-file figure is still the right
-one for the licence exposure, which is every tracked file in the folder, and ADR-001 §5 says so
-there.
+Markdown. `inventory.py` had been printing twelve since the day it was written. Both numbers were
+marked and checked by `tools/check_counts.py` until M6-f deleted the folder they counted; the
+thirteen-file figure remains the right one for the licence exposure, which is every file the
+history still carries, and ADR-001 §5 says so there.
 
 **Slice 0a fixed that**: the upstream tree sat at `Upstream/elite-source-code-library`, pinned
 at commit `aa3f7ee`, as a **submodule** rather than a copy, and all 712 include paths resolved.
@@ -64,12 +64,12 @@ clone needs nothing but a compiler. See
 |---|---|---|
 | 1 | this file | what exists and where the decisions are |
 | 2 | [Elite-Conversion-Plan.md](Elite-Conversion-Plan.md) | the inventory of what we have, the target architecture, the phased build order with acceptance criteria, and the verification strategy. **The only document that sequences.** |
-| 3 | [Source-Inventory.md](Source-Inventory.md) | every group of original routines, which C++ file it becomes, and whether it is ported, replaced or dropped. The coverage ledger the port is measured against. |
-| 4 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
-| 5 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
-| 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06; M0–M5 built 2026-09-06/07, the M6-0 gate closed 2026-09-07, M6-a ready and the resolution track running ahead of it): what the port carried from the 6502 as its architecture, measured and ratcheted; the target C++ shape; six phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
-| 7 | [Resolution.md](Resolution.md) | **the 640×400 picture, BUILT 2026-09-07/08 in seven slices** (RS-0 to RS-6; the design proposed 2026-09-07 with eight owner rulings taken the same day, and the journal records a dozen places measurement moved it): the executable presents a second, 640×400 rendering of the same frame — the space view at twice the line resolution, the dashboard redrawn at twice its detail, 8×8 text on an 80×50 grid with every docked screen re-flowed — drawn beside the C64 canvas by twins of the drawing routines, while the canvas stays the view every oracle test, golden and fixture reads. **ADR-008 is what it decided**; read this for how it got there, including five improvements declined with the measurement that declined them. Reads after Modernize.md, because it obeys that plan's rules and sequences around its M6. |
-| 8 | [InputTimer.md](InputTimer.md) | **input and time** (analysis and plan, opened 2026-09-08; its journal in §9 says which slices are built): how the keyboard reaches the game today and where it departs from the original's `TT217` and `DK4`, what is left of the joystick, and how the program is paced — one vertical blank of the player's monitor per turn, three accumulators over a cycle-cost model. Twelve slices in two tracks: an `InputFrame` per step, `TT217` ported into the library, a layered key map on scan codes, the pause screen removed by owner ruling and its settings given a file, a single frame clock with a simulated vertical blank, the docked screens as coroutines. One deadline: the cost measurements must be taken before M6-b takes the live oracle out of CI. |
+| 3 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
+| 4 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
+| 5 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06; M0–M5 built 2026-09-06/07, the M6-0 gate closed 2026-09-07, M6-a ready and the resolution track running ahead of it): what the port carried from the 6502 as its architecture, measured and ratcheted; the target C++ shape; six phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
+| 6 | [Resolution.md](Resolution.md) | **the 640×400 picture, BUILT 2026-09-07/08 in seven slices** (RS-0 to RS-6; the design proposed 2026-09-07 with eight owner rulings taken the same day, and the journal records a dozen places measurement moved it): the executable presents a second, 640×400 rendering of the same frame — the space view at twice the line resolution, the dashboard redrawn at twice its detail, 8×8 text on an 80×50 grid with every docked screen re-flowed — drawn beside the C64 canvas by twins of the drawing routines, while the canvas stays the view every oracle test, golden and fixture reads. **ADR-008 is what it decided**; read this for how it got there, including five improvements declined with the measurement that declined them. Reads after Modernize.md, because it obeys that plan's rules and sequences around its M6. |
+| 7 | [InputTimer.md](InputTimer.md) | **input and time** (analysis and plan, opened 2026-09-08; its journal in §9 says which slices are built): how the keyboard reaches the game today and where it departs from the original's `TT217` and `DK4`, what is left of the joystick, and how the program is paced — one vertical blank of the player's monitor per turn, three accumulators over a cycle-cost model. Twelve slices in two tracks: an `InputFrame` per step, `TT217` ported into the library, a layered key map on scan codes, the pause screen removed by owner ruling and its settings given a file, a single frame clock with a simulated vertical blank, the docked screens as coroutines. One deadline: the cost measurements must be taken before M6-b takes the live oracle out of CI. |
+| 8 | [Rendering.md](Rendering.md) | **erase-by-exclusive-or, and what it would take to render frames instead** (analysis, opened 2026-09-08 from an owner question; **all four rulings taken the same day**, no slice built; **revalidated against `a827b97` on 2026-09-09**, after M6 closed): the presenter is already a conventional flip-model swap chain, so the exclusive-or the question names is not in the renderer but in game state — a line heap that is also a spawn limiter, a `Drawn` bit, and a carry that reaches `DORND`. The finding that shapes it is that **nothing in the program has a frame boundary at all**: neither `Canvas::Clear` nor `Picture::Clear` is called by it. **Option A is ruled**: the picture becomes a rendered frame on the licence ADR-008 §4 wrote, and the canvas and the game are not touched. **The track is three slices and stops at the frame boundary**, delivering a picture pixel-identical to today's: no visible change, no test rewritten, ADR-008's T3 deleted rather than tested. Option B — taking the exclusive-or out of the game — is declined, and §5.2 records why the oracle's departure closed rather than opened it. **Its §11 reports a defect it found in ADR-008 §3** — the twins-absent replay that clause claimed as the proof of T1 had never been built — **and §11.3 records the repair**: the run exists since 2026-09-09, T1 is measured, and Resolution.md's R26 closed with it. |
 
 ## Decisions at a glance
 
@@ -88,20 +88,27 @@ clone needs nothing but a compiler. See
 ## Two things this corpus is deliberately not
 
 - **Not a feature design for phase 6.** Higher resolution, smoother motion, gamepad, new UI: all
-  real, all later, all gated on the faithful port passing its oracle and golden tests
-  (ADR-001 §4). Building toward a nicer game before the original one runs is the failure mode
-  the plan is shaped to avoid. **What the corpus does hold, since 2026-09-06, is a modernisation
-  plan for the PROGRAM rather than the game**: [Modernize.md](Modernize.md) restructures the code
-  with no behavioural change and its own ratchet (`tools/check_modernize.py`), and every one of
-  its slices is gated on the same oracle. The gate ADR-001 §4 set is met; that document's
-  eight questions were ruled on 2026-09-06 and its last phase removes the original from the tree.
+  real, all later, all gated on the faithful port passing its tests — which until 2026-09-08 meant
+  the oracle and the goldens (ADR-001 §4), and now means ADR-009 §2's four instruments. Building
+  toward a nicer game before the original one runs is the failure mode the plan is shaped to avoid.
+  **What the corpus does hold, since 2026-09-06, is a modernisation plan for the PROGRAM rather
+  than the game**: [Modernize.md](Modernize.md) restructures the code with no behavioural change
+  and its own ratchet (`tools/check_modernize.py`), and every one of its slices was gated on that
+  same oracle while it lasted. The gate ADR-001 §4 set is met; that document's eight questions were
+  ruled on 2026-09-06 and its last phase removed the original from the tree. **Two of the later
+  documents are past that gate**: [Resolution.md](Resolution.md) is built, and
+  [Rendering.md](Rendering.md) is ruled and unbuilt.
 - **Not a licence.** The upstream source carries no licence (ADR-001 §5, Risk R1), and the
   owner intends to publish eventually, which makes this the project's largest exposure rather
   than a footnote. Slice **0e** seeks the rights holders' permission. **The repository is
   already public**, by owner ruling on 2026-09-03 that reversed a same-day ruling to make it
-  private (Risk R1, realised and accepted rather than mitigated). `Upstream/` is a submodule, so
-  none of its content is in this history — but `MasterFile/`'s 13 files are, and they carry
-  the same copyright. What still closes 0e is a written answer from the rights holders.
+  private (Risk R1, realised and accepted rather than mitigated). **M6-f removed both from the tip
+  on 2026-09-08**, which changes the exposure without ending it: `Upstream/` was a submodule, so
+  none of its content was ever in this history, but `MasterFile/`'s 13 files are still in it, and
+  the generated data tables in `GameLogic/` — the font, the tokens, the blueprints, the sine and
+  arctangent tables — carry the same copyright at the tip today. ADR-009 §1 calls that the accepted
+  residual and says why: the tables *are* the inheritance. What still closes 0e is a written answer
+  from the rights holders.
 
 ## Conventions
 
@@ -110,6 +117,10 @@ repository in slice 0c from its own `.clang-format`, `.clang-tidy` and `.editorc
 functions and files; `_param`, `m_member`, `g_global`; `UPPER_CASE` constants; Allman braces,
 two-space indent, 140 columns; flat project folders; `/std:c++latest`, x64, v145.
 
-Every ported function carries the original label in a comment on its declaration
-(`// 6502: LL9`), and `Source-Inventory.md` is the table that says where each label went, so
-that "where did TACTICS part 4 end up" is a grep rather than an archaeology.
+**Until M6-e, every ported function carried the original label in a comment on its declaration
+(`// 6502: LL9`), and `Source-Inventory.md` was the table that said where each label went.** Both
+are gone: the markers reached zero at M6-e-4, the ledger and `tools/inventory.py` were deleted at
+M6-e-1, and AGENTS.md §1 R7 is marked RETIRED. The original's *names* stay in the commentary by
+owner ruling (Modernize.md §1 R-b), so "where did `TACTICS` part 4 end up" is still a grep — of the
+prose rather than of a ledger. [ADR-009](ADR/ADR-009-detachment.md) is the record of what replaced
+all of it.

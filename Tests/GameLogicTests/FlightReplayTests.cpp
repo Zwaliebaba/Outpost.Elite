@@ -510,6 +510,73 @@ namespace GameLogicTests
                        Elite::LoopOutcome::Escaped, L"RECORDED_ESCAPE");
     }
 
+    /*
+     * All three flights again with the TWINS SWITCHED OFF, and not one digest may move
+     * (Design/Resolution.md section 8.4).
+     *
+     * THIS IS RULE T1'S MEASUREMENT, AND IT DID NOT EXIST UNTIL 2026-09-09. T1 says the faithful
+     * routine decides and the twin only computes where -- so a twin may consume nothing the game
+     * would notice: no random number, no heap pointer, no canvas byte. ADR-008 section 3 published
+     * that as PROVED by exactly this test, and the test had never been written; the define the
+     * design named for it, `ELITE_SCREEN_SHADOW`, appears nowhere but in the sentence describing
+     * it. Design/Rendering.md section 11.3 is the finding, and this is its repair.
+     *
+     * A RUNTIME SWITCH RATHER THAN THE COMPILE-TIME ONE THE DESIGN ASKED FOR, which is the single
+     * place this departs from section 8.4 and is recorded there as CORRECTED. A define needs a
+     * second compilation of `GameLogic` and a second test binary beside it; `Picture::SetDrawing`
+     * needs neither and reaches every twin through the one guard they all share, `DrawingTwins`.
+     * What a define would additionally have caught is a twin reading something BEFORE its guard --
+     * so where the guard sits is what a reviewer checks, and every one of the forty-nine wraps the
+     * whole of its twin's work.
+     *
+     * THE PLANE ASSERTIONS ARE WHAT STOP THIS PASSING VACUOUSLY, and they are not decoration: a
+     * `SetDrawing` that did nothing would leave every digest exactly where it was and the test
+     * would be green for precisely the wrong reason. So the run also proves the switch bit -- the
+     * bitmap plane is untouched with the twins off, and written with them on.
+     */
+    TEST_METHOD(TheReplayIsTheSameWithNoTwins)
+    {
+      const auto anythingDrawn = [](const Elite::Picture& _picture) {
+        for (const std::uint8_t byte : _picture.Bitmap())
+        {
+          if (byte != 0u)
+          {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      auto quiet = std::make_unique<FlightPort>();
+      quiet->universe.picture.SetDrawing(false);
+      const Trace quietFlight = Fly(*quiet);
+      AssertAsRecorded(quietFlight, RECORDED, sizeof(RECORDED) / sizeof(RECORDED[0]), RECORDED_STEPS, RECORDED_OUTCOME,
+                       L"RECORDED with no twins");
+      Assert::IsFalse(anythingDrawn(quiet->universe.picture), L"a twin drew on the picture with the twins switched off");
+
+      auto quietDeath = std::make_unique<FlightPort>();
+      quietDeath->universe.picture.SetDrawing(false);
+      const Trace death = Fly(*quietDeath, {}, Ending::Died);
+      AssertAsRecorded(death, RECORDED_DEATH, sizeof(RECORDED_DEATH) / sizeof(RECORDED_DEATH[0]), RECORDED_DEATH_STEPS,
+                       Elite::LoopOutcome::Died, L"RECORDED_DEATH with no twins");
+      Assert::AreEqual(RECORDED_DEATH_FRAMES, death.deathFrames, L"the wreckage ran for as many frames with no twins");
+
+      auto quietPod = std::make_unique<FlightPort>();
+      quietPod->universe.picture.SetDrawing(false);
+      const Trace pod = Fly(*quietPod, {}, Ending::Escaped);
+      AssertAsRecorded(pod, RECORDED_ESCAPE, sizeof(RECORDED_ESCAPE) / sizeof(RECORDED_ESCAPE[0]), RECORDED_ESCAPE_STEPS,
+                       Elite::LoopOutcome::Escaped, L"RECORDED_ESCAPE with no twins");
+
+      // The control. Without this the three runs above prove only that a disabled surface stays
+      // blank, which would also be true if the twins had never been wired up at all.
+      auto drawn = std::make_unique<FlightPort>();
+      const Trace control = Fly(*drawn);
+      Assert::IsTrue(anythingDrawn(drawn->universe.picture),
+                     L"the twins drew nothing even switched ON, so this test proves nothing about them");
+      Assert::IsTrue(control.checkpoints.size() == quietFlight.checkpoints.size(),
+                     L"the two runs took a different number of checkpoints");
+    }
+
     /// The same script twice in one process gives the same digests, step for step.
     TEST_METHOD(TheReplayIsDeterministic)
     {

@@ -174,7 +174,7 @@ namespace Elite
             if (offsetX.high == 0u)
             {
               PlotPixel(_canvas, offsetX.low, y1, distance);
-              if (_picture != nullptr)
+              if (DrawingTwins(_picture))
               {
                 // The particle's two offsets are eight-bit screen coordinates the cloud's own
                 // generator produced, with nothing under them: `EXS1` adds a byte to a byte. So the

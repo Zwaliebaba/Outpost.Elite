@@ -6,7 +6,7 @@ source, the labels in the code and the assembly in the comments all go, §6 Phas
 §4 set for phase 6 was met on 2026-09-08, the day before the oracle left**: every oracle suite,
 every whole-bitmap comparison and the docked replay were green on the faithful build, 469 tests
 with the original beside them, all fifteen repository checks passing, and every recorded mutant
-caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->131 tests now, and
+caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->133 tests now, and
 what it can still say is M6-b's subject rather than the gate's. Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -105,6 +105,12 @@ Anything not in this table is a routine judgement call this plan makes itself an
 This section is the reading a person needs before touching any of it: how execution and data flow
 through the whole program, in the port's own names. The 6502 labels are given once each so that the
 `Source-Inventory.md` row can be found.
+
+**Read §2 as of M2's opening, not as of today (noted 2026-09-09).** It is the decode this plan was
+written from and it is kept unedited as that record. Two things in it are now history: the ledger it
+sends you to was deleted at M6-e, and **§2.7's first instrument — the oracle — no longer exists**.
+What pins behaviour now is [ADR-009](ADR/ADR-009-detachment.md) §2, and §2.7's mutant bullet is the
+only one of its three that survived M6 intact.
 
 ### 2.1 Two outer loops, and where they live
 

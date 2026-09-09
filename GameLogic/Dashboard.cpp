@@ -106,7 +106,7 @@ namespace Elite
       row = static_cast<std::uint8_t>(row + 2u + 6u);
     }
 
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       /*
        * Thirty-two steps from the same byte with one fewer shift (Dashboard2x.h), and the
@@ -169,7 +169,7 @@ namespace Elite
      * No clearing of the carry, and none is needed: the only way out of the loop is a comparison
      * against 30 that did not branch, so the carry is set and this adds 320 rather than 64.
      */
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       // The lit block is the value itself: each of the four blocks absorbs four, so a value under
       // sixteen lights fat pixel `value` and anything else lights nothing. Thirty-two slots here,
@@ -187,7 +187,7 @@ namespace Elite
     const std::uint8_t cell = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_missile - 1u) ^ 3u);
     _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _palette);
 
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       SetMissileIndicator2x(*_picture, _canvas, _missile);
     }
@@ -232,7 +232,7 @@ namespace Elite
     _canvas.ExclusiveOr(ECM_CELL, BULB_COLOUR);
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(ECM_CELL + 40u), BULB_COLOUR);
 
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       ToggleBulb2x(*_picture, _canvas, ECM_CELL);
     }
@@ -243,7 +243,7 @@ namespace Elite
     _canvas.ExclusiveOr(STATION_CELL, BULB_COLOUR);
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(STATION_CELL + 40u), BULB_COLOUR);
 
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       ToggleBulb2x(*_picture, _canvas, STATION_CELL);
     }

@@ -263,7 +263,7 @@ namespace Elite
       {
         _canvas.Write(static_cast<std::uint16_t>(base + cell), TEXT_COLOUR_WHITE);
       }
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The same thirty-two cells, as the four wide ones each becomes. `base` is one past the
         // block, which is `celllook`'s three-cell offset plus the cursor's own one (ADR-002 §7).
@@ -329,7 +329,7 @@ namespace Elite
       base = static_cast<std::uint16_t>(base + Canvas::ROW_BYTES);
     }
 
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       ClearMessageRows2x(*_picture, _layout);
     }
@@ -417,7 +417,7 @@ namespace Elite
        * The recursion terminates because the clear leaves `YC` at 1.
        */
       ClearTextArea(m_canvas, m_state);
-      if (m_picture != nullptr)
+      if (DrawingTwins(m_picture))
       {
         ClearTextArea2x(*m_picture, Layout()); // Resolution.md §4, rule T3 -- every erase has a twin
       }
@@ -448,7 +448,7 @@ namespace Elite
       {
         m_canvas.Write(static_cast<std::uint16_t>(previous + row), 0);
       }
-      if (m_picture != nullptr)
+      if (DrawingTwins(m_picture))
       {
         // The decrement above already moved the cursor, so this IS the cell just blanked. The
         // layout counts canvas cells, and `XC` is four cells in from the first of them.
@@ -482,7 +482,7 @@ namespace Elite
     // three-cell offset in `celllook` come out right.
     m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.palette);
 
-    if (m_picture != nullptr)
+    if (DrawingTwins(m_picture))
     {
       /*
        * The cursor was advanced before the glyph was drawn, so the cell the glyph went on is the

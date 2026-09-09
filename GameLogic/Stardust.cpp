@@ -47,7 +47,7 @@ namespace Elite
     const AddSignedResult sum = AddSigned(_value, _addend);
     _dust.yLow[_at] = sum.low; // Into SYL
     (void)PlotRelativePixel(_canvas, _across, _down, _distance);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       PlotRelativePixel2x(*_picture, _across, _down, _acrossLow, _downLow, _distance);
     }
@@ -64,7 +64,7 @@ namespace Elite
       _dust.x[at] = was;
 
       (void)PlotRelativePixel(_canvas, was, _dust.y[at], _dust.z[at]);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The fractions are NOT swapped by `FLIP`, so the twin's half-pixel goes on the axis the
         // byte now belongs to rather than the one it came from -- which is what the next frame's
@@ -215,7 +215,7 @@ namespace Elite
       }
 
       (void)PlotRelativePixel(_canvas, x1, y1, distance);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The fractions the loop has just stored, which are this speck's own: the mark is drawn at
         // the position the two bytes name, and next frame's erase reads the same two.
@@ -347,7 +347,7 @@ namespace Elite
       }
 
       (void)PlotRelativePixel(_canvas, x1, y1, distance);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The fractions the loop has just stored, which are this speck's own: the mark is drawn at
         // the position the two bytes name, and next frame's erase reads the same two.
@@ -512,7 +512,7 @@ namespace Elite
       }
 
       (void)PlotRelativePixel(_canvas, x1, y1, distance);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The fractions the loop has just stored, which are this speck's own: the mark is drawn at
         // the position the two bytes name, and next frame's erase reads the same two.

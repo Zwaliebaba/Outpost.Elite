@@ -18,7 +18,7 @@ namespace Elite
     do
     {
       _canvas.Write(static_cast<std::uint16_t>(_pageBase + y), 0u); // The store through `SC`
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         WriteBitmapByte2x(*_picture, static_cast<std::uint16_t>(_pageBase + y), 0u, false);
       }
@@ -57,7 +57,7 @@ namespace Elite
   {
     // The row, then 0 and 255 as its ends, and a tail call into HLOIN.
     DrawHorizontalLine(_canvas, 0u, 255u, _row);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawCanvasRow2x(*_picture, 0u, 255u, _row);
     }
@@ -75,7 +75,7 @@ namespace Elite
 
         // The pattern EORed into the byte -- so doing it twice puts it back.
         _canvas.Write(at, static_cast<std::uint8_t>(_canvas.Read(at) ^ _pattern));
-        if (_picture != nullptr)
+        if (DrawingTwins(_picture))
         {
           WriteBitmapByte2x(*_picture, at, _pattern, true);
         }
@@ -92,7 +92,7 @@ namespace Elite
     // The corner byte the rule stops one short of, filled by hand. The canvas is laid out
     // from SCBASE contiguously, so the address IS the offset.
     _canvas.Write(BOTTOM_RIGHT_CORNER, 0xFFu);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       WriteBitmapByte2x(*_picture, BOTTOM_RIGHT_CORNER, 0xFFu, false);
     }
@@ -112,7 +112,7 @@ namespace Elite
       {
         // Every bit set, and a STORE rather than the EOR `BOXS2` above it uses.
         _canvas.Write(static_cast<std::uint16_t>(cell + offset), 0xFFu);
-        if (_picture != nullptr)
+        if (DrawingTwins(_picture))
         {
           WriteBitmapByte2x(*_picture, static_cast<std::uint16_t>(cell + offset), 0xFFu, false);
         }
@@ -141,7 +141,7 @@ namespace Elite
 
     // One byte, in cell 35 of the top character row.
     _canvas.Write(0x118u, 1u);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       WriteBitmapByte2x(*_picture, 0x118u, 1u, false);
     }
@@ -204,7 +204,7 @@ namespace Elite
       CopyPagesDown(_canvas, DASHBOARD_IMAGE.data(), DASHBOARD_BITMAP, 8u, 0u);
       CopyPagesDown(_canvas, DASHBOARD_IMAGE.data() + 8u * 256u, static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 256u), 1u, 0xC0u);
 
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The same picture on the index plane, as sixteen-colour art at 640x112 (Dashboard2x.h).
         // The twins below draw over it at twice the detail from here.
@@ -242,7 +242,7 @@ namespace Elite
       {
         _canvas.Write(static_cast<std::uint16_t>(cell + offset), TEXT_COLOUR_WHITE);
       }
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The four wide cells each of those thirty-two becomes. The offset is a SCREEN RAM address,
         // so the canvas cell is what it is past `SCREEN_CELLS`.
@@ -270,7 +270,7 @@ namespace Elite
     // stops at zero rather than through it.
     ZeroPageDown(_canvas, page, static_cast<std::uint8_t>((DASHBOARD_BITMAP & 0xFFu) - 1u), _picture);
     _canvas.Write(page, 0u);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       WriteBitmapByte2x(*_picture, page, 0u, false);
     }
@@ -310,7 +310,7 @@ namespace Elite
     {
       _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 4u + offset), 0x70u);
     }
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       SetCellRun2x(*_picture, 4, 32, CellPalette::Of(0x70u));
     }
@@ -323,7 +323,7 @@ namespace Elite
       {
         _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 0x54u + offset), 0x70u);
       }
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         SetCellRun2x(*_picture, 0x54, 32, CellPalette::Of(0x70u));
       }
@@ -332,7 +332,7 @@ namespace Elite
     DrawScreenRule(_canvas, 199u, _picture); // BOXS on row 199
 
     _canvas.Write(0x1F1Fu, 0xFFu); // The corner byte again
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       WriteBitmapByte2x(*_picture, 0x1F1Fu, 0xFFu, false);
     }

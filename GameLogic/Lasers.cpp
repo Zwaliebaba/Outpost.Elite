@@ -30,7 +30,7 @@ namespace Elite
       beam.y1 = _burst.y;
       beam.y2 = 2u * VIEW_CENTRE_Y - 1u; // The bottom of the view
       (void)DrawLine(_canvas, beam);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The beam's ends are eight-bit view coordinates the routine states outright -- the corner
         // is a literal and the convergence point is `LASX`/`LASY` -- so the wide beam is those
@@ -43,7 +43,7 @@ namespace Elite
       beam.x2 = _right; // X2 from Y this time
       beam.y2 = 2u * VIEW_CENTRE_Y - 1u;
       (void)DrawLine(_canvas, beam); // LL30 again, as a tail call
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         DrawLine2x(*_picture, beam);
       }

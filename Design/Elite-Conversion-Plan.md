@@ -31,8 +31,9 @@ ideas:
    flight), then flight and drawing, then combat and the wider universe, then sound. Each slice
    ends in something that runs.
 
-The work is sized in [§6](#6-the-build-order); the coverage ledger is
-[Source-Inventory.md](Source-Inventory.md).
+The work is sized in [§6](#6-the-build-order). The coverage ledger was `Source-Inventory.md`, and it
+was **deleted at M6-e** with `tools/inventory.py` and the `// 6502:` markers it reconciled
+(Modernize.md §1 R-b, ADR-009 §1); the port is judged by its own tests now.
 
 **Where it stands, 2026-09-06.** Phases 0 to 5 are complete — all twenty-six slices, with 0b-b
 cancelled and 0e open by owner acceptance rather than unbuilt. Slice 4d closed phase 4 and with it
@@ -138,7 +139,7 @@ is preserved in the history and was true then.
   two worlds' plumbing, and reach <!--count:outpost-elite-names-->63 `Elite::` names between them.
   It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
   owner ruling). It launches, flies, fights, docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->131 tests in <!--count:test-files-->29 files: the 6502 interpreter with its cycle counter,
+- `Tests/GameLogicTests/` — <!--count:tests-->133 tests in <!--count:test-files-->29 files: the 6502 interpreter with its cycle counter,
   its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
   and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
@@ -263,8 +264,8 @@ its rate depended on how much was on screen. §5.3 says how the executable paces
 
 ### 2.2 Module map (files in `GameLogic/`, flat, PascalCase — ADR-004)
 
-Only the shape; the full label-by-label mapping is in
-[Source-Inventory.md](Source-Inventory.md).
+Only the shape. The full label-by-label mapping was `Source-Inventory.md`, deleted at M6-e
+(ADR-009 §1).
 
 | Area | Files | Original |
 |---|---|---|

@@ -196,6 +196,39 @@ namespace Elite
       return m_dashboard;
     }
 
+    // ---- the twin switch ----------------------------------------------------------------------
+
+    /*
+     * Are the twins drawing? True always, except inside the one test that proves they need not be
+     * (Resolution.md section 8.4, `TheReplayIsTheSameWithNoTwins`).
+     *
+     * WHAT THE TEST IS FOR. Rule T1 says the faithful routine decides and the twin only computes
+     * where -- so a twin may consume nothing the game would notice: no random number, no heap
+     * pointer, no canvas byte. That was asserted from RS-0 to 2026-09-09 and never measured; the
+     * design named a compile-time define for it and the define was never written. Switching the
+     * twins off at runtime and requiring the same replay digest is the measurement.
+     *
+     * WHY THE FLAG LIVES HERE AND NOT ON `Universe`. It is not game state and must never become
+     * any: `Universe` is folded by `HashState` and walked cell by cell by `StateCells`, so a flag
+     * there would need an exclusion of its own and a row saying why. This surface is ALREADY the
+     * field both of them skip (ADR-008 section 4), so a flag inside it inherits that treatment and
+     * adds no new hole. It is also why the flag cannot lie: a test that switched the twins off and
+     * moved the digest would have proved the opposite of what it set out to.
+     *
+     * IT DOES NOT GATE THE STORES BELOW, and that is deliberate. The gate is at the CALL SITES,
+     * through `DrawingTwins`, so that a twin switched off does not run at all rather than running
+     * and writing nowhere -- a twin that rolled the generator and then wrote nothing would still
+     * have rolled it, and a test that only blocked the write could not see that.
+     */
+    [[nodiscard]] bool Drawing() const noexcept
+    {
+      return m_drawing;
+    }
+    void SetDrawing(bool _drawing) noexcept
+    {
+      m_drawing = _drawing;
+    }
+
     // ---- the picture -------------------------------------------------------------------------
 
     /// Blank every plane. The regions are NOT reset: which slices have landed is a fact about the
@@ -261,6 +294,27 @@ namespace Elite
     std::array<std::uint8_t, BITMAP_SIZE> m_bitmap{};
     std::array<CellPalette, CELL_COUNT> m_cells{};
     std::array<std::uint8_t, DASHBOARD_SIZE> m_dashboard{};
+
+    /// See `Drawing` -- true except inside section 8.4's replay. Not game state and never folded.
+    bool m_drawing = true;
   };
+
+  /*
+   * Should the twin beside this call site run? -- the ONE condition every twin is guarded by.
+   *
+   * Two things at once, and they are the same question asked of the two ways a twin can be absent:
+   * there may be no surface at all, which is every test and every caller that passes the default
+   * `nullptr`, or there may be a surface with the twins switched off, which is section 8.4's replay.
+   * A guard that tested only the first would leave the second unreachable; one function tests both
+   * and no call site has to remember there are two.
+   *
+   * It replaced a bare `_picture != nullptr` at forty-seven sites when section 8.4 was finally
+   * built, and the replacement is null-safe by construction -- the pointer test is still first and
+   * still short-circuits, so a site that was only ever a null check still is one.
+   */
+  [[nodiscard]] inline bool DrawingTwins(const Picture* _picture) noexcept
+  {
+    return _picture != nullptr && _picture->Drawing();
+  }
 
 } // namespace Elite

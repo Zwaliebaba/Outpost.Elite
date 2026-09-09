@@ -46,7 +46,7 @@ namespace Elite
          * has no twin, and only `LOOP10`'s over the first does.
          */
         const int cellRow = (_block == Canvas::SCREEN_CELLS) ? row : -1;
-        if (_picture != nullptr && cellRow >= 0)
+        if (DrawingTwins(_picture) && cellRow >= 0)
         {
           SetCellBlock2x(*_picture, BORDER_RIGHT_CELL, cellRow, SCREEN_YELLOW_ON_BLACK);
           SetCellBlock2x(*_picture, BORDER_LEFT_CELL, cellRow, SCREEN_YELLOW_ON_BLACK);
@@ -56,7 +56,7 @@ namespace Elite
         for (int cell = BORDER_LEFT_CELL - 1; cell >= 0; --cell)
         {
           _canvas.Write(static_cast<std::uint16_t>(base + cell), SCREEN_BLACK_ON_BLACK);
-          if (_picture != nullptr && cellRow >= 0)
+          if (DrawingTwins(_picture) && cellRow >= 0)
           {
             SetCellBlock2x(*_picture, cell, cellRow, SCREEN_BLACK_ON_BLACK);
           }
@@ -70,7 +70,7 @@ namespace Elite
         for (int cell = BORDER_RIGHT_CELL + 1; cell < Canvas::CELL_COLUMNS; ++cell)
         {
           _canvas.Write(static_cast<std::uint16_t>(base + cell), SCREEN_BLACK_ON_BLACK);
-          if (_picture != nullptr && cellRow >= 0)
+          if (DrawingTwins(_picture) && cellRow >= 0)
           {
             SetCellBlock2x(*_picture, cell, cellRow, SCREEN_BLACK_ON_BLACK);
           }
@@ -91,7 +91,7 @@ namespace Elite
     for (std::uint16_t offset = 0; offset < Canvas::BITMAP_SIZE; ++offset)
     {
       _canvas.Write(offset, 0u);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         WriteBitmapByte2x(*_picture, offset, 0u, false);
       }
@@ -108,7 +108,7 @@ namespace Elite
     {
       _canvas.Write(cell, TEXT_COLOUR_WHITE); // White on black
     }
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       SetCellRun2x(*_picture, 0, Canvas::CELL_COLUMNS * Canvas::CELL_ROWS, TEXT_COLOUR_WHITE);
     }
@@ -139,7 +139,7 @@ namespace Elite
     {
       _canvas.Write(static_cast<std::uint16_t>(bottomRow + offset), SCREEN_YELLOW_ON_BLACK);
     }
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       SetCellRun2x(*_picture, 24 * Canvas::CELL_COLUMNS + 4, 32, SCREEN_YELLOW_ON_BLACK);
     }

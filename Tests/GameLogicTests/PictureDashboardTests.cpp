@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -440,6 +441,188 @@ namespace GameLogicTests
     TEST_METHOD(NothingOnTheScreenIsUpscaledAnyMore)
     {
       const Picture picture;
+    }
+
+    /*
+     * The dashboard ART may not be painted anywhere a scanner blip can land
+     * (Design/Resolution.md section 5.3, written 2026-09-09 -- the section states the constraint
+     * and says in terms that the test was not written).
+     *
+     * WHY THIS ONE AND NOT THE BARS. `DIL` STORES and so does its twin, so a bar blanks its whole
+     * trough every pass and art underneath is overwritten before anybody sees it -- a test asserting
+     * background there fails on art that is harmless, which is what it did, on eight pixels of the
+     * shipped picture. A BLIP IS DIFFERENT: it is exclusive-ored onto the index plane, so art
+     * underneath makes it come out `art ^ blip` -- a wrong COLOUR in the right SHAPE, while erasing
+     * goes on working perfectly and hides it from every shape test in this file.
+     *
+     * THE SET IS TAKEN FROM SHIP STATES AND NOT FROM RAW COORDINATES, which is the distinction
+     * section 5.3 draws and the reason it called the shape hard. `DrawScannerBlip` will put a mark
+     * almost anywhere on the dashboard if handed arbitrary `x1` and `y1`; what it will draw when
+     * asked by a SHIP is bounded twice over -- by the range check that drops any ship with bit 6 or
+     * 7 set in a high byte, and by the clamp that pins the row between 146 and 198.
+     *
+     * IT SWEEPS THE TWO AXES SEPARATELY AND TAKES THE PRODUCT, which is sound because a blip is a
+     * dot with a stick hanging from it: the columns it occupies are a function of the x bytes alone
+     * and the rows a function of the y and z bytes alone, so the union over the whole cross product
+     * is the product of the two unions. That is 256 + 16,384 draws instead of 4,194,304, and the
+     * product is at worst a slight OVER-approximation -- a stricter rule for the artist than the
+     * blips strictly need, and stricter in the safe direction.
+     */
+    TEST_METHOD(NoScannerBlipLandsOnPaintedDashboardArt)
+    {
+      auto universe = WithDashboard();
+      Canvas& canvas = universe->canvas;
+
+      // A blip needs a ship on the scanner, a real type, and the space view.
+      Elite::Ship ship{};
+      ship.state = Elite::Mask(Elite::ShipStateBit::OnScanner);
+      const Elite::ShipType type = Elite::ShipType::CobraMk3;
+
+      Picture scratch;
+      const auto drawBlip = [&](const Elite::Ship& _ship) { Elite::DrawScannerBlip(canvas, _ship, type, 0u, &scratch); };
+
+      // The blip is exclusive-ored, so the same call twice puts the plane back as it was -- which
+      // is what lets one scratch surface serve every state without a clear between them.
+      const auto touched = [&](const Elite::Ship& _ship, int _fromColumn, int _toColumn, std::vector<int>& _columns,
+                               std::vector<int>& _rows) {
+        drawBlip(_ship);
+        for (int row = Picture::SPACE_VIEW_HEIGHT; row < Picture::HEIGHT; ++row)
+        {
+          for (int column = _fromColumn; column < _toColumn; ++column)
+          {
+            if (scratch.Dot(column, row) != 0u)
+            {
+              _columns.push_back(column);
+              _rows.push_back(row);
+            }
+          }
+        }
+        drawBlip(_ship);
+      };
+
+      // Axis one: every x the range check admits, with the vertical bytes held still. `x.lo`'s top
+      // bit is the half-pixel the twin recovers, so it is swept too.
+      std::vector<int> columns;
+      std::vector<int> ignoredRows;
+      for (int high = 0; high < 64; ++high)
+      {
+        for (int sign = 0; sign < 2; ++sign)
+        {
+          for (int low = 0; low < 2; ++low)
+          {
+            ship.x = Elite::SignMag24{static_cast<std::uint8_t>(low << 7), static_cast<std::uint8_t>(high),
+                                      static_cast<std::uint8_t>(sign << 7)};
+            ship.y = Elite::SignMag24{};
+            ship.z = Elite::SignMag24{};
+            touched(ship, 0, Picture::WIDTH, columns, ignoredRows);
+          }
+        }
+      }
+      Assert::IsFalse(columns.empty(), L"the x sweep drew no blip at all, so this test proves nothing");
+
+      int firstColumn = Picture::WIDTH;
+      int lastColumn = 0;
+      for (const int column : columns)
+      {
+        firstColumn = (column < firstColumn) ? column : firstColumn;
+        lastColumn = (column > lastColumn) ? column : lastColumn;
+      }
+
+      // Axis two: every y and z the range check admits, with x held still. Only the columns that
+      // one x can reach are scanned, which is what keeps 16,384 states cheap.
+      ship.x = Elite::SignMag24{};
+      std::vector<int> probeColumns;
+      std::vector<int> probeRows;
+      touched(ship, 0, Picture::WIDTH, probeColumns, probeRows);
+      Assert::IsFalse(probeColumns.empty(), L"the probe blip drew nothing");
+      int probeFrom = Picture::WIDTH;
+      int probeTo = 0;
+      for (const int column : probeColumns)
+      {
+        probeFrom = (column < probeFrom) ? column : probeFrom;
+        probeTo = (column > probeTo) ? column + 1 : probeTo;
+      }
+
+      std::vector<int> rows;
+      std::vector<int> ignoredColumns;
+      for (int yHigh = 0; yHigh < 64; ++yHigh)
+      {
+        for (int ySign = 0; ySign < 2; ++ySign)
+        {
+          for (int zHigh = 0; zHigh < 64; ++zHigh)
+          {
+            for (int zSign = 0; zSign < 2; ++zSign)
+            {
+              ship.y = Elite::SignMag24{0u, static_cast<std::uint8_t>(yHigh), static_cast<std::uint8_t>(ySign << 7)};
+              ship.z = Elite::SignMag24{0u, static_cast<std::uint8_t>(zHigh), static_cast<std::uint8_t>(zSign << 7)};
+              touched(ship, probeFrom, probeTo, ignoredColumns, rows);
+            }
+          }
+        }
+      }
+      Assert::IsFalse(rows.empty(), L"the y and z sweep drew no blip at all");
+
+      int firstRow = Picture::HEIGHT;
+      int lastRow = 0;
+      for (const int row : rows)
+      {
+        firstRow = (row < firstRow) ? row : firstRow;
+        lastRow = (row > lastRow) ? row : lastRow;
+      }
+
+      // The area itself is asserted, so that a change to `SCAN`'s clamps or to the twin's geometry
+      // cannot quietly shrink what the ratchet below is measured over.
+      Assert::AreEqual(183, firstColumn, L"the leftmost column a blip can reach moved");
+      Assert::AreEqual(440, lastColumn, L"the rightmost column a blip can reach moved");
+      Assert::AreEqual(290, firstRow, L"the topmost row a blip can reach moved");
+      Assert::AreEqual(397, lastRow, L"the bottommost row a blip can reach moved");
+
+      std::size_t painted = 0;
+      for (int row = firstRow; row <= lastRow; ++row)
+      {
+        for (int column = firstColumn; column <= lastColumn; ++column)
+        {
+          painted += (universe->picture.Dot(column, row) != 0u) ? 1u : 0u;
+        }
+      }
+
+      /*
+       * A RATCHET AND NOT A PROHIBITION, and the number is inherited rather than chosen.
+       *
+       * Section 5.3 states the constraint as "the positions the twins draw into left as the
+       * background colour", and on the art in the tree today that is false 2,382 times: the
+       * scanner's ellipse and its centre line are painted, a blip crossing them comes out
+       * `art ^ blip`, and **that is what the C64 does** -- `DASHBOARD_PICTURE_2X` is still SEEDED
+       * with the canvas doubled (section 5.3, RS-4-art), so every one of those pixels is the
+       * original's own. Asserting zero would fail on the shipped picture and would be asserting
+       * that the port look different from the game it ports.
+       *
+       * So what is pinned is the direction. The blip area is 27,864 pixels; 2,382 of them are
+       * painted today and the artist may not paint more. That is the failure section 5.3 actually
+       * fears -- somebody redraws the dashboard, fills the scanner interior because it looks bare,
+       * and every shape test here stays green because erasing still works perfectly.
+       *
+       * WHEN THIS NUMBER MAY FALL: whenever the art is redrawn with less inside the scanner, and
+       * the fall is recorded here in the same commit. WHEN IT MAY RISE: never without the owner
+       * saying which pixels and why, because a rise is the defect this test exists to catch.
+       */
+      constexpr std::size_t INHERITED_FROM_THE_C64 = 2382;
+      constexpr std::size_t BLIP_AREA = 27864;
+      Assert::AreEqual(BLIP_AREA, static_cast<std::size_t>(lastColumn - firstColumn + 1) * static_cast<std::size_t>(lastRow - firstRow + 1),
+                       L"the blip area moved, so the ratchet below is measured over a different thing");
+
+      if (painted > INHERITED_FROM_THE_C64)
+      {
+        std::wstringstream message;
+        message << L"the dashboard art is now painted on " << painted << L" of the " << BLIP_AREA
+                << L" pixels a scanner blip can land on, up from the " << INHERITED_FROM_THE_C64
+                << L" this picture inherited from the C64 dashboard. A blip on a painted pixel comes out art^blip -- the right"
+                << L" shape in the wrong colour -- and erasing goes on working, which is why no other test here sees it"
+                << L" (Resolution.md section 5.3).";
+        Assert::Fail(message.str().c_str());
+      }
+      Assert::AreEqual(INHERITED_FROM_THE_C64, painted,
+                       L"fewer painted pixels than recorded: the art was redrawn, which is welcome -- lower the number here");
     }
   };
 

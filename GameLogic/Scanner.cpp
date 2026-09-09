@@ -124,7 +124,7 @@ namespace Elite
     // sets N and Z but not C.
     const SubResult stick = SubtractWithCarry(row, ground, true);
 
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       /*
        * `x_lo` is a byte the game maintains on every ship in the bubble and `SCAN` never reads: the
@@ -232,7 +232,7 @@ namespace Elite
 
   void DrawCompassDot(Canvas& _canvas, const Compass& _compass, Picture* _picture) noexcept
   {
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawCompassDot2x(*_picture, _canvas, _compass.x, _compass.y, _compass.pattern);
     }

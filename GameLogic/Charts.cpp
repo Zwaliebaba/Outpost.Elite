@@ -131,7 +131,7 @@ namespace Elite
     stroke.y1 = AddWithCarry(_at.y, top, false).value;
     stroke.y2 = stroke.y1;
     (void)DrawLine(_canvas, stroke);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawLine2x(*_picture, stroke);
     }
@@ -158,7 +158,7 @@ namespace Elite
     stroke.x1 = _at.x;
     stroke.x2 = _at.x;
     (void)DrawLine(_canvas, stroke);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawLine2x(*_picture, stroke);
     }
@@ -290,7 +290,7 @@ namespace Elite
     // edge of the drawing area, and its right end lands in the margin.
     const Line rule{0u, _y, 255u, _y};
     (void)DrawLine(_canvas, rule);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawLine2x(*_picture, rule);
     }
@@ -324,7 +324,13 @@ namespace Elite
       PlotPixel(_universe.canvas, seeds.bytes[3], y, distance);
       // The map's dots are eight-bit chart coordinates with nothing under them, so the wide dot is
       // those numbers doubled. RS-5 re-flows the map itself; this puts it on the surface.
-      PlotPixel2x(_universe.picture, 2 * static_cast<int>(seeds.bytes[3]), 2 * static_cast<int>(y), distance);
+      //
+      // The guard is explicit because this twin takes the surface by REFERENCE and not by pointer,
+      // so there is no null to test and `DrawingTwins` has nothing to be given (section 8.4).
+      if (_universe.picture.Drawing())
+      {
+        PlotPixel2x(_universe.picture, 2 * static_cast<int>(seeds.bytes[3]), 2 * static_cast<int>(y), distance);
+      }
       NextSystem(seeds);
     }
 

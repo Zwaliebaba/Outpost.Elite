@@ -2,7 +2,7 @@
 
 **Status:** **BUILT · 2026-09-08**, in seven slices (RS-0 to RS-6, §13), from a design proposed
 2026-09-07 with eight owner rulings taken the day it was opened — four on the shape (§1) and four on
-what the shape left open (§11). The suite is <!--count:tests-->131 green with all
+what the shape left open (§11). The suite is <!--count:tests-->133 green with all
 <!--count:checks-->13 repository checks passing, and what it decided is
 [ADR-008](ADR/ADR-008-the-picture.md).
 
@@ -11,8 +11,23 @@ difference between the two is the point of keeping it: every place measurement m
 marked **CORRECTED** in the section it belongs to and argued in §13's journal. Five improvements the
 design promised were DECLINED after measurement — `Divide512` and the sun's twin, the compass's
 extra bit, `wrapWidth`, and the short-range chart's label collisions — and each entry says what was
-measured and what it would have cost. One thing is outstanding and it is the owner's: the dashboard
-artwork (§11.1, RS-4-art), which no slice waits on.
+measured and what it would have cost.
+
+**ONE THING IS STILL OPEN, and it is the owner's: the dashboard artwork** (§11.1, §13's RS-4-art
+row). `DASHBOARD_PICTURE_2X`, `CopyDashboardPicture2x` and `bitmaps.py` are built and self-tested;
+the 640×112 redraw over the exported BMP is not done, and no slice waits on it.
+
+**The count went one → four → one over 2026-09-09**, which is the whole of that day's work on this
+document and is worth leaving visible rather than tidying to the answer:
+
+| Was open | Now | Where |
+|---|---|---|
+| **§8.4** — the replay run with the twins present and absent, which ADR-008 §3 published as the proof of T1 and which had never been built | **CLOSED.** `TheReplayIsTheSameWithNoTwins`; all three digests identical with the twins off. T1 is measured | §8.4 |
+| **R26** — recorded as mitigated from RS-0 on that same absent test | **CLOSED** by §8.4, and by the instrument the row always named | §9 |
+| **§5.3's scanner sweep** — a constraint stated and deliberately left unchecked | **WRITTEN**, as a ratchet: the art may not paint more of the blip area than the 2,382 pixels it inherited from the C64 | §5.3 |
+
+Two screens (sell cargo, the save menu) are also blocked in §6.3, on a defect **older than this
+track** — they set up no screen at all — so they are recorded here rather than owed here.
 
 Reads after [Modernize.md](Modernize.md), because it starts where that plan's rules end and obeys
 them.
@@ -159,7 +174,8 @@ properties of the twin arithmetic, and golden hashes of its own.
 - **M6-0-d** (the two fixture faults) is why `"a sun close enough to draw"` exists at all, and why
   the flight-loop heaps sit inside the arena. §4.2's sun twin has no shadow test without it.
 - **M6-0-b** (the replay reaching death and the escape pod) is two of the three digests §8.4 runs
-  with the twins present and absent.
+  with the twins present and absent — which it did not actually do until 2026-09-09, when the run
+  was finally built (§8.4).
 - **M6-0-g** (the mutant floor) is the mechanism §8.5 adds the four twin files to.
 
 **Nothing from M6-a onward is a prerequisite**, and the reason is one sentence: this track never
@@ -255,8 +271,10 @@ owns and will change — a thinner sun, a re-authored crosshair — and folding 
 improvement to the rendering into a re-recording of five replay tables, which is R10's failure mode
 at the scale of the whole game. What the hash needs to catch is the screen *leaking* into the game:
 a twin that consumed a random number, moved a heap pointer, or wrote a canvas byte. That is caught
-by construction — the twins take `Screen&` and const references to their inputs — and by the test
-in §8.4, which drives the replay with the screen present and absent and requires the same digest.
+by construction — the twins take `Screen&` and const references to their inputs — and by the test in
+§8.4, which drives the replay with the screen present and absent and requires the same digest.
+**That test was designed here and not built until 2026-09-09**; it is built now, and both halves of
+this sentence are true for the first time.
 `UniverseImage` names the field and marks it excluded, so `EveryCellTheImageNamesMovesTheHash` keeps
 its meaning.
 
@@ -514,9 +532,27 @@ Where it really bites is the EXCLUSIVE-OR: a blip is XORed onto the plane, so a 
 interior makes a blip come out `art ^ blip` while erasing still works perfectly and hides it from
 every shape test. Checking THAT needs the set of pixels a blip can land on, and "a blip a real ship
 would produce" is not the same set as "a blip `DrawScannerBlip` will draw if asked" — a sweep of
-raw coordinates puts marks over the whole dashboard. **Left unchecked and stated rather than
+raw coordinates puts marks over the whole dashboard. ~~**Left unchecked and stated rather than
 half-built**, which is the honest half of RS-4-art: the constraint is real, the test is not written,
-and the shape it has to have is written down above.
+and the shape it has to have is written down above.~~
+
+**WRITTEN 2026-09-09** as `NoScannerBlipLandsOnPaintedDashboardArt`, and the shape it needed is the
+one this paragraph asked for: the set comes from SHIP STATES, not from raw coordinates. It sweeps
+the x bytes the range check admits (256, `x.lo`'s top bit included, because the twin reads it) and
+the y and z bytes it admits (16,384), and takes the PRODUCT of the two unions rather than the cross
+product of the states — sound because a blip is a dot with a stick hanging from it, so its columns
+are a function of the x bytes alone and its rows of the y and z bytes alone. 16,640 draws instead of
+4,194,304. The area comes out as columns 183 to 440 and rows 290 to 397 — the scanner and nothing
+else — and those four numbers are asserted, so a change to `SCAN`'s clamps cannot quietly shrink
+what is being measured.
+
+**AND IT FOUND THE CONSTRAINT IS ALREADY FALSE, 2,382 times.** The scanner's ellipse and its centre
+line are painted, so a blip crossing them already comes out `art ^ blip`. That is not a defect: the
+picture is still SEEDED with the canvas doubled, so every one of those pixels is the C64's own, and
+a test asserting zero would be asserting that the port look different from the game it ports. **So
+it ratchets rather than forbids**: 2,382 of 27,864 today, and the artist may not paint more. That is
+the failure this section actually fears — somebody redraws the dashboard, fills the scanner interior
+because it looks bare, and every shape test in the file stays green because erasing still works.
 
 ### 5.4 Sprites
 
@@ -806,10 +842,44 @@ are the tests that pin the *extra* bit, which the shadow tests cannot see.
 PNGs on failure and `golden_diff.py` at 640×400. Recorded when a slice's shadow test is green and
 its hand-check is done, and never re-recorded without the diff attached (R10).
 
-**8.4 The replay, twice.** `TheScriptedFlightIsAsRecorded`, `TheDeathIsAsRecorded` and
-`TheEscapePodIsAsRecorded` run with the screen drawn and with the screen's twins compiled out
-(`ELITE_SCREEN_SHADOW` off, a test-only define), and the digests must agree with the recorded tables
-and with each other. This is T1's proof: the screen consumed nothing the game notices.
+**8.4 The replay, twice. BUILT 2026-09-09** as `TheReplayIsTheSameWithNoTwins` in
+`FlightReplayTests.cpp`, a month after the design said it was. All three digests — the scripted
+flight, the death and the escape pod — are taken again with the twins switched off and must equal
+the recorded tables exactly. **They do. T1 is measured rather than asserted, and R26 closes with
+it.**
+
+**CORRECTED: a runtime switch, not the compile-time one below.** `Picture::SetDrawing(false)` and
+the single guard every twin shares, `DrawingTwins(_picture)`, replace `ELITE_SCREEN_SHADOW` — a
+define would have needed a second compilation of `GameLogic` and a second test binary beside it, for
+the same answer. The flag lives inside `Picture` because that is already the one field `HashState`
+skips and `StateCells` gives no cells (§3.4), so it inherits that treatment and opens no new hole in
+the digest. Three twins take the surface by REFERENCE rather than by pointer and could not use the
+shared guard (`PlotPixel2x` in the long-range chart, the two `WriteBitmapByte2x` in `Flight.cpp`);
+they read `picture.Drawing()` directly and say so on the line.
+
+**What a define would have caught and this does not**: a twin reading something BEFORE its guard.
+So where the guard sits is a review rule — all forty-nine wrap the whole of their twin's work — and
+the test carries two assertions that stop it passing vacuously: the bitmap plane must be untouched
+with the twins off, and written with them on. Without that second one a `SetDrawing` that did
+nothing would leave every digest where it was and the suite would be green for the wrong reason.
+
+**The original design text, kept because §13's journal is the point of this document:**
+*"`TheScriptedFlightIsAsRecorded`, `TheDeathIsAsRecorded` and `TheEscapePodIsAsRecorded` run with
+the screen drawn and with the screen's twins compiled out (`ELITE_SCREEN_SHADOW` off, a test-only
+define), and the digests must agree with the recorded tables and with each other. This is T1's
+proof: the screen consumed nothing the game notices."*
+
+**None of it was built until 2026-09-09.** `ELITE_SCREEN_SHADOW` existed nowhere in the tree but in
+that sentence; the three tests ran once each, twins present. RS-0's acceptance row says "§8.4 green
+with nothing to twin yet" — true on the day, and the clause was never revisited once there was
+something to twin. So **T1 was asserted from RS-0 to 2026-09-09 and ADR-008 §3 published the
+assertion as a proof**, which is the more serious half: a design that plans an instrument and does
+not build it is a slice that slipped; an ADR that names it as evidence is a reader misled.
+
+What held it in the meantime, and adequately for what the track needed: the twins take `const`
+references to everything but the picture, §3.4's hash exclusion, and review.
+[Rendering.md](Rendering.md) §11.3 records the search that found the gap. **The gap is closed** —
+the measurement is above, and it says what everyone had assumed: the twins consume nothing.
 
 **8.5 Mutants.** `Screen.cpp`, `ShipDraw2x.cpp`, `PlanetDraw2x.cpp` and `Dashboard2x.cpp` join the
 floor in `mutants.json`, each with a caught mutant and a `selftest`, and the shadow tests are what
@@ -916,7 +986,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 | R23 | **A faithful routine is edited without its twin.** The canvas is right, the tests are green, and the screen drifts — a line drawn from a heap the twin no longer mirrors, a new call site with no twin | `check_twins.py` (§8.6) fails the push; the shadow tests (§8.1) fail the frame; both in CI |
 | R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | `PictureTextTests::NoLayoutSendsTwoFaithfulCellsToOneWideCell` sweeps the whole 40×25 grid of every layout in the tree and fails on the first collision (RS-5-0, and it caught one the day it was written); the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
 | R25 | **The extra bit is wrong and nothing sees it.** A twin that halves to the faithful value at every pixel can still be off by one hi-res pixel everywhere, and the shadow test allows one | The property sweeps of §8.2 on every twin divide and root; a screen golden per scene |
-| R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | §8.4's replay run both ways; T1 as a review rule; and since RS-3 there is no second heap at all — the twins read the faithful bytes, so there is no second pointer to move |
+| R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | **CLOSED 2026-09-09**, and by the instrument it always named: §8.4's replay now runs both ways (`TheReplayIsTheSameWithNoTwins`) and the three digests are identical with the twins switched off. Beside it, T1 as a review rule, the twins' const references, and since RS-3 no second heap at all. **It was recorded as mitigated from RS-0 to 2026-09-09 on a test that did not exist**, which is worth leaving in the register: the row was not wrong about what would close it, only about whether that had happened |
 | R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture was part canvas-upscaled and part native, and a screenshot taken then was not the design | **CLOSED at RS-6.** The tripwire was `Picture::NativeRegions` and its `Complete()` test; it fired at RS-4 when both regions turned over, and RS-6 deleted the flags, `UpscaleCell` and the canvas fallback with them. What replaces it is the opposite assertion — `ThePicture::AnUndrawnPictureIsBlankHoweverBusyTheCanvasIs` — which fails if a pixel ever comes from the canvas again. **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked |
 
 ---
@@ -1645,3 +1715,32 @@ named a region.
 dashboard artwork (§11.1). Five improvements the design promised are declined with the measurement
 that declined each, two screens are blocked on a defect older than this track, and the C64 canvas is
 exactly what it was on the day RS-0 opened — which was the point.
+
+---
+
+**2026-09-09 — two of §8's instruments were never built, and both are now.** Found while
+[Rendering.md](Rendering.md) was being validated against `a827b97`, a month after this track closed.
+
+**§8.4 was the serious one.** The replay run with the twins present and absent did not exist:
+`ELITE_SCREEN_SHADOW`, the define this document names for it, appeared nowhere but in the sentence
+naming it, and `FlightReplayTests.cpp` took its three digests once. So **rule T1 was asserted from
+RS-0 onward while ADR-008 §3 published it as proved**, and R26 sat in §9 marked mitigated by a test
+that had never run. The mechanism that made it invisible is worth naming: RS-0's acceptance row said
+"§8.4 green with nothing to twin yet", which was true on the day and stopped being true the moment
+RS-1 landed, and nothing re-asked the question. **An acceptance clause that passes vacuously is
+indistinguishable from one that passes**, and this document has no convention that would have caught
+it.
+
+It is built now — `TheReplayIsTheSameWithNoTwins` — as a runtime switch rather than the compile-time
+one designed, and §8.4 carries the reasoning. The digests do not move. Two assertions were added
+beside them so the test cannot pass vacuously in its turn, which is the lesson applied to itself.
+
+**§5.3's scanner sweep was the honest one**, left "stated rather than half-built" with the shape it
+needed written out. The shape was right and it is written: ship states rather than raw coordinates,
+and the product of two marginal sweeps rather than the cross product of 4.2 million states. It found
+the constraint already false 2,382 times, all of it inherited from the C64 dashboard the picture is
+still seeded with — so it ratchets rather than forbids. The number falls when the art is redrawn and
+may not rise.
+
+**The suite is 133.** Nothing else in the track moved: the canvas, the digests and the twins are
+what they were, which is what the two new tests were built to prove.

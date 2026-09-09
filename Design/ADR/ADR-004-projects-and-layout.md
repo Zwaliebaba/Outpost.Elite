@@ -3,7 +3,8 @@
 **Status:** Accepted · 2026-09-02 (§1 settled by owner ruling: own codebase, nothing lifted) ·
 amended 2026-09-03 (§6 added by owner ruling: the portable test runner is sanctioned and CI-gated)
 **Depends on:** ADR-001; the conventions in `.clang-format`, `.clang-tidy`, `.editorconfig`
-**Feeds:** slice 0c; the *Home* column of [Source-Inventory.md](../Source-Inventory.md)
+**Feeds:** slice 0c; the *Home* column of `Source-Inventory.md` — that ledger was deleted at M6-e
+(ADR-009 §1), and this layout is what survived it
 
 ## Context
 

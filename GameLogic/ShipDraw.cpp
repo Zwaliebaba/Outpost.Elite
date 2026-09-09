@@ -164,7 +164,7 @@ namespace Elite
     // Resolution.md §4, rule T3: the same run on the wide surface, from the SAME heap bytes, so the
     // erase below matches what was drawn without a second record to keep in step. Nothing attached
     // is a fixture comparing the canvas, which is most of them.
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawShipLines2x(*_picture, _heap, _run);
     }

@@ -84,7 +84,7 @@ namespace Elite
     }
 
     DrawHorizontalLine(_canvas, row.x1, row.x2, _row);
-    if (_picture != nullptr)
+    if (DrawingTwins(_picture))
     {
       DrawCanvasRow2x(*_picture, row.x1, row.x2, _row);
     }
@@ -186,7 +186,7 @@ namespace Elite
 
       line.y2 = y;
       line.x2 = _state.BallX(at);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // The wide segment is the faithful one doubled, taken BEFORE the call because `LOIN` hands
         // the four bytes back the other way round when it drew right to left.
@@ -341,7 +341,7 @@ namespace Elite
         _state.ballHeapTop = at;
 
         (void)DrawLine(_canvas, line);
-        if (_picture != nullptr)
+        if (DrawingTwins(_picture))
         {
           DrawLine2x(*_picture, line);
         }
@@ -1023,7 +1023,7 @@ namespace Elite
           // matching end of the new one -- the sliver that has appeared or gone.
           const std::uint8_t held = fresh.x2;
           DrawHorizontalLine(_canvas, fresh.x1, sliverFrom, row);
-          if (_picture != nullptr)
+          if (DrawingTwins(_picture))
           {
             DrawCanvasRow2x(*_picture, fresh.x1, sliverFrom, row);
           }
@@ -1032,7 +1032,7 @@ namespace Elite
 
         // PLF23 -- and the other sliver.
         DrawHorizontalLine(_canvas, sliverFrom, sliverTo, row);
-        if (_picture != nullptr)
+        if (DrawingTwins(_picture))
         {
           DrawCanvasRow2x(*_picture, sliverFrom, sliverTo, row);
         }
@@ -1048,7 +1048,7 @@ namespace Elite
         else
         {
           DrawHorizontalLine(_canvas, fresh.x1, fresh.x2, row);
-          if (_picture != nullptr)
+          if (DrawingTwins(_picture))
           {
             DrawCanvasRow2x(*_picture, fresh.x1, fresh.x2, row);
           }
@@ -1158,7 +1158,7 @@ namespace Elite
       const std::uint8_t y1 = roll.value;
 
       carry = PlotRelativePixel(_canvas, x1, y1, distance);
-      if (_picture != nullptr)
+      if (DrawingTwins(_picture))
       {
         // A fresh field has no fractions of its own -- `nWq` writes `SX` and `SY` and leaves `SXL`
         // and `SYL` as they were -- so the wide mark takes the two bytes as they stand, which is
