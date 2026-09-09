@@ -579,9 +579,9 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 |---|---|---|---|---|
 | **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->258) falls; ADR-005 §3 | 2 |
 | **T-3** ✅ **built 2026-09-09 (§10)** | §3.7: the waitable object, latency one, **resolve**-on-change over `Picture::ResolveSignature` (not present-on-change — see §3.7 and §10), occlusion idle | The picture's own goldens unchanged; the signature's own test; **owner's, outstanding**: PresentMon before and after on a scripted key, and CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
-| **RN-0** Finish the split | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
-| **RN-1** The frame boundary | `Picture::Clear` finally called — the frame refreshed from the backdrop at every present; erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
-| **RN-2** ADR-008 amended | T3 deleted; §1's byte count corrected for two surfaces | `check_docs.py`; the ADR's Status table | — | 0.5 |
+| **RN-0** ✅ **built 2026-09-09 (§10)** | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
+| **RN-1** ◐ **first commit built 2026-09-09 (§10)**; the clear is off | the boundary in `GameLogic/Frame.h`, nineteen sites through it, the clear behind a `constexpr bool`; then the clear on and the frame **cleared**, not refreshed from the backdrop (that would ghost); erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
+| **RN-2** ◐ **the RN-0 half amended 2026-09-09** | §1 says two surfaces and 215,364 bytes; §4 names the backdrop; the Status table carries the split. **T3 is NOT deleted**: it stays in force until RN-1's second commit turns the clear on, because the rule and the clear are only equal to each other | `check_docs.py`; the ADR's Status table | — | 0.5 |
 | **I-2** `InputFrame` and the layered map | §3.3: the struct, the two `Step`s over it, `Window` producing one per turn from scan codes with events accumulated into it, the layers, `NextKey` and `Flush` off the port. **Two commits**: the signature with the same keys, then the meaning | All three digests unmoved after the first commit; I-6's tests and `DockedSessionTests` after the second, with the level-against-edge answer journaled; `ShellTests` per-layer completeness | `outpost-elite-names` (<!--count:outpost-elite-names-->62) may fall; `effects-seams` unchanged | 2 |
 | **I-4** Coroutines and `Platform` | §3.5 and §3.1: `Task`, the awaitables, the thirty-six routines converted in groups, `Run()` a function over `Game` and `Platform`, `GameShell` and `FlightSession` absorbed, `Abandon` deleted | Every existing comparison green without change to what it asserts; the `GameLoopTests` case of §3.9 on the Linux leg; all digests unmoved | `effects-seams` 5 → 4 or 3; `main-lines` falls | 4–5 |
 | **T-4** Sound | §3.6: the interrupt under the scheduler, the log ring, the chip on the callback thread | `SidRenderTests` unchanged; the zero-delivery replay unmoved and the record re-taken with delivery, journaled as rule 1's first case; no stutter while dragging the title bar | ADR-005 §2 one paragraph | 1–2 |
@@ -1022,6 +1022,22 @@ like its natural home: `Turn` is also the present inside a `DELAY`, so clearing 
 held picture for the other forty-nine frames of fifty. That is also why the boundary is at the four
 WAITS and not at every present. T-1's raise was repaired by finding the reasoning written twice;
 this one has no second copy to delete.
+
+
+**2026-09-09 — RN-2, the half of it that is true.** ADR-008 §1 said "One surface beside the canvas"
+and costed it at 107,682 bytes taking a `Universe` to 123 KB. There are two since RN-0: 215,364
+bytes and 231 KB, and the heading, the prose and the number now say so, with the exclusive-or
+composite and why it was the only one that could be a no-op on the day the second surface arrived.
+§4 names the backdrop as built rather than as coming, and says the exclusion is asserted by a test
+rather than trusted. The Status table gains a row for the split.
+
+**T3 IS NOT DELETED, and the step said to delete it.** "Every erase has a twin erase" is still in
+force: RN-1's first commit put the boundary in place with the clear switched OFF, and a rule that
+goes when the clear goes on cannot go while it is off. `check_twins.py` still holds every erase to
+its twin and would be right to. The ADR says this in both places it mentions T3 — the rule in §2 and
+the row in the Status table — rather than recording a deletion that has not happened. RN-2 is half
+done and its row says so; the other half rides with RN-1's second commit, which is where it belongs,
+because the rule and the clear are only equal to each other.
 
 ---
 

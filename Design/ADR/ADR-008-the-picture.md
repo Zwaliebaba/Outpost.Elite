@@ -36,7 +36,7 @@ original still means what it meant.
 
 ## Decision
 
-### §1 One surface beside the canvas, and it is VIC-II-shaped
+### §1 Two surfaces beside the canvas, and both are VIC-II-shaped
 
 `Elite::Picture` is 640×400: a bitmap plane of 32,000 bytes for the upper region, an 80×50 grid of
 cell palettes beside it, and a 640×112 plane of colour INDICES for the dashboard. Since RS-4-art
@@ -49,8 +49,23 @@ surface has to be a bit plane or erasure stops working. The dashboard is an inde
 below the raster split the hardware is in multicolour mode, where two bits select from four
 sources, and a twin that put the right shape in the wrong colour would pass a shape test.
 
-`Universe` owns one, beside the canvas. It costs 107,682 bytes, which takes a `Universe` from 15 KB
-to 123 KB — stated rather than mitigated, and the number a later slice would have to argue with.
+`Universe` owns TWO of them beside the canvas since [Platform.md](../Platform.md)'s RN-0, and the
+split is the point rather than a second copy. The **backdrop** holds what persists between flight
+passes — the glyphs, the charts, the borders, the wipes, the dashboard's dials and its index plane —
+and the **frame** holds what a pass re-emits: the ships, the stardust, the planet, the sun, the
+explosion cloud, the two laser draws. What is presented is the two composited by exclusive-or, on
+the bitmap bit, the cell palette byte and the dashboard index alike.
+
+Exclusive-or is not a choice of blend; it is the only composite that was a no-op on the day the
+second surface arrived. Every transient write in the tree is already an exclusive-or — that is how
+this game erases — and exclusive-or is associative, so `backdrop ^ frame` with everything still in
+one of them is bit for bit the picture drawn before the split. It also costs no copy, which is why
+the design's "refresh the frame from the backdrop each frame" is NOT what happens: copying would let
+the erase twins paint a ghost.
+
+Each costs 107,682 bytes, so the pair is **215,364**, and a `Universe` goes from 15 KB to 231 KB —
+stated rather than mitigated, and the number a later slice would have to argue with. The dashboard's
+index plane is 71,680 of each and would halve at four bits a pixel.
 
 ### §2 The twin rule, which is the whole architecture
 
@@ -64,7 +79,12 @@ Four rules follow and each was earned:
 - **T2 — precision comes from upstream at twice the scale, never from interpolation.** A twin may
   use a byte the faithful routine discarded (the scanner's `x_lo`); it may not invent one.
 - **T3 — every erase has a twin erase.** The one rule with no test that can catch its absence
-  cheaply, because a missing erase looks like a smear three frames later.
+  cheaply, because a missing erase looks like a smear three frames later. **It is on its way out and
+  is not out yet**: Platform.md's RN-1 gives the frame a boundary and clears it each pass, after
+  which a twin erase does not rub last pass's ship out, it DRAWS it onto an empty surface. RN-1's
+  first commit put the boundary in place with the clear switched off; T3 goes with the second, which
+  turns the clear on and drops the six frame-side erase twins in the same breath. Until then every
+  erase still needs its twin and `check_twins.py` still holds them to it.
 - **T4 — a twin carries `/// 2x of:` and never a `// 6502:` marker.** It ports no routine, so a
   marker would claim a label it does not have. `tools/check_twins.py` enforces the pairing.
 
@@ -108,12 +128,15 @@ Resolution.md §8.4 records. [Rendering.md](../Archive/Rendering.md) §11.3 has 
 
 ### §4 The picture is not in the state hash
 
-`Universe::picture` and `Universe::screenLayout` are the fields `Elite::HashState` excludes
+`Universe::picture`, `Universe::backdrop` and `Universe::screenLayout` are the fields
+`Elite::HashState` excludes
 (ADR-007, and the comment beside the fold in `StateHash.cpp`). The picture is a second rendering of
 a frame the canvas already holds, produced by code the resolution slices kept changing; folding it
 would re-record five replay tables on a thinner sun. The exclusion is narrow — the canvas beside it
-is still folded — and §3's replay is what stops it being a hole. The backdrop `Picture` that
-[Platform.md](../Platform.md) RN-0 adds beside it is excluded the same way, for the same reason.
+is still folded — and §3's replay is what stops it being a hole. The backdrop is excluded the
+same way and for the same reason, built at RN-0 — and the exclusion is asserted rather than trusted:
+`ThePicture::TheStateHashDeliberatelyDoesNotSeeIt` writes to BOTH surfaces and requires the digest
+not to move.
 
 ### §5 Text is a mapping, and a re-flow is a table
 
@@ -183,5 +206,6 @@ predates this track.
 | The upscale is gone | Built at RS-6 | `GameLogic/Picture.cpp` |
 | The dashboard is redrawn at 640×112 | **Mechanism built; the art is the owner's, outstanding** | Resolution.md §5.3 and §11.1, `GameLogic/DashboardPicture2x.cpp`, `tools/bitmaps.py` |
 | T1 — the twins consume nothing the game notices | **Built 2026-09-09**, a month after §3 said so: `TheReplayIsTheSameWithNoTwins` takes all three digests with the twins switched off and they do not move. Asserted, not measured, from RS-0 until then | §3 above, `FlightReplayTests.cpp`, Resolution.md §8.4, Rendering.md §11.3 |
-| T3 — every erase has a twin erase | Built as a rule, never testable — and **due for deletion**: Rendering.md's RN-1 gives the picture a frame boundary, after which there are no erases to pair | §2 above, Rendering.md §6 |
+| The picture is two surfaces, composited by exclusive-or | **Built at RN-0, 2026-09-09.** 54 sites write the backdrop and 28 the frame, the two counts overlapping by the wipe, which reaches both; every digest the tree holds was unmoved by the split, and two whole-frame tables were recorded before the sites moved so they say what it preserved | §1 above, Platform.md §10, `GameLogic/Picture.cpp` |
+| T3 — every erase has a twin erase | Built as a rule, never testable — **still in force, and due out at RN-1's second commit**, not its first. The boundary exists (`GameLogic/Frame.h`) with the clear switched off; T3 goes when the clear goes on, because the two are only equal to each other | §2 above, Platform.md §5 RN-1 |
 | The canvas is retired and this ADR is superseded | **Ruled 2026-09-09** (owner, Platform.md D1): built at that track's RN-6, last, after RN-2 and I-4, on the narrowing proof ADR-007 §4 names. §1's shape, §2's twin rule and §3's canvas-shaped evidence lapse with the canvas; the picture's whole-frame record (ADR-009 §2) is the pixels' reference from then on, and ADR-010 records what replaces this document | Platform.md §4 D1, §5 RN-6 |
