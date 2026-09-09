@@ -485,9 +485,28 @@ removes it. **The boundary is per pass and the replay driver must call it per pa
 commit put it at the checkpoint and that is the line to change.
 
 **What is still open after all this**, and it is a much smaller question than the one it replaces:
-with a per-pass boundary the frame is populated at some checkpoints and empty at others (0 at step
-40, 11 at step 100, 532 at step 200). Something about which write in a pass comes last. That is the
-next thing to read, and it is the only thing between here and RN-1's second commit.
+with a per-pass boundary the frame is populated at some checkpoints and empty at others.
+
+**MEASURED 2026-09-09, and it is not about which write comes last.** A probe counting mutator calls,
+lazy clears and surviving ink per pass, on steps 36 to 44 of the scripted flight:
+
+| | writes to the frame | clears | bitmap bytes left |
+|---|---|---|---|
+| clear on, six erase twins dropped | 1246 | 1 | **0** (697 at step 42) |
+| the same, stardust erase twin put back | 1294 | 1 | **0** |
+| the same, plus the whole field drawn from state at the end of `MoveStardust` | 1342 | 1 | **0** |
+
+**Twelve hundred writes a pass and nothing survives**, and putting the erase back does not change it,
+and drawing the field whole does not change it. The +48 mutator calls the whole-field draw adds land
+NOWHERE: `probeWrites` counts the call and the mutators bounds-check and drop silently, so the next
+probe must count writes that LAND, not writes that are made. That is the one measurement missing and
+it is where the next sitting starts.
+
+The likely shapes, in order: the twin's coordinates are being rejected by `Picture`'s bounds check at
+these steps; or `DrawingTwins` is false on this path for a reason the guard's two conditions explain;
+or the lazy clear is firing later than the first write. All three are cheap to tell apart with a
+landed-write counter, and none of them should be guessed at — this question has already been
+mis-diagnosed twice from inference, once as a bad sampling moment and once as accumulation.
 
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
