@@ -587,6 +587,38 @@ wants its own hunt.
 landed writes, distinct offsets, exclusive-or against assignment, and calls per twin, then read the
 routine the counts name. Every conclusion reached by inference instead has been wrong.
 
+**TEN OF SIXTEEN CHECKPOINTS NOW MATCH EXACTLY**, measured 2026-09-09 against the tree's own ink at
+each checkpoint rather than against a ratio. The five drops are: `EraseShip`, `PlotStardust`, the
+laser's second `DrawLaserLines`, and at the TOP of `EraseSun` and `EraseBall`. The laser one fixed
+checkpoint 3 on its own.
+
+| step | 0 | 40 | 100 | 200 | 300 | 340 | 342 | 400 | 500 | 600 | 700 | 800 | 900 | 1000 | 1100 | 1170 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| tree's frame ink | 0 | 563 | 581 | 582 | 12 | 13 | 11 | 82 | 179 | 293 | 488 | 1081 | 9 | 8 | 404 | 0 |
+| with the slice | 0 | 563 | 581 | 582 | 12 | 13 | 11 | **15** | **249** | **263** | **845** | **1758** | 9 | 8 | **592** | 0 |
+| delta | · | · | · | · | · | · | · | −67 | +70 | −30 | +357 | +677 | · | · | +188 | · |
+
+**And the six that remain are NOT a missed erase.** Per-twin counts for the same passes, tree
+against slice, show the drops doing exactly and only what they should:
+
+| pass | landed | `DrawLine2x` | `DrawShipLines2x` | `PlotRelativePixel2x` | `PlotPixel2x` |
+|---|---|---|---|---|---|
+| 396 | 330 → 318 | 32 → 32 | 4 → 4 | **24 → 12** | **13 → 7** |
+| 697 | 1614 → 1598 | 28 → 28 | 2 → 2 | **24 → 12** | **16 → 8** |
+| 700 | 1292 → 1276 | 24 → 24 | 2 → 2 | **24 → 12** | **17 → 9** |
+
+The dot count halves because the stardust erase is gone, and the point count halves with
+`EraseShip`. Lines and ship lines are untouched. **So every pass draws the right things; what
+differs is what SURVIVES it.** At step 400 the tree's frame holds 82 bytes and one pass of the
+slice's holds 15, which means the tree's 82 is an ACCUMULATION across passes and not one pass's
+work — something is drawn once and left, and the per-pass clear takes it away.
+
+**That is the question for the next sitting, and it is a design question rather than a bug**: is the
+frame boundary one flight PASS or one PRESENT? They coincide in the executable, where a turn usually
+runs a single pass, and they do not in the replay, whose checkpoint is a hundred passes apart. Ten
+checkpoints agreeing says per-pass is right for most of the flight; the six that disagree are where
+something persists across passes on purpose. Find what, before changing the boundary.
+
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
 flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
