@@ -909,6 +909,42 @@ of the 74 sites turns out to do it.
 123 KB to 231 KB — not the 36 KB §3.4 assumed. `Universe.h` carries the number and RN-2 is where
 ADR-008 §1 gets it.
 
+**2026-09-09 — RN-0, the fixtures, recorded BEFORE the sites move.** The plan had these built after
+the sites moved and the order is inverted, for the reason the entry above gives: recorded first,
+they say what the split PRESERVED; recorded after, they only say what it produced. Two tables,
+149 → 151 tests, every existing digest unmoved.
+
+**The docked session drew nothing at all, and that is why it had no picture gate.** It printed
+through a terminal `TranscriptSink` — characters into a string, full stop — so `CHPR` never ran, the
+cursor only moved where a routine moved it deliberately, and the canvas and the 640×400 surface were
+blank on every screen. `DockedSessionTests`' own header has said so since slice 2e and called it the
+one thing a null presenter cannot check. The sink passes the character on to a real
+`Elite::TextPrinter` now, wired as `PictureTextTests`' `Docked` fixture is and as `Game` wires the
+real game, with the picture attached. **All six existing docked tests passed unchanged with `CHPR`
+running**, which was not a foregone conclusion and is why it was tried before a second fixture was
+invented: those assertions are about which screen was reached and whether the screens differ from
+each other, and neither moved.
+
+`TheDockedScreensAreAsRecorded` then digests seven screens — status, market, buy, sell, inventory,
+equip, data on system — off the same script `TheScreensDoNotPrintTheSameThingAsEachOther` uses, so
+the two cannot drift apart unnoticed.
+
+**`TheHyperspaceRingsAreAsRecorded` covers the other place with no record**: 35 presents through
+`DrawHyperspaceTunnel`, of which the first is `HYPNOISE`'s own vertical sync before any ring is
+drawn. It matters because `DrawHyperspaceRings` is classified as writing the FRAME on the grounds
+that each ring is its own present, and nothing else checks that classification.
+
+**Both tables carry a clause that stops them passing vacuously, and both were mutation-checked.**
+Deleting the picture attachment from the docked printer fails on "status and market resolved to the
+same picture"; passing `nullptr` where `DrawTunnel` hands the tunnel its surface fails on "every
+ring of the tunnel resolved to the same picture". A digest table matches anything once it has been
+re-recorded from a broken tree, so the distinctness clause is the half that has to be there before
+the numbers mean anything at all.
+
+**What is gated now that was not.** 27 of RN-0's 81 sites are on docked screens and 3 are the
+tunnel's; until today none of those 30 had a whole-frame test of any kind. The remaining commits
+move sites against these two tables and `ThePictureIsAsRecorded`.
+
 ---
 
 ## 11. Every ADR read against this design, 2026-09-09

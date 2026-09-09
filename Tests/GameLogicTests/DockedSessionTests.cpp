@@ -3,6 +3,7 @@
 #include "NullSeams.h"
 
 #include "Canvas.h"
+#include "Picture.h"
 #include "Charts.h"
 #include "Commander.h"
 #include "Docking.h"
@@ -24,6 +25,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -215,6 +217,25 @@ namespace GameLogicTests
     /// Every character the session printed, with the cursor it was printed at, as the screens compare.
     struct TranscriptSink final : public Elite::TextSink
     {
+      /*
+       * It RECORDS and then PASSES ON, and the passing on is RN-0's (`TheDockedScreensAreAsRecorded`).
+       *
+       * This was a terminal sink: characters went into a string and stopped, which is what the
+       * comment at the top of this file means by "a null presenter" and why it says LAYOUT is the
+       * one thing a session could not check. `CHPR` is the presenter, and with none of it the
+       * cursor only moved where a routine moved it deliberately -- and nothing was drawn, on either
+       * surface, so a session had no picture to record.
+       *
+       * Passing the character on to a real `TextPrinter` gives the session both: the transcript the
+       * older tests read, and the canvas and picture a person would see. `_next` is a pointer
+       * rather than a reference so that a sink can still be terminal, which nothing needs today and
+       * which is one line to keep.
+       */
+      explicit TranscriptSink(Elite::TextSink* _next = nullptr) noexcept
+        : next(_next)
+      {
+      }
+
       void Put(std::uint8_t _character) override
       {
         ++characters;
@@ -230,6 +251,12 @@ namespace GameLogicTests
         {
           text += '.';
         }
+
+        // And on to `CHPR`, which is what puts it on the canvas and the picture.
+        if (next != nullptr)
+        {
+          next->Put(_character);
+        }
       }
 
       void Reset()
@@ -237,6 +264,8 @@ namespace GameLogicTests
         characters = 0;
         text.clear();
       }
+
+      Elite::TextSink* next = nullptr;
 
       std::uint32_t characters = 0;
       std::string text;
@@ -269,6 +298,9 @@ namespace GameLogicTests
         shell.printer = &recursive;
         shell.extended = &characters.State();
         characters.State().sentenceStart = 0xFF;
+
+        // The wide surface, so the glyph twins draw beside the faithful ones (Resolution.md §6).
+        screen.AttachPicture(&universe.picture, &universe.screenLayout);
       }
 
       Session(const Session&) = delete;
@@ -290,7 +322,18 @@ namespace GameLogicTests
       Elite::Universe universe;
 
       // ---- the text system ---------------------------------------------------------------------
-      TranscriptSink sink;
+
+      /*
+       * `CHPR` ITSELF, over the universe's own canvas, and the sink below feeds it (RN-0).
+       *
+       * A session printed through a terminal transcript until 2026-09-09 and drew nothing, so the
+       * two things a person actually looks at -- the canvas and the 640x400 picture beside it --
+       * were empty on every docked screen and no test could record them. This is the same wiring
+       * `PictureTextTests`' `Docked` fixture has and the same wiring `Game` gives the real game.
+       */
+      Elite::TextPrinter screen{universe.canvas, universe.text};
+
+      TranscriptSink sink{&screen};
       Elite::TextState& text = universe.text;
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter recursive;
@@ -638,6 +681,116 @@ namespace GameLogicTests
       for (const Drawn& entry : drawn)
       {
         Logger::WriteMessage((entry.what + ": \"" + entry.text.substr(0, 72) + "\"\n").c_str());
+      }
+    }
+
+    /*
+     * WHAT EACH DOCKED SCREEN LOOKS LIKE, one whole-frame digest apiece (RN-0).
+     *
+     * `ThePictureIsAsRecorded` does this for a scripted FLIGHT and is the gate every rendering
+     * slice runs against. It sees no docked screen at all, and until this test the docked half had
+     * no picture gate of any kind: this file printed through a terminal transcript, so the canvas
+     * and the 640x400 surface were blank on every screen and there was nothing to hash. Twenty-seven
+     * of RN-0's eighty-one draw sites are on these screens.
+     *
+     * SO THE NUMBERS BELOW ARE A BEFORE, recorded on the tree with the backdrop present and no site
+     * moved onto it, and RN-0's remaining commits are accepted on their not moving. A chart or a
+     * market glyph misclassified as transient would blank between one screen and the next, and
+     * nothing else in this suite would say so -- the transcript would be identical, because the
+     * text is printed either way; it is only the surface it lands on that changes.
+     *
+     * They are IDENTITY ACROSS A REFACTOR and not fidelity. No oracle ever saw this surface
+     * (ADR-008 §3), and `Picture::Hash` folds the resolved pixels, so what a moved value means is
+     * "a person is shown something different", never "the game does something different" -- the
+     * state digests answer that, separately, in `FlightReplayTests`.
+     *
+     * Recorded 2026-09-09 by running the session and printing what it drew. Every value came out of
+     * the port and none was chosen.
+     */
+    static constexpr std::uint64_t RECORDED_DOCKED_PICTURES[] = {
+      0x97D04EFDD6A9BD2Dull, ///< status
+      0x580D1001003EE1A7ull, ///< market
+      0x64E4880A35A8215Full, ///< buy
+      0xCB40E184D014E420ull, ///< sell
+      0x5DA37B99B8E7D606ull, ///< inventory
+      0x7A140263D565AD3Bull, ///< equip
+      0xCB1B15DE2595159Dull, ///< data on system
+    };
+
+    TEST_METHOD(TheDockedScreensAreAsRecorded)
+    {
+      auto game = std::make_unique<Session>();
+      game->commander.cargoHold[0u] = 5;
+      game->commander.cargoHold[3u] = 2;
+      Elite::SaveCommander(game->commander, game->name, game->image);
+
+      game->keys.titleHeld = true; // Space at both title screens (M6-0-h-2)
+      (void)Elite::ResetAndStartGame(game->universe, game->ports, false);
+      game->keys.titleHeld = false;
+      Elite::GenerateMarket(game->rng, game->current.economy, game->market);
+
+      game->keys = ScriptedKeys({'2', 13, 13, 13, 13, 13, 13, 'Q', 'N', 'N', 13});
+
+      // The same seven `TheScreensDoNotPrintTheSameThingAsEachOther` walks, in the same order and
+      // off the same script, so a change to one test's script is a visible change to the other's.
+      const std::vector<std::uint8_t> SCREENS = {Elite::KEY_STATUS,    Elite::KEY_MARKET_PRICE, Elite::KEY_BUY_CARGO,
+                                                 Elite::KEY_SELL_CARGO, Elite::KEY_INVENTORY,   Elite::KEY_EQUIP_SHIP,
+                                                 Elite::KEY_DATA_ON_SYSTEM};
+
+      std::vector<std::string> names;
+      std::vector<std::uint64_t> digests;
+
+      for (const std::uint8_t key : SCREENS)
+      {
+        names.push_back(PressKey(*game, key));
+        digests.push_back(game->universe.picture.Hash(game->universe.canvas, game->universe.backdrop));
+      }
+
+      // The table, printed on every run so that re-recording is a copy rather than a transcription.
+      {
+        std::wstringstream table;
+        table << L"RECORDED_DOCKED_PICTURES[] = {";
+        for (const std::uint64_t digest : digests)
+        {
+          table << L"0x" << std::hex << std::uppercase << digest << L"ull, ";
+        }
+        table << L"};\n";
+        Logger::WriteMessage(table.str().c_str());
+      }
+
+      Assert::IsFalse(game->keys.overran, L"the session asked for more keys than the script holds");
+
+      /*
+       * The seven are DIFFERENT PICTURES, and this clause is what stops the table above passing
+       * vacuously. A session that drew nothing would give seven identical digests and go on
+       * matching a table re-recorded from it for ever; so would one where every screen blanked.
+       */
+      for (std::size_t left = 0; left < digests.size(); ++left)
+      {
+        for (std::size_t right = left + 1; right < digests.size(); ++right)
+        {
+          if (digests[left] == digests[right])
+          {
+            Assert::Fail((Widen(names[left]) + L" and " + Widen(names[right]) + L" resolved to the same picture").c_str());
+          }
+        }
+      }
+
+      Assert::AreEqual(sizeof(RECORDED_DOCKED_PICTURES) / sizeof(RECORDED_DOCKED_PICTURES[0]), digests.size(),
+                       L"a different number of screens was walked, so the table cannot line up");
+
+      for (std::size_t at = 0; at < digests.size(); ++at)
+      {
+        if (digests[at] != RECORDED_DOCKED_PICTURES[at])
+        {
+          std::wstringstream message;
+          message << L"the " << Widen(names[at]) << L" screen changed: recorded 0x" << std::hex << std::uppercase
+                  << RECORDED_DOCKED_PICTURES[at] << L", drew 0x" << digests[at]
+                  << L". Nothing about the GAME moved -- the transcript tests beside this one assert that -- so this is what a"
+                  << L" person is shown changing. If a slice meant to change it, re-record with the reason in the journal"
+                  << L" (Design/Platform-Build.md RN-0).";
+          Assert::Fail(message.str().c_str());
+        }
       }
     }
   };

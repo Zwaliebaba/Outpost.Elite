@@ -28,7 +28,7 @@ settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one p
 no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
 while the oracle was still here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
 repository** since M6-b-7 -- no assembler, no submodule, no assembled game. The suite is
-**<!--count:tests-->149 tests** and
+**<!--count:tests-->151 tests** and
 CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
 **2026-09-09.** Three things landed on top of M6. [Rendering.md](Archive/Rendering.md) opened, was ruled and
