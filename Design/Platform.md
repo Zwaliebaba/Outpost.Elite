@@ -558,6 +558,11 @@ either is the fixed-rate model D3 rules, which is a later track, an option, and 
 
 ## 5. The track
 
+**The plan that executes this table is [Platform-Build.md](Platform-Build.md)** (2026-09-09): the
+slices below as steps an agent can take, in one fixed order, with the files, the tests, the gate
+commands and the protocol every slice follows. Where it departs from a section here it says so and
+the slice's journal entry amends the section.
+
 One track, because the slices depend on each other across the two old ones. Names are kept where
 the slice is the archived one so its history resolves; new slices get new names. **Gate** is what
 turns the slice green beyond `check_all.py` and the suite; sittings are the corpus's unit.
