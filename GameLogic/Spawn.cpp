@@ -32,7 +32,7 @@ namespace Elite
     {
       AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // ABORT with GREEN2 -- the indicator's own green
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 200,
-                  _universe.view, &_universe.picture); // MESS with token 200
+                  _universe.view, &_universe.backdrop); // MESS with token 200
     }
 
     const ShipType type = TypeOf(_universe.bubble.slots[_slot]);
@@ -52,7 +52,7 @@ namespace Elite
       // `MANY+SST`, so the second is what takes the station out of the type counts (§6.58).
       _universe.bubble.slots[1] = 0;
       _universe.bubble.Count(ShipType::Station) = 0;
-      ToggleStationIndicator(_universe.canvas, &_universe.picture);
+      ToggleStationIndicator(_universe.canvas, &_universe.backdrop);
 
       // NWSHP with a sun -- and `XX0` is passed rather than kept locally even though this
       // call cannot reach the store: the type is negative, so the branch jumps past it. Passing it
@@ -180,7 +180,7 @@ namespace Elite
   NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept
   {
     // The missile indicators reset, then 127 into both turn counters.
-    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture);
+    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.backdrop);
     _universe.work.rollCounter = 127;
     _universe.work.pitchCounter = 127;
 
@@ -198,7 +198,7 @@ namespace Elite
 
   NewShip AddStation(Universe& _universe, Ports& _ports) noexcept
   {
-    ToggleStationIndicator(_universe.canvas, &_universe.picture);
+    ToggleStationIndicator(_universe.canvas, &_universe.backdrop);
 
     // The AI byte: hostile, and AI enabled.
     _universe.work.ai = Mask(AiBit::Active, AiBit::HasEcm);

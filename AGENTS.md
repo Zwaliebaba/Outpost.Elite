@@ -248,7 +248,7 @@ what is gone is the reconciliation against a ledger that no longer exists.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->147 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->151 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
@@ -432,3 +432,11 @@ the test result file. Do not add an upload that changes that.
 - [ ] `tools/check_docs.py` runs.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
 - [ ] Tests for the layer you touched were run, and you said which.
+
+The pull request body is [`.github/pull_request_template.md`](.github/pull_request_template.md),
+which GitHub fills in for you. It does not repeat this list — run this list — and it asks for the
+two things a diff cannot say: what you built differently from `Design/` and where you amended it,
+and what neither CI leg can see. The Ubuntu leg compiles only the five `Outpost/` files
+`EXECUTABLE_SOURCES` names, so a change to the window, the presenter, the shell, the composition
+root or the sound has the Windows job as its only witness that it builds, and no witness at all to
+what it looks like.

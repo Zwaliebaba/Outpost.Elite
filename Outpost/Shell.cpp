@@ -20,6 +20,23 @@ namespace Outpost
   bool GameShell::Turn()
   {
     /*
+     * THE TURN BEGINS BY WAITING FOR THE DISPLAY, and this is the whole of slice T-3
+     * (Design/Platform.md §3.7).
+     *
+     * The wait used to be at the BOTTOM, inside `Present(1, 0)`, and the difference is not where a
+     * thread sleeps but how old the keys are when the picture made from them appears. Presenting
+     * into a queue the driver holds one frame deep and then sampling the keyboard means the sample
+     * is a frame older than the pixels it produces; waiting on the chain's own latency object first
+     * and sampling immediately after puts the two inside the same refresh. Everything below --
+     * the pump that fills the key table, the scheduler's steps, the resolve -- is then as late as
+     * it can be and still make this frame, which is what "sample late, present early" means.
+     *
+     * It is safe before there is a swap chain and after there is not: `WaitForFrame` returns at
+     * once when the handle is null, so the start-up turns and the shutdown ones simply do not wait.
+     */
+    m_presenter.WaitForFrame();
+
+    /*
      * THE CLOCK IS READ HERE, ONCE, AND NOWHERE ELSE IN THE PROGRAM (Design/Platform.md §3.1).
      *
      * A turn is a turn however the game got to it -- the outer loop, a `DELAY`, a tunnel's present,
@@ -98,7 +115,29 @@ namespace Outpost
       return !m_window.Closed();
     }
 
-    return m_presenter.Present(*m_picture, *m_canvas, m_video, width, height);
+    /*
+     * Three answers, and only one of them is "carry on" (`ScreenPresenter::PresentResult`).
+     *
+     * `DXGI_STATUS_OCCLUDED` is a SUCCESS code, so while this returned a `bool` a window hidden
+     * behind another one -- or sitting on a virtual desktop nobody is looking at -- presented
+     * nothing, returned true, and went round again at whatever rate the message pump managed. That
+     * is a core burnt on a picture no one can see. `WaitWhileOccluded` idles instead, and wakes on
+     * the first input or uncovering rather than on a timer alone, so nothing is missed by it.
+     */
+    switch (m_presenter.Present(*m_picture, *m_backdrop, *m_canvas, m_video, width, height))
+    {
+    case ScreenPresenter::PresentResult::Lost:
+      return false;
+
+    case ScreenPresenter::PresentResult::Occluded:
+      m_presenter.WaitWhileOccluded();
+      return !m_window.Closed();
+
+    case ScreenPresenter::PresentResult::Presented:
+      break;
+    }
+
+    return !m_window.Closed();
   }
 
   std::uint8_t GameShell::NextKey()

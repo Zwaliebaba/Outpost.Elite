@@ -140,6 +140,27 @@ namespace Elite
      * the dashboard's index plane is 71,680 of it and would halve at four bits a pixel.
      */
     Picture picture;
+
+    /*
+     * The BACKDROP, the second of the two 640x400 surfaces (RN-0, Platform.md §3.4).
+     *
+     * `picture` above is the FRAME from this slice on: what a flight pass re-emits every step, the
+     * ships and the stardust and the planet and the sun. This one holds what persists between
+     * steps -- the glyphs, the charts, the borders, the wipes, the dashboard's dials and its index
+     * plane -- and what is presented is the two composited by exclusive-or, which `Picture.h`
+     * argues is the only composite that leaves today's picture unchanged.
+     *
+     * IT TAKES `picture`'S TREATMENT IN FULL and for `picture`'s reasons (ADR-007 §6, ADR-008 §4):
+     * `HashState` walks past it, `StateCells` does not name it, and the exclusion is asserted
+     * rather than trusted. A second surface is a second rendering of the same frame, not a second
+     * thing the game does, so folding it would re-record five replay tables every time a twin got
+     * a pixel better.
+     *
+     * It is another 107,682 bytes, which takes a `Universe` from 123 KB to 231 KB -- and that
+     * number, not the 36 KB Platform.md §3.4 assumed, is what RN-2 corrects in ADR-008 §1.
+     */
+    Picture backdrop;
+
     DrawWorkspace draw;         ///< SC(1 0) -- the dashboard's cursor, all M2-c left of it
     MathWorkspace math;         ///< Q and K2's bottom byte, the two that outlive a call
     GeometryWorkspace geometry; ///< XX16, XX12, XX2 and XX3 -- `LL9`'s stage results
@@ -383,6 +404,31 @@ namespace Elite
     void LendSunHeap() noexcept
     {
       heap.AttachSunHeap(heaps.sun);
+    }
+
+    /*
+     * The twin switch, and it is ONE switch over TWO surfaces (RN-0, Resolution.md §8.4).
+     *
+     * `DrawingTwins(_picture)` asks "should the twin that writes THIS surface run", which is the
+     * right question and is answered from whichever surface the site was handed. That is what makes
+     * the guard local and free. What it does not do is stay in step: there are two surfaces since
+     * RN-0, so a caller that switched one off would leave every twin that writes the other still
+     * drawing, and `TheReplayIsTheSameWithNoTwins` would be measuring half of what it claims while
+     * passing -- because every digest would be exactly where it was.
+     *
+     * So the two flags are never written separately. This is the only sanctioned writer, and both
+     * surfaces move together by construction rather than by a caller remembering to. The build plan
+     * asked for one flag reached through the universe from all forty-nine guard sites; this is the
+     * same guarantee for two lines instead of forty-nine, and it leaves the guard reading the
+     * surface in front of it rather than reaching back out to the universe to ask.
+     *
+     * `Picture::SetDrawing` stays public underneath because a test that builds a bare `Picture`
+     * with no universe around it has no other way in, and several do.
+     */
+    void SetDrawingTwins(bool _drawing) noexcept
+    {
+      picture.SetDrawing(_drawing);
+      backdrop.SetDrawing(_drawing);
     }
   };
 

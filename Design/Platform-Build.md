@@ -257,7 +257,14 @@ reads from the canvas), `Picture.h`, `VideoState.h`, `Controls.h` (`SIGHT_SPRITE
    pump, and on `Occluded` waits `MsgWaitForMultipleObjects(1, &latency, FALSE, 100, QS_ALLINPUT)`
    instead of spinning; `ScreenPresenter` exposes the handle for that one call. Delete
    `ScreenPresenter::Ready` (no caller; C-1).
-2. **Present on change.** `Picture` gains `std::uint32_t Generation() const noexcept` and a member
+2. **Present on change.** **BUILT DIFFERENTLY — read Platform.md §10 before touching this.** The
+   present cannot be the thing that is skipped: the latency object is a semaphore released when a
+   presented frame RETIRES, so a skipped present leaves nothing to retire and the next wait runs to
+   its cap, and the present is besides the vertical sync every hold in `Shell.cpp` counts turns
+   against. What the tree skips is the RESOLVE and the upload, on `Picture::ResolveSignature` --
+   which is in `GameLogic` beside the reads it lists, not in the shell, because `outpost-elite-names`
+   refused the shell version and was right to. The paragraph below is the plan as written and is
+   kept for the record. `Picture` gains `std::uint32_t Generation() const noexcept` and a member
    `m_generation` bumped by every mutator (`WriteBitmap`, `ExclusiveOrBitmap`, `SetCell`, `SetDot`,
    `ExclusiveOrDot`, `Clear`) — beside `m_drawing`, not game state, not folded, not resolved; a
    `PictureTests` case asserts `Hash` ignores it and each mutator moves it. The shell keeps a
@@ -324,11 +331,39 @@ do not change. `check_twins.py` does not care which surface a twin gets and need
    it beside `picture`, with a sentence. `StateCells.cpp`: the same. `StateHashTests`: the
    exclusion test covers both. `Picture::Resolve` and `Hash` take `const Picture& _backdrop`;
    `ResolveBitmapCell` reads `backdrop.ReadBitmap(offset) ^ ReadBitmap(offset)` and the cell from
-   the backdrop; the dashboard cell from the backdrop. Every caller changes in the same commit:
+   the backdrop; the dashboard cell from the backdrop. **THE LAST TWO CLAUSES CONTRADICT THIS
+   COMMIT'S OWN GATE, found 2026-09-09 while reading ahead from T-3, and the fix is one word.** No
+   site has moved yet at this commit, so every cell palette and every dashboard index is still in
+   the FRAME; reading them "from the backdrop" reads a blank one, and the four instruments the
+   paragraph below promises green would return a black screen and a hundred moved digests. Composite
+   all three planes the same way the bitmap is composited — `backdrop ^ frame`, on the palette byte
+   and on the dashboard index as well as on the bitmap bit. That is identity while either side is
+   blank, which is what makes this commit a no-op; it stays correct after commit 2 moves the
+   persistent sites, because a cell written only to the backdrop reads `backdrop ^ 0`; and it is
+   what the surrounding argument already says the composite is. The "from the backdrop alone"
+   wording describes where those planes will LIVE once the sites have moved, not how to read them.
+   The one thing it costs is that a cell palette written to BOTH surfaces would exclusive-or into
+   nonsense rather than one winning — which the site table forbids and `ThePictureIsAsRecorded`
+   would catch, so say in the journal whether any site turned out to do it.
+   Every caller changes in the same commit:
    `ScreenPresenter::Present` (its signature gains the backdrop — `check_outpost.py` will say so),
    `FlightReplayTests`' checkpoint (`picture.Hash(canvas, backdrop)`), the five `Picture*Tests`
    files (pass an empty backdrop where they resolve). With no site moved yet, the backdrop is blank
    and every hash is unchanged: **all four instruments green with nothing else touched.**
+**THE THREE STEPS BELOW ARE IN THE WRONG ORDER, found 2026-09-09 after step 1 was built.** Step 2
+moves the sites and step 3 builds the fixtures that would notice if a move was wrong, so step 2 is
+performed with no gate over most of what it touches. `ThePictureIsAsRecorded` watches a scripted
+FLIGHT; `DockedSessionTests` does not look at pixels at all — it has no `Hash`, no `Resolve` and no
+recorded table — and **27 of the 81 sites are on docked screens** (`Charts`, `Equipment`, `Game`,
+`MarketScreen`, `Missions`, `StartUp`, `GameLoop`). A misclassified chart or market glyph would
+move nothing any test asserts and would be found by a person playing, which is the failure mode
+this corpus is built to avoid. **Do step 3 first**, recording both tables on the unmoved tree,
+then step 2 against them: the tables then say what the split preserved rather than what it
+produced. Step 3's own wording already assumes it runs second ("recorded on this commit's tree —
+after step 2, so they record the split, which is identical to before it") — that sentence is the
+one to invert, and the identity it claims is exactly what recording first would let the move
+PROVE rather than assert. Renumber when performing, and say in the journal which order was used.
+
 2. **The sites.** Move the persistent sites to the backdrop per the table. After each file:
    `run_tests.sh` and `ThePictureIsAsRecorded` green, or the site you just moved is transient and
    goes back. Expect the three defaults to hold; if one does not, the gate has ruled and the journal
@@ -388,9 +423,62 @@ still works. Archive/Rendering.md §4.4 listed all nine; six are the frame's.
   ring is its own frame and nothing is needed.
 - **Ships, the planet, the stardust, the lasers, the explosion** are drawn whole every pass already.
 
+**THREE THINGS THIS STEP GETS WRONG, found 2026-09-09 by building commit 1 and trying commit 2.**
+Commit 1 is built and green; the notes below are what commit 2 walked into.
+
+**(a) The clear must be LAZY, or every digest records a blank frame.** An eager `Clear()` at the end
+of a pass leaves the surface empty for everything that looks BETWEEN passes — the replay's
+checkpoint, `ThePictureIsAsRecorded`, a presenter reading it a moment later. On the glass an eager
+and a lazy clear are identical; to an observer they are not, and the observers are the whole
+verification story here. So `Picture::EndFrame()` should MARK, and the next write that lands should
+clear first (`BeginFrameIfStale` in each mutator, one predictable branch beside the bounds check
+that is already there). The surface then holds the completed frame from the moment it is finished
+until the next one starts being drawn, which is when a person is looking at it.
+
+**(b) The rings need a drop too; "nothing is needed" is wrong.** With a clear per present, the
+rewind-and-redraw that erases the previous circle draws it back onto an empty frame as a ghost.
+`RECORDED_RINGS` moves at present 2 with the clear on and no other change, which is the measurement.
+
+**(c) `ErasingThePlanetClearsBothSurfaces` encodes the OLD contract** and fails by design once the
+planet's erase twin is dropped ("the erase left ink on the picture"). It has to be rewritten to the
+new one — the frame is cleared, not erased — and that rewrite is part of the slice rather than a
+casualty of it.
+
+**And a warning about the stardust.** `PlotStardust` is called at the old position and again at the
+bottom of the loop, and which of the two is the erase is not clear from the argument names —
+`wasAcrossLow`/`wasDownLow` are passed to the first, and both plot `x1, y1`. Dropping the wrong one
+makes the starfield vanish from the frame, which shows up as `ThePictureIsAsRecorded` drawing
+checkpoint 0's digest at checkpoint 1 (both frames then being backdrop-only). Read
+`MoveStardustAhead` whole before touching it; do not infer from the parameter names.
+
+**(d) "PIXEL-IDENTICAL" CANNOT BE MET, AND THE REASON IS A DEFECT IN THE GATE.** Measured
+2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
+flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
+
+| checkpoint (step) | 0 | 40 | 100 | 200 | 300 | 340 | 342 | 400 |
+|---|---|---|---|---|---|---|---|---|
+| frame ink, tree as it stands | 0 | 563 | 581 | 582 | **12** | **13** | **11** | 82 |
+| frame ink, clear on + drops | 0 | 563 | 1559 | 2034 | 1568 | 404 | 21 | 537 |
+| backdrop ink, both | 4212 | 4212 | 4212 | 4212 | 4212 | 4212 | 4212 | 4212 |
+
+**Twelve pixels of frame at step 300.** `ThePictureIsAsRecorded` is therefore recording, for most
+of its checkpoints, the BACKDROP and almost nothing else: the checkpoint lands at a moment when the
+pass's transients have been erased and the next pass has not drawn them. That is why RN-0's site
+moves were invisible to it, and it is why the table cannot be the thing RN-1 holds identical — with
+a frame that is cleared and redrawn whole, the checkpoint sees the ships and the starfield a player
+is looking at, and the digests move by design.
+
+So RN-1 cannot both clear the frame and leave `RECORDED_PICTURE` unmoved. **That is a decision for
+the owner, not for the agent**, and the slice stops until it is taken. The two shapes are: sample
+the picture AT THE PRESENT (a watching presenter, as `RECORDED_RINGS` already does) and re-record
+the table on the tree before the clear, so the gate compares like with like; or accept the
+re-record with the reason and the ink table above as the evidence. The first is more work and gives
+a gate that means something afterwards; the second is a re-record of a table that was not measuring
+what it claimed.
+
 **Steps, as three commits.** (1) `Game::EndFrame`, `Frame.h`'s wrappers, the sixteen sites, the
 replay driver and `Main.cpp` calling them — with `Clear` still a no-op behind a `constexpr bool`
-so the digests prove the plumbing alone. (2) The clear switched on, the six drops made, the sun
+so the digests prove the plumbing alone. **BUILT 2026-09-09; nineteen sites, not sixteen.** (2) The clear switched on, the six drops made, the sun
 twin added, `check_twins.py` given a fourth table `ERASE_NEEDS_NO_TWIN` with a reason per entry.
 (3) The `PictureTests` case for `Clear` (there is none, because nothing called it).
 

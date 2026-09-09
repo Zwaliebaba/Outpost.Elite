@@ -226,8 +226,26 @@ namespace Elite
 
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
                          const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video,
-                         MemoryMap& _map, std::uint8_t _view, Picture* _picture) noexcept
+                         MemoryMap& _map, std::uint8_t _view, Picture* _picture, Picture* _frame) noexcept
   {
+    /*
+     * THE OTHER SURFACE IS BLANKED FIRST, and it is this routine's job rather than its callers'
+     * (RN-0; the finding is in Platform.md §10).
+     *
+     * A wipe is not a draw site and the site table does not classify it. With one surface, blanking
+     * the screen blanked everything on it; split, this can only blank the one it is handed, and the
+     * transients -- the stardust, the ships, the sun -- are on the other. Leave them and they
+     * survive the view change: the scripted flight's last checkpoint, the docked screen the arrival
+     * leaves, came back with stardust on it.
+     *
+     * It is HERE and not at the two call sites because there are two and a third would forget. It
+     * is also RN-1's mechanism arriving early, and doing exactly what RN-1 will ask for.
+     */
+    if (_frame != nullptr)
+    {
+      _frame->Clear();
+    }
+
     /*
      * BOL3 over BOL4 -- one colour byte written into a rectangle of cells.
      *
@@ -385,9 +403,8 @@ namespace Elite
 
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
                       _universe.status, _universe.commander.fuel, _universe.compass, _universe.video, _universe.memoryMap,
-                      _universe.view, &_universe.picture); // Resolution.md §4, rule T3:
-                                                           // the wipe has to reach the index plane too, or a
-                                                           // screen change leaves the last one's lines behind.
+                      _universe.view, &_universe.backdrop, &_universe.picture); // Resolution.md §4, rule T3:
+                      // the wipe has to reach the index plane too, or a screen change leaves the last one's lines behind.
 
     // A countdown still running goes to `ee3` rather than OLDBOX -- it outlives a screen
     // change and is reprinted, because the screen it was on has just been wiped.

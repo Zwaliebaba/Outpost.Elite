@@ -2,6 +2,7 @@
 
 #include "Flight.h"
 
+#include "Frame.h"
 #include "Scanner.h"
 
 #include "Combat.h"
@@ -121,13 +122,13 @@ namespace Elite
     // and the test is what keeps the two in step.
     if (_universe.bubble.Count(ShipType::Station) != 0u)
     {
-      ToggleStationIndicator(_universe.canvas, &_universe.picture);
+      ToggleStationIndicator(_universe.canvas, &_universe.backdrop);
     }
 
     // An ECM still counting down is switched off first.
     if (_universe.status.ecmCountdown != 0u)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture);
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.backdrop);
     }
 
     // Rub every ship off the screen and forget both line heaps.
@@ -242,7 +243,7 @@ namespace Elite
     (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false);
 
     // One vertical sync of `DELAY`, which is what the pacing object holds for.
-    _ports.present.Present();
+    PresentFrame(_ports.present, &_universe.picture);
 
     (void)PlaySoundEffect(_universe.sound, SoundEffect::HyperspaceAgain, false);
 
@@ -424,7 +425,7 @@ namespace Elite
       DrawShip(_universe, _universe.bubble.blocks[slot], false);
 
       // RDKEY, and then the counter steps down.
-      _ports.present.HoldTitleFrame(_universe.work.z.hi); // TLL2's pace
+      HoldTitleFrame(_ports.present, &_universe.picture, _universe.work.z.hi); // TLL2's pace
       const TitleKey scan = ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
 
@@ -466,7 +467,7 @@ namespace Elite
     SetUpScreen(_universe, _ports, DEATH_VIEW);
 
     // The SAME border again, and `BOX2` EORs, so drawing it twice rubs it out.
-    DrawFullBorder(_universe.canvas, &_universe.picture);
+    DrawFullBorder(_universe.canvas, &_universe.backdrop);
 
     // Two screen bytes zeroed -- the two `BOX` STORES instead of
     // EORing, which a second pass therefore cannot remove.
@@ -474,10 +475,10 @@ namespace Elite
     _universe.canvas.Write(BORDER_TOP_RIGHT, 0u);
     // Guarded explicitly: these two twins take the surface by REFERENCE, so there is no null for
     // `DrawingTwins` to test and section 8.4's switch has to be read here.
-    if (_universe.picture.Drawing())
+    if (_universe.backdrop.Drawing())
     {
-      WriteBitmapByte2x(_universe.picture, BOTTOM_RIGHT_CORNER, 0u, false);
-      WriteBitmapByte2x(_universe.picture, BORDER_TOP_RIGHT, 0u, false);
+      WriteBitmapByte2x(_universe.backdrop, BOTTOM_RIGHT_CORNER, 0u, false);
+      WriteBitmapByte2x(_universe.backdrop, BORDER_TOP_RIGHT, 0u, false);
     }
 
     // A whole new stardust field over the cleared screen.
@@ -597,7 +598,7 @@ namespace Elite
         }
         ++ships;
       }
-      _ports.present.HoldFlightFrame(ships);
+      HoldFlightFrame(_ports.present, &_universe.picture, ships);
     };
 
     (void)MainFlightLoop(_universe, _ports);

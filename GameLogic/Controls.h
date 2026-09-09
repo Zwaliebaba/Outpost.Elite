@@ -378,7 +378,7 @@ namespace Elite
    * canvas -- offsets &23F8 and &27F8 of an array the port already compares byte for byte -- and
    * writing a sprite pointer is a canvas write like any other (§6.73).
    */
-  inline constexpr std::uint16_t SIGHT_SPRITE_CELL = Canvas::SCREEN_CELLS + 0x3F8u;
+  inline constexpr std::uint16_t SIGHT_SPRITE_CELL = Canvas::SPRITE_POINTERS;
   inline constexpr std::uint16_t SIGHT_SPRITE_CELL_2 = Canvas::DASHBOARD_CELLS + 0x3F8u;
 
   /// What `SIGHT` reaches that is a VIC-II register rather than memory.
@@ -416,7 +416,7 @@ namespace Elite
    * it had and is switched off instead. A port that wrote a pointer of 160 and then disabled the
    * sprite would look the same on screen and differ on every byte.
    */
-  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view,
-                       VideoState& _video, MemoryMap& _map) noexcept;
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view, VideoState& _video,
+                       MemoryMap& _map) noexcept;
 
 } // namespace Elite

@@ -6,6 +6,7 @@
 #include "Commander.h"
 #include "DockedKeys.h"
 #include "Flight.h"
+#include "Frame.h"
 #include "FlightLoop.h"
 #include "Galaxy.h"
 #include "ShipSlot.h"
@@ -16,6 +17,7 @@
 #include <functional>
 #include <iomanip>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -272,6 +274,27 @@ namespace GameLogicTests
       }
     };
 
+    /*
+     * 6502: HFS1's `JSR HFS2`-per-circle -- every ring the tunnel draws, digested as it appears.
+     *
+     * The tunnel paces itself through `Present`, one call per circle, which is the vertical sync
+     * the VIC-II gave it for free while the 6510 computed the next one. So a presenter watching
+     * that call sees exactly the frames a person sees, and there is no other way to reach them:
+     * the rings are drawn and erased inside one library call that returns when the tunnel is over.
+     */
+    struct RingWatch final : Elite::Presenter
+    {
+      std::function<void()> onPresent;
+
+      void WaitFrames(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void Present() override
+      {
+        onPresent();
+      }
+    };
+
     /// 6502: what the cold start leaves before a launch -- the default commander with a docking
     /// computer bought for the last phase, the home system's data, and `RESET`.
     void Prepare(FlightPort& _port)
@@ -300,9 +323,18 @@ namespace GameLogicTests
     {
       Trace trace;
       std::uint32_t step = 0;
+      /*
+       * The digest is taken BEFORE the frame ends, and then the frame ends (RN-1, `Frame.h`).
+       *
+       * The order is the whole of what this records. A checkpoint has to hash the frame AS
+       * PRESENTED -- what a person would have seen -- and the boundary comes after that, so the
+       * next pass draws onto an empty frame exactly as it does in the executable's loop. Taking
+       * the digest after the clear would record a blank frame every time and pass for ever.
+       */
       auto checkpoint = [&]() {
         trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()});
-        trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas));
+        trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas, _port.universe.backdrop));
+        Elite::EndFrame(&_port.universe.picture);
       };
 
       Prepare(_port);
@@ -598,6 +630,91 @@ namespace GameLogicTests
     }
 
     /*
+     * EVERY RING OF THE HYPERSPACE TUNNEL, digested as it is shown (RN-0).
+     *
+     * `ThePictureIsAsRecorded` above walks a scripted flight and never jumps, so the tunnel -- one
+     * of the two places the game draws something that is neither a docked screen nor a flight frame
+     * -- had no whole-frame record at all. It is exactly the shape RN-0 can break without anything
+     * noticing: `DrawHyperspaceRings` is classified as writing the FRAME, on the grounds that each
+     * ring is its own present, and if that is wrong the tunnel goes blank or leaves its rings
+     * behind and no other test in this suite would say a word.
+     *
+     * The first entry is not a ring. `HYPNOISE` asks for one vertical sync between its two sound
+     * effects before the tunnel starts, so entry zero is the screen the player is leaving --
+     * which is worth recording for its own sake, because it is what RN-1's clear will be tempted
+     * to blank.
+     *
+     * Recorded 2026-09-09 on the tree as RN-0 found it. Identity across a refactor, not fidelity:
+     * no oracle ever saw this surface (ADR-008 §3).
+     */
+    static constexpr std::uint64_t RECORDED_RINGS[] = {
+      0x3702D99714C4325ull, ///< HYPNOISE's own delay, before the first ring
+      0x3CEBE7EC8479099Cull, 0x92155EE0C1F7076Cull, 0x73B6B7A2B58BCF38ull, 0x4084F317AD1551Cull,
+      0xC9FCDB373D6B436Bull, 0x88BE92BFD9E411B7ull, 0x67D672CF733BEF17ull, 0x86E64530DC4FA343ull,
+      0x733B2FD1B733C597ull, 0xFED2B2B68ACC5E56ull, 0x2A476FC6F90E9ECEull, 0x855A0A247EDA83F2ull,
+      0x185B96966F5C5E36ull, 0x12FEF8FF0FAF2CEAull, 0xA24F52649AAAB3E6ull, 0x3DB9B49A64F8A33Aull,
+      0x7A3947958D248CBAull, 0x14B68AD8E1508C25ull, 0x281064F9E6B6B875ull, 0x81777AF935EC7C61ull,
+      0xFC2D81BC082A7419ull, 0x45356C817EE7D001ull, 0xDA421F86C190B91ull, 0x3A7D5985BEF3E5FDull,
+      0xA433D812A40F9A19ull, 0x7C6ED20A59B840Cull, 0xF0B8B273DF53470ull, 0x6485679864EF61BCull,
+      0x8A130318455EF2Cull, 0x56E8DBC3C5134BD1ull, 0x8501BB63F64539E1ull, 0x6F51E529BE0DBE89ull,
+      0xE2C7645A7F81F841ull, 0xB604CE941A1F80E6ull,
+    };
+
+    TEST_METHOD(TheHyperspaceRingsAreAsRecorded)
+    {
+      auto port = std::make_unique<FlightPort>();
+      Prepare(*port);
+
+      std::vector<std::uint64_t> rings;
+      RingWatch watch;
+      watch.onPresent = [&] {
+        rings.push_back(port->universe.picture.Hash(port->universe.canvas, port->universe.backdrop));
+      };
+
+      port->watching = &watch;
+      Elite::DrawHyperspaceTunnel(port->universe, port->Ports());
+      port->watching = nullptr;
+
+      // The table, printed on every run so that re-recording is a copy rather than a transcription.
+      {
+        std::wstringstream table;
+        table << L"RECORDED_RINGS[] = {";
+        for (const std::uint64_t digest : rings)
+        {
+          table << L"0x" << std::hex << std::uppercase << digest << L"ull, ";
+        }
+        table << L"};\n";
+        Logger::WriteMessage(table.str().c_str());
+      }
+
+      /*
+       * The tunnel DREW, and this clause is what stops the table passing vacuously: a tunnel that
+       * blanked would present the same empty picture every time and go on matching a table
+       * re-recorded from it. Distinct digests are the evidence that something moved between rings.
+       */
+      Assert::IsTrue(rings.size() > 2u, L"the tunnel presented too few times to be a tunnel");
+      const std::set<std::uint64_t> distinct(rings.begin(), rings.end());
+      Assert::IsTrue(distinct.size() > 2u, L"every ring of the tunnel resolved to the same picture");
+
+      Assert::AreEqual(sizeof(RECORDED_RINGS) / sizeof(RECORDED_RINGS[0]), rings.size(),
+                       L"the tunnel presented a different number of times, so the table cannot line up");
+
+      for (std::size_t at = 0; at < rings.size(); ++at)
+      {
+        if (rings[at] != RECORDED_RINGS[at])
+        {
+          std::wstringstream message;
+          message << L"the tunnel changed at present " << at << L": recorded 0x" << std::hex << std::uppercase
+                  << RECORDED_RINGS[at] << L", drew 0x" << rings[at]
+                  << L". Nothing about the GAME moved -- the state digests are asserted separately -- so this is what a person"
+                  << L" is shown changing. If a slice meant to change it, re-record with the reason in the journal"
+                  << L" (Design/Platform-Build.md RN-0).";
+          Assert::Fail(message.str().c_str());
+        }
+      }
+    }
+
+    /*
      * All three flights again with the TWINS SWITCHED OFF, and not one digest may move
      * (Design/Resolution.md section 8.4).
      *
@@ -634,22 +751,33 @@ namespace GameLogicTests
         return false;
       };
 
+      /*
+       * BOTH SURFACES, through the one switch that writes them (`Universe::SetDrawingTwins`).
+       *
+       * `DrawingTwins(_picture)` asks "should the twin that writes THIS surface run", which is
+       * exactly the question, and it reads whichever surface the site was handed. There are two of
+       * those since RN-0, so switching one off would leave every twin that writes the other still
+       * drawing and this test measuring half of what it claims -- while passing, because every
+       * digest would be exactly where it was. That is why the two flags have one writer and why the
+       * plane assertion below is made on both surfaces.
+       */
       auto quiet = std::make_unique<FlightPort>();
-      quiet->universe.picture.SetDrawing(false);
+      quiet->universe.SetDrawingTwins(false);
       const Trace quietFlight = Fly(*quiet);
       AssertAsRecorded(quietFlight, RECORDED, sizeof(RECORDED) / sizeof(RECORDED[0]), RECORDED_STEPS, RECORDED_OUTCOME,
                        L"RECORDED with no twins");
-      Assert::IsFalse(anythingDrawn(quiet->universe.picture), L"a twin drew on the picture with the twins switched off");
+      Assert::IsFalse(anythingDrawn(quiet->universe.picture), L"a twin drew on the frame with the twins switched off");
+      Assert::IsFalse(anythingDrawn(quiet->universe.backdrop), L"a twin drew on the backdrop with the twins switched off");
 
       auto quietDeath = std::make_unique<FlightPort>();
-      quietDeath->universe.picture.SetDrawing(false);
+      quietDeath->universe.SetDrawingTwins(false);
       const Trace death = Fly(*quietDeath, {}, Ending::Died);
       AssertAsRecorded(death, RECORDED_DEATH, sizeof(RECORDED_DEATH) / sizeof(RECORDED_DEATH[0]), RECORDED_DEATH_STEPS,
                        Elite::LoopOutcome::Died, L"RECORDED_DEATH with no twins");
       Assert::AreEqual(RECORDED_DEATH_FRAMES, death.deathFrames, L"the wreckage ran for as many frames with no twins");
 
       auto quietPod = std::make_unique<FlightPort>();
-      quietPod->universe.picture.SetDrawing(false);
+      quietPod->universe.SetDrawingTwins(false);
       const Trace pod = Fly(*quietPod, {}, Ending::Escaped);
       AssertAsRecorded(pod, RECORDED_ESCAPE, sizeof(RECORDED_ESCAPE) / sizeof(RECORDED_ESCAPE[0]), RECORDED_ESCAPE_STEPS,
                        Elite::LoopOutcome::Escaped, L"RECORDED_ESCAPE with no twins");
@@ -658,7 +786,7 @@ namespace GameLogicTests
       // blank, which would also be true if the twins had never been wired up at all.
       auto drawn = std::make_unique<FlightPort>();
       const Trace control = Fly(*drawn);
-      Assert::IsTrue(anythingDrawn(drawn->universe.picture),
+      Assert::IsTrue(anythingDrawn(drawn->universe.picture) || anythingDrawn(drawn->universe.backdrop),
                      L"the twins drew nothing even switched ON, so this test proves nothing about them");
       Assert::IsTrue(control.checkpoints.size() == quietFlight.checkpoints.size(),
                      L"the two runs took a different number of checkpoints");

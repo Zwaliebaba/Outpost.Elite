@@ -492,8 +492,16 @@ in four places, all in `Outpost/`:
   after a vertical blank, samples, steps and presents into the next one: §2.3's last row becomes one
   refresh, and the measurement is PresentMon's `MsBetweenPresents` and `MsUntilDisplayed` on a
   scripted key, taken before and after and written into T-3's journal entry.
-- `Present` is called only when `FrameChanged()`; a turn that changed nothing waits on the object
-  and does no CPU or GPU work.
+- The RESOLVE is done only when the picture's inputs moved, and the present is done every turn.
+  **This sentence said the opposite until T-3 built it** — "`Present` is called only when
+  `FrameChanged()`; a turn that changed nothing waits on the object and does no CPU or GPU work" —
+  and it cannot work: the latency object is a semaphore released when a PRESENTED frame retires, so
+  a turn that skipped the present would leave nothing to retire and the next wait would run to its
+  cap. The present is also the vertical sync every hold in `Shell.cpp` counts turns against. What
+  actually costs is the 256,000-pixel resolve and the 250 KB upload behind it, and those are what a
+  turn that changed nothing now skips; the texture is a separate resource from the back buffer, so
+  it survives the flip. `Picture::ResolveSignature` is the question "did anything `Resolve` reads
+  move", answered beside the reads and held there by `PictureTests`.
 - `DXGI_STATUS_OCCLUDED` puts the loop on `MsgWaitForMultipleObjects` with a 100 ms cap, so a hidden
   window costs ten wake-ups a second and not a core; minimised stays `WaitMessage` as today.
 - Vsync stays on and tearing stays off: at three to twenty-one steps a second a variable-refresh
@@ -569,8 +577,8 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 
 | Slice | What | Gate | Ratchets and checks | Sittings |
 |---|---|---|---|---|
-| **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->257) falls; ADR-005 §3 | 2 |
-| **T-3** The presenter | §3.7: the waitable object, latency one, present-on-change over the picture's generation counter (or the frame surface's once RN-0 lands), occlusion idle | The picture's own goldens unchanged; PresentMon before and after on a scripted key, numbers in the journal; CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
+| **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->258) falls; ADR-005 §3 | 2 |
+| **T-3** ✅ **built 2026-09-09 (§10)** | §3.7: the waitable object, latency one, **resolve**-on-change over `Picture::ResolveSignature` (not present-on-change — see §3.7 and §10), occlusion idle | The picture's own goldens unchanged; the signature's own test; **owner's, outstanding**: PresentMon before and after on a scripted key, and CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** Finish the split | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
 | **RN-1** The frame boundary | `Picture::Clear` finally called — the frame refreshed from the backdrop at every present; erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
 | **RN-2** ADR-008 amended | T3 deleted; §1's byte count corrected for two surfaces | `check_docs.py`; the ADR's Status table | — | 0.5 |
@@ -799,6 +807,221 @@ event accumulation into the `InputFrame` (§3.3) — and the ruling that the fli
 game-logic change and not a setting, which is a track of its own after RN-6 with the faithful cadence
 selectable. Nine ADRs carry their amendments as of this entry; the speed knob is gone from §3.2, §5
 and §8; §0's second row says what the track does and does not do about the sampling rate.
+
+**2026-09-09 — T-3, first commit: the wait moved from the bottom of the turn to the top.** The swap
+chain is created with `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, the queue is set to one
+frame instead of the driver's default three, and `GameShell::Turn` opens by waiting on the chain's
+latency object. Nothing about the picture changed; what changed is its age. Presenting into a
+three-deep queue and then sampling the keyboard meant a key could be read up to three refreshes
+before the pixels it moved reached the glass — 50 ms on a 60 Hz panel, against a game whose own
+step is 47. Waiting first and sampling immediately after puts the sample and the present inside one
+refresh.
+
+**`ResizeBuffers` did not need a change, and the plan asked whether it would.** `Resize` already
+reads `GetDesc1` and hands `description.Flags` straight back, so the flag round-trips without a
+line — which is luck rather than design, and the comment beside the flag now says so, because a
+resize that dropped it would leave a valid handle that is never signalled. That is a hang, not a
+wrong picture, and it would not show up until somebody dragged a window edge.
+
+**`Present` answers three things now, and the third was being lost.** `DXGI_STATUS_OCCLUDED` is a
+SUCCESS code, so while the return was a `bool` a window hidden behind another one — or on a virtual
+desktop nobody is looking at — presented nothing, said "carry on", and went round again at whatever
+rate the message pump managed, burning a core on a picture no one could see. `Occluded` now idles in
+`WaitWhileOccluded`, woken by the latency object, by any input, or by a hundred milliseconds,
+whichever is first.
+
+**One deviation from the build plan, and it is a boundary rather than a behaviour.** The plan had
+the shell perform the occluded wait over a handle the presenter exposed. The wait is one call; an
+accessor handing out a raw `HANDLE` to one caller is a worse seam than a method that names what the
+wait is for, and Win32 waits belong beside the Direct3D (ADR-004 §1). So the handle stayed private
+and the accessor went the way of `Ready`, which C-1 deleted in the same commit for having no caller
+at all.
+
+**What this commit is NOT verified by, and it should be said plainly.** Neither `ScreenPresenter`
+nor `Shell` is in `EXECUTABLE_SOURCES`, so the Ubuntu leg compiles none of it: 147 green here and
+all 13 repository checks green say nothing about this change. The Windows job is the only witness,
+and the two numbers that decide whether the slice is worth its complexity — Task Manager at rest
+with the window covered, and PresentMon's `MsUntilDisplayed` on a scripted key before and after —
+are still the owner's to take.
+
+**2026-09-09 — T-3, second commit: the resolve is skipped, the present is not, and §3.7 was wrong
+about which.** The design said a turn that changed nothing does not PRESENT and waits on the
+latency object instead. It cannot: that object is a semaphore released when a presented frame
+RETIRES, so a turn that skipped the present leaves nothing to retire and the next wait runs to its
+one-second cap — a stall dressed as a saving. The present is also the vertical sync every hold in
+`Shell.cpp` counts turns against, so removing it would take the pacing with it. §3.7's second
+bullet is rewritten to say what the tree does: present every turn, and skip the 256,000-pixel
+resolve and the 250 KB upload behind it, which is where all the cost was. What is left on an
+unchanged turn is a clear, one triangle over a texture that is already resident, and the present.
+
+**The signature moved out of the executable, and the ratchet is what moved it.** It was written
+first as a free function in `ScreenPresenter.cpp`, enumerating what `Picture::Resolve` and
+`CompositeSprites` read. `outpost-elite-names` went 62 → 66 and refused, which was the correct
+answer to a wrong design rather than an obstacle: a list of what two `GameLogic` functions read
+belongs beside those functions, not a project away. `Picture::ResolveSignature` is that list, and
+moving it bought the thing the executable could never have had — a test. `PictureTests` now
+asserts, for each of thirteen reads, that changing it moves the pixels AND moves the signature;
+deleting any one fold from the function fails it. The count came back to 62.
+
+**And the first version of that test proved nothing, which is worth recording.** It ran against a
+default picture — every cell palette black on black, the colour RAM zero, the dashboard not shown —
+where flipping bitmap bits changed no pixel a person could see, so every case passed vacuously. The
+test now asserts that each change moved the pixels BEFORE asserting the signature noticed, and it
+took two attempts to make each of the thirteen cases actually move one. A test that cannot fail is
+worse than no test, because it is counted.
+
+**One thing kept that the test does not justify.** `Present` resolves anyway every 64 turns
+regardless of the signature. The signature is a hand-kept list, and a read added tomorrow to a
+mutation the test does not make would produce a screen that stops updating — silent, total, and on
+a path neither CI leg can see. Sixty-four turns is a third of a second to a second depending on the
+panel, so the net turns that failure into visible lag rather than a freeze, at 1.5 % of the resolve
+it is insuring. It is insurance and not a substitute, and the comment beside it says so.
+
+**A duplicate address removed on the way past.** `Canvas::SCREEN_CELLS + 0x3F8u` was written out in
+`CompositeSprites` and in `SIGHT_SPRITE_CELL`, and the signature wanted it a third time. It is
+`Canvas::SPRITE_POINTERS` now, once, with the paragraph about why reading the first block reads
+both moved onto it.
+
+**147 → 149 tests**, all 13 checks, `outpost-elite-names` and `main-lines` at their ceilings. The
+Windows leg is still the only witness to the presenter half; commit 1's run was green.
+
+**2026-09-09 — RN-0, first commit: the backdrop exists and changes nothing, which is the point.**
+`Universe::backdrop` is declared beside `picture`, under the same exclusion — `HashState` walks
+past both, `StateCells` names neither, and `TheStateHashDeliberatelyDoesNotSeeIt` now writes to
+both and requires the digest not to move. `Picture::Resolve`, `Hash` and `ResolveSignature` take
+the backdrop; the two surfaces composite by exclusive-or on all three planes. **149 passed, 0
+failed, all 13 checks** with no site moved, so every digest the tree holds — the three replays,
+`RECORDED_PICTURE`, every picture golden — is byte for byte what it was. That is what the commit
+had to prove and it is all it claims.
+
+**The plan's own step would not have compiled to that.** Platform-Build.md §2.3 had the bitmap
+composited but the cell palettes and the dashboard plane read "from the backdrop", which at this
+commit is blank: a black screen and a hundred moved digests, not a no-op. Composite all three the
+same way and it is identity while either side is empty, and still correct once the sites move,
+because a cell written only to the backdrop reads `backdrop ^ 0`. The step now says so.
+
+**What it costs, said before the next commit meets it.** A cell palette written to BOTH surfaces
+exclusive-ors into nonsense rather than one winning. The site table forbids that and
+`ThePictureIsAsRecorded` would catch it, but commit 2's journal is the place to record whether any
+of the 74 sites turns out to do it.
+
+**The byte count for RN-2.** A second `Picture` is another 107,682 bytes, so a `Universe` goes from
+123 KB to 231 KB — not the 36 KB §3.4 assumed. `Universe.h` carries the number and RN-2 is where
+ADR-008 §1 gets it.
+
+**2026-09-09 — RN-0, the fixtures, recorded BEFORE the sites move.** The plan had these built after
+the sites moved and the order is inverted, for the reason the entry above gives: recorded first,
+they say what the split PRESERVED; recorded after, they only say what it produced. Two tables,
+149 → 151 tests, every existing digest unmoved.
+
+**The docked session drew nothing at all, and that is why it had no picture gate.** It printed
+through a terminal `TranscriptSink` — characters into a string, full stop — so `CHPR` never ran, the
+cursor only moved where a routine moved it deliberately, and the canvas and the 640×400 surface were
+blank on every screen. `DockedSessionTests`' own header has said so since slice 2e and called it the
+one thing a null presenter cannot check. The sink passes the character on to a real
+`Elite::TextPrinter` now, wired as `PictureTextTests`' `Docked` fixture is and as `Game` wires the
+real game, with the picture attached. **All six existing docked tests passed unchanged with `CHPR`
+running**, which was not a foregone conclusion and is why it was tried before a second fixture was
+invented: those assertions are about which screen was reached and whether the screens differ from
+each other, and neither moved.
+
+`TheDockedScreensAreAsRecorded` then digests seven screens — status, market, buy, sell, inventory,
+equip, data on system — off the same script `TheScreensDoNotPrintTheSameThingAsEachOther` uses, so
+the two cannot drift apart unnoticed.
+
+**`TheHyperspaceRingsAreAsRecorded` covers the other place with no record**: 35 presents through
+`DrawHyperspaceTunnel`, of which the first is `HYPNOISE`'s own vertical sync before any ring is
+drawn. It matters because `DrawHyperspaceRings` is classified as writing the FRAME on the grounds
+that each ring is its own present, and nothing else checks that classification.
+
+**Both tables carry a clause that stops them passing vacuously, and both were mutation-checked.**
+Deleting the picture attachment from the docked printer fails on "status and market resolved to the
+same picture"; passing `nullptr` where `DrawTunnel` hands the tunnel its surface fails on "every
+ring of the tunnel resolved to the same picture". A digest table matches anything once it has been
+re-recorded from a broken tree, so the distinctness clause is the half that has to be there before
+the numbers mean anything at all.
+
+**What is gated now that was not.** 27 of RN-0's 81 sites are on docked screens and 3 are the
+tunnel's; until today none of those 30 had a whole-frame test of any kind. The remaining commits
+move sites against these two tables and `ThePictureIsAsRecorded`.
+
+**2026-09-09 — RN-0, the sites moved: 54 to the backdrop, 28 left on the frame.** All three picture
+tables hold unmoved, 151 tests, 13 checks. The gate ruled on all three of the defaults §3.4 left
+open and confirmed each: `SeedStardustField`, `SeedStardustAndClearShips` and `FlipStardust` stay on
+the frame, `DrawHyperspaceRings` stays, `ClearAllShips` stays. **Five corrections to the site table,
+four of them found by the gate rather than by argument.**
+
+**1. A wipe is not a draw site, and the table does not classify it.** With one surface, blanking the
+screen blanked everything on it. Split, `SetUpScreenPixels` can only blank the surface it is handed,
+and the transients are on the other — so the scripted flight's last checkpoint, the docked screen
+the arrival leaves, came back with stardust on it. The wipe takes both surfaces now and clears the
+frame itself, in the routine rather than at its two call sites, because a third call site would
+forget. That is RN-1's mechanism arriving early and doing exactly what RN-1 will ask of it.
+
+**2. Sites that write the same CELL must move as a unit.** Moving the glyphs alone made all seven
+docked screens resolve to the same picture: the glyph's cell palette went to the backdrop, the
+wipe's stayed on the frame, and the composite exclusive-ors the two palette bytes into black on
+black. That is precisely the hazard recorded in the plan before this commit started, arriving on the
+first move that could produce it. Glyphs, wipes and message rows moved together afterwards.
+
+**3. Blips and the compass stay on the FRAME**, against the table's dashboard row. `ClearAllShips`
+erases every blip through the pointer the table sends to the frame, so a blip drawn on the backdrop
+would be erased on the frame — invisible today, because exclusive-or does not care which surface,
+and a stale blip stranded on the backdrop for ever once RN-1 clears the frame each pass. R-7's
+argument for the dashboard is that it is "written absolutely rather than exclusive-ored", which is
+true of the dials and the indicators and is not true of a blip. Draw and erase share a surface.
+
+**4. The chart's sun discs go to the backdrop; the flight's sun stays on the frame.** The table
+names routines, and `DrawSun` has two call sites with opposite lifetimes: the short-range chart
+draws discs it "never intends to move", and the flight sun is erased and redrawn every pass.
+
+**5. The twin switch is ONE switch over two surfaces.** `DrawingTwins(_picture)` asks whether the
+twin that writes THIS surface should run, which is the right question and reads whichever surface
+the site was handed. With two surfaces, switching one off leaves every twin that writes the other
+still drawing and `TheReplayIsTheSameWithNoTwins` measuring half of what it claims — while passing,
+because every digest would be exactly where it was. So the two flags are never written separately:
+`Universe::SetDrawingTwins` is the only writer and moves both by construction, and the plane
+assertion is made on both surfaces. The build plan asked for one flag reached through the universe
+from all forty-nine guard sites; this is the same guarantee for two lines instead of forty-nine, and
+it leaves the guard reading the surface in front of it rather than reaching back out to ask. Checked
+by mutation: a switch that reaches only the frame fails on "a twin drew on the backdrop with the
+twins switched off".
+
+**What the green does and does not prove, said plainly.** The composite is `backdrop ^ frame`, so
+moving an EXCLUSIVE-OR write between surfaces is provably invisible: exclusive-or is associative and
+both halves still land. The gate therefore says nothing about the transient sites — which is most of
+them. What it does check is every ASSIGNMENT that used to wipe out another site's writes, because an
+assignment resets only its own surface's accumulator. That is where all four corrections above came
+from, and it is the whole of RN-a's failure mode. The classification of the pure exclusive-or sites
+rests on the argument, not on the tables, until RN-1 clears the frame and makes it visible.
+
+**2026-09-09 — RN-1, first commit: the boundary exists and clears nothing.** `GameLogic/Frame.h`
+wraps the four ways the game waits and ends the frame afterwards; nineteen call sites go through it;
+`Game::EndFrame` gives the two loops outside the library the same boundary — `Main.cpp` after the
+turn that presented, and the replay driver after each checkpoint. `CLEAR_THE_FRAME` is false, so
+this is `if constexpr` around nothing and **151 tests, 13 checks and every digest prove the plumbing
+alone**. The clear arrives in the next commit together with the six erase twins it replaces, because
+those two are only equal to each other and neither is a no-op by itself.
+
+**Nineteen sites, not the sixteen the plan counted**, and the difference is exactly the three with
+no `Universe&` in scope: `ReadLine`'s settle pause, `DrawHyperspaceRing`, and `PrintCashLeft`'s beep
+— which does have one and was missed. So the wrappers take the PRESENTER AND THE FRAME rather than a
+universe. That is not only for the three: after RN-0 a site's `Picture*` may be either surface, and
+a wrapper that assumed would clear the backdrop on every docked screen. The ring passes its own
+frame, and `ReadLine` passes null and says why, which is a docked prompt with nothing of it on the
+frame.
+
+**The checkpoint hashes before the boundary, not after.** The order is the whole of what the replay
+records: a checkpoint is what a person would have seen, and the clear follows it so the next pass
+draws onto an empty frame exactly as the executable's loop does. Reversed, it would record a blank
+frame every time and pass for ever.
+
+**`main-lines` 257 → 258, raised by one, and the alternative was considered and rejected.** The one
+line is the boundary in the composition root. It cannot move into `GameShell::Turn`, which looks
+like its natural home: `Turn` is also the present inside a `DELAY`, so clearing there would blank a
+held picture for the other forty-nine frames of fifty. That is also why the boundary is at the four
+WAITS and not at every present. T-1's raise was repaired by finding the reasoning written twice;
+this one has no second copy to delete.
 
 ---
 

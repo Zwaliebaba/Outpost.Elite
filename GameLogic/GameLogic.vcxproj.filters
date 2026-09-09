@@ -154,6 +154,9 @@
     <ClInclude Include="Flight.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Frame.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Controls.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -383,6 +386,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Flight.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Frame.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Controls.cpp">

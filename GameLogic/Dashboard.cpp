@@ -214,7 +214,7 @@ namespace Elite
   void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept
   {
     _universe.bubble.missileTarget = _target;                                       // Into MSTG
-    SetMissileIndicator(_universe.canvas, _missiles, _palette, &_universe.picture); // MSBAR on the missile count
+    SetMissileIndicator(_universe.canvas, _missiles, _palette, &_universe.backdrop); // MSBAR on the missile count
 
     // Into MSAR -- and Y is the ZERO `MSBAR` ended on, not the colour that went in.
     _universe.status.missileArmed = 0;

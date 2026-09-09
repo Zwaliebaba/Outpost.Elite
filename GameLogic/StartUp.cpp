@@ -100,7 +100,7 @@ namespace Elite
     (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
     // JSR msblob.
-    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture);
+    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.backdrop);
 
     // TITLE with an Adder, close up. Its key is discarded.
     (void)ShowTitleShip(_universe, _ports, TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);

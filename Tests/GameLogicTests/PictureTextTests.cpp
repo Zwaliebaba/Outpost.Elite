@@ -225,6 +225,11 @@ namespace GameLogicTests
     {
       Canvas canvas;
       Picture picture;
+
+      /// The text printer writes one surface, so the backdrop it resolves over is empty (RN-0).
+      /// `backdrop ^ frame` with this is the frame, which is what these goldens assert.
+      Picture backdrop;
+
       Elite::TextState text;
       Elite::TextLayout layout;
       Elite::TextPrinter printer{canvas, text};
@@ -807,13 +812,13 @@ namespace GameLogicTests
       both.text.column = 6;
       both.Print("INCOMING MISSILE");
 
-      const std::uint64_t drawn = both.picture.Hash(both.canvas);
+      const std::uint64_t drawn = both.picture.Hash(both.canvas, both.backdrop);
 
       both.text.row = 16;
       both.text.column = 6;
       both.Print("INCOMING MISSILE");
 
-      Assert::AreNotEqual(drawn, both.picture.Hash(both.canvas), L"the second print changed nothing");
+      Assert::AreNotEqual(drawn, both.picture.Hash(both.canvas, both.backdrop), L"the second print changed nothing");
       Assert::IsTrue(TheGlyphsAgree(both.canvas, both.picture, Elite::SPACE_VIEW_LAYOUT).empty(), L"the erase left the two disagreeing");
 
       for (const std::uint8_t byte : both.picture.Bitmap())

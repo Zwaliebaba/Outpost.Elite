@@ -3,6 +3,7 @@
 #include "PlanetDraw.h"
 
 #include "EliteTypes.h"
+#include "Frame.h"
 #include "Lines2x.h"
 #include "LookupTables.h"
 
@@ -1258,7 +1259,7 @@ namespace Elite
        * showing anything until somebody presents, so the pacing goes where the machine's own
        * pause was -- between one circle and the one that erases it.
        */
-      _present.Present();
+      PresentFrame(_present, _picture); // the ring's own surface: each circle is its own frame
 
       // A radius past 128 doubles out of the byte, and the carry that falls out ends the ring.
       const ShiftResult doubled = RotateLeftValue(radius, false);

@@ -30,6 +30,25 @@ namespace Outpost
 
   namespace
   {
+    /*
+     * How many turns may pass on the signature's word alone before the picture is resolved anyway.
+     *
+     * `Picture::ResolveSignature` is a hand-kept list of what `Resolve` reads, and
+     * `PictureTests` holds it to that list: every mutation it knows about moves the number, and no
+     * mutation moves the PIXELS without moving it. What no test can hold is a read added tomorrow
+     * to a mutation the test does not make, and the failure that produces is a screen that stops
+     * updating -- silent, total, and dependent on which screen you are on.
+     *
+     * Sixty-four turns is between a third of a second and a second depending on the panel, so the
+     * net turns that failure into a visibly laggy screen rather than a frozen one. It does not make
+     * that list optional and it is not a substitute for getting it right.
+     */
+    constexpr std::uint32_t RESOLVE_ANYWAY_AFTER_TURNS = 64;
+
+    /// How long a hidden window sleeps before looking again. Ten wake-ups a second costs nothing
+    /// and is far short of what a person would notice on uncovering the window.
+    constexpr DWORD OCCLUDED_WAIT_MILLISECONDS = 100;
+
     D3D12_RESOURCE_BARRIER Transition(ID3D12Resource* _resource, D3D12_RESOURCE_STATES _from, D3D12_RESOURCE_STATES _to) noexcept
     {
       D3D12_RESOURCE_BARRIER barrier{};
@@ -96,10 +115,53 @@ namespace Outpost
       CloseHandle(m_fenceEvent);
       m_fenceEvent = nullptr;
     }
+
+    m_haveResolved = false;
+    m_turnsSinceResolve = 0;
+
+    // The latency object is a handle this object owns, like the fence event beside it, and the
+    // whole reason `Destroy` exists is the path where no destructor runs (see the header).
+    if (m_frameLatency != nullptr)
+    {
+      CloseHandle(m_frameLatency);
+      m_frameLatency = nullptr;
+    }
+  }
+
+  void ScreenPresenter::WaitForFrame() noexcept
+  {
+    if (m_frameLatency == nullptr)
+    {
+      return; // a turn before `Create`, or after `Destroy`: there is nothing to be ready for
+    }
+
+    // A second's cap rather than INFINITE: a driver that never signals should slow the game down,
+    // not wedge it in a wait no message can break.
+    WaitForSingleObjectEx(m_frameLatency, 1000, TRUE);
+  }
+
+  void ScreenPresenter::WaitWhileOccluded() noexcept
+  {
+    /*
+     * Ten wake-ups a second while the window is hidden, and the moment it is uncovered or a key is
+     * pressed, one immediately -- `QS_ALLINPUT` is what makes this an idle rather than a sleep.
+     */
+    if (m_frameLatency == nullptr)
+    {
+      MsgWaitForMultipleObjects(0, nullptr, FALSE, OCCLUDED_WAIT_MILLISECONDS, QS_ALLINPUT);
+      return;
+    }
+
+    HANDLE latency = m_frameLatency;
+    MsgWaitForMultipleObjects(1, &latency, FALSE, OCCLUDED_WAIT_MILLISECONDS, QS_ALLINPUT);
   }
 
   void ScreenPresenter::Create(HWND _window)
   {
+    // A new texture holds nothing, so whatever the last presenter resolved is not in it.
+    m_haveResolved = false;
+    m_turnsSinceResolve = 0;
+
     UINT factoryFlags = 0;
 
 #if defined(_DEBUG)
@@ -137,6 +199,16 @@ namespace Outpost
     chain.SampleDesc.Count = 1;
     chain.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 
+    /*
+     * The latency-waitable flag, which is what lets the loop wait at the START of a frame
+     * (Design/Platform.md §3.7, slice T-3).
+     *
+     * `Resize` passes `description.Flags` straight back to `ResizeBuffers`, so it carries this
+     * through without a change -- and it must: a resize that dropped the flag would leave the
+     * handle valid and never signalled, which is a hang rather than a wrong picture.
+     */
+    chain.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+
     winrt::com_ptr<IDXGISwapChain1> created;
     winrt::check_hresult(factory->CreateSwapChainForHwnd(m_queue.get(), _window, &chain, nullptr, nullptr, created.put()));
 
@@ -146,6 +218,18 @@ namespace Outpost
     winrt::check_hresult(factory->MakeWindowAssociation(_window, DXGI_MWA_NO_ALT_ENTER));
 
     m_swapChain = created.as<IDXGISwapChain3>();
+
+    /*
+     * ONE FRAME IN THE QUEUE, and this is the number that decides the latency.
+     *
+     * The default is three: the driver accepts three frames before it makes the caller wait, so a
+     * key sampled for frame N can reach the glass as late as N+3 -- 50 milliseconds on a 60 Hz
+     * panel, for a game whose own step is 47. One means the turn that samples the keys is the turn
+     * whose picture is shown next, which is the whole of what T-3 buys.
+     */
+    winrt::check_hresult(m_swapChain->SetMaximumFrameLatency(1));
+    m_frameLatency = m_swapChain->GetFrameLatencyWaitableObject();
+
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     D3D12_DESCRIPTOR_HEAP_DESC renderTargets{};
@@ -363,12 +447,13 @@ namespace Outpost
     CreateRenderTargets();
   }
 
-  bool ScreenPresenter::Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
-                                int _clientWidth, int _clientHeight)
+  ScreenPresenter::PresentResult ScreenPresenter::Present(const Elite::Picture& _picture, const Elite::Picture& _backdrop,
+                                                          const Elite::Canvas& _canvas, const Elite::VideoState* _video, int _clientWidth,
+                                                          int _clientHeight)
   {
     if (!m_device || _clientWidth <= 0 || _clientHeight <= 0)
     {
-      return true;
+      return PresentResult::Presented;
     }
 
     const Viewport view = FitPicture(m_width, m_height);
@@ -379,44 +464,78 @@ namespace Outpost
     //
     // The CANVAS goes in beside the screen because the screen holds no raster state and, until the
     // last resolution slice, no pixels of its own for some regions (Resolution.md §3.3).
-    if (_video != nullptr)
+    /*
+     * AND ONLY WHEN SOMETHING CHANGED (Design/Platform.md §3.7, and the departure in §10).
+     *
+     * The design said a turn that changed nothing does not PRESENT. It cannot: the frame-latency
+     * object is a semaphore released when a presented frame retires, so a turn that skipped the
+     * present would leave nothing to retire and the next `WaitForFrame` would block until its
+     * one-second cap -- a stall, not a saving. The present is also the vertical sync every hold in
+     * `Shell.cpp` counts turns against.
+     *
+     * So the present stays every turn and the WORK goes: the 256,000-pixel resolve and the 250 KB
+     * upload behind it, which is all of the cost. What is left on an unchanged turn is a clear, one
+     * triangle over the texture that is already resident, and the present -- and the texture is a
+     * separate resource from the back buffer, so it survives the flip that discards the buffer.
+     */
+    const std::uint64_t signature = _picture.ResolveSignature(_canvas, _backdrop, _video);
+    const bool changed = !m_haveResolved || signature != m_resolvedSignature || m_turnsSinceResolve >= RESOLVE_ANYWAY_AFTER_TURNS;
+
+    if (changed)
     {
-      _picture.Resolve(m_resolved, _canvas, *_video);
+      if (_video != nullptr)
+      {
+        _picture.Resolve(m_resolved, _canvas, _backdrop, *_video);
+      }
+      else
+      {
+        _picture.Resolve(m_resolved, _canvas, _backdrop);
+      }
+
+      m_resolvedSignature = signature;
+      m_haveResolved = true;
+      m_turnsSinceResolve = 0;
     }
     else
     {
-      _picture.Resolve(m_resolved, _canvas);
+      ++m_turnsSinceResolve;
     }
 
     winrt::check_hresult(m_allocators[m_frameIndex]->Reset());
     winrt::check_hresult(m_commands->Reset(m_allocators[m_frameIndex].get(), m_pipeline.get()));
 
-    // Row by row, because the upload heap's pitch is padded to 256 bytes and the image's is not.
-    std::uint8_t* destination = m_uploadMemory[m_frameIndex] + m_footprint.Offset;
-    for (UINT row = 0; row < m_footprintRows; ++row)
+    // The upload and the copy ride with the resolve: skipped together, so the barriers stay
+    // balanced and the texture is simply left in `PIXEL_SHADER_RESOURCE` where the draw wants it.
+    if (changed)
     {
-      std::memcpy(destination + static_cast<std::size_t>(row) * m_footprint.Footprint.RowPitch,
-                  m_resolved.data() + static_cast<std::size_t>(row) * Elite::Picture::WIDTH, Elite::Picture::WIDTH);
+      // Row by row, because the upload heap's pitch is padded to 256 bytes and the image's is not.
+      std::uint8_t* destination = m_uploadMemory[m_frameIndex] + m_footprint.Offset;
+      for (UINT row = 0; row < m_footprintRows; ++row)
+      {
+        std::memcpy(destination + static_cast<std::size_t>(row) * m_footprint.Footprint.RowPitch,
+                    m_resolved.data() + static_cast<std::size_t>(row) * Elite::Picture::WIDTH, Elite::Picture::WIDTH);
+      }
+
+      D3D12_RESOURCE_BARRIER toCopy =
+        Transition(m_texture.get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+      m_commands->ResourceBarrier(1, &toCopy);
+
+      D3D12_TEXTURE_COPY_LOCATION source{};
+      source.pResource = m_uploads[m_frameIndex].get();
+      source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+      source.PlacedFootprint = m_footprint;
+
+      D3D12_TEXTURE_COPY_LOCATION target{};
+      target.pResource = m_texture.get();
+      target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+      target.SubresourceIndex = 0;
+
+      m_commands->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
+
+      D3D12_RESOURCE_BARRIER toShader =
+        Transition(m_texture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+      m_commands->ResourceBarrier(1, &toShader);
     }
-
-    D3D12_RESOURCE_BARRIER toCopy = Transition(m_texture.get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    m_commands->ResourceBarrier(1, &toCopy);
-
-    D3D12_TEXTURE_COPY_LOCATION source{};
-    source.pResource = m_uploads[m_frameIndex].get();
-    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    source.PlacedFootprint = m_footprint;
-
-    D3D12_TEXTURE_COPY_LOCATION target{};
-    target.pResource = m_texture.get();
-    target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    target.SubresourceIndex = 0;
-
-    m_commands->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
-
-    D3D12_RESOURCE_BARRIER toShader =
-      Transition(m_texture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    m_commands->ResourceBarrier(1, &toShader);
 
     D3D12_RESOURCE_BARRIER toTarget =
       Transition(m_backBuffers[m_frameIndex].get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -471,16 +590,23 @@ namespace Outpost
     ID3D12CommandList* lists[] = {m_commands.get()};
     m_queue->ExecuteCommandLists(1, lists);
 
-    // Vsync on, and this is the only place the program waits.
+    /*
+     * Vsync on. It is no longer the only place the program waits -- `WaitForFrame` is, at the top
+     * of the turn -- and the two together are what put one frame between a key and its pixels.
+     *
+     * `DXGI_STATUS_OCCLUDED` IS A SUCCESS CODE, which is how it went unnoticed: the frame was
+     * submitted and nothing was shown, `check_hresult` was happy, and the caller was told to carry
+     * on. It is an answer of its own now and the caller idles on it.
+     */
     const HRESULT presented = m_swapChain->Present(1, 0);
     if (presented == DXGI_ERROR_DEVICE_REMOVED || presented == DXGI_ERROR_DEVICE_RESET)
     {
-      return false;
+      return PresentResult::Lost;
     }
     winrt::check_hresult(presented);
 
     MoveToNextFrame();
-    return true;
+    return (presented == DXGI_STATUS_OCCLUDED) ? PresentResult::Occluded : PresentResult::Presented;
   }
 
   void ScreenPresenter::WaitForGpu()

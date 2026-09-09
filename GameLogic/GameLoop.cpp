@@ -51,7 +51,7 @@ namespace Elite
       {
         // A text screen's message is in the bottom rows. A seam until M3-b-3b.
         ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.screenLayout);
+                       &_universe.backdrop, _universe.screenLayout);
       }
       else
       {
@@ -63,7 +63,7 @@ namespace Elite
          * afterwards is not redundant -- it undoes what the call just did.
          */
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, _universe.message.token,
-                    _universe.view, &_universe.picture);
+                    _universe.view, &_universe.backdrop);
         _universe.message.delay = 0u;
       }
     }
@@ -119,7 +119,7 @@ namespace Elite
     if (_universe.view == 0u)
     {
       DrawDials(_universe.canvas, _universe.draw, _universe.flight, _universe.status, _commander.fuel, _universe.compass, _universe.bubble,
-                &_universe.picture);
+                &_universe.backdrop);
 
       /*
        * AND `DIALS` COMES BACK WITH THE CARRY CLEAR, which is what the breeding roll below rotates
