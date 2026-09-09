@@ -423,9 +423,37 @@ still works. Archive/Rendering.md §4.4 listed all nine; six are the frame's.
   ring is its own frame and nothing is needed.
 - **Ships, the planet, the stardust, the lasers, the explosion** are drawn whole every pass already.
 
+**THREE THINGS THIS STEP GETS WRONG, found 2026-09-09 by building commit 1 and trying commit 2.**
+Commit 1 is built and green; the notes below are what commit 2 walked into.
+
+**(a) The clear must be LAZY, or every digest records a blank frame.** An eager `Clear()` at the end
+of a pass leaves the surface empty for everything that looks BETWEEN passes — the replay's
+checkpoint, `ThePictureIsAsRecorded`, a presenter reading it a moment later. On the glass an eager
+and a lazy clear are identical; to an observer they are not, and the observers are the whole
+verification story here. So `Picture::EndFrame()` should MARK, and the next write that lands should
+clear first (`BeginFrameIfStale` in each mutator, one predictable branch beside the bounds check
+that is already there). The surface then holds the completed frame from the moment it is finished
+until the next one starts being drawn, which is when a person is looking at it.
+
+**(b) The rings need a drop too; "nothing is needed" is wrong.** With a clear per present, the
+rewind-and-redraw that erases the previous circle draws it back onto an empty frame as a ghost.
+`RECORDED_RINGS` moves at present 2 with the clear on and no other change, which is the measurement.
+
+**(c) `ErasingThePlanetClearsBothSurfaces` encodes the OLD contract** and fails by design once the
+planet's erase twin is dropped ("the erase left ink on the picture"). It has to be rewritten to the
+new one — the frame is cleared, not erased — and that rewrite is part of the slice rather than a
+casualty of it.
+
+**And a warning about the stardust.** `PlotStardust` is called at the old position and again at the
+bottom of the loop, and which of the two is the erase is not clear from the argument names —
+`wasAcrossLow`/`wasDownLow` are passed to the first, and both plot `x1, y1`. Dropping the wrong one
+makes the starfield vanish from the frame, which shows up as `ThePictureIsAsRecorded` drawing
+checkpoint 0's digest at checkpoint 1 (both frames then being backdrop-only). Read
+`MoveStardustAhead` whole before touching it; do not infer from the parameter names.
+
 **Steps, as three commits.** (1) `Game::EndFrame`, `Frame.h`'s wrappers, the sixteen sites, the
 replay driver and `Main.cpp` calling them — with `Clear` still a no-op behind a `constexpr bool`
-so the digests prove the plumbing alone. (2) The clear switched on, the six drops made, the sun
+so the digests prove the plumbing alone. **BUILT 2026-09-09; nineteen sites, not sixteen.** (2) The clear switched on, the six drops made, the sun
 twin added, `check_twins.py` given a fourth table `ERASE_NEEDS_NO_TWIN` with a reason per entry.
 (3) The `PictureTests` case for `Clear` (there is none, because nothing called it).
 
