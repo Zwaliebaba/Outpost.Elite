@@ -1718,6 +1718,39 @@ M1-a's first file and the worked example every later slice copies.
 
 ## 8. Journal
 
+**2026-09-09 — M6-b-10: 49,083 lines of the original's symbol table and assembly listings reached
+`main`, and M6-f's own change is why.**
+
+**What happened.** `Design/Reference/` holds what `labels.py --assemble` produced: a symbol table
+of the assembled C64 build and four assembly listings of it, about 1 MB. It was gitignored from the
+day it existed, deliberately and by name in ADR-001 §5 — "on disk, where the oracle reads them; not
+in history, which is what gets published". M6-f deleted the directory, the tool that wrote it and
+every test that read it, **and deleted the ignore rules too**, on the stated reasoning that they
+"keep nothing out that could still arrive".
+
+**That was wrong inside twenty-four hours.** The `input-timer` branch was cut before M6-f and still
+had those files on disk from its own oracle runs. It merged main — taking the deletion of the rules
+with it — staged everything, and PR #23 put all twelve files into `main`, where they now sit in a
+public repository's history.
+
+**What this slice does and what it cannot do.** The files are deleted at the tip and the ignore
+rules are restored, with the reasoning written into `.gitignore` itself so the next person to find
+an "obsolete" rule reads why it is not. Nothing in the tree reads them; the only mention left was a
+comment in the CI workflow. **The history still carries them**, exactly as it still carries
+`MasterFile/`, and that is the same owner decision Risk R21 records and this plan does not take.
+
+**THE LESSON IS ABOUT IGNORE RULES AND IS WORTH MORE THAN THE INCIDENT.** An ignore rule is not
+only a statement about what the tree holds today. It is what stops a STALE WORKING COPY from
+committing what the tree has stopped holding — and a branch cut before a deletion is exactly such a
+copy. Deleting a directory and deleting the rule that guarded it are not the same change and must
+not be made together: the rule outlives the directory by however long the oldest open branch does.
+M6-f made both in one commit and reasoned about only the first.
+
+**What it cost is bounded and was checked rather than assumed.** Only `Design/Reference/*.txt`
+came back. `Upstream/`, `MasterFile/`, `.gitmodules`, `Cpu6502`, `OracleImage`, `labels.py`,
+`c64_source.py`, `extract_tables.py` and `golden_diff.py` are all still gone from `main`.
+
+
 **2026-09-09 — M6-b-9: `mutate.py --check-selftests`, the gate M6-b-8 needed and did not have.**
 
 M6-b-8's finding was that four of five unit selftests had rotted: each was an unmissable change to

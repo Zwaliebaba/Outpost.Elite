@@ -385,16 +385,26 @@ captures/
 tools/*.bmp
 
 # ---------------------------------------------------------------------------
-# THE UPSTREAM RULES WERE HERE AND ARE NOT ANY MORE (Modernize.md M6-f).
+# THE UPSTREAM RULES, RESTORED AT M6-b-10 AFTER THEIR REMOVAL COST US EXACTLY WHAT THEY GUARDED.
 #
 # They kept four things out of the history for as long as the port was written against the
 # original: the assembled game binaries and disk images, the reference binaries that ARE the
-# commercial game, BeebAsm cloned into Tools-ext/, and the symbol tables an assembly produced.
-# The submodule they were about is gone, and so are the tool that assembled it and every test
-# that read the result -- so the rules keep nothing out that could still arrive.
+# commercial game, BeebAsm cloned into Tools-ext/, and the symbol tables and assembly listings
+# `labels.py --assemble` produced. M6-f deleted the submodule, the tool and every test that read
+# the result, and deleted these rules too, on the reasoning that they "keep nothing out that could
+# still arrive".
 #
-# `Tools-ext/` stays: it is where a third-party build tool would be cloned, and vendoring one
-# into a tree intended for publication is still a licence question nobody needs.
+# THAT WAS WRONG WITHIN A DAY. A branch cut before M6-f still had `Design/Reference/` on disk from
+# its own oracle runs; it merged main, took the deletion of these rules with it, staged everything,
+# and put 49,083 lines of symbol table and assembly listing of the C64 build into `main` (§8,
+# M6-b-10). An ignore rule is not only a statement about what the tree holds today -- it is what
+# stops a stale working copy from committing what the tree has stopped holding. The rules cost
+# nothing to keep and they are kept.
+Upstream/**/3-assembled-output/*.bin
+Upstream/**/3-assembled-output/*.txt
+Upstream/**/5-compiled-game-disks/
+Upstream/**/4-reference-binaries/
+Design/Reference/
 Tools-ext/
 
 # The executable's NuGet packages, restored by the build (Outpost/packages.config).
