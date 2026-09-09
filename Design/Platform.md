@@ -248,6 +248,17 @@ table folded into one object implementing `Elite::Presenter` (now the awaitable 
 `Elite::Keyboard` (now `Held` and `HasJoystick` alone, §3.3) and `Elite::CommanderStore`. The
 `effects-seams` ceiling (<!--count:effects-seams-->5 today) falls by however many the fold removes.
 
+**Two clauses of the ADRs shape the sketch above and are honoured rather than argued with**
+(§11). `Game::Advance` is a *budget consumer* and not a fourth `Step`: it calls `Step` and
+`StepDocked` as they are, chosen by `Mode`, and resumes a task between them, so ADR-007 §2's
+finding — `FRCE` chooses between routines and the caller's choice is the game's — survives inside
+it. And `Run` is written over an *abstract* `Platform` in a file with no Win32 in it, so that it
+joins the five `Outpost/` sources the portable runner already compiles (`EXECUTABLE_SOURCES` in
+`generate_runner.py`) and the `GameLoopTests` case of §3.9 can exist; the concrete window, chain
+and device implement that interface in files the Windows leg alone compiles. ADR-004 §1 says
+presentation is "none of it unit-tested", and this is the amendment: what has no Win32 in it is
+tested, and the runner has compiled such files since slice 2e.
+
 ### 3.2 Time: `MachineTiming`, `FrameClock`, `Scheduler`
 
 ```cpp
@@ -328,7 +339,11 @@ namespace Elite
   key as now; the **Docked** layer drops the steering positions, which retires the chart rule from
   `Elite::ScanKeyboard` into data (I-8) and stops a typed `S` reaching `control.pitch` on a docked
   screen (I-5). The layer is chosen by the executable from `Game::ModeNow()` and from whether a
-  `ReadKey` task is the active consumer, which `Game` exposes as one boolean.
+  `ReadKey` task is the active consumer, which `Game` exposes as one boolean. **ADR-005 §4 calls
+  exactly this "a second table chosen by the current view, which is a phase-6 remapping question"**,
+  so I-2's second commit is a phase-6-class change by the corpus's own words and lands with the
+  §4 amendment, not ahead of it; and every layer keeps §4's standing rule that a key the game's own
+  text names is never left bound to nothing — the TextEntry layer names every position that types.
 - **Late latch.** `Sample()` runs after the pump and immediately before `Advance`, so a step reads
   the keys as they are at the moment it runs rather than as they were when the turn began.
 - **A gamepad is a column, later.** XInput (in the pre-approved SDK; Xbox-shaped pads only, which
@@ -350,7 +365,10 @@ becomes a rendered frame. What this design adds is *where* the boundary is.
   refreshed from the backdrop at every boundary, drawn on by everything per-frame, and presented.
   The refresh is a `memcpy` of the bitmap plane and the cell palettes — 36,000 bytes — plus the
   dashboard's index plane only when it moved; the 36 KB `Universe` grows by is ruled (Rendering.md
-  §9.3).
+  §9.3). **The backdrop is a second `Picture` field on `Universe` and takes `picture`'s treatment
+  exactly**: skipped by `HashState` with the reason beside the fold, no cells in `StateCells`, and
+  `TheReplayIsTheSameWithNoTwins` still green — ADR-007 §6's rule that a byte in `Universe` gets a
+  cell has one named exception and this joins it (ADR-008 §4).
 - **The boundary is the present, wherever it is asked for.** After I-4 every present is a
   `co_await` (§3.5), so a tunnel that draws thirty-four rings with a present after each is
   thirty-four frames without any special case, and Rendering.md §12.3's three unclassified sites
@@ -395,13 +413,25 @@ Thirty-six functions change return type (§2.2), which is mechanical and wide an
 diff in this track — and it lands *after* M6-d, as InputTimer.md sequenced it, because a coroutine
 diff over freshly rewritten comments reviews more easily than the reverse.
 
-Two things the archived plan did not settle, settled here:
+Three things the archived plan did not settle, settled here:
+
+- **The death sequence becomes a task, and that amends a recorded reason.** `Die` holds sixty-five
+  flight frames through `HoldFlightFrame` and is reached from `Game::Leave`; Modernize.md M4-d and
+  ADR-007 §2 kept it *synchronous* "because making it a state would change the pacing". A task is
+  not a mode-machine state and the awaitable charges the same cycles the hold charged, so the
+  pacing is unmoved and `TheDeathIsAsRecorded` is the proof; the clause is amended at I-4 to say
+  what it now means. One case that looked like a trap is not: ADR-001 §6's failed-load bug, where
+  the original re-enters the disk menu with a frame still on the stack, is ported as a single
+  `loadFramePending` flag rather than as recursion (`SaveGame.cpp`), so the coroutine chain has no
+  unbounded case and the arena can be sized from §2.2 alone.
 
 - **No heap in the frame path.** A coroutine frame is heap-allocated unless the promise says
   otherwise; the promise takes its storage from a fixed arena on `Game` sized for the deepest chain
   §2.2 found (a briefing inside a docking inside a step), and a chain deeper than that is an
   assertion and not an allocation. `noexcept` and the determinism guard both need this, and
-  `check_gamelogic.py` needs no new rule: `<coroutine>` brings no clock, no float and no I/O.
+  `check_gamelogic.py` needs no new rule: `<coroutine>` brings no clock, no float and no I/O —
+  and it bans the *identifiers* `clock` and `time` in `GameLogic/`, so the awaitables and the arena
+  are named for what they hold (`blanks`, `cycles`) and never for either word.
 - **Cancellation is destruction.** Closing the window sets a flag the loop reads; the loop returns,
   `Game` is destroyed, the active task's frame is destroyed with it and every destructor runs. There
   is no value `ReadKey` has to return to a caller that cannot be told the game is over, which is the
@@ -426,7 +456,11 @@ against a test the tree has never had.
   counters — game state, folded in every replay digest — the one part of `Universe` that advances
   on a device's clock rather than on the game's. After this the program's state is a function of its
   input frames and its elapsed cycles and nothing else, which is the property a replay of the *app*
-  needs and the corpus has not had.
+  needs and the corpus has not had. **This reverses a decision, not merely adds to one**: ADR-005 §2
+  as amended at slice 5a chose the device's queue depth as the interrupt's clock "because the device
+  consumes samples at exactly the rate they are rendered for". That reasoning was about the *chip*
+  and still holds for it — the audio thread renders at the device's rate — and was silent about the
+  *state* the interrupt mutates. §7 records it as a reversal with the ruling it needs.
 - **The chip renders on the XAudio2 callback thread** from a ring of logs the game thread publishes
   (one atomic index, no lock). An empty ring — a title-bar drag, a breakpoint — renders the chip
   forward with no new writes, which is what a 6581 does when the CPU is busy: it holds its
@@ -499,7 +533,7 @@ Four. The track proceeds on the default until ruled, and the default is the reco
 
 | # | Question | Recommendation, and the default assumed |
 |---|---|---|
-| **D1** | **One surface: retire the C64 canvas once the picture has a frame boundary (RN-6)?** The canvas is drawn every frame and never seen; it exists because the twins compute *where* and the faithful routines store *what* onto it, and because the replay digests fold it. Retiring it removes the twin rule, `check_twins.py`, the `/// 2x of:` markers, ~20 canvas exclusive-or stores, `DashboardImage.cpp`'s C64 art and most of ADR-008 §2; it leaves every decision where it is (R-8, R-9). **The bill**: the three replay records move, because the fold *narrows* — ADR-009 §3 allows a re-take in two cases and this is a third, so it needs its own ruling and the two-column proof (§5 RN-6); the 53 picture tests lose the canvas as their reference and become picture goldens; the mutant floor loses `Canvas.cpp`, which it was written never to; the raster bytes and sprite pointers `Resolve` reads off the canvas move to `ScreenState`/`VideoState`. About eight sittings | **Yes, last in the track, on the two-column gate.** It is the only step that makes the rendering path one thing, and it is what reopens per-primitive colour and a display list (Rendering.md's declined RN-3/RN-4) at a price they are worth. The corpus's own warning applies and is the reason for *last*: verification you delete is not verification you get back (Rendering.md §5.2), so the picture's whole-frame record must be the instrument that replaces the canvas before the canvas goes |
+| **D1** | **One surface: retire the C64 canvas once the picture has a frame boundary (RN-6)?** The canvas is drawn every frame and never seen; it exists because the twins compute *where* and the faithful routines store *what* onto it, and because the replay digests fold it. Retiring it removes the twin rule, `check_twins.py`, the `/// 2x of:` markers, ~20 canvas exclusive-or stores, `DashboardImage.cpp`'s C64 art and most of ADR-008 §2; it leaves every decision where it is (R-8, R-9). **The bill**: four ADRs write the canvas in independently and each is amended — ADR-001 §1 ("the verification view"), ADR-002 §4 (the four planes) and §5, ADR-003 §3 (the canvas in the hash), ADR-007 §4 — plus ADR-008 whole; the three replay records move, because the fold *narrows* — ADR-009 §3 and ADR-007 §4 allow a re-take in two cases and this is a third, so it needs its own ruling and the two-column proof (§5 RN-6); the 53 picture tests lose the canvas as their reference and become picture goldens; the mutant floor loses `Canvas.cpp`, which it was written never to; the raster bytes and sprite pointers `Resolve` reads off the canvas move to `ScreenState`/`VideoState`. About eight sittings | **Yes, last in the track, on the two-column gate.** It is the only step that makes the rendering path one thing, and it is what reopens per-primitive colour and a display list (Rendering.md's declined RN-3/RN-4) at a price they are worth. The corpus's own warning applies and is the reason for *last*: verification you delete is not verification you get back (Rendering.md §5.2), so the picture's whole-frame record must be the instrument that replaces the canvas before the canvas goes |
 | **D2** | **Coroutines (I-4) or a game thread for the blocking reads?** Both remove the nested pump, `Abandon` and `ExitProcess`. Coroutines change thirty-six signatures and give a `Run()` the suite drives on Linux; a thread changes none and does not | **Coroutines**, as InputTimer.md defaulted, after M6-d. The test is worth the diff |
 | **D3** | **Is the step rate exposed as a setting?** `speed = 100` in `Settings.txt`, the machine's own pace, and anything else is ADR-001 §4's option. It is the *only* lever on §0's second row, and it changes the feel by construction | **Build the knob in T-1 and expose it, default 100.** One integer, and the alternative is a reactivity ceiling of three frames a second in a full fight that a player of the port will attribute to the port |
 | **D4** | **PAL or NTSC as the machine?** | **Settled by ADR-001's own context line: `_VARIANT=1` is the GMA85 NTSC release.** NTSC is the machine; `MachineTiming` carries PAL and `Settings.txt` may select it. Recorded here so it is not asked a third time |
@@ -582,8 +616,14 @@ blocking rather than a timer sleeping.
   as a future tense. **§2** gains the interrupt-under-scheduler paragraph at T-4.
 - **ADR-008** loses T3 at RN-2 and corrects §1's byte count; at RN-6, if ruled, §1, §2 and §4 are
   superseded by ADR-010 and the ADR's Status table says so.
+- **ADR-005 §2 is REVERSED at T-4**, not extended: the interrupt is clocked by the scheduler's blank
+  and the device's rate paces the chip alone. That is a ruling, and the slice carries it.
 - **ADR-007 §2** ("the count of passes stays outside because it is floating point") gains a sentence
-  at T-1: it stays outside because the clock is the executable's, and it is integer now.
+  at T-1: it stays outside because the clock is the executable's, and it is integer now. At I-4 its
+  "the death sequence stays synchronous" (and Modernize.md's M4-d row) is amended to "a task whose
+  awaitable charges what the hold charged", with `TheDeathIsAsRecorded` as the evidence.
+- **ADR-004 §1** ("presentation ... none of it unit-tested") is amended at I-4: what has no Win32 in
+  it is tested on both legs, which the portable runner has done for five of its files since 2e.
 - **Modernize.md §4.4 and §4.8** gain a ✅ and a pointer here at I-2 and I-4, and §4.8's
   `ScreenPresenter` sentence gains the `Platform` fold. **Plan §5** already points here.
 - **`Design/README.md`**: the reading-order row this commit adds; a decisions row for ADR-010 at
@@ -672,3 +712,56 @@ third answer: the present is the frame boundary, the vertical blank is the sound
 and RN-0's unclassified sites are the gate's to decide. The `2x` question turned out to be the
 largest design decision in the layer and not a cleanup, and it is D1 with its price. Nothing is
 built; the track's first two slices touch no library file and are where building starts.
+
+**2026-09-09, later — every ADR read against the design (§11).** Asked whether the ADRs limit the
+track in a way it had not taken into account. Twenty-three clauses set against §3 to §5: sixteen
+held, six were corrected in the sections they touch, and one — ADR-005 §2's clock for the sound
+interrupt — is a reversal the design had described as an addition and now names as a ruling. The
+pass also removed a worry: the failed-load stack bug is ported as a flag, so I-4's arena has no
+unbounded case.
+
+---
+
+## 11. Every ADR read against this design, 2026-09-09
+
+Asked, after the design was written: do the ADRs limit it in a way it has not taken into account?
+All nine were read in full and every clause that touches rendering, input, time, ownership or the
+record was set against §3 to §5. **Verdict** is one of: *held* (the design already obeys or amends
+it, and says where), *corrected today* (the design was silent or wrong and the section named now
+says so), *needs a ruling* (a clause the design reverses, which only the owner can). Nothing found
+changes a slice's order; three things changed a slice's content.
+
+| ADR | Clause | What the design does | Verdict |
+|---|---|---|---|
+| 001 §1 | The 320×200 canvas is "the verification view" | Untouched through RN-2; retired only under D1, and D1's bill now names this clause | held |
+| 001 §3, §4 | An option is off by default; the suites are green with it off; the gate names the oracle | D3 is such an option; P-e keeps the replay at 100. The gate's wording is stale (ADR-009 §2 is the gate now) and is §7's to amend | held |
+| 001 §6 | Original bugs stay ported | The failed-load stack bug is a flag, not recursion, so I-4's arena has no unbounded case (§3.5) | corrected today |
+| 001 "what faithful does not mean" | "the port runs a fixed rate measured from the original" | It runs a cycle-budgeted variable rate and has since §6.114; the scheduler keeps that. A stale sentence, not a limit | held |
+| 002 §1 | No `float`/`double` in `GameLogic/` | Nothing in the track puts one there: cycles are integers, the picture is integer. The rule *would* block a display list with sub-pixel geometry, which is why RN-4 stays declined and why the previous review recommended scoping the ban by role | held |
+| 002 §4 | The canvas is four VIC-II planes; "sub-pixel accuracy and anti-aliasing are not built, and are not phase-6 items either" | Not touched before RN-6; the sentence forbids a visual modernisation this track does not attempt, and D1 is what would reopen it | held |
+| 002 §5 | Erase-by-XOR is available; the heaps are ported because `LL9` and `SUN` decide by them | The heaps stay under every slice including RN-6 (R-9); only picture-side erases become drops | held |
+| 003 §3 | The replay hash folds the canvas; the null-presenter ruling | Folded until RN-6; a null `Presenter` under coroutines is awaitables that resume at once, which is trivial — the ruling's own test of the seam passes | held |
+| 004 §1 | "Presentation lives in the executable ... none of it unit-tested" | `Run` over an abstract `Platform` in a portable file, joining `EXECUTABLE_SOURCES`; §3.1 and §7 say so | corrected today |
+| 004 §2 | File names unique repo-wide, against the CRT, STL and SDK, case-insensitively | `Task.h`, `Scheduler.h`, `FrameClock.h`, `Platform.h` are checked against the SDK before they are created; none is known to collide, and the rule is the slice's checklist | held |
+| 005 §1 | Present once per step; a routine the original held for many frames owes a present per frame; integer scale; vsync on | The boundary at every present is that clause made structural (§3.4); the scale, letterbox and vsync are untouched (§3.7) | held |
+| 005 §2 | The interrupt is clocked off the device's queue depth | **T-4 reverses this** for the state half and keeps it for the chip; §3.6 and §7 say so now | needs a ruling |
+| 005 §3 | Fixed timestep, steps never skipped or doubled silently, a stall logs; auto-pause "to be built as T-1" | The time clamp drops a backlog and *counts* it, which is the clause's "never silently"; auto-pause is T-1's | held |
+| 005 §4 | The modern layout; a key the text names is never unbound; "a second table chosen by the view is a phase-6 remapping question"; `InputFrame` "carries both level and edge bits" | I-2's layers *are* that second table, so the slice is phase-6-class and lands with the §4 amendment; the text-names rule binds every layer; `pressed` is one key rather than 65 edge bits, and the sentence is amended | corrected today |
+| 006 §1, §8 | Edges point down; nothing below `Ports` includes a Windows header; C++20 | `Task` and the awaitables are `GameLogic`'s and include nothing of Windows; coroutines are C++20 | held |
+| 006 §2, §3 | No width changes; value in, value out | `InputFrame` is 65 bytes and a byte; `Budget` is a value; nothing widens | held |
+| 007 §1, §6 | `Universe` is a plain aggregate with no virtual; a byte of state gets a cell unless named | The arena and the tasks live on `Game`; the backdrop joins `picture`'s named exception (§3.4) | corrected today |
+| 007 §2 | Three `Step`s, not one; the count of passes stays outside; the death sequence stays synchronous | `Advance` consumes a budget and calls the three (§3.1); the count stays outside for the clock's reason; `Die` becomes a task and the clause is amended at I-4 with `TheDeathIsAsRecorded` as evidence (§3.5, §7) | corrected today |
+| 007 §4, 009 §3 | A record moves in exactly two cases | T-4 is the first case with a proof column; RN-6 is a third case and D1 asks for it | held |
+| 008 §1, §2 | VIC-II-shaped for the erase; T1 to T4 | The shape stays through RN-2 with its reason lapsed, which RN-2 records; T3 goes; T1 and T2 bind every twin until RN-6 | held |
+| 008 §4 | The picture is excluded from the hash; the twins-absent replay proves it | The licence for every rendering slice; the backdrop inherits it; `TheReplayIsTheSameWithNoTwins` gates RN-1 | held |
+| 009 §2 | What pins the port — and `ThePictureIsAsRecorded` is not yet in its table | Every rendering gate here is that record; P-0 adds it to the table | held |
+| 009 §4 | "New behaviour must say what it IS and assert it" | Every gate in §5 is an equality the tree can take today, none a comparison | held |
+
+**What the pass changed.** Three sections were silent where an ADR spoke and now are not: the
+backdrop's exclusion from the digest (§3.4), the death sequence as a task and the arena's bound
+(§3.5), and the portability of `Run` (§3.1). One thing the design had described as an addition is a
+reversal and is now named as one (§3.6, ADR-005 §2). One slice turned out to be phase-6-class by the
+corpus's own definition and is sequenced accordingly (I-2's second commit). Nothing in the nine
+forbids the track as ordered; what they forbid — sub-pixel geometry, a wider view, a display list
+with float in it — the track does not attempt, and the previous review's recommendations on scoping
+the float ban and consolidating the canvas clauses are what would let a later track attempt them.
