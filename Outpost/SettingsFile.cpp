@@ -16,7 +16,7 @@ namespace Outpost
   {
     constexpr const char* FILE_NAME = "Settings.txt";
 
-    /// 6502: the two values `DKS3` left in a byte -- `EOR #&FF` flips the lot, so it is 0 or 255.
+    /// The two values `DKS3` left in a byte -- it flips every bit, so it is 0 or 255.
     constexpr std::uint8_t SET = 0xFF;
     constexpr std::uint8_t CLEAR = 0x00;
 
@@ -44,7 +44,7 @@ namespace Outpost
 
     constexpr int KEY_COUNT = static_cast<int>(sizeof(KEYS) / sizeof(KEYS[0]));
 
-    /// 6502: JSTK -- recognised so the report can say why it is refused (InputTimer.md §5.1).
+    /// Recognised so the report can say why it is refused (InputTimer.md §5.1).
     constexpr std::string_view JOYSTICK_KEY = "joystick";
 
     [[nodiscard]] std::uint8_t* ByteFor(int _index, Elite::Universe& _universe) noexcept

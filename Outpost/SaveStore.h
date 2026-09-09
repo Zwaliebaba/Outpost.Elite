@@ -11,7 +11,7 @@ namespace Outpost
   /*
    * Where a commander file actually goes (slice 2d).
    *
-   * 6502: KERNALSVE and KERNALLOAD. The C64 handed the Kernal a filename and an address range; this
+   * KERNALSVE and KERNALLOAD. The C64 handed the Kernal a filename and an address range; this
    * writes the same eighty-five bytes to a file under LocalAppData, and the bytes are byte-for-byte
    * what the original wrote -- `GameLogic` builds the image and compares it against the shipped
    * routine, so a commander saved here is one an emulator running the original would load.

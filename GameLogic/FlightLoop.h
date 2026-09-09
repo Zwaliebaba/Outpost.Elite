@@ -32,7 +32,7 @@ namespace Elite
    */
 
   /*
-   * 6502: MAS1 -- K(3 2 1) = INWK(Y) doubled, plus INWK(X), written back over INWK(X).
+   * K(3 2 1) = INWK(Y) doubled, plus INWK(X), written back over INWK(X).
    *
    * The doubling is a sixteen-bit `ASL`/`ROL` with the carry caught in a third byte by
    * a zero rotated right, which turns the overflow into a SIGN rather than losing it -- so what
@@ -45,7 +45,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(Ship& _work, std::uint8_t _from, std::uint8_t _to) noexcept;
 
   /*
-   * 6502: MAS2, and `m` above it -- OR the three sign bytes of a ship block together and drop the
+   * MAS2, and `m` above it -- OR the three sign bytes of a ship block together and drop the
    * sign, which is "the largest of the three distances, to within a factor of two".
    *
    * TWO ENTRY POINTS. `m` starts from a loaded zero and then falls in; `MAS2` ORs into
@@ -54,14 +54,14 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t LargestAxisFrom(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept;
 
-  /// 6502: `m` -- `MAS2` entered with A cleared, which is the ordinary way in.
+  /// `MAS2` entered with A cleared, which is the ordinary way in.
   [[nodiscard]] inline std::uint8_t LargestAxis(const Bubble& _bubble, std::uint8_t _slot) noexcept
   {
     return LargestAxisFrom(_bubble, _slot, 0);
   }
 
   /*
-   * 6502: MAS3 -- A = x^2 + y^2 + z^2 of a ship block's HIGH bytes, saturating at 255.
+   * A = x^2 + y^2 + z^2 of a ship block's HIGH bytes, saturating at 255.
    *
    * Two additions of `R` with no clear of the carry, both reading the one `SQUA2` exits with --
    * which is never set, so
@@ -70,12 +70,12 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t SumOfSquares(const Bubble& _bubble, std::uint8_t _slot) noexcept;
 
-  /// 6502: MAS4 -- the same OR as `MAS2` but over `INWK`'s high bytes rather than a slot's sign
+  /// The same OR as `MAS2` but over `INWK`'s high bytes rather than a slot's sign
   /// bytes, and without the mask. Four instructions, and it is here because the loop calls it.
   [[nodiscard]] std::uint8_t LargestShipAxis(const Ship& _work, std::uint8_t _a) noexcept;
 
   /*
-   * 6502: cntr -- creep a centre-based control reading one step towards 128.
+   * Creep a centre-based control reading one step towards 128.
    *
    * The value runs 1 to 255 with 128 as centred, so damping is "add one below the middle, subtract
    * one above it". Flight loop part 2 is its only caller and it calls it THREE times: twice on
@@ -95,7 +95,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer, std::uint8_t _dampingDisabled) noexcept;
 
   /*
-   * 6502: DENGY -- take one unit off the energy banks, and say whether that emptied them.
+   * Take one unit off the energy banks, and say whether that emptied them.
    *
    * The push of the flags is the point: the flag the caller sees is the one the step DOWN set,
    * not the one the step back up would have. So
@@ -109,7 +109,7 @@ namespace Elite
   [[nodiscard]] bool DrainEnergy(FlightStatus& _status) noexcept;
 
   /*
-   * 6502: SHD, which FALLS INTO DENGY -- bump a shield by one, and PAY FOR IT.
+   * SHD, which FALLS INTO DENGY -- bump a shield by one, and PAY FOR IT.
    *
    * A shield already at 255 branches to `SHD-2`, which is the step-back-down and return two
    * bytes above the label. So a full shield is put back and the routine returns; anything less
@@ -124,7 +124,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t RechargeShield(FlightStatus& _status, std::uint8_t _shield) noexcept;
 
   /*
-   * 6502: FAROF2, with `FAROF` one instruction above it -- is every one of a ship's high bytes
+   * FAROF2, with `FAROF` one instruction above it -- is every one of a ship's high bytes
    * below `_limit`?
    *
    * Three compares and two branches, and the carry it returns is the answer: SET when the ship is
@@ -133,14 +133,14 @@ namespace Elite
    */
   [[nodiscard]] bool WithinRange(const Ship& _work, std::uint8_t _limit) noexcept;
 
-  /// 6502: FAROF -- `WithinRange` at the limit the loop uses, which is 224.
+  /// `WithinRange` at the limit the loop uses, which is 224.
   [[nodiscard]] inline bool WithinLoopRange(const Ship& _work) noexcept
   {
     return WithinRange(_work, 224u);
   }
 
   /*
-   * 6502: HITCH -- have we hit this ship?
+   * Have we hit this ship?
    *
    * FIVE WAYS TO SAY NO BEFORE IT MEASURES ANYTHING. A non-zero `INWK+8` (the ship is not in front
    * of us), a negative type (the planet or the sun), an exploding ship, or a large x or y offset all
@@ -172,7 +172,7 @@ namespace Elite
    */
 
   /*
-   * 6502: what `SPIN` and `SPIN2` decide before a single `SFS1` runs -- the typed stage result
+   * What `SPIN` and `SPIN2` decide before a single `SFS1` runs -- the typed stage result
    * M4-a is named for.
    *
    * `SPIN2` is a loop around one call to `SFS1` and `SPIN` is a roll in front of `SPIN2`, so between
@@ -183,10 +183,10 @@ namespace Elite
    */
   struct Drop
   {
-    ShipType type;         ///< 6502: X on the way into `SFS1`
-    std::uint8_t count;    ///< 6502: CNT, and zero means `oh`
-    std::uint8_t aiFlag;   ///< 6502: A on the way into `SFS1`, which is zero for both callers
-    bool carryIfNone;      ///< 6502: the flag `oh`'s `RTS` hands back when the count is zero
+    ShipType type;         ///< X on the way into `SFS1`
+    std::uint8_t count;    ///< CNT, and zero means `oh`
+    std::uint8_t aiFlag;   ///< A on the way into `SFS1`, which is zero for both callers
+    bool carryIfNone;      ///< The flag `oh`'s `RTS` hands back when the count is zero
   };
 
   /*
@@ -200,7 +200,7 @@ namespace Elite
    */
 
   /*
-   * 6502: SPIN2 -- spawn `_count` ships of one type, one after another.
+   * Spawn `_count` ships of one type, one after another.
    *
    * `spl`'s FIRST TEST READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET. Storing the count
    * leaves the flags
@@ -222,7 +222,7 @@ namespace Elite
   [[nodiscard]] Drop PlanItems(ShipType _type, std::uint8_t _count, bool _carryIn) noexcept;
 
   /*
-   * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
+   * A destroyed ship drops some of its cargo, or does not.
    *
    * Half the time nothing happens at all: a random byte with bit 7 clear goes straight to `oh` and
    * clear bit 7. That is the ONLY thing the roll decides.
@@ -240,7 +240,7 @@ namespace Elite
   [[nodiscard]] Drop PlanDebris(Rng& _rng, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept;
 
   /*
-   * 6502: `SPIN2`'s loop body -- one call to `SFS1` and the count stepped down, run over a `Drop`.
+   * `SPIN2`'s loop body -- one call to `SFS1` and the count stepped down, run over a `Drop`.
    *
    * `spl`'s first test reads a flag the instruction above it did not set, and the loop's back edge lands
    * one instruction PAST that `BEQ`, so the test runs once on entry and never again. `Drop::count`
@@ -255,22 +255,22 @@ namespace Elite
   [[nodiscard]] bool PerformDrop(Universe& _universe, const Drop& _drop) noexcept;
 
   /*
-   * 6502: KY12 to KY20 -- the flight keys the loop reads that `DOKEY` does not.
+   * KY12 to KY20 -- the flight keys the loop reads that `DOKEY` does not.
    *
    * The same key logger, indexed by the same internal key numbers (§6.73). `DOKEY` handles the six
    * that steer; these are the ones that do something.
    */
-  inline constexpr std::size_t KEY_ENERGY_BOMB = 3;       ///< 6502: KY12 -- Tab
-  inline constexpr std::size_t KEY_ESCAPE_POD = 7;        ///< 6502: KY13 -- Escape
-  inline constexpr std::size_t KEY_ARM_MISSILE = 42;      ///< 6502: KY14 -- "T"
-  inline constexpr std::size_t KEY_UNARM_MISSILE = 34;    ///< 6502: KY15 -- "U"
-  inline constexpr std::size_t KEY_FIRE_MISSILE = 28;     ///< 6502: KY16 -- "M"
-  inline constexpr std::size_t KEY_ECM = 50;              ///< 6502: KY17 -- "E"
-  inline constexpr std::size_t KEY_WARP = 30;             ///< 6502: KY18 -- "J"
-  inline constexpr std::size_t KEY_DOCKING_COMPUTER = 44; ///< 6502: KY19 -- "C"
-  inline constexpr std::size_t KEY_CANCEL_DOCKING = 23;   ///< 6502: KY20 -- "P"
+  inline constexpr std::size_t KEY_ENERGY_BOMB = 3;       ///< Tab
+  inline constexpr std::size_t KEY_ESCAPE_POD = 7;        ///< Escape
+  inline constexpr std::size_t KEY_ARM_MISSILE = 42;      ///< "T"
+  inline constexpr std::size_t KEY_UNARM_MISSILE = 34;    ///< "U"
+  inline constexpr std::size_t KEY_FIRE_MISSILE = 28;     ///< "M"
+  inline constexpr std::size_t KEY_ECM = 50;              ///< "E"
+  inline constexpr std::size_t KEY_WARP = 30;             ///< "J"
+  inline constexpr std::size_t KEY_DOCKING_COMPUTER = 44; ///< "C"
+  inline constexpr std::size_t KEY_CANCEL_DOCKING = 23;   ///< "P"
 
-  /// 6502: the bitmap mode the energy bomb switches the upper half of the screen to.
+  /// The bitmap mode the energy bomb switches the upper half of the screen to.
   inline constexpr std::uint8_t BOMB_BITMAP_MODE = 0xD0;
 
   /*
@@ -323,7 +323,7 @@ namespace Elite
    */
 
   /*
-   * 6502: M% and the fifteen parts after it -- how a frame in space ends.
+   * M% and the fifteen parts after it -- how a frame in space ends.
    *
    * Three of its jumps leave and three do not, and telling them apart is the routine's whole shape
    * (§6.82). The three that leave jump to `DOENTRY`, `DEATH` and `ESCAPE`, none of which
@@ -332,9 +332,9 @@ namespace Elite
   enum class LoopOutcome : std::uint8_t
   {
     Continued, ///< the frame finished; the loop goes round again
-    Docked,    ///< 6502: DOENTRY, from part 9's docking check
-    Died,      ///< 6502: DEATH, from part 9 or part 15
-    Escaped,   ///< 6502: ESCAPE, from part 3's escape pod
+    Docked,    ///< DOENTRY, from part 9's docking check
+    Died,      ///< DEATH, from part 9 or part 15
+    Escaped,   ///< ESCAPE, from part 3's escape pod
   };
 
   // `FlightLoop` was the argument list the flight half took: `FlightScreen&` plus the keys, the
@@ -342,7 +342,7 @@ namespace Elite
   // byte of it is `Universe`'s since M3-a and every seam is `Ports`'.
 
   /*
-   * 6502: M% to `MA3` -- the head of a frame: the seed, the Trumbles, the controls and the keys.
+   * M% to `MA3` -- the head of a frame: the seed, the Trumbles, the controls and the keys.
    *
    * IT SEEDS THE RANDOM NUMBER GENERATOR FROM THE PLANET. The planet's own x low byte goes into
    * x low byte into the first byte of `RAND` on every single frame, so the sequence is stirred by
@@ -354,11 +354,11 @@ namespace Elite
    * -- and `cntr` touches no flags on any of its three paths. So the four added to the pitch is
    * four or five depending on the low bit of the roll (§6.85).
    */
-  /// 6502: the two messages `FRMIS` can end on. 201 is "MISSILE JAMMED".
+  /// The two messages `FRMIS` can end on. 201 is "MISSILE JAMMED".
   inline constexpr std::uint8_t MESSAGE_MISSILE_JAMMED = 201;
 
   /*
-   * 6502: FRMIS -- fire the missile that is locked on.
+   * Fire the missile that is locked on.
    *
    * `FRS1` puts one in front of us and hands back a carry; a clear one means the bubble is full,
    * and `FR1` prints "MISSILE JAMMED" and stops. Otherwise the target is told it has been shot at,
@@ -375,7 +375,7 @@ namespace Elite
   [[nodiscard]] LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: MA3 to the jump back to `MAL1` -- parts 4 to 12, once per occupied slot, and `KS1`
+   * MA3 to the jump back to `MAL1` -- parts 4 to 12, once per occupied slot, and `KS1`
    * under them.
    *
    * The loop's back edge is a jump to `MAL1` rather than a counted loop, and `KS1` is inside it: killing
@@ -390,7 +390,7 @@ namespace Elite
   [[nodiscard]] LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: MA18 to the jump to `STARS` -- parts 13 to 16, once per frame after the ships.
+   * MA18 to the jump to `STARS` -- parts 13 to 16, once per frame after the ships.
    *
    * Everything here is on a clock: three bits of the loop counter recharge the shields and the
    * banks every
@@ -401,11 +401,11 @@ namespace Elite
    */
   [[nodiscard]] LoopOutcome EndFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: `M%` from end to end -- the opening, every ship, and the tail.
+  /// `M%` from end to end -- the opening, every ship, and the tail.
   [[nodiscard]] LoopOutcome MainFlightLoop(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: TT17 -- scan the keyboard for the flight controls, once a frame.
+   * Scan the keyboard for the flight controls, once a frame.
    *
    * THE C64 HAS ITS OWN `TT17` AND IT IS NOT THE COMMON ONE. `library/common/.../tt17.asm` is
    * three instructions long and returns the joystick's roll complemented; the master file

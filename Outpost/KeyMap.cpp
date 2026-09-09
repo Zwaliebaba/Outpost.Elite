@@ -21,15 +21,17 @@ namespace Outpost
      * looked up rather than remembered: 63 translates to 13, 64 to 127 and 7 to 27, and a test walks
      * the table to prove it rather than leaving three magic numbers in a comment.
      *
-     * The `// 6502:` comment on a flight row names the KY label AND the key the C64 player used, so
-     * the row can be read against `KEYLOOK` without opening two files. Where the two disagree with
-     * the received wisdom they follow `KEYLOOK`: the energy bomb is the COMMODORE key on a C64 and
+     * A flight row's trailing comment names the Windows virtual key, and the key the C64 player
+     * used where the two differ. It used to name the original's KY label as well, so the row could
+     * be read against `KEYLOOK` without opening two files; that went with the markers at M6-e,
+     * because after M6-f there is no `KEYLOOK` to read it against. Where the C64's keys disagree
+     * with the received wisdom they follow the machine: the energy bomb is the COMMODORE key and
      * not TAB, and the escape pod is the "left arrow" key and not ESCAPE -- those are the BBC
      * Micro's keys, which is where `Controls.h` and `FlightLoop.h` took their comments from.
      */
     constexpr KeyBinding BINDINGS[] = {
       /*
-       * The seven primary flight controls, 6502: KY1 to KY7.
+       * The seven primary flight controls.
        *
        * The arrows steer and the two keys beside them set speed, which is the swap that makes this
        * map modern rather than faithful: on the C64 the arrangement is the other way round, with
@@ -40,46 +42,46 @@ namespace Outpost
        * then. Only the two Windows keys move -- the C64 keys behind them are still `KY5` for the
        * climb and `KY6` for the dive.
        */
-      {0x25, Elite::KEY_ROLL_LEFT, "Left -- roll left"},    // VK_LEFT,       6502: KY3, C64 "<"
-      {0x27, Elite::KEY_ROLL_RIGHT, "Right -- roll right"}, // VK_RIGHT,      6502: KY4, C64 ">"
-      {0x28, Elite::KEY_PITCH_UP, "Down -- climb"},         // VK_DOWN,       6502: KY5, C64 "X"
-      {0x26, Elite::KEY_PITCH_DOWN, "Up -- dive"},          // VK_UP,         6502: KY6, C64 "S"
-      {0xBE, Elite::KEY_SPEED_UP, ". -- increase speed"},   // VK_OEM_PERIOD, 6502: KY2, C64 Space
-      {0xBC, Elite::KEY_SLOW_DOWN, ", -- decrease speed"},  // VK_OEM_COMMA,  6502: KY1, C64 "?"
-      {0x41, Elite::KEY_FIRE, "A -- fire lasers"},          // VK_A,          6502: KY7, C64 "A"
+      {0x25, Elite::KEY_ROLL_LEFT, "Left -- roll left"},    // VK_LEFT,       C64 "<"
+      {0x27, Elite::KEY_ROLL_RIGHT, "Right -- roll right"}, // VK_RIGHT,      C64 ">"
+      {0x28, Elite::KEY_PITCH_UP, "Down -- climb"},         // VK_DOWN,       C64 "X"
+      {0x26, Elite::KEY_PITCH_DOWN, "Up -- dive"},          // VK_UP,         C64 "S"
+      {0xBE, Elite::KEY_SPEED_UP, ". -- increase speed"},   // VK_OEM_PERIOD, C64 Space
+      {0xBC, Elite::KEY_SLOW_DOWN, ", -- decrease speed"},  // VK_OEM_COMMA,  C64 "?"
+      {0x41, Elite::KEY_FIRE, "A -- fire lasers"},          // VK_A,          C64 "A"
 
       /*
        * AND SPACE, WHICH IS THE ONE KEY THE GAME NAMES IN ITS OWN TEXT.
        *
-       * "PRESS SPACE OR FIRE, COMMANDER." is token 7, and `TITLE` waits for it: `JSR RDKEY / BIT
-       * KY7 / BMI TL3 / BCC TLL2` loops until the fire button or ANY key. Any key is what the
-       * shell does too -- and Space was not one, because the layout above moved speed onto "." and
-       * left nothing on the key the prompt asks for. The title screen ignored the one press a
-       * player is told to make.
+       * "PRESS SPACE OR FIRE, COMMANDER." is token 7, and `TITLE` waits for it by scanning the
+       * keyboard and looping until the fire button or ANY key. Any key is what the shell does
+       * too -- and Space was not one, because the layout above moved speed onto "." and left
+       * nothing on the key the prompt asks for. The title screen ignored the one press a player
+       * is told to make.
        *
        * It maps to position 4, which IS the C64's Space, so this is the original's binding rather
        * than an invented one: it dismisses every "press space" prompt AND increases speed in
        * flight, exactly as it did on the machine. `.` keeps the same position beside it, which is
        * the seventh alias in a map that has six -- and the only one that is not a moved screen.
        */
-      {0x20, Elite::KEY_SPEED_UP, "Space -- increase speed, and every \"press space\" prompt"}, // VK_SPACE, 6502: KY2
+      {0x20, Elite::KEY_SPEED_UP, "Space -- increase speed, and every \"press space\" prompt"}, // VK_SPACE
 
       /*
-       * The nine secondary flight controls, 6502: KY12 to KY20.
+       * The nine secondary flight controls.
        *
        * Seven of them keep the C64's own letter. The two that do not are the two the C64 put on
        * keys a PC has no equivalent of: the energy bomb was the COMMODORE key and is TAB here, and
        * the escape pod was the "left arrow" key and is ESCAPE -- and ESCAPE is the same binding the
        * line editor already needed, because position 7 is what translates to 27.
        */
-      {0x09, Elite::KEY_ENERGY_BOMB, "Tab -- energy bomb"},         // VK_TAB, 6502: KY12, C64 "C="
-      {0x54, Elite::KEY_ARM_MISSILE, "T -- target missile"},        // VK_T,   6502: KY14
-      {0x55, Elite::KEY_UNARM_MISSILE, "U -- unarm missile"},       // VK_U,   6502: KY15
-      {0x4D, Elite::KEY_FIRE_MISSILE, "M -- fire missile"},         // VK_M,   6502: KY16
-      {0x45, Elite::KEY_ECM, "E -- E.C.M."},                        // VK_E,   6502: KY17
-      {0x4A, Elite::KEY_WARP, "J -- in-system jump"},               // VK_J,   6502: KY18
-      {0x43, Elite::KEY_DOCKING_COMPUTER, "C -- docking computer"}, // VK_C,   6502: KY19
-      {0x50, Elite::KEY_CANCEL_DOCKING, "P -- cancel docking"},     // VK_P,   6502: KY20
+      {0x09, Elite::KEY_ENERGY_BOMB, "Tab -- energy bomb"},         // VK_TAB, C64 "C="
+      {0x54, Elite::KEY_ARM_MISSILE, "T -- target missile"},        // VK_T
+      {0x55, Elite::KEY_UNARM_MISSILE, "U -- unarm missile"},       // VK_U
+      {0x4D, Elite::KEY_FIRE_MISSILE, "M -- fire missile"},         // VK_M
+      {0x45, Elite::KEY_ECM, "E -- E.C.M."},                        // VK_E
+      {0x4A, Elite::KEY_WARP, "J -- in-system jump"},               // VK_J
+      {0x43, Elite::KEY_DOCKING_COMPUTER, "C -- docking computer"}, // VK_C
+      {0x50, Elite::KEY_CANCEL_DOCKING, "P -- cancel docking"},     // VK_P
 
       /*
        * The six information screens, on F1 to F6.
@@ -88,12 +90,12 @@ namespace Outpost
        * is what `gnum` and the line editor read, so it cannot be given up, and giving it up is the
        * only thing that would stop it reaching the screen as well.
        */
-      {0x70, Elite::KEY_LONG_RANGE, "F1 -- Galactic Chart"},     // VK_F1, 6502: f4
-      {0x71, Elite::KEY_SHORT_RANGE, "F2 -- local chart"},       // VK_F2, 6502: f5
-      {0x72, Elite::KEY_DATA_ON_SYSTEM, "F3 -- data on system"}, // VK_F3, 6502: f6
-      {0x73, Elite::KEY_MARKET_PRICE, "F4 -- market prices"},    // VK_F4, 6502: f7
-      {0x74, Elite::KEY_STATUS, "F5 -- status"},                 // VK_F5, 6502: f8
-      {0x75, Elite::KEY_INVENTORY, "F6 -- inventory"},           // VK_F6, 6502: f9
+      {0x70, Elite::KEY_LONG_RANGE, "F1 -- Galactic Chart"},     // VK_F1
+      {0x71, Elite::KEY_SHORT_RANGE, "F2 -- local chart"},       // VK_F2
+      {0x72, Elite::KEY_DATA_ON_SYSTEM, "F3 -- data on system"}, // VK_F3
+      {0x73, Elite::KEY_MARKET_PRICE, "F4 -- market prices"},    // VK_F4
+      {0x74, Elite::KEY_STATUS, "F5 -- status"},                 // VK_F5
+      {0x75, Elite::KEY_INVENTORY, "F6 -- inventory"},           // VK_F6
 
       /*
        * The four views, on F7 to F10.
@@ -105,10 +107,10 @@ namespace Outpost
        * F10 reaches the window as WM_SYSKEYDOWN rather than WM_KEYDOWN and opens the system menu on
        * the way past. `Window::OnMessage` handles both, which is why the right view is reachable.
        */
-      {0x76, Elite::KEY_LAUNCH, "F7 -- forward view, and launch"}, // VK_F7,  6502: f0
-      {0x77, Elite::KEY_REAR_VIEW, "F8 -- rear view"},             // VK_F8,  6502: f12
-      {0x78, Elite::KEY_LEFT_VIEW, "F9 -- left view"},             // VK_F9,  6502: f22
-      {0x79, Elite::KEY_RIGHT_VIEW, "F10 -- right view"},          // VK_F10, 6502: f32
+      {0x76, Elite::KEY_LAUNCH, "F7 -- forward view, and launch"}, // VK_F7
+      {0x77, Elite::KEY_REAR_VIEW, "F8 -- rear view"},             // VK_F8
+      {0x78, Elite::KEY_LEFT_VIEW, "F9 -- left view"},             // VK_F9
+      {0x79, Elite::KEY_RIGHT_VIEW, "F10 -- right view"},          // VK_F10
 
       // The number row. Three of these are the only way to the trading screens; the other six are
       // aliases of F1 to F6 above, and all nine are what the two number readers see as digits.
@@ -131,7 +133,7 @@ namespace Outpost
       // The letter keys the game names as constants.
       {0x44, Elite::KEY_DISTANCE, "D -- distance to system"}, // VK_D
       {0x46, Elite::KEY_FIND_SYSTEM, "F -- find system"},     // VK_F
-      {0x48, 0x23, "H -- hyperspace"},                        // VK_H, 6502: HINT
+      {0x48, 0x23, "H -- hyperspace"},                        // VK_H
       {0x4F, Elite::KEY_HOME, "O -- crosshairs home"},        // VK_O
       {0x59, Elite::KEY_YES_INTERNAL, "Y -- yes"},            // VK_Y
       {0x4E, 0x19, "N -- no"},                                // VK_N
@@ -160,10 +162,10 @@ namespace Outpost
       {0x4C, 22, "L"},                                    // VK_L
       {0x51, 2, "Q"},                                     // VK_Q
       {0x52, 47, "R"},                                    // VK_R
-      {0x53, Elite::KEY_PITCH_DOWN, "S -- and the dive"}, // VK_S, 6502: KY6
+      {0x53, Elite::KEY_PITCH_DOWN, "S -- and the dive"}, // VK_S
       {0x56, 33, "V"},                                    // VK_V
       {0x57, 55, "W"},                                    // VK_W
-      {0x58, Elite::KEY_PITCH_UP, "X -- and the climb"},  // VK_X, 6502: KY5
+      {0x58, Elite::KEY_PITCH_UP, "X -- and the climb"},  // VK_X
       {0x5A, 52, "Z"},                                    // VK_Z
 
       /*
@@ -176,7 +178,7 @@ namespace Outpost
       /*
        * CTRL, WHICH IS A POSITION AND NOT A MODIFIER, and this row is the whole of the fix.
        *
-       * `CTRL` is `LDX #6` falling into `DKS4`, so the game asks for key-logger entry 6 exactly
+       * `CTRL` loads 6 and falls into `DKS4`, so the game asks for key-logger entry 6 exactly
        * the way it asks for "A" or "T" -- `keylook.asm` calls that byte "CTRL is being pressed
        * (KLO+&6)". `Main.cpp` had recorded the opposite ("Ctrl is not a matrix position") and
        * the galactic hyperdrive, built in slice 4c-b, was unreachable on the strength of it.
@@ -187,7 +189,7 @@ namespace Outpost
        * "press any key" prompt on a real machine too. TRANTABLE turns position 6 into character
        * 3, which prints nothing.
        */
-      {0x11, static_cast<std::uint8_t>(Elite::KEY_CONTROL), "Ctrl -- galactic hyperdrive, with H"}, // VK_CONTROL, 6502: CTRL
+      {0x11, static_cast<std::uint8_t>(Elite::KEY_CONTROL), "Ctrl -- galactic hyperdrive, with H"}, // VK_CONTROL
 
       /*
        * The three the line editor compares numbers against. Their positions translate to 13, 127 and
@@ -202,7 +204,7 @@ namespace Outpost
        */
       {0x0D, 63, "RETURN"}, // VK_RETURN
       {0x08, 64, "DELETE"}, // VK_BACK -- backspace is where a PC player expects delete
-      {0x1B, Elite::KEY_ESCAPE_POD, "ESCAPE -- escape capsule, and 27 for the line editor"}, // VK_ESCAPE, 6502: KY13
+      {0x1B, Elite::KEY_ESCAPE_POD, "ESCAPE -- escape capsule, and 27 for the line editor"}, // VK_ESCAPE
     };
 
     /*
@@ -224,18 +226,18 @@ namespace Outpost
      * C64, for no extra binding at all.
      *
      * AND THE Y PAIR IS THE OTHER WAY ROUND FROM THE X PAIR, which looks like a slip and is not.
-     * `TT17` ends the y axis with `EOR #%11111110`, so the UNSHIFTED key steps `QQ10` by -1 and
-     * the shifted one by +1 -- and `QQ10` grows DOWNWARDS on both charts, because a system's screen
-     * row is its y halved. Unshifted therefore moves the crosshairs UP the screen, and the arrow
-     * that means "up" to a player is the one that must not press shift. Measured on the chart
-     * rather than reasoned about: the first version had them the obvious way round and the
-     * crosshairs went the wrong way.
+     * `TT17` ends the y axis with an exclusive OR that flips every bit but the lowest, so the
+     * UNSHIFTED key steps `QQ10` by -1 and the shifted one by +1 -- and `QQ10` grows DOWNWARDS
+     * on both charts, because a system's screen row is its y halved. Unshifted therefore moves
+     * the crosshairs UP the screen, and the arrow that means "up" to a player is the one that
+     * must not press shift. Measured on the chart rather than reasoned about: the first version
+     * had them the obvious way round and the crosshairs went the wrong way.
      */
     struct CursorBinding
     {
       int virtualKey = 0;
-      std::uint8_t axis = NO_KEY;  ///< 6502: KLO+&3E or KLO+&39
-      std::uint8_t shift = NO_KEY; ///< 6502: KLO+&31, pressed for the reverse direction
+      std::uint8_t axis = NO_KEY;
+      std::uint8_t shift = NO_KEY; ///< KLO+&31, pressed for the reverse direction
       const char* what = "";
     };
 
@@ -285,8 +287,9 @@ namespace Outpost
 
   std::uint8_t CharacterFor(std::uint8_t _c64Key) noexcept
   {
-    // 6502: LDA TRANTABLE,X -- and X cannot exceed 64, because that is what RDKEY produces. A key
-    // outside the table is not a key the hardware could have reported.
+    // The translation table, indexed by the key number -- and the index cannot exceed 64,
+    // because that is what RDKEY produces. A key outside the table is not a key the hardware
+    // could have reported.
     if (_c64Key >= Elite::KEY_TRANSLATION.size())
     {
       return 0;

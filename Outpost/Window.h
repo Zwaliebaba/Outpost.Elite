@@ -72,7 +72,7 @@ namespace Outpost
     void ClientSize(int& _outWidth, int& _outHeight) const noexcept;
 
     /*
-     * 6502: `thiskey` for `TT102` -- the C64 internal key NUMBER pressed since the last time this
+     * `thiskey` for `TT102` -- the C64 internal key NUMBER pressed since the last time this
      * was asked, or `NO_KEY`, and it is an EDGE: one answer per press of a key, however long it is
      * held, and never an auto-repeat (InputTimer.md I-1).
      *
@@ -86,7 +86,7 @@ namespace Outpost
      */
     [[nodiscard]] std::uint8_t TakePressed() noexcept;
 
-    /// 6502: KEYLOOK -- whether a key is held right now, for the polling idiom `DOKEY` uses.
+    /// Whether a key is held right now, for the polling idiom `DOKEY` uses.
     [[nodiscard]] bool Held(std::uint8_t _c64Key) const noexcept;
 
     /// True once, if the client area has changed since the last time this was asked. The presenter
@@ -117,7 +117,7 @@ namespace Outpost
     /// follows it.
     void ReleaseAllKeys() noexcept;
 
-    /// 6502: KEYLOOK is 65 bytes, one per internal key number, which is also TRANTABLE's extent.
+    /// KEYLOOK is 65 bytes, one per internal key number, which is also TRANTABLE's extent.
     static constexpr std::uint8_t KEY_COUNT = 65;
 
     HWND m_window = nullptr;

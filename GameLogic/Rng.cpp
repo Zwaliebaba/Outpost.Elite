@@ -6,7 +6,6 @@ namespace Elite
 {
 
   /*
-   * 6502: DORND.
    *
    * Two chained additions over the four state bytes. The first stirs the feeder pair and leaves
    * a carry; the second consumes that carry to produce the number. The carry the caller arrives

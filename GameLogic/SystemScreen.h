@@ -14,18 +14,18 @@ namespace Elite
   /*
    * The Data on System screen (slice 2a).
    *
-   * 6502: TT25, with TT146, TT70 and the four species labels it branches through. 2a's row deferred
+   * TT25, with TT146, TT70 and the four species labels it branches through. 2a's row deferred
    * this as "cursor and canvas work" and it is neither: every line of it is a token, a number or a
    * seed bit, and the only thing it reaches outside GameLogic for is TRADEMODE -- the same seam the
    * four trading screens and the status screen already use. Plan section 6.12's pattern, for the
    * fifth time.
    */
 
-  /// 6502: TT25's `LDA #1 / JSR TRADEMODE` -- QQ11 = 1, which is this screen's view number.
+  /// The view number TT25 sets up with -- QQ11 = 1, which is this screen's.
   inline constexpr std::uint8_t DATA_ON_SYSTEM_VIEW = 1;
 
   /*
-   * 6502: TT25 -- print everything the game knows about one system.
+   * Print everything the game knows about one system.
    *
    * The screen takes its system as ARGUMENTS rather than finding it, because the original does: the
    * C64's TT25 never calls TT111, so QQ3 to QQ8 and QQ15 are whatever the caller last left there.
@@ -56,15 +56,15 @@ namespace Elite
   void SystemDataScreen(Universe& _universe, Ports& _ports, const SystemData& _data, std::uint16_t _distance) noexcept;
 
   /*
-   * 6502: TT146 -- the distance line, and the branch that decides there is not one.
+   * The distance line, and the branch that decides there is not one.
    *
    * A distance of zero is the system you are already at, and then the routine does not print a
    * blank line: it jumps to INCYC, which moves the cursor down WITHOUT a newline. The other exit
    * runs off the end of TT63 into TT60, so the light years, the cursor move, sentence case and a
    * newline all come from a fall-through rather than from a call.
    *
-   * Exposed separately because it is not only this screen's: `T95` in TT102 ends `JMP TT146`, so
-   * moving the crosshairs on a chart prints the distance through the same routine.
+   * Exposed separately because it is not only this screen's: `T95` in TT102 ends with a tail call
+   * to TT146, so moving the crosshairs on a chart prints the distance through the same routine.
    */
   void PrintDistanceLine(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text, std::uint16_t _distance) noexcept;
 

@@ -47,7 +47,30 @@ done at once, because the second has no definition of "correct" until the first 
    2026-09-08: the pause screen, recorded in ADR-005 §4 and Design/InputTimer.md §5.9.** It is a
    removal and not an option, so "green with the option off" cannot apply to it; the suites are
    green without it and the ledger row says what went.
-5. **Licence posture — owner ruling, 2026-09-02.** The upstream repository states it is
+5. **Licence posture — owner ruling, 2026-09-02.**
+
+   **AMENDED 2026-09-08 AT M6-f, WHICH IS THE AMENDMENT THIS SECTION WAS ALWAYS WAITING FOR.**
+   Everything below describes the posture while the port was written against the original, and it
+   is kept because it is the reasoning the owner ruled on. What is true at the tip now:
+
+   - **`Upstream/` and `MasterFile/` are gone.** The submodule entry, `.gitmodules`, the twelve
+     masters and upstream's `README.md` beside them are deleted, with the tools that read them
+     (`labels.py`, `c64_source.py`, `extract_tables.py`) and the assembler step on both CI legs.
+     A fresh clone builds and runs the whole suite with a compiler and nothing else.
+   - **What remains of the original in this repository is its DATA**: the generated tables in
+     `GameLogic/` — the font, the token tables, the sine and arctangent tables, the ship
+     blueprints, the dashboard image — which the game cannot run without and which §1 R-c of
+     Modernize.md accepts as the residual exposure. They are checked in and cannot be regenerated
+     here any more, which is the point: the tables ARE the inheritance.
+   - **THE HISTORY IS NOT REWRITTEN AND THIS DOES NOT CLAIM IT IS.** Every commit before M6-f
+     still carries `MasterFile/`, and a reader of the history still finds all 5,616 lines of it.
+     Whether that history is rewritten is a separate owner decision, out of the modernisation
+     plan's scope and recorded as its Risk R21. Deleting at the tip changes what a clone gets,
+     not what a fetch can reach.
+   - **Slice 0e is still not closed**, and the position is still "published knowingly, pending
+     permission" rather than "published because it is fine".
+
+   The ruling as taken, and the reasoning under it. The upstream repository states it is
    provided with no licence, for reading and forking only, on an educational and non-profit
    basis; the code is copyright D. Braben and I. Bell, the commentary Mark Moxon. The owner has
    ruled two things that this ADR originally assumed the other way:
@@ -82,8 +105,8 @@ done at once, because the second has no definition of "correct" until the first 
    - Everything not ours lives under **`Upstream/`, with one exception this section used to
      omit**. No original assembler is copied into `GameLogic/`, `Tests/` or `Design/`, and
      `Upstream/` is a reference rather than a copy, so nothing under it is in the history at
-     all. **`MasterFile/` is the exception, and it is committed:** <!--count:masterfile-files-->13
-     files, <!--count:masterfile-lines-->5,616 lines,
+     all. **`MasterFile/` was the exception, and it was committed:** 13
+     files, 5,616 lines,
      headed `copyright D. Braben and I. Bell 1985` with commentary `copyright Mark Moxon`.
      "Removing one directory removes all of it" was therefore not true — removing `Upstream/`
      removes nothing, and `MasterFile/` is what a published history would carry. That is an
@@ -119,9 +142,9 @@ done at once, because the second has no definition of "correct" until the first 
    **This does not make the exposure smaller. It makes it accepted rather than mitigated**, and
    the difference is worth writing down:
 
-   - The <!--count:masterfile-files-->13 tracked files are still public and still carry `copyright
+   - The 13 tracked files were public and carried `copyright
      D. Braben and I. Bell 1985` in their own headers, with the commentary `copyright Mark Moxon`.
-     That is <!--count:masterfile-lines-->5,616 lines of source this project does not own, in a
+     That is 5,616 lines of source this project does not own, in a
      repository anyone can read. **Thirteen is the right number HERE and twelve is the right
      number in §1.1 of the plan**: the exposure is every tracked file in the folder, upstream's
      own `README.md` included, while the annotated SOURCE is the twelve `.asm` files. The two

@@ -129,7 +129,7 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const Ship& _ship) noexcept
     {
-      _into.Bytes(_ship.ToBytes()); // 6502: the K% layout, which is the codec's whole job
+      _into.Bytes(_ship.ToBytes()); // The K% layout, which is the codec's whole job
     }
 
     void FoldIntoStateHash(Folder& _into, const Bubble& _bubble) noexcept
@@ -248,7 +248,7 @@ namespace Elite
       _into.Byte(_flight.mainLoopCounter);
       _into.Byte(_flight.slot);
       _into.Byte(static_cast<std::uint8_t>(_flight.type));
-      _into.Word(_flight.blueprint != nullptr ? _flight.blueprint->address : std::uint16_t{0}); // 6502: XX0
+      _into.Word(_flight.blueprint != nullptr ? _flight.blueprint->address : std::uint16_t{0});
       _into.Byte(_flight.signMask);
       _into.Byte(_flight.signMask2);
       _into.Byte(_flight.steerCone);
@@ -305,7 +305,7 @@ namespace Elite
 
     void FoldIntoStateHash(Folder& _into, const Commander& _commander) noexcept
     {
-      _into.Bytes(_commander.ToBytes()); // 6502: TP to CHK, the codec's layout
+      _into.Bytes(_commander.ToBytes()); // TP to CHK, the codec's layout
     }
 
     void FoldIntoStateHash(Folder& _into, const SystemSeeds& _seeds) noexcept

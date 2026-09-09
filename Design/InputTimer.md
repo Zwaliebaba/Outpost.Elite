@@ -1,11 +1,14 @@
 # Input and time — what the port does today, and the plan to modernise both
 
-**Status:** analysis and plan, opened 2026-09-08; **six of its twelve slices are built the same day**
+**Status:** analysis and plan, opened 2026-09-08; **six of its thirteen slices are built the same day**
 -- I-0, S-1, I-3, T-0, I-1 and T-2, by owner ruling, each recorded in §9 -- and I-2, I-4, I-5,
-T-1, T-3 and T-4 are not. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
+T-1, T-3 and T-4 are not, and I-6 was added on 2026-09-09 when the oracle's deletion left the input
+path with no direct test. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
 record of what was found; where a finding is closed its heading says so. **The tree moved under the
 plan the same evening** -- M6-c built, M6-d running, the resolution track closed with ADR-008 -- and
-§9's last entry says what that voided, rewrote and enlarged. It reads after
+§9's entries say what that voided, rewrote and enlarged -- and **M6 closed on 2026-09-08 with the
+oracle DELETED rather than recorded**, which §6's revalidation of 2026-09-09 works through. It reads
+after
 [Modernize.md](Modernize.md), because it starts from the shape M6-0 left and proposes slices that
 sit beside M6-a; where it touches a decision an ADR owns, it says which ADR changes.
 
@@ -655,6 +658,7 @@ the Windows CI leg (R15).
 | **I-2 `InputFrame` and the layered map** | `InputFrame` as §5.2; the two `Step`s take it; `Window` produces one per outer turn (held from scan codes for the flight set, edge computed with release); `KeyBinding` gains `scanCode` and `layers`; the Docked layer retires the chart rule from `ScanKeyboard`. | `ShellTests` per-layer completeness; `ControlsTests` for `ScanKeyboard` unchanged on the space view; replay digest unchanged. | `main-lines` (250) — `Main.cpp` shrinks; `outpost-elite-names` (61) may fall, lower the ceiling in the same commit | 2 |
 | **I-3 `JSTK` at the seam** ✅ **built 2026-09-08 (§9)** | §5.1: the title's fire test cannot select a joystick until a pad exists; one sentence in ADR-005 §4; `StartUpTests` gains the case. | Oracle comparison of `TITLE` still green (the scripted matrix presses a non-fire key); play: `A` on the title, then fly, damping present. | none | 0.5 |
 | **I-4 Coroutines** | §5.4: `Task`, the awaitable `ReadKey`/`WaitFrames`/`Present`/holds, the screens converted, `Run()` a function over `Game` and a `Platform` that answers the four ports; `GameShell` and `FlightSession` absorbed as Modernize.md §4.8 says; `Abandon` deleted. | Every existing comparison green without change to what it asserts; a new `GameLoopTests` case drives `Run()`'s loop through a docked session, a launch, a pause and a close on the Linux leg; the digest unchanged. | `effects-seams` 5 → 4 if `Presenter` and `Keyboard` fold into `Platform`; `main-lines` falls; `aggregate-refs` unchanged (8) | 4–5 |
+| **I-6 Characterisation tests for the input path** ⭐ **added 2026-09-09, before I-2** | The four routines the deleted `ControlsTests.cpp` covered — `ScanKeyboard`, `ReadFlightControls`, `ReadCrosshairKeys`, `ReadKey` — pinned at the answers they give today, over a table of matrix states, views and damping settings. Not a comparison and the file says so. | The table runs and the numbers are the port's own; a deliberate one-byte change to any of the four fails it. | none | 1 |
 | **I-5 Gamepad and remapping** | §5.8 plus a remap file in `LocalAppData`; phase 6, own ADR. | Own ADR's. | — | 3, later |
 
 ### Track T — time
@@ -785,6 +789,77 @@ and it is worth taking while it is free.
 **What is genuinely unaffected**: I-4, T-1, T-3, T-4 and I-5. The coroutine conversion changes how
 a test drives the PORT, not what it asks the ORACLE, so the fixtures answer it unchanged; the four
 timing and remapping slices touch `Outpost/` only, which no fixture ever sees.
+
+### Revalidated 2026-09-09: the oracle is gone, and the subsection above is history
+
+**M6 closed on 2026-09-08, and not the way the subsection above assumed.** M6-b was cancelled
+unbuilt by owner ruling -- *delete the oracle rather than record it* -- so there are no fixtures at
+all: 337 tests that compared against the original are deleted, the suite is 131, `Cpu6502`,
+`OracleImage`, `MasterFile/` and the submodule are out of the tree, and ADR-009 records what that
+bought and cost. Everything above about "landing before M6-b" is now the record of a plan made
+under a different assumption, kept because it is what was believed at the time. This subsection is
+what replaces it, and it starts with the two things it got wrong.
+
+**"T-0's measurements survive" was right about the capability and wrong about the outcome.**
+`CallRecord` did carry a cycle count, and had M6-b been built as scoped the cost tests would have
+replayed. It was not built. `TheCrowdedFrameCostsWhatItCosts`, `TheDockedPassCostsWhatItCosts` and
+`CycleTests::TheTitleScreensLoopCostsWhatItCosts` are deleted with the other 336, so
+`Outpost::FLIGHT_FRAME_COSTS`, `DOCKED_PASS_CYCLES` and `TITLE_TURN_COSTS` are now **measured
+constants that nothing re-derives** -- `ShellTests` asserts the tables against the same numbers the
+tables hold, which catches a typo and cannot catch a wrong measurement. The numbers are still
+honest, because T-0 took them against the real machine while it was here; what is gone is the
+ability to take them again. **That is the one place this plan's early sequencing paid for itself**:
+had T-0 waited, the crowded-end costs would not exist at all, and the flight loop would still be
+paced from the two bands §6.114 measured with no planet and no station in the scene.
+
+**"I-1's test will not replay" is moot rather than confirmed.** It predicted a failure under
+`RecordedOracle`; no `RecordedOracle` was built, and `ControlsTests.cpp` was deleted whole, so the
+prediction was never put to the test. It is left in the record above as what the analysis said, not
+as a call that came in.
+
+**And one window closed before it could be used.** The free question I-2 was told to ask -- whether
+`ScanKeyboard` matches `RDKEY` on a chart once the port's own chart rule moves out -- can no longer
+be asked by anyone. That is Risk R19 realised on this plan specifically, and it is the cost of
+having written the question down rather than taken it.
+
+**THE STRUCTURAL FINDING, and it is the one that matters for what is left: the input path now has
+no direct test.** `ControlsTests.cpp` is deleted whole, and it held every one --
+`TheFlightControlsMatchDOKEY`'s 1,984-case sweep, `TheCrosshairKeysMatchTT17`,
+`TheControlRatesMatchBUMP2AndREDU2`, `TheLaserSightsMatchSIGHT` and `TheBlockingReadMatchesTT217`.
+What is left reaches those four routines without asserting anything about them: `ScanKeyboard`,
+`ReadFlightControls`, `ReadCrosshairKeys` and `ReadKey` are **exercised** by the replay (which
+drives held keys through three scripted flights), by `GameTests` (whose cold start runs the title
+screen) and by `DockedSessionTests`, and **asserted** by none of them. `LaunchTests` names
+`ScanKeyboard` in a comment and nowhere else. ADR-009 §4 lists what was given up and does not name
+this path; it is named here because I-2 is the slice that rewrites exactly those routines.
+
+**So the approach changes in one place and holds in the rest.**
+
+| Slice | Revalidated |
+|---|---|
+| **I-2** | **Gate is void and the slice needs a predecessor.** "`ControlsTests` for `ScanKeyboard` unchanged" names a deleted file. Worse, the instrument that would guard I-2 -- the replay -- is the one I-2 must modify, because `Game::Step` changes signature and the replay drives it. Two rules follow: **I-6 first** (below), and **the signature change and the meaning change are separate commits** -- adapt the replay's driver to `InputFrame` with the same keys and prove all three digests unmoved, and only then let a layer change what a key means. |
+| **I-4** | **Instrument survives, narrowed.** `DockedSessionTests` still drives every docked screen and still asserts that the screens differ from each other, which is what a coroutine conversion could break. The gate "every existing comparison green" now means far fewer comparisons, so the slice is riskier than when it was written; the mitigation is unchanged and stronger -- convert in small groups, digests unmoved. |
+| **T-1, T-3, T-4** | **Unaffected, and now the safest work in the plan.** They touch `Outpost/` only, `ShellTests` covers `PlanSteps`, the cost tables, the viewport and the key map, and none of that moved. If anything the detachment argues for doing them next. |
+| **I-5** | Unaffected; phase 6 and its own ADR. |
+
+### I-6 — a characterisation test for the input path (new, 2026-09-09)
+
+**Before I-2, and cheap.** With the original gone, fidelity cannot be re-proved -- but present
+behaviour can be pinned so that a refactor cannot move it silently, which is the standard answer
+when a reference is withdrawn and is exactly what ADR-009 §2 calls "the port's own invariants".
+Drive a table of known matrix states through `ScanKeyboard`, `ReadFlightControls`,
+`ReadCrosshairKeys` and `ReadKey` and assert the answers they give TODAY: the logger after a scan
+at each of the space view, a chart and a docked screen; the roll and pitch rates after a held key
+with damping on and off; the crosshair steps for the five cursor combinations `TT17` reads; and the
+character `ReadKey` returns for a release-then-press script. None of it needs an oracle, all of it
+is a value the port already computes, and the numbers come from running it rather than from
+judgement.
+
+What it buys is the thing I-2 would otherwise not have: a test that fails when the layered map
+changes what a key means in a mode where it should not have. What it explicitly does NOT buy is
+fidelity -- it pins what the port does, and if the port is wrong today it pins the wrong answer.
+That is worth saying in the file itself so no later reader mistakes a characterisation test for a
+comparison. One sitting.
 
 ### What the plan does to the documents
 
@@ -963,3 +1038,28 @@ read the oracle's scan count out of the record instead -- and it must land befor
 gains one free question worth asking while it can be: whether `ScanKeyboard` matches `RDKEY` on a
 chart once the port's own chart rule moves into the key map, which nothing has ever asked the
 original.
+
+**2026-09-09 — revalidated against a tree with no oracle in it, and two of yesterday's claims were
+wrong.** M6 closed the evening before: M6-b was cancelled unbuilt by owner ruling -- delete the
+oracle rather than record it -- and M6-e, M6-f and M6-g followed, so 337 comparison tests are
+deleted, the suite is 131, and `MasterFile/`, the submodule and the interpreter are out of the tree
+(ADR-009). Merged and verified here: **131 passed, 0 failed**, thirteen repository checks pass, all
+97 recorded mutants still apply, and every one of the eight tests the six built slices left behind
+survived the deletion -- they were port-side assertions rather than comparisons, which is the
+property that saved them.
+
+Judged against that: **"T-0's measurements survive" was right about the capability and wrong about
+the outcome** -- the cost tests went with the rest, so the cost tables are measured constants
+nothing re-derives, and T-0 having run early is the reason the crowded-end numbers exist at all.
+**"I-1's test will not replay" is moot**, not confirmed: no `RecordedOracle` was ever built and the
+test was deleted with its file. **And I-2's free question closed unasked**, which is R19 realised on
+this plan.
+
+The finding that matters is structural and is now in §6: **the input path has no direct test.**
+`ControlsTests.cpp` was deleted whole, and the four routines it covered are exercised by the replay,
+`GameTests` and `DockedSessionTests` but asserted by none of them. So **I-6 is added before I-2** --
+characterisation tests that pin what the four routines answer today, which is what can still be
+done once the reference is withdrawn, and which the file will say is not a fidelity claim. I-2 also
+gains a rule it did not need before: the signature change and the meaning change go in separate
+commits, because the replay is both I-2's guard and I-2's patient. T-1, T-3 and T-4 are untouched by
+any of this and are now the safest work on the board.

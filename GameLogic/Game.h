@@ -42,8 +42,8 @@ namespace Elite
    * THE PLATFORM ARRIVES AS FOUR REFERENCES, which is `Ports` minus the four members that are this
    * library's own: the token printer, the character printer, the sink and the extended printer are
    * built HERE, over the universe, because nothing about them is the platform's. A `ControlEffects`
-   * arrived beside them until M6-0-h-3 -- 6502: JSR DOCKIT, which was never in `Ports` (§4.5) and
-   * is a library call now.
+   * arrived beside them until M6-0-h-3 -- the call to `DOCKIT`, which was never in `Ports`
+   * (§4.5) and is a library call now.
    */
   class Game
   {
@@ -54,7 +54,7 @@ namespace Elite
     Game& operator=(const Game&) = delete;
 
     /*
-     * 6502: the loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
+     * The loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
      *
      * It ends by pressing "8" for the player and PERFORMING that outcome rather than deciding it
      * again: `BAY` forces the key and `TT102` has already dispatched it, so deciding twice would
@@ -64,7 +64,7 @@ namespace Elite
     void Reset() noexcept;
 
     /*
-     * 6502: TT100 -- one pass of the flight half, with the key the window had (zero for none).
+     * One pass of the flight half, with the key the window had (zero for none).
      *
      * Answers whether the caller may step again. False is `M%` leaving the flight half or the
      * pause key freezing it, both of which the loop this came from expressed as a `return` out of
@@ -74,7 +74,7 @@ namespace Elite
     [[nodiscard]] bool Step(std::uint8_t _key) noexcept;
 
     /*
-     * 6502: MLOOP on a docked pass -- part 5 whole, then `TT17` and `TT102`, once.
+     * MLOOP on a docked pass -- part 5 whole, then `TT17` and `TT102`, once.
      *
      * Answers the VERTICAL SYNCS the pass asked `DELAY` for -- two off the space view, unless the
      * view byte is odd and `PATG` is set, which is `RunLoopTail`'s own answer -- so the executable can pace
@@ -86,7 +86,7 @@ namespace Elite
     /*
      * `StepPaused` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, owner ruling 2026-09-08).
      *
-     * 6502: FREEZE -- `DK4`'s pause screen, which was the game's only settings interface: thirteen
+     * `DK4`'s pause screen, which was the game's only settings interface: thirteen
      * toggles walked by `DKS3`, two sound keys and a quit to the title. The port could enter it
      * and not leave it (InputTimer.md I-3), and the ruling removed the screen rather than binding
      * its keys. The thirteen bytes it toggled are still `Universe`'s and are set from the
@@ -94,7 +94,7 @@ namespace Elite
      */
 
     /*
-     * 6502: what `M%` answered on the last `Step`, for a caller that needs more than "may I step
+     * What `M%` answered on the last `Step`, for a caller that needs more than "may I step
      * again".
      *
      * The M0-c replay records the outcome of every pass and compares the record digest for digest,
@@ -107,18 +107,20 @@ namespace Elite
     }
 
     /*
-     * 6502: QQ12 -- which half of the main loop the game is in (M4-d).
+     * QQ12 -- which half of the main loop the game is in (M4-d).
      *
-     * `FRCE` is `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` -- a two-way dispatch on a byte the
-     * game keeps -- so both values are the game's own. A THIRD, `Paused`, was the port's from M4-d
-     * until InputTimer.md I-0: `FREEZE` turned inside out into a state the outer loop was in. It
-     * went with the pause screen (owner ruling 2026-09-08); a windowed player's pause is the
-     * executable stopping the steps while the window is inactive (InputTimer.md §5.9).
+     * `FRCE` is a two-way dispatch on that byte -- ZERO leaves for `TT100` and non-zero for
+     * `MLOOP`, and the branch reads backwards, so the note beside it in the original source is
+     * the BBC form's and says the opposite (see `StartUp.h`). Both values are the game's own. A
+     * THIRD, `Paused`, was the port's from M4-d until InputTimer.md I-0: `FREEZE` turned inside
+     * out into a state the outer loop was in. It went with the pause screen (owner ruling
+     * 2026-09-08); a windowed player's pause is the executable stopping the steps while the
+     * window is inactive (InputTimer.md §5.9).
      */
     enum class Mode : std::uint8_t
     {
-      Flight, ///< 6502: QQ12 = 0 -- `FRCE`'s `JMP TT100`
-      Docked, ///< 6502: QQ12 non-zero -- `FRCE`'s `JMP MLOOP`
+      Flight, ///< QQ12 = 0 -- `FRCE` leaves for `TT100`
+      Docked, ///< QQ12 non-zero -- `FRCE` leaves for `MLOOP`
     };
 
     [[nodiscard]] Mode ModeNow() const noexcept
@@ -126,7 +128,7 @@ namespace Elite
       return (m_universe.dockedFlag != 0u) ? Mode::Docked : Mode::Flight;
     }
 
-    /// 6502: QQ12 -- which half of the main loop the game is in, for a caller that wants the byte
+    /// QQ12 -- which half of the main loop the game is in, for a caller that wants the byte
     /// rather than the state. `ModeNow` is what the loop should ask.
     [[nodiscard]] bool Docked() const noexcept
     {
@@ -134,7 +136,7 @@ namespace Elite
     }
 
     /*
-     * 6502: FRIN's occupied slots -- how many ships the bubble holds.
+     * FRIN's occupied slots -- how many ships the bubble holds.
      *
      * The executable asks because the cost of a flight frame depends on it and the cost is what the
      * accumulator counts against (§6.114). It is counted here rather than there because `FRIN`'s
@@ -155,7 +157,7 @@ namespace Elite
     /// The seams, for a caller that has to reach one directly -- the loader screen on start-up and
     /// the suites that drive a routine rather than a pass.
     /*
-     * 6502: SID -- the register writes the game side has made since the executable last drained
+     * The register writes the game side has made since the executable last drained
      * them, in the order it made them (§4.4's `Sounds()`, built M5-e-1).
      *
      * THE LOG IS THE GAME'S NOW AND THE EXECUTABLE READS IT. Until M5-e-1 the executable owned the
@@ -193,7 +195,7 @@ namespace Elite
     void ShowChart(std::uint8_t _view);
 
     /*
-     * 6502: FRCE -- the main loop entered with a key already "pressed".
+     * The main loop entered with a key already "pressed".
      *
      * Declared ahead of `Perform` because `BAY2` forces one, and `BAY2` is reached from inside two
      * of the actions `Perform` performs. The recursion is one level deep and cannot be more: the
@@ -204,20 +206,20 @@ namespace Elite
     /*
      * One key, and whatever screen it reaches.
      *
-     * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
+     * What `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
      * is compared against the shipped routine over 16,384 states; this is the other half, and the
      * actions that need phase 4 are refused rather than silently ignored -- a game that did nothing
      * for the hyperspace key would look exactly like one that had wired it up.
      */
     void Perform(const KeyOutcome& _outcome);
 
-    /// 6502: the six exits `DOENTRY` can take, which are the missions plus the bay itself.
+    /// The six exits `DOENTRY` can take, which are the missions plus the bay itself.
     [[nodiscard]] ForcedKey MissionOf(DockingOutcome _outcome);
 
     /// InputTimer.md §5.1: `JSTK` after a start sequence, which only a platform with a stick may keep.
     void SettleJoystick() noexcept;
 
-    /// 6502: what `M%` answers with, and what the loop does about it.
+    /// What `M%` answers with, and what the loop does about it.
     void Leave(LoopOutcome _outcome);
 
     // ---- the universe, the text system and the seams --------------------------------------------
@@ -270,7 +272,7 @@ namespace Elite
     LoopOutcome m_lastOutcome = LoopOutcome::Continued;
 
     /// LAST, because every reference in it is bound at construction (§4.5).
-    SidWriteLog m_sid; ///< 6502: SID -- the game side's writes, declared before the `Ports` that binds to it
+    SidWriteLog m_sid; ///< The game side's writes, declared before the `Ports` that binds to it
     Ports m_ports;
   };
 

@@ -2,9 +2,7 @@
 
 #include "pch.h"
 
-#include "Cpu6502.h"
 #include "NullSeams.h"
-#include "OracleImage.h"
 
 #include "Arith.h"
 #include "Canvas.h"
@@ -36,94 +34,23 @@
 #include <vector>
 
 /*
- * The port's whole flight universe, and the oracle's memory beside it.
+ * The port's whole flight universe, as a fixture.
  *
- * Shared by `ViewChangeTests` and `FlightLoopTests` because both compare routines that reach all
- * of it: `TT66` clears everything drawn on the screen, and the flight loop drives everything that
- * draws. Building it twice would be the same eighteen arguments in two disguises.
+ * Shared by `ViewChangeTests`, `LaunchTests`, `FlightLoopTests` and `FlightPort.h` because all of
+ * them drive routines that reach all of it: a screen change clears everything drawn, and the
+ * flight loop drives everything that draws. Building it four times would be the same eighteen
+ * arguments in four disguises.
  */
 namespace GameLogicTests
 {
 
-  using Elite::Testing::Cpu6502;
-  using Elite::Testing::OracleImage;
   using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-
-  inline bool OracleMissing()
-  {
-    const OracleImage& oracle = OracleImage::Instance();
-    if (oracle.Available())
-    {
-      return false;
-    }
-    Microsoft::VisualStudio::CppUnitTestFramework::Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-    return true;
-  }
 
   inline std::wstring WidenText(const std::string& _text)
   {
     return std::wstring(_text.begin(), _text.end());
   }
 
-  inline std::uint16_t ScreenBase(const OracleImage& _oracle)
-  {
-    const Cpu6502 image = _oracle.Fresh();
-    return static_cast<std::uint16_t>((image.memory[_oracle.Label("ylookupl")] | (image.memory[_oracle.Label("ylookuph")] << 8)) - 0x20);
-  }
-
-  inline void FillScreens(Cpu6502& _cpu, Elite::Canvas& _canvas, std::uint16_t _base, std::uint8_t _marker)
-  {
-    std::memset(&_cpu.memory[_base], _marker, Elite::Canvas::SCREEN_SIZE);
-    for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
-    {
-      _canvas.Write(offset, _marker);
-    }
-  }
-
-  inline std::uint32_t CompareScreens(const Cpu6502& _cpu, std::uint16_t _base, const Elite::Canvas& _canvas, std::uint8_t _marker,
-                                      const std::wstring& _context)
-  {
-    const std::span<const std::uint8_t> ours = _canvas.Screen();
-    std::uint32_t touched = 0;
-
-    for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
-    {
-      const std::uint8_t expected = _cpu.memory[static_cast<std::uint16_t>(_base + offset)];
-      if (expected != ours[offset])
-      {
-        Assert::Fail((_context + L": screen differs at offset " + std::to_wstring(offset) + L" -- game has " + std::to_wstring(expected) +
-                      L", port has " + std::to_wstring(ours[offset]))
-                       .c_str());
-      }
-      touched += (ours[offset] != _marker) ? 1u : 0u;
-    }
-
-    return touched;
-  }
-
-  /*
-   * `RecordingSight` WAS HERE AND IS NOT ANY MORE (M3-b-3a).
-   *
-   * Four lists -- the raster modes, the enable masks, the sight colours and part 15's read-modify-
-   * write -- because `SightEffects` was write-only and a list of calls was the only thing a suite
-   * could compare. Three of the four are `Universe::video` now and the fourth is
-   * `Universe::memoryMap`, both of them mirrored into the oracle and compared out of it like every
-   * other byte, so what the routine DID is compared rather than what it was asked to do.
-   */
-
-  /*
-   * `RecordingView` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
-   *
-   * It counted `DOVDU19`, which on this build is a bare `RTS` -- so the suite was comparing the
-   * port's call against nothing at all, and `ViewChangeTests` asserted the count. The library makes
-   * no call now and the comment at `LOOK1` is what carries the label.
-   *
-   * It had a `PlaySound` too, until M3-b-2a: `WARP`'s refusal noise was `ViewEffects::PlaySound`
-   * and the same `NOISE` that `DashboardEffects` declared, so the port had one routine behind two
-   * interfaces and the fixtures kept a list of calls to each. Both are `PlaySoundEffect` over
-   * `Universe::sound` now, and what they write is compared through `SOFLG` and its nine
-   * neighbours like every other byte.
-   */
 
   /*
    * The port's whole flight universe, and the `FlightScreen` over it.
@@ -410,209 +337,5 @@ namespace GameLogicTests
     _universe.explosions = 0x66u;
   }
 
-  /// Every label the screen routines touch, looked up once.
-  struct Where
-  {
-    std::uint16_t frin, kPercent, many, inwk, sx, sxl, sy, syl, sz, szl, nostm;
-    std::uint16_t lso, lsx2, ballHeapTop, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
-    std::uint16_t lsy2, sunx, yx2m1, zeroPageK5, zeroPageK6, circleStep, flag, planetDetail, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
-    std::uint16_t dtw3, dtw4, dtw5, dtw8;
-    std::uint16_t dly, de, las2, qq22, viewByte, qq11, mj, junk, ev, rand;
-    std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
-    std::uint16_t speed, rollMagnitude, rollSign, pitchRate, pitchMagnitude, energy, fsh, ash, qq14, xx0;
-    std::uint16_t cabtmp, gntmp, altit, mcnt, flh, ecma, laser, tribble, tribct;
-    std::uint16_t tribvx, tribvxh, tribxh, vic; ///< 6502: the Trumble sprite bank, slice 4d-a
-    std::uint16_t tp, mch, messxc, screen;
-    std::uint16_t tek, xx21Station, spasto; ///< 6502: tek, XX21+2*SST-2, and BEGIN's saved copy of it
-
-    /*
-     * 6502: sound_variables -- ten runs of three, one byte on its own, and the toggle (M3-b-2a).
-     *
-     * `NOISE`, `NOISE2` and `NOISEOFF` were seams until then and the fixtures counted their calls;
-     * they are `SoundEffects.cpp`'s routines over `Universe::sound` now, so what they write is
-     * compared like every other byte the frame touches.
-     */
-    std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
-
-    /*
-     * 6502: safehouse, QQ8, JSTGY, JSTE and MUTOKOLD -- five bytes M3's follow-on moved into
-     * `Universe` and the digest could not see (ADR-007 §5, closed by this widening).
-     */
-    std::uint16_t safehouse, qq8, jstgy, jste, mutokold;
-
-    /*
-     * 6502: MUPLA and MULIE -- the music player's own two bytes that a routine outside `Music.cpp`
-     * can reach (M3-b-2b).
-     *
-     * `startbd`, `stopbd`, `startat` and `stopat` run on both machines now, so a fixture that
-     * reaches one has to be able to say whether the two agree on it. The rest of the player --
-     * `BDBUFF`, the pointers, the vibrato -- is `SoundTests`', which drives the tick itself; these
-     * are what the GAME side of the code sets and reads.
-     */
-    std::uint16_t mupla, mulie;
-
-    /*
-     * 6502: L1M and `l1` -- the 6510's input/output port, and the second is address &0001 rather
-     * than a label (M3-b-3a).
-     *
-     * `SETL1` runs on both machines now, so a routine that brackets its register writes leaves the
-     * same two bytes on both. `l1` is written with the datasette bits ridden along, which is why
-     * the fixtures seed it non-zero: a comparison against zero would agree with a port that had
-     * lost the `AND #%11111000`.
-     */
-    std::uint16_t l1m;
-    static constexpr std::uint16_t IO_PORT = 0x0001;
-
-    /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
-    /// which reads cells in table order and never their addresses (`Hash(const Elite::Universe&)`).
-    Where() = default;
-
-    explicit Where(const OracleImage& _oracle)
-    {
-      frin = _oracle.Label("FRIN");
-      kPercent = _oracle.Label("K%");
-      many = _oracle.Label("MANY");
-      inwk = _oracle.Label("INWK");
-      sx = _oracle.Label("SX");
-      sxl = _oracle.Label("SXL");
-      sy = _oracle.Label("SY");
-      syl = _oracle.Label("SYL");
-      sz = _oracle.Label("SZ");
-      szl = _oracle.Label("SZL");
-      nostm = _oracle.Label("NOSTM");
-      lso = _oracle.Label("LSO");
-      lsx2 = _oracle.Label("LSX2");
-      lsy2 = _oracle.Label("LSY2");
-      sunx = _oracle.Label("SUNX");
-      yx2m1 = _oracle.Label("Yx2M1");
-      zeroPageK5 = _oracle.Label("K5");
-      zeroPageK6 = _oracle.Label("K6");
-      circleStep = _oracle.Label("STP");
-      flag = _oracle.Label("FLAG");
-      planetDetail = _oracle.Label("PLTOG");
-      v = _oracle.Label("V");
-      ballHeapTop = _oracle.Label("LSP");
-      xc = _oracle.Label("XC");
-      yc = _oracle.Label("YC");
-      qq17 = _oracle.Label("QQ17");
-      dtw1 = _oracle.Label("DTW1");
-      dtw2 = _oracle.Label("DTW2");
-      dtw6 = _oracle.Label("DTW6");
-      dtw3 = _oracle.Label("DTW3");
-      dtw4 = _oracle.Label("DTW4");
-      dtw5 = _oracle.Label("DTW5");
-      dtw8 = _oracle.Label("DTW8");
-      col2 = _oracle.Label("COL2");
-      dly = _oracle.Label("DLY");
-      de = _oracle.Label("de");
-      las2 = _oracle.Label("LAS2");
-      qq22 = _oracle.Label("QQ22");
-      viewByte = _oracle.Label("VIEW");
-      qq11 = _oracle.Label("QQ11");
-      mj = _oracle.Label("MJ");
-      junk = _oracle.Label("JUNK");
-      ev = _oracle.Label("EV");
-      rand = _oracle.Label("RAND");
-      abraxas = _oracle.Label("abraxas");
-      caravanserai = _oracle.Label("caravanserai");
-      dflag = _oracle.Label("DFLAG");
-      comx = _oracle.Label("COMX");
-      comy = _oracle.Label("COMY");
-      comc = _oracle.Label("COMC");
-      t2 = _oracle.Label("T2");
-      speed = _oracle.Label("DELTA");
-      rollMagnitude = _oracle.Label("ALP1");
-      rollSign = _oracle.Label("ALP2");
-      pitchRate = _oracle.Label("BETA");
-      pitchMagnitude = _oracle.Label("BET1");
-      energy = _oracle.Label("ENERGY");
-      fsh = _oracle.Label("FSH");
-      ash = _oracle.Label("ASH");
-      qq14 = _oracle.Label("QQ14");
-      xx0 = _oracle.Label("XX0");
-      cabtmp = _oracle.Label("CABTMP");
-      gntmp = _oracle.Label("GNTMP");
-      altit = _oracle.Label("ALTIT");
-      mcnt = _oracle.Label("MCNT");
-      flh = _oracle.Label("FLH");
-      ecma = _oracle.Label("ECMA");
-      laser = _oracle.Label("LASER");
-      tribble = _oracle.Label("TRIBBLE");
-      tribct = _oracle.Label("TRIBCT");
-      tribvx = _oracle.Label("TRIBVX");
-      tribvxh = _oracle.Label("TRIBVXH");
-      tribxh = _oracle.Label("TRIBXH");
-
-      /*
-       * 6502: VIC, which the source sets to &D000 -- and in a flat image that is `XX21`, the ship
-       * blueprint pointer table (§6.108).
-       *
-       * So writing a Trumble sprite's x coordinate in the oracle overwrites the blueprint pointers
-       * for ship types 3 to 9. On the real machine `SETL1` banks the video chip in over that RAM
-       * and the table is untouched; there is no bank here, so a comparison that runs `MVTRIBS` and
-       * then draws a ship is comparing against a corrupted table. Every fixture that gives a frame
-       * Trumbles has to stop before the ships are drawn, and `TheControlRatesMatchM` -- the only
-       * one that does -- runs the frame's HEAD.
-       */
-      vic = Cpu6502::IO_BASE; // 6502: VIC -- the chip, which the flat image labelled `XX21` until M6-0-a banked the page
-      tp = _oracle.Label("TP");
-      mch = _oracle.Label("MCH");
-      messxc = _oracle.Label("messXC");
-      tek = _oracle.Label("tek");
-      soflg = _oracle.Label("SOFLG");
-      socnt = _oracle.Label("SOCNT");
-      sopr = _oracle.Label("SOPR");
-      pulsew = _oracle.Label("PULSEW");
-      sofrch = _oracle.Label("SOFRCH");
-      sofrq = _oracle.Label("SOFRQ");
-      socr = _oracle.Label("SOCR");
-      soatk = _oracle.Label("SOATK");
-      sosus = _oracle.Label("SOSUS");
-      sovch = _oracle.Label("SOVCH");
-      dnoiz = _oracle.Label("DNOIZ");
-      safehouse = _oracle.Label("safehouse");
-      qq8 = _oracle.Label("QQ8");
-      jstgy = _oracle.Label("JSTGY");
-      jste = _oracle.Label("JSTE");
-      mutokold = _oracle.Label("MUTOKOLD");
-      mupla = _oracle.Label("MUPLA");
-      mulie = _oracle.Label("MULIE");
-      l1m = _oracle.Label("L1M");
-
-      /*
-       * 6502: XX21+2*SST-2 -- the only two bytes of the pointer table the game writes.
-       *
-       * Computed from `XX21` and `SST` rather than looked up, because it has no label of its own:
-       * the original addresses it as an expression and so does this.
-       */
-      xx21Station = static_cast<std::uint16_t>(_oracle.Label("XX21") + 2u * Elite::Byte(Elite::ShipType::Station) - 2u);
-      spasto = _oracle.Label("spasto");
-
-      screen = ScreenBase(_oracle);
-    }
-  };
-
-  /*
-   * The two names the suites use, answered by the universe image (Design/Modernize.md slice M0-b).
-   *
-   * They were two hand-written functions here, each naming its fields in its own order, so that the
-   * map from a port field to a 6502 label existed twice. `UniverseImage.cpp` holds it once, as a
-   * table of cells; `Mirror` is its `Materialise` and `CompareState` its `Compare` with the first
-   * difference turned into an assertion. Nothing a suite passes has changed.
-   */
-  void Mirror(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
-
-  /*
-   * 6502: sound_variables, compared on its own (M3-b-2a).
-   *
-   * `CompareState` covers it for the fixtures that call that; this is for the ones that mirror the
-   * universe in and check a handful of things out, which used to assert on a recorded list of
-   * `NOISE` calls. The buffer says more than the list did: which voice took the effect, what
-   * priority it went in at, what the frequency and the envelope are, and what an effect that was
-   * REFUSED left behind.
-   */
-  void CompareSound(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context);
-  void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context,
-                    bool _compareRng = true);
 
 } // namespace GameLogicTests

@@ -61,12 +61,12 @@ namespace Elite
   /// What `TT100`'s head decided, which the original says by whether it jumps straight to part 5.
   enum class LoopHead : std::uint8_t
   {
-    SkipSpawning, ///< 6502: .ytq -- 255 passes in 256 go straight to part 5
-    Spawn,        ///< 6502: the branch that skips the exit -- `MCNT` reached zero
+    SkipSpawning, ///< .ytq -- 255 passes in 256 go straight to part 5
+    Spawn,        ///< The branch that skips the exit -- `MCNT` reached zero
   };
 
   /*
-   * 6502: TT100 -- the three instructions after the flight loop and before the spawning (slice 4c-d).
+   * The three instructions after the flight loop and before the spawning (slice 4c-d).
    *
    * `DLY` is a countdown that STOPS AT ZERO rather than wrapping: a value of 0 decrements to 255,
    * which is negative, and the routine puts it straight back. So the only pass that reaches `me2`
@@ -86,7 +86,7 @@ namespace Elite
   [[nodiscard]] LoopHead RunLoopHead(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: MLOOP's first six instructions and `EE20` -- the two countdowns, before the `QQ11` gate.
+   * MLOOP's first six instructions and `EE20` -- the two countdowns, before the `QQ11` gate.
    *
    * BOTH ARE COOLING. `GNTMP` is the laser temperature the LT dial reads and `LASCT` is the pulse
    * laser's own countdown, and the two together are why a gun works at all: part 3 of the flight
@@ -107,7 +107,7 @@ namespace Elite
   void CoolTheGuns(FlightStatus& _status) noexcept;
 
   /*
-   * 6502: MLOOP -- main game loop part 5, which is the loop's own housekeeping (slice 4c-d).
+   * Main game loop part 5, which is the loop's own housekeeping (slice 4c-d).
    *
    * SIXTY-FIVE INSTRUCTIONS, AND THE PORT HAD FOURTEEN OF THEM PLACED BY HAND. §6.128 read three
    * player reports -- a dead letter key on the buy screen, dials that never moved, a laser that
@@ -139,55 +139,55 @@ namespace Elite
                                          bool _carryIn) noexcept;
 
   /*
-   * 6502: CYL2, COU and PACK -- the three ship types the spawner names that no earlier slice did.
+   * CYL2, COU and PACK -- the three ship types the spawner names that no earlier slice did.
    *
    * `PACK` is not a type of its own: the source says `PACK = SH3`, so the pack hunters are the
    * eight blueprints from the Sidewinder up, and part 4 picks one by masking a random byte to
    * three bits and adding that base WITH THE CARRY: nothing between the mask and the addition
    * clears it, so a live carry moves the pack one type along.
    */
-  /// 6502: PACK = SH3 -- the pack hunters begin at the Sidewinder (`ShipType::Sidewinder`), and the
+  /// PACK = SH3 -- the pack hunters begin at the Sidewinder (`ShipType::Sidewinder`), and the
   /// Cougar is `ShipType::Cougar`; both live in the enumeration now.
 
-  /// 6502: the wait at the end of a docked pass -- two vertical syncs with the author-names
+  /// The wait at the end of a docked pass -- two vertical syncs with the author-names
   /// option off, which is the only frame cap anywhere in the main loop (§6.17).
   inline constexpr std::uint8_t LOOP_DELAY_FRAMES = 2;
 
-  /// 6502: the roll a Trumble breeds on, which is a CARRY added to the low byte and not an
+  /// The roll a Trumble breeds on, which is a CARRY added to the low byte and not an
   /// increment: 36 values in 256, so the population grows about one pass in seven.
   inline constexpr std::uint8_t TRUMBLE_BREED_ROLL = 220;
 
-  /// 6502: compared twice, and it does two things: above it the squeak comes half as often, and it
+  /// Compared twice, and it does two things: above it the squeak comes half as often, and it
   /// is the sound of them burning rather than of them squeaking.
   inline constexpr std::uint8_t TRUMBLE_BURN_TEMPERATURE = 224;
 
-  /// 6502: the z high byte every ship spawned by part 2 starts at, which is why traders and
+  /// The z high byte every ship spawned by part 2 starts at, which is why traders and
   /// canisters always appear at the same distance in a random direction.
   inline constexpr std::uint8_t SPAWN_DISTANCE = 38;
 
-  /// 6502: the roll part 2 opens with. Above it there is no spawn at all this pass.
+  /// The roll part 2 opens with. Above it there is no spawn at all this pass.
   inline constexpr std::uint8_t TRADER_ROLL = 35;
 
-  /// 6502: three pieces of junk in the bubble and part 2 stops trying.
+  /// Three pieces of junk in the bubble and part 2 stops trying.
   inline constexpr std::uint8_t JUNK_LIMIT = 3;
 
-  /// 6502: above this a rock hermit rather than a canister or an alloy plate.
+  /// Above this a rock hermit rather than a canister or an alloy plate.
   inline constexpr std::uint8_t HERMIT_ROLL = 252;
 
-  /// 6502: the Thargoid roll, and the same constant is compared again, against a rotated random
+  /// The Thargoid roll, and the same constant is compared again, against a rotated random
   /// byte, for the bounty hunter.
   inline constexpr std::uint8_t THARGOID_ROLL = 200;
 
-  /// 6502: the government test, and the split between a lone hunter and a pack of pirates.
+  /// The government test, and the split between a lone hunter and a pack of pirates.
   inline constexpr std::uint8_t GOVERNMENT_ROLL = 90;
   inline constexpr std::uint8_t PIRATE_ROLL = 100;
 
-  /// 6502: the one value of `Ze`'s byte that sends part 3 to `fothg`, which is a Thargoid or,
+  /// The one value of `Ze`'s byte that sends part 3 to `fothg`, which is a Thargoid or,
   /// once in the game, a Cougar.
   inline constexpr std::uint8_t COUGAR_BYTE = 136;
 
   /*
-   * 6502: THERE -- are we in the Constrictor's system, and the answer is in the CARRY.
+   * Are we in the Constrictor's system, and the answer is in the CARRY.
    *
    * Galaxy 2 at (144, 33), and the routine is four compares and an `RTS`. The shape worth keeping
    * is the branch that lands ON the `RTS`, one byte past the label, stepping OVER the `CLC`: a
@@ -199,7 +199,7 @@ namespace Elite
   [[nodiscard]] bool AtConstrictorSystem(const Commander& _commander) noexcept;
 
   /*
-   * 6502: GTHG -- a Thargoid and its Thargon, which is the only pair the game spawns together.
+   * A Thargoid and its Thargon, which is the only pair the game spawns together.
    *
    * `Ze` puts the block at a random bearing, `INWK+32` gets &FF (hostile, fastest AI), and then two
    * `NWSHP`s. The second is a `JMP` rather than a `JSR`, so `GTHG` returns whatever the Thargon's
@@ -225,8 +225,8 @@ namespace Elite
    */
   enum class SpawnOutcome : std::uint8_t
   {
-    Ended,     ///< 6502: the jump to `MLOOP` -- the pass carries on into part 5
-    Restarted, ///< 6502: part 1 falling into `.TT100` -- another flight frame first
+    Ended,     ///< The jump to `MLOOP` -- the pass carries on into part 5
+    Restarted, ///< Part 1 falling into `.TT100` -- another flight frame first
   };
 
   /*

@@ -29,18 +29,18 @@ namespace Elite
 
   struct Stardust
   {
-    std::array<std::uint8_t, STARDUST_SLOTS> x{};    ///< 6502: SX
-    std::array<std::uint8_t, STARDUST_SLOTS> xLow{}; ///< 6502: SXL
-    std::array<std::uint8_t, STARDUST_SLOTS> y{};    ///< 6502: SY
-    std::array<std::uint8_t, STARDUST_SLOTS> yLow{}; ///< 6502: SYL
-    std::array<std::uint8_t, STARDUST_SLOTS> z{};    ///< 6502: SZ
-    std::array<std::uint8_t, STARDUST_SLOTS> zLow{}; ///< 6502: SZL
+    std::array<std::uint8_t, STARDUST_SLOTS> x{};
+    std::array<std::uint8_t, STARDUST_SLOTS> xLow{};
+    std::array<std::uint8_t, STARDUST_SLOTS> y{};
+    std::array<std::uint8_t, STARDUST_SLOTS> yLow{};
+    std::array<std::uint8_t, STARDUST_SLOTS> z{};
+    std::array<std::uint8_t, STARDUST_SLOTS> zLow{};
 
     /*
-     * 6502: NOSTM -- how many specks there are, and it is only ever `NOST` or 3.
+     * How many specks there are, and it is only ever `NOST` or 3.
      *
      * `NOST` is **12** in this build, which the layout agrees with: `SX` is at 1698 and `SXL` at
-     * 1711. The upstream comments beside the two `STA NOSTM` instructions say "the maximum allowed
+     * 1711. The upstream comments beside the two writes to `NOSTM` say "the maximum allowed
      * (18)" and "(20)", and both are other versions' — §6.38's lesson, and the number this port
      * would have taken if it had read the comment instead of the constant.
      *
@@ -54,7 +54,7 @@ namespace Elite
     std::uint8_t count = 0;
 
     /*
-     * 6502: newzp -- zero page 186, one intermediate the side views keep across the loop body.
+     * Zero page 186, one intermediate the side views keep across the loop body.
      *
      * `STARS2` stores the divide's quotient here and compares against it thirty instructions later,
      * by which time nothing else still holds it. It is the only byte of the movers' scratch that is
@@ -72,24 +72,24 @@ namespace Elite
   // but "(S R) = XX(1 0)" in front of a multiply, and since M2-b the multiply takes its addend as a
   // value, so they are the `SignMag16{xx, xxNext}` at each of their call sites in the movers.
 
-  /// 6502: DV41 -- Q = A, then (P R) = DELTA / Q through `DVID4`: the whole part and the fraction,
+  /// Q = A, then (P R) = DELTA / Q through `DVID4`: the whole part and the fraction,
   /// and the fraction is what comes back in A.
   [[nodiscard]] ScaledDivision DivideSpeedBy(const FlightState& _flight, std::uint8_t _divisor) noexcept;
 
-  /// 6502: DV42 -- the same for a particle's own distance.
+  /// The same for a particle's own distance.
   [[nodiscard]] ScaledDivision DivideSpeedByDistance(const FlightState& _flight, const Stardust& _dust, std::uint8_t _at) noexcept;
 
-  /// 6502: MLU1 -- Y1 = SY, then (A P) = |SY| * Q through `MLU2`. The carry is part of the answer:
+  /// Y1 = SY, then (A P) = |SY| * Q through `MLU2`. The carry is part of the answer:
   /// the front view adds `SYL` to it and the rear view subtracts, neither with a `CLC` or a `SEC`.
   /// The `Y1` it stages is the speck's own height, which the movers read from the speck (M2-c).
   [[nodiscard]] Product MultiplyByHeight(const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept;
 
-  /// 6502: MLS1 -- P = ALP1, then `MULTS`. (6502: MULTS-2 is the same without the `LDX`, reached by
+  /// P = ALP1, then `MULTS`. (`MULTS-2` is the same without the `LDX`, reached by
   /// the movers with the multiplier already in X -- which is `MultiplyScaled` called directly.)
   [[nodiscard]] Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept;
 
   /*
-   * 6502: PIX1 -- `ADD`, keep the answer as the particle's new y, and plot it.
+   * `ADD`, keep the answer as the particle's new y, and plot it.
    *
    * `_value` is (A P) and `_addend` is (S R), as `ADD` takes them: the movers hand it the pitch
    * or the roll over a zero low byte, and the particle's y. `_across`, `_down` and `_distance` are
@@ -110,7 +110,7 @@ namespace Elite
                                           std::uint8_t _acrossLow = 0, std::uint8_t _downLow = 0) noexcept;
 
   /*
-   * 6502: FLIP -- swap every speck's x and y, which reflects the whole field in the line x = y,
+   * Swap every speck's x and y, which reflects the whole field in the line x = y,
    * and redraw it.
    *
    * `LOOK1` calls it when the player changes view: it is a cheap way of making the field feel
@@ -121,7 +121,7 @@ namespace Elite
   void FlipStardust(Canvas& _canvas, Stardust& _dust, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: STARS1, STARS2 and STARS6 -- move and redraw the whole field, once per frame.
+   * STARS1, STARS2 and STARS6 -- move and redraw the whole field, once per frame.
    *
    * Three routines for three views and they are not the same arithmetic dressed differently. The
    * front view (`STARS1`) brings dust towards you and rolls and pitches it; the rear view
@@ -142,7 +142,7 @@ namespace Elite
                             Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: STARS -- pick one of the three by the view.
+   * Pick one of the three by the view.
    *
    * `STARS2` takes the view in X because it has to know left from right; the other two do not care.
    */

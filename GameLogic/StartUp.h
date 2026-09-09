@@ -17,7 +17,7 @@ namespace Elite
   /*
    * Starting a game, and going back to the docking bay (slice 2e).
    *
-   * 6502: TT170, DEATH2, BR1, QU5, BAY and FRCE -- five labels and a fall-through chain, which
+   * TT170, DEATH2, BR1, QU5, BAY and FRCE -- five labels and a fall-through chain, which
    * between them are every way the game ever begins. TT170 is the cold start; DEATH2 is what a
    * death lands on; BR1 is the title sequence; BAY is the way back to the pad after a save or a
    * launch that did not happen.
@@ -31,7 +31,7 @@ namespace Elite
    */
 
   /*
-   * 6502: QQ2, QQ28, tek and gov -- what the game caches about the system it is AT.
+   * QQ2, QQ28, tek and gov -- what the game caches about the system it is AT.
    *
    * WHERE it is, though, is not here. QQ0 and QQ1 are TP+1 and TP+2: the ship's galactic
    * coordinates live INSIDE the commander block, which is why they survive a save and why a
@@ -46,14 +46,14 @@ namespace Elite
    */
   struct CurrentSystem
   {
-    SystemSeeds seeds;           ///< 6502: QQ2
-    std::uint8_t economy = 0;    ///< 6502: QQ28
-    std::uint8_t techLevel = 0;  ///< 6502: tek
-    std::uint8_t government = 0; ///< 6502: gov
+    SystemSeeds seeds;
+    std::uint8_t economy = 0;
+    std::uint8_t techLevel = 0;  ///< tek
+    std::uint8_t government = 0; ///< gov
   };
 
   /*
-   * 6502: ping -- LDX #1 / pl1: LDA QQ0,X / STA QQ9,X / DEX / BPL pl1.
+   * Put the crosshairs on the system the ship is at.
    *
    * The crosshairs to where the ship is, both coordinates, counting DOWN -- so the loop moves the y
    * first. It reads the COMMANDER, because QQ0 and QQ1 are two of its bytes.
@@ -61,7 +61,7 @@ namespace Elite
   void CrosshairsToCurrentSystem(Universe& _universe) noexcept;
 
   /*
-   * 6502: jmp -- the other direction, and it is what makes a hyperspace jump arrive.
+   * The other direction, and it is what makes a hyperspace jump arrive.
    *
    * Two separate loads rather than a loop, which is why `hy5`'s RTS sits under it and three
    * routines return through that. And it writes into the commander: arriving somewhere is a change
@@ -75,32 +75,32 @@ namespace Elite
    * It was "what the start sequence reaches for outside GameLogic", and every one of its methods
    * turned out to be the library's: `ResetUniverse` and `ResetShip` (`RESET`, `RES2`) went in
    * M3-b-1e, `StartTheme` and `StopTheme` in M3-b-2b, `ShowDockingTunnel` when `LAUN` was ported
-   * (§6.109), `ScanTitleKeys` in M3-b-3d -- 6502: RDKEY, whose answer `TitleKey` lives in
-   * `Controls.h` beside `ScanKeyboard` -- and `WaitFrames` to `Presenter` in M3-b-3b, `ClearKeyLogger`
-   * in M6-0-h-1 -- 6502: ZEKTRAN, which is `Universe::keys` zeroed by its callers -- and
-   * `ShowTitleScreen` last: 6502: TITLE is `Elite::ShowTitleShip`
-   * (`Flight.h`), and the executable had answered the seam by forwarding to it since §6.107. `BR1`
-   * calls it directly, which is what `JSR TITLE` is, and a fixture that drives the start sequence
-   * runs the title screen for real and ends it the way a player does -- with a key held.
+   * (§6.109), `ScanTitleKeys` in M3-b-3d -- `RDKEY`, whose answer `TitleKey` lives in
+   * `Controls.h` beside `ScanKeyboard` -- and `WaitFrames` to `Presenter` in M3-b-3b,
+   * `ClearKeyLogger` in M6-0-h-1 -- `ZEKTRAN`, which is `Universe::keys` zeroed by its
+   * callers -- and `ShowTitleScreen` last: `TITLE` is `Elite::ShowTitleShip` (`Flight.h`),
+   * and the executable had answered the seam by forwarding to it since §6.107. `BR1` calls it
+   * directly rather than through anything, and a fixture that drives the start sequence runs the
+   * title screen for real and ends it the way a player does -- with a key held.
    */
 
-  /// 6502: the two title screens BR1 shows, which differ in every argument.
+  /// The two title screens BR1 shows, which differ in every argument.
   inline constexpr std::uint8_t TITLE_LOAD_TOKEN = 6;  ///< "LOAD NEW COMMANDER (Y/N)?"
   inline constexpr std::uint8_t TITLE_START_TOKEN = 7; ///< "PRESS FIRE OR SPACE, COMMANDER."
   inline constexpr std::uint8_t TITLE_COBRA_DISTANCE = 210;
   inline constexpr std::uint8_t TITLE_ADDER_DISTANCE = 48;
 
-  /// 6502: YINT -- the internal key number for "Y", which is the only answer BR1 acts on.
+  /// The internal key number for "Y", which is the only answer BR1 acts on.
   inline constexpr std::uint8_t KEY_YES_INTERNAL = 0x27;
 
-  /// 6502: LDA #3 / JSR DOXC -- where the title screen's prompt starts.
+  /// The column DOXC is set to before the title screen's prompt is printed.
   inline constexpr std::uint8_t TITLE_PROMPT_COLUMN = 3;
 
-  /// 6502: MLOOP and TT100 -- the two entries to the main game loop, which FRCE chooses between.
+  /// MLOOP and TT100 -- the two entries to the main game loop, which FRCE chooses between.
   enum class MainLoop
   {
-    Docked,  ///< 6502: MLOOP -- reached when QQ12 is non-zero
-    InSpace, ///< 6502: TT100 -- reached when it is zero
+    Docked,  ///< Reached when QQ12 is non-zero
+    InSpace, ///< Reached when it is zero
   };
 
   struct ForcedKey
@@ -110,11 +110,14 @@ namespace Elite
   };
 
   /*
-   * 6502: FRCE -- dispatch a key the game pressed for itself, then re-enter the main loop.
+   * Dispatch a key the game pressed for itself, then re-enter the main loop.
    *
-   * `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100`, and the branch is easy to read backwards: `BEQ`
-   * skips the three bytes of `JMP MLOOP`, so it is a ZERO QQ12 that reaches TT100. Docked goes to
-   * MLOOP, which is the loop's second half; in space goes to TT100, which is all of it.
+   * The docked flag picks where to re-enter, and the branch is easy to read BACKWARDS: it fires
+   * on QQ12 being ZERO and steps over the three bytes of the jump to `MLOOP`, so it is being IN
+   * SPACE that reaches TT100. Docked goes to MLOOP, which is the loop's second half; in space
+   * goes to TT100, which is all of it. The BBC form of this test branches the other way and its
+   * commentary was carried over unchanged, so the obvious reading of the note beside it is the
+   * wrong one.
    */
   [[nodiscard]] ForcedKey ForceKey(std::uint8_t _key, std::uint8_t _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
                                    bool _hyperspaceHeld) noexcept;
@@ -126,7 +129,7 @@ namespace Elite
   // and nothing in the universe carries.
 
   /*
-   * 6502: BR1 -- the title sequence, and the start of a game.
+   * The title sequence, and the start of a game.
    *
    * Three things in it are worth knowing before reading it.
    *
@@ -154,26 +157,26 @@ namespace Elite
   [[nodiscard]] ForcedKey StartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
-   * 6502: TT170, which falls through DEATH2 into BR1 -- the cold start.
+   * TT170, which falls through DEATH2 into BR1 -- the cold start.
    *
-   * The reset runs TWICE and neither call is written down as such. TT170's `JSR RESET` gets RES2 as
-   * well, because RESET has no RTS and runs off its end into it; the routine then falls into DEATH2,
-   * whose own `JSR RES2` runs it a second time. Reproduced rather than collapsed: RES2 is not
-   * idempotent in the original (it toggles the energy bomb off, and stops the bulletin board), so
-   * calling it once would be a different game.
+   * The reset runs TWICE and neither call is written down as such. TT170's call to `RESET` gets
+   * `RES2` as well, because `RESET` has no return of its own and runs off its end into it; the
+   * routine then falls into DEATH2, whose own call runs `RES2` a second time. Reproduced rather
+   * than collapsed: `RES2` is not idempotent in the original (it toggles the energy bomb off, and
+   * stops the bulletin board), so calling it once would be a different game.
    *
-   * `LDX #&FF / TXS` -- twice, once here and once in DEATH2 -- resets the 6502 stack pointer, which
-   * is how the original discards whatever frames the death or the start left behind. There is no
+   * The 6502 STACK POINTER is reset to the top -- twice, once here and once in DEATH2 -- which is
+   * how the original discards whatever frames the death or the start left behind. There is no
    * port equivalent and none is needed: the port's callers return normally.
    */
   [[nodiscard]] ForcedKey ResetAndStartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
-   * 6502: BAY -- go to the docking bay.
+   * Go to the docking bay.
    *
    * Four instructions: set QQ12 to &FF, and force key "8". So "arriving at the station" is, to the
    * game, indistinguishable from the player pressing the status key while docked -- and the docked
-   * flag is set to &FF rather than to 1, which is what makes `TT102`'s `BIT QQ12 / BPL` work.
+   * flag is set to &FF rather than to 1, which is what lets `TT102` test it by its top bit alone.
    */
   [[nodiscard]] ForcedKey EnterDockingBay(Universe& _universe, std::uint8_t _view, std::uint8_t _countdown,
                                           bool _hyperspaceHeld) noexcept;

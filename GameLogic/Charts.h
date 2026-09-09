@@ -36,7 +36,7 @@ namespace Elite
    */
 
   /*
-   * 6502: QQ9, QQ10, QQ0, QQ1, QQ11, QQ14 -- what a chart reads.
+   * QQ9, QQ10, QQ0, QQ1, QQ11, QQ14 -- what a chart reads.
    *
    * The crosshairs and where you are are separate: the crosshairs are what you have selected and
    * the home position is where the ship is, and the difference between them is the jump you are
@@ -44,21 +44,22 @@ namespace Elite
    */
   struct ChartView
   {
-    std::uint8_t cursorX = 0; ///< 6502: QQ9 -- the crosshairs' galactic x
-    std::uint8_t cursorY = 0; ///< 6502: QQ10 -- and y
-    std::uint8_t homeX = 0;   ///< 6502: QQ0 -- the current system's x
-    std::uint8_t homeY = 0;   ///< 6502: QQ1 -- and y
+    std::uint8_t cursorX = 0; ///< The crosshairs' galactic x
+    std::uint8_t cursorY = 0; ///< QQ10 -- and y
+    std::uint8_t homeX = 0;   ///< The current system's x
+    std::uint8_t homeY = 0;   ///< QQ1 -- and y
 
-    /// 6502: QQ11 -- which view is showing. Bit 7 set is the short-range chart, and nearly every
+    /// QQ11 -- which view is showing. Bit 7 set is the short-range chart, and nearly every
     /// routine here branches on it rather than taking a chart as an argument.
     std::uint8_t view = 0;
 
-    /// 6502: QQ14 -- fuel, in light years times ten. Its tenths are the fuel circle's radius.
+    /// Fuel, in light years times ten. Its tenths are the fuel circle's radius.
     LightYearsTenths fuel;
   };
 
   /*
-   * 6502: TT22's `LDA #64 / JSR TT66` and TT23's `LDA #128 / JSR TT66` -- what `QQ11` becomes.
+   * The view numbers TT22 and TT23 set up with -- 64 for the long-range chart and 128 for
+   * the short -- which is what `QQ11` becomes.
    *
    * The two charts are told apart by BIT 7 everywhere in this file, so the numbers are not
    * arbitrary: `ShortRange` is one `AND #%10000000`, and `IsChartView` in `DockedKeys.h` is the
@@ -68,8 +69,8 @@ namespace Elite
   inline constexpr std::uint8_t SHORT_RANGE_CHART_VIEW = 128;
 
   /*
-   * 6502: TT23's opening `LDA #199 / STA Yx2M1 / STA dontclip`, and the `LDA #0 / STA dontclip /
-   * LDA #2*Y-1 / STA Yx2M1` it ends with.
+   * What TT23 sets `Yx2M1` and `dontclip` to on the way in, and what it puts back on the
+   * way out.
    *
    * The short-range chart draws system discs down to the bottom of the screen, so it lifts the
    * clipper's limits for the length of the routine and puts them back afterwards.
@@ -85,21 +86,21 @@ namespace Elite
    */
   inline constexpr std::uint8_t CHART_SCREEN_BOTTOM = 199;
 
-  /// 6502: QQ19 -- a crosshair's centre and half-width.
+  /// A crosshair's centre and half-width.
   struct Crosshairs
   {
-    std::uint8_t x = 0;    ///< 6502: QQ19
-    std::uint8_t y = 0;    ///< 6502: QQ19+1
-    std::uint8_t size = 0; ///< 6502: QQ19+2
+    std::uint8_t x = 0;
+    std::uint8_t y = 0;
+    std::uint8_t size = 0;
   };
 
-  /// 6502: what TT128 leaves for CIRCLE2 -- K3, K4, K and STP.
+  /// What TT128 leaves for CIRCLE2 -- K3, K4, K and STP.
   struct RangeCircle
   {
-    std::uint8_t x = 0;      ///< 6502: K3
-    std::uint8_t y = 0;      ///< 6502: K4
-    std::uint8_t radius = 0; ///< 6502: K
-    std::uint8_t step = 0;   ///< 6502: STP -- how far round the circle each segment goes
+    std::uint8_t x = 0;
+    std::uint8_t y = 0;
+    std::uint8_t radius = 0;
+    std::uint8_t step = 0;   ///< How far round the circle each segment goes
   };
 
   // `ChartShapes` was `CIRCLE2` and `SUN`, deferred because "that heap is the flight model's
@@ -107,7 +108,7 @@ namespace Elite
   // what compares them is the chart's pixels rather than the arguments it asked for.
 
   /*
-   * 6502: TT123 -- move one coordinate of the crosshairs by a signed step.
+   * Move one coordinate of the crosshairs by a signed step.
    *
    * A move that would run off either end of the galaxy is REFUSED rather than clamped: the
    * original tests the step's sign against the carry the addition produced, and puts the old
@@ -117,7 +118,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t StepCoordinate(std::uint8_t _value, std::uint8_t _step) noexcept;
 
   /*
-   * 6502: TT15 -- draw a crosshair as two lines through a point.
+   * Draw a crosshair as two lines through a point.
    *
    * Every edge saturates rather than wrapping, and the vertical stroke's bottom is clamped to 151
    * on the long-range chart only, because that chart has the fuel circle's legend under it. The
@@ -127,7 +128,7 @@ namespace Elite
   void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: TT103 -- draw the crosshair at the selected system, on whichever chart is showing.
+   * Draw the crosshair at the selected system, on whichever chart is showing.
    *
    * On the long-range chart it is always drawn. On the short-range chart (TT105) it is drawn only
    * if the selection is close enough to be on screen, and neither range test is symmetric. Both
@@ -138,7 +139,7 @@ namespace Elite
   void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: TT16 -- move the crosshairs and redraw them.
+   * Move the crosshairs and redraw them.
    *
    * Erase, move, draw. The move arrives as two signed steps and the original negates the vertical
    * one on the way in, because the keyboard's "down" is the screen's "up".
@@ -146,7 +147,7 @@ namespace Elite
   void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: TT14 -- the circle showing how far the fuel reaches, and the crosshair at its centre.
+   * The circle showing how far the fuel reaches, and the crosshair at its centre.
    *
    * Two quite different circles share the routine. On the long-range chart it is centred on where
    * you are, at half vertical scale, with a radius of fuel/4. On the short-range chart it is
@@ -155,34 +156,34 @@ namespace Elite
   void DrawFuelRange(Universe& _universe, const ChartView& _view) noexcept;
 
   /*
-   * 6502: NLIN2 and NLIN4 -- a rule right across the screen at a given row.
+   * NLIN2 and NLIN4 -- a rule right across the screen at a given row.
    *
    * Both charts draw one under their title. X2 is 255 rather than the screen width, so the line
    * runs into the right margin; that is the original's, not a rounding here.
    */
   void DrawSeparator(Canvas& _canvas, std::uint8_t _y, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: NLIN -- LDA #23 / JSR INCYC / NLIN2. The cursor moves down one line and a rule is drawn
-  /// at pixel row 23, in that order; the increment is `INCYC`'s and has nothing to do with the 23.
-  /// One routine rather than two calls at its caller, so that it can be compared as one (M6-0-e).
+  /// The cursor moves down one line and a rule is drawn at pixel row 23, in that
+  /// order; the increment is `INCYC`'s and has nothing to do with the 23. One routine rather than
+  /// two calls at its caller, so that it can be compared as one (M6-0-e).
   void DrawTitleRule(Canvas& _canvas, TextState& _text, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: TT22 -- the long-range chart.
+   * The long-range chart.
    *
    * The screen clear at the top of the routine is TT66, which resets the whole view and belongs
    * with the screen work; a caller does that first, and leaves the cursor where TT66 leaves it.
    * Everything after it is here: the title, the two rules, the fuel circle, the 256 dots and the
    * crosshairs.
    *
-   * A system's brightness is its own seed byte: `ORA #%01010000` on QQ15+4 makes a value PIXEL
+   * A system's brightness is its own seed byte: two bits forced into QQ15+4 make a value PIXEL
    * reads as a distance, so the chart's dots vary in size for no reason except what the galaxy
    * happens to contain.
    */
   void DrawLongRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept;
 
   /*
-   * 6502: TT23 -- the short-range chart.
+   * The short-range chart.
    *
    * Every system within twenty of you across and thirty-eight up or down is drawn, with its name
    * beside it if there is a free character row within one of its own. The row bookkeeping is 25
@@ -209,7 +210,7 @@ namespace Elite
    */
 
   /*
-   * 6502: QQ12, QQ22, QQ8 and safehouse -- what choosing a hyperspace target reads and writes
+   * QQ12, QQ22, QQ8 and safehouse -- what choosing a hyperspace target reads and writes
    * besides the chart.
    *
    * None of this is the charts' own state: it is the commander's, and slice 2d owns where it lives.
@@ -218,18 +219,18 @@ namespace Elite
    */
   struct JumpState
   {
-    std::uint8_t docked = 0;    ///< 6502: QQ12 -- non-zero while docked, and you cannot jump docked
-    std::uint8_t countdown = 0; ///< 6502: QQ22+1 -- non-zero while a jump is already counting down
+    std::uint8_t docked = 0;    ///< Non-zero while docked, and you cannot jump docked
+    std::uint8_t countdown = 0; ///< Non-zero while a jump is already counting down
 
-    /// 6502: QQ22 -- the tick within each step of the countdown. `wW` stores 15 into BOTH bytes,
+    /// The tick within each step of the countdown. `wW` stores 15 into BOTH bytes,
     /// and `TT107` counts this one down to zero before it moves the displayed one; a request that
     /// left it alone started every countdown at zero, which is 255 ticks before the first step
     /// (§6.159).
     std::uint8_t counter = 0;
-    std::uint16_t distance = 0; ///< 6502: QQ8 -- how far the selected system is, in tenths
-    bool controlHeld = false;   ///< 6502: JSR CTRL / BMI Ghy -- the galactic hyperdrive's key
+    std::uint16_t distance = 0; ///< How far the selected system is, in tenths
+    bool controlHeld = false;   ///< CTRL's answer, by its sign -- the galactic drive key
 
-    /// 6502: safehouse -- the seeds of the system being jumped to, saved because the countdown
+    /// The seeds of the system being jumped to, saved because the countdown
     /// runs while the player keeps moving the crosshairs.
     SystemSeeds target;
   };
@@ -237,16 +238,16 @@ namespace Elite
   /// What `hyp` decided. The original says it by which routine it jumps to; this says it by name.
   enum class JumpOutcome
   {
-    Docked,       ///< 6502: dockEd -- and the message has been printed
+    Docked,       ///< dockEd -- and the message has been printed
     Busy,         ///< a countdown is already running, or the view cannot select a system
-    Galactic,     ///< 6502: Ghy -- CTRL was held, and that needs equipment state (slice 2d)
+    Galactic,     ///< CTRL was held, and that needs equipment state (slice 2d)
     AlreadyThere, ///< the crosshairs are on the system you are in, so there is nothing to jump to
-    OutOfRange,   ///< 6502: TT147 -- too far or not enough fuel, and "RANGE?" has been printed
+    OutOfRange,   ///< Too far or not enough fuel, and "RANGE?" has been printed
     CountingDown, ///< the name has been printed and the countdown has started
   };
 
   /*
-   * 6502: TT147 -- "RANGE?", which is a token and a question mark.
+   * "RANGE?", which is a token and a question mark.
    *
    * Reached both from `hyp` and from the equipment screen, which is why it is a routine of its own
    * for two instructions.
@@ -254,7 +255,7 @@ namespace Elite
   void PrintRangeError(TokenPrinter& _printer) noexcept;
 
   /*
-   * 6502: ee3 -- print the hyperspace countdown at the top left.
+   * Print the hyperspace countdown at the top left.
    *
    * Three digits and no decimal point, at (1, 1). The cursor move is two calls that share their
    * argument: DOXC and DOYC are both handed the same 1, which is why the number sits in the corner
@@ -263,7 +264,7 @@ namespace Elite
   void PrintCountdown(TextSink& _sink, TextState& _text, std::uint8_t _count) noexcept;
 
   /*
-   * 6502: hm -- put the crosshairs on the system nearest to where they are, and clear the message
+   * Put the crosshairs on the system nearest to where they are, and clear the message
    * rows underneath.
    *
    * Erase, search, redraw: the first TT103 rubs out the crosshair that is there, because LOIN
@@ -273,7 +274,7 @@ namespace Elite
                                     MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: hyp -- the hyperspace key, up to the point where the countdown starts.
+   * The hyperspace key, up to the point where the countdown starts.
    *
    * Everything after the countdown is arrival: `hyp1` copies the saved seeds over the commander's
    * system and rolls a new market, and `TT18` deducts the fuel and flies the tunnel. Those are the
@@ -289,7 +290,7 @@ namespace Elite
                                 const SystemSeeds& _galaxy, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: HME2's HME3 loop -- find a system by the name that was typed.
+   * HME2's HME3 loop -- find a system by the name that was typed.
    *
    * The search is the justification buffer used as a scratch pad. Control code 14 turns buffering
    * on, `cpl` prints the system's name into BUF instead of onto the screen, and the typed name is

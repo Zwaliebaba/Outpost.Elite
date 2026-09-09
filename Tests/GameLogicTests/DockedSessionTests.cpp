@@ -51,10 +51,10 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * acceptance criterion leans on this test for half of 2e's verification: LAYOUT. `CHPR` advances
  * the cursor, and `CHPR` is the presenter -- so with a null one the cursor only moves where a
  * routine moves it deliberately, through `INCYC` or `DOXC`, and every character in this
- * transcript is stamped at wherever that left it. The per-screen oracle tests DO compare the
- * cursor, because there the shipped CHPR is trapped on both sides and neither advances it. So
- * layout is verified per screen and not across a session, and the human half of the criterion --
- * "is every docked screen legible" -- is the only thing that covers a session's layout at all.
+ * transcript is stamped at wherever that left it. The per-screen comparisons DID check the
+ * cursor, because there the shipped `CHPR` was trapped on both sides and neither advanced it, and
+ * they went with the original (Modernize.md M6-b-5). Nothing covers a session's layout now except
+ * the human half of the criterion: is every docked screen legible.
  */
 namespace GameLogicTests
 {

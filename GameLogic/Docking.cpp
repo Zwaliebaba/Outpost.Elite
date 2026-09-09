@@ -13,15 +13,15 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the mission bits, masked two ways by one routine.
+    /// The mission bits, masked two ways by one routine.
     constexpr std::uint8_t MISSION_1_BITS = 0x03;
     constexpr std::uint8_t MISSION_BITS = 0x0F;
 
-    /// 6502: bit 4, which says the Trumbles have already been offered.
+    /// Bit 4, which says the Trumbles have already been offered.
     constexpr std::uint8_t TRUMBLES_OFFERED = 0x10;
 
     /*
-     * 6502: the four states bits 0 and 1 of TP hold for mission 1.
+     * The four states bits 0 and 1 of TP hold for mission 1.
      *
      * Not a flag and a spare: `%11` is both bits set at once, and the routine reads it as "you have
      * only just finished" -- the state that earns the debriefing. `%10` is what it becomes afterwards.
@@ -29,31 +29,31 @@ namespace Elite
     constexpr std::uint8_t MISSION_1_NOT_STARTED = 0x00;
     constexpr std::uint8_t MISSION_1_JUST_FINISHED = 0x03;
 
-    /// 6502: bits 0 to 3, and the three stages of mission 2 that DOENTRY can act on.
+    /// Bits 0 to 3, and the three stages of mission 2 that DOENTRY can act on.
     constexpr std::uint8_t MISSION_2_NOT_STARTED = 0x02;
     constexpr std::uint8_t MISSION_2_AWAITING_PLANS = 0x06;
     constexpr std::uint8_t MISSION_2_CARRYING_PLANS = 0x0A;
 
-    /// 6502: the two ranks, both read from the HIGH byte of the tally alone, so they are 256 and
+    /// The two ranks, both read from the HIGH byte of the tally alone, so they are 256 and
     /// 1,280 kills and the low byte never matters.
     constexpr std::uint8_t RANK_FOR_MISSION_1 = 1;
     constexpr std::uint8_t RANK_FOR_MISSION_2 = 5;
 
-    /// 6502: galaxy 0 or 1, expressed as a shift rather than a compare.
+    /// Galaxy 0 or 1, expressed as a shift rather than a compare.
     constexpr std::uint8_t GALAXY_FOR_MISSION_2 = 2;
 
-    /// 6502: Ceerdi and Birera, as coordinates rather than as system numbers, so the check
+    /// Ceerdi and Birera, as coordinates rather than as system numbers, so the check
     /// survives the generator producing them anywhere.
     constexpr std::uint8_t CEERDI_X = 215;
     constexpr std::uint8_t CEERDI_Y = 84;
     constexpr std::uint8_t BIRERA_X = 63;
     constexpr std::uint8_t BIRERA_Y = 72;
 
-    /// 6502: compared against the THIRD cash byte -- one of four, which is the whole finding.
+    /// Compared against the THIRD cash byte -- one of four, which is the whole finding.
     constexpr std::uint8_t TRUMBLES_CASH_BYTE = 0xC4;
 
     /*
-     * 6502: EN4 and EN6 -- the tail every path that has not earned a briefing falls into.
+     * EN4 and EN6 -- the tail every path that has not earned a briefing falls into.
      *
      * Eight branches in DOENTRY reach EN4, which is why it is a function here: the alternative is the
      * same three tests written eight times, and a port that forgot one of them would offer the
@@ -73,7 +73,7 @@ namespace Elite
         return DockingOutcome::DockingBay;
       }
 
-      // 6502: EN6 -- offered once, and bit 4 remembers it.
+      // Offered once, and bit 4 remembers it.
       if ((_commander.missionProgress & TRUMBLES_OFFERED) != 0u)
       {
         return DockingOutcome::DockingBay;
@@ -89,17 +89,17 @@ namespace Elite
     const std::uint8_t killsHigh = _commander.kills.hi;
     const std::uint8_t galaxy = _commander.galaxyNumber;
 
-    // 6502: EN1 -- the low two bits of `TP`.
+    // The low two bits of `TP`.
     const std::uint8_t mission1 = static_cast<std::uint8_t>(missions & MISSION_1_BITS);
     if (mission1 == MISSION_1_NOT_STARTED)
     {
-      // 6502: EN4 -- 256 kills, as a byte.
+      // 256 kills, as a byte.
       if (killsHigh < RANK_FOR_MISSION_1)
       {
         return TrumblesOrBay(_commander);
       }
 
-      // 6502: EN4 again -- galaxy 0 or 1, and a shift says so in three bytes.
+      // EN4 again -- galaxy 0 or 1, and a shift says so in three bytes.
       if ((galaxy >> 1) != 0u)
       {
         return TrumblesOrBay(_commander);
@@ -108,24 +108,24 @@ namespace Elite
       return DockingOutcome::BriefMission1;
     }
 
-    // 6502: EN1 -- both bits set is "in progress AND complete".
+    // Both bits set is "in progress AND complete".
     if (mission1 == MISSION_1_JUST_FINISHED)
     {
       return DockingOutcome::DebriefMission1;
     }
 
-    // 6502: EN2 -- the galaxy number, compared.
+    // The galaxy number, compared.
     if (galaxy != GALAXY_FOR_MISSION_2)
     {
       return TrumblesOrBay(_commander);
     }
 
-    // 6502: FOUR bits now, where the first test used two.
+    // FOUR bits now, where the first test used two.
     const std::uint8_t stage = static_cast<std::uint8_t>(missions & MISSION_BITS);
 
     if (stage == MISSION_2_NOT_STARTED)
     {
-      // 6502: EN4 -- 1,280 kills.
+      // 1,280 kills.
       if (killsHigh < RANK_FOR_MISSION_2)
       {
         return TrumblesOrBay(_commander);
@@ -133,7 +133,7 @@ namespace Elite
       return DockingOutcome::BriefMission2;
     }
 
-    // 6502: EN3 -- and then Ceerdi's coordinates.
+    // EN3 -- and then Ceerdi's coordinates.
     if (stage == MISSION_2_AWAITING_PLANS)
     {
       if (_commander.systemX != CEERDI_X || _commander.systemY != CEERDI_Y)
@@ -143,7 +143,7 @@ namespace Elite
       return DockingOutcome::CollectPlans;
     }
 
-    // 6502: EN5 -- and then Birera's.
+    // EN5 -- and then Birera's.
     if (stage == MISSION_2_CARRYING_PLANS)
     {
       if (_commander.systemX != BIRERA_X || _commander.systemY != BIRERA_Y)
@@ -159,14 +159,14 @@ namespace Elite
   DockingResult DockAtStation(Universe& _universe, Ports& _ports,
                               std::uint8_t _view, bool _hyperspaceHeld) noexcept
   {
-    // 6502: RES2 -- once here, where the cold start reaches it twice (§6.25).
+    // Once here, where the cold start reaches it twice (§6.25).
     ResetShipAndBubble(_universe, _ports);
 
-    // 6502: LAUN -- the routine rather than a seam, since this slice ported it.
+    // The routine rather than a seam, since this slice ported it.
     DrawLaunchTunnel(_universe, _ports);
 
     /*
-     * 6502: the speed, the laser temperature and the countdown zeroed, and the two shields and the
+     * The speed, the laser temperature and the countdown zeroed, and the two shields and the
      * energy banks filled.
      *
      * Two loads and six stores. Three instructions between the first two stores are commented out
@@ -180,14 +180,14 @@ namespace Elite
     _universe.status.aftShield = 0xFF;
     _universe.status.energy = 0xFF;
 
-    // 6502: forty-four frames of nothing.
+    // Forty-four frames of nothing.
     _ports.present.WaitFrames(DOCKING_PAUSE_FRAMES);
 
     DockingResult result{};
     result.outcome = MissionOnDocking(_universe.commander);
 
     /*
-     * 6502: EN6 -- the jump to `BAY`, and only this exit reaches it. Every briefing is a tail call
+     * The jump to `BAY`, and only this exit reaches it. Every briefing is a tail call
      * that ends somewhere of its own; the counter BAY's dispatch reads is the one zeroed four
      * lines above.
      */

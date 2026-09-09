@@ -12,15 +12,15 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the 128 that TTX66 and CLYNS both store into QQ17 -- bit 7, "sentence case".
+    /// The 128 that TTX66 and CLYNS both store into QQ17 -- bit 7, "sentence case".
     constexpr std::uint8_t SENTENCE_CASE = 0x80;
 
-    /// 6502: the font pointer CHPR builds -- 0x0A00 + (character << 3), assembled from the two high
+    /// The font pointer CHPR builds -- 0x0A00 + (character << 3), assembled from the two high
     /// bits of the character and a shifted low byte. For a printable character that lands on
     /// FONT + (character - 32) * 8, which is where FONT_DATA starts.
     constexpr std::uint16_t FONT_BASE = 0x0B00;
 
-    /// 6502: the high byte starts at 10 and steps to 12 or 13 as the character's top bits shift
+    /// The high byte starts at 10 and steps to 12 or 13 as the character's top bits shift
     /// out.
     [[nodiscard]] std::uint16_t GlyphPointer(std::uint8_t _character) noexcept
     {
@@ -38,7 +38,7 @@ namespace Elite
   } // namespace
 
   /*
-   * 6502: BPRNT and the TT11 / pr2 / pr5 / pr6 entry points.
+   * BPRNT and the TT11 / pr2 / pr5 / pr6 entry points.
    *
    * The accumulator is five bytes -- S ahead of K's four -- because multiplying by ten needs the
    * headroom. The original spells that multiply as three shifts and an add: shift once and keep a
@@ -52,9 +52,9 @@ namespace Elite
    */
   std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept
   {
-    std::uint8_t pointPosition = _digits; // 6502: U, which the routine rewrites and leaves
+    std::uint8_t pointPosition = _digits; // U, which the routine rewrites and leaves
     /*
-     * 6502: TT30 -- the width set to 11, the carry STASHED on the stack, and a branch past two
+     * The width set to 11, the carry STASHED on the stack, and a branch past two
      * decrements.
      *
      * BCC skips the two decrements when the carry is CLEAR, so they happen for a number that IS
@@ -69,7 +69,7 @@ namespace Elite
       --pointPosition;
     }
 
-    // 6502: TT30. XX17 counts the digits down; U becomes the position the point falls at.
+    // TT30. XX17 counts the digits down; U becomes the position the point falls at.
     std::uint8_t digitsLeft = 11;
     pointPosition = static_cast<std::uint8_t>(11u - pointPosition);
     ++pointPosition;
@@ -79,7 +79,7 @@ namespace Elite
 
     for (;;)
     {
-      // 6502: TT36 / tt37 -- how many times ten to the eleventh goes into what is left.
+      // TT36 / tt37 -- how many times ten to the eleventh goes into what is left.
       for (;;)
       {
         std::array<std::uint8_t, 4> remainder = {0, 0, 0, 0};
@@ -95,7 +95,7 @@ namespace Elite
 
         if (top >= 0x100u)
         {
-          // 6502: TT37 -- it did not fit, so this digit is done.
+          // It did not fit, so this digit is done.
           break;
         }
 
@@ -108,7 +108,7 @@ namespace Elite
       }
 
       /*
-       * 6502: TT37. Three ways to reach a character: a non-zero digit prints; a zero prints once
+       * TT37. Three ways to reach a character: a non-zero digit prints; a zero prints once
        * the first significant digit has been seen (T cleared); and a zero before that prints a
        * space, but only while U says there is still padding to spend.
        */
@@ -117,7 +117,7 @@ namespace Elite
 
       if (digit != 0 || width == 0)
       {
-        // 6502: TT32 -- a digit, and from here on zeros are digits too.
+        // A digit, and from here on zeros are digits too.
         width = 0;
         character = static_cast<std::uint8_t>(digit + 0x30u);
       }
@@ -126,7 +126,7 @@ namespace Elite
         --pointPosition;
         if ((pointPosition & 0x80u) == 0u)
         {
-          // 6502: TT34 -- still inside the number's own width, so nothing is printed at all.
+          // Still inside the number's own width, so nothing is printed at all.
           print = false;
         }
         else
@@ -140,7 +140,7 @@ namespace Elite
         _sink.Put(character);
       }
 
-      // 6502: TT34 -- a decrement guarded by a branch, so the width will not go below zero.
+      // A decrement guarded by a branch, so the width will not go below zero.
       if (width != 0)
       {
         --width;
@@ -149,20 +149,20 @@ namespace Elite
       --digitsLeft;
       if ((digitsLeft & 0x80u) != 0u)
       {
-        // 6502: rT10 -- eleven digits done, and `U` goes back as the routine leaves it.
+        // Eleven digits done, and `U` goes back as the routine leaves it.
         return pointPosition;
       }
 
       if (digitsLeft == 0 && _withPoint)
       {
-        // 6502: the carry PULLED BACK off the stack decides this, which is why it was stashed at
+        // The carry PULLED BACK off the stack decides this, which is why it was stashed at
         // the top rather than tested there.
         // was stashed rather than tested there.
         _sink.Put('.');
       }
 
       /*
-       * 6502: TT35 -- multiply the five-byte accumulator by ten. Shift once and keep a copy, shift
+       * Multiply the five-byte accumulator by ten. Shift once and keep a copy, shift
        * twice more, then add the copy back: x * 8 + x * 2.
        */
       std::array<std::uint8_t, 4> copy = {0, 0, 0, 0};
@@ -205,7 +205,7 @@ namespace Elite
 
   void PrintValue(TextSink& _sink, std::uint16_t _value, std::uint8_t _digits, bool _withPoint) noexcept
   {
-    // 6502: TT11 -- the digit count kept and the block zeroed. Only the low two bytes carry a
+    // The digit count kept and the block zeroed. Only the low two bytes carry a
     // value; the caller's sixteen bits arrive in Y and X.
     const NumberBytes value = {0u, 0u, static_cast<std::uint8_t>(_value >> 8), static_cast<std::uint8_t>(_value)};
     (void)PrintNumber(_sink, value, _digits, _withPoint);
@@ -213,14 +213,14 @@ namespace Elite
 
   void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexcept
   {
-    // 6502: pr2 -- three digits, and the byte arrives in X.
+    // Three digits, and the byte arrives in X.
     PrintValue(_sink, _value, 3, _withPoint);
   }
 
   void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept
   {
     /*
-     * 6502: T6SL1 / T6SL2. The outer loop indexes ylookup by a screen row that is a multiple of
+     * T6SL1 / T6SL2. The outer loop indexes ylookup by a screen row that is a multiple of
      * eight, so it visits character rows 1 to 23; the inner one starts at Y = 0 and counts DOWN to
      * 1, which stores at offset 0 first and then 255 down to 1 -- 256 bytes, the 32 cells this
      * screen actually uses. The margins survive, which is why a cleared screen still has its
@@ -236,7 +236,7 @@ namespace Elite
       }
     }
 
-    // 6502: Y reached zero on the way out and is stepped once, so this is (1, 1).
+    // Y reached zero on the way out and is stepped once, so this is (1, 1).
     _state.column = 1;
     _state.row = 1;
   }
@@ -244,7 +244,7 @@ namespace Elite
   void ResetCellColours(Canvas& _canvas, Picture* _picture) noexcept
   {
     /*
-     * 6502: BOL3 / BOL4. SC starts at &6004 -- three cells past `celllook`'s base, which is the
+     * BOL3 / BOL4. SC starts at &6004 -- three cells past `celllook`'s base, which is the
      * four-cell left margin the bitmap has too -- and the outer loop runs 24 times, stepping SC on
      * by 40 rather than by 32, because a screen row is 40 cells wide and Elite uses the middle 32.
      *
@@ -274,17 +274,17 @@ namespace Elite
 
   void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept
   {
-    // 6502: MT2 -- sentence case for the extended printer: bit 5 is what lowers a letter, and
+    // Sentence case for the extended printer: bit 5 is what lowers a letter, and
     // `DTW6` is the override that forces it always.
     _extended.lowerCaseBits = 32;
     _extended.alwaysLower = 0;
 
-    // 6502: 128 into both `QQ17` and `DTW2` -- and only `DTW2` keeps it. See the header: the
+    // 128 into both `QQ17` and `DTW2` -- and only `DTW2` keeps it. See the header: the
     // routine's last five bytes put `QQ17` back to zero.
     _extended.sentenceStart = SENTENCE_CASE;
 
     /*
-     * 6502: the cursor to (1, 1), then X stepped down to zero and stored into `QQ17`.
+     * The cursor to (1, 1), then X stepped down to zero and stored into `QQ17`.
      *
      * QQ17 WAS ASSIGNED TWICE HERE until M5-e-2c, because the port kept one 6502 byte in two
      * places -- the token printer's copy and the `TextState` byte CHPR reads for 255 -- and every
@@ -301,12 +301,12 @@ namespace Elite
                         MessageState& _message, Picture* _picture,
                         TextLayout _layout) noexcept
   {
-    // 6502: CLYNS -- whatever message was up is forgotten, which is why `MESS` can clear the
+    // Whatever message was up is forgotten, which is why `MESS` can clear the
     // screen and then test `DLY` and find it zero (§6.67).
     _message.delay = 0;
     _message.append = 0;
 
-    // 6502: CLYNS2 -- the measuring flag to 255, sentence case on, and the cursor to row 21,
+    // The measuring flag to 255, sentence case on, and the cursor to row 21,
     // column 1.
     _extended.sentenceStart = 0xFF;
     _text.caseFlags = SENTENCE_CASE;
@@ -314,7 +314,7 @@ namespace Elite
     _text.column = 1;
 
     /*
-     * 6502: CLYLOOP2 / CLYLOOP. Three passes, each 256 bytes, starting at SCBASE + &1A60 and
+     * CLYLOOP2 / CLYLOOP. Three passes, each 256 bytes, starting at SCBASE + &1A60 and
      * stepping &140 -- and the inner loop is the same store-then-count-down that ClearTextArea
      * uses, so offset 0 is written first and then 255 down to 1.
      */
@@ -337,7 +337,7 @@ namespace Elite
 
   std::uint8_t TextPrinter::Print(std::uint8_t _character) noexcept
   {
-    // 6502: RR4S -- a `QQ17` of 255 suppresses output entirely, and the token printer sets it that
+    // A `QQ17` of 255 suppresses output entirely, and the token printer sets it that
     // way while it is measuring rather than printing.
     if (m_state.caseFlags == 0xFFu)
     {
@@ -357,7 +357,7 @@ namespace Elite
 
     if (_character == 7)
     {
-      // 6502: R5 -- the beep, whose carry `dn2`, `R5` and `DK4` all drop.
+      // The beep, whose carry `dn2`, `R5` and `DK4` all drop.
       if (m_sound != nullptr)
       {
         (void)Beep(*m_sound, false);
@@ -372,7 +372,7 @@ namespace Elite
     }
 
     /*
-     * 6502: RRX2 / RRX1 -- the control codes, and the order matters more than it looks.
+     * RRX2 / RRX1 -- the control codes, and the order matters more than it looks.
      *
      * 10 skips the column reset, so it moves down without returning to the left; 13 resets the
      * column and does NOT move down; everything else does both. Three different behaviours out of
@@ -394,7 +394,7 @@ namespace Elite
 
   void TextPrinter::PrintGlyph(std::uint8_t _character) noexcept
   {
-    // 6502: RRX2 -- past the right margin, so wrap instead of printing. The character is lost
+    // Past the right margin, so wrap instead of printing. The character is lost
     // rather than carried to the next line; the original does not re-enter.
     if (m_state.column >= 31)
     {
@@ -406,7 +406,7 @@ namespace Elite
     if (m_state.row >= 24)
     {
       /*
-       * 6502: clss -- `TT66simp`, then the character reloaded and printed again on the fresh
+       * `TT66simp`, then the character reloaded and printed again on the fresh
        * screen through `RRafter`.
        *
        * IT IS `TT66simp` AND NOT `TT66`, and until M3-b-4a this was a seam the executable answered
@@ -426,7 +426,7 @@ namespace Elite
     }
 
     /*
-     * 6502: RR3 -- the bitmap address of the cell, which is SCBASE + YC * 320 + 32.
+     * The bitmap address of the cell, which is SCBASE + YC * 320 + 32.
      *
      * The original gets there by rotating a 16-bit value made of YC and a seeded 0x80 down two
      * places and then adding YC back, which is a times-320 in five instructions. The 32 is the
@@ -437,7 +437,7 @@ namespace Elite
     if (_character == 127)
     {
       /*
-       * 6502: the delete path. Stepping the pointer's high byte down and the index up to 248 is a
+       * The delete path. Stepping the pointer's high byte down and the index up to 248 is a
        * way of subtracting eight without touching the low byte, and ZESNEW then zeroes the eight
        * bytes it lands on. So the cell to the left is blanked outright rather than being drawn
        * over, which is the one place the text code does not EOR.
@@ -457,7 +457,7 @@ namespace Elite
       return;
     }
 
-    // 6502: RR2 -- the cursor advances before the glyph is drawn, and the colour write below
+    // The cursor advances before the glyph is drawn, and the colour write below
     // relies on that. celllook is three cells in, so celllook[YC] + XC now names cell 4 + XC.
     ++m_state.column;
 
@@ -478,7 +478,7 @@ namespace Elite
       m_canvas.ExclusiveOr(static_cast<std::uint16_t>(offset + row), bits);
     }
 
-    // 6502: celllook -- the cell's colour, written after the cursor moved, which is what makes the
+    // The cell's colour, written after the cursor moved, which is what makes the
     // three-cell offset in `celllook` come out right.
     m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.palette);
 

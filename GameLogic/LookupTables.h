@@ -23,51 +23,51 @@
 namespace Elite
 {
 
-  // 6502: log, logL -- the two halves of a logarithm, indexed by the value.
+  // log, logL -- the two halves of a logarithm, indexed by the value.
   extern const std::array<std::uint8_t, 256> LOG_TABLE;
   extern const std::array<std::uint8_t, 256> LOG_LOW_TABLE;
 
-  // 6502: antilog, antilogODD -- the inverse. Which one applies depends on a parity test the
+  // antilog, antilogODD -- the inverse. Which one applies depends on a parity test the
   // multiply makes on the way through, so both are needed.
   extern const std::array<std::uint8_t, 256> ANTILOG_TABLE;
   extern const std::array<std::uint8_t, 256> ANTILOG_ODD_TABLE;
 
-  // 6502: SNE -- a quarter turn of sine, scaled to a byte.
+  // A quarter turn of sine, scaled to a byte.
   /*
    * `OPTION_KEY_TABLE` WAS HERE AND IS NOT ANY MORE (InputTimer.md I-0, 2026-09-08).
    *
-   * 6502: TGINT -- the key each of the pause screen's thirteen toggles answered to, whose order was
+   * The key each of the pause screen's thirteen toggles answered to, whose order was
    * the option block's only definition. The pause screen was removed by owner ruling and the
    * thirteen bytes are set by name from the executable's settings file, so the table had no reader.
    */
 
   extern const std::array<std::uint8_t, 32> SINE_TABLE;
 
-  // 6502: ACT -- arctangent, indexed by a ratio the caller has already reduced.
+  // Arctangent, indexed by a ratio the caller has already reduced.
   extern const std::array<std::uint8_t, 32> ARCTAN_TABLE;
 
-  // 6502: QQ18 -- the recursive token table: runs of text separated by zero bytes, each character
+  // The recursive token table: runs of text separated by zero bytes, each character
   // exclusive-ored against RECURSIVE_TOKEN_KEY. A token number is an index counted in terminators
   // rather than an offset, which is why reading one means walking the table.
   extern const std::array<std::uint8_t, 960> RECURSIVE_TOKEN_TABLE;
 
-  // 6502: QQ16 -- pairs of letters, indexed by token. A '?' in the second position means the pair
+  // Pairs of letters, indexed by token. A '?' in the second position means the pair
   // is really a single letter.
   extern const std::array<std::uint8_t, 69> TWO_LETTER_TABLE;
 
-  // 6502: TKN1 -- the extended token table. Same shape as the recursive one, a different key, and
+  // The extended token table. Same shape as the recursive one, a different key, and
   // a richer language: its bytes can be control codes, nested tokens or randomised variants.
   extern const std::array<std::uint8_t, 3112> EXTENDED_TOKEN_TABLE;
 
-  // 6502: TKN2 -- letter pairs for the extended tokens, reached from the top of the byte range.
+  // Letter pairs for the extended tokens, reached from the top of the byte range.
   // Every value from 215 to 255 indexes this, so it runs to offset 81 and overlaps the table that
   // follows it in memory. Elite shares address space between tables where the ranges allow it.
   extern const std::array<std::uint8_t, 82> EXTENDED_PAIR_TABLE;
 
-  // 6502: RUTOK -- description overrides for particular systems, walked exactly like TKN1.
+  // Description overrides for particular systems, walked exactly like TKN1.
   extern const std::array<std::uint8_t, 625> SYSTEM_TOKEN_TABLE;
 
-  // 6502: MTIN -- for each token that has randomised variants, the first of them.
+  // For each token that has randomised variants, the first of them.
   extern const std::array<std::uint8_t, 38> VARIANT_BASE_TABLE;
 
   /*
@@ -81,26 +81,26 @@ namespace Elite
    * pixels, so a mask that looks like it covers "one pixel" may cover a bit of two.
    */
 
-  // 6502: TWOS -- one pixel of a line, selected by x within the byte. LOIN part 5 reads it with
+  // One pixel of a line, selected by x within the byte. LOIN part 5 reads it with
   // x AND 7. On this lineage the masks slide by one bit, so half of them straddle two multicolour
   // pixels; that is the game's behaviour, not a porting artefact (ADR-002 section 7).
   extern const std::array<std::uint8_t, 8> PIXEL_MASK_TABLE;
 
-  // 6502: TWOS2 -- the mark PIXEL plots, again by x AND 7, and again bit-sliding rather than
+  // The mark PIXEL plots, again by x AND 7, and again bit-sliding rather than
   // pixel-aligned.
   extern const std::array<std::uint8_t, 8> DASH_MASK_TABLE;
 
-  // 6502: CTWOS2 -- the multicolour-ALIGNED masks, two identical entries per pixel so that a pair
+  // The multicolour-ALIGNED masks, two identical entries per pixel so that a pair
   // of x values share one. CPIX2 and SCAN read it as CTWOS2+2,X with x AND 7, which is why it runs
   // to ten entries rather than eight.
   extern const std::array<std::uint8_t, 10> MULTICOLOUR_MASK_TABLE;
 
-  // 6502: DTWOS -- one aligned multicolour pixel by pixel number. Nothing in the C64 build indexes
+  // One aligned multicolour pixel by pixel number. Nothing in the C64 build indexes
   // it; it is here because the ledger names it and it is four bytes.
   extern const std::array<std::uint8_t, 4> DASHBOARD_MASK_TABLE;
 
   /*
-   * 6502: CTWOS -- the same four masks again, at a different address, and this is the one the
+   * The same four masks again, at a different address, and this is the one the
    * dashboard reads (slice 3d-b).
    *
    * `DIL2` indexes it with a bar position below four, which is what sizes it; the listing carries a
@@ -110,35 +110,35 @@ namespace Elite
    */
   extern const std::array<std::uint8_t, 4> DASHBOARD_PIXEL_TABLE;
 
-  // 6502: TWFR, TWFL -- a horizontal line's end bytes: TWFR fills from x rightwards to the end of
+  // TWFR, TWFL -- a horizontal line's end bytes: TWFR fills from x rightwards to the end of
   // the byte, TWFL fills leftwards from the start of the byte to x. Everything between is 0xFF.
   extern const std::array<std::uint8_t, 8> LINE_RIGHT_MASK_TABLE;
   extern const std::array<std::uint8_t, 8> LINE_LEFT_MASK_TABLE;
 
-  // 6502: ylookupl, ylookuph -- the bitmap address of screen row y, which is
+  // ylookupl, ylookuph -- the bitmap address of screen row y, which is
   // SCBASE + 0x20 + (y >> 3) * 320. The 0x20 is the space view's four-cell left margin.
   // Canvas computes that arithmetic directly; these are kept so a test can prove the two agree
   // for all 256 rows, and so the oracle has something to compare against.
   extern const std::array<std::uint8_t, 256> ROW_ADDRESS_LOW;
   extern const std::array<std::uint8_t, 256> ROW_ADDRESS_HIGH;
 
-  // 6502: celllookl, celllookh -- the colour-cell address of a character row, which is
+  // celllookl, celllookh -- the colour-cell address of a character row, which is
   // SCBASE + 0x2003 + 40 * row. The three-cell offset is not a margin: CHPR writes the colour
   // after advancing the cursor, so celllook[row] + (XC + 1) lands on cell 4 + XC, the same cell
   // the glyph went into.
   extern const std::array<std::uint8_t, 25> CELL_ADDRESS_LOW;
   extern const std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH;
 
-  // 6502: TENS -- the low four bytes of 10^11. The most significant byte is not here: BPRNT
+  // The low four bytes of 10^11. The most significant byte is not here: BPRNT
   // subtracts it as an immediate 0x17, so the whole constant is 0x17_4876E800.
   extern const std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH;
 
-  // 6502: QQ23 -- the market table: base price, economy gradient, base quantity and random mask,
+  // The market table: base price, economy gradient, base quantity and random mask,
   // four bytes for each of the seventeen goods.
   extern const std::array<std::uint8_t, 68> MARKET_TABLE;
 
   /*
-   * 6502: PRXS -- what each piece of equipment costs, two bytes an item, low byte first, in tenths
+   * What each piece of equipment costs, two bytes an item, low byte first, in tenths
    * of a credit.
    *
    * FOURTEEN items, not the twelve the cassette version sells: the C64 build adds the military and
@@ -147,12 +147,12 @@ namespace Elite
    */
   extern const std::array<std::uint8_t, 28> EQUIPMENT_PRICES;
 
-  // 6502: FONT -- 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
+  // 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
   // doubles each bit into a multicolour pixel on the way to the bitmap.
   extern const std::array<std::uint8_t, 768> FONT_DATA;
 
   /*
-   * 6502: NA2% -- the commander the game starts from.
+   * The commander the game starts from.
    *
    * Eight bytes of name and then the 77-byte data block, and thirteen more because JAMESON copies
    * ninety-eight rather than the eighty-five the two come to. The extra bytes are copied by the
@@ -161,7 +161,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 98> DEFAULT_COMMANDER;
 
   /*
-   * 6502: TRANTABLE -- the character `TT217` hands back for each internal key number.
+   * The character `TT217` hands back for each internal key number.
    *
    * The C64's keyboard produces a MATRIX POSITION, not a character, and `RDKEY` returns that
    * position: 0 to 64, which is why `ZEKTRAN` clears sixty-five bytes of the key logger. This is
@@ -180,7 +180,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 65> KEY_TRANSLATION;
 
   /*
-   * 6502: XX21 through the last ship blueprint -- the whole ship data region, addressed as the
+   * XX21 through the last ship blueprint -- the whole ship data region, addressed as the
    * game addresses it (slice 3a).
    *
    * ONE ARRAY AND NOT THIRTY-THREE, and that is a finding rather than a preference. Two blueprints
@@ -190,8 +190,8 @@ namespace Elite
    * two of them or hand them their neighbour's bytes. Plan §6.32 has the measurements.
    *
    * Underneath that is the reason it was never going to work: the game has NO CONCEPT of where a
-   * blueprint ends. `NWSHP` puts an address into `XX0` and every read is `LDA (XX0),Y`. So the
-   * port keeps the region and the addresses, and `ShipBlueprint.h` is the indexing.
+   * blueprint ends. `NWSHP` puts an address into `XX0` and every read is indirect through it. So
+   * the port keeps the region and the addresses, and `ShipBlueprint.h` is the indexing.
    *
    * The size is derived, not chosen -- `tools/extract_tables.py` computes it from the last
    * blueprint's own header -- so if it ever changed this declaration would stop compiling, which is
@@ -200,7 +200,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 8073> SHIP_DATA;
 
   /*
-   * 6502: scacol -- what colour a ship's blip is on the scanner, by ship type (slice 3d).
+   * What colour a ship's blip is on the scanner, by ship type (slice 3d).
    *
    * The colours are FOUR MULTICOLOUR PIXELS EACH and not colour numbers, which is why they read as
    * 0x55, 0xAA, 0xFF and 0x5A: `SCAN` ANDs the entry with the pixel mask, so a "colour" here is a
@@ -218,7 +218,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 34> SCANNER_COLOUR_TABLE;
 
   /*
-   * 6502: sightcol -- the colour of the laser sights, by which laser is fitted.
+   * The colour of the laser sights, by which laser is fitted.
    *
    * A colour NUMBER here rather than a bit pattern, unlike the scanner table above it, because the
    * sights are a sprite and this goes straight into the VIC-II's sprite colour register.
@@ -231,7 +231,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 4> LASER_SIGHT_COLOUR_TABLE;
 
   /*
-   * 6502: TRIBTA and TRIBMA -- the Trumble population, turned into sprites.
+   * TRIBTA and TRIBMA -- the Trumble population, turned into sprites.
    *
    * `SIGHT` masks the high byte of the count to `AND #%01111111` and shifts it right four times, so
    * the index is 0 to 7 and both tables have eight entries. `TRIBTA` is how many sprites that many
@@ -245,7 +245,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 8> TRUMBLE_SPRITE_TABLE;
 
   /*
-   * 6502: TRIBDIR and TRIBDIRH -- the four directions `MVTRIBS` picks between, as a 16-bit pair.
+   * TRIBDIR and TRIBDIRH -- the four directions `MVTRIBS` picks between, as a 16-bit pair.
    *
    * Four entries because `AND #3` is what indexes them, and the two tables are one 16-bit table
    * split across a low half and a high half: (TRIBDIRH TRIBDIR) reads 0, 1, -1, 0.
@@ -260,14 +260,14 @@ namespace Elite
   extern const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_HIGH_TABLE;
 
   /*
-   * 6502: shango, santana, lotus and innersec -- four of the seven tables `COMIRQ1` indexes.
+   * shango, santana, lotus and innersec -- four of the seven tables `COMIRQ1` indexes.
    *
-   * The raster interrupt runs twice a frame and `RASTCT` says which half it is setting up: entry 0
-   * is the space view and entry 1 the dashboard. Seven tables sit consecutively in memory and the
-   * handler reads all of them at `LDX RASTCT`, but only these four are DATA. The other three have
-   * a second byte the game WRITES under its own name -- `zebop`/`abraxas`, `moonflower`/
-   * `caravanserai`, `welcome`/`welcome+1` -- so they are `ScreenState` fields rather than tables,
-   * and `Raster.h` holds the two halves of those that really are fixed.
+   * The raster interrupt runs twice a frame and `RASTCT` says which half it is setting up: entry
+   * 0 is the space view and entry 1 the dashboard. Seven tables sit consecutively in memory and
+   * the handler reads all of them indexed by that counter, but only these four are DATA. The
+   * other three have a second byte the game WRITES under its own name -- `zebop`/`abraxas`,
+   * `moonflower`/`caravanserai`, `welcome`/`welcome+1` -- so they are `ScreenState` fields rather
+   * than tables, and `Raster.h` holds the two halves of those that really are fixed.
    *
    * `RASTER_NEXT_LINE_TABLE` is the pair that makes the split: 194 and 51. Fifty-one is the first
    * raster line of the bitmap and 194 is `51 + 143`, so the interrupt fires on the LAST row of the
@@ -281,7 +281,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 2> RASTER_NEXT_COUNTER_TABLE;
 
   /*
-   * 6502: spritp -- the seven sprite definitions, 64 bytes each.
+   * The seven sprite definitions, 64 bytes each.
    *
    * FROM A FOURTH ASSEMBLY, and that is the only reason they were not here already.
    * `elite-sprites.asm` is 84 lines that no build of the GAME assembles: it saves `SPRITE.bin` at
@@ -304,7 +304,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 448> SPRITE_DEFINITIONS;
 
   /*
-   * 6502: DSTORE% -- the dashboard picture, which `wantdials` copies into the bitmap.
+   * The dashboard picture, which `wantdials` copies into the bitmap.
    *
    * Seven character rows of forty cells at eight bytes each is 2,240, and this is 2,241. The
    * labels, the bar frames, the scanner's ellipse and the word ELITE are all in here as pixels:
@@ -332,7 +332,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 2241> DASHBOARD_IMAGE;
 
   /*
-   * 6502: sdump and cdump -- the colours that dashboard picture is drawn IN.
+   * sdump and cdump -- the colours that dashboard picture is drawn IN.
    *
    * `DASHBOARD_IMAGE` above is bits, and bits have no colour: what the VIC-II makes of them comes
    * from screen RAM and colour RAM, and these two are what the C64's loader fills those with
@@ -358,7 +358,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 280> DASHBOARD_COLOUR_RAM;
 
   /*
-   * 6502: SFXPR, SFXCNT, SFXFQ, SFXCR, SFXATK, SFXSUS, SFXFRCH and SFXVCH -- the sixteen sound
+   * SFXPR, SFXCNT, SFXFQ, SFXCR, SFXATK, SFXSUS, SFXFRCH and SFXVCH -- the sixteen sound
    * effects, one byte each in eight tables, and SEVENS, which turns a voice number into its SID
    * register base.
    *
@@ -380,7 +380,7 @@ namespace Elite
   extern const std::array<std::uint8_t, 3> SEVENS_TABLE;
 
   /*
-   * 6502: musicstart, COMUDAT and THEME -- the two tunes, as one region.
+   * musicstart, COMUDAT and THEME -- the two tunes, as one region.
    *
    * The player keeps a sixteen-bit pointer and PRE-INCREMENTS it before every read, so a tune
    * starts at the byte BEFORE its first note: `startbd` hands `BDENTRY` the address `musicstart`
@@ -390,7 +390,7 @@ namespace Elite
    */
   extern const std::array<std::uint8_t, 5547> MUSIC_DATA;
 
-  /// 6502: LO(musicstart) and LO(THEME-1) -- where each tune's pointer starts, as offsets into
+  /// LO(musicstart) and LO(THEME-1) -- where each tune's pointer starts, as offsets into
   /// `MUSIC_DATA`. The docking music is the Blue Danube; the theme is the one added for the GMA
   /// release, which this build is.
   inline constexpr std::uint16_t MUSIC_DOCKING_OFFSET = 0;

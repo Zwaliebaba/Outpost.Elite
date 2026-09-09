@@ -32,7 +32,7 @@ namespace Elite
    */
 
   /*
-   * 6502: TAS1 -- one axis of `K3` = this ship's coordinate MINUS the other object's.
+   * One axis of `K3` = this ship's coordinate MINUS the other object's.
    *
    * The original takes a pointer in `V(1 0)` and an index in Y of 2, 5 or 8 -- the SIGN byte of the
    * axis -- and walks down to the low byte with two `DEY`s, which leaves Y holding 0, 3 or 6: the
@@ -51,7 +51,7 @@ namespace Elite
   [[nodiscard]] bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
-   * 6502: VCSUB -- all three axes, so `K3` becomes the vector FROM the other object TO this ship.
+   * All three axes, so `K3` becomes the vector FROM the other object TO this ship.
    *
    * `VCSU1` is the same routine with the pointer already set to the second ship block -- the space
    * station's slot, as `SPS4` uses it -- so in the port it is `SubtractStationAxes` below rather
@@ -63,11 +63,11 @@ namespace Elite
   /// `DORND` at `TA64`: nothing between the two touches the flag (§6.126).
   [[nodiscard]] bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes) noexcept;
 
-  /// 6502: VCSU1 -- `VCSUB` with `V` pointing at `K%+NI%`, which is where `NWSPS` puts the station.
+  /// `VCSUB` with `V` pointing at `K%+NI%`, which is where `NWSPS` puts the station.
   [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes) noexcept;
 
   /*
-   * 6502: TAS3 and TAS4 -- the dot product of `XX15` with one of a ship's orientation vectors.
+   * TAS3 and TAS4 -- the dot product of `XX15` with one of a ship's orientation vectors.
    *
    * ONE BODY AND TWO LABELS. `TAS3` reads `INWK,Y` and `TAS4` reads `K%+NI%,Y`, and every other
    * instruction is the same, so the port has one function taking the block: `DOCKIT` passes the
@@ -81,7 +81,7 @@ namespace Elite
   [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, UnitVector _vector, std::uint8_t _at) noexcept;
 
   /*
-   * 6502: TAS6 -- point `XX15` the other way.
+   * Point `XX15` the other way.
    *
    * Three sign-bit flips, which is what negation is in sign-magnitude: the magnitude is untouched
    * and only the sign bit moves. `XX15` is `X1`, `Y1` and `X2` (§6.37), the same six bytes `TAS2`
@@ -90,7 +90,7 @@ namespace Elite
   [[nodiscard]] UnitVector NegateVector(UnitVector _vector) noexcept;
 
   /*
-   * 6502: DCS1 -- move `K3` from the station to the IDEAL DOCKING POSITION, which is out in front
+   * Move `K3` from the station to the IDEAL DOCKING POSITION, which is out in front
    * of the slot rather than at the station itself.
    *
    * IT OPENS BY CALLING THE REST OF ITSELF. The address three bytes on is the instruction after
@@ -112,24 +112,24 @@ namespace Elite
    */
   void OffsetDockingPosition(const Bubble& _bubble, K3Block& _axes) noexcept;
 
-  /// 6502: the three nose-vector high bytes `DCS1` reads, paired with the 0, 3 and 6 that say
+  /// The three nose-vector high bytes `DCS1` reads, paired with the 0, 3 and 6 that say
   /// which axis of `K3` each one moves.
   inline constexpr std::uint8_t NOSE_VECTOR_X = 10;
   inline constexpr std::uint8_t NOSE_VECTOR_Y = 12;
   inline constexpr std::uint8_t NOSE_VECTOR_Z = 14;
 
-  /// 6502: the orientation vectors' high bytes, which is what `_at` selects in
+  /// The orientation vectors' high bytes, which is what `_at` selects in
   /// `DotProductWithShip`.
   inline constexpr std::uint8_t ORIENTATION_NOSE = 10;
   inline constexpr std::uint8_t ORIENTATION_ROOF = 16;
   inline constexpr std::uint8_t ORIENTATION_SIDE = 22;
 
-  /// 6502: byte 28 gets two and byte 30 gets it DOUBLED -- accelerate by two and dive at four, and
+  /// Byte 28 gets two and byte 30 gets it DOUBLED -- accelerate by two and dive at four, and
   /// the four is the two doubled rather than a second constant.
   inline constexpr std::uint8_t ANGRY_ACCELERATION = 2;
 
   /*
-   * 6502: ANGRY -- tell the ship in slot `_slot` that we just hit it.
+   * Tell the ship in slot `_slot` that we just hit it.
    *
    * FOUR THINGS AND A TRAP. It makes the station hostile if the ship was the station or was one of
    * its own (`NEWB` bit 5); it turns the ship's AI on, but ONLY if the AI byte was already
@@ -150,7 +150,7 @@ namespace Elite
 
   // ---- slice 4a-c: the AI, and the autopilot that shares its tail ------------------------------
 
-  /// 6502: the turn rates and the firing cone `TACTICS` flies by. `DOCKIT` overwrites all three
+  /// The turn rates and the firing cone `TACTICS` flies by. `DOCKIT` overwrites all three
   /// with 3, 6 and 29: an autopilot turns no faster but lines up twice as tightly and forgives a
   /// wider angle.
   inline constexpr std::uint8_t TACTICS_RAT = 3;
@@ -159,29 +159,29 @@ namespace Elite
   inline constexpr std::uint8_t DOCKING_RAT2 = 6;
   inline constexpr std::uint8_t DOCKING_CNT2 = 29;
 
-  /// 6502: what `OOPS` is given for a collision and for a missile going off.
+  /// What `OOPS` is given for a collision and for a missile going off.
   inline constexpr std::uint8_t COLLISION_DAMAGE = 80;
   inline constexpr std::uint8_t MISSILE_DAMAGE = 250;
 
-  /// 6502: the AI byte a station gives the ship it launches, and the `NEWB` a rock hermit gives
+  /// The AI byte a station gives the ship it launches, and the `NEWB` a rock hermit gives
   /// the pirate it turns into.
   inline constexpr std::uint8_t STATION_LAUNCH_AI = 0xF1;
   inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = Mask(TraitBit::Innocent, TraitBit::Hostile);
 
-  /// 6502: a station launches Vipers until there are four of them.
+  /// A station launches Vipers until there are four of them.
   inline constexpr std::uint8_t MAXIMUM_POLICE = 4;
 
-  /// 6502: a trader runs from a random byte under 50, and a bounty hunter only turns on you once
+  /// A trader runs from a random byte under 50, and a bounty hunter only turns on you once
   /// your legal status passes 40.
   inline constexpr std::uint8_t TRADER_FLEE_ROLL = 50;
   inline constexpr std::uint8_t BOUNTY_HUNTER_FIST = 40;
 
-  /// 6502: "INCOMING MISSILE", which `SFRMIS` prints and `FRMIS` does not: the player's own launch
+  /// "INCOMING MISSILE", which `SFRMIS` prints and `FRMIS` does not: the player's own launch
   /// is silent because the player pressed the key.
   inline constexpr std::uint8_t MESSAGE_INCOMING_MISSILE = 120;
 
   /*
-   * 6502: TACTICS, all seven parts -- what a ship decides to do with the frame it was just moved
+   * TACTICS, all seven parts -- what a ship decides to do with the frame it was just moved
    * through. Returns FALSE when the player died, which is §6.122's answer to `OOPS` jumping to
    * `DEATH`.
    *
@@ -197,7 +197,7 @@ namespace Elite
   [[nodiscard]] bool RunTactics(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
   /*
-   * 6502: DOCKIT -- the docking computer, and it is the SAME TAIL as the AI.
+   * The docking computer, and it is the SAME TAIL as the AI.
    *
    * The plan had this as a slice of its own after `TACTICS` and the two cannot be split: `DOCKIT`
    * ends by jumping to `TA151` and refuses through `GOPL`, both inside `TACTICS`, while `TACTICS`
