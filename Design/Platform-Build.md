@@ -496,17 +496,33 @@ lazy clears and surviving ink per pass, on steps 36 to 44 of the scripted flight
 | the same, stardust erase twin put back | 1294 | 1 | **0** |
 | the same, plus the whole field drawn from state at the end of `MoveStardust` | 1342 | 1 | **0** |
 
-**Twelve hundred writes a pass and nothing survives**, and putting the erase back does not change it,
-and drawing the field whole does not change it. The +48 mutator calls the whole-field draw adds land
-NOWHERE: `probeWrites` counts the call and the mutators bounds-check and drop silently, so the next
-probe must count writes that LAND, not writes that are made. That is the one measurement missing and
-it is where the next sitting starts.
+**ANSWERED 2026-09-09 by counting writes that LAND, split by primitive.** Per pass, steps 36 to 41:
 
-The likely shapes, in order: the twin's coordinates are being rejected by `Picture`'s bounds check at
-these steps; or `DrawingTwins` is false on this path for a reason the guard's two conditions explain;
-or the lazy clear is firing later than the first write. All three are cheap to tell apart with a
-landed-write counter, and none of them should be guessed at — this question has already been
-mis-diagnosed twice from inference, once as a bad sampling moment and once as accumulation.
+| | |
+|---|---|
+| mutator calls | 1246 |
+| landed bitmap writes | 1214, **every one an exclusive-or**, none an assignment |
+| distinct bitmap offsets touched | 569 — so each is written about **twice** |
+| `DrawLine2x` calls | **40** |
+| `PlotRelativePixel2x` / `DrawShipLines2x` / `DrawCanvasRow2x` | 12 / 0 / 0 |
+| bitmap bytes surviving the pass | **0** |
+
+**Forty line-twin calls, twenty geometries drawn twice at the same coordinates.** That is the
+planet: `DrawBall` erases by REDRAWING THE SAME RUN, so with a cleared frame the second draw cancels
+the first and the ball vanishes. At these steps the ball is the only thing in the space view, which
+is why nothing at all survives.
+
+**So the class of routine RN-1 has to handle is wider than the plan says.** Archive/Rendering.md's
+R-10 names two differential renderers, the sun and the hyperspace rings, and calls them the exception.
+They are not: **the planet's ball is a third**, it is not in R-10, it is not in the drops list, and it
+is the one the scripted flight actually exercises. Anything that erases by redrawing its own geometry
+cancels itself on a cleared frame, and the drops list has to be derived from that property rather
+than from the six routines the plan happened to name.
+
+The three earlier diagnoses of this measurement — a bad sampling moment, then accumulation, then a
+missing whole-field draw — were all wrong, and each was reached by inference from a count that was
+measuring calls rather than effects. The counters that settled it are landed writes, distinct
+offsets, exclusive-or against assignment, and calls per twin.
 
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
