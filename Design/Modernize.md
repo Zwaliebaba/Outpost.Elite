@@ -2083,7 +2083,7 @@ tests exist -- is what makes ten thousand deleted lines reviewable; the names an
 M6-b-6 and the machinery is M6-b-7.
 
 
-**2026-09-08 — Beside M6-a: six slices of [InputTimer.md](InputTimer.md), journaled there (§9).**
+**2026-09-08 — Beside M6-a: six slices of [InputTimer.md](Archive/InputTimer.md), journaled there (§9).**
 They are that plan's and not this one's, and they touch this plan's ledger in four places worth
 naming here: `Game::Mode::Paused` and `StepPaused` are gone with the pause screen (M4-d's third
 state, removed by owner ruling); `Keyboard::NextKey` is answered by `Elite::ReadKey`, the ported

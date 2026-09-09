@@ -1,3 +1,9 @@
+> **ARCHIVED 2026-09-09 — superseded by [Platform.md](../Platform.md).** This document is kept whole
+> as the record of what was found (§1, §2, §11) and of what was built from it (RN-0's gate, §12);
+> nothing below is maintained, and its slice names — RN-0, RN-1, RN-2 — keep their meaning in the
+> live design, which carries them forward in its §1 and §5. Relative links were rewritten for the
+> move; the prose still calls sibling documents by their old paths.
+
 # Rendering — erase-by-exclusive-or, and what it would take to render frames instead
 
 **Status:** analysis, opened 2026-09-08, from an owner question: *"today some of the rendering takes
@@ -18,9 +24,9 @@ the revalidation moved three things: R-1 (the clear now has one caller, and it i
 argument was about a fixture that was never recorded. §11 is the log of that pass and says which
 claims held. Every number in §1 held unchanged.
 
-It reads after [Resolution.md](Resolution.md) and [ADR-008](ADR/ADR-008-the-picture.md), because the
+It reads after [Resolution.md](../Resolution.md) and [ADR-008](../ADR/ADR-008-the-picture.md), because the
 answer turns entirely on a clause ADR-008 already wrote (§4: the picture is not in the state hash),
-and after [ADR-009](ADR/ADR-009-detachment.md), which is now what says what pins the port at all.
+and after [ADR-009](../ADR/ADR-009-detachment.md), which is now what says what pins the port at all.
 
 **What was read.** `Outpost/ScreenPresenter.cpp` and `.h`, `Presentation.cpp`, `CanvasPixelShader.hlsl`;
 `GameLogic/Canvas.h`, `Canvas.cpp`, `Picture.h`, `Picture.cpp`, `LineHeap.h`, `HeapOffset.h`,

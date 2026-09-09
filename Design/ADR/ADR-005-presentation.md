@@ -212,7 +212,7 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   end — where the original slows down most, and where the slowdown is part of the difficulty —
   is not measured yet and is paced at the one-ship cost (§6.114).
 
-- **The crowded end and the docked pass are measured, 2026-09-08 (Design/InputTimer.md T-0),
+- **The crowded end and the docked pass are measured, 2026-09-08 (Design/Archive/InputTimer.md T-0),
   while the interpreter is still in the tree.** `FLIGHT_FRAME_COSTS` is four rows keyed by
   occupied slots, planet and sun included, linear between them: 47,784 cycles empty, 82,236 with
   the planet and its companion, 150,113 with three fighters, 293,354 with eight — three and a half
@@ -279,7 +279,7 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   docked screens (`RDKEY`, `TT217`); the port's `InputFrame` carries both level and edge bits so
   both idioms port unchanged (plan §2.1).
 
-- **The pause screen is removed. Owner ruling 2026-09-08 (Design/InputTimer.md §5.9, slice I-0).**
+- **The pause screen is removed. Owner ruling 2026-09-08 (Design/Archive/InputTimer.md §5.9, slice I-0).**
   `DK4`'s `CPX #&40` froze the game on INST/DEL and `FREEZE` was the only settings interface the
   game had: thirteen toggles, two sound keys and a quit to the title. The port had it as
   `Game::Mode::Paused` and could enter it and not leave it, because CLR/HOME was never bound
@@ -290,14 +290,14 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   removal of an original FEATURE rather than of a hardware read, and ADR-001 §4 points here.
 
 - **The game may believe it has a joystick only when the platform has one to read. Owner ruling
-  2026-09-08 (Design/InputTimer.md §5.1, slice I-3).** `TITLE` leaves `JSTK` set when the fire
+  2026-09-08 (Design/Archive/InputTimer.md §5.1, slice I-3).** `TITLE` leaves `JSTK` set when the fire
   key dismisses it, which on a C64 selects the stick `RDKEY` then reads from CIA port A. The port
   reads no port A, so `Game` clears `JSTK` after each start sequence unless `Keyboard::HasJoystick`
   answers true, which nothing does until the gamepad slice. `TITLE` itself is unchanged and still
   compared; the settlement runs after it. When a controller exists the original's rule returns:
   fire on the title screen selects it, and `JSTGY`/`JSTE` become its axis reversals.
 
-- **The blocking read is `TT217`, ported. 2026-09-08 (Design/InputTimer.md I-1).** `Elite::ReadKey`
+- **The blocking read is `TT217`, ported. 2026-09-08 (Design/Archive/InputTimer.md I-1).** `Elite::ReadKey`
   waits two frames, waits for no key, waits for a key and translates, over the port's `Held`, and is
   compared against the original with the matrix changing under it. The executable's `NextKey` is
   that routine; the queue of `WM_KEYDOWN`s it popped until then -- auto-repeats included -- is gone,

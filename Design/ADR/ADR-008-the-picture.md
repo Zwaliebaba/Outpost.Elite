@@ -8,7 +8,7 @@ moved it.
 replay run with the twins present and absent — and this ADR asserted it as *the* proof of T1. It had
 never been built, from RS-0 onwards. **It is built now**, so the clause stands again with the
 history of its falsehood beside it rather than tidied away; T1 is measured and Resolution.md's R26
-closes with it. The search that found the gap is [Rendering.md](../Rendering.md) §11.3. **No
+closes with it. The search that found the gap is [Rendering.md](../Archive/Rendering.md) §11.3. **No
 decision in this ADR moved**: the correction was always to a statement about evidence.
 **Depends on:** ADR-001 (fidelity — the game does not change, and §1 now says which surface is the
 verification view), ADR-002 §4 (the canvas and its resolve), ADR-003 (the oracle judges the canvas
@@ -104,7 +104,7 @@ measurement.
 It is now `TheReplayIsTheSameWithNoTwins`, and all three digests are identical with the twins
 switched off. The mechanism is a runtime switch (`Picture::SetDrawing`, and the one guard every twin
 shares, `DrawingTwins`) rather than the compile-time define the design named, for the reason
-Resolution.md §8.4 records. [Rendering.md](../Rendering.md) §11.3 has the search that found the gap.
+Resolution.md §8.4 records. [Rendering.md](../Archive/Rendering.md) §11.3 has the search that found the gap.
 
 ### §4 The picture is not in the state hash
 
