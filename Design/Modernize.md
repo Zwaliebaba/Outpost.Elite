@@ -745,6 +745,11 @@ becomes: create the window and the device, build `Game` over `Platform`, and loo
 described. `FlightSession` and `GameShell` are absorbed: the universe half into `Universe`, the eight-
 interface halves into `Platform`. `check_outpost.py` keeps running and has almost nothing to check.
 
+**The design that builds this is [Platform.md](Platform.md) (2026-09-09)**: the `Platform` class, the
+loop over `Game` as a function, `Step(InputFrame)` and the coroutines that take the presents out of
+the library are its I-2 and I-4, and the integer scheduler that replaces `PlanSteps` is its T-1. It
+replaced InputTimer.md, which this section pointed at until then.
+
 ### 4.9 C++20 used, C++23 held
 
 Used from C++20: `std::span` (fixed-extent for the codecs), `constexpr` codecs with
