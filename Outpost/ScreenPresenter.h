@@ -59,6 +59,53 @@ namespace Outpost
     void Create(HWND _window);
 
     /*
+     * What one call to `Present` came back with (Design/Platform.md T-3).
+     *
+     * It was a `bool` -- true for "carry on" and false for a device that had gone -- and the third
+     * answer was folded into the first: `DXGI_STATUS_OCCLUDED` is a SUCCESS code, so a window
+     * hidden behind another or on a second virtual desktop returned true and the loop went round
+     * as fast as the message pump managed, spinning a core for a picture nobody could see. Three
+     * answers, because there are three things that happen.
+     */
+    enum class PresentResult : std::uint8_t
+    {
+      Presented, ///< on the wire, and the wait for the next frame has begun
+      Occluded,  ///< nothing was shown: hidden window, or another desktop. The caller should idle
+      Lost,      ///< the device has gone, which is not recoverable here
+    };
+
+    /*
+     * Wait until the swap chain is ready for the next frame (Design/Platform.md §3.7).
+     *
+     * THIS IS WHERE THE LOOP WAITS NOW, and `Present` is where it waited before. The difference is
+     * a frame of latency: presenting into a queue the driver may hold three deep meant a key press
+     * could be sampled up to three refreshes before the pixels it moved reached the glass. Waiting
+     * on the chain's own latency object at the TOP of a turn, with the queue set to one, puts the
+     * sample and the present inside the same refresh -- the "sample as late as possible, present as
+     * soon as possible" that every modern latency-reduction path is made of.
+     *
+     * Safe before `Create` and after `Destroy`: no object, no wait, because a turn can happen
+     * before there is a swap chain to wait on.
+     */
+    void WaitForFrame() noexcept;
+
+    /*
+     * Idle while the window is hidden, rather than spinning.
+     *
+     * Woken by the latency object, by any input, or by a hundred milliseconds, whichever comes
+     * first -- so a game behind another window costs ten wake-ups a second instead of a core, and
+     * still notices the moment it is uncovered or a key is pressed. It is here rather than in the
+     * shell because the handle is this object's and Win32 waits belong with the Direct3D
+     * (ADR-004 §1).
+     *
+     * The build plan had the shell do this wait over an exposed handle. It is one call, and an
+     * accessor with one caller that hands out a raw `HANDLE` is a worse boundary than a method
+     * that says what the wait is FOR -- so the handle stays private and this is the whole of the
+     * public surface for it (Design/Platform-Build.md C-1 applies to the accessor too).
+     */
+    void WaitWhileOccluded() noexcept;
+
+    /*
      * Resolve the screen, upload it, draw it letterboxed and present on the vertical blank.
      *
      * THIS IS WHERE THE LOOP WAITS. `Present(1, 0)` blocks until the display is ready for the
@@ -72,17 +119,15 @@ namespace Outpost
      * argument: the title screen and every docked screen present before a flight session exists,
      * and a default-constructed `VideoState` would be a lie about registers nothing has written.
      */
-    [[nodiscard]] bool Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
-                               int _clientWidth, int _clientHeight);
+    [[nodiscard]] PresentResult Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
+                                        int _clientWidth, int _clientHeight);
 
     /// The client area changed. Cheap and idempotent; a zero-sized client (a minimised window) is
     /// ignored rather than resized to, because `ResizeBuffers` rejects it.
     void Resize(int _clientWidth, int _clientHeight);
 
-    [[nodiscard]] bool Ready() const noexcept
-    {
-      return m_device != nullptr;
-    }
+    // `Ready` WAS HERE AND IS NOT ANY MORE (Design/Platform-Build.md C-1): it answered whether the
+    // device existed and nothing ever asked. Every method here is already safe without one.
 
     /*
      * Wait for the GPU and release everything, without needing the destructor to run.
@@ -132,6 +177,9 @@ namespace Outpost
 
     winrt::com_ptr<ID3D12Fence> m_fence;
     HANDLE m_fenceEvent = nullptr;
+
+    /// The swap chain's own frame-latency object, waited on at the top of every turn (T-3).
+    HANDLE m_frameLatency = nullptr;
     UINT m_frameIndex = 0;
 
     int m_width = 0;

@@ -800,6 +800,42 @@ game-logic change and not a setting, which is a track of its own after RN-6 with
 selectable. Nine ADRs carry their amendments as of this entry; the speed knob is gone from §3.2, §5
 and §8; §0's second row says what the track does and does not do about the sampling rate.
 
+**2026-09-09 — T-3, first commit: the wait moved from the bottom of the turn to the top.** The swap
+chain is created with `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`, the queue is set to one
+frame instead of the driver's default three, and `GameShell::Turn` opens by waiting on the chain's
+latency object. Nothing about the picture changed; what changed is its age. Presenting into a
+three-deep queue and then sampling the keyboard meant a key could be read up to three refreshes
+before the pixels it moved reached the glass — 50 ms on a 60 Hz panel, against a game whose own
+step is 47. Waiting first and sampling immediately after puts the sample and the present inside one
+refresh.
+
+**`ResizeBuffers` did not need a change, and the plan asked whether it would.** `Resize` already
+reads `GetDesc1` and hands `description.Flags` straight back, so the flag round-trips without a
+line — which is luck rather than design, and the comment beside the flag now says so, because a
+resize that dropped it would leave a valid handle that is never signalled. That is a hang, not a
+wrong picture, and it would not show up until somebody dragged a window edge.
+
+**`Present` answers three things now, and the third was being lost.** `DXGI_STATUS_OCCLUDED` is a
+SUCCESS code, so while the return was a `bool` a window hidden behind another one — or on a virtual
+desktop nobody is looking at — presented nothing, said "carry on", and went round again at whatever
+rate the message pump managed, burning a core on a picture no one could see. `Occluded` now idles in
+`WaitWhileOccluded`, woken by the latency object, by any input, or by a hundred milliseconds,
+whichever is first.
+
+**One deviation from the build plan, and it is a boundary rather than a behaviour.** The plan had
+the shell perform the occluded wait over a handle the presenter exposed. The wait is one call; an
+accessor handing out a raw `HANDLE` to one caller is a worse seam than a method that names what the
+wait is for, and Win32 waits belong beside the Direct3D (ADR-004 §1). So the handle stayed private
+and the accessor went the way of `Ready`, which C-1 deleted in the same commit for having no caller
+at all.
+
+**What this commit is NOT verified by, and it should be said plainly.** Neither `ScreenPresenter`
+nor `Shell` is in `EXECUTABLE_SOURCES`, so the Ubuntu leg compiles none of it: 147 green here and
+all 13 repository checks green say nothing about this change. The Windows job is the only witness,
+and the two numbers that decide whether the slice is worth its complexity — Task Manager at rest
+with the window covered, and PresentMon's `MsUntilDisplayed` on a scripted key before and after —
+are still the owner's to take.
+
 ---
 
 ## 11. Every ADR read against this design, 2026-09-09
