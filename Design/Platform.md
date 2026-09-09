@@ -885,6 +885,30 @@ both moved onto it.
 **147 → 149 tests**, all 13 checks, `outpost-elite-names` and `main-lines` at their ceilings. The
 Windows leg is still the only witness to the presenter half; commit 1's run was green.
 
+**2026-09-09 — RN-0, first commit: the backdrop exists and changes nothing, which is the point.**
+`Universe::backdrop` is declared beside `picture`, under the same exclusion — `HashState` walks
+past both, `StateCells` names neither, and `TheStateHashDeliberatelyDoesNotSeeIt` now writes to
+both and requires the digest not to move. `Picture::Resolve`, `Hash` and `ResolveSignature` take
+the backdrop; the two surfaces composite by exclusive-or on all three planes. **149 passed, 0
+failed, all 13 checks** with no site moved, so every digest the tree holds — the three replays,
+`RECORDED_PICTURE`, every picture golden — is byte for byte what it was. That is what the commit
+had to prove and it is all it claims.
+
+**The plan's own step would not have compiled to that.** Platform-Build.md §2.3 had the bitmap
+composited but the cell palettes and the dashboard plane read "from the backdrop", which at this
+commit is blank: a black screen and a hundred moved digests, not a no-op. Composite all three the
+same way and it is identity while either side is empty, and still correct once the sites move,
+because a cell written only to the backdrop reads `backdrop ^ 0`. The step now says so.
+
+**What it costs, said before the next commit meets it.** A cell palette written to BOTH surfaces
+exclusive-ors into nonsense rather than one winning. The site table forbids that and
+`ThePictureIsAsRecorded` would catch it, but commit 2's journal is the place to record whether any
+of the 74 sites turns out to do it.
+
+**The byte count for RN-2.** A second `Picture` is another 107,682 bytes, so a `Universe` goes from
+123 KB to 231 KB — not the 36 KB §3.4 assumed. `Universe.h` carries the number and RN-2 is where
+ADR-008 §1 gets it.
+
 ---
 
 ## 11. Every ADR read against this design, 2026-09-09

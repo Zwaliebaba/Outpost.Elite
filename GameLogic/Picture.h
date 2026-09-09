@@ -271,6 +271,28 @@ namespace Elite
     void Clear() noexcept;
 
     /*
+     * THE TWO SURFACES, and what `_backdrop` means everywhere below (RN-0, Platform.md §3.4).
+     *
+     * One picture became two, and neither is a copy of the other. The BACKDROP holds what persists
+     * -- the glyphs, the charts, the borders, the wipes, the dashboard's dials and its index plane
+     * -- and the FRAME, which is the object these methods are called on, holds what a flight pass
+     * re-emits every step: the ships, the stardust, the planet, the sun, the explosion cloud, the
+     * two laser draws. What is shown is the two composited.
+     *
+     * THE COMPOSITE IS EXCLUSIVE-OR, on all three planes, and that is not a choice of blend but the
+     * only operation that is a no-op today. Every transient write in the tree is already an
+     * exclusive-or -- that is how the game erases, by drawing the same thing twice -- and
+     * exclusive-or is associative, so `backdrop ^ frame` with everything still in one of them is
+     * bit for bit the picture the tree drew before the split. It also costs no copy, which is why
+     * Platform.md §3.4's "refresh the frame from the backdrop each frame" is NOT what happens:
+     * copying 36,000 bytes and then letting the erase twins redraw last frame's ship onto it would
+     * paint a ghost. RN-1 is where the erases go and the clear begins.
+     *
+     * SO A BLANK BACKDROP RESOLVES TO THE FRAME ALONE, exactly, which is what lets a test build one
+     * surface and pass an empty one beside it, and what made RN-0's first commit a no-op.
+     */
+
+    /*
      * Write `WIDTH * HEIGHT` colour indices -- what the presenter uploads.
      *
      * `_canvas` is here for the RASTER STATE this surface does not hold, and since RS-6 for nothing
@@ -285,12 +307,12 @@ namespace Elite
      * scaffolding came down when the last region was taken over, which is the whole point of having
      * written it as scaffolding.
      */
-    void Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas) const noexcept;
+    void Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const Picture& _backdrop) const noexcept;
 
     /// The same with the hardware sprites over it, at twice their coordinates from the same
     /// definitions. An overload rather than a defaulted argument for `Canvas::Resolve`'s reason:
     /// a golden wants the picture the game drew and a presenter wants what a person would see.
-    void Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const VideoState& _video) const noexcept;
+    void Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const Picture& _backdrop, const VideoState& _video) const noexcept;
 
     /*
      * Everything the two `Resolve`s above READ, folded to one number, so that a caller can ask
@@ -319,7 +341,7 @@ namespace Elite
      * "unchanged" when they would have. A false change costs a frame's work; a false sameness
      * costs the frame.
      */
-    [[nodiscard]] std::uint64_t ResolveSignature(const Canvas& _canvas, const VideoState* _video) const noexcept;
+    [[nodiscard]] std::uint64_t ResolveSignature(const Canvas& _canvas, const Picture& _backdrop, const VideoState* _video) const noexcept;
 
     /*
      * FNV-1a over the resolved indices, for the screen goldens (Resolution.md section 8.3).
@@ -328,14 +350,14 @@ namespace Elite
      * default Windows stack and not something to put on it. The buffer is heap and the allocation
      * is the one thing here that can fail.
      */
-    [[nodiscard]] std::uint64_t Hash(const Canvas& _canvas) const;
+    [[nodiscard]] std::uint64_t Hash(const Canvas& _canvas, const Picture& _backdrop) const;
 
   private:
     /// One character cell of the picture, each writing eight rows of eight indices `WIDTH` apart.
     /// Three and not one because a cell is one of exactly three things: the canvas doubled, this
     /// surface's own bits through its palette, or a copy out of the dashboard's index plane.
-    void ResolveBitmapCell(std::uint8_t* _out, const Canvas& _canvas, int _column, int _row) const noexcept;
-    void ResolveDashboardCell(std::uint8_t* _out, int _column, int _row) const noexcept;
+    void ResolveBitmapCell(std::uint8_t* _out, const Canvas& _canvas, const Picture& _backdrop, int _column, int _row) const noexcept;
+    void ResolveDashboardCell(std::uint8_t* _out, const Picture& _backdrop, int _column, int _row) const noexcept;
 
     [[nodiscard]] static constexpr std::size_t Index(int _column, int _row) noexcept
     {

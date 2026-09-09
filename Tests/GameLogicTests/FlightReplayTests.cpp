@@ -302,7 +302,7 @@ namespace GameLogicTests
       std::uint32_t step = 0;
       auto checkpoint = [&]() {
         trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()});
-        trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas));
+        trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas, _port.universe.backdrop));
       };
 
       Prepare(_port);

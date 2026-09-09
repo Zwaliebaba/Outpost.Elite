@@ -447,8 +447,9 @@ namespace Outpost
     CreateRenderTargets();
   }
 
-  ScreenPresenter::PresentResult ScreenPresenter::Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas,
-                                                          const Elite::VideoState* _video, int _clientWidth, int _clientHeight)
+  ScreenPresenter::PresentResult ScreenPresenter::Present(const Elite::Picture& _picture, const Elite::Picture& _backdrop,
+                                                          const Elite::Canvas& _canvas, const Elite::VideoState* _video, int _clientWidth,
+                                                          int _clientHeight)
   {
     if (!m_device || _clientWidth <= 0 || _clientHeight <= 0)
     {
@@ -477,18 +478,18 @@ namespace Outpost
      * triangle over the texture that is already resident, and the present -- and the texture is a
      * separate resource from the back buffer, so it survives the flip that discards the buffer.
      */
-    const std::uint64_t signature = _picture.ResolveSignature(_canvas, _video);
+    const std::uint64_t signature = _picture.ResolveSignature(_canvas, _backdrop, _video);
     const bool changed = !m_haveResolved || signature != m_resolvedSignature || m_turnsSinceResolve >= RESOLVE_ANYWAY_AFTER_TURNS;
 
     if (changed)
     {
       if (_video != nullptr)
       {
-        _picture.Resolve(m_resolved, _canvas, *_video);
+        _picture.Resolve(m_resolved, _canvas, _backdrop, *_video);
       }
       else
       {
-        _picture.Resolve(m_resolved, _canvas);
+        _picture.Resolve(m_resolved, _canvas, _backdrop);
       }
 
       m_resolvedSignature = signature;

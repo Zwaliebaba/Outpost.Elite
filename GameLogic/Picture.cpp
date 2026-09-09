@@ -46,7 +46,7 @@ namespace Elite
     ++m_generation; // a blank picture is a different picture -- see `Generation`
   }
 
-  void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas) const noexcept
+  void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const Picture& _backdrop) const noexcept
   {
     if (_out.size() < static_cast<std::size_t>(WIDTH) * HEIGHT)
     {
@@ -82,17 +82,17 @@ namespace Elite
          */
         if (dashboardRow)
         {
-          ResolveDashboardCell(out, column, row);
+          ResolveDashboardCell(out, _backdrop, column, row);
         }
         else
         {
-          ResolveBitmapCell(out, _canvas, column, row);
+          ResolveBitmapCell(out, _canvas, _backdrop, column, row);
         }
       }
     }
   }
 
-  std::uint64_t Picture::ResolveSignature(const Canvas& _canvas, const VideoState* _video) const noexcept
+  std::uint64_t Picture::ResolveSignature(const Canvas& _canvas, const Picture& _backdrop, const VideoState* _video) const noexcept
   {
     /*
      * FNV-1a, the same one `Hash` uses -- over the INPUTS rather than the pixels (see the header).
@@ -115,6 +115,7 @@ namespace Elite
     };
 
     foldWord(m_generation);
+    foldWord(_backdrop.m_generation); // both surfaces are resolved, so both decide the answer
 
     // The colour RAM, which `ResolveBitmapCell` reads for a multicolour cell's %11 pair.
     for (int cell = 0; cell < Canvas::CELL_COLUMNS * Canvas::CELL_ROWS; ++cell)
@@ -158,21 +159,40 @@ namespace Elite
     return hash;
   }
 
-  void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const VideoState& _video) const noexcept
+  void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const Picture& _backdrop,
+                        const VideoState& _video) const noexcept
   {
-    Resolve(_out, _canvas);
+    Resolve(_out, _canvas, _backdrop);
 
     // The same eight hardware sprites over the same bitmap, at twice the coordinates and from the
     // same definitions (ADR-005 §1, Resolution.md §3.3 and §5.4). One blit serves both surfaces.
     CompositeSprites(_out, WIDTH, HEIGHT, SPACE_VIEW_HEIGHT, 2, _canvas, _video);
   }
 
-  void Picture::ResolveBitmapCell(std::uint8_t* _out, const Canvas& _canvas, int _column, int _row) const noexcept
+  void Picture::ResolveBitmapCell(std::uint8_t* _out, const Canvas& _canvas, const Picture& _backdrop, int _column, int _row) const noexcept
   {
-    const CellPalette palette = m_cells[static_cast<std::size_t>(_row) * CELL_COLUMNS + _column];
+    /*
+     * The two surfaces composited by exclusive-or -- the header says why that is the only operation
+     * that leaves today's picture unchanged.
+     *
+     * The PALETTE is composited on its byte and not on its two colours, which is the same thing:
+     * the byte is high in the upper nibble and low in the lower, so exclusive-oring it is
+     * exclusive-oring each colour index. A cell written on only one surface therefore reads that
+     * surface's, and a cell written on both is nonsense -- which the site table forbids and
+     * `ThePictureIsAsRecorded` would catch.
+     */
+    const std::size_t cell = static_cast<std::size_t>(_row) * CELL_COLUMNS + _column;
+    const CellPalette palette = CellPalette::Of(static_cast<std::uint8_t>(_backdrop.m_cells[cell].Byte() ^ m_cells[cell].Byte()));
     const std::uint8_t high = ColourIndex(palette.High());
     const std::uint8_t low = ColourIndex(palette.Low());
-    const std::uint8_t* bits = &m_bitmap[static_cast<std::size_t>(_row) * ROW_BYTES + static_cast<std::size_t>(_column) * 8];
+
+    const std::size_t base = static_cast<std::size_t>(_row) * ROW_BYTES + static_cast<std::size_t>(_column) * 8;
+    std::array<std::uint8_t, 8> composited{};
+    for (std::size_t subRow = 0; subRow < composited.size(); ++subRow)
+    {
+      composited[subRow] = static_cast<std::uint8_t>(_backdrop.m_bitmap[base + subRow] ^ m_bitmap[base + subRow]);
+    }
+    const std::uint8_t* bits = composited.data();
 
     /*
      * `moonflower`'s bit 4, read from the canvas because that is where the game keeps it.
@@ -215,23 +235,29 @@ namespace Elite
     }
   }
 
-  void Picture::ResolveDashboardCell(std::uint8_t* _out, int _column, int _row) const noexcept
+  void Picture::ResolveDashboardCell(std::uint8_t* _out, const Picture& _backdrop, int _column, int _row) const noexcept
   {
-    // The dashboard plane is already colour indices, one per pixel, so a cell of it is a copy.
+    /*
+     * The dashboard plane is already colour indices, one per pixel, so a cell of it is the two
+     * surfaces exclusive-ored -- which is what the blips and the compass dot were doing to this
+     * plane on one surface already (`ExclusiveOrDot`), on the index rather than on a bit.
+     */
     const std::size_t base = static_cast<std::size_t>(_row * 8 - SPACE_VIEW_HEIGHT) * WIDTH + static_cast<std::size_t>(_column) * 8;
 
     for (int subRow = 0; subRow < 8; ++subRow)
     {
-      const std::uint8_t* source = &m_dashboard[base + static_cast<std::size_t>(subRow) * WIDTH];
+      const std::size_t at = base + static_cast<std::size_t>(subRow) * WIDTH;
+      const std::uint8_t* source = &m_dashboard[at];
+      const std::uint8_t* behind = &_backdrop.m_dashboard[at];
       std::uint8_t* line = _out + static_cast<std::size_t>(subRow) * WIDTH;
       for (int pixel = 0; pixel < 8; ++pixel)
       {
-        line[pixel] = source[pixel];
+        line[pixel] = static_cast<std::uint8_t>((behind[pixel] ^ source[pixel]) & 0x0Fu);
       }
     }
   }
 
-  std::uint64_t Picture::Hash(const Canvas& _canvas) const
+  std::uint64_t Picture::Hash(const Canvas& _canvas, const Picture& _backdrop) const
   {
     constexpr std::uint64_t OFFSET_BASIS = 14695981039346656037ull;
     constexpr std::uint64_t PRIME = 1099511628211ull;
@@ -246,7 +272,7 @@ namespace Elite
      * something other than the golden it was checking.
      */
     std::vector<std::uint8_t> resolved(static_cast<std::size_t>(WIDTH) * HEIGHT, std::uint8_t{0});
-    Resolve(resolved, _canvas);
+    Resolve(resolved, _canvas, _backdrop);
 
     std::uint64_t hash = OFFSET_BASIS;
     for (const std::uint8_t index : resolved)

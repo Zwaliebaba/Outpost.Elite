@@ -135,17 +135,17 @@ namespace GameLogicTests
   } // namespace
 
   /*
-   * `Universe::picture` HAS NO CELLS HERE, and that is the whole of its treatment (Resolution.md
-   * section 3.4).
+   * `Universe::picture` AND `Universe::backdrop` HAVE NO CELLS HERE, and that is the whole of
+   * their treatment (Resolution.md section 3.4, and RN-0 for the second).
    *
-   * Every cell below mirrors a 6502 address, and the 640x400 picture has none: the original had no
+   * Every cell below mirrors a 6502 address, and the 640x400 surfaces have none: the original had no
    * such surface, so there is nothing in the interpreter's memory to write it to or read it back
    * from. It is not an omission to be closed later -- a fixture that recorded it would be recording
    * this port's own rendering against nothing (Modernize.md section 4.10), and after M6-b there
    * would be no original left to ask.
    *
-   * `Elite::HashState` walks past it too, deliberately, and `StateHash.cpp` carries the reason;
-   * `ThePicture::TheStateHashDeliberatelyDoesNotSeeIt` is what fails if somebody folds it in.
+   * `Elite::HashState` walks past them too, deliberately, and `StateHash.cpp` carries the reason;
+   * `ThePicture::TheStateHashDeliberatelyDoesNotSeeIt` is what fails if somebody folds either in.
    */
   std::vector<Cell> StateCells(Elite::Universe& _universe)
   {

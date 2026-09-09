@@ -119,8 +119,8 @@ namespace Outpost
      * argument: the title screen and every docked screen present before a flight session exists,
      * and a default-constructed `VideoState` would be a lie about registers nothing has written.
      */
-    [[nodiscard]] PresentResult Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
-                                        int _clientWidth, int _clientHeight);
+    [[nodiscard]] PresentResult Present(const Elite::Picture& _picture, const Elite::Picture& _backdrop, const Elite::Canvas& _canvas,
+                                        const Elite::VideoState* _video, int _clientWidth, int _clientHeight);
 
     /// The client area changed. Cheap and idempotent; a zero-sized client (a minimised window) is
     /// ignored rather than resized to, because `ResizeBuffers` rejects it.

@@ -43,7 +43,8 @@ namespace GameLogicTests
     std::vector<std::uint8_t> ResolvePicture(const Picture& _picture, const Canvas& _canvas)
     {
       std::vector<std::uint8_t> out(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT, std::uint8_t{0});
-      _picture.Resolve(out, _canvas);
+      // One surface, so the backdrop it composites over is empty (RN-0): `backdrop ^ frame` is the frame.
+      _picture.Resolve(out, _canvas, Elite::Picture{});
       return out;
     }
 

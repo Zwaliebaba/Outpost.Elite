@@ -124,7 +124,7 @@ namespace Outpost
      * is a core burnt on a picture no one can see. `WaitWhileOccluded` idles instead, and wakes on
      * the first input or uncovering rather than on a timer alone, so nothing is missed by it.
      */
-    switch (m_presenter.Present(*m_picture, *m_canvas, m_video, width, height))
+    switch (m_presenter.Present(*m_picture, *m_backdrop, *m_canvas, m_video, width, height))
     {
     case ScreenPresenter::PresentResult::Lost:
       return false;

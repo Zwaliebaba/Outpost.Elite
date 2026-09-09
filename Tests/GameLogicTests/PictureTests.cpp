@@ -56,6 +56,15 @@ namespace GameLogicTests
       }
     };
 
+    /*
+     * An empty backdrop, for the fixtures below that build ONE surface (RN-0).
+     *
+     * `Resolve` composites a frame over a backdrop by exclusive-or, so an empty one resolves to the
+     * frame exactly. It is spelled out rather than defaulted so that a test which should be passing
+     * a real backdrop cannot do it by omission.
+     */
+    const Elite::Picture NO_BACKDROP;
+
     /// Every pixel of both, with the sprites composited when `_video` is given.
     Pictures ResolveBoth(const Canvas& _canvas, const Picture& _picture, const Elite::VideoState* _video)
     {
@@ -63,12 +72,12 @@ namespace GameLogicTests
       if (_video != nullptr)
       {
         _canvas.Resolve(out.canvas, *_video);
-        _picture.Resolve(out.picture, _canvas, *_video);
+        _picture.Resolve(out.picture, _canvas, NO_BACKDROP, *_video);
       }
       else
       {
         _canvas.Resolve(out.canvas);
-        _picture.Resolve(out.picture, _canvas);
+        _picture.Resolve(out.picture, _canvas, NO_BACKDROP);
       }
       return out;
     }
@@ -194,11 +203,11 @@ namespace GameLogicTests
       canvas.SetSpaceViewBackground(Elite::ColourIndex(Elite::Colour::Green));
 
       std::vector<std::uint8_t> plain(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT);
-      picture.Resolve(plain, canvas);
+      picture.Resolve(plain, canvas, NO_BACKDROP);
 
       canvas.SetSpaceViewMulticolour(true);
       std::vector<std::uint8_t> bombed(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT);
-      picture.Resolve(bombed, canvas);
+      picture.Resolve(bombed, canvas, NO_BACKDROP);
 
       Assert::IsTrue(plain != bombed, L"the bomb's flag did not reach the picture at all");
 
@@ -232,7 +241,7 @@ namespace GameLogicTests
       picture.PlotPoint(25, 17); // cell (3, 2), pixel (1, 1) within it
 
       std::vector<std::uint8_t> out(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT, std::uint8_t{0});
-      picture.Resolve(out, canvas);
+      picture.Resolve(out, canvas, NO_BACKDROP);
 
       const auto at = [&out](int _x, int _y) { return out[static_cast<std::size_t>(_y) * Picture::WIDTH + _x]; };
       Assert::AreEqual<std::uint32_t>(Elite::ColourIndex(Elite::Colour::White), at(25, 17), L"the lit bit takes the cell's high nibble");
@@ -252,7 +261,7 @@ namespace GameLogicTests
       picture.SetDot(101, 300, 7u);
 
       std::vector<std::uint8_t> out(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT, std::uint8_t{0});
-      picture.Resolve(out, canvas);
+      picture.Resolve(out, canvas, NO_BACKDROP);
 
       const auto at = [&out](int _x, int _y) { return out[static_cast<std::size_t>(_y) * Picture::WIDTH + _x]; };
       Assert::AreEqual<std::uint32_t>(5u, at(100, 300), L"an index written to the plane is the index shown");
@@ -260,7 +269,7 @@ namespace GameLogicTests
 
       // With the dashboard off, all fifty rows are the space view's region and the plane is unread.
       canvas.SetDashboardShown(false);
-      picture.Resolve(out, canvas);
+      picture.Resolve(out, canvas, NO_BACKDROP);
       Assert::AreNotEqual<std::uint32_t>(5u, at(100, 300), L"a docked screen has no dashboard region to read the plane from");
     }
 
@@ -329,11 +338,11 @@ namespace GameLogicTests
        * decides which region the lower rows belong to still does.
        */
       canvas.SetDashboardShown(true);
-      const std::uint64_t base = picture.Hash(canvas);
-      Assert::AreEqual(base, picture.Hash(canvas), L"the same surface hashed differently twice");
+      const std::uint64_t base = picture.Hash(canvas, NO_BACKDROP);
+      Assert::AreEqual(base, picture.Hash(canvas, NO_BACKDROP), L"the same surface hashed differently twice");
 
       canvas.Write(0x1D00u, static_cast<std::uint8_t>(canvas.Read(0x1D00u) ^ 0xFFu));
-      Assert::AreEqual(base, picture.Hash(canvas), L"a canvas bitmap byte still reaches a native picture");
+      Assert::AreEqual(base, picture.Hash(canvas, NO_BACKDROP), L"a canvas bitmap byte still reaches a native picture");
 
       /*
        * The raster split still reaches the picture, and showing it needs ink in the plane: with the
@@ -341,9 +350,9 @@ namespace GameLogicTests
        * all. An empty surface hashes the same either way, because black is black.
        */
       picture.SetDot(100, 300, 5u);
-      const std::uint64_t withDashboard = picture.Hash(canvas);
+      const std::uint64_t withDashboard = picture.Hash(canvas, NO_BACKDROP);
       canvas.SetDashboardShown(false);
-      Assert::AreNotEqual(withDashboard, picture.Hash(canvas), L"the raster split stopped reaching the picture");
+      Assert::AreNotEqual(withDashboard, picture.Hash(canvas, NO_BACKDROP), L"the raster split stopped reaching the picture");
       canvas.SetDashboardShown(true);
 
       /*
@@ -354,9 +363,9 @@ namespace GameLogicTests
        * screen printed without it prints invisibly. This test failed that way when it was written.
        */
       picture.SetCell(1, 1, Elite::CellPalette{Elite::Colour::White, Elite::Colour::Black});
-      const std::uint64_t native = picture.Hash(canvas);
+      const std::uint64_t native = picture.Hash(canvas, NO_BACKDROP);
       picture.PlotPoint(11, 13);
-      Assert::AreNotEqual(native, picture.Hash(canvas), L"a plotted point did not move the hash");
+      Assert::AreNotEqual(native, picture.Hash(canvas, NO_BACKDROP), L"a plotted point did not move the hash");
     }
 
     /*
@@ -426,6 +435,14 @@ namespace GameLogicTests
 
       Assert::AreEqual(base, Elite::HashState(universe), L"the picture moved the state hash, which would re-record every replay");
 
+      // And the BACKDROP beside it, which RN-0 added under exactly the same exclusion: it is the
+      // other half of one rendering, not a second thing the game does.
+      universe.backdrop.PlotPoint(9, 10);
+      universe.backdrop.SetDot(11, 320, 4u);
+      universe.backdrop.SetCell(2, 2, Elite::CellPalette{Elite::Colour::Cyan, Elite::Colour::Blue});
+
+      Assert::AreEqual(base, Elite::HashState(universe), L"the backdrop moved the state hash, which would re-record every replay");
+
       // And the canvas beside it still does, so the exclusion is narrow rather than a hole.
       universe.canvas.Write(0x1234u, 0x5Au);
       Assert::AreNotEqual(base, Elite::HashState(universe), L"a canvas byte stopped moving the state hash");
@@ -489,9 +506,9 @@ namespace GameLogicTests
       Assert::AreEqual(before, picture.Generation(), L"a write that landed nowhere stepped the generation");
 
       // And no digest moves with it.
-      const std::uint64_t pixels = picture.Hash(canvas);
+      const std::uint64_t pixels = picture.Hash(canvas, NO_BACKDROP);
       picture.WriteBitmap(9u, picture.ReadBitmap(9u)); // same value: generation moves, pixels do not
-      Assert::AreEqual(pixels, picture.Hash(canvas), L"the generation reached Picture::Hash");
+      Assert::AreEqual(pixels, picture.Hash(canvas, NO_BACKDROP), L"the generation reached Picture::Hash");
     }
 
     /*
@@ -577,16 +594,16 @@ namespace GameLogicTests
       const auto check = [&](const wchar_t* _what, auto&& _change)
       {
         scene();
-        picture.Resolve(before, canvas, video);
-        const std::uint64_t signature = picture.ResolveSignature(canvas, &video);
+        picture.Resolve(before, canvas, NO_BACKDROP, video);
+        const std::uint64_t signature = picture.ResolveSignature(canvas, NO_BACKDROP, &video);
 
         _change();
 
-        picture.Resolve(after, canvas, video);
+        picture.Resolve(after, canvas, NO_BACKDROP, video);
 
         Assert::IsTrue(after != before, (std::wstring(_what) + L" moved no pixel, so this case proves nothing").c_str());
         Assert::IsTrue(
-          picture.ResolveSignature(canvas, &video) != signature,
+          picture.ResolveSignature(canvas, NO_BACKDROP, &video) != signature,
           (std::wstring(_what) + L" changed the picture and not the signature, so the presenter would never resolve it").c_str());
       };
 
@@ -610,10 +627,10 @@ namespace GameLogicTests
        * through the overload that takes none, and the two are different pictures.
        */
       scene();
-      picture.Resolve(before, canvas, video);
-      picture.Resolve(after, canvas);
+      picture.Resolve(before, canvas, NO_BACKDROP, video);
+      picture.Resolve(after, canvas, NO_BACKDROP);
       Assert::IsTrue(after != before, L"a sprite that is switched on resolved the same with and without the registers");
-      Assert::IsTrue(picture.ResolveSignature(canvas, &video) != picture.ResolveSignature(canvas, nullptr),
+      Assert::IsTrue(picture.ResolveSignature(canvas, NO_BACKDROP, &video) != picture.ResolveSignature(canvas, NO_BACKDROP, nullptr),
                      L"a picture with sprites signs the same as one without");
     }
   };

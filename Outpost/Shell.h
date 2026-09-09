@@ -77,6 +77,7 @@ namespace Outpost
     {
       m_canvas = &_universe.canvas;
       m_picture = &_universe.picture;
+      m_backdrop = &_universe.backdrop; // RN-0: what is presented is the two composited
       m_view = &_universe.view;
     }
 
@@ -243,6 +244,7 @@ namespace Outpost
     /// The 640x400 picture this presents, and the canvas above is what it presents it FROM until
     /// every region draws itself (Resolution.md §3.3). Both, because neither is the other's copy.
     Elite::Picture* m_picture = nullptr;
+    Elite::Picture* m_backdrop = nullptr;
 
     /// The sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
