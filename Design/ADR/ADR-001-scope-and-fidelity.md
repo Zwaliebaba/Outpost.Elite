@@ -49,6 +49,20 @@ done at once, because the second has no definition of "correct" until the first 
    green without it and the ledger row says what went.
 5. **Licence posture — owner ruling, 2026-09-02.**
 
+   **THE HISTORY WAS REWRITTEN 2026-09-09 (owner ruling), WHICH IS WHAT THE CLAUSE BELOW SAID
+   WOULD NEVER BE DONE BY THIS PLAN.** `git filter-repo` stripped `Design/Reference/`,
+   `MasterFile/`, the `Upstream` gitlink and `.gitmodules` from every commit, and all three
+   branches were force-pushed. A fresh clone now carries **no object under any of those paths and
+   no blob bearing "copyright D. Braben and I. Bell 1985"**, and it still builds and passes all 131
+   tests and 13 checks. Two commits were pruned as empty because they contained nothing else.
+
+   **IT IS NOT FINISHED AND THIS SECTION MUST NOT PRETEND IT IS.** GitHub retains twenty-four
+   `refs/pull/*` refs that a force-push cannot touch, and every one of them still points at
+   pre-rewrite commits: the blobs stay fetchable by SHA until GitHub Support purges them. Until
+   that request is made and completed, the exposure is reduced for anyone who CLONES and unchanged
+   for anyone who knows a commit hash. Nor can a rewrite un-publish: the repository was public
+   throughout, and forks, mirrors and archives are outside anyone's reach here.
+
    **AMENDED 2026-09-08 AT M6-f, WHICH IS THE AMENDMENT THIS SECTION WAS ALWAYS WAITING FOR.**
    Everything below describes the posture while the port was written against the original, and it
    is kept because it is the reasoning the owner ruled on. What is true at the tip now:
@@ -136,7 +150,8 @@ done at once, because the second has no definition of "correct" until the first 
    What the two rulings share is the finding that prompted them, and it stands: the clause this
    section used to carry -- "nothing is pushed to a public remote until 0e closes" -- had never
    been true. `Zwaliebaba/Outpost.Elite` is public (checked against the GitHub API, not assumed),
-   CI assembles the game on every push, and `MasterFile/` has been tracked since `92a3c7f`. The
+   CI assembled the game on every push, and `MasterFile/` was tracked from the commit that added it
+   until the history was rewritten on 2026-09-09 and that commit ceased to exist. The
    clause is gone, because a rule nobody follows is worse than no rule.
 
    **This does not make the exposure smaller. It makes it accepted rather than mitigated**, and

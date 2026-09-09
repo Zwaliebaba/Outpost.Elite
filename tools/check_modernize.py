@@ -252,7 +252,7 @@ COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 # the residue stayed EMPTY: every hard case cleared with prose, the last being `MemoryMap.h`, whose
 # argument is "the routine is eight instructions and none of them writes code" and which had the
 # eight listed as its evidence. Naming what they do is shorter, says the same, and stays checkable
-# against the port once `Upstream/` is gone -- which the listing does not.
+# against the port now that `Upstream/` is gone -- which the listing does not.
 #
 # So the tag and its counter go together, and `opcode-transcriptions` at zero now has NO EXEMPTION:
 # every instruction listing in a comment is a violation, with nothing to opt out of it. That is a
@@ -305,8 +305,8 @@ def count_opcode_transcriptions(_root: Path) -> int:
 
 
 def count_origin_markers(_root: Path) -> int:
-    """P12 -- `6502:` references in GameLogic/ -- the `//` markers inventory.py reads and the `*`-prefixed
-    ones inside block comments alike -- read from the RAW text because they are comments."""
+    """P12 -- `6502:` references in GameLogic/ -- the `//` markers and the `*`-prefixed ones inside
+    block comments alike -- read from the RAW text because they are comments."""
     total = 0
     for path in headers(_root) + sources(_root):
         total += len(ORIGIN_MARKER.findall(path.read_text(encoding="utf-8", errors="replace")))
@@ -315,9 +315,9 @@ def count_origin_markers(_root: Path) -> int:
 
 # The identifiers that are 6502 labels and nothing else (P12, Design/Modernize.md M6-c).
 #
-# WRITTEN AS A LIST AND NOT DERIVED FROM `Upstream/`, for two reasons. The first is that it has to
-# keep working after M6-f deletes the upstream tree, and a counter that reads the original cannot
-# read zero once the original is gone. The second is that "is a label" is not the question: 135
+# WRITTEN AS A LIST AND NOT DERIVED FROM `Upstream/`, for two reasons. The first is that it had to
+# keep working after M6-f deleted the upstream tree -- a counter that read the original could not
+# read zero once the original was gone -- and it does. The second is that "is a label" is not the question: 135
 # identifier spellings in `GameLogic/` are labels of the C64 build, and most of them are labels
 # BECAUSE THE ORIGINAL ALSO NEEDED A WORD FOR THE THING -- `view`, `status`, `type`, `energy`,
 # `name`, `counter`, `pixel`, `swap`, `sun`, `junk`, `cash`, `checksum`, `x1`, `y1`, `x2`, `y2` --

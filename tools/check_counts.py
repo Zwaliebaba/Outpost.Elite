@@ -88,7 +88,12 @@ def count_checks() -> int:
 
 
 def count_generated_tables() -> int:
-    """`constexpr std::array` definitions in the files tools/extract_tables.py and tools/bitmaps.py own."""
+    """`constexpr std::array` definitions in the generated data files.
+
+    Keyed on the header `extract_tables.py` wrote into each of them. That tool went with the
+    original at M6-f and the header stays, because it is the true record of where the bytes came
+    from -- the tables are the port's own data now and nothing regenerates them.
+    """
     total = 0
     for source in sorted((REPO / "GameLogic").glob("*.cpp")):
         text = source.read_text(encoding="utf-8", errors="replace")

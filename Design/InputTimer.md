@@ -20,7 +20,7 @@ sit beside M6-a; where it touches a decision an ADR owns, it says which ADR chan
 The upstream submodule was empty in the environment this was written in, so the original's
 `TT217`, `RDKEY`, `DK4`, `DKS3`, `TT17`, `TT16`, `DELAY` and `WSCAN` were fetched from the pinned
 commit `aa3f7ee` directly and read as the C64 branch of each. Every claim below about the original
-comes from those eight files; every claim about the port comes from the tree at `15f0e74`.
+comes from those eight files; every claim about the port comes from the tree at `32ab2a8`.
 
 ---
 
@@ -210,7 +210,7 @@ so the pause screen's letters and the text editor's digits do not have to be the
 `lParam` bits 16–24 and that is enough for a game that does not need to distinguish two keyboards.
 
 **AND THE MAP HAD TWELVE HOLES IN IT, found by the owner on 2026-09-08 and fixed the same day**
-(`7cb33e0`). Every letter `KeyMap` bound was bound because a CONTROL wanted it -- "T" targets a
+(`7d318d0`). Every letter `KeyMap` bound was bound because a CONTROL wanted it -- "T" targets a
 missile, "D" asks for a distance -- and the twelve letters no control uses had no matrix position at
 all, nor did "0". `MT26` reads the CHARACTER `TRANTABLE` gives the position, so an unbound key
 arrived as 0, fell outside the line editor's "!" to "z" and rang the bell instead of appearing: a
@@ -1013,7 +1013,7 @@ whenever rather than needing a window at all. **One slice is rescoped**: T-3 nam
 generation counter, and the layer is two surfaces under ADR-008 now, so §5.6 is rewritten for a
 counter per surface and the paragraph it earns goes in ADR-008 rather than ADR-005 §1 -- and the
 finding it rests on got worse rather than better, because ADR-008 §2's twin rule means a hold loop
-redraws both surfaces. **One finding is enlarged**: the owner's own fix (`7cb33e0`) found that
+redraws both surfaces. **One finding is enlarged**: the owner's own fix (`7d318d0`) found that
 twelve letters and "0" had no matrix position, so the line editor rang the bell instead of typing
 them and JAMESON was a name a player could not type back. That is I-1's defect class at another
 seam and it is folded into I-5, with the "S"/"X" dual binding it introduced folded into §5.3 as the

@@ -145,6 +145,15 @@ jobs:
       - name: Build and run the suite
         run: Tests/PortableRunner/run_tests.sh
 
+      # M6-b-8: `mutate.py --check` proves each unit HAS a selftest and that its `find` still
+      # matches; it cannot prove the selftest still MEANS anything. Four of five had rotted
+      # silently -- anchored to behaviour only the deleted comparisons observed -- and because a
+      # surviving selftest stops a full run on the first unit, a rotted anchor hides every result
+      # behind it. This runs them: one mutant per unit, about forty seconds on top of the suite,
+      # and it needs the compiler this job already has.
+      - name: Every unit's selftest still fails its own tests
+        run: python tools/mutate.py --check-selftests --runner portable
+
   windows:
     name: Debug x64 build and tests
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository

@@ -59,14 +59,14 @@
       "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is §4.3.1)"
     },
     "mutants": {
-      "ceiling": 97,
+      "ceiling": 8,
       "slack": 0,
-      "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
+      "slice": "M6-b-8: 89 of 97 deleted -- what the oracle's removal left with nothing to catch it"
     },
     "mutant-files": {
-      "ceiling": 17,
+      "ceiling": 4,
       "slack": 0,
-      "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
+      "slice": "M6-b-8: 89 of 97 deleted -- what the oracle's removal left with nothing to catch it"
     },
     "origin-markers": {
       "ceiling": 0,
