@@ -451,6 +451,31 @@ makes the starfield vanish from the frame, which shows up as `ThePictureIsAsReco
 checkpoint 0's digest at checkpoint 1 (both frames then being backdrop-only). Read
 `MoveStardustAhead` whole before touching it; do not infer from the parameter names.
 
+**(d) "PIXEL-IDENTICAL" CANNOT BE MET, AND THE REASON IS A DEFECT IN THE GATE.** Measured
+2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
+flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
+
+| checkpoint (step) | 0 | 40 | 100 | 200 | 300 | 340 | 342 | 400 |
+|---|---|---|---|---|---|---|---|---|
+| frame ink, tree as it stands | 0 | 563 | 581 | 582 | **12** | **13** | **11** | 82 |
+| frame ink, clear on + drops | 0 | 563 | 1559 | 2034 | 1568 | 404 | 21 | 537 |
+| backdrop ink, both | 4212 | 4212 | 4212 | 4212 | 4212 | 4212 | 4212 | 4212 |
+
+**Twelve pixels of frame at step 300.** `ThePictureIsAsRecorded` is therefore recording, for most
+of its checkpoints, the BACKDROP and almost nothing else: the checkpoint lands at a moment when the
+pass's transients have been erased and the next pass has not drawn them. That is why RN-0's site
+moves were invisible to it, and it is why the table cannot be the thing RN-1 holds identical — with
+a frame that is cleared and redrawn whole, the checkpoint sees the ships and the starfield a player
+is looking at, and the digests move by design.
+
+So RN-1 cannot both clear the frame and leave `RECORDED_PICTURE` unmoved. **That is a decision for
+the owner, not for the agent**, and the slice stops until it is taken. The two shapes are: sample
+the picture AT THE PRESENT (a watching presenter, as `RECORDED_RINGS` already does) and re-record
+the table on the tree before the clear, so the gate compares like with like; or accept the
+re-record with the reason and the ink table above as the evidence. The first is more work and gives
+a gate that means something afterwards; the second is a re-record of a table that was not measuring
+what it claimed.
+
 **Steps, as three commits.** (1) `Game::EndFrame`, `Frame.h`'s wrappers, the sixteen sites, the
 replay driver and `Main.cpp` calling them — with `Clear` still a no-op behind a `constexpr bool`
 so the digests prove the plumbing alone. **BUILT 2026-09-09; nineteen sites, not sixteen.** (2) The clear switched on, the six drops made, the sun
