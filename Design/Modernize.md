@@ -1710,13 +1710,59 @@ M1-a's first file and the worked example every later slice copies.
 | **R18** | The ratchet's ceilings are lowered to match the tree rather than the tree lowered to match the plan (a number with no decision behind it). | `check_modernize.py`'s slack check. | Rule 5; a ceiling change needs a journal entry naming the slice. |
 | **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-0-f's instrument, on every push since 2026-09-07; the M0-c replay's breadth, which reaches death and the escape pod since M6-0-b. | M6 is last; the review is a tool's output and a gate, not a report; a fixture is never re-recorded (rule 1). |
 | **R20** | Rewriting the comments loses the reasons — the commentary records WHY a carry matters, and prose that says only WHAT is worth less than the assembly it replaced. | M6-d, per file. | The rule for M6-d is "keep the reason, drop the transcription"; a comment that cannot be rewritten without losing its reason keeps the instruction sequence as a quotation. |
-| **R21** | Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them. | Not validated by this plan. | Owner decision, out of this plan's scope (§1 R-d); recorded so that M6-f is not mistaken for having done it. |
+| **R21** | ~~Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them.~~ **CLOSED 2026-09-09 by owner ruling: the history was rewritten** (§8, M6-b-11). | **Validated by a fresh clone**: zero objects under `Design/Reference/`, `MasterFile/`, `Upstream` or `.gitmodules`, zero blobs bearing the original's copyright header, and the suite and checks green on the rewritten tip. | The residue is not ours to close: GitHub keeps 24 `refs/pull/*` refs that a force-push cannot reach, and purging them is a request to GitHub Support. §1 R-d said this was out of the plan's scope and it was — the owner took it out of scope and then took it. |
 | **R23** | **A fixture that answers the tests as they are is 222 MB, and a fixture that is small needs 73 of them to stop asking per case.** Measured at M6-a-2: 3,229,712 calls, 98.5% of them with an input no earlier call had, so there is nothing to share and no record-size threshold that helps. Beside it, a smaller and harder one: after the interpreter goes, a test still finds its routine with `oracle.Label` and builds its machine from the assembled 64 KB, and §1 R-c sends the label table away with the oracle. | Measured, not estimated: §4.10 and §8 carry the histogram and the per-test table. | **Ruled 2026-09-08 (§1 R-f and R-g), and M6-b's row is rewritten to it.** The sweeps fold their own answers against a digest and everything else keeps a record, which is 25 MB; the labels become generated constants and the assembled image stays out of the tree. The residual risk the ruling accepts — tests that read image bytes no call ever wrote — is M6-b's first measurement rather than its first assumption. |
 | **R22** ✅ **closed 2026-09-06** | The altitude's radicand low byte is a stale scratch byte: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left. The risk as written also said `LOIN` writes `Q` on every line and the port keeps it local — **and that half was false**: this build's `LOIN` works in `P2`, `Q2`, `R2`, `S2` at 188–191 and never touches `Q` at 154. The claim came from the BBC commentary, which is where M2-c-1's `T`/`T2` defect came from too. | `TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances; `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range over six bubble shapes and lets each side decide `Q` for itself. `ALTIT` is in the compared image. | **Closed by measurement, not by ruling.** Neither fix was needed: `LOIN` had nothing to publish, and the frame's `Q` agrees with the game's on every shape the sweep covers. The fixture found a different defect on the way — `MA23` reaches `SBC #36` with the carry CLEAR, so the planet's radius costs 37 — which is fixed and the replay re-taken (§8). |
 
 ---
 
 ## 8. Journal
+
+**2026-09-09 — M6-b-11: the history rewritten. R21 closed by the owner, not by this plan.**
+
+R21 said deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f,
+and that whether the history is rewritten is an owner decision out of this plan's scope. It was.
+The owner took it, on the day M6-b-10 reported that `Design/Reference/` had reached `main` by
+accident, and ruled the widest scope: strip everything derived from the original in one pass.
+
+**What was done.** `git filter-repo --invert-paths` over `Design/Reference`, `MasterFile`,
+`Upstream` and `.gitmodules`, on a mirror clone, with an untouched backup mirror taken first. All
+three branches force-pushed: `main` 89de8e2 → 5ebee9b, this branch a70b0c9 → acefb92,
+`buy-cargo-market-screens` 92177a3 → f8ab2b5.
+
+**What was verified, on a FRESH CLONE rather than on the working copy** -- which mattered, because
+the working copy still held the pre-rewrite objects and reported the stripped paths as present, and
+reading that as a failed rewrite would have been the obvious wrong conclusion. A clone of the new
+`main` has **zero objects under any stripped path and zero blobs bearing "copyright D. Braben and
+I. Bell 1985"**, and passes 131 tests and 13 checks. The tip trees are identical to the old tips
+wherever the files had already been deleted, and where they differ the diff is exactly the stripped
+paths and nothing else.
+
+**Two commits were pruned as empty, and both were checked rather than assumed.** `Sync Source code`
+added `MasterFile/` and nothing else -- 13 files, 5,616 lines. A one-line `Sprites added` touched
+only a reference file; the 28-file commit of the same name survives, which is why the subject
+disappearing from `main` needed looking at rather than counting.
+
+**`Upstream/` never held a byte of the library.** Every entry at that path across all 443 commits
+is a `160000` gitlink, and there are zero blobs under it -- so ADR-001 §5's claim that "none of the
+~3,000 unlicensed files has ever entered this repository's history" was exactly true, and the strip
+removed a 40-character pointer rather than content.
+
+**IT IS NOT FINISHED, AND THE PART THAT IS LEFT IS NOT OURS TO DO.** GitHub keeps twenty-four
+`refs/pull/*` refs. A force-push cannot touch them, every one still points at a pre-rewrite commit,
+and the blobs stay fetchable by SHA until GitHub Support purges them. A rewrite also cannot
+un-publish: the repository was public throughout. ADR-001 §5 and Risk R1 both say so rather than
+reporting a clean result.
+
+**One consequence worth naming before it is acted on**: those same `refs/pull/*` refs are now the
+only copy of the pre-rewrite history that outlives this session's scratch backup. Purging them
+destroys it. If any of that history is wanted as an archive, it has to be taken before the request
+to Support, not after.
+
+Eight commit hashes cited across the corpus were retargeted through `filter-repo`'s own commit map;
+`92a3c7f` has no successor and the three sentences that named it are rewritten to say what is now
+true.
+
 
 **2026-09-09 — M6-b-10: 49,083 lines of the original's symbol table and assembly listings reached
 `main`, and M6-f's own change is why.**
@@ -3257,7 +3303,7 @@ that reaches it; both rewrites left it sitting on the path that does not. All th
 before the slice landed, by reading the original again rather than the paragraph. The cheap check for a whole file is that every claim the rewrite makes is
 one the source can be asked about.
 
-**A mechanical rename struck prose in M4-c-3 and sat unnoticed through two phases.** `ea6c8cb`
+**A mechanical rename struck prose in M4-c-3 and sat unnoticed through two phases.** `d248af2`
 renamed `carry` to `_frame.carry` and the substitution landed inside a sentence: "so the NEXT pass's
 first `DORND` rotates in the _frame.carry `NWSHP` returned". M6-d-14 reflowed the line above it
 without seeing it. Found by surveying every comment block for a port identifier standing where an
