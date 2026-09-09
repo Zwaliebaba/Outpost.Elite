@@ -43,6 +43,7 @@ namespace Elite
     m_bitmap.fill(0);
     m_cells.fill(CellPalette{});
     m_dashboard.fill(0);
+    ++m_generation; // a blank picture is a different picture -- see `Generation`
   }
 
   void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas) const noexcept
@@ -89,6 +90,72 @@ namespace Elite
         }
       }
     }
+  }
+
+  std::uint64_t Picture::ResolveSignature(const Canvas& _canvas, const VideoState* _video) const noexcept
+  {
+    /*
+     * FNV-1a, the same one `Hash` uses -- over the INPUTS rather than the pixels (see the header).
+     *
+     * A collision here is a frame the player does not see, and 64 bits over the eleven hundred
+     * bytes below makes that a number too small to plan around. The nearer hazard by far is the
+     * list being short of a read, which is what `PictureTests` is for.
+     */
+    constexpr std::uint64_t OFFSET_BASIS = 0xCBF29CE484222325ull;
+    constexpr std::uint64_t PRIME = 0x100000001B3ull;
+
+    std::uint64_t hash = OFFSET_BASIS;
+    const auto foldByte = [&hash](std::uint8_t _byte) noexcept { hash = (hash ^ static_cast<std::uint64_t>(_byte)) * PRIME; };
+    const auto foldWord = [&foldByte](std::uint32_t _value) noexcept
+    {
+      for (int shift = 0; shift < 32; shift += 8)
+      {
+        foldByte(static_cast<std::uint8_t>((_value >> shift) & 0xFFu));
+      }
+    };
+
+    foldWord(m_generation);
+
+    // The colour RAM, which `ResolveBitmapCell` reads for a multicolour cell's %11 pair.
+    for (int cell = 0; cell < Canvas::CELL_COLUMNS * Canvas::CELL_ROWS; ++cell)
+    {
+      foldByte(_canvas.CellColour(cell));
+    }
+
+    // The raster state, which this surface does not hold.
+    foldByte(_canvas.DashboardShown() ? 1u : 0u);
+    foldByte(_canvas.SpaceViewMulticolour() ? 1u : 0u);
+    foldByte(ColourIndex(_canvas.SpaceViewBackground()));
+    foldByte(ColourIndex(_canvas.Background()));
+
+    // santana and lotus, and the eight pointers `CompositeSprites` reads out of screen memory.
+    for (const std::uint8_t byte : _canvas.SpriteMulticolour())
+    {
+      foldByte(byte);
+    }
+    for (const Colour colour : _canvas.ExplosionColour())
+    {
+      foldByte(ColourIndex(colour));
+    }
+    for (std::size_t sprite = 0; sprite < SPRITE_COUNT; ++sprite)
+    {
+      foldByte(_canvas.Read(static_cast<std::uint16_t>(Canvas::SPRITE_POINTERS + sprite)));
+    }
+
+    foldByte((_video != nullptr) ? 1u : 0u);
+    if (_video != nullptr)
+    {
+      foldByte(_video->enabled);
+      foldByte(_video->expanded);
+      for (std::size_t sprite = 0; sprite < SPRITE_COUNT; ++sprite)
+      {
+        foldWord(_video->x[sprite]);
+        foldByte(_video->y[sprite]);
+        foldByte(ColourIndex(_video->colour[sprite]));
+      }
+    }
+
+    return hash;
   }
 
   void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const VideoState& _video) const noexcept

@@ -52,11 +52,11 @@ namespace Elite
     // Derived from `Canvas` rather than restated, so that "twice" is a fact the compiler keeps
     // rather than a second set of numbers somebody has to keep in step (AGENTS.md section 6).
 
-    static constexpr int WIDTH = Canvas::WIDTH * 2;                ///< 640
-    static constexpr int HEIGHT = Canvas::HEIGHT * 2;              ///< 400
-    static constexpr int CELL_COLUMNS = Canvas::CELL_COLUMNS * 2;  ///< 80
-    static constexpr int CELL_ROWS = Canvas::CELL_ROWS * 2;        ///< 50
-    static constexpr int ROW_BYTES = CELL_COLUMNS * 8;             ///< 640: one character row of the bitmap
+    static constexpr int WIDTH = Canvas::WIDTH * 2;               ///< 640
+    static constexpr int HEIGHT = Canvas::HEIGHT * 2;             ///< 400
+    static constexpr int CELL_COLUMNS = Canvas::CELL_COLUMNS * 2; ///< 80
+    static constexpr int CELL_ROWS = Canvas::CELL_ROWS * 2;       ///< 50
+    static constexpr int ROW_BYTES = CELL_COLUMNS * 8;            ///< 640: one character row of the bitmap
 
     /// The space view's left margin, eight character cells -- twice the four `ylookup` gives the
     /// canvas. A MARGIN and not view: the field of view is the same, at twice the resolution
@@ -106,6 +106,7 @@ namespace Elite
       if (_offset < BITMAP_SIZE)
       {
         m_bitmap[_offset] = _value;
+        ++m_generation;
       }
     }
 
@@ -114,6 +115,7 @@ namespace Elite
       if (_offset < BITMAP_SIZE)
       {
         m_bitmap[_offset] ^= _mask;
+        ++m_generation;
       }
     }
 
@@ -156,6 +158,7 @@ namespace Elite
       if (cell < CELL_COUNT)
       {
         m_cells[cell] = _palette;
+        ++m_generation;
       }
     }
 
@@ -176,6 +179,7 @@ namespace Elite
       if (at < DASHBOARD_SIZE)
       {
         m_dashboard[at] = static_cast<std::uint8_t>(_index & 0x0Fu);
+        ++m_generation;
       }
     }
 
@@ -188,6 +192,7 @@ namespace Elite
       if (at < DASHBOARD_SIZE)
       {
         m_dashboard[at] ^= static_cast<std::uint8_t>(_index & 0x0Fu);
+        ++m_generation;
       }
     }
 
@@ -229,6 +234,36 @@ namespace Elite
       m_drawing = _drawing;
     }
 
+    // ---- what has changed ---------------------------------------------------------------------
+
+    /*
+     * A counter the presenter uses to ask "is this the same picture as last time?" (T-3).
+     *
+     * It steps on every write that LANDS -- every mutator below and above, `Clear` included -- and
+     * on nothing else. It does not say what changed or how much, only that the answer to "may I
+     * reuse the pixels I resolved last frame" is no; a write of the byte that was already there
+     * steps it too, which costs a redundant resolve and never a missed frame. That bias is the
+     * whole design of it: a false "changed" is a frame's work, a false "unchanged" is a frame the
+     * player never sees.
+     *
+     * WHY A COUNTER AND NOT A FLAG THE PRESENTER CLEARS. `Picture` is `GameLogic`'s and the
+     * presenter is `Outpost`'s (ADR-004 §1); a flag the reader clears is a write from the platform
+     * into game-adjacent state, and two readers would then fight over it. A counter the writer
+     * steps and the reader only compares has one owner.
+     *
+     * IT IS NOT GAME STATE, and it lives here for `m_drawing`'s reason: this surface is ALREADY
+     * the field `HashState` and `StateCells` skip whole (ADR-008 §4), so a counter inside it
+     * inherits that exclusion and opens no new hole. `Hash` cannot see it either -- `Hash` resolves
+     * to pixels and folds those -- and `PictureTests` asserts both halves.
+     *
+     * Wrapping at 2^32 is not a hazard worth guarding: it would take a mis-compare with a picture
+     * exactly four billion writes old, and every one of those writes had to be presented.
+     */
+    [[nodiscard]] std::uint32_t Generation() const noexcept
+    {
+      return m_generation;
+    }
+
     // ---- the picture -------------------------------------------------------------------------
 
     /// Blank every plane. The regions are NOT reset: which slices have landed is a fact about the
@@ -256,6 +291,35 @@ namespace Elite
     /// definitions. An overload rather than a defaulted argument for `Canvas::Resolve`'s reason:
     /// a golden wants the picture the game drew and a presenter wants what a person would see.
     void Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const VideoState& _video) const noexcept;
+
+    /*
+     * Everything the two `Resolve`s above READ, folded to one number, so that a caller can ask
+     * "would this resolve to what the last one did?" without doing it (T-3).
+     *
+     * WHAT IT IS FOR. `Resolve` writes 256,000 indices, and a docked screen waiting on a key
+     * would redo them at the panel's refresh rate for a picture that has not moved since the glyph
+     * that drew it. `ScreenPresenter` resolves only when this number moves.
+     *
+     * IT IS A SIGNATURE OF THE INPUTS AND NOT OF THE RESULT, which is the only way it can be
+     * cheaper than the thing it replaces -- and it is why the list has to be COMPLETE rather than
+     * representative. It is here, beside the reads, rather than in the presenter that wants it,
+     * for exactly that reason: a `Resolve` that gains a read and a signature that does not are one
+     * screenful apart in this file instead of a project away, and `PictureTests` can hold the two
+     * together on a machine with no display, which is where the failure would otherwise hide.
+     *
+     * WHAT IS IN IT: this surface's `Generation`; the canvas's colour RAM, which a multicolour
+     * cell's %11 pair comes from; the four raster values `Resolve` reads -- the dashboard-shown
+     * flag, the space view's multicolour bit and background, and the border background; the sprite
+     * registers `CompositeSprites` reads off the canvas, which are the two multicolour bytes, the
+     * two explosion colours and the eight sprite pointers; and the `VideoState`, whole, including
+     * whether there was one -- "no sprites" is a different picture from "these sprites".
+     *
+     * The bias is deliberate and one-sided: this may say "changed" when the pixels would not have
+     * (`Generation` steps on a write of the byte that was already there), and must never say
+     * "unchanged" when they would have. A false change costs a frame's work; a false sameness
+     * costs the frame.
+     */
+    [[nodiscard]] std::uint64_t ResolveSignature(const Canvas& _canvas, const VideoState* _video) const noexcept;
 
     /*
      * FNV-1a over the resolved indices, for the screen goldens (Resolution.md section 8.3).
@@ -297,6 +361,9 @@ namespace Elite
 
     /// See `Drawing` -- true except inside section 8.4's replay. Not game state and never folded.
     bool m_drawing = true;
+
+    /// See `Generation` -- stepped by every write that lands. Not game state and never folded.
+    std::uint32_t m_generation = 0;
   };
 
   /*

@@ -492,8 +492,16 @@ in four places, all in `Outpost/`:
   after a vertical blank, samples, steps and presents into the next one: §2.3's last row becomes one
   refresh, and the measurement is PresentMon's `MsBetweenPresents` and `MsUntilDisplayed` on a
   scripted key, taken before and after and written into T-3's journal entry.
-- `Present` is called only when `FrameChanged()`; a turn that changed nothing waits on the object
-  and does no CPU or GPU work.
+- The RESOLVE is done only when the picture's inputs moved, and the present is done every turn.
+  **This sentence said the opposite until T-3 built it** — "`Present` is called only when
+  `FrameChanged()`; a turn that changed nothing waits on the object and does no CPU or GPU work" —
+  and it cannot work: the latency object is a semaphore released when a PRESENTED frame retires, so
+  a turn that skipped the present would leave nothing to retire and the next wait would run to its
+  cap. The present is also the vertical sync every hold in `Shell.cpp` counts turns against. What
+  actually costs is the 256,000-pixel resolve and the 250 KB upload behind it, and those are what a
+  turn that changed nothing now skips; the texture is a separate resource from the back buffer, so
+  it survives the flip. `Picture::ResolveSignature` is the question "did anything `Resolve` reads
+  move", answered beside the reads and held there by `PictureTests`.
 - `DXGI_STATUS_OCCLUDED` puts the loop on `MsgWaitForMultipleObjects` with a 100 ms cap, so a hidden
   window costs ten wake-ups a second and not a core; minimised stays `WaitMessage` as today.
 - Vsync stays on and tearing stays off: at three to twenty-one steps a second a variable-refresh
@@ -570,7 +578,7 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 | Slice | What | Gate | Ratchets and checks | Sittings |
 |---|---|---|---|---|
 | **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->257) falls; ADR-005 §3 | 2 |
-| **T-3** The presenter | §3.7: the waitable object, latency one, present-on-change over the picture's generation counter (or the frame surface's once RN-0 lands), occlusion idle | The picture's own goldens unchanged; PresentMon before and after on a scripted key, numbers in the journal; CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
+| **T-3** ✅ **built 2026-09-09 (§10)** | §3.7: the waitable object, latency one, **resolve**-on-change over `Picture::ResolveSignature` (not present-on-change — see §3.7 and §10), occlusion idle | The picture's own goldens unchanged; the signature's own test; **owner's, outstanding**: PresentMon before and after on a scripted key, and CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** Finish the split | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
 | **RN-1** The frame boundary | `Picture::Clear` finally called — the frame refreshed from the backdrop at every present; erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
 | **RN-2** ADR-008 amended | T3 deleted; §1's byte count corrected for two surfaces | `check_docs.py`; the ADR's Status table | — | 0.5 |
@@ -835,6 +843,47 @@ all 13 repository checks green say nothing about this change. The Windows job is
 and the two numbers that decide whether the slice is worth its complexity — Task Manager at rest
 with the window covered, and PresentMon's `MsUntilDisplayed` on a scripted key before and after —
 are still the owner's to take.
+
+**2026-09-09 — T-3, second commit: the resolve is skipped, the present is not, and §3.7 was wrong
+about which.** The design said a turn that changed nothing does not PRESENT and waits on the
+latency object instead. It cannot: that object is a semaphore released when a presented frame
+RETIRES, so a turn that skipped the present leaves nothing to retire and the next wait runs to its
+one-second cap — a stall dressed as a saving. The present is also the vertical sync every hold in
+`Shell.cpp` counts turns against, so removing it would take the pacing with it. §3.7's second
+bullet is rewritten to say what the tree does: present every turn, and skip the 256,000-pixel
+resolve and the 250 KB upload behind it, which is where all the cost was. What is left on an
+unchanged turn is a clear, one triangle over a texture that is already resident, and the present.
+
+**The signature moved out of the executable, and the ratchet is what moved it.** It was written
+first as a free function in `ScreenPresenter.cpp`, enumerating what `Picture::Resolve` and
+`CompositeSprites` read. `outpost-elite-names` went 62 → 66 and refused, which was the correct
+answer to a wrong design rather than an obstacle: a list of what two `GameLogic` functions read
+belongs beside those functions, not a project away. `Picture::ResolveSignature` is that list, and
+moving it bought the thing the executable could never have had — a test. `PictureTests` now
+asserts, for each of thirteen reads, that changing it moves the pixels AND moves the signature;
+deleting any one fold from the function fails it. The count came back to 62.
+
+**And the first version of that test proved nothing, which is worth recording.** It ran against a
+default picture — every cell palette black on black, the colour RAM zero, the dashboard not shown —
+where flipping bitmap bits changed no pixel a person could see, so every case passed vacuously. The
+test now asserts that each change moved the pixels BEFORE asserting the signature noticed, and it
+took two attempts to make each of the thirteen cases actually move one. A test that cannot fail is
+worse than no test, because it is counted.
+
+**One thing kept that the test does not justify.** `Present` resolves anyway every 64 turns
+regardless of the signature. The signature is a hand-kept list, and a read added tomorrow to a
+mutation the test does not make would produce a screen that stops updating — silent, total, and on
+a path neither CI leg can see. Sixty-four turns is a third of a second to a second depending on the
+panel, so the net turns that failure into visible lag rather than a freeze, at 1.5 % of the resolve
+it is insuring. It is insurance and not a substitute, and the comment beside it says so.
+
+**A duplicate address removed on the way past.** `Canvas::SCREEN_CELLS + 0x3F8u` was written out in
+`CompositeSprites` and in `SIGHT_SPRITE_CELL`, and the signature wanted it a third time. It is
+`Canvas::SPRITE_POINTERS` now, once, with the paragraph about why reading the first block reads
+both moved onto it.
+
+**147 → 149 tests**, all 13 checks, `outpost-elite-names` and `main-lines` at their ceilings. The
+Windows leg is still the only witness to the presenter half; commit 1's run was green.
 
 ---
 

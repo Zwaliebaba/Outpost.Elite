@@ -135,19 +135,6 @@ namespace Elite
 
   namespace
   {
-    /*
-     * The last eight bytes of screen RAM -- sprite N's pointer lives at base + &3F8 + N.
-     *
-     * WHICH BLOCK IS READ CANNOT MATTER, and that is a property of the game rather than a shrug.
-     * There are two blocks of screen RAM and the VIC-II reads whichever the raster split has
-     * selected, so the pointers exist twice -- and every writer keeps them in step by writing both:
-     * the loader stores each pointer to &63Fx AND &67Fx, and `SIGHT` writes `SIGHT_SPRITE_CELL`
-     * and `SIGHT_SPRITE_CELL_2` on consecutive lines for the same reason. Reading the first block
-     * is therefore reading both. If they ever disagree that is a finding about a writer, not a
-     * decision to be taken here.
-     */
-    constexpr std::uint16_t SPRITE_POINTERS = Canvas::SCREEN_CELLS + 0x3F8u;
-
     /// The colour a HI-RES sprite pixel takes, or -1 for transparent: one bit per pixel, set is the
     /// sprite's own colour and clear is the bitmap showing through.
     [[nodiscard]] int HiresPixel(const std::uint8_t* _row, int _column, Colour _colour) noexcept
@@ -206,8 +193,8 @@ namespace Elite
 
     /// `_width`, `_height` and `_splitRow` are the OUTPUT's, because both surfaces composite the
     /// same eight sprites and only their geometry differs (Design/Resolution.md section 3.3).
-    void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, const SpriteRegisters& _registers, int _left, int _top,
-                    int _scale, int _width, int _height, int _splitRow) noexcept
+    void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, const SpriteRegisters& _registers, int _left, int _top, int _scale,
+                    int _width, int _height, int _splitRow) noexcept
     {
       /*
        * ROW BY ROW, AND THE MODE IS DECIDED INSIDE THE LOOP.
@@ -281,7 +268,7 @@ namespace Elite
         continue; // VIC+&15 -- switched off
       }
 
-      const std::uint8_t pointer = _canvas.Read(static_cast<std::uint16_t>(SPRITE_POINTERS + sprite));
+      const std::uint8_t pointer = _canvas.Read(static_cast<std::uint16_t>(Canvas::SPRITE_POINTERS + sprite));
       const int definition = static_cast<int>(pointer) - static_cast<int>(SPRITE_POINTER_ORIGIN);
       if (definition < 0 || definition >= static_cast<int>(SPRITE_DEFINITION_COUNT))
       {

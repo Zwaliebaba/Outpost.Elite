@@ -81,6 +81,23 @@ namespace Elite
     static constexpr std::uint16_t DASHBOARD_CELLS = 0x2400; ///< &6400, via abraxas = &91
     static constexpr std::uint16_t SCREEN_SIZE = 0x2800;
 
+    /*
+     * &63F8 -- sprite N's pointer lives at base + &3F8 + N, the last eight bytes of screen RAM.
+     *
+     * WHICH BLOCK IS READ CANNOT MATTER, and that is a property of the game rather than a shrug.
+     * There are two blocks of screen RAM and the VIC-II reads whichever the raster split has
+     * selected, so the pointers exist twice -- and every writer keeps them in step by writing both:
+     * the loader stores each pointer to &63Fx AND &67Fx, and `SIGHT` writes `SIGHT_SPRITE_CELL`
+     * and `SIGHT_SPRITE_CELL_2` on consecutive lines for the same reason. Reading the first block
+     * is therefore reading both. If they ever disagree that is a finding about a writer, not a
+     * decision to be taken here.
+     *
+     * It is HERE rather than beside one of its readers because there are three: `CompositeSprites`,
+     * `SIGHT_SPRITE_CELL`, and `Picture::ResolveSignature`. An address written out three times is
+     * an address that gets moved twice.
+     */
+    static constexpr std::uint16_t SPRITE_POINTERS = SCREEN_CELLS + 0x3F8u;
+
     /// The 0x20 that ylookup adds to every row -- the space view's left margin, four
     /// character cells. So x 0..255 covers cells 4..35 of 40, which is 128 multicolour pixels of
     /// the 160 across the screen.
@@ -485,7 +502,6 @@ namespace Elite
   /// why negative zero and negative one are the same row; the marker and the reasoning are on the
   /// body in `Lines.cpp`.
   [[nodiscard]] SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept;
-
 
   /*
    * What `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.

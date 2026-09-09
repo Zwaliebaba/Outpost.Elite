@@ -30,6 +30,21 @@ namespace Outpost
 
   namespace
   {
+    /*
+     * How many turns may pass on the signature's word alone before the picture is resolved anyway.
+     *
+     * `Picture::ResolveSignature` is a hand-kept list of what `Resolve` reads, and
+     * `PictureTests` holds it to that list: every mutation it knows about moves the number, and no
+     * mutation moves the PIXELS without moving it. What no test can hold is a read added tomorrow
+     * to a mutation the test does not make, and the failure that produces is a screen that stops
+     * updating -- silent, total, and dependent on which screen you are on.
+     *
+     * Sixty-four turns is between a third of a second and a second depending on the panel, so the
+     * net turns that failure into a visibly laggy screen rather than a frozen one. It does not make
+     * that list optional and it is not a substitute for getting it right.
+     */
+    constexpr std::uint32_t RESOLVE_ANYWAY_AFTER_TURNS = 64;
+
     /// How long a hidden window sleeps before looking again. Ten wake-ups a second costs nothing
     /// and is far short of what a person would notice on uncovering the window.
     constexpr DWORD OCCLUDED_WAIT_MILLISECONDS = 100;
@@ -101,6 +116,9 @@ namespace Outpost
       m_fenceEvent = nullptr;
     }
 
+    m_haveResolved = false;
+    m_turnsSinceResolve = 0;
+
     // The latency object is a handle this object owns, like the fence event beside it, and the
     // whole reason `Destroy` exists is the path where no destructor runs (see the header).
     if (m_frameLatency != nullptr)
@@ -140,6 +158,10 @@ namespace Outpost
 
   void ScreenPresenter::Create(HWND _window)
   {
+    // A new texture holds nothing, so whatever the last presenter resolved is not in it.
+    m_haveResolved = false;
+    m_turnsSinceResolve = 0;
+
     UINT factoryFlags = 0;
 
 #if defined(_DEBUG)
@@ -441,44 +463,78 @@ namespace Outpost
     //
     // The CANVAS goes in beside the screen because the screen holds no raster state and, until the
     // last resolution slice, no pixels of its own for some regions (Resolution.md §3.3).
-    if (_video != nullptr)
+    /*
+     * AND ONLY WHEN SOMETHING CHANGED (Design/Platform.md §3.7, and the departure in §10).
+     *
+     * The design said a turn that changed nothing does not PRESENT. It cannot: the frame-latency
+     * object is a semaphore released when a presented frame retires, so a turn that skipped the
+     * present would leave nothing to retire and the next `WaitForFrame` would block until its
+     * one-second cap -- a stall, not a saving. The present is also the vertical sync every hold in
+     * `Shell.cpp` counts turns against.
+     *
+     * So the present stays every turn and the WORK goes: the 256,000-pixel resolve and the 250 KB
+     * upload behind it, which is all of the cost. What is left on an unchanged turn is a clear, one
+     * triangle over the texture that is already resident, and the present -- and the texture is a
+     * separate resource from the back buffer, so it survives the flip that discards the buffer.
+     */
+    const std::uint64_t signature = _picture.ResolveSignature(_canvas, _video);
+    const bool changed = !m_haveResolved || signature != m_resolvedSignature || m_turnsSinceResolve >= RESOLVE_ANYWAY_AFTER_TURNS;
+
+    if (changed)
     {
-      _picture.Resolve(m_resolved, _canvas, *_video);
+      if (_video != nullptr)
+      {
+        _picture.Resolve(m_resolved, _canvas, *_video);
+      }
+      else
+      {
+        _picture.Resolve(m_resolved, _canvas);
+      }
+
+      m_resolvedSignature = signature;
+      m_haveResolved = true;
+      m_turnsSinceResolve = 0;
     }
     else
     {
-      _picture.Resolve(m_resolved, _canvas);
+      ++m_turnsSinceResolve;
     }
 
     winrt::check_hresult(m_allocators[m_frameIndex]->Reset());
     winrt::check_hresult(m_commands->Reset(m_allocators[m_frameIndex].get(), m_pipeline.get()));
 
-    // Row by row, because the upload heap's pitch is padded to 256 bytes and the image's is not.
-    std::uint8_t* destination = m_uploadMemory[m_frameIndex] + m_footprint.Offset;
-    for (UINT row = 0; row < m_footprintRows; ++row)
+    // The upload and the copy ride with the resolve: skipped together, so the barriers stay
+    // balanced and the texture is simply left in `PIXEL_SHADER_RESOURCE` where the draw wants it.
+    if (changed)
     {
-      std::memcpy(destination + static_cast<std::size_t>(row) * m_footprint.Footprint.RowPitch,
-                  m_resolved.data() + static_cast<std::size_t>(row) * Elite::Picture::WIDTH, Elite::Picture::WIDTH);
+      // Row by row, because the upload heap's pitch is padded to 256 bytes and the image's is not.
+      std::uint8_t* destination = m_uploadMemory[m_frameIndex] + m_footprint.Offset;
+      for (UINT row = 0; row < m_footprintRows; ++row)
+      {
+        std::memcpy(destination + static_cast<std::size_t>(row) * m_footprint.Footprint.RowPitch,
+                    m_resolved.data() + static_cast<std::size_t>(row) * Elite::Picture::WIDTH, Elite::Picture::WIDTH);
+      }
+
+      D3D12_RESOURCE_BARRIER toCopy =
+        Transition(m_texture.get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+      m_commands->ResourceBarrier(1, &toCopy);
+
+      D3D12_TEXTURE_COPY_LOCATION source{};
+      source.pResource = m_uploads[m_frameIndex].get();
+      source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+      source.PlacedFootprint = m_footprint;
+
+      D3D12_TEXTURE_COPY_LOCATION target{};
+      target.pResource = m_texture.get();
+      target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+      target.SubresourceIndex = 0;
+
+      m_commands->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
+
+      D3D12_RESOURCE_BARRIER toShader =
+        Transition(m_texture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+      m_commands->ResourceBarrier(1, &toShader);
     }
-
-    D3D12_RESOURCE_BARRIER toCopy = Transition(m_texture.get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    m_commands->ResourceBarrier(1, &toCopy);
-
-    D3D12_TEXTURE_COPY_LOCATION source{};
-    source.pResource = m_uploads[m_frameIndex].get();
-    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    source.PlacedFootprint = m_footprint;
-
-    D3D12_TEXTURE_COPY_LOCATION target{};
-    target.pResource = m_texture.get();
-    target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    target.SubresourceIndex = 0;
-
-    m_commands->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
-
-    D3D12_RESOURCE_BARRIER toShader =
-      Transition(m_texture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    m_commands->ResourceBarrier(1, &toShader);
 
     D3D12_RESOURCE_BARRIER toTarget =
       Transition(m_backBuffers[m_frameIndex].get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);

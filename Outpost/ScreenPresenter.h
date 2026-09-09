@@ -106,7 +106,7 @@ namespace Outpost
     void WaitWhileOccluded() noexcept;
 
     /*
-     * Resolve the screen, upload it, draw it letterboxed and present on the vertical blank.
+     * Resolve the screen IF IT MOVED, upload it, draw it letterboxed and present on the blank.
      *
      * THIS IS WHERE THE LOOP WAITS. `Present(1, 0)` blocks until the display is ready for the
      * frame, which is what paces the whole program -- there is no timer and no sleep anywhere in
@@ -193,6 +193,16 @@ namespace Outpost
     std::array<std::uint32_t, 2> m_imageSize = {};
 
     std::vector<std::uint8_t> m_resolved;
+
+    /*
+     * What `m_resolved` and the texture were made from, so that a turn that changed nothing costs a
+     * triangle instead of 256,000 pixels (T-3, and `PresentedSignature` in the .cpp says what goes
+     * into it). `m_haveResolved` is false until the first resolve and after `Create` makes a new
+     * texture; `m_turnsSinceResolve` is the safety net's counter, not a statistic.
+     */
+    std::uint64_t m_resolvedSignature = 0;
+    bool m_haveResolved = false;
+    std::uint32_t m_turnsSinceResolve = 0;
   };
 
 } // namespace Outpost

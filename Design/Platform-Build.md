@@ -257,7 +257,14 @@ reads from the canvas), `Picture.h`, `VideoState.h`, `Controls.h` (`SIGHT_SPRITE
    pump, and on `Occluded` waits `MsgWaitForMultipleObjects(1, &latency, FALSE, 100, QS_ALLINPUT)`
    instead of spinning; `ScreenPresenter` exposes the handle for that one call. Delete
    `ScreenPresenter::Ready` (no caller; C-1).
-2. **Present on change.** `Picture` gains `std::uint32_t Generation() const noexcept` and a member
+2. **Present on change.** **BUILT DIFFERENTLY — read Platform.md §10 before touching this.** The
+   present cannot be the thing that is skipped: the latency object is a semaphore released when a
+   presented frame RETIRES, so a skipped present leaves nothing to retire and the next wait runs to
+   its cap, and the present is besides the vertical sync every hold in `Shell.cpp` counts turns
+   against. What the tree skips is the RESOLVE and the upload, on `Picture::ResolveSignature` --
+   which is in `GameLogic` beside the reads it lists, not in the shell, because `outpost-elite-names`
+   refused the shell version and was right to. The paragraph below is the plan as written and is
+   kept for the record. `Picture` gains `std::uint32_t Generation() const noexcept` and a member
    `m_generation` bumped by every mutator (`WriteBitmap`, `ExclusiveOrBitmap`, `SetCell`, `SetDot`,
    `ExclusiveOrDot`, `Clear`) — beside `m_drawing`, not game state, not folded, not resolved; a
    `PictureTests` case asserts `Hash` ignores it and each mutator moves it. The shell keeps a

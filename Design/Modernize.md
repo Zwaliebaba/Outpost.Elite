@@ -6,7 +6,7 @@ source, the labels in the code and the assembly in the comments all go, §6 Phas
 §4 set for phase 6 was met on 2026-09-08, the day before the oracle left**: every oracle suite,
 every whole-bitmap comparison and the docked replay were green on the faithful build, 469 tests
 with the original beside them, all fifteen repository checks passing, and every recorded mutant
-caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->147 tests now, and
+caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->149 tests now, and
 what it can still say is M6-b's subject rather than the gate's. Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
