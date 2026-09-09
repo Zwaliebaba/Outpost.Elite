@@ -28,7 +28,7 @@ settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one p
 no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
 while the oracle was still here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
 repository** since M6-b-7 -- no assembler, no submodule, no assembled game. The suite is
-**<!--count:tests-->133 tests** and
+**<!--count:tests-->139 tests** and
 CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
 The task this corpus planned: take the annotated 6502 source of **Commodore 64 Elite** that sat

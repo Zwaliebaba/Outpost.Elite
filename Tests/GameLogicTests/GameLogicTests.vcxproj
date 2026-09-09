@@ -166,6 +166,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="CommanderTests.cpp" />
+    <ClCompile Include="ControlsTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">

@@ -1,9 +1,10 @@
 # Input and time — what the port does today, and the plan to modernise both
 
-**Status:** analysis and plan, opened 2026-09-08; **six of its thirteen slices are built the same day**
--- I-0, S-1, I-3, T-0, I-1 and T-2, by owner ruling, each recorded in §9 -- and I-2, I-4, I-5,
-T-1, T-3 and T-4 are not, and I-6 was added on 2026-09-09 when the oracle's deletion left the input
-path with no direct test. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
+**Status:** analysis and plan, opened 2026-09-08; **six of its thirteen slices were built the same
+day** -- I-0, S-1, I-3, T-0, I-1 and T-2, by owner ruling, each recorded in §9 -- and I-2, I-4, I-5,
+T-1, T-3 and T-4 are not. **I-6 was added on 2026-09-09 when the oracle's deletion left the input
+path with no direct test, and BUILT the same day** (§9), which takes the count to seven of thirteen
+and unblocks I-2, whose gate had been naming a deleted file. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
 record of what was found; where a finding is closed its heading says so. **The tree moved under the
 plan the same evening** -- M6-c built, M6-d running, the resolution track closed with ADR-008 -- and
 §9's entries say what that voided, rewrote and enlarged -- and **M6 closed on 2026-09-08 with the
@@ -658,7 +659,7 @@ the Windows CI leg (R15).
 | **I-2 `InputFrame` and the layered map** | `InputFrame` as §5.2; the two `Step`s take it; `Window` produces one per outer turn (held from scan codes for the flight set, edge computed with release); `KeyBinding` gains `scanCode` and `layers`; the Docked layer retires the chart rule from `ScanKeyboard`. | `ShellTests` per-layer completeness; `ControlsTests` for `ScanKeyboard` unchanged on the space view; replay digest unchanged. | `main-lines` (250) — `Main.cpp` shrinks; `outpost-elite-names` (61) may fall, lower the ceiling in the same commit | 2 |
 | **I-3 `JSTK` at the seam** ✅ **built 2026-09-08 (§9)** | §5.1: the title's fire test cannot select a joystick until a pad exists; one sentence in ADR-005 §4; `StartUpTests` gains the case. | Oracle comparison of `TITLE` still green (the scripted matrix presses a non-fire key); play: `A` on the title, then fly, damping present. | none | 0.5 |
 | **I-4 Coroutines** | §5.4: `Task`, the awaitable `ReadKey`/`WaitFrames`/`Present`/holds, the screens converted, `Run()` a function over `Game` and a `Platform` that answers the four ports; `GameShell` and `FlightSession` absorbed as Modernize.md §4.8 says; `Abandon` deleted. | Every existing comparison green without change to what it asserts; a new `GameLoopTests` case drives `Run()`'s loop through a docked session, a launch, a pause and a close on the Linux leg; the digest unchanged. | `effects-seams` 5 → 4 if `Presenter` and `Keyboard` fold into `Platform`; `main-lines` falls; `aggregate-refs` unchanged (8) | 4–5 |
-| **I-6 Characterisation tests for the input path** ⭐ **added 2026-09-09, before I-2** | The four routines the deleted `ControlsTests.cpp` covered — `ScanKeyboard`, `ReadFlightControls`, `ReadCrosshairKeys`, `ReadKey` — pinned at the answers they give today, over a table of matrix states, views and damping settings. Not a comparison and the file says so. | The table runs and the numbers are the port's own; a deliberate one-byte change to any of the four fails it. | none | 1 |
+| **I-6 Characterisation tests for the input path** ✅ **added AND built 2026-09-09 (§9)** | The four routines the deleted `ControlsTests.cpp` covered — `ScanKeyboard`, `ReadFlightControls`, `ReadCrosshairKeys`, `ReadKey` — pinned at the answers they give today, over a table of matrix states, views and damping settings. Not a comparison and the file says so. | The table runs and the numbers are the port's own; a deliberate one-byte change to any of the four fails it. | none | 1 |
 | **I-5 Gamepad and remapping** | §5.8 plus a remap file in `LocalAppData`; phase 6, own ADR. | Own ADR's. | — | 3, later |
 
 ### Track T — time
@@ -837,7 +838,7 @@ this path; it is named here because I-2 is the slice that rewrites exactly those
 
 | Slice | Revalidated |
 |---|---|
-| **I-2** | **Gate is void and the slice needs a predecessor.** "`ControlsTests` for `ScanKeyboard` unchanged" names a deleted file. Worse, the instrument that would guard I-2 -- the replay -- is the one I-2 must modify, because `Game::Step` changes signature and the replay drives it. Two rules follow: **I-6 first** (below), and **the signature change and the meaning change are separate commits** -- adapt the replay's driver to `InputFrame` with the same keys and prove all three digests unmoved, and only then let a layer change what a key means. |
+| **I-2** | ~~**Gate is void and the slice needs a predecessor.**~~ **UNBLOCKED 2026-09-09: I-6 is built, and it is that predecessor.** `ControlsTests.cpp` exists again -- as a characterisation of the four routines rather than a comparison -- so I-2's gate can name it and mean something. The rest of the row stands: "`ControlsTests` for `ScanKeyboard` unchanged" names a deleted file. Worse, the instrument that would guard I-2 -- the replay -- is the one I-2 must modify, because `Game::Step` changes signature and the replay drives it. Two rules follow: **I-6 first** (below), and **the signature change and the meaning change are separate commits** -- adapt the replay's driver to `InputFrame` with the same keys and prove all three digests unmoved, and only then let a layer change what a key means. |
 | **I-4** | **Instrument survives, narrowed.** `DockedSessionTests` still drives every docked screen and still asserts that the screens differ from each other, which is what a coroutine conversion could break. The gate "every existing comparison green" now means far fewer comparisons, so the slice is riskier than when it was written; the mitigation is unchanged and stronger -- convert in small groups, digests unmoved. |
 | **T-1, T-3, T-4** | **Unaffected, and now the safest work in the plan.** They touch `Outpost/` only, `ShellTests` covers `PlanSteps`, the cost tables, the viewport and the key map, and none of that moved. If anything the detachment argues for doing them next. |
 | **I-5** | Unaffected; phase 6 and its own ADR. |
@@ -858,6 +859,32 @@ judgement.
 What it buys is the thing I-2 would otherwise not have: a test that fails when the layered map
 changes what a key means in a mode where it should not have. What it explicitly does NOT buy is
 fidelity -- it pins what the port does, and if the port is wrong today it pins the wrong answer.
+
+**BUILT 2026-09-09** as `Tests/GameLogicTests/ControlsTests.cpp`, six tests, and the file's own
+header says in terms that it is not a comparison. Three things came out of building it that the
+plan above did not know:
+
+- **The rates are `ControlState`'s `roll` and `pitch` -- `JSTX` and `JSTY` -- and not
+  `FlightState`'s `rollRate`.** That pair is derived later in the frame, so a test reading it after
+  `ReadFlightControls` sees nothing move however hard a key is held. The first draft did exactly
+  that and failed saying "rolling left moved no rate" while rolling left worked perfectly.
+- **The keys have to go on the PORT'S matrix, not into `universe.keys`.** `ReadFlightControls`
+  opens with `RDKEY`, which clears the logger and refills it from the keyboard, so a logger written
+  by hand is wiped before the first control is read.
+- **`ReadKey` cannot be tested with a still keyboard at all.** It blocks both ways round: a matrix
+  that never presses loops for ever waiting, and one that never releases loops for ever in the
+  outer loop. The script therefore has to advance BETWEEN sweeps, and the only seam that runs there
+  is the presenter -- `WaitFrames` once per outer pass, `Present` once per inner one, which is the
+  "one vertical sync a scan" `Controls.h` calls the port's sampling rate. So the test attaches a
+  presenter where `FlightPort` already offers to be watched and moves the hand from there. **That
+  is a nicer statement of I-1's release-then-press than the plan managed**, and it is the one test
+  here that would fail if I-2 dropped the debounce.
+
+**And one boundary is pinned rather than asserted**: the speed keys do nothing in
+`ReadFlightControls`. Space and "?" are read by the flight loop's part 3, with the cap of 40 and
+the "one is the floor" rule that live there. A rewrite moving speed into the key reader would be
+moving a decision across a seam, so the test says so where it would otherwise have looked like an
+omission.
 That is worth saying in the file itself so no later reader mistakes a characterisation test for a
 comparison. One sitting.
 
