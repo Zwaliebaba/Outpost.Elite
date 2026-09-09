@@ -468,13 +468,30 @@ moves were invisible to it, and it is why the table cannot be the thing RN-1 hol
 a frame that is cleared and redrawn whole, the checkpoint sees the ships and the starfield a player
 is looking at, and the digests move by design.
 
-So RN-1 cannot both clear the frame and leave `RECORDED_PICTURE` unmoved. **That is a decision for
-the owner, not for the agent**, and the slice stops until it is taken. The two shapes are: sample
-the picture AT THE PRESENT (a watching presenter, as `RECORDED_RINGS` already does) and re-record
-the table on the tree before the clear, so the gate compares like with like; or accept the
-re-record with the reason and the ink table above as the evidence. The first is more work and gives
-a gate that means something afterwards; the second is a re-record of a table that was not measuring
-what it claimed.
+So RN-1 cannot both clear the frame and leave `RECORDED_PICTURE` unmoved.
+
+**THE OWNER RULED "SAMPLE AT THE PRESENT" ON 2026-09-09, AND BUILDING IT DISPROVED ITS PREMISE.**
+There is no present to sample. `HoldFlightFrame` appears in `GameLogic` exactly once, in `Die`, and
+`FlightLoop.cpp` contains no call to the presenter at all: **an ordinary flight pass never presents
+inside the library.** The pacing is `Main.cpp`'s, through `Shell::Turn`, which the replay does not
+run. A watch attached over the whole flight fires during `Launch`'s tunnel and then not again until
+the end — sixteen checkpoints came back with two distinct digests between them, fourteen of them
+the picture as the launch left it.
+
+`RECORDED_RINGS` works because the tunnel DOES present in the library, per circle. The flight does
+not, and that is the difference.
+
+**So the ruling needs the flight loop to have a present before it can be carried out**, and that is
+I-4's work — `Run()` becoming a library function — not RN-1's. Until then the checkpoint, once per
+pass at the same place the executable presents, is the only frame boundary the replay can see, and
+"sample at the present" and "sample at the checkpoint" are the same instruction with no present to
+distinguish them.
+
+**What is still unexplained, and should be settled before anything is re-recorded.** The frame holds
+twelve non-zero bytes at step 300 and thousands once cleared. Something erases the pass's transients
+before the pass ends, or the frame is accumulating a difference rather than a picture. Neither
+reading has been established; the ink table is the evidence and the next sitting should start by
+explaining it, not by re-recording around it.
 
 **Steps, as three commits.** (1) `Game::EndFrame`, `Frame.h`'s wrappers, the sixteen sites, the
 replay driver and `Main.cpp` calling them — with `Clear` still a no-op behind a `constexpr bool`
