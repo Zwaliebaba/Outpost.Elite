@@ -324,17 +324,21 @@ namespace GameLogicTests
       Trace trace;
       std::uint32_t step = 0;
       /*
-       * The digest is taken BEFORE the frame ends, and then the frame ends (RN-1, `Frame.h`).
+       * THE BOUNDARY IS PER PASS AND IT IS NOT HERE (RN-1, `Frame.h`).
        *
-       * The order is the whole of what this records. A checkpoint has to hash the frame AS
-       * PRESENTED -- what a person would have seen -- and the boundary comes after that, so the
-       * next pass draws onto an empty frame exactly as it does in the executable's loop. Taking
-       * the digest after the clear would record a blank frame every time and pass for ever.
+       * It was here on RN-1's first commit -- the frame ended at the checkpoint -- and that was the
+       * single largest error of the slice: `Main.cpp` ends the frame every turn and this ended it
+       * once in a hundred steps, so a hundred passes of drawing piled up with nothing taking them
+       * away. `Elite::EndFrame` is called after every `Step` below, which is where the executable
+       * calls it.
+       *
+       * A checkpoint can still hash the frame AS PRESENTED -- what a person would have seen -- and
+       * that is what the LAZY clear is for: `EndFrame` marks and the next write that lands clears,
+       * so the finished frame is still on the surface when this reads it.
        */
       auto checkpoint = [&]() {
         trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()});
         trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas, _port.universe.backdrop));
-        Elite::EndFrame(&_port.universe.picture);
       };
 
       Prepare(_port);
@@ -361,6 +365,7 @@ namespace GameLogicTests
           _keysFor(frame);
           const Elite::LoopOutcome outcome = _port.Step();
           ++step;
+          Elite::EndFrame(&_port.universe.picture);
           if (step % CHECKPOINT_EVERY == 0u)
           {
             checkpoint();

@@ -31,6 +31,17 @@ THREE RULES, and each is narrow on purpose.
    which is how the Windows build broke on RS-0 -- a declaration and its uses drifting apart with
    every check green.
 
+4. AN ERASE THE FRAME BOUNDARY REPLACES HAS NO TWIN, AND MUST NOT GROW ONE BACK. `ERASE_NEEDS_NO_TWIN`
+   names them with a reason each, and the check is the OPPOSITE of rule 2: the routine must still
+   draw on the canvas and must still call no `*2x` routine at all. This is ADR-008's rule T3 going
+   out and being replaced rather than merely dropped. T3 said every erase has a twin erase, and it
+   was right while the picture was never cleared -- the game erases by drawing again, so a twin had
+   to erase too. Platform.md's RN-1 clears the frame at every present, and on a cleared surface a
+   twin erase does not rub last pass's ship out: it DRAWS it, onto an empty frame, as a ghost. An
+   entry here is therefore a decision that has been measured, and the check holds it both ways --
+   put the twin back and this fails, delete the routine's canvas drawing and this fails too, so no
+   entry can go stale in silence.
+
 WHAT IT CANNOT SEE, said plainly. It reads text, not types. A twin called with the wrong arguments,
 on the wrong cell, or in the wrong order still passes here; that is what the shadow tests of
 section 8.1 are for, and they are the instrument that matters. This one catches the pairing being
@@ -91,6 +102,23 @@ NEEDS_NO_TWIN: dict[str, str] = {
                        "is a sprite pointer and a colour register, not pixels",
 }
 
+# An ERASE that RN-1's frame boundary replaces: it draws on the canvas, it deliberately draws on
+# nothing else, and rule 4 holds it to that. The reason is the entry, because the next person to
+# read one of these routines will see a canvas write with no twin beside it and reach for the twin.
+#
+# Seven sites were dropped at RN-1 and three of them are here; the other four are inside routines
+# that still call a twin for something else and so cannot be checked this way -- `LL9` part 9's
+# `OpenHeapRun` (`ShipDraw.cpp`), the laser beam's second `DrawLaserLines` (`FlightLoop.cpp`), the
+# explosion cloud's second `DrawParticles` (`Explosion.cpp`) and `DrawSun`'s two differential arms,
+# which the whole-sun twin `DrawSunFromState2x` replaces at the end of the same routine.
+ERASE_NEEDS_NO_TWIN: dict[str, str] = {
+    "PlotStardust": "the FIRST of the two plots a speck gets each pass, at the position it HAD -- "
+                    "the erase. The second, at the new position, is the one the frame keeps",
+    "EraseSunRow": "HLOIN2, one row of the sun rubbed out; the frame gets the whole sun from "
+                   "`DrawSunFromState2x` instead, because `SUN` draws only the difference",
+    "EraseBall": "WPLS2, the planet walked off its own heap segment by segment",
+}
+
 # What "draws on the canvas" is: a write through something NAMED like a canvas, or one of the pixel
 # primitives. The receiver is checked because a `LineHeap` has `Write` too and a heap write is not
 # drawing -- counting one made the check report `StoreLineCountAndDraw`, which forwards the surface
@@ -137,8 +165,10 @@ def declared_names(_root: Path) -> set[str]:
     return names
 
 
-def check(_root: Path, _twinned: dict[str, str], _paired: dict[str, str]) -> tuple[int, int, list[str]]:
+def check(_root: Path, _twinned: dict[str, str], _paired: dict[str, str],
+          _erases: dict[str, str] | None = None) -> tuple[int, int, list[str]]:
     """Returns (routines checked, files not yet twinned, failures)."""
+    _erases = {} if _erases is None else _erases
     wrong: list[str] = []
     checked = 0
 
@@ -165,10 +195,10 @@ def check(_root: Path, _twinned: dict[str, str], _paired: dict[str, str]) -> tup
             if not DRAWS.search(body):
                 continue
             checked += 1
-            if CALLS_TWIN.search(body) or name in _paired or name in NEEDS_NO_TWIN or name.endswith("2x"):
+            if CALLS_TWIN.search(body) or name in _paired or name in NEEDS_NO_TWIN or name in _erases or name.endswith("2x"):
                 continue
             wrong.append(f"  FAIL  {path.name}: {name} draws on the canvas and calls no 2x twin, "
-                         f"and is in neither PAIRED_BY_CALLER nor NEEDS_NO_TWIN")
+                         f"and is in none of PAIRED_BY_CALLER, NEEDS_NO_TWIN or ERASE_NEEDS_NO_TWIN")
 
     # ---- rule 3: a routine paired by its caller is paired by EVERY caller ------------------------
     for path in sorted(_root.glob("*.cpp")):
@@ -182,6 +212,27 @@ def check(_root: Path, _twinned: dict[str, str], _paired: dict[str, str]) -> tup
                 checked += 1
                 if not re.search(r"\b" + twin + r"\s*\(", body):
                     wrong.append(f"  FAIL  {path.name}: {name} calls {faithful} and not {twin} beside it")
+
+    # ---- rule 4: an erase the frame boundary replaces still has no twin -------------------------
+    seen: set[str] = set()
+    for path in sorted(_root.glob("*.cpp")):
+        if path.name not in _twinned:
+            continue
+        text = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
+        for name, body in functions(text):
+            if name not in _erases:
+                continue
+            seen.add(name)
+            checked += 1
+            if CALLS_TWIN.search(body):
+                wrong.append(f"  FAIL  {path.name}: {name} is an erase the frame boundary replaces "
+                             f"(ERASE_NEEDS_NO_TWIN) and has grown a 2x twin back")
+            elif not DRAWS.search(body):
+                wrong.append(f"  FAIL  {path.name}: {name} is in ERASE_NEEDS_NO_TWIN and no longer "
+                             f"draws on the canvas -- the entry is stale")
+    for name in _erases:
+        if name not in seen:
+            wrong.append(f"  FAIL  ERASE_NEEDS_NO_TWIN names {name}, which no twinned file defines")
 
     outstanding = sum(1 for path in sorted(_root.glob("*.cpp")) if path.name not in _twinned
                       and DRAWS.search(strip_comments(path.read_text(encoding="utf-8", errors="replace"))))
@@ -222,6 +273,20 @@ def self_test() -> int:
             print("FAIL  the self-test's caller that dropped the twin was not reported")
             return 1
 
+        # RULE 4 BOTH WAYS: an erase that grows a twin back, and an entry that has gone stale.
+        (root / "Planted.cpp").write_text("void RubOut(Canvas& _canvas)\n{\n  _canvas.Write(0, 0);\n  RubOut2x(p);\n}\n",
+                                          encoding="utf-8")
+        _, _, regrown = check(root, {"Planted.cpp": "test"}, {}, {"RubOut": "an erase RN-1 dropped"})
+        if not any("has grown a 2x twin back" in line for line in regrown):
+            print("FAIL  the self-test's erase that grew its twin back was not reported")
+            return 1
+
+        (root / "Planted.cpp").write_text("void RubOut(Canvas& _canvas)\n{\n  _canvas.Write(0, 0);\n}\n", encoding="utf-8")
+        _, _, stale = check(root, {"Planted.cpp": "test"}, {}, {"Gone": "an entry nothing defines"})
+        if not any("which no twinned file defines" in line for line in stale):
+            print("FAIL  the self-test's stale ERASE_NEEDS_NO_TWIN entry was not reported")
+            return 1
+
         # A twin naming a routine nothing declares, which is what an M6-c rename would leave.
         (root / "Planted.h").write_text("/// 2x of: Vanished\nvoid Vanished2x(Picture& _p);\n", encoding="utf-8")
         (root / "Planted.cpp").write_text("void Nothing()\n{\n}\n", encoding="utf-8")
@@ -230,7 +295,7 @@ def self_test() -> int:
             print("FAIL  the self-test's twin of a routine that no longer exists was not reported")
             return 1
 
-    _, _, real = check(LOGIC, TWINNED, PAIRED_BY_CALLER)
+    _, _, real = check(LOGIC, TWINNED, PAIRED_BY_CALLER, ERASE_NEEDS_NO_TWIN)
     if real:
         print("FAIL  the tree itself does not pass")
         for line in real:
@@ -238,7 +303,8 @@ def self_test() -> int:
         return 1
 
     print("OK    self-test passed: a planted unpaired routine, a planted caller that dropped its "
-          "twin and a planted twin of a routine that no longer exists were caught, and the tree is clean")
+          "twin, a planted erase that grew its twin back, a planted stale exemption and a planted "
+          "twin of a routine that no longer exists were caught, and the tree is clean")
     return 0
 
 
@@ -246,7 +312,7 @@ def main() -> int:
     if "--self-test" in sys.argv:
         return self_test()
 
-    checked, outstanding, wrong = check(LOGIC, TWINNED, PAIRED_BY_CALLER)
+    checked, outstanding, wrong = check(LOGIC, TWINNED, PAIRED_BY_CALLER, ERASE_NEEDS_NO_TWIN)
 
     print(f"twinned files    {len(TWINNED)}")
     print(f"pairings checked {checked}")

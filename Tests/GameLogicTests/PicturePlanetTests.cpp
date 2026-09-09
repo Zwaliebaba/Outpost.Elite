@@ -3,6 +3,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "Explosion.h"
+#include "Frame.h"
 #include "Lasers.h"
 #include "Lines2x.h"
 #include "LookupTables.h"
@@ -167,6 +168,21 @@ namespace GameLogicTests
         }
       }
       return false;
+    }
+
+    /// How many bytes of the bitmap hold ink, for the assertions that need a NUMBER rather than a
+    /// yes -- RN-1's boundary leaves exactly the next pass's first write behind and nothing else.
+    [[nodiscard]] std::uint32_t InkBytes(const Picture& _picture)
+    {
+      std::uint32_t bytes = 0;
+      for (const std::uint8_t byte : _picture.Bitmap())
+      {
+        if (byte != 0u)
+        {
+          ++bytes;
+        }
+      }
+      return bytes;
     }
   } // namespace
 
@@ -363,9 +379,22 @@ namespace GameLogicTests
       }
     }
 
-    /// And drawing it again takes it off both, which is how the game erases a planet: `WPLS2` walks
-    /// the same heap the circle filled, and the twin reads the same bytes doubled (rule T3).
-    TEST_METHOD(ErasingThePlanetClearsBothSurfaces)
+    /*
+     * THE ERASE IS THE CANVAS'S ALONE, AND THE FRAME BOUNDARY IS THE PICTURE'S (RN-1).
+     *
+     * THIS TEST HELD THE OPPOSITE CONTRACT UNTIL 2026-09-09 and was right to: under rule T3 every
+     * erase had a twin erase, `WPLS2` walked the heap the circle filled and the twin walked it
+     * doubled, and this asserted the picture came back blank. RN-1 deletes that rule for the frame.
+     * The frame is cleared at every present, so an erase twin does not rub last pass's planet out --
+     * it DRAWS it, onto an empty surface, as a ghost. `EraseBall` therefore leaves the picture
+     * exactly as it was -- it does not take one any more, which is the contract said in the
+     * signature rather than asserted here -- and the boundary takes the planet away instead.
+     *
+     * So what is left to assert is the two things a signature cannot say: that the erase does clear
+     * the CANVAS, which is still the game's own memory and still erases by drawing again, and that
+     * the boundary is what clears the picture.
+     */
+    TEST_METHOD(ErasingThePlanetLeavesThePictureToTheFrameBoundary)
     {
       auto universe = std::make_unique<Elite::Universe>();
       universe->heaps.lowestVisibleRow = Elite::SPACE_VIEW_BOTTOM;
@@ -375,12 +404,28 @@ namespace GameLogicTests
                               &universe->picture);
       Assert::IsTrue(AnythingDrawn(universe->picture), L"the planet drew nothing to erase");
 
-      Elite::EraseBall(universe->canvas, universe->heaps, &universe->picture);
+      Elite::EraseBall(universe->canvas, universe->heaps);
 
-      for (const std::uint8_t byte : universe->picture.Bitmap())
-      {
-        Assert::AreEqual<std::uint32_t>(0u, byte, L"the erase left ink on the picture");
-      }
+      const auto blank = std::make_unique<Picture>();
+      Assert::AreEqual(0, Compare(universe->canvas, *blank, Canvas::SPACE_VIEW_HEIGHT).canvasOnly,
+                       L"the erase left the planet on the canvas");
+
+      /*
+       * And the boundary, which is LAZY: `EndFrame` marks and the next write that lands clears, so
+       * that everything looking BETWEEN two passes -- the presenter, the replay's checkpoint --
+       * sees the finished frame rather than a blank one. So the assertion after `EndFrame` is that
+       * the planet is STILL THERE, and one pixel of the next pass is what takes it away.
+       */
+      Elite::EndFrame(&universe->picture);
+      Assert::IsTrue(AnythingDrawn(universe->picture), L"ending the frame blanked it eagerly");
+
+      Elite::PlotPixel2x(universe->picture, 0, 0, 0u);
+
+      // Against the same mark on a surface that never held a planet, so the assertion is "this is
+      // all there is" rather than a byte count somebody has to keep in step with `MARK_WIDTH`.
+      const auto fresh = std::make_unique<Picture>();
+      Elite::PlotPixel2x(*fresh, 0, 0, 0u);
+      Assert::AreEqual(InkBytes(*fresh), InkBytes(universe->picture), L"the next pass did not start on an empty frame");
     }
 
     /*
@@ -398,6 +443,17 @@ namespace GameLogicTests
 
       for (int frame = 0; frame < 3; ++frame)
       {
+        /*
+         * THE FRAME IS ENDED BETWEEN THE THREE, which is the whole point since RN-1.
+         *
+         * `SUN` is a differential renderer and the picture cannot take a difference: the twin draws
+         * the sun WHOLE from the widths the faithful routine leaves in the heap
+         * (`DrawSunFromState2x`), so without a boundary between frames the picture would hold three
+         * suns exclusive-ored together while the canvas held one. The boundary is what makes the
+         * two comparable, and it is what the executable does at every present.
+         */
+        Elite::EndFrame(&universe->picture);
+
         const Elite::Projection centre{static_cast<std::uint8_t>(110 + 9 * frame), 0u, Elite::SPACE_VIEW_CENTRE_Y, 0u};
         Elite::DrawSun(universe->canvas, universe->heaps, universe->math, universe->rng, centre, 34u, &universe->picture);
 

@@ -274,6 +274,79 @@ namespace GameLogicTests
     }
 
     /*
+     * `Clear` AND THE FRAME BOUNDARY, which had no test at all until RN-1 because nothing called
+     * either (Platform.md §3.4).
+     *
+     * All three planes, because a clear that forgot one would show as a stale dashboard or a cell
+     * keeping last screen's palette, and neither is something the bitmap assertions could see.
+     *
+     * And the boundary is LAZY, which is the half worth pinning: `EndFrame` marks, and the next
+     * write that LANDS clears before it. Eager and lazy are identical on the glass and are not
+     * identical to a presenter or a checkpoint reading the surface between two passes -- so the
+     * assertion is that the finished frame is still there AFTER `EndFrame`, and gone once the next
+     * one has begun.
+     *
+     * EACH PLANE SETTLES THE DEBT ON ITS OWN, and the three cases are separate for a reason a
+     * measurement found: written as one case with a pixel as the first write, the bitmap's clear
+     * blanked the other two planes as well and the case passed with `BeginFrameIfStale` deleted
+     * from `SetCell` and from `SetDot`. A test that cannot fail is worse than no test, because it
+     * is counted.
+     */
+    TEST_METHOD(ClearBlanksEveryPlaneAndTheFrameBoundaryIsLazy)
+    {
+      const auto fill = [](Picture& _picture)
+      {
+        _picture.PlotPoint(320, 100);
+        _picture.SetCell(3, 2, Elite::CellPalette{Elite::Colour::White, Elite::Colour::Blue});
+        _picture.SetDot(100, 300, 5u);
+      };
+      const auto lastFrameIsGone = [](const Picture& _picture)
+      {
+        return !_picture.Point(320, 100) && _picture.Cell(3, 2) == Elite::CellPalette{} && _picture.Dot(100, 300) == 0u;
+      };
+
+      {
+        Picture picture;
+        fill(picture);
+        Assert::IsFalse(lastFrameIsGone(picture), L"the three planes were not written in the first place");
+
+        const std::uint32_t before = picture.Generation();
+        picture.Clear();
+        Assert::IsTrue(lastFrameIsGone(picture), L"Clear left one of the three planes standing");
+        for (const std::uint8_t byte : picture.Bitmap())
+        {
+          Assert::AreEqual<std::uint32_t>(0u, byte, L"Clear left ink somewhere else on the bitmap");
+        }
+        for (const std::uint8_t index : picture.Dashboard())
+        {
+          Assert::AreEqual<std::uint32_t>(0u, index, L"Clear left an index somewhere else on the dashboard plane");
+        }
+        Assert::AreNotEqual(before, picture.Generation(), L"a blank picture is a different picture and did not step the generation");
+      }
+
+      // The boundary, opened by each plane's own mutator in turn.
+      const std::array<std::pair<const wchar_t*, void (*)(Picture&)>, 3> openers = {{
+        {L"a pixel", [](Picture& _picture) { _picture.PlotPoint(0, 0); }},
+        {L"a cell", [](Picture& _picture) { _picture.SetCell(0, 0, Elite::CellPalette{Elite::Colour::Red, Elite::Colour::Black}); }},
+        {L"a dashboard dot", [](Picture& _picture) { _picture.SetDot(0, 290, 3u); }},
+      }};
+
+      for (const auto& [what, open] : openers)
+      {
+        Picture picture;
+        fill(picture);
+        picture.EndFrame();
+        Assert::IsFalse(lastFrameIsGone(picture),
+                        (std::wstring(L"ending the frame blanked it eagerly, and a checkpoint would read nothing (") + what +
+                         L")").c_str());
+
+        open(picture);
+        Assert::IsTrue(lastFrameIsGone(picture),
+                       (std::wstring(L"the new frame opened with ") + what + L" and last frame's ink survived it").c_str());
+      }
+    }
+
+    /*
      * Erase-by-redraw is exact here, which is the whole reason the upper surface is a plane of bits
      * rather than an array of colours (Resolution.md section 3.2, ADR-002 section 7).
      */

@@ -1379,7 +1379,12 @@ namespace Elite
      */
     if (_universe.status.viewLaser != 0u && _universe.status.laserCount < LASER_ERASE_LIMIT)
     {
-      (void)DrawLaserLines(_universe.canvas, _universe.burst, _universe.view, &_universe.picture);
+      /*
+       * NO TWIN ON THE FRAME: this is the beam's ERASE, the second of the pass's two draws, and the
+       * frame is cleared each pass (RN-1). On the canvas it is needed; on the frame it would draw
+       * the beam back onto a blank surface.
+       */
+      (void)DrawLaserLines(_universe.canvas, _universe.burst, _universe.view, nullptr);
       _universe.status.viewLaser = 0u;
     }
 
@@ -1510,7 +1515,7 @@ namespace Elite
 
     if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
     {
-      EraseSun(_universe.canvas, _universe.heaps, &_universe.picture);
+      EraseSun(_universe.canvas, _universe.heaps);
 
       // NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties the
       // sun's SLOT and takes its line heap, so this rubs the sun off the screen first.

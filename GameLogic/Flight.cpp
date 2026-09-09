@@ -216,9 +216,19 @@ namespace Elite
     SetUpScreen(_universe, _ports, 0u);
     _universe.view = saved;
 
-    // Falls into HFS1.
+    /*
+     * THE BACKDROP AND NOT THE FRAME (RN-1), and RN-0 had it the other way round.
+     *
+     * The tunnel's rings ACCUMULATE. Each circle is presented and the next is drawn beside it, on
+     * top of what is already there, until `LOOK1` wipes the screen -- which is `DrawHyperspaceRing`'s
+     * own comment two files over ("they erase themselves because LOOK1 below clears the screen
+     * anyway"). Anything that survives a present is the backdrop's by RN-0's own rule; RN-0
+     * classified them as the frame's on the grounds that each ring is its own present, and with no
+     * clear in the tree nothing could tell the two apart. `RECORDED_RINGS` was recorded to catch
+     * exactly this and it did, at the first present that follows another ring.
+     */
     DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present,
-                        &_universe.picture);
+                        &_universe.backdrop, &_universe.picture);
   }
 
   void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept
@@ -299,7 +309,7 @@ namespace Elite
        * IS written on this path, by the routine the port had left as a stub (§6.109).
        */
       DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present,
-                        &_universe.picture);
+                        &_universe.backdrop, &_universe.picture); // for the reason the other call site gives
     }
 
     // NLUNCH -- and the zero that clears `QQ12` is the same register the view change is

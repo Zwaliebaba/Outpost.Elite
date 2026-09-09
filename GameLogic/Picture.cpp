@@ -44,6 +44,7 @@ namespace Elite
     m_cells.fill(CellPalette{});
     m_dashboard.fill(0);
     ++m_generation; // a blank picture is a different picture -- see `Generation`
+    m_stale = false; // a clear IS the start of a frame, so it settles the debt rather than taking one
   }
 
   void Picture::Resolve(std::span<std::uint8_t> _out, const Canvas& _canvas, const Picture& _backdrop) const noexcept

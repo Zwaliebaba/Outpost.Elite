@@ -451,7 +451,219 @@ makes the starfield vanish from the frame, which shows up as `ThePictureIsAsReco
 checkpoint 0's digest at checkpoint 1 (both frames then being backdrop-only). Read
 `MoveStardustAhead` whole before touching it; do not infer from the parameter names.
 
-**(d) "PIXEL-IDENTICAL" CANNOT BE MET, AND THE REASON IS A DEFECT IN THE GATE.** Measured
+**(d) — RETRACTED 2026-09-09. THE GATE IS NOT DEFECTIVE; THE FINDING BELOW WAS WRONG.** It is kept
+because a corpus that quietly deletes its mistakes teaches nothing, and because the measurement that
+overturned it is the one to trust.
+
+The claim was that `ThePictureIsAsRecorded` records "the backdrop and almost nothing else" because
+the checkpoint lands at a bad moment. It does not. Counting the CANVAS's own bitmap beside the
+frame's at every checkpoint settles it — the canvas is the authority, is never split and is never
+cleared:
+
+| step | 0 | 40 | 100 | 200 | 300 | 340 | 342 | 400 |
+|---|---|---|---|---|---|---|---|---|
+| canvas bytes above its docked baseline of 2092 | 0 | 302 | 316 | 308 | **24** | **23** | **19** | 41 |
+| frame bytes | 0 | 563 | 581 | 582 | **12** | **13** | **11** | 82 |
+| frame ÷ twice the canvas's | — | 0.93 | 0.92 | 0.94 | 0.25 | 0.28 | 0.29 | 1.00 |
+
+**The frame IS the current picture and tracks the canvas at twice the scale.** Twelve bytes at step
+300 is not a blind gate; the scripted flight is passing through near-empty space and the CANVAS has
+only twenty-four bytes of transient content there too. The low ratios at those three checkpoints are
+byte-packing on very small numbers, not a discrepancy.
+
+**So the ruling to sample at the present is not needed**, on top of not being implementable: the
+checkpoint is once per pass, at the same place the executable presents, and is the right sampling
+point. The gate's real limitation is the one established at RN-0 and it is different: the composite
+is an exclusive-or, so moving an exclusive-or write between surfaces is provably invisible. That is
+why the eighty site moves went unnoticed. It has nothing to do with when the sample is taken.
+
+**AND THE 1559 WAS ACCUMULATION, NOT A CLEARED FRAME.** With the clear on and the erase twins
+dropped, the frame held two and a half times the ink the canvas justified — because the replay ended
+the frame at the CHECKPOINT, once in a hundred steps, so a hundred passes of drawing piled up with
+nothing erasing them. Ending the frame after every `Step`, which is what `Main.cpp` does every turn,
+removes it. **The boundary is per pass and the replay driver must call it per pass**; RN-1's first
+commit put it at the checkpoint and that is the line to change.
+
+**What is still open after all this**, and it is a much smaller question than the one it replaces:
+with a per-pass boundary the frame is populated at some checkpoints and empty at others.
+
+**MEASURED 2026-09-09, and it is not about which write comes last.** A probe counting mutator calls,
+lazy clears and surviving ink per pass, on steps 36 to 44 of the scripted flight:
+
+| | writes to the frame | clears | bitmap bytes left |
+|---|---|---|---|
+| clear on, six erase twins dropped | 1246 | 1 | **0** (697 at step 42) |
+| the same, stardust erase twin put back | 1294 | 1 | **0** |
+| the same, plus the whole field drawn from state at the end of `MoveStardust` | 1342 | 1 | **0** |
+
+**ANSWERED 2026-09-09 by counting writes that LAND, split by primitive.** Per pass, steps 36 to 41:
+
+| | |
+|---|---|
+| mutator calls | 1246 |
+| landed bitmap writes | 1214, **every one an exclusive-or**, none an assignment |
+| distinct bitmap offsets touched | 569 — so each is written about **twice** |
+| `DrawLine2x` calls | **40** |
+| `PlotRelativePixel2x` / `DrawShipLines2x` / `DrawCanvasRow2x` | 12 / 0 / 0 |
+| bitmap bytes surviving the pass | **0** |
+
+**Forty line-twin calls, twenty geometries drawn twice at the same coordinates.** That is the
+planet: `DrawBall` erases by REDRAWING THE SAME RUN, so with a cleared frame the second draw cancels
+the first and the ball vanishes. At these steps the ball is the only thing in the space view, which
+is why nothing at all survives.
+
+**So the class of routine RN-1 has to handle is wider than the plan says.** Archive/Rendering.md's
+R-10 names two differential renderers, the sun and the hyperspace rings, and calls them the exception.
+They are not: **the planet's ball is a third**, it is not in R-10, it is not in the drops list, and it
+is the one the scripted flight actually exercises. Anything that erases by redrawing its own geometry
+cancels itself on a cleared frame, and the drops list has to be derived from that property rather
+than from the six routines the plan happened to name.
+
+The three earlier diagnoses of this measurement — a bad sampling moment, then accumulation, then a
+missing whole-field draw — were all wrong, and each was reached by inference from a count that was
+measuring calls rather than effects. The counters that settled it are landed writes, distinct
+offsets, exclusive-or against assignment, and calls per twin.
+
+**THE SECOND COMMIT, ATTEMPTED 2026-09-09: from 15 of 16 checkpoints moved to 7.** Not finished, and
+not committed — the tree stays at the first commit. What follows is the state to resume from.
+
+**Four changes together took it from 15 to 7**, and none of them works without the others:
+
+1. `CLEAR_THE_FRAME` on, with the clear LAZY (`Picture::EndFrame` marks; the next landed write
+   clears), for the reason under (a).
+2. **The replay driver ends the frame after every `Step`**, not at the checkpoint. This is the single
+   largest correction. `Main.cpp` ends it every turn and the replay ended it once in a hundred steps.
+3. The frame-side erase twins dropped in `EraseShip`, `PlotStardust`, the laser's second
+   `DrawLaserLines`, and — the ones the plan does not list — at the TOP of `EraseSun` and
+   `EraseBall`, where dropping once covers everything below.
+4. `DrawSunFromState2x` for the sun, and `ClipSunRow` made pure so a twin can ask it what it holds
+   without zeroing the heap. The purity is a prerequisite, not a tidy-up.
+
+**The seven that still move, with the frame measured against the canvas** (`frame ÷ 2 × canvas
+transient`; 0.9 to 1.0 is right):
+
+| step | 40 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 1100 | 1170 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ratio | 0.93 | 0.92 | **1.76** | 0.25 | **0.18** | **0.57** | **0.53** | **1.22** | **1.40** | 0.03 | **1.49** | 0.00 |
+| | held | held | moved | held | moved | moved | moved | moved | moved | held | moved | held |
+
+**They are not one fault but two.** Steps 200, 700, 800 and 1100 carry too MUCH — something inside a
+single pass is drawing twice with nothing to cancel it. Steps 400, 500 and 600 carry too LITTLE —
+something is still erasing, or a whole-geometry draw is missing. The busy steps are the ones with
+ships in the bubble, which is where to look first. Each is the same hunt as the planet's: counters
+for landed writes, distinct offsets and calls per twin, then read the routine the count names.
+
+**Do not re-record the tables to make this pass.** A correct erase and a correct clear give the same
+frame; that equality is the slice's whole claim, and nine of the sixteen checkpoints already
+demonstrate it.
+
+**THE FOUR "TOO MUCH" CHECKPOINTS ARE THE PLANET'S MARKINGS, measured 2026-09-09.** Per-pass
+counters either side of checkpoint 200, with the four changes above in place:
+
+| pass | ink before → after | landed | distinct | `DrawLine2x` calls |
+|---|---|---|---|---|
+| 197 | 578 → **1084** | 1291 | 1087 | **20** |
+| 198 | 1084 → 582 | 589 | 582 | 16 |
+| 199 | 582 → **1086** | 1295 | 1089 | **20** |
+| 200 | 1086 → 583 | 595 | 583 | 16 |
+| 201 | 583 → 580 | 589 | 580 | 16 |
+
+**The passes alternate, and the difference is four line-twin calls worth about seven hundred
+writes.** Sixteen calls is the planet's outline; the extra four are its markings, drawn through
+`DrawEllipse` from `DrawPlanetDetail`. The canvas transient does not alternate (308 throughout), so
+on the canvas the markings are present every pass. On the frame they appear on one pass and not the
+next, which is what moves the four checkpoints.
+
+So `DrawPlanetDetail` is the file to read next, and the question to answer there is narrow: **under
+what condition are the markings drawn, and why is it not every pass.** Either they are conditional
+and the frame must redraw them from state like the sun, or an erase on that path is still running.
+
+**The three "too little" checkpoints (400, 500, 600) are a separate fault** and have not been
+investigated. Pass 500's counters — landed 612 over only 196 distinct offsets, 40 line calls, 2 ship
+calls — show heavy overdrawing of a small area, which is a different shape from the planet's and
+wants its own hunt.
+
+**Two sittings of forensics have now gone into this slice and the method is settled**: counters for
+landed writes, distinct offsets, exclusive-or against assignment, and calls per twin, then read the
+routine the counts name. Every conclusion reached by inference instead has been wrong.
+
+**TEN OF SIXTEEN CHECKPOINTS NOW MATCH EXACTLY**, measured 2026-09-09 against the tree's own ink at
+each checkpoint rather than against a ratio. The five drops are: `EraseShip`, `PlotStardust`, the
+laser's second `DrawLaserLines`, and at the TOP of `EraseSun` and `EraseBall`. The laser one fixed
+checkpoint 3 on its own.
+
+| step | 0 | 40 | 100 | 200 | 300 | 340 | 342 | 400 | 500 | 600 | 700 | 800 | 900 | 1000 | 1100 | 1170 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| tree's frame ink | 0 | 563 | 581 | 582 | 12 | 13 | 11 | 82 | 179 | 293 | 488 | 1081 | 9 | 8 | 404 | 0 |
+| with the slice | 0 | 563 | 581 | 582 | 12 | 13 | 11 | **15** | **249** | **263** | **845** | **1758** | 9 | 8 | **592** | 0 |
+| delta | · | · | · | · | · | · | · | −67 | +70 | −30 | +357 | +677 | · | · | +188 | · |
+
+**And the six that remain are NOT a missed erase.** Per-twin counts for the same passes, tree
+against slice, show the drops doing exactly and only what they should:
+
+| pass | landed | `DrawLine2x` | `DrawShipLines2x` | `PlotRelativePixel2x` | `PlotPixel2x` |
+|---|---|---|---|---|---|
+| 396 | 330 → 318 | 32 → 32 | 4 → 4 | **24 → 12** | **13 → 7** |
+| 697 | 1614 → 1598 | 28 → 28 | 2 → 2 | **24 → 12** | **16 → 8** |
+| 700 | 1292 → 1276 | 24 → 24 | 2 → 2 | **24 → 12** | **17 → 9** |
+
+The dot count halves because the stardust erase is gone, and the point count halves with
+`EraseShip`. Lines and ship lines are untouched. **So every pass draws the right things; what
+differs is what SURVIVES it.** At step 400 the tree's frame holds 82 bytes and one pass of the
+slice's holds 15, which means the tree's 82 is an ACCUMULATION across passes and not one pass's
+work — something is drawn once and left, and the per-pass clear takes it away.
+
+**AND IT IS NOT THAT EITHER.** At checkpoint 400 the tree's frame holds 82 bytes and the NEXT PASS
+TOUCHES ALL 82 OF THEM — nothing persists across passes, so the boundary is not the question. The
+per-pass boundary is right.
+
+**Every drop was then verified by restoring it one at a time**, which is the check that should have
+come first:
+
+| restored | checkpoints moved |
+|---|---|
+| nothing (all five drops in place) | **6** |
+| the ship erase | 6 — neutral here, though it must still go |
+| the stardust erase | **13** |
+| the laser erase | 7 |
+| the sun's and the planet's erases | 9 |
+| additionally dropping the explosion cloud's erase | 6 — neutral |
+
+**So all five drops are necessary and none is wrong, and the six that remain are not caused by any of
+them.** Something else still draws and erases the same geometry inside a single pass. It is not the
+ships, the stardust, the laser, the sun, the planet or the explosion cloud — each of those has been
+tested by restoring or adding its drop and watching the count.
+
+**Where to look next**, with everything above already ruled out: the compass and the scanner blips
+write the dashboard INDEX plane rather than the bitmap, so they cannot be it; `ClearAllShips` and the
+ship-as-point (`DrawShipAsPoint`, whose `PlotPixel2x` count halves with the ship erase) have not been
+tested. The method is the one that found the planet: per-twin counters for a moved pass against the
+same pass on the tree, then read the routine whose count differs.
+
+**FOUND 2026-09-09, AND IT WAS NEITHER OF THOSE TWO.** `ClearAllShips` runs at a view change and not
+per pass, and `DrawShipAsPoint` erases through `EraseShip`, which was already dropped. **It is `LL9`
+part 9 — `OpenHeapRun` in `ShipDraw.cpp` — which opens a ship's heap run by drawing LAST pass's ship
+a second time to rub it out.** One line, inside a routine whose name says nothing about erasing,
+absent from Archive/Rendering.md §4.4's list of nine and from the drops list above. Dropping it took
+all six remaining checkpoints to zero in one edit.
+
+**It caused BOTH faults, which is why they looked like two.** Where the ship had not moved between
+passes the ghost cancelled the new draw and the checkpoint held too little (400, 500, 600); where it
+had, the ghost stood beside it and the checkpoint held too much (700, 800, 1100).
+
+**The instrument was per-WRITE and not per-call, and that is what all the earlier failures were.**
+Every write that landed on the frame was recorded with its offset, its mask and a tag naming the
+primitive that made it, for one pass either side of each moved checkpoint; then the offsets whose
+writes exclusive-ored back to nothing were grouped by the pair of primitives that had cancelled
+them. Checkpoint 400 came back "74 offsets cancelled, every one a ship line against another ship
+line", which points at a routine rather than at a hypothesis to test.
+
+**So the rule is a property and not a list.** Anything that erases by redrawing its own geometry
+cancels itself on a cleared frame, whatever it is called and whatever file it is in. The plan's six,
+plus the explosion cloud, plus this one, is seven — and the seventh is the one no list would have
+contained, because every list here was built from names.
+
+**THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
 flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
 
@@ -468,19 +680,44 @@ moves were invisible to it, and it is why the table cannot be the thing RN-1 hol
 a frame that is cleared and redrawn whole, the checkpoint sees the ships and the starfield a player
 is looking at, and the digests move by design.
 
-So RN-1 cannot both clear the frame and leave `RECORDED_PICTURE` unmoved. **That is a decision for
-the owner, not for the agent**, and the slice stops until it is taken. The two shapes are: sample
-the picture AT THE PRESENT (a watching presenter, as `RECORDED_RINGS` already does) and re-record
-the table on the tree before the clear, so the gate compares like with like; or accept the
-re-record with the reason and the ink table above as the evidence. The first is more work and gives
-a gate that means something afterwards; the second is a re-record of a table that was not measuring
-what it claimed.
+So RN-1 cannot both clear the frame and leave `RECORDED_PICTURE` unmoved.
+
+**THE OWNER RULED "SAMPLE AT THE PRESENT" ON 2026-09-09, AND BUILDING IT DISPROVED ITS PREMISE.**
+There is no present to sample. `HoldFlightFrame` appears in `GameLogic` exactly once, in `Die`, and
+`FlightLoop.cpp` contains no call to the presenter at all: **an ordinary flight pass never presents
+inside the library.** The pacing is `Main.cpp`'s, through `Shell::Turn`, which the replay does not
+run. A watch attached over the whole flight fires during `Launch`'s tunnel and then not again until
+the end — sixteen checkpoints came back with two distinct digests between them, fourteen of them
+the picture as the launch left it.
+
+`RECORDED_RINGS` works because the tunnel DOES present in the library, per circle. The flight does
+not, and that is the difference.
+
+**So the ruling needs the flight loop to have a present before it can be carried out**, and that is
+I-4's work — `Run()` becoming a library function — not RN-1's. Until then the checkpoint, once per
+pass at the same place the executable presents, is the only frame boundary the replay can see, and
+"sample at the present" and "sample at the checkpoint" are the same instruction with no present to
+distinguish them.
+
+**What is still unexplained, and should be settled before anything is re-recorded.** The frame holds
+twelve non-zero bytes at step 300 and thousands once cleared. Something erases the pass's transients
+before the pass ends, or the frame is accumulating a difference rather than a picture. Neither
+reading has been established; the ink table is the evidence and the next sitting should start by
+explaining it, not by re-recording around it.
 
 **Steps, as three commits.** (1) `Game::EndFrame`, `Frame.h`'s wrappers, the sixteen sites, the
 replay driver and `Main.cpp` calling them — with `Clear` still a no-op behind a `constexpr bool`
 so the digests prove the plumbing alone. **BUILT 2026-09-09; nineteen sites, not sixteen.** (2) The clear switched on, the six drops made, the sun
 twin added, `check_twins.py` given a fourth table `ERASE_NEEDS_NO_TWIN` with a reason per entry.
 (3) The `PictureTests` case for `Clear` (there is none, because nothing called it).
+**(2) AND (3) BUILT TOGETHER 2026-09-09: SEVEN drops and not six, and one thing the plan did not
+know about — the hyperspace tunnel's rings, which RN-0 put on the frame and which belong on the
+backdrop because they accumulate until `LOOK1` wipes the screen. `RECORDED_RINGS` caught it at the
+second present, which is what it was recorded for. `DrawHyperspaceRing` takes two surfaces as a
+result — the one the circles land on and the one the present ends — because the tunnel is the one
+place in the game where those two answers differ. `CLEAR_THE_FRAME` was deleted rather than left
+standing at true, and `EraseSun`, `EraseBall`, `ErasePlanetOrSun` and `EraseSunRow` lost their
+`Picture*` parameter, because a parameter deliberately ignored is a worse lie than its absence.**
 
 **Gate.** `ThePictureIsAsRecorded`, `RECORDED_DOCKED_PICTURES`, `RECORDED_RINGS` unmoved — the
 slice's whole claim is that a correct erase and a correct clear produce the same frame;
@@ -495,6 +732,14 @@ had noticed (RN-a); the sun twin's line count.
 T3 deleted from ADR-008 §2 with the sentence saying why; §1's byte count corrected to two pictures;
 the Status table's T3 row marked deleted at RN-1 with the date. Platform.md §5's three rendering
 rows ✅. `check_docs.py`, `check_counts.py`. No code.
+
+**BUILT — the first half 2026-09-09 with RN-0 (§1's byte count, §4's backdrop, the Status split) and
+the second the same day with RN-1's second commit (T3).** One thing the step did not ask for and the
+deletion needed: §2 says what REPLACED T3, because a rule with a known weakness — Rendering.md's
+R-5, "no cheap test" — was not deleted to leave a gap. `check_twins.py`'s rule 4 fails both ways,
+which T3 never could, so R-5 closes here rather than lapsing. The Status table also gains the
+boundary as a built row, since a reader arriving at T3's deletion needs to see the thing that made
+it safe.
 
 ### 2.6 I-2 — `InputFrame`, event accumulation, the layered map (library and executable; 2 sittings, three commits)
 
