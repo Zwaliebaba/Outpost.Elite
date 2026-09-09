@@ -14,13 +14,39 @@
 #include "Flight.h"
 #include "KeyMap.h"
 
-#include <chrono>
-
 namespace Outpost
 {
 
   bool GameShell::Turn()
   {
+    /*
+     * THE CLOCK IS READ HERE, ONCE, AND NOWHERE ELSE IN THE PROGRAM (Design/Platform.md §3.1).
+     *
+     * A turn is a turn however the game got to it -- the outer loop, a `DELAY`, a tunnel's present,
+     * the title ship's hold -- so this is the one place that sees all of them. What the scheduler
+     * does with the time is its own (`Scheduler.h`): whole steps at what a step costs, blanks at
+     * the machine's frame, and nothing at all while the window is inactive, which is the pause.
+     */
+    m_scheduler.Feed(m_clock.Tick(), m_window.Active());
+
+    /*
+     * And a dropped backlog is said out loud, here rather than in the outer loop (ADR-005 §3).
+     *
+     * ADR-005 §3 has asked for a stall to be logged since 2026-09-02 and `Main.cpp` read the flag
+     * and discarded it, with the honest note that a windowed build had nowhere to report one to.
+     * It is reported HERE because this is where the clock is read: a stall inside a docked `DELAY`
+     * or a title screen's hold happens at a call depth the outer loop does not see for another
+     * turn, and a diagnostic a turn late is a diagnostic about the wrong frame.
+     */
+    if (const std::uint32_t stalls = m_scheduler.TakeStalls(); stalls != 0u)
+    {
+      m_stallsSeen += stalls;
+      OutputDebugStringA("Elite: the scheduler dropped a backlog it could not run\n");
+#if defined(_DEBUG)
+      m_window.ShowStallCount(m_stallsSeen); // where somebody PLAYING can see it, not only a debugger
+#endif
+    }
+
     /*
      * The raster interrupt, which runs whether or not the game is doing anything.
      *
@@ -110,50 +136,33 @@ namespace Outpost
     ExitProcess(0); // does not return; the declaration is [[noreturn]] for that reason
   }
 
-  // ---- the screen -------------------------------------------------------------------------------
-
-  void GameShell::ClearToView(std::uint8_t _view)
-  {
-    /*
-     * The whole routine, since slice 3d-d-iii-a.
-     *
-     * This was three calls and an apology for as long as the dashboard, the sprites, the border and
-     * the colour bands were phase 3's (§6.77): a palette fill, a text-area clear and `SetUpTextScreen`
-     * for the text state. All four exist now, `SetUpScreen` is compared against the shipped `TT66`
-     * on the whole canvas over six views including text ones, and §6.81 says in as many words that
-     * the 2e version was correct only because the half it left out was the half that observes the
-     * intermediate `QQ17`. So the approximation goes and the routine runs.
-     *
-     * IT FIXES A LEAK THE FLIGHT HALF WOULD OTHERWISE HAVE OPENED. `wantdials` points `abraxas` at
-     * the dashboard's block of screen RAM and puts the lower rows into multicolour; `TTX66K`'s text
-     * path puts both back. A docked screen reached through the old three calls after a launch would
-     * have kept the flight settings and drawn its bottom seven rows as multicolour nonsense.
-     */
-    if (m_flight == nullptr || m_ports == nullptr)
-    {
-      *m_view = _view; // The view byte alone, all that can be done without the universe
-      return;
-    }
-
-    Elite::SetUpScreen(m_flight->Universe(), *m_ports, _view);
-  }
-
   // ---- waiting and the keyboard ------------------------------------------------------------------
 
   void GameShell::WaitFrames(std::uint8_t _frames)
   {
     /*
-     * Wait for _frames VERTICAL SYNCS, and that is literally what this is: `Turn`
-     * ends in `Present(1, 0)`, so a turn is a frame. No timer, no sleep, and the wait is the same
-     * length as the original's on a 50 Hz display and shorter on a 60 Hz one -- which is the PAL
-     * and NTSC difference section 6.17 records rather than a defect in this loop.
+     * Wait for `_frames` of the MACHINE's vertical syncs (Design/Platform.md T-1).
+     *
+     * IT COUNTED PRESENTS UNTIL 2026-09-09 and that was the defect InputTimer.md T-1 named: a turn
+     * ends in `Present(1, 0)`, so a turn was one refresh of the PLAYER's monitor, and every
+     * `DELAY` in the docked game -- `TT217`'s two-frame debounce, `dn2`'s fifty, `DKS3`'s twenty,
+     * the equipment beeps -- lasted 0.83 seconds on a 60 Hz panel, 0.35 on a 144 Hz one and 0.30
+     * on a 165 Hz one. The comment that stood here called that "the PAL and NTSC difference §6.17
+     * records rather than a defect in this loop", which was true of the monitor it was written on
+     * and is not a property of the design.
+     *
+     * What it counts now is simulated blanks, which the scheduler derives from elapsed cycles at
+     * the machine's own frame -- so fifty of them are five sixths of a second on every panel there
+     * is, and a turn that delivered none simply goes round again.
      */
-    for (std::uint8_t frame = 0; frame < _frames; ++frame)
+    int owed = static_cast<int>(_frames);
+    while (owed > 0)
     {
       if (!Turn())
       {
         Abandon();
       }
+      owed -= m_scheduler.TakeBlanks();
     }
   }
 
@@ -186,16 +195,20 @@ namespace Outpost
   {
     /*
      * Present the SAME picture until a flight frame is due, which is what the VIC-II was doing
-     * while the 6510 computed the next one. `FlightFrameSeconds` is the measured cost model
+     * while the 6510 computed the next one. `FlightFrameCycles` is the measured cost model
      * (§6.114), read fresh because it depends on how full the bubble is -- and during a death the
      * bubble empties as the wreckage flies past, so the rate is not a constant.
      */
-    const double period = FlightFrameSeconds(_ships);
-
-    if (m_lastFlightFrame.time_since_epoch().count() == 0)
-    {
-      m_lastFlightFrame = std::chrono::steady_clock::now();
-    }
+    /*
+     * ONE STEP'S WORTH OF THE SCHEDULER'S TIME, at what a frame costs with this many ships in the
+     * bubble -- which is the accumulator this used to keep for itself (Design/Platform.md T-1).
+     *
+     * The backlog rule it had is the scheduler's now and is the same rule: a stall costs the
+     * sequence a frame rather than running the rest of it at double speed (§6.110). A turn that
+     * answers more than one step has caught up, and the extra is spent here rather than banked,
+     * because a hold is one frame by definition.
+     */
+    const std::uint32_t cost = FlightFrameCycles(_ships);
 
     for (;;)
     {
@@ -204,16 +217,8 @@ namespace Outpost
         Abandon();
       }
 
-      const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-      const double elapsed = std::chrono::duration<double>(now - m_lastFlightFrame).count();
-      m_lastFlightFrame = now;
-
-      m_flightFrameLeftover += elapsed;
-      if (m_flightFrameLeftover >= period)
+      if (m_scheduler.TakeSteps(cost) > 0)
       {
-        // One frame, and a long backlog is dropped rather than repaid -- a stall should cost the
-        // sequence a frame, not run the rest of it at double speed (the title's rule, §6.110).
-        m_flightFrameLeftover = (m_flightFrameLeftover >= 2.0 * period) ? 0.0 : (m_flightFrameLeftover - period);
         return;
       }
     }
@@ -250,8 +255,15 @@ namespace Outpost
      * SO THIS PRESENTS UNTIL A TURN IS DUE, and the frames in between are the same picture -- which
      * is exactly what the VIC-II was doing while the 6510 computed the next one. The accumulator is
      * the flight loop's arrangement with one difference: the period is not a constant, because what
-     * a turn costs depends on how much of the ship there is to draw (`TitleTurnSeconds`).
+     * a turn costs depends on how much of the ship there is to draw (`TitleTurnCycles`).
      */
+    /*
+     * The rate changes as the sequence runs: the ship is a dot when it starts and a wireframe
+     * across the middle of the screen when it arrives, and those cost 15,600 and 121,276 cycles.
+     * `_distance` is `INWK+7`, the byte `TLL2` walks down, and the library passes it (M3-b-3d).
+     */
+    const std::uint32_t cost = TitleTurnCycles(_distance);
+
     for (;;)
     {
       if (!Turn())
@@ -259,23 +271,8 @@ namespace Outpost
         Abandon();
       }
 
-      const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-      const double elapsed = std::chrono::duration<double>(now - m_lastSpin).count();
-      m_lastSpin = now;
-
-      /*
-       * The rate changes as the sequence runs: the ship is a dot when it starts and a wireframe
-       * across the middle of the screen when it arrives, and those cost 15,600 and 121,276 cycles.
-       * `_distance` is `INWK+7`, the byte `TLL2` walks down, and the library passes it (M3-b-3d).
-       */
-      const double period = TitleTurnSeconds(_distance);
-
-      m_spinLeftover += elapsed;
-      if (m_spinLeftover >= period)
+      if (m_scheduler.TakeSteps(cost) > 0)
       {
-        // One turn, and the rest of the backlog is dropped rather than repaid: a stall should cost
-        // the ship a turn, not spin it faster to catch up.
-        m_spinLeftover = (m_spinLeftover >= 2.0 * period) ? 0.0 : (m_spinLeftover - period);
         break;
       }
     }

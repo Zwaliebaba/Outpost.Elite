@@ -16,6 +16,10 @@ namespace Outpost
    * tested on a machine with no GPU -- so they are here, and `ScreenPresenter` is left with the
    * Direct3D and nothing to get wrong that a test could have caught.
    *
+   * THE PACING LEFT THIS FILE AT T-1 and the COSTS stayed, which is the split that was always
+   * meant: `Scheduler.h` decides how many steps a stretch of time is worth, and what a step is
+   * worth is measured here (Design/Platform.md 3.2).
+   *
    * That split is not tidiness. Everything in this file is verified by the suite on both legs;
    * everything in `ScreenPresenter.cpp` and `Window.cpp` is verified by compiling. Knowing which
    * half a bug can be in is worth the extra header.
@@ -101,29 +105,18 @@ namespace Outpost
   [[nodiscard]] Viewport FitPicture(int _clientWidth, int _clientHeight) noexcept;
 
   /*
-   * How many steps to run for the time that has passed, and how much time is left over.
+   * `StepPlan`, `MAX_STEPS_PER_CALL` AND `PlanSteps` WERE HERE AND ARE NOT ANY MORE
+   * (Design/Platform.md T-1, 2026-09-09). `Outpost::Scheduler` is all three, in integer cycles.
    *
-   * ADR-005 section 3: a fixed timestep accumulator, and steps are never silently skipped or
-   * doubled. "Never silently" is the whole design -- the count comes back and so does whether it
-   * was CLAMPED, so a caller can log a stall instead of the game lurching.
+   * What went with them is a `double` in the loop and a clamp that counted STEPS. The count was the
+   * defect: four steps per call is four frames of whatever the frame costs, so a reopened lid ran
+   * 1.17 seconds of game time between two presents. The scheduler's budget is four frames of the
+   * MACHINE, which is the same 67 milliseconds however dear the step (`Scheduler.h`).
    *
-   * The clamp matters more than it looks. Without one, a breakpoint or a laptop lid produces an
-   * accumulator holding minutes, and the next call runs thousands of steps with no presentation
-   * between them: the game appears to hang and then teleports. With one, it drops the backlog and
-   * says so.
+   * What did NOT go is the arithmetic's honesty: the count still comes back, the backlog is still
+   * dropped rather than run, and the drop is still reported -- to a counter the title bar shows in
+   * a debug build, where `Main.cpp` read `plan.stalled` and discarded it.
    */
-  struct StepPlan
-  {
-    int steps = 0;
-    double leftoverSeconds = 0.0;
-    bool stalled = false; ///< the backlog was longer than the clamp and the rest was dropped
-  };
-
-  /// The most steps one call will ever ask for. Four is enough to ride out a dropped frame at any
-  /// plausible rate and short enough that a longer gap is reported rather than absorbed.
-  inline constexpr int MAX_STEPS_PER_CALL = 4;
-
-  [[nodiscard]] StepPlan PlanSteps(double _elapsedSeconds, double _accumulatedSeconds, double _stepsPerSecond) noexcept;
 
   /*
    * How long one turn of the title screen's ship takes on the machine it was written for.
@@ -176,13 +169,9 @@ namespace Outpost
     {1, 121'276},
   }};
 
-  /// The 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
-  /// 985,248, and choosing between them is the same decision the shipped build's variant makes.
-  inline constexpr double NTSC_CLOCK_HZ = 1'022'727.0;
-
-  /// How long a turn of the title ship should take with the ship `_distanceHigh` away, in seconds.
-  /// Linear between the measured points, flat outside them.
-  [[nodiscard]] double TitleTurnSeconds(std::uint8_t _distanceHigh) noexcept;
+  /// `NTSC_CLOCK_HZ` AND `TitleTurnSeconds` WERE HERE AND ARE NOT ANY MORE (Platform.md T-1). The
+  /// clock is `MachineTiming::Ntsc()`, which carries the PAL one beside it rather than naming one
+  /// machine in a constant; the curve is `TitleTurnCycles` below.
 
   /*
    * How long a FLIGHT frame takes on the machine it was written for.
@@ -242,9 +231,7 @@ namespace Outpost
     {10, 293'354},
   }};
 
-  /// How long one flight frame should take with `_ships` slots occupied, in seconds. Linear between
-  /// the measured rows and flat outside them; the bubble cannot hold more than the last row.
-  [[nodiscard]] double FlightFrameSeconds(std::uint8_t _ships) noexcept;
+  /// `FlightFrameSeconds` WAS HERE AND IS `FlightFrameCycles` BELOW (Platform.md T-1).
 
   /*
    * How long a DOCKED pass takes, and it is two vertical syncs and almost nothing else.
@@ -275,12 +262,9 @@ namespace Outpost
   /// step at most once a frame. Recorded here; honoured when T-1's blank exists.
   inline constexpr std::uint8_t CHART_CURSOR_SYNCS = 1;
 
-  /// The VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
-  inline constexpr double NTSC_FRAME_CYCLES = 65.0 * 263.0;
-
-  /// How long one docked pass should take, in seconds, given the syncs the last pass asked `DELAY`
-  /// for -- `Game::StepDocked`'s answer, two or none (InputTimer.md T-2).
-  [[nodiscard]] double DockedPassSeconds(std::uint8_t _syncs) noexcept;
+  /// `DockedPassSeconds` WAS HERE AND IS `DockedPassCycles` BELOW (Platform.md T-1), which takes
+  /// the machine -- because a sync is 17,095 cycles on one and 19,656 on the other, and the seconds
+  /// form priced both at NTSC's.
 
   /*
    * The same three costs, in CYCLES, which is what the scheduler spends (Design/Platform.md §3.2,

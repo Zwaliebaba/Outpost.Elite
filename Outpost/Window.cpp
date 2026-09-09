@@ -125,6 +125,10 @@ namespace Outpost
 
     case WM_SIZE:
       m_resized = true;
+
+      // Minimised is inactive, which is what stops the scheduler banking time for a window with
+      // nothing to present to (Design/Platform.md §3.2). Restoring says so on the same message.
+      m_active = (_wparam != SIZE_MINIMIZED);
       return 0;
 
     /*
@@ -168,9 +172,15 @@ namespace Outpost
      */
     case WM_KILLFOCUS:
       ReleaseAllKeys();
+      m_active = false; // and the scheduler stops planning steps, which is the auto-pause (T-1)
+      return 0;
+
+    case WM_SETFOCUS:
+      m_active = true;
       return 0;
 
     case WM_ACTIVATEAPP:
+      m_active = (_wparam != FALSE);
       if (_wparam == FALSE)
       {
         ReleaseAllKeys();
@@ -294,6 +304,16 @@ namespace Outpost
     const bool resized = m_resized;
     m_resized = false;
     return resized;
+  }
+
+  void Window::ShowStallCount(std::uint32_t _stalls) const noexcept
+  {
+    if (m_window == nullptr)
+    {
+      return;
+    }
+    const std::wstring title = std::wstring(WINDOW_TITLE) + L"  [stalls: " + std::to_wstring(_stalls) + L"]";
+    SetWindowTextW(m_window, title.c_str());
   }
 
   void Window::Warn(const std::string& _text) const noexcept

@@ -133,13 +133,13 @@ is preserved in the history and was true then.
   briefings, and the Trumbles that wander the dashboard.
 - `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
   canvas, the SID synthesiser and its XAudio2 output, the key map, the commander store, and a
-  composition root in `Main.cpp` of <!--count:main-lines-->238 lines that builds `Elite::Game`
+  composition root in `Main.cpp` of <!--count:main-lines-->257 lines that builds `Elite::Game`
   over three ports and paces it. Both outer loops, the dispatch and every game byte are the
   library's since Modernize.md M3 (ADR-007); `FlightSession` and `Shell` are what remains of the
-  two worlds' plumbing, and reach <!--count:outpost-elite-names-->63 `Elite::` names between them.
+  two worlds' plumbing, and reach <!--count:outpost-elite-names-->62 `Elite::` names between them.
   It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
   owner ruling). It launches, flies, fights, docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->148 tests in <!--count:test-files-->31 files: the 6502 interpreter with its cycle counter,
+- `Tests/GameLogicTests/` — <!--count:tests-->146 tests in <!--count:test-files-->31 files: the 6502 interpreter with its cycle counter,
   its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
   and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and

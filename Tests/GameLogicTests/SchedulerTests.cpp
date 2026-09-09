@@ -232,54 +232,6 @@ namespace GameLogicTests
     }
 
     /*
-     * The integer curves are the `double` ones, to a cycle.
-     *
-     * THIS TEST IS DELIBERATELY TEMPORARY and goes with `TitleTurnSeconds`, `FlightFrameSeconds`
-     * and `DockedPassSeconds` in the commit that switches the loop over. It exists for one turn of
-     * the crank: to prove that what replaced the arithmetic computes the same numbers, over the
-     * whole input space of both curves rather than at the rows.
-     */
-    TEST_METHOD(TheCycleTablesAgreeWithTheSecondsTheyReplace)
-    {
-      for (int ships = 0; ships <= 255; ++ships)
-      {
-        const auto count = static_cast<std::uint8_t>(ships);
-        const double seconds = Outpost::FlightFrameSeconds(count);
-        const double asCycles = seconds * Outpost::NTSC_CLOCK_HZ;
-        const double drift = static_cast<double>(Outpost::FlightFrameCycles(count)) - asCycles;
-        Assert::IsTrue(drift > -1.0 && drift < 1.0, (L"the flight curve, at " + std::to_wstring(ships) + L" ships").c_str());
-      }
-
-      for (int distance = 0; distance <= 255; ++distance)
-      {
-        const auto high = static_cast<std::uint8_t>(distance);
-        const double seconds = Outpost::TitleTurnSeconds(high);
-        const double asCycles = seconds * Outpost::NTSC_CLOCK_HZ;
-        const double drift = static_cast<double>(Outpost::TitleTurnCycles(high)) - asCycles;
-        Assert::IsTrue(drift > -1.0 && drift < 1.0, (L"the title curve, at " + std::to_wstring(distance)).c_str());
-      }
-
-      // The docked pass, both answers `RunLoopTail` gives, on the machine the seconds form assumed.
-      for (const std::uint8_t syncs : {std::uint8_t{0}, Outpost::DOCKED_PASS_SYNCS})
-      {
-        const double asCycles = Outpost::DockedPassSeconds(syncs) * Outpost::NTSC_CLOCK_HZ;
-        const double drift = static_cast<double>(Outpost::DockedPassCycles(syncs, Outpost::MachineTiming::Ntsc())) - asCycles;
-        Assert::IsTrue(drift > -1.0 && drift < 1.0, L"the docked pass");
-      }
-
-      /*
-       * AND THE ONE PLACE THE TWO DO NOT AGREE, which is the defect the cycle form fixes rather
-       * than a disagreement to reconcile: the seconds form priced a docked pass's syncs at the NTSC
-       * frame whatever machine was selected, because it had no machine to ask. On PAL a sync is
-       * 19,656 cycles rather than 17,095, so the pass is longer -- which is what `wscan.asm` says
-       * and what `DockedPassSeconds` could not express.
-       */
-      Assert::IsTrue(Outpost::DockedPassCycles(Outpost::DOCKED_PASS_SYNCS, Outpost::MachineTiming::Pal()) >
-                       Outpost::DockedPassCycles(Outpost::DOCKED_PASS_SYNCS, Outpost::MachineTiming::Ntsc()),
-                     L"a PAL sync is longer than an NTSC one, which the seconds form could not say");
-    }
-
-    /*
      * The property the single-call assertions cannot see: over a long run the steps taken track the
      * time that passed, and the accumulator does not drift.
      *

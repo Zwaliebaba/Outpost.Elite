@@ -6,7 +6,7 @@ source, the labels in the code and the assembly in the comments all go, §6 Phas
 §4 set for phase 6 was met on 2026-09-08, the day before the oracle left**: every oracle suite,
 every whole-bitmap comparison and the docked replay were green on the faithful build, 469 tests
 with the original beside them, all fifteen repository checks passing, and every recorded mutant
-caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->148 tests now, and
+caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->146 tests now, and
 what it can still say is M6-b's subject rather than the gate's. Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -327,11 +327,11 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
-`Outpost/Main.cpp` is <!--count:main-lines-->238 lines and every one of them is the platform: the
+`Outpost/Main.cpp` is <!--count:main-lines-->257 lines and every one of them is the platform: the
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
-<!--count:outpost-elite-names-->63 distinct `Elite::` names where it reached 205 when M3 opened.
+<!--count:outpost-elite-names-->62 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
 `Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and

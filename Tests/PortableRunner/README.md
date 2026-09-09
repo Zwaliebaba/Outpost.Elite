@@ -4,7 +4,7 @@ Runs `Tests/GameLogicTests/` on a machine without Visual Studio — same test fi
 assertions, a different way of calling them.
 
 ```sh
-Tests/PortableRunner/run_tests.sh        # <!--count:tests-->148 tests, about half a minute from cold
+Tests/PortableRunner/run_tests.sh        # <!--count:tests-->146 tests, about half a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 OUTPOST_TEST_TIMES=1 Tests/PortableRunner/run_tests.sh          # with a per-test duration
 OUTPOST_TEST_SKIP=names.txt Tests/PortableRunner/run_tests.sh   # everything but those Suite.Method names

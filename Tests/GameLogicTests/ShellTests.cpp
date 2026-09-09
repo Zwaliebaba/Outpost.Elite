@@ -152,22 +152,28 @@ namespace GameLogicTests
      *
      * `TITLE` has no `WSCAN` in it (§6.17), so the ship turns at whatever rate a 6510 gets through
      * `MVEIT` and `LL9` -- and that is not one rate, because `LL9` draws a distant ship as a dot
-     * and a near one as a wireframe of long lines. The numbers come from
-     * `CycleTests::TheTitleScreensLoopCostsWhatItCosts`, which runs the shipped routines and adds
-     * the cycles up; this checks the curve through them behaves, which is the half a cycle count
-     * cannot check for itself.
+     * and a near one as a wireframe of long lines. The numbers came from
+     * `CycleTests::TheTitleScreensLoopCostsWhatItCosts`, which ran the shipped routines and added
+     * the cycles up while the interpreter was still in the tree; this checks the curve through them
+     * behaves, which is the half a cycle count cannot check for itself.
+     *
+     * IN CYCLES SINCE 2026-09-09 (Design/Platform.md T-1). The rows are the same measurements and
+     * every headline rate below is the number it always was; what went is the division by a clock,
+     * because the scheduler that reads this counts in cycles and had no use for seconds.
      */
     TEST_METHOD(TheTitleShipIsPacedByWhatATurnCosts)
     {
+      const std::uint32_t clock = Outpost::MachineTiming::Ntsc().clockHz;
+
       // The two ends, straight off the measurement: a dot at the start and a full wireframe at the
       // distance the ship settles at.
-      Assert::AreEqual(15'600.0 / Outpost::NTSC_CLOCK_HZ, Outpost::TitleTurnSeconds(96), 1e-9, L"a dot, 96 away");
-      Assert::AreEqual(121'276.0 / Outpost::NTSC_CLOCK_HZ, Outpost::TitleTurnSeconds(1), 1e-9, L"a wireframe, settled");
+      Assert::AreEqual(15'600u, Outpost::TitleTurnCycles(96), L"a dot, 96 away");
+      Assert::AreEqual(121'276u, Outpost::TitleTurnCycles(1), L"a wireframe, settled");
 
       // 8.4 turns a second settled and 65 while it is still a dot -- which is the whole point, and
       // the reason a single rate would make the ship's arrival take eleven seconds instead of four.
-      Assert::AreEqual(8.43, 1.0 / Outpost::TitleTurnSeconds(1), 0.05, L"settled: 8.4 turns a second");
-      Assert::AreEqual(65.6, 1.0 / Outpost::TitleTurnSeconds(96), 0.5, L"approaching: 65 turns a second");
+      Assert::AreEqual(8.43, static_cast<double>(clock) / Outpost::TitleTurnCycles(1), 0.05, L"settled: 8.4 turns a second");
+      Assert::AreEqual(65.6, static_cast<double>(clock) / Outpost::TitleTurnCycles(96), 0.5, L"approaching: 65 turns a second");
 
       /*
        * THE CURVE IS NOT MONOTONIC AND THE TABLE IS NOT SMOOTHED, which is worth an assertion of
@@ -181,24 +187,24 @@ namespace GameLogicTests
        * wireframe filling the screen -- and that every distance in between is bounded by the two
        * ends. That is what the pacing depends on; two percent of wobble in the middle is not.
        */
-      const double dot = Outpost::TitleTurnSeconds(96);
-      const double wireframe = Outpost::TitleTurnSeconds(32);
-      const double settled = Outpost::TitleTurnSeconds(1);
+      const std::uint32_t dot = Outpost::TitleTurnCycles(96);
+      const std::uint32_t wireframe = Outpost::TitleTurnCycles(32);
+      const std::uint32_t settled = Outpost::TitleTurnCycles(1);
 
       Assert::IsTrue(dot < wireframe, L"a dot is cheaper than a wireframe");
       Assert::IsTrue(wireframe < settled, L"and a wireframe than one across the middle of the screen");
 
       for (int distance = 96; distance >= 1; --distance)
       {
-        const double seconds = Outpost::TitleTurnSeconds(static_cast<std::uint8_t>(distance));
-        Assert::IsTrue(seconds >= dot - 1e-12, (L"never cheaper than a dot, at " + std::to_wstring(distance)).c_str());
-        Assert::IsTrue(seconds <= settled + 1e-12, (L"never dearer than the settled ship, at " + std::to_wstring(distance)).c_str());
+        const std::uint32_t cycles = Outpost::TitleTurnCycles(static_cast<std::uint8_t>(distance));
+        Assert::IsTrue(cycles >= dot, (L"never cheaper than a dot, at " + std::to_wstring(distance)).c_str());
+        Assert::IsTrue(cycles <= settled, (L"never dearer than the settled ship, at " + std::to_wstring(distance)).c_str());
       }
 
       // Outside the table it holds rather than extrapolating: `TITLE` starts the ship at 96 and
       // stops it at 1, so neither of these can happen -- and neither should run off the end.
-      Assert::AreEqual(Outpost::TitleTurnSeconds(96), Outpost::TitleTurnSeconds(255), 1e-12, L"beyond the table's far end");
-      Assert::AreEqual(Outpost::TitleTurnSeconds(1), Outpost::TitleTurnSeconds(0), 1e-12, L"and beyond its near one");
+      Assert::AreEqual(Outpost::TitleTurnCycles(96), Outpost::TitleTurnCycles(255), L"beyond the table's far end");
+      Assert::AreEqual(Outpost::TitleTurnCycles(1), Outpost::TitleTurnCycles(0), L"and beyond its near one");
     }
 
     /*
@@ -208,123 +214,56 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheFlightFrameAndTheDockedPassArePacedByWhatTheyCost)
     {
-      // The rows: the empty bubble of §6.114, and T-0's midpoints of the sun and station scenes.
-      Assert::AreEqual(47'784.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(0), 1e-9, L"an empty bubble");
-      Assert::AreEqual(82'236.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(2), 1e-9, L"the planet and its companion");
-      Assert::AreEqual(150'113.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(5), 1e-9, L"and three fighters");
-      Assert::AreEqual(293'354.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(10), 1e-9, L"and eight");
+      const Outpost::MachineTiming ntsc = Outpost::MachineTiming::Ntsc();
 
-      // Linear between rows -- a fighter costs about 21,000 cycles -- and flat past the last.
-      Assert::AreEqual((82'236.0 + 150'113.0) / 2.0 / Outpost::NTSC_CLOCK_HZ, Outpost::FlightFrameSeconds(3) + (Outpost::FlightFrameSeconds(4) - Outpost::FlightFrameSeconds(3)) / 2.0, 1e-9,
+      // The rows: the empty bubble of §6.114, and T-0's midpoints of the sun and station scenes.
+      Assert::AreEqual(47'784u, Outpost::FlightFrameCycles(0), L"an empty bubble");
+      Assert::AreEqual(82'236u, Outpost::FlightFrameCycles(2), L"the planet and its companion");
+      Assert::AreEqual(150'113u, Outpost::FlightFrameCycles(5), L"and three fighters");
+      Assert::AreEqual(293'354u, Outpost::FlightFrameCycles(10), L"and eight");
+
+      /*
+       * Linear between rows -- a fighter costs about 21,000 cycles -- and flat past the last.
+       *
+       * The straight line is asserted as a SUM rather than as an average, because in integers that
+       * is the property without a rounding tolerance around it: two points either side of a row's
+       * midpoint add up to the two rows they lie between, whatever the interpolation rounds each of
+       * them to.
+       */
+      Assert::AreEqual(82'236u + 150'113u, Outpost::FlightFrameCycles(3) + Outpost::FlightFrameCycles(4),
                        L"the rows are joined by straight lines");
-      Assert::AreEqual(Outpost::FlightFrameSeconds(10), Outpost::FlightFrameSeconds(255), 1e-12, L"the bubble cannot hold more than ten");
+      Assert::AreEqual(Outpost::FlightFrameCycles(10), Outpost::FlightFrameCycles(255), L"the bubble cannot hold more than ten");
       for (int ships = 1; ships <= 10; ++ships)
       {
-        Assert::IsTrue(Outpost::FlightFrameSeconds(static_cast<std::uint8_t>(ships)) > Outpost::FlightFrameSeconds(static_cast<std::uint8_t>(ships - 1)),
+        Assert::IsTrue(Outpost::FlightFrameCycles(static_cast<std::uint8_t>(ships)) >
+                         Outpost::FlightFrameCycles(static_cast<std::uint8_t>(ships - 1)),
                        (L"a fuller bubble is never cheaper, at " + std::to_wstring(ships)).c_str());
       }
 
       // The game slows to three frames a second in a fight of eight, which is the difficulty §6.17
       // said the port had to keep.
-      Assert::AreEqual(3.49, 1.0 / Outpost::FlightFrameSeconds(10), 0.05, L"a full bubble: three and a half frames a second");
-      Assert::AreEqual(12.4, 1.0 / Outpost::FlightFrameSeconds(2), 0.1, L"a quiet one: twelve");
+      const double clock = static_cast<double>(ntsc.clockHz);
+      Assert::AreEqual(3.49, clock / Outpost::FlightFrameCycles(10), 0.05, L"a full bubble: three and a half frames a second");
+      Assert::AreEqual(12.4, clock / Outpost::FlightFrameCycles(2), 0.1, L"a quiet one: twelve");
 
       // The docked pass: 4,472 cycles of work and the syncs the library asked for -- two off the
       // space view unless PATG's bit 0 lifts them, which is `RunLoopTail`'s answer and not this file's.
-      const double sync = Outpost::NTSC_FRAME_CYCLES / Outpost::NTSC_CLOCK_HZ;
-      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ + 2.0 * sync, Outpost::DockedPassSeconds(2), 1e-9, L"two syncs waited");
-      Assert::AreEqual(4'472.0 / Outpost::NTSC_CLOCK_HZ, Outpost::DockedPassSeconds(0), 1e-9, L"and none when the author names lift them");
-      Assert::AreEqual(26.5, 1.0 / Outpost::DockedPassSeconds(Outpost::DOCKED_PASS_SYNCS), 0.2,
+      Assert::AreEqual(4'472u + 2u * ntsc.cyclesPerFrame, Outpost::DockedPassCycles(2, ntsc), L"two syncs waited");
+      Assert::AreEqual(4'472u, Outpost::DockedPassCycles(0, ntsc), L"and none when the author names lift them");
+      Assert::AreEqual(26.5, clock / Outpost::DockedPassCycles(Outpost::DOCKED_PASS_SYNCS, ntsc), 0.2,
                        L"twenty-six passes a second on the NTSC frame: two syncs and four milliseconds");
     }
 
     /*
-     * ADR-005 section 3: a fixed timestep, and steps are never SILENTLY skipped or doubled.
+     * `TheStepPlannerNeverSkipsOrDoublesSilently` WAS HERE AND IS `SchedulerTests` SINCE 2026-09-09
+     * (Design/Platform.md T-1).
      *
-     * The clamp is the part worth testing hardest. A breakpoint or a closed laptop lid leaves the
-     * accumulator holding minutes; without a clamp the next call runs thousands of steps with no
-     * presentation between them, so the game appears to hang and then teleports. With one it drops
-     * the backlog -- and says it did, which is the difference between a design and a bug.
+     * It tested `PlanSteps`, which is deleted: the accumulator is integer, it lives in
+     * `Outpost::Scheduler` with the two hold loops' rules folded into it, and its clamp counts
+     * frames of the machine rather than steps of the game. Every case it made is in the new file,
+     * in cycles, beside the ones it could not make -- the vertical blank, the auto-pause, and a
+     * catch-up bounded by time.
      */
-    TEST_METHOD(TheStepPlannerNeverSkipsOrDoublesSilently)
-    {
-      constexpr double RATE = 15.0;
-      constexpr double PERIOD = 1.0 / RATE;
-
-      // Nothing has passed: no steps, and the accumulator is untouched.
-      {
-        const Outpost::StepPlan plan = Outpost::PlanSteps(0.0, 0.0, RATE);
-        Assert::AreEqual(0, plan.steps, L"no time, no steps");
-        Assert::AreEqual(0.0, plan.leftoverSeconds, 1e-12, L"and nothing accumulated");
-        Assert::IsFalse(plan.stalled, L"and no stall");
-      }
-
-      // Just under a period, then just over: the step lands on the second call, not the first.
-      {
-        const Outpost::StepPlan first = Outpost::PlanSteps(PERIOD * 0.6, 0.0, RATE);
-        Assert::AreEqual(0, first.steps, L"six tenths of a period is not a step");
-
-        const Outpost::StepPlan second = Outpost::PlanSteps(PERIOD * 0.6, first.leftoverSeconds, RATE);
-        Assert::AreEqual(1, second.steps, L"and the remainder carries into the next call");
-        Assert::AreEqual(PERIOD * 0.2, second.leftoverSeconds, 1e-9, L"leaving a fifth over");
-      }
-
-      // Exactly three periods is three steps and nothing left.
-      {
-        const Outpost::StepPlan plan = Outpost::PlanSteps(PERIOD * 3.0, 0.0, RATE);
-        Assert::AreEqual(3, plan.steps, L"three periods, three steps");
-        Assert::AreEqual(0.0, plan.leftoverSeconds, 1e-9, L"and nothing over");
-        Assert::IsFalse(plan.stalled, L"three is inside the clamp");
-      }
-
-      // A long gap is clamped, reported, and does not carry a backlog into the next call.
-      {
-        const Outpost::StepPlan plan = Outpost::PlanSteps(30.0, 0.0, RATE);
-        Assert::AreEqual(Outpost::MAX_STEPS_PER_CALL, plan.steps, L"clamped to the maximum");
-        Assert::IsTrue(plan.stalled, L"and it says so");
-        Assert::AreEqual(0.0, plan.leftoverSeconds, 1e-12, L"the backlog is dropped, not carried");
-
-        const Outpost::StepPlan next = Outpost::PlanSteps(0.0, plan.leftoverSeconds, RATE);
-        Assert::AreEqual(0, next.steps, L"so the next call starts clean");
-      }
-
-      // A clock that went backwards adds nothing rather than unwinding the accumulator.
-      {
-        const Outpost::StepPlan plan = Outpost::PlanSteps(-5.0, PERIOD * 0.5, RATE);
-        Assert::AreEqual(0, plan.steps, L"no steps");
-        Assert::AreEqual(PERIOD * 0.5, plan.leftoverSeconds, 1e-12, L"and the accumulator is intact");
-      }
-
-      // A rate of zero or less cannot produce a period, so it produces no steps rather than a
-      // division by zero.
-      for (const double rate : {0.0, -1.0})
-      {
-        const Outpost::StepPlan plan = Outpost::PlanSteps(10.0, 0.0, rate);
-        Assert::AreEqual(0, plan.steps, L"a rate of zero or less runs nothing");
-      }
-
-      /*
-       * And the property: over a long run at a steady frame time, the number of steps taken tracks
-       * the elapsed time. An accumulator that lost its remainder would drift, and drift is exactly
-       * what no single-call assertion above can see.
-       */
-      double accumulated = 0.0;
-      int steps = 0;
-      constexpr double FRAME = 1.0 / 60.0;
-      constexpr int FRAMES = 6000; // a hundred seconds at sixty frames a second
-      for (int frame = 0; frame < FRAMES; ++frame)
-      {
-        const Outpost::StepPlan plan = Outpost::PlanSteps(FRAME, accumulated, RATE);
-        accumulated = plan.leftoverSeconds;
-        steps += plan.steps;
-        Assert::IsFalse(plan.stalled, L"a steady sixty frames a second never stalls at fifteen steps");
-      }
-
-      const int expected = static_cast<int>(FRAMES * FRAME * RATE);
-      Assert::IsTrue(
-        steps == expected || steps == expected - 1,
-        (L"a hundred seconds should be about " + std::to_wstring(expected) + L" steps, not " + std::to_wstring(steps)).c_str());
-    }
   };
 
   TEST_CLASS(TheKeyMap)

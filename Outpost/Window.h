@@ -93,9 +93,35 @@ namespace Outpost
     /// resizes its buffers on it.
     [[nodiscard]] bool TakeResize() noexcept;
 
+    /*
+     * Does this window have the player's attention? (Design/Platform.md §3.2, slice T-1.)
+     *
+     * THE SCHEDULER'S AUTO-PAUSE READS THIS, and it is the whole of what a windowed player means
+     * by pause: an inactive window plans no steps and BANKS no time, so alt-tabbing away for a
+     * minute leaves the game where it was rather than owing it a minute. The keys are already
+     * released on the same messages (I-6), so nothing is held across the gap either.
+     *
+     * Minimised counts as inactive on its own message rather than by asking for the client size,
+     * because the size is asked for further down the turn than the clock is read.
+     */
+    [[nodiscard]] bool Active() const noexcept
+    {
+      return m_active;
+    }
+
     /// A diagnostic the player should read before the game goes on -- a settings line it could not
     /// use, for instance -- as a box owned by this window. An empty text shows nothing.
     void Warn(const std::string& _text) const noexcept;
+
+    /*
+     * How many backlogs the scheduler has dropped, in the title bar (ADR-005 §3, Platform.md T-1).
+     *
+     * A DEBUG BUILD'S ONLY, and the composition root is what guards it. ADR-005 §3 has asked for a
+     * stall to be logged since the ADR was written, and the honest note in `Main.cpp` was that a
+     * windowed build had nowhere to report one to; the debugger's output is one place and this is
+     * the other, and this is the one somebody PLAYING can see.
+     */
+    void ShowStallCount(std::uint32_t _stalls) const noexcept;
 
   private:
     static LRESULT CALLBACK Dispatch(HWND, UINT, WPARAM, LPARAM) noexcept;
@@ -124,6 +150,10 @@ namespace Outpost
     HINSTANCE m_instance = nullptr;
     bool m_closed = false;
     bool m_resized = false;
+
+    /// See `Active`. True until a message says otherwise: a window that has just been created has
+    /// had no focus message yet and is not paused.
+    bool m_active = true;
 
     std::uint8_t m_pressed = 0; ///< the last press since `TakePressed`, or 0
     bool m_held[KEY_COUNT] = {};
