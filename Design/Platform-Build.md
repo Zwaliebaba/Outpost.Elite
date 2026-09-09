@@ -557,6 +557,36 @@ for landed writes, distinct offsets and calls per twin, then read the routine th
 frame; that equality is the slice's whole claim, and nine of the sixteen checkpoints already
 demonstrate it.
 
+**THE FOUR "TOO MUCH" CHECKPOINTS ARE THE PLANET'S MARKINGS, measured 2026-09-09.** Per-pass
+counters either side of checkpoint 200, with the four changes above in place:
+
+| pass | ink before → after | landed | distinct | `DrawLine2x` calls |
+|---|---|---|---|---|
+| 197 | 578 → **1084** | 1291 | 1087 | **20** |
+| 198 | 1084 → 582 | 589 | 582 | 16 |
+| 199 | 582 → **1086** | 1295 | 1089 | **20** |
+| 200 | 1086 → 583 | 595 | 583 | 16 |
+| 201 | 583 → 580 | 589 | 580 | 16 |
+
+**The passes alternate, and the difference is four line-twin calls worth about seven hundred
+writes.** Sixteen calls is the planet's outline; the extra four are its markings, drawn through
+`DrawEllipse` from `DrawPlanetDetail`. The canvas transient does not alternate (308 throughout), so
+on the canvas the markings are present every pass. On the frame they appear on one pass and not the
+next, which is what moves the four checkpoints.
+
+So `DrawPlanetDetail` is the file to read next, and the question to answer there is narrow: **under
+what condition are the markings drawn, and why is it not every pass.** Either they are conditional
+and the frame must redraw them from state like the sun, or an erase on that path is still running.
+
+**The three "too little" checkpoints (400, 500, 600) are a separate fault** and have not been
+investigated. Pass 500's counters — landed 612 over only 196 distinct offsets, 40 line calls, 2 ship
+calls — show heavy overdrawing of a small area, which is a different shape from the planet's and
+wants its own hunt.
+
+**Two sittings of forensics have now gone into this slice and the method is settled**: counters for
+landed writes, distinct offsets, exclusive-or against assignment, and calls per twin, then read the
+routine the counts name. Every conclusion reached by inference instead has been wrong.
+
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
 flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
