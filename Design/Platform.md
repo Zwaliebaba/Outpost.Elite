@@ -975,11 +975,17 @@ true of the dials and the indicators and is not true of a blip. Draw and erase s
 names routines, and `DrawSun` has two call sites with opposite lifetimes: the short-range chart
 draws discs it "never intends to move", and the flight sun is erased and redrawn every pass.
 
-**5. The twin switch is two switches now.** `DrawingTwins(_picture)` asks whether the twin that
-writes THIS surface should run, which is the right question and reads whichever surface the site was
-handed. With two surfaces, switching one off left every twin that writes the other still drawing and
-`TheReplayIsTheSameWithNoTwins` measuring half of what it claims. `SilenceTwins` switches both and
-the plane assertion checks both.
+**5. The twin switch is ONE switch over two surfaces.** `DrawingTwins(_picture)` asks whether the
+twin that writes THIS surface should run, which is the right question and reads whichever surface
+the site was handed. With two surfaces, switching one off leaves every twin that writes the other
+still drawing and `TheReplayIsTheSameWithNoTwins` measuring half of what it claims — while passing,
+because every digest would be exactly where it was. So the two flags are never written separately:
+`Universe::SetDrawingTwins` is the only writer and moves both by construction, and the plane
+assertion is made on both surfaces. The build plan asked for one flag reached through the universe
+from all forty-nine guard sites; this is the same guarantee for two lines instead of forty-nine, and
+it leaves the guard reading the surface in front of it rather than reaching back out to ask. Checked
+by mutation: a switch that reaches only the frame fails on "a twin drew on the backdrop with the
+twins switched off".
 
 **What the green does and does not prove, said plainly.** The composite is `backdrop ^ frame`, so
 moving an EXCLUSIVE-OR write between surfaces is provably invisible: exclusive-or is associative and

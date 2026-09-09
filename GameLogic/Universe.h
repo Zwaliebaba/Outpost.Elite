@@ -405,6 +405,31 @@ namespace Elite
     {
       heap.AttachSunHeap(heaps.sun);
     }
+
+    /*
+     * The twin switch, and it is ONE switch over TWO surfaces (RN-0, Resolution.md §8.4).
+     *
+     * `DrawingTwins(_picture)` asks "should the twin that writes THIS surface run", which is the
+     * right question and is answered from whichever surface the site was handed. That is what makes
+     * the guard local and free. What it does not do is stay in step: there are two surfaces since
+     * RN-0, so a caller that switched one off would leave every twin that writes the other still
+     * drawing, and `TheReplayIsTheSameWithNoTwins` would be measuring half of what it claims while
+     * passing -- because every digest would be exactly where it was.
+     *
+     * So the two flags are never written separately. This is the only sanctioned writer, and both
+     * surfaces move together by construction rather than by a caller remembering to. The build plan
+     * asked for one flag reached through the universe from all forty-nine guard sites; this is the
+     * same guarantee for two lines instead of forty-nine, and it leaves the guard reading the
+     * surface in front of it rather than reaching back out to the universe to ask.
+     *
+     * `Picture::SetDrawing` stays public underneath because a test that builds a bare `Picture`
+     * with no universe around it has no other way in, and several do.
+     */
+    void SetDrawingTwins(bool _drawing) noexcept
+    {
+      picture.SetDrawing(_drawing);
+      backdrop.SetDrawing(_drawing);
+    }
   };
 
 } // namespace Elite
