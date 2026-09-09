@@ -121,6 +121,12 @@
     <ClCompile Include="..\..\Outpost\Presentation.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Outpost\Scheduler.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\FrameClock.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\KeyMap.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
@@ -131,6 +137,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ControlsTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="SchedulerTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
   </ItemGroup>

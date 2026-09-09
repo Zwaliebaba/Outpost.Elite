@@ -188,4 +188,94 @@ namespace Outpost
     return work + static_cast<double>(_syncs) * NTSC_FRAME_CYCLES / NTSC_CLOCK_HZ;
   }
 
+  // ---- the same three in cycles (Design/Platform.md T-1) ------------------------------------------
+
+  namespace
+  {
+    /*
+     * One row's worth of straight line, in integers, rounded to nearest.
+     *
+     * `_along` over `_span` of the way from `_from` to `_to`, computed in 64 bits so that the
+     * product of a quarter-million cycles and a span of ninety-five cannot overflow, and rounded
+     * rather than truncated so that the integer curve does not sit systematically below the
+     * `double` one it replaces. The difference between the two is under a cycle everywhere, which
+     * is a millionth of a frame.
+     */
+    [[nodiscard]] std::uint32_t Between(std::uint32_t _from, std::uint32_t _to, std::int64_t _along, std::int64_t _span) noexcept
+    {
+      if (_span <= 0)
+      {
+        return _from;
+      }
+      const std::int64_t rise = static_cast<std::int64_t>(_to) - static_cast<std::int64_t>(_from);
+      const std::int64_t scaled = rise * _along;
+
+      // Rounded away from zero, so that a rise and a fall of the same size move by the same amount.
+      const std::int64_t half = _span / 2;
+      const std::int64_t step = (scaled >= 0) ? ((scaled + half) / _span) : ((scaled - half) / _span);
+      return static_cast<std::uint32_t>(static_cast<std::int64_t>(_from) + step);
+    }
+  } // namespace
+
+  std::uint32_t TitleTurnCycles(std::uint8_t _distanceHigh) noexcept
+  {
+    // The walk is `TitleTurnSeconds`', line for line: the table descends in distance, so the first
+    // entry the argument is at or above is the far side of the pair it falls between.
+    const TitleTurnCost* above = &TITLE_TURN_COSTS.front();
+
+    for (const TitleTurnCost& point : TITLE_TURN_COSTS)
+    {
+      if (_distanceHigh >= point.distanceHigh)
+      {
+        break;
+      }
+      above = &point;
+    }
+
+    const std::size_t index = static_cast<std::size_t>(above - TITLE_TURN_COSTS.data());
+    if (index + 1 < TITLE_TURN_COSTS.size() && _distanceHigh < above->distanceHigh)
+    {
+      const TitleTurnCost& below = TITLE_TURN_COSTS[index + 1];
+      return Between(above->cycles, below.cycles, static_cast<std::int64_t>(above->distanceHigh) - _distanceHigh,
+                     static_cast<std::int64_t>(above->distanceHigh) - below.distanceHigh);
+    }
+    return above->cycles;
+  }
+
+  std::uint32_t FlightFrameCycles(std::uint8_t _ships) noexcept
+  {
+    // Ascending in occupied slots, linear between rows, flat outside -- `FlightFrameSeconds`' walk.
+    const FlightFrameCost* below = &FLIGHT_FRAME_COSTS.front();
+    const FlightFrameCost* above = &FLIGHT_FRAME_COSTS.back();
+
+    for (const FlightFrameCost& point : FLIGHT_FRAME_COSTS)
+    {
+      if (_ships >= point.ships)
+      {
+        below = &point;
+      }
+    }
+    for (std::size_t index = FLIGHT_FRAME_COSTS.size(); index-- > 0u;)
+    {
+      if (_ships <= FLIGHT_FRAME_COSTS[index].ships)
+      {
+        above = &FLIGHT_FRAME_COSTS[index];
+      }
+    }
+
+    if (above->ships <= below->ships)
+    {
+      return below->cycles;
+    }
+    return Between(below->cycles, above->cycles, static_cast<std::int64_t>(_ships) - below->ships,
+                   static_cast<std::int64_t>(above->ships) - below->ships);
+  }
+
+  std::uint32_t DockedPassCycles(std::uint8_t _syncs, MachineTiming _timing) noexcept
+  {
+    // The work, and the syncs the pass asked `DELAY` for at the machine's own frame -- which is
+    // where the seconds form was wrong on a PAL machine and this one is not.
+    return DOCKED_PASS_CYCLES + static_cast<std::uint32_t>(_syncs) * _timing.cyclesPerFrame;
+  }
+
 } // namespace Outpost

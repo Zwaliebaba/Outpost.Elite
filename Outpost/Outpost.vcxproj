@@ -139,6 +139,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Scheduler.h" />
+    <ClInclude Include="FrameClock.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -148,6 +150,8 @@
     <ClCompile Include="SaveStore.cpp" />
     <ClCompile Include="SettingsFile.cpp" />
     <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
+    <ClCompile Include="FrameClock.cpp" />
     <ClCompile Include="KeyMap.cpp" />
     <ClCompile Include="Window.cpp" />
     <ClCompile Include="ScreenPresenter.cpp" />

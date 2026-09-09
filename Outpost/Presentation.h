@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scheduler.h"
+
 #include <array>
 #include <cstdint>
 
@@ -279,5 +281,30 @@ namespace Outpost
   /// How long one docked pass should take, in seconds, given the syncs the last pass asked `DELAY`
   /// for -- `Game::StepDocked`'s answer, two or none (InputTimer.md T-2).
   [[nodiscard]] double DockedPassSeconds(std::uint8_t _syncs) noexcept;
+
+  /*
+   * The same three costs, in CYCLES, which is what the scheduler spends (Design/Platform.md §3.2,
+   * slice T-1).
+   *
+   * THE TABLES ABOVE DO NOT MOVE. Every number in `TITLE_TURN_COSTS`, `FLIGHT_FRAME_COSTS` and
+   * `DOCKED_PASS_CYCLES` is a measurement taken against the shipped routines while the interpreter
+   * was still in the tree (§6.110, §6.114, InputTimer.md T-0), and nothing here re-measures or
+   * rescales one. What changes is the UNIT the answer comes back in: the three functions above
+   * divided by a clock to reach seconds, because the loop that asked was keeping a `double`, and
+   * the loop keeps cycles now -- so the division goes and the interpolation between rows becomes
+   * integer.
+   *
+   * The interpolation is 64-bit and rounds to nearest, which agrees with the `double` form to
+   * within a cycle on every row; `SchedulerTests::TheCycleTablesAgreeWithTheSecondsTheyReplace`
+   * is the sweep that says so, and it goes when the seconds functions do.
+   *
+   * The machine is a parameter of the docked pass alone, because that is the only one of the three
+   * whose cost includes a WAIT: the pass is 4,472 cycles of work and the vertical syncs
+   * `RunLoopTail` asked `DELAY` for, and a sync is 17,095 cycles on an NTSC machine and 19,656 on
+   * a PAL one. The other two are work and nothing else, so they are the same number on both.
+   */
+  [[nodiscard]] std::uint32_t TitleTurnCycles(std::uint8_t _distanceHigh) noexcept;
+  [[nodiscard]] std::uint32_t FlightFrameCycles(std::uint8_t _ships) noexcept;
+  [[nodiscard]] std::uint32_t DockedPassCycles(std::uint8_t _syncs, MachineTiming _timing) noexcept;
 
 } // namespace Outpost

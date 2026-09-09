@@ -67,7 +67,20 @@ def support_sources(_repo: Path) -> list[Path]:
 # a change in it is a hash of what it produces, and a hash is useless on a leg that cannot build it.
 # Its header includes <array>, <cstddef> and <cstdint> and nothing else, so there was never a
 # platform reason for it to be out.
-EXECUTABLE_SOURCES = ["SaveStore.cpp", "Presentation.cpp", "KeyMap.cpp", "SidSynth.cpp", "SettingsFile.cpp"]
+# `Scheduler` and `FrameClock` joined 2026-09-09 (Design/Platform.md T-1). The scheduler is the
+# whole of the loop's timing as integer arithmetic and is the reason it can be tested at all --
+# the four `double` accumulators it replaces lived in `Main.cpp` and inside two hold loops that
+# call `Present`, so no machine without a display ever ran one. `FrameClock` reads the wall clock
+# and has no test; it is here so that a second compiler sees it.
+EXECUTABLE_SOURCES = [
+    "SaveStore.cpp",
+    "Presentation.cpp",
+    "KeyMap.cpp",
+    "SidSynth.cpp",
+    "SettingsFile.cpp",
+    "Scheduler.cpp",
+    "FrameClock.cpp",
+]
 
 
 def write_if_changed(_path: Path, _text: str) -> None:

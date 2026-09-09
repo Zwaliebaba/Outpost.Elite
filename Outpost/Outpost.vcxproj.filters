@@ -6,6 +6,8 @@
     <ClCompile Include="SaveStore.cpp" />
     <ClCompile Include="SettingsFile.cpp" />
     <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
+    <ClCompile Include="FrameClock.cpp" />
     <ClCompile Include="KeyMap.cpp" />
     <ClCompile Include="Window.cpp" />
     <ClCompile Include="ScreenPresenter.cpp" />
@@ -19,6 +21,8 @@
     <ClInclude Include="SaveStore.h" />
     <ClInclude Include="SettingsFile.h" />
     <ClInclude Include="Presentation.h" />
+    <ClInclude Include="Scheduler.h" />
+    <ClInclude Include="FrameClock.h" />
     <ClInclude Include="KeyMap.h" />
     <ClInclude Include="Window.h" />
     <ClInclude Include="ScreenPresenter.h" />

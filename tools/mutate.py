@@ -204,6 +204,37 @@ def make_worktree(_at: Path) -> None:
                      f"would answer about HEAD instead\n{applied.stdout}{applied.stderr}")
         print(f"worktree   carrying {len(pending.stdout.splitlines())} lines of uncommitted diff on top of HEAD")
 
+    """
+    AND THE FILES THAT ARE NOT IN A DIFF AT ALL, which is where this used to answer about the
+    wrong tree while saying it did not (found 2026-09-09, Design/Platform.md T-1).
+
+    `git diff HEAD` covers TRACKED files. A file that has never been added is in no diff, so a slice
+    that adds `Outpost/Scheduler.h` and includes it from a modified `Presentation.h` put the
+    include in the worktree and not the header, and every unit failed to build -- while the banner
+    above it, which reads `git status --porcelain`, had just listed the new file as carried. The
+    baseline guard caught it, which is what the baseline guard is for; what it could not do is say
+    why, and a tool that names a file it did not copy is the shape of Risk R13 rather than a
+    nuisance.
+
+    `--exclude-standard` is what keeps the build output out: `x64/` and the rest are ignored, so
+    this copies the files a person has written and nothing a compiler has.
+    """
+    others = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=REPO, capture_output=True, text=True)
+    if others.returncode != 0:
+        sys.exit(f"error: could not read the untracked files\n{others.stdout}{others.stderr}")
+
+    copied = 0
+    for name in others.stdout.splitlines():
+        source = REPO / name
+        if not source.is_file():
+            continue
+        target = _at / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        copied += 1
+    if copied != 0:
+        print(f"worktree   carrying {copied} untracked file{'' if copied == 1 else 's'} beside it")
+
 
 def remove_worktree(_at: Path) -> None:
     subprocess.run(["git", "worktree", "remove", "--force", str(_at)], cwd=REPO, capture_output=True, text=True)
