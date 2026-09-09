@@ -32,9 +32,9 @@
  * `Game::Step` takes one pass, which is §2.1's `Step(InputFrame)` arrived at from the other
  * direction.
  *
- * IT IS THE CLOCK AND NOT THE FLOATING POINT THAT KEEPS THE COUNT OUT HERE, amended 2026-09-09
- * (Platform.md T-1, ADR-007 §2): the accumulator is integer cycles now, and the division stays
- * because reading a clock is the thing `GameLogic` may not do.
+ * IT IS THE CLOCK AND NOT THE FLOATING POINT THAT KEEPS THE COUNT OUT HERE (Platform.md T-1,
+ * ADR-007 §2): the accumulator is integer cycles now, and reading a clock is what the library
+ * may not do.
  *
  * IT HAS TWO OUTER LOOPS AND NOT ONE, because the game does. `MLOOP`'s second half polls the
  * keyboard and dispatches, and every docked screen it reaches ends by blocking in `TT217`; `TT100`
@@ -64,10 +64,11 @@ namespace
    */
   struct App
   {
-    explicit App(Outpost::MachineTiming _timing)
+    App(Outpost::MachineTiming _timing, Outpost::SaveStore& _store)
       : clock(_timing),
         scheduler(_timing),
         audio(_timing),
+        store(_store),
         shell(window, presenter, clock, scheduler),
         flight(window),
         game(shell, shell, store)
@@ -89,13 +90,9 @@ namespace
     Outpost::Window window;
     Outpost::ScreenPresenter presenter;
 
-    /*
-     * The clock and the scheduler, ahead of everything that keeps time against them (T-1).
-     *
-     * THE MACHINE IS ONE FACT AND WAS THREE CONSTANTS -- `Presentation.h`'s two and `SoundOutput`'s
-     * own pair. It is settled once at construction and handed to the scheduler, the sound and the
-     * cost model; `scheduler.Timing()` is where anything else asks.
-     */
+    /// The clock and the scheduler, ahead of everything that keeps time against them (T-1). The
+    /// machine was three constants in two files and is settled once here; `scheduler.Timing()` is
+    /// where anything else asks.
     Outpost::FrameClock clock;
     Outpost::Scheduler scheduler;
 
@@ -107,7 +104,9 @@ namespace
      * runs in silence.
      */
     Outpost::SoundOutput audio;
-    Outpost::SaveStore store;
+    /// `Run`'s: the settings beside it decide the machine, which three members above take at
+    /// construction (T-1).
+    Outpost::SaveStore& store;
 
     Outpost::GameShell shell;
     Outpost::FlightSession flight;
@@ -152,15 +151,19 @@ namespace
 
   int Run(HINSTANCE _instance)
   {
-    // NTSC, because ADR-001's context line records the masters as `_VARIANT=1`, the GMA85 NTSC
-    // release; `Settings.txt` chooses the other one (T-1's third commit).
-    auto app = std::make_unique<App>(Outpost::MachineTiming::Ntsc());
+    // Read, build, then apply: `machine` is a constructor argument to three of `App`'s members and
+    // the game's thirteen bytes need a universe, which is why `SettingsFile.h` has two halves.
+    Outpost::SaveStore store;
+    const Outpost::SettingsReport settings = Outpost::ReadSettingsFile(store.Root());
+
+    auto app = std::make_unique<App>(settings.timing, store);
 
     app->window.Create(_instance, INITIAL_SCALE);
     app->presenter.Create(app->window.Handle());
 
-    // The thirteen bytes the pause screen toggled, from Settings.txt beside the commanders (InputTimer.md S-1).
-    app->window.Warn(Outpost::ApplySettingsFile(app->store.Root(), app->game.State()).Summary());
+    // The thirteen bytes the pause screen toggled (InputTimer.md S-1), now that there is a universe.
+    Outpost::ApplySettings(settings.parsed, app->game.State());
+    app->window.Warn(settings.Summary());
 
     // The loader's parts 5 and 6, then `NA%`, then `TT170` -- the cold start, end to end.
     app->game.Reset();
@@ -187,13 +190,10 @@ namespace
       // InputTimer.md I-0 took `FREEZE`'s third with the pause screen (owner ruling 2026-09-08).
       const Elite::Game::Mode mode = app->game.ModeNow();
 
-      /*
-       * The accumulator is dropped at the dock rather than carried across it -- one call where it
-       * was an assignment to a `double` this function held (T-1). It is never more than one step,
-       * so this is not what protects a launch from a long docked session (the scheduler's clamp
-       * is); it starts the next flight on a whole step rather than on a fraction of one measured
-       * before the market screen. Both directions, because a dock has a launch's claim.
-       */
+      // The accumulator is dropped at the dock rather than carried across it, in both directions.
+      // It is never more than one step, so this is not what protects a launch from a long docked
+      // session (the scheduler's clamp is): it starts the next flight on a whole step rather than
+      // on a fraction of one measured before the market screen.
       if (mode != lastMode)
       {
         app->scheduler.Reset();

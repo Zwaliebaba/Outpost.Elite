@@ -705,7 +705,8 @@ namespace GameLogicTests
       const std::filesystem::path commanders = root / "Commanders";
 
       Elite::Universe universe{};
-      const Outpost::SettingsReport first = Outpost::ApplySettingsFile(commanders, universe);
+      const Outpost::SettingsReport first = Outpost::ReadSettingsFile(commanders);
+      Outpost::ApplySettings(first.parsed, universe);
       Assert::IsTrue(first.created, L"no file, so the default is written");
       Assert::IsTrue(first.problems.empty(), L"and nothing to report");
       Assert::IsTrue(std::filesystem::exists(root / "Settings.txt"), L"beside the commander folder, not inside it");
@@ -715,17 +716,49 @@ namespace GameLogicTests
         std::ofstream out(root / "Settings.txt", std::ios::trunc);
         out << "planet-detail = on\nsound = off\nwhat = ever\n";
       }
-      const Outpost::SettingsReport second = Outpost::ApplySettingsFile(commanders, universe);
+      const Outpost::SettingsReport second = Outpost::ReadSettingsFile(commanders);
+      Outpost::ApplySettings(second.parsed, universe);
       Assert::IsFalse(second.created, L"the file was there");
       Assert::AreEqual<std::uint8_t>(0xFF, universe.heaps.planetDetail, L"PLTOG from the file");
       Assert::AreEqual<std::uint8_t>(0xFF, universe.sound.soundOff, L"DNOIZ from the file");
       Assert::AreEqual<std::size_t>(1, second.problems.size(), L"and the one bad line reported");
       Assert::IsTrue(second.Summary().find("line 3") != std::string::npos, L"with its line number in the summary");
 
-      const Outpost::SettingsReport none = Outpost::ApplySettingsFile(std::filesystem::path{}, universe);
+      const Outpost::SettingsReport none = Outpost::ReadSettingsFile(std::filesystem::path{});
       Assert::IsTrue(none.problems.empty() && !none.created, L"no LocalAppData: nothing read, nothing written, nothing said");
 
       std::filesystem::remove_all(root, error);
+    }
+
+    /*
+     * The machine, which is the one key that is not a byte of the game (Design/Platform.md T-1).
+     *
+     * It is read out of the same file and applied nowhere: the clock, the scheduler and the sound
+     * are built from it before there is a universe to write into. So the assertions are about what
+     * the REPORT carries, which is what the composition root reads.
+     */
+    TEST_METHOD(TheMachineIsReadFromTheFileAndDefaultsToNtsc)
+    {
+      // NTSC unless the file says otherwise -- ADR-001's variant, and what every measured number
+      // in `Presentation.h` was taken against.
+      Assert::IsTrue(Outpost::ParseSettings("damping = on").machine == std::nullopt, L"a file that does not say leaves it unsaid");
+      Assert::IsTrue(Outpost::SettingsReport{}.timing == Outpost::MachineTiming::Ntsc(), L"and the report defaults to NTSC");
+
+      Assert::IsTrue(Outpost::ParseSettings("machine = pal").machine == Outpost::MachineTiming::Pal(), L"pal");
+      Assert::IsTrue(Outpost::ParseSettings("machine = ntsc").machine == Outpost::MachineTiming::Ntsc(), L"ntsc");
+
+      // A value it cannot use is a diagnostic and not a crash (AGENTS.md §5), and it leaves the
+      // machine unsaid rather than guessing at one.
+      const Outpost::ParsedSettings bad = Outpost::ParseSettings("machine = amiga\n");
+      Assert::IsTrue(bad.machine == std::nullopt, L"an unusable value chooses nothing");
+      Assert::AreEqual<std::size_t>(1, bad.problems.size(), L"and is reported");
+      Assert::IsTrue(bad.problems[0].find("ntsc or pal") != std::string::npos, L"naming what it wanted");
+
+      // The file a player starts from names it, so the choice is discoverable rather than secret.
+      const std::string text = Outpost::DefaultSettingsText();
+      Assert::IsTrue(text.find("machine = ntsc") != std::string::npos, L"the default file carries the key");
+      Assert::IsTrue(Outpost::ParseSettings(text).problems.empty(), L"and parses clean, machine line included");
+      Assert::IsTrue(Outpost::ParseSettings(text).machine == Outpost::MachineTiming::Ntsc(), L"at NTSC");
     }
   };
 

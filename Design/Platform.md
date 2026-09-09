@@ -569,7 +569,7 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 
 | Slice | What | Gate | Ratchets and checks | Sittings |
 |---|---|---|---|---|
-| **T-1** `MachineTiming`, `FrameClock`, `Scheduler` | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->257) falls; ADR-005 §3 | 2 |
+| **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->257) falls; ADR-005 §3 | 2 |
 | **T-3** The presenter | §3.7: the waitable object, latency one, present-on-change over the picture's generation counter (or the frame surface's once RN-0 lands), occlusion idle | The picture's own goldens unchanged; PresentMon before and after on a scripted key, numbers in the journal; CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** Finish the split | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
 | **RN-1** The frame boundary | `Picture::Clear` finally called — the frame refreshed from the backdrop at every present; erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
@@ -745,6 +745,52 @@ held, six were corrected in the sections they touch, and one — ADR-005 §2's c
 interrupt — is a reversal the design had described as an addition and now names as a ruling. The
 pass also removed a worry: the failed-load stack bug is ported as a flag, so I-4's arena has no
 unbounded case.
+
+**2026-09-09 — T-1 built, in three commits, and the clamp is not the one the plan drew.**
+`Outpost::Scheduler` and `Outpost::FrameClock` are the four `double` accumulators and the three
+`steady_clock` reads; `DELAY` counts the machine's simulated blanks on every panel; an inactive
+window plans nothing and banks nothing; a dropped backlog is counted and said. `SoundOutput` takes
+the machine instead of naming NTSC in two more constants, and `Settings.txt` has a `machine` key.
+Eleven tests, 140 → 147, all three CI jobs green.
+
+**The clamp took a shape §3.2 did not specify, and the shape matters.** "By time and not by count"
+is right and is not enough on its own: a budget of four frames of the machine, applied plainly,
+would refuse a flight frame of a full bubble outright — 293,354 cycles against a budget of 68,380 —
+and the game would stop the moment a fight started. So the first affordable step is unconditional
+and the budget bounds only the CATCH-UP after it. That second clause is what keeps the one docked
+screen that runs at 228 passes a second (Data on System with the author names, whose pass waits for
+nothing) running at 228 rather than at the display's rate, and it is why the plan's named test
+`ThreePeriodsAreThreeSteps` is not in the tree: three periods is `PlanSteps`' answer, and the object
+that replaced it deliberately gives a different one.
+
+**Two things moved to where they belonged, and both improved the result.** The stall report was to
+go in `Main.cpp`; it is in `GameShell::Turn`, because that is where the clock is read — a stall
+inside a docked `DELAY` or a title hold happens at a call depth the outer loop does not see for
+another turn, and a diagnostic a turn late is about the wrong frame. And `ApplySettingsFile` split
+into `ReadSettingsFile` plus the `ApplySettings` that already existed, because `machine` decides how
+the clock, the scheduler and the sound are CONSTRUCTED and the universe they are built around does
+not exist yet: read, build, then apply.
+
+**`main-lines` 238 → 257, raised once and then held.** The rise is the clock, the scheduler and the
+mode reset arriving in the composition root, which is platform composition; P6 counts the executable
+holding game state and dispatch, and none of that came back. The tool refused the raise until it was
+asked for explicitly, which is rule 5 working. What is worth recording is the second attempt: the
+third commit pushed the count to 271 and the honest reading was not "raise it again" but that the
+reasoning had been written twice — once in `Main.cpp` and once in the header that owns the concept —
+so the composition root's prose went back to pointers and the count returned to 257 exactly.
+`outpost-elite-names` 63 → 62 with `GameShell::ClearToView`, which said it was public because
+`Main.cpp` changed screens through it and had had no caller since M3-c.
+
+**And a defect in the harness, found by the slice and fixed in it.** `tools/mutate.py` built HEAD
+plus `git diff HEAD`, which covers TRACKED files: a slice that adds a header and includes it from a
+modified file put the include in the worktree and not the header, so every unit failed to build —
+while the banner above, which reads `git status --porcelain`, had just listed the new file as
+carried. The baseline guard caught it, which is what the baseline guard is for; what it could not do
+was say why, and a tool that names a file it did not copy is Risk R13's shape rather than a
+nuisance. It copies the untracked files beside the diff now.
+
+**Not done here, and it is the owner's**: the play checks T-1 is accepted on — `dn2`'s beep the same
+length on a 60 Hz and a 144 Hz panel, and Alt+Tab away for a minute and back on the same step.
 
 **2026-09-09, later still — eight rulings, and the ADRs amended (§12).** All four of §4 and four on
 the ADRs were put to the owner and ruled the same day: three as recommended, D3 differently. The

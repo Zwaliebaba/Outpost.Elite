@@ -47,6 +47,9 @@ namespace Outpost
     /// Recognised so the report can say why it is refused (InputTimer.md §5.1).
     constexpr std::string_view JOYSTICK_KEY = "joystick";
 
+    /// The machine, which is the platform's rather than the game's (Design/Platform.md T-1).
+    constexpr std::string_view MACHINE_KEY = "machine";
+
     [[nodiscard]] std::uint8_t* ByteFor(int _index, Elite::Universe& _universe) noexcept
     {
       switch (_index)
@@ -187,6 +190,23 @@ namespace Outpost
       const std::string key = Lower(Trim(line.substr(0, equals)));
       const std::string value = Lower(Trim(line.substr(equals + 1)));
 
+      if (key == MACHINE_KEY)
+      {
+        if (value == "ntsc")
+        {
+          parsed.machine = MachineTiming::Ntsc();
+        }
+        else if (value == "pal")
+        {
+          parsed.machine = MachineTiming::Pal();
+        }
+        else
+        {
+          parsed.problems.push_back("line " + std::to_string(lineNumber) + ": `machine` wants ntsc or pal, not `" + value + "`");
+        }
+        continue;
+      }
+
       if (key == JOYSTICK_KEY)
       {
         parsed.problems.push_back("line " + std::to_string(lineNumber) +
@@ -240,9 +260,13 @@ namespace Outpost
      */
     Elite::Universe fresh{};
     std::ostringstream out;
-    out << "# Outpost: Elite -- settings. Every key is `on` or `off`; a line that cannot be read is\n"
-           "# reported when the game starts and ignored, and a key left out keeps the game's own value.\n"
-           "# These were the pause screen's thirteen toggles on the Commodore 64.\n\n";
+    out << "# Outpost: Elite -- settings. Every key below is `on` or `off`; a line that cannot be read\n"
+           "# is reported when the game starts and ignored, and a key left out keeps the game's own\n"
+           "# value. These were the pause screen's thirteen toggles on the Commodore 64.\n\n"
+           "# The machine the game keeps time against: `ntsc` or `pal`. It decides how fast a flight\n"
+           "# frame runs, how long every docked pause lasts, and the sound interrupt's rate. NTSC is\n"
+           "# the variant these masters were built as; PAL is 3.8% slower and its frame is 17% longer.\n"
+           "machine = ntsc\n\n";
     for (const SettingKey& key : KEYS)
     {
       const int index = static_cast<int>(&key - KEYS);
@@ -268,7 +292,7 @@ namespace Outpost
     return text;
   }
 
-  SettingsReport ApplySettingsFile(const std::filesystem::path& _commanders, Elite::Universe& _universe)
+  SettingsReport ReadSettingsFile(const std::filesystem::path& _commanders)
   {
     SettingsReport report;
     if (_commanders.empty())
@@ -302,8 +326,12 @@ namespace Outpost
     whole << in.rdbuf();
 
     ParsedSettings parsed = ParseSettings(whole.str());
-    ApplySettings(parsed, _universe);
-    report.problems = std::move(parsed.problems);
+    report.problems = parsed.problems;
+    if (parsed.machine.has_value())
+    {
+      report.timing = *parsed.machine;
+    }
+    report.parsed = std::move(parsed);
     return report;
   }
 

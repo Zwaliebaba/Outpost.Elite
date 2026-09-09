@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scheduler.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -38,6 +40,14 @@ namespace Outpost
    * in `Main.cpp` so that `ShellTests` covers it on both CI legs; only the message box that shows
    * the report is the window's.
    *
+   * `machine = ntsc|pal` IS THE ONE KEY THAT IS NOT A BYTE OF THE GAME (Design/Platform.md T-1).
+   * It chooses the 6510 and the VIC-II the port keeps time against: the flight loop's cost model,
+   * the vertical blank `DELAY` counts and the sound interrupt's rate. NTSC is the default and the
+   * default is not a preference -- ADR-001's context line records the masters as `_VARIANT=1`, the
+   * GMA85 NTSC release -- but `wscan.asm` says the machine decides, so a player may say otherwise.
+   * It is read BEFORE the universe exists, which is why this file has two halves: `ReadSettingsFile`
+   * says what the file holds and `ApplySettings` writes the game's bytes once there are some.
+   *
    * `JSTK` -- keyboard or joystick -- IS DELIBERATELY NOT A KEY. InputTimer.md §5.1 rules that the
    * game may believe a joystick is configured only when the platform has one to read, and until the
    * gamepad slice exists it has none; a `joystick = on` line would put `DOKEY` into the joystick
@@ -65,6 +75,10 @@ namespace Outpost
     std::vector<std::optional<std::uint8_t>> values; ///< `SettingKeyCount()` entries, in `SettingKeys()` order
     std::vector<std::string> problems;               ///< "line N: ..." -- reported, never fatal
 
+    /// `machine`, if the file named one. Not a `Universe` byte, so it is not in `values`: it is
+    /// the platform's, and the platform is built before the game (Design/Platform.md T-1).
+    std::optional<MachineTiming> machine;
+
     [[nodiscard]] std::optional<std::uint8_t> ValueOf(std::string_view _key) const noexcept;
   };
 
@@ -85,18 +99,30 @@ namespace Outpost
     std::vector<std::string> problems; ///< `ParsedSettings::problems`, plus a read failure if there was one
     bool created = false;              ///< the file was absent and the default was written
 
+    /// The machine to build the clock, the scheduler and the sound against -- the file's, or NTSC.
+    MachineTiming timing = MachineTiming::Ntsc();
+
+    /// What was read, for the caller to apply once it has a universe to apply it to.
+    ParsedSettings parsed;
+
     [[nodiscard]] std::string Summary() const;
   };
 
   /*
    * Read `Settings.txt` beside `_commanders` (the commander folder `SaveStore::Root` names -- the
-   * file sits in its parent, `Outpost.Elite`), apply it to `_universe`, and say what happened.
+   * file sits in its parent, `Outpost.Elite`) and say what it holds.
+   *
+   * IT READS AND DOES NOT APPLY, since T-1, and the split is not tidiness: `machine` decides how
+   * the clock, the scheduler and the sound are CONSTRUCTED, so it has to be known before any of
+   * them exists -- and the universe those objects are built around does not exist yet either. The
+   * caller reads first, builds the platform from `timing`, and then hands `parsed` to
+   * `ApplySettings` when there is a universe. It was one call that did both until then.
    *
    * An absent file is written from `DefaultSettingsText` so that the player has something to edit,
-   * and applies nothing. An empty `_commanders` -- no LocalAppData -- applies nothing and reports
+   * and holds nothing. An empty `_commanders` -- no LocalAppData -- holds nothing and reports
    * nothing, which is `SaveStore`'s own rule for the same case. Reads through `<fstream>`, as the
    * store does, so this file compiles on the portable runner.
    */
-  [[nodiscard]] SettingsReport ApplySettingsFile(const std::filesystem::path& _commanders, Elite::Universe& _universe);
+  [[nodiscard]] SettingsReport ReadSettingsFile(const std::filesystem::path& _commanders);
 
 } // namespace Outpost
