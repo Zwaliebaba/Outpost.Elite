@@ -169,7 +169,7 @@ namespace Elite
         for (;;)
         {
           ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.screenLayout);
+                       &_universe.backdrop, _universe.screenLayout);
 
           // Token 204 -- "QUANTITY OF ".
           _ports.printer.Print(QUANTITY_OF_TOKEN);

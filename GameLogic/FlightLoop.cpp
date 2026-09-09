@@ -300,7 +300,7 @@ namespace Elite
     {
       // The jammed-missile message.
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_MISSILE_JAMMED,
-                  _universe.view, &_universe.picture);
+                  _universe.view, &_universe.backdrop);
       return;
     }
 
@@ -486,7 +486,7 @@ namespace Elite
     if ((_universe.bubble.missileTarget & 0x80u) != 0u && _universe.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
     {
       _universe.status.missileArmed = _universe.keys[KEY_ARM_MISSILE];
-      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED, &_universe.picture);
+      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED, &_universe.backdrop);
     }
 
     /*
@@ -562,7 +562,7 @@ namespace Elite
          * carry across the flight loop, so false is what it can honestly supply, and the sound
          * comparison excludes this effect by name rather than pretending to agree.
          */
-        StartEcm(_universe.canvas, _universe.status, _universe.sound, false, &_universe.picture);
+        StartEcm(_universe.canvas, _universe.status, _universe.sound, false, &_universe.backdrop);
       }
     }
 
@@ -964,7 +964,7 @@ namespace Elite
 
     // The item's name token, on the carry the store above left behind.
     const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view, &_universe.picture);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view, &_universe.backdrop);
 
     // Bit 7 of `NEWB` is "take it out of the bubble", so a scooped canister is removed by
     // part 12 rather than by anything here.
@@ -1206,7 +1206,7 @@ namespace Elite
            * zero, so the next message within twenty frames erases this one by printing the balance
            * again.
            */
-          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 0u, _universe.view, &_universe.picture);
+          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 0u, _universe.view, &_universe.backdrop);
         }
       }
 
@@ -1406,7 +1406,7 @@ namespace Elite
 
     if (stop)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture);
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.backdrop);
     }
 
     /*
@@ -1555,7 +1555,7 @@ namespace Elite
       if (ENERGY_WARNING >= _universe.status.energy)
       {
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                    static_cast<std::uint8_t>(ENERGY_WARNING << 1u), _universe.view, &_universe.picture);
+                    static_cast<std::uint8_t>(ENERGY_WARNING << 1u), _universe.view, &_universe.backdrop);
       }
 
       /*
@@ -1613,7 +1613,7 @@ namespace Elite
       if (_universe.control.dockingComputer != 0u)
       {
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_DOCKING_ON,
-                    _universe.view, &_universe.picture);
+                    _universe.view, &_universe.backdrop);
       }
     }
     else if (_counter == STEP_CABIN_TEMPERATURE)
@@ -1684,7 +1684,7 @@ namespace Elite
         commander.fuel = commander.fuel.Scooped(scooped.value, scooped.carry);
 
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_SCOOPS_ON,
-                    _universe.view, &_universe.picture);
+                    _universe.view, &_universe.backdrop);
       }
     }
 

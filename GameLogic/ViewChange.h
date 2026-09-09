@@ -193,7 +193,8 @@ namespace Elite
    */
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
                          const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass,
-                         VideoState& _video, MemoryMap& _map, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
+                         VideoState& _video, MemoryMap& _map, std::uint8_t _view, Picture* _picture = nullptr,
+                         Picture* _frame = nullptr) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
   /*

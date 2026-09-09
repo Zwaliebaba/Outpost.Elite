@@ -101,7 +101,7 @@ namespace Elite
 
       // Token 101 through `MESS` -- "RIGHT ON COMMANDER", once every 256 whole kills.
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_RIGHT_ON_COMMANDER,
-                  _universe.view, &_universe.picture);
+                  _universe.view, &_universe.backdrop);
     }
 
     // `davidscockup` -- the same shape as `EXNO`'s noise with wider thresholds, down to the carry:
@@ -235,7 +235,7 @@ namespace Elite
       token = static_cast<std::uint8_t>(slot + 94u);
     }
 
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token, _universe.view, &_universe.picture);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token, _universe.view, &_universe.backdrop);
   }
 
   void StopEnergyBomb(ScreenState& _screen) noexcept

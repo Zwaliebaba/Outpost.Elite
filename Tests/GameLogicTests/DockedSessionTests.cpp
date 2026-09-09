@@ -299,8 +299,9 @@ namespace GameLogicTests
         shell.extended = &characters.State();
         characters.State().sentenceStart = 0xFF;
 
-        // The wide surface, so the glyph twins draw beside the faithful ones (Resolution.md §6).
-        screen.AttachPicture(&universe.picture, &universe.screenLayout);
+        // The wide surface, so the glyph twins draw beside the faithful ones (Resolution.md §6) --
+        // and the BACKDROP of the two since RN-0, exactly as `Game` wires the real game.
+        screen.AttachPicture(&universe.backdrop, &universe.screenLayout);
       }
 
       Session(const Session&) = delete;

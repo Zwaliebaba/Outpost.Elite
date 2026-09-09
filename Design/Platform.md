@@ -945,6 +945,50 @@ the numbers mean anything at all.
 tunnel's; until today none of those 30 had a whole-frame test of any kind. The remaining commits
 move sites against these two tables and `ThePictureIsAsRecorded`.
 
+**2026-09-09 — RN-0, the sites moved: 54 to the backdrop, 28 left on the frame.** All three picture
+tables hold unmoved, 151 tests, 13 checks. The gate ruled on all three of the defaults §3.4 left
+open and confirmed each: `SeedStardustField`, `SeedStardustAndClearShips` and `FlipStardust` stay on
+the frame, `DrawHyperspaceRings` stays, `ClearAllShips` stays. **Five corrections to the site table,
+four of them found by the gate rather than by argument.**
+
+**1. A wipe is not a draw site, and the table does not classify it.** With one surface, blanking the
+screen blanked everything on it. Split, `SetUpScreenPixels` can only blank the surface it is handed,
+and the transients are on the other — so the scripted flight's last checkpoint, the docked screen
+the arrival leaves, came back with stardust on it. The wipe takes both surfaces now and clears the
+frame itself, in the routine rather than at its two call sites, because a third call site would
+forget. That is RN-1's mechanism arriving early and doing exactly what RN-1 will ask of it.
+
+**2. Sites that write the same CELL must move as a unit.** Moving the glyphs alone made all seven
+docked screens resolve to the same picture: the glyph's cell palette went to the backdrop, the
+wipe's stayed on the frame, and the composite exclusive-ors the two palette bytes into black on
+black. That is precisely the hazard recorded in the plan before this commit started, arriving on the
+first move that could produce it. Glyphs, wipes and message rows moved together afterwards.
+
+**3. Blips and the compass stay on the FRAME**, against the table's dashboard row. `ClearAllShips`
+erases every blip through the pointer the table sends to the frame, so a blip drawn on the backdrop
+would be erased on the frame — invisible today, because exclusive-or does not care which surface,
+and a stale blip stranded on the backdrop for ever once RN-1 clears the frame each pass. R-7's
+argument for the dashboard is that it is "written absolutely rather than exclusive-ored", which is
+true of the dials and the indicators and is not true of a blip. Draw and erase share a surface.
+
+**4. The chart's sun discs go to the backdrop; the flight's sun stays on the frame.** The table
+names routines, and `DrawSun` has two call sites with opposite lifetimes: the short-range chart
+draws discs it "never intends to move", and the flight sun is erased and redrawn every pass.
+
+**5. The twin switch is two switches now.** `DrawingTwins(_picture)` asks whether the twin that
+writes THIS surface should run, which is the right question and reads whichever surface the site was
+handed. With two surfaces, switching one off left every twin that writes the other still drawing and
+`TheReplayIsTheSameWithNoTwins` measuring half of what it claims. `SilenceTwins` switches both and
+the plane assertion checks both.
+
+**What the green does and does not prove, said plainly.** The composite is `backdrop ^ frame`, so
+moving an EXCLUSIVE-OR write between surfaces is provably invisible: exclusive-or is associative and
+both halves still land. The gate therefore says nothing about the transient sites — which is most of
+them. What it does check is every ASSIGNMENT that used to wipe out another site's writes, because an
+assignment resets only its own surface's accumulator. That is where all four corrections above came
+from, and it is the whole of RN-a's failure mode. The classification of the pure exclusive-or sites
+rests on the argument, not on the tables, until RN-1 clears the frame and makes it visible.
+
 ---
 
 ## 11. Every ADR read against this design, 2026-09-09

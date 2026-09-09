@@ -145,7 +145,7 @@ namespace Elite
 
     // The rows cleared, token 175 through `prq`, a key read, and "0" taken off it.
     ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.screenLayout);
+                       &_universe.backdrop, _universe.screenLayout);
     for (;;)
     {
       PrintThenQuestion(_ports.printer, VIEW_TOKEN);
@@ -159,7 +159,7 @@ namespace Elite
 
       // Back to qv2 -- and there is no way out of this loop but a valid view.
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.screenLayout);
+                       &_universe.backdrop, _universe.screenLayout);
     }
   }
 
@@ -254,7 +254,7 @@ namespace Elite
 
       // The rows cleared, token 127 through `prq`, then `gnum`.
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.screenLayout);
+                       &_universe.backdrop, _universe.screenLayout);
       PrintThenQuestion(_ports.printer, ITEM_TOKEN);
 
       const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, highest);
@@ -328,7 +328,7 @@ namespace Elite
         else
         {
           _universe.commander.missiles = missiles;
-          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture); // JSR msblob
+          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.backdrop); // JSR msblob
         }
       }
 

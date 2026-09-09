@@ -233,7 +233,7 @@ namespace Elite
       at.x = SHORT_RANGE_CENTRE_X;
       at.y = SHORT_RANGE_CENTRE_Y;
       at.size = 16;
-      DrawCrosshairs(_universe.canvas, at, _view.view, &_universe.picture);
+      DrawCrosshairs(_universe.canvas, at, _view.view, &_universe.backdrop);
 
       circle.x = at.x;
       circle.y = at.y;
@@ -245,7 +245,7 @@ namespace Elite
       at.x = _view.homeX;
       at.y = static_cast<std::uint8_t>(_view.homeY >> 1);
       at.size = 7;
-      DrawCrosshairs(_universe.canvas, at, _view.view, &_universe.picture);
+      DrawCrosshairs(_universe.canvas, at, _view.view, &_universe.backdrop);
 
       circle.x = at.x;
 
@@ -272,7 +272,7 @@ namespace Elite
       _universe.heaps.circleStep = circle.step;
       const Projection centre{circle.x, 0u, circle.y, 0u};
       DrawBall(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, centre, circle.radius, false,
-               &_universe.picture);
+               &_universe.backdrop);
     }
   }
 
@@ -303,8 +303,8 @@ namespace Elite
     _ports.printer.Print(TITLE_LONG_RANGE);
 
     // The rule under the title, and then a second rule at 152, under the chart.
-    DrawTitleRule(_universe.canvas, _universe.text, &_universe.picture);
-    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM, &_universe.picture);
+    DrawTitleRule(_universe.canvas, _universe.text, &_universe.backdrop);
+    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM, &_universe.backdrop);
 
     // The fuel circle, before the dots rather than after.
     DrawFuelRange(_universe, _view);
@@ -327,15 +327,15 @@ namespace Elite
       //
       // The guard is explicit because this twin takes the surface by REFERENCE and not by pointer,
       // so there is no null to test and `DrawingTwins` has nothing to be given (section 8.4).
-      if (_universe.picture.Drawing())
+      if (_universe.backdrop.Drawing())
       {
-        PlotPixel2x(_universe.picture, 2 * static_cast<int>(seeds.bytes[3]), 2 * static_cast<int>(y), distance);
+        PlotPixel2x(_universe.backdrop, 2 * static_cast<int>(seeds.bytes[3]), 2 * static_cast<int>(y), distance);
       }
       NextSystem(seeds);
     }
 
     // The fall-through into TT15 with QQ19 set from QQ9 and QQ10.
-    DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
+    DrawTargetCrosshairs(_universe.canvas, _view, &_universe.backdrop);
   }
 
   void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy,
@@ -356,10 +356,10 @@ namespace Elite
 
     _universe.text.column = 7;
     _ports.printer.Print(TITLE_SHORT_RANGE);
-    DrawSeparator(_universe.canvas, SHORT_RANGE_RULE, &_universe.picture);
+    DrawSeparator(_universe.canvas, SHORT_RANGE_RULE, &_universe.backdrop);
 
     DrawFuelRange(_universe, _view);
-    DrawTargetCrosshairs(_universe.canvas, _view, &_universe.picture);
+    DrawTargetCrosshairs(_universe.canvas, _view, &_universe.backdrop);
 
     /*
      * Twenty-five bytes cleared, counting down from 24.
@@ -511,7 +511,7 @@ namespace Elite
            */
           ClearSunHeap(_universe.heaps);
           const Projection centre{screenX, 0u, screenY, 0u};
-          DrawSun(_universe.canvas, _universe.heaps, _universe.math, _universe.rng, centre, radius, &_universe.picture);
+          DrawSun(_universe.canvas, _universe.heaps, _universe.math, _universe.rng, centre, radius, &_universe.backdrop);
           ClearSunHeap(_universe.heaps);
         }
       }

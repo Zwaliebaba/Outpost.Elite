@@ -176,7 +176,7 @@ namespace Elite
        * what is left is the screen half -- and that half is `Elite::ClearMessageRows`.
        */
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
-                       &_universe.picture, _universe.screenLayout);
+                       &_universe.backdrop, _universe.screenLayout);
       return;
 
     case 22:

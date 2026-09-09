@@ -294,6 +294,19 @@ namespace GameLogicTests
       }
     };
 
+    /*
+     * Both 640x400 surfaces switched off at once (RN-0).
+     *
+     * One call rather than two lines repeated three times, because forgetting the second is silent:
+     * the digests would still match and the test would be measuring the twins that write the frame
+     * while the ones that write the backdrop went on drawing.
+     */
+    void SilenceTwins(Elite::Universe& _universe) noexcept
+    {
+      _universe.picture.SetDrawing(false);
+      _universe.backdrop.SetDrawing(false);
+    }
+
     /// 6502: what the cold start leaves before a launch -- the default commander with a docking
     /// computer bought for the last phase, the home system's data, and `RESET`.
     void Prepare(FlightPort& _port)
@@ -741,22 +754,32 @@ namespace GameLogicTests
         return false;
       };
 
+      /*
+       * BOTH SURFACES, since RN-0 -- and the guard is right to be per-surface.
+       *
+       * `DrawingTwins(_picture)` asks "should the twin that writes THIS surface run", which is
+       * exactly the question, and it reads whichever surface the site was handed. There are two of
+       * those now, so switching one off leaves every twin that writes the other still drawing and
+       * this test measuring half of what it claims. The plane assertion below is what would catch
+       * it, and it is checked on both surfaces for the same reason.
+       */
       auto quiet = std::make_unique<FlightPort>();
-      quiet->universe.picture.SetDrawing(false);
+      SilenceTwins(quiet->universe);
       const Trace quietFlight = Fly(*quiet);
       AssertAsRecorded(quietFlight, RECORDED, sizeof(RECORDED) / sizeof(RECORDED[0]), RECORDED_STEPS, RECORDED_OUTCOME,
                        L"RECORDED with no twins");
-      Assert::IsFalse(anythingDrawn(quiet->universe.picture), L"a twin drew on the picture with the twins switched off");
+      Assert::IsFalse(anythingDrawn(quiet->universe.picture), L"a twin drew on the frame with the twins switched off");
+      Assert::IsFalse(anythingDrawn(quiet->universe.backdrop), L"a twin drew on the backdrop with the twins switched off");
 
       auto quietDeath = std::make_unique<FlightPort>();
-      quietDeath->universe.picture.SetDrawing(false);
+      SilenceTwins(quietDeath->universe);
       const Trace death = Fly(*quietDeath, {}, Ending::Died);
       AssertAsRecorded(death, RECORDED_DEATH, sizeof(RECORDED_DEATH) / sizeof(RECORDED_DEATH[0]), RECORDED_DEATH_STEPS,
                        Elite::LoopOutcome::Died, L"RECORDED_DEATH with no twins");
       Assert::AreEqual(RECORDED_DEATH_FRAMES, death.deathFrames, L"the wreckage ran for as many frames with no twins");
 
       auto quietPod = std::make_unique<FlightPort>();
-      quietPod->universe.picture.SetDrawing(false);
+      SilenceTwins(quietPod->universe);
       const Trace pod = Fly(*quietPod, {}, Ending::Escaped);
       AssertAsRecorded(pod, RECORDED_ESCAPE, sizeof(RECORDED_ESCAPE) / sizeof(RECORDED_ESCAPE[0]), RECORDED_ESCAPE_STEPS,
                        Elite::LoopOutcome::Escaped, L"RECORDED_ESCAPE with no twins");
@@ -765,7 +788,7 @@ namespace GameLogicTests
       // blank, which would also be true if the twins had never been wired up at all.
       auto drawn = std::make_unique<FlightPort>();
       const Trace control = Fly(*drawn);
-      Assert::IsTrue(anythingDrawn(drawn->universe.picture),
+      Assert::IsTrue(anythingDrawn(drawn->universe.picture) || anythingDrawn(drawn->universe.backdrop),
                      L"the twins drew nothing even switched ON, so this test proves nothing about them");
       Assert::IsTrue(control.checkpoints.size() == quietFlight.checkpoints.size(),
                      L"the two runs took a different number of checkpoints");

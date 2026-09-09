@@ -46,7 +46,13 @@ namespace Elite
   {
     // Resolution.md RS-1: the printer draws the 640x400 surface beside the canvas, and reads `QQ11`
     // for the layout that says where. Attached here because this is where both first exist.
-    m_screen.AttachPicture(&m_universe.picture, &m_universe.screenLayout);
+    /*
+     * THE GLYPHS GO ON THE BACKDROP (RN-0). A printed character persists until something wipes the
+     * screen -- it is not re-emitted per flight pass -- so it belongs on the surface that holds
+     * what lasts, beside the borders, the charts and the dashboard's dials. The twin itself is
+     * unchanged: rule T1 says it computes where, and where is the same wherever it writes.
+     */
+    m_screen.AttachPicture(&m_universe.backdrop, &m_universe.screenLayout);
 
     m_recursive.SetValueTokens(&m_values);
     m_extended.SetGame(m_universe, m_ports); // A control code that leaves is the library's
@@ -93,7 +99,7 @@ namespace Elite
      * draws exactly what it should and the screen stays black -- the border box, the dashboard
      * picture and all seven dials included.
      */
-    SetUpLoaderScreen(m_universe.canvas, &m_universe.picture);
+    SetUpLoaderScreen(m_universe.canvas, &m_universe.backdrop);
 
     // The commander the disk menu's "load" compares against, and the one SVE writes.
     SaveCommander(m_universe.commander, m_universe.commanderName, m_universe.commanderFile);
@@ -349,12 +355,12 @@ namespace Elite
        */
       ChartView chart = ChartOf();
 
-      DrawTargetCrosshairs(m_universe.canvas, chart, &m_universe.picture);
+      DrawTargetCrosshairs(m_universe.canvas, chart, &m_universe.backdrop);
       CrosshairsToCurrentSystem(m_universe);
 
       chart.cursorX = m_universe.crosshairX;
       chart.cursorY = m_universe.crosshairY;
-      DrawTargetCrosshairs(m_universe.canvas, chart, &m_universe.picture);
+      DrawTargetCrosshairs(m_universe.canvas, chart, &m_universe.backdrop);
       return;
     }
 
@@ -370,7 +376,7 @@ namespace Elite
        */
       ChartView chart = ChartOf();
 
-      MoveCrosshairs(m_universe.canvas, chart, m_universe.crosshairStep.x, m_universe.crosshairStep.y, &m_universe.picture);
+      MoveCrosshairs(m_universe.canvas, chart, m_universe.crosshairStep.x, m_universe.crosshairStep.y, &m_universe.backdrop);
 
       m_universe.crosshairX = chart.cursorX;
       m_universe.crosshairY = chart.cursorY;
@@ -457,7 +463,7 @@ namespace Elite
 
       const JumpOutcome decided = RequestHyperspace(m_universe.canvas, m_recursive, m_extended, m_universe.text, m_universe.sentences,
                                                     m_universe.message, chart, jump, m_universe.commander.galaxySeeds,
-                                                    &m_universe.picture);
+                                                    &m_universe.backdrop);
 
       m_universe.status.hyperspaceCountdown = jump.countdown;
       m_universe.status.hyperspaceCounter = jump.counter; // Into QQ22 -- and it was never copied back (§6.159)
