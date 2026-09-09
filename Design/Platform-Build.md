@@ -613,11 +613,32 @@ differs is what SURVIVES it.** At step 400 the tree's frame holds 82 bytes and o
 slice's holds 15, which means the tree's 82 is an ACCUMULATION across passes and not one pass's
 work — something is drawn once and left, and the per-pass clear takes it away.
 
-**That is the question for the next sitting, and it is a design question rather than a bug**: is the
-frame boundary one flight PASS or one PRESENT? They coincide in the executable, where a turn usually
-runs a single pass, and they do not in the replay, whose checkpoint is a hundred passes apart. Ten
-checkpoints agreeing says per-pass is right for most of the flight; the six that disagree are where
-something persists across passes on purpose. Find what, before changing the boundary.
+**AND IT IS NOT THAT EITHER.** At checkpoint 400 the tree's frame holds 82 bytes and the NEXT PASS
+TOUCHES ALL 82 OF THEM — nothing persists across passes, so the boundary is not the question. The
+per-pass boundary is right.
+
+**Every drop was then verified by restoring it one at a time**, which is the check that should have
+come first:
+
+| restored | checkpoints moved |
+|---|---|
+| nothing (all five drops in place) | **6** |
+| the ship erase | 6 — neutral here, though it must still go |
+| the stardust erase | **13** |
+| the laser erase | 7 |
+| the sun's and the planet's erases | 9 |
+| additionally dropping the explosion cloud's erase | 6 — neutral |
+
+**So all five drops are necessary and none is wrong, and the six that remain are not caused by any of
+them.** Something else still draws and erases the same geometry inside a single pass. It is not the
+ships, the stardust, the laser, the sun, the planet or the explosion cloud — each of those has been
+tested by restoring or adding its drop and watching the count.
+
+**Where to look next**, with everything above already ruled out: the compass and the scanner blips
+write the dashboard INDEX plane rather than the bitmap, so they cannot be it; `ClearAllShips` and the
+ship-as-point (`DrawShipAsPoint`, whose `PlotPixel2x` count halves with the ship erase) have not been
+tested. The method is the one that found the planet: per-twin counters for a moved pass against the
+same pass on the tree, then read the routine whose count differs.
 
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
