@@ -37,7 +37,7 @@ namespace Elite
    */
 
   /*
-   * 6502: ZES2k -- zero bytes `_first` down to 1 of the page at `_page`.
+   * Zero bytes `_first` down to 1 of the page at `_page`.
    *
    * NOT THE WHOLE PAGE, and the order is the point. The loop stores at `_first`
    * FIRST and then counts down, stopping when Y reaches zero -- so byte 0 of the page is never
@@ -55,7 +55,7 @@ namespace Elite
    */
   void ZeroPageDown(Canvas& _canvas, std::uint16_t _pageBase, std::uint8_t _first, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: ZES1k -- the entry that zeroes a whole page, by entering `ZES2k` with Y = 0 so that the
+  /// The entry that zeroes a whole page, by entering `ZES2k` with Y = 0 so that the
   /// first `DEY` wraps to 255.
   inline void ZeroWholePage(Canvas& _canvas, std::uint16_t _pageBase, Picture* _picture = nullptr) noexcept
   {
@@ -63,7 +63,7 @@ namespace Elite
   }
 
   /*
-   * 6502: mvblockK -- copy `_pages` whole pages from `_from` to `_to`, and then `mvbllop`'s tail.
+   * Copy `_pages` whole pages from `_from` to `_to`, and then `mvbllop`'s tail.
    *
    * The same count-down shape as `ZES2k`: Y starts at zero and the loop reads and stores through
    * it, so a page is copied in the order 0, 255, 254 ... 1. The result is a copied page either way
@@ -74,12 +74,12 @@ namespace Elite
    */
   void CopyPagesDown(Canvas& _canvas, const std::uint8_t* _from, std::uint16_t _to, std::uint8_t _pages, std::uint8_t _first) noexcept;
 
-  /// 6502: BOXS -- a horizontal line right across the screen on row `_row`, through `HLOIN`.
+  /// A horizontal line right across the screen on row `_row`, through `HLOIN`.
   /// `X1 = 0` and `X2 = 255`, which is the whole 256-pixel width and not the 32 cells of text.
   void DrawScreenRule(Canvas& _canvas, std::uint8_t _row, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: BOXS2 -- EOR one byte into all eight rows of a character cell, eighteen cells down.
+   * EOR one byte into all eight rows of a character cell, eighteen cells down.
    *
    * It EORs rather than stores, so calling it twice puts the screen back -- which is how the
    * border comes and goes without the routine knowing whether it is drawing or rubbing out.
@@ -88,27 +88,27 @@ namespace Elite
   void ToggleVerticalEdge(Canvas& _canvas, std::uint16_t _cell, std::uint8_t _pattern, std::uint8_t _rows,
                           Picture* _picture = nullptr) noexcept;
 
-  /// 6502: BLUEBANDS -- 24 bytes of &FF at `_cell`, eighteen character rows down. Two of these make
+  /// 24 bytes of &FF at `_cell`, eighteen character rows down. Two of these make
   /// the coloured bands either side of the space view, and unlike `BOXS2` it STORES.
   void DrawColourBand(Canvas& _canvas, std::uint16_t _cell, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: BLUEBAND -- both bands, the left at `SCBASE` and the right 37 cells along.
+  /// Both bands, the left at `SCBASE` and the right 37 cells along.
   void DrawColourBands(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
-  // 6502: abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
+  // abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
   // `Universe.h` with M3-a, because it is state and that is where the state lives now.
 
-  /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
+  /// The two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
   /// extra bit the dashboard's bottom half needs.
   inline constexpr std::uint8_t COLOUR_BANK_DASHBOARD = 0x91;
   inline constexpr std::uint8_t BITMAP_MODE_DASHBOARD = 0xD0;
 
-  /// 6502: NOSPRITES -- switch every sprite off, bracketed by the two raster-mode changes like
+  /// Switch every sprite off, bracketed by the two raster-mode changes like
   /// `SIGHT`. Six instructions, and all six are the seam.
   void HideAllSprites(VideoState& _video, MemoryMap& _map) noexcept;
 
   /*
-   * 6502: BOX2 -- the border: two vertical edges, a byte in the top right, and a rule across row 0.
+   * The border: two vertical edges, a byte in the top right, and a rule across row 0.
    *
    * `_rows` IS SPELLED AS AN ASSEMBLER DIRECTIVE. The routine opens by loading 18 into X, and
    * `TTX66K` reaches it by falling off its own end through a load of 25 followed by `EQUB &2C` --
@@ -123,7 +123,7 @@ namespace Elite
   void DrawBorder(Canvas& _canvas, std::uint8_t _rows, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: BOX -- the whole-screen border, which is `BOX2` with a floor under it.
+   * The whole-screen border, which is `BOX2` with a floor under it.
    *
    * A load of 199 and a call to `BOXS` rules a line across the bottom pixel row, a store puts the
    * byte the rule cannot reach into the bottom right corner, and then a load of 25 with the same
@@ -134,21 +134,21 @@ namespace Elite
    */
   void DrawFullBorder(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: what a call to `BOX2` gets, which is the space view's height in character rows.
+  /// What a call to `BOX2` gets, which is the space view's height in character rows.
   inline constexpr std::uint8_t BORDER_ROWS_SPACE_VIEW = 18;
 
-  /// 6502: what falling through from `TTX66K` keeps, which is the whole screen.
+  /// What falling through from `TTX66K` keeps, which is the whole screen.
   inline constexpr std::uint8_t BORDER_ROWS_TEXT_SCREEN = 25;
 
-  /// 6502: the bottom pixel row, which `BOX` rules across before it draws the edges.
+  /// The bottom pixel row, which `BOX` rules across before it draws the edges.
   inline constexpr std::uint8_t BOTTOM_RULE_ROW = 199;
 
-  /// 6502: SCBASE+&1F1F -- the bottom right byte, which `BOXS` leaves out because `HLOIN` draws
+  /// SCBASE+&1F1F -- the bottom right byte, which `BOXS` leaves out because `HLOIN` draws
   /// x 0 to 255 and the screen is 320 wide.
   inline constexpr std::uint16_t BOTTOM_RIGHT_CORNER = 0x1F1F;
 
   /*
-   * 6502: zonkscanners -- clear bit 4 of byte 31 in every ship in the bubble.
+   * Clear bit 4 of byte 31 in every ship in the bubble.
    *
    * Bit 4 is "this ship is on the scanner", so this is the bookkeeping half of wiping the scanner:
    * the pixels go when the screen is cleared and this is what stops `SCAN` trying to rub out a
@@ -158,7 +158,7 @@ namespace Elite
   void ForgetScannerBlips(Bubble& _bubble) noexcept;
 
   /*
-   * 6502: wantdials -- put the dashboard on screen, or leave it there if it already is.
+   * Put the dashboard on screen, or leave it there if it already is.
    *
    * IT TAKES EVERYTHING `DIALS` TAKES, and that is the routine being honest rather than the port
    * being clumsy: `wantdials` draws the border, copies the dashboard picture in, forgets every
@@ -176,7 +176,7 @@ namespace Elite
                      Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
+   * Clear the screen and draw whichever furniture this view wants.
    *
    * It takes what `wantdials` takes because on two of its paths it IS `wantdials`: it tail-jumps
    * there for the space view and for view 13, and the rest of the routine is the text screens'
@@ -223,7 +223,7 @@ namespace Elite
   // 6502 label. Every byte of it is `Universe`'s since M3-a and the four seams are `Ports`'.
 
   /*
-   * 6502: TT66, which stores the view and then falls into TTX66 -- change to a screen and clear it.
+   * TT66, which stores the view and then falls into TTX66 -- change to a screen and clear it.
    *
    * The port has had HALF of this since slice 2e: `SetUpTextScreen` is the text state and the
    * pixels were left behind `TradeScreenEffects::ClearToView`, because the dashboard, the sprites,
@@ -256,7 +256,7 @@ namespace Elite
   void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view, TextLayout _layout) noexcept;
 
   /*
-   * 6502: LOOK1 -- change the view, with `LQ` and `LO2` as its other two paths.
+   * Change the view, with `LQ` and `LO2` as its other two paths.
    *
    * THREE EXITS AND THEY DO DIFFERENT AMOUNTS OF WORK. On a non-space screen it sets the view,
    * clears, draws the sights and tail-jumps to `NWSTARS`. On the space view with the SAME view
@@ -267,7 +267,7 @@ namespace Elite
   void ChangeView(Universe& _universe, Ports& _ports, std::uint8_t _to) noexcept;
 
   /*
-   * 6502: WARP -- the "J" key, which jumps you a long way towards the planet or the sun.
+   * The "J" key, which jumps you a long way towards the planet or the sun.
    *
    * It refuses in four cases and the first three are one `ORA` chain: any junk in the slot above
    * the junk count, a space station in the bubble, or witchspace. The fourth is distance -- both

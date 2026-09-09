@@ -26,7 +26,7 @@ namespace Elite
    * anything less would leave the wrong ones to be found by a player.
    */
 
-  /// 6502: QQ15 -- three sixteen-bit seeds, low byte first, as the game holds them.
+  /// Three sixteen-bit seeds, low byte first, as the game holds them.
   struct SystemSeeds
   {
     std::array<std::uint8_t, 6> bytes{};
@@ -45,7 +45,7 @@ namespace Elite
   inline constexpr SystemSeeds GALAXY_ONE_SEEDS = {{0x4A, 0x5A, 0x48, 0x02, 0x53, 0xB7}};
 
   /*
-   * 6502: QQ3, QQ4, QQ5, QQ6, QQ7 -- everything TT24 works out about a system from its seed.
+   * QQ3, QQ4, QQ5, QQ6, QQ7 -- everything TT24 works out about a system from its seed.
    *
    * Population and productivity are the two the player sees as numbers; the other three are
    * indices into token tables, which is why they are bytes rather than enumerations for now. Names
@@ -53,17 +53,17 @@ namespace Elite
    */
   struct SystemData
   {
-    std::uint8_t economy = 0;       ///< 6502: QQ3, 0 to 7
-    std::uint8_t government = 0;    ///< 6502: QQ4, 0 to 7
-    std::uint8_t techLevel = 0;     ///< 6502: QQ5
-    std::uint8_t population = 0;    ///< 6502: QQ6, in hundreds of millions
-    std::uint16_t productivity = 0; ///< 6502: QQ7, sixteen bits
+    std::uint8_t economy = 0;
+    std::uint8_t government = 0;
+    std::uint8_t techLevel = 0;
+    std::uint8_t population = 0;    ///< QQ6, in hundreds of millions
+    std::uint16_t productivity = 0; ///< QQ7, sixteen bits
 
     [[nodiscard]] bool operator==(const SystemData&) const = default;
   };
 
   /*
-   * 6502: TT54 -- twist the seeds once.
+   * Twist the seeds once.
    *
    * Three sixteen-bit values, each becoming the next: s0 takes s1, s1 takes s2, and s2 becomes the
    * sum of the old s0 and s1 plus the new s1. The order the original writes them in matters --
@@ -77,7 +77,7 @@ namespace Elite
   bool TwistSeeds(SystemSeeds& _seeds) noexcept;
 
   /*
-   * 6502: TT20 -- twist four times, which is one system along.
+   * Twist four times, which is one system along.
    *
    * The original spells this as two nested fall-throughs into TT54 rather than a loop, which is
    * four calls for the price of two JSRs. There is nothing else to it.
@@ -85,16 +85,17 @@ namespace Elite
   void NextSystem(SystemSeeds& _seeds) noexcept;
 
   /*
-   * 6502: Ghy's G1 loop -- the galactic hyperdrive.
+   * Ghy's G1 loop -- the galactic hyperdrive.
    *
-   * Each of the six bytes is rotated left by one bit, INDEPENDENTLY: `ASL A` takes the byte's top
-   * bit into the carry and `ROL` puts it back into the same byte's bottom. Not a rotate of the
-   * three sixteen-bit seeds, which is what it looks like and would give a different universe.
+   * Each of the six bytes is rotated left by one bit, INDEPENDENTLY: a shift takes the byte's
+   * top bit into the carry and a rotate puts it back into the same byte's bottom. Not a rotate
+   * of the three sixteen-bit seeds, which is what it looks like and would give a different
+   * universe.
    */
   void NextGalaxy(SystemSeeds& _seeds) noexcept;
 
   /*
-   * 6502: TT24 -- everything about a system except its name and its description.
+   * Everything about a system except its name and its description.
    *
    * Almost every line of this is an ADC whose carry comes from the line before, including two that
    * take it from an `LSR` and an `ASL` rather than from an addition. The port models the flag
@@ -103,23 +104,23 @@ namespace Elite
   [[nodiscard]] SystemData GenerateSystemData(const SystemSeeds& _seeds) noexcept;
 
   /*
-   * 6502: TT111's result -- the system nearest the crosshairs, and how far away it is.
+   * TT111's result -- the system nearest the crosshairs, and how far away it is.
    *
    * The routine leaves all of this behind in zero page and in QQ8/QQ9/QQ10, and its callers read
    * every part of it, so the port hands it back as one thing rather than through five outputs.
    */
   struct NearestSystem
   {
-    SystemSeeds seeds;          ///< 6502: QQ15, left at the system that was found
-    std::uint8_t index = 0;     ///< 6502: ZZ, its number within the galaxy
-    std::uint8_t x = 0;         ///< 6502: QQ9, the found system's galactic x
-    std::uint8_t y = 0;         ///< 6502: QQ10, and its y
-    std::uint16_t distance = 0; ///< 6502: QQ8, in tenths of a light year
+    SystemSeeds seeds;          ///< QQ15, left at the system that was found
+    std::uint8_t index = 0;     ///< ZZ, its number within the galaxy
+    std::uint8_t x = 0;         ///< QQ9, the found system's galactic x
+    std::uint8_t y = 0;         ///< QQ10, and its y
+    std::uint16_t distance = 0; ///< QQ8, in tenths of a light year
     SystemData data;            ///< from the TT24 this routine falls into
   };
 
   /*
-   * 6502: TT111 -- find the system nearest the crosshairs, and how far it is from where you are.
+   * Find the system nearest the crosshairs, and how far it is from where you are.
    *
    * Two halves that look alike and are not. The SEARCH walks all 256 systems of the galaxy and
    * measures with half of |dx| plus half of |dy| -- cheap, and good enough to pick a system. The
@@ -129,15 +130,15 @@ namespace Elite
    *
    * The halving of dy in both is the chart's aspect ratio, not an approximation.
    *
-   * Like several routines before it this one has no RTS: it ends in JMP TT24, so a caller gets the
-   * system's data as well, and the port returns that too rather than pretending the jump is not
-   * there.
+   * Like several routines before it this one has no return of its own: it ends in a tail call to
+   * TT24, so a caller gets the system's data as well, and the port returns that too rather than
+   * pretending the jump is not there.
    */
   [[nodiscard]] NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
                                                 std::uint8_t _currentX, std::uint8_t _currentY) noexcept;
 
   /*
-   * 6502: cpl -- print a system's name.
+   * Print a system's name.
    *
    * Three or four letter-pairs, and which it is depends on bit 6 of the first seed byte. The seeds
    * are twisted between pairs and put back afterwards, so this leaves them as it found them --
@@ -152,7 +153,7 @@ namespace Elite
   bool PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept;
 
   /*
-   * 6502: PDESC's PD1 path -- a system's description.
+   * PDESC's PD1 path -- a system's description.
    *
    * Four instructions and a jump, and they explain the whole trick. The RNG is seeded from the
    * system's own seed bytes, and then extended token 5 is printed; that token is full of

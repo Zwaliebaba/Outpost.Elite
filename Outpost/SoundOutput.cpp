@@ -64,7 +64,7 @@ namespace Outpost
     }
     m_source = source;
 
-    // 6502: `COLD` sets the master volume before anything plays; so does this.
+    // `COLD` sets the master volume before anything plays; so does this.
     SetBootVolume();
   }
 
@@ -90,7 +90,7 @@ namespace Outpost
   }
 
   /*
-   * 6502: LDA #%00001111 / STA SID+&18, out of `COLD` -- the master volume, set once at boot.
+   * The SID's master volume set to 15 out of `COLD` -- set once at boot.
    *
    * NOTHING IN THE EFFECT PLAYER EVER WRITES IT. `SOINT` programs the three voices and never
    * touches register &18, so every sound in the game is played at whatever volume something else
@@ -121,7 +121,7 @@ namespace Outpost
 
   void SoundOutput::RunFrame(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept
   {
-    // 6502: COMIRQ1's second pass -- one frame of the interrupt, and then the chip hears it.
+    // COMIRQ1's second pass -- one frame of the interrupt, and then the chip hears it.
     m_interrupt.Clear();
     Elite::RunSoundInterrupt(_buffer, _music, m_interrupt);
     Apply(m_interrupt);

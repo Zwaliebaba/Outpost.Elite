@@ -16,13 +16,13 @@ namespace Elite
 
   void AddToShipCoordinate(Ship& _work, std::uint8_t _high, std::uint8_t _low, std::uint8_t _axis, bool _maskSign) noexcept
   {
-    // 6502: the sign masked off at the two-bytes-earlier entry point, and the only difference
+    // The sign masked off at the two-bytes-earlier entry point, and the only difference
     // between the two.
     std::uint8_t accumulator = _maskSign ? static_cast<std::uint8_t>(_high & 0x80u) : _high;
-    auto& axis = _work.PositionAt(_axis); // 6502: INWK,X -- the axis the routine was entered with
+    auto& axis = _work.PositionAt(_axis); // INWK,X -- the axis the routine was entered with
 
     /*
-     * 6502: the high byte split into a magnitude and a sign, by shifting it out and back.
+     * The high byte split into a magnitude and a sign, by shifting it out and back.
      *
      * S ends as the magnitude of the high byte and T as its sign, and the `LSR` leaves the carry
      * CLEAR -- bit 0 of something just shifted left is always zero -- which is what the addition
@@ -33,7 +33,7 @@ namespace Elite
     magnitude = static_cast<std::uint8_t>(magnitude >> 1);
     bool carry = false;
 
-    // 6502: the accumulator still holds the sign, so this compares the two of them.
+    // The accumulator still holds the sign, so this compares the two of them.
     if (((sign ^ axis.sgn) & 0x80u) == 0u)
     {
       // Same sign: add the magnitudes and keep the sign.
@@ -48,7 +48,7 @@ namespace Elite
       return;
     }
 
-    // 6502: MV10 -- opposite signs, so subtract, and the answer may come out the other way round.
+    // Opposite signs, so subtract, and the answer may come out the other way round.
     SubResult low = SubtractWithCarry(axis.lo, _low, true);
     axis.lo = low.value;
 
@@ -60,11 +60,11 @@ namespace Elite
 
     if (high.carry)
     {
-      return; // 6502: MV11
+      return;
     }
 
     /*
-     * 6502: the subtraction went past zero, so negate what came out -- one minus each byte.
+     * The subtraction went past zero, so negate what came out -- one minus each byte.
      * The carry is clear here (the branch above was not taken), which is what makes `1 - n - 1`
      * the two's complement of n.
      */
@@ -80,14 +80,14 @@ namespace Elite
 
   KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _total, std::uint8_t _axis) noexcept
   {
-    // 6502: the total's top byte kept whole and its sign kept apart, then the two signs compared.
+    // The total's top byte kept whole and its sign kept apart, then the two signs compared.
     std::uint8_t topByte = _total.top;
     const std::uint8_t sign = static_cast<std::uint8_t>(_total.top & 0x80u);
-    const auto& axis = _work.PositionAt(_axis); // 6502: INWK,X
+    const auto& axis = _work.PositionAt(_axis);
 
     if (((sign ^ axis.sgn) & 0x80u) == 0u)
     {
-      // 6502: the carry is cleared EXPLICITLY here, where `MVT1` gets it from a shift instead.
+      // The carry is cleared EXPLICITLY here, where `MVT1` gets it from a shift instead.
       const AddResult low = AddWithCarry(_total.mid, axis.lo, false);
       _total.mid = low.value;
 
@@ -96,10 +96,10 @@ namespace Elite
 
       const AddResult high = AddWithCarry(_total.top, axis.sgn, middle.carry);
       _total.top = static_cast<std::uint8_t>((high.value & 0x7Fu) | sign);
-      return KBlockSum{_total, high.carry}; // 6502: the `ADC`'s, which `AND` and `ORA` leave alone
+      return KBlockSum{_total, high.carry}; // The `ADC`'s, which `AND` and `ORA` leave alone
     }
 
-    // 6502: MV13 -- the top byte's sign stripped, then subtract the other way round.
+    // The top byte's sign stripped, then subtract the other way round.
     topByte = static_cast<std::uint8_t>(topByte & 0x7Fu);
 
     SubResult low = SubtractWithCarry(axis.lo, _total.mid, true);
@@ -113,7 +113,7 @@ namespace Elite
 
     if (high.carry)
     {
-      return KBlockSum{_total, true}; // 6502: MV14 -- reached means the carry is set by definition
+      return KBlockSum{_total, true}; // Reached means the carry is set by definition
     }
 
     low = SubtractWithCarry(1, _total.mid, false);
@@ -129,20 +129,20 @@ namespace Elite
 
   SignMag24 AddShipCoordinateToP(const Ship& _work, SignMag24 _value, std::uint8_t _axis) noexcept
   {
-    const auto& axis = _work.PositionAt(_axis); // 6502: INWK,X
-    // 6502: Y keeps the incoming accumulator, which is what comes back, and the signs compared.
+    const auto& axis = _work.PositionAt(_axis);
+    // Y keeps the incoming accumulator, which is what comes back, and the signs compared.
     if (((_value.sgn ^ axis.sgn) & 0x80u) == 0u)
     {
-      const AddResult low = AddWithCarry(_value.lo, axis.lo, false); // 6502: a cleared carry, then add
+      const AddResult low = AddWithCarry(_value.lo, axis.lo, false); // A cleared carry, then add
       _value.lo = low.value;
 
       const AddResult high = AddWithCarry(_value.hi, axis.hi, low.carry);
       _value.hi = high.value;
 
-      return _value; // 6502: the saved sign, and out
+      return _value; // The saved sign, and out
     }
 
-    // 6502: MV50 -- subtract, and if it goes past zero negate and FLIP THE SIGN that comes back.
+    // Subtract, and if it goes past zero negate and FLIP THE SIGN that comes back.
     SubResult low = SubtractWithCarry(axis.lo, _value.lo, true);
     _value.lo = low.value;
 
@@ -151,11 +151,11 @@ namespace Elite
 
     if (high.carry)
     {
-      _value.sgn = static_cast<std::uint8_t>(_value.sgn ^ 0x80u); // 6502: the saved sign, flipped, and out
+      _value.sgn = static_cast<std::uint8_t>(_value.sgn ^ 0x80u); // The saved sign, flipped, and out
       return _value;
     }
 
-    // 6502: MV51 -- and here the sign is NOT flipped, which is the asymmetry worth noticing.
+    // MV51 -- and here the sign is NOT flipped, which is the asymmetry worth noticing.
     low = SubtractWithCarry(1, _value.lo, false);
     _value.lo = low.value;
 
@@ -167,24 +167,24 @@ namespace Elite
 
   void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept
   {
-    auto& vector = _work.VectorAt(_y); // 6502: INWK,Y -- the vector the routine was entered with
-    // 6502: y = y - alpha * x, and the subtraction is a sign flip. The store into `P` after each
+    auto& vector = _work.VectorAt(_y); // INWK,Y -- the vector the routine was entered with
+    // Y = y - alpha * x, and the subtraction is a sign flip. The store into `P` after each
     // `MAD` is dead: `MULT1` writes `P` before it reads it.
     AddSignedResult result = MultiplyAndAdd(static_cast<std::uint8_t>(vector.x.hi ^ 0x80u), _rollRate, vector.y);
     vector.y.hi = result.high;
     vector.y.lo = result.low;
 
-    // 6502: X = X + alpha * Y
+    // X = X + alpha * Y
     result = MultiplyAndAdd(vector.y.hi, _rollRate, vector.x);
     vector.x.hi = result.high;
     vector.x.lo = result.low;
 
-    // 6502: beta into `Q` -- y = y - beta * z
+    // Beta into `Q` -- y = y - beta * z
     result = MultiplyAndAdd(static_cast<std::uint8_t>(vector.z.hi ^ 0x80u), _pitchRate, vector.y);
     vector.y.hi = result.high;
     vector.y.lo = result.low;
 
-    // 6502: Z = Z + beta * Y
+    // Z = Z + beta * Y
     result = MultiplyAndAdd(vector.y.hi, _pitchRate, vector.z);
     vector.z.hi = result.high;
     vector.z.lo = result.low;
@@ -201,21 +201,21 @@ namespace Elite
     [[nodiscard]] AddSignedResult RotateHalf(const Ship& _work, std::uint8_t _from, std::uint8_t _other, std::uint8_t _signMask2,
                                              bool _flip) noexcept
     {
-      const auto& from = _work.ComponentAt(_from);   // 6502: INWK,X / INWK+1,X
-      const auto& other = _work.ComponentAt(_other); // 6502: INWK,Y / INWK+1,Y
-      // 6502: half the magnitude of the high byte, parked in `T`...
+      const auto& from = _work.ComponentAt(_from);
+      const auto& other = _work.ComponentAt(_other);
+      // Half the magnitude of the high byte, parked in `T`...
       const std::uint8_t halfHigh = static_cast<std::uint8_t>((from.hi & 0x7Fu) >> 1);
 
       // ...taken off the value, which is what keeps the rotation from growing without bound.
-      // 6502: the shrunk value is the (S R) the `ADD` below takes.
+      // The shrunk value is the (S R) the `ADD` below takes.
       const SubResult low = SubtractWithCarry(from.lo, halfHigh, true);
       const SignMag16 shrunk{low.value, SubtractWithCarry(from.hi, 0, low.carry).value};
 
-      // 6502: the other value and its sign, into `P` and `T`.
+      // The other value and its sign, into `P` and `T`.
       std::uint8_t otherLow = other.lo;
       std::uint8_t otherSign = static_cast<std::uint8_t>(other.hi & 0x80u);
 
-      // 6502: (A P) shifted right four times -- divided by sixteen, which is the rotation's angle.
+      // (A P) shifted right four times -- divided by sixteen, which is the rotation's angle.
       std::uint8_t high = static_cast<std::uint8_t>(other.hi & 0x7Fu);
       for (int shift = 0; shift < 4; ++shift)
       {
@@ -224,7 +224,7 @@ namespace Elite
         otherLow = static_cast<std::uint8_t>((otherLow >> 1) | (carry ? 0x80u : 0u));
       }
 
-      // 6502: the sign back on, the half's own flip, and the direction out of `RAT2`.
+      // The sign back on, the half's own flip, and the direction out of `RAT2`.
       std::uint8_t withSign = static_cast<std::uint8_t>(high | otherSign);
       if (_flip)
       {
@@ -232,23 +232,23 @@ namespace Elite
       }
       withSign = static_cast<std::uint8_t>(withSign ^ _signMask2);
 
-      return AddSigned(SignMag16{otherLow, withSign}, shrunk); // 6502: ADD
+      return AddSigned(SignMag16{otherLow, withSign}, shrunk);
     }
   } // namespace
 
   void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _signMask2) noexcept
   {
-    auto& x = _work.ComponentAt(_x); // 6502: the two components MVS5 rotates into each other
+    auto& x = _work.ComponentAt(_x); // The two components MVS5 rotates into each other
     auto& y = _work.ComponentAt(_y);
-    // 6502: the first half is held in `K` while the second runs.
+    // The first half is held in `K` while the second runs.
     const AddSignedResult first = RotateHalf(_work, _x, _y, _signMask2, false);
 
-    // 6502: the same with X and Y swapped, and the sign flip that makes it a rotation.
+    // The same with X and Y swapped, and the sign flip that makes it a rotation.
     const AddSignedResult second = RotateHalf(_work, _y, _x, _signMask2, true);
     y.hi = second.high;
     y.lo = second.low;
 
-    // 6502: and only now is the first component written, so the second half read the value the
+    // And only now is the first component written, so the second half read the value the
     // first half had not yet replaced.
     x.lo = first.low;
     x.hi = first.high;
@@ -256,18 +256,18 @@ namespace Elite
 
   std::uint8_t OrientationComponent(const Ship& _work, std::uint8_t _a, std::uint8_t _x, std::uint8_t _y) noexcept
   {
-    // 6502: the third index is parked in `P+2` and read back as Y further down.
+    // The third index is parked in `P+2` and read back as Y further down.
     const std::uint8_t divisorAxis = _a;
 
-    // 6502: MULT12 on the roof and nose components at X -- (S R) = the first product.
+    // MULT12 on the roof and nose components at X -- (S R) = the first product.
     const Product first = MultiplySigned(_work.ComponentAt(static_cast<std::uint8_t>(SHIP_ROOF_OFFSET + _x)).hi,
                                          _work.ComponentAt(static_cast<std::uint8_t>(SHIP_NOSE_OFFSET + _x)).hi);
 
-    // 6502: MAD on the pair at Y -- (A X) = the second product, plus the first.
+    // MAD on the pair at Y -- (A X) = the second product, plus the first.
     const AddSignedResult sum = MultiplyAndAdd(_work.ComponentAt(static_cast<std::uint8_t>(SHIP_ROOF_OFFSET + _y)).hi,
                                                _work.ComponentAt(static_cast<std::uint8_t>(SHIP_NOSE_OFFSET + _y)).hi, first.Pair());
 
-    // 6502: the parked index read back, the divisor loaded and the sign flipped, then the
+    // The parked index read back, the divisor loaded and the sign flipped, then the
     // fall-through into DVIDT.
     const std::uint8_t divisor = _work.ComponentAt(static_cast<std::uint8_t>(SHIP_NOSE_OFFSET + divisorAxis)).hi;
 
@@ -276,11 +276,11 @@ namespace Elite
 
   namespace
   {
-    /// 6502: NORM, normalising one of the three vectors in place. It works on `XX15`, so the six
+    /// NORM, normalising one of the three vectors in place. It works on `XX15`, so the six
     /// bytes go out and the three high ones come back.
     void NormaliseVector(Ship& _work, std::uint8_t _at) noexcept
     {
-      auto& components = _work.VectorAt(_at); // 6502: the vector at INWK+n, of which NORM reads the three high bytes
+      auto& components = _work.VectorAt(_at); // The vector at INWK+n, of which NORM reads the three high bytes
       std::array<std::uint8_t, 3> vector = {components.x.hi, components.y.hi, components.z.hi};
       (void)Normalise(vector);
       components.x.hi = vector[0];
@@ -288,7 +288,7 @@ namespace Elite
       components.z.hi = vector[2];
     }
 
-    /// 6502: is this component big enough to divide by? Bits 5 and 6 of the magnitude,
+    /// Is this component big enough to divide by? Bits 5 and 6 of the magnitude,
     /// so anything below 32 fails and the routine picks a different axis.
     [[nodiscard]] bool BigEnoughToDivideBy(std::uint8_t _component) noexcept
     {
@@ -298,11 +298,11 @@ namespace Elite
 
   void TidyOrientation(Ship& _work) noexcept
   {
-    // 6502: the nose vector, at INWK+10 / +12 / +14.
+    // The nose vector, at INWK+10 / +12 / +14.
     NormaliseVector(_work, SHIP_NOSE_OFFSET);
 
     /*
-     * 6502: TI1 and TI2 -- recompute ONE component of the roof
+     * TI1 and TI2 -- recompute ONE component of the roof
      * vector from the other two, dividing by whichever component of the nose vector is largest.
      *
      * The three branches write to INWK+16, +18 or +20 and pass different index triples, and the
@@ -315,26 +315,26 @@ namespace Elite
     }
     else if (BigEnoughToDivideBy(_work.nose.y.hi))
     {
-      // 6502: TI1 -- TAX makes X the 0 the accumulator held, and A is 2.
+      // TAX makes X the 0 the accumulator held, and A is 2.
       _work.roof.y.hi = OrientationComponent(_work, 2, 0, 4);
     }
     else
     {
-      // 6502: TI2 -- TYA puts the 4 into A, and Y becomes 2.
+      // TYA puts the 4 into A, and Y becomes 2.
       _work.roof.z.hi = OrientationComponent(_work, 4, 0, 2);
     }
 
-    // 6502: TI3 -- the roof vector, now that it has been rebuilt.
+    // The roof vector, now that it has been rebuilt.
     NormaliseVector(_work, SHIP_ROOF_OFFSET);
 
     /*
-     * 6502: the side vector as the CROSS PRODUCT of the other two, one component at a time. Each is
+     * The side vector as the CROSS PRODUCT of the other two, one component at a time. Each is
      * `MULT12` then `TIS1` then a sign flip, and Q is set ONCE before the first of the three -- so
      * the second and third `MULT12` run on the Q the `TIS1` before them left, which is its X. The
      * port used to reproduce that by calling the routines in the same order on the same workspace;
      * the multiplier each one actually gets is written out here instead.
      */
-    Product across = MultiplySigned(_work.roof.z.hi, _work.nose.y.hi); // 6502: MULT12 on the nose's y and the roof's z
+    Product across = MultiplySigned(_work.roof.z.hi, _work.nose.y.hi); // MULT12 on the nose's y and the roof's z
     _work.side.x.hi = static_cast<std::uint8_t>(MultiplyAddDivide96(_work.roof.y.hi, _work.nose.z.hi, across.Pair()) ^ 0x80u);
 
     across = MultiplySigned(_work.roof.x.hi, _work.nose.z.hi); // Q is still TIS1's X, the nose's z
@@ -344,7 +344,7 @@ namespace Elite
     _work.side.z.hi = static_cast<std::uint8_t>(MultiplyAddDivide96(_work.roof.x.hi, _work.nose.y.hi, across.Pair()) ^ 0x80u);
 
     /*
-     * 6502: TIL1 -- a store loop stepping down in TWOS from 14.
+     * A store loop stepping down in TWOS from 14.
      *
      * The LOW bytes of the vectors, zeroed -- the fractional part is what the rounding was
      * accumulating in, and throwing it away is the point of the whole routine.
@@ -363,13 +363,13 @@ namespace Elite
 
   void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept
   {
-    // 6502: MULT3 with the roll rate's sign flipped -- K = -alpha * x.
+    // MULT3 with the roll rate's sign flipped -- K = -alpha * x.
     KBlock moved = MultiplySigned24(_work.x, static_cast<std::uint8_t>(_rollRate ^ 0x80u));
     // Discarded: `MV40` runs a second `MULT3` over this result, so nothing reads the flag (§6.126).
-    moved = AddShipCoordinateToK(_work, moved, 3u).value; // 6502: MVT3 on the y axis -- K = y - alpha * x
+    moved = AddShipCoordinateToK(_work, moved, 3u).value; // MVT3 on the y axis -- K = y - alpha * x
 
     /*
-     * 6502: the result parked in `K2` while `MULT3` refills `K`.
+     * The result parked in `K2` while `MULT3` refills `K`.
      *
      * BYTES 1 TO 3 ONLY. `MV40` never writes `K2`, so its bottom byte is whatever the last routine
      * to use the block left there -- the planet or sun drawer's, a frame ago -- and the addition of
@@ -380,24 +380,24 @@ namespace Elite
     KBlock parked = moved;
     parked.low = _math.k2Low;
 
-    // 6502: MULT3 with the pitch rate -- K = beta * K2, the coordinate from `K+1` up.
+    // MULT3 with the pitch rate -- K = beta * K2, the coordinate from `K+1` up.
     moved = MultiplySigned24(parked.Coordinate(), _pitchRate);
-    moved = AddShipCoordinateToK(_work, moved, 6u).value; // 6502: MVT3 on the z axis -- K = z + beta * K2
+    moved = AddShipCoordinateToK(_work, moved, 6u).value; // MVT3 on the z axis -- K = z + beta * K2
 
-    // 6502: the new z, and P set up for the multiply that follows.
+    // The new z, and P set up for the multiply that follows.
     _work.z = moved.Coordinate();
 
-    // 6502: MULT3 again on the sign-flipped result -- K = -beta * z', with `Q` still holding beta.
+    // MULT3 again on the sign-flipped result -- K = -beta * z', with `Q` still holding beta.
     moved = MultiplySigned24(SignMag24{moved.mid, moved.high, static_cast<std::uint8_t>(moved.top ^ 0x80u)}, _pitchRate);
 
-    // 6502: the two top bytes' signs compared -- which way the two blocks point.
+    // The two top bytes' signs compared -- which way the two blocks point.
     const std::uint8_t sign = static_cast<std::uint8_t>(moved.top & 0x80u);
     std::uint8_t high = 0;
 
     if (((sign ^ parked.top) & 0x80u) == 0u)
     {
       /*
-       * 6502: the bottom bytes are added and the result DISCARDED. Only the carry it produces is
+       * The bottom bytes are added and the result DISCARDED. Only the carry it produces is
        * wanted, because the answer is stored from K+1 upwards.
        */
       bool carry = AddWithCarry(moved.low, parked.low, false).carry;
@@ -414,7 +414,7 @@ namespace Elite
     }
     else
     {
-      // 6502: MV1 -- the bottom bytes subtracted, discarded for the borrow in the same way.
+      // The bottom bytes subtracted, discarded for the borrow in the same way.
       bool carry = SubtractWithCarry(moved.low, parked.low, true).carry;
 
       SubResult difference = SubtractWithCarry(moved.mid, parked.mid, carry);
@@ -425,14 +425,14 @@ namespace Elite
       _work.y.hi = difference.value;
       carry = difference.carry;
 
-      // 6502: the two top bytes with their signs stripped -- magnitudes only.
+      // The two top bytes with their signs stripped -- magnitudes only.
       difference = SubtractWithCarry(static_cast<std::uint8_t>(moved.top & 0x7Fu), static_cast<std::uint8_t>(parked.top & 0x7Fu), carry);
       std::uint8_t magnitudeDifference = difference.value;
       high = difference.value;
 
       if (!difference.carry)
       {
-        // 6502: the subtraction went past zero, so negate all three bytes.
+        // The subtraction went past zero, so negate all three bytes.
         SubResult negated = SubtractWithCarry(1, _work.y.lo, false);
         _work.y.lo = negated.value;
 
@@ -444,27 +444,27 @@ namespace Elite
       }
     }
 
-    // 6502: MV2 -- the sign the two blocks agreed on, folded back onto the result.
+    // The sign the two blocks agreed on, folded back onto the result.
     _work.y.sgn = static_cast<std::uint8_t>(high ^ sign);
 
-    // 6502: MULT3 with the roll rate, then MVT3 on the x axis -- x = x + alpha * y'.
+    // MULT3 with the roll rate, then MVT3 on the x axis -- x = x + alpha * y'.
     moved = MultiplySigned24(_work.y, _rollRate);
     moved = AddShipCoordinateToK(_work, moved, 0u).value; // the flag dies at `MV45` (§6.126)
 
     _work.x = moved.Coordinate();
 
-    // 6502: the roll rate was the last thing stored into `Q` above, and for the SUN -- which
+    // The roll rate was the last thing stored into `Q` above, and for the SUN -- which
     // `MV45` sends straight back -- it is the frame's Q, the byte the altitude check reads
     // (`EndFlightFrame`).
     _math.lastDivisor = _rollRate;
 
-    // 6502: MV45 -- back into MVEIT's tail, which the caller runs.
+    // Back into MVEIT's tail, which the caller runs.
   }
 
   namespace
   {
     /*
-     * 6502: MV45 onwards -- the tail both paths through MVEIT join at.
+     * MV45 onwards -- the tail both paths through MVEIT join at.
      *
      * `MV40` jumps to it and the ordinary path falls into it, so it is written once here rather
      * than duplicated. Everything in it is about the ship's OWN motion: its speed along its own z
@@ -473,56 +473,56 @@ namespace Elite
     void MoveShipTail(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, std::uint8_t _view,
                       Picture* _picture) noexcept
     {
-      // 6502: MVT1 on the z axis with the player's speed -- z -= it. The 128 is a sign and nothing
+      // MVT1 on the z axis with the player's speed -- z -= it. The 128 is a sign and nothing
       // else, which is why this is the unmasked entry point.
       AddToShipCoordinate(_work, 128, _flight.speed, 6u, false);
 
-      // 6502: the type masked to bits 7 and 0 and compared against both set -- the SUN, and only
+      // The type masked to bits 7 and 0 and compared against both set -- the SUN, and only
       // the sun, stops here. It has no orientation to rotate.
       if ((Byte(_flight.type) & 0x81u) == 0x81u)
       {
         return;
       }
 
-      // 6502: MVS4 three times -- the nose, roof and side vectors by the player's turn.
+      // MVS4 three times -- the nose, roof and side vectors by the player's turn.
       RotateShipVector(_work, 9u, _flight.rollRate, _flight.pitchRate);
       RotateShipVector(_work, 15u, _flight.rollRate, _flight.pitchRate);
       RotateShipVector(_work, 21u, _flight.rollRate, _flight.pitchRate);
 
-      // 6502: the last thing `MVS4` stores into `Q` is beta, and nothing below writes `Q` -- so
+      // The last thing `MVS4` stores into `Q` is beta, and nothing below writes `Q` -- so
       // for a ship the loop moves and does not go on to draw, this is the frame's Q, which the
       // altitude check reads (`EndFlightFrame`). The kernel keeps its scratch since M2-b; this one
       // byte is kept for that reader.
       _math.lastDivisor = _flight.pitchRate;
 
       /*
-       * 6502: the ship's own roll, at INWK+30, then its pitch at INWK+29.
+       * The ship's own roll, at INWK+30, then its pitch at INWK+29.
        *
        * The compare against 127 followed by a subtraction of NOTHING is a damping, and reads as
        * one only once you see the carry: the compare sets it when the magnitude is 127, so the
        * subtraction takes nothing off; below that it takes one off every iteration. So a ship at full roll holds it and any other roll decays to zero,
        * which is how a ship straightens up after a turn without anything deciding that it should.
        */
-      // 6502: the component offsets MVS5 is handed -- roofv against nosev's x, y and z for the
+      // The component offsets MVS5 is handed -- roofv against nosev's x, y and z for the
       // pitch, and against sidev's for the roll.
       const std::array<std::array<std::uint8_t, 3>, 2> vectors = {{{SHIP_NOSE_OFFSET, SHIP_NOSE_OFFSET + 2u, SHIP_NOSE_OFFSET + 4u},
                                                                    {SHIP_SIDE_OFFSET, SHIP_SIDE_OFFSET + 2u, SHIP_SIDE_OFFSET + 4u}}};
 
       for (int which = 0; which < 2; ++which)
       {
-        std::uint8_t& counter = (which == 0) ? _work.pitchCounter : _work.rollCounter; // 6502: INWK+30, then INWK+29
+        std::uint8_t& counter = (which == 0) ? _work.pitchCounter : _work.rollCounter;
         _flight.signMask2 = static_cast<std::uint8_t>(counter & 0x80u);
 
         const std::uint8_t magnitude = static_cast<std::uint8_t>(counter & 0x7Fu);
         if (magnitude == 0u)
         {
-          continue; // 6502: MV8 and MV5 -- no turn, so nothing to apply and nothing to damp
+          continue; // MV8 and MV5 -- no turn, so nothing to apply and nothing to damp
         }
 
         const SubResult damped = SubtractWithCarry(magnitude, 0, magnitude >= 127u);
         counter = static_cast<std::uint8_t>(damped.value | _flight.signMask2);
 
-        // 6502: MVS5 three times over -- the orientation vectors turned
+        // MVS5 three times over -- the orientation vectors turned
         // against the ship's own roll or pitch.
         RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, vectors[which][0], _flight.signMask2);
         RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, vectors[which][1], _flight.signMask2);
@@ -530,20 +530,20 @@ namespace Elite
       }
 
       /*
-       * 6502: MV5 -- the state byte tested for killed or exploding, and bit 4 set if neither.
+       * The state byte tested for killed or exploding, and bit 4 set if neither.
        *
        * Bit 4 is "this ship is drawn on the scanner". A live ship sets it and gets scanned AGAIN --
        * the second call of the iteration -- while an exploding one clears it instead and is not.
        */
       if (HasAny(_work.state, ShipStateBit::Killed, ShipStateBit::Exploding))
       {
-        _work.state = Without(_work.state, ShipStateBit::OnScanner); // 6502: MVD1
+        _work.state = Without(_work.state, ShipStateBit::OnScanner);
         return;
       }
 
       _work.state = With(_work.state, ShipStateBit::OnScanner);
 
-      // 6502: SCAN as a tail call, so it is the last thing done.
+      // SCAN as a tail call, so it is the last thing done.
       DrawScannerBlip(_canvas, _work, _flight.type, _view, _picture);
     }
   } // namespace
@@ -554,18 +554,18 @@ namespace Elite
     FlightState& flight = _universe.flight;
     const Blueprint& blueprint = *_universe.flight.blueprint;
 
-    // 6502: exploding or already dead goes straight to MV30 and the scanner. Nothing below moves
+    // Exploding or already dead goes straight to MV30 and the scanner. Nothing below moves
     // it, which is why a wreck hangs where it died.
     if (!HasAny(work.state, ShipStateBit::Killed, ShipStateBit::Exploding))
     {
-      // 6502: the loop counter folded with the slot and masked to four bits -- one ship every
+      // The loop counter folded with the slot and masked to four bits -- one ship every
       // sixteenth pass.
       if ((static_cast<std::uint8_t>(flight.mainLoopCounter ^ flight.slot) & 15u) == 0u)
       {
         TidyOrientation(work);
       }
 
-      // 6502: MV3 -- a negative type goes to MV40. The planet and the sun move differently and
+      // A negative type goes to MV40. The planet and the sun move differently and
       // rejoin at MV45.
       if (IsBody(flight.type))
       {
@@ -575,7 +575,7 @@ namespace Elite
       }
 
       /*
-       * 6502: an inactive AI byte skips to MV30; a missile goes to MV26 at once; everything else
+       * An inactive AI byte skips to MV30; a missile goes to MV26 at once; everything else
        * waits for the counter folded with the slot to come out a multiple of eight.
        *
        * A missile thinks on EVERY iteration and everything else on one in eight, which is the whole
@@ -584,7 +584,7 @@ namespace Elite
       if (Has(work.ai, AiBit::Active) &&
           (flight.type == ShipType::Missile || (static_cast<std::uint8_t>(flight.mainLoopCounter ^ flight.slot) & 7u) == 0u))
       {
-        // 6502: TACTICS at MV26 -- and it can end in `DEATH`, which does not come back.
+        // TACTICS at MV26 -- and it can end in `DEATH`, which does not come back.
         if (!RunTactics(_universe, _ports, flight.slot))
         {
           return false;
@@ -592,10 +592,10 @@ namespace Elite
       }
     }
 
-DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.picture); // 6502: MV30 -- SCAN
+DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.picture); // SCAN
 
     /*
-     * 6502: the ship's speed doubled twice into `Q`, then three axes of FMLTU and MVT1-2.
+     * The ship's speed doubled twice into `Q`, then three axes of FMLTU and MVT1-2.
      *
      * The ship's speed, times four, scaling its own nose vector into its position -- so a ship moves
      * along the direction it is pointing, and the multiply is the unsigned high-byte one because
@@ -603,10 +603,10 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
      */
     const std::uint8_t speed = static_cast<std::uint8_t>(work.speed << 2);
 
-    // 6502: INWK+10, +12 and +14 -- the nose vector's high bytes -- against x, y and z in turn.
+    // INWK+10, +12 and +14 -- the nose vector's high bytes -- against x, y and z in turn.
     const auto step = [&work, speed](const std::uint8_t& _high, std::uint8_t _axis) noexcept
     {
-      const std::uint8_t along = MultiplyByLog(static_cast<std::uint8_t>(_high & 0x7Fu), speed, false).value; // 6502: into R
+      const std::uint8_t along = MultiplyByLog(static_cast<std::uint8_t>(_high & 0x7Fu), speed, false).value; // Into R
       AddToShipCoordinate(work, _high, along, _axis, true);
     };
     step(work.nose.x.hi, SHIP_X_OFFSET);
@@ -614,7 +614,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
     step(work.nose.z.hi, SHIP_Z_OFFSET);
 
     /*
-     * 6502: the speed and acceleration bytes, and the blueprint's maximum read through `XX0`.
+     * The speed and acceleration bytes, and the blueprint's maximum read through `XX0`.
      *
      * Speed plus acceleration, clamped at both ends: a negative result becomes zero and anything
      * above the blueprint's maximum speed becomes that maximum. THEN THE ACCELERATION IS CLEARED --
@@ -633,7 +633,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
     work.acceleration = 0;
 
     /*
-     * 6502: the rotation of the ship's POSITION by the player's roll and pitch -- y -= a*x,
+     * The rotation of the ship's POSITION by the player's roll and pitch -- y -= a*x,
      * z += b*K2, y = K2 - b*z, x += a*y -- through `MLTU2` and `MVT6`.
      *
      * `MLTU2-2` is a store into `Q` followed by `MLTU2` itself, so the multiplier the ported
@@ -642,21 +642,21 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
      * that under a sign and hands back a coordinate; `K2` held the intermediate y while `P` was
      * reused for the next multiply, and both are locals here.
      */
-    // 6502: MLTU2-2 with `ALP1` -- (A P+1 P) = (~x_lo, x_hi) * alp1, then MVT6 on y.
+    // MLTU2-2 with `ALP1` -- (A P+1 P) = (~x_lo, x_hi) * alp1, then MVT6 on y.
     Product24 wide = MultiplyWide(work.x.hi, static_cast<std::uint8_t>(work.x.lo ^ 0xFFu), flight.rollMagnitude);
     const SignMag24 rolledY =
       AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.rollSignFlipped ^ work.x.sgn)}, 3u);
 
-    // 6502: MLTU2-2 with `BET1` -- the same on z, with `K2`'s low byte complemented into `P`.
+    // MLTU2-2 with `BET1` -- the same on z, with `K2`'s low byte complemented into `P`.
     wide = MultiplyWide(rolledY.hi, static_cast<std::uint8_t>(rolledY.lo ^ 0xFFu), flight.pitchMagnitude);
     work.z = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(rolledY.sgn ^ flight.pitchSign)}, 6u);
 
-    // 6502: MLTU2 -- `Q` is still `BET1`, and ITS CARRY is what the arithmetic below runs on.
+    // `Q` is still `BET1`, and ITS CARRY is what the arithmetic below runs on.
     wide = MultiplyWide(work.z.hi, static_cast<std::uint8_t>(work.z.lo ^ 0xFFu), flight.pitchMagnitude);
     work.y.sgn = rolledY.sgn;
 
     /*
-     * 6502: three signs folded together, and a CLEAR top bit branches to MV43.
+     * Three signs folded together, and a CLEAR top bit branches to MV43.
      *
      * `BPL` branches when bit 7 is CLEAR, and what it branches to is the SUBTRACTION -- so the
      * signs agreeing means subtract and disagreeing means add, which is the opposite way round from
@@ -666,7 +666,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
     if (((rolledY.sgn ^ flight.pitchSign ^ work.z.sgn) & 0x80u) != 0u)
     {
       /*
-       * 6502: the addition has NO clear of the carry in front of it. It runs on the carry `MLTU2`
+       * The addition has NO clear of the carry in front of it. It runs on the carry `MLTU2`
        * left, because nothing between them touches it -- the stores, loads and folds do not.
        */
       AddResult sum = AddWithCarry(wide.mid, rolledY.lo, wide.carry);
@@ -676,7 +676,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
     }
     else
     {
-      // 6502: MV43 -- the subtraction the other way round, and no setting of the carry either,
+      // The subtraction the other way round, and no setting of the carry either,
       // for the same reason.
       SubResult difference = SubtractWithCarry(rolledY.lo, wide.mid, wide.carry);
       work.y.lo = difference.value;
@@ -693,18 +693,18 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
       }
     }
 
-    // 6502: MV44 -- MVT6 with `ALP1` -- x = x + alpha * y.
+    // MVT6 with `ALP1` -- x = x + alpha * y.
     wide = MultiplyWide(work.y.hi, static_cast<std::uint8_t>(work.y.lo ^ 0xFFu), flight.rollMagnitude);
     work.x = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.rollSign ^ work.y.sgn)}, 0u);
 
-    MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view, &_universe.picture); // 6502: falls into MV45
+    MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view, &_universe.picture); // Falls into MV45
     return true;
   }
 
   namespace
   {
 
-    /// 6502: PUS1 -- swap one orientation vector's x and z, flipping a sign on each side. Called for
+    /// Swap one orientation vector's x and z, flipping a sign on each side. Called for
     /// the nose, roof and side vectors, and the third time by falling into it rather than calling.
     void SwapVectorAxes(Ship& _work, const FlightState& _flight, std::uint8_t _at) noexcept
     {
@@ -722,7 +722,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
 
   void FlipAxesForView(Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept
   {
-    // 6502: the front view needs nothing, and what it branches to is the bare return at the end
+    // The front view needs nothing, and what it branches to is the bare return at the end
     // of the rear view's block.
     if (_view == 0u)
     {
@@ -734,7 +734,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
 
   void FlipAxes(Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept
   {
-    // 6502: PU1 -- the DEX comes first, so everything below reads the view MINUS ONE.
+    // The DEX comes first, so everything below reads the view MINUS ONE.
     const std::uint8_t which = static_cast<std::uint8_t>(_view - 1u);
 
     if (which == 0u)
@@ -749,7 +749,7 @@ DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.
       return;
     }
 
-    // 6502: PU2 -- the comparison against 2 has its carry rotated into the top bit of a zero, so
+    // The comparison against 2 has its carry rotated into the top bit of a zero, so
     // `RAT2` is the sign mask for the right view and `RAT` for the left. One instruction less than
     // an `if`, and the reason the two masks are always each other's complement.
     _flight.signMask2 = (which >= 2u) ? std::uint8_t{0x80} : std::uint8_t{0x00};

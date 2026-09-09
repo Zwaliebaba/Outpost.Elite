@@ -3,7 +3,7 @@
 #include <cstdint>
 
 /*
- * Constants the game is built with (Source-Inventory section 6).
+ * Constants the game is built with.
  *
  * These come from the master file's preamble rather than from any routine, and they carry the
  * original names so that a reader with the commentary open can find them. Build options live
@@ -27,17 +27,17 @@ namespace Elite
 
   // ---- text ------------------------------------------------------------------------------
 
-  /// 6502: RE -- the byte the recursive token table is hidden behind. The table is stored with
+  /// The byte the recursive token table is hidden behind. The table is stored with
   /// every character exclusive-ored against this, purely to stop the text being readable in a
   /// dump of the binary. The port keeps the obfuscation rather than storing plain text, because
   /// the table is extracted verbatim and the routine that reads it is being verified against the
   /// original.
   inline constexpr std::uint8_t RECURSIVE_TOKEN_KEY = 0x23;
 
-  /// 6502: VE -- the same trick, for the extended token table.
+  /// The same trick, for the extended token table.
   inline constexpr std::uint8_t EXTENDED_TOKEN_KEY = 0x57;
 
-  /// 6502: LL -- the width justified text wraps at, in characters.
+  /// The width justified text wraps at, in characters.
   inline constexpr std::uint8_t JUSTIFIED_LINE_WIDTH = 30;
 
 } // namespace Elite

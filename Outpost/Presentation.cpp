@@ -182,8 +182,8 @@ namespace Outpost
 
   double DockedPassSeconds(std::uint8_t _syncs) noexcept
   {
-    // The work between the waits, and the waits the library asked for -- `LDA QQ11 / AND PATG /
-    // LSR A / BCS plus13 / LDY #2 / JSR DELAY` is `RunLoopTail`'s to decide, and it says two or none.
+    // The work between the waits, and the waits the library asked for -- how many syncs a docked
+    // pass waits is `RunLoopTail`'s to decide, and it says two or none.
     const double work = static_cast<double>(DOCKED_PASS_CYCLES) / NTSC_CLOCK_HZ;
     return work + static_cast<double>(_syncs) * NTSC_FRAME_CYCLES / NTSC_CLOCK_HZ;
   }

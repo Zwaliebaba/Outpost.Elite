@@ -3,7 +3,6 @@
 #include "pch.h"
 
 #include "FlightUniverse.h"
-#include "UniverseImage.h"
 
 #include "Charts.h"
 #include "Game.h"
@@ -148,34 +147,14 @@ namespace GameLogicTests
     }
 
     /*
-     * The replay digest: the universe image, widened with what the image does not carry and a
-     * flight changes -- the pixels, the ship line heap and the flight controls. The image leaves
-     * them out because the oracle compares them by other means (`CompareScreens`, the heap
-     * comparisons in `FlightLoopTests`); a replay has no oracle and wants all of it. Every part is
-     * a byte layout ADR-002 fixes, so the digest survives the data-model slices the same way the
-     * image does.
+     * The replay digest.
+     *
+     * There were two until M6-b-7: this one, folded over the label table and widened with the
+     * pixels, the ship line heap and the flight controls; and `Game::StateHash()` beside it, which
+     * already folds all three because they are bytes of `Universe`. The label fold went with the
+     * labels, which is what M6-f always said would happen to it, and the record kept the column
+     * that outlived them -- so the flight is the flight it was and no digest was re-taken.
      */
-    [[nodiscard]] std::uint64_t Digest() const
-    {
-      std::uint64_t digest = Hash(universe);
-      digest = FoldBytes(digest, universe.canvas.Screen());
-
-      std::array<std::uint8_t, Elite::LineHeap::SIZE> arena{};
-      for (std::size_t offset = 0; offset < arena.size(); ++offset)
-      {
-        arena[offset] = universe.heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::LineHeap::BASE + offset)));
-      }
-      digest = FoldBytes(digest, arena);
-
-      const std::array<std::uint8_t, 6> rest = {universe.control.roll,
-                                                universe.control.pitch,
-                                                universe.control.dockingComputer,
-                                                universe.status.hyperspaceCounter,
-                                                universe.status.ecmOurs,
-                                                docked};
-      return FoldBytes(digest, rest);
-    }
-
     /// The library-native digest beside it (M5-e-3): `Game::StateHash()`, which already folds the
     /// pixels, the heap and the controls because they are bytes of `Universe`.
     [[nodiscard]] std::uint64_t StateDigest() const noexcept

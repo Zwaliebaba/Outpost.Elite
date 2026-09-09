@@ -49,7 +49,7 @@ namespace Elite
   }
 
   /*
-   * 6502: SBC -- subtract with borrow, where the carry means "no borrow" both going in and coming
+   * Subtract with borrow, where the carry means "no borrow" both going in and coming
    * out, so a subtraction that has not borrowed leaves it SET.
    *
    * It lives here beside `AddWithCarry` rather than in one .cpp file because the two are the same
@@ -93,7 +93,7 @@ namespace Elite
   }
 
   /*
-   * 6502: INWK+9/10 and kin, and the register pairs (A P), (S R) and (A X) the arithmetic kernel
+   * INWK+9/10 and kin, and the register pairs (A P), (S R) and (A X) the arithmetic kernel
    * takes and returns -- a sixteen-bit sign-magnitude value: fifteen bits of magnitude and the sign
    * in bit 7 of the high byte. One component of an orientation vector is one of these, and so is
    * every operand of `ADD` (M2-b), which is why the type lives here and not with the ship.

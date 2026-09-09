@@ -15,13 +15,13 @@ namespace Elite
   /*
    * The six tokens that print game state rather than text (slice 2c).
    *
-   * 6502: TT27's first six branches -- `TAX / BEQ csh / ... / DEX / BEQ fwl`. Tokens 0 to 5 are
+   * TT27's first six branches, which test the token by counting it down. Tokens 0 to 5 are
    * control codes that reach into the commander and the universe instead of into the token table,
    * and slice 1c-a declared them a seam because nothing that could answer them existed yet. This
    * closes it.
    *
    *   0  csh   the cash, to nine digits with a decimal point, then " CR" and a newline
-   *   1  tal   the galaxy number, ONE-BASED -- `LDX GCNT / INX`
+   *   1  tal   the galaxy number, ONE-BASED -- `GCNT` plus one
    *   2  ypl   the CURRENT system's name, which is not the same as 3
    *   3  cpl   the SELECTED system's name, which slice 2a already ports
    *   4  cmn   the commander's name, up to the carriage return that ends it
@@ -54,11 +54,11 @@ namespace Elite
     void Print(std::uint8_t _token, TextSink& _sink) override;
 
   private:
-    void PrintCash(TextSink& _sink);          ///< 6502: csh, which falls into plf
-    void PrintGalaxyNumber(TextSink& _sink);  ///< 6502: tal
-    void PrintCurrentSystem();                ///< 6502: ypl
-    void PrintCommanderName(TextSink& _sink); ///< 6502: cmn
-    void PrintFuelAndCash(TextSink& _sink);   ///< 6502: fwl, which falls into PCASH
+    void PrintCash(TextSink& _sink);          ///< csh, which falls into plf
+    void PrintGalaxyNumber(TextSink& _sink);  ///< tal
+    void PrintCurrentSystem();                ///< ypl
+    void PrintCommanderName(TextSink& _sink); ///< cmn
+    void PrintFuelAndCash(TextSink& _sink);   ///< fwl, which falls into PCASH
 
     TokenPrinter& m_printer;
     TextState& m_text;

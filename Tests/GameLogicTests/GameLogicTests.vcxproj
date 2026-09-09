@@ -102,16 +102,10 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Cpu6502.h" />
-    <ClInclude Include="Oracle.h" />
-    <ClInclude Include="OracleImage.h" />
-    <ClInclude Include="OracleLabels.h" />
-    <ClInclude Include="GoldenCanvas.h" />
     <ClInclude Include="FlightPort.h" />
     <ClInclude Include="FlightUniverse.h" />
     <ClInclude Include="NullSeams.h" />
-    <ClInclude Include="ShipBytes.h" />
-    <ClInclude Include="UniverseImage.h" />
+    <ClInclude Include="StateCells.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -121,69 +115,35 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Cpu6502.cpp" />
-    <ClCompile Include="Oracle.cpp" />
-    <ClCompile Include="OracleImage.cpp" />
     <ClCompile Include="ArithTests.cpp" />
-    <ClCompile Include="Cpu6502Tests.cpp" />
-    <ClCompile Include="OracleTests.cpp" />
     <ClCompile Include="RngTests.cpp" />
-    <ClCompile Include="ExtendedTokenTests.cpp" />
     <ClCompile Include="TokenTests.cpp" />
     <ClCompile Include="CanvasSpikeTests.cpp" />
     <ClCompile Include="CanvasTests.cpp" />
     <ClCompile Include="TextPrintTests.cpp" />
-    <ClCompile Include="GoldenCanvas.cpp" />
-    <ClCompile Include="GoldenTests.cpp" />
-    <ClCompile Include="NumberTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
     <ClCompile Include="GameTests.cpp" />
-    <ClCompile Include="UniverseImage.cpp" />
-    <ClCompile Include="UniverseImageTests.cpp" />
+    <ClCompile Include="StateCells.cpp" />
     <ClCompile Include="StateHashTests.cpp" />
     <ClCompile Include="FlightReplayTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
-    <ClCompile Include="MissionTests.cpp" />
-    <ClCompile Include="MarketScreenTests.cpp" />
-    <ClCompile Include="StateTokenTests.cpp" />
-    <ClCompile Include="NameEntryTests.cpp" />
     <ClCompile Include="SaveGameTests.cpp" />
-    <ClCompile Include="SystemScreenTests.cpp" />
     <ClCompile Include="SaveStoreTests.cpp" />
-    <ClCompile Include="DockedKeyTests.cpp" />
-    <ClCompile Include="StartUpTests.cpp" />
-    <ClCompile Include="DockingTests.cpp" />
     <ClCompile Include="DockedSessionTests.cpp" />
     <ClCompile Include="ShellTests.cpp" />
     <ClCompile Include="ShipDataTests.cpp" />
     <ClCompile Include="ShipMoveTests.cpp" />
-    <ClCompile Include="ShipDrawTests.cpp" />
-    <ClCompile Include="StardustTests.cpp" />
-    <ClCompile Include="PlanetDrawTests.cpp" />
-    <ClCompile Include="DashboardTests.cpp" />
     <ClCompile Include="FlightLoopTests.cpp" />
-    <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="LaunchTests.cpp" />
-    <ClCompile Include="ControlsTests.cpp" />
     <ClCompile Include="VideoStateTests.cpp" />
     <ClCompile Include="ViewChangeTests.cpp" />
-    <ClCompile Include="LaserTests.cpp" />
-    <ClCompile Include="MessageTests.cpp" />
-    <ClCompile Include="ScannerTests.cpp" />
-    <ClCompile Include="ExplosionTests.cpp" />
-    <ClCompile Include="HyperspaceTests.cpp" />
-    <ClCompile Include="GameLoopTests.cpp" />
     <ClCompile Include="PictureTests.cpp" />
     <ClCompile Include="PictureTextTests.cpp" />
     <ClCompile Include="PictureLineTests.cpp" />
     <ClCompile Include="PicturePlanetTests.cpp" />
     <ClCompile Include="PictureDashboardTests.cpp" />
-    <ClCompile Include="TacticsTests.cpp" />
     <ClCompile Include="RasterTests.cpp" />
     <ClCompile Include="SidRenderTests.cpp" />
-    <ClCompile Include="TrumbleTests.cpp" />
-    <ClCompile Include="SpawnTests.cpp" />
-    <ClCompile Include="SoundTests.cpp" />
     <!-- The parts of the executable that are decisions rather than API calls, compiled into the
          suite so they are covered rather than only shipped: the commander store, the palette and
          viewport arithmetic, and the key map. None is in this directory, so none uses this
@@ -205,9 +165,7 @@
     <ClCompile Include="..\..\Outpost\SidSynth.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="ChartTests.cpp" />
     <ClCompile Include="CommanderTests.cpp" />
-    <ClCompile Include="CycleTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">

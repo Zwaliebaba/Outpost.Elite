@@ -71,27 +71,27 @@ namespace Elite
     /*
      * The two blocks of screen RAM, and which is which is NOT what their addresses suggest.
      *
-     * 6502: `zebop` is always &81, so the upper part of the screen always takes its colours from
+     * `zebop` is always &81, so the upper part of the screen always takes its colours from
      * &6000 -- the space view and every text view alike. `abraxas` is &81 too until `wantdials`
      * makes it &91, which is the ONE case that uses &6400: the dashboard. So the first block
      * colours the game screen and the second colours the dashboard, and `celllook` -- the table
      * CHPR writes a glyph's colour through -- indexes the first.
      */
-    static constexpr std::uint16_t SCREEN_CELLS = 0x2000;    ///< 6502: &6000, via zebop
-    static constexpr std::uint16_t DASHBOARD_CELLS = 0x2400; ///< 6502: &6400, via abraxas = &91
+    static constexpr std::uint16_t SCREEN_CELLS = 0x2000;    ///< &6000, via zebop
+    static constexpr std::uint16_t DASHBOARD_CELLS = 0x2400; ///< &6400, via abraxas = &91
     static constexpr std::uint16_t SCREEN_SIZE = 0x2800;
 
-    /// 6502: the 0x20 that ylookup adds to every row -- the space view's left margin, four
+    /// The 0x20 that ylookup adds to every row -- the space view's left margin, four
     /// character cells. So x 0..255 covers cells 4..35 of 40, which is 128 multicolour pixels of
     /// the 160 across the screen.
     static constexpr std::uint16_t SPACE_VIEW_MARGIN = 0x20;
 
-    /// 6502: DLOC% -- the dashboard starts at character row 18, so the space view is y 0..143.
+    /// The dashboard starts at character row 18, so the space view is y 0..143.
     /// That is the 144 in the masters' "256 x 144 space view" note on Y = 72.
     static constexpr int DASHBOARD_CELL_ROW = 18;
     static constexpr int SPACE_VIEW_HEIGHT = DASHBOARD_CELL_ROW * 8;
 
-    /// 6502: ylookup -- the bitmap offset of the character row containing screen row _y, left
+    /// The bitmap offset of the character row containing screen row _y, left
     /// margin included. The table is extracted too (ROW_ADDRESS_LOW/HIGH) and a test proves this
     /// agrees with it for all 256 values, including the ones past the bottom of the bitmap that
     /// the table also carries.
@@ -100,7 +100,7 @@ namespace Elite
       return static_cast<std::uint16_t>(SPACE_VIEW_MARGIN + (_y & 0xF8) * CELL_COLUMNS);
     }
 
-    /// 6502: celllook -- the screen-RAM offset of a character row. The three cells are not a
+    /// The screen-RAM offset of a character row. The three cells are not a
     /// margin: CHPR writes a glyph's colour after advancing the cursor, so celllook + (XC + 1)
     /// lands on cell 4 + XC, which is where the glyph went.
     [[nodiscard]] static constexpr std::uint16_t CellRowOffset(int _row) noexcept
@@ -143,8 +143,9 @@ namespace Elite
       Write(_offset, _palette.Byte());
     }
 
-    /// 6502: EOR (SC),Y / STA (SC),Y -- the only way the drawing code puts anything on screen,
-    /// and the reason drawing a thing twice erases it (plan section 4.6).
+    /// An exclusive OR against the screen byte, stored back -- the only way the drawing
+    /// code puts anything on screen, and the reason drawing a thing twice erases it (plan
+    /// section 4.6).
     void ExclusiveOr(std::uint16_t _offset, std::uint8_t _mask) noexcept
     {
       if (_offset < SCREEN_SIZE)
@@ -153,7 +154,8 @@ namespace Elite
       }
     }
 
-    /// 6502: EOR #BULBCOL / STA (SC),Y -- the bulbs toggle a PALETTE in and out of screen RAM.
+    /// The same against a palette constant -- the bulbs toggle a PALETTE in and out of
+    /// screen RAM.
     void ExclusiveOr(std::uint16_t _offset, CellPalette _palette) noexcept
     {
       ExclusiveOr(_offset, _palette.Byte());
@@ -202,7 +204,7 @@ namespace Elite
     }
 
     /*
-     * 6502: VIC+&21, the background register, which supplies %00 -- and there are TWO of it.
+     * VIC+&21, the background register, which supplies %00 -- and there are TWO of it.
      *
      * One register, rewritten twice a frame by `COMIRQ1` from `welcome,X`: the LOWER half gets
      * `welcome+1`, which nothing in the game ever changes, and the upper half gets `welcome`, which
@@ -213,14 +215,14 @@ namespace Elite
      * This one is the lower half's, and it is the one the loader sets before any interrupt exists.
      *
      * THE SETTER TAKES A BYTE AND THE GETTER ANSWERS A `Colour`, WHICH IS THE LATCH (slice 5a).
-     * `STA VIC+&21` puts eight bits on the bus and the chip keeps four; the game relies on it,
-     * because `COMIRQ1` increments `welcome` on every pass while the energy bomb burns and stores
-     * the running count straight into the register. After eight frames of bomb that byte is past
-     * 15, and this port resolves the canvas into COLOUR INDICES that the presenter looks up in a
-     * sixteen-entry palette -- so the mask is not tidiness, it is the register. It was missing
-     * until slice 5a and nothing measured it: the oracle holds the same unlatched byte the port
-     * did (`TheRasterInterruptMatchesCOMIRQ1` compares `welcome` at &9C and &FF and agrees), and
-     * no test had ever resolved a canvas with a bomb-flashed background.
+     * A store to the background register puts eight bits on the bus and the chip keeps four; the
+     * game relies on it, because `COMIRQ1` increments `welcome` on every pass while the energy
+     * bomb burns and stores the running count straight into the register. After eight frames of
+     * bomb that byte is past 15, and this port resolves the canvas into COLOUR INDICES that the
+     * presenter looks up in a sixteen-entry palette -- so the mask is not tidiness, it is the
+     * register. It was missing until slice 5a and nothing measured it: the oracle holds the same
+     * unlatched byte the port did (`TheRasterInterruptMatchesCOMIRQ1` compares `welcome` at &9C
+     * and &FF and agrees), and no test had ever resolved a canvas with a bomb-flashed background.
      */
     [[nodiscard]] Colour Background() const noexcept
     {
@@ -231,7 +233,7 @@ namespace Elite
       m_background = ColourOf(_stored);
     }
 
-    /// 6502: welcome -- the SPACE VIEW's background, and only visible while `moonflower` has put
+    /// The SPACE VIEW's background, and only visible while `moonflower` has put
     /// the upper half into multicolour, which is the energy bomb and nothing else.
     [[nodiscard]] Colour SpaceViewBackground() const noexcept
     {
@@ -243,7 +245,7 @@ namespace Elite
     }
 
     /*
-     * 6502: moonflower's bit 4 -- is the SPACE VIEW in multicolour mode?
+     * moonflower's bit 4 -- is the SPACE VIEW in multicolour mode?
      *
      * Clear for every ordinary frame, and the energy bomb is the one thing that sets it: flight
      * loop part 3 stores %11010000 and `BOMBOFF` puts %11000000 back. The same bytes then decode as
@@ -261,7 +263,7 @@ namespace Elite
     }
 
     /*
-     * 6502: VIC+&1C and VIC+&28 as `COMIRQ1` leaves them -- index 0 is the space view's pass and
+     * VIC+&1C and VIC+&28 as `COMIRQ1` leaves them -- index 0 is the space view's pass and
      * index 1 the dashboard's.
      *
      * `santana` is which sprites are multicolour and `lotus` is sprite 1's colour, and the pair
@@ -285,7 +287,7 @@ namespace Elite
     }
 
     /*
-     * 6502: DFLAG, and the `abraxas` / `caravanserai` pair it drives -- is the dashboard on screen?
+     * DFLAG, and the `abraxas` / `caravanserai` pair it drives -- is the dashboard on screen?
      *
      * ONE FLAG, TWO EFFECTS, and they always move together: with the dashboard shown, character
      * rows 18 to 24 switch to multicolour AND to the second block of screen RAM. Without it the
@@ -315,7 +317,7 @@ namespace Elite
     // ---- the seam ---------------------------------------------------------------------------
 
     /*
-     * 6502: what the VIC-II did on its way to the screen.
+     * What the VIC-II did on its way to the screen.
      *
      * Writes WIDTH * HEIGHT colour indices, one byte each, which is what ADR-005's R8_UINT texture
      * uploads. Each multicolour pixel becomes two columns, because that is its real width.
@@ -379,7 +381,7 @@ namespace Elite
     Colour m_spaceViewBackground = Colour::Black;
     bool m_spaceViewMulticolour = false;
 
-    /// 6502: santana and lotus -- see `SetSpriteMulticolour`. Initialised to what the game holds.
+    /// santana and lotus -- see `SetSpriteMulticolour`. Initialised to what the game holds.
     std::array<std::uint8_t, 2> m_spriteMulticolour = {0xFEu, 0xFCu};
     std::array<Colour, 2> m_explosionColour = {Colour::Red, Colour::Black};
     bool m_dashboardShown = false;
@@ -410,7 +412,7 @@ namespace Elite
                         const VideoState& _video) noexcept;
 
   /*
-   * 6502: X1, Y1, X2, Y2 -- a line, as `LOIN` takes it: the first four bytes of `XX15`.
+   * X1, Y1, X2, Y2 -- a line, as `LOIN` takes it: the first four bytes of `XX15`.
    *
    * A value since M2-c: the line routines take one and the clipper hands one back. `LOIN` may
    * swap its ends on the way, and `DrawnLine` is what it leaves.
@@ -424,7 +426,7 @@ namespace Elite
   };
 
   /*
-   * 6502: SC(1 0) -- the screen pointer, and all that is left of the drawing workspace.
+   * SC(1 0) -- the screen pointer, and all that is left of the drawing workspace.
    *
    * Everything else that lived here is a value since M2-c: `X1`, `Y1`, `X2` and `Y2` are a `Line`,
    * `XX15+4` and `XX15+5` its two extra bytes in the clipper's `Line16`, `SWAP` what `LOIN` and the
@@ -439,24 +441,25 @@ namespace Elite
    */
   struct DrawWorkspace
   {
-    std::uint16_t screenPointer = 0; ///< 6502: SC(1 0)
+    std::uint16_t screenPointer = 0;
   };
 
   // ---- the pixel primitives (slice 1d-a) ------------------------------------------------------
 
-  /// 6502: PIXEL -- plot at (_x, _y) with the size taken from `_distance`, which is `ZZ`: under 80
+  /// Plot at (_x, _y) with the size taken from `_distance`, which is `ZZ`: under 80
   /// it is a four-pixel square, under 144 a two-pixel dash, and beyond that a single mark.
   void PlotPixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
-  /// 6502: PIXEL2 -- the same, for a point given in the space view's own sign-magnitude
+  /// The same, for a point given in the space view's own sign-magnitude
   /// coordinates relative to the centre. Falls through into PIXEL, so this is that whole path.
   /*
-   * Returns the exit carry, which one caller reads: `nWq` fills the stardust field with
-   * `JSR PIXEL2 / DEY / BNE SAL4` and the next iteration opens with `JSR DORND`, so the generator
-   * runs on whatever the plot left (§6.57). The eleventh dropped flag.
+   * Returns the exit carry, which one caller reads: `nWq` fills the stardust field by calling
+   * `PIXEL2` in a loop whose next iteration opens with `DORND`, so the generator runs on whatever
+   * the plot left (§6.57). The eleventh dropped flag.
    *
-   * The stardust's own movers do NOT read it -- they follow the plot with `JSR DV42`, and `DVID4`
-   * opens with an `ASL` -- so they discard it explicitly rather than by accident.
+   * The stardust's own movers do NOT read it -- they follow the plot with `DV42`, and `DVID4`
+   * opens with a shift that overwrites the flag -- so they discard it explicitly rather than by
+   * accident.
    */
   [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
@@ -474,17 +477,18 @@ namespace Elite
   {
     std::uint8_t x = 0;     ///< `X1` as `PIXEL` receives it, measured from the view's left edge
     std::uint8_t y = 0;     ///< `Y1` as `PIXEL` receives it, measured down
-    bool offScreen = false; ///< the `CMP #72 / BCS PX4` exit -- more than 72 rows from the centre
+    bool offScreen = false; ///< the 72-row exit -- more than 72 rows from the view's centre
   };
 
-  /// `PIXEL2`'s `EOR #%01111111 / ADC #1 / EOR #%10000000` on x and its `LDA #73 / SBC T` on y.
-  /// The y half carries the borrow the x half did not clear, which is why negative zero and
-  /// negative one are the same row; the marker and the reasoning are on the body in `Lines.cpp`.
+  /// `PIXEL2`'s sign-magnitude fold on x -- complement, add one, flip the top bit -- and its
+  /// subtraction from 73 on y. The y half carries the borrow the x half did not clear, which is
+  /// why negative zero and negative one are the same row; the marker and the reasoning are on the
+  /// body in `Lines.cpp`.
   [[nodiscard]] SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept;
 
 
   /*
-   * 6502: what `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.
+   * What `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.
    *
    * The scanner's stick is drawn by walking on from where the dot finished rather than by plotting
    * (x, y) pairs, so it needs the pointer and the row the dash left behind -- and the mask index,
@@ -493,25 +497,26 @@ namespace Elite
    *
    * `address` is ONE sixteen-bit value rather than the two bytes the original keeps, and that is a
    * different judgement from `ScreenPointer`'s in `Lines.cpp`. There the split is load-bearing:
-   * `LOIN` runs `SBC #247` for its own borrow and reads the result. Here both moves are a full
-   * sixteen-bit add or subtract of 320 with the carry into the high byte spelled out (`SEC` on the
-   * way up, a `CPY` that has just set it on the way down) and no exit carry read -- so the pair and
-   * the sixteen-bit value are the same number, not merely the same number in practice.
+   * `LOIN` subtracts 247 from the low byte for its own borrow and reads the result. Here both
+   * moves are a full sixteen-bit add or subtract of 320 with the carry into the high byte spelled
+   * out (an explicit set on the way up, a compare that has just set it on the way down) and no
+   * exit carry read -- so the pair and the sixteen-bit value are the same number, not merely the
+   * same number in practice.
    */
   struct CellCursor
   {
-    std::uint16_t address = 0; ///< 6502: SC(1 0) -- the character block, INCLUDING the wrap below
-    std::uint8_t row = 0;      ///< 6502: Y -- the pixel row within it
-    std::uint8_t pixel = 0;    ///< 6502: X -- x AND 7, the index into CTWOS2
+    std::uint16_t address = 0; ///< SC(1 0) -- the character block, INCLUDING the wrap below
+    std::uint8_t row = 0;      ///< The pixel row within it
+    std::uint8_t pixel = 0;    ///< X AND 7, the index into CTWOS2
   };
 
-  /// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour mask `COL` (RED, YELLOW, GREEN and
+  /// A two-pixel dash at (X1, Y1) in the colour mask `COL` (RED, YELLOW, GREEN and
   /// WHITE are four multicolour pixels each rather than a colour number). The second pixel can
   /// land in the next character cell, and the routine detects that from the mask rather than from
   /// x -- which is why the cursor it returns can point one cell to the right of (X1, Y1)'s own.
   CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept;
 
-  /// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it. The cursor is the SECOND
+  /// A two-by-two block: CPIX2, then the row above it. The cursor is the SECOND
   /// call's, which is the row `SCAN` starts its stick from. The original leaves `Y1` decremented;
   /// nothing reads it, and since M2-c nothing can.
   CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept;
@@ -526,7 +531,7 @@ namespace Elite
   struct DrawnLine
   {
     Line ends;
-    bool swapped = false; ///< 6502: SWAP
+    bool swapped = false;
   };
 
   /*
@@ -544,12 +549,12 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t LineSlope(std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
-  /// 6502: LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
+  /// LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
   /// alternates between each cell's two colours. The shipped code unrolls it into thirty-two
   /// copies reached through self-modifying jumps; this is the two loops those copies are.
   DrawnLine DrawLine(Canvas& _canvas, Line _line) noexcept;
 
-  /// 6502: HLOIN -- a horizontal line from `_x1` to `_x2` (exclusive) on row `_y`. The ends are
+  /// A horizontal line from `_x1` to `_x2` (exclusive) on row `_y`. The ends are
   /// masked bytes and everything between is a whole byte, which is why a line's edge can come out
   /// a different colour from its body. The original swaps the ends and decrements `X2` in place;
   /// no caller reads either afterwards, and `T` and `R` are its own (M2-c).

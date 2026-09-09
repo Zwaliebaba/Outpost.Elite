@@ -38,7 +38,7 @@ namespace Elite
 
   void StopJustifying(ExtendedTextState& _state) noexcept
   {
-    // 6502: MT15 -- the flag and the buffer length both cleared, out of one zero.
+    // The flag and the buffer length both cleared, out of one zero.
     _state.justify = 0;
     _state.bufferLength = 0;
   }
@@ -55,7 +55,7 @@ namespace Elite
     /// The four thresholds that turn a random byte into one of five alternatives.
     constexpr std::array<std::uint8_t, 4> VARIANT_THRESHOLDS = {51, 102, 153, 204};
 
-    /// 6502: VOWEL -- the case folded by forcing one bit, then five comparisons. The carry is set
+    /// The case folded by forcing one bit, then five comparisons. The carry is set
     /// on a match and cleared by the `CLC` the fall-through reaches, so "carry set" means vowel.
     [[nodiscard]] bool IsVowel(std::uint8_t _character) noexcept
     {
@@ -63,7 +63,7 @@ namespace Elite
       return lower == 'a' || lower == 'e' || lower == 'i' || lower == 'o' || lower == 'u';
     }
 
-    /// 6502: MT18 reads the letter-pair table two bytes in.
+    /// MT18 reads the letter-pair table two bytes in.
     constexpr std::size_t RANDOM_WORD_OFFSET = 2;
   } // namespace
 
@@ -73,12 +73,12 @@ namespace Elite
 
   void CharacterPrinter::Put(std::uint8_t _character) noexcept
   {
-    // 6502: the case mask reset to 255. It lasts exactly one character: MT19 sets it just before
+    // The case mask reset to 255. It lasts exactly one character: MT19 sets it just before
     // the letter it applies to, and this is what takes it away again.
     m_state.caseMask = 0xFF;
 
     /*
-     * 6502: the CMP ladder into DA8. X arrives at the store as 255 when one of the five matched
+     * The CMP ladder into DA8. X arrives at the store as 255 when one of the five matched
      * and 0 when none did, so DTW2 records "the character just printed ended a word". The next
      * letter through DTS is left capitalised on the strength of it, which is how the game gets
      * sentence case out of one byte and no lookahead.
@@ -87,7 +87,7 @@ namespace Elite
                             ? std::uint8_t{0xFF}
                             : std::uint8_t{0x00};
 
-    // 6502: bit 7 of `DTW4` clear -- nobody asked for justification, so this goes straight to the
+    // Bit 7 of `DTW4` clear -- nobody asked for justification, so this goes straight to the
     // screen.
     if ((m_state.justify & 0x80u) == 0u)
     {
@@ -96,7 +96,7 @@ namespace Elite
     }
 
     /*
-     * 6502: bit 6 of `DTW4` suppresses the flush entirely.
+     * Bit 6 of `DTW4` suppresses the flush entirely.
      *
      * Only the in-flight message printer sets it. That routine buffers a whole message so it can
      * measure it and centre it by hand, and a form feed inside such a message is a character to
@@ -108,7 +108,7 @@ namespace Elite
       return;
     }
 
-    // 6502: the character into the buffer at `DTW5`, and the length up by one.
+    // The character into the buffer at `DTW5`, and the length up by one.
     if (m_state.bufferLength < buffer.size())
     {
       buffer[m_state.bufferLength] = _character;
@@ -122,7 +122,7 @@ namespace Elite
 
   void CharacterPrinter::Emit(std::uint8_t _count) noexcept
   {
-    // 6502: DAS1 -- the buffer's first `_count` bytes through the character printer.
+    // The buffer's first `_count` bytes through the character printer.
     const std::size_t count = std::min<std::size_t>(_count, buffer.size());
     for (std::size_t index = 0; index < count; ++index)
     {
@@ -142,7 +142,7 @@ namespace Elite
       if (restart)
       {
         /*
-         * 6502: DA11 -- the rotating bit is reseeded only when it has run out of places to go,
+         * The rotating bit is reseeded only when it has run out of places to go,
          * and that is deliberate. It carries across passes, so a line whose only gap was skipped
          * on one pass has that gap widened on the next.
          *
@@ -160,26 +160,26 @@ namespace Elite
         {
           _rotor = 0x40;
         }
-        scan = LINE_WIDTH - 1; // 6502: the scan starts at 29
+        scan = LINE_WIDTH - 1; // The scan starts at 29
         restart = false;
         firstPass = false;
         sawGap = false;
       }
 
-      // 6502: DAL1 -- the line is ready the moment the thirty-first character is a space.
+      // The line is ready the moment the thirty-first character is a space.
       if (buffer[LINE_WIDTH] == SPACE)
       {
         return {true, _rotor};
       }
 
-      // 6502: DAL2 -- back through the line looking for a gap this pass is allowed to widen.
+      // Back through the line looking for a gap this pass is allowed to widen.
       bool widen = false;
       for (;;)
       {
         --scan;
         if (scan <= 0)
         {
-          // 6502: DA11 -- off the front of the line, so round again.
+          // Off the front of the line, so round again.
           restart = true;
           break;
         }
@@ -191,7 +191,7 @@ namespace Elite
 
         sawGap = true;
 
-        // 6502: the rotor shifted, and a set top bit skips this gap -- so every other one is
+        // The rotor shifted, and a set top bit skips this gap -- so every other one is
         // passed over and the padding spreads along the line instead of piling up in the first
         // space it finds.
         _rotor = static_cast<std::uint8_t>(_rotor << 1);
@@ -215,7 +215,7 @@ namespace Elite
       }
 
       /*
-       * 6502: DAL6 -- shift the tail right by one to open the gap.
+       * Shift the tail right by one to open the gap.
        *
        * The loop starts one PAST the last character, so the original moves a byte of whatever
        * follows the text along with it. Nothing ever prints that byte: DTW5 counts the text and
@@ -232,7 +232,7 @@ namespace Elite
       ++m_state.bufferLength;
 
       /*
-       * 6502: DAL3 -- step back over the whole run of spaces this gap belongs to. A still holds
+       * Step back over the whole run of spaces this gap belongs to. A still holds
        * the space that was moved, which is what the CMP compares against, and the BNE returns to
        * DAL1 WITHOUT resetting Y: the scan carries on from where it is rather than starting over.
        */
@@ -251,7 +251,7 @@ namespace Elite
   void CharacterPrinter::Justify() noexcept
   {
     /*
-     * 6502: DA5 -- the rotor shifted right on the way in.
+     * The rotor shifted right on the way in.
      *
      * SCH is the screen pointer's high byte, borrowed here as the rotating bit that decides which
      * gap to widen. The LSR is dead: it always clears bit 7, so DA11 always reseeds the bit at
@@ -265,7 +265,7 @@ namespace Elite
     {
       if (m_state.bufferLength <= LINE_WIDTH)
       {
-        // 6502: DA6 -- short enough to print as it stands.
+        // Short enough to print as it stands.
         Emit(m_state.bufferLength);
         m_state.bufferLength = 0;
         break;
@@ -277,7 +277,7 @@ namespace Elite
       rotor = padded.rotor;
       const bool broke = padded.broke;
 
-      // 6502: DA2 -- thirty characters and a newline. The space that broke the line goes with
+      // Thirty characters and a newline. The space that broke the line goes with
       // them, which is why the subtraction below takes thirty-ONE away: CHPR returns with the
       // carry clear, so the subtraction of thirty borrows one more.
       Emit(LINE_WIDTH);
@@ -296,7 +296,7 @@ namespace Elite
       }
 
       /*
-       * 6502: DAL4 -- move what is left down to the front. X is one more than the count, so the
+       * Move what is left down to the front. X is one more than the count, so the
        * original copies one byte more than there is text; DTW5 stops it ever being printed.
        */
       for (std::size_t index = 0; index <= static_cast<std::size_t>(m_state.bufferLength); ++index)
@@ -310,7 +310,7 @@ namespace Elite
       }
     }
 
-    // 6502: DA7 -- however it got here, a flush ends on a newline.
+    // However it got here, a flush ends on a newline.
     m_screen.Put(FORM_FEED);
   }
 
@@ -368,7 +368,7 @@ namespace Elite
   {
     if (_byte < FIRST_CHARACTER)
     {
-      // 6502: DT3 -- a control code, dispatched through the JMTB jump table.
+      // A control code, dispatched through the JMTB jump table.
       RunTextCode(_byte);
       return;
     }
@@ -376,7 +376,7 @@ namespace Elite
     if ((m_characters.State().toLineBuffer & 0x80u) != 0u)
     {
       /*
-       * 6502: DT8 -- bit 7 of `DTW3` decides.
+       * Bit 7 of `DTW3` decides.
        *
        * Everything above 31 goes to the RECURSIVE printer instead -- not just characters, but the
        * variants, the nested tokens and the letter pairs as well, because the test is on the byte
@@ -405,7 +405,7 @@ namespace Elite
       return;
     }
 
-    // 6502: the TKN2 path -- a pair of letters from the top of the range.
+    // The TKN2 path -- a pair of letters from the top of the range.
     const std::size_t index = static_cast<std::size_t>(_byte - FIRST_PAIR) * 2u;
     if (index + 1 >= EXTENDED_PAIR_TABLE.size())
     {
@@ -435,14 +435,14 @@ namespace Elite
       _character = static_cast<std::uint8_t>(_character & state.caseMask);
     }
 
-    // 6502: DT9 into DASC -- digits, spaces and punctuation skip the folding and arrive here
+    // DT9 into DASC -- digits, spaces and punctuation skip the folding and arrive here
     // anyway, which matters: DASC is what notices that a full stop ended a sentence.
     m_characters.Put(_character);
   }
 
   void ExtendedTokenPrinter::PrintRandomVariant(std::uint8_t _byte) noexcept
   {
-    // 6502: DT6 is reached by a BCC, so the carry is clear on the way into DORND -- deterministic
+    // DT6 is reached by a BCC, so the carry is clear on the way into DORND -- deterministic
     // rather than incidental, which is why this can use the repeatable entry point.
     const std::uint8_t roll = m_rng.NextRepeatable().value;
 
@@ -481,13 +481,13 @@ namespace Elite
     switch (_code)
     {
     case 1:
-      // 6502: MT1 -- upper case, and stop forcing it.
+      // Upper case, and stop forcing it.
       state.lowerCaseBits = 0;
       state.alwaysLower = 0;
       return;
 
     case 2:
-      // 6502: MT2 -- sentence case. The two routines share their tail through a BIT that
+      // Sentence case. The two routines share their tail through a BIT that
       // swallows the instruction between them.
       state.lowerCaseBits = 0x20;
       state.alwaysLower = 0;
@@ -496,7 +496,7 @@ namespace Elite
     case 3:
     case 4:
       /*
-       * 6502: JMTB sends both of these to TT27 with the code itself in A. Token 3 is the name
+       * JMTB sends both of these to TT27 with the code itself in A. Token 3 is the name
        * of the system you are looking at and token 4 the one you are docked at, and both are
        * value tokens -- so they arrive here and leave through whatever the recursive printer
        * was given for them.
@@ -505,12 +505,12 @@ namespace Elite
       return;
 
     case 5:
-      // 6502: MT5 -- stop routing extended text through the recursive printer.
+      // Stop routing extended text through the recursive printer.
       state.toLineBuffer = 0;
       return;
 
     case 6:
-      // 6502: MT6 -- start routing it there, in sentence case.
+      // Start routing it there, in sentence case.
       m_recursive.SetCaseFlags(0x80);
       state.toLineBuffer = 0xFF;
       return;
@@ -519,14 +519,14 @@ namespace Elite
     case 10:
     case 12:
     case 20:
-      // 6502: JMTB sends these four straight to DASC with the code in A. Seven is the bell,
+      // JMTB sends these four straight to DASC with the code in A. Seven is the bell,
       // ten and twenty are line movements, and twelve is the newline that also empties the
       // justification buffer.
       m_characters.Put(_code);
       return;
 
     case 8:
-      // 6502: MT8 -- the column, then `DTW2`. The column belongs to the canvas and goes to the
+      // The column, then `DTW2`. The column belongs to the canvas and goes to the
       // seam; the flag belongs here.
       ++m_codesThatLeft;
       if (m_universe != nullptr && m_ports != nullptr)
@@ -537,26 +537,26 @@ namespace Elite
       return;
 
     case 13:
-      // 6502: MT13 -- lower case, forced.
+      // Lower case, forced.
       state.alwaysLower = 0x80;
       state.lowerCaseBits = 0x20;
       return;
 
     case 14:
-      // 6502: MT14 -- justify from here on. The ASL that clears DTW5 is the same instruction
+      // Justify from here on. The ASL that clears DTW5 is the same instruction
       // MT15 uses, which is why the two routines overlap in the binary.
       state.justify = 0x80;
       state.bufferLength = 0;
       return;
 
     case 15:
-      // 6502: MT15 -- stop justifying, and throw away anything buffered. The same two stores the
+      // Stop justifying, and throw away anything buffered. The same two stores the
       // free function below makes, because `MESS` reaches them by `JSR` rather than by token.
       StopJustifying(state);
       return;
 
     case 16:
-      // 6502: MT16 -- print DTW7, which is the operand byte of this routine's own LDA. It goes
+      // Print DTW7, which is the operand byte of this routine's own LDA. It goes
       // to DASC rather than DTS, so no case folding is applied to it.
       m_characters.Put(state.literal);
       return;
@@ -570,13 +570,13 @@ namespace Elite
       return;
 
     case 19:
-      // 6502: MT19 -- clear bit 5 of the next letter, which forces it to upper case. DASC puts
+      // Clear bit 5 of the next letter, which forces it to upper case. DASC puts
       // the mask back to 255 immediately afterwards, so this reaches exactly one character.
       state.caseMask = 0xDF;
       return;
 
     case 21:
-      // 6502: CLYNS -- clears the bottom of the screen and puts the cursor there. The two flags
+      // Clears the bottom of the screen and puts the cursor there. The two flags
       // are text state and are set here; the rest is the seam's.
       state.sentenceStart = 0xFF;
       m_recursive.SetCaseFlags(0x80);
@@ -591,7 +591,7 @@ namespace Elite
     case 23:
     case 29:
       /*
-       * 6502: MT23 and MT29 -- move to row 10 or row 6, switch to white text, then fall into
+       * MT23 and MT29 -- move to row 10 or row 6, switch to white text, then fall into
        * MT13. They are one routine with two entry points, and the entry that sets the row is
        * skipped by a BIT, the same trick MT1 and MT2 use.
        *
@@ -646,15 +646,15 @@ namespace Elite
   {
     ExtendedTextState& state = m_characters.State();
 
-    // 6502: MT17 -- clearing the "first letter seen" bit of `QQ17` makes the recursive printer
+    // Clearing the "first letter seen" bit of `QQ17` makes the recursive printer
     // capitalise the name again.
     m_recursive.SetCaseFlags(static_cast<std::uint8_t>(m_recursive.CaseFlags() & 0xBFu));
 
-    // 6502: recursive token 3 -- the name of the system you are looking at.
+    // Recursive token 3 -- the name of the system you are looking at.
     m_recursive.Print(3);
 
     /*
-     * 6502: MT171 -- the buffer's last character tested for a vowel, and the length backed up over
+     * The buffer's last character tested for a vowel, and the length backed up over
      * it if it is one.
      *
      * The name has just gone into the justification buffer, so this reaches back into it: if the
@@ -674,17 +674,17 @@ namespace Elite
       }
     }
 
-    // 6502: extended token &99 -- the ending, which is a token of its own.
+    // Extended token &99 -- the ending, which is a token of its own.
     Print(0x99);
   }
 
   void ExtendedTokenPrinter::PrintRandomWord() noexcept
   {
-    // 6502: MT19 -- upper case for one letter, which is the word's initial.
+    // Upper case for one letter, which is the word's initial.
     m_characters.State().caseMask = 0xDF;
 
     /*
-     * 6502: a random byte masked to 0-3 as the pair count, then the loop.
+     * A random byte masked to 0-3 as the pair count, then the loop.
      *
      * The carry matters here in a way it does not in DT6. DT3 reaches this routine through an
      * LSR of an even index, so the first DORND is called with the carry clear; the second is
@@ -703,7 +703,7 @@ namespace Elite
     {
       roll = m_rng.Next(carry);
 
-      // 6502: the roll masked to an EVEN index into the pair table, so a pair is never read across
+      // The roll masked to an EVEN index into the pair table, so a pair is never read across
       // a boundary.
       const std::size_t pair = static_cast<std::size_t>(roll.value & 0x3Eu) + RANDOM_WORD_OFFSET;
       if (pair + 1 < EXTENDED_PAIR_TABLE.size())

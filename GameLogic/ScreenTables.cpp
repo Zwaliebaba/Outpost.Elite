@@ -11,22 +11,22 @@
 
 namespace Elite
 {
-  // 6502: TWOS -- one pixel of a line, by x within the byte.
+  // One pixel of a line, by x within the byte.
   constexpr std::array<std::uint8_t, 8> PIXEL_MASK_TABLE = {
     0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01,
   };
 
-  // 6502: TWOS2 -- the mark PIXEL plots, by x within the byte.
+  // The mark PIXEL plots, by x within the byte.
   constexpr std::array<std::uint8_t, 8> DASH_MASK_TABLE = {
     0xC0, 0xC0, 0x60, 0x30, 0x18, 0x0C, 0x06, 0x03,
   };
 
-  // 6502: CTWOS2 -- multicolour-aligned pixel masks, two entries per pixel.
+  // Multicolour-aligned pixel masks, two entries per pixel.
   constexpr std::array<std::uint8_t, 10> MULTICOLOUR_MASK_TABLE = {
     0xC0, 0xC0, 0x30, 0x30, 0x0C, 0x0C, 0x03, 0x03, 0xC0, 0xC0,
   };
 
-  // 6502: DTWOS -- one multicolour pixel, by pixel number.
+  // One multicolour pixel, by pixel number.
   constexpr std::array<std::uint8_t, 4> DASHBOARD_MASK_TABLE = {
     0xC0,
     0x30,
@@ -34,17 +34,17 @@ namespace Elite
     0x03,
   };
 
-  // 6502: TWFR -- a horizontal line's first byte, filled from x rightwards.
+  // A horizontal line's first byte, filled from x rightwards.
   constexpr std::array<std::uint8_t, 8> LINE_RIGHT_MASK_TABLE = {
     0xFF, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01,
   };
 
-  // 6502: TWFL -- a horizontal line's last byte, filled leftwards to x.
+  // A horizontal line's last byte, filled leftwards to x.
   constexpr std::array<std::uint8_t, 8> LINE_LEFT_MASK_TABLE = {
     0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0xFF,
   };
 
-  // 6502: ylookupl -- low byte of the bitmap address of screen row y.
+  // Low byte of the bitmap address of screen row y.
   constexpr std::array<std::uint8_t, 256> ROW_ADDRESS_LOW = {
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0,
     0xA0, 0xA0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x60, 0x60, 0x60, 0x60,
@@ -60,7 +60,7 @@ namespace Elite
     0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0,
   };
 
-  // 6502: ylookuph -- high byte of the same.
+  // High byte of the same.
   constexpr std::array<std::uint8_t, 256> ROW_ADDRESS_HIGH = {
     0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
     0x42, 0x42, 0x43, 0x43, 0x43, 0x43, 0x43, 0x43, 0x43, 0x43, 0x45, 0x45, 0x45, 0x45, 0x45, 0x45, 0x45, 0x45, 0x46, 0x46, 0x46, 0x46,
@@ -76,19 +76,19 @@ namespace Elite
     0x65, 0x65, 0x65, 0x65, 0x65, 0x65, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
   };
 
-  // 6502: celllookl -- low byte of the colour-cell address of character row.
+  // Low byte of the colour-cell address of character row.
   constexpr std::array<std::uint8_t, 25> CELL_ADDRESS_LOW = {
     0x03, 0x2B, 0x53, 0x7B, 0xA3, 0xCB, 0xF3, 0x1B, 0x43, 0x6B, 0x93, 0xBB, 0xE3,
     0x0B, 0x33, 0x5B, 0x83, 0xAB, 0xD3, 0xFB, 0x23, 0x4B, 0x73, 0x9B, 0xC3,
   };
 
-  // 6502: celllookh -- high byte of the same.
+  // High byte of the same.
   constexpr std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH = {
     0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61,
     0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x63, 0x63, 0x63, 0x63, 0x63,
   };
 
-  // 6502: TENS -- the low four bytes of 10^11, for BPRNT.
+  // The low four bytes of 10^11, for BPRNT.
   constexpr std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH = {
     0x48,
     0x76,
@@ -96,13 +96,13 @@ namespace Elite
     0x00,
   };
 
-  // 6502: scacol -- the colour a ship's blip is drawn in, by ship type.
+  // The colour a ship's blip is drawn in, by ship type.
   constexpr std::array<std::uint8_t, 34> SCANNER_COLOUR_TABLE = {
     0x00, 0xFF, 0xFF, 0xAA, 0xAA, 0xAA, 0x55, 0x55, 0x55, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x55, 0xAA,
     0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x5A, 0xAA, 0xAA, 0x00, 0xAA,
   };
 
-  // 6502: CTWOS -- one aligned multicolour pixel, for the dashboard's bars.
+  // One aligned multicolour pixel, for the dashboard's bars.
   constexpr std::array<std::uint8_t, 4> DASHBOARD_PIXEL_TABLE = {
     0xC0,
     0x30,
@@ -110,7 +110,7 @@ namespace Elite
     0x03,
   };
 
-  // 6502: sightcol -- the colour of the laser sights, by laser type.
+  // The colour of the laser sights, by laser type.
   constexpr std::array<std::uint8_t, 4> LASER_SIGHT_COLOUR_TABLE = {
     0x07,
     0x07,
@@ -118,17 +118,17 @@ namespace Elite
     0x04,
   };
 
-  // 6502: TRIBTA -- how many Trumble sprites to show, by population.
+  // How many Trumble sprites to show, by population.
   constexpr std::array<std::uint8_t, 8> TRUMBLE_COUNT_TABLE = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x06,
   };
 
-  // 6502: TRIBMA -- which sprites to enable for that many Trumbles.
+  // TRIBMA -- which sprites to enable for that many Trumbles.
   constexpr std::array<std::uint8_t, 8> TRUMBLE_SPRITE_TABLE = {
     0x00, 0x04, 0x0C, 0x1C, 0x3C, 0x7C, 0xFC, 0xFC,
   };
 
-  // 6502: TRIBDIR -- the low byte of the four directions a Trumble sprite can move in.
+  // The low byte of the four directions a Trumble sprite can move in.
   constexpr std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_TABLE = {
     0x00,
     0x01,
@@ -136,7 +136,7 @@ namespace Elite
     0x00,
   };
 
-  // 6502: TRIBDIRH -- the high byte of the same four, which makes the second of them negative.
+  // The high byte of the same four, which makes the second of them negative.
   constexpr std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_HIGH_TABLE = {
     0x00,
     0x00,
@@ -144,31 +144,31 @@ namespace Elite
     0x00,
   };
 
-  // 6502: shango -- which raster line the next interrupt fires on, per half of the split.
+  // shango -- which raster line the next interrupt fires on, per half of the split.
   constexpr std::array<std::uint8_t, 2> RASTER_NEXT_LINE_TABLE = {
     0xC2,
     0x33,
   };
 
-  // 6502: santana -- which sprites are multicolour, per half -- sprite 1 is the only one that differs.
+  // santana -- which sprites are multicolour, per half -- sprite 1 is the only one that differs.
   constexpr std::array<std::uint8_t, 2> RASTER_SPRITE_MULTICOLOUR_TABLE = {
     0xFE,
     0xFC,
   };
 
-  // 6502: lotus -- sprite 1's colour, which is red above the split and invisible below it.
+  // Sprite 1's colour, which is red above the split and invisible below it.
   constexpr std::array<std::uint8_t, 2> RASTER_SPRITE_COLOUR_TABLE = {
     0x02,
     0x00,
   };
 
-  // 6502: innersec -- what RASTCT becomes, which is what makes the split alternate.
+  // What RASTCT becomes, which is what makes the split alternate.
   constexpr std::array<std::uint8_t, 2> RASTER_NEXT_COUNTER_TABLE = {
     0x01,
     0x00,
   };
 
-  // 6502: sdump -- screen RAM for the dashboard's seven rows: %01 in the high nibble, %10 in the low.
+  // Screen RAM for the dashboard's seven rows: %01 in the high nibble, %10 in the low.
   constexpr std::array<std::uint8_t, 280> DASHBOARD_SCREEN_COLOURS = {
     0x00, 0x00, 0x00, 0x07, 0x17, 0x17, 0x74, 0x74, 0x74, 0x74, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27,
     0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x67, 0x27, 0x27, 0x27, 0x27, 0x27, 0x37, 0x37, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
@@ -185,7 +185,7 @@ namespace Elite
     0x27, 0x27, 0x27, 0x27, 0x07, 0x27, 0x24, 0x24, 0x24, 0x24, 0x17, 0x17, 0x07, 0x00, 0x00, 0x00,
   };
 
-  // 6502: cdump -- colour RAM for the same rows, which is where multicolour %11 comes from.
+  // Colour RAM for the same rows, which is where multicolour %11 comes from.
   constexpr std::array<std::uint8_t, 280> DASHBOARD_COLOUR_RAM = {
     0x00, 0x00, 0x00, 0x00, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
     0x0D, 0x0D, 0x0D, 0x0D, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

@@ -92,7 +92,7 @@ namespace Outpost
     // call this object made that needed them, `DOCKIT`, and `DOKEY` makes that call itself now.
 
     /*
-     * 6502: comirq1 -- what the raster interrupt does with `abraxas` and `caravanserai` on its way
+     * What the raster interrupt does with `abraxas` and `caravanserai` on its way
      * past, which is to poke them into VIC registers &18 and &11.
      *
      * The port keeps those two as ordinary bytes (§6.73 the other way round) and the canvas keeps
@@ -121,7 +121,7 @@ namespace Outpost
     // `Elite::DrawShip` does inside the library now.
 
     /*
-     * 6502: RDKEY, once, into whichever logger the caller owns.
+     * RDKEY, once, into whichever logger the caller owns.
      *
      * Public because `GameShell` needs it for the title screen and the flight loop's own scan
      * needs it for the flight loop, and they must be the same scan: two implementations of `RDKEY`
@@ -158,7 +158,7 @@ namespace Outpost
      */
     Elite::Universe* m_universe = nullptr; ///< attached by `AttachUniverse`
 
-    /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
+    /// The sound buffer, the music player and the chip they write -- the composition root's,
     /// because the docked half beeps and starts the theme through the shell.
 
   };

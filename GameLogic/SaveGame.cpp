@@ -16,22 +16,22 @@ namespace Elite
 
   namespace
   {
-    /// 6502: bit 7 forced on, so the first byte is never small.
+    /// Bit 7 forced on, so the first byte is never small.
     constexpr std::uint8_t COMPETITION_HIGH_BIT = 0x80;
 
-    /// 6502: two constants with no meaning beyond being hard to guess.
+    /// Two constants with no meaning beyond being hard to guess.
     constexpr std::uint8_t COMPETITION_MIX = 0x5A;
     constexpr std::uint8_t CHECKSUM_STAMP = 0xA9;
 
-    /// 6502: the only two keys `YESNO` accepts.
+    /// The only two keys `YESNO` accepts.
     constexpr std::uint8_t KEY_YES = 'Y';
     constexpr std::uint8_t KEY_NO = 'N';
 
-    /// 6502: NA2%+8 -- the block begins after the eight bytes of name, in the file and in NA2%.
+    /// The block begins after the eight bytes of name, in the file and in NA2%.
     constexpr std::size_t BLOCK_IN_FILE = COMMANDER_NAME_SIZE;
 
     /*
-     * 6502: the extended tokens SVE and its error paths print.
+     * The extended tokens SVE and its error paths print.
      *
      *   1    the menu itself
      *   4    "COMPETITION NUMBER:", the heading over the number a save prints
@@ -46,7 +46,7 @@ namespace Elite
     constexpr std::uint8_t DEVICE_ERROR_TOKEN = 255;
 
     /*
-     * 6502: LOD's test of the block's first byte, which branches to `ELT2F`.
+     * LOD's test of the block's first byte, which branches to `ELT2F`.
      *
      * The whole test for "is this a commander file". Bit 7 of the first byte of the block is bit 7
      * of TP, the mission flags, and no commander the game writes has it set -- so a file from some
@@ -56,7 +56,7 @@ namespace Elite
     constexpr std::uint8_t NOT_A_COMMANDER = 0x80;
 
     /*
-     * 6502: tapeerror and ELT2F -- print a token, wait for a key, and jump back to SVE.
+     * Tapeerror and ELT2F -- print a token, wait for a key, and jump back to SVE.
      *
      * Two labels with one body between them, which is why the port has one function: the only thing
      * that differs is the token, and both end by jumping back to `SVE`.
@@ -71,7 +71,7 @@ namespace Elite
   CompetitionNumber MakeCompetitionNumber(const Commander& _image) noexcept
   {
     /*
-     * 6502: SVE's competition-number chain, and the checksum stamped beside it.
+     * SVE's competition-number chain, and the checksum stamped beside it.
      *
      * ONE ACCUMULATOR, four stores, and the stores are out of order. Each EOR builds on what the
      * last one left, so the four bytes are a chain rather than four independent expressions -- and
@@ -93,7 +93,7 @@ namespace Elite
     accumulator = static_cast<std::uint8_t>(accumulator ^ _image.competition);
     result.value[2] = accumulator;
 
-    // 6502: the third byte of the four, counting from the most significant.
+    // The third byte of the four, counting from the most significant.
     accumulator = static_cast<std::uint8_t>(accumulator ^ _image.cash.Byte(2u));
     result.value[1] = accumulator;
 
@@ -101,7 +101,7 @@ namespace Elite
     accumulator = static_cast<std::uint8_t>(accumulator ^ _image.kills.hi);
     result.value[3] = accumulator;
 
-    // 6502: the checksum as it was BEFORE the chain above touched it, which is why it was stacked.
+    // The checksum as it was BEFORE the chain above touched it, which is why it was stacked.
     result.checksum2 = static_cast<std::uint8_t>(checksum ^ CHECKSUM_STAMP);
 
     return result;
@@ -109,7 +109,7 @@ namespace Elite
 
   bool AskYesNo(Keyboard& _keys) noexcept
   {
-    // 6502: YESNO -- anything that is not Y or N is read again, and N returns with the carry clear.
+    // Anything that is not Y or N is read again, and N returns with the carry clear.
     for (;;)
     {
       const std::uint8_t key = _keys.NextKey();
@@ -127,7 +127,7 @@ namespace Elite
   void ResetToDefaultCommander(std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept
   {
     /*
-     * 6502: JAMESON -- the default commander at NA2% copied over the save image at NA%, and then
+     * The default commander at NA2% copied over the save image at NA%, and then
      * `oldlong` set to seven for the length of "JAMESON".
      *
      * It writes over NA%, the SAVE IMAGE, and not over the commander at TP -- so the reset does
@@ -147,7 +147,7 @@ namespace Elite
   SaveOutcome SaveCommanderTo(CommanderStore& _store, Commander& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
   {
     /*
-     * 6502: the save count is HALVED here rather than incremented.
+     * The save count is HALVED here rather than incremented.
      *
      * So it decays towards zero and a commander saved ten times looks like one saved once. It is
      * the live commander that changes here, not the file image, which is why this takes the block
@@ -166,7 +166,7 @@ namespace Elite
       Commander::FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE>{file.data() + BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE});
     outcome.competition = MakeCompetitionNumber(image);
 
-    // 6502: NA% -- kept because DFAULT reads it back, not because the write needs it.
+    // Kept because DFAULT reads it back, not because the write needs it.
     outcome.image = file;
 
     outcome.written = _store.Write(_name, file);
@@ -181,24 +181,24 @@ namespace Elite
       return false;
     }
 
-    // 6502: DFAULT -- and the checksums are what decide, not the read.
+    // DFAULT -- and the checksums are what decide, not the read.
     return LoadCommander(file, _outBlock, _name);
   }
 
   DiskMenuResult DiskAccessMenu(Universe& _universe, Ports& _ports) noexcept
   {
     /*
-     * 6502: RLINE, which is a global in the original and a local here.
+     * RLINE, which is a global in the original and a local here.
      *
      * GTNME lowers the length to seven and puts it back to nine on BOTH exits, so nothing outside
      * this routine can observe the change -- and the menu is the game's only caller of MT26.
      */
     LineLimits limits;
 
-    // 6502: NA% -- the eight bytes of name at the front of the image, which TRNME writes.
+    // The eight bytes of name at the front of the image, which TRNME writes.
     const auto imageName = std::span<std::uint8_t, COMMANDER_FILE_SIZE>{_universe.commanderFile}.first<COMMANDER_NAME_SIZE>();
 
-    // 6502: INWK+5 -- what KERNALSETUP turns into a filename, which is the LINE and not the image.
+    // What KERNALSETUP turns into a filename, which is the LINE and not the image.
     const auto typedName = [&]() noexcept
     {
       std::array<std::uint8_t, COMMANDER_NAME_SIZE> typed{};
@@ -210,7 +210,7 @@ namespace Elite
     };
 
     /*
-     * 6502: the return address `loading` pushes, which the error paths never pop.
+     * The return address `loading` pushes, which the error paths never pop.
      *
      * `tapeerror` and `ELT2F` jump back to `SVE` rather than returning -- so when a load fails, the
      * menu is RE-ENTERED with `loading`'s frame still on the stack. Whatever leaf the player reaches
@@ -240,22 +240,22 @@ namespace Elite
     {
       if (loadFramePending)
       {
-        StoreCommanderName(_universe.lineBuffer, imageName); // 6502: TRNME
-        _result.newCommander = true;                         // 6502: SEC
+        StoreCommanderName(_universe.lineBuffer, imageName);
+        _result.newCommander = true;
       }
       return _result;
     };
 
     for (;;)
     {
-      // 6502: token 1 through `DETOK` -- the menu, redrawn every time round.
+      // Token 1 through `DETOK` -- the menu, redrawn every time round.
       _ports.tokens.Print(MENU_TOKEN);
 
-      // 6502: JSR t.
+      // JSR t.
       const std::uint8_t key = _ports.keyboard.NextKey();
 
       /*
-       * 6502: `loading` -- ask for a name, load, copy the name in, and return with the carry set.
+       * Ask for a name, load, copy the name in, and return with the carry set.
        *
        * The order is the interesting part. LOD runs BEFORE TRNME, so the name it opens is the one
        * MT26 left in the line buffer while the image still holds the previous commander's, and
@@ -272,7 +272,7 @@ namespace Elite
 
         std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
 
-        // 6502: the Kernal's load reporting failure in the carry -- the device could not read it.
+        // The Kernal's load reporting failure in the carry -- the device could not read it.
         if (!_ports.store.Read(typedName(), file))
         {
           loadFramePending = true;
@@ -280,7 +280,7 @@ namespace Elite
           continue;
         }
 
-        // 6502: the block's first byte is negative -- it read something, but not a commander.
+        // The block's first byte is negative -- it read something, but not a commander.
         if ((file[BLOCK_IN_FILE] & NOT_A_COMMANDER) != 0u)
         {
           loadFramePending = true;
@@ -288,35 +288,35 @@ namespace Elite
           continue;
         }
 
-        // 6502: `copyme` -- the BLOCK into NA%+8, and only the block. The image keeps the name it
+        // The BLOCK into NA%+8, and only the block. The image keeps the name it
         // had until TRNME below overwrites it.
         for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
         {
           _universe.commanderFile[BLOCK_IN_FILE + index] = file[BLOCK_IN_FILE + index];
         }
 
-        // 6502: TRNME -- the typed name over the one the image was carrying.
+        // The typed name over the one the image was carrying.
         StoreCommanderName(_universe.lineBuffer, imageName);
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Loaded;
-        result.newCommander = true; // 6502: SEC
+        result.newCommander = true;
         return leave(result);
       }
 
       /*
-       * 6502: SV1 -- and every failure in it goes back to the menu rather than out of it.
+       * SV1 -- and every failure in it goes back to the menu rather than out of it.
        */
       if (key == DISK_MENU_SAVE)
       {
         (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present, _universe.lineBuffer, imageName,
                                limits);
 
-        // 6502: TRNME -- and here it runs BEFORE the file is touched, so the name the store is
+        // TRNME -- and here it runs BEFORE the file is touched, so the name the store is
         // given and the name in the image are the same eight bytes.
         StoreCommanderName(_universe.lineBuffer, imageName);
 
-        // 6502: token 4 through `DETOK`. It comes one instruction after the save count is halved
+        // Token 4 through `DETOK`. It comes one instruction after the save count is halved
         // in the original and one before it here, which nothing can observe: the token does not
         // read the save count.
         _ports.tokens.Print(SAVE_TOKEN);
@@ -332,14 +332,14 @@ namespace Elite
          */
         const SaveOutcome saved = SaveCommanderTo(_ports.store, _universe.commander, imageName);
 
-        // 6502: SVL1 and the three checksums -- the image is what they leave behind.
+        // SVL1 and the three checksums -- the image is what they leave behind.
         for (std::size_t index = 0; index < COMMANDER_FILE_SIZE; ++index)
         {
           _universe.commanderFile[index] = saved.image[index];
         }
 
         /*
-         * 6502: the competition number, printed BEFORE the Kernal is called.
+         * The competition number, printed BEFORE the Kernal is called.
          *
          * So a save the device refuses still shows a number, and the number it shows is the one
          * the refused file would have had.
@@ -351,11 +351,11 @@ namespace Elite
         }
         _universe.numberWidth = PrintNumber(_ports.characters, competition, _universe.numberWidth, false);
 
-        // 6502: TT67 twice, so the number gets a blank line under it.
+        // TT67 twice, so the number gets a blank line under it.
         PrintNewline(_ports.printer);
         PrintNewline(_ports.printer);
 
-        // 6502: BCS saveerror -- which is a JMP to tapeerror, the same body the load path uses. No
+        // BCS saveerror -- which is a JMP to tapeerror, the same body the load path uses. No
         // frame is left behind: SV1 is reached by a BRANCH from the menu, so the only return
         // address on the stack is still SVE's own.
         if (!saved.written)
@@ -365,7 +365,7 @@ namespace Elite
         }
 
         /*
-         * 6502: DFAULT -- the save reads its own file image straight back.
+         * The save reads its own file image straight back.
          *
          * Which means a save is also a load: the platform bit goes on in the competition flags, the
          * block's checksum byte is left as DFAULT's copy loop leaves it, and the commander that
@@ -374,21 +374,21 @@ namespace Elite
          */
         (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
-        // 6502: JSR t -- one key before the menu gives the screen back.
+        // JSR t -- one key before the menu gives the screen back.
         (void)_ports.keyboard.NextKey();
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Saved;
-        result.newCommander = false; // 6502: SVEX -- CLC, in spite of the DFAULT above
+        result.newCommander = false; // CLC, in spite of the DFAULT above
         result.competition = saved.competition;
         return leave(result);
       }
 
-      // 6502: feb10 -- the media byte flipped and the menu redisplayed. Tape is 0 and disk is &FF,
+      // The media byte flipped and the menu redisplayed. Tape is 0 and disk is &FF,
       // and the redisplay is the point: control code 31 in the menu names the media it is not using.
       if (key == DISK_MENU_MEDIA)
       {
-        // 6502: the same all-eight-bits flip the pause screen's `DKS3` does, and the reason `DISK`
+        // The same all-eight-bits flip the pause screen's `DKS3` does, and the reason `DISK`
         // is a BYTE and not a bool: it is one of the thirteen toggles, and a bool cannot hold the
         // &FF the indexed store writes (§6.139).
         _universe.useDisk = static_cast<std::uint8_t>(_universe.useDisk ^ 0xFFu);
@@ -396,7 +396,7 @@ namespace Elite
       }
 
       /*
-       * 6502: token 224, the yes/no prompt, then `JAMESON` and a tail jump into `DFAULT`.
+       * Token 224, the yes/no prompt, then `JAMESON` and a tail jump into `DFAULT`.
        *
        * "No" leaves the menu rather than redisplaying it, which is the one place SVE treats a
        * refusal as an exit. And the `JMP` is a tail call, so what the caller sees on return is
@@ -410,19 +410,19 @@ namespace Elite
           return leave(DiskMenuResult{});
         }
 
-        // 6502: JAMESON -- NA2% over NA%, which is an image and not the live commander.
+        // NA2% over NA%, which is an image and not the live commander.
         ResetToDefaultCommander(_universe.commanderFile);
 
-        // 6502: DFAULT -- and only now is the default commander actually in play.
+        // DFAULT -- and only now is the default commander actually in play.
         (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Reset;
-        result.newCommander = true; // 6502: DFAULT's own checksum compare, not anything SVE writes
+        result.newCommander = true; // DFAULT's own checksum compare, not anything SVE writes
         return leave(result);
       }
 
-      // 6502: feb13 -- return with the carry clear. Anything that is not one of the four keys.
+      // Return with the carry clear. Anything that is not one of the four keys.
       return leave(DiskMenuResult{});
     }
   }

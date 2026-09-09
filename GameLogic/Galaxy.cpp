@@ -12,7 +12,7 @@ namespace Elite
   {
     std::array<std::uint8_t, 6>& seed = _seeds.bytes;
 
-    // 6502: the sixteen-bit s0 plus s1, low halves first with the carry running into the high
+    // The sixteen-bit s0 plus s1, low halves first with the carry running into the high
     // ones. X and Y hold that sum across the shuffle below, which is why it is computed first.
     const AddResult low = AddWithCarry(seed[0], seed[2], false);
     const AddResult high = AddWithCarry(seed[1], seed[3], low.carry);
@@ -31,7 +31,7 @@ namespace Elite
     const AddResult sumLow = AddWithCarry(low.value, seed[2], false);
     seed[4] = sumLow.value;
 
-    // 6502: the last addition in the routine, and the last instruction that touches the carry, so
+    // The last addition in the routine, and the last instruction that touches the carry, so
     // this is what the routine leaves in it.
     const AddResult sumHigh = AddWithCarry(high.value, seed[3], sumLow.carry);
     seed[5] = sumHigh.value;
@@ -40,7 +40,7 @@ namespace Elite
 
   void NextSystem(SystemSeeds& _seeds) noexcept
   {
-    // 6502: TT20 -- JSR into a JSR that falls through, so four twists.
+    // JSR into a JSR that falls through, so four twists.
     for (int twist = 0; twist < 4; ++twist)
     {
       TwistSeeds(_seeds);
@@ -51,7 +51,7 @@ namespace Elite
   {
     for (std::uint8_t& byte : _seeds.bytes)
     {
-      // 6502: a shift and a rotate that bring the byte's top bit round into its own bottom bit.
+      // A shift and a rotate that bring the byte's top bit round into its own bottom bit.
       byte = static_cast<std::uint8_t>((byte << 1) | (byte >> 7));
     }
   }
@@ -61,14 +61,14 @@ namespace Elite
     const std::array<std::uint8_t, 6>& seeds = _seeds.bytes;
     SystemData data;
 
-    // 6502: the economy is three bits of the first seed's high byte.
+    // The economy is three bits of the first seed's high byte.
     data.economy = static_cast<std::uint8_t>(seeds[1] & 0x07u);
 
-    // 6502: and the government is three bits of the second seed's low byte, shifted down.
+    // And the government is three bits of the second seed's low byte, shifted down.
     data.government = static_cast<std::uint8_t>((seeds[2] >> 3) & 0x07u);
 
     /*
-     * 6502: TT77 -- anarchies and feudal states (government 0 and 1) are forced to a poor economy.
+     * Anarchies and feudal states (government 0 and 1) are forced to a poor economy.
      * The shift that tests it also SETS THE CARRY from government's bit 0, and that carry is still
      * there four instructions later; the explicit `CLC` at `TT77` is what stops it reaching the
      * first addition, so this branch is arithmetically invisible and the next one is not.
@@ -78,15 +78,15 @@ namespace Elite
       data.economy = static_cast<std::uint8_t>(data.economy | 0x02u);
     }
 
-    // 6502: a rich economy makes for a high tech level, so it inverts.
+    // A rich economy makes for a high tech level, so it inverts.
     std::uint8_t tech = static_cast<std::uint8_t>(data.economy ^ 0x07u);
 
-    // 6502: two bits of a seed added to the level, with the carry clear from the `CLC` above.
+    // Two bits of a seed added to the level, with the carry clear from the `CLC` above.
     AddResult step = AddWithCarry(static_cast<std::uint8_t>(seeds[3] & 0x03u), tech, false);
     tech = step.value;
 
     /*
-     * 6502: the government halved and added to the technology level.
+     * The government halved and added to the technology level.
      *
      * Here the carry is NOT clear: the LSR immediately before sets it from government's bit 0, and
      * this ADC consumes it. So an odd government adds one to the technology level, through a flag
@@ -99,7 +99,7 @@ namespace Elite
     data.techLevel = tech;
 
     /*
-     * 6502: population is four times the technology level plus the economy plus the government
+     * Population is four times the technology level plus the economy plus the government
      * plus one, and every one of those additions takes the carry from the one before it. The two
      * shifts contribute a carry as well, from bit 7 of the technology level.
      */
@@ -112,7 +112,7 @@ namespace Elite
     data.population = step.value;
 
     /*
-     * 6502: productivity is (inverted economy + 3) * (government + 4) * population, shifted up
+     * Productivity is (inverted economy + 3) * (government + 4) * population, shifted up
      * three places. Both constants are reached through the carry the population's last addition
      * left, so they are not really 3 and 4.
      */
@@ -122,12 +122,12 @@ namespace Elite
     step = AddWithCarry(data.government, 4, step.carry);
     const std::uint8_t governmentFactor = step.value;
 
-    // 6502: `MULTU` twice -- the two factors, then the LOW byte of that product times the
+    // `MULTU` twice -- the two factors, then the LOW byte of that product times the
     // population.
     Product product = MultiplyUnsigned(economyFactor, governmentFactor);
     product = MultiplyUnsigned(product.low, data.population);
 
-    // 6502: three shifts across the sixteen-bit product -- a multiply by eight.
+    // Three shifts across the sixteen-bit product -- a multiply by eight.
     std::uint8_t productHigh = product.high;
     std::uint8_t productLow = product.low;
     for (int shift = 0; shift < 3; ++shift)
@@ -143,7 +143,7 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the complement-and-increment that follows a borrow -- a negate reached with carry
+    /// The complement-and-increment that follows a borrow -- a negate reached with carry
     /// clear.
     [[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _first, std::uint8_t _second) noexcept
     {
@@ -160,25 +160,25 @@ namespace Elite
   NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crosshairX, std::uint8_t _crosshairY, std::uint8_t _currentX,
                                   std::uint8_t _currentY) noexcept
   {
-    // 6502: TT81 -- the search always starts from the galaxy's own seeds, not from wherever the
+    // The search always starts from the galaxy's own seeds, not from wherever the
     // seeds happen to be.
     SystemSeeds seeds = _galaxy;
 
     NearestSystem best;
-    std::uint8_t bestMetric = 0x7F; // 6502: T starts at 127
+    std::uint8_t bestMetric = 0x7F; // T starts at 127
     std::uint8_t index = 0;
 
     for (;;)
     {
       /*
-       * 6502: TT130. A system's galactic coordinates are two of its seed bytes: x is byte 3 and y
+       * TT130. A system's galactic coordinates are two of its seed bytes: x is byte 3 and y
        * is byte 1. Nothing computes them -- they simply are the seed, which is why moving one
        * system along moves you across the galaxy.
        */
       const std::uint8_t dx = AbsoluteDifference(seeds.bytes[3], _crosshairX) >> 1;
       const std::uint8_t dy = AbsoluteDifference(seeds.bytes[1], _crosshairY) >> 1;
 
-      // 6502: the two halves summed and compared against the best -- nearer, and strictly so.
+      // The two halves summed and compared against the best -- nearer, and strictly so.
       const std::uint8_t metric = AddWithCarry(dy, dx, false).value;
       if (metric < bestMetric)
       {
@@ -189,7 +189,7 @@ namespace Elite
 
       NextSystem(seeds);
 
-      // 6502: 256 systems, counted by a byte that wraps to zero.
+      // 256 systems, counted by a byte that wraps to zero.
       ++index;
       if (index == 0)
       {
@@ -201,7 +201,7 @@ namespace Elite
     best.y = best.seeds.bytes[1];
 
     /*
-     * 6502: TT139 onwards -- the real distance, which is a different measurement from the one the
+     * TT139 onwards -- the real distance, which is a different measurement from the one the
      * search just used. dx is squared whole; dy is HALVED first, then squared.
      */
     const Product squared = SquareUnsigned(AbsoluteDifference(best.x, _currentX));
@@ -209,17 +209,17 @@ namespace Elite
     const std::uint8_t halfDy = static_cast<std::uint8_t>(AbsoluteDifference(best.y, _currentY) >> 1);
     const Product second = SquareUnsigned(halfDy);
 
-    // 6502: the sum SATURATES rather than wrapping, because a distance that wrapped would read as
+    // The sum SATURATES rather than wrapping, because a distance that wrapped would read as
     // very close indeed.
     const AddResult sumLow = AddWithCarry(second.low, squared.low, false);
     const AddResult sumHigh = AddWithCarry(second.high, squared.high, sumLow.carry);
 
     const std::uint8_t radicandHigh = sumHigh.carry ? std::uint8_t{255} : sumHigh.value;
 
-    // 6502: LL5 -- Q becomes the square root of (R Q). The exit carry is not read here.
+    // Q becomes the square root of (R Q). The exit carry is not read here.
     const Root root = SquareRoot(radicandHigh, sumLow.value);
 
-    // 6502: two shifts across the pair -- the answer times four, as a sixteen-bit value.
+    // Two shifts across the pair -- the answer times four, as a sixteen-bit value.
     std::uint8_t distanceLow = root.value;
     std::uint8_t distanceHigh = 0;
     for (int shift = 0; shift < 2; ++shift)
@@ -230,26 +230,26 @@ namespace Elite
     }
     best.distance = static_cast<std::uint16_t>((static_cast<std::uint16_t>(distanceHigh) << 8) | distanceLow);
 
-    // 6502: TT24 -- the routine does not return, it continues into the data generator.
+    // The routine does not return, it continues into the data generator.
     best.data = GenerateSystemData(best.seeds);
     return best;
   }
 
   bool PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
   {
-    // 6502: TT53 -- the seeds are saved to QQ19 and put back at the end, because printing a name
+    // The seeds are saved to QQ19 and put back at the end, because printing a name
     // must not move the universe on.
     const SystemSeeds saved = _seeds;
 
     /*
-     * 6502: bit 6 of the first seed byte decides whether the name has four letter-pairs or three.
+     * Bit 6 of the first seed byte decides whether the name has four letter-pairs or three.
      * `BIT` tests it without loading it, which is why the test reads as an overflow branch and has
      * nothing to do with arithmetic.
      */
     int pairs = ((_seeds.bytes[0] & 0x40u) != 0u) ? 4 : 3;
 
     /*
-     * 6502: the carry TT54 leaves on the last time round the loop, which nothing here clears
+     * The carry TT54 leaves on the last time round the loop, which nothing here clears
      * afterwards -- TT56's restore is six loads and stores and a DEX. So it survives the RTS, and
      * the short-range chart reads it.
      */
@@ -257,12 +257,12 @@ namespace Elite
 
     for (int pair = 0; pair < pairs; ++pair)
     {
-      // 6502: five bits of a seed byte, and a zero means this pair is simply skipped, which is how
+      // Five bits of a seed byte, and a zero means this pair is simply skipped, which is how
       // the game gets names of odd length out of a fixed number of twists.
       const std::uint8_t token = static_cast<std::uint8_t>(_seeds.bytes[5] & 0x1Fu);
       if (token != 0)
       {
-        // 6502: the high bit tells TT27 this is a letter pair, not a character.
+        // The high bit tells TT27 this is a letter pair, not a character.
         _printer.Print(static_cast<std::uint8_t>(token | 0x80u));
       }
 
@@ -276,7 +276,7 @@ namespace Elite
   void PrintSystemDescription(ExtendedTokenPrinter& _printer, Rng& _rng, const SystemSeeds& _seeds) noexcept
   {
     /*
-     * 6502: PDL1K -- the last four seed bytes copied over the RNG state, counting down from 3.
+     * The last four seed bytes copied over the RNG state, counting down from 3.
      *
      * The randomness that varies a description is not random at all: it is the system's own seed,
      * copied over the RNG state. So the same world reads the same way every time you arrive, and
@@ -284,7 +284,7 @@ namespace Elite
      */
     _rng.SetState({_seeds.bytes[2], _seeds.bytes[3], _seeds.bytes[4], _seeds.bytes[5]});
 
-    // 6502: extended token 5.
+    // Extended token 5.
     _printer.Print(5);
   }
 

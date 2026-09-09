@@ -23,9 +23,9 @@ namespace Elite
 
   std::uint8_t DoubleAndAddCoordinate(Ship& _work, std::uint8_t _from, std::uint8_t _to) noexcept
   {
-    const auto& from = _work.ComponentAt(_from); // 6502: the component read as two bytes
-    auto& to = _work.PositionAt(_to);            // 6502: the coordinate written as three
-    // 6502: the component doubled into the block's middle two bytes.
+    const auto& from = _work.ComponentAt(_from); // The component read as two bytes
+    auto& to = _work.PositionAt(_to);            // The coordinate written as three
+    // The component doubled into the block's middle two bytes.
     KBlock total;
     const ShiftResult low = RotateLeftValue(from.lo, false);
     total.mid = low.value;
@@ -33,25 +33,25 @@ namespace Elite
     const ShiftResult high = RotateLeftValue(from.hi, low.carry);
     total.high = high.value;
 
-    // 6502: the bit that fell off the top becomes the sign byte, so the doubling cannot overflow:
+    // The bit that fell off the top becomes the sign byte, so the doubling cannot overflow:
     // it widens instead.
     total.top = RotateRight(0u, high.carry).value;
 
     // The exit carry is live only on `VCSUB`'s path out to `TA64` (§6.126). `MVT1` reads `K+3`
     // and stores, so the flag dies here.
-    total = AddShipCoordinateToK(_work, total, _to).value; // 6502: MVT3
+    total = AddShipCoordinateToK(_work, total, _to).value;
 
-    // 6502: the sign byte is what `MVT3` leaves in the accumulator, because every path through it
+    // The sign byte is what `MVT3` leaves in the accumulator, because every path through it
     // ends by storing there.
-    to = total.Coordinate(); // 6502: the block's two middle bytes become the coordinate
+    to = total.Coordinate(); // The block's two middle bytes become the coordinate
 
-    return static_cast<std::uint8_t>(total.top & 0x7Fu); // 6502: the magnitude, sign masked off
+    return static_cast<std::uint8_t>(total.top & 0x7Fu); // The magnitude, sign masked off
   }
 
   std::uint8_t LargestAxisFrom(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept
   {
     /*
-     * 6502: the three axes' sign bytes ORed together, then the sign masked off.
+     * The three axes' sign bytes ORed together, then the sign masked off.
      *
      * `Y` is a byte offset into `K%` and every caller passes a multiple of the block size, so the
      * port takes the slot instead -- the same substitution `GINF` got, and for the same reason
@@ -67,21 +67,21 @@ namespace Elite
   {
     const Ship& block = _bubble.blocks[_slot];
 
-    // 6502: the x axis squared, and its high byte starts the running total.
+    // The x axis squared, and its high byte starts the running total.
     std::uint8_t running = SquareUnsigned(block.x.hi).high;
 
-    // 6502: the y axis added in. The add reads the squaring's exit carry, and that carry is never
+    // The y axis added in. The add reads the squaring's exit carry, and that carry is never
     // set (§6.70), so this is the plain addition it looks like.
     const Product second = SquareUnsigned(block.y.hi);
     const AddResult sum = AddWithCarry(second.high, running, second.carry);
     if (sum.carry)
     {
-      return 0xFFu; // 6502: MA30 -- saturated
+      return 0xFFu; // Saturated
     }
 
-    running = sum.value; // 6502: back into the running total
+    running = sum.value; // Back into the running total
 
-    // 6502: the z axis added in, with a branch that skips the saturation.
+    // The z axis added in, with a branch that skips the saturation.
     const Product third = SquareUnsigned(block.z.hi);
     const AddResult total = AddWithCarry(third.high, running, third.carry);
 
@@ -90,43 +90,43 @@ namespace Elite
 
   std::uint8_t LargestShipAxis(const Ship& _work, std::uint8_t _a) noexcept
   {
-    // 6502: the three axes' high bytes ORed together, with no mask -- unlike `MAS2`.
+    // The three axes' high bytes ORed together, with no mask -- unlike `MAS2`.
     return static_cast<std::uint8_t>(_a | _work.x.hi | _work.y.hi | _work.z.hi);
   }
 
   std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer, std::uint8_t _dampingDisabled) noexcept
   {
-    // 6502: two tests, and only the second returns.
+    // Two tests, and only the second returns.
     if (_dockingComputer == 0u && _dampingDisabled != 0u)
     {
       return _value;
     }
 
-    // 6502: below the centre, so bump up towards it. `BUMP`'s own exit branch is always taken from
+    // Below the centre, so bump up towards it. `BUMP`'s own exit branch is always taken from
     // here, because a value under 128 stays at or under 128 when one is added.
     if ((_value & 0x80u) == 0u)
     {
       return static_cast<std::uint8_t>(_value + 1u);
     }
 
-    // 6502: at or above the centre, so reduce towards it, unless that has just crossed the middle.
+    // At or above the centre, so reduce towards it, unless that has just crossed the middle.
     const std::uint8_t reduced = static_cast<std::uint8_t>(_value - 1u);
     if ((reduced & 0x80u) != 0u)
     {
       return reduced;
     }
 
-    // 6502: falling into `BUMP` only happens from exactly 128, so this puts back what the decrement
+    // Falling into `BUMP` only happens from exactly 128, so this puts back what the decrement
     // took away and the value sits still.
     return static_cast<std::uint8_t>(reduced + 1u);
   }
 
   Drop PlanItems(ShipType _type, std::uint8_t _count, bool _carryIn) noexcept
   {
-    // 6502: SPIN2 parks the count without setting flags, and the AI byte every child gets is zero.
+    // SPIN2 parks the count without setting flags, and the AI byte every child gets is zero.
     // `CNT` is `PerformDrop`'s loop counter now; what this answers is the number that goes in it.
     //
-    // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count,
+    // .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count,
     // and `oh` is a bare `RTS`. A count of zero is that branch, and `carryIfNone` is what it hands
     // back (M2-d).
     return {_type, _count, 0u, _carryIn};
@@ -134,7 +134,7 @@ namespace Elite
 
   bool PerformDrop(Universe& _universe, const Drop& _drop) noexcept
   {
-    // 6502: the test runs once on entry and never again, because the loop's back edge re-enters
+    // The test runs once on entry and never again, because the loop's back edge re-enters
     // below it.
     if (_drop.count == 0u)
     {
@@ -145,7 +145,7 @@ namespace Elite
     for (;;)
     {
       /*
-       * 6502: SFS1, spawning against the ship being processed.
+       * SFS1, spawning against the ship being processed.
        *
        * `SFS1` ends by calling `NWSHP` and then does nothing but pulls and stores, so the carry it
        * leaves is `NWSHP`'s: CLEAR for a full bubble, SET for a ship that was made (M2-d). Until
@@ -156,8 +156,8 @@ namespace Elite
                                         _drop.aiFlag, _drop.type, _universe.flight.blueprint)
                            .created;
 
-      remaining = static_cast<std::uint8_t>(remaining - 1u); // 6502: CNT counts down
-      if (remaining == 0u) // 6502: the loop's back edge re-enters past the entry test
+      remaining = static_cast<std::uint8_t>(remaining - 1u); // CNT counts down
+      if (remaining == 0u) // The loop's back edge re-enters past the entry test
       {
         return carry;
       }
@@ -166,19 +166,19 @@ namespace Elite
 
   Drop PlanDebris(Rng& _rng, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept
   {
-    // 6502: nothing else in the routine looks at the roll except its top bit, so half of all calls
+    // Nothing else in the routine looks at the roll except its top bit, so half of all calls
     // do nothing.
     const RngResult roll = _rng.Next(_carryIn);
     if ((roll.value & 0x80u) == 0u)
     {
-      // 6502: `oh` is a bare return, so the carry the caller gets is the generator's own (M2-d).
+      // `oh` is a bare return, so the carry the caller gets is the generator's own (M2-d).
       // It is the same answer as a count of zero and it is spelled the same way, which is not a
       // coincidence: `oh` is the one label both paths reach.
       return {_type, 0u, 0u, roll.carry};
     }
 
     /*
-     * 6502: the ship type copied between two registers, then masked by the blueprint's first byte.
+     * The ship type copied between two registers, then masked by the blueprint's first byte.
      *
      * The copy reads as "move the index across", and it is -- but it goes THROUGH the accumulator,
      * and the mask two instructions later reads that rather than the random number the generator
@@ -188,17 +188,17 @@ namespace Elite
      */
     const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & _blueprint.cargo & 0x0Fu);
 
-    // 6502: and it falls into SPIN2, with the generator's carry, which the mask did not touch.
+    // And it falls into SPIN2, with the generator's carry, which the mask did not touch.
     return PlanItems(_type, capped, roll.carry);
   }
 
   bool DrainEnergy(FlightStatus& _status) noexcept
   {
-    // 6502: the flag the caller gets is this one, taken before the floor is restored below.
+    // The flag the caller gets is this one, taken before the floor is restored below.
     _status.energy = static_cast<std::uint8_t>(_status.energy - 1u);
     const bool emptied = _status.energy == 0u;
 
-    // 6502: one is the floor, and the caller still hears about having reached it.
+    // One is the floor, and the caller still hears about having reached it.
     if (emptied)
     {
       _status.energy = static_cast<std::uint8_t>(_status.energy + 1u);
@@ -209,21 +209,21 @@ namespace Elite
 
   std::uint8_t RechargeShield(FlightStatus& _status, std::uint8_t _shield) noexcept
   {
-    // 6502: a full shield is put back and costs nothing.
+    // A full shield is put back and costs nothing.
     const std::uint8_t raised = static_cast<std::uint8_t>(_shield + 1u);
     if (raised == 0u)
     {
-      return static_cast<std::uint8_t>(raised - 1u); // 6502: SHD-2 undoes the increment and returns
+      return static_cast<std::uint8_t>(raised - 1u); // SHD-2 undoes the increment and returns
     }
 
-    // 6502: and no return -- it falls into DENGY, so the unit comes out of the banks (§6.83).
+    // And no return -- it falls into DENGY, so the unit comes out of the banks (§6.83).
     (void)DrainEnergy(_status);
     return raised;
   }
 
   bool WithinRange(const Ship& _work, std::uint8_t _limit) noexcept
   {
-    // 6502: the limit compared against each axis in turn, and the carry out of the LAST compare
+    // The limit compared against each axis in turn, and the carry out of the LAST compare
     // reached is the answer -- which is why the two early exits both leave a clear one.
     if (_limit < _work.x.hi || _limit < _work.y.hi)
     {
@@ -235,44 +235,44 @@ namespace Elite
 
   bool IsHit(const Ship& _work, const Blueprint& _blueprint, ShipType _type) noexcept
   {
-    // 6502: the z sign byte, and anything but zero means the ship is not close enough in front of
+    // The z sign byte, and anything but zero means the ship is not close enough in front of
     // us to have been hit.
     if (_work.z.sgn != 0u)
     {
       return false;
     }
 
-    // 6502: the planet and the sun are not shootable.
+    // The planet and the sun are not shootable.
     if (IsBody(_type))
     {
       return false;
     }
 
-    // 6502: already exploding, or too far off to either side. Three tests ORed into one branch.
+    // Already exploding, or too far off to either side. Three tests ORed into one branch.
     if (Has(_work.state, ShipStateBit::Exploding) || (_work.x.hi | _work.y.hi) != 0u)
     {
       return false;
     }
 
-    // 6502: x squared into the running area. `(S R)` is this routine's own since M2-c-3: nothing
+    // X squared into the running area. `(S R)` is this routine's own since M2-c-3: nothing
     // between the two squares and the compare below reads either byte.
     const Product across = SquareUnsigned(_work.x.lo);
-    SignMag16 area{across.low, across.high}; // 6502: (S R)
+    SignMag16 area{across.low, across.high};
 
-    // 6502: y squared added in, sixteen bits wide, saturating out if it carries.
+    // Y squared added in, sixteen bits wide, saturating out if it carries.
     const Product down = SquareUnsigned(_work.y.lo);
     const AddResult low = AddWithCarry(down.low, area.lo, across.carry);
     area.lo = low.value;
     const AddResult high = AddWithCarry(down.high, area.hi, low.carry);
     if (high.carry)
     {
-      return false; // 6502: TN10 -- too big to compare, which is its own "no"
+      return false; // Too big to compare, which is its own "no"
     }
 
-    area.hi = high.value; // 6502: the area's high byte
+    area.hi = high.value; // The area's high byte
 
     /*
-     * 6502: the blueprint's target area compared against the running one.
+     * The blueprint's target area compared against the running one.
      *
      * A SIXTEEN-BIT COMPARE, HIGH BYTE FIRST, and the branch out of it is its early ANSWER rather
      * than an early no. `HI1` is a bare return, so the branch hands back the carry the high-byte
@@ -282,39 +282,39 @@ namespace Elite
      * The label is shared with four genuine rejections above, which is exactly why the port read
      * it as a fifth and failed on the first case it was given (§6.84).
      */
-    const std::uint8_t target = static_cast<std::uint8_t>(_blueprint.targetArea >> 8); // 6502: (XX0),2 -- the high byte
+    const std::uint8_t target = static_cast<std::uint8_t>(_blueprint.targetArea >> 8); // (XX0),2 -- the high byte
     if (target != area.hi)
     {
       return target >= area.hi;
     }
 
-    return static_cast<std::uint8_t>(_blueprint.targetArea & 0xFFu) >= area.lo; // 6502: (XX0),1 -- the low byte
+    return static_cast<std::uint8_t>(_blueprint.targetArea & 0xFFu) >= area.lo; // (XX0),1 -- the low byte
   }
 
   void FireMissile(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: a full bubble means the missile stays on the rail.
+    // A full bubble means the missile stays on the rail.
     if (!SpawnShipAhead(_universe.bubble, _universe.work, ShipType::Missile, _universe.flight.speed, _universe.bubble.missileTarget,
                         _universe.flight.blueprint)
            .created)
     {
-      // 6502: FR1 -- the jammed-missile message.
+      // The jammed-missile message.
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_MISSILE_JAMMED,
                   _universe.view, &_universe.picture);
       return;
     }
 
-    // 6502: the TARGET's slot and type are what anger is raised against, not the missile's.
+    // The TARGET's slot and type are what anger is raised against, not the missile's.
     const std::uint8_t target = _universe.bubble.missileTarget;
     (void)Anger(_universe.bubble, _universe.flight, target, TypeOf(_universe.bubble.slots[target]));
 
-    // 6502: the lock is gone and so is the indicator.
+    // The lock is gone and so is the indicator.
     AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_NONE);
 
-    // 6502: one fewer on the rail.
+    // One fewer on the rail.
     _universe.commander.missiles = static_cast<std::uint8_t>(_universe.commander.missiles - 1u);
 
-    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false); // 6502: the launch effect
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false); // The launch effect
   }
 
   /*
@@ -328,7 +328,7 @@ namespace Elite
   void StirTheFrame(Universe& _universe) noexcept
   {
     /*
-     * 6502: the planet's own x low byte goes into the generator, every frame.
+     * The planet's own x low byte goes into the generator, every frame.
      *
      * Only the FIRST of the four seed bytes, so the other three carry on from wherever the last
      * call left them: this stirs the sequence rather than resetting it.
@@ -338,7 +338,7 @@ namespace Elite
     _universe.rng.SetState(seed);
 
     /*
-     * 6502: `MVTRIBS` jumps back to `NOMVETR`, so this is a call written as two jumps (§6.82).
+     * `MVTRIBS` jumps back to `NOMVETR`, so this is a call written as two jumps (§6.82).
      *
      * `MoveTrumbles` was a seam here until slice 4d-a, for the same reason five others were: the
      * routine on the other side did not exist. It does now, and the seam is deleted rather than
@@ -361,29 +361,29 @@ namespace Elite
   {
     // ---- part 2: the roll ------------------------------------------------------------------------
 
-    // 6502: the damping runs twice, so the roll creeps back by two per frame.
+    // The damping runs twice, so the roll creeps back by two per frame.
     std::uint8_t roll = _universe.control.roll;
     roll = DampTowardsCentre(roll, _universe.control.dockingComputer, _universe.options.dampingDisabled);
     roll = DampTowardsCentre(roll, _universe.control.dockingComputer, _universe.options.dampingDisabled);
 
-    // 6502: the rate turned into a sign and a magnitude, with the sign kept both ways round.
+    // The rate turned into a sign and a magnitude, with the sign kept both ways round.
     const std::uint8_t rollSigned = static_cast<std::uint8_t>(roll ^ 0x80u);
     _universe.flight.rollSign = static_cast<std::uint8_t>(rollSigned & 0x80u);
     _universe.control.roll = roll;
     _universe.flight.rollSignFlipped = static_cast<std::uint8_t>(_universe.flight.rollSign ^ 0x80u);
 
-    // 6502: the magnitude, negated if it is on the far side of the centre.
+    // The magnitude, negated if it is on the far side of the centre.
     std::uint8_t rollMagnitude = rollSigned;
     if ((rollMagnitude & 0x80u) != 0u)
     {
       rollMagnitude = static_cast<std::uint8_t>((rollMagnitude ^ 0xFFu) + 1u);
     }
 
-    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // 6502: one shift down
-    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // 6502: and a second
+    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // One shift down
+    rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u); // And a second
 
     /*
-     * 6502: a third shift, but only below eight.
+     * A third shift, but only below eight.
      *
      * AND THE CARRY THIS LEAVES IS READ BY THE PITCH. Either the compare's, when the magnitude is
      * eight or more, or the extra shift's low bit when it is not -- and the pitch's add below has
@@ -397,22 +397,22 @@ namespace Elite
       rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u);
     }
 
-    _universe.flight.rollMagnitude = rollMagnitude; // 6502: ALP1
+    _universe.flight.rollMagnitude = rollMagnitude;
     _universe.flight.rollRate = static_cast<std::uint8_t>(rollMagnitude | _universe.flight.rollSign);
 
     // ---- part 2: the pitch, which is not the same shape ------------------------------------------
 
-    // 6502: the damping runs ONCE here, where the roll gets two.
+    // The damping runs ONCE here, where the roll gets two.
     std::uint8_t pitch = _universe.control.pitch;
     pitch = DampTowardsCentre(pitch, _universe.control.dockingComputer, _universe.options.dampingDisabled);
 
-    // 6502: the two sign bytes are written the OTHER way round from the roll's.
+    // The two sign bytes are written the OTHER way round from the roll's.
     const std::uint8_t pitchSigned = static_cast<std::uint8_t>(pitch ^ 0x80u);
     _universe.control.pitch = pitch;
     _universe.flight.pitchSignFlipped = static_cast<std::uint8_t>(pitchSigned & 0x80u);
     _universe.flight.pitchSign = static_cast<std::uint8_t>(_universe.flight.pitchSignFlipped ^ 0x80u);
 
-    // 6502: the magnitude, complemented if negative -- and no adding one back here, because the
+    // The magnitude, complemented if negative -- and no adding one back here, because the
     // add below does it.
     std::uint8_t pitchMagnitude = pitchSigned;
     if ((pitchMagnitude & 0x80u) != 0u)
@@ -420,22 +420,22 @@ namespace Elite
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude ^ 0xFFu);
     }
 
-    // 6502: four added, on the ROLL's carry, which is the finding above.
+    // Four added, on the ROLL's carry, which is the finding above.
     pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude + 4u + (carry ? 1u : 0u));
 
-    for (int shift = 0; shift < 4; ++shift) // 6502: four shifts down
+    for (int shift = 0; shift < 4; ++shift) // Four shifts down
     {
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude >> 1u);
     }
 
-    // 6502: a further shift below three, rather than the roll's eight, so the pitch is coarser at
+    // A further shift below three, rather than the roll's eight, so the pitch is coarser at
     // the low end than the roll is.
     if (pitchMagnitude < 3u)
     {
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude >> 1u);
     }
 
-    _universe.flight.pitchMagnitude = pitchMagnitude; // 6502: BET1
+    _universe.flight.pitchMagnitude = pitchMagnitude;
     _universe.flight.pitchRate = static_cast<std::uint8_t>(pitchMagnitude | _universe.flight.pitchSign);
   }
 
@@ -451,13 +451,13 @@ namespace Elite
 
     Commander& commander = _universe.commander;
 
-    // 6502: forty is the ceiling.
+    // Forty is the ceiling.
     if (_universe.keys[KEY_SPEED_UP] != 0u && _universe.flight.speed < 40u)
     {
       _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed + 1u);
     }
 
-    // 6502: MA17 -- one is the floor, so the ship never stops dead.
+    // One is the floor, so the ship never stops dead.
     if (_universe.keys[KEY_SLOW_DOWN] != 0u)
     {
       _universe.flight.speed = static_cast<std::uint8_t>(_universe.flight.speed - 1u);
@@ -467,17 +467,17 @@ namespace Elite
       }
     }
 
-    // 6502: MA4 -- the mask against the rail count is the "have we got one" test, so the key does
+    // The mask against the rail count is the "have we got one" test, so the key does
     // nothing at all with an empty rail.
     if ((_universe.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
       AbortMissileLock(_universe, commander.missiles, MISSILE_READY);
-      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // 6502: the boop
-      _universe.status.missileArmed = 0u;                               // 6502: which `ABORT` has already done
+      (void)PlaySoundEffect(_universe.sound, SoundEffect::Boop, false); // The boop
+      _universe.status.missileArmed = 0u;                               // Which `ABORT` has already done
     }
 
     /*
-     * 6502: MA20 -- arm a missile, if there is no lock and one is on the rail.
+     * Arm a missile, if there is no lock and one is on the rail.
      *
      * `MSTG` is 255 for no lock, so the sign test skips this whenever there IS one: a missile
      * already seeking cannot be re-armed. And what gets stored is the KEY's value rather than a
@@ -490,7 +490,7 @@ namespace Elite
     }
 
     /*
-     * 6502: MA25 -- fire the armed missile.
+     * Fire the armed missile.
      *
      * PRESSING "M" WITH NO LOCK SKIPS FIVE OTHER KEYS. The no-lock branch jumps past the energy
      * bomb, the docking-computer cancel, the escape pod, the warp and the E.C.M., so a frame in
@@ -512,7 +512,7 @@ namespace Elite
 
     if (checkedTheRest)
     {
-      // 6502: MA24 -- `BOMB` is a countdown kept as a shift, so the bomb burns for as many frames
+      // `BOMB` is a countdown kept as a shift, so the bomb burns for as many frames
       // as it has bits left.
       if (_universe.keys[KEY_ENERGY_BOMB] != 0u)
       {
@@ -520,40 +520,40 @@ namespace Elite
 
         if (commander.energyBomb != 0u)
         {
-          // 6502: the upper half of the screen changes mode, and that IS the effect: no drawing is
+          // The upper half of the screen changes mode, and that IS the effect: no drawing is
           // involved.
           _universe.screen.upperBitmapMode = BOMB_BITMAP_MODE;
           (void)PlaySoundEffect(_universe.sound, SoundEffect::EnergyBomb, false);
         }
       }
 
-      // 6502: MA76 -- cancelling the docking computer also stops its music.
+      // Cancelling the docking computer also stops its music.
       if (_universe.keys[KEY_CANCEL_DOCKING] != 0u)
       {
         _universe.control.dockingComputer = 0u;
         StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
       }
 
-      // 6502: MA78 -- the pod needs one fitted and no jump in progress, and the jump out of here
+      // The pod needs one fitted and no jump in progress, and the jump out of here
       // does not come back, so the frame ends.
       if ((_universe.keys[KEY_ESCAPE_POD] & commander.escapePod) != 0u && _universe.status.midJump == 0u)
       {
         return LoopOutcome::Escaped;
       }
 
-      // 6502: noescp -- the warp key, if it is held.
+      // The warp key, if it is held.
       if (_universe.keys[KEY_WARP] != 0u)
       {
         Warp(_universe, _ports);
       }
 
-      // 6502: the E.C.M. needs one fitted and none already running, and decrementing the owner
+      // The E.C.M. needs one fitted and none already running, and decrementing the owner
       // byte from zero is what makes it &FF, which is "ours" (§6.71's pair).
       if ((_universe.keys[KEY_ECM] & commander.ecm) != 0u && _universe.status.ecmCountdown == 0u)
       {
         _universe.status.ecmOurs = static_cast<std::uint8_t>(_universe.status.ecmOurs - 1u);
         /*
-         * 6502: the carry handed on from here is NOT KNOWN (§6.118).
+         * The carry handed on from here is NOT KNOWN (§6.118).
          *
          * Everything between the last flag-setting instruction and this call leaves the carry
          * alone, so the flag that reaches `NOISE` was set somewhere further back in the frame --
@@ -567,7 +567,7 @@ namespace Elite
     }
 
     /*
-     * 6502: MA64 -- the docking-computer request, gated on one being fitted.
+     * The docking-computer request, gated on one being fitted.
      *
      * The byte it folds in at `KLO+&29` IS `KY5`, the "X" key. So holding X while pressing C
      * cancels the request -- both bytes are &FF when held, and one exclusive-ored with the other
@@ -588,7 +588,7 @@ namespace Elite
   /*
    * ---- part 3's tail: the guns -----------------------------------------------------------------
    *
-   * 6502: MA68 -- every path through part 3 reaches this label, including the one the no-lock
+   * Every path through part 3 reaches this label, including the one the no-lock
    * branch cut five keys short of.
    */
   [[nodiscard]] LoopOutcome FireTheGuns(Universe& _universe, Ports& _ports) noexcept
@@ -597,10 +597,10 @@ namespace Elite
 
     // ---- part 3's tail: the guns -----------------------------------------------------------------
 
-    _universe.status.laserPower = 0u;     // 6502: MA68 -- the laser power cleared
-    _universe.flight.speedTimes4Low = 0u; // 6502: and the stardust's low byte with it
+    _universe.status.laserPower = 0u;     // The laser power cleared
+    _universe.flight.speedTimes4Low = 0u; // And the stardust's low byte with it
 
-    // 6502: the speed as a sixteen-bit value the stardust subtracts, which is `DELTA` shifted up
+    // The speed as a sixteen-bit value the stardust subtracts, which is `DELTA` shifted up
     // six places.
     {
       ShiftResult step = RotateRight(_universe.flight.speed, false);
@@ -611,31 +611,31 @@ namespace Elite
       _universe.flight.speedTimes4High = step.value;
     }
 
-    // 6502: a pulse laser's countdown, which is why it cannot be held down.
+    // A pulse laser's countdown, which is why it cannot be held down.
     if (_universe.status.laserCount != 0u)
     {
       return LoopOutcome::Continued;
     }
 
-    // 6502: 242 is where the gun jams.
+    // 242 is where the gun jams.
     if (_universe.keys[KEY_FIRE] == 0u || _universe.status.laserTemperature >= 242u)
     {
       return LoopOutcome::Continued;
     }
 
-    // 6502: this view's laser, if it has one.
+    // This view's laser, if it has one.
     const Laser fitted = commander.lasers[_universe.spaceView];
     if (!fitted.Fitted())
     {
       return LoopOutcome::Continued;
     }
 
-    // 6502: the power without its top bit, which is what the damage arithmetic uses.
+    // The power without its top bit, which is what the damage arithmetic uses.
     _universe.status.laserPower = fitted.Power();
     _universe.status.viewLaser = _universe.status.laserPower;
 
     /*
-     * 6502: which of four effects the fitted laser sounds, chosen by a chain of comparisons.
+     * Which of four effects the fitted laser sounds, chosen by a chain of comparisons.
      *
      * The chain ends in the assembler trick that hides one load inside another's operand, so that
      * the beam laser's effect survives and the one below it is skipped (§6.79). Sixth time in this
@@ -652,7 +652,7 @@ namespace Elite
     }
 
     /*
-     * 6502: `custard` sounds it -- and the burst that follows opens with the random generator,
+     * `custard` sounds it -- and the burst that follows opens with the random generator,
      * which reads the carry this leaves, so the sound's own outcome shifts the burst by a pixel
      * (§6.86).
      *
@@ -665,10 +665,10 @@ namespace Elite
     const bool carryIn = fitted.IsBeam() ? (fitted.byte >= LASER_MILITARY.byte) : (fitted.byte >= LASER_MINING.byte);
     const bool heard = PlaySoundEffect(_universe.sound, sound, carryIn).carry;
 
-    // 6502: LASLI -- the burst itself, which draws and heats the gun.
+    // The burst itself, which draws and heats the gun.
     (void)FireLaser(_universe.canvas, _universe.rng, _universe.burst, _universe.status, _universe.view, heard, &_universe.picture);
 
-    // 6502: a beam laser gets no countdown at all, which is what lets it be held down.
+    // A beam laser gets no countdown at all, which is what lets it be held down.
     const std::uint8_t countdown = fitted.IsBeam() ? std::uint8_t{0u} : fitted.byte;
     _universe.status.laserCount = static_cast<std::uint8_t>(countdown & 0xFAu);
 
@@ -677,10 +677,10 @@ namespace Elite
 
   LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept
   {
-    StirTheFrame(_universe); // 6502: part 1
-    TurnTheShip(_universe);  // 6502: part 2
+    StirTheFrame(_universe); // Part 1
+    TurnTheShip(_universe);  // Part 2
 
-    // 6502: part 3 -- and the jump to `ESCAPE` is the one exit it has, which is why this is not a
+    // Part 3 -- and the jump to `ESCAPE` is the one exit it has, which is why this is not a
     // `void`.
     const LoopOutcome keys = RunFlightKeys(_universe, _ports);
     if (keys != LoopOutcome::Continued)
@@ -688,63 +688,63 @@ namespace Elite
       return keys;
     }
 
-    return FireTheGuns(_universe, _ports); // 6502: MA68 -- part 3's tail
+    return FireTheGuns(_universe, _ports); // Part 3's tail
   }
 
   namespace
   {
 
-    /// 6502: the station's own `NEWB` bit, read from slot 1.
+    /// The station's own `NEWB` bit, read from slot 1.
     inline constexpr std::uint8_t STATION_SLOT = 1;
 
-    /// 6502: the docking check's three thresholds, none of which is named in the source.
+    /// The docking check's three thresholds, none of which is named in the source.
     inline constexpr std::uint8_t DOCK_MINIMUM_PITCH = 214;
     inline constexpr std::uint8_t DOCK_MINIMUM_ALIGNMENT = 89;
     inline constexpr std::uint8_t DOCK_MAXIMUM_ROLL = 80;
 
-    /// 6502: below this speed a failed dock is survivable and above it is not.
+    /// Below this speed a failed dock is survivable and above it is not.
     inline constexpr std::uint8_t DOCK_SURVIVABLE_SPEED = 5;
 
-    /// 6502: "CARGO SCOOPED" is not a token here, it is `MESS`'s argument for a full hold.
+    /// "CARGO SCOOPED" is not a token here, it is `MESS`'s argument for a full hold.
     inline constexpr std::uint8_t MESSAGE_HOLD_FULL = 78;
 
-    /// 6502: the first cargo name's token, which the item number is added to.
+    /// The first cargo name's token, which the item number is added to.
     inline constexpr std::uint8_t MESSAGE_FIRST_CARGO = 208;
 
-    /// 6502: the laser's own "damage" for the noise `EXNO` makes, which is not `LAS`.
+    /// The laser's own "damage" for the noise `EXNO` makes, which is not `LAS`.
     inline constexpr std::uint8_t LASER_HIT_ENERGY = 15;
 
-    /// 6502: the message doubles when the banks are under half of this.
+    /// The message doubles when the banks are under half of this.
     inline constexpr std::uint8_t ENERGY_WARNING = 50;
     inline constexpr std::uint8_t MESSAGE_ENERGY_LOW = 50;
 
-    /// 6502: the three steps of the thirty-two frame cycle that do something.
+    /// The three steps of the thirty-two frame cycle that do something.
     inline constexpr std::uint8_t STEP_ENERGY_CHECK = 10;
     inline constexpr std::uint8_t STEP_DOCKING_REMINDER = 15;
     inline constexpr std::uint8_t STEP_CABIN_TEMPERATURE = 20;
 
-    /// 6502: "DOCKING COMPUTERS ON" and "FUEL SCOOPS ON".
+    /// "DOCKING COMPUTERS ON" and "FUEL SCOOPS ON".
     inline constexpr std::uint8_t MESSAGE_DOCKING_ON = 123;
     inline constexpr std::uint8_t MESSAGE_SCOOPS_ON = 160;
 
-    /// 6502: the altitude's own constant, and the cabin's.
+    /// The altitude's own constant, and the cabin's.
     inline constexpr std::uint8_t ALTITUDE_PLANET_RADIUS = 36;
     inline constexpr std::uint8_t CABIN_BASE = 30;
 
-    /// 6502: the sun cooks the cabin, and then it cooks the Trumbles.
+    /// The sun cooks the cabin, and then it cooks the Trumbles.
     inline constexpr std::uint8_t CABIN_SCOOPING = 224;
     inline constexpr std::uint8_t CABIN_TRUMBLE_DEATH = 240;
 
-    /// 6502: the station is respawned when the planet is inside this range.
+    /// The station is respawned when the planet is inside this range.
     inline constexpr std::uint8_t STATION_SPAWN_RANGE = 192;
 
-    /// 6502: everything but the two lowest sprites goes off.
+    /// Everything but the two lowest sprites goes off.
     inline constexpr std::uint8_t SPRITES_KEEP = 0x03;
 
-    /// 6502: above this the beam is still being drawn and is left alone.
+    /// Above this the beam is still being drawn and is left alone.
     inline constexpr std::uint8_t LASER_ERASE_LIMIT = 8;
 
-    /// 6502: bit 7 set without touching the other seven.
+    /// Bit 7 set without touching the other seven.
     [[nodiscard]] std::uint8_t MarkKilled(std::uint8_t _state) noexcept
     {
       return With(_state, ShipStateBit::Killed);
@@ -752,7 +752,7 @@ namespace Elite
   } // namespace
 
   /*
-   * 6502: part 11, from `MA47` to `MA14` -- what our laser does to it.
+   * Part 11, from `MA47` to `MA14` -- what our laser does to it.
    *
    * THE DAMAGE PASSED TO THE NOISE IS DEAD. `EXNO` overwrites it in its own first two
    * instructions, so the frequency the sound gets is the one `EXNO` loads for itself. The upstream
@@ -771,9 +771,9 @@ namespace Elite
 
   [[nodiscard]] LaserHit ApplyLaserHit(Universe& _universe, Ports& _ports, const Blueprint& _blueprint, ShipType _type) noexcept
   {
-    (void)PlayHitSound(_universe.work, _universe.sound); // 6502: EXNO
+    (void)PlayHitSound(_universe.work, _universe.sound);
 
-    // 6502: a station takes no damage here and only gets angry.
+    // A station takes no damage here and only gets angry.
     if (_type == ShipType::Station)
     {
       return {false, _universe.work.energy};
@@ -782,7 +782,7 @@ namespace Elite
     std::uint8_t power = _universe.status.laserPower;
 
     /*
-     * 6502: the type compared against the Constrictor, then the laser against the military one.
+     * The type compared against the Constrictor, then the laser against the military one.
      *
      * A Constrictor or anything above it is immune to everything but a military laser, and takes a
      * QUARTER of even that. The comparison is against the MASKED power -- 23, which is what `MA68`
@@ -797,10 +797,10 @@ namespace Elite
 
       power = static_cast<std::uint8_t>(power >> 1u);
       power = static_cast<std::uint8_t>(power >> 1u);
-      _universe.status.laserPower = power; // 6502: quartered in place
+      _universe.status.laserPower = power; // Quartered in place
     }
 
-    // 6502: BURN -- the power comes off its energy, and no borrow means it survived.
+    // The power comes off its energy, and no borrow means it survived.
     const SubResult left = SubtractWithCarry(_universe.work.energy, power, true);
     if (left.carry)
     {
@@ -810,7 +810,7 @@ namespace Elite
     _universe.work.state = With(_universe.work.state, ShipStateBit::Killed);
 
     /*
-     * 6502: `nosp` and the splinter roll above it -- what a killed ship leaves behind.
+     * `nosp` and the splinter roll above it -- what a killed ship leaves behind.
      *
      * ONLY a mining laser splits an asteroid, and only an asteroid splits. Everything else drops
      * whatever `SPIN` decides from its blueprint, which is not random at all (§6.74).
@@ -825,11 +825,11 @@ namespace Elite
     bool carry;
     if (_type != ShipType::Asteroid)
     {
-      carry = Byte(_type) >= Byte(ShipType::Asteroid); // 6502: the type compare, then `nosp`
+      carry = Byte(_type) >= Byte(ShipType::Asteroid); // The type compare, then `nosp`
     }
     else if (power != LASER_MINING.Power())
     {
-      carry = power >= LASER_MINING.Power(); // 6502: the laser compare, then `nosp`
+      carry = power >= LASER_MINING.Power(); // The laser compare, then `nosp`
     }
     else
     {
@@ -838,12 +838,12 @@ namespace Elite
       carry = PerformDrop(_universe, PlanItems(ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u), roll.carry));
     }
 
-    // 6502: nosp -- plate then canister, in that order, every time, and the second on the carry
+    // Plate then canister, in that order, every time, and the second on the carry
     // the first left.
     carry = PerformDrop(_universe, PlanDebris(_universe.rng, _blueprint, ShipType::AlloyPlate, carry));
     static_cast<void>(PerformDrop(_universe, PlanDebris(_universe.rng, _blueprint, ShipType::Canister, carry)));
 
-    // 6502: EXNO2 -- and what `MA14` stores is what the sound routine left behind (§6.86's
+    // EXNO2 -- and what `MA14` stores is what the sound routine left behind (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
     return {true, RecordKill(_universe, _ports, _type)};
   }
@@ -851,7 +851,7 @@ namespace Elite
   /*
    * ---- part 7: is it touching us? -------------------------------------------------------------
    *
-   * 6502: the state bits masked and handed to `MAS4`, with one branch on the result.
+   * The state bits masked and handed to `MAS4`, with one branch on the result.
    *
    * ONE TEST DOES FOUR JOBS. `MAS4` ORs the three high bytes into whatever it is handed, so seeding
    * it with the "exploding or dead" bits means a ship that is far away on any axis, or already
@@ -865,10 +865,10 @@ namespace Elite
    */
   enum class Contact : std::uint8_t
   {
-    Clear,     ///< 6502: MA65 -- far away on some axis, or exploding, or already killed
-    Docking,   ///< 6502: ISDK -- the station, close enough to try
-    Scoopable, ///< 6502: the scoops-and-below path -- under us, with fuel scoops fitted
-    Collision, ///< 6502: MA58 -- close, intact, and not one of the above
+    Clear,     ///< Far away on some axis, or exploding, or already killed
+    Docking,   ///< The station, close enough to try
+    Scoopable, ///< The scoops-and-below path -- under us, with fuel scoops fitted
+    Collision, ///< Close, intact, and not one of the above
   };
 
   [[nodiscard]] Contact TestContact(const Ship& _work, const Commander& _commander, ShipType _type, bool _isBody) noexcept
@@ -880,7 +880,7 @@ namespace Elite
       return Contact::Clear;
     }
 
-    // 6502: the three low bytes ORed, tested for sign -- and the result survives to the mask below.
+    // The three low bytes ORed, tested for sign -- and the result survives to the mask below.
     const std::uint8_t low = static_cast<std::uint8_t>(_work.x.lo | _work.y.lo | _work.z.lo);
     if ((low & 0x80u) != 0u || _isBody)
     {
@@ -889,7 +889,7 @@ namespace Elite
 
     if (_type == ShipType::Station)
     {
-      return Contact::Docking; // 6502: ISDK
+      return Contact::Docking;
     }
 
     if ((low & 0xC0u) != 0u || _type == ShipType::Missile)
@@ -898,7 +898,7 @@ namespace Elite
     }
 
     /*
-     * 6502: the scoops byte masked against the ship's y sign.
+     * The scoops byte masked against the ship's y sign.
      *
      * `BST` is &FF with fuel scoops fitted and byte 5 is the ship's y sign, so the mask asks "we
      * have scoops AND it is below us" -- scooping only works on things that come up from
@@ -911,7 +911,7 @@ namespace Elite
   /*
    * ---- part 8: scooping it up -------------------------------------------------------------------
    *
-   * 6502: the blueprint's first byte shifted down four places, then one added.
+   * The blueprint's first byte shifted down four places, then one added.
    *
    * AND THE ADDITION TAKES THE FOURTH SHIFT'S CARRY, which is bit 3 of that byte. The zero test
    * between them reads the value without touching the flags, so what lands in the hold is the top
@@ -921,8 +921,8 @@ namespace Elite
   enum class ScoopResult : std::uint8_t
   {
     Stowed,   ///< it is in the hold and `NEWB` bit 7 is set, so part 12 takes the ship away
-    HoldFull, ///< 6502: MA59 -- `tnpr1` said no, which is a bounce rather than damage
-    Crashed,  ///< 6502: MA58 -- nothing worth scooping, so it is a collision after all
+    HoldFull, ///< `tnpr1` said no, which is a bounce rather than damage
+    Crashed,  ///< Nothing worth scooping, so it is a collision after all
   };
 
   [[nodiscard]] ScoopResult ScoopCargo(Universe& _universe, Ports& _ports, ShipType _type) noexcept
@@ -932,7 +932,7 @@ namespace Elite
 
     if (_type == ShipType::Canister)
     {
-      // 6502: `oily` rolls for the item -- and the carry it rolls in is SET, because the only way
+      // `oily` rolls for the item -- and the carry it rolls in is SET, because the only way
       // here is off a comparison that found its operand equal, which sets the flag. The port passed
       // a clear one until 2026-09-06, hidden behind a comparison that skipped the generator on
       // every frame that also seeded a cloud (§6.157).
@@ -944,29 +944,29 @@ namespace Elite
       const std::uint8_t worth = static_cast<std::uint8_t>(nibble >> 4u);
       if (worth == 0u)
       {
-        return ScoopResult::Crashed; // 6502: MA58 -- nothing worth scooping
+        return ScoopResult::Crashed; // Nothing worth scooping
       }
 
       item = static_cast<std::uint8_t>(worth + 1u + ((nibble & 0x08u) != 0u ? 1u : 0u));
     }
 
-    // 6502: slvy2 -- `tnpr1` stores the item and asks whether ONE more will fit.
+    // `tnpr1` stores the item and asks whether ONE more will fit.
     if (!CargoFits(commander, item, 1u))
     {
       return ScoopResult::HoldFull;
     }
 
-    // 6502: the one unit `tnpr` pushed and popped, added into the hold -- and the carry is clear,
+    // The one unit `tnpr` pushed and popped, added into the hold -- and the carry is clear,
     // because a clear carry is how the branch above was not taken.
     std::uint8_t& held = commander.cargoHold[item];
     const AddResult stored = AddWithCarry(1u, held, false);
     held = stored.value;
 
-    // 6502: the item's name token, on the carry the store above left behind.
+    // The item's name token, on the carry the store above left behind.
     const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
     ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view, &_universe.picture);
 
-    // 6502: bit 7 of `NEWB` is "take it out of the bubble", so a scooped canister is removed by
+    // Bit 7 of `NEWB` is "take it out of the bubble", so a scooped canister is removed by
     // part 12 rather than by anything here.
     _universe.work.traits = With(_universe.work.traits, TraitBit::Remove);
     return ScoopResult::Stowed;
@@ -983,9 +983,9 @@ namespace Elite
    */
   enum class DockingTest : std::uint8_t
   {
-    Arrived, ///< 6502: GOIN -- all four passed
-    TooFast, ///< 6502: MA62 -- too fast to survive the miss
-    Bumped,  ///< 6502: MA67 -- a miss slow enough to survive, which part 10 charges for
+    Arrived, ///< All four passed
+    TooFast, ///< Too fast to survive the miss
+    Bumped,  ///< A miss slow enough to survive, which part 10 charges for
   };
 
   [[nodiscard]] DockingTest TestDocking(Universe& _universe) noexcept
@@ -994,7 +994,7 @@ namespace Elite
 
     if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
     {
-      (void)LoadPlanetAxes(_universe.bubble, _universe.axes);          // 6502: SPS1
+      (void)LoadPlanetAxes(_universe.bubble, _universe.axes);
       const UnitVector towards = NormaliseAxes(_universe.axes).vector; // the fall-through
 
       if (towards.z >= DOCK_MINIMUM_ALIGNMENT && static_cast<std::uint8_t>(_universe.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
@@ -1003,7 +1003,7 @@ namespace Elite
       }
     }
 
-    // 6502: MA62 -- fast enough and you are dead.
+    // Fast enough and you are dead.
     return (_universe.flight.speed >= DOCK_SURVIVABLE_SPEED) ? DockingTest::TooFast : DockingTest::Bumped;
   }
 
@@ -1019,9 +1019,9 @@ namespace Elite
   enum class Impact : std::uint8_t
   {
     None,    ///< nothing touched us, or it was scooped
-    Bounced, ///< 6502: MA59 -- a full hold
-    Bumped,  ///< 6502: MA67 -- the station, slowly
-    Crashed, ///< 6502: MA58 -- everything else
+    Bounced, ///< A full hold
+    Bumped,  ///< The station, slowly
+    Crashed, ///< Everything else
   };
 
   /// Answers whether the player survived it. False is the jump to `DEATH` out of `OOPS`.
@@ -1034,11 +1034,11 @@ namespace Elite
 
     if (_impact == Impact::Bounced)
     {
-      // 6502: MA59 -- and the carry is SET, because part 8's branch is the only way here: a full
+      // MA59 -- and the carry is SET, because part 8's branch is the only way here: a full
       // hold is exactly the carry the capacity test leaves.
       (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, true);
-      _universe.work.state = MarkKilled(_universe.work.state); // 6502: MA60
-      // 6502: MA61 -- and marking it killed has just set bit 7, so the branch is always taken.
+      _universe.work.state = MarkKilled(_universe.work.state);
+      // MA61 -- and marking it killed has just set bit 7, so the branch is always taken.
       return true;
     }
 
@@ -1047,18 +1047,18 @@ namespace Elite
 
     if (_impact == Impact::Bumped)
     {
-      _universe.flight.speed = 1u;    // 6502: MA67 -- the bump slows you to one
-      damage = DOCK_SURVIVABLE_SPEED; // 6502: and the carry is the speed test's, so clear
+      _universe.flight.speed = 1u;    // The bump slows you to one
+      damage = DOCK_SURVIVABLE_SPEED; // And the carry is the speed test's, so clear
     }
     else
     {
-      _universe.work.state = MarkKilled(_universe.work.state); // 6502: MA58
+      _universe.work.state = MarkKilled(_universe.work.state);
       const ShiftResult halved = RotateRight(_universe.work.energy, true);
       damage = halved.value;
       carry = halved.carry;
     }
 
-    // 6502: MA63 -- and `OOPS` makes the same noise itself on the path that survives, so a hit
+    // MA63 -- and `OOPS` makes the same noise itself on the path that survives, so a hit
     // that costs the banks is heard twice.
     if (!TakeDamage(_universe, _ports, _block, damage, carry))
     {
@@ -1066,7 +1066,7 @@ namespace Elite
     }
 
     /*
-     * 6502: MA63 -- the carry into the explosion sound is the one `OOPS` left.
+     * The carry into the explosion sound is the one `OOPS` left.
      *
      * `OOPS` ends by adding into the energy banks and branching on the result, and reaching here
      * at all means the carry branch was taken, so it is SET. Nothing between the two calls touches
@@ -1079,14 +1079,14 @@ namespace Elite
   /*
    * ---- part 11: our laser, and the scanner --------------------------------------------------------
    *
-   * 6502: MA26 -- the blip is drawn when `NEWB`'s top bit is set.
+   * The blip is drawn when `NEWB`'s top bit is set.
    *
    * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing two
    * jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
    */
   struct Aim
   {
-    /// 6502: a chart on screen skips the aiming AND the ship drawing below it.
+    /// A chart on screen skips the aiming AND the ship drawing below it.
     bool draws;
 
     /*
@@ -1105,21 +1105,21 @@ namespace Elite
       DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view, &_universe.picture);
     }
 
-    if (_universe.view != 0u) // 6502: MA15 -- a chart means no drawing at all
+    if (_universe.view != 0u) // A chart means no drawing at all
     {
       return {false, false};
     }
 
-    FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView); // 6502: PLUT
+    FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView);
 
-    if (!IsHit(_universe.work, *_universe.flight.blueprint, _type)) // 6502: HITCH
+    if (!IsHit(_universe.work, *_universe.flight.blueprint, _type))
     {
-      return {true, false}; // 6502: MA8 -- not in the sights, and `HITCH` cleared the flag saying so
+      return {true, false}; // Not in the sights, and `HITCH` cleared the flag saying so
     }
 
-    bool carry = true; // 6502: the flag `HITCH` sets, which nothing on the way to `MA47` touches
+    bool carry = true; // The flag `HITCH` sets, which nothing on the way to `MA47` touches
 
-    // 6502: an armed missile locks onto whatever the sights are on, and the indicator turns red.
+    // An armed missile locks onto whatever the sights are on, and the indicator turns red.
     // `BEEP` is `NOISE`, whose exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are
     // stores and register moves and leave it alone.
     if (_universe.status.missileArmed != 0u)
@@ -1132,16 +1132,16 @@ namespace Elite
       SetMissileTarget(_universe, _universe.commander.missiles, _universe.flight.slot, MISSILE_LOCKED);
     }
 
-    // 6502: MA47 -- no laser firing this frame, so nothing is damaged.
+    // No laser firing this frame, so nothing is damaged.
     if (_universe.status.laserPower != 0u)
     {
       const LaserHit hit = ApplyLaserHit(_universe, _ports, *_universe.flight.blueprint, _type);
       if (hit.stores)
       {
-        _universe.work.energy = hit.energy; // 6502: MA14
+        _universe.work.energy = hit.energy;
       }
 
-      // 6502: `MA14+2` -- the anger call, which both skip-the-store paths land on too. `INF` is
+      // The anger call, which both skip-the-store paths land on too. `INF` is
       // this ship's block here, the one the loop is on, so the slot is `XSAV`'s. Every laser path
       // ends in this call, so its exit carry is the one `LL9` gets.
       carry = Anger(_universe.bubble, _universe.flight, _universe.flight.slot, _type);
@@ -1153,14 +1153,14 @@ namespace Elite
   /*
    * ---- part 12: what is written back, and what is removed ----------------------------------------
    *
-   * 6502: MA15 -- the energy goes back on every path, and byte 31 only on the path that keeps the
+   * The energy goes back on every path, and byte 31 only on the path that keeps the
    * ship. That asymmetry is the routine: a ship being removed has its block shuffled away by
    * `KILLSHP`, so writing its state would be wasted.
    */
   enum class KillOutcome : std::uint8_t
   {
-    Kept,    ///< 6502: MA27 -- the state byte goes back and the index advances
-    Removed, ///< 6502: KS1 -- `KILLSHP`, and the index does NOT advance
+    Kept,    ///< The state byte goes back and the index advances
+    Removed, ///< `KILLSHP`, and the index does NOT advance
   };
 
   [[nodiscard]] KillOutcome RetireShip(Universe& _universe, Ports& _ports, Ship& _block, ShipType _type, bool _isBody) noexcept
@@ -1177,7 +1177,7 @@ namespace Elite
     if (Has(_universe.work.state, ShipStateBit::Killed) && Has(_universe.work.state, ShipStateBit::Exploding))
     {
       /*
-       * 6502: the trait bit folded into the legal status.
+       * The trait bit folded into the legal status.
        *
        * Bit 6 is "shooting this was a crime", and it is ORed into the legal status rather than added
        * -- so the offence is recorded once however many innocents die, and a fugitive cannot become
@@ -1185,13 +1185,13 @@ namespace Elite
        */
       commander.legalStatus = static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.traits & Mask(TraitBit::Cop)));
 
-      // 6502: no bounty while a message is up or in witchspace, because the bounty IS a message
+      // No bounty while a message is up or in witchspace, because the bounty IS a message
       // and there is nowhere to put it.
       const bool quiet = (_universe.message.delay | _universe.status.midJump) == 0u;
 
       if (quiet)
       {
-        // 6502: the blueprint's bounty, two bytes, paid only when the low one is not zero.
+        // The blueprint's bounty, two bytes, paid only when the low one is not zero.
         const std::uint8_t low = static_cast<std::uint8_t>(_universe.flight.blueprint->bounty & 0xFFu);
 
         if (low != 0u)
@@ -1199,7 +1199,7 @@ namespace Elite
           ReceiveCash(commander, _universe.flight.blueprint->bounty);
 
           /*
-           * 6502: message token zero.
+           * Message token zero.
            *
            * TOKEN ZERO IS THE CASH. The printer branches on it before anything else, so the bounty
            * message is the player's balance printed in flight -- and `MESS` then remembers that
@@ -1210,10 +1210,10 @@ namespace Elite
         }
       }
 
-      return KillOutcome::Removed; // 6502: KS1S -- every path through this block ends there
+      return KillOutcome::Removed; // Every path through this block ends there
     }
 
-    // 6502: MAC1 -- and the planet and the sun are never out of range, because they are what range
+    // MAC1 -- and the planet and the sun are never out of range, because they are what range
     // is measured against.
     return (!_isBody && !WithinLoopRange(_universe.work)) ? KillOutcome::Removed : KillOutcome::Kept;
   }
@@ -1222,28 +1222,28 @@ namespace Elite
   {
     Commander& commander = _universe.commander;
 
-    // 6502: MA3 and MAL1 -- the index is advanced by hand, never by the loop.
+    // MA3 and MAL1 -- the index is advanced by hand, never by the loop.
     std::uint8_t slot = 0;
 
     for (;;)
     {
-      _universe.flight.slot = slot; // 6502: XSAV
+      _universe.flight.slot = slot;
 
-      // 6502: the first empty slot ends the pass.
+      // The first empty slot ends the pass.
       const ShipType type = TypeOf(_universe.bubble.slots[slot]);
       if (type == ShipType::None)
       {
         return LoopOutcome::Continued;
       }
 
-      _universe.flight.type = type; // 6502: TYPE
+      _universe.flight.type = type;
 
-      // 6502: MAL2 -- the whole block copied into the workspace, one byte at a time.
+      // The whole block copied into the workspace, one byte at a time.
       Ship& block = _universe.bubble.blocks[slot];
       _universe.work = block;
 
       /*
-       * 6502: the blueprint pointer, looked up from the doubled ship type.
+       * The blueprint pointer, looked up from the doubled ship type.
        *
        * The planet and the sun have no blueprint, and `XX0` is left holding the LAST ship's --
        * which is why part 5's tests below run on an index only a real ship has set.
@@ -1254,7 +1254,7 @@ namespace Elite
         _universe.flight.blueprint = BlueprintFor(_universe.bubble, type);
 
         /*
-         * 6502: part 5 -- the bomb's test and the four under it.
+         * Part 5 -- the bomb's test and the four under it.
          *
          * The energy bomb kills everything in the bubble EXCEPT a station, a Thargoid and anything
          * from the Constrictor upwards, and the three exemptions are compared against the DOUBLED
@@ -1267,12 +1267,12 @@ namespace Elite
         if ((commander.energyBomb & 0x80u) != 0u && !exempt && !Has(_universe.work.state, ShipStateBit::Exploding))
         {
           _universe.work.state = MarkKilled(_universe.work.state);
-          (void)RecordKill(_universe, _ports, type); // 6502: EXNO2
+          (void)RecordKill(_universe, _ports, type);
         }
       }
 
       /*
-       * 6502: MA21 moves the ship, and MAL3 copies the workspace back a byte at a time.
+       * MA21 moves the ship, and MAL3 copies the workspace back a byte at a time.
        *
        * The block is written back BEFORE the death is acted on, because the original writes it
        * back only on the path that survives -- the jump to `DEATH` from inside `TACTICS` never
@@ -1317,11 +1317,11 @@ namespace Elite
         switch (TestDocking(_universe))
         {
         case DockingTest::Arrived:
-          // 6502: GOIN -- the music stops and the docked screen takes over
+          // The music stops and the docked screen takes over
           StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
           return LoopOutcome::Docked;
         case DockingTest::TooFast:
-          return LoopOutcome::Died; // 6502: DEATH
+          return LoopOutcome::Died;
         case DockingTest::Bumped:
           impact = Impact::Bumped;
           break;
@@ -1335,7 +1335,7 @@ namespace Elite
 
       const Aim aim = AimAtShip(_universe, _ports, type);
 
-      // 6502: MA8 -- and it is the same call that erases the last frame's ship.
+      // MA8 -- and it is the same call that erases the last frame's ship.
       if (aim.draws)
       {
         DrawShip(_universe, block, aim.carry);
@@ -1344,7 +1344,7 @@ namespace Elite
       if (RetireShip(_universe, _ports, block, type, isBody) == KillOutcome::Removed)
       {
         /*
-         * 6502: KS1 -- `KILLSHP`, then straight back to the top of the loop.
+         * `KILLSHP`, then straight back to the top of the loop.
          *
          * THE INDEX IS NOT ADVANCED. `KILLSHP` shuffles every slot above the dead one down, so the
          * ship that was behind it is now in the same slot -- and going round on the same index is
@@ -1355,14 +1355,14 @@ namespace Elite
       }
       else
       {
-        block.state = _universe.work.state; // 6502: MA27 -- the state byte goes back
-        ++slot;                             // 6502: and only here does the index advance
+        block.state = _universe.work.state; // The state byte goes back
+        ++slot;                             // And only here does the index advance
       }
     }
   }
 
   /*
-   * 6502: part 16, from `.MA23` -- the laser beam, the E.C.M. countdowns, and the stardust.
+   * Part 16, from `.MA23` -- the laser beam, the E.C.M. countdowns, and the stardust.
    *
    * Every path through parts 13 to 15 ends here, most of them by jumping to it. It is written as a
    * separate function for exactly that reason: `MA23S` appears four times in the source and is
@@ -1371,7 +1371,7 @@ namespace Elite
   [[nodiscard]] LoopOutcome EndFlightFrameTail(Universe& _universe, Ports& _ports) noexcept
   {
     /*
-     * 6502: MA23 -- the beam on screen, erased once its countdown is low enough.
+     * The beam on screen, erased once its countdown is low enough.
      *
      * `LAS2` is "there is a beam on screen" and `LASCT` is how long it has left. Below eight the
      * beam is rubbed out by drawing it again -- `LASLI2` is `LASLI` without the firing -- so the
@@ -1384,7 +1384,7 @@ namespace Elite
     }
 
     /*
-     * 6502: MA16, MA69 and MA70 -- the two countdowns and the off switch.
+     * MA16, MA69 and MA70 -- the two countdowns and the off switch.
      *
      * TWO COUNTDOWNS AND ONE OFF SWITCH. `ECMP` says the E.C.M. is ours, and while it is the banks
      * pay for it a unit a frame -- `DENGY` returning zero means the banks are empty, which turns
@@ -1395,7 +1395,7 @@ namespace Elite
 
     if (_universe.status.ecmOurs != 0u)
     {
-      stop = DrainEnergy(_universe.status); // 6502: DENGY, and an empty bank jumps to MA70
+      stop = DrainEnergy(_universe.status); // DENGY, and an empty bank jumps to MA70
     }
 
     if (!stop && _universe.status.ecmCountdown != 0u)
@@ -1406,11 +1406,11 @@ namespace Elite
 
     if (stop)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture); // 6502: MA70
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture);
     }
 
     /*
-     * 6502: MA66 -- and the branch out lands on a return borrowed from another routine thirty-three
+     * MA66 -- and the branch out lands on a return borrowed from another routine thirty-three
      * bytes further on. So a chart on screen ends the frame with the stardust left exactly where it
      * was.
      */
@@ -1425,7 +1425,7 @@ namespace Elite
   /*
    * ---- part 13's head: the energy bomb burns down --------------------------------------------
    *
-   * 6502: MA18 -- the bomb doubled, and switched off when the top bit falls out.
+   * The bomb doubled, and switched off when the top bit falls out.
    *
    * The bomb is a countdown kept as a shift register: part 3 doubles it when the key is pressed and
    * this doubles it again every frame, so it burns for as many frames as it has bits left and ends
@@ -1457,7 +1457,7 @@ namespace Elite
     Commander& commander = _universe.commander;
 
     /*
-     * 6502: the shields are fed FROM the banks, so they only recharge while the banks are at least
+     * The shields are fed FROM the banks, so they only recharge while the banks are at least
      * half full. `SHD` itself takes a unit of energy per shield (§6.83).
      */
     if ((_universe.status.energy & 0x80u) != 0u)
@@ -1467,7 +1467,7 @@ namespace Elite
     }
 
     /*
-     * 6502: `b` -- the energy unit added into the banks, with the carry SET going in.
+     * The energy unit added into the banks, with the carry SET going in.
      *
      * That set carry IS the recharge: a commander with no energy unit still gains one point every
      * eighth frame. And the overflow branch SKIPS the store rather than clamping, so banks that
@@ -1489,20 +1489,20 @@ namespace Elite
    */
   void MaybeSpawnStation(Universe& _universe, Ports& _ports) noexcept
   {
-    // 6502: no station already in range, and the planet not too far off on any axis.
+    // No station already in range, and the planet not too far off on any axis.
     if (_universe.bubble.Count(ShipType::Station) != 0u || LargestAxis(_universe.bubble, 0u) != 0u)
     {
       return;
     }
 
-    // 6502: MAL4 copies 29 bytes, not the whole block: the position, the orientation, the speed
+    // MAL4 copies 29 bytes, not the whole block: the position, the orientation, the speed
     // and the acceleration, and nothing after.
     std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _universe.work.ToBytes();
     const std::array<std::uint8_t, SHIP_BLOCK_SIZE> planet = _universe.bubble.blocks[0].ToBytes();
     std::copy_n(planet.begin(), 29u, bytes.begin());
     _universe.work = Ship::FromBytes(bytes);
 
-    // 6502: MAS1 three times, on the axis pairs (9, 0), (11, 3) and (13, 6).
+    // MAS1 three times, on the axis pairs (9, 0), (11, 3) and (13, 6).
     // The `&&`s short-circuit and have to: each call DOUBLES the coordinate it reads, in place,
     // so a second one after a non-zero answer would move the planet twice.
     const bool ahead = DoubleAndAddCoordinate(_universe.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(_universe.work, 11u, 3u) == 0u &&
@@ -1510,9 +1510,9 @@ namespace Elite
 
     if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
     {
-      EraseSun(_universe.canvas, _universe.heaps, &_universe.picture); // 6502: WPLS
+      EraseSun(_universe.canvas, _universe.heaps, &_universe.picture);
 
-      // 6502: NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties the
+      // NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties the
       // sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
       (void)AddStation(_universe, _ports);
     }
@@ -1521,7 +1521,7 @@ namespace Elite
   /*
    * ---- part 15: the thirty-two step cycle, as the table it is ----------------------------------
    *
-   * 6502: MA22 and MA93 -- the counter masked to five bits, then compared step by step.
+   * MA22 and MA93 -- the counter masked to five bits, then compared step by step.
    *
    * THE CYCLE IS THIRTY-TWO STEPS AND NOT SIXTEEN. The M4-a row and this block's own heading both
    * said sixteen and neither is right: `MCNT` is masked with 31, so the three jobs below fire once
@@ -1544,7 +1544,7 @@ namespace Elite
     if (_counter == STEP_ENERGY_CHECK)
     {
       /*
-       * 6502: fifty compared against the banks, then doubled into a message token.
+       * Fifty compared against the banks, then doubled into a message token.
        *
        * AND THE BRANCH SKIPS BOTH INSTRUCTIONS, not just the doubling: it clears four bytes, which
        * is the shift and the call together, so healthy banks send no message at all -- the fifty is
@@ -1559,19 +1559,19 @@ namespace Elite
       }
 
       /*
-       * 6502: the altitude is set to 255 before anything is measured, so a planet too far away in
+       * The altitude is set to 255 before anything is measured, so a planet too far away in
        * any axis leaves the dial full.
        */
       _universe.status.altitude = 0xFFu;
 
       if (LargestAxis(_universe.bubble, 0u) == 0u)
       {
-        // 6502: MAS3 -- and the carry out of it is its saturation, not a comparison.
+        // MAS3 -- and the carry out of it is its saturation, not a comparison.
         const std::uint8_t squares = SumOfSquares(_universe.bubble, 0u);
         if (squares != 0xFFu)
         {
           /*
-           * 6502: the planet's radius taken off, and a borrow means the ground.
+           * The planet's radius taken off, and a borrow means the ground.
            *
            * AND THE CARRY IS CLEAR, so the subtraction takes THIRTY-SEVEN. `MAS3` returns with the
            * flag its own last addition left -- set only when the sum saturated, which is the case
@@ -1582,11 +1582,11 @@ namespace Elite
           const SubResult above = SubtractWithCarry(squares, ALTITUDE_PLANET_RADIUS, false);
           if (!above.carry)
           {
-            return LoopOutcome::Died; // 6502: MA28
+            return LoopOutcome::Died;
           }
 
           /*
-           * 6502: the square root of the difference, whose low byte becomes the altitude.
+           * The square root of the difference, whose low byte becomes the altitude.
            *
            * THE RADICAND'S LOW BYTE IS WHATEVER `Q` LAST HELD. Nothing between the last ship's
            * processing and this square root writes `Q` -- neither `MAS3` nor `m` does -- so the
@@ -1609,7 +1609,7 @@ namespace Elite
     }
     else if (_counter == STEP_DOCKING_REMINDER)
     {
-      // 6502: MA29 -- step 15, and the reminder only when the computer is on.
+      // Step 15, and the reminder only when the computer is on.
       if (_universe.control.dockingComputer != 0u)
       {
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_DOCKING_ON,
@@ -1619,7 +1619,7 @@ namespace Elite
     else if (_counter == STEP_CABIN_TEMPERATURE)
     {
       /*
-       * 6502: MA33 -- step 20, room temperature stored, then the station-range test.
+       * Step 20, room temperature stored, then the station-range test.
        *
        * Thirty is room temperature and it is written unconditionally, so the sun's contribution
        * below is a replacement rather than an increase. Inside station range there is no sun to
@@ -1633,7 +1633,7 @@ namespace Elite
       }
 
       /*
-       * 6502: the distance squared, complemented and added to thirty.
+       * The distance squared, complemented and added to thirty.
        *
        * The temperature is thirty MINUS the distance squared, written as a negate-and-add on
        * `MAS3`'s exit carry -- and the carry OUT is death: an overflow here means the sum passed
@@ -1645,17 +1645,17 @@ namespace Elite
 
       if (heat.carry)
       {
-        return LoopOutcome::Died; // 6502: MA28
+        return LoopOutcome::Died;
       }
 
-      // 6502: below this the sun is just warm and nothing else happens.
+      // Below this the sun is just warm and nothing else happens.
       if (heat.value < CABIN_SCOOPING)
       {
         return EndFlightFrameTail(_universe, _ports);
       }
 
       /*
-       * 6502: past 240 the sprites are cut back and the Trumble count is halved.
+       * Past 240 the sprites are cut back and the Trumble count is halved.
        *
        * THE TRUMBLES COOK. The sprite write is bracketed by two raster-mode changes because the
        * sprites belong to the interrupt handler, and the population is HALVED as a sixteen-bit
@@ -1673,7 +1673,7 @@ namespace Elite
       }
 
       /*
-       * 6502: nokilltr -- fuel scooping, capped at a full tank, then the message.
+       * Fuel scooping, capped at a full tank, then the message.
        *
        * The amount is the player's own SPEED: `DELT4+1` is `DELTA` shifted up six places, halved
        * again here. Flying into the sun faster fills the tank faster.
@@ -1693,23 +1693,23 @@ namespace Elite
 
   LoopOutcome EndFlightFrame(Universe& _universe, Ports& _ports) noexcept
   {
-    BurnEnergyBomb(_universe); // 6502: part 13's head, on every frame
+    BurnEnergyBomb(_universe); // Part 13's head, on every frame
 
-    // 6502: MA77 -- seven frames in eight skip straight to part 15.
+    // Seven frames in eight skip straight to part 15.
     const std::uint8_t counter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter & 31u);
 
     if ((_universe.flight.mainLoopCounter & 7u) == 0u)
     {
-      RechargeBanks(_universe); // 6502: part 13's tail
+      RechargeBanks(_universe); // Part 13's tail
 
-      // 6502: part 14 opens with the witchspace test -- no space stations there.
+      // Part 14 opens with the witchspace test -- no space stations there.
       if (_universe.status.midJump != 0u)
       {
         return EndFlightFrameTail(_universe, _ports);
       }
 
       /*
-       * 6502: the counter masked to five bits, and the fall-through matters (M4-a-3).
+       * The counter masked to five bits, and the fall-through matters (M4-a-3).
        *
        * A zero runs part 14 and every path through it ends at `MA23S`; anything else drops into
        * `MA93`, which is part 15's first compare. The port used to return the tail on BOTH, which
@@ -1725,14 +1725,14 @@ namespace Elite
     }
     else
     {
-      // 6502: MA22 -- part 15's own witchspace test, the twin of part 14's.
+      // Part 15's own witchspace test, the twin of part 14's.
       if (_universe.status.midJump != 0u)
       {
         return EndFlightFrameTail(_universe, _ports);
       }
     }
 
-    return RunCycleStep(_universe, _ports, counter); // 6502: .MA93
+    return RunCycleStep(_universe, _ports, counter);
   }
 
   LoopOutcome MainFlightLoop(Universe& _universe, Ports& _ports) noexcept
@@ -1754,10 +1754,10 @@ namespace Elite
 
   CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
-    // 6502: DOKEY, which BOTH paths do before they differ.
+    // DOKEY, which BOTH paths do before they differ.
     ReadFlightControls(_universe, _ports);
 
-    // 6502: the space view returns with the two registers untouched, so the caller gets no movement
+    // The space view returns with the two registers untouched, so the caller gets no movement
     // rather than a movement of zero, and the two are the same thing here.
     if (_view == 0u)
     {
