@@ -38,11 +38,11 @@ SIX THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has alr
    otherwise run the unmutated suite, see it pass, and report a survivor; or worse, run a DIFFERENT
    mutant's edit and report on that. Both directions are refused loudly.
 
-4. THE WORKTREE HAS NO SYMLINKS IN IT. `AGENTS.md` section 6's recipe symlinks the submodule and the
-   reference files into a detached worktree, and warns that every `git checkout -f` eats the
-   symlink and it must be re-made. This copies instead: `Design/Reference/*.txt` is a handful of
-   text files and the oracle's whole `versions/c64` tree is 4.4 MB. Copying removes the trap by
-   construction rather than documenting it, which is what section 6.119 asked for.
+4. THE WORKTREE HAS NO SYMLINKS IN IT, AND NOW HAS NOTHING TO SYMLINK. The old recipe linked the
+   submodule and the assembled reference files into a detached worktree and warned that every
+   `git checkout -f` ate the link. This copied instead, which removed the trap by construction
+   (section 6.119); M6-f deleted the submodule and the reference files, so there is nothing to
+   copy either. The worktree is the repository and that is all it needs to be.
 
 5. THE WORKTREE CARRIES WHAT YOU HAVE, NOT WHAT YOU LAST COMMITTED. It is still built from HEAD --
    a mutation run wants a state somebody can name -- but the uncommitted diff is applied on top,

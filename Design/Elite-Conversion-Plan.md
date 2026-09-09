@@ -182,10 +182,12 @@ to head this list is gone, and so is the item below it:
    to compare against.
 3. ~~**Two live mutation survivors.**~~ **Closed 2026-09-06** (§6.156). Every unit is at zero
    and the not-caught entries left in `tools/mutants.json` are recorded EQUIVALENTS with the
-   proof on them, which is a measurement and not debt — <!--count:mutants-->97 mutants in
-   <!--count:mutant-files-->seventeen files since Modernize.md M6-0-g (2026-09-07), which also put
-   a floor under the corpus: fourteen files that must each carry a caught mutant, enforced by
-   `mutate.py --check`. **R13 does not close on it**: every tally
+   proof on them, which is a measurement and not debt — <!--count:mutants-->8 mutants in
+   <!--count:mutant-files-->four files. It was 97 in seventeen with a floor of fourteen until
+   Modernize.md M6-b-8 (2026-09-09): the corpus measured the 337 comparisons against the original,
+   M6-b-5 deleted those, and the owner ruled that what no longer has a test to catch it be deleted
+   rather than kept as an expected survivor. Eighty-nine went; the floor is the three files that
+   can still meet it. `mutate.py --check` enforces it. **R13 does not close on it**: every tally
    published before `mutate.py` existed is still an assertion nobody can re-run, and that half of
    the row is not recoverable by anything.
 4. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders

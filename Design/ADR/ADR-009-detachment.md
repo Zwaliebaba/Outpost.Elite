@@ -97,13 +97,22 @@ worse record than none.
   while the original was here; a behaviour no test reached before M6-b is unpinned for ever." No
   fixture was recorded, so the sentence is stronger than its own wording — a behaviour no
   SURVIVING test reaches is unpinned, which is most of them.
-- **The mutation corpus lost most of its subjects.** M6-0-g built it for exactly this moment, on
-  the argument that after detachment "a mutant is the only instrument that says whether a test
-  would NOTICE". Of thirteen units, five (`tactics`, `hyperspace`, `missions`, `spawn`,
-  `trumbles`) now select no tests at all and three (`arith`, `rng`, `shipmove`) select one each;
-  `raster`, `flight` and `game` survive. Rule 3 says a mutant is re-anchored and never dropped,
-  and for most of these there is nothing left to anchor to. **The floor M6-0-g set cannot be met**,
-  and what to do about it is an open decision rather than something this ADR settles.
+- **The mutation corpus lost most of its subjects, and 89 of its 97 mutants were then deleted**
+  (M6-b-8, owner ruling 2026-09-09). M6-0-g built it for exactly this moment, on the argument that
+  after detachment "a mutant is the only instrument that says whether a test would NOTICE" — and
+  what it was measuring was the 337 tests. Eight of the thirteen units lost every `TEST_CLASS`
+  their filters named; the other five were run, and 18 of their 26 mutants survived, `shipmove`
+  and `flight` losing every one. Rule 3 says a mutant is re-anchored and never dropped, and for
+  these there was nothing left to anchor to: the owner ruled they be deleted rather than recorded
+  as expected survivors, so that what remains is a gate rather than a to-do list. **Eight mutants
+  in four files remain, all caught; the floor M6-0-g set went from fourteen files to three, the
+  first time it has shrunk and it was written never to.** What the corpus still speaks for is the
+  raster split, the canvas blit, the explosion cloud's seeding and the `Game` object.
+- **A selftest can rot without anything saying so, and four of five had.** Each unit carries one
+  unmissable mutant whose survival means the harness itself is broken. `ra-selftest` zeroed a
+  register that only the deleted comparison read; because a surviving selftest stops the run by
+  design, the corpus could not be measured at all until the flags were lifted for one pass. **A
+  selftest is only unmissable relative to the tests that exist**, and nothing checked that.
 - **The two golden canvases went** with the routines that drew them into the interpreter, and
   `golden_diff.py` with them.
 - **What did NOT change**: the port's behaviour. Not one line of `GameLogic/` was touched by any

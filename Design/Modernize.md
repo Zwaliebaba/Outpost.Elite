@@ -241,19 +241,17 @@ Three instruments are in place and every slice below leans on them:
 - **The whole-bitmap comparisons**: `TITLE`, `TT110`, the dashboard, the planet and the stardust
   suites compare the whole `SCBASE` region byte for byte. They see composition where the per-routine
   tests see routines.
-- **The mutants**: <!--count:mutants-->97 recorded edits in <!--count:mutant-files-->seventeen files,
-  each anchored to a line of source that must match exactly once, each expected to be caught or
-  recorded as an equivalent with its proof. `mutate.py --check` runs in CI; the run itself works
-  through the portable runner on Linux (`--runner portable`). **The floor (M6-0-g)**: `mutants.json`
-  names fourteen `.cpp` files that must each carry a mutant the suite catches -- the arithmetic
-  kernel and the generator, the flight model (`ShipMove`, `Spawn`, `Flight`, `FlightLoop`,
-  `Tactics`), the drawing that composes (`PlanetDraw`, `ShipDraw`, `Canvas`, `Raster`) and the
-  three state machines with their own rows (`Hyperspace`, `Missions`, `Trumbles`) -- because in
-  each of them a slip is invisible to every per-routine comparison except the one on that file.
-  `mutate.py --check` refuses a floor file whose only mutants are survivors or equivalents. A
-  ported file that composes what these do (`GameLoop`, `Controls`, `Docking`, the screens) is
-  covered by the whole-frame comparisons and the replay and is not on the floor; the floor grows
-  when a file joins that list, never shrinks.
+- **The mutants**: <!--count:mutants-->8 recorded edits in <!--count:mutant-files-->four files,
+  each anchored to a line of source that must match exactly once and each expected to be caught.
+  `mutate.py --check` runs in CI; the run itself works through the portable runner on Linux
+  (`--runner portable`), and 8 of 8 are caught. **The floor (M6-0-g) is three files and was
+  fourteen** -- `Canvas`, `Raster` and `ShipDraw` -- each of which must carry a mutant the suite
+  catches. **THE FLOOR SHRANK, WHICH IT WAS WRITTEN NEVER TO DO** (M6-b-8, 2026-09-09): the corpus
+  measured the 337 comparisons against the original, M6-b-5 deleted those, and by owner ruling
+  eighty-nine of the ninety-seven mutants were deleted rather than kept as expected survivors.
+  Eleven files left the floor because nothing can meet it for them. What the corpus still says
+  anything about is the raster split, the canvas blit, the explosion cloud's seeding and the
+  `Game` object; ADR-009 §4 carries the rest.
 
 What nothing pins: the presenter (R5, by design) and timing (ADR-005 §3, by design). The things
 M6-0 named — a whole frame with an explosion in it, the escape pod and the death sequence in
@@ -1717,6 +1715,53 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-09 — M6-b-8: the mutation corpus, 97 mutants to 8. Owner ruling, and a rotted selftest.**
+
+The corpus measured the 337 comparisons against the original. M6-b-5 deleted those, so most of it
+was measuring nothing. The owner was given four options — measure and re-expect, delete what is
+dead, write tests to re-anchor, or leave it — and ruled **delete**, so that what remains is a gate
+and not a list of known gaps.
+
+**IT TOOK TWO STEPS AND THE SECOND FOUND SOMETHING THE FIRST COULD NOT.** Eight units lost every
+`TEST_CLASS` their filters named — `tactics`, `hyperspace`, `trumbles`, `missions`, `rng`, `arith`,
+`planetdraw`, `spawn` — which is 71 mutants and needs no run to establish. **The substring filter
+had said six units and 56 mutants**; matching the class names exactly said eight and 71, and the
+difference is `trumbles` and `planetdraw`, whose filters (`TheTrumbles`, `ThePlanet`, `TheSun`)
+still matched other suites' method names. The tripwire on selection exists because filters lie, and
+it lied again here.
+
+**Then the five remaining units were RUN, because a unit whose filter still selects tests is not
+the same as a unit those tests can still see.** 18 of the 26 survived. `shipmove` and `flight` had
+not one caught mutant left and went whole; `raster` kept five of nine, `cloud-seed` one of seven,
+`game` both. Eight mutants in four files remain and a re-run has all eight caught.
+
+**THE FINDING IS THE SELFTEST, and it is worth more than the tally.** Every unit carries one
+unmissable mutant whose survival means the harness is broken rather than the code — `OracleIsPresent`
+for the mutation runner. `ra-selftest` zeroed `nextRasterLine`, chosen because the comparison
+against the original read that register on every one of 256 passes. No surviving test reads it at
+all. So the first run stopped on mutant 1 of 26 reporting R13 realised, which is exactly what it is
+built to do and exactly the wrong diagnosis: the harness was fine and the anchor had rotted. Four
+of the five selftests had. **A selftest is only unmissable relative to the tests that exist**, and
+nothing in `mutate.py --check` says so — it checks that every unit HAS one, not that it still
+means anything. The corpus could not be measured at all until the flags were lifted for one pass.
+`raster`'s is `ra-alternate` now (`innersec` is the only thing that moves `RASTCT`, and
+`TheSplitAlternates` asserts two passes return it), and `cloud-seed`'s is its only remaining mutant.
+
+**The floor went from fourteen files to three** — `Canvas`, `Raster`, `ShipDraw` — the first time
+it has shrunk, and it was written never to. One recorded EQUIVALENT went with its unit
+(`sm-mltu2-carry`, whose proof was that `MLTU2`'s carry into the middle byte is always clear
+there); the proof is in the history and is not re-derivable from what is left.
+
+**And a tools audit, asked for while this ran.** Nothing in `tools/` is obsolete as a tool: all
+eleven scripts still do a job and `bitmaps.py`'s self-test round-trips all four sheets. Four
+carried prose naming things that are gone — `extract_tables.py`, `inventory.py`, `Upstream/`,
+`Design/Reference/*.txt` — and `bitmaps.py` told a reader to run `extract_tables.py --pictures` to
+put a picture back, which is a command that no longer exists and the one stale line that could
+actually cost somebody an afternoon. **One tracked file WAS obsolete**: `tools/DASHBOARD_IMAGE.bmp`,
+a working export committed by accident in "Render bug fixed. It works now", read by nothing and
+reproducible in a second with `bitmaps.py export`. Deleted, and `tools/*.bmp` is ignored now.
+
 
 **2026-09-08 — M6-g: ADR-009, and M6 closes.**
 

@@ -379,6 +379,11 @@ build/
 captures/
 *.replay
 
+# What `tools/bitmaps.py export` writes: a sheet of an array the tree already holds, for a paint
+# program to open. `tools/DASHBOARD_IMAGE.bmp` was committed by accident and removed at M6-b-8;
+# `export` puts any of them back in a second.
+tools/*.bmp
+
 # ---------------------------------------------------------------------------
 # THE UPSTREAM RULES WERE HERE AND ARE NOT ANY MORE (Modernize.md M6-f).
 #
