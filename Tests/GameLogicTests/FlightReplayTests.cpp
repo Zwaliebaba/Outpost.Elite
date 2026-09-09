@@ -204,6 +204,18 @@ namespace GameLogicTests
     /// How long a ramming is given before the script gives up on the planet.
     constexpr std::uint32_t RAMMING_LIMIT = 3000;
 
+    /*
+     * The picture's own record, one entry per checkpoint of the scripted flight -- see
+     * `ThePictureIsAsRecorded`. Recorded 2026-09-09 on the tree as RN-0 found it, by running the
+     * flight and printing what it drew; every value here came out of the port and none was chosen.
+     */
+    constexpr std::uint64_t RECORDED_PICTURE[] = {
+      0xDCFA8C65CCB1CEACull, 0xAAFD70C67DFABF0Full, 0xEA56D42A32E51CD7ull, 0x015A06C177737503ull,
+      0xE821E6604E3CF8EEull, 0xC2BEDF3AB25D91E4ull, 0x596B0A3997B19656ull, 0x9EBD54B99ADBEDA8ull,
+      0x1E2143C755120AC6ull, 0xFD1F2BA5FFF4B690ull, 0xF837D8E84327CD22ull, 0x94729D971173D01Aull,
+      0xA302EF23E2247B98ull, 0xD1151AC33278ABD6ull, 0xA788104F5F517874ull, 0x0A1B2189DFA7975Dull,
+    };
+
     struct Trace
     {
       std::vector<Checkpoint> checkpoints;
@@ -211,6 +223,22 @@ namespace GameLogicTests
       Elite::LoopOutcome outcome = Elite::LoopOutcome::Continued;
       bool viperCreated = false;
       std::uint32_t deathFrames = 0; ///< how many frames `DEATH` showed, zero unless the flight died
+
+      /*
+       * What the 640x400 surface RESOLVED TO at each of the checkpoints above (Rendering.md RN-0).
+       *
+       * The digests beside it are the game's; this one is the picture's, and the two answer
+       * different questions. `HashState` walks past the picture on purpose (ADR-008 §4), so the
+       * replay tables cannot see a change to what a person is shown -- which was fine while the
+       * picture was only ever drawn, and stops being fine the moment a slice reorganises WHEN it is
+       * drawn. RN-0 and RN-1 do exactly that, and Rendering.md's risk RN-a is that a region nobody
+       * noticed was persistent blanks afterwards with no test looking at it.
+       *
+       * So this is that test. It is filled on every flight and asserted by one
+       * (`ThePictureIsAsRecorded`); the other three ignore it, because a state digest that moved
+       * would fail them first and a picture digest is the harder thing to read.
+       */
+      std::vector<std::uint64_t> pictures;
     };
 
     /// How a scripted flight ends (M6-0-b): the docking computer, the planet, or the escape pod.
@@ -272,7 +300,10 @@ namespace GameLogicTests
     {
       Trace trace;
       std::uint32_t step = 0;
-      auto checkpoint = [&]() { trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()}); };
+      auto checkpoint = [&]() {
+        trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()});
+        trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas));
+      };
 
       Prepare(_port);
       if (_ending == Ending::Escaped)
@@ -508,6 +539,62 @@ namespace GameLogicTests
       Assert::IsTrue(trace.outcome == Elite::LoopOutcome::Escaped, (L"the pod was not pulled:" + Describe(trace, L"RECORDED_ESCAPE")).c_str());
       AssertAsRecorded(trace, RECORDED_ESCAPE, sizeof(RECORDED_ESCAPE) / sizeof(RECORDED_ESCAPE[0]), RECORDED_ESCAPE_STEPS,
                        Elite::LoopOutcome::Escaped, L"RECORDED_ESCAPE");
+    }
+
+    /*
+     * WHAT A PERSON IS SHOWN, digested at every checkpoint of the scripted flight
+     * (Design/Rendering.md RN-0, the gate its slice table asks for).
+     *
+     * THE REPLAY TABLES ABOVE CANNOT SEE THE PICTURE. `HashState` walks past it deliberately
+     * (ADR-008 §4) so that improving the rendering does not re-record five tables of game state --
+     * a decision that is right and that leaves the 640x400 surface with no whole-frame regression
+     * test at all. Every other test of it is per routine: a glyph at a cell, a bar at a value, a
+     * line swept over its inputs. Nothing until now asserted a WHOLE FRAME of it, let alone a
+     * hundred frames of a real flight.
+     *
+     * That gap is exactly what RN-0 and RN-1 walk into. They do not change what is drawn; they
+     * change WHEN, moving the persistent regions onto a second surface and clearing the frame each
+     * pass. Rendering.md's risk RN-a names the failure: a region nobody noticed was persistent
+     * blanks afterwards, and it looks like nothing at all until somebody launches the game.
+     *
+     * So the numbers below are a BEFORE, recorded on the tree as it stood when RN-0 opened, and the
+     * slice's acceptance is that they do not move. They are not fidelity -- no oracle ever saw this
+     * surface (ADR-008 §3) -- they are identity across a refactor, which is the only thing a
+     * picture digest can be.
+     */
+    TEST_METHOD(ThePictureIsAsRecorded)
+    {
+      auto port = std::make_unique<FlightPort>();
+      const Trace trace = Fly(*port);
+
+      // The table, printed on every run so that re-recording is a copy rather than a transcription.
+      {
+        std::wstringstream table;
+        table << L"RECORDED_PICTURE[] = {";
+        for (const std::uint64_t digest : trace.pictures)
+        {
+          table << L"0x" << std::hex << std::uppercase << digest << L"ull, ";
+        }
+        table << L"};\n";
+        Logger::WriteMessage(table.str().c_str());
+      }
+
+      Assert::AreEqual(sizeof(RECORDED_PICTURE) / sizeof(RECORDED_PICTURE[0]), trace.pictures.size(),
+                       L"the flight took a different number of checkpoints, so the picture table cannot line up");
+
+      for (std::size_t at = 0; at < trace.pictures.size(); ++at)
+      {
+        if (trace.pictures[at] != RECORDED_PICTURE[at])
+        {
+          std::wstringstream message;
+          message << L"the picture changed at checkpoint " << at << L" (step " << trace.checkpoints[at].step << L"): recorded 0x"
+                  << std::hex << std::uppercase << RECORDED_PICTURE[at] << L", drew 0x" << trace.pictures[at]
+                  << L". Nothing about the GAME moved -- the state digests are asserted separately and pass -- so this is what a"
+                  << L" person is shown changing. If a slice meant to change it, re-record with the reason in the journal"
+                  << L" (Rendering.md RN-0).";
+          Assert::Fail(message.str().c_str());
+        }
+      }
     }
 
     /*

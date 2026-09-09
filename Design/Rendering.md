@@ -647,3 +647,71 @@ placement is now a review rule; all forty-nine wrap the whole of their twin's wo
 ADR-008 §3's clause stands again with the history of its falsehood beside it, Resolution.md §8.4 is
 BUILT and R26 is CLOSED. The finding was reported to the owner on the day it was found rather than
 folded silently into a slice, and repaired on the next instruction.
+
+---
+
+## 12. RN-0 begun, 2026-09-09 — the gate first
+
+**Built: the gate. Not yet built: the split.** RN-0's acceptance is "the picture identical to
+today's, frame for frame, on a recorded flight", and on 2026-09-09 that instrument did not exist —
+so it was built before the change rather than after it, which is the order risk RN-a demands.
+
+### 12.1 `ThePictureIsAsRecorded`
+
+`Trace` gains a `pictures` vector and the replay's checkpoint lambda fills it with
+`Picture::Hash(canvas)` — what the surface RESOLVES to, so it is what a person would be shown and
+not an internal representation. Sixteen checkpoints over the scripted flight, recorded as
+`RECORDED_PICTURE` on the tree as RN-0 found it.
+
+**This is the first whole-frame regression test the 640×400 surface has ever had.** Everything else
+about it is per routine: a glyph at a cell, a bar at a value, a line swept over its inputs
+(ADR-008 §3). Nothing asserted a whole frame, let alone a hundred frames of a real flight — and the
+replay tables could not, because `HashState` walks past the picture on purpose (ADR-008 §4). That
+exclusion is right and it left precisely the hole RN-0 and RN-1 would fall into: they do not change
+*what* is drawn, only *when*, and a state digest cannot see that.
+
+### 12.2 The docked screens are NOT covered, and the reason is a fixture
+
+An attempt to gate them the same way failed and is recorded rather than retried:
+**`DockedSessionTests`' `Session` cannot see the picture at all.** It prints through a
+`TranscriptSink` and never calls `TextPrinter::AttachPicture` — only `Game` and `PictureTextTests`
+do — so all seven docked screens digest to the same value, which is whatever the start sequence
+left. A gate there needs a fixture of the `PictureTextTests` kind, and that is RN-1's to build.
+
+What covers them meanwhile is ADR-008 §3 clause 1: the shadow tests assert every glyph the canvas
+has appears at the mapped wide cell, which would catch a blanked docked screen. That is real cover,
+and it is per cell rather than per frame.
+
+### 12.3 The sites, classified — what RN-0 has left to do
+
+Seventy-four sites reach a picture through the universe. They divide into two kinds and the division
+is the whole of the remaining work, because §4.5's two surfaces only help if each site is on the
+right one.
+
+**Transient — redrawn every flight pass, and therefore the FRAME's:** `DrawShip`,
+`DrawShipAsPoint`, `DrawExplosionCloud` and `DrawPlanetOrSun` (`ShipDraw.cpp` ×4); `MoveShipTail`
+(`ShipMove.cpp` ×3); `MoveStardust`, `EraseSun`, `DrawScannerBlip`, the laser's two
+(`FlightLoop.cpp` ×5); `DrawDials` (`GameLoop.cpp`).
+
+**Persistent — drawn once and expected to survive, and therefore the BACKDROP's:** every
+`ShowMessage` (×8, which live for a `DLY` countdown of about twenty frames); `ClearMessageRows`
+(×5); the indicators — `SetMissileIndicator`, `ToggleStationIndicator`, `StartEcm`, `StopEcm`,
+`ResetMissileIndicators` (×9); all of `Charts.cpp` (×11); `SetUpScreenPixels`, `DrawFullBorder`,
+`SetUpLoaderScreen`, the crosshairs and `Launch` (×9).
+
+**And three that need a ruling rather than a classification**, which is why RN-0 is not finished
+here:
+
+- **`SeedStardustField` / `SeedStardustAndClearShips` / `FlipStardust`.** The field is transient and
+  `MoveStardust` re-emits every particle each pass, so the seed looks like the frame's — but it also
+  runs at a launch and a hyperspace, where there is no next pass yet.
+- **`DrawHyperspaceRings`.** It presents inside its own loop, so it is an animation that already
+  owns a frame boundary of its own; whether it becomes eight frames or stays one is a design
+  decision this document has not taken.
+- **`ClearAllShips`.** Under RN-1 the restore removes the ships and the erase becomes a drop — but
+  it is also called from a view change, where there may be no restore before the next present.
+
+**What this means for the estimate.** §6 called RN-0 the plumbing and RN-1 the boundary. Building
+the gate showed the split is the dear half and the boundary the cheap one: the two surfaces are a
+`memcpy` and two call sites, and deciding which of seventy-four writes goes where is the slice.
+That is not a reason to stop — it is the reason the gate went in first.
