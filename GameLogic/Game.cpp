@@ -9,6 +9,7 @@
 #include "Docking.h"
 #include "Equipment.h"
 #include "Flight.h"
+#include "Frame.h"
 #include "Galaxy.h"
 #include "GameLoop.h"
 #include "LoaderScreen.h"
@@ -86,6 +87,11 @@ namespace Elite
       ++ships;
     }
     return ships;
+  }
+
+  void Game::EndFrame() noexcept
+  {
+    Elite::EndFrame(&m_universe.picture);
   }
 
   void Game::Reset() noexcept

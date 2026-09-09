@@ -2,6 +2,7 @@
 
 #include "Equipment.h"
 
+#include "Frame.h"
 #include "TextPrint2x.h"
 
 #include "Dashboard.h"
@@ -294,7 +295,7 @@ namespace Elite
       {
         PrintThenQuestion(_ports.printer, CASH_TOKEN);
         (void)Beep(_universe.sound, false);
-        _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+        WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
         return;
       }
 
@@ -461,7 +462,7 @@ namespace Elite
         _ports.printer.Print(PRESENT_TOKEN);
         // A beep, then fifty frames of `DELAY`
         (void)Beep(_universe.sound, false);
-        _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+        WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
         return;
       }
 
@@ -469,7 +470,7 @@ namespace Elite
       PrintSpace(_ports.printer);
       PrintThenSpace(_ports.printer, CASH_LINE_TOKEN);
       (void)Beep(_universe.sound, false);
-      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+      WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
     }
   }
 

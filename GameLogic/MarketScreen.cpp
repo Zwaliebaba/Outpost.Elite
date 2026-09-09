@@ -2,6 +2,7 @@
 
 #include "MarketScreen.h"
 
+#include "Frame.h"
 #include "TextPrint2x.h"
 
 #include "EliteTypes.h"
@@ -95,7 +96,7 @@ namespace Elite
       PrintSpace(_ports.printer);
       PrintThenSpace(_ports.printer, CASH_LINE_TOKEN);
       (void)Beep(_universe.sound, false);
-      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+      WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
     }
 
     /*
@@ -109,7 +110,7 @@ namespace Elite
       PrintSpace(_ports.printer);
       PrintThenQuestion(_ports.printer, _token);
       (void)Beep(_universe.sound, false);
-      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+      WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
     }
   } // namespace
 
@@ -330,7 +331,7 @@ namespace Elite
           PrintNewline(_ports.printer);
           PrintThenQuestion(_ports.printer, ITEM_TOKEN);
           (void)Beep(_universe.sound, false);
-          _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+          WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
           continue;
         }
 
@@ -374,7 +375,7 @@ namespace Elite
     {
       // A beep, then fifty frames of `DELAY`
       (void)Beep(_universe.sound, false);
-      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
+      WaitFrames(_ports.present, &_universe.picture, BEEP_PAUSE_FRAMES);
       return;
     }
 

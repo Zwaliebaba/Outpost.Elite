@@ -6,6 +6,7 @@
 #include "Commander.h"
 #include "DockedKeys.h"
 #include "Flight.h"
+#include "Frame.h"
 #include "FlightLoop.h"
 #include "Galaxy.h"
 #include "ShipSlot.h"
@@ -322,9 +323,18 @@ namespace GameLogicTests
     {
       Trace trace;
       std::uint32_t step = 0;
+      /*
+       * The digest is taken BEFORE the frame ends, and then the frame ends (RN-1, `Frame.h`).
+       *
+       * The order is the whole of what this records. A checkpoint has to hash the frame AS
+       * PRESENTED -- what a person would have seen -- and the boundary comes after that, so the
+       * next pass draws onto an empty frame exactly as it does in the executable's loop. Taking
+       * the digest after the clear would record a blank frame every time and pass for ever.
+       */
       auto checkpoint = [&]() {
         trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()});
         trace.pictures.push_back(_port.universe.picture.Hash(_port.universe.canvas, _port.universe.backdrop));
+        Elite::EndFrame(&_port.universe.picture);
       };
 
       Prepare(_port);

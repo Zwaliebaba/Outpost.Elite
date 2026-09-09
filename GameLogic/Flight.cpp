@@ -2,6 +2,7 @@
 
 #include "Flight.h"
 
+#include "Frame.h"
 #include "Scanner.h"
 
 #include "Combat.h"
@@ -242,7 +243,7 @@ namespace Elite
     (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false);
 
     // One vertical sync of `DELAY`, which is what the pacing object holds for.
-    _ports.present.Present();
+    PresentFrame(_ports.present, &_universe.picture);
 
     (void)PlaySoundEffect(_universe.sound, SoundEffect::HyperspaceAgain, false);
 
@@ -424,7 +425,7 @@ namespace Elite
       DrawShip(_universe, _universe.bubble.blocks[slot], false);
 
       // RDKEY, and then the counter steps down.
-      _ports.present.HoldTitleFrame(_universe.work.z.hi); // TLL2's pace
+      HoldTitleFrame(_ports.present, &_universe.picture, _universe.work.z.hi); // TLL2's pace
       const TitleKey scan = ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
 
@@ -597,7 +598,7 @@ namespace Elite
         }
         ++ships;
       }
-      _ports.present.HoldFlightFrame(ships);
+      HoldFlightFrame(_ports.present, &_universe.picture, ships);
     };
 
     (void)MainFlightLoop(_universe, _ports);

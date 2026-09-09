@@ -2,6 +2,7 @@
 
 #include "Missions.h"
 
+#include "Frame.h"
 #include "TextPrint2x.h"
 
 #include "EliteTypes.h"
@@ -66,7 +67,7 @@ namespace Elite
     (void)MoveShip(_universe, _ports);
 
     // RDKEY as a tail call, so what `PAS1` returns is what `RDKEY` returns.
-    _ports.present.HoldTitleFrame(_universe.work.z.hi); // TLL2's pace
+    HoldTitleFrame(_ports.present, &_universe.picture, _universe.work.z.hi); // TLL2's pace
     return ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
   }
 
@@ -107,7 +108,7 @@ namespace Elite
     for (;;)
     {
       // Round again while a key is held.
-      _ports.present.HoldTitleFrame(_universe.work.z.hi); // TLL2's pace
+      HoldTitleFrame(_ports.present, &_universe.picture, _universe.work.z.hi); // TLL2's pace
       if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)
       {
         continue;
@@ -120,7 +121,7 @@ namespace Elite
        * check for a release it has already had. Written as two scans in a loop rather than as a
        * do-while, because that is the shape: the first scan is reached again on every failure.
        */
-      _ports.present.HoldTitleFrame(_universe.work.z.hi); // TLL2's pace
+      HoldTitleFrame(_ports.present, &_universe.picture, _universe.work.z.hi); // TLL2's pace
       if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)
       {
         return; // .newyearseve RTS
@@ -134,7 +135,7 @@ namespace Elite
     _ports.tokens.Print(INCOMING_MESSAGE_TOKEN);
 
     // A hundred frames of `DELAY`, as a tail call.
-    _ports.present.WaitFrames(INCOMING_MESSAGE_FRAMES);
+    WaitFrames(_ports.present, &_universe.picture, INCOMING_MESSAGE_FRAMES);
   }
 
   void PrintMissionToken(ExtendedTokenPrinter& _tokens, std::uint8_t _base, std::uint8_t _galaxy) noexcept

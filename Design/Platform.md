@@ -577,7 +577,7 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 
 | Slice | What | Gate | Ratchets and checks | Sittings |
 |---|---|---|---|---|
-| **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->257) falls; ADR-005 §3 | 2 |
+| **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->258) falls; ADR-005 §3 | 2 |
 | **T-3** ✅ **built 2026-09-09 (§10)** | §3.7: the waitable object, latency one, **resolve**-on-change over `Picture::ResolveSignature` (not present-on-change — see §3.7 and §10), occlusion idle | The picture's own goldens unchanged; the signature's own test; **owner's, outstanding**: PresentMon before and after on a scripted key, and CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** Finish the split | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
 | **RN-1** The frame boundary | `Picture::Clear` finally called — the frame refreshed from the backdrop at every present; erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
@@ -994,6 +994,34 @@ them. What it does check is every ASSIGNMENT that used to wipe out another site'
 assignment resets only its own surface's accumulator. That is where all four corrections above came
 from, and it is the whole of RN-a's failure mode. The classification of the pure exclusive-or sites
 rests on the argument, not on the tables, until RN-1 clears the frame and makes it visible.
+
+**2026-09-09 — RN-1, first commit: the boundary exists and clears nothing.** `GameLogic/Frame.h`
+wraps the four ways the game waits and ends the frame afterwards; nineteen call sites go through it;
+`Game::EndFrame` gives the two loops outside the library the same boundary — `Main.cpp` after the
+turn that presented, and the replay driver after each checkpoint. `CLEAR_THE_FRAME` is false, so
+this is `if constexpr` around nothing and **151 tests, 13 checks and every digest prove the plumbing
+alone**. The clear arrives in the next commit together with the six erase twins it replaces, because
+those two are only equal to each other and neither is a no-op by itself.
+
+**Nineteen sites, not the sixteen the plan counted**, and the difference is exactly the three with
+no `Universe&` in scope: `ReadLine`'s settle pause, `DrawHyperspaceRing`, and `PrintCashLeft`'s beep
+— which does have one and was missed. So the wrappers take the PRESENTER AND THE FRAME rather than a
+universe. That is not only for the three: after RN-0 a site's `Picture*` may be either surface, and
+a wrapper that assumed would clear the backdrop on every docked screen. The ring passes its own
+frame, and `ReadLine` passes null and says why, which is a docked prompt with nothing of it on the
+frame.
+
+**The checkpoint hashes before the boundary, not after.** The order is the whole of what the replay
+records: a checkpoint is what a person would have seen, and the clear follows it so the next pass
+draws onto an empty frame exactly as the executable's loop does. Reversed, it would record a blank
+frame every time and pass for ever.
+
+**`main-lines` 257 → 258, raised by one, and the alternative was considered and rejected.** The one
+line is the boundary in the composition root. It cannot move into `GameShell::Turn`, which looks
+like its natural home: `Turn` is also the present inside a `DELAY`, so clearing there would blank a
+held picture for the other forty-nine frames of fifty. That is also why the boundary is at the four
+WAITS and not at every present. T-1's raise was repaired by finding the reasoning written twice;
+this one has no second copy to delete.
 
 ---
 

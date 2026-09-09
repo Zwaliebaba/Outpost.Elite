@@ -3,6 +3,7 @@
 #include "Docking.h"
 
 #include "Flight.h"
+#include "Frame.h"
 
 /*
  * Docking at the station (slice 2e).
@@ -181,7 +182,7 @@ namespace Elite
     _universe.status.energy = 0xFF;
 
     // Forty-four frames of nothing.
-    _ports.present.WaitFrames(DOCKING_PAUSE_FRAMES);
+    WaitFrames(_ports.present, &_universe.picture, DOCKING_PAUSE_FRAMES);
 
     DockingResult result{};
     result.outcome = MissionOnDocking(_universe.commander);

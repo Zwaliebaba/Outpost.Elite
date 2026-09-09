@@ -4,6 +4,7 @@
 
 #include "EliteTypes.h"
 #include "FlightLoop.h" // for the KY12..KY20 offsets `RDKEY`'s `QQ11` tail clears
+#include "Frame.h"
 #include "LookupTables.h"
 #include "Ports.h"
 #include "Tactics.h" // for DOCKIT, which `DOKEY`'s autopilot path calls (M6-0-h-3)
@@ -162,7 +163,7 @@ namespace Elite
     for (;;)
     {
       // Two frames of `DELAY`, the debounce.
-      _ports.present.WaitFrames(TT217_DEBOUNCE_FRAMES);
+      WaitFrames(_ports.present, &_universe.picture, TT217_DEBOUNCE_FRAMES);
 
       // Back to t -- a key already down when the prompt appeared is not the answer.
       if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).pressed)
@@ -179,7 +180,7 @@ namespace Elite
           // Through `TRANTABLE` to the character, which is what every caller compares against.
           return KEY_TRANSLATION[scan.key];
         }
-        _ports.present.Present(); // the port's: the matrix is the window's table, and a present is what fills it
+        PresentFrame(_ports.present, &_universe.picture); // the port's: the matrix is the window's table, and a present is what fills it
       }
     }
   }

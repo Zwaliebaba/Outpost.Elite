@@ -64,6 +64,16 @@ namespace Elite
     void Reset() noexcept;
 
     /*
+     * END THE FRAME: the boundary, over this object's own universe (RN-1, `Frame.h`).
+     *
+     * The four waits inside the library end their own frames. What is left is the loop OUTSIDE it:
+     * `Main.cpp` presents for itself after `Step`, and the replay driver checkpoints after each
+     * step and must hash the frame AS PRESENTED rather than the one after. Both call this, so both
+     * see the same boundary the library's own waits do.
+     */
+    void EndFrame() noexcept;
+
+    /*
      * One pass of the flight half, with the key the window had (zero for none).
      *
      * Answers whether the caller may step again. False is `M%` leaving the flight half or the

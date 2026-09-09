@@ -3,6 +3,7 @@
 #include "NameEntry.h"
 
 #include "Controls.h"
+#include "Frame.h"
 
 /*
  * The line editor and the commander's name (slice 2d).
@@ -45,7 +46,7 @@ namespace Elite
     _text.palette = TEXT_COLOUR_PURPLE; // TextPrint.h's, not a second copy (slice 5a-8)
 
     // Settle for eight frames, then throw away anything already buffered.
-    _present.WaitFrames(SETTLE_FRAMES);
+    WaitFrames(_present, nullptr, SETTLE_FRAMES); // a docked prompt: nothing of this is on the frame
     _keys.Flush();
 
     LineResult result{};

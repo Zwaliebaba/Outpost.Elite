@@ -186,6 +186,7 @@ namespace
 
     while (app->shell.Turn())
     {
+      app->game.EndFrame(); // the frame `Turn` just presented is over (`Frame.h`)
       // FRCE's question about `QQ12` -- ONE question since M4-d, and TWO answers since
       // InputTimer.md I-0 took `FREEZE`'s third with the pause screen (owner ruling 2026-09-08).
       const Elite::Game::Mode mode = app->game.ModeNow();
