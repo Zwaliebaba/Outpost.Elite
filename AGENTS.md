@@ -432,3 +432,11 @@ the test result file. Do not add an upload that changes that.
 - [ ] `tools/check_docs.py` runs.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
 - [ ] Tests for the layer you touched were run, and you said which.
+
+The pull request body is [`.github/pull_request_template.md`](.github/pull_request_template.md),
+which GitHub fills in for you. It does not repeat this list — run this list — and it asks for the
+two things a diff cannot say: what you built differently from `Design/` and where you amended it,
+and what neither CI leg can see. The Ubuntu leg compiles only the five `Outpost/` files
+`EXECUTABLE_SOURCES` names, so a change to the window, the presenter, the shell, the composition
+root or the sound has the Windows job as its only witness that it builds, and no witness at all to
+what it looks like.
