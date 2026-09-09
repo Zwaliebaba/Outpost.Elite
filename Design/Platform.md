@@ -1,6 +1,8 @@
 # Platform — rendering, input and time as one frame
 
-**Status:** design, opened 2026-09-09 against `f50775b`; **nothing in it is built.** It replaces
+**Status:** design, opened 2026-09-09 against `f50775b`; **nothing in it is built. Its four decisions
+and four more on the ADRs were RULED the same day** — §12 has the eight outcomes, and every ADR they
+touch carries its amendment. It replaces
 [Archive/Rendering.md](Archive/Rendering.md) and [Archive/InputTimer.md](Archive/InputTimer.md),
 two plans for one layer written a day apart with a seam between them that the program does not
 have: the frame boundary the first wants *is* the vertical blank the second wants, the coroutine
@@ -43,11 +45,12 @@ three delays, and they have different owners:
 | Delay | What it is today (`f50775b`, 60 Hz panel) | Who owns it | Can it move without a visible change? |
 |---|---|---|---|
 | **Pipeline** — from the OS message to the photons | The window is pumped once a turn and a turn ends in `Present(1, 0)` on a two-buffer flip chain with the default queue depth, so a frame can sit one to three refreshes behind the step that drew it: 17 to 50 ms (§2.3) | The executable | **Yes.** A latency-waitable swap chain with a queue depth of one, the keyboard sampled immediately before the step it feeds, and the present immediately after: about one refresh, measured rather than argued (§3.7, T-3) |
-| **Sampling** — how often the game looks at the keys | Once per flight step, and a flight step is paced at what the 6510 took: 47 ms empty, 147 ms with three fighters, 290 ms with eight (`Presentation.h`'s table, InputTimer.md T-0). Docked, once per two vertical syncs | The cost model, which is fidelity | **Only as an option.** The step rate is the game's feel — the turn rates and the fight are tuned per step — and ADR-001 §4 says an option is off by default. §4 D3 is the knob; one integer in the scheduler |
+| **Sampling** — how often the game looks at the keys | Once per flight step, and a flight step is paced at what the 6510 took: 47 ms empty, 147 ms with three fighters, 290 ms with eight (`Presentation.h`'s table, InputTimer.md T-0). Docked, once per two vertical syncs | The cost model, which is fidelity | **Only by changing the game logic, which is ruled (§4 D3).** The step rate is the game's feel — the turn rates and the fight are tuned per step — so a knob that scaled it was declined; the ruling is a fixed-rate flight model as its own track after RN-6, with the faithful cadence selectable under ADR-001 §4. What this track does inside the row is accumulate input events into the frame, so a tap between steps is never lost (§3.3) |
 | **Stalls** — a hang, a burst, a starve | A title-bar drag stops the pump and starves the audio in 67 ms; a breakpoint or a lid produces four steps in a burst; a hidden window spins; closing a docked game is `ExitProcess` | The executable | **Yes.** One loop, one clock, a time-clamped backlog, an audio thread and auto-pause (§3.2, §3.6) |
 
-So the design spends freely on the first and third rows and asks before touching the second, and
-every slice's gate is pixel identity against the picture the tree already draws.
+So the design spends freely on the first and third rows, touches the second only where no step
+changes (event accumulation) and leaves its rate to the ruled track; every slice's gate is pixel
+identity against the picture the tree already draws.
 
 **The `2x` files are not old copies, and neither set can go.** `Dashboard2x.cpp`, `Lines2x.cpp`,
 `ShipDraw2x.cpp` and `TextPrint2x.cpp` (245, 292, 33 and 106 lines; `wc -l` on `f50775b`) hold the
@@ -271,7 +274,7 @@ class Scheduler
 {
 public:
   [[nodiscard]] Budget Advance(std::int64_t _elapsedCycles, bool _active, Cost _cost) noexcept;
-  void SetSpeedPercent(std::uint16_t _percent) noexcept;   // 100 is the machine (§4 D3)
+  // No speed knob (§4 D3, declined): the step cost is the one number the fixed-rate track replaces
 };
 ```
 
@@ -293,9 +296,10 @@ Rules, and each replaces one of §2.1's four clocks or one of InputTimer.md's th
   the elapsed cycles rather than banking them; on activation the game resumes on a whole step where
   it was. This is what a windowed player means by pause (InputTimer.md §5.9 item 2), it needs no
   key, and it closes the "Alt+Tab for a minute and come back to a teleport" case.
-- **The speed knob is one integer.** `SetSpeedPercent(p)` scales the step cost by `100/p`. At 100 it
-  is the machine; anything else is ADR-001 §4's option, off by default, and §4 D3 is whether it is
-  exposed in `Settings.txt` at all.
+- **No speed knob, by ruling (§4 D3).** The step cost is the cost model's and nothing scales it.
+  What the ruling gives instead is the hook: the fixed-rate flight model that follows RN-6 charges
+  one blank per step where this charges `FLIGHT_FRAME_COSTS(ships)`, and the scheduler does not
+  otherwise change.
 - **The sound interrupt runs once per blank the budget delivers**, on this thread, into a log the
   audio thread renders (§3.6). It is the fourth clock of §2.1 folded into the first.
 
@@ -344,8 +348,14 @@ namespace Elite
   so I-2's second commit is a phase-6-class change by the corpus's own words and lands with the
   §4 amendment, not ahead of it; and every layer keeps §4's standing rule that a key the game's own
   text names is never left bound to nothing — the TextEntry layer names every position that types.
-- **Late latch.** `Sample()` runs after the pump and immediately before `Advance`, so a step reads
-  the keys as they are at the moment it runs rather than as they were when the turn began.
+- **Late latch, and a tap is never lost.** `Sample()` runs after the pump and immediately before
+  `Advance`, so a step reads the keys as they are at the moment it runs rather than as they were when
+  the turn began — and it *accumulates*: a key that went down at any point since the last sample is
+  reported held for that one step. At 147 to 290 ms between flight steps a pure sample loses a tap of
+  fire, a view key or hyperspace; the C64 scanned once a frame and lost it too, so this is the one
+  reactivity gain in flight that changes what no step computes. The replay's scripted keys span
+  steps, so no record moves; the rule is Quake's `kb.msec` without the fraction, and it is what the
+  owner's question of 2026-09-09 about event-driven input turned out to be asking for (§12).
 - **A gamepad is a column, later.** XInput (in the pre-approved SDK; Xbox-shaped pads only, which
   is the honest limit) fills `held` for `KY3` to `KY7`, the views and fire, and answers
   `HasJoystick`, at which point `TITLE`'s fire test selects the stick exactly as `dojoystick` did
@@ -460,7 +470,7 @@ against a test the tree has never had.
   as amended at slice 5a chose the device's queue depth as the interrupt's clock "because the device
   consumes samples at exactly the rate they are rendered for". That reasoning was about the *chip*
   and still holds for it — the audio thread renders at the device's rate — and was silent about the
-  *state* the interrupt mutates. §7 records it as a reversal with the ruling it needs.
+  *state* the interrupt mutates. **Ruled 2026-09-09 (§12 R1)**: reversed, and ADR-005 §2 carries it.
 - **The chip renders on the XAudio2 callback thread** from a ring of logs the game thread publishes
   (one atomic index, no lock). An empty ring — a title-bar drag, a breakpoint — renders the chip
   forward with no new writes, which is what a 6581 does when the CPU is busy: it holds its
@@ -527,20 +537,22 @@ Every slice runs `python tools/check_all.py` and the suite, and lands through th
 
 ---
 
-## 4. Decisions for the owner
+## 4. Decisions for the owner — RULED 2026-09-09
 
-Four. The track proceeds on the default until ruled, and the default is the recommendation.
+Four were asked and all four were ruled the day the document opened, three as recommended and one
+differently (§12 has the exchange). The rows keep the question and the recommendation as they were
+put, with the ruling against each, because the alternative that was rejected is part of the record.
 
-| # | Question | Recommendation, and the default assumed |
+| # | Question | Recommendation as put, and the RULING |
 |---|---|---|
-| **D1** | **One surface: retire the C64 canvas once the picture has a frame boundary (RN-6)?** The canvas is drawn every frame and never seen; it exists because the twins compute *where* and the faithful routines store *what* onto it, and because the replay digests fold it. Retiring it removes the twin rule, `check_twins.py`, the `/// 2x of:` markers, ~20 canvas exclusive-or stores, `DashboardImage.cpp`'s C64 art and most of ADR-008 §2; it leaves every decision where it is (R-8, R-9). **The bill**: four ADRs write the canvas in independently and each is amended — ADR-001 §1 ("the verification view"), ADR-002 §4 (the four planes) and §5, ADR-003 §3 (the canvas in the hash), ADR-007 §4 — plus ADR-008 whole; the three replay records move, because the fold *narrows* — ADR-009 §3 and ADR-007 §4 allow a re-take in two cases and this is a third, so it needs its own ruling and the two-column proof (§5 RN-6); the 53 picture tests lose the canvas as their reference and become picture goldens; the mutant floor loses `Canvas.cpp`, which it was written never to; the raster bytes and sprite pointers `Resolve` reads off the canvas move to `ScreenState`/`VideoState`. About eight sittings | **Yes, last in the track, on the two-column gate.** It is the only step that makes the rendering path one thing, and it is what reopens per-primitive colour and a display list (Rendering.md's declined RN-3/RN-4) at a price they are worth. The corpus's own warning applies and is the reason for *last*: verification you delete is not verification you get back (Rendering.md §5.2), so the picture's whole-frame record must be the instrument that replaces the canvas before the canvas goes |
-| **D2** | **Coroutines (I-4) or a game thread for the blocking reads?** Both remove the nested pump, `Abandon` and `ExitProcess`. Coroutines change thirty-six signatures and give a `Run()` the suite drives on Linux; a thread changes none and does not | **Coroutines**, as InputTimer.md defaulted, after M6-d. The test is worth the diff |
-| **D3** | **Is the step rate exposed as a setting?** `speed = 100` in `Settings.txt`, the machine's own pace, and anything else is ADR-001 §4's option. It is the *only* lever on §0's second row, and it changes the feel by construction | **Build the knob in T-1 and expose it, default 100.** One integer, and the alternative is a reactivity ceiling of three frames a second in a full fight that a player of the port will attribute to the port |
-| **D4** | **PAL or NTSC as the machine?** | **Settled by ADR-001's own context line: `_VARIANT=1` is the GMA85 NTSC release.** NTSC is the machine; `MachineTiming` carries PAL and `Settings.txt` may select it. Recorded here so it is not asked a third time |
+| **D1** | **One surface: retire the C64 canvas once the picture has a frame boundary (RN-6)?** The canvas is drawn every frame and never seen; it exists because the twins compute *where* and the faithful routines store *what* onto it, and because the replay digests fold it. Retiring it removes the twin rule, `check_twins.py`, the `/// 2x of:` markers, ~20 canvas exclusive-or stores, `DashboardImage.cpp`'s C64 art and most of ADR-008 §2; it leaves every decision where it is (R-8, R-9). **The bill**: four ADRs write the canvas in independently and each is amended — ADR-001 §1 ("the verification view"), ADR-002 §4 (the four planes) and §5, ADR-003 §3 (the canvas in the hash), ADR-007 §4 — plus ADR-008 whole; the three replay records move, because the fold *narrows* — ADR-009 §3 and ADR-007 §4 allow a re-take in two cases and this is a third, so it needs its own ruling and the two-column proof (§5 RN-6); the 53 picture tests lose the canvas as their reference and become picture goldens; the mutant floor loses `Canvas.cpp`, which it was written never to; the raster bytes and sprite pointers `Resolve` reads off the canvas move to `ScreenState`/`VideoState`. About eight sittings | **Yes, last in the track, on the two-column gate.** It is the only step that makes the rendering path one thing, and it is what reopens per-primitive colour and a display list (Rendering.md's declined RN-3/RN-4) at a price they are worth. The corpus's own warning applies and is the reason for *last*: verification you delete is not verification you get back (Rendering.md §5.2), so the picture's whole-frame record must be the instrument that replaces the canvas before the canvas goes. **RULED: yes, as recommended.** ADR-001 §1, ADR-002 §4, ADR-003 §3, ADR-007 §4 and ADR-008 carry it |
+| **D2** | **Coroutines (I-4) or a game thread for the blocking reads?** Both remove the nested pump, `Abandon` and `ExitProcess`. Coroutines change thirty-six signatures and give a `Run()` the suite drives on Linux; a thread changes none and does not | **Coroutines**, as InputTimer.md defaulted, after M6-d. The test is worth the diff. **RULED: coroutines, after M6-d.** ADR-007 §2 and Modernize.md's M4-d row carry the death sequence's change |
+| **D3** | **Is the step rate exposed as a setting?** `speed = 100` in `Settings.txt`, the machine's own pace, and anything else is ADR-001 §4's option. It is the *only* lever on §0's second row, and it changes the feel by construction | **Build the knob in T-1 and expose it, default 100.** One integer, and the alternative is a reactivity ceiling of three frames a second in a full fight that a player of the port will attribute to the port. **RULED DIFFERENTLY: no knob — change the game logic.** The owner asked how modern shooters take input; the answer (events collected, a snapshot polled at a fixed tick, the picture interpolated between ticks) made the knob the wrong lever, because it only changes how often the *original's* step happens. The ruling is a **fixed-rate flight model** — one flight step per simulated vertical blank, the per-step constants rescaled and widened where a per-blank increment is fractional — **as its own track and ADR, after RN-6, with the faithful cadence kept selectable** (ADR-001 §4's option rule). This track keeps the cost model as the only pace and gives the model its hook (§3.2); the event accumulation of §3.3 is the reactivity this track does deliver in flight. ADR-001 §4 and ADR-005 §3 carry it |
+| **D4** | **PAL or NTSC as the machine?** | **Settled by ADR-001's own context line: `_VARIANT=1` is the GMA85 NTSC release.** NTSC is the machine; `MachineTiming` carries PAL and `Settings.txt` may select it. Recorded here so it is not asked a third time. **Confirmed**, not re-asked |
 
 Not a decision: **look and feel.** Every slice's gate is the picture the tree draws today, frame for
 frame, and the cost model the tree paces by today, step for step; the only thing that may change
-either is an option ruled under D3 and off by default.
+either is the fixed-rate model D3 rules, which is a later track, an option, and off by default.
 
 ---
 
@@ -552,18 +564,19 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 
 | Slice | What | Gate | Ratchets and checks | Sittings |
 |---|---|---|---|---|
-| **T-1** `MachineTiming`, `FrameClock`, `Scheduler` | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; the speed knob (D3, default 100); `SoundOutput` takes the same `MachineTiming` | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->238) falls; ADR-005 §3 | 2 |
+| **T-1** `MachineTiming`, `FrameClock`, `Scheduler` | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->238) falls; ADR-005 §3 | 2 |
 | **T-3** The presenter | §3.7: the waitable object, latency one, present-on-change over the picture's generation counter (or the frame surface's once RN-0 lands), occlusion idle | The picture's own goldens unchanged; PresentMon before and after on a scripted key, numbers in the journal; CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** Finish the split | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
 | **RN-1** The frame boundary | `Picture::Clear` finally called — the frame refreshed from the backdrop at every present; erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
 | **RN-2** ADR-008 amended | T3 deleted; §1's byte count corrected for two surfaces | `check_docs.py`; the ADR's Status table | — | 0.5 |
-| **I-2** `InputFrame` and the layered map | §3.3: the struct, the two `Step`s over it, `Window` producing one per turn from scan codes, the layers, `NextKey` and `Flush` off the port. **Two commits**: the signature with the same keys, then the meaning | All three digests unmoved after the first commit; I-6's tests and `DockedSessionTests` after the second, with the level-against-edge answer journaled; `ShellTests` per-layer completeness | `outpost-elite-names` (<!--count:outpost-elite-names-->63) may fall; `effects-seams` unchanged | 2 |
+| **I-2** `InputFrame` and the layered map | §3.3: the struct, the two `Step`s over it, `Window` producing one per turn from scan codes with events accumulated into it, the layers, `NextKey` and `Flush` off the port. **Two commits**: the signature with the same keys, then the meaning | All three digests unmoved after the first commit; I-6's tests and `DockedSessionTests` after the second, with the level-against-edge answer journaled; `ShellTests` per-layer completeness | `outpost-elite-names` (<!--count:outpost-elite-names-->63) may fall; `effects-seams` unchanged | 2 |
 | **I-4** Coroutines and `Platform` | §3.5 and §3.1: `Task`, the awaitables, the thirty-six routines converted in groups, `Run()` a function over `Game` and `Platform`, `GameShell` and `FlightSession` absorbed, `Abandon` deleted | Every existing comparison green without change to what it asserts; the `GameLoopTests` case of §3.9 on the Linux leg; all digests unmoved | `effects-seams` 5 → 4 or 3; `main-lines` falls | 4–5 |
 | **T-4** Sound | §3.6: the interrupt under the scheduler, the log ring, the chip on the callback thread | `SidRenderTests` unchanged; the zero-delivery replay unmoved and the record re-taken with delivery, journaled as rule 1's first case; no stutter while dragging the title bar | ADR-005 §2 one paragraph | 1–2 |
 | **C-1** Cleanup | §9's inventory: `GameShell::ClearToView` (no caller since M5-e; "public because `Main.cpp` changes screens through it" and it does not), `ScreenPresenter::Ready` (no caller), `Keyboard::Flush` and its three call sites (with I-2), the four `double` accumulators (with T-1), `FlightSession` (with I-4). **Not the `2x` files** (§0) | `check_outpost.py`; the Windows build | `outpost-elite-names` | 0.5, spread over the slices named |
-| **RN-6** One surface (D1) | The canvas stores go; `Resolve` reads raster state from `ScreenState` and `VideoState`; the twins become the routines' own stores and lose their suffix; `check_twins.py`, T1 to T4 and `DashboardImage.cpp` go; the picture tests become goldens | **The two-column proof**: `HashState` with the canvas excluded is taken on every checkpoint before the slice and must be identical after it; only then are the records re-taken under a new rule case named in ADR-010. `ThePictureIsAsRecorded` unmoved throughout | `mutant-files` falls (journaled); `check_twins.py` leaves `check_all.py`; ADR-008 amended or superseded | 6–8 |
+| **RN-6** One surface (D1, ruled) | The canvas stores go; `Resolve` reads raster state from `ScreenState` and `VideoState`; the twins become the routines' own stores and lose their suffix; `check_twins.py`, T1 to T4 and `DashboardImage.cpp` go; the picture tests become goldens | **The two-column proof**: `HashState` with the canvas excluded is taken on every checkpoint before the slice and must be identical after it; only then are the records re-taken under a new rule case named in ADR-010. `ThePictureIsAsRecorded` unmoved throughout | `mutant-files` falls (journaled); `check_twins.py` leaves `check_all.py`; ADR-008 amended or superseded | 6–8 |
 | **I-5** Gamepad and remapping | §3.3's last bullet, a remap file, its own ADR | Its ADR's | — | 3, phase 6 |
-| **P-0** ADR-010 | "The platform, as built": the loop, the clocks, the frame, the input, the sound, the surface, in the shape of ADR-007 and ADR-008, with the numbers this track measured | `check_docs.py`, `check_counts.py`; README row | — | 1 |
+| **P-0** ADR-010 | "The platform, as built": the loop, the clocks, the frame, the input, the sound, the surface, in the shape of ADR-007 and ADR-008, with the numbers this track measured; it supersedes ADR-005 (ruled, A4) | `check_docs.py`, `check_counts.py`; README row | — | 1 |
+| **FR** The fixed-rate flight model (D3, ruled) | **Its own design and ADR, after RN-6 and P-0; not this track's.** One flight step per simulated blank; every per-step constant rescaled (the control bumps, the eighth-frame recharge, the one-in-256 spawn roll, the countdowns, the ship and dust motion) and widened where a per-blank increment is fractional, under ADR-002 §3's rule; the faithful cadence selectable, the faithful records untouched, a second record for the model. The presentation half — a display list and interpolation between steps at the display's rate — is what ADR-002 §1's role-scoped float ban (A1) exists for | Its own; ADR-001 §4's rule: green with the option off | — | later |
 
 ### Sequencing
 
@@ -573,7 +586,7 @@ T-1 ──┬──────────────────────�
 T-3 ──┤   (both executable-only; free of every library slice; the safest work on the board)
       │
 RN-0 ─┼─► RN-1 ─► RN-2 ──────────────────────────────────┐
-      │                                                    ├─► RN-6 (D1) ─► P-0
+      │                                                    ├─► RN-6 (D1) ─► P-0 ─► FR (D3, own track)
 I-2 ──┴─► I-4 (after M6-d finishes) ─────────────────────┘
                  └─► I-5 (own ADR)                C-1 rides inside I-2, I-4 and T-1
 ```
@@ -582,7 +595,7 @@ T-1 and T-3 first, because they are the two a player on a high-refresh panel mee
 touches `GameLogic/`. RN-0 and I-2 can run in either order and beside each other; I-4 wants both,
 because the boundary it puts behind `co_await` is RN-1's and the frame it resumes on is I-2's. RN-6
 is last and is the one slice whose gate is a proof rather than an equality. About twenty-five
-sittings to P-0 without RN-6 and thirty-two with it.
+sittings to P-0 without RN-6 and thirty-two with it; FR is its own track and is not counted.
 
 ---
 
@@ -607,6 +620,12 @@ blocking rather than a timer sleeping.
 ---
 
 ## 7. What the track does to the documents
+
+**Every ruling below that needed no slice was written into its ADR on 2026-09-09** (§12): ADR-001
+§1 and §4, ADR-002 §1 and §4, ADR-003 §3, ADR-004 §1, ADR-005 §1 to §4, ADR-006 §6, ADR-007 §2, §4
+and §6, ADR-008 §4 and its Status table, ADR-009 §2 and §3, and Modernize.md's M4-d row. What is left
+for the slices is the as-built wording: the numbers T-3 measures, the case I-2's second commit
+journals, and ADR-010 at P-0.
 
 - **ADR-005 §1** gains the waitable chain and present-on-change (T-3) — one paragraph, since
   ADR-008 owns the layer and this is the executable's half of it. **§3** is rewritten at T-1: the
@@ -644,7 +663,7 @@ blocking rather than a timer sleeping.
 | P-b | **Level dispatch changes a screen the fixtures do not reach** | I-2's second commit runs I-6, `DockedSessionTests` and the hand-check on every docked screen with a key held; the port's edge is kept if any moves |
 | P-c | **The interrupt under the scheduler moves the records for a reason that is not the widening** | The zero-delivery column: the same run with no blanks delivered must reproduce the old records to the bit before the new ones are taken |
 | P-d | **RN-6 retires the canvas and a decision was hiding in a store** — a routine that read a canvas byte back to decide something | `grep` on `f50775b` finds one canvas read outside `Resolve` and the tests, `ViewChange.cpp:77`, an exclusive-or pattern's read-modify-write with no decision on it; the two-column proof is the instrument if the grep is wrong, and it fails before any record is re-taken |
-| P-e | **The speed option is left on and a digest is re-taken under it** | The replay driver constructs its scheduler at 100 and cannot be given another; the option is `Outpost/`'s and the library never sees a percentage |
+| P-e | **The fixed-rate model's record is mistaken for the faithful one** | There is no knob in this track (D3); when FR comes, its record is a second table beside the three, never a re-take of them, and ADR-001 §4's rule is that the faithful three stay green with the model off |
 | P-f | **Two threads, one `Universe`** — the audio thread reads game state | It never does: it reads a ring of logs the game thread wrote after its step, and the ring is the only shared object |
 
 Rendering.md's RN-b (the colour change's rewrite) and RN-e (closed) do not carry: the first is
@@ -696,7 +715,9 @@ a change to one surface instead of a rewrite of five test files (Rendering.md's 
 R-6 is still the bill); Raw Input, because the scan code is in `WM_KEYDOWN` already; a fixed
 higher step rate as the *default*, because it is the feel and ADR-001 §4 says an option is off; a
 second thread for the game, for §3.5's reason; `GameInput` over XInput, until the owner is asked
-about the package.
+about the package; and **a speed knob**, put and declined on 2026-09-09 in favour of the fixed-rate
+track (D3), because scaling how often the original's step happens is not the modernisation the owner
+meant by "change the game logic".
 
 ---
 
@@ -719,6 +740,14 @@ held, six were corrected in the sections they touch, and one — ADR-005 §2's c
 interrupt — is a reversal the design had described as an addition and now names as a ruling. The
 pass also removed a worry: the failed-load stack bug is ported as a flag, so I-4's arena has no
 unbounded case.
+
+**2026-09-09, later still — eight rulings, and the ADRs amended (§12).** All four of §4 and four on
+the ADRs were put to the owner and ruled the same day: three as recommended, D3 differently. The
+owner's counter-question on event-driven input produced the one change to what this track builds —
+event accumulation into the `InputFrame` (§3.3) — and the ruling that the flight step's rate is a
+game-logic change and not a setting, which is a track of its own after RN-6 with the faithful cadence
+selectable. Nine ADRs carry their amendments as of this entry; the speed knob is gone from §3.2, §5
+and §8; §0's second row says what the track does and does not do about the sampling rate.
 
 ---
 
@@ -744,7 +773,7 @@ changes a slice's order; three things changed a slice's content.
 | 004 §1 | "Presentation lives in the executable ... none of it unit-tested" | `Run` over an abstract `Platform` in a portable file, joining `EXECUTABLE_SOURCES`; §3.1 and §7 say so | corrected today |
 | 004 §2 | File names unique repo-wide, against the CRT, STL and SDK, case-insensitively | `Task.h`, `Scheduler.h`, `FrameClock.h`, `Platform.h` are checked against the SDK before they are created; none is known to collide, and the rule is the slice's checklist | held |
 | 005 §1 | Present once per step; a routine the original held for many frames owes a present per frame; integer scale; vsync on | The boundary at every present is that clause made structural (§3.4); the scale, letterbox and vsync are untouched (§3.7) | held |
-| 005 §2 | The interrupt is clocked off the device's queue depth | **T-4 reverses this** for the state half and keeps it for the chip; §3.6 and §7 say so now | needs a ruling |
+| 005 §2 | The interrupt is clocked off the device's queue depth | **T-4 reverses this** for the state half and keeps it for the chip; §3.6 and §7 say so now | ruled (R1, §12) |
 | 005 §3 | Fixed timestep, steps never skipped or doubled silently, a stall logs; auto-pause "to be built as T-1" | The time clamp drops a backlog and *counts* it, which is the clause's "never silently"; auto-pause is T-1's | held |
 | 005 §4 | The modern layout; a key the text names is never unbound; "a second table chosen by the view is a phase-6 remapping question"; `InputFrame` "carries both level and edge bits" | I-2's layers *are* that second table, so the slice is phase-6-class and lands with the §4 amendment; the text-names rule binds every layer; `pressed` is one key rather than 65 edge bits, and the sentence is amended | corrected today |
 | 006 §1, §8 | Edges point down; nothing below `Ports` includes a Windows header; C++20 | `Task` and the awaitables are `GameLogic`'s and include nothing of Windows; coroutines are C++20 | held |
@@ -760,8 +789,39 @@ changes a slice's order; three things changed a slice's content.
 **What the pass changed.** Three sections were silent where an ADR spoke and now are not: the
 backdrop's exclusion from the digest (§3.4), the death sequence as a task and the arena's bound
 (§3.5), and the portability of `Run` (§3.1). One thing the design had described as an addition is a
-reversal and is now named as one (§3.6, ADR-005 §2). One slice turned out to be phase-6-class by the
+reversal and is now named as one (§3.6, ADR-005 §2) — and ruled the same day (§12 R1). One slice turned out to be phase-6-class by the
 corpus's own definition and is sequenced accordingly (I-2's second commit). Nothing in the nine
 forbids the track as ordered; what they forbid — sub-pixel geometry, a wider view, a display list
 with float in it — the track does not attempt, and the previous review's recommendations on scoping
 the float ban and consolidating the canvas clauses are what would let a later track attempt them.
+
+---
+
+## 12. The rulings, 2026-09-09
+
+Eight questions were put to the owner on the day the design opened: the four of §4 and four on how
+the ADRs should change after the review of all nine (§11). Every ruling was written into the
+document that owns it the same day; this table is the index. One question was answered with a
+question — *"should we not move the input from sampling to event driven?"* — and the answer to
+that reshaped D3, so it is recorded here rather than smoothed into the row.
+
+| # | Question | Ruling | Recorded in |
+|---|---|---|---|
+| D1 | Retire the C64 canvas once the picture has a frame boundary (RN-6)? | **Yes**, last in the track, after RN-2 and I-4, on the two-column gate | ADR-001 §1, ADR-002 §4, ADR-003 §3, ADR-007 §4, ADR-008 Status; §5 RN-6 |
+| D2 | Coroutines or a game thread for the blocking reads? | **Coroutines, after M6-d.** The death sequence becomes a task | ADR-007 §2; Modernize.md M4-d; §3.5, §5 I-4 |
+| D3 | Expose the step rate as a `speed` setting? | **No knob — change the game logic.** A fixed-rate flight model, one step per simulated blank with the per-step constants rescaled, as its own track and ADR after RN-6, **faithful cadence selectable**. Event accumulation into the frame is what this track delivers in flight | ADR-001 §4, ADR-005 §3 and §4; §3.2, §3.3, §5 FR |
+| D4 | PAL or NTSC? | **NTSC**, settled by ADR-001's own variant line; PAL selectable | ADR-005 §3 |
+| R1 | The sound interrupt's clock | **The simulated blank clocks the interrupt**; the device paces the chip alone. ADR-005 §2 is reversed | ADR-005 §2; §3.6, §5 T-4 |
+| A1 | ADR-002's float ban: by directory or by role? | **By role, now.** Simulation integer for good; presentation may use float; no float enters `GameLogic/` until a slice names and exempts a renderer file. §4's "not phase-6 items either" struck | ADR-002 §1 and §4 |
+| A3 | ADR-004 §1's "presentation is not unit-tested" | **Amend the sentence, keep `EXECUTABLE_SOURCES`**; no fifth project | ADR-004 §1; §3.1 |
+| A4 | ADR-005: amend or supersede? | **Amend now; ADR-010 supersedes it at P-0** | ADR-005 status; §5 P-0 |
+
+**The exchange behind D3, because it changed the design.** Asked whether input should move from
+sampling to event-driven: modern shooters do both in a fixed order — events collected by the OS,
+drained once per fixed simulation tick into a snapshot the game polls (Doom's `ticcmd`, Quake's
+`kb.msec`, Source's `usercmd`), with the picture interpolated between ticks at the display's rate.
+The port already has the first two layers, and `InputFrame` is a `usercmd`; what it lacked was the
+accumulation that stops a tap between ticks being lost (§3.3, added) and the third layer, which needs
+a display list and a renderer that may use float (A1, ruled) — neither of which this track builds.
+The tick's *rate* is the game's, and that is what "change the game logic" ruled: not a knob on the
+original's cadence but a fixed-rate model beside it.

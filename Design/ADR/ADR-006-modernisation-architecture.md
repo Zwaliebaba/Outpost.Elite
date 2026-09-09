@@ -198,7 +198,8 @@ what its 6502 control flow is.**
 ### §6 Verification through the change
 
 - **The oracle decides**, per slice, until M6 records it. A slice ends with the suite green on the
-  portable runner with the oracle present and, before merge, on the Windows job.
+  portable runner with the oracle present and, before merge, on the Windows job. *(History since M6:
+  ADR-009 §2's instruments decide, and [Platform.md](../Platform.md) §3.9 says which gates which slice.)*
 - **The universe image and the replay hash** (`Tests/GameLogicTests/UniverseImage`, built at M0-b and
   M0-c) are the layout-independent bridge: `Materialise` writes the same bytes before and after a
   slice for the same game, every oracle test compares through it, and the flight replay's sixteen

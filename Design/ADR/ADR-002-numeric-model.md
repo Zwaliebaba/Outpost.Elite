@@ -4,7 +4,7 @@
 measurement rather than assertion — see §7) · **moved from Proposed to Accepted 2026-09-05.** The
 model has been the port's whole basis for twenty-three slices and has not needed a second amendment:
 every divergence found in that time was a routine transcribed wrongly, never the numeric model
-being unable to express what the 6502 did.
+being unable to express what the 6502 did. · **Amended 2026-09-09 (owner rulings on [Platform.md](../Platform.md) §12): §1's float ban is scoped by role rather than by directory, §4's canvas planes are retired at that track's RN-6, and §4's clause that sub-pixel accuracy is not a phase-6 item is struck.**
 **Depends on:** ADR-001 (fidelity)
 **Feeds:** ADR-003 (the oracle only works if this holds), every `GameLogic` file
 
@@ -41,6 +41,19 @@ up as wrong prices in a system three galaxies away.
    - `Wrap8(x)`, `AddC(a, b, c)` → `(sum, carry)` helpers so that intent reads.
    - **No `float`, `double` or `DirectXMath` anywhere in `GameLogic`.** A CI guard greps for
      them (the same mechanism Frontier uses for `<chrono>`).
+
+     **Amended 2026-09-09 (owner ruling, [Platform.md](../Platform.md) §12 A1): the ban is scoped by
+     ROLE and not by directory.** *Simulation* — anything that writes `Universe` or decides what the
+     game does — is integer exactly as above, for good. *Presentation* — anything that only READS
+     `Universe` and produces pixels, a display list or an interpolated frame — may use floating point,
+     because nothing it computes can reach a digest: ADR-008 §4's exclusion of the presented surface
+     from the state hash is the mechanism, and `TheReplayIsTheSameWithNoTwins` is the measurement.
+     **No float enters `GameLogic/` under this ruling until a slice needs one.** `check_gamelogic.py`
+     keeps banning the two words across the directory; the slice that first needs them names the
+     renderer file and exempts it in the tool with the reason beside it, so the exemption is a
+     decision and not a hole. What the ruling unlocks — render-side interpolation between simulation
+     steps at the display's rate, and a display list — is the presentation half of Platform.md §9 and
+     of the fixed-rate track ADR-001 §4 now names, and neither is built by the current track.
 2. **Tables are data, not functions.** `SNE`, `ACT`, `LOG`, `LOGL`, `ANTILOG`, `ANTILOGODD`,
    `TWOS` and kin are extracted byte-for-byte (slice 1a). A port of `FMLTU` looks up the same
    tables the original did; it does not call `std::log`.
@@ -84,6 +97,11 @@ up as wrong prices in a system three galaxies away.
    plus one background index for `%00`, and one flag for whether the dashboard is on screen,
    which is the single thing that selects the mode and the block together. About 11 KB in total.
 
+   **The planes are retired at [Platform.md](../Platform.md)'s RN-6 (owner ruling 2026-09-09, D1).**
+   The canvas stops being drawn, `Picture` becomes the one surface, and the raster bytes and sprite
+   pointers `Picture::Resolve` reads off the canvas move to the `ScreenState` and `VideoState` they
+   belong to. What §5 keeps — the heaps — stays, because it is state the game decides by and not pixels.
+
    - **Drawing is byte-wise exclusive-or into `m_bitmap`**, at the addresses the original
      computes. `ylookup` and `celllook` are ported as the tables they are.
    - **Cell colour is mutable state, not a palette.** The game writes it (`RED2`, `GREEN2`,
@@ -105,8 +123,10 @@ up as wrong prices in a system three galaxies away.
      40 and spans the same 256 columns of the resolved image. Higher internal resolution is built as
      the parallel path [Design/Resolution.md](../Resolution.md) §4 describes — a twin per drawing
      routine, computing coordinates and never deciding — so the drawing code is joined rather than
-     forked. Sub-pixel accuracy and anti-aliasing are not built, and are not phase-6 items either:
-     the twins draw the same shapes at twice the scale, with hard pixels.
+     forked. Sub-pixel accuracy and anti-aliasing are not built: the twins draw the same shapes at
+     twice the scale, with hard pixels. *(This sentence said "and are not phase-6 items either" until
+     2026-09-09; §1's ruling that scopes the float ban by role makes them phase-6 items on the
+     presentation side, and the clause is struck.)*
 
 5. **Erase-by-XOR is available.** `Canvas` provides XOR plotting, and the line heaps are ported,
    because `LL9` and `SUN` use the heap contents to decide what to erase. Whether the executable

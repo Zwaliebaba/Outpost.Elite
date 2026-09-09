@@ -2,7 +2,7 @@
 
 **Status:** Accepted · 2026-09-07, written at Phase M3's close from what M3-a, M3-b and M3-c
 actually built rather than from what §4.4 planned — the two differ in three places and each is
-recorded below with its reason.
+recorded below with its reason. **Amended 2026-09-09 (owner rulings on [Platform.md](../Platform.md) §12): §2's reason for the count of passes staying outside is the clock, not the type, and the death sequence becomes a coroutine; §4 admits a third case, a narrowing with its proof column; §6 names the backdrop surface as the second field the fold excludes.**
 **Depends on:** ADR-001 (fidelity — the game does not change), ADR-002 (numeric model — every byte
 keeps its width), ADR-003 (the oracle is the judge until M6), ADR-004 §1 (which drew this seam
 "from day one"), ADR-006 §4 (which planned it, and which this document amends)
@@ -94,12 +94,22 @@ which have to say which of `DOENTRY`, `DEATH` and `ESCAPE` they left by; a mode 
 because by the time the mode has changed the routine has already returned. The two answer different
 questions and both are needed.
 
+**AND THE DEATH SEQUENCE BECOMES A COROUTINE at [Platform.md](../Platform.md) I-4 (owner ruling D2,
+2026-09-09).** Modernize.md's M4-d row kept it synchronous "because making it a state would change
+the pacing". A task is not a mode-machine state, and the awaitable it suspends on charges exactly the
+cycles `HoldFlightFrame` charged, so the pacing is the same and `TheDeathIsAsRecorded` is the
+evidence that it is. `LoopOutcome` still says which door the frame left by; what changes is that
+`Die` no longer presents from inside the library.
+
 **AND THE COUNT OF PASSES CANNOT BE HERE.** §4.4 and Modernize.md's M3-c row both say `Advance`
 moves into the library. It could not: it turns elapsed seconds into a count of passes over ADR-005
 §3's accumulator, and that is floating point by construction. So it split — `Outpost::PlanSteps`
 and the seconds stay in the executable, and one `Step` is one pass. That is a better division than
 the row described: how many passes a wall-clock interval is worth is a property of the DISPLAY, and
-the passes are the game's.
+the passes are the game's. **Amended 2026-09-09 ([Platform.md](../Platform.md) T-1): the count stays
+outside because the CLOCK is the executable's (§1), not because the arithmetic is floating point —
+the scheduler counts in integer 6510 cycles and `double` leaves the loop. The division stands; its
+reason is the better one.**
 
 `Step` answers a `bool` because the loop it came from expressed "stop stepping" as a `return` out
 of the whole batch — `M%` leaving the flight half, or the pause key freezing it. A caller that
@@ -167,6 +177,13 @@ deliberately widened digest, named in the journal; or a defect in the port found
 the record re-taken and the defect named. A record that moves with no defect named is a refactor
 that changed the game, and that is the failure the record exists to produce.
 
+**A THIRD CASE, admitted 2026-09-09 (owner ruling, [Platform.md](../Platform.md) D1): a NARROWING.**
+When a field LEAVES the fold — the canvas, at Platform.md's RN-6 — the record moves for every
+checkpoint and the flight for none, and the proof has the shape the widenings used: the fold WITHOUT
+the field is taken on every checkpoint before the slice and must be identical after it, and is
+journaled beside the re-take. A narrowing without that column is a refactor that changed the game.
+The case was admitted for that one slice and with its name on it; a second use needs its own ruling.
+
 **WHAT M3 DID TO IT IS THE EVIDENCE THIS ADR IS FOR.** The record moved twice, both in M3-b and
 both for defects the slice found: `NOISE2` returning the sustain it went in with rather than the
 flag byte it wrote (M3-b-2a), and `Music.cpp` missing the `SETL1` brackets around `stopat` and
@@ -232,7 +249,10 @@ game's (`m_paused`, which no 6502 byte backs); it would cost `Universe` one of i
 are `Universe::sentences`, bound into `CharacterPrinter` by reference the way `TextPrinter` binds
 `text`, and `QQ17` is `text.caseFlags` alone since M5-e-2c); or it is the platform's by the determinism guard (the clock,
 the seconds, the files, the device). **And a byte in `Universe` gets a cell in `UniverseImage`, unless it has no
-6502 label to pair with** — which on the tree today is `crosshairStep` and nothing else (§5).
+6502 label to pair with** — which on the tree today is `crosshairStep` and nothing else (§5). **And `Universe::picture` gains a
+twin at [Platform.md](../Platform.md) RN-0 — the backdrop surface — which takes the same exclusion for
+the same reason** (ADR-008 §4 and the Consequences bullet below): a second rendering of a frame the
+game has already decided, folded nowhere and given no cells.
 
 ## Consequences
 

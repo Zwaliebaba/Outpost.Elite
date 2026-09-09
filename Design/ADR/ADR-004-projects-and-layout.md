@@ -1,7 +1,7 @@
 # ADR-004 — Projects and Layout
 
 **Status:** Accepted · 2026-09-02 (§1 settled by owner ruling: own codebase, nothing lifted) ·
-amended 2026-09-03 (§6 added by owner ruling: the portable test runner is sanctioned and CI-gated)
+amended 2026-09-03 (§6 added by owner ruling: the portable test runner is sanctioned and CI-gated) · **§1 amended 2026-09-09**: presentation code with no Win32 in it is tested on both legs through the portable runner's `EXECUTABLE_SOURCES`, by owner ruling on Platform.md.
 **Depends on:** ADR-001; the conventions in `.clang-format`, `.clang-tidy`, `.editorconfig`
 **Feeds:** slice 0c; the *Home* column of `Source-Inventory.md` — that ledger was deleted at M6-e
 (ADR-009 §1), and this layout is what survived it
@@ -45,6 +45,16 @@ and a library boundary drawn around code with exactly one consumer is ceremony. 
 past the point where that is comfortable, splitting it out later is a project file and a set of
 `#include` lines, not a redesign — the seams that matter (`Canvas`, `SoundEvent`, `InputFrame`)
 are between the game and the presentation, and they exist from day one.
+
+**Amended 2026-09-09 (owner ruling, [Platform.md](../Platform.md) §12 A3): "none of which is
+unit-tested" is not the rule, and has not described the tree since slice 2e.** The portable runner
+compiles the `Outpost/` files that have no Win32 in them — `EXECUTABLE_SOURCES` in
+`generate_runner.py`: `Presentation`, `KeyMap`, `SettingsFile`, `SidSynth`, `SaveStore` — and
+`ShellTests` covers them on both legs; Platform.md's scheduler, its key layers and the loop over
+`Game` (written over an abstract `Platform`) join that list. **The rule is: what has no Win32 in it is
+tested; what has is verified by the Windows build and by `check_outpost.py`.** No fifth project: a
+`Platform.lib` built on both legs was put and declined as ceremony around the same boundary the list
+already draws.
 
 **`GameLogic` is the name** because this repository's `.clang-tidy` header filter already names
 it, and because the content is the game's logic. The namespace is `Elite`.
