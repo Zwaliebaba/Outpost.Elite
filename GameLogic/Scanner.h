@@ -26,7 +26,7 @@ namespace Elite
   // ---- the scanner ----------------------------------------------------------------------------
 
   /*
-   * 6502: SCAN -- draw or erase one ship's blip.
+   * Draw or erase one ship's blip.
    *
    * A BLIP IS A DOT AND A STICK. The dot is `CPIX4` at the ship's position on the scanner's
    * ellipse; the stick joins it to the horizontal line the ellipse is drawn around, so the height
@@ -53,26 +53,26 @@ namespace Elite
 
   // ---- the compass ----------------------------------------------------------------------------
 
-  /// 6502: YELLOW -- four multicolour pixels of colour %10, and the compass's "ahead" colour. It
+  /// Four multicolour pixels of colour %10, and the compass's "ahead" colour. It
   /// is also what makes the dot a four-pixel block rather than a dash, because `DOT` branches on
   /// the colour and not on the direction.
   inline constexpr PixelPattern COMPASS_AHEAD = PixelPattern::Yellow;
 
-  /// 6502: GREEN -- four pixels of %11, and "behind": a two-pixel dash rather than a block.
+  /// Four pixels of %11, and "behind": a two-pixel dash rather than a block.
   inline constexpr PixelPattern COMPASS_BEHIND = PixelPattern::Green;
 
-  /// 6502: COMX, COMY and COMC -- where the compass dot is and what colour it is. They persist
+  /// COMX, COMY and COMC -- where the compass dot is and what colour it is. They persist
   /// between frames because that is how it is erased: `COMPAS` draws the OLD dot again before it
   /// works out the new one.
   struct Compass
   {
-    std::uint8_t x = 0;                         ///< 6502: COMX
-    std::uint8_t y = 0;                         ///< 6502: COMY
-    PixelPattern pattern = PixelPattern::Blank; ///< 6502: COMC -- a pattern, which is what `DOT` branches on
+    std::uint8_t x = 0;
+    std::uint8_t y = 0;
+    PixelPattern pattern = PixelPattern::Blank; ///< A pattern, which is what `DOT` branches on
   };
 
   /*
-   * 6502: K3 -- the ten bytes `SPS1`, `SPS3`, `SPS4` and `TAS2` pass between them.
+   * The ten bytes `SPS1`, `SPS3`, `SPS4` and `TAS2` pass between them.
    *
    * Three (low, high, sign) triples at 0, 3 and 6, and a tenth byte at 9 that `TAS2` builds for
    * itself. It is an array rather than three named fields because `SPS3` writes `K3,X`, `K3+1,X`
@@ -91,7 +91,7 @@ namespace Elite
   using K3Block = std::array<std::uint8_t, 10>;
 
   /*
-   * 6502: XX15, XX15+1, XX15+2 as `TAS2` and `NORM` leave them -- a unit vector, three
+   * XX15, XX15+1, XX15+2 as `TAS2` and `NORM` leave them -- a unit vector, three
    * sign-magnitude bytes with seven bits of magnitude and the sign on top, scaled to a length of
    * 96. `SP2` reads it for the compass, `TAS3`/`TAS4` take its dot product with an orientation
    * vector, `TAS6` turns it round, and `MA3` part 9 reads its z for the docking check.
@@ -102,9 +102,9 @@ namespace Elite
    */
   struct UnitVector
   {
-    std::uint8_t x = 0; ///< 6502: XX15
-    std::uint8_t y = 0; ///< 6502: XX15+1
-    std::uint8_t z = 0; ///< 6502: XX15+2
+    std::uint8_t x = 0;
+    std::uint8_t y = 0;
+    std::uint8_t z = 0;
   };
 
   /// What `TAS2` (and `TA2`, the tail `DOCKIT` enters at) hand back: the vector, and the length
@@ -112,21 +112,21 @@ namespace Elite
   struct NormalisedVector
   {
     UnitVector vector;
-    std::uint8_t length = 0; ///< 6502: Q, as `NORM` leaves it
+    std::uint8_t length = 0; ///< Q, as `NORM` leaves it
   };
 
   /*
-   * 6502: DOT -- draw the compass dot where `COMX`, `COMY` and `COMC` say it is.
+   * Draw the compass dot where `COMX`, `COMY` and `COMC` say it is.
    *
-   * The colour decides the SHAPE. `CMP #YELLOW / BNE CPIX2` falls through into `CPIX4` when the
-   * target is ahead and branches to `CPIX2` when it is behind, so a dot pointing forwards is a
-   * four-pixel block and one pointing backwards is a two-pixel dash. That is not a separate
-   * decision from the colour: it is the same byte read twice.
+   * The colour decides the SHAPE. Yellow -- the target ahead -- falls through into `CPIX4`, and
+   * anything else branches to `CPIX2`, so a dot pointing forwards is a four-pixel block and one
+   * pointing backwards is a two-pixel dash. That is not a separate decision from the colour: it
+   * is the same byte read twice.
    */
   void DrawCompassDot(Canvas& _canvas, const Compass& _compass, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: SPS3 -- copy one of the planet's coordinates into `K3`, as (mid, high, sign).
+   * Copy one of the planet's coordinates into `K3`, as (mid, high, sign).
    *
    * IT DROPS THE LOW BYTE, and that is the point. The planet's coordinates are 24-bit -- byte 0 is
    * the low byte, byte 1 the middle, and byte 2 carries the sign in bit 7 and the top seven bits
@@ -136,7 +136,7 @@ namespace Elite
   void LoadPlanetAxis(const Ship& _planet, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
-   * 6502: TAS2 -- turn the three coordinates in `K3` into a unit vector in `XX15`.
+   * Turn the three coordinates in `K3` into a unit vector in `XX15`.
    *
    * Shift all three left together until the largest of them overflows out of bit 7, then take each
    * high byte, halve it, and put the sign back on top -- so what comes out is three sign-magnitude
@@ -158,13 +158,13 @@ namespace Elite
    */
   [[nodiscard]] NormalisedVector NormaliseAxes(K3Block& _axes) noexcept;
 
-  /// 6502: SPS1 -- three `SPS3` calls for the planet, then a fall-through into `TAS2`. The
+  /// Three `SPS3` calls for the planet, then a fall-through into `TAS2`. The
   /// fall-through is the routine: `SPS1` has no `RTS` of its own. `_axes` is the `K3` it leaves,
   /// which `MA3` part 9 normalises a second time.
   [[nodiscard]] UnitVector LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes) noexcept;
 
   /*
-   * 6502: SPS4 -- the same for the space station, which is nine bytes copied straight across.
+   * The same for the space station, which is nine bytes copied straight across.
    *
    * SLOT 1, always: `K%+NI%` is the second ship block, and that is where `NWSPS` puts the station
    * -- over the sun, which is why the two are never in the bubble together. And the station's
@@ -177,39 +177,41 @@ namespace Elite
   /// an `SBC` with nothing clearing it in between (§6.60).
   struct CompassOffset
   {
-    std::uint8_t offset = 0; ///< 6502: X -- the position, in scanner pixels, as a two's complement byte
-    std::uint8_t sign = 0;   ///< 6502: Y -- 0 or 255, the same sign as a mask
-    bool carry = false;      ///< 6502: the carry `DVID4` left, which `SP2` adds and subtracts with
+    std::uint8_t offset = 0; ///< The position, in scanner pixels, as a two's complement byte
+    std::uint8_t sign = 0;   ///< 0 or 255, the same sign as a mask
+    bool carry = false;      ///< The carry `DVID4` left, which `SP2` adds and subtracts with
   };
 
   /*
-   * 6502: SPS2 -- turn one of `TAS2`'s sign-magnitude bytes into a signed offset from the centre
+   * Turn one of `TAS2`'s sign-magnitude bytes into a signed offset from the centre
    * of the compass, which is A * 2 / 20 with the sign put back on.
    *
    * The twenty is the compass's radius in pixels. The doubling is not a scale factor the divide
-   * then undoes -- it is how the sign gets out of the way: `ASL A` pushes bit 7 into the carry and
-   * `LDA #0 / ROR A` catches it, leaving the magnitude in A with nothing above it.
+   * then undoes -- it is how the sign gets out of the way: a shift left pushes bit 7 into the
+   * carry, and a rotate right into a cleared byte catches it, leaving the magnitude with nothing
+   * above it.
    */
   [[nodiscard]] CompassOffset ScaleToCompass(std::uint8_t _value) noexcept;
 
   /*
-   * 6502: SP2 -- put the dot where `XX15` points, and draw it.
+   * Put the dot where `XX15` points, and draw it.
    *
-   * `JMP DOT` at the end, so drawing is part of it rather than something the caller does after.
+   * It ends with a tail call to `DOT`, so drawing is part of it rather than something the caller
+   * does after.
    * The colour comes from the sign of the third coordinate alone: ahead is yellow and behind is
    * green, and `DOT` reads that same byte again to decide whether to draw a block or a dash.
    */
   void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards, Picture* _picture = nullptr) noexcept;
 
-  /// 6502: SP1 -- `JSR SPS4` and then a fall-through into `SP2`. Aim the compass at the station
-  /// and draw it.
+  /// `SPS4` and then a fall-through into `SP2`. Aim the compass at the station and
+  /// draw it.
   void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes,
                            Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: COMPAS -- erase the old dot, work out the new one, draw it.
+   * Erase the old dot, work out the new one, draw it.
    *
-   * The first `JSR DOT` is the erase, and it works because everything here is EOR: the dot is
+   * The first call to `DOT` is the erase, and it works because everything here is EOR: the dot is
    * still where the last frame left it, so drawing it again takes it away. That is also why
    * `Compass` has to persist between calls.
    *

@@ -13,12 +13,12 @@
 
 namespace Elite
 {
-  /// 6502: what byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
+  /// What byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
   inline constexpr std::uint8_t EXPLOSION_COUNTER_START = 18;
 
   namespace
   {
-    /// 6502: DVL6 / DV9 -- the denominator's top byte, shifted up (at least once, with the bytes
+    /// DVL6 / DV9 -- the denominator's top byte, shifted up (at least once, with the bytes
     /// below it) until its top bit is set: what `DVID3B` stores in `Q` and leaves there.
     [[nodiscard]] std::uint8_t ScaledDivisorTop(SignMag24 _divisor) noexcept
     {
@@ -44,7 +44,7 @@ namespace Elite
     // difference between dividing by zero and dividing by one is invisible at this scale.
     const SignMag24 distance{static_cast<std::uint8_t>(_ship.z.lo | 0x01u), _ship.z.hi, _ship.z.sgn};
 
-    // 6502: DV9 -- the divide leaves the scaled divisor in `Q`, and for a ship drawn as a
+    // The divide leaves the scaled divisor in `Q`, and for a ship drawn as a
     // dot that is the frame's Q the altitude check reads (`EndFlightFrame`). The kernel keeps its
     // scratch since M2-b; this byte is recomputed here for that one reader, and `K` is the block
     // this routine returns since M2-c-3.
@@ -61,14 +61,14 @@ namespace Elite
     const std::uint8_t top = static_cast<std::uint8_t>((quotient.top & 0x7Fu) | quotient.high);
     if (top != 0u)
     {
-      // 6502: PL21 -- SEC and return. X is not touched on this path.
+      // SEC and return. X is not touched on this path.
       return ScreenOffset{quotient.low, 0, top, true};
     }
 
     const std::uint8_t high = quotient.mid;
     if (high >= 4u)
     {
-      // 6502: the CPX that overflows at 1024, returning through PL6's RTS with the carry the
+      // The CPX that overflows at 1024, returning through PL6's RTS with the carry the
       // comparison set. A is still the zero the test above left, which is why `SHPPT` -- which
       // reads A and not the carry -- can miss this and does.
       return ScreenOffset{quotient.low, high, 0, true};
@@ -80,7 +80,7 @@ namespace Elite
       return ScreenOffset{quotient.low, high, 0, false};
     }
 
-    // 6502: the two's complement negation. The added one runs with the carry the comparison left
+    // The two's complement negation. The added one runs with the carry the comparison left
     // CLEAR, so it adds exactly one -- the one place in this file where the incoming carry is not
     // part of the sum, and the only one where reading it as `+ 1 + C` would still be right. The
     // original writes
@@ -88,17 +88,17 @@ namespace Elite
     const AddResult low = AddWithCarry(static_cast<std::uint8_t>(quotient.low ^ 0xFFu), 1, false);
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(high ^ 0xFFu), 0, low.carry);
 
-    // 6502: PL44 -- the carry cleared, then PL6's return.
+    // The carry cleared, then PL6's return.
     return ScreenOffset{low.value, negated.value, negated.value, false};
   }
 
   ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept
   {
-    // 6502: PLS6 on the x coordinate.
+    // PLS6 on the x coordinate.
     const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.x);
     if (across.overflow)
     {
-      // 6502: PL2-1, which is PROJ's own return one byte before the next routine begins.
+      // PL2-1, which is PROJ's own return one byte before the next routine begins.
       return ProjectResult{true, across.a};
     }
 
@@ -108,7 +108,7 @@ namespace Elite
     const AddResult x1 = AddWithCarry(across.high, 0, x.carry);
     _screen.x1 = x1.value;
 
-    // 6502: the y coordinate, with its sign flipped: up the screen is down the axis.
+    // The y coordinate, with its sign flipped: up the screen is down the axis.
     const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.y.sgn ^ 0x80u);
     const ScreenOffset down = DivideToScreenOffset(_ship, _math, SignMag24{_ship.y.lo, _ship.y.hi, upwards});
     if (down.overflow)
@@ -128,7 +128,7 @@ namespace Elite
   {
 
     /*
-     * 6502: Shpt -- one four-pixel horizontal line, written as the line-heap entry that ENDS at
+     * One four-pixel horizontal line, written as the line-heap entry that ENDS at
      * offset `_y`. The original walks Y forwards and then back, which is why the entry's four bytes
      * come out at `_y - 1` to `_y + 2` rather than starting where Y is.
      *
@@ -207,23 +207,23 @@ namespace Elite
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
-      return _carryIn; // 6502: LL10-1 -- a bare return, and the flag is the caller's
+      return _carryIn; // LL10-1 -- a bare return, and the flag is the caller's
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
     DrawShipLines(_canvas, _heap, _ship.heap, _picture);
 
-    // 6502: LL155's exit -- the test against 4 clears it for a heap with no line on it, and the
+    // LL155's exit -- the test against 4 clears it for a heap with no line on it, and the
     // comparison that ends the drawing loop leaves it set for every heap that had one.
     return _heap.Read(_ship.heap) >= 4u;
   }
 
   void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept
   {
-    _heap.Write(_run.Byte(1u), EXPLOSION_COUNTER_START); // 6502: 18 into byte 1 of the heap
-    _heap.Write(_run.Byte(2u), _explosionCount);         // 6502: byte 7 of the blueprint into byte 2
+    _heap.Write(_run.Byte(1u), EXPLOSION_COUNTER_START); // 18 into byte 1 of the heap
+    _heap.Write(_run.Byte(2u), _explosionCount);         // Byte 7 of the blueprint into byte 2
 
-    // 6502: EE55 -- four random bytes into the heap. The first roll takes the carry `EE51` left,
+    // Four random bytes into the heap. The first roll takes the carry `EE51` left,
     // and each later one the clear the loop's own comparison leaves while the index is under six.
     bool carry = _carryIn;
     for (std::uint16_t byte = 3u; byte <= 6u; ++byte)
@@ -241,7 +241,7 @@ namespace Elite
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
-    // 6502: the two high bytes ORed together, and anything set goes to nono. See the header -- this
+    // The two high bytes ORed together, and anything set goes to nono. See the header -- this
     // is not the carry, and the difference is
     // visible whenever `PLS6` overflows on its second test rather than its first.
     const bool offScreen = (projected.a | _screen.x1) != 0u || _screen.y >= static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 2);
@@ -254,7 +254,7 @@ namespace Elite
     if (offScreen || !StorePoint(_heap, heap, _screen, 2, _screen.y) ||
         !StorePoint(_heap, heap, _screen, 6, AddWithCarry(_screen.y, 1, false).value))
     {
-      // 6502: nono -- one bit masked out of the state byte. Reached four ways, and all four leave
+      // One bit masked out of the state byte. Reached four ways, and all four leave
       // the ship marked as not on the screen.
       _ship.state = Without(_ship.state, ShipStateBit::OnScreen);
       return;
@@ -291,15 +291,15 @@ namespace Elite
 
       // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
       // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
-      // answer and not of the first product (6502: `LL38`).
+      // answer and not of the first product (`LL38`).
       SignMag16 total{MultiplyByLog(_geometry.scaledOrientation[base], magnitude[0], false).value,
                       static_cast<std::uint8_t>(sign[0] ^ _geometry.scaledOrientation[base + 1])};
 
-      // 6502: the second product goes straight back over its own multiplier, and `LL38` combines
+      // The second product goes straight back over its own multiplier, and `LL38` combines
       // it with the total under the two signs.
       std::uint8_t term = MultiplyByLog(_geometry.scaledOrientation[base + 2], magnitude[1], false).value;
       SignedSum combined = CombineSigned(static_cast<std::uint8_t>(sign[1] ^ _geometry.scaledOrientation[base + 3]), term, total);
-      total = SignMag16{combined.value, combined.sign}; // 6502: back through `T` into `R`
+      total = SignMag16{combined.value, combined.sign}; // Back through `T` into `R`
 
       term = MultiplyByLog(_geometry.scaledOrientation[base + 4], magnitude[2], false).value;
       combined = CombineSigned(static_cast<std::uint8_t>(sign[2] ^ _geometry.scaledOrientation[base + 5]), term, total);
@@ -311,9 +311,9 @@ namespace Elite
 
   PreparedSlope PrepareSlope(Slope _slope, SignMag16 _distance) noexcept
   {
-    PreparedSlope prepared{_distance, _slope.gradient, 0}; // 6502: the gradient into Q
+    PreparedSlope prepared{_distance, _slope.gradient, 0}; // The gradient into Q
 
-    const std::uint8_t original = _distance.hi; // 6502: S
+    const std::uint8_t original = _distance.hi;
     if ((original & 0x80u) != 0u)
     {
       // (S R) = -(S R). The low byte is subtracted from zero and the high byte adds nothing on
@@ -331,7 +331,7 @@ namespace Elite
   namespace
   {
 
-    /// 6502: LL122 -- (Y X) = (S R) * Q, shift-and-add, with the first shift happening BEFORE any
+    /// (Y X) = (S R) * Q, shift-and-add, with the first shift happening BEFORE any
     /// addition so the product comes out halved. That is not an error to correct: the caller wants
     /// the step for half a pixel.
     SlopeStep MultiplySlope(PreparedSlope _prepared) noexcept
@@ -379,7 +379,7 @@ namespace Elite
       return SlopeStep{low, high, _prepared.divisor};
     }
 
-    /// 6502: LL121 -- (Y X) = (S R) / Q, restoring division, with (Y X) starting at &FFFE as the bit
+    /// (Y X) = (S R) / Q, restoring division, with (Y X) starting at &FFFE as the bit
     /// counter in the same trick `LL31` uses: the quotient bits push the set bits out of the top.
     SlopeStep DivideSlope(PreparedSlope _prepared) noexcept
     {
@@ -416,7 +416,7 @@ namespace Elite
       return SlopeStep{low, high, _prepared.divisor};
     }
 
-    /// 6502: LL133 -- negate (Y X). Both loops exit with the carry clear, so the added one is one.
+    /// Negate (Y X). Both loops exit with the carry clear, so the added one is one.
     SlopeStep NegateStep(SlopeStep _step) noexcept
     {
       const AddResult low = AddWithCarry(static_cast<std::uint8_t>(_step.low ^ 0xFFu), 1, false);
@@ -435,7 +435,7 @@ namespace Elite
 
   SlopeStep StepAlongX(Slope _slope, std::uint8_t _distanceHigh, std::uint8_t _xLow) noexcept
   {
-    // 6502: LL120 -- `R` is overwritten on entry, so whatever the caller left there is dead.
+    // `R` is overwritten on entry, so whatever the caller left there is dead.
     const PreparedSlope prepared = PrepareSlope(_slope, SignMag16{_xLow, _distanceHigh});
     const SlopeStep step = (_slope.steep != 0u) ? DivideSlope(prepared) : MultiplySlope(prepared);
     return FinishStep(step, prepared.sign);
@@ -480,7 +480,7 @@ namespace Elite
       a = 0;
     }
 
-    // 6502: LL119 -- x1_hi is non-zero and positive, so the point is off the RIGHT edge. Stepping
+    // X1_hi is non-zero and positive, so the point is off the RIGHT edge. Stepping
     // the high byte down is what makes the step land on 255 rather than 256.
     if (a != 0u)
     {
@@ -489,7 +489,7 @@ namespace Elite
       _point.xHigh = 0;
     }
 
-    // 6502: LL134 -- y1_hi is negative, so the point is off the TOP. Step to y = 0.
+    // Y1_hi is negative, so the point is off the TOP. Step to y = 0.
     if ((_point.yHigh & 0x80u) != 0u)
     {
       AddStep(StepAlongY(_slope, SignMag16{_point.yLow, _point.yHigh}), _point.xLow, _point.xHigh, _math);
@@ -497,7 +497,7 @@ namespace Elite
       _point.yHigh = 0;
     }
 
-    // 6502: LL135 -- and the bottom, which is a subtraction rather than a sign test because the
+    // LL135 -- and the bottom, which is a subtraction rather than a sign test because the
     // edge is 144 and not zero. R and S hold the difference whether or not the clamp runs, because
     // that difference IS the step's argument.
     const SubResult overshoot = SubtractWithCarry(_point.yLow, SPACE_VIEW_BOTTOM, true);
@@ -508,7 +508,7 @@ namespace Elite
       return;
     }
 
-    // 6502: LL139 -- and 143 rather than 144, for the same reason the right edge is 255.
+    // LL139 -- and 143 rather than 144, for the same reason the right edge is 255.
     AddStep(StepAlongY(_slope, SignMag16{overshoot.value, beyond.value}), _point.xLow, _point.xHigh, _math);
     _point.yLow = static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 1);
     _point.yHigh = 0;
@@ -517,7 +517,7 @@ namespace Elite
   namespace
   {
 
-    /// 6502: LL146 -- repack the two clipped points into the four eight-bit coordinates the line
+    /// Repack the two clipped points into the four eight-bit coordinates the line
     /// drawing wants. The order matters in the original: `XX15+2` is read into `XX15+1` before it
     /// is overwritten, which is what the four bytes' aliasing makes of it.
     [[nodiscard]] Line RepackClipped(Line16 _line) noexcept
@@ -525,14 +525,14 @@ namespace Elite
       return Line{_line.first.xLow, _line.first.yLow, _line.second.xLow, _line.second.yLow};
     }
 
-    /// 6502: the four swaps at LLX117 -- exchange the two ends of the line.
+    /// The four swaps at LLX117 -- exchange the two ends of the line.
     void SwapEnds(Line16& _line) noexcept
     {
       std::swap(_line.first, _line.second);
     }
 
     /// True when both ends are so far off the same side that no part of the line can be on screen.
-    /// 6502: the four sign tests at LL83, which are only reached when neither
+    /// The four sign tests at LL83, which are only reached when neither
     /// end is on the screen. `XX12+2` is the byte the original works in and `LL115` overwrites it
     /// on every path that gets past here; the port keeps writing it until M2-c-3 takes `XX12`.
     bool BothEndsBeyondTheSameEdge(Line16 _line, GeometryWorkspace& _geometry) noexcept
@@ -565,7 +565,7 @@ namespace Elite
       return ((second | _geometry.dotProducts[2]) & 0x80u) == 0u;
     }
 
-    /// 6502: LL115 to LL114 -- the line's gradient, scaled so that both differences fit in a byte,
+    /// LL115 to LL114 -- the line's gradient, scaled so that both differences fit in a byte,
     /// with `T` saying which axis it is measured along.
     [[nodiscard]] Slope MeasureSlope(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
     {
@@ -580,7 +580,7 @@ namespace Elite
       _geometry.dotProducts[5] = downHigh.value;
 
       // The direction of the slope, which is the two differences' signs EOR'd -- taken now, because
-      // both are about to be made positive. 6502: `LL116` stores it in `XX12+3`.
+      // both are about to be made positive. `LL116` stores it in `XX12+3`.
       const std::uint8_t direction = static_cast<std::uint8_t>(downHigh.value ^ _geometry.dotProducts[3]);
 
       if ((_geometry.dotProducts[5] & 0x80u) != 0u)
@@ -603,7 +603,7 @@ namespace Elite
         high = SubtractWithCarry(0, _geometry.dotProducts[3], low.carry).value;
       }
 
-      // 6502: LL111 / LL112 -- halve both until each fits in one byte.
+      // LL111 / LL112 -- halve both until each fits in one byte.
       while (high != 0u || _geometry.dotProducts[5] != 0u)
       {
         const bool intoAcross = (high & 0x01u) != 0u;
@@ -616,7 +616,7 @@ namespace Elite
       }
 
       /*
-       * 6502: LL113 -- X is the now-zero high byte, so T starts at zero and the steep branch
+       * X is the now-zero high byte, so T starts at zero and the steep branch
        * decrements it to 255.
        *
        * `Q` IS WRITTEN AS WELL AS USED. The divisor stays there, and for a frame whose last ship
@@ -630,7 +630,7 @@ namespace Elite
         return Slope{DivideByLog(_geometry.dotProducts[4], _math.lastDivisor).value, direction, 0};
       }
 
-      // 6502: LL114 -- steep, so `T` comes out as 255.
+      // Steep, so `T` comes out as 255.
       _math.lastDivisor = _geometry.dotProducts[4];
       return Slope{DivideByLog(_geometry.dotProducts[2], _math.lastDivisor).value, direction, 0xFFu};
     }
@@ -649,7 +649,7 @@ namespace Elite
       return result;
     }
 
-    // 6502: LL107 -- is the FAR end on the screen? Both its high bytes zero and its y under 144.
+    // Is the FAR end on the screen? Both its high bytes zero and its y under 144.
     constexpr std::uint8_t LAST_ROW = static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 1);
     std::uint8_t state = LAST_ROW;
     if ((_secondXHigh | _line.second.yHigh) == 0u && LAST_ROW >= _line.second.yLow)
@@ -670,7 +670,7 @@ namespace Elite
       result.ends = static_cast<std::uint8_t>(result.ends >> 1);
     }
 
-    // 6502: LL83 -- with neither end on screen, four cheap rejections before any arithmetic.
+    // With neither end on screen, four cheap rejections before any arithmetic.
     if ((result.ends & 0x80u) != 0u && BothEndsBeyondTheSameEdge(_line, _geometry))
     {
       result.rejected = true;
@@ -679,7 +679,7 @@ namespace Elite
 
     const Slope slope = MeasureSlope(_line, _geometry, _math);
 
-    // 6502: LL116 -- the gradient and its direction, where LL118 and LL120/LL123 read them. They
+    // The gradient and its direction, where LL118 and LL120/LL123 read them. They
     // are the `Slope` value since M2-c-2; the two bytes are still written because `XX12` is what
     // the original works in and M2-c-3 is what takes it.
     _geometry.dotProducts[2] = slope.gradient;
@@ -688,7 +688,7 @@ namespace Elite
     const bool nearEndOnScreen = result.ends != 0u && (result.ends & 0x80u) == 0u;
     if (!nearEndOnScreen)
     {
-      // 6502: LL138 -- clip the near end.
+      // Clip the near end.
       MovePointOnScreen(_line.first, slope, _math);
 
       if ((result.ends & 0x80u) == 0u)
@@ -698,7 +698,7 @@ namespace Elite
         return result;
       }
 
-      // 6502: LL117 -- and if clipping did not actually bring it on screen, the line misses.
+      // LL117 -- and if clipping did not actually bring it on screen, the line misses.
       if ((_line.first.xHigh | _line.first.yHigh) != 0u || _line.first.yLow >= SPACE_VIEW_BOTTOM)
       {
         result.rejected = true;
@@ -706,10 +706,10 @@ namespace Elite
       }
     }
 
-    // 6502: LLX117 -- put the other end in the near slot and clip that too.
+    // Put the other end in the near slot and clip that too.
     SwapEnds(_line);
     MovePointOnScreen(_line.first, slope, _math);
-    result.swap = static_cast<std::uint8_t>(result.swap - 1u); // 6502: SWAP steps down
+    result.swap = static_cast<std::uint8_t>(result.swap - 1u); // SWAP steps down
 
     result.line = RepackClipped(_line);
     return result;
@@ -717,14 +717,14 @@ namespace Elite
 
   ClipResult ClipLine(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip) noexcept
   {
-    // 6502: LL145 -- `SWAP` zeroed, which `LL147` does not do.
+    // `SWAP` zeroed, which `LL147` does not do.
     return ClipLineKeepingSwap(_line, _geometry, _math, _clip, 0u, _line.second.xHigh);
   }
 
   namespace
   {
 
-    /// 6502: LL15 and LL21 -- copy the ship's three orientation vectors into XX16 and scale each
+    /// LL15 and LL21 -- copy the ship's three orientation vectors into XX16 and scale each
     /// magnitude down by 197. Doubling the magnitude puts its top bit into the carry and the sign
     /// byte rotates it in, so what gets divided is the pair read as nine bits.
     void ScaleOrientation(const Ship& _work, GeometryWorkspace& _geometry) noexcept
@@ -738,7 +738,7 @@ namespace Elite
         _geometry.scaledOrientation[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
       }
 
-      constexpr std::uint8_t SCALE = 197; // 6502: 197 into Q
+      constexpr std::uint8_t SCALE = 197; // 197 into Q
       for (int index = 16; index >= 0; index -= 2)
       {
         const std::size_t at = static_cast<std::size_t>(index);
@@ -747,7 +747,7 @@ namespace Elite
       }
     }
 
-    /// 6502: the twenty-four instructions at the top of LL42 -- transpose XX16, so the three vectors
+    /// The twenty-four instructions at the top of LL42 -- transpose XX16, so the three vectors
     /// become their own x, y and z components. `LL51` is then the same code doing a different
     /// rotation, which is why there is a transpose rather than a second routine.
     void TransposeOrientation(GeometryWorkspace& _geometry) noexcept
@@ -760,12 +760,12 @@ namespace Elite
       std::swap(_geometry.scaledOrientation[11], _geometry.scaledOrientation[15]);
     }
 
-    /// 6502: LL89 -- the dot product of a face's normal in XX12 with the position in XX15, whose SIGN
+    /// The dot product of a face's normal in XX12 with the position in XX15, whose SIGN
     /// decides whether the face is drawn. What gets stored is the MAGNITUDE, so a face seen exactly
     /// edge-on comes out invisible.
     std::uint8_t FaceVisibility(Vector16 _vector, const GeometryWorkspace& _geometry) noexcept
     {
-      // 6502: the first product, and the sign it is summed under.
+      // The first product, and the sign it is summed under.
       SignMag16 total{MultiplyByLog(_vector.x.lo, _geometry.dotProducts[0], false).value,
                       static_cast<std::uint8_t>(_geometry.dotProducts[1] ^ _vector.x.hi)};
 
@@ -781,7 +781,7 @@ namespace Elite
     }
 
     /*
-     * 6502: the sixteen-bit add-or-subtract at LL49/LL52 and LL53/LL54 -- the ship's own coordinate
+     * The sixteen-bit add-or-subtract at LL49/LL52 and LL53/LL54 -- the ship's own coordinate
      * plus or minus the rotated vertex, under the two signs, negated again when the subtraction
      * crossed zero.
      *
@@ -792,9 +792,9 @@ namespace Elite
     [[nodiscard]] SignMag24 PlaceVertexAxis(std::uint8_t _productLow, std::uint8_t _productSign, const Ship& _work,
                                             std::size_t _axis) noexcept
     {
-      const auto axis = _work.PositionAt(static_cast<std::uint8_t>(_axis)); // 6502: INWK,X to INWK+2,X
+      const auto axis = _work.PositionAt(static_cast<std::uint8_t>(_axis));
 
-      // 6502: XX15(2 1 0) for x and XX15(5 4 3) for y -- the same six bytes, read as two 24-bit
+      // XX15(2 1 0) for x and XX15(5 4 3) for y -- the same six bytes, read as two 24-bit
       // sign-magnitude coordinates once the dot products are done with them (M2-c-2: a value).
       SignMag24 placed;
       placed.sgn = axis.sgn;
@@ -833,7 +833,7 @@ namespace Elite
       return placed;
     }
 
-    /// 6502: LL80 -- put a clipped line's four bytes on the ship's line heap.
+    /// Put a clipped line's four bytes on the ship's line heap.
     void PushHeapLine(LineHeap& _heap, HeapOffset _run, Line _line, std::uint8_t& _next) noexcept
     {
       _heap.Write(_run.Byte(_next), _line.x1);
@@ -844,7 +844,7 @@ namespace Elite
     }
 
     /// Whether the two faces a nibble pair names are both invisible, which is what makes a vertex or
-    /// an edge not worth drawing. 6502: the four visibility tests in parts 6 and 10.
+    /// an edge not worth drawing: the four visibility tests in parts 6 and 10.
     bool EitherFaceVisible(const GeometryWorkspace& _geometry, std::uint8_t _pair) noexcept
     {
       return _geometry.faceVisible[static_cast<std::size_t>(_pair & 0x0Fu)] != 0u || _geometry.faceVisible[static_cast<std::size_t>(_pair >> 4)] != 0u;
@@ -853,7 +853,7 @@ namespace Elite
   } // namespace
 
   /*
-   * 6502: what `LL9`'s eleven entry points share (M4-b).
+   * What `LL9`'s eleven entry points share (M4-b).
    *
    * `DrawShip` was 551 lines over seven annotated part blocks, taking thirteen arguments and
    * carrying four locals across them under comment rules. The rules are function boundaries now and
@@ -886,10 +886,10 @@ namespace Elite
     /// there is always a universe, and the nullable pointers are the public routines'.
     Picture& picture;
 
-    std::uint8_t detail = 31;               ///< 6502: XX4 -- how much detail the distance allows
-    std::array<std::uint8_t, 9> position{}; ///< 6502: XX18 -- the position, halved, then rotated
-    HeapOffset run{};                       ///< 6502: the ship's own block of the line heap
-    std::uint8_t used = 1;                  ///< 6502: U -- heap bytes used, one because byte 0 is the count
+    std::uint8_t detail = 31;               ///< How much detail the distance allows
+    std::array<std::uint8_t, 9> position{}; ///< The position, halved, then rotated
+    HeapOffset run{};                       ///< The ship's own block of the line heap
+    std::uint8_t used = 1;                  ///< Heap bytes used, one because byte 0 is the count
 
   };
 
@@ -904,23 +904,23 @@ namespace Elite
   enum class Presence : std::uint8_t
   {
     Draw,     ///< fall through to `EE28` -- there is a ship to draw
-    Body,     ///< 6502: LL25 -- the planet or the sun, which is a different routine
-    Erased,   ///< 6502: EE51, which `LL14` also jumps to -- rubbed out and gone
-    Exploded, ///< 6502: `LL14`'s other exit, into `DOEXP` -- off the screen and still burning
+    Body,     ///< The planet or the sun, which is a different routine
+    Erased,   ///< EE51, which `LL14` also jumps to -- rubbed out and gone
+    Exploded, ///< `LL14`'s other exit, into `DOEXP` -- off the screen and still burning
   };
 
   [[nodiscard]] Presence TestPresence(ShipRender& _render, Ship& _slot, ShipType _type, Rng& _rng, bool _carryIn) noexcept
   {
-    // 6502: LL25 -- a negative type is the planet or the sun, which is a different routine.
+    // A negative type is the planet or the sun, which is a different routine.
     if (IsBody(_type))
     {
       return Presence::Body;
     }
 
-    // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
+    // Bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
     if (Has(_render.work.traits, TraitBit::Remove))
     {
-      // 6502: EE51 as a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
+      // EE51 as a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
       static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture));
       return Presence::Erased;
     }
@@ -937,13 +937,13 @@ namespace Elite
       _slot.acceleration = 0;
       _slot.pitchCounter = 0;
 
-      // 6502: EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
+      // EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
       const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture);
-      SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
+      SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry);
     }
 
-    // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
+    // EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
     // two coordinate tests are sixteen-bit: |x| or |y| at least as large as z puts the ship outside
     // a ninety-degree view whatever the projection would make of it.
     bool gone = (_render.work.z.sgn & 0x80u) != 0u;
@@ -960,10 +960,9 @@ namespace Elite
 
     if (gone)
     {
-      // 6502: LL14.
       if (!Has(_render.work.state, ShipStateBit::Exploding))
       {
-        // 6502: EE51 -- and the flag is `LL9`'s exit
+        // EE51 -- and the flag is `LL9`'s exit
         static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false, &_render.picture));
         return Presence::Erased;
       }
@@ -984,7 +983,7 @@ namespace Elite
   enum class Range : std::uint8_t
   {
     Detailed, ///< close enough for the vertices and the edges
-    Dot,      ///< 6502: LL13 -- past the blueprint's own visibility distance
+    Dot,      ///< Past the blueprint's own visibility distance
   };
 
   [[nodiscard]] Range MeasureRange(ShipRender& _render) noexcept
@@ -1014,7 +1013,7 @@ namespace Elite
     }
     else if (_render.blueprint.visibility < _render.work.z.hi && !Has(_render.work.state, ShipStateBit::Exploding))
     {
-      // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
+      // Past the blueprint's own visibility distance, so a dot will do.
       return Range::Dot;
     }
 
@@ -1041,7 +1040,7 @@ namespace Elite
 
     if (Has(_render.work.state, ShipStateBit::Exploding))
     {
-      // 6502: EE30 -- an exploding ship shows every face and every vertex, so that the whole cloud
+      // An exploding ship shows every face and every vertex, so that the whole cloud
       // can be built out of them.
       for (int face = faceBytes >> 2; face >= 0; --face)
       {
@@ -1051,7 +1050,7 @@ namespace Elite
     }
     else if (faceBytes != 0u)
     {
-      // 6502: EE29 -- halve the ship's position until its z fits in a byte, counting the halvings
+      // Halve the ship's position until its z fits in a byte, counting the halvings
       // on top of the blueprint's own scale in byte 18.
       std::uint8_t shifts = _render.blueprint.normalShifts;
       std::uint8_t z = _render.position[7];
@@ -1072,7 +1071,7 @@ namespace Elite
         _render.position[6] = RotateRight(_render.position[6], intoZ).value;
       }
 
-      // 6502: LL91 -- the position, rotated into the ship's own frame. `XX15`'s six bytes are the
+      // The position, rotated into the ship's own frame. `XX15`'s six bytes are the
       // three sign-magnitude pairs `LL51` reads, which is a `Vector16` since M2-c-2.
       DotProducts(Vector16{SignMag16{_render.position[0], _render.position[2]}, SignMag16{_render.position[3], _render.position[5]},
                            SignMag16{_render.position[6], _render.position[8]}},
@@ -1084,13 +1083,13 @@ namespace Elite
       _render.position[6] = _render.geometry.dotProducts[4];
       _render.position[8] = _render.geometry.dotProducts[5];
 
-      // 6502: `V` is built from bytes 4 and 17 of the blueprint and points at the faces; in this
+      // `V` is built from bytes 4 and 17 of the blueprint and points at the faces; in this
       // port it is `at`, because the blueprint carries them as a span, so the pointer set-up is an
       // index starting at zero and nothing else (M4-b).
       std::uint8_t at = 0;
       do
       {
-        // 6502: LL86 -- a face whose own distance is under the ship's is taken as visible without
+        // A face whose own distance is under the ship's is taken as visible without
         // the arithmetic.
         const std::uint8_t flags = _render.blueprint.faces[at];
         _render.geometry.dotProducts[1] = flags;
@@ -1102,25 +1101,25 @@ namespace Elite
           continue;
         }
 
-        // 6502: LL87 -- the face's normal, with its three sign bits spread out by doubling.
+        // The face's normal, with its three sign bits spread out by doubling.
         _render.geometry.dotProducts[3] = static_cast<std::uint8_t>(flags << 1);
         _render.geometry.dotProducts[5] = static_cast<std::uint8_t>(flags << 2);
         _render.geometry.dotProducts[0] = _render.blueprint.faces[at + 1u];
         _render.geometry.dotProducts[2] = _render.blueprint.faces[at + 2u];
         _render.geometry.dotProducts[4] = _render.blueprint.faces[at + 3u];
 
-        Vector16 normal; // 6502: XX15's six bytes, the face's normal plus the ship's position
+        Vector16 normal; // XX15's six bytes, the face's normal plus the ship's position
 
-        if (shifts >= 4u) // 6502: XX17, the shift count part 3 left
+        if (shifts >= 4u) // XX17, the shift count part 3 left
         {
-          // 6502: LL143 -- the position is already small enough to use as it stands.
+          // The position is already small enough to use as it stands.
           normal = Vector16{SignMag16{_render.position[0], _render.position[2]}, SignMag16{_render.position[3], _render.position[5]},
                             SignMag16{_render.position[6], _render.position[8]}};
         }
         else
         {
           /*
-           * 6502: LL92 to LL94, with `ovflw` as the retry.
+           * LL92 to LL94, with `ovflw` as the retry.
            *
            * Scale the normal down by the shift count and add the position to it, one axis at a
            * time. Any of the three overflowing sends the whole thing back to the start with the
@@ -1141,7 +1140,7 @@ namespace Elite
               third = static_cast<std::uint8_t>(third >> 1);
             }
 
-            // 6502: `LL38` on the z pair, and the same for x and y: each is the halved coordinate
+            // `LL38` on the z pair, and the same for x and y: each is the halved coordinate
             // under the ship's sign, plus the vertex.
             const SignedSum alongZ = CombineSigned(_render.position[8], _render.position[6], SignMag16{third, _render.geometry.dotProducts[5]});
             if (!alongZ.carry)
@@ -1163,7 +1162,7 @@ namespace Elite
               }
             }
 
-            // 6502: ovflw.
+            // ovflw.
             _render.position[0] = static_cast<std::uint8_t>(_render.position[0] >> 1);
             _render.position[6] = static_cast<std::uint8_t>(_render.position[6] >> 1);
             _render.position[3] = static_cast<std::uint8_t>(_render.position[3] >> 1);
@@ -1173,7 +1172,7 @@ namespace Elite
 
         _render.geometry.faceVisible[static_cast<std::size_t>(at >> 2)] = FaceVisibility(normal, _render.geometry);
         at = static_cast<std::uint8_t>(at + 4u);
-      } while (at < faceBytes); // 6502: XX20
+      } while (at < faceBytes);
     }
   }
 
@@ -1182,11 +1181,11 @@ namespace Elite
   {
     TransposeOrientation(_render.geometry);
 
-    // 6502: XX0+20 -- V is the vertices here, and the loop's own `vertex` is it: the blueprint
+    // V is the vertices here, and the loop's own `vertex` is it: the blueprint
     // carries them as a span, so the pointer set-up is an index starting at zero (M4-b).
 
     /*
-     * 6502: CNT -- where in `XX3` the next projected vertex goes, four bytes at a time.
+     * CNT -- where in `XX3` the next projected vertex goes, four bytes at a time.
      *
      * Its carry is load-bearing: `LL50` adds four to it and then adds six to `XX17` ON THAT CARRY,
      * so a heap that has filled past 255 ends the vertex loop. Both are locals since M2-c-3 and
@@ -1204,22 +1203,22 @@ namespace Elite
 
       if (visible)
       {
-        // 6502: LL49 -- the vertex's three sign bits, spread out by doubling, then rotated into
+        // The vertex's three sign bits, spread out by doubling, then rotated into
         // the player's frame and added to the ship's own position.
         DotProducts(Vector16{SignMag16{_render.blueprint.vertices[vertex], flags},
                              SignMag16{_render.blueprint.vertices[vertex + 1u], static_cast<std::uint8_t>(flags << 1)},
                              SignMag16{_render.blueprint.vertices[vertex + 2u], static_cast<std::uint8_t>(flags << 2)}},
                     _render.geometry);
 
-        // 6502: XX15's six bytes again, now as x in (2 1 0) and y in (5 4 3).
+        // XX15's six bytes again, now as x in (2 1 0) and y in (5 4 3).
         SignMag24 across = PlaceVertexAxis(_render.geometry.dotProducts[0], _render.geometry.dotProducts[1], _render.work, SHIP_X_OFFSET);
         SignMag24 down = PlaceVertexAxis(_render.geometry.dotProducts[2], _render.geometry.dotProducts[3], _render.work, SHIP_Y_OFFSET);
 
-        // 6502: LL55 / LL56 / LL140 -- and z, which is a plain sixteen-bit add or subtract with a
+        // LL55 / LL56 / LL140 -- and z, which is a plain sixteen-bit add or subtract with a
         // floor of four rather than a sign-magnitude one, because a vertex behind the player has
         // to be pulled in front of it before anything is divided by it. `(U T)` is this loop's own
         // since M2-c-3.
-        SignMag16 depth{}; // 6502: (U T) -- the vertex's distance
+        SignMag16 depth{}; // (U T) -- the vertex's distance
         if ((_render.geometry.dotProducts[5] & 0x80u) == 0u)
         {
           const AddResult sum = AddWithCarry(_render.geometry.dotProducts[4], _render.work.z.lo, false);
@@ -1240,7 +1239,7 @@ namespace Elite
           }
         }
 
-        // 6502: LL57 -- halve all three until the two coordinates and the distance fit in a byte
+        // Halve all three until the two coordinates and the distance fit in a byte
         // each, so that the division below is an eight-bit one.
         while ((depth.hi | across.hi | down.hi) != 0u)
         {
@@ -1257,12 +1256,12 @@ namespace Elite
           depth.lo = RotateRight(depth.lo, intoZ).value;
         }
 
-        // 6502: LL60 to LL70 -- the projection itself, and the only place in the port where the
+        // LL60 to LL70 -- the projection itself, and the only place in the port where the
         // divide is picked by which of two routines can do it: LL28 when the coordinate is smaller
         // than the distance, LL61 when it is not.
         std::uint8_t x = vertexSlot;
 
-        // 6502: the distance into `Q`, and the divide is (U R) = 256 * x / distance. `LL28`
+        // The distance into `Q`, and the divide is (U R) = 256 * x / distance. `LL28`
         // leaves U as it was, which is the zero the halving loop above ended on. `Q` is written as
         // well as read here because, for the last vertex of the last ship drawn, it is the frame's Q
         // the altitude check reads (`EndFlightFrame`) -- unless the clipper writes it after.
@@ -1280,7 +1279,7 @@ namespace Elite
 
         if ((across.sgn & 0x80u) != 0u)
         {
-          // 6502: LL62 -- 128 - (U R), for a vertex to the left of centre.
+          // 128 - (U R), for a vertex to the left of centre.
           const SubResult low = SubtractWithCarry(128, projectedX.low, true);
           _render.geometry.projectedVertices[x] = low.value;
           ++x;
@@ -1294,7 +1293,7 @@ namespace Elite
           _render.geometry.projectedVertices[x] = AddWithCarry(projectedX.high, 0, low.carry).value;
         }
 
-        // 6502: LL66 -- and the same again for y, with U cleared first because `LL28` does not
+        // LL66 -- and the same again for y, with U cleared first because `LL28` does not
         // write it and the last vertex's value would otherwise be added in.
         Quotient16 projectedY{0, 0};
         if (down.lo < distance)
@@ -1309,7 +1308,7 @@ namespace Elite
         ++x;
         if ((down.sgn & 0x80u) != 0u)
         {
-          // 6502: LL70 -- below the centre of the view.
+          // Below the centre of the view.
           const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, false);
           _render.geometry.projectedVertices[x] = low.value;
           ++x;
@@ -1325,7 +1324,7 @@ namespace Elite
 
       }
 
-      // 6502: LL50 -- on to the next vertex, six bytes along, and stop when the count runs out or
+      // On to the next vertex, six bytes along, and stop when the count runs out or
       // the index wraps. The carry out of CNT's addition is what feeds XX17's, so a heap that has
       // filled past 255 ends the loop as well.
       const AddResult nextCnt = AddWithCarry(vertexSlot, 4, false);
@@ -1333,7 +1332,7 @@ namespace Elite
       const AddResult nextVertex = AddWithCarry(vertex, 6, nextCnt.carry);
       vertex = nextVertex.value;
 
-      if (nextVertex.carry || vertex >= _render.blueprint.vertexBytes) // 6502: XX20
+      if (nextVertex.carry || vertex >= _render.blueprint.vertexBytes)
       {
         break;
       }
@@ -1355,7 +1354,7 @@ namespace Elite
       return false;
     }
 
-    // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen. The
+    // Rub out the last frame's ship, then mark this one as being on the screen. The
     // run is the frame's from here: parts 10 and 11 push onto the same block and count against the
     // same total, which is why `U` and the offset travel together (M4-b).
     _render.run = _render.work.heap;
@@ -1365,7 +1364,7 @@ namespace Elite
     }
     _render.work.state = With(_render.work.state, ShipStateBit::OnScreen);
 
-    // 6502: U -- how many bytes of the heap this ship has used, which starts at one because byte 0
+    // How many bytes of the heap this ship has used, which starts at one because byte 0
     // is the count itself.
     _render.used = 1;
 
@@ -1387,7 +1386,7 @@ namespace Elite
         beam.second.xLow = 0;
         beam.second.xHigh = 0;
 
-        // 6502: the far end's y is `XX12(1 0)`, which is where `LL145` reads it and where the port
+        // The far end's y is `XX12(1 0)`, which is where `LL145` reads it and where the port
         // keeps writing it: `XX12` is `LL9`'s frame until M2-c-3.
         _render.geometry.dotProducts[1] = 0;
         _render.geometry.dotProducts[0] = _render.work.z.lo;
@@ -1415,23 +1414,23 @@ namespace Elite
   /// ---- parts 10 and 11: the edges, and the heap's own length byte ------------------------------
   void PushEdges(ShipRender& _render) noexcept
   {
-    std::uint16_t walker = 0;   // 6502: V(1 0) -- the edges, which the blueprint carries as a span
-    std::uint8_t heapLimit = 0; // 6502: T1 -- how many heap bytes this blueprint allows
-    std::uint8_t edgeIndex = 0; // 6502: XX17
+    std::uint16_t walker = 0;   // V(1 0) -- the edges, which the blueprint carries as a span
+    std::uint8_t heapLimit = 0; // How many heap bytes this blueprint allows
+    std::uint8_t edgeIndex = 0;
 
-    // 6502: `V` is built from bytes 3 and 16 of the blueprint and points at the edges, which the
+    // `V` is built from bytes 3 and 16 of the blueprint and points at the edges, which the
     // blueprint carries as a span here; the index starts at 0.
     walker = 0;
     heapLimit = _render.blueprint.heapBytes;
 
-    // 6502: SWAP, which `LL147` decrements and nothing in `LL9` reads: `LOIN` zeroes it before it
+    // SWAP, which `LL147` decrements and nothing in `LL9` reads: `LOIN` zeroes it before it
     // sets it again, and `WPLS2`'s reader is the ball's. The accumulation is the byte's, so the
     // port carries it (M2-c-2).
     std::uint8_t swap = 0;
 
     for (;;)
     {
-      // 6502: LL75 -- four bytes per edge: how far away it stays visible, the two faces it joins,
+      // Four bytes per edge: how far away it stays visible, the two faces it joins,
       // and the two vertices it runs between.
       const std::uint8_t distance = _render.blueprint.edges[walker];
       if (distance >= _render.detail && EitherFaceVisible(_render.geometry, _render.blueprint.edges[walker + 1u]))
@@ -1446,14 +1445,14 @@ namespace Elite
         edge.first.yHigh = _render.geometry.projectedVertices[from + 3u];
         edge.second.xLow = _render.geometry.projectedVertices[to];
 
-        // 6502: `XX12(1 0)` again -- the far end's y, in `LL9`'s frame until M2-c-3.
+        // `XX12(1 0)` again -- the far end's y, in `LL9`'s frame until M2-c-3.
         _render.geometry.dotProducts[1] = _render.geometry.projectedVertices[to + 3u];
         _render.geometry.dotProducts[0] = _render.geometry.projectedVertices[to + 2u];
         edge.second.yHigh = _render.geometry.dotProducts[1];
         edge.second.yLow = _render.geometry.dotProducts[0];
         edge.second.xHigh = _render.geometry.projectedVertices[to + 1u];
 
-        // 6502: `LL147` is entered with `XX15+5` in the accumulator, and `SWAP` accumulates across
+        // `LL147` is entered with `XX15+5` in the accumulator, and `SWAP` accumulates across
         // the edges rather than being zeroed for each.
         const ClipResult clipped = ClipLineKeepingSwap(edge, _render.geometry, _render.math, _render.clip, swap, edge.second.xHigh);
         swap = clipped.swap;
@@ -1469,7 +1468,7 @@ namespace Elite
            * `Universe` field and a state-hash exclusion went with it.
            */
 
-          // 6502: LL80 -- and stop as soon as the heap this blueprint asked for is full.
+          // LL80 -- and stop as soon as the heap this blueprint asked for is full.
           PushHeapLine(_render.heap, _render.run, clipped.line, _render.used);
           if (_render.used >= heapLimit)
           {
@@ -1478,28 +1477,27 @@ namespace Elite
         }
       }
 
-      // 6502: LL78.
       edgeIndex = static_cast<std::uint8_t>(edgeIndex + 1u);
-      if (edgeIndex >= _render.blueprint.edgeCount) // 6502: XX20
+      if (edgeIndex >= _render.blueprint.edgeCount)
       {
         break;
       }
       walker = static_cast<std::uint16_t>(walker + 4u);
     }
 
-    // 6502: LL81 -- the heap's length goes in byte 0, and then it is drawn.
+    // The heap's length goes in byte 0, and then it is drawn.
     StoreLineCountAndDraw(_render.canvas, _render.heap, _render.run, _render.used, &_render.picture);
   }
 
   /*
-   * 6502: LL9 -- the ship renderer, as the seven stages its part blocks always were (M4-b).
+   * The ship renderer, as the seven stages its part blocks always were (M4-b).
    *
    * Every stage answers and this performs: the two tail jumps, the dot and the explosion are here,
    * over the universe, and no stage sees more of it than its `ShipRender` frame.
    */
   namespace
   {
-    /// 6502: `LL14`'s tail jump into `DOEXP` -- age the cloud by one frame and draw it, which is how the last
+    /// `LL14`'s tail jump into `DOEXP` -- age the cloud by one frame and draw it, which is how the last
     /// frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     /// vertices part 8 projected, which `DOEXP` copies onto the ship's line heap on its first frame.
     void DrawExplosion(Universe& _universe) noexcept
@@ -1514,42 +1512,42 @@ namespace Elite
     ShipRender render{_universe.canvas, _universe.geometry, _universe.math,   _universe.clip,    _universe.projection,
                       _universe.work,   _universe.heap,     *_universe.flight.blueprint, _universe.picture};
 
-    switch (TestPresence(render, _slot, _universe.flight.type, _universe.rng, _carryIn)) // 6502: part 1
+    switch (TestPresence(render, _slot, _universe.flight.type, _universe.rng, _carryIn)) // Part 1
     {
     case Presence::Draw:
       break;
     case Presence::Body:
-      // 6502: LL25 -- a tail jump to `PLANET`, taken for a type with bit 7 set. `INWK` is the body
+      // A tail jump to `PLANET`, taken for a type with bit 7 set. `INWK` is the body
       // and `TYPE`
       // decides which of the two it is, exactly as the tail jump does.
       DrawPlanetOrSun(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _universe.rng, _universe.work,
                       _universe.projection, _universe.flight.type, &_universe.picture);
       return;
     case Presence::Erased:
-      return; // 6502: EE51, and the flag it leaves is `LL9`'s exit, which nothing reads
+      return; // EE51, and the flag it leaves is `LL9`'s exit, which nothing reads
     case Presence::Exploded:
-      DrawExplosion(_universe); // 6502: `LL14`'s tail jump into `DOEXP`
+      DrawExplosion(_universe); // `LL14`'s tail jump into `DOEXP`
       return;
     }
 
-    if (MeasureRange(render) == Range::Dot) // 6502: part 2
+    if (MeasureRange(render) == Range::Dot) // Part 2
     {
-      // 6502: `LL13`'s tail jump to `SHPPT`
+      // `LL13`'s tail jump to `SHPPT`
       DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection, &_universe.picture);
       return;
     }
 
-    ScaleShip(render);       // 6502: part 3
-    SelectFaces(render);     // 6502: parts 4 and 5
-    ProjectVertices(render); // 6502: parts 6 to 8
+    ScaleShip(render);       // Part 3
+    SelectFaces(render);     // Parts 4 and 5
+    ProjectVertices(render); // Parts 6 to 8
 
-    if (!OpenHeapRun(render)) // 6502: part 9
+    if (!OpenHeapRun(render)) // Part 9
     {
       DrawExplosion(_universe);
       return;
     }
 
-    PushEdges(render); // 6502: parts 10 and 11, and `LL81`'s count byte with them
+    PushEdges(render); // Parts 10 and 11, and `LL81`'s count byte with them
   }
 
 } // namespace Elite

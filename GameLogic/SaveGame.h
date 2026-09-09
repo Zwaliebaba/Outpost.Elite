@@ -18,14 +18,14 @@ namespace Elite
   /*
    * Saving and loading a commander (slice 2d).
    *
-   * 6502: SV1, LOD, YESNO and JAMESON. The C64 build's `SVE` is not a file write at all -- it is
+   * SV1, LOD, YESNO and JAMESON. The C64 build's `SVE` is not a file write at all -- it is
    * the disk access menu -- and the only instructions in the whole flow that touch a device are two
    * Kernal calls. Everything around them is arithmetic, text and a keyboard, which is why this
    * waited on nothing but somebody looking.
    */
 
   /*
-   * 6502: KERNALSVE and KERNALLOAD -- where a commander file goes and comes from.
+   * KERNALSVE and KERNALLOAD -- where a commander file goes and comes from.
    *
    * The port's answer to the C64's Kernal. It is a seam for the reason `GameLogic` has all its
    * others: the determinism guard forbids file access here (AGENTS.md §5, checked by
@@ -40,16 +40,16 @@ namespace Elite
   public:
     virtual ~CommanderStore() = default;
 
-    /// 6502: SV1's `JSR KERNALSVE`. False when the write failed.
+    /// SV1's call into the Kernal to write the file. False when the write failed.
     virtual bool Write(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
                        std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file) = 0;
 
-    /// 6502: LOD's `JSR KERNALLOAD`. False when the file could not be read.
+    /// LOD's call into the Kernal to read it back. False when the file could not be read.
     virtual bool Read(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) = 0;
   };
 
   /*
-   * 6502: SV1's K to K+3 -- the competition number, and the CHK2 that is computed with it.
+   * SV1's K to K+3 -- the competition number, and the CHK2 that is computed with it.
    *
    * A four-byte number printed after every save, and it is not a serial: it is the commander's
    * checksum folded together with the competition flags, the third byte of the cash and the high
@@ -63,12 +63,12 @@ namespace Elite
    */
   struct CompetitionNumber
   {
-    std::array<std::uint8_t, 4> value{}; ///< 6502: K to K+3, which BPRNT prints most significant first
-    std::uint8_t checksum2 = 0;          ///< 6502: CHK2 -- the checksum EOR &A9, stored in the file
+    std::array<std::uint8_t, 4> value{}; ///< K to K+3, which BPRNT prints most significant first
+    std::uint8_t checksum2 = 0;          ///< The checksum EORed with &A9, in the file
   };
 
   /*
-   * 6502: the instructions between `JSR CHECK` and `JSR KERNALSETUP` in SV1.
+   * What SV1 does between computing the checksum and handing the file to the Kernal.
    *
    * Takes the FILE image rather than the live block, because the checksum it folds in is the one
    * SaveCommander wrote into the file and not anything the commander at TP holds.
@@ -76,16 +76,17 @@ namespace Elite
   [[nodiscard]] CompetitionNumber MakeCompetitionNumber(const Commander& _image) noexcept;
 
   /*
-   * 6502: YESNO -- wait for "Y" or "N", and ignore everything else.
+   * Wait for "Y" or "N", and ignore everything else.
    *
-   * Returns true for "Y". The original says so with the carry, and it gets it for free: `CMP #'Y'`
-   * sets the carry when the key is 'Y' or higher, and the branch it takes lands on an RTS. So the
-   * "yes" answer is the comparison's own flag rather than anything the routine sets.
+   * Returns true for "Y". The original says so with the carry, and it gets it for free: comparing
+   * the key with 'Y' sets the carry when the key is 'Y' or higher, and the branch that test takes
+   * lands straight on a return. So the "yes" answer is the comparison's own flag rather than
+   * anything the routine sets.
    */
   [[nodiscard]] bool AskYesNo(Keyboard& _keys) noexcept;
 
   /*
-   * 6502: JAMESON -- put the default commander back.
+   * Put the default commander back.
    *
    * Copies NA2% over NA%, which is the SAVE IMAGE and not the live commander, so a caller has to
    * load it afterwards for the reset to take effect. `SVE`'s option 4 does exactly that: JAMESON
@@ -94,13 +95,13 @@ namespace Elite
   void ResetToDefaultCommander(std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept;
 
   /*
-   * 6502: SV1 without its two Kernal calls -- everything a save does before the bytes leave.
+   * SV1 without its two Kernal calls -- everything a save does before the bytes leave.
    *
    * Halves the save count, builds the file image with all three checksums, works out the
    * competition number and hands the result to the store. The competition number is returned rather
    * than printed, because printing it is four token calls the caller already owns.
    *
-   * `LSR SVC` is the one line worth pausing on: every save HALVES the count rather than
+   * The save count is the one field worth pausing on: every save HALVES it rather than
    * incrementing it, so it decays towards zero and a commander saved often looks the same as one
    * saved once. Whatever it was for, it is not a count of saves.
    */
@@ -110,7 +111,7 @@ namespace Elite
     CompetitionNumber competition{};
 
     /*
-     * 6502: NA% after SVL1 -- the save image, and it outlives the write.
+     * NA% after SVL1 -- the save image, and it outlives the write.
      *
      * SV1 calls DFAULT once the Kernal returns, and DFAULT reads NA% rather than re-reading the
      * disk, so the bytes have to be here for the menu to reproduce that. Returning them also says
@@ -124,7 +125,7 @@ namespace Elite
                                             std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept;
 
   /*
-   * 6502: `loading` without LOD's Kernal call -- read a file back and check it.
+   * `loading` without LOD's Kernal call -- read a file back and check it.
    *
    * Returns false when the store could not read it OR when either checksum disagrees, which are
    * different failures to a player and the same one to this routine. The original does not
@@ -145,13 +146,13 @@ namespace Elite
   // are `Universe`'s, and the keyboard, the line editor's two waits and the store are `Ports`'.
   // It went in M3-a-3, and `GameStart` went with it because it held one.
 
-  /// How the menu ended. 6502: which label it reached, and the carry it left.
+  /// How the menu ended: which label it reached, and the carry it left.
   enum class DiskMenuOutcome
   {
-    Left,   ///< 6502: feb13 -- any key but 1 to 4, and CLC
-    Loaded, ///< 6502: `loading` -- SEC, and a different commander is in place
-    Saved,  ///< 6502: SVEX after a successful save -- and CLC, even though DFAULT just ran
-    Reset,  ///< 6502: option 4 -- JAMESON then DFAULT, so the default commander is loaded
+    Left,   ///< Any key but 1 to 4, and CLC
+    Loaded, ///< SEC, and a different commander is in place
+    Saved,  ///< SVEX after a successful save -- and CLC, even though DFAULT just ran
+    Reset,  ///< Option 4 -- JAMESON then DFAULT, so the default commander is loaded
   };
 
   /*
@@ -162,7 +163,7 @@ namespace Elite
    * an inconsistency in the port -- it is what the routine does, and the header above says how.
    */
 
-  /// 6502: the four keys SVE compares against, in the order it compares them.
+  /// The four keys SVE compares against, in the order it compares them.
   inline constexpr std::uint8_t DISK_MENU_LOAD = '1';
   inline constexpr std::uint8_t DISK_MENU_SAVE = '2';
   inline constexpr std::uint8_t DISK_MENU_MEDIA = '3';
@@ -171,12 +172,12 @@ namespace Elite
   struct DiskMenuResult
   {
     DiskMenuOutcome outcome = DiskMenuOutcome::Left;
-    bool newCommander = false;       ///< 6502: the carry on return
-    CompetitionNumber competition{}; ///< 6502: K to K+3, when a save happened
+    bool newCommander = false;       ///< The carry on return
+    CompetitionNumber competition{}; ///< K to K+3, when a save happened
   };
 
   /*
-   * 6502: SVE -- the disk access menu, which is what the C64 build calls its save routine.
+   * The disk access menu, which is what the C64 build calls its save routine.
    *
    * Five options around routines that all exist by now, and three things about it are worth
    * knowing before reading it.
@@ -186,13 +187,14 @@ namespace Elite
    * waits for a key and jumps back to SVE, and a file that is not a commander reaches `ELT2F` and
    * does the same. There is no way to leave the menu by failing.
    *
-   * AND A FAILED LOAD POISONS EVERY LATER EXIT. Those failures are inside `JSR LOD`, and they
-   * leave by `JMP SVE` rather than by returning, so the menu is re-entered with LOD's return
-   * address still on the stack. Whatever the player does next, its RTS lands back in `loading` at
-   * `JSR TRNME / SEC / RTS` -- so leaving with "5" after a failed load renames the commander to
-   * whatever was typed and reports a new commander loaded, which sends TT102 to restart the game
-   * instead of to the docking bay. Nothing was loaded. The frame is pushed again on each failed
-   * load, so the stack grows until it does not.
+   * AND A FAILED LOAD POISONS EVERY LATER EXIT. Those failures happen inside `LOD`, and they leave
+   * by jumping back to `SVE` rather than by returning, so the menu is re-entered with LOD's return
+   * address still on the stack. Whatever the player does next, its return lands back in `loading`,
+   * where the next thing done is to rename the commander and report success with the carry -- so
+   * leaving with "5" after a failed load renames the commander to whatever was typed and reports a
+   * new commander loaded, which sends TT102 to restart the game instead of to the docking bay.
+   * Nothing was loaded. The frame is pushed again on each failed load, so the stack grows until it
+   * does not.
    *
    * SAVING RELOADS. After a successful write, SV1 calls DFAULT on the file it has just written and
    * waits for a key before returning. So a save is also a load: the commander that carries on is
@@ -201,17 +203,17 @@ namespace Elite
    *
    * AND THE CARRY IS NOT WHAT IT LOOKS LIKE. `SVEX` and `feb13` both clear it, so a save and an
    * exit say "no new commander" -- the save in spite of the DFAULT it just ran. Option 1 sets it
-   * with an explicit `SEC`. Option 4 sets it too, and NOTHING IN SVE WRITES IT: `JMP DFAULT` is a
-   * tail call, and DFAULT's last comparison is `CMP CHK3` on the path where the two agree, which
-   * leaves the carry set. So the flag that tells TT102 to restart the game is, for the reset, a
-   * side effect of a checksum test three routines away.
+   * explicitly. Option 4 sets it too, and NOTHING IN SVE WRITES IT: the jump to `DFAULT` is a
+   * tail call, and DFAULT's last act is the comparison against the third checksum, which on the
+   * path where the two agree leaves the carry set. So the flag that tells TT102 to restart the
+   * game is, for the reset, a side effect of a checksum test three routines away.
    */
   /*
    * THE TWO COMMANDERS ARE BOTH ARGUMENTS, and keeping them apart is the whole reason this reads
    * the way it does.
    *
-   *   `_block` and `_name`   6502: TP and NAME -- the commander being played
-   *   `_image`               6502: NA% -- the last saved commander, as a file
+   *   `_block` and `_name`   `TP` and `NAME` -- the commander being played
+   *   `_image`               `NA%` -- the last saved commander, as a file
    *
    * Nothing in the menu writes the live commander except DFAULT. A load fills the IMAGE and returns
    * with the carry set so the caller will run DFAULT; TRNME renames the IMAGE; JAMESON overwrites

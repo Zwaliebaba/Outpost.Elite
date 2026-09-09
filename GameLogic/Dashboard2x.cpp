@@ -143,7 +143,8 @@ namespace Elite
 
   void SetMissileIndicator2x(Picture& _picture, const Canvas& _canvas, std::uint8_t _missile) noexcept
   {
-    // The same cell `MSBAR` chose -- its `DEX / TXA / INX / EOR #3` -- as a column and a row.
+    // The same cell `MSBAR` chose -- one below the count, its low two bits flipped -- as a column
+    // and a row.
     const int indicator = static_cast<int>(static_cast<std::uint8_t>(static_cast<std::uint8_t>(_missile - 1u) ^ 3u));
     const int cell = static_cast<int>(MISSILE_CELL - Canvas::DASHBOARD_CELLS) + indicator;
     ResolveDashboardCell2x(_picture, _canvas, cell % Canvas::CELL_COLUMNS, cell / Canvas::CELL_COLUMNS);
@@ -227,8 +228,8 @@ namespace Elite
     const int wideX = 2 * canvasX;
     const int wideY = 2 * static_cast<int>(_row);
 
-    // `DOT`'s `CMP #YELLOW / BNE CPIX2`: a target ahead is a four-pixel block and one behind a
-    // two-pixel dash, and the shape is the colour read twice rather than a second decision.
+    // `DOT` reads the colour twice: a target ahead is a four-pixel block and one behind a
+    // two-pixel dash, and the shape is that same byte rather than a second decision.
     // Halved as the blip is: one fat pixel of width instead of two.
     const int rows = (_pattern == COMPASS_AHEAD) ? 4 : 2;
 

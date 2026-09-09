@@ -9,11 +9,21 @@ found three (§6.149, §6.150, §6.151). The two `Labels.json`/`Oracle.json` ref
 **Amended in prospect 2026-09-06 (owner ruling, [Modernize.md](../Modernize.md) §1 R-a):** the oracle is
 the judge through the modernisation's phases M1–M5 and is then RECORDED — Phase M6 replaces every
 live comparison with a checked-in fixture and retires the interpreter, the assembler and the
-submodule. Nothing below changes until M6-b lands; ADR-008 will say what pins behaviour after it.
+submodule. Nothing below changed until M6-b came -- and what came was a deletion rather than a fixture; ADR-009 says what pins behaviour after it. (This line said ADR-008 when it was written; the resolution track took that number on 2026-09-08.)
 **Amended 2026-09-07 at the close of the M6-0 gate (Modernize.md §6 Phase M6, §8):** §1's
 interpreter banks the I/O page and answers a keyboard matrix, so the start sequence and the sprite
 register writes run on the oracle rather than being trapped; the interpreter records which labels
 each test ran and CI reads that against the ledger (§4); and the mutation rule of §4 gains a floor.
+**SUPERSEDED IN PART 2026-09-08 BY [ADR-009](ADR-009-detachment.md), and the part is large.** The
+prospective amendment above said M6 would replace every live comparison with a checked-in fixture;
+the owner ruled on 2026-09-08 that there would be no fixture and the comparisons would be DELETED
+instead. **§1 (the oracle), §2 (the golden canvases) and §4 (bringing the oracle up) describe
+machinery that no longer exists** and are kept as the record of the method that built the port
+through six phases -- twenty-six slices, every one of which found defects the oracle caught and
+nothing else would have. **§3, the replay hashes, is untouched** and is now the centre of what
+pins the port. ADR-009 names the seven instruments that remain and, at length, what was given up.
+Read that first; read this for how the port was got right in the first place.
+
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 

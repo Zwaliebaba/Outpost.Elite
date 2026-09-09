@@ -3,7 +3,7 @@
 #include "FlightPort.h"
 #include "FlightUniverse.h"
 #include "StateHash.h"
-#include "UniverseImage.h"
+#include "StateCells.h"
 
 #include <cstdint>
 #include <memory>
@@ -32,8 +32,6 @@ namespace GameLogicTests
   public:
     TEST_METHOD(EveryCellTheImageNamesMovesTheHash)
     {
-      const Where at{};
-
       Universe universe;
       Seed(universe, 5u);
       const std::uint64_t base = Elite::HashState(universe);
@@ -41,7 +39,7 @@ namespace GameLogicTests
       std::size_t checked = 0;
       std::size_t inert = 0;
       std::wstring unseen; // every cell the fold walked past, reported together rather than first-only
-      for (const Cell& cell : ImageCells(universe, at))
+      for (const Cell& cell : StateCells(universe))
       {
         const std::uint8_t before = cell.get();
         cell.set(static_cast<std::uint8_t>((before ^ 0xFFu) & cell.mask));

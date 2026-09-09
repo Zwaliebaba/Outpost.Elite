@@ -17,30 +17,30 @@ namespace Elite
   /*
    * The text cursor and the character printer (slice 1d-b).
    *
-   * 6502: XC, YC, QQ17, COL2, K3 -- the zero-page bytes CHPR reads and leaves behind. XC and YC
+   * XC, YC, QQ17, COL2, K3 -- the zero-page bytes CHPR reads and leaves behind. XC and YC
    * are character cells, not pixels, and the printer advances them itself, so a caller that prints
    * two characters in a row does not touch them.
    */
-  /// 6502: the `&10` RES2 stores in COL2 -- colour 1 (white) for bitmap code %01 and colour 0
+  /// The `&10` RES2 stores in COL2 -- colour 1 (white) for bitmap code %01 and colour 0
   /// (black) for %10. The default text colour of every screen in the game.
   inline constexpr CellPalette TEXT_COLOUR_WHITE{Colour::White, Colour::Black};
 
-  /// 6502: MAG2 -- purple for %01, black for %10. GNUM and MT26 switch to it while the player is
+  /// Purple for %01, black for %10. GNUM and MT26 switch to it while the player is
   /// typing and back to `TEXT_COLOUR_WHITE` when the line is done.
   inline constexpr CellPalette TEXT_COLOUR_PURPLE{Colour::Purple, Colour::Black};
 
   struct TextState
   {
-    std::uint8_t column = 0; ///< 6502: XC
-    std::uint8_t row = 0;    ///< 6502: YC
+    std::uint8_t column = 0;
+    std::uint8_t row = 0;
 
-    /// 6502: QQ17 -- the capitalisation state. The token printer works on it and CHPR reads it for
+    /// The capitalisation state. The token printer works on it and CHPR reads it for
     /// the value 255, which means "print nothing at all". ONE byte since M5-e-2c: the printer kept
     /// a copy until then and every store of QQ17 was two stores (§8).
     std::uint8_t caseFlags = 0;
 
     /*
-     * 6502: COL2 -- the palette byte written alongside every glyph.
+     * The palette byte written alongside every glyph.
      *
      * ZERO IS BLACK ON BLACK, and that is the shipped value: `COL2` is uninitialised memory, and
      * what puts `TEXT_COLOUR_WHITE` in it before anything prints is RES2, which the start sequence
@@ -52,7 +52,7 @@ namespace Elite
   };
 
   /*
-   * 6502: DLY, de, MCH and messXC -- what an in-flight message needs between frames.
+   * DLY, de, MCH and messXC -- what an in-flight message needs between frames.
    *
    * `DLY` counts it down, `MCH` is the token on screen so it can be printed AGAIN to erase it, `de`
    * is one bit saying whether " DESTROYED" is appended, and `messXC` is the column the last message
@@ -61,10 +61,10 @@ namespace Elite
    */
   struct MessageState
   {
-    std::uint8_t delay = 0;  ///< 6502: DLY
-    std::uint8_t append = 0; ///< 6502: de
-    std::uint8_t token = 0;  ///< 6502: MCH
-    std::uint8_t column = 0; ///< 6502: messXC
+    std::uint8_t delay = 0;
+    std::uint8_t append = 0; ///< de
+    std::uint8_t token = 0;
+    std::uint8_t column = 0;
   };
 
   /*
@@ -84,7 +84,7 @@ namespace Elite
    */
 
   /*
-   * 6502: BPRNT -- print a number, right-aligned in a fixed width, with an optional decimal point.
+   * Print a number, right-aligned in a fixed width, with an optional decimal point.
    *
    * The number is a 32-bit value in K, and the printer works by repeated subtraction of ten to the
    * eleventh from a 40-bit accumulator that it multiplies by ten between digits. Eleven digits
@@ -95,12 +95,12 @@ namespace Elite
    * does: the original reaches DASC, which is the whole sentence-case machinery, and the number
    * printer's own behaviour is the sequence of characters it hands over.
    */
-  /// 6502: K -- the value, most significant byte first. A value since M2-c; `NumberWorkspace` held
+  /// The value, most significant byte first. A value since M2-c; `NumberWorkspace` held
   /// it and `U` until then.
   using NumberBytes = std::array<std::uint8_t, 4>;
 
   /*
-   * 6502: BPRNT. `_withPoint` is the carry the entry points set, and it decides whether a decimal
+   * BPRNT. `_withPoint` is the carry the entry points set, and it decides whether a decimal
    * point is printed at all -- pr6 clears it, pr5 leaves it as the caller had it. `_digits` is `U`,
    * how many digits fall after the decimal point.
    *
@@ -112,14 +112,14 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept;
 
-  /// 6502: TT11 -- the same, for a sixteen-bit value, which is how nearly every caller reaches it.
+  /// The same, for a sixteen-bit value, which is how nearly every caller reaches it.
   void PrintValue(TextSink& _sink, std::uint16_t _value, std::uint8_t _digits, bool _withPoint) noexcept;
 
-  /// 6502: pr2 -- three digits, no decimal point, for a byte.
+  /// Three digits, no decimal point, for a byte.
   void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexcept;
 
   /*
-   * 6502: TT66simp -- clear the text area and put the cursor back at (1, 1).
+   * Clear the text area and put the cursor back at (1, 1).
    *
    * It walks ylookup in steps of eight and zeroes 256 bytes from each character row's start, which
    * is exactly the 32 cells the space view and the text screens occupy -- the four-cell margins
@@ -128,7 +128,7 @@ namespace Elite
   void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept;
 
   /*
-   * 6502: TTX66K's BOL3 / BOL4 -- the palette byte behind every character cell.
+   * TTX66K's BOL3 / BOL4 -- the palette byte behind every character cell.
    *
    * THIS IS WHAT MAKES THE PICTURE VISIBLE, and it is separate from `ClearTextArea` for the same
    * reason it is separate on the hardware: TT66simp zeroes the BITMAP, and the bitmap holds two-bit
@@ -143,7 +143,7 @@ namespace Elite
   void ResetCellColours(Canvas& _canvas, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: TT66, which falls into TTX66 -- the text state a screen change leaves behind.
+   * TT66, which falls into TTX66 -- the text state a screen change leaves behind.
    *
    * ONLY the text state. The rest of TTX66 is the ball line heap, the laser, the message delay and
    * `TTX66K` -- the dashboard, the sprites, the border box and the colour bands -- all of which is
@@ -161,7 +161,7 @@ namespace Elite
   void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept;
 
   /*
-   * 6502: CLYNS, which falls into CLYNS2 -- clear the bottom three text rows.
+   * CLYNS, which falls into CLYNS2 -- clear the bottom three text rows.
    *
    * The three rows are 21, 22 and 23, and the routine reaches them by address rather than through
    * `ylookup`: `SCBASE + &1A60` is character row 21 at the four-cell left margin, and `&140` is one
@@ -187,12 +187,12 @@ namespace Elite
                         MessageState& _message,
                         Picture* _picture = nullptr, TextLayout _layout = SPACE_VIEW_LAYOUT) noexcept;
 
-  /// 6502: the row CLYNS leaves the cursor on, which is the top of the three it
+  /// The row CLYNS leaves the cursor on, which is the top of the three it
   /// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.
   inline constexpr std::uint8_t MESSAGE_ROW = 21;
 
   /*
-   * 6502: TT26 / CHPR -- print one character at the cursor and advance it.
+   * TT26 / CHPR -- print one character at the cursor and advance it.
    *
    * Two entry points in the original share this body, and the control codes below 32 are handled
    * here rather than by the caller, so this is where a newline actually moves the cursor.
@@ -285,7 +285,7 @@ namespace Elite
       return WideCell{m_labelWideColumn + static_cast<int>(_column) - static_cast<int>(m_labelFirstColumn), mapped.row};
     }
 
-    /// 6502: CHPR. Returns the character, as the routine does in A.
+    /// CHPR. Returns the character, as the routine does in A.
     std::uint8_t Print(std::uint8_t _character) noexcept;
 
     /*
@@ -300,7 +300,7 @@ namespace Elite
     }
 
   private:
-    /// 6502: RR1 onwards -- the printable path, which is the glyph and its cell colour.
+    /// RR1 onwards -- the printable path, which is the glyph and its cell colour.
     void PrintGlyph(std::uint8_t _character) noexcept;
 
     /// The layout for whatever screen is up, or the centred default when nothing is attached.
@@ -313,7 +313,7 @@ namespace Elite
 
     Canvas& m_canvas;
     TextState& m_state;
-    SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s call to BEEP fills
+    SoundBuffer* m_sound = nullptr; ///< What `R5`'s call to BEEP fills
 
     Picture* m_picture = nullptr;        ///< the second surface, or none -- see `AttachPicture`
     const TextLayout* m_layout = nullptr; ///< the screen's layout, read and never written
@@ -328,7 +328,7 @@ namespace Elite
   /*
    * `KeySource` WAS HERE AND IS `Keyboard::NextKey` SINCE M3-b-3d.
    *
-   * 6502: TT217 -- "scan the keyboard until a key is pressed". The game BLOCKS here, inside a
+   * "scan the keyboard until a key is pressed". The game BLOCKS here, inside a
    * screen's own loop, and ADR-004 §1's problem is unchanged by the move: `GameLogic`'s input is
    * meant to be an `InputFrame`, which is a poll and not a wait, and the two cannot both be true of
    * the same code. Whoever resolves it decides how the seam is driven -- a pumped thread, a
@@ -344,11 +344,11 @@ namespace Elite
    * round.
    */
 
-  /// 6502: INCYC -- one step down the rows. The whole routine.
+  /// One step down the rows. The whole routine.
   void MoveCursorDown(TextState& _text) noexcept;
 
   /*
-   * 6502: TT60 -- and it is a chain of four routines, each falling into the next.
+   * TT60 -- and it is a chain of four routines, each falling into the next.
    *
    * TT60 prints a token and falls into TTX69, which moves the cursor down and falls into TT69,
    * which sets sentence case and falls into TT67, which prints a newline. The assembled addresses
@@ -359,11 +359,11 @@ namespace Elite
    */
   void PrintTitleLine(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 
-  /// 6502: TTX69 -- the same chain one link down, entered without a token. Moves the cursor to the
+  /// The same chain one link down, entered without a token. Moves the cursor to the
   /// next row, sets sentence case and prints a newline, so it is TWO vertical movements.
   void MoveDownAndNewline(TokenPrinter& _printer, TextState& _text) noexcept;
 
-  /// 6502: plf2 -- `plf` and then an indent to column six. A token, a newline, then the indent.
+  /// `plf` and then an indent to column six. A token, a newline, then the indent.
   void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 
 } // namespace Elite

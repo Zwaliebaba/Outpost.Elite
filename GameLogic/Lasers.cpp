@@ -10,13 +10,13 @@
 namespace Elite
 {
 
-  /// 6502: DENGY -- declared here rather than through `FlightLoop.h`, which includes this file.
+  /// Declared here rather than through `FlightLoop.h`, which includes this file.
   [[nodiscard]] bool DrainEnergy(FlightStatus& _status) noexcept;
 
   namespace
   {
     /*
-     * 6502: las -- two lines from one corner pair to the convergence point.
+     * Two lines from one corner pair to the convergence point.
      *
      * Reached twice, and the second time by falling into it rather than by a `JSR`, which is why the
      * arguments arrive in A and Y rather than on the stack: the first pair is loaded and CALLED,
@@ -25,11 +25,11 @@ namespace Elite
     bool DrawLaserPair(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _left, std::uint8_t _right, Picture* _picture) noexcept
     {
       Line beam;
-      beam.x2 = _left;                   // 6502: X2 from A
-      beam.x1 = _burst.x;                // 6502: LASX
-      beam.y1 = _burst.y;                // 6502: LASY
-      beam.y2 = 2u * VIEW_CENTRE_Y - 1u; // 6502: the bottom of the view
-      (void)DrawLine(_canvas, beam);     // 6502: LL30
+      beam.x2 = _left;                   // X2 from A
+      beam.x1 = _burst.x;
+      beam.y1 = _burst.y;
+      beam.y2 = 2u * VIEW_CENTRE_Y - 1u; // The bottom of the view
+      (void)DrawLine(_canvas, beam);
       if (_picture != nullptr)
       {
         // The beam's ends are eight-bit view coordinates the routine states outright -- the corner
@@ -40,9 +40,9 @@ namespace Elite
 
       beam.x1 = _burst.x;
       beam.y1 = _burst.y;
-      beam.x2 = _right; // 6502: X2 from Y this time
+      beam.x2 = _right; // X2 from Y this time
       beam.y2 = 2u * VIEW_CENTRE_Y - 1u;
-      (void)DrawLine(_canvas, beam); // 6502: LL30 again, as a tail call
+      (void)DrawLine(_canvas, beam); // LL30 again, as a tail call
       if (_picture != nullptr)
       {
         DrawLine2x(*_picture, beam);
@@ -54,13 +54,13 @@ namespace Elite
 
   bool DrawLaserLines(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _view, Picture* _picture) noexcept
   {
-    // 6502: LASLI2 -- a non-zero view leaves through the previous routine's `RTS`, borrowed.
+    // A non-zero view leaves through the previous routine's `RTS`, borrowed.
     if (_view != 0u)
     {
       return false;
     }
 
-    // 6502: the first corner pair called, then the second falling into it again.
+    // The first corner pair called, then the second falling into it again.
     (void)DrawLaserPair(_canvas, _burst, 32u, 224u, _picture);
     return DrawLaserPair(_canvas, _burst, 48u, 208u, _picture);
   }
@@ -69,7 +69,7 @@ namespace Elite
                  Picture* _picture) noexcept
   {
     /*
-     * 6502: a random byte masked to three bits, added to the centre less four, into `LASY`.
+     * A random byte masked to three bits, added to the centre less four, into `LASY`.
      *
      * The mask does not touch the carry, so what the addition adds is `DORND`'s exit carry -- the
      * beam's convergence point is one pixel further down on half the frames for no reason the
@@ -79,24 +79,24 @@ namespace Elite
     const AddResult y = AddWithCarry(static_cast<std::uint8_t>(down.value & 7u), static_cast<std::uint8_t>(VIEW_CENTRE_Y - 4u), down.carry);
     _burst.y = y.value;
 
-    // 6502: the same again, across, into `LASX`.
+    // The same again, across, into `LASX`.
     const RngResult across = _rng.Next(y.carry);
     const AddResult x =
       AddWithCarry(static_cast<std::uint8_t>(across.value & 7u), static_cast<std::uint8_t>(VIEW_CENTRE_X - 4u), across.carry);
     _burst.x = x.value;
 
     /*
-     * 6502: eight added to `GNTMP` -- and this one runs on the carry the line above left, which is
+     * Eight added to `GNTMP` -- and this one runs on the carry the line above left, which is
      * ALWAYS CLEAR: three bits plus 124 plus at most one is 132, and that cannot carry out of a
      * byte. So a shot costs exactly eight, and this uncleared addition is the constant kind while
      * the two above it are not (§6.65's split, and §6.68 measured it).
      */
     _status.laserTemperature = AddWithCarry(_status.laserTemperature, LASER_HEAT_PER_SHOT, x.carry).value;
 
-    // 6502: DENGY -- built in 3d-d-iii-b, so this is no longer a seam.
+    // Built in 3d-d-iii-b, so this is no longer a seam.
     (void)DrainEnergy(_status);
 
-    // 6502: and no RTS -- LASLI runs straight on into LASLI2.
+    // And no RTS -- LASLI runs straight on into LASLI2.
     return DrawLaserLines(_canvas, _burst, _view, _picture);
   }
 

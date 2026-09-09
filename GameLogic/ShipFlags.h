@@ -23,7 +23,7 @@ namespace Elite
 {
 
   /*
-   * 6502: INWK+31 -- the ship's state, and it holds two things.
+   * The ship's state, and it holds two things.
    *
    * The bottom three bits are how many missiles the ship still carries (`NWSHP` ORs them in from
    * blueprint byte 19, `TACTICS` decrements them with `DEC INWK+31`), and the top five are the
@@ -34,15 +34,15 @@ namespace Elite
    */
   enum class ShipStateBit : std::uint8_t
   {
-    OnScreen = 0x08,   ///< 6502: bit 3 -- drawn on the screen now, so the next `LL9` must rub it out
-    OnScanner = 0x10,  ///< 6502: bit 4 -- a blip on the scanner, which `SCAN` erases the same way
-    Exploding = 0x20,  ///< 6502: bit 5
-    Firing = 0x40,     ///< 6502: bit 6 while bit 5 is clear -- the laser line `MA8` draws
-    CloudDrawn = 0x40, ///< 6502: bit 6 while bit 5 is set -- `DOEXP` drew a cloud last frame
-    Killed = 0x80,     ///< 6502: bit 7 -- killed, and exploding once `LL9` has seen it
+    OnScreen = 0x08,   ///< Bit 3 -- drawn on the screen now, so the next `LL9` must rub it out
+    OnScanner = 0x10,  ///< Bit 4 -- a blip on the scanner, which `SCAN` erases the same way
+    Exploding = 0x20,  ///< Bit 5
+    Firing = 0x40,     ///< Bit 6 while bit 5 is clear -- the laser line `MA8` draws
+    CloudDrawn = 0x40, ///< Bit 6 while bit 5 is set -- `DOEXP` drew a cloud last frame
+    Killed = 0x80,     ///< Bit 7 -- killed, and exploding once `LL9` has seen it
   };
 
-  /// 6502: the bottom three bits of `INWK+31` -- the missiles left, which share the byte with the
+  /// The bottom three bits of `INWK+31` -- the missiles left, which share the byte with the
   /// flags. Also how `NWSHP` reads blueprint byte 19, whose bottom three bits are laid out the same
   /// way.
   [[nodiscard]] constexpr std::uint8_t MissilesOf(std::uint8_t _state) noexcept
@@ -51,7 +51,7 @@ namespace Elite
   }
 
   /*
-   * 6502: INWK+32 -- the AI byte, which reads differently for a missile and for anything else.
+   * The AI byte, which reads differently for a missile and for anything else.
    *
    * For a ship it is `%A aaaaaa E`: bit 7 says `TACTICS` runs for it, bits 1 to 6 are its
    * aggression, bit 0 says it has an ECM. For a missile it is `%A tttttt 0`, the middle six the
@@ -63,26 +63,26 @@ namespace Elite
    */
   enum class AiBit : std::uint8_t
   {
-    HasEcm = 0x01,        ///< 6502: bit 0 of a ship's byte -- fitted with an ECM
-    Hostile = 0x40,       ///< 6502: bit 6 of a ship's byte -- the top of the aggression field
-    AimedAtPlayer = 0x40, ///< 6502: bit 6 of a missile's byte -- its target is us
-    Active = 0x80,        ///< 6502: bit 7 -- `TACTICS` runs for this ship
+    HasEcm = 0x01,        ///< Bit 0 of a ship's byte -- fitted with an ECM
+    Hostile = 0x40,       ///< Bit 6 of a ship's byte -- the top of the aggression field
+    AimedAtPlayer = 0x40, ///< Bit 6 of a missile's byte -- its target is us
+    Active = 0x80,        ///< Bit 7 -- `TACTICS` runs for this ship
   };
 
-  /// 6502: the top bit masked off and the rest shifted down -- the slot a missile is locked on to.
+  /// The top bit masked off and the rest shifted down -- the slot a missile is locked on to.
   [[nodiscard]] constexpr std::uint8_t MissileTargetOf(std::uint8_t _ai) noexcept
   {
     return static_cast<std::uint8_t>((_ai & 0x7Fu) >> 1u);
   }
 
-  /// 6502: the slot shifted up with the top bit forced on -- the AI byte that locks a missile on.
+  /// The slot shifted up with the top bit forced on -- the AI byte that locks a missile on.
   [[nodiscard]] constexpr std::uint8_t MissileAiFor(std::uint8_t _targetSlot) noexcept
   {
     return static_cast<std::uint8_t>((_targetSlot << 1u) | 0x80u);
   }
 
   /*
-   * 6502: NEWB -- the ship's nature, one bit each, in the order the source's `TACTICS` walks them
+   * The ship's nature, one bit each, in the order the source's `TACTICS` walks them
    * one shift at a time.
    *
    * Bit 5 is the source's "innocent bystander", and it is what the STATION takes offence at: hit a
@@ -92,14 +92,14 @@ namespace Elite
    */
   enum class TraitBit : std::uint8_t
   {
-    Trader = 0x01,       ///< 6502: bit 0 -- flees at a roll of fifty or more
-    BountyHunter = 0x02, ///< 6502: bit 1 -- turns on you once `FIST` passes forty
-    Hostile = 0x04,      ///< 6502: bit 2 -- what `ANGRY` sets
-    Pirate = 0x08,       ///< 6502: bit 3 -- keeps clear of the station
-    Docking = 0x10,      ///< 6502: bit 4 -- heading for the station
-    Innocent = 0x20,     ///< 6502: bit 5 -- an innocent bystander, on the station's side
-    Cop = 0x40,          ///< 6502: bit 6 -- shooting one is a crime
-    Remove = 0x80,       ///< 6502: bit 7 -- scooped or docked, so leave the bubble
+    Trader = 0x01,       ///< Bit 0 -- flees at a roll of fifty or more
+    BountyHunter = 0x02, ///< Bit 1 -- turns on you once `FIST` passes forty
+    Hostile = 0x04,      ///< Bit 2 -- what `ANGRY` sets
+    Pirate = 0x08,       ///< Bit 3 -- keeps clear of the station
+    Docking = 0x10,      ///< Bit 4 -- heading for the station
+    Innocent = 0x20,     ///< Bit 5 -- an innocent bystander, on the station's side
+    Cop = 0x40,          ///< Bit 6 -- shooting one is a crime
+    Remove = 0x80,       ///< Bit 7 -- scooped or docked, so leave the bubble
   };
 
   /// The three flag enumerations, and only those: the helpers below work on a byte with any of
@@ -114,28 +114,28 @@ namespace Elite
     return static_cast<std::uint8_t>((static_cast<std::uint8_t>(_bit) | ... | static_cast<std::uint8_t>(_more)));
   }
 
-  /// 6502: a mask and a branch -- the bit is set.
+  /// A mask and a branch -- the bit is set.
   template <ShipFlagBit Bit>
   [[nodiscard]] constexpr bool Has(std::uint8_t _bits, Bit _bit) noexcept
   {
     return (_bits & Mask(_bit)) != 0u;
   }
 
-  /// 6502: a mask and a branch -- at least one of the bits is set.
+  /// A mask and a branch -- at least one of the bits is set.
   template <ShipFlagBit Bit, std::same_as<Bit>... More>
   [[nodiscard]] constexpr bool HasAny(std::uint8_t _bits, Bit _bit, More... _more) noexcept
   {
     return (_bits & Mask(_bit, _more...)) != 0u;
   }
 
-  /// 6502: the byte ORed with the bits, as a value.
+  /// The byte ORed with the bits, as a value.
   template <ShipFlagBit Bit, std::same_as<Bit>... More>
   [[nodiscard]] constexpr std::uint8_t With(std::uint8_t _bits, Bit _bit, More... _more) noexcept
   {
     return static_cast<std::uint8_t>(_bits | Mask(_bit, _more...));
   }
 
-  /// 6502: the byte masked against their complement, as a value.
+  /// The byte masked against their complement, as a value.
   template <ShipFlagBit Bit, std::same_as<Bit>... More>
   [[nodiscard]] constexpr std::uint8_t Without(std::uint8_t _bits, Bit _bit, More... _more) noexcept
   {

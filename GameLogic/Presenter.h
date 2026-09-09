@@ -11,10 +11,10 @@ namespace Elite
    * THE SECOND OF THE FOUR PORTS, after `SoundSink`. It is a port and not a call into a routine
    * that now exists, and the test is the one every seam in M3-b has been put to: is there anything
    * behind it that `GameLogic` could do for itself? For the four seams this slice removed there
-   * was -- `TT66`, `CLYNS`, `TRADEMODE` and `dn2` are all routines the library has -- and for this
-   * one there is not. `DELAY` is `LDY #n / .DELY1 JSR WSCAN / DEY / BNE DELY1`, and `WSCAN` waits
-   * for the raster to reach the bottom of the screen. There is no way to wait for a vertical sync
-   * that does not know what a screen is.
+   * was -- `TT66`, `CLYNS`, `TRADEMODE` and `dn2` are all routines the library has -- and for
+   * this one there is not. `DELAY` is a loop around `WSCAN`, and `WSCAN` waits for the raster
+   * to reach the bottom of the screen. There is no way to wait for a vertical sync that does
+   * not know what a screen is.
    *
    * IT COUNTS FRAMES AND NOT SECONDS, and that is the whole of why the method takes a count. `DELAY`
    * is one of three routines in the C64 build that calls `WSCAN` (§6.17), so fifty of them is one
@@ -36,7 +36,7 @@ namespace Elite
     virtual ~Presenter() = default;
 
     /*
-     * 6502: DELAY -- wait for `_frames` vertical syncs.
+     * Wait for `_frames` vertical syncs.
      *
      * Declared once where `LineEntryEffects` and `StartUpEffects` each declared it, and that is not
      * a merge of two things that happened to look alike: there is one `DELAY` in the game and the
@@ -49,7 +49,7 @@ namespace Elite
      *
      * `DELAY` with a count of one, and named for the FRAME rather than the circle because two
      * routines want it: `HFL2` after every circle, which is the pacing §6.109 measured, and
-     * `HYPNOISE`'s own `LDY #1 / JSR DELAY`, which is the same thing for the same length.
+     * `HYPNOISE`'s own one-count delay, which is the same thing for the same length.
      */
     virtual void Present() = 0;
 
@@ -75,11 +75,11 @@ namespace Elite
      * The same again for the title screen's spin, and it is a SECOND hold rather than an argument
      * to the first because the two cost curves are different routines' (M3-b-3d).
      *
-     * `TITLE` runs `MVEIT` and `LL9` and comes straight back round -- there is no `JSR WSCAN`
-     * anywhere in it (§6.17) -- so the ship turns at whatever rate a 6510 gets through those two,
-     * which is 121,276 cycles once it has arrived and 15,600 while it is still a dot. Presenting
-     * once per turn hands that decision to the display instead, and on a 165 Hz panel the ship
-     * span twenty times too fast (§6.110).
+     * `TITLE` runs `MVEIT` and `LL9` and comes straight back round -- there is no wait for
+     * vertical sync anywhere in it (§6.17) -- so the ship turns at whatever rate a 6510 gets
+     * through those two, which is 121,276 cycles once it has arrived and 15,600 while it is
+     * still a dot. Presenting once per turn hands that decision to the display instead, and on
+     * a 165 Hz panel the ship span twenty times too fast (§6.110).
      *
      * `_distance` is `INWK+7`, the byte `TLL2` walks down -- so the curve is indexed by the same
      * counter the original's cost depended on.

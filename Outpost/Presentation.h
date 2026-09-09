@@ -162,7 +162,7 @@ namespace Outpost
    */
   struct TitleTurnCost
   {
-    std::uint8_t distanceHigh; ///< 6502: INWK+7, which `TLL2` walks from 96 down to 1
+    std::uint8_t distanceHigh; ///< INWK+7, which `TLL2` walks from 96 down to 1
     std::uint32_t cycles;      ///< what one turn costs there, measured against the shipped routines
   };
 
@@ -174,7 +174,7 @@ namespace Outpost
     {1, 121'276},
   }};
 
-  /// 6502: the 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
+  /// The 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
   /// 985,248, and choosing between them is the same decision the shipped build's variant makes.
   inline constexpr double NTSC_CLOCK_HZ = 1'022'727.0;
 
@@ -185,12 +185,12 @@ namespace Outpost
   /*
    * How long a FLIGHT frame takes on the machine it was written for.
    *
-   * §6.17 settled the shape of this question in 2026-09-03 and it took until now to answer it. The
-   * C64's main loop has no frame cap: `WSCAN` -- the wait for vertical sync -- is called from
-   * `DELAY`, `TT16+7` and `FREEZE`, and the `JSR WSCAN` in `main_flight_loop_part_13_of_16` is
-   * inside a version gate the C64 build is not in. So `M%` runs as fast as a 6510 gets round it,
-   * the rate is a CONSEQUENCE of what a frame costs, and **that is why the real game visibly slows
-   * down when the screen fills with ships**.
+   * §6.17 settled the shape of this question in 2026-09-03 and it took until now to answer it.
+   * The C64's main loop has no frame cap: `WSCAN` -- the wait for vertical sync -- is called
+   * from `DELAY`, `TT16+7` and `FREEZE`, and the one call to it in
+   * `main_flight_loop_part_13_of_16` is inside a version gate the C64 build is not in. So `M%`
+   * runs as fast as a 6510 gets round it, the rate is a CONSEQUENCE of what a frame costs, and
+   * **that is why the real game visibly slows down when the screen fills with ships**.
    *
    * THE PORT RAN IT AT THE VERTICAL REFRESH INSTEAD, and the note that did so argued the loop "is
    * driven by that refresh and nothing else -- there is no timer in the game". The first half is
@@ -229,7 +229,7 @@ namespace Outpost
    */
   struct FlightFrameCost
   {
-    std::uint8_t ships;   ///< 6502: how many slots of `FRIN` are occupied, planet and sun included
+    std::uint8_t ships;   ///< How many slots of `FRIN` are occupied, planet and sun included
     std::uint32_t cycles; ///< what a frame costs there, measured against the shipped `M%`
   };
 
@@ -247,18 +247,17 @@ namespace Outpost
   /*
    * How long a DOCKED pass takes, and it is two vertical syncs and almost nothing else.
    *
-   * 6502: `MLOOP` with `QQ12` set -- the guns cool, `DIALS` is skipped, `LDA QQ11 / AND PATG / LSR A
-   * / BCS plus13 / LDY #2 / JSR DELAY` waits TWO vertical syncs unless the view byte is odd AND the
-   * author-names option is on -- which only the Data on System screen, at 1, ever is -- the
-   * Trumbles breed, `TT17` scans the keyboard, and `TT102` dispatches `thiskey`, which on
-   * a pass with no key falls through `TT107`'s countdown and returns. Measured by
-   * `FlightLoopTests::TheDockedPassCostsWhatItCosts` (InputTimer.md T-0) with `DELAY` and `WSCAN`
-   * trapped, on the status screen with no key held: 4,472 cycles, 4,591 with Trumbles aboard,
-   * 2,746 on the long-range chart and up to 5,691 on the short-range chart with a cursor key
-   * held. So the pass is 4 ms of work and 40 ms of waiting at PAL, and the docked half runs at
-   * a little under HALF THE VERTICAL-SYNC RATE -- 22 passes a second on a PAL machine, 26 on NTSC
-   * -- which is what paces the hyperspace countdown and the chart crosshairs. On the one screen
-   * where the names lift the wait the same pass runs at 228 a second; that is the original's
+   * `MLOOP` with `QQ12` set -- the guns cool, `DIALS` is skipped, a two-sync `DELAY` runs
+   * unless the view byte masked with the author-names option comes out ODD -- which only the Data
+   * on System screen, at 1, ever does -- the Trumbles breed, `TT17` scans the keyboard, and `TT102`
+   * dispatches `thiskey`, which on a pass with no key falls through `TT107`'s countdown and
+   * returns. Measured by `FlightLoopTests::TheDockedPassCostsWhatItCosts` (InputTimer.md T-0) with
+   * `DELAY` and `WSCAN` trapped, on the status screen with no key held: 4,472 cycles, 4,591 with
+   * Trumbles aboard, 2,746 on the long-range chart and up to 5,691 on the short-range chart with a
+   * cursor key held. So the pass is 4 ms of work and 40 ms of waiting at PAL, and the docked half
+   * runs at a little under HALF THE VERTICAL-SYNC RATE -- 22 passes a second on a PAL machine, 26
+   * on NTSC -- which is what paces the hyperspace countdown and the chart crosshairs. On the one
+   * screen where the names lift the wait the same pass runs at 228 a second; that is the original's
    * behaviour and the model follows it, because `Game::StepDocked` says which it was.
    *
    * Until InputTimer.md T-1 builds the simulated vertical blank, the syncs are priced at the NTSC
@@ -267,14 +266,14 @@ namespace Outpost
    */
   inline constexpr std::uint32_t DOCKED_PASS_CYCLES = 4'472;
 
-  /// 6502: LDY #2 / JSR DELAY -- the two syncs a docked pass waits, unless `QQ11 AND PATG` is odd.
+  /// The two syncs a docked pass waits, unless `QQ11 AND PATG` is odd.
   inline constexpr std::uint8_t DOCKED_PASS_SYNCS = 2;
 
-  /// 6502: TT16's `JSR WSCAN` -- one more sync on a chart pass that moves the crosshairs, so they
+  /// TT16's call to `WSCAN` -- one more sync on a chart pass that moves the crosshairs, so
   /// step at most once a frame. Recorded here; honoured when T-1's blank exists.
   inline constexpr std::uint8_t CHART_CURSOR_SYNCS = 1;
 
-  /// 6502: the VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
+  /// The VIC-II's frame on the NTSC machine, in cycles -- 65 cycles a line, 263 lines.
   inline constexpr double NTSC_FRAME_CYCLES = 65.0 * 263.0;
 
   /// How long one docked pass should take, in seconds, given the syncs the last pass asked `DELAY`

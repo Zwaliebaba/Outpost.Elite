@@ -36,7 +36,7 @@ namespace Elite
   // `Dashboard.h` beside the routine that takes it.
 
   /*
-   * 6502: KILLSHP -- take the ship in slot X out of the bubble.
+   * Take the ship in slot X out of the bubble.
    *
    * The slot list, the ship blocks and the line heap all shuffle down together, and `INF` walks up
    * the list as they do so that each ship is written into the slot below the one it came from.
@@ -49,7 +49,7 @@ namespace Elite
   void KillShip(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
   /*
-   * 6502: SOS1 -- put the system's planet or sun into the bubble.
+   * Put the system's planet or sun into the bubble.
    *
    * ONE BIT OF THE TECH LEVEL is the whole of how Elite chooses a planet's look: bit 1 of the tech
    * level becomes bit 1 of the type, so type 128 gets meridians and type 130 a crater (§6.53's
@@ -58,16 +58,16 @@ namespace Elite
    */
   [[nodiscard]] NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: DOD -- the Dodo station's ship type, which is the last blueprint this build carries.
+  /// The Dodo station's ship type, which is the last blueprint this build carries.
   /// Measured rather than counted: entry 33 of the pointer table is 60973, and `SHIP_DODO` is at
   /// 60973 in the assembled image.
   /// `ShipType::Dodo` is the enumerator; this note stays for the measurement.
 
-  /// 6502: a system this advanced has a Dodo, not a Coriolis.
+  /// A system this advanced has a Dodo, not a Coriolis.
   inline constexpr std::uint8_t STATION_DODO_TECH_LEVEL = 10;
 
   /*
-   * 6502: NWSPS -- put the space station into the bubble, and NwS1 with it.
+   * Put the space station into the bubble, and NwS1 with it.
    *
    * IT TAKES THE SUN'S PLACE AND THE SUN'S MEMORY, which is two separate instructions doing one
    * thing. Storing a zero in `FRIN+1` empties slot 1 -- the sun's -- without going anywhere near
@@ -88,7 +88,7 @@ namespace Elite
   [[nodiscard]] NewShip AddStation(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: SOLAR -- build the system: a sun, a planet, and however many Trumbles have bred.
+   * Build the system: a sun, a planet, and however many Trumbles have bred.
    *
    * The Trumble arithmetic is the first thing it does and it is a population model in nine
    * instructions: a random number under sixteen is added to the count, forced to at least four,
@@ -108,7 +108,7 @@ namespace Elite
   void BuildSystem(Universe& _universe, Ports& _ports, bool _carryIn) noexcept;
 
   /*
-   * 6502: Ze -- a ship block for the death sequence's debris, and it ends in a SECOND `DORND`.
+   * A ship block for the death sequence's debris, and it ends in a SECOND `DORND`.
    *
    * `ZINF` clears the block, one random byte gives the x and y SIGNS and the `INWK+32` AI byte,
    * and 25 goes into all three high bytes so the wreckage starts at a fixed distance in a random
@@ -126,21 +126,21 @@ namespace Elite
    * routine passed a clear carry to both and matched the shipped game for four pieces of wreckage
    * before the fifth landed one random step off (§6.117).
    */
-  /// 6502: the high byte the debris starts at in all three axes, so it appears at one distance in
+  /// The high byte the debris starts at in all three axes, so it appears at one distance in
   /// a random direction rather than at a random distance.
   inline constexpr std::uint8_t DEBRIS_DISTANCE = 25;
 
-  /// 6502: the compare whose CARRY becomes bit 0 of the AI byte, so roughly one wreck in eleven
+  /// The compare whose CARRY becomes bit 0 of the AI byte, so roughly one wreck in eleven
   /// gets its flag set.
   inline constexpr std::uint8_t DEBRIS_AI_THRESHOLD = 245;
 
-  /// 6502: the orientation `fq1` gives every piece: nose along z, side along x.
+  /// The orientation `fq1` gives every piece: nose along z, side along x.
   inline constexpr std::uint8_t DEBRIS_ORIENTATION = 0x60;
 
   [[nodiscard]] RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept;
 
   /*
-   * 6502: fq1 -- point a ship along the z axis, give it the player's speed, and create it.
+   * Point a ship along the z axis, give it the player's speed, and create it.
    *
    * `INWK+14 = &60` is the nose vector's z, `INWK+22 = &60 OR 128` the side vector's x with its
    * sign set, and `INWK+27` is `DELTA` ROTATED left, so the caller's carry lands in bit 0 and the
@@ -155,21 +155,21 @@ namespace Elite
 
   // ---- slice 4a-b: putting a ship into the bubble from inside the bubble ------------------------
 
-  /// 6502: twenty-eight units to the right and HALF that ahead -- the second is the first shifted
+  /// Twenty-eight units to the right and HALF that ahead -- the second is the first shifted
   /// down rather than a constant of its own -- which is where a fired missile appears.
   inline constexpr std::uint8_t SPAWN_AHEAD_X = 28;
   inline constexpr std::uint8_t SPAWN_AHEAD_Z = 14;
 
-  /// 6502: the AI byte `SESCP` and `SFRMIS` hand `SFS1`: hostile, aggression 15, and bit 0 clear
+  /// The AI byte `SESCP` and `SFRMIS` hand `SFS1`: hostile, aggression 15, and bit 0 clear
   /// so it has no target yet.
   inline constexpr std::uint8_t SPAWN_CHILD_AI = 0xFE;
 
-  /// 6502: the speed a station's child leaves at, which is why a Viper launched from a Coriolis is
+  /// The speed a station's child leaves at, which is why a Viper launched from a Coriolis is
   /// already moving when you see it.
   inline constexpr std::uint8_t STATION_CHILD_SPEED = 32;
 
   /*
-   * 6502: FRS1 -- put a ship 28 to the right and 14 ahead of us, pointing away.
+   * Put a ship 28 to the right and 14 ahead of us, pointing away.
    *
    * `ZINF` then four stores then a FALL INTO `fq1`, which is `AddDebris` above: the same three
    * bytes of orientation and the same rotate on the speed. So the carry that rotate brings in has
@@ -185,7 +185,7 @@ namespace Elite
                                        std::uint8_t _missileTarget, const Blueprint*& _blueprint) noexcept;
 
   /*
-   * 6502: SFS2 -- move a ship along one axis by twice A, sign and all.
+   * Move a ship along one axis by twice A, sign and all.
    *
    * Five instructions, and the first four are `TAS7`'s opening exactly: the double pushes the sign
    * into the carry and a zero rotated right catches it. Then a jump to `MVT1` rather than `TAS7`'s
@@ -194,7 +194,7 @@ namespace Elite
   void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept;
 
   /*
-   * 6502: SFS1 -- spawn a child from the ship in slot `_parent`: wreckage, a Viper out of a
+   * Spawn a child from the ship in slot `_parent`: wreckage, a Viper out of a
    * station, an escape pod, a missile fired at us.
    *
    * IT SWAPS `INWK` OUT AND BACK. The new ship is built in the caller's own workspace, so the
@@ -217,7 +217,7 @@ namespace Elite
                                        ShipType _parentType, std::uint8_t _aiFlag, ShipType _shipType,
                                        const Blueprint*& _blueprint) noexcept;
 
-  /// 6502: SESCP -- `SFS1` with the escape pod's type and the standard AI byte already loaded.
+  /// `SFS1` with the escape pod's type and the standard AI byte already loaded.
   [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent,
                                        ShipType _parentType, const Blueprint*& _blueprint) noexcept;
 
