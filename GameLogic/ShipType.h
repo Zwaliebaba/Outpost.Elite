@@ -13,7 +13,7 @@ namespace Elite
 {
 
   /*
-   * 6502: the ship types, in the order `XX21` lists their blueprints (Modernize.md M1-b).
+   * The ship types, in the order `XX21` lists their blueprints (Modernize.md M1-b).
    *
    * A type is a number the game uses three ways: as an index into `XX21` and `MANY`, as the value
    * of a slot in `FRIN`, and as `TYPE` while a ship is being moved -- where 128 and 129 are the
@@ -29,42 +29,42 @@ namespace Elite
    */
   enum class ShipType : std::uint8_t
   {
-    None = 0,            ///< 6502: an empty slot in FRIN
-    Missile = 1,         ///< 6502: MSL -- the only type that carries a target slot in its AI byte
-    Station = 2,         ///< 6502: SST -- the Coriolis, or the Dodo where `NWSPS` says so; skips the heap
-    EscapePod = 3,       ///< 6502: ESC, and JL, the bottom of the junk range
-    AlloyPlate = 4,      ///< 6502: PLT, the first of the wreckage
-    Canister = 5,        ///< 6502: OIL
+    None = 0,            ///< An empty slot in FRIN
+    Missile = 1,         ///< The only type that carries a target slot in its AI byte
+    Station = 2,         ///< The Coriolis, or the Dodo where `NWSPS` says so; skips the heap
+    EscapePod = 3,       ///< ESC, and JL, the bottom of the junk range
+    AlloyPlate = 4,      ///< PLT, the first of the wreckage
+    Canister = 5,
     Boulder = 6,
-    Asteroid = 7,        ///< 6502: AST
-    Splinter = 8,        ///< 6502: SPL, the last of the wreckage
-    Shuttle = 9,         ///< 6502: SHU
-    Transporter = 10,    ///< 6502: SHU+1, which the source never names and `TA1` counts
-    CobraMk3 = 11,       ///< 6502: CYL, and JH -- the first type that is not junk
+    Asteroid = 7,
+    Splinter = 8,        ///< SPL, the last of the wreckage
+    Shuttle = 9,
+    Transporter = 10,    ///< SHU+1, which the source never names and `TA1` counts
+    CobraMk3 = 11,       ///< CYL, and JH -- the first type that is not junk
     Python = 12,
     Boa = 13,
-    Anaconda = 14,       ///< 6502: ANA
-    RockHermit = 15,     ///< 6502: HER -- counts as junk despite its number
-    Viper = 16,          ///< 6502: COPS
-    Sidewinder = 17,     ///< 6502: SH3, and PACK -- the first of the eight pack hunters
+    Anaconda = 14,
+    RockHermit = 15,     ///< Counts as junk despite its number
+    Viper = 16,
+    Sidewinder = 17,     ///< SH3, and PACK -- the first of the eight pack hunters
     Mamba = 18,
-    Krait = 19,          ///< 6502: KRA
-    Adder = 20,          ///< 6502: ADA -- the title screen's ship
+    Krait = 19,
+    Adder = 20,          ///< The title screen's ship
     Gecko = 21,
     CobraMk1 = 22,
-    Worm = 23,           ///< 6502: WRM
-    CobraMk3Pirate = 24, ///< 6502: CYL2 -- a different blueprint and a different bounty
+    Worm = 23,
+    CobraMk3Pirate = 24, ///< A different blueprint and a different bounty
     AspMk2 = 25,
     PythonPirate = 26,
     FerDeLance = 27,
     Moray = 28,
-    Thargoid = 29,       ///< 6502: THG -- exempt from the energy bomb
-    Thargon = 30,        ///< 6502: TGL
-    Constrictor = 31,    ///< 6502: CON -- the mission ship; a laser is halved from here up unless military
-    Cougar = 32,         ///< 6502: COU
-    Dodo = 33,           ///< 6502: DOD -- a blueprint the station borrows, never a slot's type
-    Planet = 128,        ///< 6502: TYPE with bit 7 set -- no blueprint, moved by MV40
-    Sun = 129,           ///< 6502: %10000001, which `AND #&81 / CMP #&81` singles out
+    Thargoid = 29,       ///< Exempt from the energy bomb
+    Thargon = 30,
+    Constrictor = 31,    ///< The mission ship; a laser is halved from here up unless military
+    Cougar = 32,
+    Dodo = 33,           ///< A blueprint the station borrows, never a slot's type
+    Planet = 128,        ///< TYPE with bit 7 set -- no blueprint, moved by MV40
+    Sun = 129,           ///< %10000001, which a mask-and-compare against &81 singles out
   };
 
   /// The byte a type is in `FRIN`, `MANY`'s index, `TYPE` and the image.
@@ -80,20 +80,20 @@ namespace Elite
     return static_cast<ShipType>(_byte);
   }
 
-  /// 6502: LDA TYPE / BMI -- the planet or the sun, which have no blueprint.
+  /// TYPE tested for its SIGN -- the planet or the sun, which have no blueprint.
   [[nodiscard]] constexpr bool IsBody(ShipType _type) noexcept
   {
     return (Byte(_type) & 0x80u) != 0u;
   }
 
-  /// 6502: JL to JH, exclusive, and HER -- what `NWSHP` and `KILLSHP` count in `JUNK`.
+  /// JL to JH, exclusive, and HER -- what `NWSHP` and `KILLSHP` count in `JUNK`.
   [[nodiscard]] constexpr bool IsJunk(ShipType _type) noexcept
   {
     return _type == ShipType::RockHermit || (Byte(_type) >= Byte(ShipType::EscapePod) && Byte(_type) < Byte(ShipType::CobraMk3));
   }
 
-  /// 6502: CMP #SPL+1 / BCS / CMP #PLT / BCC -- the cargo range, plate to splinter, which `SFS1`
-  /// gives a random tumble and nothing else does.
+  /// The cargo range, plate to splinter, bounded at both ends -- which `SFS1` gives a
+  /// random tumble and nothing else does.
   [[nodiscard]] constexpr bool IsWreckage(ShipType _type) noexcept
   {
     return Byte(_type) >= Byte(ShipType::AlloyPlate) && Byte(_type) <= Byte(ShipType::Splinter);

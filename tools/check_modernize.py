@@ -73,10 +73,7 @@ WORKSPACE_PARAM = re.compile(r"\b(?:Math|Draw|Geometry)Workspace&\s+_[a-z]")
 CLASS_HEAD = re.compile(r"\b(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[^{;]*)?\{")
 PURE_VIRTUAL = re.compile(r"\)\s*(?:const\s*)?(?:noexcept\s*)?=\s*0\s*;")
 ELITE_NAME = re.compile(r"\bElite::([A-Za-z_]\w*)")
-LEDGER_FILE = re.compile(r"`([A-Za-z0-9_]+\.(?:h|cpp))`")
 ORIGIN_MARKER = re.compile(r"\b6502:")
-ORACLE_USE = re.compile(r"\bOracleImage\b|\bOracleMissing\b")
-ORIGIN_PATH = re.compile(r"\bUpstream\b|\bMasterFile\b")
 
 
 def count_register_params(_root: Path) -> int:
@@ -176,35 +173,6 @@ def count_mutant_files(_root: Path) -> int:
     return len({mutant["file"] for unit in recorded["units"] for mutant in unit["mutants"]})
 
 
-def count_inventory_stale_files(_root: Path) -> int:
-    """M5-c -- `.h`/`.cpp` names in a ledger row's HOME cell that name no file in any project folder.
-
-    IT READS THE HOME CELL AND NOT THE WHOLE FILE, and M5-c narrowed it there rather than lowering a
-    ceiling to meet the tree (Risk R18 is the other way round). A home is the row's live claim about
-    where its labels live; the notes beside it are HISTORY, and the plan's rule for numbers already
-    draws that line -- a journal number was true when it was written and is never touched. Two notes
-    name a file precisely to say the tree does NOT have it (§6.129's raster row, and the workspace
-    row M5-c rewrote), so a counter over the whole file would need a finding deleted to reach zero.
-    `inventory.py --check-homes` applies the same rule and is the repository check behind it.
-    """
-    ledger = _root / "Design" / "Source-Inventory.md"
-    on_disk: set[str] = set()
-    for folder in ("GameLogic", "Outpost", "NeuronCore", "Tests/GameLogicTests", "Tests/PortableRunner/Shim"):
-        directory = _root / folder
-        if directory.is_dir():
-            on_disk.update(path.name for path in directory.iterdir() if path.is_file())
-
-    stale = 0
-    for line in ledger.read_text(encoding="utf-8", errors="replace").split("\n"):
-        if not line.startswith("|"):
-            continue
-        cells = line.split("|")
-        if len(cells) < 5:
-            continue
-        stale += len([name for name in LEDGER_FILE.findall(cells[3]) if name not in on_disk])
-    return stale
-
-
 # ---- M6-d's instrument: the assembly transcribed in comments -------------------------------------
 #
 # The 6502's 56 mnemonics, split by addressing mode, because the two need different tests.
@@ -276,31 +244,41 @@ UNAMBIGUOUS_IMPLIED = re.compile(r"(?:/\s*(?:" + "|".join(_PLAIN_IMPLIED) + r")\
 COMMENT_LINE = re.compile(r"^\s*(?://|\*|/\*)")
 
 
-# The tag that makes a quotation DELIBERATE (§1 R-i, ruled 2026-09-08).
+# R-i's `6502 quoted:` TAG WAS HERE AND IS NOT ANY MORE (M6-d-59, owner ruling 2026-09-08).
 #
-# M6-d's row wants the ratchet at zero and Risk R20 lets a comment keep its instruction sequence
-# when that sequence IS the reason. Both hold once the counter can tell the two apart, and the only
-# thing that can tell them apart is the author saying which this is. So a kept quotation carries the
-# tag, ON EVERY LINE OF IT: an untagged listing is transcription and goes, a tagged one is counted
-# against a cap you can see. Tagging each line rather than opening a block keeps the rule
-# unambiguous and makes a long quotation cost more to keep, which is the right incentive.
+# R-i split this counter in two on the expectation that some comments could not be rewritten
+# without losing their reason, and gave those a tag so the residue would be visible and capped
+# rather than argued site by site. Fifty-eight slices took the tree from 997 listings to zero and
+# the residue stayed EMPTY: every hard case cleared with prose, the last being `MemoryMap.h`, whose
+# argument is "the routine is eight instructions and none of them writes code" and which had the
+# eight listed as its evidence. Naming what they do is shorter, says the same, and stays checkable
+# against the port once `Upstream/` is gone -- which the listing does not.
 #
-# Not `6502:` -- that is the marker M6-e removes, and `\b6502:` does not match this.
-QUOTED_TAG = re.compile(r"\b6502 quoted:")
+# So the tag and its counter go together, and `opcode-transcriptions` at zero now has NO EXEMPTION:
+# every instruction listing in a comment is a violation, with nothing to opt out of it. That is a
+# stronger guarantee than the split was, and one fewer mechanism to rot.
 
 
 def _is_transcription(_line: str) -> bool:
-    """Does this comment line QUOTE instructions, rather than name one in a sentence?"""
-    if not (OPCODE_OPERAND.search(_line) or OPCODE_IMPLIED.search(_line)):
+    """Does this comment line QUOTE instructions, rather than name one in a sentence?
+
+    EVERY test reads the comment's BODY. The comment's own `//` is a slash, and an implied-mode
+    instruction needs a slash beside it to be a listing -- so `// CLC, in spite of the DFAULT above`
+    read as a quoted `CLC` purely because the delimiter sat next to it. That was invisible while
+    every such comment carried a `6502:` marker between the two; M6-e-3 removed the markers and
+    three sentences turned into listings that had never changed. The body test was already here for
+    LISTING_CONTEXT, with a comment saying exactly this; it belongs on all of them.
+    """
+    body = COMMENT_LINE.sub("", _line, count=1)
+    if not (OPCODE_OPERAND.search(body) or OPCODE_IMPLIED.search(body)):
         return False
-    if UNAMBIGUOUS_OPERAND.search(_line) or UNAMBIGUOUS_IMPLIED.search(_line):
+    if UNAMBIGUOUS_OPERAND.search(body) or UNAMBIGUOUS_IMPLIED.search(body):
         return True
-    # The comment's own `//` is a slash, so the context test reads the BODY and not the marker.
-    return bool(LISTING_CONTEXT.search(COMMENT_LINE.sub("", _line, count=1)))
+    return bool(LISTING_CONTEXT.search(body))
 
 
 def _opcode_lines(_root: Path):
-    """Every comment line in the port that shows instruction shape, with whether it is tagged.
+    """Every comment line in the port that shows instruction shape.
 
     Counted per LINE and not per instruction, because a rewrite replaces lines: a run of six
     instructions across two comment lines is two sites to rewrite, not six.
@@ -318,17 +296,12 @@ def _opcode_lines(_root: Path):
         for path in sorted(here.glob("*.h")) + sorted(here.glob("*.cpp")):
             for line in comment_lines(path.read_text(encoding="utf-8", errors="replace")):
                 if line and _is_transcription(line):
-                    yield line, bool(QUOTED_TAG.search(line))
+                    yield line
 
 
 def count_opcode_transcriptions(_root: Path) -> int:
-    """P12 -- instruction listings that carry no reason. M6-d drives this one to ZERO."""
-    return sum(1 for _line, tagged in _opcode_lines(_root) if not tagged)
-
-
-def count_opcode_quotations(_root: Path) -> int:
-    """P12 -- instruction sequences kept BECAUSE they are the reason (R20, R-i). Capped, not zero."""
-    return sum(1 for _line, tagged in _opcode_lines(_root) if tagged)
+    """P12 -- instruction listings in comments. M6-d drove this to ZERO and it stays there."""
+    return sum(1 for _line in _opcode_lines(_root))
 
 
 def count_origin_markers(_root: Path) -> int:
@@ -500,26 +473,6 @@ def count_origin_identifiers(_root: Path) -> int:
     return total
 
 
-def count_oracle_test_files(_root: Path) -> int:
-    """P12 -- test translation units that load the assembled original through OracleImage."""
-    tests = _root / "Tests" / "GameLogicTests"
-    return len([path for path in sorted(tests.glob("*Tests.cpp"))
-                if ORACLE_USE.search(strip_comments(path.read_text(encoding="utf-8", errors="replace")))])
-
-
-def count_origin_tools(_root: Path) -> int:
-    """P12 -- scripts in tools/ that read Upstream/ or MasterFile/ (this one reads neither)."""
-    total = 0
-    for path in sorted((_root / "tools").glob("*.py")):
-        if path.name == Path(__file__).name:
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-        if ORIGIN_PATH.search(code):
-            total += 1
-    return total
-
-
 COUNTERS = {
     "register-params": (count_register_params, "P1: std::uint8_t _a/_x/_y parameters in GameLogic/*.h"),
     "workspace-params": (count_workspace_params, "P2: zero-page workspace reference parameters in GameLogic/*.h"),
@@ -533,13 +486,13 @@ COUNTERS = {
     "carry-params": (count_carry_params, "P11: bool _carryIn parameters in GameLogic/*.h"),
     "mutants": (count_mutants, "recorded mutants in tools/mutants.json"),
     "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
-    "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
-    "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments that carry no reason"),
-    "opcode-quotations": (count_opcode_quotations, "P12: instruction sequences kept because they ARE the reason"),
+    "opcode-transcriptions": (count_opcode_transcriptions, "P12: instruction listings in comments -- no exemption"),
     "origin-identifiers": (count_origin_identifiers, "P12: identifiers that are 6502 labels, in the library, the app and the suite"),
-    "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
-    "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
+    # `oracle-test-files` WAS HERE AND IS NOT ANY MORE (M6-b-7): it counted the test translation
+    # units that loaded the assembled original, and it reached zero when the tests went. A counter
+    # over a header that no longer exists guards nothing -- a file that included it would not
+    # compile -- so it goes with the header rather than sitting at zero for ever.
 }
 
 
@@ -580,8 +533,45 @@ def check_ratchet(_measured: dict[str, tuple[int, str]]) -> list[str]:
     return complaints
 
 
-def write_ratchet(_measured: dict[str, tuple[int, str]]) -> None:
+def rising_ceilings(_measured: dict[str, tuple[int, str]],
+                    _existing: dict[str, dict[str, int | str]]) -> list[str]:
+    """The counts a rewrite would move UP, which rule 5 does not allow without a reason.
+
+    Split out from `write_ratchet` so the self-test can exercise it without writing to the real
+    ratchet: a guard nothing proves is a guard nobody can rely on, which is the lesson of the
+    counter it protects.
+    """
+    return [
+        f"{name}: {value} is ABOVE the recorded ceiling of {int(_existing[name]['ceiling'])}"
+        for name, (value, _meaning) in sorted(_measured.items())
+        if name in _existing and value > int(_existing[name]["ceiling"])
+    ]
+
+
+def write_ratchet(_measured: dict[str, tuple[int, str]], _raise: bool = False) -> None:
+    """Rewrite the ceilings to the tree -- and REFUSE to raise one unless asked in so many words.
+
+    `--update` used to write whatever it measured, which makes it a snapshot and not a ratchet.
+    Rule 5 says the numbers only go down, and until M6-d-57 nothing enforced that on the writing
+    side: `check_modernize.py` complains when a count sits below its ceiling and tells you to run
+    `--update`, and `--update` would then happily raise a DIFFERENT count that the same slice had
+    pushed up. That is exactly what happened -- a comment rewrite grew `Outpost/Main.cpp` by one
+    line, `--update` moved P6's ceiling from 238 to 239, and the only thing that noticed was
+    `check_counts.py` complaining about a marked number in the plan. Rule 5 was being enforced by a
+    coincidence.
+
+    So a raise is now an error that names the counts and stops. `--update --raise-ceiling` is the
+    way to say a rise is intended, and a slice that needs it has something to justify in its journal
+    entry.
+    """
     existing = load_ratchet()
+    rises = rising_ceilings(_measured, existing)
+    if rises and not _raise:
+        for rise in rises:
+            print(f"      {rise}")
+        sys.exit("error: --update would RAISE a ceiling, and the ratchet only goes down (rule 5).\n"
+                 "       Fix the tree, or pass --raise-ceiling and justify it in the journal entry.")
+
     ceilings: dict[str, dict[str, int | str]] = {}
     for name, (value, _meaning) in _measured.items():
         previous = existing.get(name, {})
@@ -627,7 +617,7 @@ namespace Elite
   // it clears both halves AND the carry, and expresses that with ROR through the flag: also prose
   // TWO LOOPS AND ONE COUNTER, and the mode is decided INSIDE the loop: a sentence, not a listing
   /// 6502: TXA / CLC -- implied-mode instructions in a quoted run count too
-  // 6502 quoted: LDA #1 / STA T -- tagged, so this one is a QUOTATION and not a transcription
+  // LDA #1 / STA T -- R-i's tag is gone (M6-d-59) and a listing needs no marker: still counted
   /// 6502: AND #63 -- an immediate operand, so the AND alone makes this line a listing
   /// 6502: the mask is `&DC00`/`&DC01` AND ONLY that -- capitals after AND, and a slash: still prose
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
@@ -668,16 +658,6 @@ SAMPLE_MUTANTS = {
     ]
 }
 
-SAMPLE_LEDGER = (
-    "| Labels | N | Home | Disposition | Notes |\n"
-    "|---|---|---|---|---|\n"
-    "| `alpha` | 1 | `Present.h`, `Missing.cpp` | Port | it was in `Gone.cpp` once, which is HISTORY |\n"
-)
-
-SAMPLE_ORACLE_TEST = "#include \"OracleImage.h\"\nTEST_CLASS(A) { TEST_METHOD(B) { OracleImage::Instance(); } };\n"
-SAMPLE_PLAIN_TEST = "// OracleImage only in a comment\nTEST_CLASS(C) { TEST_METHOD(D) { } };\n"
-SAMPLE_ORIGIN_TOOL = "# Upstream in a comment does not count\nROOT = REPO / \"Upstream\" / \"elite-source-code-library\"\n"
-SAMPLE_PLAIN_TOOL = "# MasterFile mentioned only here\nprint(1)\n"
 
 EXPECTED = {
     "register-params": 3,
@@ -692,13 +672,9 @@ EXPECTED = {
     "carry-params": 1,
     "mutants": 3,
     "mutant-files": 2,
-    "inventory-stale-files": 1,
     "origin-markers": 7,
     "origin-identifiers": 5,
-    "opcode-transcriptions": 4,
-    "opcode-quotations": 1,
-    "oracle-test-files": 1,
-    "origin-tools": 1,
+    "opcode-transcriptions": 5,
 }
 
 
@@ -715,12 +691,7 @@ def self_test() -> list[str]:
         (root / "GameLogic" / "Sample.cpp").write_text(SAMPLE_SOURCE, encoding="utf-8")
         (root / "Outpost" / "Main.cpp").write_text(SAMPLE_MAIN, encoding="utf-8")
         (root / "tools" / "mutants.json").write_text(json.dumps(SAMPLE_MUTANTS), encoding="utf-8")
-        (root / "Design" / "Source-Inventory.md").write_text(SAMPLE_LEDGER, encoding="utf-8")
         (root / "Tests" / "GameLogicTests").mkdir(parents=True)
-        (root / "Tests" / "GameLogicTests" / "ATests.cpp").write_text(SAMPLE_ORACLE_TEST, encoding="utf-8")
-        (root / "Tests" / "GameLogicTests" / "BTests.cpp").write_text(SAMPLE_PLAIN_TEST, encoding="utf-8")
-        (root / "tools" / "labels.py").write_text(SAMPLE_ORIGIN_TOOL, encoding="utf-8")
-        (root / "tools" / "check_docs.py").write_text(SAMPLE_PLAIN_TOOL, encoding="utf-8")
 
         measured = counts(root)
 
@@ -732,6 +703,13 @@ def self_test() -> list[str]:
     for name in measured:
         if name not in EXPECTED:
             complaints.append(f"self-test: {name} has a counter and no expectation")
+
+    # The ratchet's writing side, which went unguarded until M6-d-57 and raised P6's ceiling by one.
+    sample = {"down": (5, ""), "same": (5, ""), "up": (6, ""), "new": (9, "")}
+    held = {"down": {"ceiling": 9}, "same": {"ceiling": 5}, "up": {"ceiling": 5}}
+    rising = rising_ceilings(sample, held)
+    if rising != ["up: 6 is ABOVE the recorded ceiling of 5"]:
+        complaints.append(f"self-test: rising_ceilings answered {rising!r}, expected the one rise")
     return complaints
 
 
@@ -742,6 +720,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="The modernisation ratchet (Design/Modernize.md).")
     parser.add_argument("--list", action="store_true", help="print every count and stop")
     parser.add_argument("--update", action="store_true", help="rewrite the ceilings to the tree as it is")
+    parser.add_argument("--raise-ceiling", action="store_true",
+                        help="with --update, allow a ceiling to go UP -- justify it in the journal entry")
     parser.add_argument("--self-test", action="store_true", help="prove the counters on a synthetic tree, and stop")
     arguments = parser.parse_args()
 
@@ -764,7 +744,7 @@ def main() -> int:
         return 0
 
     if arguments.update:
-        write_ratchet(measured)
+        write_ratchet(measured, arguments.raise_ceiling)
         print(f"OK    {RATCHET.relative_to(REPO).as_posix()} rewritten to the tree: {len(measured)} ceilings")
         return 0
 

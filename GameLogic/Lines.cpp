@@ -27,9 +27,9 @@ namespace Elite
     std::uint8_t subRow = static_cast<std::uint8_t>(_down & 0x07u);
     const std::uint16_t cell = static_cast<std::uint16_t>(Canvas::RowOffset(_down) + (_across & 0xF8u));
 
-    if (_distance >= 144) // 6502: the distance against 144
+    if (_distance >= 144) // The distance against 144
     {
-      // 6502: PX3 -- far away, so one mark and nothing else.
+      // Far away, so one mark and nothing else.
       _canvas.ExclusiveOr(static_cast<std::uint16_t>(cell + subRow), mask);
       return;
     }
@@ -38,12 +38,12 @@ namespace Elite
 
     if (_distance >= 80)
     {
-      // 6502: PX13 -- a middle distance, so the dash on its own is enough.
+      // A middle distance, so the dash on its own is enough.
       return;
     }
 
     /*
-     * 6502: PX3 -- the row index stepped down, and a negative one put back to 1.
+     * The row index stepped down, and a negative one put back to 1.
      *
      * Closer still, so a second dash goes above the first to make a square -- except on the top
      * row of a character cell, where decrementing the pixel row would leave the cell entirely.
@@ -57,7 +57,7 @@ namespace Elite
   SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept
   {
     /*
-     * 6502: PIXEL2's two conversions. The coordinates arrive as sign-magnitude
+     * PIXEL2's two conversions. The coordinates arrive as sign-magnitude
      * offsets from the centre of the space view, and come out as screen coordinates: x measured
      * from the left edge, y downwards.
      *
@@ -66,7 +66,7 @@ namespace Elite
      * from the centre to the edge. Both branches end at the same flip, which is what makes it
      * one expression rather than two.
      */
-    const std::uint8_t x1 = _across; // 6502: X1
+    const std::uint8_t x1 = _across;
     std::uint8_t x = x1;
     if ((x1 & 0x80u) != 0u)
     {
@@ -74,9 +74,9 @@ namespace Elite
     }
     x ^= 0x80u;
 
-    // 6502: PX4 -- a point more than 72 rows from the centre is off the top or bottom of the
+    // A point more than 72 rows from the centre is off the top or bottom of the
     // space view, and the routine simply returns.
-    if ((_down & 0x7Fu) >= 72u) // 6502: Y1
+    if ((_down & 0x7Fu) >= 72u)
     {
       return SpaceViewPoint{x, 0u, true};
     }
@@ -105,7 +105,7 @@ namespace Elite
       carry = negated.carry;
     }
 
-    // 6502: 73 rather than 72, because the borrow is usually taken.
+    // 73 rather than 72, because the borrow is usually taken.
     return SpaceViewPoint{x, static_cast<std::uint8_t>(73u - magnitude - (carry ? 0u : 1u)), false};
   }
 
@@ -123,7 +123,7 @@ namespace Elite
     PlotPixel(_canvas, point.x, point.y, _distance);
 
     /*
-     * 6502: `PIXEL`'s exit carry, and it is exactly `ZZ >= 80`.
+     * `PIXEL`'s exit carry, and it is exactly `ZZ >= 80`.
      *
      * Three of the four ways out leave it set -- the test against 144, the test against 80, and
      * `PIXEL2`'s own off-screen exit -- and the fourth, the near case that plots twice, comes
@@ -136,16 +136,16 @@ namespace Elite
 
   CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept
   {
-    const std::uint16_t cell = static_cast<std::uint16_t>(Canvas::RowOffset(_down) + (_across & 0xF8u)); // 6502: X1, Y1
+    const std::uint16_t cell = static_cast<std::uint16_t>(Canvas::RowOffset(_down) + (_across & 0xF8u));
     const std::uint8_t subRow = static_cast<std::uint8_t>(_down & 0x07u);
     const std::uint8_t index = static_cast<std::uint8_t>(_across & 0x07u);
 
-    // 6502: the aligned mask out of `CTWOS2`, narrowed to the pattern being drawn.
+    // The aligned mask out of `CTWOS2`, narrowed to the pattern being drawn.
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(cell + subRow),
                         static_cast<std::uint8_t>(MULTICOLOUR_MASK_TABLE[index] & PatternByte(_pattern)));
 
     /*
-     * 6502: CP1 -- the second pixel's mask, two entries along, tested for its top bit.
+     * The second pixel's mask, two entries along, tested for its top bit.
      *
      * The dash's second pixel is two entries along, and the routine works out whether that pixel
      * has crossed into the next character cell by looking at the MASK rather than at x: only the
@@ -157,14 +157,14 @@ namespace Elite
 
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(secondCell + subRow), static_cast<std::uint8_t>(second & PatternByte(_pattern)));
 
-    // 6502: SC(1 0), Y and X as the routine leaves them -- and SC is the WRAPPED cell when the
+    // SC(1 0), Y and X as the routine leaves them -- and SC is the WRAPPED cell when the
     // second pixel crossed, because that is the byte the last store wrote through.
     return CellCursor{secondCell, subRow, index};
   }
 
   CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept
   {
-    // 6502: CPIX4 -- one dash, then the row stepped up and a fall through into `CPIX2` for the
+    // One dash, then the row stepped up and a fall through into `CPIX2` for the
     // row above. `Y1` is left stepped in the original; no caller reads it (M2-c).
     (void)PlotDash(_canvas, _across, _down, _pattern);
     return PlotDash(_canvas, _across, static_cast<std::uint8_t>(_down - 1u), _pattern);
@@ -172,13 +172,13 @@ namespace Elite
 
   void DrawHorizontalLine(Canvas& _canvas, std::uint8_t _x1, std::uint8_t _x2, std::uint8_t _row) noexcept
   {
-    // 6502: HL6 -- a line of no length is not drawn at all.
+    // A line of no length is not drawn at all.
     if (_x1 == _x2)
     {
       return;
     }
 
-    // 6502: HL5 -- the ends the right way round. The original writes them back to `X1` and `X2`;
+    // The ends the right way round. The original writes them back to `X1` and `X2`;
     // no caller reads them after the call (M2-c).
     std::uint8_t left = _x1;
     std::uint8_t right = _x2;
@@ -188,14 +188,14 @@ namespace Elite
       right = _x1;
     }
 
-    // 6502: the right end stepped down -- it is exclusive.
+    // The right end stepped down -- it is exclusive.
     right = static_cast<std::uint8_t>(right - 1u);
 
     const std::uint16_t row = static_cast<std::uint16_t>(Canvas::RowOffset(_row) + (_row & 0x07u));
     std::uint16_t offset = static_cast<std::uint16_t>(row + (left & 0xF8u));
 
     /*
-     * 6502: HL1 -- the cell's base, parked in `T` and not in `T2`, which is what the port wrote until
+     * The cell's base, parked in `T` and not in `T2`, which is what the port wrote until
      * M2-c (§8). The byte is the kernel's and a local since M2-b, and the single-byte path below
      * overwrites it with the right-hand mask before returning, so nothing survives the call.
      */
@@ -205,7 +205,7 @@ namespace Elite
     if (span == 0)
     {
       /*
-       * 6502: HL2 -- both ends are in the same byte, so the two end masks are ANDed rather than
+       * Both ends are in the same byte, so the two end masks are ANDed rather than
        * written one after the other. Writing them separately would EOR the overlap twice and
        * erase it, which is the kind of thing erase-by-EOR punishes.
        */
@@ -214,13 +214,13 @@ namespace Elite
       return;
     }
 
-    const std::uint8_t wholeBytes = static_cast<std::uint8_t>(span >> 3); // 6502: three shifts, into R
+    const std::uint8_t wholeBytes = static_cast<std::uint8_t>(span >> 3); // Three shifts, into R
 
-    // 6502: TWFR -- the first byte is filled from x rightwards to the end of the byte.
+    // The first byte is filled from x rightwards to the end of the byte.
     _canvas.ExclusiveOr(offset, LINE_RIGHT_MASK_TABLE[left & 0x07u]);
     offset = static_cast<std::uint16_t>(offset + 8u);
 
-    // 6502: HLL1 -- every whole byte between the ends, which in multicolour terms is four pixels
+    // Every whole byte between the ends, which in multicolour terms is four pixels
     // of colour %11 at a time.
     for (std::uint8_t remaining = static_cast<std::uint8_t>(wholeBytes - 1u); remaining != 0; --remaining)
     {
@@ -228,12 +228,12 @@ namespace Elite
       offset = static_cast<std::uint16_t>(offset + 8u);
     }
 
-    // 6502: HL3 / TWFL -- the last byte is filled leftwards from the start of the byte to x.
+    // HL3 / TWFL -- the last byte is filled leftwards from the start of the byte to x.
     _canvas.ExclusiveOr(offset, LINE_LEFT_MASK_TABLE[right & 0x07u]);
   }
 
   /*
-   * 6502: LOIN / LL30 -- the line.
+   * LOIN / LL30 -- the line.
    *
    * The densest routine in phase 1, and almost all of that density is unrolling. The shipped code
    * has thirty-two copies of two loops: eight starting bit positions, each reached through a
@@ -257,7 +257,7 @@ namespace Elite
 
   namespace
   {
-    /// 6502: SC and SCH -- the screen pointer, kept as the two bytes the original keeps, because the
+    /// SC and SCH -- the screen pointer, kept as the two bytes the original keeps, because the
     /// carry between them is load-bearing (see the note above).
     struct ScreenPointer
     {
@@ -286,20 +286,20 @@ namespace Elite
     };
 
     /*
-     * 6502: STPX and everything it reaches -- the shallow case, where the line moves further across
+     * STPX and everything it reaches -- the shallow case, where the line moves further across
      * than it does up or down, so it plots one pixel per column and steps rows when the accumulator
      * says to.
      */
     /// Returns `SWAP`: whether the ends were exchanged, which `_line` then holds the other way round.
     bool DrawShallowLine(Canvas& _canvas, Line& _line, std::uint8_t _deltaX, std::uint8_t _deltaY, std::uint8_t _errorSeed) noexcept
     {
-      // 6502: LI3 -- draw left to right, swapping the ends if they arrived the other way round.
+      // Draw left to right, swapping the ends if they arrived the other way round.
       // The swap flag is what records that, and the record matters: a swapped line does not
       // plot its first pixel.
       bool swapped = false;
       if (_line.x1 >= _line.x2)
       {
-        swapped = true; // 6502: the swap flag stepped down
+        swapped = true; // The swap flag stepped down
         std::uint8_t swap = _line.x1;
         _line.x1 = _line.x2;
         _line.x2 = swap;
@@ -308,7 +308,7 @@ namespace Elite
         _line.y2 = swap;
       }
 
-      // 6502: LI3 -- the slope, as a fraction of a row per column.
+      // The slope, as a fraction of a row per column.
       _deltaY = LineSlope(_deltaY, _deltaX);
 
       const bool goingUp = _line.y1 >= _line.y2;
@@ -336,7 +336,7 @@ namespace Elite
 
       if (goingUp)
       {
-        // 6502: the AC19 block. SC is the row plus the byte within it, Y the pixel row in the cell.
+        // The AC19 block. SC is the row plus the byte within it, Y the pixel row in the cell.
         const AddResult base =
           AddWithCarry(static_cast<std::uint8_t>(_line.x1 & 0xF8u), static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
         screenPointer.low = base.value;
@@ -348,7 +348,7 @@ namespace Elite
       else
       {
         /*
-         * 6502: DOWN. Same address by a different route: Y is biased up to 0xF8..0xFF and SC pulled
+         * DOWN. Same address by a different route: Y is biased up to 0xF8..0xFF and SC pulled
          * down by 248 to match, so that INY runs off the end of a cell into zero and the branch that
          * tests it is a BNE. The port keeps the bias rather than normalising it, because SC's low
          * byte is what the carry chain reads.
@@ -375,7 +375,7 @@ namespace Elite
 
       if (swapped)
       {
-        // 6502: the swapped entry counts one more and enters past the plot.
+        // The swapped entry counts one more and enters past the plot.
         count = static_cast<std::uint8_t>(_deltaX + 1u);
         if (count == 0)
         {
@@ -385,7 +385,7 @@ namespace Elite
       }
       else if (!goingUp && _deltaX == 0)
       {
-        // 6502: LIE0 -- the downward entry checks for an empty line and the upward one does not.
+        // The downward entry checks for an empty line and the upward one does not.
         // Not a symmetry the port may impose: upward with a zero span really does plot 256
         // pixels, because the count wraps.
         return swapped;
@@ -399,7 +399,7 @@ namespace Elite
         }
         skipFirst = false;
 
-        // 6502: the pixel counter, tested before the step rather than after the plot.
+        // The pixel counter, tested before the step rather than after the plot.
         --count;
         if (count == 0)
         {
@@ -414,7 +414,7 @@ namespace Elite
         {
           if (goingUp)
           {
-            // 6502: up a pixel row, and up a character row when that runs out.
+            // Up a pixel row, and up a character row when that runs out.
             --y;
             if ((y & 0x80u) != 0u)
             {
@@ -425,7 +425,7 @@ namespace Elite
           }
           else
           {
-            // 6502: the biased row index runs up to zero rather than down past it.
+            // The biased row index runs up to zero rather than down past it.
             ++y;
             if (y == 0)
             {
@@ -434,14 +434,14 @@ namespace Elite
               y = 0xF8u;
             }
           }
-          carry = false; // 6502: the CLC that every step path ends with
+          carry = false; // The CLC that every step path ends with
         }
 
         ++bit;
         if (bit == 8)
         {
           /*
-           * 6502: LI89 and LI29 -- one character cell to the right, and here is the carry that a
+           * LI89 and LI29 -- one character cell to the right, and here is the carry that a
            * flat offset would lose. Adding eight to the pointer's low byte can carry, and nothing
            * clears it
            * before the next iteration adds the slope, so that iteration advances one step further
@@ -458,17 +458,17 @@ namespace Elite
     }
 
     /*
-     * 6502: STPY and everything it reaches -- the steep case, one pixel per ROW, stepping across
+     * STPY and everything it reaches -- the steep case, one pixel per ROW, stepping across
      * when the accumulator says to. The mask is carried in R2 and shifted rather than indexed, which
      * is why this half has no bit counter.
      */
     bool DrawSteepLine(Canvas& _canvas, Line& _line, std::uint8_t _deltaX, std::uint8_t _deltaY, std::uint8_t _errorSeed) noexcept
     {
-      // 6502: LI15 -- draw downwards, swapping the ends if needed.
+      // Draw downwards, swapping the ends if needed.
       bool swapped = false;
       if (_line.y1 < _line.y2)
       {
-        swapped = true; // 6502: the swap flag stepped down
+        swapped = true; // The swap flag stepped down
         std::uint8_t swap = _line.x1;
         _line.x1 = _line.x2;
         _line.x2 = swap;
@@ -488,17 +488,17 @@ namespace Elite
       std::uint8_t y = static_cast<std::uint8_t>(_line.y1 & 0x07u);
       std::uint8_t mask = PIXEL_MASK_TABLE[_line.x1 & 0x07u];
 
-      // 6502: LIfudge -- a vertical line keeps a slope of zero rather than dividing.
+      // A vertical line keeps a slope of zero rather than dividing.
       if (_deltaX != 0)
       {
         _deltaX = LineSlope(_deltaX, _deltaY);
       }
 
-      // 6502: LIfudge -- the carry set and the count stepped up, then the direction test.
+      // The carry set and the count stepped up, then the direction test.
       std::uint8_t count = static_cast<std::uint8_t>(_deltaY + 1u);
       const bool goingRight = SubtractWithCarry(_line.x2, _line.x1, true).carry;
 
-      // 6502: LI17 -- unswapped enters past the plot, swapped plots and counts one fewer. Both
+      // Unswapped enters past the plot, swapped plots and counts one fewer. Both
       // halves, left and right, do this the same way.
       bool skipFirst = !swapped;
       if (swapped)
@@ -517,7 +517,7 @@ namespace Elite
         skipFirst = false;
 
         /*
-         * 6502: LI17 / LI18 -- one pixel row up, every iteration. This is the steep case, so the row
+         * LI17 / LI18 -- one pixel row up, every iteration. This is the steep case, so the row
          * always moves and it is the column that waits for the accumulator.
          *
          * And the borrow this leaves is NOT cleared. Both shallow paths end their row step with a
@@ -544,7 +544,7 @@ namespace Elite
         {
           if (goingRight)
           {
-            // 6502: the mask walks right a bit at a time, and when it falls out of the byte it
+            // The mask walks right a bit at a time, and when it falls out of the byte it
             // comes back at the top and the pointer steps a cell.
             const bool fellOut = (mask & 0x01u) != 0u;
             mask = static_cast<std::uint8_t>(mask >> 1);
@@ -560,7 +560,7 @@ namespace Elite
           }
           else
           {
-            // 6502: LFT -- the same, leftwards.
+            // The same, leftwards.
             const bool fellOut = (mask & 0x80u) != 0u;
             mask = static_cast<std::uint8_t>(mask << 1);
             if (fellOut)
@@ -572,10 +572,10 @@ namespace Elite
               }
             }
           }
-          carry = false; // 6502: every one of those paths reaches LIC5 or LIC6 with carry clear
+          carry = false; // Every one of those paths reaches LIC5 or LIC6 with carry clear
         }
 
-        // 6502: LIC5 and LIC6 -- the count is tested after the step, not before it.
+        // LIC5 and LIC6 -- the count is tested after the step, not before it.
         --count;
         if (count == 0)
         {
@@ -585,7 +585,7 @@ namespace Elite
     }
   } // namespace
 
-  /// 6502: the LIlog chain in LOIN, and the LIloG chain in its steep half -- 256 * A / Q through
+  /// The LIlog chain in LOIN, and the LIloG chain in its steep half -- 256 * A / Q through
   /// the logarithm tables, saturating at 255. The same shape as LL28's body, but this copy stores
   /// nothing in `widget` and takes the operands in registers, so it is written out rather than
   /// shared: a helper that had to grow a flag to say whether it scribbles on zero page would be
@@ -611,12 +611,12 @@ namespace Elite
 
   DrawnLine DrawLine(Canvas& _canvas, Line _line) noexcept
   {
-    // 6502: 128 into the error seed, then doubled into the swap flag. That doubling does three
+    // 128 into the error seed, then doubled into the swap flag. That doubling does three
     // jobs at once: it leaves the accumulator seeded at half, it zeroes the swap flag, and it
     // SETS the carry, which is why the subtraction below has none set in front of it.
     const std::uint8_t errorSeed = 0x80;
 
-    // 6502: LI1 and LI2 -- the two spans, as magnitudes. Negating by complementing and adding
+    // LI1 and LI2 -- the two spans, as magnitudes. Negating by complementing and adding
     // one works because the branch that reaches it left the carry clear.
     SubResult span = SubtractWithCarry(_line.x2, _line.x1, true);
     const std::uint8_t deltaX = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;

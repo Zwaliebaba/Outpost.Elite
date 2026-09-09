@@ -12,7 +12,7 @@ namespace Elite
   namespace
   {
     /*
-     * 6502: the shape both explosions share -- a level starting at 11 and stepped up once for each
+     * The shape both explosions share -- a level starting at 11 and stepped up once for each
      * threshold the distance comes under.
      *
      * Written once because it is written twice: `EXNO` and `EXNO2` differ only in their four
@@ -41,7 +41,7 @@ namespace Elite
         }
       }
 
-      // 6502: the level shifted into the high nibble with 3 in the low one.
+      // The level shifted into the high nibble with 3 in the low one.
       return static_cast<std::uint8_t>((level << 4) | 3u);
     }
 
@@ -49,13 +49,13 @@ namespace Elite
 
   std::uint8_t ExplosionVolume(std::uint8_t _distance) noexcept
   {
-    // 6502: EXNO's four thresholds.
+    // EXNO's four thresholds.
     return Volume(_distance, 8u, 4u, 3u, 2u);
   }
 
   std::uint8_t KillVolume(std::uint8_t _distance) noexcept
   {
-    // 6502: EXNO2's four thresholds -- a kill is heard from twice as far as a hit.
+    // EXNO2's four thresholds -- a kill is heard from twice as far as a hit.
     return Volume(_distance, 16u, 8u, 6u, 3u);
   }
 
@@ -64,7 +64,7 @@ namespace Elite
     const std::uint8_t sustain = ExplosionVolume(_work.z.hi);
 
     /*
-     * 6502: the hit sound at pitch 208 -- AND THE CARRY IS ALWAYS CLEAR (M3-b-2a).
+     * The hit sound at pitch 208 -- AND THE CARRY IS ALWAYS CLEAR (M3-b-2a).
      *
      * `NOISE2` runs on the caller's flag and the seam had no way to carry one, so the port passed
      * false and the plan recorded the gap. The four shifts that build the byte above are what set
@@ -79,7 +79,7 @@ namespace Elite
     Commander& commander = _universe.commander;
 
     /*
-     * 6502: the kill worth added into the tally, fraction first, carrying up through three bytes.
+     * The kill worth added into the tally, fraction first, carrying up through three bytes.
      *
      * Twenty-four bits with the bottom eight a fraction, so most kills add nothing visible: a
      * Sidewinder is worth a fraction and it takes several of them to move the number the status
@@ -99,7 +99,7 @@ namespace Elite
       commander.kills.hi =
         static_cast<std::uint8_t>(commander.kills.hi + 1u);
 
-      // 6502: token 101 through `MESS` -- "RIGHT ON COMMANDER", once every 256 whole kills.
+      // Token 101 through `MESS` -- "RIGHT ON COMMANDER", once every 256 whole kills.
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_RIGHT_ON_COMMANDER,
                   _universe.view, &_universe.picture);
     }
@@ -117,7 +117,7 @@ namespace Elite
     FlightStatus& status = _universe.status;
 
     /*
-     * 6502: the damage stashed, then byte 8 of the ship's own block decides which shield -- a
+     * The damage stashed, then byte 8 of the ship's own block decides which shield -- a
      * negative sign branches to `OO1` and the aft one.
      *
      * AND THE `SBC` BELOW RUNS ON THE CALLER'S CARRY. Neither entry sets it: part 10 arrives at
@@ -133,17 +133,17 @@ namespace Elite
     const SubResult left = SubtractWithCarry(shield, _damage, _carryIn);
     if (left.carry)
     {
-      // 6502: the shield keeps what is left and the banks are untouched.
+      // The shield keeps what is left and the banks are untouched.
       shield = left.value;
       return true;
     }
 
-    // 6502: OO2 and OO5 -- the shield to zero, and on into OO3 with the negative remainder still
+    // OO2 and OO5 -- the shield to zero, and on into OO3 with the negative remainder still
     // in the accumulator.
     shield = 0u;
 
     /*
-     * 6502: OO3 -- the remainder added to the energy banks, then two branches over a jump to
+     * The remainder added to the energy banks, then two branches over a jump to
      * `DEATH`.
      *
      * The zero branch is the trap: it jumps FORWARD past the carry branch, onto the jump to
@@ -155,11 +155,11 @@ namespace Elite
 
     if (banks.value == 0u || !banks.carry)
     {
-      return false; // 6502: DEATH
+      return false;
     }
 
     /*
-     * 6502: EXNO3 then OUCH -- and `EXNO3` is nothing but the explosion sound, so the carry `OUCH`
+     * EXNO3 then OUCH -- and `EXNO3` is nothing but the explosion sound, so the carry `OUCH`
      * opens its first random roll on is the sound routine's answer (§6.88).
      *
      * The carry going IN is SET, and it is the carry branch four instructions above that sets it:
@@ -173,45 +173,45 @@ namespace Elite
 
   void DamageEquipment(Universe& _universe, Ports& _ports, bool _carryIn) noexcept
   {
-    // 6502: a random byte, and a negative one leaves -- half the hits break nothing at all.
+    // A random byte, and a negative one leaves -- half the hits break nothing at all.
     const RngResult roll = _universe.rng.Next(_carryIn);
     if ((roll.value & 0x80u) != 0u)
     {
       return;
     }
 
-    // 6502: the generator's OTHER byte is the slot, and 22 is where the block ends.
+    // The generator's OTHER byte is the slot, and 22 is where the block ends.
     const std::uint8_t slot = roll.previous;
     if (slot >= 22u)
     {
       return;
     }
 
-    // 6502: QQ20,X -- and X runs to 21, past the seventeen goods into the five fittings after
+    // QQ20,X -- and X runs to 21, past the seventeen goods into the five fittings after
     // them. `cargoHold[slot]` was that until M1-d typed the hold, and then it was an out-of-range
     // subscript for every fitting `OUCH` could break (plan §6.158).
     Commander& commander = _universe.commander;
     std::uint8_t& held = commander.HoldOrFitting(slot);
 
-    // 6502: nothing in the slot, nothing to break.
+    // Nothing in the slot, nothing to break.
     if (held == 0u)
     {
       return;
     }
 
-    // 6502: a message already up suppresses this one, and the routine with it.
+    // A message already up suppresses this one, and the routine with it.
     if (_universe.message.delay != 0u)
     {
       return;
     }
 
-    _universe.message.append = 3u; // 6502: de -- "... DESTROYED"
+    _universe.message.append = 3u; // "... DESTROYED"
 
-    // 6502: the slot cleared with `DLY`, which is zero because that is how we got here.
+    // The slot cleared with `DLY`, which is zero because that is how we got here.
     held = 0u;
 
     /*
-     * 6502: the slot compared against seventeen, branching to `ou1` above it, and the CARRY that
+     * The slot compared against seventeen, branching to `ou1` above it, and the CARRY that
      * compare leaves is part of the sum. Below seventeen it is clear and the token is the slot plus
      * 208, a cargo name; at nineteen and above it is set and the token is the slot plus 94, an
      * equipment name. Seventeen and eighteen have messages of their own because their names are
@@ -224,11 +224,11 @@ namespace Elite
     }
     else if (slot == 17u)
     {
-      token = MESSAGE_ECM_DESTROYED; // 6502: ou2 -- token 108
+      token = MESSAGE_ECM_DESTROYED; // Token 108
     }
     else if (slot == 18u)
     {
-      token = MESSAGE_SCOOPS_DESTROYED; // 6502: ou3 -- token 111
+      token = MESSAGE_SCOOPS_DESTROYED; // Token 111
     }
     else
     {
@@ -240,8 +240,8 @@ namespace Elite
 
   void StopEnergyBomb(ScreenState& _screen) noexcept
   {
-    _screen.upperBitmapMode = 0xC0u; // 6502: moonflower
-    _screen.backgroundFlash = 0u;    // 6502: welcome
+    _screen.upperBitmapMode = 0xC0u; // moonflower
+    _screen.backgroundFlash = 0u;    // welcome
   }
 
 } // namespace Elite

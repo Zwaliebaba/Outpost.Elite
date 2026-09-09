@@ -66,26 +66,26 @@ uses plain `camelCase` fields so brace initialization reads naturally.
 **R6 — Units and spaces belong in names; types do not.** `speedPerStep`, `angleTurns`,
 `xCanvas` are encouraged. Never encode the type: no `iCount`, `pShip`, `strName`.
 
-### R7 — The port carries its origin (this repository's own rule)
+### R7 — RETIRED at M6-e (2026-09-08)
 
-*(Stands until [Design/Modernize.md](Design/Modernize.md) slice M6-e removes the markers, the ledger and
-`inventory.py` together, by owner ruling of 2026-09-06. Until then this rule is unchanged.)*
+*(Removed by [Design/Modernize.md](Design/Modernize.md) slice M6-e, on the owner ruling of
+2026-09-06 that the markers, the ledger and `inventory.py` go together. The rule is kept here as a
+heading so a reader who arrives at a reference to "R7" finds out what it was and when it went,
+rather than finding nothing.)*
 
-**Every function ported from 6502 names its original label on the declaration:**
+**R7 said: every function ported from 6502 names its original label on the declaration**, as
+`/// 6502: DORND — generate the next random number.`, and `tools/inventory.py` reconciled those
+markers with `Design/Source-Inventory.md` and the master files' include list. That was the map from
+the port back to the original, and it was needed exactly as long as the original was.
 
-```cpp
-/// 6502: DORND — generate the next random number.
-[[nodiscard]] RngResult NextRandom() noexcept;
-```
+It is not needed any longer. M6-f deletes `Upstream/` and `MasterFile/`, so a marker would point at
+nothing and a ledger would reconcile against nothing. **What the markers carried that is worth
+keeping was moved into the prose by M6-d** — the reason a carry matters, why a routine is entered
+part-way through, which flag is set at a distance — and that prose stands on its own without a label
+beside it. What the markers carried that was only a name went with them.
 
-`tools/inventory.py` collects these `// 6502:` markers and reconciles them with
-[Design/Source-Inventory.md](Design/Source-Inventory.md) and the master files' include list.
-Where several 6502 entry points merged into one function, name them all. The ledger names a
-multi-part routine once (`mveit_part_1_of_9` … `part_9_of_9`) and a numbered family as a range
-(`bdro1`–`bdro15`); `inventory.py` expands both, and `--strict` -- which CI runs -- fails on any
-master-level include no row names (plan §6.120). Where the upstream
-commentary explains a trick, leave a one-line pointer to the label rather than reproducing the
-essay — the source is vendored and a reader can go and read it.
+The rules that replace it are the ordinary ones: §1 names things for what they hold, and a comment
+says why the code is the shape it is.
 
 ---
 
@@ -202,36 +202,25 @@ Tests are an MSVC CppUnitTest DLL:
 vstest.console.exe x64\Debug\GameLogicTests.dll
 ```
 
-**Oracle tests need the reference binaries** and report *skipped — oracle absent* without them
-(ADR-003 §1). That is expected on a fresh machine until BeebAsm has assembled the upstream
-tree; it is not a passing suite. Tests that hand-assemble the routine under test need nothing
-and always run.
-
-**On a Linux box the whole oracle takes four commands**, which is what CI's Ubuntu job does and
-what a hosted session did on 2026-09-08 to build six slices against the original:
+**THE SUITE NEEDS NOTHING BUT THE REPOSITORY** since M6-b-7 (Modernize.md §8). Until then every
+comparison against the original needed BeebAsm, the `Upstream/` submodule and an assembled game,
+and a machine without them reported *skipped — oracle absent* and failed `OracleIsPresent` by
+design. There is no interpreter, no image and no assembler step on either CI leg:
 
 ```sh
-git submodule update --init                      # the upstream tree, pinned by the gitlink
-git clone https://github.com/stardot/beebasm.git Tools-ext/beebasm && cd Tools-ext/beebasm \
-  && git checkout $BEEBASM_REF && mkdir -p out && g++ -std=c++14 -O2 -o out/beebasm src/*.cpp
-python tools/labels.py --assemble                # the reference build, Labels.txt and Binaries.txt
-Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed -- not N passed, 1 failed
+Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed
 ```
 
-`BEEBASM_REF` is the commit `.github/workflows/build-and-test.yml` pins; `Tools-ext/` is ignored.
-**The assembly rewrites one file inside the submodule** (`COMLOD.unprot.bin` under
-`3-assembled-output`), which `git status` then shows as a modified submodule: restore it with
-`git -C Upstream/elite-source-code-library checkout -- .` and never commit it -- `Upstream/` is
-not ours (§2).
+`Upstream/` and `MasterFile/` went at M6-f, with `labels.py`, `c64_source.py`,
+`extract_tables.py` and `golden_diff.py`. Nothing here reads the original any more.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->nineteen in CI's
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->thirteen in CI's
 order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
 2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
 ```
-python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/check_gamelogic.py               # GameLogic/ has no clock, no randomness, no float, no file or Win32 call
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
@@ -241,34 +230,21 @@ python tools/check_docs.py                    # no table row is wider than its h
 python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
 python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
 python tools/mutate.py --check                # every recorded mutant still applies, and every floor file carries a caught one
-python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
-python tools/inventory.py --strict            # coverage ledger: every master-level include has a row
-python tools/inventory.py --check-homes       # every file a ledger row's HOME cell names is on disk
-python tools/inventory.py --self-test         # that check still catches a planted stale home
 python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
 python tools/check_twins.py                   # every routine with a 640x400 twin still calls it (Resolution.md §8.6)
 python tools/check_twins.py --self-test       # that check still catches a routine whose twin went missing
 python tools/channel_census.py --check        # the channel census names every workspace field and matches the plan
 ```
 
-**And one review that needs the suite to have run first**, so it is a step of the Ubuntu suite
-job rather than a repository check:
-
-```
-Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # the suite, recording which oracle labels each test ran
-python tools/inventory.py --coverage x64/Debug/coverage.txt           # every Port row's files are run by some test, or the row says why not
-```
-
-The instrument is M6-0-f's: the interpreter marks every address it executes and every trap it
-takes, the runner writes the labels per test, and the review reads them against
-`Source-Inventory.md`'s *Port* rows. A row may exempt a file with `<!--uncovered: stem -- why-->`
-inside its notes cell, and the review prints every exemption it honoured; four of the current
-nineteen are written as GAPS for M6-a rather than as exemptions, and the tool will say so until a
-test runs them.
+**The coverage review went with the ledger at M6-e.** M6-0-f built it: the interpreter marked every
+address it executed, the runner wrote the labels per test, and `inventory.py --coverage` read them
+against `Source-Inventory.md`'s *Port* rows. It did its job — the four gaps it found are closed
+(M6-a-1) — and it cannot outlive the rows it read. The suite still runs under the portable runner;
+what is gone is the reconciliation against a ledger that no longer exists.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->469 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->131 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
@@ -338,25 +314,24 @@ the unmutated suite and reports a survivor. `expect` is `caught` unless the note
 
 Six things the tool does that a hand run kept getting wrong, so that reading them here is enough:
 
-- **The baseline is proven before any mutant is believed.** With the oracle missing the suite
-  reports `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that reads
-  only that line reports every mutant as caught, and three tallies were published from exactly
+- **The baseline is proven before any mutant is believed.** With the oracle missing the suite used
+  to report `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that read
+  only that line reported every mutant as caught, and three tallies were published from exactly
   that (§6.119). The unmutated suite runs first and must be green.
 - **A timeout is a catch.** Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an
   odd count run for ever: the suite times out, no summary line is printed, and a harness looking
   for one calls it a tooling failure. It is the strongest possible catch.
 - **A worktree with no symlinks in it.** The old recipe symlinked the submodule into a detached
-  worktree and warned that every `git checkout -f` ate the link. The tool COPIES instead — the
-  reference files are text and the oracle's `versions/c64` tree is 4.4 MB — so the trap is gone by
-  construction rather than documented.
+  worktree and warned that every `git checkout -f` ate the link. The tool COPIES instead, so the
+  trap is gone by construction rather than documented.
 - **A unit's test filter is verified before it is trusted.** A filter that selects the wrong tests
   is worse than no filter, because it produces a confident number about code it never ran. Record
   one filter per `TEST_CLASS` and the count they select; the tool checks it against the unmutated
   build.
 - **Every unit carries a `selftest` mutant** — an unmissable change the suite cannot fail to catch,
-  run first, and the run stops if it survives. It is the harness's own `OracleIsPresent`: without
-  it, a list of "survivors" could be a run that never rebuilt, which is R13 realised (§6.119). Add
-  one when you add a unit; `--check` fails if a unit has none.
+  run first, and the run stops if it survives. It is the one deliberate failure that says the
+  harness works: without it, a list of "survivors" could be a run that never rebuilt, which is R13
+  realised (§6.119). Add one when you add a unit; `--check` fails if a unit has none.
 - **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
 
 **Closing a survivor: three questions, in this order.** §6.132's method is "probe the comparison,
@@ -375,18 +350,11 @@ What it does NOT do is recover the tallies already published. Those mutants are 
 survivors §6.125 named are in the file because their names pinned them, and the rest stay
 unreproducible. R13 is open on that half.
 
-**Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
-serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
-`ELSE` / `ENDIF` conditionals -- which nest, and which include `NOT(...)` blocks that are easy to
-skim past. Porting the BBC Master's version of a routine by mistake is a real failure mode, met
-more than once here.
-
-```
-python tools/c64_source.py --code library/common/main/subroutine/tt25.asm
-```
-
-It evaluates the conditionals against the master build's own symbol values and errors on a symbol
-it does not know rather than guessing FALSE.
+**THE ORIGINAL IS NOT HERE ANY MORE (M6-f).** `tools/c64_source.py` resolved a routine's C64
+form through the upstream library's nested `IF` / `ELIF` / `ELSE` / `ENDIF` conditionals, because
+porting the BBC Master's version of a routine by mistake was a real failure mode met more than
+once. There is nothing left to read that way: the port's own comments are the record of what each
+routine does and why, which is what M6-d spent fifty-eight slices making true.
 
 **Report what you actually did.** "Builds clean, not run" and "builds, and the arithmetic suite
 is green against the oracle" are different claims. Never imply the second when you did the first.
@@ -402,8 +370,9 @@ patience:
   clone every time.
 - **Suite on Ubuntu (portable runner)** (Ubuntu, ~85s): builds BeebAsm at the pinned commit (cached
   across runs), assembles the reference build, then builds and runs
-  the whole suite through `Tests/PortableRunner/` with `--coverage`, and reads the coverage file
-  against the ledger's *Port* rows (`inventory.py --coverage`, M6-0-f). Not the authority
+  the whole suite through `Tests/PortableRunner/`. It read the coverage file against the ledger's
+  *Port* rows until M6-e retired both (M6-0-f built that review; it found four gaps and they are
+  closed). Not the authority
   (ADR-004 §1) — it is here so a
   broken push says so in a minute rather than five, and because a second compiler catches what the
   first tolerates. It is also more permissive than MSVC in ways nothing measures (§6.116).
@@ -444,12 +413,11 @@ the test result file. Do not add an upload that changes that.
 
 ## 8. Before you hand work back
 
-- [ ] Naming conforms to §1, and every ported function carries its `// 6502:` label (R7).
+- [ ] Naming conforms to §1. (R7's `// 6502:` label is retired — see R7.)
 - [ ] Files are PascalCase, flat, unique repo-wide including against the CRT and STL.
 - [ ] Every added/removed/moved file is in both the `.vcxproj` **and** the `.filters`.
 - [ ] `GameLogic` gained no clock, no randomness, no float, no Win32 call.
-- [ ] `Design/Source-Inventory.md` updated for anything you ported, INSIDE the notes column
-      rather than as a new cell; `tools/inventory.py` and `tools/check_docs.py` run.
+- [ ] `tools/check_docs.py` runs.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
 - [ ] Tests for the layer you touched were run, and you said which, and whether the oracle was
       present.

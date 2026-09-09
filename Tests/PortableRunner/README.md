@@ -1,24 +1,19 @@
 # The portable test runner
 
-Runs `Tests/GameLogicTests/` on a machine without Visual Studio — same test files, same oracle,
-same assertions, a different way of calling them.
+Runs `Tests/GameLogicTests/` on a machine without Visual Studio — same test files, same
+assertions, a different way of calling them.
 
 ```sh
-python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # <!--count:tests-->469 tests, about a minute from cold
+Tests/PortableRunner/run_tests.sh        # <!--count:tests-->131 tests, about half a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
-Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # and which oracle labels each test ran
-python tools/inventory.py --coverage x64/Debug/coverage.txt           # read against the ledger's Port rows (M6-0-f)
-Tests/PortableRunner/run_tests.sh --measure                           # every call to the interpreter, counted and sized
-Tests/PortableRunner/run_tests.sh --record out.fixture Galaxy         # and kept, as a fixture (M6-a-2)
+OUTPOST_TEST_TIMES=1 Tests/PortableRunner/run_tests.sh          # with a per-test duration
+OUTPOST_TEST_SKIP=names.txt Tests/PortableRunner/run_tests.sh   # everything but those Suite.Method names
 ```
 
-`--measure` and `--record` install a `RecordingOracle` behind `Cpu6502::CallSubroutine`
-(`Tests/GameLogicTests/Oracle.h`, Design/Modernize.md §4.10). Measuring prints a `MEASURE` line per
-test and a record-size histogram at the end and keeps nothing; recording keeps every distinct call
-and writes the fixture, and two runs of the same filter produce byte-identical files. Measuring the
-whole suite takes about six times as long as running it, and its answer is 3.2 million calls and
-222 MB — which is why nothing commits a fixture yet (Modernize.md M6-b).
+`--coverage`, `--measure` and `--record` WERE HERE AND ARE NOT ANY MORE (Modernize.md M6-b-7).
+All three drove the 6502 interpreter: which labels a test executed, what a recording of every call
+to it would cost, and the fixture itself. There is no interpreter, and no assembler step before
+any of this — the suite needs the repository and a compiler.
 
 Needs `g++` with C++20, `make`, and Python 3. Nothing else.
 
@@ -27,9 +22,10 @@ Needs `g++` with C++20, `make`, and Python 3. Nothing else.
 MSVC is the authority (ADR-004 §1), and it stays the authority: it is what the game ships built
 with, and a disagreement between the two runners is decided in MSVC's favour every time.
 
-What MSVC is not, is *available*. The port is written against the assembled original a routine at
-a time, and getting a carry chain right takes ten or twenty compile-run cycles. On a machine with
-no Visual Studio those cycles either do not happen, or they happen on CI at four minutes each.
+What MSVC is not, is *available*. The port was written against the assembled original a routine
+at a time, and getting a carry chain right took ten or twenty compile-run cycles. On a machine
+with no Visual Studio those cycles either do not happen, or they happen on CI at four minutes
+each.
 This runner turns that loop into a minute from cold and a few seconds when one file changed and a
 filter narrows the run to the suite being worked on — and every defect found while writing slices
 1c-c-b, 2a, 2b, 2c and 2d was found here first, with MSVC agreeing exactly afterwards. That has
@@ -45,7 +41,7 @@ thirty-seven seconds at 313 tests and 52 files — so treat it as the shape and 
 
 The second reason is CI. Measured 2026-09-05 at 310 tests, on the same commit: the Ubuntu leg of
 `.github/workflows/build-and-test.yml` ran the whole suite in **72 seconds** end to end (59s of it
-the build-and-run step, BeebAsm cached) against the Windows job's **4m24s** — of which 51s is the
+the build-and-run step) against the Windows job's **4m24s** — of which 51s is the
 tests and the rest is two MSBuild passes over the test project, two over the executable, and a
 37-second `vswhere` preflight. Re-measured at 348 tests the two are 87 seconds and 5m07s, so the
 ratio has held while both grew. The ratio is what the argument rests on, not the absolute figures.
@@ -85,8 +81,7 @@ D3D12 and is not compiled here; `tools/check_outpost.py` checks the names and ar
 and only the Windows build checks the types.
 
 The build output goes to `x64/Debug/PortableTests`, deliberately the same directory MSBuild puts
-`GameLogicTests.dll` in, because the oracle finds the repository by walking up from wherever its
-own binary lives.
+`GameLogicTests.dll` in, which is what AGENTS.md §6 documents.
 
 ## What it is not
 
@@ -100,15 +95,11 @@ own binary lives.
 - **Not tolerant of a non-ASCII checkout path.** `Shim/NeuronCore.h` widens the executable's path
   a byte at a time. A repository under a path with non-ASCII characters fails here and works under
   MSVC.
-- **Not a substitute for assembling the game.** Without `Design/Reference/Labels.txt` and the
-  assembled blocks, every oracle test skips and `OracleIsPresent` fails, exactly as it does on
-  Windows (ADR-003 §1, Risk R9). `run_tests.sh` warns before it gets that far.
-- **Not safe in a worktree that has lost its submodule.** `git worktree add` leaves
-  `Upstream/elite-source-code-library` as an empty gitlink directory, and every `git checkout -f`
-  in that worktree puts the empty directory back over any symlink placed there. The suite then
-  reports `N passed, 1 failed` on EVERY run — `OracleIsPresent`, by design — and a harness that
-  reads only that line calls every mutant caught. Verify `N passed, 0 failed` before believing a
-  mutation result (`AGENTS.md` §6, §6.119).
+- **Not dependent on the assembled game any more, and it was until M6-b-7.** Without
+  `Design/Reference/Labels.txt` and the assembled blocks every comparison against the original
+  skipped and `OracleIsPresent` failed, which was a mechanism a harness reading only the last line
+  could misread — three mutation tallies were published that way (`AGENTS.md` §6, §6.119). There is
+  nothing to assemble now, so there is nothing to be missing.
 
 ## The one rule this tree breaks
 

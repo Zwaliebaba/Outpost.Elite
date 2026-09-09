@@ -12,7 +12,7 @@
 /*
  * The explosion cloud (slice 4b-b).
  *
- * 6502: DOEXP, PTCLS, PTCLS2 and EXS1. Three hundred and eleven instructions between them, and
+ * DOEXP, PTCLS, PTCLS2 and EXS1. Three hundred and eleven instructions between them, and
  * almost all of the difficulty is in flags: five of the routine's decisions are carried into an
  * `ADC` or an `SBC` that has no `CLC` or `SEC` in front of it, so the arithmetic depends on a
  * comparison made several instructions earlier. Each one is named where it happens.
@@ -23,7 +23,7 @@ namespace Elite
   namespace
   {
     /*
-     * 6502: PTCLS and PTCLS2, which are one body -- see the header. The two pointers are null for
+     * PTCLS and PTCLS2, which are one body -- see the header. The two pointers are null for
      * `PTCLS` and the state for `PTCLS2`, which is what tells the two entries apart.
      */
     void DrawParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap, const Bubble& _bubble,
@@ -32,7 +32,7 @@ namespace Elite
       const HeapOffset address = _work.heap;
 
       /*
-       * 6502: sprx and spry -- where the burst sits relative to the cloud's centre.
+       * Sprx and spry -- where the burst sits relative to the cloud's centre.
        *
        * They are RAM in the original and locals here, because `PTCLS2` writes them at the top and
        * reads them further down the same call; nothing else in the game touches either byte.
@@ -42,9 +42,9 @@ namespace Elite
 
       if (_video != nullptr)
       {
-        SetMemoryMap(*_map, MEMORY_MAP_IO); // 6502: SETL1 -- map the I/O page in
+        SetMemoryMap(*_map, MEMORY_MAP_IO); // Map the I/O page in
 
-        // 6502: the distance compared against 7 with the accumulator already loaded for the
+        // The distance compared against 7 with the accumulator already loaded for the
         // register write, so the two answers are chosen before the branch rather than after it.
         const bool distant = _work.z.hi >= 7u;
         ApplySpriteExpansion(*_video, distant ? 0xFDu : 0xFFu);
@@ -53,7 +53,7 @@ namespace Elite
       }
 
       /*
-       * 6502: byte 0 of the heap -- this frame's cloud size, into `Q`.
+       * Byte 0 of the heap -- this frame's cloud size, into `Q`.
        *
        * `Q` stays in the workspace where `T`, `U`, `CNT` and `TGT` became locals, for the same
        * reason the clipper's did (M2-c-2): it is the frame's `Q`, and the altitude check takes
@@ -63,7 +63,7 @@ namespace Elite
       _math.lastDivisor = _heap.Read(address);
 
       /*
-       * 6502: byte 1, the cloud counter, turned into a particle count.
+       * Byte 1, the cloud counter, turned into a particle count.
        *
        * Past 128 the counter is COMPLEMENTED, which is what makes the cloud grow and then shrink: the count
        * is complemented, so the count walks 1..7 up and 7..1 back down over the explosion's life.
@@ -76,19 +76,19 @@ namespace Elite
       }
       // `U`, `TGT` and `CNT` are `PTCLS`'s own since M2-c-3: it fills each before its first read
       // and `DOEXP` is the last thing that happens to a ship in a frame. `Q` is not -- see below.
-      const std::uint8_t particles = static_cast<std::uint8_t>((counter >> 4) | 1u); // 6502: four shifts, a bit forced on, into U
-      const std::uint8_t lastVertex = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u))); // 6502: TGT
+      const std::uint8_t particles = static_cast<std::uint8_t>((counter >> 4) | 1u); // Four shifts, a bit forced on, into U
+      const std::uint8_t lastVertex = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u)));
 
-      // 6502: one byte of the generator's state pushed and kept across the whole routine, because
+      // One byte of the generator's state pushed and kept across the whole routine, because
       // everything below deliberately destroys that state and one byte of it has to survive.
       const std::uint8_t stacked = _rng.State()[1];
 
-      std::uint8_t vertex = 6; // 6502: the byte before the first vertex on the heap
+      std::uint8_t vertex = 6; // The byte before the first vertex on the heap
 
       do
       {
         /*
-         * 6502: EXL3 -- four bytes off the heap into `K3`, BACKWARDS, so that
+         * Four bytes off the heap into `K3`, BACKWARDS, so that
          * `K3+3 = x_lo`, `K3+2 = x_hi`, `K3+1 = y_lo`, `K3+0 = y_hi`.
          *
          * These four are `K3` in the original and therefore also `XX2+0` to `XX2+3`, the first
@@ -102,12 +102,12 @@ namespace Elite
           ++vertex;
           point[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
         }
-        const std::uint8_t savedVertex = vertex; // 6502: kept in CNT
+        const std::uint8_t savedVertex = vertex; // Kept in CNT
 
         if (_video != nullptr)
         {
           /*
-           * 6502: the burst sprite, placed at the vertex plus the offset chosen above.
+           * The burst sprite, placed at the vertex plus the offset chosen above.
            *
            * Both coordinates are sixteen-bit adds with an explicit `CLC`, and both are rejected on
            * the HIGH byte first: negative or 512 and over in x, anything at all in y. The x test is
@@ -130,7 +130,7 @@ namespace Elite
         }
 
         /*
-         * 6502: EXL2 -- bytes 3 to 6 of the heap, EORed with the vertex index, become the four
+         * Bytes 3 to 6 of the heap, EORed with the vertex index, become the four
          * generator seeds. The store's index runs from 3 to 6 and wraps to &0002, which is `RAND`.
          *
          * This is the whole trick of the routine: the cloud is regenerated from these four bytes
@@ -144,21 +144,21 @@ namespace Elite
         }
         _rng.SetState(seeds);
 
-        // 6502: EXL4 -- the body runs U + 1 times, not U, because the count is tested after it.
+        // The body runs U + 1 times, not U, because the count is tested after it.
         std::uint8_t particle = particles;
         for (;;)
         {
-          // 6502: DORND2 -- how far away the particle is, which is what decides whether `PIXEL`
+          // How far away the particle is, which is what decides whether `PIXEL`
           // draws one mark, two, or a square. `ZZ` and `Y1` are this loop's own (M2-c).
           const std::uint8_t distance = _rng.NextRepeatable().value;
 
-          // 6502: EXS1 on the vertex's y, against the cloud size in `Q`.
+          // EXS1 on the vertex's y, against the cloud size in `Q`.
           const ExplosionOffset offsetY = OffsetByCloud(_rng, point[0], point[1], _math.lastDivisor);
 
           if (offsetY.high != 0u || offsetY.low >= EXPLOSION_PARTICLE_BOTTOM)
           {
             /*
-             * 6502: EX11 -- and it is not a bare jump to `EX4`. It runs the generator once MORE before
+             * EX11 -- and it is not a bare jump to `EX4`. It runs the generator once MORE before
              * rejoining, so that a particle rejected on its y costs the same two random numbers as
              * one that got as far as its x. Without it the cloud would not repeat and could not be
              * erased.
@@ -167,7 +167,7 @@ namespace Elite
           }
           else
           {
-            const std::uint8_t y1 = offsetY.low; // 6502: kept in Y1
+            const std::uint8_t y1 = offsetY.low; // Kept in Y1
 
             const ExplosionOffset offsetX = OffsetByCloud(_rng, point[2], point[3], _math.lastDivisor);
 
@@ -192,11 +192,11 @@ namespace Elite
           }
         }
 
-        vertex = savedVertex; // 6502: back out of CNT
+        vertex = savedVertex; // Back out of CNT
       } while (vertex < lastVertex);
 
       /*
-       * 6502: the pushed byte pulled back, then the planet's own byte into `RAND+3`.
+       * The pushed byte pulled back, then the planet's own byte into `RAND+3`.
        *
        * Three fates for four bytes: `RAND+1` comes back off the stack, `RAND+3` is replaced by the
        * PLANET's z_lo -- byte 6 of slot 0, the same "pretty random" byte the spawner reads -- and
@@ -208,7 +208,7 @@ namespace Elite
 
       if (_map != nullptr)
       {
-        SetMemoryMap(*_map, MEMORY_MAP_RAM); // 6502: SETL1 -- map the I/O page back out
+        SetMemoryMap(*_map, MEMORY_MAP_RAM); // Map the I/O page back out
       }
 
       state[3] = _bubble.blocks[0].z.lo;
@@ -218,15 +218,15 @@ namespace Elite
 
   ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept
   {
-    const std::uint8_t vertexHigh = _high; // 6502: kept in S -- the vertex's high byte, for the tail
+    const std::uint8_t vertexHigh = _high; // Kept in S -- the vertex's high byte, for the tail
 
-    // 6502: the inlined copy of DORND2 -- the C64 spells the routine out here rather than calling
+    // The inlined copy of DORND2 -- the C64 spells the routine out here rather than calling
     // it, which changes the timing and nothing else.
     const RngResult random = _rng.NextRepeatable();
     const ShiftResult doubled = RotateLeftValue(random.value, random.carry);
 
     /*
-     * 6502: `FMLTU` parks X in `P`, and this is the one call site in the game where the port can
+     * `FMLTU` parks X in `P`, and this is the one call site in the game where the port can
      * say what X held -- the generator's PREVIOUS byte, moved there two instructions back. It
      * byte. `FMLTU` parks X there to preserve it and every exit reloads it, which leaves `P`
      * holding a register value nothing goes on to read. See `MultiplyByLog` in `Arith.h`.
@@ -235,19 +235,19 @@ namespace Elite
 
     if (doubled.carry)
     {
-      // 6502: EX5 -- the negative half. The carry is SET here BECAUSE the branch was taken, and
+      // The negative half. The carry is SET here BECAUSE the branch was taken, and
       // `FMLTU` passes an entry carry straight through on its two zero exits, so it matters.
       const LogProduct product = MultiplyByLog(doubled.value, _size, true);
       const std::uint8_t offsetLow = product.value;
 
-      // 6502: the offset taken off the vertex, and the borrow going in is whatever `FMLTU` left,
+      // The offset taken off the vertex, and the borrow going in is whatever `FMLTU` left,
       // not a set carry.
       const SubResult low = SubtractWithCarry(_low, offsetLow, product.carry);
       const SubResult high = SubtractWithCarry(vertexHigh, 0, low.carry);
       return ExplosionOffset{high.value, low.value};
     }
 
-    // 6502: FMLTU again for the positive half, and the same borrowed carry the other way round.
+    // FMLTU again for the positive half, and the same borrowed carry the other way round.
     // §6.42 recorded this call as one of the two that read it.
     const LogProduct product = MultiplyByLog(doubled.value, _size, false);
     const AddResult low = AddWithCarry(product.value, _low, product.carry);
@@ -272,7 +272,7 @@ namespace Elite
   {
     const HeapOffset address = _work.heap;
 
-    // 6502: bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
+    // Bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
     if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
@@ -280,7 +280,7 @@ namespace Elite
     }
 
     /*
-     * 6502: (A T) = z, scaled into one byte -- and the CARRY IT LEAVES IS THE POINT.
+     * (A T) = z, scaled into one byte -- and the CARRY IT LEAVES IS THE POINT.
      *
      * The comparison against 32 decides whether the ship is far enough away to cap the distance
      * at 254, and nothing between there and the addition of four below touches the carry. So
@@ -288,7 +288,7 @@ namespace Elite
      * a value whose bit 7 must be clear -- z_hi under 32 shifted twice cannot reach 128 -- and
      * so leaves it CLEAR and the cloud ages by four.
      */
-    std::uint8_t scaleLow = _work.z.lo; // 6502: T -- `DOEXP`'s own since M2-c-3, the low half of the scale
+    std::uint8_t scaleLow = _work.z.lo; // `DOEXP`'s own since M2-c-3, the low half of the scale
     std::uint8_t scaled = _work.z.hi;
     bool carry = scaled >= 32u;
 
@@ -300,26 +300,26 @@ namespace Elite
     {
       for (int pass = 0; pass < 2; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(scaleLow, false); // 6502: the low byte doubled
+        const ShiftResult low = RotateLeftValue(scaleLow, false); // The low byte doubled
         scaleLow = low.value;
-        scaled = RotateLeftValue(scaled, low.carry).value; // 6502: and the high byte rotated
+        scaled = RotateLeftValue(scaled, low.carry).value; // And the high byte rotated
       }
 
-      // 6502: a set carry rotated in -- times eight overall, with a 1 forced into bit 0 so that a ship close
+      // A set carry rotated in -- times eight overall, with a 1 forced into bit 0 so that a ship close
       // enough to divide to nothing still has a visible cloud.
       const ShiftResult forced = RotateLeftValue(scaled, true);
       scaled = forced.value;
       carry = forced.carry;
     }
 
-    _math.lastDivisor = scaled; // 6502: into Q -- the distance the cloud size is divided by
+    _math.lastDivisor = scaled; // Into Q -- the distance the cloud size is divided by
 
     const std::uint8_t cloudCounter = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
     const AddResult grown = AddWithCarry(cloudCounter, 4u, carry);
 
     if (grown.carry)
     {
-      // 6502: EX2 -- the counter has run off the end, so the explosion is over. Bits 5 and 7 say
+      // The counter has run off the end, so the explosion is over. Bits 5 and 7 say
       // "exploding" and "killed", and `MVEIT` is what acts on the pair.
       _work.state = With(_work.state, ShipStateBit::Exploding, ShipStateBit::Killed);
       return;
@@ -328,7 +328,7 @@ namespace Elite
     _heap.Write(address.Byte(static_cast<std::uint16_t>(1u)), grown.value);
 
     /*
-     * 6502: DVID4 -- (P R) = 256 * counter / distance, then times eight, capped at 254.
+     * (P R) = 256 * counter / distance, then times eight, capped at 254.
      *
      * The divide's own exit carry is dropped: the comparison that follows overwrites it before
      * anything can branch on it. The three doublings shift the sixteen-bit answer up rather than
@@ -346,24 +346,24 @@ namespace Elite
       std::uint8_t fraction = divided.fraction;
       for (int pass = 0; pass < 3; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(fraction, false); // 6502: the fraction doubled
+        const ShiftResult low = RotateLeftValue(fraction, false); // The fraction doubled
         fraction = low.value;
-        size = RotateLeftValue(size, low.carry).value; // 6502: and the size rotated
+        size = RotateLeftValue(size, low.carry).value; // And the size rotated
       }
     }
 
-    _heap.Write(address, size); // 6502: back into byte 0 -- this frame's cloud size
+    _heap.Write(address, size); // Back into byte 0 -- this frame's cloud size
 
-    // 6502: the drawn bit masked off -- not drawn yet. The test that follows reads what that
+    // The drawn bit masked off -- not drawn yet. The test that follows reads what that
     // left, so a ship with nothing on the screen returns here with the flag already cleared.
     _work.state = Without(_work.state, ShipStateBit::CloudDrawn);
     if (!Has(_work.state, ShipStateBit::OnScreen))
     {
-      return; // 6502: TT48, which is a bare return
+      return; // TT48, which is a bare return
     }
 
     /*
-     * 6502: EXL1 -- copy the visible vertices from `XX3` onto the line heap, downwards.
+     * Copy the visible vertices from `XX3` onto the line heap, downwards.
      *
      * Byte 2 of the heap is `4 * n + 6` for n vertices, so the loop runs from there down to byte 7
      * and the first six bytes -- size, counter, count and three seed bytes -- are left alone. The
@@ -382,10 +382,10 @@ namespace Elite
       --index;
     } while (index != 6u);
 
-    _work.state = With(_work.state, ShipStateBit::CloudDrawn); // 6502: the drawn bit set -- there is a cloud now
+    _work.state = With(_work.state, ShipStateBit::CloudDrawn); // The drawn bit set -- there is a cloud now
 
     /*
-     * 6502: PTCLS2 -- the counter compared against 18 BEFORE it grew, so this is true on the
+     * The counter compared against 18 BEFORE it grew, so this is true on the
      * explosion's first frame and never again. `PTCLS2S` is a jump that exists only so the branch
      * reaches; the C64 is the only version with either.
      */

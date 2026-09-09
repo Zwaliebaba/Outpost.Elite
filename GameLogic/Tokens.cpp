@@ -46,7 +46,7 @@ namespace Elite
     constexpr std::uint8_t PHRASE_AFTER_PAIRS = 160;
     constexpr std::uint8_t PHRASE_FIRST = 96;
 
-    /// 6502: crlf -- LDA #21 / JSR DOXC. Where control code 9 puts the cursor before its colon.
+    /// crlf -- where control code 9 puts the cursor before its colon.
     constexpr std::uint8_t CONTROL_CODE_9_COLUMN = 21;
 
     /// Characters 14 to 31 are phrases in disguise; this is the offset that maps them.
@@ -97,7 +97,7 @@ namespace Elite
 
     if (_token == 9)
     {
-      // 6502: crlf -- LDA #21 / JSR DOXC / JMP TT73. Tab to column 21, then a colon.
+      // Tab to column 21, then a colon, the second half a tail call.
       m_text.column = CONTROL_CODE_9_COLUMN;
       Print(':');
       return;
@@ -133,7 +133,7 @@ namespace Elite
     {
       if ((flags & FLAG_SEEN_FIRST_LETTER) != 0u)
       {
-        // 6502: TT45 -- past the first letter of a sentence.
+        // Past the first letter of a sentence.
         if (flags == FLAG_SUPPRESS_ALL)
         {
           return;
@@ -159,7 +159,7 @@ namespace Elite
         return;
       }
 
-      // 6502: TT41 -- looking for the first letter of the sentence, which stays capital.
+      // Looking for the first letter of the sentence, which stays capital.
       if (_character < UPPER_A)
       {
         m_sink.Put(_character);
@@ -173,13 +173,13 @@ namespace Elite
 
     if ((flags & FLAG_SEEN_FIRST_LETTER) != 0u)
     {
-      // 6502: TT46 -- clear the marker and print as-is.
+      // Clear the marker and print as-is.
       m_text.caseFlags = static_cast<std::uint8_t>(flags & ~FLAG_SEEN_FIRST_LETTER);
       m_sink.Put(_character);
       return;
     }
 
-    // 6502: TT42 -- lower case throughout.
+    // Lower case throughout.
     if (_character >= UPPER_A && _character <= UPPER_Z)
     {
       m_sink.Put(static_cast<std::uint8_t>(_character + CASE_TO_LOWER));
@@ -193,7 +193,7 @@ namespace Elite
   {
     if (_token >= PHRASE_AFTER_PAIRS)
     {
-      // 6502: TT47 -- above the pair range this is a phrase after all.
+      // Above the pair range this is a phrase after all.
       PrintPhrase(static_cast<std::uint8_t>(_token - PHRASE_AFTER_PAIRS));
       return;
     }

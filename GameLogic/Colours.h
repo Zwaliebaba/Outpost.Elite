@@ -31,8 +31,8 @@ namespace Elite
    *   - Colour RAM's nibble, the background register, and each sprite's own colour register ARE
    *     one index, and those are what this type is for.
    *
-   * AND THE REGISTERS TAKE FOUR BITS, WHICH IS WHY `ColourOf` EXISTS. `STA VIC+&21` writes eight
-   * bits and the chip latches the low four; the game relies on that -- `COMIRQ1` increments
+   * AND THE REGISTERS TAKE FOUR BITS, WHICH IS WHY `ColourOf` EXISTS. A store to the background
+   * register writes eight bits and the chip latches the low four; the game relies on that --
    * `welcome` while the energy bomb burns and stores the running count straight into the register,
    * so the byte on its way there is a counter and only becomes a colour when the hardware masks it.
    * Every conversion from a byte to a `Colour` goes through `ColourOf`, and that is the port's
@@ -65,14 +65,14 @@ namespace Elite
     return static_cast<std::uint8_t>(_colour);
   }
 
-  /// 6502: what the VIC-II does to every byte stored in a colour register -- it keeps four bits.
+  /// What the VIC-II does to every byte stored in a colour register -- it keeps four bits.
   [[nodiscard]] constexpr Colour ColourOf(std::uint8_t _byte) noexcept
   {
     return static_cast<Colour>(_byte & 0x0Fu);
   }
 
   /*
-   * 6502: RED, YELLOW, GREEN and WHITE -- the first of the two families above, as its own type
+   * RED, YELLOW, GREEN and WHITE -- the first of the two families above, as its own type
    * (slice 5a-9).
    *
    * FOUR MULTICOLOUR PIXELS PACKED IN A BYTE, and never a colour. `COL` holds one, `CPIX2` ANDs it
@@ -107,7 +107,7 @@ namespace Elite
   }
 
   /*
-   * 6502: RED2, GREEN2, YELLOW2, BLACK2, MAG2 and BULBCOL -- the second family, as its own type
+   * RED2, GREEN2, YELLOW2, BLACK2, MAG2 and BULBCOL -- the second family, as its own type
    * (slice 5a-8).
    *
    * A SCREEN RAM BYTE IN MULTICOLOUR BITMAP MODE IS TWO COLOURS: the high nibble is what a %01

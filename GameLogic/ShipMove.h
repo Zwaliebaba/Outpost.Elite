@@ -16,14 +16,14 @@ namespace Elite
   /*
    * Moving a ship (slice 3a).
    *
-   * 6502: MVEIT and the primitives it is built from. A ship's position is three SIGN-MAGNITUDE
+   * MVEIT and the primitives it is built from. A ship's position is three SIGN-MAGNITUDE
    * numbers of twenty-four bits each -- not two's complement -- so "add" is a comparison of signs
    * followed by either an addition or a subtraction, and the subtraction has to negate its own
    * result when it goes past zero. That is what these three routines are, in three shapes.
    */
 
   /*
-   * 6502: MVT1, and MVT1-2 which is the same routine two bytes earlier.
+   * MVT1, and MVT1-2 which is the same routine two bytes earlier.
    *
    * INWK+X(3) = INWK+X(3) + (S R), where the sign of the addend is bit 7 of `_a`. The two entry
    * points differ only in whether `_a` is masked to its sign bit first, which is `_maskSign`:
@@ -41,7 +41,7 @@ namespace Elite
   void AddToShipCoordinate(Ship& _work, std::uint8_t _high, std::uint8_t _low, std::uint8_t _axis, bool _maskSign) noexcept;
 
   /*
-   * 6502: MVT3 -- K(4) = K(4) + INWK+X(3), sign-magnitude, with K's own sign in K+3.
+   * K(4) = K(4) + INWK+X(3), sign-magnitude, with K's own sign in K+3.
    *
    * The same shape as MVT1 with the operands the other way round: the ship's coordinate is what is
    * added, and the answer stays in K. `MV40` -- the planet and sun path through `MVEIT` -- is what
@@ -59,7 +59,7 @@ namespace Elite
   [[nodiscard]] KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _total, std::uint8_t _axis) noexcept;
 
   /*
-   * 6502: MVT6 -- (P+1 P+2) = (P+1 P+2) + INWK+X(2), and the sign comes back in A.
+   * (P+1 P+2) = (P+1 P+2) + INWK+X(2), and the sign comes back in A.
    *
    * Sixteen bits rather than twenty-four, and the sign is RETURNED rather than stored, because the
    * caller is in the middle of a rotation and wants it in the accumulator. The negation branch
@@ -71,7 +71,7 @@ namespace Elite
   [[nodiscard]] SignMag24 AddShipCoordinateToP(const Ship& _work, SignMag24 _value, std::uint8_t _axis) noexcept;
 
   /*
-   * 6502: MVS4 -- roll and pitch one of a ship's three orientation vectors.
+   * Roll and pitch one of a ship's three orientation vectors.
    *
    * Four multiply-accumulates through `MAD`: y -= alpha*x, x += alpha*y, then y -= beta*z,
    * z += beta*y. `MVEIT` calls it three times, at INWK+9, +15 and +21, which are the ship's nose,
@@ -85,7 +85,7 @@ namespace Elite
   void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _rollRate, std::uint8_t _pitchRate) noexcept;
 
   /*
-   * 6502: MVS5 -- rotate a PAIR of coordinates by a sixteenth, for the ship's own roll and pitch.
+   * Rotate a PAIR of coordinates by a sixteenth, for the ship's own roll and pitch.
    *
    * Two halves that are the same code with the two indices swapped, and one sign flip between them
    * which is what makes the pair rotate rather than both drift the same way. The angle is fixed:
@@ -100,7 +100,7 @@ namespace Elite
   void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _signMask2) noexcept;
 
   /*
-   * 6502: TIS3, which FALLS INTO DVIDT -- one component of the third orientation vector, worked out
+   * TIS3, which FALLS INTO DVIDT -- one component of the third orientation vector, worked out
    * from the other two.
    *
    * `(-x_a * z_a - x_b * z_b) / x_c`, in the indices `_x`, `_y` and `_a`. The three arguments are
@@ -114,7 +114,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t OrientationComponent(const Ship& _work, std::uint8_t _a, std::uint8_t _x, std::uint8_t _y) noexcept;
 
   /*
-   * 6502: TIDY -- put a ship's orientation vectors back into shape.
+   * Put a ship's orientation vectors back into shape.
    *
    * `MVEIT` runs this on one ship every sixteenth iteration of the main loop, because the rounding
    * in `MVS4` and `MVS5` accumulates: the vectors slowly stop being unit length and stop being at
@@ -129,7 +129,7 @@ namespace Elite
   void TidyOrientation(Ship& _work) noexcept;
 
   /*
-   * 6502: MV40 -- move a PLANET or a SUN, which is the whole of `MVEIT` for a negative ship type.
+   * Move a PLANET or a SUN, which is the whole of `MVEIT` for a negative ship type.
    *
    * It is a BRANCH of `MVEIT` rather than a subroutine of it: `MV3` jumps to it and it jumps back
    * to `MV45`, into `MVEIT`'s tail. So it skips the scanner, the acceleration
@@ -167,7 +167,7 @@ namespace Elite
    */
 
   /*
-   * 6502: ALPHA, ALP1, ALP2, BETA, BET1, BET2, DELTA, MCNT, XSAV, TYPE and RAT2 -- the flight state
+   * ALPHA, ALP1, ALP2, BETA, BET1, BET2, DELTA, MCNT, XSAV, TYPE and RAT2 -- the flight state
    * `MVEIT` reads, none of which belongs to the ship it is moving.
    *
    * The roll and pitch are each kept THREE WAYS in the original -- signed, magnitude and sign -- and
@@ -177,31 +177,31 @@ namespace Elite
    */
   struct FlightState
   {
-    std::uint8_t rollRate = 0;    ///< 6502: ALPHA -- roll, signed
-    std::uint8_t rollMagnitude = 0;     ///< 6502: ALP1 -- its magnitude
-    std::uint8_t rollSign = 0;     ///< 6502: ALP2 -- its sign
-    std::uint8_t rollSignFlipped = 0; ///< 6502: ALP2+1 -- the sign flipped, which MVEIT uses as well
-    std::uint8_t pitchRate = 0;     ///< 6502: BETA -- pitch, signed
-    std::uint8_t pitchMagnitude = 0;     ///< 6502: BET1 -- its magnitude
-    std::uint8_t pitchSign = 0;     ///< 6502: BET2 -- its sign
-    std::uint8_t pitchSignFlipped = 0; ///< 6502: BET2+1 -- flipped, which the stardust uses as ALP2+1 is used
-    std::uint8_t speed = 0;    ///< 6502: DELTA -- the player's speed
+    std::uint8_t rollRate = 0;    ///< Roll, signed
+    std::uint8_t rollMagnitude = 0;     ///< Its magnitude
+    std::uint8_t rollSign = 0;     ///< Its sign
+    std::uint8_t rollSignFlipped = 0; ///< The sign flipped, which MVEIT uses as well
+    std::uint8_t pitchRate = 0;     ///< Pitch, signed
+    std::uint8_t pitchMagnitude = 0;     ///< Its magnitude
+    std::uint8_t pitchSign = 0;     ///< Its sign
+    std::uint8_t pitchSignFlipped = 0; ///< Flipped, which the stardust uses as ALP2+1 is used
+    std::uint8_t speed = 0;    ///< The player's speed
 
-    /// 6502: DELT4(1 0) -- the speed times four, as sixteen bits. The stardust subtracts it from
+    /// DELT4(1 0) -- the speed times four, as sixteen bits. The stardust subtracts it from
     /// every particle's z on every frame, which is what makes the stars stream past.
     std::uint8_t speedTimes4Low = 0;
     std::uint8_t speedTimes4High = 0;
 
-    /// 6502: MCNT and XSAV -- the main loop counter and the slot being moved. `MVEIT` uses their
+    /// MCNT and XSAV -- the main loop counter and the slot being moved. `MVEIT` uses their
     /// EOR to spread expensive work across iterations, so that `TIDY` runs on one ship every
     /// sixteenth pass and `TACTICS` on one every eighth, rather than on all of them at once.
     std::uint8_t mainLoopCounter = 0;
     std::uint8_t slot = 0;
 
-    ShipType type = ShipType::None; ///< 6502: TYPE -- negative (`IsBody`) for the planet and the sun
+    ShipType type = ShipType::None; ///< Negative (`IsBody`) for the planet and the sun
 
     /*
-     * 6502: XX0(1 0) -- the blueprint the loop is working from, AND IT IS NOT RESET PER SHIP.
+     * XX0(1 0) -- the blueprint the loop is working from, AND IT IS NOT RESET PER SHIP.
      *
      * Part 4 writes it only for a ship with a blueprint: a NEGATIVE type skips the two loads
      * for the planet and the sun. So a body inherits whatever the last real ship left, and `MVEIT`
@@ -211,14 +211,14 @@ namespace Elite
      */
     const Blueprint* blueprint = &NO_BLUEPRINT;
 
-    /// 6502: RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
+    /// RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
     /// masks. Two routines, two meanings, the same two bytes; they are never live together because
     /// `PLUT` runs when the view changes and `MVS5` while a ship moves.
     std::uint8_t signMask = 0;
     std::uint8_t signMask2 = 0;
 
     /*
-     * 6502: CNT2 -- how wide a cone counts as "pointing at it", and the third byte of the same
+     * How wide a cone counts as "pointing at it", and the third byte of the same
      * setting as `RAT` and `RAT2`.
      *
      * `TACTICS` writes all three in three instructions and `DOCKIT` overwrites all three, which is
@@ -231,12 +231,12 @@ namespace Elite
     std::uint8_t steerCone = 0;
   };
 
-  // 6502: MSL -- `ShipType::Missile` is in `ShipSlot.h` with the other type numbers. `MVEIT`
+  // `ShipType::Missile` is in `ShipSlot.h` with the other type numbers. `MVEIT`
   // singles it out so that a missile runs its tactics on EVERY iteration rather than one in eight;
   // a missile that thought once every eighth of a second would be trivial to outrun.
 
   /*
-   * 6502: MVEIT -- move one ship, and the whole of slice 3a's arithmetic meets here.
+   * Move one ship, and the whole of slice 3a's arithmetic meets here.
    *
    * `_blueprint` is `XX0`, which the routine reads exactly once: byte 15, the maximum speed, to
    * clamp acceleration against. That single read is why the blueprints had to be extracted before
@@ -261,7 +261,7 @@ namespace Elite
   [[nodiscard]] bool MoveShip(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.
+   * PLUT and PU1 -- flip a ship's axes for the view the player is looking through.
    *
    * Elite draws all four views with one piece of geometry: rather than four projections, it turns
    * the SHIP round. The rear view flips eight sign bytes; the left and right views swap x with z

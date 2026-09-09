@@ -26,10 +26,10 @@ ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is built, 202
 [InputTimer.md](InputTimer.md) are built beside M6-a — the pause screen removed and its thirteen
 settings given a file, `TT217` ported as `Elite::ReadKey` so a held key is one press, the fire key
 no longer selecting a joystick the port cannot read, the crowded end and the docked pass measured
-while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **A fresh clone needs
-`git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->469 tests** and
-CI runs **<!--count:checks-->nineteen repository checks** beside it.
+while the oracle is here, and the docked pass running `MLOOP` whole (its §9). **The suite needs nothing but the
+repository** since M6-b-7 -- no assembler, no submodule, no assembled game. The suite is
+**<!--count:tests-->131 tests** and
+CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -38,11 +38,12 @@ under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game 
 
 ## The one finding to read first
 
-`MasterFile/` holds the **<!--count:masters-->12 master files** of Mark Moxon's annotated C64
-Elite source (<!--count:master-lines-->5,577 lines). Those masters are almost entirely `INCLUDE`
-lines: they pull in **<!--count:library-includes-->710 distinct library files** plus the font
-binary, and the routine bodies, ship blueprints and token tables all live in those includes
-rather than in the masters. They were not in this repository.
+`MasterFile/` held the **12 master files** of Mark Moxon's annotated C64 Elite source (5,577
+lines), and it was deleted at M6-f on 2026-09-08 along with `Upstream/`. The numbers here are
+history and no longer carry checked markers. Those masters were almost entirely `INCLUDE` lines:
+they pulled in **710 distinct library files** plus the font binary, and the routine bodies, ship
+blueprints and token tables all lived in those includes rather than in the masters. They were not
+in this repository either.
 
 **The count used to read "13 master files ... 5,615 lines" and that counted the FOLDER**, not the
 source: upstream's own `README.md` sits beside the twelve `.asm` files and is 39 lines of
@@ -51,11 +52,10 @@ now marked and checked by `tools/check_counts.py`; the thirteen-file figure is s
 one for the licence exposure, which is every tracked file in the folder, and ADR-001 §5 says so
 there.
 
-**Slice 0a fixed that**: the upstream tree sits at `Upstream/elite-source-code-library`, pinned
-at commit `aa3f7ee`, and all <!--count:includes-->712 include paths resolve. It is a
-**submodule**, not a copy —
-a fresh clone needs `git submodule update --init` before anything here can be built or tested,
-and `tools/inventory.py --check-includes` is the standing proof either way. See
+**Slice 0a fixed that**: the upstream tree sat at `Upstream/elite-source-code-library`, pinned
+at commit `aa3f7ee`, as a **submodule** rather than a copy, and all 712 include paths resolved.
+That is over: M6-f removed the submodule, the masters and the tools that read them, so a fresh
+clone needs nothing but a compiler. See
 [Elite-Conversion-Plan.md §1](Elite-Conversion-Plan.md#1-what-we-actually-have).
 
 ## Reading order
@@ -77,12 +77,13 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 |---|---|---|
 | [001](ADR/ADR-001-scope-and-fidelity.md) | Scope and fidelity | **Port the C64 game as it is, bit-faithful in logic, before changing anything.** GMA85 variant as configured in `elite-build-options.asm`; the assembled original running in an emulator is the reference. Modernisation is a later phase with its own decisions. |
 | [002](ADR/ADR-002-numeric-model.md) | Numeric model | **8-bit integer semantics preserved exactly** — same widths, same wraparound, same lookup tables, same RNG — in the space view's 256×144 logical coordinates, on a canvas that holds the C64's own multicolour bitmap and cell-colour planes and resolves to 320×200 indices at the presenter seam (§4, amended 2026-09-03). No floats in game logic. |
-| [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** runs the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. Amended 2026-09-07 (§1, §4): the interpreter banks the I/O page and answers a keyboard matrix, records which labels each test ran, and the mutant corpus has a floor. |
-| [004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | **Our own codebase — nothing lifted from a sibling repository.** `GameLogic` (namespace `Elite`) holds the port, platform-free and deterministic; presentation lives in `Outpost.exe`; tests under `Tests/`. Flat folders, unique PascalCase names, generated data tables checked in, `MasterFile/` and `Upstream/` are reference only. |
+| [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** ran the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. §1, §2 and §4 are history since M6 deleted the oracle and both goldens — **ADR-009 is what replaces them**; §3, the replay hashes, is untouched and is now the centre of the method. |
+| [004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | **Our own codebase — nothing lifted from a sibling repository.** `GameLogic` (namespace `Elite`) holds the port, platform-free and deterministic; presentation lives in `Outpost.exe`; tests under `Tests/`. Flat folders, unique PascalCase names, generated data tables checked in; `MasterFile/` and `Upstream/` were reference only and left the tree at M6-f. |
 | [005](ADR/ADR-005-presentation.md) | Presentation | **Packaged Win32, no XAML: MSIX stays, WinUI 3 goes.** Raw window, flip-model D3D12 swap chain blitting the indexed canvas at integer scale, XAudio2 with a small SID-style synthesiser. Amended 2026-09-08 (§3, §4): the pause screen removed by owner ruling, the blocking read ported as `TT217`, a joystick only when the platform has one, the crowded end and the docked pass measured. |
-| [006](ADR/ADR-006-modernisation-architecture.md) | Modernisation architecture | **The port becomes a C++ program with no behavioural change**: typed structs with byte codecs, value-in value-out routines, `Universe` and `Game` over four ports, pipelines of named stages, the oracle as judge until recorded fixtures replace it — the architecture [Modernize.md](Modernize.md) builds toward, recorded at M2's opening and amended as phases land. |
+| [006](ADR/ADR-006-modernisation-architecture.md) | Modernisation architecture | **The port becomes a C++ program with no behavioural change**: typed structs with byte codecs, value-in value-out routines, `Universe` and `Game` over four ports, pipelines of named stages, the oracle as judge until M6 deleted it (ADR-009) — the architecture [Modernize.md](Modernize.md) builds toward, recorded at M2's opening and amended as phases land. |
 | [007](ADR/ADR-007-state-ownership.md) | State ownership and the replay hash | **`Universe` owns every byte of game state; `Game` owns the dispatch; the executable owns the clock.** Written at M3's close from what was built, including the three places ADR-006 §4 was wrong: three `Step`s rather than one, the count of passes outside because it is floating point, and `Mode` deferred to M4-d. Records what the replay digest does and does not cover, and that it did not move across the phase. |
 | [008](ADR/ADR-008-the-picture.md) | The 640×400 picture, as built | **The executable presents a 640×400 `Elite::Picture`; the C64 canvas stays as the verification view and is never replaced.** Written at the resolution track's close from what RS-0 to RS-6 built. Records the twin rule and its four clauses, the five kinds of evidence that stand in for an oracle that cannot judge this surface, the layouts as the owner accepted them, and five improvements declined with the measurement that declined each. |
+| [009](ADR/ADR-009-detachment.md) | Detachment: what pins the port now | **The 6502 oracle, the assembled original and the tools that read it are deleted; 337 of 469 tests went with them.** Written at M6's close from what was built, on an owner ruling taken against this corpus's recommendation. Names the seven instruments that pin behaviour now, what a recorded digest is and what changing one means, and — at length, because a record of only what remains would be worse than none — exactly what was given up. |
 
 ## Two things this corpus is deliberately not
 

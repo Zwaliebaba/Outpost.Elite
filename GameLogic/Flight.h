@@ -25,7 +25,7 @@ namespace Elite
 {
 
   /*
-   * 6502: ZERO -- a zero-fill from `de` down to `FRIN`.
+   * A zero-fill from `de` down to `FRIN`.
    *
    * FIFTY-NINE BYTES BY ADDRESS, and the port has them in seven structures: the ship slots and
    * counts, the junk tally, the docking computer, both E.C.M. bytes, the mid-jump flag, the cabin
@@ -39,7 +39,7 @@ namespace Elite
   void ClearBubbleState(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: RES2 -- the ship, the heaps, the dashboard and the stardust, and then straight into ZINF.
+   * The ship, the heaps, the dashboard and the stardust, and then straight into ZINF.
    *
    * IT RE-CENTRES THE PITCH AND NOT THE ROLL. The pitch's store is there and the roll's is not, and
    * neither is in `ZERO`'s range -- so a launch leaves the roll rate wherever the last flight left
@@ -49,7 +49,7 @@ namespace Elite
   void ResetShipAndBubble(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: RESET -- the universe, and then `RES2`, which it falls into.
+   * The universe, and then `RES2`, which it falls into.
    *
    * THE 255 THAT MEANS "DOCKED" IS THE SAME 255 THAT FILLS THE SHIELDS. A loop counts down past
    * zero, the 255 it ran off the end with is moved into `QQ12` to mean "docked", and the
@@ -63,11 +63,11 @@ namespace Elite
    */
   void ResetGame(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: how fast you leave the slot, and it is four times `RES2`'s 3.
+  /// How fast you leave the slot, and it is four times `RES2`'s 3.
   inline constexpr std::uint8_t LAUNCH_SPEED = 12;
 
   /*
-   * 6502: the step `LAUN` hands `HFS2`, and the upstream header comment has it backwards.
+   * The step `LAUN` hands `HFS2`, and the upstream header comment has it backwards.
    *
    * `HFS2`'s own summary says "4 for launch, 8 for hyperspace"; the instruction inside `LAUN` is
    * eight, and the comment beside THAT instruction says 8, "so there are fewer sections in the
@@ -78,7 +78,7 @@ namespace Elite
   inline constexpr std::uint8_t LAUNCH_TUNNEL_STEP = 8;
 
   /*
-   * 6502: LAUN, and the `HFS2` it falls into -- the tunnel a launch and an arrival both open with.
+   * LAUN, and the `HFS2` it falls into -- the tunnel a launch and an arrival both open with.
    *
    * Three things and then eight rings: the whoosh, the step, and a `TT66` that clears the screen
    * and draws the border box with `QQ11` PUT BACK AFTERWARDS. That last is the whole of why the
@@ -91,17 +91,17 @@ namespace Elite
    */
   void DrawLaunchTunnel(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
+  /// The step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
   /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
   inline constexpr std::uint8_t HYPERSPACE_TUNNEL_STEP = 4;
 
-  /// 6502: `NOISE2`'s two arguments for the first hyperspace sound. The low nibble of the first
+  /// `NOISE2`'s two arguments for the first hyperspace sound. The low nibble of the first
   /// is a release length of 5 and the high nibble a sustain volume of 15.
   inline constexpr std::uint8_t HYPERSPACE_SUSTAIN = 0xF5;
   inline constexpr std::uint8_t HYPERSPACE_FREQUENCY = 240;
 
   /*
-   * 6502: HFS2 on its own -- the step, the screen clear, and the eight rings.
+   * HFS2 on its own -- the step, the screen clear, and the eight rings.
    *
    * `LAUN` and `LL164` are the same routine with a different noise and a different step in front
    * of it, which is what `HFS2` taking `A` says: the two entry points differ by two instructions.
@@ -110,7 +110,7 @@ namespace Elite
   void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step) noexcept;
 
   /*
-   * 6502: LL164 -- the hyperspace tunnel, and `HYPNOISE` in front of it.
+   * The hyperspace tunnel, and `HYPNOISE` in front of it.
    *
    * Five instructions once `HFS2` exists: the noise, a step of 4, and the rings. `HYPNOISE` is a
    * SOUND routine (the upstream files it as one) and it is played through the seams phase 5 owns,
@@ -122,7 +122,7 @@ namespace Elite
   void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * 6502: TT110 -- leave the station, or refuse to.
+   * Leave the station, or refuse to.
    *
    * A zero `QQ12` branches to `NLUNCH`, which is the refusal: pressing "1" in flight falls straight through to the
    * view change, which is why the key works in both places and does something in only one.
@@ -137,7 +137,7 @@ namespace Elite
               std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept;
 
   /*
-   * 6502: ESCAPE -- abandon ship, and it is the only way to survive a fight you are losing
+   * Abandon ship, and it is the only way to survive a fight you are losing
    * (slice 4b-a).
    *
    * `RES2`, then the ship you left becomes an NPC flying away from you: `FRS1` puts a Cobra ahead,
@@ -156,29 +156,29 @@ namespace Elite
    * and zeroes the high byte, so a hold full of them comes back as a nuisance rather than a crisis.
    * What it gives: seven light years of fuel, and a docking.
    */
-  /// 6502: the speed the abandoned ship leaves at.
+  /// The speed the abandoned ship leaves at.
   inline constexpr std::uint8_t ESCAPE_SPEED = 8;
 
-  /// 6502: the pitch, and HALVED it is both the AI byte and the frame count.
+  /// The pitch, and HALVED it is both the AI byte and the frame count.
   inline constexpr std::uint8_t ESCAPE_PITCH = 194;
 
   void AbandonShip(Universe& _universe, Ports& _ports) noexcept;
 
-  /// 6502: `TT66` on view 13, then the view put back to zero -- and it is two values on purpose. `TTX66K`
+  /// `TT66` on view 13, then the view put back to zero -- and it is two values on purpose. `TTX66K`
   /// tail-jumps to `wantdials` for view 0 AND for view 13, so both draw the same pixels; what
   /// differs is that `TT66` prints the view's NAME for a zero, and the title screen has none.
   inline constexpr std::uint8_t TITLE_CLEAR_VIEW = 13;
 
-  /// 6502: 96 into the nose vector's z high byte, and into the ship's own z high byte. The second
+  /// 96 into the nose vector's z high byte, and into the ship's own z high byte. The second
   /// is what `TLL2` walks down, so it is where the ship starts.
   inline constexpr std::uint8_t TITLE_START_DISTANCE = 96;
 
-  /// 6502: the maximum roll and pitch counters, which is
+  /// The maximum roll and pitch counters, which is
   /// the whole of why the ship turns.
   inline constexpr std::uint8_t TITLE_SPIN = 127;
 
-  /// 6502: twelve into `CNT2` and five into `MCNT` -- the two counters the loop is entered with.
-  /// 6502: row 15 and column 1 -- `TITLE`'s own cursor for the prompt, which
+  /// Twelve into `CNT2` and five into `MCNT` -- the two counters the loop is entered with.
+  /// Row 15 and column 1 -- `TITLE`'s own cursor for the prompt, which
   /// OVERWRITES the column `BR1` set three instructions earlier.
   inline constexpr std::uint8_t TITLE_PROMPT_ROW = 15;
   inline constexpr std::uint8_t TITLE_PROMPT_LEFT = 1;
@@ -186,7 +186,7 @@ namespace Elite
   inline constexpr std::uint8_t TITLE_CNT2 = 12;
   inline constexpr std::uint8_t TITLE_MCNT = 5;
 
-  /// 6502: the tokens `TITLE` prints before the caller's own -- 30 through `plf`, 13 for the
+  /// The tokens `TITLE` prints before the caller's own -- 30 through `plf`, 13 for the
   /// author names, and 12 for "by D.Braben & I.Bell".
   inline constexpr std::uint8_t TITLE_HEADING_TOKEN = 30;
   inline constexpr std::uint8_t TITLE_AUTHORS_TOKEN = 13;
@@ -196,7 +196,7 @@ namespace Elite
   // of it is `Universe`'s since M3-a and every seam is `Ports`'.
 
   /*
-   * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
+   * The title screen, its rotating ship, and the key that dismisses it.
    *
    * THE KEY YOU DISMISS IT WITH CONFIGURES THE JOYSTICK. `JSTK` is set to &FF immediately before
    * the loop, and the exit tests the fire key: pressing FIRE leaves the
@@ -221,7 +221,7 @@ namespace Elite
                                            std::uint8_t _distance) noexcept;
 
   /*
-   * 6502: what `TT66` is actually called with in `DEATH` -- MEASURED, and it is not 6 (§6.117).
+   * What `TT66` is actually called with in `DEATH` -- MEASURED, and it is not 6 (§6.117).
    *
    * The upstream comment says the pair that hides the dashboard also "sets A to 6 in the
    * process", which is the BBC's `DET1` -- five instructions ending in a register write. On this
@@ -234,25 +234,25 @@ namespace Elite
    */
   inline constexpr std::uint8_t DEATH_VIEW = 224;
 
-  /// 6502: the recursive token `DEATH` prints, "{all caps}GAME OVER".
+  /// The recursive token `DEATH` prints, "{all caps}GAME OVER".
   inline constexpr std::uint8_t GAME_OVER_TOKEN = 146;
 
-  /// 6502: the cursor, moved to the middle of the screen -- one load feeding both calls.
+  /// The cursor, moved to the middle of the screen -- one load feeding both calls.
   inline constexpr std::uint8_t GAME_OVER_ROW = 12;
   inline constexpr std::uint8_t GAME_OVER_COLUMN = 12;
 
-  /// 6502: SCBASE+&118 -- the second byte `BOX` STORES rather than EORs, so the second that a
+  /// SCBASE+&118 -- the second byte `BOX` STORES rather than EORs, so the second that a
   /// redraw cannot rub out. `BOTTOM_RIGHT_CORNER` in `ViewChange.h` is the first.
   inline constexpr std::uint16_t BORDER_TOP_RIGHT = 0x118;
 
-  /// 6502: how long the death animation lasts, in flight-loop iterations.
+  /// How long the death animation lasts, in flight-loop iterations.
   inline constexpr std::uint8_t DEATH_FRAMES = 64;
 
-  /// 6502: D1 -- the debris loop fills slots until the FIFTH one is taken.
+  /// The debris loop fills slots until the FIFTH one is taken.
   inline constexpr std::size_t DEATH_DEBRIS_SLOT = 4;
 
   /*
-   * 6502: DEATH -- the chaos of our destruction, over a "GAME OVER" sign.
+   * The chaos of our destruction, over a "GAME OVER" sign.
    *
    * The sequence is: the sound, `RES2`, FOUR TIMES our speed, a cleared screen with the border
    * EORed off again, a fresh stardust field, the sign, then five pieces of wreckage spawned in
@@ -273,7 +273,7 @@ namespace Elite
    * `BR1` -- so this ends where the caller's own death exit already goes.
    */
   /*
-   * 6502: DEATH from its start to the call to `U%` -- the scene, before anything moves.
+   * DEATH from its start to the call to `U%` -- the scene, before anything moves.
    *
    * Split from the animation because the routine is two things and not one: everything above `U%`
    * builds a screen and a bubble, and everything below it runs the flight loop over them sixty-four

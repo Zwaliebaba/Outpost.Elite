@@ -2,7 +2,6 @@
 
 #include "FlightPort.h"
 #include "FlightUniverse.h"
-#include "UniverseImage.h"
 
 #include "Commander.h"
 #include "DockedKeys.h"
@@ -31,13 +30,12 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * at every hundredth step and at every turn of the script. The digests are RECORDED below, and
  * the suite fails when a step's digest is not the one recorded.
  *
- * WHAT THIS PINS THAT NOTHING ELSE DOES. Every routine in the flight is compared against the
- * shipped game somewhere in this suite, one call at a time. A refactor that keeps every one of
- * those green can still change how they compose: the order two side effects happen in, a value
- * one routine leaves for the next (`XX0`, `K3+1`), a seam answered with a different argument.
- * The replay sees the composition, and it sees it without the oracle -- which is what lets it
- * outlive the oracle (Modernize.md M6) and what the modernisation's every slice is measured by
- * (Risk R14).
+ * WHAT THIS PINS THAT NOTHING ELSE DOES. Every routine in the flight was compared against the
+ * shipped game somewhere in this suite, one call at a time, and a refactor that kept every one of
+ * those green could still change how they compose: the order two side effects happen in, a value
+ * one routine leaves for the next (`XX0`, `K3+1`), a seam answered with a different argument. The
+ * replay sees the composition, and it sees it without the original -- which is why it outlived it
+ * (Modernize.md M6-b-5) and what the modernisation's every slice is measured by (Risk R14).
  *
  * WHEN THE RECORD MAY CHANGE. Never for a refactor: a changed digest is a changed game, and the
  * slice that changed it has found a defect or introduced one. The record is re-taken in two cases
@@ -56,8 +54,7 @@ namespace GameLogicTests
     struct Checkpoint
     {
       std::uint32_t step;
-      std::uint64_t digest; ///< the label hash: `UniverseImage` widened with the pixels, the heap and the controls
-      std::uint64_t state;  ///< `Game::StateHash()`, library-native (M5-e-3) -- the one that outlives the labels
+      std::uint64_t state; ///< `Game::StateHash()`, library-native (M5-e-3) -- the one that outlived the labels
     };
 
     /// Digests are taken this often, and at every turn of the script besides.
@@ -143,22 +140,22 @@ namespace GameLogicTests
      * flight is the flight it was, and what moved is nine bytes that had been constants.
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0xe2e8e3e51484050eull, 0x2ab36cb10fc3d025ull},     // launched from Lave
-      {40, 0x213b1335554bb32cull, 0x41c73e56e5b6dec0ull},    // coasted
-      {100, 0x37de3b418e64b8d9ull, 0x52b4ee3425808769ull},   // at full speed
-      {200, 0xa989b80ffa644f23ull, 0x38f68d860fee04daull},
-      {300, 0x187d3ff1a6cb13e7ull, 0x8cacc02d70b22da1ull},
-      {340, 0x2ed5b019a755b387ull, 0xf1365571ec21753bull},   // the Viper fought
-      {342, 0x59ff6b54f8754ff5ull, 0xe40530ef96dd4a8aull},   // the docking computer engaged
-      {400, 0xdcc716aab0968035ull, 0x7cc5be3c31affc57ull},
-      {500, 0x29c7fa21f4caa8e2ull, 0x650920d3bf96ad4dull},
-      {600, 0x3b8efac5f86b0ad9ull, 0x6ab3ccd16ef631ccull},
-      {700, 0x16c67711a7f6774bull, 0x8e7b06a8fc599754ull},
-      {800, 0xd400072409783fe8ull, 0x5625267a616ccbd3ull},
-      {900, 0x83f04d7051b44b8aull, 0xece8c828544e5bc6ull},
-      {1000, 0xf9264bf01da1822eull, 0xb8e25422b42eb7b9ull},
-      {1100, 0xdf5dfbe0a0c56019ull, 0xb2527b82bca1dbf0ull},
-      {1170, 0x5ae981a85f5bc5f9ull, 0xf42b8700b049cf7cull},  // docked
+      {0, 0x2ab36cb10fc3d025ull},     // launched from Lave
+      {40, 0x41c73e56e5b6dec0ull},    // coasted
+      {100, 0x52b4ee3425808769ull},   // at full speed
+      {200, 0x38f68d860fee04daull},
+      {300, 0x8cacc02d70b22da1ull},
+      {340, 0xf1365571ec21753bull},   // the Viper fought
+      {342, 0xe40530ef96dd4a8aull},   // the docking computer engaged
+      {400, 0x7cc5be3c31affc57ull},
+      {500, 0x650920d3bf96ad4dull},
+      {600, 0x6ab3ccd16ef631ccull},
+      {700, 0x8e7b06a8fc599754ull},
+      {800, 0x5625267a616ccbd3ull},
+      {900, 0xece8c828544e5bc6ull},
+      {1000, 0xb8e25422b42eb7b9ull},
+      {1100, 0xb2527b82bca1dbf0ull},
+      {1170, 0xf42b8700b049cf7cull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;
@@ -176,31 +173,31 @@ namespace GameLogicTests
      * the way to the bay, ended here by RETURN held through the ramming (M6-0-h-2).
      */
     constexpr Checkpoint RECORDED_DEATH[] = {
-      {0, 0xe2e8e3e51484050eull, 0x2ab36cb10fc3d025ull},
-      {40, 0x213b1335554bb32cull, 0x41c73e56e5b6dec0ull},
-      {100, 0xee3b7c15a656f9a5ull, 0xcf0708d959c8d9b5ull},
-      {200, 0x180549abbb35abe1ull, 0xf31650189d79a522ull},
-      {300, 0x897ab579513dfee4ull, 0xb5c764b1f87030ccull},
-      {400, 0x11ceaff7610bc611ull, 0xc5a2ac751108c15eull},
-      {500, 0xbd5b6181394e6fb1ull, 0xfa51e22968f351d1ull},
-      {600, 0x647ec3b65c1bf905ull, 0xa97903db4ccd7f65ull},
-      {700, 0x6ae759cc3397d5a9ull, 0x7a7ec0b76786e8f1ull},
-      {800, 0xcb5fcbbe0ea6988full, 0x770e957149997397ull},
-      {900, 0x1cd95c36557bfd34ull, 0xed9888c5284035edull},
-      {1000, 0x2a196bec374e6819ull, 0xe90ae1c8215cb3d2ull},
-      {1078, 0xbf6775aeb5574be8ull, 0x0a832382a56065d8ull}, // DEATH's first frame of wreckage
-      {1078, 0x17f97ec662d74d7dull, 0xec34cc852da779bbull}, // its thirty-third
-      {1078, 0xcff13eac1b7fb7f7ull, 0x6668376ec5651e8full}, // its sixty-fifth and last
-      {1079, 0xd47984d5edf0abb5ull, 0xeb31e3057f1eb194ull}, // and the docked game BR1 leaves
+      {0, 0x2ab36cb10fc3d025ull},
+      {40, 0x41c73e56e5b6dec0ull},
+      {100, 0xcf0708d959c8d9b5ull},
+      {200, 0xf31650189d79a522ull},
+      {300, 0xb5c764b1f87030ccull},
+      {400, 0xc5a2ac751108c15eull},
+      {500, 0xfa51e22968f351d1ull},
+      {600, 0xa97903db4ccd7f65ull},
+      {700, 0x7a7ec0b76786e8f1ull},
+      {800, 0x770e957149997397ull},
+      {900, 0xed9888c5284035edull},
+      {1000, 0xe90ae1c8215cb3d2ull},
+      {1078, 0x0a832382a56065d8ull}, // DEATH's first frame of wreckage
+      {1078, 0xec34cc852da779bbull}, // its thirty-third
+      {1078, 0x6668376ec5651e8full}, // its sixty-fifth and last
+      {1079, 0xeb31e3057f1eb194ull}, // and the docked game BR1 leaves
     };
     constexpr std::uint32_t RECORDED_DEATH_STEPS = 1079;
     constexpr std::uint32_t RECORDED_DEATH_FRAMES = 65; ///< `DEATH`'s `LASCT` loop, counted at the presenter
 
     constexpr Checkpoint RECORDED_ESCAPE[] = {
-      {0, 0xd2acaa0b8441c181ull, 0xd7815787c1624578ull},
-      {40, 0xfb03a4f3b282e7f7ull, 0x990865d9800c90e9ull},
-      {100, 0xb34146af4154f81eull, 0xa28af286e648c5a4ull},
-      {102, 0xe782dcec02d54161ull, 0xd860de950ede3562ull}, // ESCAPE, and the arrival it flies through
+      {0, 0xd7815787c1624578ull},
+      {40, 0x990865d9800c90e9ull},
+      {100, 0xa28af286e648c5a4ull},
+      {102, 0xd860de950ede3562ull}, // ESCAPE, and the arrival it flies through
     };
     constexpr std::uint32_t RECORDED_ESCAPE_STEPS = 102;
 
@@ -275,7 +272,7 @@ namespace GameLogicTests
     {
       Trace trace;
       std::uint32_t step = 0;
-      auto checkpoint = [&]() { trace.checkpoints.push_back(Checkpoint{step, _port.Digest(), _port.StateDigest()}); };
+      auto checkpoint = [&]() { trace.checkpoints.push_back(Checkpoint{step, _port.StateDigest()}); };
 
       Prepare(_port);
       if (_ending == Ending::Escaped)
@@ -417,8 +414,8 @@ namespace GameLogicTests
       out << L"\n    constexpr Checkpoint " << _name << L"[] = {\n";
       for (const Checkpoint& point : _trace.checkpoints)
       {
-        out << L"      {" << point.step << L", 0x" << std::hex << std::setw(16) << std::setfill(L'0') << point.digest << L"ull, 0x"
-            << std::setw(16) << std::setfill(L'0') << point.state << std::dec << L"ull},\n";
+        out << L"      {" << point.step << L", 0x" << std::hex << std::setw(16) << std::setfill(L'0') << point.state << std::dec
+            << L"ull},\n";
       }
       out << L"    };\n    constexpr std::uint32_t " << _name << L"_STEPS = " << _trace.steps << L";\n"
           << L"    constexpr Elite::LoopOutcome " << _name << L"_OUTCOME = Elite::LoopOutcome::"
@@ -443,8 +440,7 @@ namespace GameLogicTests
       std::size_t first = 0;
       for (std::size_t index = 0; same && index < _count; ++index)
       {
-        if (_recorded[index].step != _trace.checkpoints[index].step || _recorded[index].digest != _trace.checkpoints[index].digest ||
-            _recorded[index].state != _trace.checkpoints[index].state)
+        if (_recorded[index].step != _trace.checkpoints[index].step || _recorded[index].state != _trace.checkpoints[index].state)
         {
           same = false;
           first = index;
@@ -469,7 +465,7 @@ namespace GameLogicTests
       }
       for (std::size_t index = 0; index < _left.size(); ++index)
       {
-        if (_left[index].step != _right[index].step || _left[index].digest != _right[index].digest || _left[index].state != _right[index].state)
+        if (_left[index].step != _right[index].step || _left[index].state != _right[index].state)
         {
           return false;
         }

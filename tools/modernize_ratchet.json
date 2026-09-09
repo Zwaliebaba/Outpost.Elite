@@ -68,40 +68,20 @@
       "slack": 0,
       "slice": "InputTimer.md T-2: the game unit -- a selftest and the docked tail, on Game.cpp"
     },
-    "inventory-stale-files": {
+    "origin-markers": {
       "ceiling": 0,
       "slack": 0,
-      "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
-    },
-    "origin-markers": {
-      "ceiling": 4103,
-      "slack": 0,
-      "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
+      "slice": "M6-e-4: the last 55, by hand -- origin-markers reaches ZERO"
     },
     "opcode-transcriptions": {
-      "ceiling": 253,
-      "slack": 0,
-      "slice": "M6-d-50: four more to zero, and the carry is set by a side effect where the SEC is commented out"
-    },
-    "opcode-quotations": {
       "ceiling": 0,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M6-d-59: R-i's `6502 quoted:` tag deleted (owner ruling) -- zero now has no exemption"
     },
     "origin-identifiers": {
       "ceiling": 0,
       "slack": 0,
       "slice": "M6-c-11: Arctan's two Ts, and the kernel finished"
-    },
-    "oracle-test-files": {
-      "ceiling": 47,
-      "slack": 0,
-      "slice": "InputTimer.md I-0: the pause screen goes by owner ruling 2026-09-08"
-    },
-    "origin-tools": {
-      "ceiling": 7,
-      "slack": 0,
-      "slice": "M0-a"
     }
   }
 }

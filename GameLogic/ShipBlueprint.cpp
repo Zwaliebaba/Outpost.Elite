@@ -7,15 +7,15 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDA (XX0),Y -- one byte of the region, by ADDRESS. Outside the region it reads zero,
-    /// which is what the old `ShipByte` did and what `NO_BLUEPRINT` keeps.
+    /// One byte of the region, read INDIRECTLY through `XX0` -- so by ADDRESS. Outside the
+    /// region it reads zero, which is what the old `ShipByte` did and what `NO_BLUEPRINT` keeps.
     [[nodiscard]] std::uint8_t RegionByte(std::uint16_t _address) noexcept
     {
       const std::uint32_t offset = static_cast<std::uint32_t>(_address) - SHIP_DATA_BASE;
       return (offset < SHIP_DATA.size()) ? SHIP_DATA[offset] : std::uint8_t{0};
     }
 
-    /// 6502: the twenty header bytes at an address, and the three tables they describe.
+    /// The twenty header bytes at an address, and the three tables they describe.
     [[nodiscard]] Blueprint ParseBlueprint(ShipType _type, std::uint16_t _address) noexcept
     {
       Blueprint blueprint;
@@ -74,7 +74,7 @@ namespace Elite
       return blueprint;
     }
 
-    /// 6502: XX21 -- the table, parsed once: entry 0 is the empty slot and stays `NO_BLUEPRINT`.
+    /// The table, parsed once: entry 0 is the empty slot and stays `NO_BLUEPRINT`.
     [[nodiscard]] const std::array<Blueprint, SHIP_TYPE_COUNT + 1u>& Blueprints() noexcept
     {
       static const std::array<Blueprint, SHIP_TYPE_COUNT + 1u> BLUEPRINTS = []() noexcept
@@ -82,8 +82,9 @@ namespace Elite
         std::array<Blueprint, SHIP_TYPE_COUNT + 1u> table{};
         for (std::uint8_t type = 1; type <= SHIP_TYPE_COUNT; ++type)
         {
-          // 6502: ASL A / TAY / LDA XX21-1,Y / ... / LDA XX21-2,Y. The doubling is the two bytes an
-          // address takes; the -1 and -2 are what make the table one-based.
+          // The type doubled and used as an index, then two bytes fetched below the table's
+          // base. The doubling is the two bytes an address takes; the -1 and -2 are what make the
+          // table one-based.
           const std::uint16_t entry = static_cast<std::uint16_t>(SHIP_DATA_BASE + (type - 1u) * 2u);
           const std::uint16_t address = static_cast<std::uint16_t>(RegionByte(entry) | (RegionByte(static_cast<std::uint16_t>(entry + 1u)) << 8));
           table[type] = (address == 0u) ? NO_BLUEPRINT : ParseBlueprint(TypeOf(type), address);

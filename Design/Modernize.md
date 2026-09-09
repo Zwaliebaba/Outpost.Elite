@@ -3,10 +3,11 @@
 **Status:** **Accepted in scope · opened 2026-09-06, §1's questions ruled the same day** (all eight, and a
 ninth the owner added: the port is DETACHED from the original at the end — the oracle, the assembler
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
-§4 set for phase 6 is met**: every oracle
-suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->469 tests, oracle present), all <!--count:checks-->nineteen repository checks pass,
-and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
+§4 set for phase 6 was met on 2026-09-08, the day before the oracle left**: every oracle suite,
+every whole-bitmap comparison and the docked replay were green on the faithful build, 469 tests
+with the original beside them, all fifteen repository checks passing, and every recorded mutant
+caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->131 tests now, and
+what it can still say is M6-b's subject rather than the gate's. Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
 **Depends on:** ADR-001 (fidelity — unchanged), ADR-002 (numeric model — unchanged), ADR-003 (the
@@ -48,7 +49,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
-| **M6** | **Detach — behind the M6-0 gate, which closed 2026-09-07; M6-a is built and M6-b is blocked on two owner rulings (§4.10, §6).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then the oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
+| **M6** | **Detach — DONE 2026-09-08, all rows. The M6-0 gate closed 2026-09-07; M6-a built the recorder; M6-b was then CANCELLED by owner ruling and the oracle deleted instead (§8).** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then -- by the ruling of 2026-09-08 -- the 337 comparisons against the original and the interpreter that answered them are DELETED rather than recorded; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | **Met.** A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1): a fresh clone needs a C++20 compiler and nothing else. What it cost is [ADR-009](ADR/ADR-009-detachment.md) §4, and the one row left open in the phase is the mutation corpus. |
 
 Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
 it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
@@ -86,13 +87,13 @@ Clarified the same day into four rulings:
 | # | Ruling | What it means for the plan |
 |---|---|---|
 | R-a | **Detach at the end, not first.** The oracle stays the judge through M1–M5; a final phase records its answers as checked-in fixtures, replaces every oracle test with a fixture test, and only then deletes the interpreter, the upstream submodule and the masters. | Phase **M6** (§6). Every earlier slice is still measured against the assembled original, which is the only instrument that can say a refactor changed nothing. |
-| R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. | M6-c, M6-d and M6-e. M2 and M4 rename as they go so that M6-c is a sweep of what is left, not a second pass over everything. AGENTS.md R7 and §7 are amended when M6-e lands, not before. |
+| R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. **AND NOT THE NAMES IN PROSE** — scoped by owner ruling 2026-09-08, on M6-e-4's measurement. | M6-c, M6-d and M6-e; done, except `MasterFile/` and `Upstream/`, which are M6-f. M2 and M4 renamed as they went so that M6-c was a sweep of what was left. AGENTS.md R7 and §7 were amended when M6-e landed. **The ruling**: 2,702 citations of original routine and variable names survive in comments (480 distinct, 136 files), and they STAY. They are the port's own vocabulary rather than pointers into a tree that is going: the comments around each one define what it does, and the prose M6-d spent 58 slices building says WHERE a behaviour comes from — "the carry `EE51` returned", "`NWSPS` evicts the sun before it takes the heap" — which cannot be said without the name. Removing them would be a phase of its own and would cost the precision that was the point. This row is met when `MasterFile/` and `Upstream/` leave. |
 | R-c | **The derived data stays**: the generated tables the game cannot run without, and the recorded fixtures the tests cannot run without. That is the accepted residual exposure (Risk R1, restated at M6-f). | Q7 is moot — the label table the bridge needs exists only while the oracle does, and is generated into the test tree for M0-b to M6-a and deleted with it. Q8 stands: `modernize-*` widened one check per commit. |
 | R-e | **"The port was wrong, the record is not needed."** (Ruled 2026-09-06, on the replay.) When a slice finds a defect in the port and fixes it, the replay record follows the fix: it is re-taken with the journal entry naming the defect, and no ADR-001 §6 row is needed for the record to move. What stays forbidden is a record that moves with no defect named — that is a refactor that changed the game. | Rule 1 and M0-c's "when the record may change", below. The journal entry is the audit trail; the oracle suites, which do not move for a fix of this kind unless the defect was theirs too, are the check that the fix is a fix. |
-| R-f | **The sweeps answer with a digest; everything else keeps its record.** (Ruled 2026-09-08, on M6-a-2's measurement.) A test that makes more than two thousand calls to the oracle stops comparing against it case by case and folds its own answers into one digest, compared against one recorded number; every test under that keeps a full input-to-answer record. | 73 of the 295 tests that call the oracle change shape in M6-b; the fixture is about 25 MB rather than 222. What is bought is diagnosis and not fidelity — a fixture of either kind pins what the tests asked on the day it was recorded — so it is spent where debugging is hard (the drawing, whole-frame and composition comparisons) and saved where a bisect against the previous commit finds the case (the arithmetic sweeps). §4.10 carries the measurement. |
-| R-g | **The labels become constants; the assembled image never enters the tree.** (Ruled 2026-09-08, with R-f.) `tools/labels.py` emits the ~1,900 addresses as a generated header — metadata about the original on the same footing as the extracted data tables — and the record's key stops being taken over the base image and is taken over what the test WROTE, which needs a write set in the interpreter. | This is the half of R-c that Q7 got wrong: the label table does NOT go with the oracle, because the tests still have to find their routines. The 64 KB image is the original's CODE and stays out, so ADR-001 §5's "nothing derived from `Upstream/` is uploaded" holds through M6-f. The risk the ruling accepts is an unsized tail of tests that read image bytes no call ever wrote; M6-b measures it before it builds on it. |
-| R-h | **What the fixture CARRIES is measured before it is committed.** (Ruled 2026-09-08, on M6-b-1's census.) The census counted image DEPENDENCE — 18.5% of calls read a non-zero byte nothing wrote — and that is an upper bound, not the quantity ADR-001 §5 turns on: a byte read from a table may be consumed into a computation rather than reaching the recorded answer. So the recorder measures how much of the answers is VERBATIM image content, and piece (3) waits on that number. | One more recording pass and a small change to `RecordingOracle`. The ruling is deliberately narrow: it does not reopen R-f or R-g, it supplies the one fact those two were ruled without. §4.10 carries the result. |
-| R-i | **M6-d's ratchet splits in two: transcription to zero, quotation capped.** (Ruled 2026-09-08, on M6-d-0's instrument.) The row's "at zero" and R20's "keeps the instruction sequence as a quotation" cannot both hold of one counter, because a kept quotation is a counted line. So there are two: a listing that carries no reason goes to **zero**, and a quotation that IS the reason carries an explicit tag the counter can see and is capped at a declared number. | Both the row and R20 stay true at once. The point of the tag is that the cap stays MECHANICAL — a floor I assert per site is not a ratchet, and the residue belongs in the counter where it can be seen rather than in a fudged floor. |
+| R-f | **DISCHARGED UNBUILT 2026-09-08.** The ruling was sound and its subject is gone: a test that made more than two thousand oracle calls was to fold its answers into one digest, and every test under that to keep a full record. Both halves describe a fixture the owner then ruled against building. | The measurement behind it stands and is worth keeping: 73 of the 295 tests that called the oracle made 98.5% of the calls, which is why no record-size threshold helped. Nothing in the tree depends on the ruling. |
+| R-g | **DISCHARGED UNBUILT 2026-09-08, except for the header, which exists and goes.** `labels.py --header` was built and `Tests/GameLogicTests/OracleLabels.h` is in the tree with a `--check` in CI — that half shipped. The other half, keying a record on the write set, has nothing to key. | The header was deleted with the machinery at M6-b-7 rather than kept: R-g's reason for keeping the labels was that "the tests still have to find their routines", and after M6-b-5 no test does. |
+| R-h | **DISCHARGED, ANSWERED 2026-09-08 (M6-b-4).** The fixture's own verbatim figure is 63.9% — 4,340,437 of 6,791,718 bytes — and not the lower number §4.10's caveat predicted. | The ruling did its job: it is the measurement the owner read before ruling that nothing would be committed at all. It is the only one of the three that changed an outcome. |
+| R-i | **DISCHARGED, and the tag deleted with it** (owner ruling 2026-09-08, M6-d-59). R-i split M6-d's ratchet in two — a listing that carries no reason to **zero**, a quotation that IS the reason tagged `6502 quoted:` and capped — because the row's "at zero" and R20's "keeps the instruction sequence as a quotation" cannot both hold of one counter. The split was right to make and the residue turned out to be EMPTY: fifty-eight slices took the tree from 997 listings to zero and not one comment needed the tag. | The cap is zero, so there is nothing for a second counter to hold. `opcode-transcriptions` at zero now carries the whole guarantee with **no exemption** — which is stronger than the split was, and one fewer mechanism to rot. R20 still stands: keep the reason. What M6-d proved is that the reason is always sayable. |
 | R-d | **History is not rewritten by this plan.** Removing the files at the tip is M6-f; whether the history that carried them is rewritten is a separate owner decision and is not scheduled here. | Recorded in R21 (§7) so that it cannot be mistaken for something M6 did. |
 
 Anything not in this table is a routine judgement call this plan makes itself and records in §6.
@@ -387,20 +388,21 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,103 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->0 `6502:`
 references in `GameLogic/`'s comments. Across `GameLogic/` **and** `Outpost/` —
 a wider scope, so neither count contains the other, and a listing need not carry a marker at all —
-<!--count:opcode-transcriptions-->253 comment lines are an instruction LISTING carrying no reason and
-<!--count:opcode-quotations-->0 are a sequence kept
-because it IS the reason (M6-d's instrument, split 2026-09-08 under §1 R-i and widened the same day to
-the comments that END a line rather than start one — the shape it asks for,
-why naming an instruction is not quoting one, and the tag that separates the two, are in
-`check_modernize.py`); M6-d drives the listings to zero and caps the quotations; <!--count:origin-identifiers-->0 sites in the library, the
+<!--count:opcode-transcriptions-->0 comment lines are an instruction LISTING (M6-d's instrument,
+widened 2026-09-08 to the comments that END a line rather than start one — the shape it asks for and
+why naming an instruction is not quoting one are in `check_modernize.py`). M6-d drove it to zero and
+it has NO EXEMPTION: R-i's `6502 quoted:` tag went unused through all fifty-eight slices and was
+deleted with the phase (owner ruling, M6-d-59), so every listing in a comment is a violation. <!--count:origin-identifiers-->0 sites in the library, the
 executable and the suite where the port still calls something by its 6502 label (M6-c's instrument,
-2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); <!--count:oracle-test-files-->47 of the test translation
-units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
-submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
-`MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
+2026-09-08 — the five families and what is deliberately NOT in them are in `check_modernize.py`); no test loads the assembled original --
+47 files did until M6-b-5 deleted them and the 337 comparisons they carried, and M6-b-7 deleted
+the interpreter and the loader they used, so nothing needs BeebAsm, the submodule or the label
+map (the counter went with them: a count over a header that no longer exists guards nothing); no tool reads `Upstream/` or `MasterFile/` -- six did, and M6-f
+deleted the folders, the three tools that could not survive them and the counter over both; CI
+builds no assembler. This was the port's method, not a defect in
 it, and it is the one pattern that the owner's ruling (§1, R-a to R-d) makes a target: the end state
 builds, tests and reads with none of it present. Until M6 it is also what every other slice is
 measured by, which is why it is counted here and removed last.
@@ -836,12 +838,17 @@ arithmetic agreeing with the original by chance; it is a block of the original's
 the record.
 
 So the committed fixture would carry roughly 8 MB of the original verbatim, and that is a different
-proposition from "the fixture holds answers, not the image". **One caveat, stated because it cuts the
-owner's way and not mine**: this is the WHOLE corpus, before R-f folds the 73 heavy tests into
-digests. Those tests are the drawing and whole-frame comparisons — the ones whose records are most
-likely to be long runs of screen — so the proportion surviving into the ~25 MB fixture could be
-materially lower. Measuring that needs the digests built first, which is piece (3), which is the
-thing waiting on this ruling.
+proposition from "the fixture holds answers, not the image". **That caveat was stated because it cut the
+owner's way, and MEASURING IT SHOWED IT CUTS THE OTHER WAY (M6-b-4, §8).** The 37.2% is the WHOLE
+corpus. The fixture is the 222 tests R-f leaves keeping records, and over those alone it is
+**4,340,437 of 6,791,718 record bytes — 63.9%**. Folding the heavy tests into digests removes the
+arithmetic SWEEPS, whose records are computed answers carrying almost nothing of the original, and
+keeps the drawing, frame and composition comparisons, whose records are screen content, blueprints
+and text. **The digests concentrate the original's content rather than diluting it.** In absolute
+terms the ~24.6 MB fixture would hold **4.34 MB of bytes the assembled original also holds
+contiguously**, in 441,993 runs, the longest still 2,024. The guess that this needed the digests
+built first was wrong: running the light tests ALONE measures exactly the records the fixture would
+hold, whichever of them asks for one first.
 
 Where those 19,112 addresses fall says the split did its job: &CF00–&FAFF holds 7,832 of them,
 &0400–&20FF 5,137, &B700–&C6FF 3,947 and &9200–&99FF 1,509 — and **&4000–&67FF, the bitmap, drops
@@ -870,12 +877,15 @@ the escape pod. Both are instruments since the M6-0 gate (2026-09-07): the revie
 holds a `Died` and an `Escaped` table beside `Docked` (M6-0-b). The data tables need nothing here: their oracle comparison (`extract_tables.py
 --check` and `TableTests`) was retired on 2026-09-07, and the tables are already the port's own C++.
 
-**What M6 removes, in order**: the label names from identifiers (M6-c), the assembly from the
-comments (M6-d), the markers and the ledger with `inventory.py` and AGENTS.md R7 (M6-e), and then
-`Upstream/`, `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py`,
-`extract_tables.py`'s assembler half, the BeebAsm steps in both CI jobs, and the count markers that
-described the masters (M6-f). ADR-001 §5 and Risk R1 are restated at M6-f to what is then true: the
-tree carries the original's data and the port's own code, and nothing of its source.
+**What M6 removed, in order, and all of it is done**: the label names from identifiers (M6-c),
+the assembly from the comments (M6-d), the markers and the ledger with `inventory.py` and
+AGENTS.md R7 (M6-e), the 337 comparisons against the original and the 32 files that held them
+(M6-b-5), their names and prose (M6-b-6), `Cpu6502`, `OracleImage`, `Oracle`, `OracleLabels.h` and
+the assembler on both CI legs (M6-b-7), and then `Upstream/`, `MasterFile/`, `labels.py`,
+`c64_source.py`, `extract_tables.py`, `golden_diff.py`, `.gitmodules`, `.gitignore`'s upstream
+rules and the count markers that described the masters (M6-f). ADR-001 §5 and Risk R1 are restated
+at M6-f to what is now true: the tree carries the original's data and the port's own code, and
+nothing of its source.
 
 ---
 
@@ -1611,7 +1621,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times) and so is `Laser` (**M5-a-11**, four constant families for four bytes); `Equipment` is refused (**M5-a-12**) with the reason in ADR-006 §2 — the bytes are four encodings, and hold slots besides (§8). | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->54 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
-| **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
+| **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; 0 stale homes. **The check and its counter went with the ledger at M6-e-1**, which is what M6-e is for. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
 | **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the eight `DTW` bytes into `Universe` (**M5-e-2b**, built) and the doubled `QQ17` collapsed into `TextState` with the token printer bound to it (**M5-e-2c**, built), `StateHash()` library-native beside the label hash (**M5-e-3**, built — `Elite::HashState`, with a completeness test that walks the label table and found five fields the first fold forgot). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
 
@@ -1653,12 +1663,12 @@ were safe after M6-f, and none of them waited.
 | **M6-0-g Mutants to a stated floor** ✅ **built 2026-09-07 (§8)** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** ✅ **built 2026-09-08 (§8, two sittings)** | **M6-a-1**: the four gaps M6-0-f's instrument named are closed — `ISDK` and `GOIN` run in a bubble that holds the planet and a station and nothing else, two chosen generator seeds put sixty traders through `MTT4`, and three entries into `comudat` reach music commands 6 and 11 — and the review reads 269 stems run against 15 exempted where it read 265 against 19. **The `MTT4` fixture found a defect**: `.MTT4` ends `JSR NWSHP` and the next byte is `.TT100`, so a trader's pass costs a second flight frame and parts 3 and 4 do not run on it, where the port continued into part 3. **M6-a-2**: the `Oracle` seam, at `Cpu6502::CallSubroutine` and not at §4.10's `Call(label, State)`, which no test's shape would have fitted; `LiveOracle`; `RecordingOracle` with a measuring mode and a fixture writer; the corpus measured. **THE ROW'S LAST CLAUSE IS ANSWERED RATHER THAN BUILT, and the answer is a question for the owner**: a threshold on record size saves the wrong thing, because the 222.4 MB is 3.2 million small calls and not a few big records (§4.10). Committing a fixture waits on the ruling M6-b now needs. | M6-0's eight rows green first, and the coverage review clean with no gap note left in the ledger — both met. The suite runs green through the recorder (454 of 454) and two recording runs of one suite produced byte-identical files. **The "fixtures are committed" clause is NOT met and is withdrawn rather than fudged**: what to commit is the ruling, and §4.10 says what it costs either way. | 3 |
-| **M6-b Fixtures answer — scope set by §1 R-f and R-g, ruled 2026-09-08** | Four pieces, and the first is a measurement: **(1)** the interpreter records its READ set for one pass, so the tail R-g accepts — tests that read image bytes no call ever wrote — is a number before anything is built on it; **(2)** the key moves off the base image and onto what the test wrote, and `tools/labels.py --header` emits the addresses as generated constants with a `--check`; **(3)** the 73 tests over two thousand oracle calls fold their answers into a digest each, and `RecordingOracle` writes the ~25 MB fixture; **(4)** `RecordedOracle` serves the suite, `LiveOracle` and the BeebAsm steps leave CI, `OracleIsPresent` is retired and `mutate.py`'s oracle check goes (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged; the fixture committed and a second recording run byte-identical to it. | 2 for the mechanism, plus roughly 3 for the 73 tests and the read-set measurement |
+| **M6-b The oracle goes** — **CANCELLED AND REPLACED 2026-09-08 by owner ruling**; M6-b-5 built | The row was four pieces of recording: a read-set census, a write-set key with `labels.py --header`, the 73 sweeps folding into digests, and `RecordedOracle` serving a ~25 MB fixture. **None of it is built and none of it will be.** The owner asked "why bother" after M6-b-4 measured what the fixture would carry, was given the argument for building it, and ruled the other way: the interpreter, the image and the 337 tests that compare against them are deleted instead. **M6-b-5** (§8) took the suite from 469 tests to 131 and `oracle-test-files` from 47 to 0; **M6-b-6** takes the machinery — `Cpu6502`, `OracleImage`, `Oracle`, `OracleLabels.h`, `UniverseImage`, the runner's recording modes and the assembler in CI. | The suite green with nothing but the repository: no BeebAsm, no submodule, no label map, no fixture. **What is knowingly given up is written down rather than glossed**: every behaviour the original was still pinning is pinned by nothing afterwards (R19), and most of the mutation corpus M6-0-g built for this moment loses the tests that caught it (§8, M6-b-5). | 2 |
 | **M6-c Identifiers** ✅ **built 2026-09-08 (§8, seventeen slices)** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
-| **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. **Scope split by §1 R-i, ruled 2026-09-08**: a listing that carries no reason goes, a sequence that IS the reason is tagged `6502 quoted:` and stays. | `opcode-transcriptions` at **zero**; `opcode-quotations` at or under the cap, every one of them justified in §8; per-file review that no "why" was lost. | 8–10 |
-| **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
-| **M6-f The tree** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py` and the master-count markers removed; ADR-001 §5 and Risk R1 restated; `.gitignore`'s upstream rules dropped. | A fresh clone builds and runs the whole suite with nothing but the repository; `origin-tools` at zero. | 1 |
-| **M6-g ADR-009** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran, and two documents cannot share a number. | Accepted. | 1 |
+| **M6-d Comments** — **DONE**, 58 slices | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. §1 R-i split the scope on 2026-09-08 and is now discharged: the tagged-quotation half went unused and was deleted (M6-d-59). | `opcode-transcriptions` at **zero**, met — 997 → 0 across 116 files, with no exemption left in the counter; per-file review that no "why" was lost. | 8–10 |
+| **M6-e Markers and the ledger** — **DONE**, 4 slices | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone (15 checks, from 19); `origin-markers` at **zero**, met — 4,103 → 0 in `GameLogic/` and 97 → 0 in `Outpost/`. The residue R-b may still want is 2,702 citations of original NAMES in prose, measured in §8 and left for the owner. | 1 |
+| **M6-f The tree** ✅ **built 2026-09-08 (§8)** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `labels.py`, `c64_source.py`, `extract_tables.py`, `golden_diff.py`, `Design/Reference/`, the master-count markers and `.gitignore`'s upstream rules removed; the `origin-tools` counter retired with the folders it counted; ADR-001 §5 and Risk R1 restated. `Cpu6502` and `OracleImage` went a slice earlier, at M6-b-7. | **Met.** A fresh clone builds and runs the whole suite with a compiler and nothing else: no submodule, no assembler, no assembled game. `origin-tools` is not "at zero" but GONE, which is the stronger answer and the same one M6-b-7 gave `oracle-test-files`. | 1 |
+| **M6-g ADR-009** ✅ **written 2026-09-08 (§8)** | [ADR-009](ADR/ADR-009-detachment.md), the detachment as built: what pins behaviour now (seven instruments, named one at a time), what a recorded digest is and what changing one means, the two alternatives and why each was not taken, and -- at length, because a record of only what remains would be worse than none -- exactly what was given up. **NUMBERED 009 AND NOT 008 SINCE 2026-09-08**: the resolution track landed `ADR-008-the-picture.md` while this branch ran. | **Accepted.** ADR-003 §1, §2 and §4 are superseded in part and say so; §3 is untouched and is now the centre of the method. | 1 |
 
 **Total: roughly 90 sittings**, which is the same order as the port itself took (plan §7), and the
 plan expects the estimate to be wrong in the same direction the port's was: the dense units
@@ -1707,6 +1717,207 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-08 — M6-g: ADR-009, and M6 closes.**
+
+[ADR-009](ADR/ADR-009-detachment.md), written from what was built rather than from what was
+planned, because the two differ at the largest possible scale: the plan said M6-b would record a
+fixture and the owner ruled that it would not.
+
+**THE ADR SPENDS MORE WORDS ON WHAT WAS LOST THAN ON WHAT REMAINS, and that is the point of it.**
+A document that recorded only the seven surviving instruments would read as though the method had
+improved. It has not: 337 comparisons against the machine that defines the answer are gone and
+cannot be re-run anywhere without re-obtaining the original; Risk R19 is realised in a stronger
+form than its own wording, because no fixture was recorded at all; and the mutation corpus M6-0-g
+built for exactly this moment lost most of its subjects. §4 says all of that in the ADR's own
+voice, with the numbers.
+
+**What it can claim, and it is not nothing.** Not one line of `GameLogic/` was touched by any slice
+of M6-b or M6-f, and the three replay records are the same numbers they were before the deletion,
+to the bit. That is the evidence the game is the game it was, and after the deletion it is the only
+evidence there is -- which is why M5-e-3 putting a library-native digest beside the label one, a
+month early, turns out to be the most valuable thing in the phase.
+
+The alternative the owner rejected is written down with the measurement behind it, and so is one
+that was never put to them: freezing each test's expectation as a literal, which is cheaper than a
+fixture and remains available if the coverage loss proves unacceptable. It would need its own
+ruling, because an expectation taken from the port's own answers is a weaker claim than one taken
+from the original's, and the ADR says so rather than leaving a reader to work it out.
+
+ADR-003 is superseded in part rather than replaced: §1, §2 and §4 describe machinery that no longer
+exists and are kept as the record of how the port was got right; §3 is untouched. **M6 is done
+except for the mutation corpus**, which M6-b-5 measured, this slice records, and nobody has yet
+decided about.
+
+
+**2026-09-08 — M6-f: `Upstream/` and `MasterFile/` leave the tree.**
+
+The submodule entry, `.gitmodules`, the twelve masters and upstream's `README.md` beside them;
+`labels.py`, `c64_source.py`, `extract_tables.py` and `golden_diff.py`; `Design/Reference/`;
+`.gitignore`'s four blocks of upstream rules; the source-resolver check and the submodule checkout
+from CI. **A fresh clone builds and runs the whole suite with a compiler and nothing else** --
+M6-f's acceptance, met.
+
+**FOUR TOOLS AND NOT THE TWO THE ROW NAMED, and the two extra are worth naming.**
+`extract_tables.py` wrote the generated data tables from the assembled output; with nothing to
+assemble it cannot run, and the tables it wrote are checked in and are the port's own now -- which
+is exactly what §1 R-c calls the accepted residual exposure. `golden_diff.py` read the PNGs a
+failing golden wrote, and both goldens went with the oracle at M6-b-5; it had been orphaned for
+three slices and nothing noticed, which is the argument for a counter over tools rather than a
+list in a document.
+
+**Three counters retired with what they counted.** `masters`, `master-lines`, `masterfile-files`,
+`masterfile-lines`, `includes` and `library-includes` in `check_counts.py`, and `origin-tools` in
+the ratchet. The M6-f row asked for `origin-tools` AT ZERO; it is gone instead, for the reason
+M6-b-7 gave for `oracle-test-files`: a counter over a directory that does not exist guards
+nothing. Sixteen numbers in five documents lost their markers and kept their values, which is
+AGENTS.md §8's rule -- a number that no longer describes the tree is history, and history is not
+edited.
+
+**ADR-001 §5 and Risk R1 are restated rather than replaced.** The reasoning the owner ruled on in
+September stays where it is; both now open with what is true at the tip. **Neither goes green, and
+the reason is the same for both**: the HISTORY still carries all 5,616 lines of `MasterFile/`.
+Deleting at the tip changes what a clone gets, not what a fetch can reach, and whether the history
+is rewritten is an owner decision this plan does not take (§1 R-d, R21). The generated data tables
+stay for the reason they always did -- the game cannot run without them -- and they are as
+derivative as they were.
+
+131 tests green, all thirteen checks. What is left of M6 is `ADR-009` (M6-g), and beside it the
+mutation corpus M6-b-5 measured and did not touch.
+
+
+**2026-09-08 — M6-b-7: the interpreter, the image and the label header. No assembler on either leg.**
+
+`Cpu6502` (1,300 lines), `Oracle`, `OracleImage`, `OracleLabels.h` and `FlightUniverse.h`'s oracle
+half are gone, and with them the runner's `--coverage`, `--measure` and `--record`, the BeebAsm
+build and the assemble step on both CI legs, `labels.py --check` from the fourteen, and the two
+Win32 stand-ins in the portable runner's shim that existed only so `OracleImage` could find the
+repository root. **A fresh clone builds and runs the whole suite with a compiler and nothing else**
+-- which is what M6-f's acceptance asks for, arriving a slice early because the tests that needed
+the assembler went first.
+
+**TWO THINGS SURVIVED THAT LOOKED LIKE THE ORACLE'S AND ARE NOT.**
+
+**The state-cell table.** `UniverseImage` mapped every byte of `Universe` to the address the 6502
+kept it at, and four walks over it did the work: `Materialise` wrote the port's state into the
+interpreter, `Compare` read it back, `Absorb` reversed it, `Hash` folded it into the replay's
+digest. The first three go with the interpreter and the fourth with the labels, exactly as M6-f
+always said. But the TABLE is the list `Elite::HashState` is held to -- the risk with a
+hand-written fold is a field it forgot, and `StateHashTests` walks every cell, changes its byte and
+requires the hash to move. So the table stays, as `StateCells.h/.cpp`, with the address and the
+I/O-page flag taken out of every one of 102 constructor calls (`tools`-side script, arguments split
+at top level so a `static_cast<std::uint16_t>(_at.sunx + 1u)` counted as one). **The names are the
+original's and stay**, for the reason §1 R-b gives. One thing the address was doing had to be
+replaced: it was what told two `TRIBVX` cells apart, so the six Trumble velocities and the twenty
+dust cells carry their index in the name now. 1,489 cells move the hash, 7 are inert.
+
+**The replay's second digest.** Each checkpoint carried two: the label fold and
+`Game::StateHash()`. The label fold is deleted and thirty-six recorded rows lose their first
+column -- **NOT a re-take under rule 1**: the state column is the one it was, to the bit, in all
+three records, and the flight is unchanged. That column was added at M5-e-3 precisely so that this
+day would cost nothing, and it did.
+
+**What the compiler could not see, again.** `-Wunused-function` found nothing here, because what
+was left over were TYPES and the two Win32 shims are `inline` in a header. The reference count from
+M6-b-6 found them.
+
+131 tests green, all fourteen checks. `labels.py` and `c64_source.py` are still in `tools/` and
+`Upstream/` is still checked out, because the master counts and the source resolver read it; those
+are M6-f, one slice away, and nothing runs `labels.py --check` in between.
+
+
+**2026-09-08 — M6-b-6: the names and the prose the deletion left behind.**
+
+M6-b-5 deleted the tests and said in its own entry that it had left two things: file comments
+describing suites that no longer exist, and nine classes named for a comparison they no longer
+make. Both are done here, and one more thing the compiler could not see.
+
+**Nine classes renamed.** `LogarithmRoutinesAgainstTheShippedGame` → `TheScaledDivide`,
+`CanvasAgainstTheShippedGame` → `TheCanvasPrimitives`, `CommanderAgainstTheShippedGame` →
+`TheCommanderBlock`, `GalaxyAgainstTheShippedGame` → `TheSystemDescriptions`,
+`MarketAgainstTheShippedGame` → `TheEconomyGradient`, `RngAgainstOracle` →
+`TheRepeatableGenerator`, `SavingACommanderMatchesTheShippedGame` → `TheSaveMenuAndItsStore`,
+`TextPrinterAgainstTheShippedGame` → `TheTextPrintersCellColours`,
+`TokenPrinterAgainstTheShippedGame` → `TheTokenPrinter`. Each is named for what its surviving
+tests actually assert.
+
+**Fifteen file comments rewritten**, and the shape of every one is the same: say what the deleted
+comparison was, then say what the survivor asserts and why it did not depend on it. That is worth
+the words -- `TheScaledDivide` looks like a thin test until you know that the exhaustive sweep
+beside it proved the port AGREED with the original and this one proves they were both RIGHT, which
+is the failure a comparison cannot see. The same reading applies to `TIDY`'s branch coverage, the
+economy gradient's sign, the repeatable generator's carry and the description seeding: each is the
+assertion its comparison could not make, which is why each is what is left.
+
+**AND TWENTY-ONE DECLARATIONS NOTHING REFERENCED, which `-Wall` does not report.**
+`-Wunused-function` sees functions and stops there, so `ShippedMenu`, `OracleRun`, `DeviceStore`,
+`StampedSink`, `RecordingSink`, `Change`, `DeferredValueTokens`, the assembled `ROUTINE_BYTES` and
+eleven constants all survived M6-b-5's compiler-driven sweep. A second instrument -- count the
+references to every declared name outside its own definition -- found them; the false positives it
+also reports are call sites its regular expression reads as declarations, and they were checked by
+hand rather than trusted. Two more functions fell out once those went (`FileImage`, then
+`FileCommander`), which is why the sweep loops.
+
+Suite green at 131, all fifteen checks. `VideoStateTests`'s `Widen` is dead too and is NOT touched
+here: it was dead before M6-b-5 and has nothing to do with the oracle, so it is a tidy of its own
+rather than a line smuggled into this one.
+
+
+**2026-09-08 — M6-b-5: the oracle's tests go. 469 → 131, and the reason is an owner ruling.**
+
+"I want to get rid of the oracle. Why bother?" -- asked after M6-b-4 measured what a committed
+fixture would carry, and answered by the owner against this document's recommendation, which was to
+build the 25 MB fixture R-f and R-g had already scoped. The ruling stands and the rest of M6-b is
+cancelled: nothing is recorded, and what the original was answering is deleted instead.
+
+**THE DELETION IS NOT "DELETE THE FILES THAT INCLUDE THE ORACLE", and that mattered.** Two
+instruments were built and both are wrong on their own. Counting REFERENCES -- does the test, or a
+helper it calls, name `Cpu6502` or `OracleImage`? -- deletes `TheStationSurvivesTheLaunch`, whose
+fixture holds a `Cpu6502` and whose twenty assertions are all about the port: the station in the
+bubble, the heap it drew through, the pixels on the canvas. Counting ASSERTIONS -- does any
+`Assert::` argument name an oracle-side value? -- keeps
+`SignedMultiplyIntoScratchMatchesExhaustively`, whose one assertion is inside a loop and whose
+comparison is in a helper. A test stays only where the two agree; the eleven they disagreed about
+were read. Six of those disagreements were `PlotPixel`, `DrawHorizontalLine`, `Launch`,
+`MarketPrice`, `SetUpScreen` and `printer` -- library calls the first instrument mis-parsed as
+helpers -- and five were `Compare`, `CompareSequence`, `RunAndCompare`, `CompareEveryToken` and
+`CompareThroughDasc`, which are the real thing. `OracleMissing()` says nothing either way: it is a
+skip guard, and `TheHeaderExtentAgreesWithTheLayoutExceptWhereItFamouslyDoesNot` calls it and then
+compares the port's blueprint headers against the port's own layout, so it stays with the guard
+deleted.
+
+**What went**: 337 tests in 32 files deleted whole and 17 files trimmed -- the arithmetic sweeps,
+the drawing (ships, planets, the sun, the ball heap), the whole flight frame, tactics, the missions,
+the spawns, the sound and the music, the tokens and the extended tokens, the Trumbles, the charts,
+the market, the scanner, the dashboard, the cycle model and the interpreter's own tests.
+
+**What stays**: 131 tests. The picture layer's fifty-three (RS-0 to RS-6, which never had an
+oracle), the scripted replay's five and the state hash's four, the shell's arithmetic, key map and
+settings file, the video state, the save store, the docked session, the `Game` object, the raster
+split minus its one comparison, and the twenty-odd port-only assertions that were living inside
+oracle files. `check_all.py` is green on all fifteen checks; the suite runs in half a minute
+where it took a minute.
+
+**THE MUTATION CORPUS IS THE CASUALTY AND IS MEASURED RATHER THAN LEFT TO ROT.** M6-0-g built it
+for exactly this moment -- "after M6-b a fixture says what the tests ASKED and a mutant is the only
+instrument that says whether a test would NOTICE" -- and the deletion takes most of it with the
+tests. Of the thirteen units, the filters now select: `tactics` 7 → 0, `hyperspace` 6 → 0,
+`missions` 12 → 0, `spawn` 6 → 0, `trumbles` 9 → 0, `rng` 5 → 1, `arith` 24 → 1, `shipmove` 10 → 1,
+`planetdraw` 24 → 3, `cloud-seed` 18 → 2, `flight` 17 → 6, `raster` 8 → 7, `game` 6 → 6. Rule 3
+says a mutant is re-anchored and never dropped, and for most of these there is nothing left to
+anchor to. `mutate.py --check` still passes because it only proves the find-strings apply; the
+`tests` tripwire fires on a real run. **The corpus is not touched in this slice** -- what to do
+with it is a decision of its own and is M6-b-6's.
+
+**Not done here, on purpose, and both are named so they cannot be forgotten.** The PROSE in the
+seventeen trimmed files still describes the suites that were deleted -- `ArithTests`'s head comment
+opens "the arithmetic kernel against the shipped routines", and five classes are still called
+`...AgainstTheShippedGame` or `RngAgainstOracle` with nothing to compare against. And `Cpu6502`,
+`OracleImage`, `Oracle`, `OracleLabels.h`, `UniverseImage` and `FlightUniverse.h`'s oracle half are
+still in the tree, unused by any test but still compiled. Keeping this diff to one thing -- which
+tests exist -- is what makes ten thousand deleted lines reviewable; the names and the comments are
+M6-b-6 and the machinery is M6-b-7.
+
 
 **2026-09-08 — Beside M6-a: six slices of [InputTimer.md](InputTimer.md), journaled there (§9).**
 They are that plan's and not this one's, and they touch this plan's ledger in four places worth
@@ -1942,6 +2153,566 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-08 — M6-b-4: the fixture's OWN verbatim figure, and the caveat cuts the other way.**
+
+Owner ruling: measure before committing anything. R-h's answer was 37.2% over the whole corpus, and
+§4.10 carried a caveat "stated because it cuts the owner's way" -- that R-f's digests would remove
+the drawing and whole-frame tests, whose records are longest runs of screen, so the fixture's own
+proportion could be materially LOWER. It is materially higher.
+
+| | record bytes | verbatim | share |
+|---|---|---|---|
+| whole corpus (295 tests) | 22,279,497 | 8,297,316 | **37.2%** |
+| the fixture (222 tests that keep records) | 6,791,718 | 4,340,437 | **63.9%** |
+
+**The caveat had the two halves the wrong way round.** The tests R-f folds into digests are the
+ARITHMETIC SWEEPS -- `SignedAdditionMatchesOverASweep` at 200,000 calls, the multiply and divide
+sweeps, `TheControlRatesMatchBUMP2AndREDU2` at 262,144 -- and their records are computed ANSWERS,
+which carry almost nothing of the original. What keeps a full record is the other 222: the drawing,
+frame and composition comparisons, whose records are screen content, blueprints and text. So the
+digests strip out the low-carry half and CONCENTRATE what is left.
+
+In absolute terms: a ~24.6 MB fixture holding **4.34 MB of bytes the assembled original also holds
+contiguously**, in 441,993 runs, the longest still 2,024. That is 17.7% of the whole fixture and
+63.9% of its memory content.
+
+**And the method the caveat assumed was unnecessary.** It said measuring this needed the digests
+built first, which is piece (3), which is the thing waiting on the ruling -- a deadlock. It is not
+one: running the 222 light tests ALONE measures exactly the records the fixture would hold, counted
+once, whichever of them asks for one first. No digest has to exist and no fixture has to be written.
+The runner gained a skip list (`OUTPOST_TEST_SKIP`, one `Suite.Method` per line) because its filter
+is a single substring and cannot say "everything except these"; attributing per-test deltas from one
+pass would have credited a shared record to whichever test ran first, which is an estimate and not
+an answer.
+
+Pass one reproduced §4.10's numbers exactly -- 8,297,316 of 22,279,497, 1,128,263 runs, longest
+2,024 -- which is the check that says the instrument has not drifted since M6-b-3 measured it.
+
+**Nothing was committed to the fixture and piece (3) has not been started.** 469 tests green on a
+plain run, all fifteen checks. The ruling this was for is the owner's: 4.34 MB of the original's own
+content, in runs of up to two thousand contiguous bytes, inside a file this repository would carry.
+
+
+**2026-09-08 — R-b scoped: the original's NAMES stay in the prose.**
+
+Owner ruling, on M6-e-4's measurement. R-b said "every trace of the original goes" and listed four
+things; the markers, the ledger and the identifiers are gone, and `MasterFile/` and `Upstream/` are
+M6-f's. What the list never named, and what the count found, is 2,702 citations of original routine
+and variable names in comments -- 480 distinct names across 136 files.
+
+**They stay, and R-b now says so.** They are the port's own vocabulary rather than pointers into a
+tree that is going: the comments around each one define what it does, and the prose M6-d spent
+fifty-eight slices building works by saying WHERE a behaviour comes from. "The carry `EE51`
+returned", "`NWSPS` evicts the sun before it takes the heap", "`DFAULT`'s last act is the comparison
+against the third checksum" -- none of those is sayable without the name, and replacing each with a
+description would cost exactly the precision the phase was for.
+
+The row is amended rather than left implying unfinished work, which is the point of writing it down:
+a risk register that says a thing is outstanding when it has been decided is worse than one that
+never mentioned it.
+
+
+**2026-09-08 — M6-e-4: the last 55, by hand. `origin-markers` reaches ZERO and M6-e's row is
+met.**
+
+Eighteen embedded markers in `GameLogic/` and thirty-seven in `Outpost/`, thirty-four of them in one
+file. `origin-markers` 18 → **0**; `Outpost/` is at zero too, which the counter does not read.
+
+**`KeyMap.cpp`'s table was a content decision rather than a strip.** Its rows read
+`// VK_LEFT,       6502: KY3, C64 "<"` -- the Windows key, the original's KY label, and the key the
+C64 player pressed. The file's own header said why: "so the row can be read against `KEYLOOK`
+without opening two files". **After M6-f there is no `KEYLOOK` to read it against**, so the label
+loses the job it was doing and the C64 key does not. The label goes, the C64 key stays where the two
+differ, and the header now says that is what a row holds. Twenty-one rows kept a C64 key; ten
+function-key rows had nothing but the label and are down to the Windows key alone.
+
+**One of the fifty-five was not embedded at all.** `*m_view = _view; // 6502: the view byte alone` is
+an ordinary trailing comment; the classifier read the `*` of the DEREFERENCE as a block-comment
+continuation and gave up. Worth knowing rather than fixing: the tool's job was to find what needed a
+person, and a false positive there costs a hand edit while a false negative costs a broken sentence.
+It was tuned in the safe direction on purpose.
+
+**THE RESIDUE, measured, because R-b says "every trace of the original goes" and this is what is
+left.** The markers are gone; the original's NAMES are not. 2,702 citations of routine and variable
+names survive in comments -- `LL9` 74 times, `MVEIT` 54, `NWSHP` 54, `XX0` 54 -- across 480 distinct
+names in 136 files. **They are not what M6-e removes and were never counted by anything.** They are
+load-bearing in a way the markers were not: M6-d spent fifty-eight slices writing prose whose whole
+method is to say WHERE a behaviour comes from and WHY, and "the carry `EE51` returned" or "`NWSPS`
+evicts the sun before it takes the heap" cannot be said without the name. The comments around them
+define what each one does, so the names are the port's own vocabulary rather than pointers into a
+tree that is about to go.
+
+Whether that satisfies R-b is the owner's to rule on and it is not M6-e's row to decide. Removing
+them is not a sweep -- it is rewriting two thousand sentences to say "the routine that spawns a
+ship" where they now say `NWSHP`, which would be a phase of its own and would make the prose worse.
+Recorded here so the ruling is made on a number rather than an impression.
+
+469 tests green, all fifteen checks, 97 of 97 anchors applying, the code proved identical by the
+`code_only` comparison. `origin-markers` **0**.
+
+
+**2026-09-08 — M6-e-3: `GameLogic/`'s sources. 2,683 markers, eight mutants re-anchored, and the
+detector was counting the comment's own slash.**
+
+`origin-markers` 2,701 → **18**. Sixty-seven files; the code proved identical, non-blank line for
+non-blank line, by the same `code_only` comparison.
+
+**M6-d-57's guard paid for itself in one slice.** `--update` refused to run: `opcode-transcriptions`
+was 3 where its ceiling is 0, and the ratchet only goes down. Three sentences had become listings
+without changing a word:
+
+```
+    // 6502: CLC, in spite of the DFAULT above      ->   // CLC, in spite of the DFAULT above
+    // 6502: TYA puts the 4 into A, and Y ...       ->   // TYA puts the 4 into A, and Y ...
+    // 6502: CLV, then the routine.                 ->   // CLV, then the routine.
+```
+
+**An implied-mode instruction needs a slash beside it to be a listing, and the comment's own `//`
+was being read as that slash.** With a marker in between the two were never adjacent, so the flaw
+was invisible for the whole of M6-d; removing the marker put them together. `_is_transcription`
+already ran the LISTING_CONTEXT test against the comment's BODY rather than the raw line, with a
+comment saying exactly why -- it just did not do the same for the opcode tests. It does now, and all
+three read as 0, which is the right answer: naming an instruction in a sentence is what R20 keeps
+and what §3 says is not a quotation. **The counter has been slightly wrong since it was built, in
+the one direction that was never going to show up while the markers were there.**
+
+**Eight mutants re-anchored, none dropped (rule 3).** `mi-second-inc`, `mi-dead-counter`,
+`mi-pause2-loop`, `mi-tp-set`, `cs-ll9-carry-hit`, `pd-pl44-clc`, `game-selftest` and `sp-selftest`
+carry comment text inside their `find`, and a marker sat in it. Re-anchoring is the same
+transformation the files got, applied to the anchor -- so the anchor cannot drift from the file it
+names.
+
+**The verifier's own false positive is worth recording.** It first reported five files whose code
+had "changed", all with the same signature: HEAD had a blank line where the new file had a
+statement. A comment-only line contributes an empty line to `code_only`'s output, and dropping such
+a line -- which is exactly what a labels-only marker asks for -- removes it and shifts everything
+after. The question the check is actually asking is whether any STATEMENT changed, moved relative to
+another, or vanished, so it compares the non-blank code. All five were `// 6502: TT146.` and its
+kind, correctly removed.
+
+469 tests green, all fifteen checks, 97 of 97 mutants over a full run carrying this slice. Eighteen
+markers are left in `GameLogic/` and 37 in `Outpost/`, all of them EMBEDDED, for M6-e-4.
+
+
+**2026-09-08 — M6-e-2: `Outpost/` and `GameLogic/`'s headers. 1,462 markers, and the classifier
+earned five corrections on the way.**
+
+`origin-markers` 4,103 → **2,701**; 97 more went from `Outpost/`, which the counter does not read.
+Seventy-five files, and the code is proved untouched rather than reviewed: `code_only` strips
+comments from HEAD's copy and from the new one and the two are compared byte for byte, per line
+right-stripped. Seventy-five files, zero differ. **A comment edit that passes that test cannot have
+moved anything the compiler sees, whatever the diff's size** -- which is the only honest way to
+review four thousand lines.
+
+**Five corrections, every one of them found by reading the tool's output rather than by a check.**
+
+1. **The comment opener was being found from the RIGHT.** `* The \`// 6502:\` comment on a flight row
+   names the KY label ...` -- a line that QUOTES a marker -- split on the last `//` and read the
+   text on the wrong side of it, decided the marker opened the comment, and stripped it. The opener
+   is now found from the left, and a `*` block continuation counts as one.
+2. **`LABEL, ` is not a label head.** `RDKEY, once, into whichever logger the caller owns` and
+   "\`thiskey\`, and ZERO IS A KEY" are sentences whose SUBJECT is the label; taking it leaves them
+   headless. Only a DASH reliably says "this is the name and what follows describes it".
+3. **Nor is `LABEL -- and ...`.** `LSO -- and the station's line heap is IT` reads "IT" as `LSO`.
+   A conjunction or relative pronoun after the dash means the sentence continues, so the label stays.
+4. **Capitalising a label INVENTS A WORD.** `moonflower and welcome -- the energy bomb` must not
+   become `Moonflower`: `moonflower` is a table in the C64 build and `Moonflower` is nothing. The
+   tool now harvests every lowercase name a marker introduces -- 212 of them -- and leaves those
+   alone. The first attempt harvested every lowercase word after a marker, learnt "the" and "which"
+   as labels, and then declined to capitalise a sentence that began with one; a harvest has to know
+   what POSITION a name is in.
+5. **`///< 6502: KY1 -- "?"` is not labels-only.** It names the key as well as the label, and
+   dropping the comment would have lost the key. A payload with a dash or a quoted thing has a
+   description in it.
+
+**The 370 labels-only comments go whole, and that is the judgement worth stating.** `Worm = 23,
+///< 6502: WRM` says nothing but where the thing came from. Leaving `///< WRM` behind would be worse
+than either keeping or deleting it: a bare label with no marker to say what kind of name it is, in a
+tree whose original is about to be deleted. So the marker takes the comment with it, and the line
+too when the comment was the whole line.
+
+**On the harness.** `mutate.py --check` says all 97 anchors still apply, and for a comment-only
+change that is the complete argument: a mutant's `find` text still matching means no anchor crossed
+a changed line, so no mutation is different. The full run comes at the end of the marker work rather
+than four times over.
+
+469 tests green, all fifteen checks, 97 of 97 anchors applying. Twelve markers are left in the
+headers and 37 in `Outpost/` -- the EMBEDDED ones, for M6-e-4.
+
+
+**2026-09-08 — M6-e-1: the ledger and `inventory.py` retire, and R7 with them. No marker touched
+yet.**
+
+`Design/Source-Inventory.md` (241 rows) and `tools/inventory.py` (451 lines) are deleted, and with
+them the four `check_all.py` entries, the five CI steps, the `inventory-stale-files` counter and the
+coverage review M6-0-f built. `check_all.py` runs **fifteen** checks where it ran nineteen; the
+ratchet holds **seventeen** counts where it held eighteen. AGENTS.md R7 is retired in place -- kept
+as a heading that says what the rule was and when it went, so a reader who meets a reference to "R7"
+finds an answer rather than a hole -- and ADR-004 §4 is discharged the same way.
+
+**The order is forced and worth writing down.** M6-e's row lists the markers and the ledger together
+and rule 4 says they go together, but they cannot go in the same commit without a 4,200-line diff
+nobody can read. The constraint is one-directional: `inventory.py --check-homes` reconciles the
+markers AGAINST the ledger, so removing markers first turns `check_all` red, while removing the
+ledger first leaves the markers as ordinary comments and everything green. So the ledger goes first
+and the markers follow in slices. Rule 4's "together" is satisfied by the phase, which is where it
+was always going to be satisfied.
+
+**Three headers pointed at the ledger and now point at nothing, so they were fixed here rather than
+left.** `EliteConfig.h` cited "Source-Inventory section 6", `LoaderScreen.h` its §3, `Controls.h` its
+row 145. A dangling reference in a comment is the same defect M6-d spent six findings on: it reads
+as authority and cannot be checked.
+
+**What the markers themselves take, measured before touching one.** All 4,200 of them (4,103 in
+`GameLogic/`, 97 in `Outpost/`) fall into four classes by what follows the marker, and only the last
+needs a person:
+
+| class | count | what removal is |
+|---|---|---|
+| `PROSE` | 2,078 | drop the marker, capitalise: `// 6502: the carry the second subtraction leaves` |
+| `LABEL_THEN_PROSE` | 1,699 | drop the marker AND the label, keep the sentence: `// 6502: NW8 -- the type's defaults ...` |
+| `LABELS_ONLY` | 370 | drop the COMMENT: `Worm = 23, ///< 6502: WRM` says nothing but where it came from, and `///< WRM` would be worse than either keeping or deleting it |
+| `EMBEDDED` | 53 | the marker is mid-sentence and carries a clause -- by hand, a paragraph at a time |
+
+The classifier earned two corrections while it was being written. `///< 6502: KY1 -- "?"` was going
+to be dropped whole as labels-only, which would have lost the KEY as well as the label; a payload
+with a dash or a quoted thing has a description in it and is never labels-only. And `* 6502: MVEIT.`
+inside a block comment was leaving an empty ` *` line, because a block continuation is not a comment
+opener in the C sense; it drops whole now. Zero lines would be left as an empty comment.
+
+469 tests green, all fifteen checks, 97 of 97 mutants still applying. `origin-markers` unmoved at
+4,103, which is the point: this slice took the map away and left the markers where they were.
+
+
+**2026-09-08 — M6-d-59: R-i's `6502 quoted:` tag is deleted, and zero now has no exemption.**
+
+Owner ruling, on M6-d-58's report. R-i split this counter in two on 2026-09-08 because the row's "at
+zero" and R20's "keeps the instruction sequence as a quotation" cannot both hold of one counter, and
+gave the kept half an explicit tag so the residue would be MECHANICAL -- a number rather than a floor
+asserted per site. That was the right instrument to build: it made the question decidable and it made
+the cost of keeping a quotation visible. Fifty-eight slices later the residue is empty.
+
+So the tag, its regex, the `opcode-quotations` counter and its ceiling are all gone, and the ratchet
+holds eighteen counts where it held nineteen. **`opcode-transcriptions` at zero now has NO
+EXEMPTION**: there is no longer any way for an instruction listing to sit in a comment and be
+counted as intended. That is a stronger guarantee than the split was, and one fewer mechanism to
+rot. R20 is untouched and still says keep the reason; what M6-d established is that the reason is
+always sayable, on every comment in this tree, including the ones written specifically to argue that
+it was not.
+
+The self-test's sample tree keeps the line that used to carry the tag, now as a plain listing with
+no marker on it -- which is also the case the counter needs: **a listing need not carry a `6502:`
+marker to be a listing**, and after M6-e removes the markers that is the only kind there could be.
+
+469 tests green, all eighteen counts at their ceilings, all nineteen repository checks.
+
+
+**2026-09-08 — M6-d-58: the last nineteen files. `opcode-transcriptions` reaches ZERO and M6-d's
+row is met.**
+
+30 sites over nineteen files -- `Dashboard2x.cpp`, `Galaxy.h`, `Lines2x.h`, `LookupTables.cpp`,
+`LookupTables.h`, `ShipBlueprint.cpp`, `ShipBlueprint.h`, `StateTokens.h`, `SystemScreen.h`,
+`Tokens.cpp`, `Outpost/Presentation.cpp`, `Colours.h`, `LineHeap.h`, `MemoryMap.cpp`, `MemoryMap.h`,
+`Stardust.h`, `Outpost/SettingsFile.cpp`, `Outpost/SoundOutput.cpp` and `Outpost/SoundOutput.h`.
+All 116 files at zero.
+
+**`opcode-quotations` is 0 and R-i's `6502 quoted:` tag was never used, in 58 slices.** That is the
+finding of the whole phase and it is the owner's to rule on before M6-e closes the ledger. R-i split
+the ratchet in two on the expectation that some comments could not be rewritten without losing their
+reason, and gave those a tag so the residue would be visible and capped rather than argued per site.
+The residue is empty. The hardest cases the tree had all cleared with prose: `Hyperspace.h`'s
+mid-instruction entry point, `Arith.h`'s four dropped-flag arguments, `EraseShip`'s three-way carry,
+`OUCH`'s carry arriving from a sound routine, `MVTRIBS`'s two generator calls with deliberately
+different carries, and -- last of all, in this slice -- `MemoryMap.h`, whose whole argument is "the
+routine is eight instructions and none of them writes code" and which had the eight listed as its
+evidence. Naming what the eight DO is shorter, says the same thing, and can be checked against the
+port after `Upstream/` is gone, which the listing cannot. **The cap can be set to zero, and R-i's
+tag can be deleted with it.**
+
+**One instruction listing lives where the counter cannot see it, and there is exactly one.** A sweep
+of every string literal in `GameLogic/` and `Outpost/` for a mnemonic with an operand found a single
+hit: a `static_assert` message reading "AND #3 is what indexes the directions", four lines under a
+comment this slice had just rewritten to say "two bits are what index them". Made consistent. The
+counter reads COMMENTS, which is what M6-d's row asks of it, and that is the right scope -- but it
+is worth writing down that the scope has an edge and where the edge was.
+
+**The phase in numbers.** 997 sites over 116 files at M6-d-0; 0 over 0 now, across fifty-eight
+slices. Six errors in landed prose found and fixed along the way, every one of them in a sentence a
+listing was decorating and none of them in code: two miscounts, two misplaced citations, an
+off-by-one in a word, and a sentence that changed convention mid-breath. Three defects in the
+instruments, all found by the work rather than by a check: `--update` would raise a ceiling, the
+harness's subject line under-reported twice, and `apply` across two calls could replace the wrong
+line. Five idiom families named and documented where the code is, because after M6-f the port is the
+only place they can live: the data byte that assembles as an instruction and swallows the next one;
+the mid-instruction entry point whose address IS the parameter; the constant that is one thing in
+the original and several in the port; the flag set at a distance; and -- twice -- the original's own
+commentary being wrong for this build.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved. `opcode-transcriptions` 30 → **0**.
+
+
+**2026-09-08 — M6-d-57: eleven files to zero, and the tail is now thirty sites over nineteen
+files.**
+
+35 sites over eleven files -- `Music.h`, `NameEntry.h`, `ExtendedTokens.h`, `Lasers.h`,
+`LoaderScreen.h`, `Presenter.h`, `Raster.h`, `ShipType.h`, `Universe.h`, `Outpost/Main.cpp` and
+`Outpost/Shell.h`. Eighty-seventh to ninety-seventh at zero.
+
+The widest slice of the phase, and it went without incident, which is the report. Every one of the
+thirty-five was the shape M6-d-53 named: a routine's name, its listing, and prose underneath that
+already carried the reason. `LDA #&70` is "foreground colour 7 over background colour 0"; `LDX
+RASTCT` is "indexed by the raster counter"; `LDA #8 / ADC GNTMP` is "what one shot costs in laser
+heat". The mnemonic was never the fact.
+
+Two places where the LISTING was the last thing standing between the reader and a wrong reading,
+and both are recorded as reasons now. `NameEntry.h`'s beep is the data-byte idiom again -- an
+accepted character reaches the print by falling past the load of the bell character through a byte
+that assembles as a three-byte instruction -- so `OSW0L` has ONE print and what it prints depends on
+which way it arrived. And `Lasers.h`'s three uncleared adds: the convergence point spans NINE rows
+where three random bits alone would give eight, because the coordinate adds ride `DORND`'s exit
+carry, and the heat add cannot carry because three bits plus 124 plus at most one is 132.
+
+`Main.cpp`, `Game.h` and `StartUp.h` now all three say what `FRCE`'s dispatch actually does, which
+is the same fact in the three places a reader meets it. That is deliberate: after M6-f there is no
+listing to go back to.
+
+**And M6-d-55's fix to the harness's subject line was itself incomplete.** The filter went, but the
+line still capped its list at twelve entries and said nothing when it truncated -- so this slice,
+which touches twelve files plus the plan and two tools, got a subject line that stopped at
+`Outpost/Shell.h` and dropped `tools/` entirely. Same defect, one layer down, found the same way:
+counting the lines against the slice. **A line whose whole job is to be checked against something
+must not decide for the reader what fits.** The cap is gone.
+
+**And the ratchet's WRITING side turned out not to be a ratchet.** Rewriting the `FRCE` comment in
+`Outpost/Main.cpp` grew that file by one line, and `--update` moved P6's ceiling from 238 to 239
+without a word. Rule 5 says the numbers only go down; `check_modernize.py` enforces that on the
+READING side -- a count below its ceiling fails and tells you to run `--update` -- and `--update`
+would then happily raise a different count the same slice had pushed up. The only thing that
+noticed was `check_counts.py` complaining that a marked number in this plan no longer matched the
+tree. **Rule 5 was being enforced by a coincidence.** `--update` now refuses to raise a ceiling,
+names the counts that would rise, and exits 1; `--update --raise-ceiling` is how a slice says a
+rise is intended, and owes the journal a reason. The check is `rising_ceilings`, split out so the
+self-test can exercise it without writing to the real file -- a guard nothing proves is a guard
+nobody can rely on, which is the lesson of the counter it protects. The comment was rewritten to
+fit two lines instead, so P6 stayed at 238 and nothing needed raising.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (36, 11, 34, 7, 5, 1, 12, 30, 49, 8 and 8). `opcode-transcriptions` 65 → 30.
+
+
+**2026-09-08 — M6-d-56: six files to zero, an orphan comment inside an empty namespace, and a
+five-instruction sequence called four.**
+
+27 sites over six files -- `Outpost/KeyMap.cpp`, `Outpost/Presentation.h`, `Outpost/Shell.cpp`,
+`Equipment.h`, `Game.h` and `Messages.h`. Eighty-first to eighty-sixth at zero.
+
+**A doc comment documenting nothing.** `Shell.cpp` opened with an anonymous namespace whose entire
+contents were `/// 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.` and a blank line. Whatever it once
+described went elsewhere -- `dn2`'s two halves are `Elite::Beep` and `Presenter::WaitFrames`, and
+the constant is `MarketScreen.h`'s `BEEP_PAUSE_FRAMES`. A comment with no declaration under it
+cannot be made right by rewriting; it can only be deleted, so the comment and the empty namespace
+went together. `origin-markers` is unmoved because it counts `GameLogic/` only, which is worth
+knowing rather than assuming -- the run confirms it.
+
+**A sixth error in landed prose, and this one miscounts and mislocates in six words.** `Equipment.h`
+said "the four instructions before EQL1" and then listed FIVE, and they are not before `EQL1` --
+`LDX #1` and, on some builds, a whole conditional block sit between. The sequence is the fuel price
+at the top of `EQSHP`: 70 minus the tank, doubled, into the table's first entry. That is what the
+comment says now, and it has no count to get wrong.
+
+**M6-d-52's FRCE finding is now recorded where the enum lives.** `Game.h`'s `Mode` is exactly the
+two values that branch decides, so the note that the original's own annotation reads backwards for
+this build belongs beside it as well as in `StartUp.h`. Two places, one fact, because a reader
+arriving at either needs it -- the same judgement as the data-byte idiom in M6-d-51.
+
+`Presentation.h` is the timing file and its sites were all `JSR WSCAN` and `JSR DELAY` in prose
+about how long a pass takes. The calls are not the fact; the SYNCS are, and the file already counts
+them.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved except `Shell.cpp`'s 10 → 9, which is the orphan (37, 7, 9, 7, 17 and 5).
+`opcode-transcriptions` 92 → 65.
+
+
+**2026-09-08 — M6-d-55: the VIC registers named rather than addressed, and the harness's subject
+line was under-reporting.**
+
+23 sites over four files -- `Lines2x.cpp`, `VideoState.cpp`, `VideoState.h` and
+`Outpost/FlightSession.cpp`. Seventy-seventh to eightieth at zero, and the first slice to reach into
+`Outpost/`.
+
+**`tools/mutate.py` was naming only some of the files its worktree carries.** The run's subject line
+exists because a tally nobody can attribute is worthless -- M6-d-25a put eight journal entries'
+tallies against the wrong commit, and the line was written to stop that. But its filter was
+`Tests/`, `GameLogic/`, and the files the chosen mutants live in, so `Outpost/FlightSession.cpp`
+was carried and NOT named. The header for this slice listed three files where four were measured. A
+reader checking the line against the slice -- which is exactly the check the line is for -- would
+have concluded the run did not cover the fourth. `make_worktree` applies `git diff HEAD` whole, so
+the filter was never doing anything but hiding. It is gone: the line now names every uncommitted
+file, `tools/` and `Design/` included. **An under-reporting subject line is the disclaimer it
+replaced, one layer down.**
+
+The comment work itself is the shape M6-d-53 described. `VideoState` is nine comments that were a
+store to a VIC address -- `STA VIC+&15`, `STA VIC+&27`, `STA VIC+&17 / STA VIC+&1D` -- and every one
+of them is better as the register's NAME: the sprite enable byte, sprite 0's colour, both expand
+registers. The address is what a reader has to look up; the name is what the code means. The one
+that mattered, part 15's read-modify-write of the enable byte, says so in words now and the fact it
+carries -- that the flight loop cannot compute the new byte because it does not know how many
+Trumble sprites are showing -- was already in the prose.
+
+`Lines2x.cpp` is the twin file and carries NO `6502:` markers by design, so its six sites were
+listings inside comments that exist to explain what the twin does differently. Those read better
+without them: "the swapped entry counts one more and the increment can wrap" is the fact, and
+`LDX P2 / INX / BEQ` was the evidence for it.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (0, 7, 17 and 12). `opcode-transcriptions` 115 → 92.
+
+
+**2026-09-08 — M6-d-54: four more to zero, and a second `apply` on an already-edited file
+overwrote the line above.**
+
+26 sites over four files -- `Explosion.h`, `Trumbles.h`, `Charts.h` and `Scanner.h`.
+Seventy-third to seventy-sixth at zero.
+
+**The method failed in a new way and the tooling could not have caught it.** `apply` takes line
+ranges from ONE snapshot and applies them bottom-up, which is safe within a call. It is not safe
+ACROSS calls: the first pass over `Charts.h` turned one line into two, everything below moved down
+by one, and a follow-up call using the original numbers replaced the wrong line -- deleting the
+`distance` field's declaration and leaving `controlHeld` declared twice. The transcription count
+still read correctly, the marker count still read correctly, and neither says anything about a
+struct losing a member. What found it was reading the file back. The rule is now: **after any
+`apply` on a file, re-read it before choosing any further range in that file.** The compiler would
+have caught this one; the next one might be a comment. `apply` now PRINTS every line it removes, so
+a range taken from stale numbers is visible in the tool's own output rather than only in a diff
+read carefully enough.
+
+A second truncation of the M6-d-52 kind: `Scanner.h`'s `DOT` paragraph is four lines and the survey
+shows two lines of context, so the range was taken from the survey's window and stopped one line
+short, losing "it is the same byte read twice". **Paragraph bounds come from the file, never from
+the survey's context lines.**
+
+Two more instances of FLAGS SET AT A DISTANCE, both in this slice. The explosion counter's add of 4
+has nothing clearing the carry in front of it, so a ship at z_hi 32 or more ages at five a frame and
+a nearer one at four -- sixty frames of explosion or forty-eight, decided by a comparison made for
+another purpose; the upstream comment says only "add 4". And `MVTRIBS` calls the generator twice
+with different carries on purpose: the first is reached after a shift of a value at most 7, so
+clear; the second only by falling past the 235 test, which sets it. The generator reads the carry,
+so the two calls are not interchangeable.
+
+One correction: `TRUMBLE_TURN_ROLL` said "above this a Trumble picks a new direction, which is 21
+rolls in 256". Twenty-one values means 235 to 255 inclusive, so it is AT OR above. The count was
+right and the word was wrong.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (9, 14, 42 and 25). `opcode-transcriptions` 141 → 115.
+
+
+**2026-09-08 — M6-d-53: the raster handler and three headers to zero, where the listing WAS the
+whole comment.**
+
+32 sites over four files -- `Canvas.h`, `Docking.h`, `Tokens.h` and `Raster.cpp`.
+Sixty-ninth to seventy-second at zero.
+
+`Raster.cpp` is the clearest case M6-d has met of the shape R20 was written for. Eight of its
+comments were a load and a store and nothing else -- `LDA zebop,X / STA VIC+&18`, `LDA shango,X /
+STA VIC+&12`, `LDA innersec,X / STA RASTCT` -- and each one is a table indexed by the raster
+counter, written to one register. Saying that is shorter than the listing AND says more, because
+"indexed by the counter" is the fact the whole handler turns on and the listing only implies it.
+The one place a mnemonic really mattered, `BIT BOMB / BPL`, mattered because the test sits ABOVE
+the split and so runs twice a frame -- which the prose already said in the next sentence.
+
+Nothing surprising came out of the four, which is itself the finding: with 141 sites left the tail
+is now overwhelmingly this shape -- a routine's name, its listing, and prose underneath that
+already carries the reason. The listing goes and the paragraph is unchanged.
+
+Two aligned tables were edited row by row and neither reflowed: `Docking.h`'s outcome enum and
+`Canvas.h`'s `SpaceViewPoint`. After M6-d-52 every table row is re-read whole before moving on.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (30, 13, 15 and 8). `opcode-transcriptions` 173 → 141.
+
+
+**2026-09-08 — M6-d-52: four of the widest headers to zero, and a preamble that was eight
+instructions described as two.**
+
+38 sites over four files -- `Combat.h`, `StartUp.h`, `MarketScreen.h` and `ShipDraw.h`.
+Sixty-fifth to sixty-eighth at zero.
+
+**A fourth miscount, and this one was in the sentence the listing was decorating.** `ShipDraw.h`
+called `DVID3B2`'s preamble "the two-instruction preamble" while naming an instruction inside it;
+on this build it is EIGHT -- the numerator's high byte stored, then the ship's z low, high and sign
+copied into `Q`, `R` and `S`, with the low bit forced on the way. The count is gone rather than
+corrected, because what the preamble DOES is the fact worth keeping and the number never was.
+Worth noting while there: `DVID3B` forces the same low bit a second time on the NUMERATOR, so a
+reader who finds one of the two and stops has the wrong one for "guarantees a non-zero
+denominator".
+
+**The original's own commentary can be wrong, and that is a fact about the original.** `FRCE`'s
+re-entry test reads `LDA QQ12 / BEQ P%+5 / JMP MLOOP`, so it is being IN SPACE -- QQ12 zero -- that
+steps over the jump and reaches `TT100`. The annotation beside that branch says "if we are docked",
+which is the BBC form's text carried over unchanged onto a branch that was inverted for this
+build. `StartUp.h` now says so in as many words. Once `Upstream/` is gone the port is the only
+place that knowledge can live, and it is exactly the kind of thing a future reader would otherwise
+rediscover by getting it wrong first.
+
+**Where an instruction really is the reason, the reason is sayable.** Four hard cases went this
+slice: `EraseShip`'s three-way carry (a loop's terminating compare leaves it set, a length test
+leaves it clear, a bare return leaves the caller's), `OUCH`'s carry arriving from a sound routine
+reached by a branch that is really a jump, `LL9`'s explosion seed rolling in the carry the call was
+made with, and the projection's minus-on-y being a sign bit flipped. None needed R-i's quotation
+tag. `opcode-quotations` is still 0 and the tag has still never been used.
+
+Method note: the M6-d-50 rule earned its keep immediately. Replacing a row of an ALIGNED TABLE in
+`MarketScreen.h` truncated "and both halves exist:" to "and both halves", and the following line
+went on with the second half of a sentence that no longer had a first. Caught by re-reading the
+block rather than by any check -- there is no check for this, which is the argument for reading
+every rewritten paragraph whole.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (12, 21, 6 and 60). `opcode-transcriptions` 211 → 173.
+
+
+**2026-09-08 — M6-d-51: the commander and its file to zero, and three citations that were wrong in
+ways only the original could show.**
+
+42 sites over four files -- `Commander.cpp`, `Commander.h`, `SaveGame.h` and `DockedKeys.cpp`.
+Sixty-first to sixty-fourth at zero.
+
+**Three of the listings this slice removed were WRONG, and all three were in `Commander.cpp`.** The
+CHECK transcription read `ADC NA%+6,X / EOR NA%+7,X` where the original reads `NA%+7` and `NA%+8`,
+and the sentence under it said "NA%+7 is the block's first byte" when the block starts at NA%+8 --
+which `SaveGame.cpp` had said correctly for two phases. The copy loop in `DFAULT` was cited as
+`STA YSAV2,X`; it stores to `NAME-1,X`, and `YSAV2` is a scratch byte belonging to the character
+printer with no connection to the commander at all. And one sentence changed convention mid-breath:
+"read the block's first seventy-four bytes only, so byte seventy-four cannot change what they
+returned" counts bytes in its first half and indexes them in its second, so as written it
+contradicts itself; the byte it means is the seventy-fifth.
+
+In all three the CODE was right. The listing was decoration, nothing read it, and nothing could
+therefore catch it. That is the strongest form of the R20 argument and it is worth stating plainly:
+**after M6-f deletes `Upstream/`, a wrong listing is not merely useless but unfalsifiable** -- it
+reads as authority and there is nothing left to check it against. A reason can be argued with from
+the port alone; a transcription cannot.
+
+**A third instance of the flag set at a distance** (M6-d-50 found the first two). `SVE`'s option 4
+reports "new commander" with the carry, and nothing in `SVE` writes that flag: the jump to `DFAULT`
+is a tail call, and DFAULT's last act is the comparison against the third checksum, which on the
+agreeing path leaves the carry set. The flag that decides whether `TT102` restarts the game or
+returns to the docking bay is a side effect of a checksum test in another routine. Named here, not
+re-derived: the family is real and this is its extreme.
+
+The data-byte idiom appears at BOTH ENDS for the first time. `INSP`'s three view keys enter one
+chain of three loads at three different points, each skipping the loads below it through an
+`EQUB &2C`, and the port documents that in `DockedKeys.cpp` as well as at the `LOOK1` end -- because
+in the port they are two functions and a reader arriving at either needs the reason. Same instance,
+counted once, written twice.
+
+469 tests green, all nineteen checks, 97 of 97 mutants over a run carrying this slice, markers
+unmoved (11, 86, 24 and 11). `opcode-transcriptions` 253 → 211.
+
 
 **2026-09-08 — M6-d-50: four more to zero, and the carry is set by a side effect where the `SEC` is
 commented out.**

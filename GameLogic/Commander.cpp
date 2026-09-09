@@ -24,22 +24,23 @@ namespace Elite
 
   namespace
   {
-    /// 6502: LDX #&49 -- the loop counts down from 73, and the accumulator STARTS at 73 because the
-    /// routine begins `TXA`. So the count is also the seed.
+    /// The loop counts down from 73, and the accumulator STARTS at 73 because the routine
+    /// seeds it from the counter before the first step. So the count is also the seed.
     constexpr std::uint8_t CHECKSUM_STEPS = 0x49;
 
-    /// 6502: NA2%+8 -- the block begins after the eight bytes of name.
+    /// The block begins after the eight bytes of name.
     constexpr std::size_t BLOCK_IN_FILE = COMMANDER_NAME_SIZE;
   } // namespace
 
   std::uint8_t Checksum(const Commander& _block) noexcept
   {
     /*
-     * 6502: CHECK -- LDX #&49 / CLC / TXA / QUL2: ADC NA%+6,X / EOR NA%+7,X / DEX / BNE QUL2.
+     * Fold the block into one byte, walking from the end down towards the start.
      *
-     * NA%+7 is the block's first byte, so `ADC NA%+6,X` reads the byte BEFORE the one the EOR
-     * reads. Each step therefore mixes a neighbouring pair, and the loop ends at X = 1 rather than
-     * at 0 -- so the block's last three bytes, which are the checksums themselves, are never read.
+     * The two reads are ONE BYTE APART, the addition taking the lower of the pair, so every step
+     * mixes a neighbouring pair rather than a byte with itself. The walk starts three bytes below
+     * the end, so the block's last three bytes -- the three checksums -- are never read at all;
+     * and it stops on the pair (0, 1), so the first byte is added but never folded in.
      */
     const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes = _block.ToBytes();
     std::uint8_t accumulator = CHECKSUM_STEPS;
@@ -58,7 +59,8 @@ namespace Elite
   std::uint8_t Checksum2(const Commander& _block) noexcept
   {
     /*
-     * 6502: CHECK2 -- STX T / EOR T / ROR A / ADC NA%+6,X / EOR NA%+7,X.
+     * The same fold, with the accumulator first mixed with the loop counter and
+     * then rotated right through the carry.
      *
      * The rotate is the whole difference. It shifts the carry the LAST addition produced into bit
      * 7 and hands bit 0 to the addition that follows, so within one step the carry is consumed,
@@ -102,7 +104,8 @@ namespace Elite
                      std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept
   {
     /*
-     * 6502: SVL1 -- LDA TP,X / STA NA%+7,X, then JSR CHECK2 / STA CHK3 / JSR CHECK / STA CHK.
+     * Copy the block into the file image, then run both checksum routines and store
+     * what they return.
      *
      * The block is copied first and the checksums are written over two of its bytes IN THE FILE.
      * The live commander at TP is untouched -- so this takes its block by const reference, and the
@@ -122,8 +125,9 @@ namespace Elite
     image.checksum = Checksum(image);
 
     /*
-     * 6502: PLA / EOR #&A9 / STA CHK2 -- the THIRD stored byte, and this port did not write it
-     * until the save flow was built on top and the comparison found it missing.
+     * The THIRD stored byte -- the first checksum pulled back off the stack and EORed with
+     * &A9 -- and this port did not write it until the save flow was built on top and the
+     * comparison found it missing.
      *
      * It sits four instructions past the competition number in SV1, well after the two CHECK calls,
      * which is why reading SVE from the top and stopping at them looked complete. Nothing caught
@@ -132,9 +136,9 @@ namespace Elite
      * with itself. A file saved that way loads into the original with bit 7 of COK set -- flagged
      * as tampered by the game's own copy protection.
      *
-     * Writing it here rather than in the save flow is safe and is what the original does in effect:
-     * both CHECK and CHECK2 read the block's first seventy-four bytes only, so byte seventy-four
-     * cannot change what they returned.
+     * Writing it here rather than in the save flow is safe and is what the original does in
+     * effect: both checksum routines read the block's first seventy-four bytes only, and this is
+     * the seventy-fifth, so storing it cannot change what they returned.
      */
     image.checksum2 = static_cast<std::uint8_t>(image.checksum ^ 0xA9u);
 
@@ -154,15 +158,15 @@ namespace Elite
      */
     const Commander image = Commander::FromBytes(_file.subspan<BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE>());
 
-    // 6502: QUL1 -- LDA NA%-1,X / STA YSAV2,X, which copies the name and the block together
-    // because they are consecutive in both places.
+    // One loop copies the name and the block together, because they are consecutive
+    // in the file and consecutive again in the workspace it copies them to.
     for (std::size_t index = 0; index < COMMANDER_NAME_SIZE; ++index)
     {
       _outName[index] = _file[index];
     }
 
     /*
-     * 6502: the loop's `BNE QUL1` ends it at X = 1, so the last byte it moves is the block's
+     * The loop stops one byte short of the end, so the last byte it moves is the block's
      * seventy-sixth and the seventy-seventh -- the block's own checksum -- is never loaded. What
      * the caller had there stays there. Nothing reads it before the next save recomputes it.
      */
@@ -173,7 +177,7 @@ namespace Elite
     }
 
     /*
-     * 6502: doitagain -- JSR CHECK / CMP CHK / BNE doitagain.
+     * Recompute the first checksum and compare it with the stored one.
      *
      * The branch goes BACKWARDS to the check, not forwards to an error path, so a block whose
      * checksum is wrong spins here for ever. The port returns instead; the header says why.
@@ -184,7 +188,7 @@ namespace Elite
     }
 
     /*
-     * 6502: EOR #&A9 / TAX / LDA COK / CPX CHK2 / BEQ tZ / ORA #&80 / tZ: ORA #&40 / STA COK.
+     * What happens BETWEEN the two checksum comparisons, which is easy to read past.
      *
      * The competition flags, and they are the interesting half of this routine. Bit 6 is the
      * PLATFORM STAMP: every version sets its own bit here -- 1 for cassette, 3 for the Master, 6
@@ -204,7 +208,8 @@ namespace Elite
     competition = static_cast<std::uint8_t>(competition | 0x40u);
     _outBlock.competition = competition;
 
-    // 6502: JSR CHECK2 / CMP CHK3 / BNE doitagain -- and the same backwards branch.
+    // The second checksum against its stored byte -- and the same backwards branch, so a
+    // mismatch spins in the original where the port returns false.
     return Checksum2(image) == image.checksum3;
   }
 

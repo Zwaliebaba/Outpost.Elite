@@ -1,240 +1,29 @@
 #include "pch.h"
 
-#include "Cpu6502.h"
-#include "OracleImage.h"
 #include "Canvas.h"
 #include "Raster.h"
 #include "VideoState.h"
 
 #include <array>
-#include <string>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
-using Elite::Testing::Cpu6502;
-using Elite::Testing::OracleImage;
 
 /*
- * 6502: COMIRQ1's VIC-II half (slice 4f).
+ * The raster split: which half of the screen a pass paints, and what the energy bomb does to it.
  *
- * The same shape as the sound half's comparison and for the same reason (§6.129): what a VIC-II
- * sees is a SEQUENCE of register writes, so the interpreter logs the writes in order and the port's
- * are compared against them one at a time. A comparison of the registers' final state would agree
- * with a port that wrote them in any order, and the order is the whole of a raster split -- the
- * screen changes where the writes land, not where they finish.
- *
- * The handler is entered as the interrupt it is, with a return address and a status byte on the
- * stack, and runs to its `RTI`.
- *
- * TWO WRITES ARE NAMED EXCLUSIONS AND THEY ARE THE SAME KIND OF THING. `VIC+&19` is the interrupt
- * latch, acknowledged with `LDA / ORA #%10000000 / STA` on the way in; the port has no interrupt to
- * acknowledge, and in the flat oracle image that address is inside `XX21` so the value read back is
- * a ship blueprint pointer rather than a VIC-II flag. `l1` is the 6510 port register, which is the
- * `SetRasterMode` seam already. Neither reaches the screen.
+ * A frame is two interrupts, and the whole of a split is WHERE the writes land rather than what
+ * they finish as -- a model that painted both halves the same way would leave every register at
+ * the same final value and put the dashboard's colours across the space view. So these assert the
+ * boundary: the alternation a hardcoded "space view then dashboard" would pass, the bomb's
+ * multicolour above the split and not below it, an explosion cut off at it, and a flash that
+ * counts past every colour the chip has.
  */
+
 namespace GameLogicTests
 {
-
-  namespace
-  {
-    bool OracleMissing()
-    {
-      const OracleImage& oracle = OracleImage::Instance();
-      if (oracle.Available())
-      {
-        return false;
-      }
-      Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-      return true;
-    }
-
-    std::wstring Widen(const std::string& _text)
-    {
-      return std::wstring(_text.begin(), _text.end());
-    }
-
-    /// 6502: VIC -- the chip's registers, which the interpreter treats as memory.
-    constexpr std::uint16_t VIC_BASE = 0xD000;
-
-    /// 6502: VIC+&19, the interrupt latch -- acknowledged, never displayed. See the file comment.
-    constexpr std::uint16_t VIC_INTERRUPT_LATCH = VIC_BASE + 0x19;
-
-    struct RasterLabels
-    {
-      std::uint16_t comirq1, rastct, bomb, zebop, abraxas, moonflower, caravanserai, welcome, mupla;
-
-      explicit RasterLabels(const OracleImage& _oracle)
-        : comirq1(_oracle.Label("COMIRQ1")),
-          rastct(_oracle.Label("RASTCT")),
-          bomb(_oracle.Label("BOMB")),
-          zebop(_oracle.Label("zebop")),
-          abraxas(_oracle.Label("abraxas")),
-          moonflower(_oracle.Label("moonflower")),
-          caravanserai(_oracle.Label("caravanserai")),
-          welcome(_oracle.Label("welcome")),
-          mupla(_oracle.Label("MUPLA"))
-      {
-      }
-    };
-
-    void RunInterrupt(Cpu6502& _cpu, std::uint16_t _handler, const std::wstring& _where)
-    {
-      constexpr std::uint16_t STOP = 0xFFF9;
-      _cpu.Push(static_cast<std::uint8_t>(STOP >> 8));
-      _cpu.Push(static_cast<std::uint8_t>(STOP & 0xFFu));
-      _cpu.Push(0x24u); // the flags the main loop would have: interrupts enabled, nothing else set
-      _cpu.pc = _handler;
-
-      for (std::uint32_t steps = 0; steps < 200'000u; ++steps)
-      {
-        if (_cpu.pc == STOP)
-        {
-          return;
-        }
-        Assert::IsTrue(_cpu.Step(), (_where + L": the handler hit an opcode the interpreter does not have").c_str());
-      }
-      Assert::Fail((_where + L": the handler did not return").c_str());
-    }
-
-    /// One pass of the port's model, flattened into the six writes the handler makes, in its order.
-    struct Write
-    {
-      std::uint16_t address;
-      std::uint8_t value;
-    };
-
-    std::array<Write, 6> WritesOf(const Elite::RasterRegisters& _registers)
-    {
-      return {{
-        {VIC_BASE + 0x18, _registers.memoryPointers},
-        {VIC_BASE + 0x16, _registers.control2},
-        {VIC_BASE + 0x12, _registers.nextRasterLine},
-        {VIC_BASE + 0x1C, _registers.spriteMulticolour},
-        {VIC_BASE + 0x28, _registers.explosionColour},
-        {VIC_BASE + 0x21, _registers.background},
-      }};
-    }
-  } // namespace
-
   TEST_CLASS(TheRasterInterrupt)
   {
   public:
-    /*
-     * 6502: COMIRQ1 over both halves of the split, with and without the energy bomb.
-     *
-     * The state the handler reads is five bytes -- `RASTCT`, `BOMB`, `abraxas`, `caravanserai` and
-     * `moonflower` -- plus `welcome`, which it also WRITES. The sweep crosses all of them: both
-     * passes, the bomb on and off, the dashboard's two set-ups and the space view's two bitmap
-     * modes, and four starting values of `welcome` including the one that wraps.
-     */
-    TEST_METHOD(TheRasterInterruptMatchesCOMIRQ1)
-    {
-      if (OracleMissing())
-      {
-        return;
-      }
-
-      const OracleImage& oracle = OracleImage::Instance();
-      const RasterLabels at(oracle);
-
-      // 6502: LDA #%11000000 is the default and #%11010000 is what the energy bomb stores, so the
-      // pair is the whole range this byte takes.
-      constexpr std::uint8_t MODES[] = {0xC0u, 0xD0u};
-
-      // 6502: abraxas is &81 for a text view and &91 with the dashboard on it; caravanserai
-      // follows it. Crossed rather than paired, because the handler reads them independently.
-      constexpr std::uint8_t BANKS[] = {0x81u, 0x91u};
-
-      // 255 is the one that matters: `INC welcome` wraps it to zero, and a port that saturated
-      // would agree everywhere else.
-      constexpr std::uint8_t FLASHES[] = {0x00u, 0x07u, 0x9Cu, 0xFFu};
-
-      std::uint32_t compared = 0;
-
-      for (const std::uint8_t counter : {0u, 1u})
-      {
-        for (const std::uint8_t bomb : {0x00u, 0x80u, 0x7Fu, 0xFFu})
-        {
-          for (const std::uint8_t upperMode : MODES)
-          {
-            for (const std::uint8_t lowerMode : MODES)
-            {
-              for (const std::uint8_t bank : BANKS)
-              {
-                for (const std::uint8_t flash : FLASHES)
-                {
-                  Cpu6502 cpu = oracle.Fresh();
-
-                  /*
-                   * The music is trapped and the sound is not reached.
-                   *
-                   * `COMIRQ1` falls into `SOINT` on the pass that leaves `RASTCT` at zero, and
-                   * `SOINT` is slice 5a's and is compared there. `MUPLA` clear is what keeps the
-                   * music player out of it; the sound writes that follow are outside the logged
-                   * range, so they cannot reach this comparison either way.
-                   */
-                  cpu.memory[at.mupla] = 0u;
-
-                  cpu.memory[at.rastct] = counter;
-                  cpu.memory[at.bomb] = bomb;
-                  cpu.memory[at.zebop] = Elite::RASTER_MEMORY_SPACE_VIEW;
-                  cpu.memory[at.abraxas] = bank;
-                  cpu.memory[at.moonflower] = upperMode;
-                  cpu.memory[at.caravanserai] = lowerMode;
-                  cpu.memory[at.welcome] = flash;
-                  cpu.memory[static_cast<std::uint16_t>(at.welcome + 1)] = Elite::RASTER_BACKGROUND_DASHBOARD;
-
-                  // The latch read is a blueprint pointer in a flat image, so it is pinned rather
-                  // than left to whatever `XX21` holds -- see the file comment.
-                  cpu.Io(VIC_INTERRUPT_LATCH) = 0u;
-
-                  cpu.LogStores(VIC_BASE, static_cast<std::uint16_t>(VIC_BASE + 0x2E));
-                  const std::wstring where =
-                    Widen("COMIRQ1: RASTCT " + std::to_string(counter) + " BOMB " + std::to_string(bomb) + " upper "
-                          + std::to_string(upperMode) + " lower " + std::to_string(lowerMode) + " bank " + std::to_string(bank)
-                          + " welcome " + std::to_string(flash));
-                  RunInterrupt(cpu, at.comirq1, where);
-
-                  Elite::ScreenState screen{};
-                  screen.rasterCounter = counter;
-                  screen.colourBank = bank;
-                  screen.bitmapMode = lowerMode;
-                  screen.upperBitmapMode = upperMode;
-                  screen.backgroundFlash = flash;
-
-                  const Elite::RasterRegisters registers = Elite::TickRasterInterrupt(screen, bomb);
-                  const std::array<Write, 6> want = WritesOf(registers);
-
-                  // Every VIC write the handler made, in order, minus the latch acknowledge.
-                  std::size_t index = 0;
-                  for (const Cpu6502::StoreHit& store : cpu.stores)
-                  {
-                    if (store.address == VIC_INTERRUPT_LATCH)
-                    {
-                      continue;
-                    }
-                    Assert::IsTrue(index < want.size(), (where + L": the handler wrote more registers than the port").c_str());
-                    const std::wstring at_write = where + L" write " + std::to_wstring(index);
-                    Assert::AreEqual<int>(want[index].address, store.address, (at_write + L": register").c_str());
-                    Assert::AreEqual<int>(want[index].value, store.value, (at_write + L": value").c_str());
-                    ++index;
-                  }
-                  Assert::AreEqual<std::size_t>(want.size(), index, (where + L": how many VIC writes").c_str());
-
-                  Assert::AreEqual<int>(cpu.memory[at.rastct], screen.rasterCounter, (where + L": RASTCT").c_str());
-                  Assert::AreEqual<int>(cpu.memory[at.welcome], screen.backgroundFlash, (where + L": welcome").c_str());
-                  Assert::AreEqual(counter == 0u, registers.spaceView, (where + L": which half").c_str());
-                  ++compared;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      Assert::AreEqual<std::uint32_t>(2u * 4u * 2u * 2u * 2u * 4u, compared, L"the whole sweep ran");
-      Logger::WriteMessage(("COMIRQ1: " + std::to_string(compared) + " interrupts, six VIC writes each").c_str());
-    }
-
     /*
      * The split alternates, and it does so from either end.
      *

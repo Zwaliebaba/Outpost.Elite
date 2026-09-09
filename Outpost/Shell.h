@@ -92,12 +92,12 @@ namespace Outpost
      *
      * NOT THE SAME THING AS `Present`, and the difference is five times over. `Present` is
      * `DELAY` with a count of one -- a single vertical sync, which is what the launch and
-     * hyperspace tunnels ask for because the original spells `JSR DELAY` inside them. `DEATH`'s
-     * `.D2 JSR M% / DEC LASCT / BNE D2` asks for nothing of the kind: it runs the flight loop flat
-     * out and the VIC-II showed each frame for however long the next took (§6.17 -- the C64 loop
-     * has no frame cap). At the measured 81,000-odd cycles a frame that is about 12.7 a second, so
-     * paced by vsync the sixty-four frames of the death sequence took a second instead of five and
-     * looked like a glitch rather than a death.
+     * hyperspace tunnels ask for because the original spells that delay out inside them.
+     * `DEATH`'s own loop -- run the flight loop, count down, go round -- asks for nothing of the
+     * kind: it runs flat out and the VIC-II showed each frame for however long the next took
+     * (§6.17 -- the C64 loop has no frame cap). At the measured 81,000-odd cycles a frame that is
+     * about 12.7 a second, so paced by vsync the sixty-four frames of the death sequence took a
+     * second instead of five and looked like a glitch rather than a death.
      *
      * The accumulator is the title screen's, for the same reason and with the same backlog rule:
      * a stall costs a frame rather than being repaid by running faster to catch up.
@@ -106,12 +106,12 @@ namespace Outpost
 
     // ---- Elite::Keyboard -------------------------------------------------------------------------
 
-    /// 6502: the matrix walk's read of one row, which is all of `RDKEY` that is the platform's
+    /// The matrix walk's read of one row, which is all of `RDKEY` that is the platform's
     /// since M3-b-3d -- `Elite::ScanKeyboard` is the rest.
     [[nodiscard]] bool Held(std::size_t _key) override;
 
     /*
-     * 6502: TT217 -- block until a key is pressed.
+     * Block until a key is pressed.
      *
      * The nested pump `Window.h` argues for. The window stays alive while the game waits, and the
      * canvas cannot be uploaded mid-mutation because the code that mutates it is the code that is
@@ -138,11 +138,11 @@ namespace Outpost
      * changes need it before the composition root has lent the shell its ports.
      */
 
-    /// 6502: TT66 -- `Elite::SetUpScreen` once the ports are lent, and `STA QQ11` alone before
+    /// `Elite::SetUpScreen` once the ports are lent, and the view byte alone before
     /// then. Public because `Main.cpp` changes screens through it.
     void ClearToView(std::uint8_t _view);
 
-    /// 6502: FLKB -- empty the keyboard buffer.
+    /// Empty the keyboard buffer.
     void Flush() override;
 
     // `Elite::StartUpEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-h-2): `ShowTitleScreen`
@@ -152,7 +152,7 @@ namespace Outpost
 
     void WaitFrames(std::uint8_t _frames) override;
 
-    /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
+    /// The vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
     void Present() override;
 
     /// The title screen's spin, held on its own cost curve -- see `Presenter.h`, and §6.110 for the
@@ -168,7 +168,7 @@ namespace Outpost
      * directly.
      */
 
-    /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is `Game`'s universe's, because
+    /// QQ11 -- which screen is showing. See `m_view`: the byte is `Game`'s universe's, because
     /// the flight half writes it too.
     [[nodiscard]] std::uint8_t View() const noexcept
     {
@@ -234,7 +234,7 @@ namespace Outpost
     /// every region draws itself (Resolution.md §3.3). Both, because neither is the other's copy.
     Elite::Picture* m_picture = nullptr;
 
-    /// 6502: the sprite registers, null until the composition root attaches them.
+    /// The sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
 
     FlightSession* m_flight = nullptr;
@@ -246,7 +246,7 @@ namespace Outpost
     Elite::Game* m_game = nullptr;
 
     /*
-     * 6502: QQ11 -- which screen is showing, and it is a REFERENCE because both halves write it.
+     * QQ11 -- which screen is showing, and it is a REFERENCE because both halves write it.
      *
      * The shell owned the byte while `TT66` was the only writer, and slice 3d-d-iii-b gave the
      * flight loop `ChangeView`, `TT110` and the whole of `FlightScreen`, all of which write the

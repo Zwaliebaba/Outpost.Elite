@@ -18,7 +18,7 @@ namespace Elite
   /*
    * The explosion cloud (slice 4b-b).
    *
-   * 6502: DOEXP with PTCLS inside it, and the C64's own PTCLS2 beside them. This is the third and
+   * DOEXP with PTCLS inside it, and the C64's own PTCLS2 beside them. This is the third and
    * last of `LL9`'s exits -- `PLANET` went in slice 3c, `DOEXP` is here -- and it is the routine
    * that makes a dying ship into a bloom of particles rather than a wireframe.
    *
@@ -34,17 +34,17 @@ namespace Elite
    * would fill with debris that never goes away.
    */
 
-  /// 6502: the cloud counter `EE55` writes into byte 1 of the line heap, and the value `DOEXP`
+  /// The cloud counter `EE55` writes into byte 1 of the line heap, and the value `DOEXP`
   /// compares `frump` against to decide that this is the explosion's first frame.
   inline constexpr std::uint8_t EXPLOSION_CLOUD_START = 18;
 
-  /// 6502: CPX #2*Y-1 -- a particle at or below this row is off the bottom of the space view.
-  /// `SPACE_VIEW_BOTTOM` is the `2*Y` it is one less than.
+  /// The particle's row is compared against one less than the space view's height -- at or
+  /// below it, the particle is off the bottom. `SPACE_VIEW_BOTTOM` is that height.
   inline constexpr std::uint8_t EXPLOSION_PARTICLE_BOTTOM = SPACE_VIEW_BOTTOM - 1;
 
-  /// 6502: CPY #2*Y+50 -- the sprite is allowed FIFTY ROWS FURTHER DOWN than a particle is,
-  /// because it is placed by its top-left corner and the fifty is how far behind the dashboard
-  /// the original is willing to let it start.
+  /// The sprite's row is compared against the view's height plus fifty -- FIFTY ROWS
+  /// FURTHER DOWN than a particle is allowed, because the sprite is placed by its top-left
+  /// corner and the fifty is how far behind the dashboard the original will let it start.
   inline constexpr std::uint8_t EXPLOSION_SPRITE_BOTTOM = SPACE_VIEW_BOTTOM + 50;
 
   /*
@@ -78,16 +78,16 @@ namespace Elite
    */
 
   /*
-   * 6502: EXS1 -- (A X) = (A R) +/- random * cloud size, with the flags set for the high byte.
+   * (A X) = (A R) +/- random * cloud size, with the flags set for the high byte.
    *
    * The one piece of arithmetic in the explosion, and it is an "other entry point" in the upstream
    * source rather than private to `PTCLS`, so it is exported and compared on its own: three of the
    * routine's five borrowed flags are in these twenty instructions.
    *
    * Half the particles go one way from the vertex and half the other, and the choice is bit 7 of
-   * the random byte AFTER the `ROL A` that doubles it -- which is to say bit 6 of what the
-   * generator produced. That doubling is a ROTATE, not a shift: it takes the carry the generator
-   * left in at bit 0, so the multiplier is nine bits wide from an eight-bit source.
+   * the random byte AFTER the doubling -- which is to say bit 6 of what the generator produced.
+   * That doubling is a ROTATE, not a shift: it takes the carry the generator left in at bit 0,
+   * so the multiplier is nine bits wide from an eight-bit source.
    *
    * `_a` is the high byte of the coordinate and `R` the low; `Q` is the cloud size and `S` and `T`
    * come out holding what the routine left in them, because the caller's next call overwrites both
@@ -95,15 +95,15 @@ namespace Elite
    */
   struct ExplosionOffset
   {
-    std::uint8_t high = 0; ///< 6502: A -- non-zero means the particle is off the screen
-    std::uint8_t low = 0;  ///< 6502: X
+    std::uint8_t high = 0; ///< Non-zero means the particle is off the screen
+    std::uint8_t low = 0;
   };
 
   /// `_high` is A, the vertex's high byte; `_low` is R and `_size` is Q, which the caller staged.
   [[nodiscard]] ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept;
 
   /*
-   * 6502: PTCLS -- draw one frame of the cloud, and PTCLS2 -- the same with the burst sprite.
+   * Draw one frame of the cloud, and PTCLS2 -- the same with the burst sprite.
    *
    * They are ONE BODY. Instruction for instruction the C64's `PTCLS2` is `PTCLS` with a prologue
    * that sizes the sprite, an insert inside the vertex loop that places it, and a `SETL1` pair
@@ -127,24 +127,25 @@ namespace Elite
                                         const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture = nullptr) noexcept;
 
   /*
-   * 6502: DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
+   * DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
    *
    * The shape is: rub out the last frame if there was one, work out how big this frame's cloud is,
    * copy the ship's visible vertices onto its line heap as the cloud's origins, and draw. Byte 1
    * of the heap is the counter that ages, byte 0 is the size it produces, and byte 2 is how many
    * vertices to bloom from.
    *
-   * THE COUNTER GROWS BY FOUR OR BY FIVE, AND WHICH IT IS DEPENDS ON DISTANCE. `ADC #4` has no
-   * `CLC` in front of it and the carry reaching it is the `CMP #32` that asked whether the ship
-   * was far away: a ship at z_hi of 32 or more leaves it SET and ages at five a frame, a nearer one
-   * clears it through the `ROL A` that scales the distance and ages at four. Sixty frames of
+   * THE COUNTER GROWS BY FOUR OR BY FIVE, AND WHICH IT IS DEPENDS ON DISTANCE. The add of 4 has
+   * nothing clearing the carry in front of it, and the carry reaching it is the distance test
+   * above: a ship at z_hi of 32 or more leaves it SET and ages at five a frame, a nearer one
+   * clears it through the rotate that scales the distance and ages at four. Sixty frames of
    * explosion or forty-eight. The upstream comment says only "add 4".
    *
    * `EX2` is the end of the explosion, reached when that addition overflows: bits 5 and 7 of byte
    * 31 go on, and `MVEIT` takes the ship out of the bubble on the next pass.
    *
-   * The C64 draws the first frame -- and only the first, `CPY #18` against the counter BEFORE it
-   * grew -- through `PTCLS2`, so the burst sprite appears once and is never moved again.
+   * The C64 draws the first frame -- and only the first, the counter tested against its starting
+   * 18 BEFORE it grew -- through `PTCLS2`, so the burst sprite appears once and is never moved
+   * again.
    */
   void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
                           const Bubble& _bubble, VideoState& _video, MemoryMap& _map, Picture* _picture = nullptr) noexcept;
