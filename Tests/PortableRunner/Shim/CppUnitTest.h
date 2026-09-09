@@ -85,6 +85,18 @@ namespace Microsoft::VisualStudio::CppUnitTestFramework
       std::fputs(_message, stdout);
       std::fputc('\n', stdout);
     }
+
+    /*
+     * CppUnitTest declares this overload beside the narrow one, and a test written against MSVC
+     * uses whichever its stream produces: `ThePictureIsAsRecorded` prints its record through a
+     * `std::wstringstream`, built on the Windows leg first and then found here, as the header's
+     * opening comment says a gap is found -- by a test that needs it, fixed here rather than by
+     * writing the test differently for the two runners. Narrowed the way every assertion message is.
+     */
+    static void WriteMessage(const wchar_t* _message)
+    {
+      WriteMessage(ShimNarrow(_message).c_str());
+    }
   };
 
   class Assert
