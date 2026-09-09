@@ -524,6 +524,39 @@ missing whole-field draw — were all wrong, and each was reached by inference f
 measuring calls rather than effects. The counters that settled it are landed writes, distinct
 offsets, exclusive-or against assignment, and calls per twin.
 
+**THE SECOND COMMIT, ATTEMPTED 2026-09-09: from 15 of 16 checkpoints moved to 7.** Not finished, and
+not committed — the tree stays at the first commit. What follows is the state to resume from.
+
+**Four changes together took it from 15 to 7**, and none of them works without the others:
+
+1. `CLEAR_THE_FRAME` on, with the clear LAZY (`Picture::EndFrame` marks; the next landed write
+   clears), for the reason under (a).
+2. **The replay driver ends the frame after every `Step`**, not at the checkpoint. This is the single
+   largest correction. `Main.cpp` ends it every turn and the replay ended it once in a hundred steps.
+3. The frame-side erase twins dropped in `EraseShip`, `PlotStardust`, the laser's second
+   `DrawLaserLines`, and — the ones the plan does not list — at the TOP of `EraseSun` and
+   `EraseBall`, where dropping once covers everything below.
+4. `DrawSunFromState2x` for the sun, and `ClipSunRow` made pure so a twin can ask it what it holds
+   without zeroing the heap. The purity is a prerequisite, not a tidy-up.
+
+**The seven that still move, with the frame measured against the canvas** (`frame ÷ 2 × canvas
+transient`; 0.9 to 1.0 is right):
+
+| step | 40 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 1100 | 1170 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ratio | 0.93 | 0.92 | **1.76** | 0.25 | **0.18** | **0.57** | **0.53** | **1.22** | **1.40** | 0.03 | **1.49** | 0.00 |
+| | held | held | moved | held | moved | moved | moved | moved | moved | held | moved | held |
+
+**They are not one fault but two.** Steps 200, 700, 800 and 1100 carry too MUCH — something inside a
+single pass is drawing twice with nothing to cancel it. Steps 400, 500 and 600 carry too LITTLE —
+something is still erasing, or a whole-geometry draw is missing. The busy steps are the ones with
+ships in the bubble, which is where to look first. Each is the same hunt as the planet's: counters
+for landed writes, distinct offsets and calls per twin, then read the routine the count names.
+
+**Do not re-record the tables to make this pass.** A correct erase and a correct clear give the same
+frame; that equality is the slice's whole claim, and nine of the sixteen checkpoints already
+demonstrate it.
+
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
 flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
