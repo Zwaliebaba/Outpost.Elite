@@ -23,7 +23,7 @@ through six phases -- twenty-six slices, every one of which found defects the or
 nothing else would have. **§3, the replay hashes, is untouched** and is now the centre of what
 pins the port. ADR-009 names the seven instruments that remain and, at length, what was given up.
 Read that first; read this for how the port was got right in the first place.
-
+**§3 amended 2026-09-09**: the canvas leaves the replay fold at Platform.md's RN-6 under the narrowing case ADR-007 §4 records.
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 
@@ -114,6 +114,10 @@ build can be told to skip the encryption and the workspace-noise matching
   in Debug and Release (the CI leg compares the recorded hash sequence across configurations)
   and requires identical hashes at every step. `GameLogic` has no clock, no OS entropy and no
   pointers as keys, and a CI grep guards `<chrono>`, `<random>`, `rand(` and `float` out of it.
+- **The canvas leaves the fold at [Platform.md](../Platform.md)'s RN-6 (owner ruling 2026-09-09,
+  D1)**, under the third case ADR-007 §4 now admits — a NARROWING, proved by the fold without the
+  canvas being identical on every checkpoint before and after the slice — and the picture's
+  whole-frame record (`ThePictureIsAsRecorded`, ADR-009 §2) stands beside the digest for the pixels.
 - The replay scripts double as the reproduction path for any bug report: the script that
   reaches the state is the ticket.
 

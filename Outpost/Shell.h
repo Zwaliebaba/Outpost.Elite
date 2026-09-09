@@ -1,5 +1,7 @@
 #pragma once
 
+#include "FrameClock.h"
+#include "Scheduler.h"
 #include "ScreenPresenter.h"
 #include "Window.h"
 
@@ -14,7 +16,6 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 
-#include <chrono>
 #include <cstdint>
 
 namespace Elite
@@ -53,9 +54,20 @@ namespace Outpost
   class GameShell final : public Elite::Presenter, public Elite::Keyboard
   {
   public:
-    GameShell(Window& _window, ScreenPresenter& _presenter) noexcept
+    /*
+     * The clock and the scheduler are the composition root's and arrive here because `Turn` is
+     * where a turn is (Design/Platform.md §3.1, slice T-1).
+     *
+     * IT IS FED FROM `Turn` AND NOT FROM THE OUTER LOOP, and that is the whole reason they are on
+     * this object. `WaitFrames`, `Present` and both holds reach `Turn` from inside ported routines,
+     * so the loop in `Main.cpp` is only one of four call depths a turn can happen at; a clock read
+     * in the outer loop alone would stop advancing the moment the game entered a docked screen.
+     */
+    GameShell(Window& _window, ScreenPresenter& _presenter, FrameClock& _clock, Scheduler& _scheduler) noexcept
       : m_window(_window),
-        m_presenter(_presenter)
+        m_presenter(_presenter),
+        m_clock(_clock),
+        m_scheduler(_scheduler)
     {
     }
 
@@ -134,13 +146,11 @@ namespace Outpost
      * `Elite::SetUpScreen`; `ClearBottomRows` was `Elite::ClearMessageRows`; `BeepAndPause` was
      * `Elite::Beep` and `WaitFrames`. Four seams, and every one of them a forwarding call.
      *
-     * `ClearToView` SURVIVES AS A PRIVATE HELPER, because `Run(9)` and this file's own screen
-     * changes need it before the composition root has lent the shell its ports.
+     * `ClearToView` SURVIVED AS A HELPER AND IS GONE TOO (Design/Platform-Build.md C-1, 2026-09-09).
+     * It said "public because `Main.cpp` changes screens through it", and `Main.cpp` had stopped:
+     * the dispatch moved into `Elite::Game` at M3-c and took every screen change with it, so what
+     * was left here was a forwarding call with no caller at all.
      */
-
-    /// `Elite::SetUpScreen` once the ports are lent, and the view byte alone before
-    /// then. Public because `Main.cpp` changes screens through it.
-    void ClearToView(std::uint8_t _view);
 
     /// Empty the keyboard buffer.
     void Flush() override;
@@ -255,21 +265,24 @@ namespace Outpost
     std::uint8_t* m_view = nullptr; ///< attached by `AttachUniverse`
 
     /*
-     * What paces the title screen's ship, and it is a CLOCK because the thing being paced is not
-     * frames (`Presentation.h`, `TitleTurnSeconds`).
+     * THE FOUR ACCUMULATORS THAT WERE HERE ARE ONE OBJECT NOW (Design/Platform.md T-1, 2026-09-09).
      *
-     * `TLL2` has no `WSCAN` in it, so a turn of the ship costs what `MVEIT` and `LL9` cost and the
-     * rate is a consequence. Presenting once per turn ties it to the display instead, which is
-     * twenty times too fast on a 165 Hz panel; these two carry the accumulator that decouples
-     * them, the same arrangement `Main.cpp` gives the flight loop and for the same reason.
+     * `m_lastSpin` and `m_spinLeftover` paced the title ship, `m_lastFlightFrame` and
+     * `m_flightFrameLeftover` the death sequence, each a `steady_clock` sample and a `double` with
+     * its own backlog rule -- and `Main.cpp` held a third and a fourth. What they were doing was
+     * right and §6.110 is why they existed at all; what was wrong is that there were four of them,
+     * that two lived inside loops no machine without a display could run, and that `DELAY` counted
+     * none of them and counted PRESENTS instead.
+     *
+     * `Scheduler` is the rules and `FrameClock` is the sample, both integer and both tested on
+     * either leg. The holds below read them; they own nothing.
      */
-    std::chrono::steady_clock::time_point m_lastSpin{};
-    double m_spinLeftover = 0.0;
+    FrameClock& m_clock;
+    Scheduler& m_scheduler;
 
-    /// The same pair again for `HoldFlightFrame`, kept apart from the title's so that a death
-    /// does not inherit whatever backlog the title screen had left over.
-    std::chrono::steady_clock::time_point m_lastFlightFrame{};
-    double m_flightFrameLeftover = 0.0;
+    /// Every backlog the scheduler has dropped this session. Not game state and never in a digest:
+    /// it counts what the PLATFORM failed to deliver.
+    std::uint32_t m_stallsSeen = 0;
   };
 
 } // namespace Outpost

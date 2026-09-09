@@ -133,13 +133,13 @@ is preserved in the history and was true then.
   briefings, and the Trumbles that wander the dashboard.
 - `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
   canvas, the SID synthesiser and its XAudio2 output, the key map, the commander store, and a
-  composition root in `Main.cpp` of <!--count:main-lines-->238 lines that builds `Elite::Game`
+  composition root in `Main.cpp` of <!--count:main-lines-->257 lines that builds `Elite::Game`
   over three ports and paces it. Both outer loops, the dispatch and every game byte are the
   library's since Modernize.md M3 (ADR-007); `FlightSession` and `Shell` are what remains of the
-  two worlds' plumbing, and reach <!--count:outpost-elite-names-->63 `Elite::` names between them.
+  two worlds' plumbing, and reach <!--count:outpost-elite-names-->62 `Elite::` names between them.
   It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
   owner ruling). It launches, flies, fights, docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->140 tests in <!--count:test-files-->30 files: the 6502 interpreter with its cycle counter,
+- `Tests/GameLogicTests/` — <!--count:tests-->147 tests in <!--count:test-files-->31 files: the 6502 interpreter with its cycle counter,
   its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
   and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
   assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
@@ -345,6 +345,10 @@ that a tree without the oracle cannot read as green (Risk R9).
 
 ## 5. Presentation (summary of ADR-005)
 
+**The live design for this layer is [Platform.md](Platform.md), from 2026-09-09.** What follows is
+the summary as ADR-005 stood, amended in place as slices landed; the timing and input paragraphs
+below that name InputTimer.md are history, and that document is in [Archive/](Archive/README.md).
+
 ### 5.1 Screen
 
 The C64 game draws into a 320×200 multicolour bitmap: a 256×144 space view at the top (the
@@ -373,7 +377,7 @@ from that measurement** (expected 10–20 Hz), presenting every step, with vsync
 rate like the original" mode is a modernisation option. This is the one place where fidelity
 cannot be defined by the oracle, and it is called out as Risk R3.
 
-**Measured to the crowded end, 2026-09-08 (Design/InputTimer.md T-0).** `Outpost::FLIGHT_FRAME_COSTS` is
+**Measured to the crowded end, 2026-09-08 (Design/Archive/InputTimer.md T-0).** `Outpost::FLIGHT_FRAME_COSTS` is
 four rows keyed by occupied slots, linear between them, down to three and a half frames a second in a
 fight of eight; the docked pass is two vertical syncs around four thousand cycles and is paced by the
 syncs `Game::StepDocked` asks for. ADR-005 §3 carries the numbers. What is still unbuilt is the simulated
@@ -395,7 +399,7 @@ does not use it. The C64's flight keys are the `KY1`–`KY7` and `KY12`–`KY20`
 `KEYLOOK`, and none of the sixteen was bound until this change — a gap slice 2e's own tests could
 not see, because they asserted only that what WAS bound translated correctly.
 
-**The blocking read is the original's, 2026-09-08 (Design/InputTimer.md I-1), and the pause screen is
+**The blocking read is the original's, 2026-09-08 (Design/Archive/InputTimer.md I-1), and the pause screen is
 gone (I-0, owner ruling).** `TT217` is `Elite::ReadKey` — two frames of debounce, wait for no key, wait
 for a key, translate — compared against the original with the matrix changing under it; the executable's
 queue of key-down messages, auto-repeats included, is gone, and the dispatch takes one genuine press a
@@ -532,7 +536,7 @@ any amount of re-sequencing.
 
 ### 6.161 Input and time: six slices in a day, and what reading the source found
 
-[InputTimer.md](InputTimer.md) opened 2026-09-08 as an analysis of the keyboard and the clock, and
+[InputTimer.md](Archive/InputTimer.md) opened 2026-09-08 as an analysis of the keyboard and the clock, and
 six of its slices were built the same day by owner ruling; its §9 is the journal and this entry is
 the pointer. Four findings belong in this list because they are the kind §6.128 named -- a routine
 ported and reached by nothing, or a loop written from a description rather than a listing.

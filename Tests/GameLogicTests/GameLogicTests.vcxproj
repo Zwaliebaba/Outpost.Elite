@@ -159,6 +159,12 @@
     <ClCompile Include="..\..\Outpost\Presentation.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\..\Outpost\Scheduler.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\FrameClock.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\KeyMap.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -167,6 +173,7 @@
     </ClCompile>
     <ClCompile Include="CommanderTests.cpp" />
     <ClCompile Include="ControlsTests.cpp" />
+    <ClCompile Include="SchedulerTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">

@@ -1,3 +1,10 @@
+> **ARCHIVED 2026-09-09 — superseded by [Platform.md](../Platform.md).** This document is kept whole
+> as the record of what was found (§1 to §4) and of the seven slices built from it (§9: I-0, S-1,
+> I-1, I-3, I-6, T-0, T-2); nothing below is maintained. The six slices it left unbuilt — I-2, I-4,
+> I-5, T-1, T-3, T-4 — keep their names in the live design, which says in its §1 what each became.
+> Code comments still cite this file as `InputTimer.md`; the slice labels resolve here. Relative
+> links were rewritten for the move.
+
 # Input and time — what the port does today, and the plan to modernise both
 
 **Status:** analysis and plan, opened 2026-09-08; **six of its thirteen slices were built the same
@@ -10,7 +17,7 @@ plan the same evening** -- M6-c built, M6-d running, the resolution track closed
 §9's entries say what that voided, rewrote and enlarged -- and **M6 closed on 2026-09-08 with the
 oracle DELETED rather than recorded**, which §6's revalidation of 2026-09-09 works through. It reads
 after
-[Modernize.md](Modernize.md), because it starts from the shape M6-0 left and proposes slices that
+[Modernize.md](../Modernize.md), because it starts from the shape M6-0 left and proposes slices that
 sit beside M6-a; where it touches a decision an ADR owns, it says which ADR changes.
 
 **What was read.** `Outpost/Window.*`, `KeyMap.*`, `Shell.*`, `Main.cpp`, `FlightSession.*`,

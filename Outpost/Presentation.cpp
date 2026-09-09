@@ -66,55 +66,39 @@ namespace Outpost
     return view;
   }
 
-  StepPlan PlanSteps(double _elapsedSeconds, double _accumulatedSeconds, double _stepsPerSecond) noexcept
+  // ---- the same three in cycles (Design/Platform.md T-1) ------------------------------------------
+
+  namespace
   {
-    StepPlan plan{};
-    plan.leftoverSeconds = _accumulatedSeconds;
-
-    if (!(_stepsPerSecond > 0.0))
-    {
-      return plan;
-    }
-
-    // A negative elapsed time is a clock that went backwards, which is not this function's problem
-    // to diagnose -- but adding it would run the accumulator backwards, so it is ignored.
-    if (_elapsedSeconds > 0.0)
-    {
-      plan.leftoverSeconds += _elapsedSeconds;
-    }
-
-    const double period = 1.0 / _stepsPerSecond;
-
-    while (plan.leftoverSeconds >= period && plan.steps < MAX_STEPS_PER_CALL)
-    {
-      plan.leftoverSeconds -= period;
-      ++plan.steps;
-    }
-
     /*
-     * The backlog outlived the clamp, so the rest is dropped rather than run.
+     * One row's worth of straight line, in integers, rounded to nearest.
      *
-     * Dropping it is the only option that keeps the game responsive, and saying so is what stops
-     * it being invisible: ADR-005 section 3 asks for a stall to be logged, and a caller cannot log
-     * what it was not told.
+     * `_along` over `_span` of the way from `_from` to `_to`, computed in 64 bits so that the
+     * product of a quarter-million cycles and a span of ninety-five cannot overflow, and rounded
+     * rather than truncated so that the integer curve does not sit systematically below the
+     * `double` one it replaces. The difference between the two is under a cycle everywhere, which
+     * is a millionth of a frame.
      */
-    if (plan.leftoverSeconds >= period)
+    [[nodiscard]] std::uint32_t Between(std::uint32_t _from, std::uint32_t _to, std::int64_t _along, std::int64_t _span) noexcept
     {
-      plan.stalled = true;
-      plan.leftoverSeconds = 0.0;
+      if (_span <= 0)
+      {
+        return _from;
+      }
+      const std::int64_t rise = static_cast<std::int64_t>(_to) - static_cast<std::int64_t>(_from);
+      const std::int64_t scaled = rise * _along;
+
+      // Rounded away from zero, so that a rise and a fall of the same size move by the same amount.
+      const std::int64_t half = _span / 2;
+      const std::int64_t step = (scaled >= 0) ? ((scaled + half) / _span) : ((scaled - half) / _span);
+      return static_cast<std::uint32_t>(static_cast<std::int64_t>(_from) + step);
     }
+  } // namespace
 
-    return plan;
-  }
-
-  double TitleTurnSeconds(std::uint8_t _distanceHigh) noexcept
+  std::uint32_t TitleTurnCycles(std::uint8_t _distanceHigh) noexcept
   {
-    /*
-     * The table is in descending order of distance and the walk goes with it, so the first entry
-     * the argument is at or above is the far side of the pair it falls between. Outside the table
-     * the cost is flat: nothing calls this with a distance above 96, because `TITLE` starts there,
-     * and 1 is where the ship stops.
-     */
+    // The walk is `TitleTurnSeconds`', line for line: the table descends in distance, so the first
+    // entry the argument is at or above is the far side of the pair it falls between.
     const TitleTurnCost* above = &TITLE_TURN_COSTS.front();
 
     for (const TitleTurnCost& point : TITLE_TURN_COSTS)
@@ -126,31 +110,19 @@ namespace Outpost
       above = &point;
     }
 
-    double cycles = static_cast<double>(above->cycles);
-
-    /*
-     * The pair `_distanceHigh` falls between, if it falls between two at all.
-     *
-     * `above` and `below` rather than the obvious `far` and `near`: both of those are still MACROS
-     * after `<windows.h>`, so `const TitleTurnCost& near = ...` compiles as a declaration with no
-     * name. AGENTS.md section 6 records the same trap costing a CI leg with `bool near`.
-     */
     const std::size_t index = static_cast<std::size_t>(above - TITLE_TURN_COSTS.data());
     if (index + 1 < TITLE_TURN_COSTS.size() && _distanceHigh < above->distanceHigh)
     {
       const TitleTurnCost& below = TITLE_TURN_COSTS[index + 1];
-      const double span = static_cast<double>(above->distanceHigh - below.distanceHigh);
-      const double along = static_cast<double>(above->distanceHigh - _distanceHigh) / span;
-      cycles = static_cast<double>(above->cycles) + along * (static_cast<double>(below.cycles) - static_cast<double>(above->cycles));
+      return Between(above->cycles, below.cycles, static_cast<std::int64_t>(above->distanceHigh) - _distanceHigh,
+                     static_cast<std::int64_t>(above->distanceHigh) - below.distanceHigh);
     }
-
-    return cycles / NTSC_CLOCK_HZ;
+    return above->cycles;
   }
 
-  double FlightFrameSeconds(std::uint8_t _ships) noexcept
+  std::uint32_t FlightFrameCycles(std::uint8_t _ships) noexcept
   {
-    // Ascending in occupied slots, linear between rows, flat outside: below the first row is the
-    // empty bubble's cost and above the last is the fullest bubble the game can hold.
+    // Ascending in occupied slots, linear between rows, flat outside -- `FlightFrameSeconds`' walk.
     const FlightFrameCost* below = &FLIGHT_FRAME_COSTS.front();
     const FlightFrameCost* above = &FLIGHT_FRAME_COSTS.back();
 
@@ -169,23 +141,19 @@ namespace Outpost
       }
     }
 
-    double cycles = static_cast<double>(below->cycles);
-    if (above->ships > below->ships)
+    if (above->ships <= below->ships)
     {
-      const double span = static_cast<double>(above->ships - below->ships);
-      const double along = static_cast<double>(_ships - below->ships) / span;
-      cycles += along * (static_cast<double>(above->cycles) - static_cast<double>(below->cycles));
+      return below->cycles;
     }
-
-    return cycles / NTSC_CLOCK_HZ;
+    return Between(below->cycles, above->cycles, static_cast<std::int64_t>(_ships) - below->ships,
+                   static_cast<std::int64_t>(above->ships) - below->ships);
   }
 
-  double DockedPassSeconds(std::uint8_t _syncs) noexcept
+  std::uint32_t DockedPassCycles(std::uint8_t _syncs, MachineTiming _timing) noexcept
   {
-    // The work between the waits, and the waits the library asked for -- how many syncs a docked
-    // pass waits is `RunLoopTail`'s to decide, and it says two or none.
-    const double work = static_cast<double>(DOCKED_PASS_CYCLES) / NTSC_CLOCK_HZ;
-    return work + static_cast<double>(_syncs) * NTSC_FRAME_CYCLES / NTSC_CLOCK_HZ;
+    // The work, and the syncs the pass asked `DELAY` for at the machine's own frame -- which is
+    // where the seconds form was wrong on a PAL machine and this one is not.
+    return DOCKED_PASS_CYCLES + static_cast<std::uint32_t>(_syncs) * _timing.cyclesPerFrame;
   }
 
 } // namespace Outpost

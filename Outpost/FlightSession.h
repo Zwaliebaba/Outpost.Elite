@@ -171,11 +171,12 @@ namespace Outpost
    * The second half is true and the first is what §6.17 had already disproved: the C64's main loop
    * has no `WSCAN` in it, so it is not driven by the refresh at all, and a frame really takes
    * 48,000 to 86,000 cycles -- twelve to twenty-one a second rather than sixty. The rate now comes
-   * from `Outpost::FlightFrameSeconds` in `Presentation.h`, where the measurement it is derived
+   * from `Outpost::FlightFrameCycles` in `Presentation.h`, where the measurement it is derived
    * from is written down beside it (§6.114).
    *
-   * `GameShell::WaitFrames` still counts PRESENTS, because `DELAY` counts vertical syncs and a
-   * present is one; that half of §6.17 was right and is unchanged.
+   * `GameShell::WaitFrames` counted PRESENTS until 2026-09-09, on the argument that `DELAY`
+   * counts vertical syncs and a present is one -- true of the panel it was written on rather than
+   * of the design. It counts the MACHINE's simulated blanks now (Design/Platform.md T-1).
    */
 
 } // namespace Outpost

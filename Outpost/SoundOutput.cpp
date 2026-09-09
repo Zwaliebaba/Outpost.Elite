@@ -7,7 +7,9 @@
 namespace Outpost
 {
 
-  SoundOutput::SoundOutput() noexcept
+  SoundOutput::SoundOutput(MachineTiming _timing) noexcept
+    : m_timing(_timing),
+      m_synth(_timing.clockHz, SAMPLE_RATE)
   {
     /*
      * OPENING THE DEVICE IS A CAPABILITY PROBE, and the rule in AGENTS.md section 5 is that probes
@@ -146,11 +148,11 @@ namespace Outpost
       RunFrame(_buffer, _music);
 
       // How many samples this frame is worth, with the fraction carried: 737 or 738.
-      m_sampleRemainder += FRAME_CYCLES * SAMPLE_RATE % CLOCK_HZ;
-      std::uint32_t samples = FRAME_CYCLES * SAMPLE_RATE / CLOCK_HZ;
-      if (m_sampleRemainder >= CLOCK_HZ)
+      m_sampleRemainder += m_timing.cyclesPerFrame * SAMPLE_RATE % m_timing.clockHz;
+      std::uint32_t samples = m_timing.cyclesPerFrame * SAMPLE_RATE / m_timing.clockHz;
+      if (m_sampleRemainder >= m_timing.clockHz)
       {
-        m_sampleRemainder -= CLOCK_HZ;
+        m_sampleRemainder -= m_timing.clockHz;
         ++samples;
       }
 

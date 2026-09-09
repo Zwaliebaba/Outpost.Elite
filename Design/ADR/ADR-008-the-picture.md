@@ -8,8 +8,8 @@ moved it.
 replay run with the twins present and absent — and this ADR asserted it as *the* proof of T1. It had
 never been built, from RS-0 onwards. **It is built now**, so the clause stands again with the
 history of its falsehood beside it rather than tidied away; T1 is measured and Resolution.md's R26
-closes with it. The search that found the gap is [Rendering.md](../Rendering.md) §11.3. **No
-decision in this ADR moved**: the correction was always to a statement about evidence.
+closes with it. The search that found the gap is [Rendering.md](../Archive/Rendering.md) §11.3. **No
+decision in this ADR moved**: the correction was always to a statement about evidence. **Amended 2026-09-09 (owner rulings on [Platform.md](../Platform.md) §12): the backdrop surface joins §4's exclusion; T3 is deleted at RN-2; and this ADR is SUPERSEDED at RN-6, when the canvas is retired and the picture is the one surface.**
 **Depends on:** ADR-001 (fidelity — the game does not change, and §1 now says which surface is the
 verification view), ADR-002 §4 (the canvas and its resolve), ADR-003 (the oracle judges the canvas
 and cannot judge this), ADR-005 §1 (which this amends: 640×400 for 320×200, `ScreenPresenter` for
@@ -104,7 +104,7 @@ measurement.
 It is now `TheReplayIsTheSameWithNoTwins`, and all three digests are identical with the twins
 switched off. The mechanism is a runtime switch (`Picture::SetDrawing`, and the one guard every twin
 shares, `DrawingTwins`) rather than the compile-time define the design named, for the reason
-Resolution.md §8.4 records. [Rendering.md](../Rendering.md) §11.3 has the search that found the gap.
+Resolution.md §8.4 records. [Rendering.md](../Archive/Rendering.md) §11.3 has the search that found the gap.
 
 ### §4 The picture is not in the state hash
 
@@ -112,7 +112,8 @@ Resolution.md §8.4 records. [Rendering.md](../Rendering.md) §11.3 has the sear
 (ADR-007, and the comment beside the fold in `StateHash.cpp`). The picture is a second rendering of
 a frame the canvas already holds, produced by code the resolution slices kept changing; folding it
 would re-record five replay tables on a thinner sun. The exclusion is narrow — the canvas beside it
-is still folded — and §3's replay is what stops it being a hole.
+is still folded — and §3's replay is what stops it being a hole. The backdrop `Picture` that
+[Platform.md](../Platform.md) RN-0 adds beside it is excluded the same way, for the same reason.
 
 ### §5 Text is a mapping, and a re-flow is a table
 
@@ -183,3 +184,4 @@ predates this track.
 | The dashboard is redrawn at 640×112 | **Mechanism built; the art is the owner's, outstanding** | Resolution.md §5.3 and §11.1, `GameLogic/DashboardPicture2x.cpp`, `tools/bitmaps.py` |
 | T1 — the twins consume nothing the game notices | **Built 2026-09-09**, a month after §3 said so: `TheReplayIsTheSameWithNoTwins` takes all three digests with the twins switched off and they do not move. Asserted, not measured, from RS-0 until then | §3 above, `FlightReplayTests.cpp`, Resolution.md §8.4, Rendering.md §11.3 |
 | T3 — every erase has a twin erase | Built as a rule, never testable — and **due for deletion**: Rendering.md's RN-1 gives the picture a frame boundary, after which there are no erases to pair | §2 above, Rendering.md §6 |
+| The canvas is retired and this ADR is superseded | **Ruled 2026-09-09** (owner, Platform.md D1): built at that track's RN-6, last, after RN-2 and I-4, on the narrowing proof ADR-007 §4 names. §1's shape, §2's twin rule and §3's canvas-shaped evidence lapse with the canvas; the picture's whole-frame record (ADR-009 §2) is the pixels' reference from then on, and ADR-010 records what replaces this document | Platform.md §4 D1, §5 RN-6 |

@@ -34,14 +34,14 @@
       "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 238,
+      "ceiling": 257,
       "slack": 0,
-      "slice": "InputTimer.md I-1: the press queue goes and the dispatch takes one press a step"
+      "slice": "Design/Platform.md T-1: 238 -> 257, RAISED. The clock, the scheduler and the mode-change reset arrive in the composition root; P6 counts the executable holding GAME STATE and DISPATCH, and none of that came back -- the dispatch left at M3-c and stayed gone. Two additions that would have made it larger were moved rather than waved through: the stall report went to `GameShell::Turn`, where the clock is read and where a stall inside a docked DELAY is seen when it happens rather than a turn later, and `App::timing` went because `scheduler.Timing()` is the same fact. Four `double` accumulators and three `steady_clock` reads went the other way. I-4 takes this file to ADR-004 section 1's two hundred lines and the ceiling goes down with it."
     },
     "outpost-elite-names": {
-      "ceiling": 63,
+      "ceiling": 62,
       "slack": 0,
-      "slice": "the merge of InputTimer.md's six slices with M6-a and the resolution track, 2026-09-08 -- both sides moved this count and the tree is the sum"
+      "slice": "Design/Platform.md T-1 (C-1): 63 -> 62. `GameShell::ClearToView` is deleted -- it forwarded to `Elite::SetUpScreen` and said it was public because `Main.cpp` changed screens through it, and `Main.cpp` had stopped at M3-c."
     },
     "effects-seams": {
       "ceiling": 5,

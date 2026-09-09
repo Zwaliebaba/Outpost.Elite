@@ -6,7 +6,7 @@ source, the labels in the code and the assembly in the comments all go, §6 Phas
 §4 set for phase 6 was met on 2026-09-08, the day before the oracle left**: every oracle suite,
 every whole-bitmap comparison and the docked replay were green on the faithful build, 469 tests
 with the original beside them, all fifteen repository checks passing, and every recorded mutant
-caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->140 tests now, and
+caught or a proved equivalent (plan §6.156). The suite is <!--count:tests-->147 tests now, and
 what it can still say is M6-b's subject rather than the gate's. Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -327,11 +327,11 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
-`Outpost/Main.cpp` is <!--count:main-lines-->238 lines and every one of them is the platform: the
+`Outpost/Main.cpp` is <!--count:main-lines-->257 lines and every one of them is the platform: the
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
-<!--count:outpost-elite-names-->63 distinct `Elite::` names where it reached 205 when M3 opened.
+<!--count:outpost-elite-names-->62 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
 `Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and
@@ -744,6 +744,11 @@ becomes: create the window and the device, build `Game` over `Platform`, and loo
 `game.Step(input)` → present, with `Guarded` around it — the two hundred lines ADR-004 §1
 described. `FlightSession` and `GameShell` are absorbed: the universe half into `Universe`, the eight-
 interface halves into `Platform`. `check_outpost.py` keeps running and has almost nothing to check.
+
+**The design that builds this is [Platform.md](Platform.md) (2026-09-09)**: the `Platform` class, the
+loop over `Game` as a function, `Step(InputFrame)` and the coroutines that take the presents out of
+the library are its I-2 and I-4, and the integer scheduler that replaces `PlanSteps` is its T-1. It
+replaced InputTimer.md, which this section pointed at until then.
 
 ### 4.9 C++20 used, C++23 held
 
@@ -1619,7 +1624,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M4-a Flight frame stages** ✅ **built 2026-09-07 (§8)** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the housekeeping cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. **M4-a-3 built 2026-09-07 (§8):** the head and the tail split at their annotated parts — 324 → 14 and 254 → 43 — with the cycle as a table, the thirty-two-step count corrected in three places, and part 14's fall-through into part 15 restored. **M4-a is complete.** | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
 | **M4-b LL9 stages** ✅ **built 2026-09-07 (§8)** | `DrawShip` as the SEVEN stages of §4.6 over a `ShipRender` frame — `TestPresence`, `MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`, `OpenHeapRun`, `PushEdges`; 551 → 38 lines of pipeline. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged; the replay digest unchanged. The channel census names a PART rather than `DrawShip` for `xx2`, `xx3`, `xx12` and `q`, and raises three inherited inputs one function had hidden. | 4 |
 | **M4-c Decisions** ✅ **built 2026-09-07 (§8)** | `TACTICS` answers a `Tactic` over five parts (M4-c-1); `DOCKIT`'s `bool` was a PHANTOM — the original reaches no `OOPS` and no `DEATH`, so it is `void` (M4-c-2); `MLOOP` parts 1–4 answer a `SpawnPass` over a `SpawnFrame`, because §6.125's carry is live across all four (M4-c-3). | `TacticsTests` green at 7,326 cases; SEVEN `tactics` mutants re-anchored, none dropped, `mutate.py --check` at 72 of 72. The row said sixteen mutants and the unit has seven that name a line in `RunTactics`. | 5 |
-| **M4-d Mode machine polish** ✅ **built 2026-09-07 (§8)** | `Game::Mode` built — `Flight`, `Docked`, `Paused` — which takes the pause-before-`QQ12` ordering out of `Main.cpp` (`main-lines` 256 → 253). The mission sub-machine was already `MissionOf` (M3-c). **`LoopOutcome` is NOT retired and the row was wrong to ask**: `Continued` is not a mode and the other three are transitions, so a mode cannot carry what four routines have to return. **The death sequence stays synchronous**, because making it a state would change the pacing this row's own acceptance forbids from moving. | Replay hashes unchanged. | 2 |
+| **M4-d Mode machine polish** ✅ **built 2026-09-07 (§8)** | `Game::Mode` built — `Flight`, `Docked`, `Paused` — which takes the pause-before-`QQ12` ordering out of `Main.cpp` (`main-lines` 256 → 253). The mission sub-machine was already `MissionOf` (M3-c). **`LoopOutcome` is NOT retired and the row was wrong to ask**: `Continued` is not a mode and the other three are transitions, so a mode cannot carry what four routines have to return. **The death sequence stays synchronous**, because making it a state would change the pacing this row's own acceptance forbids from moving.<br><br>**Amended 2026-09-09 (owner ruling D2 on [Platform.md](Platform.md), slice I-4)**: the sequence becomes a coroutine whose awaitable charges what the hold charged — not a mode-machine state, the pacing unmoved, `TheDeathIsAsRecorded` the evidence. ADR-007 §2 carries it. | Replay hashes unchanged. | 2 |
 
 ### Phase M5 — Polish and the ledger
 
@@ -2083,7 +2088,7 @@ tests exist -- is what makes ten thousand deleted lines reviewable; the names an
 M6-b-6 and the machinery is M6-b-7.
 
 
-**2026-09-08 — Beside M6-a: six slices of [InputTimer.md](InputTimer.md), journaled there (§9).**
+**2026-09-08 — Beside M6-a: six slices of [InputTimer.md](Archive/InputTimer.md), journaled there (§9).**
 They are that plan's and not this one's, and they touch this plan's ledger in four places worth
 naming here: `Game::Mode::Paused` and `StepPaused` are gone with the pause screen (M4-d's third
 state, removed by owner ruling); `Keyboard::NextKey` is answered by `Elite::ReadKey`, the ported

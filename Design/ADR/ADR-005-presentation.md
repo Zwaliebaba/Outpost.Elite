@@ -7,7 +7,7 @@ built as of 2026-09-06** — the sprite overlay (`VideoState`, `SPRITE.bin`, the
 `Resolve` — §6.148) and the raster effects (slice 4f — §6.155) — **and the second was wrong about
 two of its three subjects.** `welcome` is `VIC+&21`, the background colour inside the image, not
 the border, so nothing went to the presenter; and `HFX` is not an effect this build has at all. The
-paragraphs below are corrected in place and say which claim was which.
+paragraphs below are corrected in place and say which claim was which. **Amended 2026-09-09 by the owner rulings recorded on [Platform.md](../Platform.md) §12: §1 gains the waitable presenter, §2 is REVERSED (the sound interrupt is clocked by the simulated blank), §3 gains the integer scheduler and records the speed knob declined in favour of a fixed-rate flight model as its own track, §4 gains the `InputFrame` with event accumulation and the layered map. ADR-010, written at that track's close, supersedes this document.**
 **Depends on:** ADR-002 (the canvas), ADR-004 (where the code lives)
 **Feeds:** slices 0d, 2e, 5a
 
@@ -166,6 +166,14 @@ main loop that ran as fast as the scene allowed.
   8..71 of 80, and the dashboard starts at y 288 (`Picture.h`, and the frame's own interior is the
   reason a re-flowed screen's text stays inside cells 8..71 — Resolution.md §8.1).
 
+- **The presenter waits on the swap chain's latency object, presents on change and idles when hidden
+  — 2026-09-09 ([Platform.md](../Platform.md) T-3).** `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`
+  with a queue of one, so the loop runs right after a blank, samples, steps and presents into the
+  next; `Present` only when the frame surface's generation counter moved; `DXGI_STATUS_OCCLUDED` waits
+  on `MsgWaitForMultipleObjects` with a cap. Vsync, the integer scale and the letterbox are unchanged.
+  ADR-008 owns the surface; this is the executable's half, and PresentMon's input-to-photon number is
+  what the slice is accepted on.
+
 ### §2 Sound
 
 - `GameLogic` ports the effect player and the music player as **per-step state machines that
@@ -191,6 +199,17 @@ the rate they are rendered for. `SidSynth` is per-cycle and integer, with sync a
 and without the filter; "Frontier's `AudioDevice`" above does not exist in this tree and
 `SoundOutput` talks to XAudio2 directly.
 
+**REVERSED 2026-09-09 (owner ruling, [Platform.md](../Platform.md) §12 R1, slice T-4).** The
+interrupt is clocked by the SIMULATED VERTICAL BLANK the scheduler delivers — once per blank, on the
+game thread — and not by the device's queue depth. The paragraph above was right about the chip and
+silent about the state: the sound buffer's counters are game state in every replay digest, and
+clocking them from a device made `Universe` the one thing in the program that advanced on a clock the
+game does not own. The device's rate still paces the CHIP — the synthesiser renders a ring of
+per-blank logs on the XAudio2 callback thread at the sample rate, and an empty ring renders the last
+registers as a 6581 does when its processor is busy — so each half keeps the clock that is its own.
+The record is re-taken once, with a zero-delivery run as the column that proves the flight did not
+move (ADR-007 §4's first case).
+
 ### §3 Timing
 
 - The original's main loop had no fixed period. Slice 0b measures its iteration rate in VICE
@@ -212,7 +231,7 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   end — where the original slows down most, and where the slowdown is part of the difficulty —
   is not measured yet and is paced at the one-ship cost (§6.114).
 
-- **The crowded end and the docked pass are measured, 2026-09-08 (Design/InputTimer.md T-0),
+- **The crowded end and the docked pass are measured, 2026-09-08 (Design/Archive/InputTimer.md T-0),
   while the interpreter is still in the tree.** `FLIGHT_FRAME_COSTS` is four rows keyed by
   occupied slots, planet and sun included, linear between them: 47,784 cycles empty, 82,236 with
   the planet and its companion, 150,113 with three fighters, 293,354 with eight — three and a half
@@ -223,6 +242,19 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   around 4,472 cycles of work, so the docked half runs at just under half the sync rate, and
   `DockedPassSeconds` prices the syncs `Game::StepDocked` asked for (T-2). `TT16`'s extra sync per crosshair step is
   recorded and waits for the simulated blank (T-1) to be honoured.
+
+- **One integer scheduler, the blank, and the rate that is NOT an option here — amended 2026-09-09
+  ([Platform.md](../Platform.md) §3.2; rulings D3 and D4).** T-1 replaces `PlanSteps` and both hold
+  loops with one scheduler in integer 6510 cycles at the machine's rate — NTSC, settled by ADR-001's
+  own variant line, PAL selectable in `Settings.txt` — which delivers whole flight steps at the
+  measured cost, whole docked passes at their syncs, and one vertical blank every `cyclesPerFrame`.
+  `DELAY` counts those blanks on every panel; a stall costs a frame and never a burst, and is counted
+  where `(void)plan.stalled` discarded it; an inactive or minimised window plans nothing and banks
+  nothing, which is the pause §4 promised. **A `speed` knob that scaled the cost model was put and
+  DECLINED.** The owner ruled that the flight step's rate is a game-logic change and not a setting: a
+  fixed-rate flight model — one step per blank, the per-step constants rescaled — as its own track and
+  ADR after Platform.md's RN-6, with the faithful cadence kept selectable (ADR-001 §4). Until then the
+  cost model is the only pace, and the scheduler's step cost is the hook that model plugs into.
 
 - **The title screen is cycle-budgeted as well. Added 2026-09-05.** `TITLE`
   is not driven by the vertical sync — §6.17's scan found `WSCAN` called from `DELAY`,
@@ -279,7 +311,7 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   docked screens (`RDKEY`, `TT217`); the port's `InputFrame` carries both level and edge bits so
   both idioms port unchanged (plan §2.1).
 
-- **The pause screen is removed. Owner ruling 2026-09-08 (Design/InputTimer.md §5.9, slice I-0).**
+- **The pause screen is removed. Owner ruling 2026-09-08 (Design/Archive/InputTimer.md §5.9, slice I-0).**
   `DK4`'s `CPX #&40` froze the game on INST/DEL and `FREEZE` was the only settings interface the
   game had: thirteen toggles, two sound keys and a quit to the title. The port had it as
   `Game::Mode::Paused` and could enter it and not leave it, because CLR/HOME was never bound
@@ -290,14 +322,14 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   removal of an original FEATURE rather than of a hardware read, and ADR-001 §4 points here.
 
 - **The game may believe it has a joystick only when the platform has one to read. Owner ruling
-  2026-09-08 (Design/InputTimer.md §5.1, slice I-3).** `TITLE` leaves `JSTK` set when the fire
+  2026-09-08 (Design/Archive/InputTimer.md §5.1, slice I-3).** `TITLE` leaves `JSTK` set when the fire
   key dismisses it, which on a C64 selects the stick `RDKEY` then reads from CIA port A. The port
   reads no port A, so `Game` clears `JSTK` after each start sequence unless `Keyboard::HasJoystick`
   answers true, which nothing does until the gamepad slice. `TITLE` itself is unchanged and still
   compared; the settlement runs after it. When a controller exists the original's rule returns:
   fire on the title screen selects it, and `JSTGY`/`JSTE` become its axis reversals.
 
-- **The blocking read is `TT217`, ported. 2026-09-08 (Design/InputTimer.md I-1).** `Elite::ReadKey`
+- **The blocking read is `TT217`, ported. 2026-09-08 (Design/Archive/InputTimer.md I-1).** `Elite::ReadKey`
   waits two frames, waits for no key, waits for a key and translates, over the port's `Held`, and is
   compared against the original with the matrix changing under it. The executable's `NextKey` is
   that routine; the queue of `WM_KEYDOWN`s it popped until then -- auto-repeats included -- is gone,
@@ -305,6 +337,25 @@ and without the filter; "Frontier's `AudioDevice`" above does not exist in this 
   when a prompt appears is not its answer, a key held down is one character, and two presses need
   a release between them, which is what the C64 did and what "a screen was skipped" was the
   absence of.
+
+- **The dispatch takes an `InputFrame`, and a tap is never lost — 2026-09-09
+  ([Platform.md](../Platform.md) I-2).** One struct per step: sixty-five held bytes over the matrix
+  and the press for `TT102`, produced by the platform after the message pump and immediately before
+  the step it feeds. Events are accumulated into it: a key that went down at any point since the last
+  frame is reported held for that one step, so a tap shorter than a flight step — up to 290 ms by the
+  cost model — reaches the game. The C64 scanned its matrix once a frame and lost such a tap; this is
+  the one reactivity gain in flight that changes what no step computes, and the replay's held keys
+  span steps, so no record moves. The bullet above that said the frame "carries both level and edge
+  bits" is this, with the edge one key rather than sixty-five.
+
+- **The map has layers, which is the phase-6 remapping question the many-to-one bullet deferred —
+  ruled 2026-09-09 ([Platform.md](../Platform.md) I-2).** `KeyBinding` gains a scan code for the
+  positional keys, so the arrows and `,`/`.` are the physical keys on every layout, and a layer set
+  `{Flight, Docked, TextEntry}`. The Docked layer drops the steering positions, which retires the
+  chart rule from `Elite::ScanKeyboard` into data and is exactly "a second table chosen by the current
+  view". Every layer keeps the Space rule above: no key the game's own text names is bound to nothing,
+  and the TextEntry layer names every position that types. A gamepad fills the same frame later on its
+  own ADR; XInput is the recommendation, and `GameInput` is a package the owner has not been asked for.
 
 ### §5 The window and the application shell
 

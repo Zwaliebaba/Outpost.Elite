@@ -1,6 +1,6 @@
 # ADR-001 — Scope and Fidelity: Port the C64 Game As It Is, First
 
-**Status:** Accepted · 2026-09-02 (§5 amended the same day by owner ruling — see below); §5 amended twice more 2026-09-03 (make it private, then reversed: it stays public, knowingly)
+**Status:** Accepted · 2026-09-02 (§5 amended the same day by owner ruling — see below); §5 amended twice more 2026-09-03 (make it private, then reversed: it stays public, knowingly) · **Amended 2026-09-09 by owner rulings taken on [Platform.md](../Platform.md) §4: §1's verification view is retired at that track's RN-6; §4 gains the first phase-6 option ruled — a fixed-rate flight model with the faithful cadence selectable — and its gate is restated over ADR-009 §2; the "fixed rate" line under *What faithful does not mean* is corrected.**
 **Depends on:** — (root decision)
 **Feeds:** every other ADR; the plan's phases 1–5 exist to satisfy it, phase 6 is what it defers
 
@@ -23,7 +23,12 @@ done at once, because the second has no definition of "correct" until the first 
    verification view — same sounds as a sequence of SID register writes. What the executable
    presents is `Elite::Picture`, a 640×400 rendering of the same frame
    ([Design/Resolution.md](../Resolution.md)), drawn beside the canvas and never in its place. Anything that can be checked against the assembled original
-   is checked (ADR-003).
+   is checked (ADR-003). **Amended 2026-09-09 (owner ruling, [Platform.md](../Platform.md) D1): the
+   canvas is the verification view until Platform.md's RN-6 retires it**, after which the verification
+   view is the state digest over decisions — `HashState` with no surface in it — beside the picture's
+   own whole-frame record. The decisions do not change: the RNG, the AI, the heaps and the flags are
+   what "behaviour-exact" names, and none of them is a canvas byte. ADR-007 §4 has the proof that gates
+   the retirement.
 2. **The variant is the one the masters are configured for** (GMA85 NTSC), held as
    `constexpr` in `EliteConfig.h` so the PAL variant and the maxed commander are switches, not
    forks. The NTSC/PAL distinction matters only to timing (§5.3 of the plan) and to a few bytes
@@ -38,15 +43,30 @@ done at once, because the second has no definition of "correct" until the first 
    [Design/Modernize.md](../Modernize.md), and its last phase detaches the port from the original —
    the oracle becomes recorded fixtures and `MasterFile/` and `Upstream/` leave the tree (Modernize.md
    §1 R-a to R-d, Phase M6). Every clause of this ADR stands until that phase amends §5 for real.)* Smoothing,
-   input remapping, gamepad, save UI, timing options — none is designed in this corpus. The
+   input remapping, gamepad, save UI, timing options — none is designed in this corpus *(two are, since
+   2026-09-09; see the end of this clause)*. The
    resolution is designed in [Design/Resolution.md](../Resolution.md) and is not an option: the
    fidelity suites keep their meaning because they read the canvas, which the picture never
    replaces. The
    gate for starting phase 6 is: every oracle suite, every golden and the replay suite green on
-   the faithful build. **One original feature is removed ahead of that phase by owner ruling,
-   2026-09-08: the pause screen, recorded in ADR-005 §4 and Design/InputTimer.md §5.9.** It is a
+   the faithful build. *(Restated 2026-09-09: the oracle and the goldens are gone — ADR-009 — so the gate
+   is ADR-009 §2's instruments green on the faithful build, the three replay records and the picture's
+   whole-frame record among them, and it is met.)* **One original feature is removed ahead of that phase by owner ruling,
+   2026-09-08: the pause screen, recorded in ADR-005 §4 and Design/Archive/InputTimer.md §5.9.** It is a
    removal and not an option, so "green with the option off" cannot apply to it; the suites are
    green without it and the ledger row says what went.
+
+   **Two phase-6 items are designed and one is RULED, 2026-09-09 ([Platform.md](../Platform.md) §4,
+   §12).** Input remapping's first half — a layered key map on scan codes — is Platform.md's I-2 and is
+   recorded in ADR-005 §4. And the first phase-6 OPTION under this clause is ruled: **a fixed-rate
+   flight model** — one flight step per simulated vertical blank, the per-step constants rescaled and
+   widened where eight bits cannot carry a per-blank increment (ADR-002 §3's rule for widening) — as
+   its own track and its own ADR, sequenced after Platform.md's RN-6, **with the faithful cadence kept
+   selectable**. That is this clause applied rather than bent: the option is off by default, the
+   faithful replay records stay green with it off, and the model gets a second record of its own. A
+   `speed` knob that merely scaled the cost model was put and declined in its favour, because a knob
+   changes how often the original's step happens and the ruling is that the step itself is what is
+   modernised.
 5. **Licence posture — owner ruling, 2026-09-02.**
 
    **THE HISTORY WAS REWRITTEN 2026-09-09 (owner ruling), WHICH IS WHAT THE CLAUSE BELOW SAID
@@ -184,7 +204,9 @@ done at once, because the second has no definition of "correct" until the first 
 - It does not mean the same memory layout at runtime. Zero page and workspaces become structs
   with the original names (plan §4.3); that is for traceability, not for address fidelity.
 - It does not mean the same frame rate mechanism. The original ran its loop as fast as it
-  could; the port runs a fixed rate measured from the original (ADR-005 §3, Risk R3).
+  could; the port runs a cycle-budgeted rate measured from the original — variable, as the original's
+  was, slowing as the bubble fills (ADR-005 §3, Risk R3). *(This line said "a fixed rate" until
+  2026-09-09 and had been wrong since plan §6.114; a fixed rate is the phase-6 option §4 now rules.)*
 - It does not mean the loader, copy protection, disk fast-loader or the PDS transfer tool.
   Those masters are dropped in full (Source-Inventory §5).
 

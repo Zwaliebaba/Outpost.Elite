@@ -2,7 +2,7 @@
 
 **Status:** **BUILT · 2026-09-08**, in seven slices (RS-0 to RS-6, §13), from a design proposed
 2026-09-07 with eight owner rulings taken the day it was opened — four on the shape (§1) and four on
-what the shape left open (§11). The suite is <!--count:tests-->140 green with all
+what the shape left open (§11). The suite is <!--count:tests-->147 green with all
 <!--count:checks-->13 repository checks passing, and what it decided is
 [ADR-008](ADR/ADR-008-the-picture.md).
 
@@ -878,7 +878,7 @@ not build it is a slice that slipped; an ADR that names it as evidence is a read
 
 What held it in the meantime, and adequately for what the track needed: the twins take `const`
 references to everything but the picture, §3.4's hash exclusion, and review.
-[Rendering.md](Rendering.md) §11.3 records the search that found the gap. **The gap is closed** —
+[Rendering.md](Archive/Rendering.md) §11.3 records the search that found the gap. **The gap is closed** —
 the measurement is above, and it says what everyone had assumed: the twins consume nothing.
 
 **8.5 Mutants.** `Screen.cpp`, `ShipDraw2x.cpp`, `PlanetDraw2x.cpp` and `Dashboard2x.cpp` join the
@@ -1719,7 +1719,7 @@ exactly what it was on the day RS-0 opened — which was the point.
 ---
 
 **2026-09-09 — two of §8's instruments were never built, and both are now.** Found while
-[Rendering.md](Rendering.md) was being validated against `a827b97`, a month after this track closed.
+[Rendering.md](Archive/Rendering.md) was being validated against `a827b97`, a month after this track closed.
 
 **§8.4 was the serious one.** The replay run with the twins present and absent did not exist:
 `ELITE_SCREEN_SHADOW`, the define this document names for it, appeared nowhere but in the sentence

@@ -3,7 +3,7 @@
 **Status:** **Accepted** · 2026-09-08, written at M6's close from what was actually built. It
 records a DELETION, and the reasoning under it is an owner ruling taken against this corpus's
 recommendation — which is why the argument the corpus made is written down here beside the ruling
-rather than quietly dropped.
+rather than quietly dropped. **Amended 2026-09-09**: §2 gains the picture's whole-frame record; §3 admits the narrowing case ADR-007 §4 records, for Platform.md's RN-6.
 **Depends on:** ADR-001 (fidelity — unchanged; §5 restated at M6-f), ADR-002 (the numeric model,
 which is what the port keeps of the original's arithmetic), ADR-007 (state ownership — `Universe`
 is what the surviving digests fold), ADR-008 (the picture, which never had an oracle and shows what
@@ -57,6 +57,7 @@ says nothing about what they can see.
 | **The replay digests** | COMPOSITION: three scripted flights — a launch-to-docking, a death, an escape pod — each hashed at every hundredth step and at every turn of the script, against a recorded table. A refactor that keeps every routine correct and changes how they compose fails here and nowhere else | `FlightReplayTests` |
 | **The state hash and its cell walk** | That the digest above SEES the state: `Elite::HashState` folds `Universe` in declaration order, and a table of cells is walked one byte at a time with the requirement that each moves the hash -- 1,489 do and 7 are inert setters the table declares as such. A field the fold forgot is named, not counted | `StateHashTests`, `StateCells.cpp` |
 | **The picture layer** | Fifty-three tests over the 640×400 surface, which never had an oracle and never could (ADR-008): every twinned routine draws on both surfaces, the glyphs match, the layouts land where their tables say | `Picture*Tests`, `check_twins.py` |
+| **The picture's whole-frame record** | Sixteen checkpoints of the scripted flight hashed as the picture RESOLVES — what a person would be shown — recorded 2026-09-09 as the first per-frame regression the 640×400 surface has had. Every rendering slice in [Platform.md](../Platform.md) is gated on it, and at that track's RN-6 it replaces the canvas as the pixels' reference | `FlightReplayTests::ThePictureIsAsRecorded` |
 | **The port's own invariants** | The assertions that were never comparisons: the scaled divide really divides, `TIDY` reaches all three of its shapes, the economy gradient pushes price and quantity opposite ways, a station survives a launch, the raster split alternates | scattered through the trimmed suites, one or two per file |
 | **The shell** | The viewport arithmetic, the palette, the step planner, the key map and the settings file — all of it the platform's rather than the game's | `ShellTests` |
 | **The mutation corpus** | Whether a test would NOTICE. **Degraded, and §4 says how far** | `mutate.py`, `mutants.json` |
@@ -74,7 +75,9 @@ governs them and is unchanged by the detachment:
 
 A record may be re-taken in exactly two cases, and the journal entry names it: the digest is
 deliberately WIDENED (more cells in the fold), or a defect in the port is found and fixed and the
-record follows the fix. Never for a refactor.
+record follows the fix. Never for a refactor. **Three since 2026-09-09**: a NARROWING, with the fold
+without the departing field identical on every checkpoint before and after (ADR-007 §4). It was
+admitted for one slice, [Platform.md](../Platform.md)'s RN-6, with that slice's name on it.
 
 **What is different now is what a re-take costs.** While the original was here, a digest that moved
 could be adjudicated: run the routine on both machines and see which was right. That is gone. A

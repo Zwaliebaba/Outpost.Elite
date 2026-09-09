@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Scheduler.h"
 #include "SidSynth.h"
 
 #include "Music.h"
@@ -44,7 +45,15 @@ namespace Outpost
   class SoundOutput
   {
   public:
-    SoundOutput() noexcept;
+    /*
+     * The machine decides the interrupt's rate and the chip's clock, and it is a PARAMETER since
+     * T-1 (Design/Platform.md §3.2) where it was two constants here.
+     *
+     * The two were `1'022'727` and `65 * 263` -- NTSC, named in this file as well as in
+     * `Presentation.h` and `Scheduler.h`, which is three places for one fact. The composition root
+     * settles the machine once from `Settings.txt` and hands it to all three.
+     */
+    explicit SoundOutput(MachineTiming _timing) noexcept;
     ~SoundOutput();
 
     SoundOutput(const SoundOutput&) = delete;
@@ -69,13 +78,19 @@ namespace Outpost
     void RunFrame(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept;
     [[nodiscard]] std::uint32_t QueuedBuffers() noexcept;
 
-    /// The 6510's clock on the NTSC machine, and the VIC-II's frame in cycles on the same.
-    static constexpr std::uint32_t CLOCK_HZ = 1'022'727;
-    static constexpr std::uint32_t FRAME_CYCLES = 65 * 263;
     static constexpr std::uint32_t SAMPLE_RATE = 44'100;
 
-    /// A frame is 737 samples and a fraction; the ring's slots hold the ceiling.
-    static constexpr std::size_t FRAME_SAMPLES_MAX = FRAME_CYCLES * SAMPLE_RATE / CLOCK_HZ + 1;
+    /*
+     * A slot big enough for a frame of EITHER machine, which is PAL's.
+     *
+     * `CLOCK_HZ` and `FRAME_CYCLES` were constants here until T-1 -- NTSC, named in this file as
+     * well as in `Presentation.h`, which is two places for one fact and no way to choose. They are
+     * `m_timing` now; but an array's size is not a run-time choice, so the ceiling is taken from
+     * the longer frame: PAL's 19,656 cycles at its own 985,248 Hz is 880 samples against NTSC's
+     * 737. A slot is 1.7 KB either way and there are eight of them.
+     */
+    static constexpr std::size_t FRAME_SAMPLES_MAX =
+      static_cast<std::size_t>(MachineTiming::Pal().cyclesPerFrame) * SAMPLE_RATE / MachineTiming::Pal().clockHz + 1;
 
     /// How deep the queue is kept, and how many slots there are to keep it from. The slot about to
     /// be written was submitted RING frames ago and at most TARGET are still in flight, so it is free.
@@ -83,12 +98,15 @@ namespace Outpost
     static constexpr std::size_t RING = 8;
     static_assert(RING > TARGET_QUEUED + 1);
 
+    /// The 6510 and the VIC-II this port is being, settled once by the composition root.
+    MachineTiming m_timing;
+
     bool m_comInitialised = false;
     winrt::com_ptr<IXAudio2> m_xaudio;
     IXAudio2MasteringVoice* m_mastering = nullptr;
     IXAudio2SourceVoice* m_source = nullptr;
 
-    SidSynth m_synth{CLOCK_HZ, SAMPLE_RATE};
+    SidSynth m_synth;
     Elite::SidWriteLog m_interrupt;
 
     std::array<std::array<std::int16_t, FRAME_SAMPLES_MAX>, RING> m_ring{};
