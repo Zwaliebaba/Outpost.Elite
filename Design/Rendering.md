@@ -8,8 +8,9 @@ the canvas and the game are not touched.** §5's option B is declined, and it is
 rewritten to decline on the sequencing finding that arrived *with* the ruling rather than on the one
 this document opened with, because the two point opposite ways and the first one was wrong.
 **All four of its rulings are taken (§9)** and the track is three slices, RN-0 to RN-2: the frame
-boundary and nothing past it, delivering a picture pixel-identical to today's. **No slice is
-built.**
+boundary and nothing past it, delivering a picture pixel-identical to today's. **RN-0 is part-built
+as of 2026-09-09 — its GATE is in and its SPLIT is not** (§12), and RN-1 and RN-2 are unstarted.
+Three sites need an owner ruling before the split can finish, and §12.3 names them.
 
 **REVALIDATED against `a827b97` on 2026-09-09, after M6 closed and the original left the tree**, and
 the revalidation moved three things: R-1 (the clear now has one caller, and it is a test),
@@ -442,7 +443,7 @@ Shaped so that the tree plays at every step, which is Resolution.md §10's rule 
 
 | Slice | What | Gate |
 |---|---|---|
-| **RN-0** | The second `Picture` and the background/frame split (§4.5), with the plane still a bit plane and the twins still exclusive-oring. Frame picture cloned from background each frame; everything else unchanged | Every golden and the replay digest unchanged; the picture identical to today's, frame for frame, on a recorded flight |
+| **RN-0** ◐ **part-built 2026-09-09 (§12)** | The second `Picture` and the background/frame split (§4.5), with the plane still a bit plane and the twins still exclusive-oring. Frame picture cloned from background each frame; everything else unchanged. **The GATE is built and the SPLIT is not**, and §12 says why that order and what is left | ✅ `ThePictureIsAsRecorded` — sixteen checkpoints of the scripted flight, recorded and green. ◻ The docked screens are not covered and want a `PictureTextTests`-shaped fixture (§12.2). ◻ Three of the seventy-four sites need a ruling, not a classification (§12.3) |
 | **RN-1** | The frame boundary (§4.2). `Picture::Clear` on the frame surface each frame; the per-frame twins re-emit; the erase twins become drops (§4.4) and `check_twins.py` grows its fourth table | The picture must still be identical, because a correct erase and a correct clear produce the same frame. **This is the slice that proves R-2 is solved.** It also runs under `TheReplayIsTheSameWithNoTwins`, which is the guard that matters here — dropping every erase twin is precisely the change T1 exists to catch, and that test was built on 2026-09-09 ahead of the track rather than inside it (§11.3) |
 | **RN-2** | ADR-008 amended, and it is amended by DELETION: **T3 goes** — "every erase has a twin erase" is not a rule the picture can break once it has a frame — and §1's byte count is corrected for the second surface. §3's five clauses all stand, because the picture is still a bit plane and still byte-comparable to the canvas | `tools/check_docs.py`, and the ADR's Status table |
 
