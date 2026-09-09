@@ -451,7 +451,45 @@ makes the starfield vanish from the frame, which shows up as `ThePictureIsAsReco
 checkpoint 0's digest at checkpoint 1 (both frames then being backdrop-only). Read
 `MoveStardustAhead` whole before touching it; do not infer from the parameter names.
 
-**(d) "PIXEL-IDENTICAL" CANNOT BE MET, AND THE REASON IS A DEFECT IN THE GATE.** Measured
+**(d) — RETRACTED 2026-09-09. THE GATE IS NOT DEFECTIVE; THE FINDING BELOW WAS WRONG.** It is kept
+because a corpus that quietly deletes its mistakes teaches nothing, and because the measurement that
+overturned it is the one to trust.
+
+The claim was that `ThePictureIsAsRecorded` records "the backdrop and almost nothing else" because
+the checkpoint lands at a bad moment. It does not. Counting the CANVAS's own bitmap beside the
+frame's at every checkpoint settles it — the canvas is the authority, is never split and is never
+cleared:
+
+| step | 0 | 40 | 100 | 200 | 300 | 340 | 342 | 400 |
+|---|---|---|---|---|---|---|---|---|
+| canvas bytes above its docked baseline of 2092 | 0 | 302 | 316 | 308 | **24** | **23** | **19** | 41 |
+| frame bytes | 0 | 563 | 581 | 582 | **12** | **13** | **11** | 82 |
+| frame ÷ twice the canvas's | — | 0.93 | 0.92 | 0.94 | 0.25 | 0.28 | 0.29 | 1.00 |
+
+**The frame IS the current picture and tracks the canvas at twice the scale.** Twelve bytes at step
+300 is not a blind gate; the scripted flight is passing through near-empty space and the CANVAS has
+only twenty-four bytes of transient content there too. The low ratios at those three checkpoints are
+byte-packing on very small numbers, not a discrepancy.
+
+**So the ruling to sample at the present is not needed**, on top of not being implementable: the
+checkpoint is once per pass, at the same place the executable presents, and is the right sampling
+point. The gate's real limitation is the one established at RN-0 and it is different: the composite
+is an exclusive-or, so moving an exclusive-or write between surfaces is provably invisible. That is
+why the eighty site moves went unnoticed. It has nothing to do with when the sample is taken.
+
+**AND THE 1559 WAS ACCUMULATION, NOT A CLEARED FRAME.** With the clear on and the erase twins
+dropped, the frame held two and a half times the ink the canvas justified — because the replay ended
+the frame at the CHECKPOINT, once in a hundred steps, so a hundred passes of drawing piled up with
+nothing erasing them. Ending the frame after every `Step`, which is what `Main.cpp` does every turn,
+removes it. **The boundary is per pass and the replay driver must call it per pass**; RN-1's first
+commit put it at the checkpoint and that is the line to change.
+
+**What is still open after all this**, and it is a much smaller question than the one it replaces:
+with a per-pass boundary the frame is populated at some checkpoints and empty at others (0 at step
+40, 11 at step 100, 532 at step 200). Something about which write in a pass comes last. That is the
+next thing to read, and it is the only thing between here and RN-1's second commit.
+
+**THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
 flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
 
