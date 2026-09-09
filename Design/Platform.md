@@ -580,7 +580,7 @@ turns the slice green beyond `check_all.py` and the suite; sittings are the corp
 | **T-1** ✅ **built 2026-09-09 (§10)** | §3.2 in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated blanks; the time clamp; auto-pause; the stall counter; `SoundOutput` takes the same `MachineTiming`. No speed knob (D3) | `ShellTests` moved and extended (§3.2's three new cases); play: `dn2`'s beep pause is five sixths of a second on a 60 Hz and a 144 Hz panel; Alt+Tab away a minute, back on the same step | `main-lines` (<!--count:main-lines-->258) falls; ADR-005 §3 | 2 |
 | **T-3** ✅ **built 2026-09-09 (§10)** | §3.7: the waitable object, latency one, **resolve**-on-change over `Picture::ResolveSignature` (not present-on-change — see §3.7 and §10), occlusion idle | The picture's own goldens unchanged; the signature's own test; **owner's, outstanding**: PresentMon before and after on a scripted key, and CPU at rest with the window hidden | ADR-008 one paragraph | 1–2 |
 | **RN-0** ✅ **built 2026-09-09 (§10)** | The backdrop and frame surfaces; the 71 classified sites moved; the three defaults of §3.4; the docked-screen picture fixture of §3.9 | `ThePictureIsAsRecorded` unmoved; the new docked fixture green; `TheReplayIsTheSameWithNoTwins` | none; the 36 KB is ruled | 2 |
-| **RN-1** ◐ **first commit built 2026-09-09 (§10)**; the clear is off | the boundary in `GameLogic/Frame.h`, nineteen sites through it, the clear behind a `constexpr bool`; then the clear on and the frame **cleared**, not refreshed from the backdrop (that would ghost); erase twins become drops; `check_twins.py`'s fourth table | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
+| **RN-1** ✅ **built 2026-09-09 (§10)** | the boundary in `GameLogic/Frame.h`, nineteen sites through it; the clear on and LAZY, and the frame **cleared**, not refreshed from the backdrop (that would ghost); **seven** erase twins become drops, the seventh being `LL9` part 9's, which no list had; the tunnel's rings move to the backdrop; `check_twins.py`'s fourth table and its rule 4 | Both picture gates unmoved: a correct erase and a correct clear produce the same frame, which is the slice's whole claim | `check_twins.py` | 2 |
 | **RN-2** ◐ **the RN-0 half amended 2026-09-09** | §1 says two surfaces and 215,364 bytes; §4 names the backdrop; the Status table carries the split. **T3 is NOT deleted**: it stays in force until RN-1's second commit turns the clear on, because the rule and the clear are only equal to each other | `check_docs.py`; the ADR's Status table | — | 0.5 |
 | **I-2** `InputFrame` and the layered map | §3.3: the struct, the two `Step`s over it, `Window` producing one per turn from scan codes with events accumulated into it, the layers, `NextKey` and `Flush` off the port. **Two commits**: the signature with the same keys, then the meaning | All three digests unmoved after the first commit; I-6's tests and `DockedSessionTests` after the second, with the level-against-edge answer journaled; `ShellTests` per-layer completeness | `outpost-elite-names` (<!--count:outpost-elite-names-->62) may fall; `effects-seams` unchanged | 2 |
 | **I-4** Coroutines and `Platform` | §3.5 and §3.1: `Task`, the awaitables, the thirty-six routines converted in groups, `Run()` a function over `Game` and `Platform`, `GameShell` and `FlightSession` absorbed, `Abandon` deleted | Every existing comparison green without change to what it asserts; the `GameLoopTests` case of §3.9 on the Linux leg; all digests unmoved | `effects-seams` 5 → 4 or 3; `main-lines` falls | 4–5 |
@@ -1038,6 +1038,87 @@ its twin and would be right to. The ADR says this in both places it mentions T3 
 the row in the Status table — rather than recording a deletion that has not happened. RN-2 is half
 done and its row says so; the other half rides with RN-1's second commit, which is where it belongs,
 because the rule and the clear are only equal to each other.
+
+**2026-09-09 — RN-1, second commit: the clear is on, and the drops are SEVEN.** Every picture gate
+is unmoved — `ThePictureIsAsRecorded`'s sixteen checkpoints, `RECORDED_DOCKED_PICTURES`,
+`RECORDED_RINGS` — with 152 tests and 13 checks green. That equality is the slice's whole claim: a
+correct erase and a correct clear produce the same frame.
+
+**The seventh erase is the finding, and it is not called `Erase` anything.** `LL9` part 9
+(`OpenHeapRun`, `ShipDraw.cpp`) opens a ship's heap run by drawing LAST pass's ship a second time to
+rub it out. It is one line inside a routine whose name says nothing about erasing, it is absent from
+Archive/Rendering.md §4.4's list of nine, and it is absent from this document's own drops list. It
+was still running on the frame after the other six went, and it caused BOTH of the faults that were
+being hunted as two: where the ship had not moved between passes the ghost cancelled the new draw
+and the checkpoint held too LITTLE; where it had, the ghost stood beside it and the checkpoint held
+too MUCH. Six checkpoints were out by −67, +70, −30, +357, +677 and +188; dropping this one line
+took all six to zero.
+
+**The instrument that named it, after four diagnoses reached by inference were all wrong.** Every
+write that LANDED on the frame was recorded with the offset, the mask, and a tag naming the drawing
+primitive it came from, for one pass either side of each moved checkpoint; then the offsets whose
+writes exclusive-ored back to nothing were grouped by the pair of primitives that had cancelled
+them. At checkpoint 400 that read "74 offsets cancelled, every one of them a ship line against
+another ship line" — which is not a fact anybody would have guessed and is one nobody has to. **The
+rule this slice ends with is that the class of routine RN-1 handles is a PROPERTY, not a list:
+anything that erases by redrawing its own geometry cancels itself on a cleared frame, whatever it is
+called.**
+
+**The hyperspace tunnel's rings are the BACKDROP's, and RN-0 had them on the frame.** They
+accumulate: each circle is presented and the next is drawn on top of what is already there until
+`LOOK1` wipes the screen, which is `DrawHyperspaceRing`'s own comment ("they erase themselves
+because `LOOK1` below clears the screen anyway"). Anything that survives a present is the backdrop's
+by RN-0's own rule. `RECORDED_RINGS` was recorded to catch exactly this and did, at the first
+present that follows another ring — the second one. So `DrawHyperspaceRing` takes TWO surfaces now:
+the one the circles are drawn on and the one the present ends. They differ in exactly one place in
+the game and this is it, and hand both the same surface and the tunnel wipes itself — which is the
+mutation that proves the record is load-bearing. With the rings on the backdrop the digests are bit
+for bit what they were.
+
+**A first attempt at this passed every test and was still wrong.** Leaving the rings on the frame
+and having the ring's present end NOTHING gives the same pixels — there is no boundary during the
+tunnel either way — so no test could tell them apart. It contradicted RN-1's own principle that a
+present is the end of a frame, and it left persistent content on the surface defined as what a pass
+re-emits, which is a trap for I-4's flight loop rather than a bug today. Two parameters, and the
+mutation that fails, is the version that says what is true.
+
+**The clear is LAZY and that is not an optimisation.** `Picture::EndFrame` marks; the next write
+that lands clears first. An eager clear is identical on the glass and wrong to everything that looks
+BETWEEN two passes — the presenter, the replay's checkpoint, every recorded picture digest — because
+all of them would read a blank surface instead of the frame that was just finished. Planting the
+eager version fails three tests, one of them `ThePictureIsAsRecorded` at checkpoint 1.
+
+**The boundary is per PASS, and the replay driver had it per checkpoint.** `Main.cpp` ends the frame
+every turn; the replay ended it once in a hundred steps, so a hundred passes piled up. That was the
+single largest correction of the sitting and it is one line in the fixture.
+
+**Four routines lost their `Picture*` and one lost its side effect.** `EraseSun`, `EraseBall`,
+`ErasePlanetOrSun` and `EraseSunRow` do not take a picture any more: a parameter that is
+deliberately ignored is a worse lie than its absence, and the contract is now in the signature
+rather than in a comment. `ClipSunRow` was made PURE — it zeroed the heap entry it was asked about,
+so a twin could not ask without consuming game state — and `DrawSunFromState2x` draws the whole sun
+from the widths `SUN` leaves behind, because a differential renderer cannot survive a clear.
+
+**T3's replacement, and it is a replacement rather than a deletion.** `check_twins.py` gains a
+fourth rule and an `ERASE_NEEDS_NO_TWIN` table with a reason per entry, and the rule is the OPPOSITE
+of rule 2: a routine named there must still draw on the canvas and must still call no twin at all.
+Put a twin back and the check fails; delete the canvas drawing and it fails too, so no entry can go
+stale in silence. Three of the seven drops sit in routines that have nothing else to draw and are in
+the table; the other four are inside routines that legitimately call a twin for something else and
+the table says which and why.
+
+**Two tests were rewritten to the new contract and one was added.**
+`ErasingThePlanetClearsBothSurfaces` asserted the old rule and became
+`ErasingThePlanetLeavesThePictureToTheFrameBoundary`; `TheSunLandsOnBothSurfacesAsItDrifts` now ends
+the frame between its three, which is what makes a whole-sun twin comparable with a differential
+canvas. `ClearBlanksEveryPlaneAndTheFrameBoundaryIsLazy` is new — `Clear` had never had a test
+because nothing called it — and it opens the new frame with each plane's own mutator in turn. That
+last part was a measurement, not a preference: written as one case with a pixel as the first write,
+the bitmap's clear blanked the other two planes as well and the case passed with `BeginFrameIfStale`
+deleted from `SetCell` and from `SetDot`.
+
+**`CLEAR_THE_FRAME` is gone.** A `constexpr bool` that is now always true is scaffolding, and
+scaffolding left up is read as structure.
 
 ---
 

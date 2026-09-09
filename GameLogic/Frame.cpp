@@ -11,19 +11,20 @@ namespace Elite
   void EndFrame(Picture* _frame) noexcept
   {
     /*
-     * `if constexpr` rather than a runtime test, so that with the clear off this compiles to
-     * nothing at all and the first commit cannot be accused of costing a frame's memset.
+     * A MARK AND NOT A MEMSET, which is the whole of RN-1's second finding.
+     *
+     * `Picture::EndFrame` only records that the frame is over; the next write that LANDS clears
+     * first. An eager clear here would be identical on the glass and wrong to everything that looks
+     * BETWEEN two passes -- the presenter a moment later, the replay's checkpoint, every recorded
+     * picture digest -- because all of them would see a blank surface rather than the frame that
+     * was just finished.
+     *
+     * Null is a real argument and not a missing one: three of the nineteen present sites have no
+     * frame in scope, because what they are presenting has nothing of the frame on it.
      */
-    if constexpr (CLEAR_THE_FRAME)
+    if (_frame != nullptr)
     {
-      if (_frame != nullptr)
-      {
-        _frame->Clear();
-      }
-    }
-    else
-    {
-      static_cast<void>(_frame);
+      _frame->EndFrame();
     }
   }
 

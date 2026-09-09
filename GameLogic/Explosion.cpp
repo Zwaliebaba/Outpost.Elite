@@ -276,7 +276,13 @@ namespace Elite
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
     if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
-      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr, _picture);
+      /*
+       * NO TWIN ON THE FRAME: the comment above says what this is -- last frame's cloud drawn a
+       * second time to rub it out -- and the frame is cleared each pass (RN-1). On the canvas the
+       * second draw is the erase; on a surface blanked every pass it is a ghost of the cloud that
+       * has already gone, and the new cloud is drawn over it.
+       */
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr, nullptr);
     }
 
     /*

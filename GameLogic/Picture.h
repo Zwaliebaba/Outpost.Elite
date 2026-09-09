@@ -103,6 +103,7 @@ namespace Elite
 
     void WriteBitmap(std::size_t _offset, std::uint8_t _value) noexcept
     {
+      BeginFrameIfStale();
       if (_offset < BITMAP_SIZE)
       {
         m_bitmap[_offset] = _value;
@@ -112,6 +113,7 @@ namespace Elite
 
     void ExclusiveOrBitmap(std::size_t _offset, std::uint8_t _mask) noexcept
     {
+      BeginFrameIfStale();
       if (_offset < BITMAP_SIZE)
       {
         m_bitmap[_offset] ^= _mask;
@@ -154,6 +156,7 @@ namespace Elite
 
     void SetCell(int _column, int _row, CellPalette _palette) noexcept
     {
+      BeginFrameIfStale();
       const std::size_t cell = Index(_column, _row);
       if (cell < CELL_COUNT)
       {
@@ -175,6 +178,7 @@ namespace Elite
 
     void SetDot(int _x, int _y, std::uint8_t _index) noexcept
     {
+      BeginFrameIfStale();
       const std::size_t at = DashboardIndex(_x, _y);
       if (at < DASHBOARD_SIZE)
       {
@@ -188,6 +192,7 @@ namespace Elite
     /// colour the way two multicolour masks do.
     void ExclusiveOrDot(int _x, int _y, std::uint8_t _index) noexcept
     {
+      BeginFrameIfStale();
       const std::size_t at = DashboardIndex(_x, _y);
       if (at < DASHBOARD_SIZE)
       {
@@ -262,6 +267,23 @@ namespace Elite
     [[nodiscard]] std::uint32_t Generation() const noexcept
     {
       return m_generation;
+    }
+
+    /*
+     * The frame is finished; the next write that LANDS starts a new one (Platform.md §3.4, RN-1).
+     *
+     * THE CLEAR IS LAZY AND THAT IS NOT AN OPTIMISATION. This surface holds what a pass drew, and
+     * everything that reads it does so between two passes: `ScreenPresenter` a moment after the
+     * step, the replay's checkpoint, `ThePictureIsAsRecorded`. Blanking it here would give every one
+     * of them an empty picture and a digest that could never fail. So the surface keeps the
+     * completed frame from the moment it is finished until the next one starts being drawn, which
+     * is exactly the window in which somebody is looking at it.
+     *
+     * The cost is one predictable branch beside the bounds check each mutator already has.
+     */
+    void EndFrame() noexcept
+    {
+      m_stale = true;
     }
 
     // ---- the picture -------------------------------------------------------------------------
@@ -386,6 +408,19 @@ namespace Elite
 
     /// See `Generation` -- stepped by every write that lands. Not game state and never folded.
     std::uint32_t m_generation = 0;
+
+    /// See `EndFrame`. Not game state and never folded.
+    bool m_stale = false;
+
+    /// The other half of `EndFrame`: the debt is settled by the first write that lands.
+    void BeginFrameIfStale() noexcept
+    {
+      if (m_stale)
+      {
+        m_stale = false;
+        Clear();
+      }
+    }
   };
 
   /*

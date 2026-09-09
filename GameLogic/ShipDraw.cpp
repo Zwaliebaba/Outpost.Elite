@@ -203,7 +203,7 @@ namespace Elite
     DrawShipLines(_canvas, _heap, _run, _picture);
   }
 
-  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture) noexcept
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
@@ -211,7 +211,17 @@ namespace Elite
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
-    DrawShipLines(_canvas, _heap, _ship.heap, _picture);
+    /*
+     * NO TWIN ON THE FRAME: this is the ERASE, and the frame is cleared (RN-1, `Frame.h`).
+     *
+     * `DrawShipLines` is both the draw and the erase, because the game erases by drawing a second
+     * time. On the canvas that still holds -- the canvas is the game's own memory and is never
+     * cleared. On the frame it does not: the surface is blanked at every boundary, so this would
+     * not rub last pass's ship out, it would DRAW it, onto an empty frame, as a ghost. The
+     * `Picture*` went with the twin: a parameter deliberately ignored is a worse lie than its
+     * absence, and the contract belongs in the signature.
+     */
+    DrawShipLines(_canvas, _heap, _ship.heap, nullptr);
 
     // LL155's exit -- the test against 4 clears it for a heap with no line on it, and the
     // comparison that ends the drawing loop leaves it set for every heap that had one.
@@ -237,7 +247,7 @@ namespace Elite
                        Picture* _picture) noexcept
   {
     // The flag `EE51` returns goes nowhere from here: `SHPPT` overwrites it in `PROJ`'s arithmetic.
-    static_cast<void>(EraseShip(_canvas, _ship, _heap, false, _picture));
+    static_cast<void>(EraseShip(_canvas, _ship, _heap, false));
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
@@ -921,7 +931,7 @@ namespace Elite
     if (Has(_render.work.traits, TraitBit::Remove))
     {
       // EE51 as a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
-      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture));
+      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn));
       return Presence::Erased;
     }
 
@@ -939,7 +949,7 @@ namespace Elite
 
       // EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
-      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture);
+      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn);
       SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry);
     }
 
@@ -963,7 +973,7 @@ namespace Elite
       if (!Has(_render.work.state, ShipStateBit::Exploding))
       {
         // EE51 -- and the flag is `LL9`'s exit
-        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false, &_render.picture));
+        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false));
         return Presence::Erased;
       }
 
@@ -1360,7 +1370,17 @@ namespace Elite
     _render.run = _render.work.heap;
     if (Has(_render.work.state, ShipStateBit::OnScreen))
     {
-      DrawShipLines(_render.canvas, _render.heap, _render.run, &_render.picture);
+      /*
+       * NO TWIN ON THE FRAME: this is `EE31`'s erase and the frame is cleared (RN-1, `Frame.h`).
+       *
+       * THE SEVENTH FRAME-SIDE ERASE, and the one Archive/Rendering.md section 4.4's list of nine
+       * does not have -- it is not a routine called `Erase` anything, it is one line inside
+       * `LL9` part 9 that draws last pass's ship a second time. Dropping it is what took the
+       * last six checkpoints of RN-1 to nothing, and it caused BOTH faults at once: where the
+       * ship had not moved the ghost cancelled the new draw and the checkpoint held too little,
+       * and where it had it stood beside it and the checkpoint held too much.
+       */
+      DrawShipLines(_render.canvas, _render.heap, _render.run, nullptr);
     }
     _render.work.state = With(_render.work.state, ShipStateBit::OnScreen);
 

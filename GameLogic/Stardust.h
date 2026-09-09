@@ -99,15 +99,16 @@ namespace Elite
    * The ledger marked this ported with the rest of the pixel routines in slice 1d-a and it was not
    * (§6.41): it writes `SYL`, and the stardust arrays did not exist then.
    *
-   * `_acrossLow` and `_downLow` are `SXL` and `SYL` AS THEY WERE WHEN THE MARK BEING ERASED WAS
-   * DRAWN, which is not what the arrays hold by the time this is called: the mover overwrites `SXL`
-   * two statements above the call and this routine overwrites `SYL` itself. They are the twin's
-   * half-pixel (Resolution.md section 4.3, slice RS-3) and the caller stages them beside the
-   * position it already stages.
+   * `_picture`, `_acrossLow` AND `_downLow` WERE HERE AND ARE NOT ANY MORE (RN-1). The two
+   * fractions were `SXL` and `SYL` as they were when the mark being erased was DRAWN -- which is
+   * not what the arrays hold by the time this is called -- and they existed solely so the wide
+   * mark could be rubbed out at the half-pixel the faithful byte could not express
+   * (Resolution.md §4.3). The frame is cleared at every present now, so there is no wide mark to
+   * rub out: this plot is the canvas's alone, and the second plot at the speck's NEW position is
+   * the one the frame keeps. `check_twins.py`'s `ERASE_NEEDS_NO_TWIN` holds it to that.
    */
   [[nodiscard]] std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend,
-                                          std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance, Picture* _picture = nullptr,
-                                          std::uint8_t _acrossLow = 0, std::uint8_t _downLow = 0) noexcept;
+                                          std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /*
    * Swap every speck's x and y, which reflects the whole field in the line x = y,

@@ -172,7 +172,26 @@ namespace Elite
     bool offScreen = false;   ///< The carry -- SEC on both of `ED1`'s and `ED3`'s exits
   };
 
-  [[nodiscard]] SunRow ClipSunRow(PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept;
+  [[nodiscard]] SunRow ClipSunRow(const PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth,
+                                  std::uint8_t _row) noexcept;
+
+  /// 2x of: DrawSun
+  /*
+   * THE WHOLE SUN, from the half-widths `SUN` has just left in the heap (RN-1).
+   *
+   * `SUN` is a DIFFERENTIAL renderer -- Archive/Rendering.md's finding R-10 -- and that is what a
+   * cleared frame cannot live with. It keeps last pass's half-width per row in `LSO` and draws only
+   * the two pieces that CHANGED, which on a surface that is never cleared adds up to a sun and on
+   * one that is cleared every pass adds up to two slivers on an empty screen.
+   *
+   * So the frame gets the sun drawn whole instead, from the widths the faithful routine has already
+   * computed and stored. It DECIDES NOTHING (rule T1): the shape, the radius and every width are
+   * the game's, and this computes only where they land at twice the scale. It rolls no generator,
+   * takes no heap and writes no canvas byte, which is what `TheReplayIsTheSameWithNoTwins` holds it
+   * to -- and it reads the heap through `ClipSunRow`, which RN-1 made pure so that asking could not
+   * also consume.
+   */
+  void DrawSunFromState2x(Picture& _picture, const PlanetSunState& _state, SignMag16 _centre) noexcept;
 
   /*
    * Clip the row, forget it, and draw it.
@@ -182,8 +201,7 @@ namespace Elite
    * written would draw whatever `X1` and `X2` happened to hold, and the port reproduces that rather
    * than adding the branch the game does not have (ADR-003).
    */
-  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row,
-                   Picture* _picture = nullptr) noexcept;
+  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept;
 
   /// Forget the whole sun. Rows 1 to 199 are zeroed and entry 0 becomes 255.
   void ClearSunHeap(PlanetSunState& _state) noexcept;
@@ -198,7 +216,7 @@ namespace Elite
    * The 143 is the literal `2*Y-1` and not `Yx2M1`, in the same build where `CHKON` reads the
    * variable. Reproduced as written.
    */
-  void EraseSun(Canvas& _canvas, PlanetSunState& _state, Picture* _picture = nullptr) noexcept;
+  void EraseSun(Canvas& _canvas, PlanetSunState& _state) noexcept;
 
   /*
    * Rub the planet out, one segment at a time.
@@ -207,11 +225,11 @@ namespace Elite
    * run's START rather than another segment's end. `BLINE` writes those breaks when a segment is
    * clipped away, which is how a circle half off the screen comes back as several polylines.
    */
-  void EraseBall(Canvas& _canvas, PlanetSunState& _state, Picture* _picture = nullptr) noexcept;
+  void EraseBall(Canvas& _canvas, PlanetSunState& _state) noexcept;
 
   /// Rub out whichever of the two this is. `TYPE` is 128 for the planet and 129 for
   /// the sun, and the routine tells them apart with an `LSR` rather than a comparison.
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type, Picture* _picture = nullptr) noexcept;
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type) noexcept;
 
   /*
    * Is a circle of radius K at (K3, K4) worth drawing?
@@ -315,7 +333,7 @@ namespace Elite
    */
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                           ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present,
-                          Picture* _picture = nullptr) noexcept;
+                          Picture* _picture = nullptr, Picture* _frame = nullptr) noexcept;
 
   /*
    * The whole effect, eight rings from the centre of the space view.
@@ -323,8 +341,18 @@ namespace Elite
    * `K3` and `K4` are set to the view centre and their high bytes cleared, so the rings are drawn
    * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
    */
+  /*
+   * `_picture` IS THE BACKDROP AND `_frame` IS THE FRAME, and they are two parameters because the
+   * tunnel is the one place in the game where the two answers differ (RN-1).
+   *
+   * Every circle is presented, and a present is the end of a frame -- so the frame is ended here,
+   * per circle, exactly as `Main.cpp` ends it per turn. What the rings are DRAWN on is the other
+   * surface: they accumulate until `LOOK1` wipes the screen, and anything that survives a present
+   * belongs to the backdrop. Hand both to the same surface and the tunnel wipes itself.
+   */
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip, Presenter& _present, Picture* _picture = nullptr) noexcept;
+                           MathWorkspace& _math, ClipState& _clip, Presenter& _present, Picture* _picture = nullptr,
+                           Picture* _frame = nullptr) noexcept;
 
   /*
    * Is it worth drawing, how coarse should it be, and then draw it.

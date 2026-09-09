@@ -41,16 +41,24 @@ namespace Elite
   }
 
   std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend, std::uint8_t _across,
-                            std::uint8_t _down, std::uint8_t _distance, Picture* _picture, std::uint8_t _acrossLow,
-                            std::uint8_t _downLow) noexcept
+                            std::uint8_t _down, std::uint8_t _distance) noexcept
   {
     const AddSignedResult sum = AddSigned(_value, _addend);
     _dust.yLow[_at] = sum.low; // Into SYL
+    /*
+     * NO TWIN ON THE FRAME: this plot is the ERASE, and the frame is cleared (RN-1, `Frame.h`).
+     *
+     * `PIX1` runs twice a pass per speck. Here, at the position and the distance the speck HAD --
+     * the caller stages `X1`, `Y1`, `ZZ` and the two fractions for exactly this, and says so -- and
+     * again at the bottom of the loop at the new one. The canvas needs both, because it is never
+     * cleared. The frame needs only the second: this one would draw last pass's speck back onto an
+     * empty surface, which is a trail rather than a starfield.
+     *
+     * The surface and the two FRACTIONS went with the twin: they existed only so the wide mark
+     * could be put where the faithful byte could not say, and a parameter deliberately ignored is
+     * a worse lie than its absence.
+     */
     (void)PlotRelativePixel(_canvas, _across, _down, _distance);
-    if (DrawingTwins(_picture))
-    {
-      PlotRelativePixel2x(*_picture, _across, _down, _acrossLow, _downLow, _distance);
-    }
     return sum.high; // Into YY+1
   }
 
@@ -112,12 +120,13 @@ namespace Elite
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
       /*
-       * `SXL` and `SYL` as the last frame's plot left them, staged beside the position that plot
-       * used because both are overwritten before the erase below reaches them. They are the wide
-       * mark's half-pixel and nothing faithful reads them (Resolution.md section 4.3).
+       * THE TWO STAGED FRACTIONS WERE HERE AND ARE NOT ANY MORE (RN-1).
+       *
+       * `SXL` and `SYL` as last frame's plot left them, staged beside the position that plot used
+       * because both are overwritten before the erase reached them. They were the wide mark's
+       * half-pixel (Resolution.md section 4.3) and nothing faithful ever read them, so with the
+       * erase twin dropped they had no reader at all.
        */
-      const std::uint8_t wasAcrossLow = _dust.xLow[at];
-      const std::uint8_t wasDownLow = _dust.yLow[at];
 
       // The speed over the distance, halved twice, is how far this speck moves.
       // Forcing bit 0 on stops a distant speck dividing by zero further down.
@@ -163,8 +172,8 @@ namespace Elite
       _dust.xLow[at] = sum.low;
 
       // PIX1 with (S R) = YY(1 0), a zero low byte, and the pitch rate's sign flipped.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.pitchRate ^ 0x80u)}, y, x1, y1, distance,
-                          _picture, wasAcrossLow, wasDownLow);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.pitchRate ^ 0x80u)}, y, x1, y1,
+                          distance);
 
       // The three kill tests. A speck that has drifted more than 120 either way, or come
       // closer than 16, is not clipped -- it is thrown away and a new one rolled at the edge.
@@ -229,12 +238,13 @@ namespace Elite
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
       /*
-       * `SXL` and `SYL` as the last frame's plot left them, staged beside the position that plot
-       * used because both are overwritten before the erase below reaches them. They are the wide
-       * mark's half-pixel and nothing faithful reads them (Resolution.md section 4.3).
+       * THE TWO STAGED FRACTIONS WERE HERE AND ARE NOT ANY MORE (RN-1).
+       *
+       * `SXL` and `SYL` as last frame's plot left them, staged beside the position that plot used
+       * because both are overwritten before the erase reached them. They were the wide mark's
+       * half-pixel (Resolution.md section 4.3) and nothing faithful ever read them, so with the
+       * erase twin dropped they had no reader at all.
        */
-      const std::uint8_t wasAcrossLow = _dust.xLow[at];
-      const std::uint8_t wasDownLow = _dust.yLow[at];
 
       // The same opening as the front view, down to the bit forced on. The carry the
       // second rotate leaves is not read: the front view subtracts next, and this one calls.
@@ -290,7 +300,7 @@ namespace Elite
       _dust.xLow[at] = sum.low;
 
       // PIX1 with (S R) = YY(1 0), a zero low byte, and the pitch rate unflipped.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.pitchRate}, y, x1, y1, distance, _picture, wasAcrossLow, wasDownLow);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.pitchRate}, y, x1, y1, distance);
 
       x1 = x.hi;
       _dust.x[at] = x.hi;
@@ -400,12 +410,13 @@ namespace Elite
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
       /*
-       * `SXL` and `SYL` as the last frame's plot left them, staged beside the position that plot
-       * used because both are overwritten before the erase below reaches them. They are the wide
-       * mark's half-pixel and nothing faithful reads them (Resolution.md section 4.3).
+       * THE TWO STAGED FRACTIONS WERE HERE AND ARE NOT ANY MORE (RN-1).
+       *
+       * `SXL` and `SYL` as last frame's plot left them, staged beside the position that plot used
+       * because both are overwritten before the erase reached them. They were the wide mark's
+       * half-pixel (Resolution.md section 4.3) and nothing faithful ever read them, so with the
+       * erase twin dropped they had no reader at all.
        */
-      const std::uint8_t wasAcrossLow = _dust.xLow[at];
-      const std::uint8_t wasDownLow = _dust.yLow[at];
 
       /*
        * STL2 -- and the first thing to notice is what is NOT here. The dust does not come
@@ -443,8 +454,7 @@ namespace Elite
 
       sum = MultiplyAndAdd(y.hi, roll, y);
       // PIX1 with the pair in (S R), a zero low byte, and the roll rate.
-      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.rollRate}, sum.Pair(), x1, y1, distance, _picture, wasAcrossLow,
-                          wasDownLow);
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.rollRate}, sum.Pair(), x1, y1, distance);
 
       _dust.x[at] = x.hi;
       x1 = x.hi;

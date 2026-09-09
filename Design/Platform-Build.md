@@ -640,6 +640,29 @@ ship-as-point (`DrawShipAsPoint`, whose `PlotPixel2x` count halves with the ship
 tested. The method is the one that found the planet: per-twin counters for a moved pass against the
 same pass on the tree, then read the routine whose count differs.
 
+**FOUND 2026-09-09, AND IT WAS NEITHER OF THOSE TWO.** `ClearAllShips` runs at a view change and not
+per pass, and `DrawShipAsPoint` erases through `EraseShip`, which was already dropped. **It is `LL9`
+part 9 — `OpenHeapRun` in `ShipDraw.cpp` — which opens a ship's heap run by drawing LAST pass's ship
+a second time to rub it out.** One line, inside a routine whose name says nothing about erasing,
+absent from Archive/Rendering.md §4.4's list of nine and from the drops list above. Dropping it took
+all six remaining checkpoints to zero in one edit.
+
+**It caused BOTH faults, which is why they looked like two.** Where the ship had not moved between
+passes the ghost cancelled the new draw and the checkpoint held too little (400, 500, 600); where it
+had, the ghost stood beside it and the checkpoint held too much (700, 800, 1100).
+
+**The instrument was per-WRITE and not per-call, and that is what all the earlier failures were.**
+Every write that landed on the frame was recorded with its offset, its mask and a tag naming the
+primitive that made it, for one pass either side of each moved checkpoint; then the offsets whose
+writes exclusive-ored back to nothing were grouped by the pair of primitives that had cancelled
+them. Checkpoint 400 came back "74 offsets cancelled, every one a ship line against another ship
+line", which points at a routine rather than at a hypothesis to test.
+
+**So the rule is a property and not a list.** Anything that erases by redrawing its own geometry
+cancels itself on a cleared frame, whatever it is called and whatever file it is in. The plan's six,
+plus the explosion cloud, plus this one, is seven — and the seventh is the one no list would have
+contained, because every list here was built from names.
+
 **THE SUPERSEDED FINDING FOLLOWS, kept for the record.** Measured
 2026-09-09 by counting non-zero bitmap bytes on both surfaces at every checkpoint of the scripted
 flight, first on the tree as it stands and then with the clear on and the erase twins dropped:
@@ -687,6 +710,14 @@ replay driver and `Main.cpp` calling them — with `Clear` still a no-op behind 
 so the digests prove the plumbing alone. **BUILT 2026-09-09; nineteen sites, not sixteen.** (2) The clear switched on, the six drops made, the sun
 twin added, `check_twins.py` given a fourth table `ERASE_NEEDS_NO_TWIN` with a reason per entry.
 (3) The `PictureTests` case for `Clear` (there is none, because nothing called it).
+**(2) AND (3) BUILT TOGETHER 2026-09-09: SEVEN drops and not six, and one thing the plan did not
+know about — the hyperspace tunnel's rings, which RN-0 put on the frame and which belong on the
+backdrop because they accumulate until `LOOK1` wipes the screen. `RECORDED_RINGS` caught it at the
+second present, which is what it was recorded for. `DrawHyperspaceRing` takes two surfaces as a
+result — the one the circles land on and the one the present ends — because the tunnel is the one
+place in the game where those two answers differ. `CLEAR_THE_FRAME` was deleted rather than left
+standing at true, and `EraseSun`, `EraseBall`, `ErasePlanetOrSun` and `EraseSunRow` lost their
+`Picture*` parameter, because a parameter deliberately ignored is a worse lie than its absence.**
 
 **Gate.** `ThePictureIsAsRecorded`, `RECORDED_DOCKED_PICTURES`, `RECORDED_RINGS` unmoved — the
 slice's whole claim is that a correct erase and a correct clear produce the same frame;

@@ -162,7 +162,7 @@ namespace Elite
    * on the screen returns through a bare return with the flag the caller arrived with, which is
    * `_carryIn`.
    */
-  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture = nullptr) noexcept;
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept;
 
   /*
    * What `LL9` part 1 does after `EE51`, and the `EE55` loop -- set up a newly killed

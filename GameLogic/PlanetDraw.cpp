@@ -12,8 +12,30 @@
 namespace Elite
 {
 
-  SunRow ClipSunRow(PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
+  /*
+   * `ClipSunRow`'s state write, at the callers it belongs to (RN-1).
+   *
+   * The clip zeroed the heap entry itself on each of its two off-screen exits until it was made
+   * pure. This is the same store, at the same moments, spelled where a reader can see it happen.
+   */
+  void ZeroSunRowIfOffScreen(PlanetSunState& _state, const SunRow& _row, std::uint8_t _at) noexcept
   {
+    if (_row.offScreen && _at < _state.sun.size())
+    {
+      _state.sun[_at] = 0;
+    }
+  }
+
+  SunRow ClipSunRow(const PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
+  {
+    /*
+     * PURE SINCE RN-1, and the two lines that left are the reason.
+     *
+     * It used to zero `_state.sun[_row]` on each of its two off-screen exits, which made a clip
+     * that ANSWERS a question also one that CONSUMES state -- and a twin that needs the same answer
+     * could then not ask for it without rolling the game forward (rule T1). The zeroing is the
+     * caller's now; `offScreen` is how it knows, and it always did.
+     */
     // EDGES computes the right-hand end first. `T` is the kernel's byte and this routine's
     // own since M2-c-2; `X1` and `X2` are the answer.
     SunRow row;
@@ -33,10 +55,6 @@ namespace Elite
        * A fixture that seeds `SUNX` with a random high byte does reach it, and M6-0-d found the
        * two machines differing there (§8); the fixture seeds a reachable centre now.
        */
-      if (_row < _state.sun.size())
-      {
-        _state.sun[_row] = 0;
-      }
       row.offScreen = true;
       return row;
     }
@@ -61,10 +79,6 @@ namespace Elite
     if ((leftHigh.value & 0x80u) == 0u)
     {
       // Positive and non-zero: the whole line is off the right.
-      if (_row < _state.sun.size())
-      {
-        _state.sun[_row] = 0;
-      }
       row.offScreen = true;
       return row;
     }
@@ -73,22 +87,25 @@ namespace Elite
     return row;
   }
 
-  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row,
-                   Picture* _picture) noexcept
+  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
   {
     // HLOIN2 clips the row, clears its heap entry and draws. The carry is dropped.
     const SunRow row = ClipSunRow(_state, _centre, _halfWidth, _row);
 
+    // The heap entry is cleared whether or not the row was on screen -- an erased row has no
+    // width, and `ClipSunRow` used to do the off-screen half of this before RN-1 made it pure.
     if (_row < _state.sun.size())
     {
       _state.sun[_row] = 0;
     }
 
+    /*
+     * NO TWIN, AND NO PICTURE TO GIVE ONE (RN-1). This is an erase and the frame is cleared at
+     * every present, so a twin here would not rub last pass's row out -- it would draw it, onto an
+     * empty surface. The parameter went with the twin: a `Picture*` this ignored would be a worse
+     * lie than the absence.
+     */
     DrawHorizontalLine(_canvas, row.x1, row.x2, _row);
-    if (DrawingTwins(_picture))
-    {
-      DrawCanvasRow2x(*_picture, row.x1, row.x2, _row);
-    }
   }
 
   void ClearSunHeap(PlanetSunState& _state) noexcept
@@ -112,7 +129,7 @@ namespace Elite
     _state.SetBallX(0, 0xFF);
   }
 
-  void EraseSun(Canvas& _canvas, PlanetSunState& _state, Picture* _picture) noexcept
+  void EraseSun(Canvas& _canvas, PlanetSunState& _state) noexcept
   {
     // A negative first entry branches to `WPLS-1`, which is `WP1`'s own return. One
     // of the six backward label-with-offset targets §6.35 counted that land in the file BEFORE the
@@ -132,14 +149,14 @@ namespace Elite
       const std::uint8_t width = _state.sun[row];
       if (width != 0u)
       {
-        EraseSunRow(_canvas, _state, wasAt, width, row, _picture);
+        EraseSunRow(_canvas, _state, wasAt, width, row);
       }
     }
 
     _state.sun[0] = 0xFF;
   }
 
-  void EraseBall(Canvas& _canvas, PlanetSunState& _state, Picture* _picture) noexcept
+  void EraseBall(Canvas& _canvas, PlanetSunState& _state) noexcept
   {
     // Entry 0 of the x heap is the flag: `CIRCLE` clears it when it starts filling,
     // so anything else means there is nothing to rub out.
@@ -187,12 +204,8 @@ namespace Elite
 
       line.y2 = y;
       line.x2 = _state.BallX(at);
-      if (DrawingTwins(_picture))
-      {
-        // The wide segment is the faithful one doubled, taken BEFORE the call because `LOIN` hands
-        // the four bytes back the other way round when it drew right to left.
-        DrawLine2x(*_picture, line);
-      }
+      // NO TWIN, AND NO PICTURE TO GIVE ONE (RN-1): this walk is `WPLS2`, the planet's erase, and
+      // the frame boundary is what takes the planet off the picture. See `EraseSunRow`.
       const DrawnLine drawn = DrawLine(_canvas, line);
       line = drawn.ends; // the four bytes as `LOIN` leaves them, the other way round when it swapped
       ++at;
@@ -210,17 +223,17 @@ namespace Elite
     }
   }
 
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type, Picture* _picture) noexcept
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type) noexcept
   {
     // The planet is 128 and the sun 129, so the bottom bit is the whole of the test
     // and no comparison is needed.
     if ((Byte(_type) & 0x01u) != 0u)
     {
-      EraseSun(_canvas, _state, _picture);
+      EraseSun(_canvas, _state);
     }
     else
     {
-      EraseBall(_canvas, _state, _picture);
+      EraseBall(_canvas, _state);
     }
   }
 
@@ -709,7 +722,7 @@ namespace Elite
   {
     // Rub out last frame's planet, draw this frame's outline, and only then think
     // about the markings.
-    EraseBall(_canvas, _state, _picture);
+    EraseBall(_canvas, _state);
 
     if (DrawCircle(_canvas, _state, _geometry, _math, _clip, _centre, _radius.low, _picture))
     {
@@ -838,13 +851,13 @@ namespace Elite
      */
     if (_ship.z.sgn >= 48u || (_ship.z.sgn | _ship.z.hi) == 0u)
     {
-      ErasePlanetOrSun(_canvas, _state, _type, _picture);
+      ErasePlanetOrSun(_canvas, _state, _type);
       return;
     }
 
     if (Project(_ship, _math, _centre).offScreen)
     {
-      ErasePlanetOrSun(_canvas, _state, _type, _picture);
+      ErasePlanetOrSun(_canvas, _state, _type);
       return;
     }
 
@@ -881,7 +894,7 @@ namespace Elite
     if (extent.offScreen)
     {
       // Nothing of it is on screen, so only rub out the old one.
-      EraseSun(_canvas, _state, _picture);
+      EraseSun(_canvas, _state);
       return;
     }
 
@@ -960,7 +973,7 @@ namespace Elite
     {
       if (_state.sun[row] != 0u)
       {
-        EraseSunRow(_canvas, _state, wasAt, _state.sun[row], row, _picture);
+        EraseSunRow(_canvas, _state, wasAt, _state.sun[row], row);
       }
       --row;
     }
@@ -1012,31 +1025,27 @@ namespace Elite
         // The old line, clipped against LAST frame's centre. Its two ends go in `XX(1 0)`, which
         // `PLF23` reads back -- two locals of this loop since M2-c-3.
         const SunRow old = ClipSunRow(_state, wasAt, was, row);
+        ZeroSunRowIfOffScreen(_state, old, row);
         std::uint8_t sliverFrom = old.x1;
         const std::uint8_t sliverTo = old.x2;
 
         // And the new one, against this frame's.
         const SunRow fresh = ClipSunRow(_state, isAt, _state.sun[row], row);
+        ZeroSunRowIfOffScreen(_state, fresh, row);
 
         if (!fresh.offScreen)
         {
           // The two ends CROSSED OVER, so what is drawn is one end of the old line to the
           // matching end of the new one -- the sliver that has appeared or gone.
           const std::uint8_t held = fresh.x2;
+          // NO TWIN: the frame gets the whole sun from `DrawSunFromState2x` at the end of this
+          // routine, not this sliver of the difference. See its comment in `PlanetDraw.h`.
           DrawHorizontalLine(_canvas, fresh.x1, sliverFrom, row);
-          if (DrawingTwins(_picture))
-          {
-            DrawCanvasRow2x(*_picture, fresh.x1, sliverFrom, row);
-          }
           sliverFrom = held;
         }
 
         // PLF23 -- and the other sliver.
-        DrawHorizontalLine(_canvas, sliverFrom, sliverTo, row);
-        if (DrawingTwins(_picture))
-        {
-          DrawCanvasRow2x(*_picture, sliverFrom, sliverTo, row);
-        }
+        DrawHorizontalLine(_canvas, sliverFrom, sliverTo, row); // no twin: see `DrawSunFromState2x`
       }
       else
       {
@@ -1048,11 +1057,7 @@ namespace Elite
         }
         else
         {
-          DrawHorizontalLine(_canvas, fresh.x1, fresh.x2, row);
-          if (DrawingTwins(_picture))
-          {
-            DrawCanvasRow2x(*_picture, fresh.x1, fresh.x2, row);
-          }
+          DrawHorizontalLine(_canvas, fresh.x1, fresh.x2, row); // no twin: see `DrawSunFromState2x`
         }
       }
 
@@ -1100,7 +1105,7 @@ namespace Elite
       {
         if (_state.sun[row] != 0u)
         {
-          EraseSunRow(_canvas, _state, wasAt, _state.sun[row], row, _picture);
+          EraseSunRow(_canvas, _state, wasAt, _state.sun[row], row);
         }
         --row;
       }
@@ -1109,6 +1114,38 @@ namespace Elite
     // PLF8 -- and this frame's centre becomes next frame's.
     _state.sunX = _centre.x;
     _state.sunXNext = _centre.x1;
+
+    /*
+     * AND THE WHOLE SUN ONTO THE FRAME, because the differential above cannot survive a clear.
+     *
+     * Last of all, so that `_state.sun` holds the widths this pass ended with -- which is what the
+     * player is about to be shown. The differential arms above no longer draw on the frame at all;
+     * they still draw on the canvas, which is never cleared and is what the oracle compares.
+     */
+    if (DrawingTwins(_picture))
+    {
+      DrawSunFromState2x(*_picture, _state, isAt);
+    }
+  }
+
+  void DrawSunFromState2x(Picture& _picture, const PlanetSunState& _state, SignMag16 _centre) noexcept
+  {
+    // `EraseSun`'s walk, drawing instead of erasing and taking nothing away: every row the heap
+    // says has a width, clipped against the centre it is being drawn at.
+    for (std::uint8_t row = SPACE_VIEW_BOTTOM - 1u; row != 0u; --row)
+    {
+      const std::uint8_t width = _state.sun[row];
+      if (width == 0u)
+      {
+        continue;
+      }
+
+      const SunRow span = ClipSunRow(_state, _centre, width, row);
+      if (!span.offScreen)
+      {
+        DrawCanvasRow2x(_picture, span.x1, span.x2, row);
+      }
+    }
   }
 
   void ClearShip(Ship& _work) noexcept
@@ -1235,7 +1272,8 @@ namespace Elite
   }
 
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                          const Projection& _centre, std::uint8_t _index, Presenter& _present, Picture* _picture) noexcept
+                          const Projection& _centre, std::uint8_t _index, Presenter& _present, Picture* _picture,
+                          Picture* _frame) noexcept
   {
     // The ring's starting radius, the low three bits of the index plus eight, and
     // this routine's own since M2-c-3: it fills `K` and nothing else reads the block while it runs.
@@ -1259,7 +1297,15 @@ namespace Elite
        * showing anything until somebody presents, so the pacing goes where the machine's own
        * pause was -- between one circle and the one that erases it.
        */
-      PresentFrame(_present, _picture); // the ring's own surface: each circle is its own frame
+      /*
+       * THE FRAME IS THE OTHER SURFACE, which is why this routine takes two (RN-1).
+       *
+       * A present is the end of a frame and this is a present, so the frame ends here. What the
+       * ring is DRAWN on is `_picture`, which its callers answer with the backdrop, because the
+       * rings accumulate until `LOOK1` wipes the screen. Ending the surface the rings are on would
+       * leave one circle where there should be five.
+       */
+      PresentFrame(_present, _frame);
 
       // A radius past 128 doubles out of the byte, and the carry that falls out ends the ring.
       const ShiftResult doubled = RotateLeftValue(radius, false);
@@ -1280,7 +1326,7 @@ namespace Elite
   }
 
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                           Presenter& _present, Picture* _picture) noexcept
+                           Presenter& _present, Picture* _picture, Picture* _frame) noexcept
   {
     // The centre of the space view as a sixteen-bit pair, and the ring counter zeroed.
     Projection centre{};
@@ -1294,7 +1340,7 @@ namespace Elite
     // A local since M2-c-3, with `LL9`'s own four.
     for (std::uint8_t index = 0; index < 8u; ++index)
     {
-      DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _present, _picture);
+      DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _present, _picture, _frame);
     }
   }
 
