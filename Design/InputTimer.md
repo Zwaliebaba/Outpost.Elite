@@ -1,9 +1,14 @@
 # Input and time — what the port does today, and the plan to modernise both
 
-**Status:** analysis and plan, opened 2026-09-08; **six of its twelve slices are built the same day**
+**Status:** analysis and plan, opened 2026-09-08; **six of its thirteen slices are built the same day**
 -- I-0, S-1, I-3, T-0, I-1 and T-2, by owner ruling, each recorded in §9 -- and I-2, I-4, I-5,
-T-1, T-3 and T-4 are not. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
-record of what was found; where a finding is closed its heading says so. It reads after
+T-1, T-3 and T-4 are not, and I-6 was added on 2026-09-09 when the oracle's deletion left the input
+path with no direct test. §0 to §4 describe the port AS IT WAS when the document opened, kept as the
+record of what was found; where a finding is closed its heading says so. **The tree moved under the
+plan the same evening** -- M6-c built, M6-d running, the resolution track closed with ADR-008 -- and
+§9's entries say what that voided, rewrote and enlarged -- and **M6 closed on 2026-09-08 with the
+oracle DELETED rather than recorded**, which §6's revalidation of 2026-09-09 works through. It reads
+after
 [Modernize.md](Modernize.md), because it starts from the shape M6-0 left and proposes slices that
 sit beside M6-a; where it touches a decision an ADR owns, it says which ADR changes.
 
@@ -204,6 +209,27 @@ so the pause screen's letters and the text editor's digits do not have to be the
 (§5.3). Raw Input (`WM_INPUT`) is *not* needed for this; the scan code is in `WM_KEYDOWN`'s
 `lParam` bits 16–24 and that is enough for a game that does not need to distinguish two keyboards.
 
+**AND THE MAP HAD TWELVE HOLES IN IT, found by the owner on 2026-09-08 and fixed the same day**
+(`7cb33e0`). Every letter `KeyMap` bound was bound because a CONTROL wanted it -- "T" targets a
+missile, "D" asks for a distance -- and the twelve letters no control uses had no matrix position at
+all, nor did "0". `MT26` reads the CHARACTER `TRANTABLE` gives the position, so an unbound key
+arrived as 0, fell outside the line editor's "!" to "z" and rang the bell instead of appearing: a
+commander's name could not contain B, G, I, K, L, Q, R, S, V, W, X or Z, and **JAMESON, the name the
+screen itself offers, was one a player could not type back**. That is I-1's defect class at another
+seam -- the map was built control-first and nobody asked what the line editor needed -- and it is
+the third finding in this document that a per-mode layer would have caught, because a TextEntry
+layer has to name every position that types.
+
+**The fix binds "S" and "X" to the C64's own dive and climb, which makes them a letter AND a
+control**, and that is the many-to-one case §5.3 exists to resolve rather than a new problem: the
+number row has had it since ADR-005 §4 and the fix gives the two steering keys their original C64
+positions back. One consequence is worth stating because it is bounded rather than absent:
+`Elite::ScanKeyboard` drops the steering positions only on a CHART view, so on a docked screen that
+is not a chart a typed "S" does reach `control.pitch` through `StepDocked`'s `ScanFlightControls`.
+Nothing steers on it -- `Launch` calls `ResetShipAndBubble` (6502: RES2), which re-centres the rate
+before a flight can read it -- so it is harmless today, and it is a concrete second reason for the
+**Docked** layer to drop steering rather than leaving that to the chart alone (§5.3).
+
 ### I-6 (A) — Focus loss leaves keys held — **built 2026-09-08 in I-0, §9**
 
 `Window::OnMessage` handles neither `WM_KILLFOCUS`, `WM_ACTIVATE` nor `WM_ACTIVATEAPP`. Alt+Tab
@@ -305,6 +331,12 @@ returns `DXGI_STATUS_OCCLUDED` *immediately* when the window is hidden behind an
 virtual desktop, and `Turn()` only idles on `WaitMessage` when the client area is zero. A game on a
 hidden desktop runs the outer loop at whatever rate the pump manages. The waitable-object flip
 model (ADR-005 §1 already chose flip model) is the standard answer to both (§5.6).
+
+**THE FINDING STANDS AND THE COST HAS DOUBLED SINCE IT WAS WRITTEN** (2026-09-08, §9). The
+resolution track's RS-0 to RS-6 replaced `CanvasPresenter` with `ScreenPresenter`, and a turn now
+resolves and uploads TWO surfaces -- `Present(picture, canvas, video)` -- so a hold loop redraws
+the 640×400 picture as well as the canvas for a frame that has not changed. ADR-008 owns that layer
+now, which is where §5.6's paragraph goes.
 
 ### T-4 (B) — NTSC in the cost model, NTSC in the sound, PAL in the decision
 
@@ -425,7 +457,11 @@ struct KeyBinding
 Rules. The flight set (`KY1`–`KY7`, the crosshairs) binds by scan code, so the arrows and `,`/`.`
 are the physical keys on every layout. Letters and digits bind by virtual key, as now. The
 **Docked** layer drops the steering positions, which retires the chart rule inside
-`Elite::ScanKeyboard` (I-8) into data. The **TextEntry** layer, selected while `ReadKey` is the
+`Elite::ScanKeyboard` (I-8) into data -- and since the key-map fix of 2026-09-08 it has a second
+reason as well as a tidier one: "S" and "X" are now a letter and a steering control at once, so a
+docked screen that is not a chart feeds a typed letter to `control.pitch` (I-5). The layer is what
+makes "types a letter" and "steers the ship" the same key in different modes rather than at the
+same time. The **TextEntry** layer, selected while `ReadKey` is the
 consumer, is where a later phase-6 remapping can give the digits back to the F-keys; it is not
 built here, only left room for. The layer is chosen by the executable from `Game::ModeNow()` and
 from whether `ReadKey` is the active consumer, which the library exposes as one boolean on `Game`.
@@ -516,15 +552,26 @@ one second at PAL and five sixths at NTSC regardless of how many presents happen
 
 ### 5.6 The presenter: a waitable swap chain, and present only what changed
 
+**Rewritten 2026-09-08 for `ScreenPresenter`**: the resolution track landed between this section
+being written and the slice being scheduled, so what was one surface is two and the class it named
+is gone (§9).
+
 `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT` with `SetMaximumFrameLatency(1)`; the outer
 loop waits on the object (which is the vertical-blank pacing `Present(1, 0)` gives today) and calls
-`Present` only when the canvas generation counter — one byte on `Canvas`, bumped by every write
-that changes the planes — has moved. When `Present` reports `DXGI_STATUS_OCCLUDED` the loop waits
-on the object *and* `MsgWaitForMultipleObjects` with a 100 ms cap, so a hidden window costs a
-wake-up ten times a second rather than a core. On a variable-refresh panel the frame clock, not the
-present interval, paces the game, so the display can run at whatever rate it likes. This slice is
-the executable only and has no oracle; its acceptance is the presenter still passing the golden
-screenshot and a Task Manager reading.
+`ScreenPresenter::Present` only when something has changed. **The counter is per surface**, because
+the two are written by different code and at different rates: one on `Canvas` and one on
+`Picture`, each a byte bumped by every write that changes what the surface holds, and a turn that
+finds both unmoved uploads neither. That is a bigger saving than the single-surface version this
+section first described -- ADR-008 §2's twin rule means every drawing routine writes both, so a
+hold loop was redrawing twice as much as the finding measured.
+
+When `Present` reports `DXGI_STATUS_OCCLUDED` the loop waits on the object *and*
+`MsgWaitForMultipleObjects` with a 100 ms cap, so a hidden window costs a wake-up ten times a
+second rather than a core. On a variable-refresh panel the frame clock, not the present interval,
+paces the game, so the display can run at whatever rate it likes. This slice is the executable only
+and has no oracle; its acceptance is the presenter still passing the golden screenshot and a Task
+Manager reading, and its paragraph goes in **ADR-008** rather than ADR-005 §1, which no longer owns
+this layer.
 
 ### 5.7 Audio on its own thread
 
@@ -611,6 +658,7 @@ the Windows CI leg (R15).
 | **I-2 `InputFrame` and the layered map** | `InputFrame` as §5.2; the two `Step`s take it; `Window` produces one per outer turn (held from scan codes for the flight set, edge computed with release); `KeyBinding` gains `scanCode` and `layers`; the Docked layer retires the chart rule from `ScanKeyboard`. | `ShellTests` per-layer completeness; `ControlsTests` for `ScanKeyboard` unchanged on the space view; replay digest unchanged. | `main-lines` (250) — `Main.cpp` shrinks; `outpost-elite-names` (61) may fall, lower the ceiling in the same commit | 2 |
 | **I-3 `JSTK` at the seam** ✅ **built 2026-09-08 (§9)** | §5.1: the title's fire test cannot select a joystick until a pad exists; one sentence in ADR-005 §4; `StartUpTests` gains the case. | Oracle comparison of `TITLE` still green (the scripted matrix presses a non-fire key); play: `A` on the title, then fly, damping present. | none | 0.5 |
 | **I-4 Coroutines** | §5.4: `Task`, the awaitable `ReadKey`/`WaitFrames`/`Present`/holds, the screens converted, `Run()` a function over `Game` and a `Platform` that answers the four ports; `GameShell` and `FlightSession` absorbed as Modernize.md §4.8 says; `Abandon` deleted. | Every existing comparison green without change to what it asserts; a new `GameLoopTests` case drives `Run()`'s loop through a docked session, a launch, a pause and a close on the Linux leg; the digest unchanged. | `effects-seams` 5 → 4 if `Presenter` and `Keyboard` fold into `Platform`; `main-lines` falls; `aggregate-refs` unchanged (8) | 4–5 |
+| **I-6 Characterisation tests for the input path** ⭐ **added 2026-09-09, before I-2** | The four routines the deleted `ControlsTests.cpp` covered — `ScanKeyboard`, `ReadFlightControls`, `ReadCrosshairKeys`, `ReadKey` — pinned at the answers they give today, over a table of matrix states, views and damping settings. Not a comparison and the file says so. | The table runs and the numbers are the port's own; a deliberate one-byte change to any of the four fails it. | none | 1 |
 | **I-5 Gamepad and remapping** | §5.8 plus a remap file in `LocalAppData`; phase 6, own ADR. | Own ADR's. | — | 3, later |
 
 ### Track T — time
@@ -620,7 +668,7 @@ the Windows CI leg (R15).
 | **T-0 Measure while the oracle exists** ✅ **built 2026-09-08 (§9)** | `FlightLoopTests`: a crowded-bubble scene with `TACTICS` returning (a station whose AI path terminates, or the station trapped and its cost added from a separate measurement); a scene with the planet; the docked `MLOOP` pass; `TT16`'s `WSCAN`. Recorded as rows of `FLIGHT_FRAME_COSTS` and a new `DOCKED_PASS_COST`, each asserted by a test as the title curve is. | The new rows exist and the tests assert them; §6 journal entry naming the numbers as history. **Before M6-b.** | `check_counts` if any doc states the count | 2 |
 | **T-1 `MachineTiming`, `FrameClock`, `Scheduler`** | §5.5, in `Presentation.*`; `PlanSteps` and both hold loops replaced; `WaitFrames` counts simulated vertical blanks; the stall log; PAL/NTSC as one constant set with the default the owner rules; `SoundOutput` takes the same `MachineTiming`; **auto-pause while inactive** (§5.9 item 2). | `ShellTests` moved and extended (vertical-blank cases, the inactive case plans zero steps and banks nothing); play on a 60 Hz and a high-refresh panel: `dn2`'s beep pause is one second on both at PAL; Alt+Tab away for a minute and back, the game is where it was. | `main-lines`; ADR-005 §3 amended | 2 |
 | **T-2 Honour the dropped frames** ✅ **built 2026-09-08 (§9), ahead of T-1: the syncs are returned and priced, not yet waited on a simulated blank** | With T-1's tick: `StepDocked` runs `RunLoopTail` and the executable waits its two blanks. | Trumbles breed while docked, compared against the oracle's `MLOOP` on a docked pass; the digest re-taken with a journal entry naming the defect (rule R-e). | `mutants.json` gains a mutant for the docked tail | 1 |
-| **T-3 Waitable swap chain** | §5.6: latency-waitable flip model, canvas generation counter, present-on-change, occlusion idle. | Golden screenshot unchanged; CPU at rest with the window hidden. | ADR-005 §1 one paragraph | 1 |
+| **T-3 Waitable swap chain** | §5.6, **rescoped 2026-09-08**: latency-waitable flip model, a generation counter on `Canvas` AND `Picture`, present-on-change, occlusion idle, against `ScreenPresenter` rather than the `CanvasPresenter` the section first named. | Golden screenshot and the picture's own goldens unchanged; CPU at rest with the window hidden. | ADR-008 one paragraph, not ADR-005 §1 | 1–2 |
 | **T-4 Audio thread** | §5.7. Optional. | `SidRenderTests` unchanged; no stutter while dragging the title bar. | ADR-005 §2 one paragraph | 1 |
 
 ### Sequencing
@@ -665,6 +713,19 @@ and `Controls.*` that I-2 and I-4 rewrite. I-2 lands before M6-c starts. I-4 lan
 M6-c or after M6-d, and after is the better order: M6-d is the eight-to-ten-sitting slice, and a
 coroutine diff over freshly rewritten comments reviews more easily than the reverse.
 
+**AND THE FIRST OF THOSE TWO IS VOID SINCE 2026-09-08 (§9), because M6-c is built.** Seventeen
+slices renamed the tree while the six above were landing, and `origin-identifiers` is at zero, so
+"I-2 lands before M6-c starts" describes a window that has closed. Two things follow and neither is
+a blocker. I-2 lands into an already-renamed tree, so it names its own additions for what they hold
+-- `InputFrame`, the layers -- rather than carrying a 6502 name that M6-c would have had to take
+off it, which is less work than the original order and not more. And the constraint that remains, M6-d's, turns out
+to be nearly spent where I-2 works: measured on the day, `Controls.cpp`, `Controls.h` and `Game.cpp`
+carry **zero** `opcode-transcriptions` and `Game.h` carries **four**, so M6-d has already been
+through the files I-2 rewrites and what is left there is one header's worth. **I-2 is therefore
+free to run whenever**, with a glance at that counter for `Game.h` first. I-4's "after M6-d" is
+unchanged and is further out than it was, because M6-d as a whole is only about half done -- 253
+transcriptions remain across the library, just not in these files.
+
 **Everything executable-only is free.** T-1, T-3, T-4, S-1 and the window half of I-0 touch
 `Outpost/` and `Presentation.*` only; the oracle never sees them and M6 never edits them.
 
@@ -674,15 +735,138 @@ is. One documented number moves — Modernize.md's "five seams, final for M6" be
 folds `Presenter` and `Keyboard` into a `Platform` — and that is a sentence to amend, not a
 conflict.
 
-So the interleaving is: I-0, S-1, I-3, T-0, I-1 and T-2 now, beside M6-a's four gaps and before
+So the interleaving was: I-0, S-1, I-3, T-0, I-1 and T-2 now, beside M6-a's four gaps and before
 the recorder runs; T-1 and T-3 whenever; I-2 before M6-c; I-4 after M6-d. **Ruled 2026-09-08 by the
-owner: the first six run now.**
+owner: the first six run now**, and they did.
+
+**What is left, re-sequenced the same evening**: T-1 and T-3 are still free of M6 entirely
+(executable only, no oracle, and M6 does not edit `Outpost/`), so they can run at any time and T-3
+is the one whose scope M6's neighbour changed rather than M6 itself. I-2 goes around M6-d per the
+paragraph above. I-4 waits for M6-d to finish. I-5 is phase 6 and waits on its own ADR. Nothing
+here is blocked on M6-b, which is where the six that landed had to be.
+
+### What the oracle's removal changes, asked 2026-09-08 and answered against the tree
+
+The rule in the subsection above is "every slice that changes or adds LIBRARY behaviour lands
+before M6-b". Asked whether that had really taken the detachment into account, the tree says: **the
+rule was right about slices and silent about the TESTS they leave behind**, and that is where the
+work is. The sharper rule, which is what §6 should have said from the start, is that the deadline
+is not *changing library behaviour* but **asking the original a question it has not been asked**. A
+fixture holds the answers to questions put while the interpreter was here; a test that asks a new
+one after M6-b fails by design (Modernize.md §4.10, R19), and a test that reads anything the
+recorder does not capture fails for a duller reason.
+
+**T-0's measurements survive, and by M6-a's design rather than by this plan's foresight.**
+`Oracle.h`'s `CallRecord` carries a `cycles` field -- "what the call ADDED, so a caller's own count
+is untouched" -- the recorder writes it (`record.cycles = _cpu.cycles - beforeCycles`) and the
+on-disk format reserves eight bytes for it. `Cpu6502::CallSubroutine` routes through
+`Oracle::Current()`, so `TheCrowdedFrameCostsWhatItCosts` and `TheDockedPassCostsWhatItCosts` replay
+their cycle deltas from the fixture like any other answer. That was not checked when T-0 was
+written and it happened to be true; it is written down here so the next reader does not have to
+rediscover it.
+
+**I-1's test does NOT survive, as written, and this is a task rather than a risk.**
+`ControlsTests::TheBlockingReadMatchesTT217` changes the CIA matrix on every scan through
+`Cpu6502::AddProbe` -- the probe this slice added to the interpreter, because a matrix set once
+cannot reach `TT217`'s second wait -- and then asserts `script.scanCount == scans`, where `scans` is
+incremented **by the probe**. Under a `RecordedOracle` the interpreter never runs, so the probe
+never fires, `scans` is zero and the assertion fails on every script. The fix is small and has a
+deadline: take the oracle's scan count from something the record HOLDS -- `instructions`, or a trap
+hit on `RDKEY` -- and keep `matrix.walks` as the port's side, which is computed live and needs
+nothing. **It must land before M6-b**, and it is as much M6-b's to notice as this plan's, so it is
+named in both places.
+
+**I-2 gains a small deadline it did not have.** The port's own chart rule inside
+`Elite::ScanKeyboard` -- drop the four steering positions while a chart is up, because the modern
+layout gives the arrows two jobs -- is compared against the original **nowhere**:
+`TheFlightControlsMatchDOKEY` runs at the space view, "where `RDKEY` forgets nothing", and the
+`TT217` comparison runs docked. So moving the rule out into the Docked layer (§5.3) needs no oracle
+and can happen at any time. But if I-2 wants to PROVE that removing it makes `ScanKeyboard` match
+`RDKEY` on a chart as well -- a question the original has never been put -- **it has to ask before
+M6-b**, because afterwards there is nothing to ask. That is one scripted case in an existing sweep,
+and it is worth taking while it is free.
+
+**What is genuinely unaffected**: I-4, T-1, T-3, T-4 and I-5. The coroutine conversion changes how
+a test drives the PORT, not what it asks the ORACLE, so the fixtures answer it unchanged; the four
+timing and remapping slices touch `Outpost/` only, which no fixture ever sees.
+
+### Revalidated 2026-09-09: the oracle is gone, and the subsection above is history
+
+**M6 closed on 2026-09-08, and not the way the subsection above assumed.** M6-b was cancelled
+unbuilt by owner ruling -- *delete the oracle rather than record it* -- so there are no fixtures at
+all: 337 tests that compared against the original are deleted, the suite is 131, `Cpu6502`,
+`OracleImage`, `MasterFile/` and the submodule are out of the tree, and ADR-009 records what that
+bought and cost. Everything above about "landing before M6-b" is now the record of a plan made
+under a different assumption, kept because it is what was believed at the time. This subsection is
+what replaces it, and it starts with the two things it got wrong.
+
+**"T-0's measurements survive" was right about the capability and wrong about the outcome.**
+`CallRecord` did carry a cycle count, and had M6-b been built as scoped the cost tests would have
+replayed. It was not built. `TheCrowdedFrameCostsWhatItCosts`, `TheDockedPassCostsWhatItCosts` and
+`CycleTests::TheTitleScreensLoopCostsWhatItCosts` are deleted with the other 336, so
+`Outpost::FLIGHT_FRAME_COSTS`, `DOCKED_PASS_CYCLES` and `TITLE_TURN_COSTS` are now **measured
+constants that nothing re-derives** -- `ShellTests` asserts the tables against the same numbers the
+tables hold, which catches a typo and cannot catch a wrong measurement. The numbers are still
+honest, because T-0 took them against the real machine while it was here; what is gone is the
+ability to take them again. **That is the one place this plan's early sequencing paid for itself**:
+had T-0 waited, the crowded-end costs would not exist at all, and the flight loop would still be
+paced from the two bands §6.114 measured with no planet and no station in the scene.
+
+**"I-1's test will not replay" is moot rather than confirmed.** It predicted a failure under
+`RecordedOracle`; no `RecordedOracle` was built, and `ControlsTests.cpp` was deleted whole, so the
+prediction was never put to the test. It is left in the record above as what the analysis said, not
+as a call that came in.
+
+**And one window closed before it could be used.** The free question I-2 was told to ask -- whether
+`ScanKeyboard` matches `RDKEY` on a chart once the port's own chart rule moves out -- can no longer
+be asked by anyone. That is Risk R19 realised on this plan specifically, and it is the cost of
+having written the question down rather than taken it.
+
+**THE STRUCTURAL FINDING, and it is the one that matters for what is left: the input path now has
+no direct test.** `ControlsTests.cpp` is deleted whole, and it held every one --
+`TheFlightControlsMatchDOKEY`'s 1,984-case sweep, `TheCrosshairKeysMatchTT17`,
+`TheControlRatesMatchBUMP2AndREDU2`, `TheLaserSightsMatchSIGHT` and `TheBlockingReadMatchesTT217`.
+What is left reaches those four routines without asserting anything about them: `ScanKeyboard`,
+`ReadFlightControls`, `ReadCrosshairKeys` and `ReadKey` are **exercised** by the replay (which
+drives held keys through three scripted flights), by `GameTests` (whose cold start runs the title
+screen) and by `DockedSessionTests`, and **asserted** by none of them. `LaunchTests` names
+`ScanKeyboard` in a comment and nowhere else. ADR-009 §4 lists what was given up and does not name
+this path; it is named here because I-2 is the slice that rewrites exactly those routines.
+
+**So the approach changes in one place and holds in the rest.**
+
+| Slice | Revalidated |
+|---|---|
+| **I-2** | **Gate is void and the slice needs a predecessor.** "`ControlsTests` for `ScanKeyboard` unchanged" names a deleted file. Worse, the instrument that would guard I-2 -- the replay -- is the one I-2 must modify, because `Game::Step` changes signature and the replay drives it. Two rules follow: **I-6 first** (below), and **the signature change and the meaning change are separate commits** -- adapt the replay's driver to `InputFrame` with the same keys and prove all three digests unmoved, and only then let a layer change what a key means. |
+| **I-4** | **Instrument survives, narrowed.** `DockedSessionTests` still drives every docked screen and still asserts that the screens differ from each other, which is what a coroutine conversion could break. The gate "every existing comparison green" now means far fewer comparisons, so the slice is riskier than when it was written; the mitigation is unchanged and stronger -- convert in small groups, digests unmoved. |
+| **T-1, T-3, T-4** | **Unaffected, and now the safest work in the plan.** They touch `Outpost/` only, `ShellTests` covers `PlanSteps`, the cost tables, the viewport and the key map, and none of that moved. If anything the detachment argues for doing them next. |
+| **I-5** | Unaffected; phase 6 and its own ADR. |
+
+### I-6 — a characterisation test for the input path (new, 2026-09-09)
+
+**Before I-2, and cheap.** With the original gone, fidelity cannot be re-proved -- but present
+behaviour can be pinned so that a refactor cannot move it silently, which is the standard answer
+when a reference is withdrawn and is exactly what ADR-009 §2 calls "the port's own invariants".
+Drive a table of known matrix states through `ScanKeyboard`, `ReadFlightControls`,
+`ReadCrosshairKeys` and `ReadKey` and assert the answers they give TODAY: the logger after a scan
+at each of the space view, a chart and a docked screen; the roll and pitch rates after a held key
+with damping on and off; the crosshair steps for the five cursor combinations `TT17` reads; and the
+character `ReadKey` returns for a release-then-press script. None of it needs an oracle, all of it
+is a value the port already computes, and the numbers come from running it rather than from
+judgement.
+
+What it buys is the thing I-2 would otherwise not have: a test that fails when the layered map
+changes what a key means in a mode where it should not have. What it explicitly does NOT buy is
+fidelity -- it pins what the port does, and if the port is wrong today it pins the wrong answer.
+That is worth saying in the file itself so no later reader mistakes a characterisation test for a
+comparison. One sitting.
 
 ### What the plan does to the documents
 
 ADR-005 §3 gains the simulated vertical blank, the auto-pause and the `MachineTiming` default; §4
 gains the `JSTK` rule, the layered map and the pause screen's removal, with a pointer from ADR-001
-§4; §1 and §2 one paragraph each if T-3 and T-4 land. `Source-Inventory.md` row 148 moves `dk4`,
+§4; §2 one paragraph if T-4 lands, and **ADR-008 one paragraph if T-3 does** -- ADR-005 §1 no
+longer owns the presenter layer (§9). `Source-Inventory.md` row 148 moves `dk4`,
 `dks3` and `mutokch`'s toggle half to Dropped. Modernize.md §4.8's "one `Platform` class" and
 §4.4's `Step(const InputFrame&)` are what I-2 and I-4 build, so those sections gain a ✅ and a
 pointer here rather than new text; §4.4's mode diagram loses its Paused node. Plan §5.4 is rewritten
@@ -804,3 +988,78 @@ views; the replay never runs a docked pass, so no digest moves; `mutants.json` g
 with its selftest and the docked tail, the corpus's first mutants on a CALL rather than an
 operation. Run on the committed head through the portable runner against a 414-green baseline:
 2 of 2 caught, none survived, none equivalent.
+
+**2026-09-08, later — the tree moved under the plan, and three things in it are now wrong.** The six
+slices above landed beside M6-a; by the evening main also carried **M6-c built** (seventeen slices,
+`origin-identifiers` at zero), **M6-d running** (about fifty slices, `opcode-transcriptions` at 253
+against a target of zero), **the resolution track closed** (RS-5, RS-6 and ADR-008: the 640×400
+picture, `CanvasPresenter` replaced by `ScreenPresenter`, `FitCanvas` by `FitPicture`), and **M6-a
+built with M6-b scoped but blocked** on two new rulings -- R-f, which folds the sweeps into digests
+and takes the fixture from 222 MB to about 25, and R-g, which makes the labels a generated header
+and keeps the assembled image out of the tree. The suite is 469 tests and CI runs nineteen checks.
+Verified on that tip before this entry was written: 469 passed, 0 failed with the oracle present,
+all nineteen checks green, and every one of the six slices' names -- `ReadKey`, `TakePressed`,
+`HasJoystick`, `SettingsFile`, the cost tables, `DockedPassSeconds` -- carried through the renames
+intact.
+
+What that did to what is left, and it is worth separating the three kinds. **One premise is void**:
+"I-2 lands before M6-c starts" (§6) names a window that has closed, and the sequencing subsection
+now says what replaces it -- I-2 lands into a renamed tree, which is less work rather than more.
+The first draft of this entry said I-2 must dodge M6-d instead and cited `6502:` marker counts for
+the two files; that was the wrong counter and the wrong conclusion. M6-d is measured by
+`opcode-transcriptions`, and measured per file it is already zero in `Controls.cpp`, `Controls.h`
+and `Game.cpp` and four in `Game.h` -- M6-d has been through I-2's files, so I-2 is free to run
+whenever rather than needing a window at all. **One slice is rescoped**: T-3 named `CanvasPresenter` and a canvas
+generation counter, and the layer is two surfaces under ADR-008 now, so §5.6 is rewritten for a
+counter per surface and the paragraph it earns goes in ADR-008 rather than ADR-005 §1 -- and the
+finding it rests on got worse rather than better, because ADR-008 §2's twin rule means a hold loop
+redraws both surfaces. **One finding is enlarged**: the owner's own fix (`7cb33e0`) found that
+twelve letters and "0" had no matrix position, so the line editor rang the bell instead of typing
+them and JAMESON was a name a player could not type back. That is I-1's defect class at another
+seam and it is folded into I-5, with the "S"/"X" dual binding it introduced folded into §5.3 as the
+Docked layer's second reason.
+
+**What did NOT change, said because a plan that only records damage is misleading.** The six built
+slices are untouched in substance; M6-c renamed through them and M6-d rewrote their comments, which
+is exactly what those phases are for. T-1, T-4, S-1's file and the whole of §5.5 stand as written.
+T-5's deadline was M6-b and M6-b is still unbuilt, so the measurements landed with room to spare.
+And the plan's shape -- two tracks, the executable-only slices free of M6 -- held under a
+ninety-three-commit week, which is the property it was written for.
+
+**2026-09-08, later still — "will the oracle going away change things?", asked and run down.** The
+answer is a new subsection in §6 and one defect. §6's rule bound SLICES to M6-b and said nothing
+about the tests they leave behind, and the sharper rule is that a slice's deadline is asking the
+original something it has not been asked. Against that: T-0's cost tests survive, because
+`CallRecord` carries a cycle count and `CallSubroutine` goes through the seam -- true by M6-a's
+design and not by this plan's foresight, and now written down. **I-1's `TheBlockingReadMatchesTT217`
+does not survive**: it asserts on a counter its own interpreter probe increments, and a replayed
+call never runs the interpreter, so the count is zero and every script fails. Fixing it is small --
+read the oracle's scan count out of the record instead -- and it must land before M6-b. And I-2
+gains one free question worth asking while it can be: whether `ScanKeyboard` matches `RDKEY` on a
+chart once the port's own chart rule moves into the key map, which nothing has ever asked the
+original.
+
+**2026-09-09 — revalidated against a tree with no oracle in it, and two of yesterday's claims were
+wrong.** M6 closed the evening before: M6-b was cancelled unbuilt by owner ruling -- delete the
+oracle rather than record it -- and M6-e, M6-f and M6-g followed, so 337 comparison tests are
+deleted, the suite is 131, and `MasterFile/`, the submodule and the interpreter are out of the tree
+(ADR-009). Merged and verified here: **131 passed, 0 failed**, thirteen repository checks pass, all
+97 recorded mutants still apply, and every one of the eight tests the six built slices left behind
+survived the deletion -- they were port-side assertions rather than comparisons, which is the
+property that saved them.
+
+Judged against that: **"T-0's measurements survive" was right about the capability and wrong about
+the outcome** -- the cost tests went with the rest, so the cost tables are measured constants
+nothing re-derives, and T-0 having run early is the reason the crowded-end numbers exist at all.
+**"I-1's test will not replay" is moot**, not confirmed: no `RecordedOracle` was ever built and the
+test was deleted with its file. **And I-2's free question closed unasked**, which is R19 realised on
+this plan.
+
+The finding that matters is structural and is now in §6: **the input path has no direct test.**
+`ControlsTests.cpp` was deleted whole, and the four routines it covered are exercised by the replay,
+`GameTests` and `DockedSessionTests` but asserted by none of them. So **I-6 is added before I-2** --
+characterisation tests that pin what the four routines answer today, which is what can still be
+done once the reference is withdrawn, and which the file will say is not a fidelity claim. I-2 also
+gains a rule it did not need before: the signature change and the meaning change go in separate
+commits, because the replay is both I-2's guard and I-2's patient. T-1, T-3 and T-4 are untouched by
+any of this and are now the safest work on the board.
