@@ -331,7 +331,21 @@ do not change. `check_twins.py` does not care which surface a twin gets and need
    it beside `picture`, with a sentence. `StateCells.cpp`: the same. `StateHashTests`: the
    exclusion test covers both. `Picture::Resolve` and `Hash` take `const Picture& _backdrop`;
    `ResolveBitmapCell` reads `backdrop.ReadBitmap(offset) ^ ReadBitmap(offset)` and the cell from
-   the backdrop; the dashboard cell from the backdrop. Every caller changes in the same commit:
+   the backdrop; the dashboard cell from the backdrop. **THE LAST TWO CLAUSES CONTRADICT THIS
+   COMMIT'S OWN GATE, found 2026-09-09 while reading ahead from T-3, and the fix is one word.** No
+   site has moved yet at this commit, so every cell palette and every dashboard index is still in
+   the FRAME; reading them "from the backdrop" reads a blank one, and the four instruments the
+   paragraph below promises green would return a black screen and a hundred moved digests. Composite
+   all three planes the same way the bitmap is composited — `backdrop ^ frame`, on the palette byte
+   and on the dashboard index as well as on the bitmap bit. That is identity while either side is
+   blank, which is what makes this commit a no-op; it stays correct after commit 2 moves the
+   persistent sites, because a cell written only to the backdrop reads `backdrop ^ 0`; and it is
+   what the surrounding argument already says the composite is. The "from the backdrop alone"
+   wording describes where those planes will LIVE once the sites have moved, not how to read them.
+   The one thing it costs is that a cell palette written to BOTH surfaces would exclusive-or into
+   nonsense rather than one winning — which the site table forbids and `ThePictureIsAsRecorded`
+   would catch, so say in the journal whether any site turned out to do it.
+   Every caller changes in the same commit:
    `ScreenPresenter::Present` (its signature gains the backdrop — `check_outpost.py` will say so),
    `FlightReplayTests`' checkpoint (`picture.Hash(canvas, backdrop)`), the five `Picture*Tests`
    files (pass an empty backdrop where they resolve). With no site moved yet, the backdrop is blank
