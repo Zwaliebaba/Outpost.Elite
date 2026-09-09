@@ -243,8 +243,10 @@ Three instruments are in place and every slice below leans on them:
   tests see routines.
 - **The mutants**: <!--count:mutants-->8 recorded edits in <!--count:mutant-files-->four files,
   each anchored to a line of source that must match exactly once and each expected to be caught.
-  `mutate.py --check` runs in CI; the run itself works through the portable runner on Linux
-  (`--runner portable`), and 8 of 8 are caught. **The floor (M6-0-g) is three files and was
+  `mutate.py --check` runs in CI and `mutate.py --check-selftests` beside the suite on the Ubuntu
+  leg -- the first proves every mutant still applies, the second that each unit's selftest is still
+  unmissable to the tests that EXIST, which is the one M6-b-8 found four of five failing. The full
+  run works through the portable runner on Linux (`--runner portable`), and 8 of 8 are caught. **The floor (M6-0-g) is three files and was
   fourteen** -- `Canvas`, `Raster` and `ShipDraw` -- each of which must carry a mutant the suite
   catches. **THE FLOOR SHRANK, WHICH IT WAS WRITTEN NEVER TO DO** (M6-b-8, 2026-09-09): the corpus
   measured the 337 comparisons against the original, M6-b-5 deleted those, and by owner ruling
@@ -1715,6 +1717,38 @@ M1-a's first file and the worked example every later slice copies.
 ---
 
 ## 8. Journal
+
+**2026-09-09 — M6-b-9: `mutate.py --check-selftests`, the gate M6-b-8 needed and did not have.**
+
+M6-b-8's finding was that four of five unit selftests had rotted: each was an unmissable change to
+a test that had been deleted three slices earlier, and `mutate.py --check` passed throughout
+because it asks whether a unit HAS a selftest, not whether it still means anything. This is the
+check that would have caught it the day M6-b-5 landed.
+
+**It has to RUN them, and that is not a concession.** Whether a test would notice a change is
+exactly the question no static check can answer -- it is the whole premise of mutation testing --
+so the only honest form of this gate is one build and one mutant per unit. That is 45 seconds on
+top of the suite, on the Ubuntu leg that already has a compiler. It is deliberately NOT in
+`check_all.py`, which is the compiler-free seconds-long set.
+
+**THE DIAGNOSIS IS THE PART WORTH THE CODE.** When `ra-selftest` survived, the harness announced
+R13 realised -- the edit never reached the binary, the build never happened -- which is the right
+alarm and was the wrong diagnosis: the harness was fine and the anchor was worthless. The two are
+distinguishable and the check says which. If EVERY selftest survives, one broken build explains
+all of them at once and no single rotted anchor explains more than its own unit, so suspect the
+harness. If SOME survive and others are caught, the harness demonstrably works and those anchors
+have rotted. Both branches were staged and proved: one rotted anchor gives "THE HARNESS WORKS --
+it caught the others", three give "suspect the harness before the anchors", and the exit code is 1
+either way (a check that fails quietly is worse than none).
+
+**And it is the only way to see the second one.** A surviving selftest stops a full corpus run on
+the first unit, by design and rightly -- so a rotted anchor hides every result behind it. M6-b-8
+could not measure the corpus at all until the flags were lifted for one pass. This mode runs all of
+them and reports all of them.
+
+Seventh entry in `mutate.py`'s scar-tissue list, which is the file's own record of the ways a
+mutation run has lied. 131 tests, 13 checks, 8 of 8 mutants, 3 of 3 selftests.
+
 
 **2026-09-09 — M6-b-8: the mutation corpus, 97 mutants to 8. Owner ruling, and a rotted selftest.**
 

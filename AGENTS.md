@@ -332,6 +332,14 @@ Six things the tool does that a hand run kept getting wrong, so that reading the
   run first, and the run stops if it survives. It is the one deliberate failure that says the
   harness works: without it, a list of "survivors" could be a run that never rebuilt, which is R13
   realised (§6.119). Add one when you add a unit; `--check` fails if a unit has none.
+- **AND A SELFTEST ROTS.** Unmissable is a property of the mutant AND the tests, and the tests move:
+  `ra-selftest` zeroed a register only the comparisons against the original ever read, and when
+  those went it survived while the mutant, the file and the `find` were all unchanged. `--check`
+  still passed, because it asks whether a unit HAS one. Four of five had rotted (M6-b-8).
+  `mutate.py --check-selftests` runs them and CI's Ubuntu leg does it on every push; it is also
+  the only way to see the second rotted anchor, because a surviving selftest stops a full run on
+  the first unit. **If every selftest survives, suspect the harness; if some survive and others are
+  caught, the harness works and those anchors have rotted.**
 - **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
 
 **Closing a survivor: three questions, in this order.** §6.132's method is "probe the comparison,

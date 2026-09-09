@@ -18,8 +18,9 @@ says what happened.
     python tools/mutate.py --unit rng --unit arith  or several, on one worktree and one baseline
     python tools/mutate.py --id ta-253            run one mutant
     python tools/mutate.py                        run everything (slow: builds once per mutant)
+    python tools/mutate.py --check-selftests      each unit's selftest still fails its own tests
 
-SIX THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has already lied.
+SEVEN THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has already lied.
 
 1. THE BASELINE IS PROVEN BEFORE ANY MUTANT IS BELIEVED. A worktree whose `Upstream/` submodule was
    empty made every comparison against the original skip and `OracleIsPresent` fail by design; the
@@ -56,6 +57,15 @@ SIX THINGS IN HERE ARE SCAR TISSUE, and each one is a way a mutation run has alr
    `TheJump`, and the filter matched three tests in two other files whose method names happen to
    contain the word -- so two mutants the suite certainly catches were reported as survivors. The
    number of tests a unit's filters select is now data, checked against the unmutated build.
+
+7. A SELFTEST CAN ROT, AND `--check` CANNOT SEE IT. A unit's selftest is an unmissable change whose
+   survival is supposed to mean the harness is broken -- but unmissable is a property of the mutant
+   AND the tests, and the tests move. `ra-selftest` zeroed a register only a comparison against the
+   original ever read; when M6-b-5 deleted that comparison the mutant, the file and the `find` were
+   all unchanged and the anchor was worthless. `--check` still passed, because it asks whether a
+   unit HAS a selftest, not whether it still means anything. Four of five had rotted the same way
+   (M6-b-8). `--check-selftests` runs them, and because a surviving selftest stops a full run on
+   the first unit by design, it is the only way to see the second one.
 
 WHAT A FAILURE MEANS. A run fails when a mutant's outcome differs from the `expect` recorded beside
 it, in either direction. A new survivor is a gap in the tests. A recorded survivor that starts
@@ -414,6 +424,76 @@ def check_filters(_runner, _chosen: list[Mutant]) -> list[str]:
     return complaints
 
 
+def check_selftests(_runner, _root: Path, _selftests: list[Mutant]) -> int:
+    """Every unit's selftest is still unmissable TO THE TESTS THAT EXIST.
+
+    THIS GATE EXISTS BECAUSE FOUR OF FIVE HAD ROTTED AND NOTHING SAID SO (M6-b-8, 2026-09-09).
+
+    A unit's selftest is an unmissable change whose survival is supposed to mean the HARNESS is
+    broken rather than the code -- the edit never reached the binary, or the build never happened.
+    That reading is only true while the change really is unmissable, and unmissable is not a
+    property of the mutant. It is a property of the mutant AND the tests. `ra-selftest` zeroed the
+    raster line the next interrupt fires on, which the comparison against the original read on
+    every one of 256 passes; M6-b-5 deleted that comparison and no surviving test reads the
+    register at all. The mutant was unchanged, the file was unchanged, and the anchor was worthless.
+
+    `--check` cannot see this: it verifies that every unit HAS a selftest and that its `find` still
+    matches once, both of which stayed true. Only running it can, and running it is cheap -- one
+    mutant per unit -- which is why this is its own mode rather than something you learn from a
+    full corpus run. Worse, you CANNOT learn it from a full run: a surviving selftest stops the run
+    on the first unit by design, so a rotted anchor hides every result behind it.
+
+    THE DIAGNOSIS IS THE POINT, and it is what took the longest to work out by hand. If EVERY
+    selftest survives, suspect the harness: one broken build explains all of them at once, and that
+    is Risk R13. If SOME survive and others are caught, the harness demonstrably works -- it caught
+    one -- so each survivor is an anchor that has rotted, and the fix is to re-anchor that unit's
+    selftest on behaviour its remaining tests actually read.
+    """
+    print("\nselftests  each unit's unmissable mutant must still make its own tests FAIL")
+
+    rotted: list[Mutant] = []
+    for mutant in _selftests:
+        original = apply(_root, mutant)
+        started = time.time()
+        try:
+            result, detail, _ = run_filters(_runner, mutant.filter)
+        finally:
+            restore(_root, mutant, original)
+
+        outcome = outcome_of(result, detail, time.time() - started)
+        caught = outcome.result == CAUGHT
+        if not caught:
+            rotted.append(mutant)
+        print(f"           {mutant.unit + '/' + mutant.id:<28s} {'caught' if caught else 'SURVIVES':<9s}"
+              f" {outcome.detail}  ({outcome.seconds:.0f}s)")
+
+    if not rotted:
+        print(f"\nOK    {len(_selftests)} unit selftests, every one of them still unmissable")
+        return 0
+
+    print(f"\nFAIL  {len(rotted)} of {len(_selftests)} unit selftests survived their own tests:")
+    for mutant in rotted:
+        print(f"      {mutant.unit}/{mutant.id} on {mutant.file}")
+
+    if len(rotted) == len(_selftests):
+        print(
+            "\n      EVERY ONE OF THEM SURVIVED, so suspect the harness before the anchors: one\n"
+            "      build that did not happen explains all of these at once and no single rotted\n"
+            "      anchor explains more than its own unit. That is Risk R13 (section 6.119).\n"
+            "      The baseline above was green, so start with whether the edit reached the binary."
+        )
+    else:
+        print(
+            "\n      THE HARNESS WORKS -- it caught the others -- so each of these is an ANCHOR THAT\n"
+            "      HAS ROTTED: the mutant is still unmissable to some test that used to exist and is\n"
+            "      not unmissable to any test that does. Re-anchor it on behaviour the unit's\n"
+            "      remaining tests actually read, and say in its note which test now sees it.\n"
+            "      If nothing the unit still has can see any change to its file, the unit is not\n"
+            "      measuring anything and that is the finding."
+        )
+    return 1
+
+
 def pick_runner(_root: Path, _wanted: str | None):
     if _wanted in (None, "portable") and PortableRunner.available():
         return PortableRunner(_root)
@@ -590,6 +670,8 @@ def main(_argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--list", action="store_true", help="print the recorded mutants and stop")
     parser.add_argument("--check", action="store_true", help="every mutant still applies to the tree; no build, no worktree")
+    parser.add_argument("--check-selftests", action="store_true", dest="check_selftests",
+                        help="run each unit's selftest and require it to be caught: one build, one mutant per unit")
     parser.add_argument("--unit", action="append", help="only this unit (repeatable: one worktree and one baseline for all of them)")
     parser.add_argument("--id", dest="ident", help="only this mutant")
     parser.add_argument("--runner", choices=["portable", "msbuild"], help="which test runner (default: portable if available)")
@@ -613,6 +695,9 @@ def main(_argv: list[str]) -> int:
         return 0
 
     chosen = select(units, arguments.unit, arguments.ident)
+    if arguments.check_selftests:
+        # One mutant per unit, and `select` already sorts them first.
+        chosen = [mutant for mutant in chosen if mutant.selftest]
     if not chosen:
         print("no mutants selected -- `--list` shows what is recorded")
         return 1
@@ -652,6 +737,9 @@ def main(_argv: list[str]) -> int:
             for complaint in wrong:
                 print(f"      {complaint}")
             return 1
+
+        if arguments.check_selftests:
+            return check_selftests(runner, scratch, chosen)
 
         # ---- the mutants ------------------------------------------------------------------------
         rows: list[tuple[Mutant, Outcome, bool]] = []
