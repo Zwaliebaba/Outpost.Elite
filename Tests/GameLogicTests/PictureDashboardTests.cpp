@@ -39,12 +39,15 @@ namespace GameLogicTests
     using Elite::Canvas;
     using Elite::Picture;
 
+    /// An empty backdrop, for a fixture that builds one surface (RN-0): `backdrop ^ frame` with
+    /// this is the frame. A named object rather than a temporary, because a `Picture` is 107 KB.
+    const Picture NO_BACKDROP;
+
     /// The whole picture, resolved, which is what a person sees.
     std::vector<std::uint8_t> ResolvePicture(const Picture& _picture, const Canvas& _canvas)
     {
       std::vector<std::uint8_t> out(static_cast<std::size_t>(Picture::WIDTH) * Picture::HEIGHT, std::uint8_t{0});
-      // One surface, so the backdrop it composites over is empty (RN-0): `backdrop ^ frame` is the frame.
-      _picture.Resolve(out, _canvas, Elite::Picture{});
+      _picture.Resolve(out, _canvas, NO_BACKDROP);
       return out;
     }
 

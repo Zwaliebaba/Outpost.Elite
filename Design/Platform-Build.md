@@ -350,6 +350,20 @@ do not change. `check_twins.py` does not care which surface a twin gets and need
    `FlightReplayTests`' checkpoint (`picture.Hash(canvas, backdrop)`), the five `Picture*Tests`
    files (pass an empty backdrop where they resolve). With no site moved yet, the backdrop is blank
    and every hash is unchanged: **all four instruments green with nothing else touched.**
+**THE THREE STEPS BELOW ARE IN THE WRONG ORDER, found 2026-09-09 after step 1 was built.** Step 2
+moves the sites and step 3 builds the fixtures that would notice if a move was wrong, so step 2 is
+performed with no gate over most of what it touches. `ThePictureIsAsRecorded` watches a scripted
+FLIGHT; `DockedSessionTests` does not look at pixels at all — it has no `Hash`, no `Resolve` and no
+recorded table — and **27 of the 81 sites are on docked screens** (`Charts`, `Equipment`, `Game`,
+`MarketScreen`, `Missions`, `StartUp`, `GameLoop`). A misclassified chart or market glyph would
+move nothing any test asserts and would be found by a person playing, which is the failure mode
+this corpus is built to avoid. **Do step 3 first**, recording both tables on the unmoved tree,
+then step 2 against them: the tables then say what the split preserved rather than what it
+produced. Step 3's own wording already assumes it runs second ("recorded on this commit's tree —
+after step 2, so they record the split, which is identical to before it") — that sentence is the
+one to invert, and the identity it claims is exactly what recording first would let the move
+PROVE rather than assert. Renumber when performing, and say in the journal which order was used.
+
 2. **The sites.** Move the persistent sites to the backdrop per the table. After each file:
    `run_tests.sh` and `ThePictureIsAsRecorded` green, or the site you just moved is transient and
    goes back. Expect the three defaults to hold; if one does not, the gate has ruled and the journal
