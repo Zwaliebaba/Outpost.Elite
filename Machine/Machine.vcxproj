@@ -79,6 +79,7 @@
     <ClInclude Include="Cpu.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="Dos.h" />
+    <ClInclude Include="ExeLoader.h" />
     <ClInclude Include="FileStore.h" />
     <ClInclude Include="Firmware.h" />
     <ClInclude Include="GamePort.h" />
@@ -106,6 +107,7 @@
     <ClCompile Include="Cpu.cpp" />
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Dos.cpp" />
+    <ClCompile Include="ExeLoader.cpp" />
     <ClCompile Include="FileStore.cpp" />
     <ClCompile Include="Firmware.cpp" />
     <ClCompile Include="GamePort.cpp" />

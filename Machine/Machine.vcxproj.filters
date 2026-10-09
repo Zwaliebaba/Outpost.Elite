@@ -19,6 +19,9 @@
     <Filter Include="Io">
       <UniqueIdentifier>{D724A654-3C77-526C-A9C5-CB5309721AA7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Loader">
+      <UniqueIdentifier>{56703538-0074-5434-89F2-3C3BB01A5A6D}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Memory">
       <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
     </Filter>
@@ -53,6 +56,9 @@
     </ClInclude>
     <ClInclude Include="Dos.h">
       <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="ExeLoader.h">
+      <Filter>Loader</Filter>
     </ClInclude>
     <ClInclude Include="FileStore.h">
       <Filter>Dos</Filter>
@@ -130,6 +136,9 @@
     </ClCompile>
     <ClCompile Include="Dos.cpp">
       <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="ExeLoader.cpp">
+      <Filter>Loader</Filter>
     </ClCompile>
     <ClCompile Include="FileStore.cpp">
       <Filter>Dos</Filter>
