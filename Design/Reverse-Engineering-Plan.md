@@ -1,6 +1,6 @@
 # ELITEL.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. Nothing is built. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). D6 stays open by design.
+**Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6); D6 stays open by design. **Phase 0 is under way:** ADR-001 to ADR-003 are written, and the provenance check found this copy cracked (ADR-001).
 
 **The goal as stated:** reverse-engineer `ELITEL.EXE` so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
 
@@ -21,7 +21,7 @@ It is the 1987 Firebird *Elite* for the IBM PC, CGA build. The version string is
 | Input | the game's own int 9 handler at 0x0201 reads port 0x60, so the BIOS keyboard is unused during play; joystick on port 0x201; mouse through int 33h |
 | DOS | int 21h functions 09, 0C, 1A, 2C, 30, 3C, 3D, 3E, 3F, 40, 41, 43, 4E, 4F — the commander files (`*.cdr`, default commander `JAMESON` at DS:0x7229) and the start-up checks; int 24h hooked to 0x02F0 for the duration of play; exits with `retf` to PSP:0 |
 | Other machines | detects an Amstrad PC by its ROM string at FC00:0016 (compared with "Amstrad" at DS:0x2001, flag at DS:0x2000) and chains the timer to the BIOS only on that path |
-| Protection | a word from the printed manual ("Program Protection", DS:0x2424), three attempts, then "the program is cleared": the routine at 0x0554 zero-fills CS from 0x0564 to 0x8F50, called from 0x0072 when DS:0x2009 is still zero after start-up |
+| Protection | a word from the printed manual ("Program Protection", DS:0x2424), three attempts, then "the program is cleared": the routine at 0x0554 zero-fills CS from 0x0564 to 0x8F50, called from 0x0072 when DS:0x2009 is still zero after start-up. **Defeated in this copy** by a patch at 0x0532–0x0538 (ADR-001) |
 
 The interface text is plain ASCII — screen titles, ship names, government and economy names, the system-name digram table — rather than the tokenised text of the 6502 versions, which makes the data segment comparatively quick to map.
 
@@ -44,6 +44,8 @@ DOSBox Staging or DOSBox-X runs this file on Windows 11 today with no functional
 From 0x003B the start-up code reads the DOS clock, adds seven seconds, reads the clock again and compares. The conditional branch that would close that loop is two `NOP`s at 0x0054, so a seven-second wait — taken at start-up and again every time play returns through 0x003B — has been patched out, by the publisher or by someone later. One visible patch means there may be others, and the protection path is the obvious candidate. "Without functionality change" needs a known build to be measured against. If the owner has the rest of the distribution — the other display builds, the loader, the manual — the EGA build may also be a better reference than a four-colour CGA one.
 
 **Ruled (D4):** this file is the reference, because it is the only copy the owner has; no unpatched copy and no other display build is available. The patch at 0x0054 is documented, not reverted, so the port starts without the seven-second wait, as the reference does. Phase 0 looks for further patches, and the protection path is where to look first: if this copy already bypasses the protection, that bypass is what D5's patch documents rather than a second change.
+
+**Found in Phase 0 (ADR-001):** it does. The answer check's branch is two NOPs at 0x0537 and the flag it tested is forced at 0x0532, so the question screen still appears but any answer passes. That makes two patch sites in all, with this file's provenance a cracked copy. D5 then needs one byte more, not a second bypass: the host sets the protection's "already shown" flag at DS:0x25E4 in the loaded image, so the screen never appears.
 
 ### 2.4 This repository has done this once already
 
@@ -100,7 +102,7 @@ Phase 1 runs alongside Phase 2: static analysis bounds the routines, and the int
 
 ### Phase 2 — The host
 
-An 8086 interpreter covering the instructions this binary uses. Flags are exact except AF and PF, which the code never tests — no `pushf`, `lahf`, parity branch or BCD instruction appears in the sweep. Instructions carry approximate 8088 cycle counts so that the timer cadence and the calibrated delays (§7.4) behave. Around it: a 1 MB address space and the devices in §1 — CGA mode 4 with retrace timing, PIT channels 0 and 2, the PIC, the keyboard at port 0x60, the speaker gate, the joystick port and an int 33h mouse. BIOS and DOS are emulated at the call level, for exactly the functions §1 lists, and anything else fails loudly, so the surface cannot drift into a general DOS emulator.
+An 8086 interpreter covering the instructions this binary uses. Every flag the 8088 defines is exact, AF and PF included, even though the code never tests those two (no `pushf`, `lahf`, parity branch or BCD instruction appears in the sweep): they cost little and ADR-003 compares them. Instructions carry approximate 8088 cycle counts so that the timer cadence and the calibrated delays (§7.4) behave. Around it: a 1 MB address space and the devices in §1 — CGA mode 4 with retrace timing, PIT channels 0 and 2, the PIC, the keyboard at port 0x60, the speaker gate, the joystick port and an int 33h mouse. BIOS and DOS are emulated at the call level, for exactly the functions §1 lists, and anything else fails loudly, so the surface cannot drift into a general DOS emulator.
 
 The shell is a Win32 window with a D3D12 presenter (the original's resolution and palette, integer scale, corrected to 4:3, D8), XAudio2 synthesising the speaker from time-stamped port writes, the keyboard mapped to scan codes, the joystick through XInput, the mouse through raw input, and `.cdr` files in a user folder. The reference binary is read from the repository at start-up, not embedded. The protection patch (D5) is applied to the loaded image from the byte list in ADR-001, so the file keeps its recorded hash and every comparison is against the original plus exactly that patch.
 
@@ -157,7 +159,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 3. **Two interrupt handlers run inside the game.** The timer handler, at about 1 kHz, calls 0x7170; the keyboard handler calls 0x7463 and never chains to the BIOS. Whatever they write, the main loop reads asynchronously (§3).
 4. **Some delays are calibrated for a 4.77 MHz 8088.** The routines at 0x4618 and 0x05CC wait for vertical retrace and then spin 700 iterations of `dec ax / jnz`. On a modern CPU that spin takes no time; in the interpreter it takes as long as the cycle model says. What the delay protects — a tear-free blit, a palette change, a copy inside the blanking interval — decides how the native version replaces it.
 5. **The palette is written outside mode changes.** Colour-select writes to 0x3D9 occur at 0x49F8, at 0x7CB7 (stepping through a table) and at 0x7D2A. If any of them is timed within a frame, the presenter must model a split palette rather than one palette per frame.
-6. **Game speed may have depended on the CPU.** If flight and AI advance once per frame rather than per timer tick, the original slowed down on a real PC as the screen filled with ships, and "without functionality change" needs a definition before Phase 4 can meet it (D6).
+6. **Game speed may have depended on the CPU.** If flight and AI advance once per frame rather than per timer tick, the original slowed down on a real PC as the screen filled with ships, and "without functionality change" needs a definition before Phase 4 can meet it (D6). Phase 0 found a 20-per-second rate limiter at 0x777D with no caller anywhere in the code (ADR-001); whether something reaches it through data is a Phase 1 question that bears directly on D6.
 7. **The Amstrad path is a second machine.** It changes the timer's behaviour and probably input. The port keeps only the IBM PC behaviour unless the owner says otherwise.
 
 ## 8. Decisions for the owner
@@ -168,7 +170,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip and keep the reference outside the tree. | **Make the repository private.** The owner makes the change; it was still public on 2026-10-09. |
 | D3 | Original data in the port | Read it from the user's copy at start-up (the OpenRCT2 model). | **Follows from D2:** generated tables are checked in, and the reference binary is committed so CI can run the oracle until Phase 4 ends. |
 | D4 | The reference binary | An unpatched copy with a recorded hash. | **This file, `ELITEL.EXE`, with its known patch documented** — the only copy available. Phase 0 looks for further patches (§2.3). |
-| D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** The patch is a byte list in ADR-001, applied to the loaded image so the file keeps its hash. |
+| D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** One byte, DS:0x25E4, set in the loaded image so the file keeps its hash (ADR-001). |
 | D6 | What "the same speed" means | Decide after Phase 1 and Phase 2 measure how the game paces itself. | **Open**, by design, until those measurements exist. |
 | D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. | **Delete it after Phase 4.** The replay corpus must be complete before it goes (Phase 4). |
 | D8 | The picture | As the original drew it, at integer scale, corrected to 4:3. | **CGA mode 4 as this build draws it, at integer scale, corrected to 4:3.** |
@@ -178,8 +180,8 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 
 | ADR | Subject | When |
 |---|---|---|
-| ADR-001 | Scope, reference binary and fidelity (D1, D4, D5, D8, D9) | Phase 0 |
-| ADR-002 | Original data and the repository (D2, D3) | Phase 0 |
-| ADR-003 | Verification: interpreter validation, replays, differential tests, the oracle's lifetime (§6, D7) | Phase 0 |
+| [ADR-001](ADR/ADR-001-scope-reference-and-fidelity.md) | Scope, reference binary and fidelity (D1, D4, D5, D8, D9) | Phase 0 — written |
+| [ADR-002](ADR/ADR-002-original-data-and-the-repository.md) | Original data and the repository (D2, D3) | Phase 0 — written |
+| [ADR-003](ADR/ADR-003-verification.md) | Verification: interpreter validation, replays, differential tests, the oracle's lifetime (§6, D7) | Phase 0 — written |
 | ADR-004 | Projects and layout | Phase 2, when the first project is created |
 | ADR-005 | Time, pacing and the replay digests (D6) | Start of Phase 4, from the measurements |
