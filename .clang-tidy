@@ -95,18 +95,18 @@ WarningsAsErrors: '*'
 # THIS ALTERNATION IS A PROJECT REGISTRY. It names the projects whose headers are linted, so
 # ADDING A PROJECT MEANS ADDING IT HERE -- a project missing from this list is a project whose
 # headers are checked by nothing at all, with no finding and no warning to say so. It is the
-# quietest way to lose a gate, which is why Build/CheckProjectFiles.py should be written to
-# compare this list against the solution rather than trusting anyone to remember.
+# quietest way to lose a gate, which is why Build/CheckProjectFiles.py compares this list against
+# every project in the tree (its tidy-reach rule) rather than trusting anyone to remember.
 #
-# Only the `<Something>Tests` convention is seeded, because that is all this repository has agreed
-# on so far. The first project to be created adds its own name here, as `(<Project>|[A-Za-z0-9]+Tests)`.
+# The `<Something>Tests` convention covers every test project; the rest are named one by one
+# (ADR-004).
 #
 # [/\\], not '/'. On a Windows Clang build the paths arrive with backslashes, so a filter anchored
 # on a forward slash matches no header at all and silently suppresses every in-build diagnostic.
 # The pattern matches headers sitting DIRECTLY in a project folder, which is every hand-written
 # one (AGENTS.md §2's flat-directory rule). A bare `.*` would also match build output and the
 # Windows SDK, and most of what it reported would be from headers nobody here wrote.
-HeaderFilterRegex: '([A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
+HeaderFilterRegex: '(Machine|CpuConformance|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
 
 # A `Resource.h` is written by the Visual Studio resource editor, not by hand. Its
 # `#define IDC_STATIC -1` trips bugprone-macro-parentheses, and the fix would be undone the next
