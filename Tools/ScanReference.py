@@ -72,8 +72,10 @@ def disassemble(_code: bytes, _entries: list[int]) -> dict[int, CsInsn]:
       instructions[address] = decoded
       operand = decoded.operands[0] if decoded.operands else None
       branches = decoded.mnemonic.startswith(("j", "loop")) or decoded.mnemonic == "call"
-      if branches and operand is not None and operand.type == CS_OP_IMM and 0 <= operand.imm < len(_code):
-        pending.append(operand.imm)
+      # IP wraps within the segment; Capstone reports a near target past 0xFFFF unwrapped.
+      target = operand.imm & 0xFFFF if operand is not None and operand.type == CS_OP_IMM else None
+      if branches and target is not None and target < len(_code):
+        pending.append(target)
       if decoded.mnemonic in ENDS_FLOW:
         break
       address += decoded.size
