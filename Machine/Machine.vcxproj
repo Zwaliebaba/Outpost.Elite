@@ -87,6 +87,7 @@
     <ClInclude Include="InstructionObserver.h" />
     <ClInclude Include="InterruptSource.h" />
     <ClInclude Include="Mouse.h" />
+    <ClInclude Include="Pc.h" />
     <ClInclude Include="PcServices.h" />
     <ClInclude Include="Pit.h" />
     <ClInclude Include="PortRouter.h" />
@@ -115,6 +116,7 @@
     <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Memory.cpp" />
     <ClCompile Include="Mouse.cpp" />
+    <ClCompile Include="Pc.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

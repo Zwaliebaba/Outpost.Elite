@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Build">
+      <UniqueIdentifier>{819C6745-53D6-5A49-8FC6-9352646D103D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Recording">
+      <UniqueIdentifier>{2F01B16E-EE8A-598A-9CCB-DE2C9F849469}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Runner">
+      <UniqueIdentifier>{7D9BB439-BE54-58EC-B2FB-74C947F75BD6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>Build</Filter>
+    </ClInclude>
+    <ClInclude Include="PngWriter.h">
+      <Filter>Recording</Filter>
+    </ClInclude>
+    <ClInclude Include="StepScript.h">
+      <Filter>Runner</Filter>
+    </ClInclude>
+    <ClInclude Include="TraceWriter.h">
+      <Filter>Recording</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Runner</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PngWriter.cpp">
+      <Filter>Recording</Filter>
+    </ClCompile>
+    <ClCompile Include="StepScript.cpp">
+      <Filter>Runner</Filter>
+    </ClCompile>
+    <ClCompile Include="TraceWriter.cpp">
+      <Filter>Recording</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

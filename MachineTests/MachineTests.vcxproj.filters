@@ -22,6 +22,9 @@
     <Filter Include="Memory">
       <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pc">
+      <UniqueIdentifier>{4D391271-F4E6-54D0-8805-8197E7BC576D}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Services">
       <UniqueIdentifier>{C629C94A-1F95-558B-B2D2-1AF3FD9AE872}</UniqueIdentifier>
     </Filter>
@@ -79,6 +82,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PcTests.cpp">
+      <Filter>Pc</Filter>
     </ClCompile>
     <ClCompile Include="PicTests.cpp">
       <Filter>Devices</Filter>

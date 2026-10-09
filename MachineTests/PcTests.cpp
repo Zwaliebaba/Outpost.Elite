@@ -1,0 +1,181 @@
+#include "pch.h"
+
+#include "DirectoryFileStore.h"
+#include "Firmware.h"
+#include "Pc.h"
+#include "ServiceRig.h"
+#include "Sha256.h"
+
+#include <initializer_list>
+#include <memory>
+#include <vector>
+
+using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+
+namespace MachineTests
+{
+
+namespace
+{
+
+// A minimal MZ executable: a two-paragraph header, no relocations, the code at CS:IP 0000:0000, and
+// a stack at 0010:0100 inside the 32 paragraphs of minimum allocation.
+std::vector<std::uint8_t> TinyExe(std::initializer_list<std::uint8_t> _code)
+{
+  constexpr std::size_t HEADER_BYTES = 0x20;
+  const std::size_t fileBytes = HEADER_BYTES + _code.size();
+  std::vector<std::uint8_t> file(HEADER_BYTES, 0);
+  const auto put16 = [&](std::size_t _offset, std::size_t _value)
+  {
+    file[_offset] = static_cast<std::uint8_t>(_value & 0xFF);
+    file[_offset + 1] = static_cast<std::uint8_t>((_value >> 8) & 0xFF);
+  };
+  file[0] = 'M';
+  file[1] = 'Z';
+  put16(0x02, fileBytes % 512);
+  put16(0x04, (fileBytes + 511) / 512);
+  put16(0x08, HEADER_BYTES / 16);
+  put16(0x0A, 0x20);   // minimum allocation, paragraphs
+  put16(0x0C, 0xFFFF); // maximum allocation
+  put16(0x0E, 0x0010); // SS
+  put16(0x10, 0x0100); // SP
+  put16(0x18, 0x1C);   // relocation table offset
+  file.insert(file.end(), _code);
+  return file;
+}
+
+// A PC with its files in a scratch directory, the clock starting at midnight.
+class PcRig
+{
+public:
+  explicit PcRig(std::string_view _name)
+    : m_directory(_name),
+      m_files(m_directory.Path()),
+      m_pc(m_files, Desc())
+  {
+  }
+
+  [[nodiscard]] Machine::Pc& Host() noexcept
+  {
+    return m_pc;
+  }
+
+  [[nodiscard]] Machine::LoadedProgram Load(const std::vector<std::uint8_t>& _file)
+  {
+    Machine::LoadedProgram program;
+    Assert::IsTrue(m_pc.Load(_file, Machine::ExeLoader::Desc{}, program) == Machine::LoadError::None, L"loads");
+    return program;
+  }
+
+private:
+  [[nodiscard]] static Machine::Pc::Desc Desc() noexcept
+  {
+    Machine::Pc::Desc desc;
+    desc.startMoment = Machine::Dos::DateTime{1980, 1, 1, 0, 0, 0, 0};
+    return desc;
+  }
+
+  ScratchDirectory m_directory;
+  Machine::DirectoryFileStore m_files;
+  Machine::Pc m_pc;
+};
+
+} // namespace
+
+TEST_CLASS(PcTests)
+{
+public:
+  // The whole chain: the PIT's channel 0 at the BIOS's 18.2 Hz raises IRQ0 at cycle 262,144, the PIC
+  // grants it, the CPU vectors to the ROM's timer handler, which counts the tick and sends EOI.
+  TEST_METHOD(TimerTickReachesTheBiosHandler)
+  {
+    PcRig rig("TimerTick");
+    (void)rig.Load(TinyExe({0xFB, 0xEB, 0xFE})); // sti; jmp $
+    const std::uint32_t tickAddress = Machine::Memory::Linear(Machine::Firmware::DATA_SEGMENT, 0x6C);
+    Assert::AreEqual(0u, std::uint32_t{rig.Host().Ram().Read16(tickAddress)}, L"midnight");
+
+    Assert::IsTrue(rig.Host().RunUntil(262'000) == Machine::StopReason::Reached);
+    Assert::AreEqual(0u, std::uint32_t{rig.Host().Ram().Read16(tickAddress)}, L"not yet");
+    Assert::IsTrue(rig.Host().RunUntil(2 * 262'144 + 1'000) == Machine::StopReason::Reached);
+    Assert::AreEqual(2u, std::uint32_t{rig.Host().Ram().Read16(tickAddress)}, L"two ticks, so the first was ended");
+  }
+
+  TEST_METHOD(Int20hEndsTheRun)
+  {
+    PcRig rig("Terminate");
+    (void)rig.Load(TinyExe({0xCD, 0x20})); // int 20h
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated);
+    Assert::IsTrue(rig.Host().Services().Terminated());
+  }
+
+  TEST_METHOD(RefusedCallStopsTheRun)
+  {
+    PcRig rig("Fault");
+    const Machine::LoadedProgram program = rig.Load(TinyExe({0xB4, 0xFF, 0xCD, 0x21})); // mov ah,0FFh; int 21h
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Fault);
+    Assert::IsTrue(rig.Host().Services().Fault().has_value());
+    const Machine::ServiceFault fault = rig.Host().Services().Fault().value_or(Machine::ServiceFault{});
+    Assert::AreEqual(0x21u, std::uint32_t{fault.vector});
+    Assert::AreEqual(0xFFu, std::uint32_t{fault.ah});
+    Assert::AreEqual(std::uint32_t{program.loadSegment}, std::uint32_t{fault.cs});
+    Assert::AreEqual(0x0002u, std::uint32_t{fault.ip}, L"the INT's own address");
+  }
+
+  TEST_METHOD(HaltWithInterruptsOffDeadlocks)
+  {
+    PcRig rig("Deadlock");
+    (void)rig.Load(TinyExe({0xFA, 0xF4})); // cli; hlt
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Deadlocked);
+  }
+
+  // ADR-003's boot, on the whole machine: the reference, with the D5 byte, from its entry to the first
+  // call of GetKey (CS:7636). It matches DOSBox-X's trace register for register (Tools/CompareTrace.py).
+  // These figures pin it: any change to the CPU, a device or a service that alters the boot by one
+  // instruction, one cycle or one byte of memory fails here, and has to say why.
+  TEST_METHOD(ReferenceBootsToItsFirstKeyRead)
+  {
+    const std::vector<std::uint8_t> file = ReadReferenceBinary();
+    Assert::IsFalse(file.empty(), L"ELITEL.EXE at the repository root");
+    ScratchDirectory directory("ReferenceBoot");
+    Machine::DirectoryFileStore files(directory.Path());
+    Machine::Pc::Desc desc;
+    desc.startMoment = Machine::Dos::DateTime{1980, 1, 1, 0, 0, 0, 0};
+    const auto pc = std::make_unique<Machine::Pc>(files, desc);
+    Machine::ExeLoader::Desc load;
+    load.pspSegment = 0x0813; // DOSBox-X's, so the traces compare
+    Machine::LoadedProgram program;
+    Assert::IsTrue(pc->Load(file, load, program) == Machine::LoadError::None);
+    Assert::IsTrue(Machine::ExeLoader::PatchByte(pc->Ram(), program, 0x08F6, 0x25E4, 0x00, 0x01), L"D5");
+
+    const Machine::Registers& regs = pc->Processor().Regs();
+    while (!(regs.cs == program.loadSegment && regs.ip == 0x7636) && pc->Clock() < 2'000'000)
+    {
+      pc->Step();
+      Assert::IsFalse(pc->Services().Fault().has_value(), L"no call refused");
+    }
+    Assert::AreEqual(0x7636u, std::uint32_t{regs.ip}, L"GetKey reached");
+    Assert::AreEqual(std::uint64_t{28'576}, pc->Processor().InstructionCount());
+    Assert::AreEqual(std::uint64_t{655'906}, pc->Clock());
+    Assert::AreEqual(0x2Au, std::uint32_t{pc->Video().ModeControl()}, L"mode 4: 320x200 graphics, video on");
+    Assert::AreEqual("c167165cc1a8854f78291db0737f252e3bcb700489f6ba597624385cfc1473b2",
+                     Machine::Sha256::ToHex(Machine::Sha256::Of(pc->Ram().Bytes())).c_str());
+  }
+
+  TEST_METHOD(RunsAreIdenticalToTheCycle)
+  {
+    std::uint64_t clocks[2] = {};
+    std::uint64_t instructions[2] = {};
+    for (int run = 0; run < 2; ++run)
+    {
+      PcRig rig("Repeat");
+      (void)rig.Load(TinyExe({0xFB, 0x40, 0xEB, 0xFD})); // sti; inc ax; jmp back to the inc
+      Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Reached);
+      clocks[run] = rig.Host().Clock();
+      instructions[run] = rig.Host().Processor().InstructionCount();
+    }
+    Assert::AreEqual(clocks[0], clocks[1]);
+    Assert::AreEqual(instructions[0], instructions[1]);
+  }
+};
+
+} // namespace MachineTests

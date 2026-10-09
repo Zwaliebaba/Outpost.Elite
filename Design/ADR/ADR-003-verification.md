@@ -31,12 +31,14 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
   **Measured 2026-10-09, DOSBox-X 2024.03.01 against itself:**
   - Its `cycles` set to 310, 200 and 1000 give traces of 37,893, 41,424 and 40,342 instructions. All three reduce to the same 23,413 records.
   - Two runs at 310 are byte-identical.
+
+  **Measured 2026-10-09, the host (ADR-006) against DOSBox-X:** the host's 28,576 instructions reduce to the same 23,413 records as DOSBox-X's, and every register agrees at every one of them; in 320 records only input registers differ. Defined flags differ in 4,909 records, and every one is accounted for: undefined flags (AF after shifts; SF, ZF, PF and AF after MUL and IMUL; everything after DIV and the divide trap), flags computed from inputs, and two flag bugs in DOSBox-X itself (ADR-006 item 7). The comparison passes.
 - **Static screens.** Compared with DOSBox-X screenshots (`Tools/ReferenceScreens.py`), taken by the same step script that drives the host:
   - **Both charts** are drawn by the game in mode 4 and are compared pixel for pixel.
   - **The title's ship turns**, so a screenshot catches whichever frame the wall clock gives. It is compared with the host frame that matches it, and finding no match is the failure.
   - **The status, market, equipment and inventory screens** are text mode, drawn with our own font (D14), which is close to the CGA's but not the same. They are compared by character and attribute in video memory, not by pixel.
 
-**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-006, which records the cause of each change. The corpus is built to reach every subsystem:
+**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-007, which records the cause of each change. The corpus is built to reach every subsystem:
 
 - trading, and every equipment item;
 - combat with every ship type;
@@ -52,7 +54,7 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
 **5. The oracle ends with Phase 4 (D7).** At the end of Phase 4 the interpreter, the capture harness and the per-routine differential tests are deleted from the tree. Before that:
 
 - the replay corpus has to reach everything in item 2;
-- its digests have to be re-based under ADR-006;
+- its digests have to be re-based under ADR-007;
 - the known-answer tests have to be in the suite.
 
 From then on, the replays and the known answers are what the port is held to.
@@ -62,5 +64,5 @@ From then on, the replays and the known answers are what the port is held to.
 ## What this forecloses
 
 - Porting a routine against the interpreter before item 1 holds.
-- Re-basing a digest to get a red build green. A digest moves only through ADR-006, with its cause.
+- Re-basing a digest to get a red build green. A digest moves only through ADR-007, with its cause.
 - Any per-routine comparison against the original after Phase 4. A behaviour question raised later is answered from the replays, from the known answers, or by restoring the interpreter from history, not by asking the original directly.

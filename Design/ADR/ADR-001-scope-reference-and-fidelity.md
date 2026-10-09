@@ -36,7 +36,7 @@ The MZ header's checksum field (0x1399) does not satisfy the documented definiti
 
 5. **Only the IBM PC behaviour is ported** (ruled by the owner, D12). The Amstrad path — the ROM check at start-up, the flag at DS:0x2000 and the timer chaining that depends on it — stays in the hosted original as the reference has it. It never executes there, because the emulated PC has no Amstrad ROM string at FC00:0016, and the port does not carry it.
 
-6. **Speed is not defined here.** What "the same speed" means (D6) is decided in ADR-006, after Phase 1 shows how the game paces itself and Phase 2 measures it at 4.77 MHz.
+6. **Speed is not defined here.** What "the same speed" means (D6) is decided in ADR-007, after Phase 1 shows how the game paces itself and Phase 2 measures it at 4.77 MHz.
 
 ## What this forecloses
 
