@@ -331,6 +331,32 @@ public:
     Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
     Assert::AreEqual(0x0001u, rig.Stack(0), L"returns past the HLT");
   }
+
+  // The execution map marks where each instruction starts, at its first prefix byte, and nothing else.
+  TEST_METHOD(ExecutionMapMarksInstructionStarts)
+  {
+    Rig rig({0xB8, 0x34, 0x12, 0x26, 0x8B, 0x07, 0x90}); // mov ax,1234h; mov ax,es:[bx]; nop
+    std::vector<std::uint8_t> map;
+    rig.Processor().SetExecutionMap(&map);
+    Assert::AreEqual(static_cast<std::size_t>(Machine::Memory::SIZE_BYTES), map.size());
+
+    for (int step = 0; step < 3; ++step)
+    {
+      (void)rig.Processor().Step();
+    }
+    const std::uint32_t base = Machine::Memory::Linear(CODE_SEGMENT, 0);
+    for (std::uint32_t offset = 0; offset < 8; ++offset)
+    {
+      const bool start = offset == 0 || offset == 3 || offset == 6;
+      Assert::AreEqual(start ? 1u : 0u, std::uint32_t{map[base + offset]});
+    }
+
+    rig.Processor().SetExecutionMap(nullptr);
+    rig.Regs().ip = 0;
+    map[base] = 0;
+    (void)rig.Processor().Step();
+    Assert::AreEqual(0u, std::uint32_t{map[base]}, L"no map, no marks");
+  }
 };
 
 } // namespace MachineTests

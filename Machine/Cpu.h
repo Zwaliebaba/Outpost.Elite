@@ -4,6 +4,7 @@
 #include "Registers.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace Machine
 {
@@ -54,6 +55,10 @@ class PortBus;
 /// therefore delayed by one instruction. Single-step (TF) traps through vector 1 after an
 /// instruction that began and ended with TF set. HLT stops execution until an interrupt is taken.
 ///
+/// Execution map. Optionally, the CPU marks the linear address of every instruction it starts, its
+/// first prefix byte, with 1 in a map of the address space: what Phase 2's traces use to settle
+/// which code runs (Reference-Map.md, "Coverage"). Without a map it costs one predictable branch.
+///
 /// Timing. Step() returns an approximate 8088 clock count: the documented best case for the
 /// instruction from Intel's 8086 table, plus the effective-address cycles, plus 4 clocks for every
 /// word the 8088 moves over its 8-bit bus, plus 2 per prefix byte. It does not model the prefetch
@@ -70,6 +75,11 @@ public:
 
   /// What the INTR line is wired to. Null (the default) means no hardware interrupt ever arrives.
   void SetInterruptSource(InterruptSource* _source) noexcept;
+
+  /// Where to mark the instructions executed, or null to stop. A map holding fewer than
+  /// Memory::SIZE_BYTES entries is grown to that size with zeros, which is why this is not noexcept.
+  /// Marks are only ever set; clearing the map is the caller's business.
+  void SetExecutionMap(std::vector<std::uint8_t>* _map);
 
   /// The 8088's reset state: CS:IP = FFFF:0000, flags clear, everything else zero.
   void Reset() noexcept;
@@ -180,6 +190,7 @@ private:
   HostServices* m_host = nullptr;
   Registers m_regs{};
   InterruptSource* m_interrupts = nullptr;
+  std::vector<std::uint8_t>* m_executionMap = nullptr;
   std::uint64_t m_instructionCount = 0;
   std::uint32_t m_cycles = 0;
 

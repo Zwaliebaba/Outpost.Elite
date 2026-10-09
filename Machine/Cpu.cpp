@@ -113,6 +113,15 @@ void Cpu::SetInterruptSource(InterruptSource* _source) noexcept
   m_interrupts = _source;
 }
 
+void Cpu::SetExecutionMap(std::vector<std::uint8_t>* _map)
+{
+  if (_map != nullptr && _map->size() < Memory::SIZE_BYTES)
+  {
+    _map->resize(Memory::SIZE_BYTES, 0);
+  }
+  m_executionMap = _map;
+}
+
 void Cpu::Reset() noexcept
 {
   m_regs = Registers{};
@@ -139,6 +148,10 @@ std::uint32_t Cpu::Step()
   }
   m_interruptShadow = false;
   const bool trapping = Flag(FLAG_TRAP);
+  if (m_executionMap != nullptr)
+  {
+    (*m_executionMap)[Memory::Linear(m_regs.cs, m_regs.ip)] = 1;
+  }
 
   m_segmentOverride = -1;
   m_repeat = Repeat::None;
