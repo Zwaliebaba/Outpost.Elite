@@ -24,6 +24,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Cga.h">
+      <Filter>Video</Filter>
+    </ClInclude>
     <ClInclude Include="CgaFont.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -56,6 +59,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Cga.cpp">
+      <Filter>Video</Filter>
+    </ClCompile>
     <ClCompile Include="CgaFont.cpp">
       <Filter>Video</Filter>
     </ClCompile>

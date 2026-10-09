@@ -26,6 +26,9 @@
     <ClCompile Include="CgaFontTests.cpp">
       <Filter>Video</Filter>
     </ClCompile>
+    <ClCompile Include="CgaTests.cpp">
+      <Filter>Video</Filter>
+    </ClCompile>
     <ClCompile Include="CpuTests.cpp">
       <Filter>Cpu</Filter>
     </ClCompile>

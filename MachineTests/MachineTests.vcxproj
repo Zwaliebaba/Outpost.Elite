@@ -87,6 +87,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CgaFontTests.cpp" />
+    <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="CpuTests.cpp" />
     <ClCompile Include="MemoryTests.cpp" />
     <ClCompile Include="pch.cpp">
