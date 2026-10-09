@@ -1,12 +1,14 @@
 # ELITEL.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. Nothing is built. Nothing here is a decision until an ADR records it (AGENTS.md §6); §8 lists what the owner has to rule before Phase 0 can close.
+**Status:** proposed 2026-10-09; the owner ruled D1–D5 and D7–D9 the same day (§8). Nothing is built. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). D6 stays open by design, and Phase 0 cannot start measuring until the EGA build is in the tree (D4).
 
 **The goal as stated:** reverse-engineer `ELITEL.EXE` so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
 
 ## 1. What the binary is
 
 Measured on 2026-10-09 from the file at the repository root (SHA-256 `440b06de18c121855635d55e7a95308d5748144d8c4c63f082cbb864af95e55e`) with an MZ header parse and an `ndisasm` linear sweep of the code segment. The sweep decodes some data as code, so its counts are approximate; Phase 1 replaces them with recursive-descent figures.
+
+**Ruled 2026-10-09: this file is not the reference** (D4, D9). The EGA build replaces it and is surveyed the same way once it is in the tree. Everything in this section describes the CGA file. The game logic, DOS use, timer, keyboard, divide trap and protection are expected to carry over to the EGA build and the video rows are expected to change, but neither expectation is verified until that survey runs.
 
 It is the 1987 Firebird *Elite* for the IBM PC, CGA build. The version string is `Release:1? 1-10-87` (DS:0x7780) and the exit message is "Thank you for playing ELITE - Have a nice DOS!".
 
@@ -25,23 +27,29 @@ It is the 1987 Firebird *Elite* for the IBM PC, CGA build. The version string is
 
 The interface text is plain ASCII — screen titles, ship names, government and economy names, the system-name digram table — rather than the tokenised text of the 6502 versions, which makes the data segment comparatively quick to map.
 
-## 2. Four things to settle before the plan is worth running
+## 2. Four things settled before the plan was worth running
 
 ### 2.1 DOSBox already meets the stated goal
 
-DOSBox Staging or DOSBox-X runs this file on Windows 11 today with no functional change, and packaging it behind a launcher is an afternoon's work. If "runs on modern Windows" is the whole goal, the right plan is that one. Reverse engineering pays only if the goal is a native source base that can be read, fixed, extended and reshaped. The rest of this plan assumes that is the real goal; D1 asks the owner to confirm it.
+DOSBox Staging or DOSBox-X runs this file on Windows 11 today with no functional change, and packaging it behind a launcher is an afternoon's work. If "runs on modern Windows" is the whole goal, the right plan is that one. Reverse engineering pays only if the goal is a native source base that can be read, fixed, extended and reshaped. The rest of this plan assumes that is the real goal.
+
+**Ruled (D1):** a native source port.
 
 ### 2.2 The binary is a commercial copyright work on a public `main`
 
-`Zwaliebaba/Outpost.Elite` is public and `ELITEL.EXE` is on `main` at `4cfcee3`. That is distribution of the original program now, not an exposure that might arise later. The C64 attempt in this repository's history carried the same risk as its R1 and, at its last revision, was still waiting on an answer from the rights holders. Removing the file from the tip stops further distribution but does not recall forks or caches, and rewriting a public history is drastic and only partly effective. A faithful port inherits the problem a second time through its data: the ship models, font, text and tables are the original's bytes. D2 and D3.
+`Zwaliebaba/Outpost.Elite` is public and `ELITEL.EXE` is on `main` at `4cfcee3`. That is distribution of the original program now, not an exposure that might arise later. The C64 attempt in this repository's history carried the same risk as its R1 and, at its last revision, was still waiting on an answer from the rights holders. Removing the file from the tip stops further distribution but does not recall forks or caches, and rewriting a public history is drastic and only partly effective. A faithful port inherits the problem a second time through its data: the ship models, font, text and tables are the original's bytes.
+
+**Ruled (D2, D3):** the repository becomes private, so the reference binary and generated data tables may be committed. As of 2026-10-09 it is still public; the change is the owner's to make in the repository settings, and what forks and caches took during the public period stays out there.
 
 ### 2.3 This copy is not pristine
 
-From 0x003B the start-up code reads the DOS clock, adds seven seconds, reads the clock again and compares. The conditional branch that would close that loop is two `NOP`s at 0x0054, so a seven-second wait — taken at start-up and again every time play returns through 0x003B — has been patched out, by the publisher or by someone later. One visible patch means there may be others, and the protection path is the obvious candidate. "Without functionality change" needs a known build to be measured against. If the owner has the rest of the distribution — the other display builds, the loader, the manual — the EGA build may also be a better reference than a four-colour CGA one. D4.
+From 0x003B the start-up code reads the DOS clock, adds seven seconds, reads the clock again and compares. The conditional branch that would close that loop is two `NOP`s at 0x0054, so a seven-second wait — taken at start-up and again every time play returns through 0x003B — has been patched out, by the publisher or by someone later. One visible patch means there may be others, and the protection path is the obvious candidate. "Without functionality change" needs a known build to be measured against. If the owner has the rest of the distribution — the other display builds, the loader, the manual — the EGA build may also be a better reference than a four-colour CGA one.
+
+**Ruled (D4, D9):** the EGA build is the reference, and this CGA file is dropped rather than kept as a second one. The EGA build gets the same provenance check this section applied here.
 
 ### 2.4 This repository has done this once already
 
-Until `4cfcee3` the tree held a near-complete C++ port of *Commodore 64* Elite from Mark Moxon's annotated 6502 source: nine ADRs, more than 20,000 lines of design documents, a 6502 oracle and a replay digest. `Sync` deleted all of it, and AGENTS.md says that history binds nothing here. Two of its lessons are still cheap to keep and expensive to relearn. Running the original beside the port is what made that port possible, and deleting the oracle took the suite from 469 tests to 131 (`Design/README.md` at `3da3590`). And its documents grew faster than its game did; this plan is meant to stay short. One thing is new and makes this attempt harder: there is no annotated source. Naming several hundred routines from a bare binary is a cost the C64 attempt never paid, and it dominates Phases 1 and 3. If the reset was for a reason — cost, licence, the C64 being the wrong source — the owner should say which, because each would change something here.
+Until `4cfcee3` the tree held a near-complete C++ port of *Commodore 64* Elite from Mark Moxon's annotated 6502 source: nine ADRs, more than 20,000 lines of design documents, a 6502 oracle and a replay digest. `Sync` deleted all of it, and AGENTS.md says that history binds nothing here. Two of its lessons are still cheap to keep and expensive to relearn. Running the original beside the port is what made that port possible, and deleting the oracle took the suite from 469 tests to 131 (`Design/README.md` at `3da3590`). And its documents grew faster than its game did; this plan is meant to stay short. One thing is new and makes this attempt harder: there is no annotated source. Naming several hundred routines from a bare binary is a cost the C64 attempt never paid, and it dominates Phases 1 and 3. **Ruled:** the reset was because the PC version was wanted; the method was not the problem. The C64 attempt's verification ideas — the replay digest, the differential oracle — are reused here as ideas, not as code.
 
 ## 3. Approach
 
@@ -51,7 +59,7 @@ There are three ways from this binary to native source.
 
 **B. Static recompilation.** A translator turns each instruction into C++ statements on a register file and a 1 MB array, giving a native executable that is bit-exact from the start. The usual reason to recompile rather than interpret is speed, and it does not apply: interpreting a 4.77 MHz 8088 is a negligible load for a modern core. The costs remain — the self-modifying line drawer, four indirect-branch sites, interrupts that can arrive between any two instructions — and a translator bug is silent, because its output has nothing to be checked against.
 
-**C. A hosted interpreter, then replacement routine by routine (recommended).** Build a small 8086 interpreter and exactly the PC this program touches — §1's table is the whole list — inside a native Win32, D3D12 and XAudio2 shell. The unmodified original then runs as a native Windows program at the end of Phase 2, which meets the stated goal early, with the original's own code. After that, the original's routines are replaced with C++ one at a time: the interpreter hands control to a native function when execution reaches a hooked entry address, and each replacement is proved by running both versions from the same captured state and comparing everything they wrote. When the whole replay corpus executes no original instruction, the interpreter leaves the shipping executable and stays in the test project as the oracle. This is the pattern OpenRCT2 used on RollerCoaster Tycoon 2, with an interpreter in place of DLL injection, because 64-bit Windows cannot execute 16-bit code at all.
+**C. A hosted interpreter, then replacement routine by routine (recommended).** Build a small 8086 interpreter and exactly the PC this program touches — §1's table is the whole list — inside a native Win32, D3D12 and XAudio2 shell. The unmodified original then runs as a native Windows program at the end of Phase 2, which meets the stated goal early, with the original's own code. After that, the original's routines are replaced with C++ one at a time: the interpreter hands control to a native function when execution reaches a hooked entry address, and each replacement is proved by running both versions from the same captured state and comparing everything they wrote. When the whole replay corpus executes no original instruction, the interpreter leaves the shipping executable, and at the end of Phase 4 it leaves the tree (D7). This is the pattern OpenRCT2 used on RollerCoaster Tycoon 2, with an interpreter in place of DLL injection, because 64-bit Windows cannot execute 16-bit code at all.
 
 C is recommended because it is the only option in which the game always runs and every step is checked against the original. Its weak points, stated so they can be watched:
 
@@ -76,9 +84,9 @@ Each phase ends on a criterion that can be checked.
 
 ### Phase 0 — Decisions and ground
 
-Rule D1 to D8 (§8) and write ADR-001 to ADR-003 (§9). Write the three checkers that AGENTS.md §6 calls early work — `Build/CheckFormat.py`, `Build/CheckProjectFiles.py` and `Build/RunClangTidy.py` — because the first C++ lands in Phase 2 and until then every rule they would enforce is review's problem. Settle the reference binary (D4) before anything is measured against it.
+Add the EGA build to the tree and survey it as §1 surveyed the CGA file, including the provenance check of §2.3. Write ADR-001 to ADR-003 (§9) from the rulings in §8. Write the three checkers that AGENTS.md §6 calls early work — `Build/CheckFormat.py`, `Build/CheckProjectFiles.py` and `Build/RunClangTidy.py` — because the first C++ lands in Phase 2 and until then every rule they would enforce is review's problem. Settle the reference binary (D4) before anything is measured against it.
 
-**Exit:** the ADRs are merged, the checkers gate in CI, and the reference binary's hash is recorded in ADR-001.
+**Exit:** §1 describes the EGA build; the ADRs are merged; the checkers gate in CI; the reference binary's hash and the D5 patch's byte list are recorded in ADR-001.
 
 ### Phase 1 — Map the binary
 
@@ -94,15 +102,15 @@ Phase 1 runs alongside Phase 2: static analysis bounds the routines, and the int
 
 ### Phase 2 — The host
 
-An 8086 interpreter covering the instructions this binary uses. Flags are exact except AF and PF, which the code never tests — no `pushf`, `lahf`, parity branch or BCD instruction appears in the sweep. Instructions carry approximate 8088 cycle counts so that the timer cadence and the calibrated delays (§7.4) behave. Around it: a 1 MB address space and the devices in §1 — CGA mode 4 with retrace timing, PIT channels 0 and 2, the PIC, the keyboard at port 0x60, the speaker gate, the joystick port and an int 33h mouse. BIOS and DOS are emulated at the call level, for exactly the functions §1 lists, and anything else fails loudly, so the surface cannot drift into a general DOS emulator.
+An 8086 interpreter covering the instructions this binary uses. Flags are exact except AF and PF, which the code never tests — no `pushf`, `lahf`, parity branch or BCD instruction appears in the sweep. Instructions carry approximate 8088 cycle counts so that the timer cadence and the calibrated delays (§7.4) behave. Around it: a 1 MB address space and the devices §1 lists for the reference build: the display adapter (CGA mode 4 with retrace timing for the CGA file, whatever Phase 0's survey finds for the EGA build), PIT channels 0 and 2, the PIC, the keyboard at port 0x60, the speaker gate, the joystick port and an int 33h mouse. BIOS and DOS are emulated at the call level, for exactly the functions §1 lists, and anything else fails loudly, so the surface cannot drift into a general DOS emulator.
 
-The shell is a Win32 window with a D3D12 presenter (320×200 indexed, the CGA palette, integer scale, corrected to 4:3), XAudio2 synthesising the speaker from time-stamped port writes, the keyboard mapped to scan codes, the joystick through XInput, the mouse through raw input, and `.cdr` files in a user folder. The original is loaded from the user's copy at start-up, not embedded (D3).
+The shell is a Win32 window with a D3D12 presenter (the original's resolution and palette, integer scale, corrected to 4:3, D8), XAudio2 synthesising the speaker from time-stamped port writes, the keyboard mapped to scan codes, the joystick through XInput, the mouse through raw input, and `.cdr` files in a user folder. The reference binary is read from the repository at start-up, not embedded. The protection patch (D5) is applied to the loaded image from the byte list in ADR-001, so the file keeps its recorded hash and every comparison is against the original plus exactly that patch.
 
 Interrupts are injected at instruction-count boundaries rather than wall-clock moments, so a session recorded as inputs against instruction count replays bit for bit. That replay is the regression gate for everything after it.
 
 ADR-004 settles the projects when the first one is created. A starting point to argue with: an interpreter library; an `Engine` library for the window, D3D12, audio and input; a `GameLogic` library (namespace `Elite`) for the port; the executable; a test project per library, each added to `.clang-tidy`'s `HeaderFilterRegex`.
 
-**Exit:** the reference binary, unmodified, boots, gets past the protection per D5, docks, launches, flies, fights, hyperspaces, saves and reloads a commander; its boot trace matches DOSBox-X's (§6.1); a seed corpus of recorded replays reproduces identical digests on every run. *This meets the stated goal.*
+**Exit:** the reference binary, with only the D5 patch applied, boots, skips the protection, docks, launches, flies, fights, hyperspaces, saves and reloads a commander; its boot trace matches DOSBox-X's (§6.1); a seed corpus of recorded replays reproduces identical digests on every run. *This meets the stated goal.*
 
 ### Phase 3 — Replace routines with C++
 
@@ -114,11 +122,13 @@ A replacement is accepted when it matches the original on every captured call (�
 
 ### Phase 4 — Detach
 
-The interpreter leaves the shipping executable. CGA memory becomes a native 320×200 index buffer handed to the presenter; the speaker becomes a native synthesiser; the timer and keyboard handlers become a fixed-tick scheduler at the rate D6 sets; DOS file calls become `std::filesystem`, with the `.cdr` format kept byte-compatible so that commanders saved by the original still load. The protection goes per D5. The data-segment overlay is re-laid as typed state, now that nothing interpreted reads its bytes.
+The interpreter leaves the shipping executable. Video memory becomes a native index buffer handed to the presenter; the speaker becomes a native synthesiser; the timer and keyboard handlers become a fixed-tick scheduler at the rate D6 sets; DOS file calls become `std::filesystem`, with the `.cdr` format kept byte-compatible so that commanders saved by the original still load. The protection is not ported (D5). The data-segment overlay is re-laid as typed state, now that nothing interpreted reads its bytes, and the ship models, font, text and tables become C++ tables generated from the reference by a script under `Tools/` and checked in (D3).
+
+At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-005.
 
 This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-005 with its cause, never a re-baseline to make CI green.
 
-**Exit:** the shipping executable contains no interpreter; the replay corpus, re-based under ADR-005, passes; the game has been played and looked at, not only built (AGENTS.md §3).
+**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-005, passes; the game has been played and looked at, not only built (AGENTS.md §3).
 
 ### Phase 5 — Beyond the original (outside this plan)
 
@@ -144,6 +154,8 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 
 ## 7. Hazards found in the binary
 
+Found in the CGA build. Phase 0's survey re-checks each against the EGA build; 4 and 5 are CGA hardware and will be replaced by whatever the EGA display code does.
+
 1. **Divide overflow is part of the arithmetic.** The int 0 handler at 0x025E inspects the faulting instruction, sets AL to 0x7F or AX to 0x7FFF, and resumes, so the game relies on the trap to saturate quotients. It copes with both the 8086 convention (return address after the `div`) and the 286-and-later one (return address at it), but on the later path it skips exactly two bytes, so a `div` with a memory operand would resume mid-instruction on a 286 or newer. Every one of the roughly 60 `div` and `idiv` sites must reproduce the saturation explicitly in C++. The interpreter models the 8088 convention, the machine the code was written for.
 2. **The line drawer rewrites itself.** About 30 addresses between 0x1CC9 and 0x22B2 are written through `CS:`. For example, 0x1CC9 and 0x1CCB hold `add ax,si` and `add bx,di` inside a stepping loop and are overwritten with whichever variant the line's direction needs. The interpreter executes this as it stands; the C++ replaces it with ordinary branches.
 3. **Two interrupt handlers run inside the game.** The timer handler, at about 1 kHz, calls 0x7170; the keyboard handler calls 0x7463 and never chains to the BIOS. Whatever they write, the main loop reads asynchronously (§3).
@@ -154,22 +166,23 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 
 ## 8. Decisions for the owner
 
-| # | Decision | Recommendation |
-|---|---|---|
-| D1 | Is the goal a native source port, or is a DOSBox package enough? | A native source port; otherwise nothing below is needed (§2.1). |
-| D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip now, keep the reference copy outside the tree, and decide separately whether to rewrite history. CI then needs a private way to obtain the file, or the tests that need it run only locally. |
-| D3 | Original data in the port | The OpenRCT2 model: the executable reads ship models, font, text and tables from the user's own copy of the original at start-up, so the repository holds only new code. The alternative, generated tables checked in, is simpler and carries the exposure §2.2 describes. |
-| D4 | The reference binary | A pristine copy with a recorded hash; this file only if none exists, with its known patch documented. Say whether the other display builds and the manual are available. |
-| D5 | Copy protection | Remove it from the port. In the hosted original, answer it at the point where the answer is checked rather than by altering the binary. |
-| D6 | What "the same speed" means | Decide after Phase 1 shows how the game paces itself and Phase 2 measures the original's frame rate at 4.77 MHz. No number is chosen before then. |
-| D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. The previous attempt deleted its oracle and went from 469 tests to 131. |
-| D8 | The picture | CGA mode 4 as the original drew it, at integer scale, corrected to 4:3. Anything else is Phase 5. |
+| # | Decision | Recommendation | Ruling, 2026-10-09 |
+|---|---|---|---|
+| D1 | Is the goal a native source port, or is a DOSBox package enough? | A native source port (§2.1). | **Native source port.** |
+| D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip and keep the reference outside the tree. | **Make the repository private.** The owner makes the change; it was still public on 2026-10-09. |
+| D3 | Original data in the port | Read it from the user's copy at start-up (the OpenRCT2 model). | **Follows from D2:** generated tables are checked in, and the reference binary is committed so CI can run the oracle until Phase 4 ends. |
+| D4 | The reference binary | An unpatched copy with a recorded hash. | **The EGA build.** It is not in the tree yet; its provenance is checked as §2.3 checked the CGA file. |
+| D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** The patch is a byte list in ADR-001, applied to the loaded image so the file keeps its hash. |
+| D6 | What "the same speed" means | Decide after Phase 1 and Phase 2 measure how the game paces itself. | **Open**, by design, until those measurements exist. |
+| D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. | **Delete it after Phase 4.** The replay corpus must be complete before it goes (Phase 4). |
+| D8 | The picture | As the original drew it, at integer scale, corrected to 4:3. | **As the EGA build draws it, at integer scale, corrected to 4:3.** |
+| D9 | The CGA file as a second reference | Keep it: diffing the two builds separates the display code from the game logic. | **Dropped.** Only the EGA build is analysed; Phase 1 finds the hardware boundary by hand. |
 
 ## 9. ADRs this plan produces
 
 | ADR | Subject | When |
 |---|---|---|
-| ADR-001 | Scope, reference binary and fidelity (D1, D4, D5, D8) | Phase 0 |
+| ADR-001 | Scope, reference binary and fidelity (D1, D4, D5, D8, D9) | Phase 0 |
 | ADR-002 | Original data and the repository (D2, D3) | Phase 0 |
 | ADR-003 | Verification: interpreter validation, replays, differential tests, the oracle's lifetime (§6, D7) | Phase 0 |
 | ADR-004 | Projects and layout | Phase 2, when the first project is created |
