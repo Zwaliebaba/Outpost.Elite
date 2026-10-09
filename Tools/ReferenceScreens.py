@@ -11,6 +11,7 @@ small script of steps:
   wait N       let N seconds of wall time pass
   key NAME     press and release one key (xdotool key names: F1, space, Escape, Return, a, ...)
   shot NAME    write NAME.png to --out
+  digest NAME  ignored here: ReferenceRunner prints a state digest, and one script serves both
 
 Each shot is the emulated screen as a 640x200 image on the CGA's dot grid, the same grid
 Machine::Cga renders: DOSBox-X draws the 200-line picture doubled to 400, so every other row is
@@ -40,9 +41,14 @@ REFERENCE_SHA256 = "440b06de18c121855635d55e7a95308d5748144d8c4c63f082cbb864af95
 PATCH_OFFSET = 0xB584
 PATCH_FROM = 0x00
 PATCH_TO = 0x01
+# DOSBox-X's fixed instructions per emulated millisecond: about a 4.77 MHz 8088's pace, so that `wait N`
+# lets roughly N seconds of the original's time pass.
+CYCLES_PER_MILLISECOND = 310
 WINDOW_WIDTH = 640
 WINDOW_HEIGHT = 400
 
+# The clock is set the way a PC/XT without a clock card boots, so that the game's reads of the time of
+# day (int 21h AH=2Ch, twice in RestartPlay) return the same in every run and in the host.
 CONFIG = """[sdl]
 output=surface
 [dosbox]
@@ -51,7 +57,7 @@ memsize=1
 [cpu]
 cputype=8086
 core=normal
-cycles=fixed 310
+cycles=fixed {cycles}
 [mixer]
 nosound=true
 [speaker]
@@ -59,7 +65,9 @@ pcspeaker=false
 [autoexec]
 mount c "{drive}"
 c:
-ELITEL.EXE
+date 01-01-1980
+time 00:00:00
+{command}
 """
 
 
@@ -134,8 +142,8 @@ def main() -> int:
       sys.exit(f"{tool} is not installed; see this script's docstring")
   steps = [step.split(maxsplit=1) for step in (part.strip() for part in args.steps.split(";")) if step]
   for step in steps:
-    if len(step) != 2 or step[0] not in ("wait", "key", "shot"):
-      sys.exit(f"bad step {' '.join(step)!r}; steps are 'wait N', 'key NAME' and 'shot NAME'")
+    if len(step) != 2 or step[0] not in ("wait", "key", "shot", "digest"):
+      sys.exit(f"bad step {' '.join(step)!r}; steps are 'wait N', 'key NAME', 'shot NAME' and 'digest NAME'")
   args.out.mkdir(parents=True, exist_ok=True)
 
   with tempfile.TemporaryDirectory(prefix="reference-screens-") as scratch:
@@ -143,7 +151,7 @@ def main() -> int:
     drive.mkdir()
     patched_copy(args.exe, drive)
     config = Path(scratch) / "dosbox.conf"
-    config.write_text(CONFIG.format(drive=drive), encoding="ascii")
+    config.write_text(CONFIG.format(drive=drive, command="ELITEL.EXE", cycles=CYCLES_PER_MILLISECOND), encoding="ascii")
 
     display = free_display()
     env = dict(os.environ, DISPLAY=display, SDL_AUDIODRIVER="dummy")
@@ -160,6 +168,8 @@ def main() -> int:
           time.sleep(float(argument))
         elif verb == "key":
           run(["xdotool", "key", "--window", window, argument], env)
+        elif verb == "digest":
+          pass  # only the host can fingerprint its own state; the step is accepted so one script serves both
         else:
           target = args.out / f"{argument}.png"
           capture(env, window, Path(scratch), target)

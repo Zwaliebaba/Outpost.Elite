@@ -1,6 +1,6 @@
 # ADR-003 — Verification
 
-**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8.
+**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8. **Amended 2026-10-09:** item 1's boot trace and static screens, after the first DOSBox-X traces and the CGA showed that neither could be compared the way this ADR first said.
 
 ## Context
 
@@ -13,8 +13,23 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
 **1. The interpreter is checked against three independent references before anything is ported against it.** None of them is linked into the build (R14); they are development tools.
 
 - **Per-instruction tests.** The SingleStepTests 8088 suite, about 3 million tests generated on real 8088 hardware, run against the interpreter one instruction at a time. It is fetched by a script under `Tools/` rather than committed, unless its repository's own licence file is confirmed to allow committing it. Every flag the 8088 defines for an instruction is compared, AF and PF included: computing them costs little, and an exclusion list is somewhere for a real bug to hide. Flags Intel documents as undefined for an instruction are masked, and any use of one by this binary is a Phase 1 finding.
-- **The boot trace.** Every instruction from the program entry to the first keyboard read, with the ADR-001 patch applied, compared register for register with DOSBox-X's debugger trace of the same binary. No input happens in that stretch, so both traces are deterministic.
-- **Static screens.** The title, the status, market, equipment and inventory screens, and both charts, compared pixel for pixel with DOSBox-X screenshots taken at the same points.
+- **The boot trace.** Every instruction from the program entry to the first call of `GetKey` (CS:7636), with the ADR-001 patch applied, compared register for register with the trace of the same binary in DOSBox-X's heavy debugger. `Tools/ReferenceTrace.py` records that trace, and `Tools/CompareTrace.py` compares two.
+
+  The two traces cannot be compared raw. Each emulator is deterministic once its clock is pinned: the game reads the time of day twice in `RestartPlay`, so both start at 00:00:00 on 1 January 1980, as a PC/XT without a clock card does. But the two are not aligned with each other, because the 1 kHz timer lands wherever each one's cycle accounting puts it. The comparison therefore sets aside what is not the program's:
+  - DOSBox-X's own BIOS and DOS code, in segment F000;
+  - each run of the game's interrupt handlers;
+  - the record per iteration that DOSBox-X writes for a REP instruction;
+  - the game's three polling waits on time, at 0599, 05D0 and 461B.
+
+  It also treats two things as inputs: what the game reads from ports that move with time (the timer, port 0x61, the CGA status, the joystick), and the two variables where it keeps such a value. An input register may differ until it agrees again. Every other register must agree at every remaining instruction. Flags are reported, not failed, because they include flags the 8088 leaves undefined and flags computed from those inputs.
+
+  **Measured 2026-10-09 with DOSBox-X 2024.03.01:**
+  - Its `cycles` set to 310, 200 and 1000 give traces of 37,893, 41,424 and 40,342 instructions. All three reduce to the same 23,413 records.
+  - Two runs at 310 are byte-identical.
+- **Static screens.** Compared with DOSBox-X screenshots (`Tools/ReferenceScreens.py`), taken by the same step script that drives the host:
+  - **Both charts** are drawn by the game in mode 4 and are compared pixel for pixel.
+  - **The title's ship turns**, so a screenshot catches whichever frame the wall clock gives. It is compared with the host frame that matches it, and finding no match is the failure.
+  - **The status, market, equipment and inventory screens** are text mode, drawn with our own font (D14), which is close to the CGA's but not the same. They are compared by character and attribute in video memory, not by pixel.
 
 **2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-006, which records the cause of each change. The corpus is built to reach every subsystem:
 
