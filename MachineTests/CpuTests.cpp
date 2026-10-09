@@ -2,6 +2,7 @@
 
 #include "Cpu.h"
 #include "HostServices.h"
+#include "InterruptSource.h"
 #include "Memory.h"
 #include "PortBus.h"
 
@@ -53,6 +54,46 @@ public:
 
 private:
   std::vector<std::uint8_t> m_vectors;
+};
+
+// The INTR line with one request on it at a time, holding the vector it will answer with.
+class ScriptedSource final : public Machine::InterruptSource
+{
+public:
+  void Raise(std::uint8_t _vector) noexcept
+  {
+    m_vector = _vector;
+    m_pending = true;
+  }
+
+  [[nodiscard]] bool InterruptPending() const noexcept override
+  {
+    ++m_queries;
+    return m_pending;
+  }
+
+  [[nodiscard]] std::uint8_t AcknowledgeInterrupt() noexcept override
+  {
+    m_pending = false;
+    ++m_acknowledged;
+    return m_vector;
+  }
+
+  [[nodiscard]] std::size_t Queries() const noexcept
+  {
+    return m_queries;
+  }
+
+  [[nodiscard]] std::size_t Acknowledged() const noexcept
+  {
+    return m_acknowledged;
+  }
+
+private:
+  mutable std::size_t m_queries = 0;
+  std::size_t m_acknowledged = 0;
+  std::uint8_t m_vector = 0;
+  bool m_pending = false;
 };
 
 // A machine with code at CODE_SEGMENT:0000 and an empty stack at STACK_SEGMENT:STACK_TOP.
@@ -203,22 +244,92 @@ public:
     Assert::AreEqual(std::size_t{2}, host.Vectors().size());
   }
 
+  // The CPU asks its InterruptSource at an instruction boundary, acknowledges, and vectors through
+  // the entry the acknowledge returned; the handler's first instruction runs in the same step.
+  TEST_METHOD(HardwareInterruptVectorsThroughTheAcknowledgedEntry)
+  {
+    Rig rig({0x90, 0x90}); // nop; nop
+    rig.Ram().Write16(0x09u * 4, 0x0010);
+    rig.Ram().Write16(0x09u * 4 + 2, 0x5000);
+    rig.Ram().Write8(0x5000, 0x0010, 0x90);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+
+    (void)rig.Processor().Step();
+    Assert::AreEqual(std::size_t{0}, source.Acknowledged(), L"nothing pending: nothing acknowledged");
+    source.Raise(0x09);
+    (void)rig.Processor().Step();
+
+    Assert::AreEqual(std::size_t{1}, source.Acknowledged());
+    Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
+    Assert::AreEqual(0x0011u, std::uint32_t{rig.Regs().ip}, L"the handler's first instruction ran");
+    Assert::AreEqual(0x0001u, rig.Stack(0), L"returns to the second nop");
+    Assert::AreEqual(std::uint32_t{CODE_SEGMENT}, rig.Stack(1));
+    Assert::IsFalse((rig.Regs().flags & Machine::FLAG_INTERRUPT) != 0, L"IF is cleared on entry");
+  }
+
   TEST_METHOD(HardwareInterruptWaitsOneInstructionAfterSti)
   {
     Rig rig({0xFB, 0x90, 0x90}); // sti; nop; nop
     rig.Ram().Write16(0x08u * 4, 0x0000);
     rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
     rig.Regs().flags = Machine::FLAGS_FIXED_ONES;
-    rig.Processor().RequestInterrupt(0x08);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+    source.Raise(0x08);
 
     (void)rig.Processor().Step(); // sti
+    Assert::AreEqual(std::size_t{0}, source.Queries(), L"IF clear: the source is not even asked");
     (void)rig.Processor().Step(); // the nop after it still runs
     Assert::AreEqual(0x0002u, std::uint32_t{rig.Regs().ip});
     Assert::AreEqual(std::uint32_t{CODE_SEGMENT}, std::uint32_t{rig.Regs().cs});
+    Assert::AreEqual(std::size_t{0}, source.Acknowledged());
 
     (void)rig.Processor().Step(); // now the interrupt is taken, and its handler's first instruction runs
     Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
     Assert::AreEqual(0x0002u, rig.Stack(0), L"returns to the second nop");
+  }
+
+  // On the 8088 any MOV or POP to a segment register holds interrupts off for one instruction.
+  TEST_METHOD(SegmentLoadShadowsTheNextInstruction)
+  {
+    Rig rig({0x8E, 0xD0, 0x90, 0x90}); // mov ss,ax; nop; nop
+    rig.Regs().ax = STACK_SEGMENT;
+    rig.Ram().Write16(0x08u * 4, 0x0000);
+    rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+
+    (void)rig.Processor().Step(); // mov ss,ax
+    source.Raise(0x08);
+    (void)rig.Processor().Step(); // the nop in its shadow
+    Assert::AreEqual(std::size_t{0}, source.Acknowledged());
+    Assert::AreEqual(0x0003u, std::uint32_t{rig.Regs().ip});
+
+    (void)rig.Processor().Step();
+    Assert::AreEqual(std::size_t{1}, source.Acknowledged());
+    Assert::AreEqual(0x0003u, rig.Stack(0));
+  }
+
+  // HLT waits for an interrupt; with nothing pending it idles without executing.
+  TEST_METHOD(HaltedCpuWakesForAnInterrupt)
+  {
+    Rig rig({0xF4, 0x90}); // hlt; nop
+    rig.Ram().Write16(0x08u * 4, 0x0000);
+    rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+
+    (void)rig.Processor().Step();
+    Assert::IsTrue(rig.Processor().Halted());
+    Assert::AreEqual(Machine::Cpu::HALT_IDLE_CYCLES, rig.Processor().Step());
+    Assert::AreEqual(0x0001u, std::uint32_t{rig.Regs().ip});
+
+    source.Raise(0x08);
+    (void)rig.Processor().Step();
+    Assert::IsFalse(rig.Processor().Halted());
+    Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
+    Assert::AreEqual(0x0001u, rig.Stack(0), L"returns past the HLT");
   }
 };
 

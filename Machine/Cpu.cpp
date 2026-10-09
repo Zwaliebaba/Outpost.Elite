@@ -3,6 +3,7 @@
 #include "Cpu.h"
 
 #include "HostServices.h"
+#include "InterruptSource.h"
 #include "Memory.h"
 #include "PortBus.h"
 
@@ -95,7 +96,7 @@ constexpr std::int32_t AsSigned(std::uint32_t _value, bool _word) noexcept
 
 } // namespace
 
-Cpu::Cpu(Memory& _memory, PortBus& _ports)
+Cpu::Cpu(Memory& _memory, PortBus& _ports) noexcept
   : m_memory(_memory),
     m_ports(_ports)
 {
@@ -107,30 +108,28 @@ void Cpu::SetHostServices(HostServices* _host) noexcept
   m_host = _host;
 }
 
+void Cpu::SetInterruptSource(InterruptSource* _source) noexcept
+{
+  m_interrupts = _source;
+}
+
 void Cpu::Reset() noexcept
 {
   m_regs = Registers{};
   m_regs.cs = 0xFFFF;
   m_regs.flags = FLAGS_FIXED_ONES;
-  m_pendingInterrupts.clear();
   m_instructionCount = 0;
   m_halted = false;
   m_interruptShadow = false;
 }
 
-void Cpu::RequestInterrupt(std::uint8_t _vector)
-{
-  m_pendingInterrupts.push_back(_vector);
-}
-
 std::uint32_t Cpu::Step()
 {
   m_cycles = 0;
-  if (!m_interruptShadow && Flag(FLAG_INTERRUPT) && !m_pendingInterrupts.empty())
+  if (m_interrupts != nullptr && !m_interruptShadow && Flag(FLAG_INTERRUPT) && m_interrupts->InterruptPending())
   {
-    const std::uint8_t vector = m_pendingInterrupts.front();
-    m_pendingInterrupts.pop_front();
-    m_halted = false;
+    // The acknowledge cycle: the controller puts the vector on the bus and marks it in service.
+    const std::uint8_t vector = m_interrupts->AcknowledgeInterrupt();
     EnterInterrupt(vector);
     m_cycles += HARDWARE_INTERRUPT_CYCLES;
   }

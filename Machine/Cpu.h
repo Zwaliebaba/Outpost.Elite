@@ -4,12 +4,12 @@
 #include "Registers.h"
 
 #include <cstdint>
-#include <deque>
 
 namespace Machine
 {
 
 class HostServices;
+class InterruptSource;
 class Memory;
 class PortBus;
 
@@ -46,12 +46,13 @@ class PortBus;
 /// the middle of one; the 8088 would take it between iterations. The game's string instructions
 /// are short block copies and fills, and nothing it does depends on the difference.
 ///
-/// Interrupts. RequestInterrupt queues a maskable hardware interrupt; it is taken at the start of
-/// the next Step() for which IF is set and no interrupt shadow is in force. Loading any segment
-/// register with MOV or POP casts a shadow over the following instruction, as on the 8088 (later
-/// CPUs only do this for SS), and so does STI, whose effect is therefore delayed by one
-/// instruction. Single-step (TF) traps through vector 1 after an instruction that began and ended
-/// with TF set. HLT stops execution until an interrupt is taken.
+/// Interrupts. The INTR line is wired to an InterruptSource, the PIC. At the start of every Step()
+/// for which IF is set and no interrupt shadow is in force, the CPU asks it InterruptPending(); if
+/// so, it runs the acknowledge cycle, AcknowledgeInterrupt(), and vectors through the entry that
+/// returns. Loading any segment register with MOV or POP casts a shadow over the following
+/// instruction, as on the 8088 (later CPUs only do this for SS), and so does STI, whose effect is
+/// therefore delayed by one instruction. Single-step (TF) traps through vector 1 after an
+/// instruction that began and ended with TF set. HLT stops execution until an interrupt is taken.
 ///
 /// Timing. Step() returns an approximate 8088 clock count: the documented best case for the
 /// instruction from Intel's 8086 table, plus the effective-address cycles, plus 4 clocks for every
@@ -62,11 +63,13 @@ class PortBus;
 class Cpu
 {
 public:
-  /// Not noexcept: constructing the pending-interrupt queue may allocate (MSVC's debug library does).
-  Cpu(Memory& _memory, PortBus& _ports);
+  Cpu(Memory& _memory, PortBus& _ports) noexcept;
 
   /// The hook consulted on INT n, INT 3 and INTO. Null (the default) means every interrupt vectors.
   void SetHostServices(HostServices* _host) noexcept;
+
+  /// What the INTR line is wired to. Null (the default) means no hardware interrupt ever arrives.
+  void SetInterruptSource(InterruptSource* _source) noexcept;
 
   /// The 8088's reset state: CS:IP = FFFF:0000, flags clear, everything else zero.
   void Reset() noexcept;
@@ -75,9 +78,6 @@ public:
   /// interrupt is taken first when it can be, and its entry cycles are included. A halted CPU with
   /// nothing to take returns HALT_IDLE_CYCLES without executing anything.
   std::uint32_t Step();
-
-  /// Queues a maskable hardware interrupt (the INTR line, with the vector the PIC would supply).
-  void RequestInterrupt(std::uint8_t _vector);
 
   [[nodiscard]] Registers& Regs() noexcept
   {
@@ -179,7 +179,7 @@ private:
   PortBus& m_ports;
   HostServices* m_host = nullptr;
   Registers m_regs{};
-  std::deque<std::uint8_t> m_pendingInterrupts;
+  InterruptSource* m_interrupts = nullptr;
   std::uint64_t m_instructionCount = 0;
   std::uint32_t m_cycles = 0;
 
