@@ -28,12 +28,13 @@ The rules, and the part of AGENTS.md each one enforces:
                             PreprocessorDefinitions, #defined by at most one header and by no .cpp.
   third-party      R14      No package-manager manifest, no PackageReference, no Import from packages\.
   flat-dirs        §2       .h/.cpp sit directly in a project directory. The only subdirectories are
-                            Shader/ (.hlsl only) and CompiledShader/ (build output).
+                            Shader/ (.hlsl and .hlsli only) and CompiledShader/ (build output).
   file-names       R7, R11  .h/.cpp only; PascalCase stems apart from the Visual Studio wizard names;
-                            shaders are <Name>VS.hlsl / <Name>PS.hlsl.
+                            shaders are <Name>VS.hlsl / <Name>PS.hlsl; shared HLSL is <Name>.hlsli.
   registration     §2       Every .h/.cpp is in its .vcxproj and its .filters, as the right item type;
                             every item exists; nothing is in two projects; every .hlsl is an FxCompile
-                            item writing CompiledShader\<Stem>.h as g_<Stem> with the matching ShaderType.
+                            item writing CompiledShader\<Stem>.h as g_<Stem> with the matching ShaderType;
+                            every .hlsli is a None item, compiled only through the shaders that include it.
   filters          §2       No Source Files / Header Files / Resource Files filter; every item has a
                             filter; a .h and the .cpp of the same name share one.
   tidy-reach       §2       .clang-tidy's HeaderFilterRegex matches a header in every project directory.
@@ -94,6 +95,7 @@ WIZARD_NAMES = frozenset({"pch.h", "pch.cpp", "framework.h", "targetver.h", "Res
 PASCAL_CASE = re.compile(r"[A-Z][A-Za-z0-9]*")
 SHADER_NAME = re.compile(r"[A-Z][A-Za-z0-9]*(VS|PS)")
 SHADER_TYPES = {"VS": "Vertex", "PS": "Pixel"}
+HLSL_EXTENSIONS = (".hlsl", ".hlsli")
 BUILD_OUTPUT_DIRS = frozenset({"x64", ".vs", "compiledshader"})
 
 CONFIGURATIONS = ("Debug|x64", "Release|x64")
@@ -126,7 +128,7 @@ DEFAULT_FILTERS = frozenset({"source files", "header files", "resource files"})
 UNIT_TEST_INCLUDE = r"$(VCInstallDir)Auxiliary\VS\UnitTest\include"
 # Item types whose Include is not a file in the tree.
 NON_FILE_ITEMS = frozenset({"projectconfiguration", "filter", "packagereference", "projectcapability"})
-REGISTERED_ITEMS = ("clcompile", "clinclude", "fxcompile")
+REGISTERED_ITEMS = ("clcompile", "clinclude", "fxcompile", "none")
 ITEM_ATTRIBUTES = frozenset({"Include", "Exclude", "Remove", "Update", "Condition", "KeepMetadata", "RemoveMetadata",
                              "KeepDuplicates", "MatchOnMetadata", "MatchOnMetadataOptions", "Label"})
 # Where FXC may write <Lib>/CompiledShader/<Stem>.h: the project directory, spelled any of these ways.
@@ -736,7 +738,9 @@ class Checker:
         self.add(path, 0, "file-names", "is not PascalCase; a file is named for its primary type (R7)")
       if suffix == ".hlsl" and not SHADER_NAME.fullmatch(pure.stem):
         self.add(path, 0, "file-names", "is not named <Name>VS.hlsl or <Name>PS.hlsl with a PascalCase <Name>")
-      if suffix in CPP_EXTENSIONS + BANNED_EXTENSIONS + (".hlsl", ".vcxproj", ".sln", ".slnx"):
+      if suffix == ".hlsli" and not PASCAL_CASE.fullmatch(pure.stem):
+        self.add(path, 0, "file-names", "is not named <Name>.hlsli with a PascalCase <Name>")
+      if suffix in CPP_EXTENSIONS + BANNED_EXTENSIONS + HLSL_EXTENSIONS + (".vcxproj", ".sln", ".slnx"):
         spelling = british_spelling(pure.name)
         if spelling:
           self.add(path, 0, "spelling", f"the file name uses '{spelling}'; identifiers and source names use the SDK's "
@@ -748,12 +752,12 @@ class Checker:
         elif len(inside) > 1:
           self.add(path, 0, "flat-dirs",
                    f"is in a subdirectory of {owner.path}; C++ sits directly in the project folder")
-      elif suffix == ".hlsl":
+      elif suffix in HLSL_EXTENSIONS:
         if owner is None or len(inside) != 2 or inside[0] != "Shader":
           self.add(path, 0, "flat-dirs", "is HLSL outside a project's Shader/ directory")
       elif owner is not None and len(inside) > 1:
         if inside[0] == "Shader":
-          self.add(path, 0, "flat-dirs", "is not .hlsl; Shader/ holds HLSL and nothing else")
+          self.add(path, 0, "flat-dirs", "is not .hlsl or .hlsli; Shader/ holds HLSL and nothing else")
         else:
           self.add(path, 0, "flat-dirs", f"is in '{inside[0]}/' inside {owner.directory}/; a project's only "
                    "subdirectories are Shader/ and CompiledShader/")
@@ -762,7 +766,7 @@ class Checker:
     owners: dict[str, tuple[str, int]] = {}
     for path in self.sources:
       suffix = PurePosixPath(path).suffix.casefold()
-      if suffix not in CPP_EXTENSIONS + BANNED_EXTENSIONS + (".hlsl",):
+      if suffix not in CPP_EXTENSIONS + BANNED_EXTENSIONS + HLSL_EXTENSIONS:
         continue
       stripped, tokens = scan_source(read_text(self.root / path))
       for match in SILENCED_WARNING.finditer(stripped):
@@ -775,7 +779,7 @@ class Checker:
       for token, line in seen.items():
         self.add(path, line, "spelling", f"identifier '{token}' uses '{british_spelling(token)}'; identifiers use the "
                  "SDK's spelling (R11)")
-      if suffix == ".hlsl":
+      if suffix in HLSL_EXTENSIONS:
         continue
       for name, line in type_definitions(tokens):
         problem = affix_problem(name)
@@ -1001,6 +1005,11 @@ class Checker:
         node = registered.get(path.casefold())
         if node is None or node.tag.casefold() != "fxcompile":
           self.add(path, 0, "registration", f"is not an FxCompile item in {_project.path}, so nothing compiles it")
+      elif suffix == ".hlsli":
+        node = registered.get(path.casefold())
+        if node is None or node.tag.casefold() != "none":
+          self.add(path, 0, "registration", f"is not a None item in {_project.path}; a shader include is compiled "
+                   "only through the shaders that include it")
     for path, node in sorted(registered.items()):
       if _project.filters is not None and path not in filtered:
         self.add(_project.path, node.line, "registration", f"{node.attrib['Include']} is not in {filters_name}")
