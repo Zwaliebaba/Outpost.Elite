@@ -48,12 +48,15 @@ WINDOW_WIDTH = 640
 WINDOW_HEIGHT = 400
 
 # The clock is set the way a PC/XT without a clock card boots, so that the game's reads of the time of
-# day (int 21h AH=2Ch, twice in RestartPlay) return the same in every run and in the host.
+# day (int 21h AH=2Ch, twice in RestartPlay) return the same in every run and in the host. DOS reports
+# 3.30, the version the host's DOS emulates and the one current when the game shipped.
 CONFIG = """[sdl]
 output=surface
 [dosbox]
 machine=cga
 memsize=1
+[dos]
+ver=3.30
 [cpu]
 cputype=8086
 core=normal

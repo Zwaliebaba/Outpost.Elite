@@ -21,9 +21,14 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
   - the record per iteration that DOSBox-X writes for a REP instruction;
   - the game's three polling waits on time, at 0599, 05D0 and 461B.
 
-  It also treats two things as inputs: what the game reads from ports that move with time (the timer, port 0x61, the CGA status, the joystick), and the two variables where it keeps such a value. An input register may differ until it agrees again. Every other register must agree at every remaining instruction. Flags are reported, not failed, because they include flags the 8088 leaves undefined and flags computed from those inputs.
+  It also treats as inputs what does not come from the program:
+  - what the game reads from ports that move with time (the timer, port 0x61, the CGA status, the joystick), and the two variables where it keeps such a value;
+  - interrupt vectors, which point wherever each emulator's ROM keeps its handlers, and the copies the game saves;
+  - what the video BIOS leaves in AX, and the OEM byte in BH after DOS's version call, both of which belong to the BIOS or DOS that answers.
 
-  **Measured 2026-10-09 with DOSBox-X 2024.03.01:**
+  An input register may differ until it agrees again; if the difference reaches any other register, that is a divergence. Every other register must agree at every remaining instruction. Flags are reported, not failed, because they include flags the 8088 leaves undefined and flags computed from those inputs.
+
+  **Measured 2026-10-09, DOSBox-X 2024.03.01 against itself:**
   - Its `cycles` set to 310, 200 and 1000 give traces of 37,893, 41,424 and 40,342 instructions. All three reduce to the same 23,413 records.
   - Two runs at 310 are byte-identical.
 - **Static screens.** Compared with DOSBox-X screenshots (`Tools/ReferenceScreens.py`), taken by the same step script that drives the host:

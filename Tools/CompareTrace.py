@@ -31,9 +31,16 @@ One more difference is an input rather than the program's: what the program read
 value moves with time -- the timer's counters (0x40-0x42), the timer-2 and refresh bits of 0x61, the
 CGA status (0x3DA) and the joystick (0x201) -- and what it reads back from a variable where it kept
 such a value (--input-address, by default speakerPortImage 0x2008 and savedSpeakerPort 0x226A, which
-hold port 0x61 as read at start-up). The comparison decodes the instruction just executed from the
-reference image. After an IN from one of those ports, AX becomes an input register; after a direct
-load from one of those addresses (MOV AL/AX from memory, or MOV reg, [disp16]), its destination does.
+hold port 0x61 as read at start-up). Interrupt vectors are inputs too: each emulator's ROM keeps its
+handlers at its own addresses, so what the game reads from the interrupt table, and the copies it
+keeps at 226B-2272, differ. The comparison decodes the instruction just executed from the reference
+image. After an IN from one of those ports, AX becomes an input register; after a direct load from
+one of those addresses or from the interrupt table (MOV AL/AX from memory with any segment, or
+MOV reg, [disp16]), its destination does;
+after DOS's version call (int 21h AH=30h), BX does, because BH is the OEM number: real DOS 3.30
+returns 0 for IBM, and DOSBox-X leaves BH unchanged unless AL was 0 or 1; and after any video BIOS
+call (int 10h), AX does, because what is left there is each BIOS's own -- the IBM ROM leaves
+internal values, DOSBox-X leaves AX alone -- and the game overwrites it at all five of its calls.
 An input register may differ for as long as it is the only kind that differs, and stops being one
 when the two agree again. A difference that reaches any other register is a divergence like any
 other, to be looked at rather than waved through.
@@ -61,6 +68,12 @@ CS, IP, SP, SS, FLAGS = 0, 1, 9, 12, 13
 DEFINED_FLAGS = 0x0FD5
 BIOS_SEGMENT = 0xF000
 AX, BX, CX, DX, SI, DI, BP = 2, 3, 4, 5, 6, 7, 8
+ES, DS = 11, 10
+SEGMENT_PREFIXES = {0x26: ES, 0x2E: CS, 0x36: SS, 0x3E: DS}
+INTERRUPT_TABLE_BYTES = 0x400
+# Data-segment words that keep a timed value or a saved interrupt vector: speakerPortImage and
+# savedSpeakerPort (port 0x61 at start-up), and the int 0 and int 9 vectors the game saves at 226B-2272.
+DEFAULT_INPUT_ADDRESSES = [0x2008, 0x226A, 0x226B, 0x226D, 0x226F, 0x2271]
 TIMED_PORTS = {0x40, 0x41, 0x42, 0x61, 0x3DA, 0x201}
 DEFAULT_WAITS = ["0599-05A2", "461B-4620", "05D0-05D5"]
 # The ModRM reg field's register, as a record index, for word and for byte operands (AH-BH are halves).
@@ -84,13 +97,24 @@ class Image:
     offset = self.entry_cs_in_image * 16 + _record[IP]
     if offset + 3 >= len(self.code):
       return None
+    segment = _record[DS]
+    if self.code[offset] in SEGMENT_PREFIXES:
+      segment = _record[SEGMENT_PREFIXES[self.code[offset]]]
+      offset += 1
     opcode, second = self.code[offset], self.code[offset + 1]
     if opcode in (0xE4, 0xE5):
       return AX if second in TIMED_PORTS else None
     if opcode in (0xEC, 0xED):
       return AX if _record[DX] in TIMED_PORTS else None
     if opcode in (0xA0, 0xA1):
-      return AX if int.from_bytes(self.code[offset + 1:offset + 3], "little") in _addresses else None
+      address = int.from_bytes(self.code[offset + 1:offset + 3], "little")
+      if (segment * 16 + address) & 0xFFFFF < INTERRUPT_TABLE_BYTES:
+        return AX  # a vector: where the emulator's ROM keeps its handlers
+      return AX if segment == _record[DS] and address in _addresses else None
+    if opcode == 0xCD and second == 0x10:
+      return AX  # what the video BIOS leaves in AX is its own: IBM's ROM leaves internal values, DOSBox-X AX
+    if opcode == 0xCD and second == 0x21 and _record[AX] >> 8 == 0x30:
+      return BX  # DOS's version call: BH is the OEM number, which DOSBox-X leaves alone unless AL is 0 or 1
     if opcode in (0x8A, 0x8B) and second & 0xC7 == 0x06:
       if int.from_bytes(self.code[offset + 2:offset + 4], "little") in _addresses:
         return (BYTE_REGISTERS if opcode == 0x8A else WORD_REGISTERS)[(second >> 3) & 7]
@@ -176,7 +200,7 @@ def main() -> int:
                            "(default 0599-05A2, 461B-4620 and 05D0-05D5)")
   parser.add_argument("--context", type=int, default=6, help="matching records to print before a divergence")
   parser.add_argument("--input-address", type=lambda text: int(text, 0), action="append",
-                      help="a data-segment offset that holds a timed input (default 0x2008 and 0x226A)")
+                      help="a data-segment offset that holds an input (default: the port 0x61 copies and saved vectors)")
   parser.add_argument("--exe", type=Path, default=ROOT / "ELITEL.EXE", help="the reference binary, to decode inputs")
   args = parser.parse_args()
 
