@@ -50,10 +50,10 @@ Phase 2's execution traces are the final word on all of these. Until a trace con
   | +03/+08 | 1+2 | z, the same way |
   | +0A/+0C/+0E | 2 each | Pitch, yaw and roll, 2048 units a turn. The sun and planet reuse +0A–+0B for scale and disc colour, and the station reuses bit 0 of +0C as an "inside the box last frame" latch |
   | +10/+12/+14 | 2 each | View-space x, y and z. z is the sort key, and bit 7 of byte +15 means behind the viewer |
-  | +16, +17 | 1 each | AI timer and AI state |
+  | +16, +17 | 1 each | AI timer (used by class 5) and AI state |
   | +18 | 1 | Speed |
   | +19–+1B | 1 each | Velocity per frame |
-  | +1C, +1D | 1 each | AI parameters from the spawn table |
+  | +1C, +1D | 1 each | Range (high byte) and turn rate, from the spawn table |
   | +1E | 1 | Flags (below) |
   | +1F | 1 | Ships still to launch: the station's 10–17, or a Thargoid's Thargons |
   | +20–+25 | | Station only: the compass target, in view space at reduced scale |
@@ -63,14 +63,14 @@ Phase 2's execution traces are the final word on all of these. Until a trace con
   | +2C | 1 | Most cargo canisters dropped; also the masking device's flicker count |
   | +2D | 1 | Explosion fragment count |
   | +2E, +2F | 1 each | Debris lifetime and age |
-  | +30 | 1 | Accumulated laser damage, saturating |
-  | +31 | 1 | Bounty, in tenths of a credit |
+  | +30 | 1 | Aggression: the chance in 256 each frame that it fires, raised (saturating) when the player's laser hits it |
+  | +31 | 1 | Bounty, in tenths of a credit; 0xFF marks a protected ship, whose killing is an offence |
   | +32 | 1 | Missiles carried |
-  | +33 | 1 | Behaviour class, which indexes `table75C0` (the per-class update) and the class names |
+  | +33 | 1 | Behaviour class. It indexes `behaviorHandlers` (DS:0x75C0) and the class names at DS:0x4B3D: 0 None, 1 Station, 2 Attack (missiles), 3 Debris (pods, barrels, rocks), 4 Trader (and police), 5 Wolf, 6 Hunter, 7 Debris (fragments) |
   | +34 | 1 | Off-scanner counter; the object is despawned when it wraps |
-  | +35–+39 | | AI fields, not yet understood |
-  | +3A | 2 | A slot pointer written at launch, probably the launcher |
-  | +3C | 1 | High byte of camera-frame z |
+  | +35/+36/+38 | 1, 2, 2 | Weaving timer and offsets |
+  | +3A | 2 | A Viper's police flag, or a Thargon's parent slot |
+  | +3C | 1 | High byte of camera-frame z; bit 7 chooses the aft shield when it hits the player |
   | +3D | 1 | Scale shift, the first sort key |
   | +3E | 1 | Distance measure, (x²+y²+z²)>>22 |
   | +3F | 1 | Level-of-detail limit: the object is drawn as a dot when +3F < +3E |
@@ -82,8 +82,8 @@ Phase 2's execution traces are the final word on all of these. Until a trace con
   | 0 | hostile: set when the player's laser hits it; required before a ship fires missiles; a station with it set refuses docking |
   | 1 | scanner blip drawn |
   | 2 | indestructible: the station, the sun and the planet |
-  | 3 | set on debris and canisters; meaning unknown |
-  | 4 | a splinter carrying precious metals |
+  | 3 | a fragment or a dropped barrel |
+  | 4 | scoopable minerals (a splinter) |
   | 5 | carries a masking device: drawn for 25 frames, hidden for 20 |
   | 6 | the flicker's hidden phase; on a Barrel, the barrel holds the masking device |
   | 7 | drawn this frame |
@@ -148,7 +148,7 @@ Measured with `python Tools/MapReference.py --shared 0201,0215`, which walks the
 
 **There are none.** The colour-select register (0x3D9) is written in three places, and none of them waits on the raster:
 
-- **0x49F8, in `UpdateDamageFlash`.** Once a frame, while a countdown runs, it sets background colour 4 with the bright palette, then restores DS:0xA83D.
+- **0x49F8, in `UpdateFuelLeak`.** Once a frame. While the fuel leak runs ("FUEL LEAK!", fuel −5 a frame for 51 frames, armed on arrival in missions 1 and 3), it sets background colour 4 with the bright palette. Otherwise it writes `maskingBackgroundColor` (DS:0xA83D), which is 0 normally and 9, light blue, while the masking device's key N is held.
 - **0x7CB7, in `DrawDockedFrame`.** It sets a docked screen's border to the background colour, the high nibble of the screen's attribute byte, after switching to text mode.
 - **0x7D2A, in `SetGraphicsMode`.** It runs after the BIOS sets mode 4.
 
@@ -242,6 +242,12 @@ The waits on vertical retrace at 0x4618 and 0x05CC precede block copies to the s
 - **System data:** tech level and population use this version's own formulas, which differ from the 6502 versions (ADR-003 item 4).
 
 **Other behaviour the port keeps because the reference has it:**
+- **"Hyperspaced into WITCH SPACE!"** never shows, because 0x4827 compares `witchspaceCountdown` with 1 and it is always 0 or 100 there.
+- **The mask ship's escorts become Asps**, because `PlaceEscortNear` copies the type byte. `IsMaskShipPresent` does not check the active bit.
+- **A police Viper made by `SpawnRandomTrader`** writes a word at +30, which zeroes its bounty, so killing it brings neither a bounty nor an offence.
+- **`ClampTurnStep` (0x5186) does not wrap at 2048**, so ships turn the long way across 0.
+- **Stale state is read.** A new ship's spawn direction (0x4E95) uses the sin/cos pairs the last `ComputeVelocity` left, and `LaunchPlayerMissile` copies 64 bytes from whatever DI the key handler left. `ExplodeObject` loses DI after a failed slot search.
+- **The "9th Galaxy"** is reached from galaxy 7 with a chance of 300 in 65,536.
 - **Supernova mission:** declining it still pays 1,400 Cr at the next dock.
 - **Ships' ECM** is only counted down inside the station's AI, so it never works in a system without a station.
 - **The planet description generator** never capitalises y or z.
@@ -251,4 +257,4 @@ The waits on vertical retrace at 0x4618 and 0x05CC precede block copies to the s
 
 ## Naming status
 
-Every range except 0x4690–0x55B3 is named, and that one is still in progress. `python Tools/MapReference.py` prints the current counts. A name is a claim, and a claim with no evidence in its notes is a defect in the table.
+Every range is named: 383 of 386 routines, with Routine3F20, Routine7D6E and Routine8C71 left by their addresses and described in their notes, and 390 of the 422 data addresses the code references. `python Tools/MapReference.py` prints the current counts. A name is a claim, and a claim with no evidence in its notes is a defect in the table.

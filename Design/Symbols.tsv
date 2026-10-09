@@ -256,78 +256,92 @@ CS:45E4	routine	DrawDistantStation		in: DI=station slot	3d	projects +0x20/+0x22/
 CS:4618	routine	WaitRetraceThenDelay		clobbers AX, DX	video	polls port 0x3DA until bit 3 (vertical retrace), then spins 700 (0x2BC) dec/jnz iterations: a CPU-speed-dependent delay; called by PresentSpaceView
 CS:4627	routine	IsObjectNearKeepBlip		in: DI=slot; out: CF=1 near; clobbers AL	ships	IsObjectNear without the blip erase; UpdateCompass uses it on the planet
 CS:4680	routine	SaveStartupCommander		clobbers AX, CX, SI, DI, ES	save-load	called once from Start: copies commanderFileBytes of commanderBlock to startupCommander, which Routine4691 copies back for a new game
-CS:4691	routine	Routine4691				
-CS:4727	routine	Routine4727				
-CS:48CB	routine	Routine48CB				
-CS:48E0	routine	Routine48E0				
-CS:4926	routine	Routine4926				
-CS:4937	routine	Routine4937				
-CS:4973	routine	Routine4973				
-CS:49BF	routine	UpdateDamageFlash			video	once a frame: while a countdown runs, colour select 0x14 (background 4, bright palette); otherwise restores DS:A83D
-CS:4A04	routine	Routine4A04				
-CS:4A16	routine	Routine4A16				
-CS:4A30	routine	Routine4A30				
-CS:4C2E	routine	Routine4C2E				
-CS:4C40	routine	Routine4C40				
-CS:4C58	routine	Routine4C58				
-CS:4C96	routine	Routine4C96				
-CS:4CAC	routine	Routine4CAC				
-CS:4CB9	routine	Routine4CB9				
-CS:4CC6	routine	Routine4CC6				
-CS:4CD3	routine	Routine4CD3				
-CS:4CE0	routine	Routine4CE0				
-CS:4CED	routine	Routine4CED				
-CS:4CFA	routine	Routine4CFA				
-CS:4D07	routine	Routine4D07				
-CS:4D28	routine	Routine4D28				
-CS:4D5B	routine	Routine4D5B				
-CS:4D80	routine	Routine4D80				
-CS:4DCE	routine	Routine4DCE				
-CS:4E10	routine	Routine4E10				
-CS:4E3B	routine	Routine4E3B				
-CS:4E95	routine	Routine4E95				
-CS:4EE5	routine	Routine4EE5				
-CS:4EEF	routine	Routine4EEF				
-CS:4F14	routine	Routine4F14				
-CS:4F1E	routine	Routine4F1E				
-CS:4F28	routine	Routine4F28				
-CS:4F55	routine	Routine4F55				
-CS:4F68	routine	Routine4F68				
-CS:4F8E	routine	Routine4F8E				
-CS:4FB8	routine	Routine4FB8				
-CS:4FBF	routine	Routine4FBF				
-CS:4FE1	routine	Routine4FE1				
-CS:511E	routine	Routine511E				
-CS:515E	routine	Routine515E				
-CS:516B	routine	Routine516B				
-CS:5186	routine	Routine5186				
-CS:51AB	routine	Routine51AB				
-CS:5200	routine	Routine5200				
-CS:521D	routine	Routine521D				
-CS:5262	routine	Routine5262				
-CS:52D2	routine	Routine52D2				
-CS:530C	routine	Routine530C				
-CS:5340	routine	Routine5340				
-CS:5350	routine	Routine5350				
-CS:536E	routine	Routine536E				
-CS:541E	routine	Routine541E				
-CS:5433	routine	Routine5433				
-CS:543E	routine	Routine543E				
-CS:5448	routine	Routine5448				
-CS:5451	routine	Routine5451				
-CS:545A	routine	Routine545A				
-CS:5491	routine	Routine5491				
-CS:54AF	routine	Routine54AF				
-CS:54D4	routine	Routine54D4				
-CS:5512	routine	Routine5512				
+CS:4691	routine	StartNewGame		in: nothing; out: ES=DS; clobbers AX, CX, SI, DI	start-up	called by the title screen (0x7E9B) on a key other than F9/F10; copies commanderFileBytes from startupCommander (DS:726C) over commanderBlock (DS:719B); playerEnergy=0x3FF, foreShield=aftShield=0xFF, cabinTemperature=12, altitude=0xFF; clears witch space, mission, fuel-leak and missile state, playerDead, messageFrames
+CS:4727	routine	CompleteHyperspaceJump		in: galacticJumpPending; out: ES=B800; clobbers AX, BX, CX, DX, SI, DI, BP	hyperspace	called by 0x7F99 when hyperspaceCountdown reaches 0. EraseCompassAndBlips, shows 'Hyperspace Motors Engaged'. Normal: fuel -= hyperspaceFuelCost, legalStatus -= 5 (floor 0). Copies the 25-byte target record to currentSystemName, seeds the system (LoadSystemSeeds, 139C), mis-jumps into witch space on rand<200 with no mission or when forceMisjump is set, plays the tunnel, builds it (ArriveInSystem, 2B5A), runs UpdateMissionSchedule, picks the arrival text, arms the fuel leak for missions 1 and 3. A galactic jump also clears legalStatus and galacticHyperdriveFitted
+CS:47A1	label	MisJump			hyperspace	clears forceMisjump and calls EnterWitchSpace
+CS:4827	label	PickArrivalText			hyperspace	witch-space text needs witchspaceCountdown==1 here, but every path leaves it 0 or 0x64, so 'Hyperspaced into WITCH SPACE!' never shows
+CS:487B	label	GalacticJump			hyperspace	galaxyNumber 7->8 only when rand<300 (else 0), 8->0, otherwise +1; writes the digit into arrivalGalaxyText, randomises chartCursorX/Y, clears chartIsShortRange, picks a system (FindNearestSystem, SelectSystemAtCursor)
+CS:48CB	routine	ResetHyperspaceRings		out: ES=B800; clobbers AX, CX, SI, DI	hyperspace	copies 15 words hyperspaceRingStart (DS:746C) to hyperspaceRings (DS:748A); called when the countdown starts (0x810B)
+CS:48E0	routine	DrawHyperspaceRings		clobbers all	hyperspace	for each of 10 rings in hyperspaceRings: counts down the delay; then grows the radius by max(1, r/8) while r<150 and, once r>=20, draws a circle of that radius and colour (drawColor) at (128,64) in the space view (DrawCircle, 1AC1)
+CS:4926	routine	PlayHyperspaceTunnel		clobbers all	hyperspace	50 frames of: UpdateMessageLine (35A3), DrawHyperspaceRings, FinishSpaceViewFrame (0570, paced by minimumFrameMs)
+CS:4937	routine	EnterWitchSpace		clobbers AX, BX	hyperspace	witchspaceCountdown=0x64; currentSystemX/currentSystemChartY (and chartCursorX/Y, galacticCursorX/Y) = midpoint of the old position and the destination's systemX, systemY/2; shortRangeCursorX/Y = 0x50/0x40
+CS:4973	routine	UpdateMissionSchedule		clobbers AL	hyperspace	per arrival outside witch space: counts down maskSystemJumps (setting fledMaskShip at 0); outside galaxy 1 (or when DS:7259=1) increments missionJumpCount and sets missionNumber to 1, 2, 3 at counts 0x20, 0x40, 0x80
+CS:49BF	routine	UpdateFuelLeak		clobbers AX, DX	flight	was UpdateDamageFlash. Once a frame from 0x7ED3: fuelLeakDelayFrames counts down, then fuelLeakFrames=51; each leak frame fuel -= 5 (floor 0), message 'FUEL LEAK!' for the remaining frames, port 0x3D9 = 0x14 (red background, intensity). With no leak it writes maskingBackgroundColor (0, or 9 while the cloak is on) to 0x3D9
+CS:4A04	routine	AwardArchangelTitle		clobbers AL, CX, SI, DI	docked	copies 9 bytes 'ARCHANGEL' (DS:74B3) over commanderRankText (DS:71AC); called from the mission 3 debriefing (0x6FB8)
+CS:4A16	routine	LatchHyperspaceTarget		clobbers AL, CX, SI, DI	hyperspace	when a normal jump countdown starts (0x8118): hyperspaceTargetIndex = selectedSystemIndex and copies systemRecordBytes of selectedSystemName to hyperspaceTargetRecord
+CS:4A30	routine	UpdateObjectsAndSpawn		clobbers all	ai	once a frame: clears the class counts, then for every active slot of shipSlotCount counts it and calls behaviorHandlers[+33] (call [bx+0x75C0] at 0x4A61); clears maskingBackgroundColor; then, with fewer than 10 non-debris objects, spawns: mask-mission ships, invasion Thargoids, or one of each class by government limits and odds
+CS:4A61	label	CallBehaviorHandler			ai	call [bx+0x75C0], BX = 2 x byte +33 of the slot in DI; the only indirect call in this range
+CS:4AA6	label	SpawnByGovernment			ai	classes 3, 4, 6, 5 in turn: count < spawnLimitsByGovernment[spawnGovernment] (+1 class 3 with miningLaserCount) and rand < spawnOddsByGovernment[currentGovernment] (ScaleSpawnOdds); in witch space only class 5, without the odds test
+CS:4B93	label	SpawnMaskMissionShips			ai	while maskSystemJumps=1 and maskMissionShipsLeft>0: with no wolves, an Asp mask ship plus two escorts; with 1-2 wolves, one more, promoted to mask ship if none carries the device
+CS:4C17	label	SpawnInvasionWave			ai	thargoid mission: InSafeZone (2E63) and fewer than 8 wolves, SpawnInvasionThargoid
+CS:4C2E	routine	ScaleSpawnOdds		in: BX=odds; out: BX	ai	BX <<= 5 while jumpDriveEngaged
+CS:4C40	routine	IsMaskShipPresent		out: CF=1 if found, SI=slot; clobbers CX	ai	scans objectSlotCount slots from shipSlots for byte +1E bit 5 (carries the masking device); does not test the active bit
+CS:4C58	routine	PlaceEscortNear		in: SI=leader, DI=escort; clobbers AX, CX, DX, SI	ai	copies bytes 0-15 of the leader (byte 0 type included, so an escort takes the leader's type) then adds rand -1024..+1023 to each 24-bit coordinate
+CS:4C96	routine	InitPoliceViper		in: DI=slot; clobbers AX, BX	ships	template 0x7665 (Viper), class 4, +3A=1 (police), aggression +30=100; launched by the station handler 55B5
+CS:4CAC	routine	InitMissile		in: DI=slot; clobbers AX, BX	combat	template 0x75D9 (Missile), class 2
+CS:4CB9	routine	InitCargoBarrel		in: DI=slot; clobbers AX, BX	ships	template 0x75F7 (Barrel), class 3; cargo dropped by ExplodeObject and by the player's death (2FE3)
+CS:4CC6	routine	InitAbandonedCobra		in: DI=slot; clobbers AX, BX	ships	template 0x7633 (Cobra) with class 0 (no handler); only caller is LaunchEscapePod (2F0F), which also clears cargoHold and escapePodFitted: the ship the player leaves behind
+CS:4CD3	routine	InitEscapePod		in: DI=slot; clobbers AX, BX	ships	template 0x75E3 (Escape Pod), class 3; only from LaunchShipFromObject with DL=0x15, which no caller passes
+CS:4CE0	routine	InitShuttle		in: DI=slot; clobbers AX, BX	ships	template 0x761F (Shuttle), class 3; launched by the station handler 55B5
+CS:4CED	routine	InitKraitHunter		in: DI=slot; clobbers AX, BX	ships	template 0x7683 (Krait), class 6; only from LaunchShipFromObject with DL=5, reached only from dead code at 0x56D1
+CS:4CFA	routine	InitThargon		in: DI=slot; clobbers AX, BX	ships	template 0x76F1 (Thargon), class 5; launched by Thargoids
+CS:4D07	routine	SpawnRandomDrifter		in: DI=free slot; clobbers AX, BX, CX, DX, BP	ships	template 0x75E3 + 10 x (rand 0-7): Escape Pod, Plate, Barrel, Boulder, Astroid, Splinter, Shuttle, Transporter; class 3; turn rate +1D=30; placed, aimed at the player, velocity set
+CS:4D28	routine	SpawnRandomTrader		in: DI=free slot; clobbers AX, BX, CX, DX, BP	ships	template 0x7633 + 10 x (rand byte / 43): Cobra, Python, Boa, Anaconda, Astroid, Viper; class 4. A Viper gets +3A = rand&1 (1 = police) and, when police, a word write of legalStatus to +30, which also zeroes the bounty byte +31
+CS:4D5B	routine	SpawnRandomHunter		in: DI=free slot; clobbers AX, BX, CX, DX, BP	ships	template 0x766F + 10 x (rand byte / 37): Sidewinder, Mamba, Krait, Adder, Gecko, Cobra MkI, Worm; class 6; aggression +30 = rand&0x1F
+CS:4D80	routine	SpawnRandomWolf		in: DI=free slot; clobbers AX, BX, CX, DX, BP	ships	template 0x76B5 + 10 x (rand byte / 52): Cobra, Asp, Python, Ferdelance, Moray; in witch space index 5, Thargoid; class 5; aggression rand&0x3F (+0x20 when spawnGovernment=0); a Thargoid gets +1F = 2-5 Thargons
+CS:4DCE	routine	SpawnMaskMissionShip		in: DI=free slot, CF=1 for the mask ship; clobbers AX, BX, CX, DX, BP	ships	Asp template; type Asp (CF=1) or Constrictor/Cougar (CF=0, rand sign); class 5, aggression rand&0x7F, energy 150, no cargo, 6 missiles, bounty 200
+CS:4E10	routine	SpawnInvasionThargoid		in: DI=free slot; clobbers AX, BX, CX, DX, BP	ships	template 0x76E7 (Thargoid), class 5, aggression rand&0x7F, energy 50, no cargo, 6 missiles, +1F=8 Thargons
+CS:4E3B	routine	InitObjectFromTemplate		in: BX=template table, AL=index, DI=slot; clobbers AX, BX	ships	10-byte record at BX+10*AL from spawnTemplates: byte 0 = type*2+1 (active); speed->+18, turn rate->+1D, bounty->+31, missiles->+32, cargo->+2C, fragments->+2D, energy->+2B, ->+3F, range->+1C; clears +17, +1E, +30; +34=1
+CS:4E95	routine	PlaceAtSpawnPoint		in: DI=slot; clobbers AX, BX, CX, DX	ships	position = (rand +-1023, 10000) rotated by the sin/cos left in DS:41BC, then (rand +-1023, that) rotated by DS:41B8; those slots hold the angles of the last ComputeVelocity call, so the spawn direction depends on earlier state
+CS:4ED2	code	Routine4ED2		out: DX:AX	ships	unreached: DX:AX = +-(0x251C + (rand & 0xFFF)), sign from rand bit 8; no caller
+CS:4EE5	routine	FacePlayerWithRandomRoll		in: DI=slot; clobbers AX, BX, CX, DX, BP	ships	FacePlayer, then +0E = rand
+CS:4EEF	routine	ComputeAnglesToObject		in: DI=object; out: AX, BX=angles; clobbers CX, DX, BP	maths	scales the 24-bit position to 16 bits (GetPositionScaleShift, ScalePositionDown), then two ArcTangent2 calls give the direction angles from the player; uses rotation slot DS:41B8. ArriveInSystem stores them in playerPitchAngle and playerYawAngle to face the station
+CS:4F14	routine	GetObjectPosition		in: DI; out: AX, BX, CX = x, y, z low words	ships	
+CS:4F1E	routine	GetVectorToPlayer		in: DI; out: AX, BX, CX = -x, -y, -z	ships	the player sits at the origin
+CS:4F28	routine	ConvertVectorToAngles		in: AX, BX, CX=vector; out: AX, BX=angles; clobbers CX, DX, BP	maths	divides each by 4, then two ArcTangent2 calls give the pair that ComputeVelocity turns back into this direction (negated, as +0A, +0C use them); uses rotation slot DS:41C0
+CS:4F55	routine	RandomizeOrientation		in: DI; clobbers AX	ships	+0A, +0C, +0E = rand each
+CS:4F68	routine	ComputeVelocity		in: DI; clobbers AX, BX, DX	ships	rotates (0, speed +18) by +0C then by +0A (SetSinCos6/7, RotateBySinCos6/7) into velocity bytes +19, +1A, +1B; leaves the angles in rotation slots DS:41B8, DS:41BC
+CS:4F8E	routine	MoveObject		in: DI; clobbers AX, DX, and as RemoveObject when it removes	ships	adds the sign-extended velocity +19..+1B to the 24-bit position; removes the object (RemoveObject) when IsObjectNear (3BB2) fails: a coordinate no longer fits 16 bits
+CS:4FB8	routine	RemoveObject		in: DI; clobbers AX, BX, CX, DX and sets ES=B800 when a blip is erased	ships	clears the active bit of byte 0 and EraseScannerBlip (42F4)
+CS:4FBF	routine	RemoveAllMissiles		clobbers AX, BX, CX, DX, DI; ES as RemoveObject	combat	removes every active type 20 (Missile) in the first objectSlotCount slots; called by the ECM key (0x82DE) and the station handler
+CS:4FE1	routine	ExplodeObject		in: DI=object; clobbers all; DI kept unless a cargo slot search fails	combat	TallyMaskMissionKill; if byte 0 bit 7 (drawn this frame) is clear it is only removed. Otherwise removed, explosion sound (7B1C), +2D fragments as class 7 Splinters in debris slots (10 extra steps for a station), then cargo: one barrel for the mask ship (it carries bit 6 = the device), else rand/(255/(cargo+1)+1) barrels
+CS:50B9	label	DropCargo			combat	after a failed FindFreeShipSlot the xchg leaves DI on the end pointer, so DI is lost for the rest of the loop and on return
+CS:511E	routine	TallyMaskMissionKill		in: DI	combat	while maskMissionShipsLeft>0: an Asp (type 24) with bounty +31=200 decrements it, and if it carries the device (+1E bit 5) sets maskShipDestroyed
+CS:5145	code	Routine5145		out: CF	ai	unreached: CF=1 when +20/+22/+24 minus the position is within 500 on all axes (2F6E)
+CS:515E	routine	FacePlayer		in: DI; clobbers AX, BX, CX, DX, BP	ships	+0A, +0C = ConvertVectorToAngles(GetVectorToPlayer)
+CS:516B	routine	TurnTowardAngles		in: DI, AX, BX=wanted angles; out: AX, BX=|errors|; clobbers CX, DX, BP	ai	moves +0A towards AX and +0C towards BX by at most turn rate +1D each (ClampTurnStep)
+CS:5186	routine	ClampTurnStep		in: AX=wanted, CX=current, DI; out: AX=step, BX=|error|; clobbers CX	ai	error = (AX&0x7FF)-(CX&0x7FF) with no wrap at 2048, so a turn across 0 goes the long way; step = error, or +-[DI+1D]
+CS:51AB	routine	TryFireLaserAtPlayer		in: DI, AX, BX=aim errors; clobbers AX, BX, CX, DX	combat	needs blip drawn (+1E bit 1), rand byte < aggression +30, 5A30 clear, and gameOverFrames, escapePodFrames, maskingBackgroundColor all 0; aggression -= 5 unless it would fall below 20; aim within 200: playerHitBy=DI, playerHitPending=2, within 70: 1; playerHitByDepth=+3C
+CS:5200	routine	FindFreeShipSlot		out: CF=1 and SI=slot if free	ships	first slot with the active bit clear from slot 3 (DS:6640), objectSlotCount-3 slots; keeps CX
+CS:521D	routine	ReclaimShipSlot		out: SI=slot; clobbers AX, CX; when evicting also DI=SI, BX, DX, ES	ships	first slot from slot 3 whose blip is not drawn (+1E bit 1 clear), returned as it is; otherwise a random slot 4-19, removed first
+CS:524D	code	Routine524D		out: CF=byte 0 bit 7	ships	unreached except from 0x5254; keeps AX
+CS:5254	code	Routine5254		out: CF	combat	unreached except from 0x53FE: CF=1 when drawn this frame and +15 bit 6 clear
+CS:5262	routine	LaunchPlayerMissile		clobbers all	combat	from the M key (0x828C): takes a slot, copies 64 bytes from the caller's DI into it, InitMissile, places it at (0,100,0) rotated by the negated playerPitchAngle, playerYawAngle and playerRollAngle (RotateRollYawPitch), target +29 = missileTarget, aims at the target's position, moves twice
+CS:52D2	routine	ClearAllObjects		out: ES=DS; clobbers AX, CX, DI	ships	zeroes shipSlotCount x 64 bytes from shipSlots
+CS:52EA	code	Routine52EA		in: BX, CX=angle errors; out: CF	combat	unreached except from 0x53F9: errors sign-extended from 11 bits, then within 150 (2F6E)
+CS:530C	routine	FindDebrisSlot		out: SI=slot; keeps AX, BX, CX	ships	first inactive slot of debrisSlotCount from slot 20 (DS:6A80); if none, the one with the greatest age +2F
+CS:5340	routine	CopyObject		in: SI=source, DI=destination; out: ES=DS	ships	copies 64 bytes; keeps CX, SI, DI
+CS:5350	routine	UpdateDebrisAi		in: DI; clobbers AX, DX, and more when MoveObject removes it	ships	class 7 handler: lifetime +2E counts down and clears the active bit at 0; otherwise age +2F +1, +0E += +26, +0A += +27, MoveObject
+CS:536E	routine	LaunchShipFromObject		in: DI=launcher, DL=0x14/0x15/7/5; out: CF=1 if launched, DI kept; clobbers AX, BX, CX, DX, SI, BP, ES	combat	copies the launcher into a free slot and re-inits it: 0x14 missile aimed at the player (+29=0), 0x15 escape pod, 7 Thargon (+3A=launcher), 5 Krait. The DL=5 path pops the launcher into DI and returns through the stale pushed DI; never runs
+CS:53E8	code	Routine53E8		in: DI, AX, BX	combat	unreached: an earlier enemy laser routine writing playerHitBy, playerHitPending and playerHitByDepth like TryFireLaserAtPlayer; hostile bit instead of blip bit, rand < 50, 1 then 2 (the other way round)
+CS:541E	routine	IsDebrisType		in: DI; out: ZF=1 if type 5, 6, 11 or 12; clobbers AL	ships	Astroid, Boulder, Splinter, Plate: the class 3 types ShowShipIdentity (364D) labels 'Debris'; it labels the other class 3 types 'Simple'
+CS:5433	routine	IsViperType		in: DI; out: ZF=1 if type 28 (Viper)	ships	keeps AX
+CS:543E	routine	IsPoliceViper		in: DI; out: ZF=1 if a Viper with word +3A = 1	ships	police: launched by the station (InitPoliceViper) or a Viper trader with +3A=1
+CS:5448	routine	IsThargoidType		in: DI; out: ZF=1 if type 22; clobbers AL	ships	
+CS:5451	routine	IsThargonType		in: DI; out: ZF=1 if type 7; clobbers AL	ships	
+CS:545A	routine	TryLaunchMissileAtPlayer		in: DI, BX=odds out of 65536; out: DI kept; clobbers AX, BX, CX, DX, SI, BP, ES	combat	needs killCount >= 3, hostile (+1E bit 0), 5A30 clear, missiles +32 > 0, gameOverFrames, escapePodFrames and maskingBackgroundColor all 0, rand < BX; LaunchShipFromObject DL=0x14, then missiles -1
+CS:5491	routine	TryLaunchThargon		in: DI; out: DI kept; clobbers AX, BX, CX, DX, SI, BP, ES	combat	a Thargoid with Thargons left (+1F) launches one when rand < 300 (LaunchShipFromObject DL=7), then +1F -1
+CS:54AF	routine	CountOtherHuntersOnScanner		in: DI; out: AL=count, BP=last found; clobbers CX, SI	ai	class 6 slots with the blip drawn, other than DI
+CS:54D4	routine	GetVectorToObject		in: DI=self, SI=target, DX=range; out: AX, BX, CX=(target-self)/4, CF=1 if all within DX/4; clobbers DX, BP	ai	
+CS:5512	routine	UpdateMissileAi		in: DI=missile	combat	class 2 handler: spins +0E; target +29, or the player when 0 (then incomingMissileAlert=1); explodes if the target is gone. Within 200 of it: explodes; the player takes TakeDamage 800 (2C9B); a ship gets kill credit (8BE6) and explodes unless +1E bit 2; a station costs legalStatus +5, or 10 energy in the thargoid mission (destroyed at 0)
 CS:55B4	routine	SkipInertObjectAi	1	in: DI=ship slot; changes nothing	ai	AI class 0 (table75C0[0]): a bare ret. Class 0 is given to the sun and planet slots (0x2A97, 0x2AD0) and to the ship 0x4CC6 makes
 CS:55B5	routine	UpdateStationAi		in: DI=ship slot; clobbers AX BX CX DX SI	ai	AI class 1, set only at 0x2B18 for slot 2 (Coriolis, or Dodo at tech level 9+). Spins ([DI+0E]+=10). If its angry bit ([DI+1E] bit 0) is set, Routine3BB2 returns CF=1, the player is not within 0x1C2 on every axis, and legalStatus>=10: launches a ship with chance 90/65536 (offender) or 2000/65536 (legalStatus>=40): Viper police (0x4C96) if random>=10000, Shuttle (0x4CE0) if >=5000, else trader (0x4D28). Then, from 0x5631: a missile (type 0x14) aimed at the station adds 40 to legalStatus, one aimed at a police Viper inside the safe zone adds 10, and either starts npcEcmFrames=20 unless antiEcmActive=1. While npcEcmFrames runs it sets ecmFired and removes every missile (0x4FBF). npcEcmFrames is counted down only here, so with no station slot an NPC ECM never acts
 CS:5631	label	CheckMissilesAtStation			ai	in UpdateStationAi: npcEcmFrames countdown, missile scan over objectSlotCount slots, legalStatus penalties; with thargoidInvasionActive=1 the ECM is cancelled (0x569B)
 CS:56A1	routine	UpdateDriftingObjectAi		in: DI=ship slot	ai	AI class 3: escape pod, plate, barrel, boulder, asteroid, splinter, shuttle, transporter (templates DS:75E3/75F7/761F). Moves by its velocity (0x4F8E); if Routine541E says it is a rock (types 5, 6, 0x0B, 0x0C) it also turns [DI+0A]/[DI+0E] by 0x37/-0x21, swapped by type parity ([DI] bit 1)
 CS:56BC	routine	UpdateTraderOrPoliceAi		in: DI=ship slot; clobbers most registers	ai	AI class 4: Cobra, Python, Boa, Anaconda, Asteroid, Viper (DS:7633 via 0x4D28) and police Vipers (0x4C96, [DI+3A]=1). Rocks only spin. State [DI+17]: 0 init; 1 police Viper with legalStatus>=5 attacks (2), angry ship flees (3) with chance 0x53FC/65536 else attacks; 2 attack: steer at player, lasers (0x51AB), police missile chance 100 or 3000 by legalStatus, energy [DI+2B]<8 flees (non-police), within 0x320 breaks off (4); 3 evade: random jink every 10 frames, missile if energy<3, NPC ECM (npcEcmFrames=20) with chance 50/65536; 4+ fly away until beyond [DI+1C], then attack again
 CS:56D1	label	UnreachableRockSplit			ai	dead code: 0x56C5 jumps over it when [DI+1E] bit 0 is clear and 0x56CB when it is set, so the rock never spawns type 5 (0x536E, DL=5) or sets bit 4
-CS:5808	routine	UpdateHunterAi		in: DI=ship slot; clobbers most registers	ai	AI class 5: Cobra, Asp, Python, Fer-de-Lance, Moray, Thargoid (DS:76B5), Thargon (76F1), the mission ships (0x4DCE, 0x4E10). Thargoid: NPC ECM chance 100/65536 (npcEcmFrames=30). State [DI+17]: 1 picks 2-5 attack passes ([DI+16]); 2 attack run: steer at player, lasers, missile chance 1000, Thargoids launch Thargons (0x5491), within 1000 turn away (3); 3 turn away; once beyond [DI+1C] count a pass off, and after the last rest in state 1 ([DI+30]=9, angry bit cleared); a Thargon whose mother ([DI+3A]) is not a hostile Thargoid goes to state 0x0A instead, where [DI+18] drops by 3 a frame while it is 10 or more
-CS:58FE	routine	UpdatePirateAi		in: DI=ship slot; out may set BP; clobbers most registers	ai	AI class 6: Sidewinder, Mamba, Krait, Adder, Gecko, Cobra Mk I, Worm (DS:766F, 7683). State [DI+17]: 0 flies at the player until hostile ([DI+1E] bit 1); counts hostile class-6 pack mates (0x54AF): 2+ attack (1) when legalStatus>=40 or chance 50/65536, exactly 1 follows it ([DI+29]=mate, state 2); 1 attack, missile chance 1500; 2 formation flight to the mate (0x54D4), close -> 4; 3 evade with random jinks until beyond [DI+1C], then state 0; 4+ closes on the player with lasers and missile chance 2500 while farther than 5000 on some axis, then returns to state 0. Name from the template ships and pack behaviour
+CS:5808	routine	UpdateWolfAi		in: DI=ship slot; clobbers most registers	ai	class 5, 'Wolf' in the game's class names (DS:4B3D). AI class 5: Cobra, Asp, Python, Fer-de-Lance, Moray, Thargoid (DS:76B5), Thargon (76F1), the mission ships (0x4DCE, 0x4E10). Thargoid: NPC ECM chance 100/65536 (npcEcmFrames=30). State [DI+17]: 1 picks 2-5 attack passes ([DI+16]); 2 attack run: steer at player, lasers, missile chance 1000, Thargoids launch Thargons (0x5491), within 1000 turn away (3); 3 turn away; once beyond [DI+1C] count a pass off, and after the last rest in state 1 ([DI+30]=9, angry bit cleared); a Thargon whose mother ([DI+3A]) is not a hostile Thargoid goes to state 0x0A instead, where [DI+18] drops by 3 a frame while it is 10 or more
+CS:58FE	routine	UpdateHunterAi		in: DI=ship slot; out may set BP; clobbers most registers	ai	class 6, 'Hunter' in the game's class names (DS:4B3D); always attacks a player with legalStatus 40 or more (0x592D). AI class 6: Sidewinder, Mamba, Krait, Adder, Gecko, Cobra Mk I, Worm (DS:766F, 7683). State [DI+17]: 0 flies at the player until hostile ([DI+1E] bit 1); counts hostile class-6 pack mates (0x54AF): 2+ attack (1) when legalStatus>=40 or chance 50/65536, exactly 1 follows it ([DI+29]=mate, state 2); 1 attack, missile chance 1500; 2 formation flight to the mate (0x54D4), close -> 4; 3 evade with random jinks until beyond [DI+1C], then state 0; 4+ closes on the player with lasers and missile chance 2500 while farther than 5000 on some axis, then returns to state 0. Name from the template ships and pack behaviour
 CS:5A30	routine	CheckSafeZoneHoldFire		in: DI=ship slot; out: CF=1 if the ship must not fire	ai	CF=0 when thargoidInvasionActive=1 or the ship is a police Viper (0x543E); otherwise CF = bit 0 of safeZoneFlags (DS:4308), which 0x2E69 sets while the player is within 0x32C8 of the station. Gates lasers (0x51AB) and missiles (0x545A)
 CS:5A50	routine	ShowSellCargoScreen		out: AH=scan code of the F-key or Esc that ended the screen	docked	F2. Frame DS:7793 "SELL CARGO", help text DS:889B, header DS:781C. ComputeMarketPrices, then 17 rows: name (DS:8493), sell price (screenPrices+2), units held (cargoHold) or "-", unit. tradeScreenIsBuy=0, then RunCargoTradeMenu
 CS:5B09	routine	ShowBuyCargoScreen		out: AH=scan code of the F-key or Esc that ended the screen	docked	F3. Copies randomState0-2 (DS:71CB, 3 words) to marketRandomState, frame DS:77A0 "BUY CARGO". 17 rows: name, buy price, quantity on sale. The first time after an arrival (marketQuantitiesSet=0) each quantity is ((r&31)-7) xor (r>>8&3) from NextMarketRandom, 0 if negative, stored in cargoHold[i].available; then marketQuantitiesSet=1. tradeScreenIsBuy=1, RunCargoTradeMenu
@@ -625,11 +639,11 @@ DS:4263	data	playerDocked	1		docking	1 after a successful dock (0x2C4F), 0 at 0x
 DS:4264	table	collisionRanges	32	word	flight	box half-size per object type for CheckCollisions: 275 for types 0-1 (stations), 100 for the rest
 DS:42A4	table	tunnelRectangles	10	5 points of 2 signed bytes	docking	the tunnel's rectangles, smallest first, drawn by DrawTunnelRectangle
 DS:4308	data	safeZoneFlags	1		flight	bit 0: inside the station's safe zone (UpdateSafeZone)
-DS:4309	data	data4309	1			
+DS:4309	data	playerHitByDepth	1		combat	shooter's +3C; bit 7 picks the aft shield
 DS:430A	text	leavingStationMessage			docking	'Leaving Space Station'
 DS:4320	text	autoDockMessage			docking	'Auto-Dock Sequence Initiated'
 DS:433D	data	shipSlotCount	1		ships	36 (0x24) from Routine29D0: object slots then debris slots
-DS:433E	data	data433E	1		ai	UpdateStationAi launches only when it is 1+; 0 in witch space (0x2A51)
+DS:433E	data	spawnGovernment	1		ai	currentGovernment on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
 DS:433F	data	wreckDriftX	2		combat	SpawnPlayerWreckage: the player's nose direction times 40 (Routine2F8B), x
 DS:4341	data	wreckDriftY	2		combat	as wreckDriftX, y
 DS:4343	data	wreckDriftZ	2		combat	as wreckDriftX, z
@@ -703,12 +717,18 @@ DS:70D5	data	freeCargoTonnes	1		equipment	TryScoopObject
 DS:70ED	text	alienItemsText			equipment	'Alien Items'
 DS:70F9	text	maskingDeviceText			equipment	'Masking Device!'
 DS:7109	data	compassTargetIsStation	1		flight	UpdateCompass; TransformAndDrawObjects classifies the station only when 1
-DS:715B	data	data715B	1			
+DS:7110	text	arrivalSystemText	25		hyperspace	'Hyperspaced into System!'
+DS:7129	text	hyperspaceEngagedText	26		hyperspace	'Hyperspace Motors Engaged'
+DS:7143	text	arrivalGalaxyText	26		hyperspace	'Hyperspaced into galaxy ' and a digit at DS:715B
+DS:715B	text	arrivalGalaxyDigit	1		hyperspace	galaxyNumber + '1', written by GalacticJump into arrivalGalaxyText
+DS:715D	text	ninthGalaxyText	27		hyperspace	'Welcome to the 9th Galaxy!'
+DS:7178	text	witchSpaceArrivalText	30		hyperspace	'Hyperspaced into WITCH SPACE!'; never selected (see 0x4827)
 DS:7196	data	hyperspaceFuelCost	1		hyperspace	selectedDistanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4740)
 DS:7197	data	commanderFileBytes	2		save-load	208: length of commanderBlock, the size read and written at 0x0340 and 0x036D
-DS:7199	data	data7199	2			
+DS:7199	data	systemRecordBytes	2		galaxy	25 in the file; length of a system record copy
 DS:719B	data	commanderBlock	208		save-load	the commander file image (int 21h AH=3Fh/40h from here)
 DS:71AA	text	commanderTitle			docked	frame bytes 0x0F 0x0D then "COMMANDER " (ShowCommanderStatusScreen)
+DS:71AC	text	commanderRankText	9		docked	'COMMANDER', the rank inside commanderTitle (DS:71AA, frame bytes first); AwardArchangelTitle overwrites it
 DS:71B7	text	creditBalanceText	19		docked	cash as text, "      100.0 Credits", written by Routine3543
 DS:71CB	data	randomState0	2		maths	with randomState1-2 three words stepped by Routine061C (a,b,c -> b,c,c+a+b); ShowBuyCargoScreen copies all three to marketRandomState
 DS:71CD	data	randomState1	2		maths	
@@ -781,48 +801,54 @@ DS:7252	data	cargoAlienItemsTonnes	1		market	product 16; Thargons
 DS:7254	data	refugeesTonnes	1		docked	mission 1 refugees aboard (20 or 35), shown as "Refugees" by ShowInventoryScreen
 DS:7255	data	cargoUsedTonnes	1		market	tonnes in the hold (gold, platinum and gems excluded); capacity 20, 35 with the extension
 DS:7256	data	marketQuantitiesSet	1		market	0 after an arrival (0x4774); ShowBuyCargoScreen then rolls the quantities on sale and sets 1
-DS:7257	data	data7257	1			
+DS:7257	data	missionJumpCount	1		hyperspace	jumps counted by UpdateMissionSchedule
 DS:7258	data	missionNumber	1		docked	0 none, 1 supernova refugees, 2 masking device, 3 Thargoid invasion; set at 0x49BB, cleared by ShowMissionDebriefing
 DS:7259	data	data7259	1			
 DS:725A	data	witchspaceCountdown	1		hyperspace	nonzero in witch space: 100 on entry (0x4937), lowered by Thargoid kills (0x8C23); the status screen shows WITCH SPACE
-DS:725B	data	data725B	1			
-DS:725C	data	data725C	1			
-DS:725D	data	data725D	1		docked	mission 2 completes only when 1; set at 0x513F when the mask ship (type 0x18, [+31]=0xC8) dies with [+1E] bit 5
+DS:725B	data	fuelLeakDelayFrames	1		flight	frames before a fuel leak starts; 50 set on arrival in missions 1 and 3
+DS:725C	data	fuelLeakFrames	1		flight	51 when a leak starts; frames of leak left
+DS:725D	data	maskShipDestroyed	1		combat	set when the ship carrying the masking device is destroyed
 DS:725E	data	maskingDeviceRecovered	1		docked	set by Routine441F (0x4498); mission 2 debrief fits the cloaking device
-DS:725F	data	data725F	1			
+DS:725F	data	maskMissionShipsLeft	1		combat	5 at the mission 2 briefing; decremented by TallyMaskMissionKill; mask spawning runs while nonzero
 DS:7260	data	thargoidInvasionActive	1		docked	mission 3: set by ShowMissionBriefing; ships may fire in the safe zone, docking is refused (0x2C32), missiles damage the station; cleared when the station dies (0x55AE, 0x8B6B)
 DS:7261	data	invadedStationDestroyed	1		docked	set at 0x55A9 and 0x8B66
 DS:7262	data	antiEcmEmulatorFitted	1		equipment	mission 3 reward, 'L' in flight (0x83A5) toggles DS:A83E
-DS:7263	data	data7263	1		flight	sun heating level once DS:7264 reaches 1 (DrawSunOrPlanet): grows by max(it/4, 1) a frame; overflow kills
-DS:7264	data	data7264	2		docked	400 at a mission briefing, 0 on arrival (0x47FB); counted down by Routine3F6D; probably the supernova timer
+DS:7263	data	supernovaHeat	1		flight	0 until supernovaFrames runs out; then starts from cabinTemperature and grows by max(1, h/4) a frame, killing on overflow (0x3F86-0x3FAC); cleared on arrival
+DS:7264	data	supernovaFrames	2		flight	400 after the supernova briefing (0x6E97); counts down at 0x3F7C and stays 1; cleared on arrival
 DS:7266	data	missionStage	1		docked	0 not briefed, 1 briefed, 2 debriefing on screen
 DS:7267	data	jumpedSinceBriefing	1		docked	set on every hyperspace arrival (0x4801), cleared at a briefing; mission 1 completes only after a jump
 DS:7268	data	fledMaskShip	1		docked	set at 0x4988; mission 2 debrief "Running away from the mask ship..."
-DS:7269	data	data7269	1			
-DS:726A	data	data726A	1			
+DS:7269	data	maskSystemJumps	1		hyperspace	2 at the mission 2 briefing; -1 per arrival; 1 means the mask ship's system
+DS:726A	data	hyperspaceTargetIndex	1		hyperspace	selectedSystemIndex latched when the countdown starts
 DS:726C	data	startupCommander	208		save-load	copy of commanderBlock taken by SaveStartupCommander
+DS:746C	table	hyperspaceRingStart	10	3 bytes	hyperspace	delay frames, radius, colour per ring; copied to hyperspaceRings by ResetHyperspaceRings
+DS:748A	table	hyperspaceRings	10	3 bytes	hyperspace	working copy animated by DrawHyperspaceRings
+DS:74A8	text	fuelLeakText	11		flight	'FUEL LEAK!'
+DS:74B3	text	archangelTitle	9		docked	'ARCHANGEL', ended by the forceMisjump byte
 DS:74BC	data	forceMisjump	1		hyperspace	set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival (47AC) it forces Routine4937, which puts the ship halfway between the systems and sets DS:725A=100
-DS:75C0	table	table75C0	8	code	ai	AI class handlers by slot byte +0x33: SkipInertObjectAi, UpdateStationAi, Routine5512 (missiles), UpdateDriftingObjectAi, UpdateTraderOrPoliceAi, UpdateHunterAi, UpdatePirateAi, Routine5350 (class 7, debris from 0x5081)
-DS:75D0	data	data75D0	1			
-DS:75D1	data	data75D1	1			
-DS:75D4	data	data75D4	1			
-DS:75D5	data	data75D5	1			
-DS:75D6	data	data75D6	1			
-DS:75D7	data	data75D7	1			
-DS:770F	data	data770F	1			
-DS:7710	data	data7710	1			
-DS:7711	data	data7711	1			
-DS:7712	data	data7712	1			
-DS:772F	data	data772F	2			
+DS:74BD	data	hyperspaceTargetRecord	25		hyperspace	selectedSystemName latched when the countdown starts
+DS:75C0	table	behaviorHandlers	8	code	ai	call [bx+0x75C0] at 0x4A61, index byte +33: SkipInertObjectAi, UpdateStationAi, UpdateMissileAi, UpdateDriftingObjectAi, UpdateTraderOrPoliceAi, 5808 (class 5, labelled 'Wolf'), 58FE (class 6, labelled 'Hunter'), UpdateDebrisAi; labels in shipClassNames
+DS:75D0	data	activeObjectCount	1		ai	active objects of class other than 7 this frame; spawning needs < 10
+DS:75D1	table	behaviorClassCounts	8	byte	ai	active objects per class 0-7, recounted each frame by UpdateObjectsAndSpawn
+DS:75D4	data	drifterCount	1		ai	behaviorClassCounts[3]: class 3 ('Debris'/'Simple' drifters)
+DS:75D5	data	traderCount	1		ai	behaviorClassCounts[4]: class 4 ('Trader')
+DS:75D6	data	wolfCount	1		ai	behaviorClassCounts[5]: class 5 ('Wolf'); also gates mask and invasion spawns
+DS:75D7	data	hunterCount	1		ai	behaviorClassCounts[6]: class 6 ('Hunter')
+DS:75D9	table	spawnTemplates	31	10-byte record	ships	type, speed, turn rate, bounty, missiles, cargo, fragments, energy, +3F, range high byte; read by InitObjectFromTemplate. Groups: 75D9 Missile; 75E3 eight drifters; 7633 six traders; 766F seven hunters; 76B5 five wolves; 76E7 Thargoid; 76F1 Thargon; 76FB Constrictor; 7705 Cougar
+DS:770F	table	spawnLimitsByGovernment	8	4 bytes	ai	max objects of class 3, 4, 6, 5, indexed by spawnGovernment x 4
+DS:7710	data	traderLimitColumn	1		ai	column of spawnLimitsByGovernment: max class 4
+DS:7711	data	hunterLimitColumn	1		ai	column of spawnLimitsByGovernment: max class 6
+DS:7712	data	wolfLimitColumn	1		ai	column of spawnLimitsByGovernment: max class 5
+DS:772F	data	spawnLimitOffset	2		ai	spawnGovernment x 4, set by UpdateObjectsAndSpawn
 DS:7731	data	npcEcmFrames	1		combat	NPC ECM: 20 from the station or a fleeing trader, 30 from a Thargoid; counted down only by UpdateStationAi, which removes all missiles each frame it runs
 DS:7732	data	incomingMissileAlert	1		flight	set by Routine5512; CheckMissileWarning clears it
-DS:7733	data	data7733	2			
-DS:7736	data	data7736	1			
-DS:7737	data	data7737	2			
-DS:7739	data	data7739	2			
-DS:773B	data	data773B	2			
-DS:773D	data	data773D	2			
-DS:773F	data	data773F	2			
+DS:7733	data	maskShipSlot	2		ai	mask ship slot kept while its escorts are placed
+DS:7736	data	explodingStation	1		combat	1 while ExplodeObject explodes a station: 10 extra debris steps
+DS:7737	data	spawnOddsOffset	2		ai	currentGovernment x 8, set by UpdateObjectsAndSpawn
+DS:7739	table	spawnOddsByGovernment	8	4 words	ai	spawn chance per frame out of 65536 for class 3, 4, 6, 5, indexed by currentGovernment x 8
+DS:773B	data	traderOddsColumn	2		ai	column of spawnOddsByGovernment: class 4
+DS:773D	data	hunterOddsColumn	2		ai	column of spawnOddsByGovernment: class 6
+DS:773F	data	wolfOddsColumn	2		ai	column of spawnOddsByGovernment: class 5
 DS:7780	text	versionString			start-up	"Release:1? 1-10-87"
 DS:7793	text	sellCargoFrame			docked	frame bytes, then "SELL CARGO"
 DS:77A0	text	buyCargoFrame			docked	frame bytes, then "BUY CARGO"
@@ -1000,7 +1026,7 @@ DS:A400	data	screenLayout	1		video	FFh in the file; 0 cockpit (ShowCockpitScreen
 DS:A401	data	textAttribute	1		text	CGA text attribute for PrintTextModeString; DrawDockedFrame sets it from the frame's first byte
 DS:A403	table	frameCorners	6	word cell offset, byte CP437 character	docked	the docked frame's corners and tees: C9h at 0, BBh at 4Eh, CCh at A0h, B9h at EEh, C8h at 780h, BCh at 7CEh
 DS:A420	data	inFlight	1		flight	1 while RunFlight's loop owns the screen (GameLoop), 0 on the title and docked screens and while Routine0BB3 runs a screen from flight (F9's status screen excepted, run with 1); Routine5EC9 and ReadScanCode test it
-DS:A421	data	dataA421	1			
+DS:A421	data	miningLaserOnAsteroid	1		combat	set when laser kind 2 (Mining, names at DS:7DF2) hits type 5 (0x8B0C); fragments get slower, live 60 frames longer, and may carry minerals (+1E bit 4)
 DS:A422	data	escapePodFrames	1		flight	80 when the capsule launches (2F14); TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero KillPlayer does nothing
 DS:A423	data	galacticJumpPending	1		hyperspace	set when H is pressed inside the galactic drive window; Routine4727 then makes a galactic jump
 DS:A424	text	idIndicatorMessage			combat	'ID Indicator Activated'
