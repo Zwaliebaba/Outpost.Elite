@@ -78,6 +78,7 @@
     <ClInclude Include="Cpu.h" />
     <ClInclude Include="HostServices.h" />
     <ClInclude Include="InterruptSource.h" />
+    <ClInclude Include="PortRouter.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="pch.h" />
@@ -93,6 +94,7 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="PortRouter.cpp" />
     <ClCompile Include="Sha256.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

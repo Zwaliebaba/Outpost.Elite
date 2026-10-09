@@ -7,6 +7,9 @@
     <Filter Include="Cpu">
       <UniqueIdentifier>{6E59F20A-6C1E-56DB-8CEB-AF7F4C71E9AF}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Devices">
+      <UniqueIdentifier>{4247BB1B-1667-5080-A1D7-C8D79DD0FAF1}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Memory">
       <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
     </Filter>
@@ -37,6 +40,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PortRouterTests.cpp">
+      <Filter>Devices</Filter>
     </ClCompile>
     <ClCompile Include="Sha256Tests.cpp">
       <Filter>Verification</Filter>
