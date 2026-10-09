@@ -7,12 +7,13 @@ name: Build
 # Every step that has something to run BLOCKS. Nothing here is `continue-on-error`, and a script
 # that exists and fails fails the build.
 #
-# But this repository is a clean start: there is no solution, no project and no checker script in
-# it yet, and a gate that cannot run must not be dressed up as a gate that passed. So each step is
-# guarded on the file it needs -- the checker script, the solution, the built test binaries -- and
-# a step whose input is absent is SKIPPED and says so in the log. The moment the file lands, the
-# step starts gating with no edit here. Remove a guard once its input is permanently there; never
-# add one to get past a red build.
+# But this repository is a clean start: there is no solution and no project in it yet, and a gate
+# that cannot run must not be dressed up as a gate that passed. So each step that needs one is
+# guarded on it -- the solution, the built test binaries -- and a step whose input is absent is
+# SKIPPED and says so in the log. The moment the file lands, the step starts gating with no edit
+# here. Remove a guard once its input is permanently there; never add one to get past a red build.
+# The checker scripts are permanently there, so their steps are no longer guarded: on a tree with
+# no C++ they run and pass with nothing to check.
 #
 # Nothing is discovered by name. The solution is whatever single .slnx/.sln sits at the root, and
 # the test suites are whatever *Tests.vcxproj the tree contains -- so adding a project does not
@@ -151,7 +152,6 @@ jobs:
       # surface as a confusing build failure: a file missing from a project, a header in a
       # subdirectory clang-tidy will never see, or Debug and Release drifting apart.
       - name: Check the build shape and the project registries
-        if: hashFiles('Build/CheckProjectFiles.py') != ''
         shell: pwsh
         run: python Build\CheckProjectFiles.py
 
@@ -191,7 +191,6 @@ jobs:
       # After the build, so that a compile error is reported as a compile error rather than as
       # forty linter findings about a file that does not parse.
       - name: Run clang-tidy
-        if: hashFiles('Build/RunClangTidy.py') != ''
         shell: pwsh
         run: python Build\RunClangTidy.py
 
@@ -225,11 +224,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install clang-format 18
-        if: hashFiles('Build/CheckFormat.py') != ''
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-format-18
 
       - name: Check formatting
-        if: hashFiles('Build/CheckFormat.py') != ''
         run: python3 Build/CheckFormat.py --clang-format clang-format-18

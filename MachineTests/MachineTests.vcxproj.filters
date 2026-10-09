@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Build">
+      <UniqueIdentifier>{819C6745-53D6-5A49-8FC6-9352646D103D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Cpu">
+      <UniqueIdentifier>{6E59F20A-6C1E-56DB-8CEB-AF7F4C71E9AF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Memory">
+      <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>Build</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="CpuTests.cpp">
+      <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryTests.cpp">
+      <Filter>Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Build</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

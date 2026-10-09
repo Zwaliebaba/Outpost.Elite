@@ -1,0 +1,46 @@
+# ADR-003 — Verification
+
+**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8.
+
+## Context
+
+The port claims to be the game in the reference binary (ADR-001), so every claim needs something outside the port to check it against. In Phases 2 and 3 that something is the original's own code, running under our 8086 interpreter beside the C++ that replaces it. But the interpreter is new code too, and a bug in it looks exactly like game behaviour. It has to be checked against references that are independent of us before it can judge anything.
+
+The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 attempt in this repository's history did the same with its 6502 oracle, and its suite went from 469 tests to 131 (`Design/README.md` at `3da3590`). Whatever the port is held to after Phase 4 therefore has to be recorded, in full, before the oracle goes.
+
+## Decision
+
+**1. The interpreter is checked against three independent references before anything is ported against it.** None of them is linked into the build (R14); they are development tools.
+
+- **Per-instruction tests.** The SingleStepTests 8088 suite, about 3 million tests generated on real 8088 hardware, run against the interpreter one instruction at a time. It is fetched by a script under `Tools/` rather than committed, unless its repository's own licence file is confirmed to allow committing it. Every flag the 8088 defines for an instruction is compared, AF and PF included: computing them costs little, and an exclusion list is somewhere for a real bug to hide. Flags Intel documents as undefined for an instruction are masked, and any use of one by this binary is a Phase 1 finding.
+- **The boot trace.** Every instruction from the program entry to the first keyboard read, with the ADR-001 patch applied, compared register for register with DOSBox-X's debugger trace of the same binary. No input happens in that stretch, so both traces are deterministic.
+- **Static screens.** The title, the status, market, equipment and inventory screens, and both charts, compared pixel for pixel with DOSBox-X screenshots taken at the same points.
+
+**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-006, which records the cause of each change. The corpus is built to reach every subsystem:
+
+- trading, and every equipment item;
+- combat with every ship type;
+- docking by hand and by docking computer;
+- hyperspace, galactic hyperspace and witch space;
+- death and the escape pod;
+- saving and loading a commander.
+
+**3. Every replaced routine passes a differential test.** During any replay the interpreter can capture the whole machine state at each call of a chosen routine. The test restores a captured state and runs the original, recording every memory write, every port write, the registers, and the flags the callers read. It then restores the same state, runs the C++ version, and compares the two. Basic-block coverage of the original routine, measured from the same captures, must be complete, or each uncovered block gets a constructed input or a written reason. A routine is not replaced in the shipping path until its test passes.
+
+**4. Known answers from outside the interpreter.** The galaxy seeds and the system-name digrams are checked against Elite's published facts. Derived system data is not: this version computes tech level and population by formulas that differ from the 6502 versions (Phase 1, `Symbols.tsv` at 0x1199). Lave's government, economy, tech level and market prices are therefore checked against the values the reference itself stores in its default commander, which agree with its own code. Under AGENTS.md the reference is the design, so a published 6502 value is not a reason to change anything.
+
+**5. The oracle ends with Phase 4 (D7).** At the end of Phase 4 the interpreter, the capture harness and the per-routine differential tests are deleted from the tree. Before that:
+
+- the replay corpus has to reach everything in item 2;
+- its digests have to be re-based under ADR-006;
+- the known-answer tests have to be in the suite.
+
+From then on, the replays and the known answers are what the port is held to.
+
+**6. Everything runs in CI.** The tests live in a `*Tests` project per library (ADR-004) and run under `vstest.console.exe` on Debug|x64, as `.github/workflows/build.yml` already does for every `*Tests.vcxproj`. The reference binary is in the tree (ADR-002), so tests that need it never skip. Each test project keeps its `SuiteSmoke` placeholder until its first real test lands (AGENTS.md §3).
+
+## What this forecloses
+
+- Porting a routine against the interpreter before item 1 holds.
+- Re-basing a digest to get a red build green. A digest moves only through ADR-006, with its cause.
+- Any per-routine comparison against the original after Phase 4. A behaviour question raised later is answered from the replays, from the known answers, or by restoring the interpreter from history, not by asking the original directly.

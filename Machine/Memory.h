@@ -1,0 +1,98 @@
+// Machine/Memory.h
+#pragma once
+
+#include <cstdint>
+#include <span>
+#include <vector>
+
+namespace Machine
+{
+
+/// The 8088's 1 MiB address space, all of it RAM.
+///
+/// Linear addresses are 20 bits wide and wrap: anything above 0xFFFFF lands at the bottom again, as
+/// on the 8088, which has no A20 line to stop it. A word access by linear address takes its second
+/// byte from the next linear address, wrapped the same way. A word access by (segment, offset) takes
+/// its second byte from offset + 1 of the same segment, so offset 0xFFFF pairs with offset 0x0000.
+///
+/// Devices that decode memory (the CGA, a ROM) are not modelled here yet; when they are, they hook in
+/// below this interface and the CPU does not change.
+class Memory
+{
+public:
+  static constexpr std::uint32_t SIZE_BYTES = 0x100000;
+  static constexpr std::uint32_t ADDRESS_MASK = SIZE_BYTES - 1;
+
+  Memory();
+
+  [[nodiscard]] static constexpr std::uint32_t Linear(std::uint16_t _segment, std::uint16_t _offset) noexcept
+  {
+    return ((static_cast<std::uint32_t>(_segment) << 4) + _offset) & ADDRESS_MASK;
+  }
+
+  [[nodiscard]] std::uint8_t Read8(std::uint32_t _linear) const noexcept
+  {
+    return m_bytes[_linear & ADDRESS_MASK];
+  }
+
+  void Write8(std::uint32_t _linear, std::uint8_t _value) noexcept
+  {
+    m_bytes[_linear & ADDRESS_MASK] = _value;
+  }
+
+  [[nodiscard]] std::uint16_t Read16(std::uint32_t _linear) const noexcept
+  {
+    return static_cast<std::uint16_t>(Read8(_linear) | (Read8(_linear + 1) << 8));
+  }
+
+  void Write16(std::uint32_t _linear, std::uint16_t _value) noexcept
+  {
+    Write8(_linear, static_cast<std::uint8_t>(_value & 0xFF));
+    Write8(_linear + 1, static_cast<std::uint8_t>(_value >> 8));
+  }
+
+  [[nodiscard]] std::uint8_t Read8(std::uint16_t _segment, std::uint16_t _offset) const noexcept
+  {
+    return Read8(Linear(_segment, _offset));
+  }
+
+  void Write8(std::uint16_t _segment, std::uint16_t _offset, std::uint8_t _value) noexcept
+  {
+    Write8(Linear(_segment, _offset), _value);
+  }
+
+  [[nodiscard]] std::uint16_t Read16(std::uint16_t _segment, std::uint16_t _offset) const noexcept
+  {
+    const auto next = static_cast<std::uint16_t>(_offset + 1);
+    return static_cast<std::uint16_t>(Read8(_segment, _offset) | (Read8(_segment, next) << 8));
+  }
+
+  void Write16(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _value) noexcept
+  {
+    const auto next = static_cast<std::uint16_t>(_offset + 1);
+    Write8(_segment, _offset, static_cast<std::uint8_t>(_value & 0xFF));
+    Write8(_segment, next, static_cast<std::uint8_t>(_value >> 8));
+  }
+
+  /// Copies bytes in at a linear address, wrapping at 1 MiB.
+  void Load(std::uint32_t _linear, std::span<const std::uint8_t> _bytes) noexcept;
+
+  /// Sets every byte to zero.
+  void Clear() noexcept;
+
+  /// The whole address space, for loaders, snapshots and the conformance runner.
+  [[nodiscard]] std::span<std::uint8_t> Bytes() noexcept
+  {
+    return m_bytes;
+  }
+
+  [[nodiscard]] std::span<const std::uint8_t> Bytes() const noexcept
+  {
+    return m_bytes;
+  }
+
+private:
+  std::vector<std::uint8_t> m_bytes;
+};
+
+} // namespace Machine
