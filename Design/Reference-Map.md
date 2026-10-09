@@ -60,7 +60,7 @@ The main program reads all of these, and it is the only one that consumes the bu
 - **The value.** `minimumFrameMs` is 50 in the file, which is 20 frames a second. The pause screen sets it with F1–F10, from `frameTimeChoices` (DS:0xA921): 200, 125, 100, 83, 67, 56, 50, 40, 30 and 1 ms.
 - **No elapsed-time use.** No other code reads `msSinceFrame`. `millisecondCounter` is read only for a blink at 0x2914, and `timerTicks` only by `WaitForTimerTick` and the uncalled `RateLimit`.
 
-**What this means for D6.** On a real 4.77 MHz PC the game ran at 20 frames a second whenever a frame's work fitted in 50 ms, and slowed down whenever it did not. On a modern machine every frame fits. Running the original's own frame-time setting therefore gives exactly the speed the original intended, and the speed it actually reached on any PC fast enough. Reproducing the 1987 slowdowns would need a cycle-cost model of every frame, and would only be worth it if the owner wants them. **Recommendation for D6:** "the same speed" is the original's frame-time setting, default 50 ms, selectable with F1–F10 as the original's is. The owner rules (plan §8).
+**What this means for D6.** On a real 4.77 MHz PC the game ran at 20 frames a second whenever a frame's work fitted in 50 ms, and slowed down whenever it did not. On a modern machine every frame fits. Running the original's own frame-time setting therefore gives exactly the speed the original intended, and the speed it actually reached on any PC fast enough. Reproducing the 1987 slowdowns would need a cycle-cost model of every frame, and would only be worth it if the owner wants them. **Ruled (D6):** "the same speed" is the original's frame-time setting, default 50 ms, selectable with F1–F10 as the original's is. No model of the 1987 slowdowns.
 
 ### 3. Mid-frame palette writes
 
@@ -83,13 +83,7 @@ The game uses four BIOS modes:
 | 0 (40×25 monochrome text) | the protection question | 0x04B2 |
 | 2 (80×25 text) | on exit | 0x00AD |
 
-**The docked screens are text, drawn by the CGA's character generator, and their glyphs are not in `ELITEL.EXE`.** `DrawDockedFrame` writes code-page 437 characters into text memory: 0xBA and 0xCD, the double-line box pieces, then the screen's text. On the original machine the CGA turned those bytes into pixels with the 8×8 font in its own ROM. A faithful picture of the docked screens therefore needs that font, and nothing in the reference supplies it. This is **D14** for the owner. The options:
-
-- reproduce the IBM CGA ROM font, which is IBM's work and carries the same kind of exposure ADR-002 accepts for the game's own data;
-- draw an 8×8 code-page 437 font of our own that matches it closely;
-- use a public-domain 8×8 font.
-
-Phase 2 needs the answer before the presenter can show a docked screen.
+**The docked screens are text, drawn by the CGA's character generator, and their glyphs are not in `ELITEL.EXE`.** `DrawDockedFrame` writes code-page 437 characters into text memory: 0xBA and 0xCD, the double-line box pieces, then the screen's text. On the original machine the CGA turned those bytes into pixels with the 8×8 font in its own ROM. A faithful picture of the docked screens therefore needs that font, and nothing in the reference supplies it. **Ruled (D14):** the port draws its own 8×8 code-page 437 font, matching the CGA's for the characters the game uses. It is near-identical, not byte-exact, and carries no third-party bytes.
 
 ## Control flow
 
