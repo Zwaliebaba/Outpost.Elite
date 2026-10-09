@@ -10,6 +10,9 @@
     <Filter Include="Memory">
       <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Verification">
+      <UniqueIdentifier>{747F9A38-ADFD-527B-843F-548997B33CDF}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -25,6 +28,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="Sha256Tests.cpp">
+      <Filter>Verification</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
