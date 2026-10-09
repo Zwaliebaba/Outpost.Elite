@@ -62,5 +62,43 @@
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
 
-# Save-file fixtures under Tests/ are binary: a normalized line ending is a refused file.
-*.sav binary
+###############################################################################
+# Line endings, kept in step with /.editorconfig (AGENTS.md §4)
+#
+# `* text=auto` above normalizes every text file to LF in the REPOSITORY. What it does not
+# do is decide what the WORKING TREE gets -- that is core.autocrlf's business, and therefore
+# different on every machine -- while /.editorconfig states a definite answer per format and
+# every editor that honours it obeys. Two files disagreeing about one file is how a whole-file
+# diff turns up inside a one-line change, so the formats .editorconfig is explicit about are
+# explicit here too. Change one, change the other in the same commit.
+###############################################################################
+
+# CRLF in the working tree: Windows sources, and the files Visual Studio rewrites wholesale.
+*.cpp           text eol=crlf
+*.h             text eol=crlf
+*.hlsl          text eol=crlf
+*.vcxproj       text eol=crlf
+*.filters       text eol=crlf
+*.slnx          text eol=crlf
+*.sln           text eol=crlf
+*.props         text eol=crlf
+*.targets       text eol=crlf
+*.json          text eol=crlf
+.clang-format   text eol=crlf
+.clang-tidy     text eol=crlf
+.editorconfig   text eol=crlf
+.gitattributes  text eol=crlf
+.gitignore      text eol=crlf
+
+# LF in the working tree: what the Linux CI job reads, and what reads the same either way.
+*.py            text eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.md            text eol=lf
+
+# The Visual Studio resource editor writes these as UTF-16 and rewrites them wholesale. Git's
+# own heuristic usually calls them binary on the NUL bytes; saying so outright means a
+# normalization pass can never corrupt one.
+*.rc            -text
+*.rc2           -text

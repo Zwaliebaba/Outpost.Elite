@@ -1,442 +1,269 @@
-# Outpost: Elite — how to work here
+# AGENTS.md — Engineering Rules
 
-Conformance rules for anyone, human or agent, writing code in this repository.
+Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-Two things to read before you start:
+This repository is a greenfield C++23 game and a hobby project with one developer: a Direct3D 12 game built on Windows with MSVC. This file is about **how code is written here** — naming, layout, build settings and the standing rules of the codebase. It is not the design: what the game *is* belongs in a design document that does not exist yet.
 
-1. **This file** — naming, layout, build, and the working rules.
-2. **[Design/](Design/)** — the architecture decisions. [Design/README.md](Design/README.md)
-   indexes them; they are normative, and where this file and an ADR disagree, the ADR wins on
-   *what* to build and this file wins on *how it is spelled*.
+**The tree is empty.** This repository holds this file, the root configuration files, `.gitignore` and `.github/` — no solution, no projects, no source. Nothing below is a target to migrate towards; it describes the code as it must be written from the first line. There is no legacy here and nothing is grandfathered, so a whole-tree run of any checker comes back clean — trivially today, and by conformance from then on.
 
-**What this repository is.** A C++ port of Commodore 64 Elite, written from the annotated 6502
-source that used to sit in `MasterFile/` and `Upstream/`. The port is faithful first and modernised
-later ([ADR-001](Design/ADR/ADR-001-scope-and-fidelity.md)); the assembled original **was** the test
-oracle ([ADR-003](Design/ADR/ADR-003-verification.md)) until **M6-f deleted both trees and the
-interpreter on 2026-09-08**. What pins the port now is
-[ADR-009](Design/ADR/ADR-009-detachment.md) §2, and a fresh clone needs a compiler and nothing
-else — no submodule, no assembler, no assembled game.
+**Where these rules come from.** They are carried over from two sibling repositories: `Outpost.Warzone`, where the formatter and linter settings were measured against roughly 223,000 lines, and `Nomad-Commander`. That lineage is why `.clang-format` and `.clang-tidy` are what they are, and it is why code can move between the trees without a rename or a reflow pass. **What did not come across is the other trees' design, their decisions or their plan.** A decision taken there binds nothing here.
 
-**This is a greenfield tree. Nothing is grandfathered.** The rules below apply to every line
-from the first one. The one exception is the vendored upstream assembler source, which is not
-ours and is never edited.
+**What is authoritative, in order:**
+
+1. **This file** — conformance: naming, style, build settings, and how to work here.
+2. **`Design/ADR/`** — engineering decisions taken while building, one file per decision (§6). **There are none yet**; numbering starts at `ADR-001` in this repository and does not continue another's.
+3. **The surrounding code** — for anything neither of the above covers, match the file you are editing.
+
+A design document, when there is one, sits alongside rather than above: it says what is built and this file says how. Until it exists there is no design authority, and a task that needs a design answer asks the owner and gets the answer written down before the code is.
+
+If a rule here conflicts with a habit from another codebase, this file wins. If you think a rule is wrong or your task cannot be done without deviating, **say so in your report — never deviate silently.**
 
 ---
 
 ## 1. Naming convention (normative — no exceptions)
 
-[`.clang-tidy`](.clang-tidy) is the machine-readable statement of this table and the single
-source of truth for the option values. This document does not repeat them, so there is nothing
-to drift.
-
 | Kind | Convention | Example |
 |---|---|---|
-| Type (class, struct, enum, concept, alias) | `PascalCase` | `ShipSlot`, `SignMag24` |
-| Function, method | `PascalCase` | `NextRandom()`, `DrawLine()` |
-| Member variable | `m_camelCase` | `m_canvas` |
-| Static member | `sm_camelCase` | `sm_instance` |
-| Global | `g_camelCase` | `g_stopRequested` |
-| Parameter | `_camelCase` | `_shipIndex`, `_seed` |
-| Local | `camelCase` | `lineCount` |
-| Constant (`constexpr`, `static constexpr`) | `UPPER_CASE` | `MAX_SHIPS`, `CANVAS_WIDTH` |
-| Enumerator | `PascalCase` | `Coriolis`, `EscapePod` |
-| Macro | `SCREAMING_SNAKE` | `ASSERT`, `DEBUG_ASSERT` |
-| Namespace | `PascalCase` | `Neuron`, `Elite` |
-| File | `PascalCase.cpp` / `.h` | `ShipMove.cpp` |
+| Type (class, struct, enum, concept, alias) | `PascalCase` | `SwapChainTarget` |
+| Function, method | `PascalCase` | `PresentFrame()` |
+| Member variable | `m_camelCase` | `m_deviceRemoved` |
+| Static member (mutable) | `sm_camelCase` | `sm_activeDevice` |
+| Global | `g_camelCase` | `g_instance`, `g_frameCount` |
+| Parameter | `_camelCase` | `_fileName`, `_entityId` |
+| Local | `camelCase` | `shadedColor` |
+| Compile-time constant | `UPPER_CASE` | `WIDTH_PIXELS`, `CELL_PIXELS` |
+| Enumerator | `PascalCase` | `DeviceLost`, `OutOfVideoMemory` |
+| Macro | `UPPER_CASE` | `ENGINE_ASSERT` |
+| Namespace | `PascalCase` | `Engine` |
+| File | `PascalCase.cpp` / `.h` | `SwapChainTarget.cpp` |
+
+**Note the split that catches people out: a `constexpr` is `UPPER_CASE`, an enumerator is `PascalCase`.** They are both compile-time and they are spelled differently on purpose — an enumerator is a *value of a type* and reads as one at the use site (`PageFault::OutOfVideoMemory`), while a constant is a number with a name and is meant to look like one. [`.clang-tidy`](.clang-tidy) enforces both, and it is the single source of truth for the option values; this document states the rules in prose and does not repeat the settings, so there is nothing to drift.
 
 ### The rules behind the table
 
-**R1 — The leading underscore on parameters is deliberate.** It is legal C++: the reserved
-forms are `_Uppercase`, anything containing `__`, and `_lowercase` **at global scope**. A
-parameter is never at global scope, so `_seed` is safe. Never introduce a reserved form — no
-`_Impl`, no `__helper`, no file-scope `_cache` (use `g_cache` in an anonymous namespace).
+**R1 — The leading underscore on parameters is deliberate.** It is legal C++: the reserved forms are `_Uppercase`, anything containing `__`, and `_lowercase` **at global scope**. A parameter is never at global scope, so `_fileName` is safe. Never introduce a reserved form — no `_Impl`, no `__helper`, no file-scope `_cache` (use `g_cache` in an anonymous namespace).
 
-**R2 — A type name carries no prefix, and that includes abstract ones.** No `IFoo`, `CFoo`,
-`SFoo`, `EFoo`, `FooBase`, `FooImpl`, or `_t` suffixes. Name the concept and let the concrete
-types say what they are.
+**R2 — A type name carries no prefix or affix, and that includes abstract ones.** An interface is `Transport`, not `ITransport`. A base class is not `BaseTransport` or `AbstractTransport`. PascalCase means the name and nothing else. This bans `CFoo`, `SFoo`, `EFoo`, `IFoo`, `FooBase`, `FooAbstract`, `FooImpl` and `_t` suffixes. Name the concept and let the concrete types say what they are:
 
-**R3 — Compile-time constants are `UPPER_CASE`**; enumerators stay `PascalCase`. `sm_` is
-reserved for *mutable* statics, which are rare and must document their thread-safety.
+```
+Transport             ← the concept
+├── UdpTransport      ← a socket-backed one
+└── LoopbackTransport ← in-process, for tests
+```
 
-**R4 — Acronyms capitalize as words**: `SidSynth`, `VicPalette`, `RngState` — never
-`SIDSynth`. Identifiers from an external SDK keep that SDK's spelling (`ID3D12Device`,
-`HRESULT`, `IXAudio2`) and are never renamed to fit.
+That tree is an illustration of the rule, not a description of anything. A base class for one derived class is ceremony: name the concept, and add the layer when a second thing needs it.
 
-**R5 — `m_` marks encapsulated state, not every field.** A `class` with invariants prefixes
-private members `m_`. A public aggregate — a config struct, a POD passed to the presenter —
-uses plain `camelCase` fields so brace initialization reads naturally.
+clang-tidy can require an *absent* prefix but cannot see a *present* suffix, so the repository checker carries the other half (§6).
 
-**R6 — Units and spaces belong in names; types do not.** `speedPerStep`, `angleTurns`,
-`xCanvas` are encouraged. Never encode the type: no `iCount`, `pShip`, `strName`.
+**R3 — Compile-time constants are `UPPER_CASE`.** `constexpr`, `inline constexpr` and `static constexpr` members: `WIDTH_PIXELS`, `TICKS_PER_SECOND`, `CELL_PIXELS`. `sm_` is reserved for *mutable* statics, which are rare and must document their thread-safety.
 
-### R7 — RETIRED at M6-e (2026-09-08)
+**R4 — Acronyms capitalize as words**: `HlslSource`, `DxgiFactory`, `UdpTransport` — never `HLSLSource`. Identifiers from an external SDK keep that SDK's spelling (`ID3D12Device`, `DXGI_FORMAT`, `HRESULT`, `IDXGISwapChain4`) and are never renamed to fit.
 
-*(Removed by [Design/Modernize.md](Design/Modernize.md) slice M6-e, on the owner ruling of
-2026-09-06 that the markers, the ledger and `inventory.py` go together. The rule is kept here as a
-heading so a reader who arrives at a reference to "R7" finds out what it was and when it went,
-rather than finding nothing.)*
+**R5 — Template parameters are PascalCase**: `T`, `Fn`, `BlockBytes`, `Ts...`.
 
-**R7 said: every function ported from 6502 names its original label on the declaration**, as
-`/// 6502: DORND — generate the next random number.`, and `tools/inventory.py` reconciled those
-markers with `Design/Source-Inventory.md` and the master files' include list. That was the map from
-the port back to the original, and it was needed exactly as long as the original was.
+**R6 — Units belong in names; types do not.** `durationTicks`, `speedUnitsPerSecond`, `radiusMeters`, `volumePercent` are encouraged — a game measured in ticks, seconds, pixels and distances makes unit ambiguity a real defect class, and it is one the compiler cannot catch for you. Never encode the type: no `iCount`, `pEntity`, `strName`.
 
-It is not needed any longer. M6-f deletes `Upstream/` and `MasterFile/`, so a marker would point at
-nothing and a ledger would reconcile against nothing. **What the markers carried that is worth
-keeping was moved into the prose by M6-d** — the reason a carry matters, why a routine is entered
-part-way through, which flag is set at a distance — and that prose stands on its own without a label
-beside it. What the markers carried that was only a name went with them.
+**R7 — A file is named for its primary type**, PascalCase, `.h` / `.cpp` only. `.hpp`, `.cc` and `.inl` are not used; template implementations live in the header. Exceptions, because MSBuild and the Visual Studio wizards spell them this way: `pch.h`, `pch.cpp`, `framework.h`, `targetver.h`, `Resource.h`.
 
-The rules that replace it are the ordinary ones: §1 names things for what they hold, and a comment
-says why the code is the shape it is.
+**R8 — `m_` marks encapsulated state, not every field.** A `class` with invariants prefixes private members `m_`. A public aggregate — a `Desc` config struct, a wire record, a POD handed to the renderer — uses plain `camelCase` fields so brace initialization reads naturally.
+
+**R9 — One namespace per layer, and the engine does not know the game.** Reusable engine code gets its own namespace; game code gets another. The split is a rule rather than a filing preference: if an engine type has to know a game concept by name in order to do its job, it is in the wrong layer. Test suites use `namespace <Project>Tests`.
+
+**R10 — No `using namespace` at file scope in a header.** It leaks into every translation unit that includes it, and the failure it causes appears somewhere else. In a `.cpp` it is allowed for the unit-test framework and nothing else; otherwise qualify the name or write a local alias.
+
+**R11 — One spelling per family, and it is the SDK's.** `color`, `initialize`, `serialize`, `normalize`, `quantize`, `synchronize`, `behavior`, `neighbor`, `center`, `gray`, `canceled`. Neither spelling is wrong English; the defect is a tree where a reader has to know which half they are in and a grep for one finds half the uses. `D3D12_CLEAR_VALUE::Color` settles which half wins. Prose is not checked — a design document may spell `flavour` and `harbour`; an identifier spells `flavor` and `harbor`.
+
+### Worked example — this is the target style
+
+```cpp
+// Engine/SceneTarget.h
+#pragma once
+
+#include <cstdint>
+
+namespace Engine
+{
+
+// R3: constant → UPPER_CASE. R6: the unit is in the name.
+inline constexpr std::uint32_t SCREEN_WIDTH_PIXELS = 1920;
+inline constexpr std::uint32_t SCREEN_HEIGHT_PIXELS = 1080;
+
+// Enumerator → PascalCase, unlike the constants above.
+enum class TargetFault : std::uint8_t
+{
+  DeviceRemoved,
+  BadFormat,
+  OutOfVideoMemory
+};
+
+/// The colour framebuffer the game draws into, and the depth buffer that goes with it.
+/// R2: no prefix on the type. R8: private state carries m_.
+class SceneTarget
+{
+public:
+  struct Desc                                            // R8: aggregate → plain fields
+  {
+    std::uint32_t widthPixels;                           // R6: unit in the name
+    std::uint32_t heightPixels;
+    DXGI_FORMAT colorFormat;                             // R4: SDK spelling kept as-is
+  };
+
+  [[nodiscard]] static bool Create(ID3D12Device* _device,        // R1: _ on parameters
+                                   const Desc& _desc,
+                                   SceneTarget& _outTarget) noexcept;
+
+  [[nodiscard]] std::uint32_t WidthPixels() const noexcept { return m_widthPixels; }
+
+private:
+  ID3D12Resource* m_depthTarget = nullptr;
+  std::uint32_t m_widthPixels = 0;
+  bool m_deviceRemoved = false;
+};
+
+} // namespace Engine
+```
+
+### Enforcement
+
+| Rule | Enforced by |
+|---|---|
+| The naming table, R1, R3, R5, R8 | [`.clang-tidy`](.clang-tidy), gated in CI over the whole tree |
+| R2 affixes, R7 file names and project registration, R11 spellings, §2 flat directories, shader names and functional filters | `Build/CheckProjectFiles.py`, gated in CI |
+| R4, R6, R9, R10 | Review. Check your own diff against the table before handing it back. |
+
+**Neither checker exists yet** (§6). `.clang-tidy` is configured and gates the moment there is a translation unit to run it over; `Build/CheckProjectFiles.py` has to be written, and until it is, the four rules in its row are review's problem and nothing else. A rule nobody can run is a rule that rots, so writing that checker is early work rather than housekeeping.
 
 ---
 
-## 2. Repository map
+## 2. Repository shape
 
-| Path | What it is | May you edit it? |
-|---|---|---|
-| `NeuronCore/` | Foundation static library: the shared precompiled-header content and `Debug.h`'s assert/trace family. No game semantics. | Yes |
-| `GameLogic/` | **The port.** Namespace `Elite`. Deterministic, no window, no GPU, no audio device, no clock, no file system, no float. Draws into an in-memory canvas and emits sound events. | Yes |
-| `Outpost/` | The executable: composition root, window, D3D12 canvas presenter, SID synthesiser, key map, save store. The only project that knows both the game and the platform. | Yes |
-| `Tests/GameLogicTests/` | MSVC CppUnitTest DLL: the suites, the replay digests and the state-cell walk. **The 6502 interpreter and the oracle went at M6-b-5/M6-f** (ADR-009 §1); what pins behaviour now is ADR-009 §2. | Yes |
-| `Tests/PortableRunner/` | The same suite under g++: three shim headers, a generator and a shell script. Compiles the test files unmodified — see its own README. | Yes |
-| `Design/` | ADRs, the conversion plan, the risk register, and the design notes. The source inventory was here until M6-e deleted it. | Yes — see §7 |
-| ~~`MasterFile/`~~ | The 13 annotated master `.asm` files. **Deleted at M6-f, 2026-09-08** (ADR-009 §1). Still in the history, and still carrying the copyright Risk R1 names. | — |
-| ~~`Upstream/`~~ | The vendored upstream source tree, a submodule pinned by commit. **Deleted at M6-f**, so none of it is at the tip and none of it was ever in this history. | — |
-| `tools/` | Repository checkers. The data extractors that read the original (`labels.py`, `c64_source.py`, `extract_tables.py`, `inventory.py`, `golden_diff.py`) went at M6-e/M6-f. | Yes |
-| `x64/`, `.vs/`, `*.user`, `Generated Files/` | Build and IDE output. | **No — and never commit them** |
+The concrete layout — the solution, the projects and the edges between them — is settled when the first project is created, and recorded here and in an ADR at that point. Until then, these are the standing constraints any layout has to satisfy.
 
-**Project dependencies, and the edges run one way:**
+**Project directories are flat, with exactly two sanctioned subdirectories.** C++ source — headers and `.cpp` alike — lives directly in its project's folder. **There is no `src/`, no `include/`**, and no other split of a project by file kind. This is not taste: `.clang-tidy`'s `HeaderFilterRegex` matches headers exactly one level in, so **a header in a subdirectory is silently unchecked** — no findings, no warning, and nobody notices for months. The two exceptions are the shader pipeline:
 
-```
-NeuronCore.lib            the foundation everything builds on
-├── GameLogic.lib         references NeuronCore only
-└── Outpost.exe           references GameLogic and NeuronCore
-GameLogicTests.dll        references GameLogic and NeuronCore
-```
+- **`<Lib>/Shader/`** holds the HLSL, hand-written, named for the shader and its stage: `<Shader>VS.hlsl` for a vertex shader and `<Shader>PS.hlsl` for a pixel shader.
+- **`<Lib>/CompiledShader/`** holds what the compiler wrote: one header per `.hlsl`, `<Shader>VS.h` and `<Shader>PS.h`, each declaring a byte array `g_<Shader>VS` / `g_<Shader>PS`. It is **build output** — produced by an `FXCompile` item in the `.vcxproj` on every build, listed in `.gitignore`, skipped by every checker, and never edited or committed. The `.cpp` that binds the pipeline state includes it and nothing else does.
 
-`GameLogic` never references `Outpost`. Nothing references the executable.
+**Shaders are compiled into the executable.** The bytecode reaches the GPU from those generated byte arrays, and nothing else: no `.cso` beside the `.exe`, no shader loaded from disk at runtime, no `D3DCompile` and no `d3dcompiler_47.dll` dependency. A shader change is a rebuild.
+
+**The edges run one way, and a layer never reaches sideways.** Engine code is built on by game code and never the reverse (R9), and two libraries at the same level share what is below them rather than each other. An edge that only exists "for now" is an edge, and it is the one that will be impossible to remove later.
+
+**The project files are part of the source.** Adding, removing or moving a file means editing the owning `.vcxproj` **and** its `.filters`. A file that compiles locally but is missing from the project fails only in CI — or worse, links a stale object nobody notices.
+
+**Filters are functional.** A `.filters` file groups a project by what the code *does* — `Rendering`, `Audio`, `Input`, `Shader` — never by what kind of file it is. The Visual Studio defaults `Source Files`, `Header Files` and `Resource Files` are deleted when a project is created and never come back, and a `.h` sits in the same filter as its `.cpp`.
+
+**There are no vendored SDKs and no package manager.** The build depends on the Windows SDK and the MSVC standard library, and on nothing else. See R14.
+
+**Build and IDE output is never committed** — `x64/`, `.vs/`, `*.user`, and anything a build step generates.
 
 ---
 
-## 3. Files and layout
+## 3. Build and verify
 
-- **Flat project directories.** All of a project's `.h`/`.cpp` sit directly in its folder. No
-  code subdirectories — grouping lives in `.vcxproj.filters` only. (`Tests/` holds one folder
-  per test project; that is a solution-level split, not a code subdirectory.)
-- **File names are unique repo-wide**, and also unique against the CRT, the STL and the
-  Windows SDK, **case-insensitively**. A header named `Math.h` or `Random.h` shadows a standard
-  one for every translation unit that can see the folder, and the errors land inside the STL
-  with nothing pointing at you. This is why the port uses `Arith.h` and `Rng.h`.
-- **Includes are unqualified**: `#include "Rng.h"`. Each project lists the roots it is
-  entitled to as `$(SolutionDir)<Project>` include paths.
-- **Every added, removed or renamed file updates both** the `.vcxproj` and the
-  `.vcxproj.filters` of its project, in the same commit.
+**x64 is the only platform.** No Win32/x86 configuration in any project or solution; do not add one, and do not write code that only works at 32 bits.
+
+**The compiler settings are the settings.** Toolset `v145` (Visual Studio 2026), `/std:c++latest`, `/permissive-`, `/W4` with **warnings as errors**, `/fp:precise`, `/arch:AVX2` (R16). There is no CMake. If a build error tempts you to change the toolset, lower the language standard, turn off `/permissive-` or silence a warning — **stop and report instead.**
+
+**Debug and Release are aligned by rule, not by luck.** Every setting that is not *about* optimisation reads identically in both configurations: language standard, conformance, warning level, include directories, precompiled header, floating-point model, instruction set. The two differ in exactly four things — `Optimization`, `_DEBUG` vs `NDEBUG`, `FunctionLevelLinking`/`IntrinsicFunctions`, and the linker's folding and LTCG switches. (MSBuild spells those four through a few more properties — `UseDebugLibraries`, `RuntimeLibrary` as the debug or release CRT, `LinkIncremental`, `WholeProgramOptimization`, `EnableCOMDATFolding`, `OptimizeReferences` — and that list is the whole of what may differ.)
+
+That alignment matters more than it looks, because **CI builds Debug only** (§6). Release is compiled by whoever ships, and a Release that quietly lost an include directory or sat on an older language standard would not be discovered until then. A static check of the two configurations is what stands in for the build nobody runs.
+
+**Build through the solution, never a `.vcxproj` directly.** Output paths and cross-project include directories are anchored on `$(SolutionDir)`, and MSBuild defines `SolutionDir` only for a solution build. Building a project file directly resolves every one of those paths against the *project* folder instead of the repository root. **It does not fail — that is the problem.** Output lands in the wrong folder, so the next solution build links against whichever copy is staler, and every cross-project include path becomes a directory that does not exist. The breakage is latent: it bites the first time a file reaches across projects, which may be weeks after someone got into the habit. To build one project, use `/t:<ProjectName>` on the solution.
+
+```powershell
+# Everything, from the repository root, naming the solution.
+msbuild <Solution>.slnx /p:Configuration=Debug /p:Platform=x64 /m /v:minimal /nologo
+
+# One project, still through the solution.
+msbuild <Solution>.slnx /t:<ProjectName> /p:Configuration=Debug /p:Platform=x64 /m /nologo
+
+# Release, before you claim anything about it.
+msbuild <Solution>.slnx /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo
+```
+
+**A project does not put its own directory on the include path.** `cl.exe` already searches the directory of the including file first for a quoted include, so `#include "FileSys.h"` from a `.cpp` in the same folder resolves without help. Only the directories of *other* projects are listed, as `$(SolutionDir)<Project>`.
+
+**Run the tests**, through `vstest.console.exe`, over every suite the build produced.
+
+**vstest reports "no tests found" as a pass.** An empty suite is therefore worse than no suite: it is a green check mark over a library nobody exercised. Every test project ships a placeholder `SuiteSmoke` for exactly this reason; delete it when the first real test lands, never before.
+
+**Run the checkers before you push.** They are seconds of Python and they are what CI runs:
+
+```powershell
+python Build\CheckFormat.py           # clang-format, whole tree. --fix rewrites the offenders
+python Build\CheckProjectFiles.py     # build shape, project registration, R2/R7/R11
+python Build\RunClangTidy.py          # needs a Developer PowerShell (INCLUDE must be set)
+```
+
+**A green build says nothing about whether the game draws.** For anything touching rendering, input, audio or presentation, launch the executable and look at it.
+
+**Report what you actually did.** "Builds clean, not run" and "builds and runs" are different claims. Never imply the second when you only did the first, and say which configurations you built.
 
 ---
 
 ## 4. Layout and formatting
 
-[`.clang-format`](.clang-format) is the authority; [`.editorconfig`](.editorconfig) repeats only
-what an editor needs before the first save. The shape: **Allman braces, 2-space indent, 140
-columns, no tabs, `namespace` contents indented, pointer binds left** (`std::uint8_t* _dst`).
+[`.clang-format`](.clang-format) is the authority for C++ layout: 2-space indent, 140 columns, Allman braces, pointer and reference bound left, includes never reordered. [`.editorconfig`](.editorconfig) covers everything clang-format does not — CRLF, UTF-8, final newline, trailing whitespace, and the non-C++ formats — and repeats the two numbers an editor needs before the first save.
 
-Include order is **not** sorted automatically and is grouped by hand: `pch.h` first, then
-Windows headers, then SDK headers, then project headers, then the standard library.
+**This tree is formatted, and CI keeps it that way.** A whole-tree format check here is a no-op. Format what you write; if the check fires, run `--fix` and commit the result rather than arguing with it.
 
-Format the lines you write. Do not reformat files you are only passing through. *(The rule that
-followed here — never reformat anything under `Upstream/` or `MasterFile/` — retired with those
-trees at M6-f; the checklist item in §8 goes with it.)*
+- **Do not reformat what your task did not touch.** The check being green tree-wide means a drive-by reformat produces pure churn and buries your actual change.
+- **Include order is load-bearing and grouped by hand**, which is why `SortIncludes` is `Never`: `pch.h`, then `<windows.h>` before any D3D12/DXGI/XAudio2 header, then the rest of the SDK, then project headers, then the standard library. A formatter reordering these behind a change's back is a correctness risk, not a style preference.
+- **One header owns the Windows macro family, and nothing else defines any of it.** `NOMINMAX`, `WIN32_LEAN_AND_MEAN`, `NOMCX`, `NOSERVICE`, `NOHELP` are set in that one header, before `<windows.h>`, and the project files deliberately define none of them. Two owners of one macro is C4005, and `/WX` makes that fatal — `/D` spells a bare macro as `1` where a `#define` spells it as nothing, so the collision is guaranteed rather than possible. If you need `<windows.h>`, include that header; do not add the macros yourself.
+- Do not silence a diagnostic with `#pragma warning(disable: ...)` to make a build pass. Fix the cause, or report it.
 
 ---
 
-## 5. C++ rules for this codebase
+## 5. Rules for this codebase
 
-- **C++20** (`stdcpp20`), MSVC v145, `ConformanceMode` on, x64 is the platform that matters.
-  Do not turn conformance off to make something compile.
-- **`GameLogic` is deterministic and platform-free.** No wall clock, no OS entropy, no
-  `<chrono>`, no `<random>`, no `rand()`, no file or registry access, no Win32 calls, and
-  **no `float` or `double` anywhere** ([ADR-002](Design/ADR/ADR-002-numeric-model.md)). The
-  replay-equality suite is the gate; `tools/check_gamelogic.py` is the backstop.
-- **8-bit semantics are preserved exactly.** Same widths, same wraparound, same lookup tables.
-  Where the original truncates to a byte, truncate. Widen only inside a helper whose result is
-  narrowed the same way the original narrowed it. Tables are extracted data, never recomputed
-  with `std::sin`.
-- **COM lifetimes are RAII through `winrt::com_ptr`**, not `Microsoft::WRL::ComPtr` and never
-  raw `Release()`. Create with `Thing(IID_PPV_ARGS(thing.put()))`, query with
-  `thing.try_as<IOther>()`. This is a COM-helper sanction only — C++/WinRT is not used as a UI
-  or async framework, and there is no XAML in this application
-  ([ADR-005](Design/ADR/ADR-005-presentation.md) §5).
-- **An `HRESULT` that must succeed goes through `winrt::check_hresult`.** Exceptions:
-  capability probes are control flow; shutdown paths log instead of throwing. The thrown error
-  is caught once, at the composition root. Assertions are `Debug.h`'s `ASSERT` family.
-- **No external libraries without the owner's explicit approval.** Pre-approved: the Windows
-  SDK (Win32, D3D12/DXGI, XAudio2) and C++/WinRT as above. The 6502 interpreter and the SID
-  synthesiser are **written here** rather than taken from an emulator project — present the
-  case and **stop** if you think a third-party library is justified.
-- **Errors that are the user's fault are diagnostics, not crashes.** Anything reading content
-  or configuration reports what was wrong and fails closed; it never asserts on bad input.
-- **Two words and one container the Windows toolchain owns.** `near` and `far` are still macros
-  after `<windows.h>` — `const bool near = ...` compiles as a declaration with no name — and it has
-  cost **two** CI legs and two compile errors (§6.110, and Resolution.md RS-3, where it reached the
-  Windows job from `Tests/` because `check_gamelogic.py` only read `GameLogic/`; it reads every C++
-  file the Windows job compiles now). And `std::vector<bool>` is bit-packed:
-  `operator[]` returns a proxy, and MSVC's `Assert::AreEqual` static-asserts that it has no
-  `ToString` for one while g++ compiles it without a word (§6.116). Store `std::uint8_t`. Both
-  reach CI through the fast leg green, so neither is a warning you get locally.
+**R12 — Graphics is Direct3D 12.** COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style. How the renderer is shaped — passes, render targets, resolution, scaling, window style, multisampling, text — is not settled here; it is a design and engineering decision taken when the renderer is built, and recorded as an ADR (§6).
+
+**R14 — No third-party dependencies and no package manager.** The Windows SDK and the MSVC standard library, and nothing else. If you believe something is unavoidable, propose it in your report with what it buys and what it costs — do not add it. This is a closed list, not a high bar.
+
+**It binds what the executable is built from, not what a development tool needs.** Scripts under `Build/` and `Tools/` never ship and never link, so a baker that needs Pillow does not reopen this rule. **Third-party *content* is a different question and it is the owner's**: art, fonts and sound are allowed, and anything under a licence needs the owner's approval before it lands, with the licence text travelling with the bytes.
+
+For Direct3D that list means what the Windows SDK installs: `d3d12.h`, `dxgi1_6.h`, `DirectXMath.h`, `wrl/client.h` (`Microsoft::WRL::ComPtr` is the COM smart pointer R12 asks for) and the `fxc`/`dxc` compilers that `FXCompile` drives. It excludes what a D3D12 sample reaches for by reflex, because each is NuGet or GitHub content and not SDK content: the DirectX Agility SDK and its `d3dx12.h`, DirectX-Headers, DirectXTK12, DirectXTex, and the DirectX Shader Compiler as a redistributable. Resource barriers and heap descriptions are written by hand.
+
+**R15 — Memory is plain C++.** `new`/`delete` where it must be, RAII everywhere, standard containers by default. No pool, slab or free-list allocator without a decision recorded in `Design/ADR/`.
+
+**R16 — The floating-point model and instruction set are stated, not inherited.** Every project compiles `/fp:precise` and **`/arch:AVX2`**, stated explicitly in the project file rather than inherited from an MSVC default — a default is not a decision, and the symptom of losing one is two builds of the same code disagreeing about the same sum with no line to blame. Both settings are identical in Debug and Release.
+
+**What `/arch:AVX2` costs is named rather than waved at.** It sets an AVX2 floor — Intel Haswell (2013) and AMD Excavator (2015); an older CPU meets an illegal instruction, not a message. And it lets MSVC contract `a*b+c` into an FMA even under `/fp:precise`, which changes float results, and may contract differently at different optimisation levels. Float code that must produce bit-identical results across builds cannot rely on it.
+
+**If the game needs a deterministic core** — a simulation that replays, lockstep networking, a result that must reproduce from a seed — that is a decision recorded as an ADR, and inside that core: no `float` where a fixed-point or integer quantity will do (hold a fraction as integer hundredths and say so in the name, R6), no iteration over an unordered container whose order reaches the outcome, no wall-clock time (a tick is the clock, and wall time maps to ticks at one seam), and randomness from a pinned PRNG with a recorded seed — never `std::random_device`, never a hash of an address.
+
+**R17 — A string you do not write is `const`.** `/permissive-` turns on `/Zc:strictStrings`: a literal is `const char[N]` and will not bind to `char*`. The fix is `const` on the signature, never a cast at the call site — a `const_cast` here is a lie about a literal that lives in a read-only section, and writing through it is a real crash rather than a theoretical one.
+
+**R18 and up are reserved.** A design document does not only say what to build; some of what it says constrains how the code is *shaped* — which state a decision routine may read, what an emitted event has to carry with it, where tuning values live. Those are conformance rules with a design source, and they are written here as R18 onward when there is a design to cite, without renumbering anything above. Until then, do not invent one and do not import one from another tree: a rule with no source behind it is a rule nobody can settle an argument with.
 
 ---
 
-## 6. Build and verify
+## 6. Working rules
 
-```powershell
-& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" `
-    Outpost.slnx /p:Configuration=Debug /p:Platform=x64 /m /nologo /v:minimal `
-    /flp:logfile=build.log`;errorsonly
-```
+**Stay in scope.** Do what the task asks. Adjacent code that offends you is not part of the task — note it in your report and move on. Unrequested "while I was in there" changes are the main way a young tree acquires regressions it cannot bisect.
 
-Run MSBuild through the **PowerShell** tool, not Bash: git-bash mangles the `/p:` switches.
-`build.log` empty means clean; do not judge success from the tail of stdout, because parallel
-warnings scroll the real error away.
+**Record decisions as ADRs.** An engineering decision — a file format, a wire protocol, a subsystem's shape, an exception to a rule here — goes in `Design/ADR/` as one file per decision, numbered in order from `ADR-001-<slug>.md`, stating the context, the decision and what it forecloses, in the same commit as the change that implements it. Figures in an ADR are measured, not estimated — if you quote one, say how you measured it. A decision nobody wrote down gets re-litigated every few months by whoever forgot it.
 
-Tests are an MSVC CppUnitTest DLL:
+**Write the checkers early.** `Build/CheckFormat.py`, `Build/CheckProjectFiles.py` and `Build/RunClangTidy.py` are what §1, §2 and §3 lean on, and **none of them exists yet.** Until each one lands, the rules it would enforce are review's problem — which is exactly why they are early work rather than housekeeping.
 
-```powershell
-vstest.console.exe x64\Debug\GameLogicTests.dll
-```
+**What CI runs.** [`.github/workflows/build.yml`](.github/workflows/build.yml) has two jobs: a Windows job that checks the build shape, builds **Debug|x64**, runs the test suites and then clang-tidy; and a Linux job that checks formatting on a pinned clang-format. **Every step that has something to run blocks; a step whose input does not exist yet is skipped, not faked.** Each gate is guarded on the file it needs — the checker script, the solution, the built test DLLs — so the workflow is honest about today's empty tree and starts gating the moment that file lands. The guards are the only concession: nothing is `continue-on-error`, and a script that exists and fails still fails the build. Remove a guard once its input is permanently there, not before, and never add one to get past a red build.
 
-**THE SUITE NEEDS NOTHING BUT THE REPOSITORY** since M6-b-7 (Modernize.md §8). Until then every
-comparison against the original needed BeebAsm, the `Upstream/` submodule and an assembled game,
-and a machine without them reported *skipped — oracle absent* and failed `OracleIsPresent` by
-design. There is no interpreter, no image and no assembler step on either CI leg:
+**CI does not build Release.** The Windows build is the slow half of the pipeline and a second configuration roughly doubles it for a tree where the two differ only in optimisation. What stands in for it is the static alignment check on the two configurations (§3) — and, before a release, an actual `Configuration=Release` build by whoever is shipping. If you change something that could plausibly break only under optimisation, build Release yourself and say so.
 
-```sh
-Tests/PortableRunner/run_tests.sh                # green means N passed, 0 failed
-```
-
-`Upstream/` and `MasterFile/` went at M6-f, with `labels.py`, `c64_source.py`,
-`extract_tables.py` and `golden_diff.py`. Nothing here reads the original any more.
-
-Repository checks:
-
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->thirteen in CI's
-order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
-2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
-
-```
-python tools/check_gamelogic.py               # GameLogic/ has no clock, no randomness, no float, no file or Win32 call
-python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
-python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
-python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
-python tools/check_outpost.py --self-test     # that check still catches its planted breakages
-python tools/check_docs.py                    # no table row is wider than its header
-python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
-python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
-python tools/mutate.py --check                # every recorded mutant still applies, and every floor file carries a caught one
-python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
-python tools/check_twins.py                   # every routine with a 640x400 twin still calls it (Resolution.md §8.6)
-python tools/check_twins.py --self-test       # that check still catches a routine whose twin went missing
-python tools/channel_census.py --check        # the channel census names every workspace field and matches the plan
-```
-
-**The coverage review went with the ledger at M6-e.** M6-0-f built it: the interpreter marked every
-address it executed, the runner wrote the labels per test, and `inventory.py --coverage` read them
-against `Source-Inventory.md`'s *Port* rows. It did its job — the four gaps it found are closed
-(M6-a-1) — and it cannot outlive the rows it read. The suite still runs under the portable runner;
-what is gone is the reconciliation against a ledger that no longer exists.
-
-**A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
-decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->152 tests` — and the
-check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
-marker and are never touched: "321 tests" was true the day it was written and must stay. Before
-writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
-
-**A marker is a claim WHEREVER it sits**, including inside a fenced block or a code span — the
-check used to skip both and a stale number hid in each (§6.154). To SHOW the syntax without making
-a claim, spell the placeholder in capitals: `<!--count:NAME-->`, which the pattern cannot match. Use
-that spelling in a journal entry that quotes a marker too, so history cannot become a live claim
-that a later change breaks.
-
-**AND A STATUS AGES WORSE THAN A NUMBER**, because it is prose in shape and a number in kind. "Not
-modelled", "we will", "that work is not done", "settled" — each reads like reasoning and survives a
-proofread, and no check reaches it. §6.154 found an ADR decision that had been taken and never
-built, and it was invisible precisely because the coverage ledger tracks routines, the effort table
-tracks slices and `check_counts.py` tracks numbers. When you write a sentence in the future tense,
-leave something behind that will ask later whether the future happened.
-
-**`check_docs.py` exists because a Markdown table drops what it cannot fit.** GitHub renders a
-table with the header's number of columns and discards every cell past it without a word, so a
-row that has grown an extra `| ... |` on the end reads perfectly in the raw file and is missing
-its last paragraphs on the web. Thirteen rows of `Source-Inventory.md` had done that, one of them
-holding nineteen invisible cells (§6.72). **Append a slice's result INSIDE the notes column, with
-`<br><br>` between entries, never as a new cell.**
-
-**`check_outpost.py` exists because the portable runner compiles no part of `Outpost/`.** It is
-Win32 and DirectX 12, so a hosted Linux runner cannot build it -- and that leaves a whole
-executable outside every check runnable there. Renaming a `GameLogic` type breaks the app with the
-Linux suite still green, which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
-The check asserts the names still resolve AND that every `Elite::` call passes as many arguments
-as the declaration takes -- the second half added after the name check alone let a fifth parameter
-on `ClearMessageRows` reach the Windows job, the second break of the same afternoon through the
-same hole. It still cannot check parameter TYPES at an unchanged arity, and only building the app
-can.
-
-**Add a new file to its `.vcxproj` AND its `.vcxproj.filters`.** The portable runner globs the
-directory and will happily compile a file no project names; MSVC will not, so the two builds
-quietly test different things. `check_projects.py` fails on that, on a path that does not resolve
-(`Include` is relative to the PROJECT, not to the repository), and on a filters file that has
-drifted from its project.
-
-**Mutation-test a finished unit, and RECORD THE MUTANTS.** A slice is not done until each of its
-decisions has been shown to matter: change one constant, one comparison or one flag in the ported
-source, run the suite, and a mutation that nothing catches is either a gap in the tests or an
-equivalent worth measuring and recording.
-
-**The mutants go in `tools/mutants.json` and the run is `tools/mutate.py`.** Do not do this by
-hand any more. A hand-edited mutant is thrown away when the run ends, which made every tally in
-this corpus an assertion nobody could re-check — Risk R13, and §6.119 is the demonstration that a
-tally can be confidently wrong.
-
-```
-python tools/mutate.py --list             # what is recorded, and for which slice
-python tools/mutate.py --unit tactics     # run one unit's mutants
-python tools/mutate.py --unit rng --unit arith   # or several, on one worktree and one baseline
-python tools/mutate.py --id ta-253        # run one
-python tools/mutate.py --check            # they all still apply, without building (this is in CI)
-```
-
-**There is a floor** (plan M6-0-g): `mutants.json` names the files that must each carry a mutant
-the suite catches, and `--check` refuses one whose mutants are all survivors or equivalents. A
-slice that ports a file where a slip would be invisible to every per-routine comparison but its
-own adds the file to the floor with its first caught mutant, in the same commit.
-
-Add a `{id, file, find, replace, expect, note}` per mutant when the slice lands. `find` must match
-its file EXACTLY ONCE — the tool refuses anything else, because a mutant that applies nowhere runs
-the unmutated suite and reports a survivor. `expect` is `caught` unless the note says why not.
-
-Six things the tool does that a hand run kept getting wrong, so that reading them here is enough:
-
-- **The baseline is proven before any mutant is believed.** With the oracle missing the suite used
-  to report `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that read
-  only that line reported every mutant as caught, and three tallies were published from exactly
-  that (§6.119). The unmutated suite runs first and must be green.
-- **A timeout is a catch.** Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an
-  odd count run for ever: the suite times out, no summary line is printed, and a harness looking
-  for one calls it a tooling failure. It is the strongest possible catch.
-- **A worktree with no symlinks in it.** The old recipe symlinked the submodule into a detached
-  worktree and warned that every `git checkout -f` ate the link. The tool COPIES instead, so the
-  trap is gone by construction rather than documented.
-- **A unit's test filter is verified before it is trusted.** A filter that selects the wrong tests
-  is worse than no filter, because it produces a confident number about code it never ran. Record
-  one filter per `TEST_CLASS` and the count they select; the tool checks it against the unmutated
-  build.
-- **Every unit carries a `selftest` mutant** — an unmissable change the suite cannot fail to catch,
-  run first, and the run stops if it survives. It is the one deliberate failure that says the
-  harness works: without it, a list of "survivors" could be a run that never rebuilt, which is R13
-  realised (§6.119). Add one when you add a unit; `--check` fails if a unit has none.
-- **AND A SELFTEST ROTS.** Unmissable is a property of the mutant AND the tests, and the tests move:
-  `ra-selftest` zeroed a register only the comparisons against the original ever read, and when
-  those went it survived while the mutant, the file and the `find` were all unchanged. `--check`
-  still passed, because it asks whether a unit HAS one. Four of five had rotted (M6-b-8).
-  `mutate.py --check-selftests` runs them and CI's Ubuntu leg does it on every push; it is also
-  the only way to see the second rotted anchor, because a surviving selftest stops a full run on
-  the first unit. **If every selftest survives, suspect the harness; if some survive and others are
-  caught, the harness works and those anchors have rotted.**
-- **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
-
-**Closing a survivor: three questions, in this order.** §6.132's method is "probe the comparison,
-print what reaches it, count the distinct values" and it closes most of them. When it does not, ask
-the other two before concluding the mutant is equivalent. **Does what this line writes reach the
-comparison at all?** `kill-rotate` survived every ladder because `TALLY` was neither pushed into the
-interpreter nor read back out, and no amount of coverage fixes a value nobody looks at. **And is
-the code PAST the branch reached both ways?** `msl-16` was landed on exactly and still survived,
-because the branch it opens reads a bit that no target in the fixture had set. Then: **a survivor
-that outlives a round of ladder-building deserves more attention than a fresh one, not less.** The
-easy explanations are used up, and what is left is a hole in the comparison or a hole in the port.
-Twelve of the ship AI's thirteen were the sweep and the thirteenth was a defect, and it was the last
-one closed (plan §6.152, §6.153).
-
-What it does NOT do is recover the tallies already published. Those mutants are gone; the fifteen
-survivors §6.125 named are in the file because their names pinned them, and the rest stay
-unreproducible. R13 is open on that half.
-
-**THE ORIGINAL IS NOT HERE ANY MORE (M6-f).** `tools/c64_source.py` resolved a routine's C64
-form through the upstream library's nested `IF` / `ELIF` / `ELSE` / `ENDIF` conditionals, because
-porting the BBC Master's version of a routine by mistake was a real failure mode met more than
-once. There is nothing left to read that way: the port's own comments are the record of what each
-routine does and why, which is what M6-d spent fifty-eight slices making true.
-
-**Report what you actually did.** "Builds clean, not run" and "builds, and the arithmetic suite
-is green against the oracle" are different claims. Never imply the second when you did the first.
-
-### CI
-
-[`.github/workflows/build-and-test.yml`](.github/workflows/build-and-test.yml) runs the same
-things on a push. Three jobs, because they need different machines and different amounts of
-patience:
-
-- **Repository checks** (Ubuntu, ~10s): every checker listed above. This
-  is the job that would have caught slice 0a's `.gitmodules` gap, because it starts from a fresh
-  clone every time.
-- **Suite on Ubuntu (portable runner)** (Ubuntu, ~85s): builds BeebAsm at the pinned commit (cached
-  across runs), assembles the reference build, then builds and runs
-  the whole suite through `Tests/PortableRunner/`. It read the coverage file against the ledger's
-  *Port* rows until M6-e retired both (M6-0-f built that review; it found four gaps and they are
-  closed). Not the authority
-  (ADR-004 §1) — it is here so a
-  broken push says so in a minute rather than five, and because a second compiler catches what the
-  first tolerates. It is also more permissive than MSVC in ways nothing measures (§6.116).
-- **Debug x64 build and tests** (Windows, ~5 min): builds BeebAsm with `cl`, assembles the
-  reference build, builds `Tests\GameLogicTests\GameLogicTests.vcxproj` in
-  Debug and Release, runs the suite in Release (the exhaustive sweeps are four times dearer
-  unoptimised), then restores the executable's NuGet packages and **builds `Outpost.vcxproj`
-  unpackaged in both configurations** — the only compiler that ever reads `Outpost/`.
-
-Two things about the Windows job are deliberate and are explained in the workflow itself:
-
-- **It assembles the game before it builds ours.** A run without the oracle fails exactly one
-  test by design (Risk R9), so a CI that skipped this step would be permanently red for a reason
-  nobody would keep reading.
-- **The Debug build of the tests is compiled and never run.** It exists so the configuration a
-  developer builds locally cannot rot; the suite runs in Release. Dropping it would save about a
-  minute per push and is an owner call, not a default.
-
-**Nothing derived from `Upstream/` leaves the runner.** The assembled blocks, the label map and
-BeebAsm are all built from source this project does not own (ADR-001 §5); the only artefact is
-the test result file. Do not add an upload that changes that.
+**Commits and PRs.** Branch off `main`; small, focused commits with an imperative subject describing the change, not the process. One change per PR. CI must be green. Never commit build output, `.vs/` or `.user` files.
 
 ---
 
-## 7. Working rules
+## 7. Before you hand work back
 
-- Change the lines the task requires and no others. No drive-by reformatting, no opportunistic
-  renames.
-- Port one routine at a time, with its oracle test, and keep the original's structure until the
-  test is green. Tidying is allowed *after* a routine is green and stays green.
-- If a rule here blocks the task, say so in your report rather than quietly bending it.
-- If a design decision needs to change, change the ADR — do not leave code and `Design/`
-  disagreeing.
-- **Original bugs are ported, not fixed.** If you find one, port it, add it to
-  [ADR-001](Design/ADR/ADR-001-scope-and-fidelity.md) §6, and leave the fix for phase 6.
-
----
-
-## 8. Before you hand work back
-
-- [ ] Naming conforms to §1. (R7's `// 6502:` label is retired — see R7.)
-- [ ] Files are PascalCase, flat, unique repo-wide including against the CRT and STL.
-- [ ] Every added/removed/moved file is in both the `.vcxproj` **and** the `.filters`.
-- [ ] `GameLogic` gained no clock, no randomness, no float, no Win32 call.
-- [ ] `tools/check_docs.py` runs.
-- [ ] It builds — Debug at minimum — and you said which configurations you actually built.
-- [ ] Tests for the layer you touched were run, and you said which.
-
-The pull request body is [`.github/pull_request_template.md`](.github/pull_request_template.md),
-which GitHub fills in for you. It does not repeat this list — run this list — and it asks for the
-two things a diff cannot say: what you built differently from `Design/` and where you amended it,
-and what neither CI leg can see. The Ubuntu leg compiles only the five `Outpost/` files
-`EXECUTABLE_SOURCES` names, so a change to the window, the presenter, the shell, the composition
-root or the sound has the Windows job as its only witness that it builds, and no witness at all to
-what it looks like.
+- [ ] Naming conforms to §1 — `_` on parameters, `m_` on class state, `UPPER_CASE` constants, `PascalCase` enumerators, no `I`/`C`/`Base` affixes.
+- [ ] Only the lines the task required were changed; no reformatting, no drive-by fixes.
+- [ ] New, removed or moved files are in the `.vcxproj` **and** the `.filters` of every project involved.
+- [ ] No project's `ConformanceMode`, `LanguageStandard`, `WarningLevel` or `TreatWarningAsError` was changed, and no warning was silenced with a pragma.
+- [ ] Debug and Release still agree on everything §3 says they must.
+- [ ] No new third-party dependency (R14).
+- [ ] The checkers pass — or, for one not yet written, the report says which and why.
+- [ ] It builds Debug|x64, and every test suite runs and passes.
+- [ ] If it touches rendering, input, audio or presentation: it was **run**, not just built.
+- [ ] `Design/ADR/` has a new file if the change *was* a decision.
+- [ ] Your report states plainly what you verified, what you assumed, and any rule here you had to bend.

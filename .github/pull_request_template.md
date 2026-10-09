@@ -1,66 +1,44 @@
 <!--
-  One slice per pull request (Design/Platform-Build.md §0). Delete a section only if it is
-  genuinely empty; "nothing outstanding" is worth a line, an absent heading is not.
-  AGENTS.md §8 is the hand-back checklist and is NOT repeated here -- run it.
+  AGENTS.md §7 is the checklist this mirrors. Delete the parts that do not apply; do not delete
+  the parts that do because they are inconvenient.
 -->
 
 ## What this changes
 
-<!--
-  Prose, not a list of files. What the code does now that it did not, and why that is the right
-  answer -- the same argument the commit messages make. A reader who never opens the diff should
-  finish this section knowing what moved and what it cost.
--->
+<!-- One paragraph. What the change does, not what you did to make it. -->
 
-## Departures from the design or the plan
+## Why
 
-<!--
-  Anything you built differently from Design/*.md, and the reason. A departure is not a
-  confession: the plan is written ahead of the tree and the tree is what is true. What IS
-  required is that the document be amended in this pull request and the slice's journal entry
-  say so -- code and Design/ must not be left disagreeing (AGENTS.md §7).
+<!-- The problem, or the decision this implements. Link the ADR if there is one; add one under
+     Design/ADR/ if this change IS a decision (AGENTS.md §6). -->
 
-  Write "none" if there were none.
--->
+## How it was verified
 
-## Verification
+<!-- Be specific and be honest. "Builds clean, not run" and "builds and runs" are different
+     claims. Say which configurations you actually built. -->
 
-<!--
-  Fill the right-hand column. Say which configurations you actually BUILT, not which ones exist.
--->
+- [ ] Builds clean, `Debug|x64`, through the solution
+- [ ] Every test suite runs and passes
+- [ ] `python Build\CheckProjectFiles.py`
+- [ ] `python Build\CheckFormat.py`
+- [ ] `python Build\RunClangTidy.py`
+- [ ] Release built locally (CI does not build it — AGENTS.md §6)
+- [ ] Ran the executable (**required** if this touches rendering, input, audio or presentation)
 
-| | |
-|---|---|
-| `Tests/PortableRunner/run_tests.sh` | N passed, 0 failed |
-| `python tools/check_all.py` | 13 of 13 |
-| `python tools/mutate.py --unit X --runner portable` | which units, or not run and why |
-| Ratchets in `tools/modernize_ratchet.json` | which moved, which were raised, and the journalled reason for any raise |
-| Marked counts (`python tools/check_counts.py`) | agree |
-| Configurations built | Debug x64, Release x64, or which |
+<!-- A checker that is not written yet is not a box to tick. Strike it and say so below. -->
 
-<!--
-  A new test earns its place by failing. Say how you know each one does: which mutation you
-  planted, or which recorded mutant covers it. A test that cannot fail is worse than no test,
-  because it is counted.
--->
+## Conformance
 
-## What is not verified here
+- [ ] Naming follows AGENTS.md §1 — `_` on parameters, `m_` on class state, `UPPER_CASE`
+      constants, `PascalCase` enumerators, no `I`/`C`/`Base` affixes
+- [ ] New, removed or moved files are in the `.vcxproj` **and** the `.filters`
+- [ ] A new project was added to `.clang-tidy`'s `HeaderFilterRegex`, or this PR adds none
+- [ ] Debug and Release still agree on everything AGENTS.md §3 says they must
+- [ ] No warning silenced, no `ConformanceMode`/`LanguageStandard`/`WarningLevel` changed
+- [ ] No new third-party dependency (R14)
+- [ ] Only the lines the task required were changed
 
-<!--
-  The honest half, and the one most worth writing.
+## Anything you had to bend
 
-  The Ubuntu leg does not compile Outpost/Window.cpp, ScreenPresenter.cpp, Shell.cpp, Main.cpp or
-  SoundOutput.cpp -- only the five files EXECUTABLE_SOURCES names. If the change touches any of
-  those, the Windows job is the only witness that it BUILDS and nothing on either leg can see what
-  it LOOKS LIKE. Say so plainly rather than letting a green tick imply otherwise.
-
-  Also name any digest that was re-recorded, and what makes the new value right.
--->
-
-## Outstanding, and whose
-
-<!--
-  What this pull request does not finish, and who it is waiting on. A gate that says "play:" is
-  the owner's: the beep lengths, the cadence, the legibility, PresentMon's numbers, a look at the
-  screen on a real panel. List them so they are not mistaken for done.
--->
+<!-- Rules you deviated from and why, assumptions you made, things you noticed but left alone.
+     An empty section here is a claim; make sure it is true. -->
