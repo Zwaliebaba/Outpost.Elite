@@ -10,6 +10,9 @@
     <Filter Include="Devices">
       <UniqueIdentifier>{4247BB1B-1667-5080-A1D7-C8D79DD0FAF1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Dos">
+      <UniqueIdentifier>{0B41E6E2-9CB7-545D-A331-B26C3C50DEB5}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Firmware">
       <UniqueIdentifier>{23A8AABB-5BEB-503F-9A27-FF274ADE16F5}</UniqueIdentifier>
     </Filter>
@@ -44,6 +47,15 @@
     </ClInclude>
     <ClInclude Include="Cpu.h">
       <Filter>Cpu</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectoryFileStore.h">
+      <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="Dos.h">
+      <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="FileStore.h">
+      <Filter>Dos</Filter>
     </ClInclude>
     <ClInclude Include="Firmware.h">
       <Filter>Firmware</Filter>
@@ -106,6 +118,15 @@
     </ClCompile>
     <ClCompile Include="Cpu.cpp">
       <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectoryFileStore.cpp">
+      <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="Dos.cpp">
+      <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="FileStore.cpp">
+      <Filter>Dos</Filter>
     </ClCompile>
     <ClCompile Include="Firmware.cpp">
       <Filter>Firmware</Filter>
