@@ -7,7 +7,6 @@
 
 #include <initializer_list>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -22,9 +21,18 @@ constexpr std::size_t REFERENCE_BYTES = 97'200;
 constexpr std::size_t REFERENCE_HEADER_BYTES = 0x40;
 constexpr std::uint16_t REFERENCE_DATA_SEGMENT = 0x08F6;
 
+// A word of the image, by offset. A plain aggregate rather than std::pair: brace-initializing a
+// pair of 16-bit words from int literals narrows inside MSVC's <utility>, which /W4 /WX rejects.
+struct ImageWord
+{
+  std::uint16_t offset;
+  std::uint16_t value;
+};
+
 // A small MZ executable: a two-paragraph header, then _code as the image, entry 0000:0000, stack 0000:0100.
+// Each relocation is the offset and segment of the word to relocate.
 std::vector<std::uint8_t> MakeExecutable(const std::vector<std::uint8_t>& _code, std::uint16_t _minAllocation, std::uint16_t _maxAllocation,
-                                         const std::vector<std::pair<std::uint16_t, std::uint16_t>>& _relocations = {})
+                                         const std::vector<ImageWord>& _relocations = {})
 {
   std::vector<std::uint8_t> file(0x20, 0);
   const auto put = [&file](std::size_t _offset, std::uint16_t _value)
@@ -93,8 +101,8 @@ public:
     Assert::AreEqual(0x1010u, std::uint32_t{program.loadSegment});
     Assert::AreEqual(0xA000u, std::uint32_t{program.memoryTopSegment}, L"maximum allocation FFFFh takes everything");
     Assert::AreEqual(97'136u, program.imageBytes);
-    const std::vector<std::pair<std::uint16_t, std::uint16_t>> relocated = {
-      {0x0007, 0x08F6}, {0x020A, 0x08F6}, {0x021E, 0x08F6}, {0x02F2, 0x08F6}, {0x060E, 0x08F6}, {0x7B7D, 0x0000}, {0x7C03, 0x13CF}};
+    const std::vector<ImageWord> relocated = {{0x0007, 0x08F6}, {0x020A, 0x08F6}, {0x021E, 0x08F6}, {0x02F2, 0x08F6},
+                                              {0x060E, 0x08F6}, {0x7B7D, 0x0000}, {0x7C03, 0x13CF}};
     for (const auto& [offset, value] : relocated)
     {
       Assert::AreEqual(std::uint32_t{value} + 0x1010u, std::uint32_t{rig.Ram().Read16(program.loadSegment, offset)});
