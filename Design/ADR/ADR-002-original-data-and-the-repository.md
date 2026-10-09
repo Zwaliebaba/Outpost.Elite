@@ -1,6 +1,6 @@
 # ADR-002 — Original data and the repository
 
-**Status:** accepted 2026-10-09, from the owner's rulings D2 and D3 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner). **The repository change it rules is not yet made:** on 2026-10-09 `Zwaliebaba/Outpost.Elite` was still public.
+**Status:** accepted 2026-10-09, from the owner's rulings D2 and D3 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner). **Carried out 2026-10-09:** the owner made `Zwaliebaba/Outpost.Elite` private the same day.
 
 ## Context
 
@@ -12,7 +12,7 @@ AGENTS.md R14 puts third-party content under the owner's approval and asks for i
 
 ## Decision
 
-1. **The repository becomes private (D2).** That stops further distribution of the binary and of anything derived from it. The owner makes the change in the repository settings. Until then, every commit that adds original-derived bytes adds to what is public.
+1. **The repository becomes private (D2).** That stops further distribution of the binary and of anything derived from it. The owner made the change on 2026-10-09; before then the binary had been public on `main` since `4cfcee3`, together with the plan, ADRs and symbol table merged in PR #28.
 
 2. **The reference binary stays in the tree** at the root, as `ELITEL.EXE`, byte-identical to the hash in ADR-001. Tooling (`Tools/ScanReference.py`), the Phase 2 host and the test suites read it from there. CI can therefore run every test that needs the original, with no secret and no private download.
 

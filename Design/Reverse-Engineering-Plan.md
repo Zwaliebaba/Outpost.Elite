@@ -37,7 +37,7 @@ DOSBox Staging or DOSBox-X runs this file on Windows 11 today with no functional
 
 `Zwaliebaba/Outpost.Elite` is public and `ELITEL.EXE` is on `main` at `4cfcee3`. That is distribution of the original program now, not an exposure that might arise later. The C64 attempt in this repository's history carried the same risk as its R1 and, at its last revision, was still waiting on an answer from the rights holders. Removing the file from the tip stops further distribution but does not recall forks or caches, and rewriting a public history is drastic and only partly effective. A faithful port inherits the problem a second time through its data: the ship models, font, text and tables are the original's bytes.
 
-**Ruled (D2, D3):** the repository becomes private, so the reference binary and generated data tables may be committed. As of 2026-10-09 it is still public; the change is the owner's to make in the repository settings, and what forks and caches took during the public period stays out there.
+**Ruled (D2, D3):** the repository becomes private, so the reference binary and generated data tables may be committed. The owner made it private on 2026-10-09; what forks and caches took during the public period stays out there.
 
 ### 2.3 This copy is not pristine
 
@@ -169,7 +169,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | # | Decision | Recommendation | Ruling, 2026-10-09 |
 |---|---|---|---|
 | D1 | Is the goal a native source port, or is a DOSBox package enough? | A native source port (§2.1). | **Native source port.** |
-| D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip and keep the reference outside the tree. | **Make the repository private.** The owner makes the change; it was still public on 2026-10-09. |
+| D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip and keep the reference outside the tree. | **Make the repository private.** Done by the owner on 2026-10-09. |
 | D3 | Original data in the port | Read it from the user's copy at start-up (the OpenRCT2 model). | **Follows from D2:** generated tables are checked in, and the reference binary is committed so CI can run the oracle until Phase 4 ends. |
 | D4 | The reference binary | An unpatched copy with a recorded hash. | **This file, `ELITEL.EXE`, with its known patch documented** — the only copy available. Phase 0 looks for further patches (§2.3). |
 | D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** One byte, DS:0x25E4, set in the loaded image so the file keeps its hash (ADR-001). |
