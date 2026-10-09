@@ -94,8 +94,10 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="PicTests.cpp" />
+    <ClCompile Include="PitTests.cpp" />
     <ClCompile Include="PortRouterTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
+    <ClCompile Include="SpeakerTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Machine\Machine.vcxproj">

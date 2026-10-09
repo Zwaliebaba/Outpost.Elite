@@ -78,7 +78,9 @@
     <ClInclude Include="Cpu.h" />
     <ClInclude Include="HostServices.h" />
     <ClInclude Include="InterruptSource.h" />
+    <ClInclude Include="Pit.h" />
     <ClInclude Include="PortRouter.h" />
+    <ClInclude Include="Speaker.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="pch.h" />
@@ -96,8 +98,10 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Pic.cpp" />
+    <ClCompile Include="Pit.cpp" />
     <ClCompile Include="PortRouter.cpp" />
     <ClCompile Include="Sha256.cpp" />
+    <ClCompile Include="Speaker.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
