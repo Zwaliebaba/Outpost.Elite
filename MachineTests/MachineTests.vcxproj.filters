@@ -38,6 +38,9 @@
     <ClCompile Include="CpuTests.cpp">
       <Filter>Cpu</Filter>
     </ClCompile>
+    <ClCompile Include="GamePortTests.cpp">
+      <Filter>Devices</Filter>
+    </ClCompile>
     <ClCompile Include="KeyboardTests.cpp">
       <Filter>Devices</Filter>
     </ClCompile>

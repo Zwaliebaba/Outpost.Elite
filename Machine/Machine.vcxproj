@@ -76,6 +76,7 @@
     <ClInclude Include="Cga.h" />
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Cpu.h" />
+    <ClInclude Include="GamePort.h" />
     <ClInclude Include="HostServices.h" />
     <ClInclude Include="InterruptSource.h" />
     <ClInclude Include="Pit.h" />
@@ -94,6 +95,7 @@
     <ClCompile Include="Cga.cpp" />
     <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="Cpu.cpp" />
+    <ClCompile Include="GamePort.cpp" />
     <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Memory.cpp" />
     <ClCompile Include="pch.cpp">

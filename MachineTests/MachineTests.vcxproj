@@ -89,6 +89,7 @@
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="CpuTests.cpp" />
+    <ClCompile Include="GamePortTests.cpp" />
     <ClCompile Include="KeyboardTests.cpp" />
     <ClCompile Include="MemoryTests.cpp" />
     <ClCompile Include="pch.cpp">

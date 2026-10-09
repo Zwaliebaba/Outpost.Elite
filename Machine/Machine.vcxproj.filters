@@ -39,6 +39,9 @@
     <ClInclude Include="Cpu.h">
       <Filter>Cpu</Filter>
     </ClInclude>
+    <ClInclude Include="GamePort.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
     <ClInclude Include="HostServices.h">
       <Filter>Services</Filter>
     </ClInclude>
@@ -88,6 +91,9 @@
     </ClCompile>
     <ClCompile Include="Cpu.cpp">
       <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="GamePort.cpp">
+      <Filter>Devices</Filter>
     </ClCompile>
     <ClCompile Include="Keyboard.cpp">
       <Filter>Devices</Filter>
