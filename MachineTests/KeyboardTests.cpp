@@ -61,7 +61,7 @@ public:
     return (m_pic.RequestRegister() & 0x02u) != 0;
   }
 
-  // What ReadScanCode (0x7463) does: read port 0x60, pulse port 0x61 bit 7, send EOI.
+  // What ReadScanCode (0x7443) does: read port 0x60, pulse port 0x61 bit 7, send EOI.
   [[nodiscard]] std::uint32_t ServiceKeyboard()
   {
     (void)m_pic.AcknowledgeInterrupt();

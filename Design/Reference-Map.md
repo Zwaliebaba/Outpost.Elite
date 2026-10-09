@@ -4,16 +4,13 @@
 
 ## Coverage
 
-This map describes `ELITES.EXE`, the reference since ADR-007; its addresses were translated from the map of `ELITEL.EXE`, the wireframe build of the same release, and the solid renderer was mapped afresh. `python Tools/MapReference.py --gaps` reaches 13,831 instructions and 35,580 of the code segment's 36,672 bytes, in 386 routines. It walks from the program entry, the four interrupt handlers, the three jump tables and the two blueprint handlers. It also finds 444 data-segment addresses that the code references by absolute address or as a table base.
+This map describes `ELITES.EXE`, the reference since ADR-007; its addresses were translated from the map of `ELITEL.EXE`, the wireframe build of the same release, and the solid renderer was mapped afresh. `python Tools/MapReference.py --gaps` reaches 13,831 instructions and 35,580 of the code segment's 36,672 bytes, in 387 routines. It walks from the program entry, the four interrupt handlers, the three jump tables and the two blueprint handlers. It also finds 444 data-segment addresses that the code references by absolute address or as a table base.
 
 What stays unreached:
 
 - **The protection's failure path** at 0x053F. The crack cut it off (ADR-001).
-- **The triangle filler at 0x1B7A–0x233F (1,990 bytes).** In `ELITES.EXE` it is live: the solid renderer's face loop calls `FillTriangle` (0x1BFB) for every filled face (ADR-007). It holds:
-  - `FillTriangle` (0x1BFB) and a clipped variant, `FillClippedTriangle` (0x1E6E), which fill dithered triangles into the drawing buffer;
-  - debug leftovers that nothing enters: a fixed test triangle (0x22FB), a register printer (0x22E0, which calls 0x32E7) and a routine that marks the screen corner (0x2324).
-
-  It patches 18 two-byte instructions with 42 `CS:` writes, which is the self-modifying code plan §7.2 was about. In `ELITEL.EXE`, the wireframe build, nothing entered the block at all. How the face loop drives it, and how it patches itself, is being mapped and will be added here.
+- **The triangle filler's debug leftovers at 0x22E0–0x233F**: a fixed test triangle (0x22FB), a register printer (0x22E0, which calls 0x32E7) and a routine that marks the screen corner (0x2324). The filler around them is live, self-modifying code and all ([The solid renderer](#the-solid-renderer)). Its two tables of instruction templates, at 0x1CF3 and 0x1FF8, are read and never executed.
+- **A stray `ret` at 0x3B8C** in the face loop, after an unconditional jump.
 - **Number printers at 0x32E7–0x3406**, seven entry points. Only 0x32E7 is called, and only from the filler's register printer, which nothing enters. Also **`DrawGaugeBar` at 0x3440**, which nothing calls.
 - **Thirteen short routines** of 4 to 85 bytes, each following a `ret` or a jump, with no branch to them:
   - the uncalled rate limiter `RateLimit` at 0x775D (ADR-001);
@@ -27,8 +24,8 @@ Phase 2's execution traces are the final word on all of these. Until a trace con
 - **Drawing buffer.** DS:0x0000–0x1FFF is the 256×128-pixel, 2-bit drawing buffer, 64 bytes a line, which `ClearDrawBuffer` (0x060D) clears every frame.
   - **Space view.** `PresentSpaceView` (0x0599) copies rows 1–126 (`spaceViewBuffer`, from DS:0x0040) into CGA memory at B800:01E8, which places the view at x=32, y=12. Rows 0 and 127 are drawn into and never shown.
   - **Charts.** `CopyChartBufferToScreen` (0x05CC) presents the same buffer for the chart screens, starting from an 8-line band that AL selects.
-- **Cockpit.** A 16,000-byte CGA image fills DS:0xB160–0xEFDF, just above the stack. `ShowCockpitScreen` (0x7BC0) copies it to the screen through the relocated segment constant 0x13CF. It holds the dashboard panel and its labels.
-- **Objects in space.** They live in 36 records of 64 bytes from DS:0x6930 (`shipSlots`), set up by Routine29D0:
+- **Cockpit.** A 16,000-byte CGA image fills DS:0xB160–0xEFDF, just above the stack. `ShowCockpitScreen` (0x7BC0) copies it to the screen through the relocated segment constant 0x140A. It holds the dashboard panel and its labels.
+- **Objects in space.** They live in 36 records of 64 bytes from DS:0x6930 (`shipSlots`), set up by `SetUpLocalSpace` (0x29D0):
 
   | Slots | Holds |
   |---|---|
@@ -38,7 +35,7 @@ Phase 2's execution traces are the final word on all of these. Until a trace con
   | 3–19 | ships, scanned up to `objectSlotCount` (20) |
   | 20–35 | debris (`debrisSlotCount`, 16) |
 
-  `shipSlotCount` (DS:0x433D) is 36 in flight and 3 on the title. A new ship is filled from a 10-byte record in the spawn table: byte 0 is the type, and bytes 1–9 go to +18, +1D, +31, +32, +2C, +2D, +2B, +3F and +1C, in that order (Routine4E3B).
+  `shipSlotCount` (DS:0x433D) is 36 in flight and 3 on the title. A new ship is filled from a 10-byte record in the spawn table: byte 0 is the type, and bytes 1–9 go to +18, +1D, +31, +32, +2C, +2D, +2B, +3F and +1C, in that order (`InitObjectFromTemplate`, 0x4E1B).
 
   | Offset | Size | Meaning |
   |---|---|---|
@@ -86,17 +83,136 @@ Phase 2's execution traces are the final word on all of these. Until a trace con
   | 6 | the flicker's hidden phase; on a Barrel, the barrel holds the masking device |
   | 7 | drawn this frame |
 
-- **Ship blueprints.** `blueprintTable` (DS:0x68C9) points to 30 blueprints that lie back to back over DS:0x4D70–0x68C8. Each blueprint holds, in order:
+- **Ship blueprints.** `blueprintTable` (DS:0x68C9) points to 30 blueprints that lie back to back over DS:0x4D70–0x68C8, and all 30 parse to exactly that range. Each blueprint holds, in order:
   - **a handler and box size**: a handler address, then the half-width p. For handler 0x377A only, the half-height q and the half-length h follow, and the handler writes the 8 box corners as vertices 34–41. Type 0, the Dodo station, has handler 0x38BF, which builds a dodecahedron and its docking slot itself.
   - **a vertex program**: a count, then ops whose bits 0–5 are a vertex index and bits 6–7 load, store, average or add;
   - **the projected-vertex count**;
-  - **fixed edges**, always drawn (only the Plate has any);
-  - **face edges**, each two bytes of vertex×4, with a mark bit in the first and the color in the low bits of the second;
-  - **faces**: three vertex bytes, then the face's edges. A face that passes the winding test marks its edges, and only marked edges are drawn.
+  - **fixed edges**: a count, which is 0 in every blueprint;
+  - **face edges**: a count, then two bytes each: vertex A×4, then vertex B×4 with the colour in the low two bits;
+  - **faces**: a count, then for each face three winding bytes (vertex×4), a byte count k and k bytes of items, which [the solid renderer](#the-solid-renderer) describes.
 
-  That is the layout `ELITEL.EXE`'s edge renderer reads. `ELITES.EXE`'s blueprints are longer by the face lists its solid renderer reads; their layout is being mapped and will be added here.
+  The 30 blueprints hold 291 faces, which carry 500 filled triangles and 148 edge items. The faces use 119 of the 678 face edges. The other 559 are never drawn, among them every edge of the Dodo, the Coriolis and the Python.
 
   `RunBlueprintHandler` (0x3CDD) jumps to the handler with 0x3CF2 (`RenderBlueprintBody`) pushed as its return address. Blueprints use at most vertex 41 of the 42-vertex buffer at DS:0x7230, and `sqrtTable` lies directly after it.
+
+## The solid renderer
+
+**How this was established.** It was read from the listing and then checked by execution on the PC host (ADR-006).
+
+- **The model.** A model of the triangle filler, written from the listing, reproduced the drawing buffer byte for byte in 40,499 calls:
+  - 11,499 calls from game runs: the title, a launch and the rear view, all 28 title ships, and a ship forced close;
+  - 29,000 direct calls to 0x1BFB with random vertices.
+- **Coverage.** Together they took all eight paths through the filler.
+- **What a call touches.** The last 6,000 direct calls ran with interrupts off. They changed nothing outside four places: the drawing buffer, the scratch at DS:0x2F7C–0x2F9E, the stack below the call and the 18 patch sites.
+- **Where the tools are.** The model and its harness were working tools and are not in the tree. Phase 3's differential tests take their place.
+
+**Where it sits.**
+
+- `TransformAndDrawObjects` (0x3D25) draws the objects far to near.
+- For a ship, `RunBlueprintHandler` (0x3CDD) builds the box vertices. `RenderBlueprintBody` (0x3CF2) then does four things:
+  1. runs the vertex program (`RunVertexProgram`, 0x3A40);
+  2. projects the first projected-vertex-count vertices in place (`ProjectVertices`, 0x2340);
+  3. stores the edge lists;
+  4. calls `DrawVisibleFaces` (0x3AB3) with the face list.
+
+**The face loop.** `DrawVisibleFaces` takes each face in turn.
+
+1. **It culls.** The three winding bytes pick three projected points, and `TriangleWindingSign` (0x3A9B) decides: SF = 1 is facing. A hidden face is skipped whole (`stc; adc si,cx` at 0x3B8D).
+2. **It draws the face's k bytes of items in order.**
+   - **An edge** is a byte below 0x80 and counts 1. It is twice the edge's index in the face-edge list. That record gives the two vertices and the colour, and `DrawClippedLine` (0x1603) draws it.
+   - **A filled triangle** is a byte 0x80|n and counts 4. The word at `faceFillPatterns` + n becomes `triangleFillPattern`. Three bytes of vertex×2 follow, and `FillTriangle` (0x1BFB) fills the triangle.
+   - **Either is skipped** when one of its points has x = 0x7FFF.
+
+**What the loop does not do.**
+
+- **Faces are not sorted by depth.** They are drawn in the order the blueprint lists them, and back-face culling is the only hidden-surface removal.
+- **Shared edges are drawn more than once.** An edge listed by two visible faces is drawn twice: 104 of the 1,339 lines drawn during the title run were repeats.
+- **Fixed edges are never drawn, and half the ships carry no lines at all.** 15 of the 30 blueprints list no edge items, so their adjacent faces are told apart only by colour and dither phase. Where a face does list edges, they are drawn before or after its fills, in the order the face lists them.
+
+**Worked example: the Cobra Mk III** (type 26, the title ship), at DS:0x64CB–0x664F.
+
+- **Header:** 28 projected vertices, 40 face edges and 13 faces.
+- **Face 0** is `08 10 00 22` followed by 34 item bytes:
+  - five fills, `92 02 04 06` to `92 02 0C 00`, a solid colour-3 fan from vertex 1;
+  - fourteen black detail edges, `34` to `4E` (edges 26–39).
+- **Edge 10 is drawn up to four times a frame.** It is a colour-3 line between vertices 9 and 10, listed by faces 1, 4, 8 and 9. Face 4 draws it before its fill and the others after theirs.
+- **Faces 11 and 12** are two triangles each, in solid colour 2.
+
+**Colours and dither.** `faceFillPatterns` (DS:0x74B9) holds 16 words: the four solid colours, and the six two-colour checkerboards in both phases. The low byte fills the buffer's even rows and the high byte its odd rows; the pixels below are colour indices, four to a byte.
+
+| Item | Word | Even rows | Odd rows | | Item | Word | Even rows | Odd rows |
+|---|---|---|---|---|---|---|---|---|
+| 80 | 0000 | 0000 | 0000 | | 90 | BBEE | 3232 | 2323 |
+| 82 | 5555 | 1111 | 1111 | | 92 | FFFF | 3333 | 3333 |
+| 84 | 2288 | 2020 | 0202 | | 94 | CC33 | 0303 | 3030 |
+| 86 | 1144 | 1010 | 0101 | | 96 | EEBB | 2323 | 3232 |
+| 88 | AAAA | 2222 | 2222 | | 98 | 8822 | 0202 | 2020 |
+| 8A | 33CC | 3030 | 0303 | | 9A | 4411 | 0101 | 1010 |
+| 8C | 6699 | 2121 | 1212 | | 9C | 9966 | 1212 | 2121 |
+| 8E | DD77 | 1313 | 3131 | | 9E | 77DD | 3131 | 1313 |
+
+- **How the pattern is applied.** `DrawStackedSpansFromRow` (0x1CD5) takes the word and swaps its bytes when the bottom row is odd. It swaps them again after every row, and `FillTriangleSpan` writes the current byte across the span.
+- **The dither belongs to the screen, not the ship.** It follows the buffer's absolute rows and byte columns, not the triangle. Two triangles of one colour therefore meet without a seam, and the dither does not move with the ship.
+- **Every pattern is used.** All 16 occur in the blueprints, and in the title run every pattern word was a table entry.
+
+**The filler's contract.** `FillTriangle` (0x1BFB) takes three vertices as signed words, each an x and a buffer row:
+
+- A in AX, DX; B in BX, BP; C in CX, DI;
+- the pattern in `triangleFillPattern`;
+- DF = 0.
+
+It clobbers every general register. It returns with ES = DS, except when the clipped path rejects a triangle outright, which leaves ES as it was. It writes four things and nothing else:
+
+- rows 0–127 of the drawing buffer;
+- the scratch at DS:0x2F7C–0x2F9E;
+- its own 18 patch sites;
+- the stack: one span per row, at most 128.
+
+**Triangles inside the buffer (0x1C12).**
+
+- **The test.** It doubles the rows and ORs the high bytes of the six coordinates. If all six high bytes are zero, so that x is 0–255 and the row 0–127, the triangle stays on this path.
+- **Sorting.** It sorts the vertices by row into four cases: flat bottom, flat top, one row, and general.
+- **Edges.** It traces the two edges top to bottom in 8.8 fixed point. Each starts at fraction 0, with slope floor(|Δx|·256/Δrows).
+- **The stack is the span buffer.** It pushes one span per row, and `DrawStackedSpans` (0x1CD1) pops them and draws from the bottom row up.
+- **The general case.** The lower short edge restarts at the middle vertex with fraction 0 and is stepped once before the first row below it.
+- **A short edge.** Because slopes are floored, an edge can end one pixel short of its end vertex.
+
+**Triangles that cross the edge of the buffer** go to `FillClippedTriangle` (0x1E6E).
+
+- **Rejection.** It returns at once when all three x are below 0 or all are 256 or above, or when all three rows are below 0 or all are 128 or above.
+- **Setup.** It halves the rows back with `sar`, so a row of magnitude 0x4000 or more loses its top bit. It then sorts into the same four cases.
+- **Edges.** It traces them in 16.16 fixed point: the integer part in AX and BX, the fraction in SI and DI, and the slope from two unsigned divides.
+- **The row walk.** It starts at the top vertex's row, however far off the buffer that is. A row is drawn only when it is 0–127 and its span meets 0–255, and the span is clamped to 0–255. The walk stops at the first hidden row after a drawn one.
+
+**`FillTriangleSpan` (0x1B7A)** fills DL..DH inclusive on row SI/64 with the byte BL.
+
+- **The two end bytes** are masked through `triangleEdgeMasks`. The masks are read through BP, which addresses the stack segment, so they sit at SS:0000 = DS:0xAD60. The stack would have to grow 0x3E8 bytes to reach them.
+- **The bytes between** are written with a `stosb` to an even address, then `rep stosw`.
+
+**The filler modifies itself.** Each edge step is an add, or a subtract when the edge runs leftward. The filler writes the right instruction over the step once per triangle, instead of testing the direction every row.
+
+| Path | Patched steps | `CS:` writes | Templates |
+|---|---|---|---|
+| `FillTriangle` | 6 two-byte steps (`add`/`sub` `ax,si` and `bx,di`) | 14 | 0x1CF3 |
+| `FillClippedTriangle` | 12 four-byte steps (`add`/`adc` or `sub`/`sbb` with a memory operand) | 28 | 0x1FF8 |
+
+- **The clipped writes copy only the opcode and ModRM word**, so each patched step keeps its own displacement.
+- **No state carries from one call to the next.** Every path writes the add forms first and then the subtract forms it needs.
+- **Why it patches.** `div` is unsigned, and the slope's magnitude needs all 16 bits.
+- **No prefetch hazard on the 8088.** The nearest forward write lands 18 bytes past the instruction that makes it, beyond the 4-byte queue. The backward writes are reached only through jumps, which flush the queue.
+- **Both forms ran.** Every site the game reached ran in both forms.
+- **In the port** the patch is a sign per edge. What has to be kept is the arithmetic and the quirks below.
+
+**Two other changes that come with the solid renderer.**
+
+- **`DrawDistantStation` (0x45C6)** draws the far station as a filled disc (`DrawDisc`) rather than a circle's outline. This is read from the code; no run has reached it yet.
+- **`nearClipZ` (DS:0x73D7) is 100.** `ClassifyViewPosition` (0x3CA5) does not draw an object whose centre is nearer than that.
+
+**Still to establish**, with Phase 2's replays:
+
+- whether a near-plane vertex (below) occurs in play;
+- why the delay after vertical retrace is 2,000 iterations;
+- whether a solid frame matches DOSBox-X's.
 
 ## The three Phase 1 questions
 
@@ -135,7 +251,7 @@ Measured with `python Tools/MapReference.py --shared 0201,0215`, which walks the
 
 **It advances once a frame, with a minimum frame time and no scaling by elapsed time.**
 
-- **The wait.** `PresentSpaceView` (0x0599) spins until `msSinceFrame` reaches `minimumFrameMs` (DS:0xACFB) and then clears it. It then waits for vertical retrace plus a fixed 700-iteration delay (`WaitRetraceThenDelay`, 0x45FF) before copying the frame out. A frame therefore takes the longer of its own work and `minimumFrameMs`.
+- **The wait.** `PresentSpaceView` (0x0599) spins until `msSinceFrame` reaches `minimumFrameMs` (DS:0xACFB) and then clears it. It then waits for vertical retrace plus a fixed 2,000-iteration delay (`WaitRetraceThenDelay`, 0x45FF) before copying the frame out. A frame therefore takes the longer of its own work and `minimumFrameMs`.
 - **The value.** `minimumFrameMs` is 50 in the file, which is 20 frames a second. The pause screen sets it with F1–F10, from `frameTimeChoices` (DS:0xACF1): 200, 125, 100, 83, 67, 56, 50, 40, 30 and 1 ms. The file's 50 is F7's value, but the pause screen's own text names F8 (40 ms) as the default. The port follows the value, which is what the reference does.
 - **No elapsed-time use.** No other code reads `msSinceFrame`. `millisecondCounter` is read only for a blink at 0x2914, and `timerTicks` only by `WaitForTimerTick` and the uncalled `RateLimit`.
 - **Waits count ticks or frames**, never CPU loops:
@@ -231,6 +347,14 @@ The waits on vertical retrace at 0x45FF and 0x05CC precede block copies to the s
 
 **Other quirks that change what the player sees, and so must be kept:**
 - **`TriangleWindingSign` (0x3A9B)** takes its sign from the high-word difference. When the high words are equal it takes it from the low word, which is not the true 32-bit sign, and face culling depends on it.
+- **The near-plane marker is missed.** `ProjectVertices` marks a vertex nearer than `nearPlaneZ` (50) with x = 0x8000 (0x23B2) and leaves its y stale. `DrawVisibleFaces` skips a point only when x = 0x7FFF (0x3B19–0x3B71).
+  - **The effect.** A near vertex reaches `FillTriangle` and `DrawClippedLine` as x = −32768, and its faces are drawn as wedges out to the left edge of the view.
+  - **The evidence.** It took a title ship forced to distance 120 to show it: 129 triangles and 28 lines over 12 seconds. Forced to 144 there were 21, and at 160 none.
+  - **What is inferred.** That 0x7FFF was meant as 0x8000 is an inference.
+- **Clipped triangles carry two register slips.** Both move edge pixels by one, and the model of the filler matches the reference only with both in.
+  - **SI is overwritten.** In `FillClippedTriangle`'s general case, when the bottom vertex is not right of the middle one, the subtract forms for the lower edge are written through SI (0x2225–0x2234). That replaces the long edge's fraction with 0x1E1B.
+  - **DI is not reset.** At 0x2249 only the integer part of the lower short edge is reloaded, so DI keeps the upper edge's fraction.
+- **The two filler paths disagree by a pixel.** The same triangle filled at 8.8 inside the buffer and at 16.16 when clipped can differ at its edges, so a ship's edge pixels can change as it crosses the border of the view.
 - **The vertex program's average** adds in 16 bits before shifting, so it can overflow.
 - **Sun radius on the death frame.** The frame `KillPlayer` runs, the sun is drawn with radius 60, because the routine leaves AL = 0x3C.
 - **`VectorWithinBox`** compares only the low 16 bits of 24-bit positions, so a rare false collision is possible.
@@ -257,4 +381,4 @@ The waits on vertical retrace at 0x45FF and 0x05CC precede block copies to the s
 
 ## Naming status
 
-Every range is named: 383 of 386 routines, with Routine3F02, Routine7D4E and Routine8C51 left by their addresses and described in their notes, and 390 of the 422 data addresses the code references. `python Tools/MapReference.py` prints the current counts. A name is a claim, and a claim with no evidence in its notes is a defect in the table.
+Every range is named: 384 of 387 routines, with Routine3F02, Routine7D4E and Routine8C51 left by their addresses and described in their notes, and 412 of the 444 data addresses the code references. `python Tools/MapReference.py` prints the current counts. A name is a claim, and a claim with no evidence in its notes is a defect in the table.

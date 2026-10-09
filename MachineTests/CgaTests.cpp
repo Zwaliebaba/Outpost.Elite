@@ -376,7 +376,7 @@ public:
     Assert::IsFalse(anyCursorDot(), L"R10 bits 5-6 = 01");
 
     rig.SetCrtc(Machine::CrtcRegister::CursorStart, 0x06);
-    rig.SetCrtc(Machine::CrtcRegister::CursorAddressHigh, 0x0E); // SetTextMode, 0x7D31
+    rig.SetCrtc(Machine::CrtcRegister::CursorAddressHigh, 0x0E); // SetTextMode, 0x7D11
     Assert::IsFalse(anyCursorDot(), L"cursor address 0x0E00 is off the page");
 
     rig.SetCrtc(Machine::CrtcRegister::CursorAddressHigh, 0x00);

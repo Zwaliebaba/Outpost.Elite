@@ -29,7 +29,7 @@ class Speaker;
 /// is latched into port 0x60 and raises IRQ1. The latch then stays full, and nothing more arrives,
 /// until port 0x61 bit 7 is pulsed: written high, which empties the latch, and low again, which
 /// starts the next delivery. That is the XT's acknowledge, and the game's handler (ReadScanCode,
-/// 0x7463, Reference-Map.md) does exactly that after reading port 0x60. A read of port 0x60 with
+/// 0x7443, Reference-Map.md) does exactly that after reading port 0x60. A read of port 0x60 with
 /// the latch empty returns 0, as the XT's cleared shift register does.
 ///
 /// DELIVERY_DELAY_CYCLES is 1 ms, a chosen figure, not a measured one: the XT keyboard sends each

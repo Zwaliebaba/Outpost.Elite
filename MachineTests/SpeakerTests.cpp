@@ -44,7 +44,7 @@ public:
     m_speaker.SetPortB(_value);
   }
 
-  // What the game's music does for a note: channel 2, LSB then MSB, mode 3 (0x7392).
+  // What the game's music does for a note: channel 2, LSB then MSB, mode 3 (0x7372).
   void PlayTone(Machine::Cycles _cycle, std::uint16_t _divisor)
   {
     m_clock = _cycle;
@@ -160,7 +160,7 @@ public:
       Assert::AreEqual(FULL / 2, std::int32_t{samples.back()});
     }
 
-    // SilenceSpeakerTimer's divisor 2 (0x7456), about 597 kHz, too.
+    // SilenceSpeakerTimer's divisor 2 (0x7436), about 597 kHz, too.
     SpeakerRig rig;
     rig.SetPortB(0, GATE_AND_DATA);
     rig.PlayTone(0, 2);

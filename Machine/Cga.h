@@ -149,7 +149,7 @@ enum class CrtcRegister : std::uint8_t
 /// R14:R15. It covers scan lines R10 to R11 of the cell (bits 0-4 of each), and when R10's start is
 /// greater than R11's end it is split, covering lines 0 to R11 and R10 to 7, as on the 6845. It is
 /// drawn in the cell's foreground colour. It is off when R10's bits 5-6 are 01, when its address is
-/// not a cell on the page (SetTextMode, 0x7D31, sets R14 to 0x0E for this), or when its lines miss
+/// not a cell on the page (SetTextMode, 0x7D11, sets R14 to 0x0E for this), or when its lines miss
 /// the cell's 8. The 6845's own blink modes, 10 and 11 in R10's bits 5-6, are not modelled: they
 /// blink at the CGA's rate like 00.
 class Cga final : public PortBus

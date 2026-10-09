@@ -17,8 +17,8 @@ namespace Machine
 /// Drawn: 0x00 and 0xFF (blank, as on the CGA), the printable ASCII range 0x20-0x7E, and the
 /// shades, box-drawing pieces and blocks 0xB0-0xDF. That covers every character the reference
 /// can put in text mode: the docked screens' strings, which are printable ASCII only; the frame
-/// DrawDockedFrame (0x7CA8) draws from 0xBA, 0xCD and the corners and tees at DS:0xA403 (0xB9,
-/// 0xBB, 0xBC, 0xC8, 0xC9, 0xCC); and the input cursor 0xDB that ToggleInputCursor (0x7747)
+/// DrawDockedFrame (0x7C88) draws from 0xBA, 0xCD and the corners and tees at DS:0xA7D3 (0xB9,
+/// 0xBB, 0xBC, 0xC8, 0xC9, 0xCC); and the input cursor 0xDB that ToggleInputCursor (0x7727)
 /// makes in text mode. Every other code point, 0x01-0x1F, 0x7F-0xAF and 0xE0-0xFE, is not drawn
 /// and renders as a hollow box, so that a gap shows on the screen instead of passing for text.
 ///

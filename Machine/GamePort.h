@@ -18,7 +18,7 @@ namespace Machine
 /// A write, of any value, fires the one-shots at the current cycle. Bit i (0-3) of a read is 1 from
 /// then until the one-shot for axis i times out, start + OneShotCycles(resistance of axis i), and 0
 /// after. The 558 timers are not retriggerable: a write while a one-shot is still timing leaves that
-/// one alone. Bits 4-7 are the buttons, 0 while pressed. The game's ReadJoystickAxes (0x779E,
+/// one alone. Bits 4-7 are the buttons, 0 while pressed. The game's ReadJoystickAxes (0x777E,
 /// Reference-Map.md) counts polling loops until a bit drops, so the timing is kept to the cycle.
 ///
 /// The host sets each axis's resistance, 0-100 kOhm, from the stick's position. An axis with no

@@ -26,6 +26,7 @@ Both were measured on 2026-10-09: with `python Tools/ScanReference.py` (Capstone
   - ELITEL's edge-drawing loops are replaced by a face loop.
   - The face loop walks a list of entries. An edge entry it draws with the existing `DrawClippedLine` (CS:1603). A face entry it fills, triangle by triangle, in a colour from a new 32-byte table at DS:74B9.
   - It fills by calling CS:1BFB, inside the self-modifying triangle filler at CS:1B7A. ELITEL carries that filler too, but nothing calls it there (Reference-Map.md had it as dead).
+  - Two smaller changes go with it. The far station is drawn as a filled disc rather than a circle's outline. The delay after vertical retrace, before the space view is copied out, is 2,000 iterations where ELITEL's was 700.
   - After the renderer, the code shifts by small amounts, by -20h at the end.
 - **Data.** 96.6% of it is identical in order. The ship blueprints grow by their face lists. The near clipping distance (`nearClipZ`) is 100 where ELITEL's is 10. Everything after the blueprints moves by up to 3D0h; the planet-description phrases, for example, are the same 195 strings at new addresses.
 
@@ -43,6 +44,7 @@ Both were measured on 2026-10-09: with `python Tools/ScanReference.py` (Capstone
    Hex numbers in the notes are translated by explicit rules that tell an address from a value: a number continuing a `CS:`/`DS:` list takes that segment, and named sets cover values and unprefixed data. The results, measured:
    - Of the symbol table's 1,101 rows, 1,097 translated and 713 moved. The 46 placeholder names that embed an address were renamed.
    - Four rows could not translate by alignment: the two edge-drawing routines the face loop replaced, and two text tables whose pointers moved with what they point at. The tables were placed from the code that loads them (DS:9763 and DS:976F). The two routines have no counterpart in `ELITES.EXE`; the solid renderer that replaced them is mapped in its own right (Reference-Map.md).
+   - A later check found what these rules missed, and the same maps corrected it: 94 placeholder names in the notes, such as `Routine7636` for `GetKey`, that held an `ELITEL.EXE` address but named no row; three segment constants (08F6h, 13CFh, 138Fh); and the figures in the plan's §1.
 
 4. **The measured figures are re-measured on `ELITES.EXE`** (ADR-003 and ADR-006), and the pinned boot is re-pinned:
    - The boot reaches its first `GetKey` in 39,255 instructions and 761,619 cycles. Builds by g++ and clang++ write byte-identical traces.

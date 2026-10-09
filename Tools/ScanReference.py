@@ -12,7 +12,7 @@ interrupt handlers and its three resolved jump tables, then reports:
     zero-filled data, or code, with any branch into a code region from other unreached code.
 
 This is a measuring instrument for Phase 0, not the Phase 1 map. It knows nothing about the
-data-driven dispatch at 0x3D08 (`jmp ax`, with targets read from data), so code reached only
+data-driven dispatch at 0x3CF0 (`jmp ax`, with targets read from data), so code reached only
 through that is reported as unreached.
 
 Development tool only (AGENTS.md R14 binds what the executable is built from). Needs Capstone:
