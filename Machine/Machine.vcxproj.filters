@@ -69,6 +69,12 @@
     <ClInclude Include="InterruptSource.h">
       <Filter>Io</Filter>
     </ClInclude>
+    <ClInclude Include="Mouse.h">
+      <Filter>Services</Filter>
+    </ClInclude>
+    <ClInclude Include="PcServices.h">
+      <Filter>Services</Filter>
+    </ClInclude>
     <ClInclude Include="Pit.h">
       <Filter>Devices</Filter>
     </ClInclude>
@@ -140,8 +146,14 @@
     <ClCompile Include="Memory.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
+    <ClCompile Include="Mouse.cpp">
+      <Filter>Services</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PcServices.cpp">
+      <Filter>Services</Filter>
     </ClCompile>
     <ClCompile Include="Pic.cpp">
       <Filter>Devices</Filter>
