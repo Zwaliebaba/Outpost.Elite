@@ -27,7 +27,7 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
 
 **3. Every replaced routine passes a differential test.** During any replay the interpreter can capture the whole machine state at each call of a chosen routine. The test restores a captured state and runs the original, recording every memory write, every port write, the registers, and the flags the callers read. It then restores the same state, runs the C++ version, and compares the two. Basic-block coverage of the original routine, measured from the same captures, must be complete, or each uncovered block gets a constructed input or a written reason. A routine is not replaced in the shipping path until its test passes.
 
-**4. Known answers from outside the binary.** Galaxy generation is checked against Elite's published facts: the seeds, and Lave's government, economy, tech level and market prices. They are independent of both the interpreter and the port.
+**4. Known answers from outside the interpreter.** The galaxy seeds and the system-name digrams are checked against Elite's published facts. Derived system data is not: this version computes tech level and population by formulas that differ from the 6502 versions (Phase 1, `Symbols.tsv` at 0x1199). Lave's government, economy, tech level and market prices are therefore checked against the values the reference itself stores in its default commander, which agree with its own code. Under AGENTS.md the reference is the design, so a published 6502 value is not a reason to change anything.
 
 **5. The oracle ends with Phase 4 (D7).** At the end of Phase 4 the interpreter, the capture harness and the per-routine differential tests are deleted from the tree. Before that:
 
