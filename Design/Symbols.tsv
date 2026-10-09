@@ -1,0 +1,839 @@
+# The symbol table for ELITEL.EXE: what is known about each address (plan §4, ADR-001).
+# Edited by hand and by `python Tools/MapReference.py --seed`; the listing is generated from it.
+# Routines are PascalCase, data camelCase; a name of the form Routine04A3 or data25E4 is unnamed.
+address	kind	name	size	contract	subsystem	notes
+CS:0000	routine	Start			start-up	program entry: DOS check, timer and keyboard set-up, then the play loop
+CS:00C6	routine	Routine00C6				
+CS:0105	routine	Routine0105				
+CS:0148	routine	Routine0148				
+CS:016B	routine	Routine016B				
+CS:01B7	routine	Routine01B7				
+CS:0201	isr	KeyboardInterrupt			input	int 9; calls the scan-code reader and never chains to the BIOS
+CS:0215	isr	TimerInterrupt			timer	int 8 at ~1 kHz (PIT divisor 0x04A9); chains to the BIOS only on the Amstrad path
+CS:025A	data	savedTimerVector	4		timer	BIOS int 8 vector, kept in the code segment for the far jump that chains to it
+CS:025E	isr	DivideOverflowInterrupt			maths	int 0: saturates the quotient to 0x7F or 0x7FFF and resumes (plan §7.1)
+CS:02A1	data	divideSavedBx	2		maths	scratch for DivideOverflowInterrupt
+CS:02A3	data	divideSavedDs	2		maths	scratch for DivideOverflowInterrupt
+CS:02A5	routine	Routine02A5				
+CS:02D4	routine	Routine02D4				
+CS:02F0	isr	CriticalErrorInterrupt			save-load	int 24h, hooked for the whole play session
+CS:02FF	routine	Routine02FF				
+CS:03FD	routine	Routine03FD				
+CS:0470	routine	Routine0470				
+CS:04A3	routine	CopyProtection			protection	asks for a manual word; returns at once when protectionShown is set (ADR-001 D5 patch)
+CS:0532	label	ProtectionPatchedCheck			protection	crack: a cmp turned into a mov, then two NOPs where jnz 0x053F was (ADR-001)
+CS:053F	code	ProtectionFailed			protection	unreachable since the crack: count down the tries, then wipe the program
+CS:0554	routine	WipeProgram			protection	zero-fills CS from 0x0564 to 0x8F50
+CS:0570	routine	Routine0570			video	calls PresentSpaceView between two other screen steps; name pending
+CS:0587	routine	Routine0587				
+CS:0599	routine	PresentSpaceView			video	waits until msSinceFrame reaches minimumFrameMs, clears it, waits for retrace plus a delay, then copies spaceViewBuffer to B800:01E8
+CS:05CC	routine	Routine05CC				
+CS:060D	routine	Routine060D				
+CS:061C	routine	Routine061C				
+CS:0630	routine	Routine0630				
+CS:066C	routine	Routine066C				
+CS:068F	routine	Routine068F				
+CS:07D0	table	noiseSource	1024	byte	sound	code bytes read as data: Routine7AB3 sends bit 1 of each to the speaker in turn
+CS:0887	routine	Routine0887				
+CS:08A1	routine	Routine08A1				
+CS:08B9	routine	Routine08B9				
+CS:08CB	routine	Routine08CB				
+CS:08F2	routine	Routine08F2				
+CS:0927	routine	Routine0927				
+CS:0940	routine	Routine0940				
+CS:0969	routine	Routine0969				
+CS:09A3	routine	Routine09A3				
+CS:09D6	routine	Routine09D6				
+CS:09EE	routine	Routine09EE				
+CS:0A06	routine	Routine0A06				
+CS:0A13	routine	Routine0A13				
+CS:0A19	routine	Routine0A19				
+CS:0A1F	routine	Routine0A1F				
+CS:0A28	routine	Routine0A28				
+CS:0A43	routine	Routine0A43				
+CS:0A88	routine	Routine0A88				
+CS:0A9A	routine	Routine0A9A				
+CS:0B40	label	DockedKeyDispatch			docked	F1 returns (launch); F2-F10 and Esc call the docked screens
+CS:0BB3	routine	Routine0BB3				
+CS:0CAE	routine	Routine0CAE				
+CS:0E52	routine	Routine0E52				
+CS:1076	routine	Routine1076				
+CS:10AF	routine	Routine10AF				
+CS:10C0	routine	Routine10C0				
+CS:10D6	routine	Routine10D6				
+CS:10FE	routine	Routine10FE				
+CS:1146	routine	Routine1146				
+CS:1199	routine	Routine1199				
+CS:1292	routine	Routine1292				
+CS:12F9	routine	Routine12F9				
+CS:1341	routine	Routine1341				
+CS:139C	routine	Routine139C				
+CS:13B4	routine	Routine13B4				
+CS:13C1	routine	Routine13C1				
+CS:140D	routine	Routine140D				
+CS:14C5	routine	Routine14C5				
+CS:1505	routine	Routine1505				
+CS:1552	routine	Routine1552				
+CS:157D	routine	Routine157D				
+CS:15A9	routine	Routine15A9				
+CS:15BC	routine	Routine15BC				
+CS:15CF	routine	Routine15CF				
+CS:15E0	routine	Routine15E0				
+CS:1603	routine	Routine1603				
+CS:1686	routine	Routine1686				
+CS:16C1	routine	Routine16C1				
+CS:16D1	routine	Routine16D1				
+CS:1826	routine	Routine1826				
+CS:1A07	routine	Routine1A07				
+CS:1AA0	routine	Routine1AA0				
+CS:1AC1	routine	Routine1AC1				
+CS:2340	routine	Routine2340				
+CS:23DB	routine	Routine23DB				
+CS:2421	routine	Routine2421				
+CS:2426	routine	Routine2426				
+CS:242B	routine	Routine242B				
+CS:2430	routine	Routine2430				
+CS:2435	routine	Routine2435				
+CS:243B	routine	Routine243B				
+CS:2441	routine	Routine2441				
+CS:2447	routine	Routine2447				
+CS:244D	routine	Routine244D				
+CS:2453	routine	Routine2453				
+CS:2465	routine	Routine2465				
+CS:246D	routine	Routine246D				
+CS:2475	routine	Routine2475				
+CS:247D	routine	Routine247D				
+CS:2485	routine	Routine2485				
+CS:248D	routine	Routine248D				
+CS:2495	routine	Routine2495				
+CS:249D	routine	Routine249D				
+CS:24A5	routine	Routine24A5				
+CS:24E5	routine	Routine24E5				
+CS:24F7	routine	Routine24F7				
+CS:2540	routine	Routine2540				
+CS:254F	routine	Routine254F				
+CS:2645	routine	Routine2645				
+CS:26BE	routine	Routine26BE				
+CS:273E	routine	Routine273E				
+CS:2799	routine	Routine2799				
+CS:2804	routine	Routine2804				
+CS:283B	routine	Routine283B				
+CS:2882	routine	Routine2882				
+CS:290C	routine	Routine290C				
+CS:2959	routine	Routine2959				
+CS:29D0	routine	Routine29D0				
+CS:2B5A	routine	Routine2B5A				
+CS:2BC5	routine	Routine2BC5				
+CS:2C9B	routine	Routine2C9B				
+CS:2CDB	routine	Routine2CDB				
+CS:2D0F	routine	Routine2D0F				
+CS:2D5B	routine	Routine2D5B				
+CS:2E0A	routine	Routine2E0A				
+CS:2E63	routine	Routine2E63				
+CS:2E69	routine	Routine2E69				
+CS:2E96	routine	Routine2E96				
+CS:2ED6	routine	Routine2ED6				
+CS:2F0F	routine	Routine2F0F				
+CS:2F65	routine	Routine2F65				
+CS:2F6E	routine	Routine2F6E				
+CS:2F8B	routine	Routine2F8B				
+CS:2FD8	routine	Routine2FD8				
+CS:2FE3	routine	Routine2FE3				
+CS:3115	routine	Routine3115				
+CS:3130	routine	Routine3130				
+CS:31EC	routine	Routine31EC				
+CS:31F9	routine	Routine31F9				
+CS:32D8	routine	Routine32D8				
+CS:3407	routine	Routine3407				
+CS:3432	routine	Routine3432				
+CS:349A	routine	Routine349A				
+CS:3527	routine	Routine3527				
+CS:3543	routine	Routine3543				
+CS:35A3	routine	Routine35A3				
+CS:3609	routine	Routine3609				
+CS:3626	routine	Routine3626				
+CS:364D	routine	Routine364D				
+CS:36B6	routine	Routine36B6				
+CS:36FD	routine	Routine36FD				
+CS:370E	routine	Routine370E				
+CS:371A	routine	Routine371A				
+CS:3726	routine	Routine3726				
+CS:3740	routine	Routine3740				
+CS:3768	routine	Routine3768				
+CS:377A	routine	Routine377A				blueprint handler for ship types 1-29 (the first word of their blueprints)
+CS:38BF	routine	Routine38BF				blueprint handler for ship type 0
+CS:3A13	routine	Routine3A13				
+CS:3A40	routine	Routine3A40				
+CS:3A91	routine	Routine3A91				
+CS:3AF0	routine	Routine3AF0				
+CS:3B4B	routine	Routine3B4B				
+CS:3B63	routine	Routine3B63				
+CS:3BB2	routine	Routine3BB2				
+CS:3C02	routine	Routine3C02				
+CS:3C6A	routine	Routine3C6A				
+CS:3C8A	routine	Routine3C8A				
+CS:3C96	routine	Routine3C96				
+CS:3CF5	routine	RunBlueprintHandler		in: SI=blueprint, DI=ship slot	3d	pushes Routine3D0A, reads the handler address and a byte (to DS:7011) from the blueprint, jumps to the handler
+CS:3D0A	entry	Routine3D0A				where a blueprint handler returns to: Routine3CF5 pushes it before jmp ax
+CS:3D43	routine	Routine3D43				
+CS:3ECA	routine	Routine3ECA				
+CS:3EE5	routine	Routine3EE5				
+CS:3EF5	routine	Routine3EF5				
+CS:3F01	routine	Routine3F01				
+CS:3F20	routine	Routine3F20				
+CS:3F48	routine	Routine3F48				
+CS:3F55	routine	Routine3F55				
+CS:3F5E	routine	Routine3F5E				
+CS:3F6D	routine	Routine3F6D				
+CS:40C2	routine	Routine40C2				
+CS:410A	routine	Routine410A				
+CS:4162	routine	Routine4162				
+CS:41AD	routine	Routine41AD				
+CS:42C2	routine	Routine42C2				
+CS:42F4	routine	Routine42F4				
+CS:4314	routine	Routine4314				
+CS:4344	routine	Routine4344				
+CS:4351	routine	Routine4351				
+CS:43BC	routine	Routine43BC				
+CS:43E2	routine	Routine43E2				
+CS:441F	routine	Routine441F				
+CS:45B2	routine	Routine45B2				
+CS:45E4	routine	Routine45E4				
+CS:4618	routine	WaitRetraceThenDelay			video	waits for vertical retrace, then spins 700 iterations of dec/jnz
+CS:4627	routine	Routine4627				
+CS:4680	routine	Routine4680				
+CS:4691	routine	Routine4691				
+CS:4727	routine	Routine4727				
+CS:48CB	routine	Routine48CB				
+CS:48E0	routine	Routine48E0				
+CS:4926	routine	Routine4926				
+CS:4937	routine	Routine4937				
+CS:4973	routine	Routine4973				
+CS:49BF	routine	UpdateDamageFlash			video	once a frame: while a countdown runs, colour select 0x14 (background 4, bright palette); otherwise restores DS:A83D
+CS:4A04	routine	Routine4A04				
+CS:4A16	routine	Routine4A16				
+CS:4A30	routine	Routine4A30				
+CS:4C2E	routine	Routine4C2E				
+CS:4C40	routine	Routine4C40				
+CS:4C58	routine	Routine4C58				
+CS:4C96	routine	Routine4C96				
+CS:4CAC	routine	Routine4CAC				
+CS:4CB9	routine	Routine4CB9				
+CS:4CC6	routine	Routine4CC6				
+CS:4CD3	routine	Routine4CD3				
+CS:4CE0	routine	Routine4CE0				
+CS:4CED	routine	Routine4CED				
+CS:4CFA	routine	Routine4CFA				
+CS:4D07	routine	Routine4D07				
+CS:4D28	routine	Routine4D28				
+CS:4D5B	routine	Routine4D5B				
+CS:4D80	routine	Routine4D80				
+CS:4DCE	routine	Routine4DCE				
+CS:4E10	routine	Routine4E10				
+CS:4E3B	routine	Routine4E3B				
+CS:4E95	routine	Routine4E95				
+CS:4EE5	routine	Routine4EE5				
+CS:4EEF	routine	Routine4EEF				
+CS:4F14	routine	Routine4F14				
+CS:4F1E	routine	Routine4F1E				
+CS:4F28	routine	Routine4F28				
+CS:4F55	routine	Routine4F55				
+CS:4F68	routine	Routine4F68				
+CS:4F8E	routine	Routine4F8E				
+CS:4FB8	routine	Routine4FB8				
+CS:4FBF	routine	Routine4FBF				
+CS:4FE1	routine	Routine4FE1				
+CS:511E	routine	Routine511E				
+CS:515E	routine	Routine515E				
+CS:516B	routine	Routine516B				
+CS:5186	routine	Routine5186				
+CS:51AB	routine	Routine51AB				
+CS:5200	routine	Routine5200				
+CS:521D	routine	Routine521D				
+CS:5262	routine	Routine5262				
+CS:52D2	routine	Routine52D2				
+CS:530C	routine	Routine530C				
+CS:5340	routine	Routine5340				
+CS:5350	routine	Routine5350				
+CS:536E	routine	Routine536E				
+CS:541E	routine	Routine541E				
+CS:5433	routine	Routine5433				
+CS:543E	routine	Routine543E				
+CS:5448	routine	Routine5448				
+CS:5451	routine	Routine5451				
+CS:545A	routine	Routine545A				
+CS:5491	routine	Routine5491				
+CS:54AF	routine	Routine54AF				
+CS:54D4	routine	Routine54D4				
+CS:5512	routine	Routine5512				
+CS:55B4	routine	Routine55B4				
+CS:55B5	routine	Routine55B5				
+CS:56A1	routine	Routine56A1				
+CS:56BC	routine	Routine56BC				
+CS:5808	routine	Routine5808				
+CS:58FE	routine	Routine58FE				
+CS:5A30	routine	Routine5A30				
+CS:5A50	routine	Routine5A50				
+CS:5B09	routine	Routine5B09				
+CS:5C12	routine	Routine5C12				
+CS:5CFE	routine	Routine5CFE				
+CS:5E4C	routine	Routine5E4C				
+CS:5EC9	routine	Routine5EC9				
+CS:6040	routine	Routine6040				
+CS:60F2	routine	Routine60F2				
+CS:610B	routine	Routine610B				
+CS:6117	routine	Routine6117				
+CS:6131	routine	Routine6131				
+CS:6348	routine	Routine6348				
+CS:635B	routine	Routine635B				
+CS:6387	routine	Routine6387				
+CS:63D2	routine	Routine63D2				
+CS:648F	routine	Routine648F				
+CS:655F	routine	Routine655F				
+CS:6573	routine	Routine6573				
+CS:6584	routine	Routine6584				
+CS:65A0	routine	Routine65A0				
+CS:65AF	routine	Routine65AF				
+CS:65C3	routine	Routine65C3				
+CS:660C	routine	Routine660C				
+CS:660E	routine	Routine660E				
+CS:661A	routine	Routine661A				
+CS:662B	routine	Routine662B				
+CS:6882	routine	Routine6882				
+CS:68EE	routine	Routine68EE				
+CS:6943	routine	Routine6943				
+CS:6966	routine	Routine6966				
+CS:6992	routine	Routine6992				
+CS:69B5	routine	Routine69B5				
+CS:69D3	routine	Routine69D3				
+CS:69EE	routine	Routine69EE				
+CS:6AA5	routine	Routine6AA5				
+CS:6AB9	routine	Routine6AB9				
+CS:6AF9	routine	Routine6AF9				
+CS:6B3E	routine	Routine6B3E				
+CS:6DE1	routine	Routine6DE1				
+CS:6DFE	routine	Routine6DFE				
+CS:6E0C	routine	Routine6E0C				
+CS:6E12	routine	Routine6E12				
+CS:6ED7	routine	Routine6ED7				
+CS:6FE0	routine	Routine6FE0				
+CS:702F	routine	Routine702F				
+CS:709A	routine	Routine709A				
+CS:70AD	routine	Routine70AD				
+CS:70E1	routine	Routine70E1				
+CS:7127	routine	Routine7127				
+CS:7129	routine	Routine7129				
+CS:712F	routine	Routine712F				
+CS:7135	routine	Routine7135				
+CS:7144	routine	Routine7144				
+CS:7170	routine	TimerTick			timer	the timer interrupt's work, every tick
+CS:73BA	label	CheckProtectionAnswer			protection	reached from TimerTick while a question is pending; decodes the expected word and compares
+CS:7421	routine	Routine7421				
+CS:7443	routine	Routine7443				
+CS:7456	routine	Routine7456				
+CS:7463	routine	ReadScanCode			input	the keyboard interrupt's work
+CS:7500	routine	Routine7500				
+CS:7556	routine	Routine7556				
+CS:7636	routine	Routine7636				
+CS:7688	routine	Routine7688				
+CS:76B4	routine	Routine76B4				
+CS:7747	routine	Routine7747				
+CS:775A	routine	Routine775A				
+CS:7770	routine	Routine7770				
+CS:777D	code	RateLimit			timer	waits until timerTicks reaches 50 since it last ran, when rateLimitEnabled; no direct caller
+CS:7792	routine	WaitForTimerTick			timer	spins until timerTicks changes
+CS:779E	routine	Routine779E				
+CS:77E1	routine	Routine77E1				
+CS:790F	routine	Routine790F				
+CS:799E	routine	Routine799E				
+CS:7A77	routine	Routine7A77				
+CS:7A7D	routine	Routine7A7D				
+CS:7A83	routine	Routine7A83				
+CS:7AB3	routine	Routine7AB3				
+CS:7AD8	routine	Routine7AD8				
+CS:7AE3	routine	Routine7AE3				
+CS:7B1C	routine	Routine7B1C				
+CS:7B29	routine	Routine7B29				
+CS:7B8B	routine	Routine7B8B				
+CS:7B91	routine	Routine7B91				
+CS:7BB6	routine	Routine7BB6				
+CS:7BE0	routine	Routine7BE0				
+CS:7C1B	routine	Routine7C1B				
+CS:7C32	routine	Routine7C32				
+CS:7C45	routine	Routine7C45				
+CS:7CA8	routine	DrawDockedFrame		in: SI=border colour and title bytes	docked	switches to text mode 1 if not already in it, sets the border colour, draws the CP437 double-line frame
+CS:7D09	routine	Routine7D09				
+CS:7D18	routine	Routine7D18				
+CS:7D1E	routine	SetGraphicsMode			video	BIOS mode 4, palette 0, then colour select 0x10
+CS:7D31	routine	SetTextMode			video	BIOS mode 1 (40x25 colour text), then programs the CRTC cursor registers
+CS:7D50	routine	GameLoop			start-up	forever: Routine7DA1 (title, then the docked screens) with DS:A420=0, then Routine7EBB with DS:A420=1
+CS:7D6E	routine	Routine7D6E				
+CS:7DA1	routine	Routine7DA1			docked	the title screen's rotating ship (F9/F10 cycle the ship type), then jumps on to the docked-screen key dispatch at 0x0B40; name pending
+CS:7EBB	routine	Routine7EBB				
+CS:7F5D	routine	Routine7F5D				
+CS:7F7D	routine	Routine7F7D				
+CS:7F89	routine	Routine7F89				
+CS:7F99	routine	Routine7F99				
+CS:7FC8	routine	Routine7FC8				
+CS:83BF	routine	Routine83BF				
+CS:83D2	routine	Routine83D2				
+CS:8450	routine	Routine8450				
+CS:8492	routine	Routine8492				
+CS:85B9	routine	Routine85B9				
+CS:860C	routine	Routine860C				
+CS:8642	routine	Routine8642				
+CS:8A36	routine	Routine8A36				
+CS:8A66	routine	Routine8A66				
+CS:8AE2	routine	Routine8AE2				
+CS:8BAB	routine	Routine8BAB				
+CS:8BCA	routine	Routine8BCA				
+CS:8BE6	routine	Routine8BE6				
+CS:8C71	routine	Routine8C71				
+CS:8C82	routine	Routine8C82				
+CS:8CAE	routine	Routine8CAE				
+CS:8D4E	routine	Routine8D4E				
+CS:8D8A	routine	Routine8D8A				
+CS:8EC5	routine	Routine8EC5				
+CS:8EDA	routine	Routine8EDA				
+CS:8EEF	routine	Routine8EEF				
+CS:8F22	routine	Routine8F22				
+DS:0040	data	spaceViewBuffer	8064		video	the space view, 256x126 pixels at 2 bits per pixel, 64 bytes per line, copied out by PresentSpaceView
+DS:2000	data	amstradPresent	1		start-up	1 in the file; cleared at start-up unless the ROM at FC00:0016 reads Amstrad
+DS:2001	text	amstradSignature	7		start-up	"Amstrad"
+DS:2008	data	speakerPortImage	1		sound	the value last written to port 0x61; the timer handler toggles bit 1 for sound effects
+DS:2009	data	data2009	1			
+DS:200A	text	exitMessage			start-up	$-terminated, int 21h AH=09
+DS:2039	text	dosVersionMessage			start-up	$-terminated
+DS:2069	data	data2069	2			
+DS:206B	data	data206B	1			
+DS:206C	data	data206C	1			
+DS:206D	data	data206D	2			
+DS:20EF	text	commanderFilePattern	6		save-load	"*.cdr"
+DS:2267	data	data2267	1			
+DS:2268	data	data2268	2			
+DS:226A	data	savedSpeakerPort	1		sound	port 0x61 at start-up, restored on exit
+DS:226B	data	savedDivideVector	4		start-up	BIOS int 0 vector
+DS:226D	data	data226D	2			
+DS:226F	data	savedKeyboardVector	4		start-up	BIOS int 9 vector
+DS:2271	data	data2271	2			
+DS:2278	data	data2278	2			
+DS:2283	data	data2283	2			
+DS:2289	data	data2289	2			
+DS:2416	data	protectionDescriptor	2		protection	pointer to the protection's strings and question table
+DS:2424	text	protectionTitle			protection	"Program Protection"
+DS:25C9	data	protectionInput			protection	int 21h AH=0Ah buffer: capacity, count, then the typed word
+DS:25CA	data	data25CA	1			
+DS:25E1	data	protectionQuestion	1		protection	question number while one is pending; 0xFF when none
+DS:25E2	data	protectionTriesLeft	1		protection	3 in the file
+DS:25E3	data	protectionAnswerCorrect	1		protection	set by CheckProtectionAnswer; forced by the crack
+DS:25E4	data	protectionShown	1		protection	0 in the file; the D5 patch sets it to 1 at load
+DS:25E5	data	data25E5	1			
+DS:25F0	data	data25F0	1			
+DS:27F4	data	data27F4	1			
+DS:295D	data	data295D	1			
+DS:295E	data	data295E	1			
+DS:295F	data	data295F	1			
+DS:2960	data	data2960	1			
+DS:2970	data	data2970	2			
+DS:2971	data	data2971	1			
+DS:2972	data	data2972				
+DS:2973	data	data2973	1			
+DS:2974	data	data2974				
+DS:2975	data	data2975	1			
+DS:29E5	data	data29E5	1			
+DS:29E6	data	data29E6	1			
+DS:29E7	data	data29E7	1			
+DS:29E8	data	data29E8	1			
+DS:29E9	data	data29E9	1			
+DS:2A7E	data	data2A7E	1			
+DS:2A96	data	data2A96	1			
+DS:2A97	data	data2A97	2			
+DS:2B99	data	data2B99	2			
+DS:2C9B	data	data2C9B	1			
+DS:2C9C	data	data2C9C	1			
+DS:2C9D	data	data2C9D	1			
+DS:2CE0	data	data2CE0	1			
+DS:2CE4	data	data2CE4	1			
+DS:2CE5	data	data2CE5	1			
+DS:2CE6	data	data2CE6	2			
+DS:2CE8	data	data2CE8	1			
+DS:2CE9	data	data2CE9	1			
+DS:2CEA	data	data2CEA	2			
+DS:2CEC	data	data2CEC	2			
+DS:2EEF	data	data2EEF	2			
+DS:2EF1	data	data2EF1	2			
+DS:2EF3	data	data2EF3	1			
+DS:2EFC	data	data2EFC	2			
+DS:2EFE	data	data2EFE	2			
+DS:2FA0	data	data2FA0	2			
+DS:41CE	data	data41CE	2			
+DS:41F0	data	data41F0	1			
+DS:41F1	data	data41F1	1			
+DS:41F2	data	data41F2	1			
+DS:41F3	data	data41F3	1			
+DS:41F4	data	data41F4	1			
+DS:41F5	data	data41F5	1			
+DS:41F8	data	data41F8	2			
+DS:4220	data	data4220	1			
+DS:4221	data	data4221	1			
+DS:4222	data	data4222	1			
+DS:4223	data	data4223	1			
+DS:422C	data	data422C	1			
+DS:422D	data	data422D	1			
+DS:422E	data	data422E	1			
+DS:422F	data	data422F	1			
+DS:4230	data	data4230	1			
+DS:4231	data	data4231	1			
+DS:4232	data	data4232	1			
+DS:4233	data	data4233	1			
+DS:4234	data	data4234	1			
+DS:4235	data	data4235	1			
+DS:4236	data	data4236	1			
+DS:4237	data	data4237	1			
+DS:4260	data	data4260	2			
+DS:4262	data	data4262	1			
+DS:4263	data	data4263	1			
+DS:4264	data	data4264	2			
+DS:4308	data	data4308	1			
+DS:4309	data	data4309	1			
+DS:433D	data	shipSlotCount	1		ships	how many 64-byte slots from DS:6580 are walked
+DS:433E	data	data433E	1			
+DS:433F	data	data433F	2			
+DS:4341	data	data4341	2			
+DS:4343	data	data4343	2			
+DS:4345	data	data4345	1			
+DS:4A84	data	data4A84	2			
+DS:4B05	data	data4B05	2			
+DS:4B07	data	data4B07	2			
+DS:4B09	data	data4B09				
+DS:4B0A	data	data4B0A	1			
+DS:4D15	table	table4D15	4	code		indexed by jmp [bx+0x4D15] at 0x36E3
+DS:4D1D	data	data4D1D	2			
+DS:4D1F	data	data4D1F	1			
+DS:4D20	data	data4D20	1			
+DS:4D21	data	data4D21	2			
+DS:651D	table	blueprintTable	30	pointer		blueprint address per ship type, indexed by type*2 at 0x3E6C
+DS:6580	data	shipSlots			ships	64-byte records, one per object in space
+DS:6F80	data	data6F80	2			
+DS:6F82	data	data6F82	1			
+DS:7003	data	data7003	1			
+DS:7007	data	data7007	2			
+DS:7009	data	data7009	2			
+DS:700B	data	data700B	2			
+DS:700D	data	data700D	2			
+DS:700F	data	data700F	2			
+DS:7011	data	data7011	2			
+DS:7019	data	data7019	2			
+DS:701B	data	data701B	2			
+DS:701D	data	data701D	2			
+DS:701F	data	data701F	2			
+DS:7021	data	data7021	2			
+DS:7023	data	data7023	2			
+DS:7025	data	data7025	1			
+DS:7026	data	data7026	1			
+DS:7027	data	data7027	2			
+DS:7029	data	data7029	2			
+DS:702B	data	data702B	2			
+DS:702D	data	data702D	2			
+DS:702F	data	data702F	2			
+DS:7031	data	data7031	2			
+DS:7033	data	data7033	2			
+DS:70D5	data	data70D5	1			
+DS:7109	data	data7109	1			
+DS:715B	data	data715B	1			
+DS:7196	data	data7196	1			
+DS:7197	data	data7197	2			
+DS:7199	data	data7199	2			
+DS:71CB	data	data71CB	2			
+DS:71CD	data	data71CD	2			
+DS:71CF	data	data71CF	2			
+DS:71D1	data	data71D1	1			
+DS:71D2	data	data71D2	1			
+DS:71D3	data	data71D3	1			
+DS:71D4	data	data71D4	1			
+DS:71D5	data	data71D5	1			
+DS:71D6	data	data71D6	1			
+DS:71D7	data	data71D7	1			
+DS:71D8	data	data71D8	1			
+DS:71D9	data	data71D9	1			
+DS:71DA	data	data71DA	1			
+DS:71E5	data	data71E5	1			
+DS:71E8	data	data71E8	1			
+DS:71E9	data	data71E9	1			
+DS:71EA	data	data71EA	1			
+DS:71EC	data	data71EC	1			
+DS:71EF	data	data71EF	1			
+DS:71F8	data	data71F8	2			
+DS:71FA	data	data71FA	2			
+DS:71FD	data	data71FD	1			
+DS:71FE	data	data71FE	1			
+DS:71FF	data	data71FF	2			
+DS:7201	data	data7201	1			
+DS:7202	data	data7202	1			
+DS:7203	data	data7203	1			
+DS:7204	data	data7204	1			
+DS:7205	data	data7205	1			
+DS:7206	data	data7206	1			
+DS:7207	data	data7207	1			
+DS:7208	data	data7208	1			
+DS:7209	data	data7209	2			
+DS:720B	data	data720B	2			
+DS:720D	data	data720D	2			
+DS:720F	data	data720F	2			
+DS:7212	data	data7212	1			
+DS:7213	data	data7213	1			
+DS:7214	data	data7214	1			
+DS:7215	data	data7215	1			
+DS:7218	data	data7218	1			
+DS:7219	data	data7219	1			
+DS:721A	data	data721A	1			
+DS:721B	data	data721B	1			
+DS:721C	data	data721C	1			
+DS:721D	data	data721D	1			
+DS:721E	data	data721E	1			
+DS:7220	data	data7220	1			
+DS:7221	data	data7221	1			
+DS:7222	data	data7222	1			
+DS:7223	data	data7223	2			
+DS:7225	data	data7225	2			
+DS:7227	data	data7227	1			
+DS:7228	data	data7228	1			
+DS:7229	text	defaultCommanderName			save-load	"JAMESON"
+DS:7232	data	data7232	1			
+DS:7238	data	data7238	1			
+DS:7244	data	data7244	1			
+DS:724A	data	data724A	1			
+DS:724C	data	data724C	1			
+DS:724E	data	data724E	1			
+DS:7250	data	data7250	1			
+DS:7252	data	data7252	1			
+DS:7254	data	data7254	1			
+DS:7255	data	data7255	1			
+DS:7256	data	data7256	1			
+DS:7257	data	data7257	1			
+DS:7258	data	data7258	1			
+DS:7259	data	data7259	1			
+DS:725A	data	data725A	1			
+DS:725B	data	data725B	1			
+DS:725C	data	data725C	1			
+DS:725D	data	data725D	1			
+DS:725E	data	data725E	1			
+DS:725F	data	data725F	1			
+DS:7260	data	data7260	1			
+DS:7261	data	data7261	1			
+DS:7262	data	data7262	1			
+DS:7263	data	data7263	1			
+DS:7264	data	data7264	2			
+DS:7266	data	data7266	1			
+DS:7267	data	data7267	1			
+DS:7268	data	data7268	1			
+DS:7269	data	data7269	1			
+DS:726A	data	data726A	1			
+DS:74BC	data	data74BC	1			
+DS:75C0	table	table75C0	8	code		indexed by call [bx+0x75C0] at 0x4A61
+DS:75D0	data	data75D0	1			
+DS:75D1	data	data75D1	1			
+DS:75D4	data	data75D4	1			
+DS:75D5	data	data75D5	1			
+DS:75D6	data	data75D6	1			
+DS:75D7	data	data75D7	1			
+DS:770F	data	data770F	1			
+DS:7710	data	data7710	1			
+DS:7711	data	data7711	1			
+DS:7712	data	data7712	1			
+DS:772F	data	data772F	2			
+DS:7731	data	data7731	1			
+DS:7732	data	data7732	1			
+DS:7733	data	data7733	2			
+DS:7736	data	data7736	1			
+DS:7737	data	data7737	2			
+DS:7739	data	data7739	2			
+DS:773B	data	data773B	2			
+DS:773D	data	data773D	2			
+DS:773F	data	data773F	2			
+DS:7780	text	versionString			start-up	"Release:1? 1-10-87"
+DS:7978	data	data7978	1			
+DS:7979	data	data7979	1			
+DS:7AD3	data	data7AD3	1			
+DS:7AEB	data	data7AEB	1			
+DS:7C70	data	data7C70	1			
+DS:7C71	data	data7C71	1			
+DS:7E49	data	data7E49	2			
+DS:7E5A	data	data7E5A	1			
+DS:7E5B	data	data7E5B	2			
+DS:7E5D	data	data7E5D	1			
+DS:7E5E	data	data7E5E	1			
+DS:7E6F	data	data7E6F	2			
+DS:7E75	data	data7E75	2			
+DS:8027	data	data8027	1			
+DS:8029	data	data8029	1			
+DS:803A	data	data803A	1			
+DS:803B	data	data803B	1			
+DS:8125	data	data8125	1			
+DS:8466	data	data8466	1			
+DS:8467	data	data8467	1			
+DS:847D	data	data847D	1			
+DS:880F	data	data880F	1			
+DS:8840	data	data8840	2			
+DS:8842	data	data8842	2			
+DS:8844	data	data8844	2			
+DS:8846	data	data8846	2			
+DS:884E	data	data884E	2			
+DS:8850	data	data8850	2			
+DS:8852	data	data8852	2			
+DS:8854	data	data8854	1			
+DS:8A5E	data	data8A5E	1			
+DS:8A5F	data	data8A5F	1			
+DS:8CAE	data	data8CAE	1			
+DS:9289	data	data9289	1			
+DS:9393	table	textControlCodes	6	code	text	jmp [bx] at 0x7049 for codes 1-31; only the first 6 entries are code addresses
+DS:9C60	data	keyDown	128		input	1 while the key is held, indexed by scan code - 1; written by ReadScanCode
+DS:9C61	data	data9C61	1			
+DS:9C70	data	data9C70	1			
+DS:9C72	data	data9C72	1			
+DS:9C74	data	data9C74	1			
+DS:9C76	data	data9C76	1			
+DS:9C77	data	data9C77	1			
+DS:9C78	data	data9C78	1			
+DS:9C79	data	data9C79	1			
+DS:9C7D	data	data9C7D	1			
+DS:9C7E	data	data9C7E	1			
+DS:9C82	data	data9C82	1			
+DS:9C83	data	data9C83	1			
+DS:9C84	data	data9C84	1			
+DS:9C86	data	data9C86	1			
+DS:9C8A	data	data9C8A	1			
+DS:9C8E	data	data9C8E	1			
+DS:9C90	data	data9C90	1			
+DS:9C91	data	data9C91	1			
+DS:9C92	data	data9C92	1			
+DS:9C93	data	data9C93	1			
+DS:9C94	data	data9C94	1			
+DS:9C96	data	data9C96	1			
+DS:9C97	data	data9C97	1			
+DS:9C98	data	data9C98	1			
+DS:9C99	data	data9C99	1			
+DS:9CA8	data	data9CA8	1			
+DS:9CAB	data	data9CAB	1			
+DS:9CAD	data	data9CAD	1			
+DS:9CB0	data	data9CB0	1			
+DS:9CD7	data	data9CD7	1			
+DS:9CD8	data	data9CD8	1			
+DS:9CD9	data	data9CD9	1			
+DS:9CDA	data	data9CDA	1			
+DS:9CDB	data	data9CDB	1			
+DS:9CDC	data	data9CDC	1			
+DS:9CDD	data	data9CDD	1			
+DS:9CDE	data	data9CDE	1			
+DS:9CE0	data	keyBuffer	16		input	ring buffer of make codes, written by ReadScanCode
+DS:9CF0	data	keyBufferWrite	2		input	next write address in keyBuffer
+DS:9CF2	data	data9CF2	2			
+DS:9CF4	data	keyBufferCount	1		input	keys waiting in keyBuffer; ReadScanCode drops a key when it reaches 16
+DS:9CF5	data	data9CF5	1			
+DS:9CF6	data	data9CF6	1			
+DS:9CF7	data	timerTicks	2		timer	incremented by TimerTick; reset by RateLimit
+DS:9CF9	data	rateLimitEnabled	1		timer	gates RateLimit
+DS:9CFA	data	data9CFA	1			
+DS:9CFD	data	data9CFD	2			
+DS:9CFF	data	data9CFF	1			
+DS:9D00	data	data9D00	1			
+DS:9D55	data	data9D55	1			
+DS:9D56	data	data9D56	1			
+DS:9D57	data	data9D57	1			
+DS:9D58	data	data9D58	1			
+DS:9D59	data	data9D59	1			
+DS:9D5A	data	data9D5A	1			
+DS:9D5B	data	data9D5B	1			
+DS:9D5C	data	data9D5C	1			
+DS:9D5D	data	data9D5D	1			
+DS:9D5E	data	data9D5E	1			
+DS:9D5F	data	data9D5F	2			
+DS:9D61	data	data9D61	2			
+DS:9D63	data	data9D63				
+DS:9D64	data	data9D64	1			
+DS:9D65	data	data9D65	1			
+DS:9D66	data	data9D66	1			
+DS:9D67	data	data9D67	1			
+DS:9D68	data	millisecondCounter	2		timer	incremented every tick; bit 9 drives a blink at 0x2914
+DS:9D6A	data	msSinceFrame	1		timer	incremented every tick; compared with minimumFrameMs and cleared by PresentSpaceView
+DS:9D6B	data	data9D6B	1			
+DS:9D6C	data	data9D6C	1			
+DS:9D6D	data	data9D6D	1			
+DS:9D6E	data	data9D6E	1			
+DS:9D6F	data	data9D6F	1			
+DS:9D70	data	data9D70	1			
+DS:9D71	data	data9D71	1			
+DS:9D72	data	data9D72	1			
+DS:9D73	data	data9D73	1			
+DS:9D74	data	data9D74	1			
+DS:9D75	data	data9D75	1			
+DS:9D76	data	data9D76	1			
+DS:9D77	data	data9D77	2			
+DS:9D79	data	data9D79	1			
+DS:9D7A	data	data9D7A	1			
+DS:9D7B	data	data9D7B	1			
+DS:9D7C	data	data9D7C	1			
+DS:9D7D	data	data9D7D	1			
+DS:9D7E	data	data9D7E	2			
+DS:9D80	data	data9D80	1			
+DS:9D81	data	data9D81	2			
+DS:9D83	data	data9D83	2			
+DS:9D85	data	musicPlaying	1		sound	when 1, TimerTick plays the tune at musicPointer on PIT channel 2
+DS:9D86	data	musicPointer	2		sound	next note; 0x47 restarts at DS:9DE4
+DS:9D88	table	notePeriods		word	sound	PIT channel 2 divisors, indexed by note
+DS:A1E4	data	dataA1E4				
+DS:A1E5	data	dataA1E5	1			
+DS:A1E6	data	dataA1E6	1			
+DS:A400	data	dataA400	1			
+DS:A401	data	dataA401	1			
+DS:A420	data	dataA420	1			
+DS:A421	data	dataA421	1			
+DS:A422	data	dataA422	1			
+DS:A423	data	dataA423	1			
+DS:A455	data	dataA455	1			
+DS:A489	data	dataA489	2			
+DS:A48C	data	dataA48C	1			
+DS:A48D	data	dataA48D	1			
+DS:A526	data	dataA526	1			
+DS:A527	data	dataA527	2			
+DS:A529	data	dataA529	1			
+DS:A52D	data	dataA52D	1			
+DS:A52E	data	dataA52E	1			
+DS:A5DF	data	dataA5DF	2			
+DS:A5E1	data	dataA5E1	2			
+DS:A5E3	data	dataA5E3	2			
+DS:A5E5	data	dataA5E5	2			
+DS:A5E7	data	dataA5E7	2			
+DS:A5E9	data	dataA5E9	2			
+DS:A5EB	data	dataA5EB	1			
+DS:A5EC	data	dataA5EC	2			
+DS:A5EE	data	dataA5EE	1			
+DS:A716	data	dataA716	1			
+DS:A717	data	dataA717	2			
+DS:A719	data	dataA719	1			
+DS:A71A	data	dataA71A	2			
+DS:A71C	data	dataA71C	1			
+DS:A71D	data	dataA71D	1			
+DS:A71E	data	dataA71E	2			
+DS:A75E	data	dataA75E	1			
+DS:A75F	data	dataA75F	1			
+DS:A760	data	dataA760	1			
+DS:A82F	data	dataA82F	1			
+DS:A830	data	dataA830	1			
+DS:A831	data	dataA831	1			
+DS:A833	data	dataA833	1			
+DS:A835	data	dataA835	1			
+DS:A837	data	dataA837	1			
+DS:A839	data	dataA839	1			
+DS:A83B	data	soundEnabled	1		sound	toggled by S on the pause screen; TimerTick does nothing more when it is 0
+DS:A83D	data	dataA83D	1			
+DS:A83E	data	dataA83E	1			
+DS:A83F	data	dataA83F	1			
+DS:A8E4	data	dataA8E4	1			
+DS:A8E5	data	dataA8E5	2			
+DS:A921	table	frameTimeChoices	10	byte	timer	200, 125, 100, 83, 67, 56, 50, 40, 30, 1 ms, chosen with F1-F10 on the pause screen
+DS:A92B	data	minimumFrameMs	1		timer	50 in the file; the shortest a frame may take
+DS:A92C	data	dataA92C	1			
+DS:FFFC	data	dataFFFC	2			
+DS:FFFE	data	dataFFFE	2			
+DS:FFFF	data	dataFFFF	1			
