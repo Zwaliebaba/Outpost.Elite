@@ -11,11 +11,10 @@
 # ── Status: CI gates this over the whole tree ──────────────────────────────────────────────
 #
 # `.github/workflows/build.yml` runs clang-tidy on the Windows job, after the build, over every
-# hand-written translation unit in the tree (AGENTS.md §6) -- from the moment Build/RunClangTidy.py
-# exists, which it does not yet, so the step is guarded until it does. It runs through clang's MSVC
-# driver (`--driver-mode=cl`) against the same switches the .vcxproj files set, because the
-# alternative — GNU driver mode against the Windows SDK — disagrees with MSVC in both directions
-# and reports defects that are not there.
+# hand-written translation unit in the tree (AGENTS.md §6), through Build/RunClangTidy.py. It runs
+# through clang's MSVC driver (`--driver-mode=cl`) against the same switches the .vcxproj files
+# set, because the alternative — GNU driver mode against the Windows SDK — disagrees with MSVC in
+# both directions and reports defects that are not there.
 #
 # This repository is GREENFIELD, and at the time of writing it holds no C++ at all. Nothing is
 # grandfathered, a whole-tree pass comes back clean, and a finding is therefore a defect rather
@@ -52,7 +51,7 @@
 # Four rules of AGENTS.md §1 this file cannot express — R2's banned type affixes, R7's file naming
 # and .vcxproj/.filters registration, R11's standing spelling families, and §2's flat project
 # directories — are checked by Build/CheckProjectFiles.py, which runs in the same CI job that
-# builds, once somebody writes it (AGENTS.md §6). A check that exists somewhere is worth more
+# builds (AGENTS.md §6). A check that exists somewhere is worth more
 # than a rule everyone is asked to remember.
 #
 # readability-identifier-length is deliberately NOT enabled. Its defaults reject the domain
