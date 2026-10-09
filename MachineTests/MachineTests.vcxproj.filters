@@ -41,6 +41,9 @@
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>
+    <ClCompile Include="PicTests.cpp">
+      <Filter>Devices</Filter>
+    </ClCompile>
     <ClCompile Include="PortRouterTests.cpp">
       <Filter>Devices</Filter>
     </ClCompile>

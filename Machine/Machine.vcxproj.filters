@@ -54,6 +54,9 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="Pic.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
     <ClInclude Include="PortBus.h">
       <Filter>Io</Filter>
     </ClInclude>
@@ -79,6 +82,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="Pic.cpp">
+      <Filter>Devices</Filter>
     </ClCompile>
     <ClCompile Include="PortRouter.cpp">
       <Filter>Devices</Filter>
