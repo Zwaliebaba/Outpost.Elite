@@ -24,6 +24,12 @@
     <ClInclude Include="HostServices.h">
       <Filter>Services</Filter>
     </ClInclude>
+    <ClInclude Include="InterruptSource.h">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Timing.h">
+      <Filter>Cpu</Filter>
+    </ClInclude>
     <ClInclude Include="Memory.h">
       <Filter>Memory</Filter>
     </ClInclude>

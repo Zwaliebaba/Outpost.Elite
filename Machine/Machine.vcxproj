@@ -75,6 +75,8 @@
   <ItemGroup>
     <ClInclude Include="Cpu.h" />
     <ClInclude Include="HostServices.h" />
+    <ClInclude Include="InterruptSource.h" />
+    <ClInclude Include="Timing.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PortBus.h" />
