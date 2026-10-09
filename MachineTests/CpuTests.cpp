@@ -2,6 +2,8 @@
 
 #include "Cpu.h"
 #include "HostServices.h"
+#include "InstructionObserver.h"
+#include "InterruptSource.h"
 #include "Memory.h"
 #include "PortBus.h"
 
@@ -53,6 +55,64 @@ public:
 
 private:
   std::vector<std::uint8_t> m_vectors;
+};
+
+// The INTR line with one request on it at a time, holding the vector it will answer with.
+class ScriptedSource final : public Machine::InterruptSource
+{
+public:
+  void Raise(std::uint8_t _vector) noexcept
+  {
+    m_vector = _vector;
+    m_pending = true;
+  }
+
+  [[nodiscard]] bool InterruptPending() const noexcept override
+  {
+    ++m_queries;
+    return m_pending;
+  }
+
+  [[nodiscard]] std::uint8_t AcknowledgeInterrupt() noexcept override
+  {
+    m_pending = false;
+    ++m_acknowledged;
+    return m_vector;
+  }
+
+  [[nodiscard]] std::size_t Queries() const noexcept
+  {
+    return m_queries;
+  }
+
+  [[nodiscard]] std::size_t Acknowledged() const noexcept
+  {
+    return m_acknowledged;
+  }
+
+private:
+  mutable std::size_t m_queries = 0;
+  std::size_t m_acknowledged = 0;
+  std::uint8_t m_vector = 0;
+  bool m_pending = false;
+};
+
+// Keeps CS:IP of every instruction it is told about.
+class AddressRecorder final : public Machine::InstructionObserver
+{
+public:
+  void BeforeInstruction(const Machine::Registers& _registers) override
+  {
+    m_addresses.push_back(Machine::Memory::Linear(_registers.cs, _registers.ip));
+  }
+
+  [[nodiscard]] const std::vector<std::uint32_t>& Addresses() const noexcept
+  {
+    return m_addresses;
+  }
+
+private:
+  std::vector<std::uint32_t> m_addresses;
 };
 
 // A machine with code at CODE_SEGMENT:0000 and an empty stack at STACK_SEGMENT:STACK_TOP.
@@ -203,22 +263,149 @@ public:
     Assert::AreEqual(std::size_t{2}, host.Vectors().size());
   }
 
+  // The CPU asks its InterruptSource at an instruction boundary, acknowledges, and vectors through
+  // the entry the acknowledge returned; the handler's first instruction runs in the same step.
+  TEST_METHOD(HardwareInterruptVectorsThroughTheAcknowledgedEntry)
+  {
+    Rig rig({0x90, 0x90}); // nop; nop
+    rig.Ram().Write16(0x09u * 4, 0x0010);
+    rig.Ram().Write16(0x09u * 4 + 2, 0x5000);
+    rig.Ram().Write8(0x5000, 0x0010, 0x90);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+
+    (void)rig.Processor().Step();
+    Assert::AreEqual(std::size_t{0}, source.Acknowledged(), L"nothing pending: nothing acknowledged");
+    source.Raise(0x09);
+    (void)rig.Processor().Step();
+
+    Assert::AreEqual(std::size_t{1}, source.Acknowledged());
+    Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
+    Assert::AreEqual(0x0011u, std::uint32_t{rig.Regs().ip}, L"the handler's first instruction ran");
+    Assert::AreEqual(0x0001u, rig.Stack(0), L"returns to the second nop");
+    Assert::AreEqual(std::uint32_t{CODE_SEGMENT}, rig.Stack(1));
+    Assert::IsFalse((rig.Regs().flags & Machine::FLAG_INTERRUPT) != 0, L"IF is cleared on entry");
+  }
+
   TEST_METHOD(HardwareInterruptWaitsOneInstructionAfterSti)
   {
     Rig rig({0xFB, 0x90, 0x90}); // sti; nop; nop
     rig.Ram().Write16(0x08u * 4, 0x0000);
     rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
     rig.Regs().flags = Machine::FLAGS_FIXED_ONES;
-    rig.Processor().RequestInterrupt(0x08);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+    source.Raise(0x08);
 
     (void)rig.Processor().Step(); // sti
+    Assert::AreEqual(std::size_t{0}, source.Queries(), L"IF clear: the source is not even asked");
     (void)rig.Processor().Step(); // the nop after it still runs
     Assert::AreEqual(0x0002u, std::uint32_t{rig.Regs().ip});
     Assert::AreEqual(std::uint32_t{CODE_SEGMENT}, std::uint32_t{rig.Regs().cs});
+    Assert::AreEqual(std::size_t{0}, source.Acknowledged());
 
     (void)rig.Processor().Step(); // now the interrupt is taken, and its handler's first instruction runs
     Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
     Assert::AreEqual(0x0002u, rig.Stack(0), L"returns to the second nop");
+  }
+
+  // On the 8088 any MOV or POP to a segment register holds interrupts off for one instruction.
+  TEST_METHOD(SegmentLoadShadowsTheNextInstruction)
+  {
+    Rig rig({0x8E, 0xD0, 0x90, 0x90}); // mov ss,ax; nop; nop
+    rig.Regs().ax = STACK_SEGMENT;
+    rig.Ram().Write16(0x08u * 4, 0x0000);
+    rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+
+    (void)rig.Processor().Step(); // mov ss,ax
+    source.Raise(0x08);
+    (void)rig.Processor().Step(); // the nop in its shadow
+    Assert::AreEqual(std::size_t{0}, source.Acknowledged());
+    Assert::AreEqual(0x0003u, std::uint32_t{rig.Regs().ip});
+
+    (void)rig.Processor().Step();
+    Assert::AreEqual(std::size_t{1}, source.Acknowledged());
+    Assert::AreEqual(0x0003u, rig.Stack(0));
+  }
+
+  // HLT waits for an interrupt; with nothing pending it idles without executing.
+  TEST_METHOD(HaltedCpuWakesForAnInterrupt)
+  {
+    Rig rig({0xF4, 0x90}); // hlt; nop
+    rig.Ram().Write16(0x08u * 4, 0x0000);
+    rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
+    ScriptedSource source;
+    rig.Processor().SetInterruptSource(&source);
+
+    (void)rig.Processor().Step();
+    Assert::IsTrue(rig.Processor().Halted());
+    Assert::AreEqual(Machine::Cpu::HALT_IDLE_CYCLES, rig.Processor().Step());
+    Assert::AreEqual(0x0001u, std::uint32_t{rig.Regs().ip});
+
+    source.Raise(0x08);
+    (void)rig.Processor().Step();
+    Assert::IsFalse(rig.Processor().Halted());
+    Assert::AreEqual(0x5000u, std::uint32_t{rig.Regs().cs});
+    Assert::AreEqual(0x0001u, rig.Stack(0), L"returns past the HLT");
+  }
+
+  // The execution map marks where each instruction starts, at its first prefix byte, and nothing else.
+  TEST_METHOD(ExecutionMapMarksInstructionStarts)
+  {
+    Rig rig({0xB8, 0x34, 0x12, 0x26, 0x8B, 0x07, 0x90}); // mov ax,1234h; mov ax,es:[bx]; nop
+    std::vector<std::uint8_t> map;
+    rig.Processor().SetExecutionMap(&map);
+    Assert::AreEqual(static_cast<std::size_t>(Machine::Memory::SIZE_BYTES), map.size());
+
+    for (int step = 0; step < 3; ++step)
+    {
+      (void)rig.Processor().Step();
+    }
+    const std::uint32_t base = Machine::Memory::Linear(CODE_SEGMENT, 0);
+    for (std::uint32_t offset = 0; offset < 8; ++offset)
+    {
+      const bool start = offset == 0 || offset == 3 || offset == 6;
+      Assert::AreEqual(start ? 1u : 0u, std::uint32_t{map[base + offset]});
+    }
+
+    rig.Processor().SetExecutionMap(nullptr);
+    rig.Regs().ip = 0;
+    map[base] = 0;
+    (void)rig.Processor().Step();
+    Assert::AreEqual(0u, std::uint32_t{map[base]}, L"no map, no marks");
+  }
+
+  // A step that takes an interrupt reports the handler's first instruction, the one it executes,
+  // and never the interrupted one, which runs only after the IRET.
+  TEST_METHOD(ObserverSeesEachExecutedInstructionOnce)
+  {
+    Rig rig({0x90, 0x90}); // nop; nop
+    rig.Ram().Write16(0x08u * 4, 0x0010);
+    rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
+    rig.Ram().Write8(0x5000, 0x0010, 0x90); // nop
+    rig.Ram().Write8(0x5000, 0x0011, 0xCF); // iret
+    ScriptedSource source;
+    AddressRecorder recorder;
+    rig.Processor().SetInterruptSource(&source);
+    rig.Processor().SetInstructionObserver(&recorder);
+
+    (void)rig.Processor().Step();
+    source.Raise(0x08);
+    for (int step = 0; step < 3; ++step)
+    {
+      (void)rig.Processor().Step();
+    }
+
+    const std::uint32_t code = Machine::Memory::Linear(CODE_SEGMENT, 0);
+    const std::uint32_t handler = Machine::Memory::Linear(0x5000, 0x0010);
+    const std::vector<std::uint32_t> expected = {code, handler, handler + 1, code + 1};
+    Assert::IsTrue(recorder.Addresses() == expected, L"nop, handler nop, iret, second nop");
+
+    rig.Processor().SetInstructionObserver(nullptr);
+    (void)rig.Processor().Step();
+    Assert::AreEqual(std::size_t{4}, recorder.Addresses().size(), L"no observer, no reports");
   }
 };
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Map the reference binary from the symbol table: the Phase 1 workbench (plan §4, §5).
 
-Design/Symbols.tsv is the source of truth for what is known about ELITEL.EXE: one row per address,
+Design/Symbols.tsv is the source of truth for what is known about ELITES.EXE: one row per address,
 naming a routine, a jump table or a data item and saying what it does. This tool reads it, walks
 the code from every routine and table it names, and writes:
 
@@ -42,7 +42,7 @@ except ImportError:
   sys.exit("Capstone is not installed: python -m pip install capstone==5.0.7")
 
 ROOT = Path(__file__).resolve().parent.parent
-CODE_SEGMENT_BYTES = 0x8F60
+CODE_SEGMENT_BYTES = 0x8F40
 COLUMNS = ["address", "kind", "name", "size", "contract", "subsystem", "notes"]
 UNNAMED = re.compile(r"(Routine|data)[0-9A-F]{4}")
 KINDS = {"routine", "entry", "isr", "label", "code", "table", "data", "text"}
@@ -333,7 +333,7 @@ def write_listing(_path: Path, _routines: dict[int, Routine], _rows: dict[tuple[
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-  parser.add_argument("--exe", type=Path, default=ROOT / "ELITEL.EXE")
+  parser.add_argument("--exe", type=Path, default=ROOT / "ELITES.EXE")
   parser.add_argument("--table", type=Path, default=ROOT / "Design" / "Symbols.tsv")
   parser.add_argument("--listing", type=Path, help="write the annotated disassembly here")
   parser.add_argument("--seed", action="store_true", help="add a row for every unnamed routine and data reference")

@@ -5,4 +5,5 @@
   <Project Path="Machine/Machine.vcxproj" Id="20d2e016-f4f9-5fe2-9c7d-a4db0f992259" />
   <Project Path="MachineTests/MachineTests.vcxproj" Id="2ffe55e1-b795-5059-b6df-19038d01ca33" />
   <Project Path="CpuConformance/CpuConformance.vcxproj" Id="4edc7d15-6ca3-5746-967c-f868b41a9ff3" />
+  <Project Path="ReferenceRunner/ReferenceRunner.vcxproj" Id="49a53673-c844-539f-b2a7-0030aec3a3ad" />
 </Solution>

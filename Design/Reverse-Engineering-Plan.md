@@ -1,27 +1,27 @@
-# ELITEL.EXE — reverse-engineering and native port plan
+# ELITES.EXE — reverse-engineering and native port plan
 
 **Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day, D10–D13 after Phase 0's work, and D6 and D14 from Phase 1's findings (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). **Phase 0's work is done on its branch, and closes when that branch is merged:** ADR-001 to ADR-003 are written, the provenance check found this copy cracked (ADR-001), and the three checkers are in `Build/`, with their CI steps no longer guarded.
 
-**The goal as stated:** reverse-engineer `ELITEL.EXE` so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
+**The goal as stated:** reverse-engineer `ELITEL.EXE` (since D15, its solid-ship build `ELITES.EXE`) so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
 
 ## 1. What the binary is
 
-Measured on 2026-10-09 from the file at the repository root (SHA-256 `440b06de18c121855635d55e7a95308d5748144d8c4c63f082cbb864af95e55e`) with an MZ header parse and an `ndisasm` linear sweep of the code segment. The sweep decodes some data as code, so its counts are approximate; Phase 1 replaces them with recursive-descent figures.
+Measured on 2026-10-09 from the file at the repository root (SHA-256 `18b5076a54733dea2d45b1e3b280fd1377067b6cb1b27166d3873aa7e7744363`) with an MZ header parse and an `ndisasm` linear sweep of the code segment; first measured on `ELITEL.EXE`, and re-measured on `ELITES.EXE` when D15 made it the reference (ADR-007). The sweep decodes some data as code, so its counts are approximate; Phase 1 replaces them with recursive-descent figures.
 
-It is the 1987 Firebird *Elite* for the IBM PC, CGA build. The version string is `Release:1? 1-10-87` (DS:0x7780) and the exit message is "Thank you for playing ELITE - Have a nice DOS!".
+It is the 1987 Firebird *Elite* for the IBM PC, CGA build. The version string is `Release:1? 1-10-87` (DS:0x7B50) and the exit message is "Thank you for playing ELITE - Have a nice DOS!".
 
 | | |
 |---|---|
-| Format | DOS MZ, 97,200 bytes, no overlay, 64-byte header, 7 relocations, entry 0000:0000, stack 138F:03F8 |
-| Layout | one code segment (image 0x0000–0x8F5F, 36,704 bytes); data segment 0x08F6 (image 0x8F60 to the end, 60,432 bytes); one further segment value, 0x13CF, fixed up at CS:0x7C03 |
+| Format | DOS MZ, 98,144 bytes, no overlay, 64-byte header, 7 relocations, entry 0000:0000, stack 13CA:03F8 |
+| Layout | one code segment (image 0x0000–0x8F3F, 36,672 bytes); data segment 0x08F4 (image 0x8F40 to the end, 61,408 bytes); one further segment value, 0x140A, fixed up at CS:0x7BE3 |
 | Code | hand-written 8086 assembly, 8086 instruction set only, no x87; about 14,300 instructions, 1,370 call sites and 550 returns, so of the order of 400–500 routines |
 | Video | CGA mode 4 (320×200, 4 colours) written directly at B800; CRTC at 0x3D4, mode at 0x3D8, colour select at 0x3D9, retrace polled at 0x3DA; BIOS modes 0, 1, 2 and 4 and the palette set through int 10h |
 | Time | PIT channel 0 reprogrammed to divisor 0x04A9 (about 1 kHz), serviced by the game's own int 8 handler at 0x0215 |
 | Sound | PC speaker only: PIT channel 2 and port 0x61 |
 | Input | the game's own int 9 handler at 0x0201 reads port 0x60, so the BIOS keyboard is unused during play; joystick on port 0x201; mouse through int 33h |
-| DOS | int 21h functions 09, 0C, 1A, 2C, 30, 3C, 3D, 3E, 3F, 40, 41, 43, 4E, 4F — the commander files (`*.cdr`, default commander `JAMESON` at DS:0x7229) and the start-up checks; int 24h hooked to 0x02F0 around disk operations and the screenshot save; exits with `retf` to PSP:0 |
+| DOS | int 21h functions 09, 0C, 1A, 2C, 30, 3C, 3D, 3E, 3F, 40, 41, 43, 4E, 4F — the commander files (`*.cdr`, default commander `JAMESON` at DS:0x75F9) and the start-up checks; int 24h hooked to 0x02F0 around disk operations and the screenshot save; exits with `retf` to PSP:0 |
 | Other machines | detects an Amstrad PC by its ROM string at FC00:0016 (compared with "Amstrad" at DS:0x2001, flag at DS:0x2000) and chains the timer to the BIOS only on that path |
-| Protection | a word from the printed manual ("Program Protection", DS:0x2424), three attempts, then "the program is cleared": the routine at 0x0554 zero-fills CS from 0x0564 to 0x8F50. `Start` calls it at 0x0072 whenever `diskOperation` (DS:0x2009) is 0, which is every exit to DOS as well as a failed protection. **Defeated in this copy** by a patch at 0x0532–0x0538 (ADR-001) |
+| Protection | a word from the printed manual ("Program Protection", DS:0x2424), three attempts, then "the program is cleared": the routine at 0x0554 zero-fills CS from 0x0564 to 0x8F30. `Start` calls it at 0x0072 whenever `diskOperation` (DS:0x2009) is 0, which is every exit to DOS as well as a failed protection. **Defeated in this copy** by a patch at 0x0532–0x0538 (ADR-001) |
 
 The interface text is plain ASCII — screen titles, ship names, government and economy names, the system-name digram table — rather than the tokenised text of the 6502 versions, which makes the data segment comparatively quick to map.
 
@@ -37,7 +37,7 @@ DOSBox Staging or DOSBox-X runs this file on Windows 11 today with no functional
 
 `Zwaliebaba/Outpost.Elite` is public and `ELITEL.EXE` is on `main` at `4cfcee3`. That is distribution of the original program now, not an exposure that might arise later. The C64 attempt in this repository's history carried the same risk as its R1 and, at its last revision, was still waiting on an answer from the rights holders. Removing the file from the tip stops further distribution but does not recall forks or caches, and rewriting a public history is drastic and only partly effective. A faithful port inherits the problem a second time through its data: the ship models, font, text and tables are the original's bytes.
 
-**Ruled (D2, D3):** the repository becomes private, so the reference binary and generated data tables may be committed. As of 2026-10-09 it is still public; the change is the owner's to make in the repository settings, and what forks and caches took during the public period stays out there.
+**Ruled (D2, D3):** the repository becomes private, so the reference binary and generated data tables may be committed. The owner made it private on 2026-10-09; what forks and caches took during the public period stays out there.
 
 ### 2.3 This copy is not pristine
 
@@ -70,7 +70,7 @@ C is recommended because it is the only option in which the game always runs and
 
 ## 4. Tooling
 
-**Ghidra is the static workbench.** Its MZ loader handles the segmented 16-bit image, and with DS set to 0x08F6 across the code segment its cross-references resolve into the data segment. It is used for disassembly, the call graph, cross-references and data typing, not for its decompiler output (§3 A). IDA is not needed.
+**Ghidra is the static workbench.** Its MZ loader handles the segmented 16-bit image, and with DS set to 0x08F4 across the code segment its cross-references resolve into the data segment. It is used for disassembly, the call graph, cross-references and data typing, not for its decompiler output (§3 A). IDA is not needed.
 
 **The knowledge lives in a text file, not in a Ghidra project.** A checked-in symbol table, one row per address — kind, name, registers in and out, flags returned, notes — is the source of truth, with two small Ghidra scripts to import and export it. A Ghidra project is a binary database that does not diff, review or merge, and the naming of several hundred routines is the most expensive thing this project produces; it has to be reviewable in a pull request.
 
@@ -90,7 +90,7 @@ Finish the provenance check of §2.3: compare the code against what the binary i
 
 ### Phase 1 — Map the binary
 
-Disassemble by recursive descent in Ghidra. Classify every byte of the code segment as code or data; bound, name and give a register contract to every routine; list every irregular construct — the int 8, int 9, int 0 and int 24h handlers, the four indirect branches and their tables (`jmp [bx+0x4D15]`, `call [bx+0x75C0]`, `jmp ax` at 0x3D08, `jmp [bx]` at 0x7049), the self-modified instructions, the routines with more than one entry and the shared tails. Then map the data segment: the text, ship blueprints, font and dashboard bitmaps, maths tables, the digram table, the default commander, and the market and equipment tables. Group the routines into subsystems: raster and lines, 3D and ships, planet and sun, text, dashboard and scanner, input, sound, timer, flight, AI, combat, docking, hyperspace, galaxy, market, equipment, save and load, protection, start-up.
+Disassemble by recursive descent in Ghidra. Classify every byte of the code segment as code or data; bound, name and give a register contract to every routine; list every irregular construct — the int 8, int 9, int 0 and int 24h handlers, the four indirect branches and their tables (`jmp [bx+0x4D15]`, `call [bx+0x7990]`, `jmp ax` at 0x3CF0, `jmp [bx]` at 0x7029), the self-modified instructions, the routines with more than one entry and the shared tails. Then map the data segment: the text, ship blueprints, font and dashboard bitmaps, maths tables, the digram table, the default commander, and the market and equipment tables. Group the routines into subsystems: raster and lines, 3D and ships, planet and sun, text, dashboard and scanner, input, sound, timer, flight, AI, combat, docking, hyperspace, galaxy, market, equipment, save and load, protection, start-up.
 
 The annotated 6502 sources are a legitimate aid for recognising an algorithm — galaxy generation, market prices, the ship AI. They are never the PC version's truth: this is a separate implementation for a different machine, and where the two differ the binary wins.
 
@@ -124,11 +124,11 @@ A replacement is accepted when it matches the original on every captured call (�
 
 The interpreter leaves the shipping executable. Video memory becomes a native index buffer handed to the presenter; the speaker becomes a native synthesiser; the timer and keyboard handlers become a fixed-tick scheduler at the rate D6 sets; DOS file calls become `std::filesystem`, with the `.cdr` format kept byte-compatible so that commanders saved by the original still load. The protection is not ported (D5). The data-segment overlay is re-laid as typed state, now that nothing interpreted reads its bytes, and the ship models, font, text and tables become C++ tables generated from the reference by a script under `Tools/` and checked in (D3).
 
-At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-006.
+At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-008.
 
-This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-006 with its cause, never a re-baseline to make CI green.
+This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-008 with its cause, never a re-baseline to make CI green.
 
-**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-006, passes; the game has been played and looked at, not only built (AGENTS.md §3).
+**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-008, passes; the game has been played and looked at, not only built (AGENTS.md §3).
 
 ### Phase 5 — Beyond the original (outside this plan)
 
@@ -155,25 +155,25 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 ## 7. Hazards found in the binary
 
 1. **Divide overflow is part of the arithmetic.** The int 0 handler at 0x025E inspects the faulting instruction, sets AL to 0x7F or AX to 0x7FFF, and resumes, so the game relies on the trap to saturate quotients. It copes with both the 8086 convention (return address after the `div`) and the 286-and-later one (return address at it), but on the later path it skips exactly two bytes, so a `div` with a memory operand would resume mid-instruction on a 286 or newer. Every one of the roughly 60 `div` and `idiv` sites must reproduce the saturation explicitly in C++. The interpreter models the 8088 convention, the machine the code was written for. *Phase 1:* the handler mis-sizes three-byte divides: for `div word [si+4]` at 0x2369 and 0x2392 it reads the ModRM byte, which is even, and returns AL = 0x7F with AH and DX unchanged. Reference-Map.md lists every divide that reaches the trap.
-2. **Self-modifying code is dead.** The code that rewrites itself (42 `CS:` writes to 18 instructions) is a triangle filler at 0x1B7A–0x233F that nothing can enter; Phase 1 decoded from every byte offset to be sure (Reference-Map.md). The line drawer the game uses, `DrawLine` (0x16D1), does not modify itself. The interpreter still executes self-modifying code correctly, so a Phase 2 trace that contradicts this costs nothing.
-3. **Two interrupt handlers run inside the game.** The timer handler, at about 1 kHz, calls 0x7170; the keyboard handler calls 0x7463 and never chains to the BIOS. Whatever they write, the main loop reads asynchronously (§3). *Phase 1:* what they share is counters, the keyboard's tables and buffer, and the sound engine. The sound engine's effects are speaker toggles at the tick rate, so it has to run on the audio clock, not once a frame (Reference-Map.md).
-4. **Some delays are calibrated for a 4.77 MHz 8088.** The routines at 0x4618 and 0x05CC wait for vertical retrace and then spin 700 iterations of `dec ax / jnz`. On a modern CPU that spin takes no time; in the interpreter it takes as long as the cycle model says. What the delay protects — a tear-free blit, a palette change, a copy inside the blanking interval — decides how the native version replaces it. *Phase 1:* both precede block copies to the screen, timed against the beam to avoid tearing; in the port they become presenting a finished frame.
-5. **The palette is written outside mode changes.** Colour-select writes to 0x3D9 occur at 0x49F8, at 0x7CB7 (stepping through a table) and at 0x7D2A. If any of them is timed within a frame, the presenter must model a split palette rather than one palette per frame. *Phase 1:* none of the three is timed within a frame: a fuel-leak flash once a frame, a docked screen's border colour, and the set-up after mode 4.
-6. **Game speed may have depended on the CPU.** If flight and AI advance once per frame rather than per timer tick, the original slowed down on a real PC as the screen filled with ships, and "without functionality change" needs a definition before Phase 4 can meet it (D6). Phase 0 found a 20-per-second rate limiter at 0x777D with no caller anywhere in the code (ADR-001); whether something reaches it through data is a Phase 1 question that bears directly on D6. *Phase 1:* it advances once a frame with a minimum frame time of 50 ms, selectable with F1–F10 on the pause screen, and ruled as the port's speed (D6).
+2. **Self-modifying code is live.** The code that rewrites itself (42 `CS:` writes to 18 instructions) is the triangle filler at 0x1B7A–0x233F, which the solid renderer calls for every filled face. In `ELITEL.EXE` nothing could enter it, which Phase 1 first found; D15 made the build that uses it the reference (ADR-007). *Phase 1:* it rewrites each edge step to an add or a subtract once per triangle, and no write can reach an instruction already in the 8088's prefetch queue, so the interpreter, which executes self-modifying code as written, needs no queue model for it. The port replaces the patch with a sign per edge (Reference-Map.md). The line drawer, `DrawLine` (0x16D1), does not modify itself.
+3. **Two interrupt handlers run inside the game.** The timer handler, at about 1 kHz, calls 0x7150; the keyboard handler calls 0x7443 and never chains to the BIOS. Whatever they write, the main loop reads asynchronously (§3). *Phase 1:* what they share is counters, the keyboard's tables and buffer, and the sound engine. The sound engine's effects are speaker toggles at the tick rate, so it has to run on the audio clock, not once a frame (Reference-Map.md).
+4. **Some delays are calibrated for a 4.77 MHz 8088.** The routines at 0x45FF and 0x05CC wait for vertical retrace and then spin 2,000 and 700 iterations of `dec ax / jnz`. On a modern CPU that spin takes no time; in the interpreter it takes as long as the cycle model says. What the delay protects — a tear-free blit, a palette change, a copy inside the blanking interval — decides how the native version replaces it. *Phase 1:* both precede block copies to the screen, timed against the beam to avoid tearing; in the port they become presenting a finished frame.
+5. **The palette is written outside mode changes.** Colour-select writes to 0x3D9 occur at 0x49D8, at 0x7C97 (stepping through a table) and at 0x7D0A. If any of them is timed within a frame, the presenter must model a split palette rather than one palette per frame. *Phase 1:* none of the three is timed within a frame: a fuel-leak flash once a frame, a docked screen's border colour, and the set-up after mode 4.
+6. **Game speed may have depended on the CPU.** If flight and AI advance once per frame rather than per timer tick, the original slowed down on a real PC as the screen filled with ships, and "without functionality change" needs a definition before Phase 4 can meet it (D6). Phase 0 found a 20-per-second rate limiter at 0x775D with no caller anywhere in the code (ADR-001); whether something reaches it through data is a Phase 1 question that bears directly on D6. *Phase 1:* it advances once a frame with a minimum frame time of 50 ms, selectable with F1–F10 on the pause screen, and ruled as the port's speed (D6).
 7. **The Amstrad path is a second machine.** It changes the timer's behaviour and probably input. The port keeps only the IBM PC behaviour unless the owner says otherwise.
 8. **The docked screens are CGA text mode.** Mode 1, 40×25: the CGA's character ROM draws their glyphs, and that font is not in the binary (D14).
-9. **Noise is made from the program's own code.** Routine7AB3 sends bit 1 of successive bytes of CS:0x07D0–0x0BCF to the speaker, so those 1,024 bytes are sound data as well as code.
+9. **Noise is made from the program's own code.** `EmitNoiseSample` (0x7A93) sends bit 1 of successive bytes of CS:0x07D0–0x0BCF to the speaker, so those 1,024 bytes are sound data as well as code.
 
 ## 8. Decisions for the owner
 
 | # | Decision | Recommendation | Ruling, 2026-10-09 |
 |---|---|---|---|
 | D1 | Is the goal a native source port, or is a DOSBox package enough? | A native source port (§2.1). | **Native source port.** |
-| D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip and keep the reference outside the tree. | **Make the repository private.** The owner makes the change; it was still public on 2026-10-09. |
+| D2 | `ELITEL.EXE` on the public `main` | Remove it from the tip and keep the reference outside the tree. | **Make the repository private.** Done by the owner on 2026-10-09. |
 | D3 | Original data in the port | Read it from the user's copy at start-up (the OpenRCT2 model). | **Follows from D2:** generated tables are checked in, and the reference binary is committed so CI can run the oracle until Phase 4 ends. |
 | D4 | The reference binary | An unpatched copy with a recorded hash. | **This file, `ELITEL.EXE`, with its known patch documented** — the only copy available. Phase 0 looks for further patches (§2.3). |
 | D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** One byte, DS:0x25E4, set in the loaded image so the file keeps its hash (ADR-001). |
-| D6 | What "the same speed" means | The original's own minimum frame time, once Phase 1 showed how it paces itself. | **The game's own frame time:** 50 ms by default, selectable with F1–F10 as on the original's pause screen. No model of 1987 slowdowns (Reference-Map.md). ADR-006 records it with the change that implements it. |
+| D6 | What "the same speed" means | The original's own minimum frame time, once Phase 1 showed how it paces itself. | **The game's own frame time:** 50 ms by default, selectable with F1–F10 as on the original's pause screen. No model of 1987 slowdowns (Reference-Map.md). ADR-008 records it with the change that implements it. |
 | D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. | **Delete it after Phase 4.** The replay corpus must be complete before it goes (Phase 4). |
 | D8 | The picture | As the original drew it, at integer scale, corrected to 4:3. | **CGA mode 4 as this build draws it, at integer scale, corrected to 4:3.** |
 | D9 | A second build beside the reference | Keep one if available: diffing two builds separates the display code from the game logic. | **Moot:** there is no second build. Phase 1 finds the hardware boundary by hand. |
@@ -182,6 +182,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D12 | The Amstrad path (§7.7) | Port the IBM PC behaviour only. | **IBM PC only** (ADR-001 item 5). |
 | D13 | What answers a design question | The reference is the design. | **The reference is the design.** AGENTS.md names ADR-001's reference as what the game is and this plan as what sequences the work; the owner rules only where the reference is silent or a change is wanted. |
 | D14 | The 8×8 font for the docked screens' text mode, which the binary does not contain | Draw our own lookalike. | **Draw our own** 8×8 code-page 437 font matching the CGA's, for the characters the game uses. |
+| D15 | Which build is the reference, now that a second one exists | — (raised by the owner) | **`ELITES.EXE`**, the solid-ship build of the same release, replaces `ELITEL.EXE` as the reference, and `ELITEL.EXE` leaves the tree (ADR-007). |
 
 ## 9. ADRs this plan produces
 
@@ -190,6 +191,8 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-001](ADR/ADR-001-scope-reference-and-fidelity.md) | Scope, reference binary and fidelity (D1, D4, D5, D8, D9) | Phase 0 — written |
 | [ADR-002](ADR/ADR-002-original-data-and-the-repository.md) | Original data and the repository (D2, D3) | Phase 0 — written |
 | [ADR-003](ADR/ADR-003-verification.md) | Verification: interpreter validation, replays, differential tests, the oracle's lifetime (§6, D7) | Phase 0 — written |
-| ADR-004 | Projects and layout | Phase 2, when the first project is created |
+| [ADR-004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | Phase 2 — written |
 | [ADR-005](ADR/ADR-005-interpreter.md) | The 8086 interpreter: what one step is, interrupts, timing, and what checks it | Phase 2 — written |
-| ADR-006 | Time, pacing and the replay digests (D6) | Phase 4, with the change that implements it |
+| [ADR-006](ADR/ADR-006-pc-host.md) | The PC host: the machine the reference runs on, its devices and services, and the headless runner | Phase 2 — written |
+| [ADR-007](ADR/ADR-007-reference-elites.md) | The reference becomes `ELITES.EXE` (D15) | Phase 2 — written |
+| ADR-008 | Time, pacing and the replay digests (D6) | Phase 4, with the change that implements it |

@@ -1,6 +1,6 @@
 # ADR-004 — Projects and layout
 
-**Status:** accepted 2026-10-09, when the first projects were created (AGENTS.md §2). The layout follows the starting point in [Reverse-Engineering-Plan.md §5, Phase 2](../Reverse-Engineering-Plan.md#phase-2--the-host). The owner can reopen it.
+**Status:** accepted 2026-10-09, when the first projects were created (AGENTS.md §2). The layout follows the starting point in [Reverse-Engineering-Plan.md §5, Phase 2](../Reverse-Engineering-Plan.md#phase-2--the-host). The owner can reopen it. **Amended 2026-10-09:** a fourth project, `ReferenceRunner`, joins the three (item 2), and item 5's claim about `<expected>` is corrected.
 
 ## Context
 
@@ -22,13 +22,14 @@ AGENTS.md §2 fixes the rest of the shape:
 
 1. **One solution at the root, `Outpost.Elite.slnx`**, x64 only, built through the solution (AGENTS.md §3).
 
-2. **Three projects now:**
+2. **Four projects now** (`ReferenceRunner` was added with the PC host):
 
    | Project | Kind | Namespace | Holds |
    |---|---|---|---|
    | `Machine` | static library | `Machine` | The 8086 interpreter, and the PC it runs on: memory, the timer, the interrupt controller, the keyboard controller, the CGA, the speaker gate, the joystick port. Also the BIOS and DOS services, emulated at the call level for exactly the functions the reference uses (plan §1), and the MZ loader. |
    | `MachineTests` | native unit tests | `MachineTests` | Tests of `Machine`. |
    | `CpuConformance` | console executable | `CpuConformance` | Runs the SingleStepTests 8088 suite against `Machine`'s interpreter (ADR-003 item 1). CI builds it. `Tools/CpuConformance.py` fetches the suite, converts it and runs it, because the suite is about 3 million tests and does not belong in the repository or in every CI run. |
+   | `ReferenceRunner` | console executable | `ReferenceRunner` | Runs the reference headless on the PC host and records what ADR-003 compares: screenshots, state digests, the boot trace and code coverage (ADR-006). Standard C++, so it runs where the binary is studied as well as on Windows. CI builds it. |
 
 3. **Three projects later, named now so that the edges are known:**
 
@@ -42,7 +43,7 @@ AGENTS.md §2 fixes the rest of the shape:
 
 4. **`Machine` (and later `GameLogic`) is standard C++ and includes no Windows header.** It compiles with MSVC in the solution and with GCC 13 or Clang 18 outside it. The Linux build is a development tool under `Tools/`: it compiles the library's sources and a driver, never a second build system for the product, and it only proves that the code runs. MSVC with `/W4 /WX` is still the build that gates (AGENTS.md §3). `Engine` and `Outpost` are Windows-only.
 
-5. **C++ features are limited to what both compilers have.** That means C++23 as far as GCC 13's library supports it. `<print>` is out, for example; `<expected>` and `<span>` are in. When the Linux side moves to a newer GCC this limit moves with it, and this ADR is amended.
+5. **C++ features are limited to what both compilers have.** That means C++23 as far as GCC 13's library supports it, and as far as Clang 18 can compile that library. `<print>` is out, for example, and `<span>` and `<format>` are in. **`<expected>` is out too**, which this item first said the opposite of: libstdc++ 13 enables `std::expected` only when `__cpp_concepts` is at least 202002, and Clang 18 reports 201907 (measured 2026-10-09). A function that can fail returns its error and passes results through reference parameters instead. When the Linux side moves to newer compilers this limit moves with them, and this ADR is amended.
 
 ## What this forecloses
 

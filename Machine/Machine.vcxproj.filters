@@ -7,22 +7,106 @@
     <Filter Include="Cpu">
       <UniqueIdentifier>{6E59F20A-6C1E-56DB-8CEB-AF7F4C71E9AF}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Devices">
+      <UniqueIdentifier>{4247BB1B-1667-5080-A1D7-C8D79DD0FAF1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dos">
+      <UniqueIdentifier>{0B41E6E2-9CB7-545D-A331-B26C3C50DEB5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Firmware">
+      <UniqueIdentifier>{23A8AABB-5BEB-503F-9A27-FF274ADE16F5}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Io">
       <UniqueIdentifier>{D724A654-3C77-526C-A9C5-CB5309721AA7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Loader">
+      <UniqueIdentifier>{56703538-0074-5434-89F2-3C3BB01A5A6D}</UniqueIdentifier>
     </Filter>
     <Filter Include="Memory">
       <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pc">
+      <UniqueIdentifier>{4D391271-F4E6-54D0-8805-8197E7BC576D}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Services">
       <UniqueIdentifier>{C629C94A-1F95-558B-B2D2-1AF3FD9AE872}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Sound">
+      <UniqueIdentifier>{2248FD5B-4609-5B65-AA3B-E7BD96271643}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Verification">
+      <UniqueIdentifier>{747F9A38-ADFD-527B-843F-548997B33CDF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{BD77D3FD-363E-5FBF-B551-013BF256F01E}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Bios.h">
+      <Filter>Firmware</Filter>
+    </ClInclude>
+    <ClInclude Include="Cga.h">
+      <Filter>Video</Filter>
+    </ClInclude>
+    <ClInclude Include="CgaFont.h">
+      <Filter>Video</Filter>
+    </ClInclude>
     <ClInclude Include="Cpu.h">
       <Filter>Cpu</Filter>
     </ClInclude>
+    <ClInclude Include="DirectoryFileStore.h">
+      <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="Dos.h">
+      <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="ExeLoader.h">
+      <Filter>Loader</Filter>
+    </ClInclude>
+    <ClInclude Include="FileStore.h">
+      <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="Firmware.h">
+      <Filter>Firmware</Filter>
+    </ClInclude>
+    <ClInclude Include="GamePort.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
     <ClInclude Include="HostServices.h">
       <Filter>Services</Filter>
+    </ClInclude>
+    <ClInclude Include="InstructionObserver.h">
+      <Filter>Cpu</Filter>
+    </ClInclude>
+    <ClInclude Include="InterruptSource.h">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Mouse.h">
+      <Filter>Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Pc.h">
+      <Filter>Pc</Filter>
+    </ClInclude>
+    <ClInclude Include="PcServices.h">
+      <Filter>Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Pit.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
+    <ClInclude Include="PortRouter.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
+    <ClInclude Include="ServiceFault.h">
+      <Filter>Services</Filter>
+    </ClInclude>
+    <ClInclude Include="Speaker.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Timing.h">
+      <Filter>Cpu</Filter>
+    </ClInclude>
+    <ClInclude Include="Keyboard.h">
+      <Filter>Devices</Filter>
     </ClInclude>
     <ClInclude Include="Memory.h">
       <Filter>Memory</Filter>
@@ -30,22 +114,82 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="Pic.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
     <ClInclude Include="PortBus.h">
       <Filter>Io</Filter>
     </ClInclude>
     <ClInclude Include="Registers.h">
       <Filter>Cpu</Filter>
     </ClInclude>
+    <ClInclude Include="Sha256.h">
+      <Filter>Verification</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Bios.cpp">
+      <Filter>Firmware</Filter>
+    </ClCompile>
+    <ClCompile Include="Cga.cpp">
+      <Filter>Video</Filter>
+    </ClCompile>
+    <ClCompile Include="CgaFont.cpp">
+      <Filter>Video</Filter>
+    </ClCompile>
     <ClCompile Include="Cpu.cpp">
       <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectoryFileStore.cpp">
+      <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="Dos.cpp">
+      <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="ExeLoader.cpp">
+      <Filter>Loader</Filter>
+    </ClCompile>
+    <ClCompile Include="FileStore.cpp">
+      <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="Firmware.cpp">
+      <Filter>Firmware</Filter>
+    </ClCompile>
+    <ClCompile Include="GamePort.cpp">
+      <Filter>Devices</Filter>
+    </ClCompile>
+    <ClCompile Include="Keyboard.cpp">
+      <Filter>Devices</Filter>
     </ClCompile>
     <ClCompile Include="Memory.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
+    <ClCompile Include="Mouse.cpp">
+      <Filter>Services</Filter>
+    </ClCompile>
+    <ClCompile Include="Pc.cpp">
+      <Filter>Pc</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PcServices.cpp">
+      <Filter>Services</Filter>
+    </ClCompile>
+    <ClCompile Include="Pic.cpp">
+      <Filter>Devices</Filter>
+    </ClCompile>
+    <ClCompile Include="Pit.cpp">
+      <Filter>Devices</Filter>
+    </ClCompile>
+    <ClCompile Include="PortRouter.cpp">
+      <Filter>Devices</Filter>
+    </ClCompile>
+    <ClCompile Include="Sha256.cpp">
+      <Filter>Verification</Filter>
+    </ClCompile>
+    <ClCompile Include="Speaker.cpp">
+      <Filter>Sound</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

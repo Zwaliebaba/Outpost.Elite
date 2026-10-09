@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure the reference binary for the provenance record in ADR-001.
 
-Disassembles the code segment of ELITEL.EXE by recursive descent from its entry point, its four
+Disassembles the code segment of ELITES.EXE by recursive descent from its entry point, its four
 interrupt handlers and its three resolved jump tables, then reports:
 
   * the file's identity (size, SHA-256, MZ header fields);
@@ -12,7 +12,7 @@ interrupt handlers and its three resolved jump tables, then reports:
     zero-filled data, or code, with any branch into a code region from other unreached code.
 
 This is a measuring instrument for Phase 0, not the Phase 1 map. It knows nothing about the
-data-driven dispatch at 0x3D08 (`jmp ax`, with targets read from data), so code reached only
+data-driven dispatch at 0x3CF0 (`jmp ax`, with targets read from data), so code reached only
 through that is reported as unreached.
 
 Development tool only (AGENTS.md R14 binds what the executable is built from). Needs Capstone:
@@ -30,7 +30,7 @@ try:
 except ImportError:
   sys.exit("Capstone is not installed: python -m pip install capstone==5.0.7")
 
-CODE_SEGMENT_BYTES = 0x8F60  # the data segment, 0x08F6, starts here: five relocations load DS with it
+CODE_SEGMENT_BYTES = 0x8F40  # the data segment, 0x08F4, starts here: five relocations load DS with it
 
 ENTRY_POINTS = {
   0x0000: "program entry",
@@ -43,8 +43,8 @@ ENTRY_POINTS = {
 # (data-segment offset, entry count, the indirect branch that uses it)
 JUMP_TABLES = [
   (0x4D15, 4, "jmp [bx+0x4D15] at 0x36E3"),
-  (0x75C0, 8, "call [bx+0x75C0] at 0x4A61"),
-  (0x9393, 31, "jmp [bx] at 0x7049, text control codes 1-31"),
+  (0x7990, 8, "call [bx+0x7990] at 0x4A41"),
+  (0x9763, 31, "jmp [bx] at 0x7029, text control codes 1-31"),
 ]
 
 ENDS_FLOW = {"ret", "retf", "iret", "jmp", "ljmp"}
@@ -115,7 +115,7 @@ def branch_sources(_code: bytes, _targets: list[int]) -> dict[int, list[int]]:
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-  default = Path(__file__).resolve().parent.parent / "ELITEL.EXE"
+  default = Path(__file__).resolve().parent.parent / "ELITES.EXE"
   parser.add_argument("exe", nargs="?", type=Path, default=default, help="the reference binary")
   args = parser.parse_args()
 
