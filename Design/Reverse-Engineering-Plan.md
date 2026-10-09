@@ -1,6 +1,6 @@
 # ELITEL.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6); D6 stays open by design. **Phase 0's work is done on its branch, and closes when that branch is merged:** ADR-001 to ADR-003 are written, the provenance check found this copy cracked (ADR-001), and the three checkers are in `Build/`, with their CI steps no longer guarded.
+**Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day, and D10–D13 after Phase 0's work (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6); D6 stays open by design. **Phase 0's work is done on its branch, and closes when that branch is merged:** ADR-001 to ADR-003 are written, the provenance check found this copy cracked (ADR-001), and the three checkers are in `Build/`, with their CI steps no longer guarded.
 
 **The goal as stated:** reverse-engineer `ELITEL.EXE` so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
 
@@ -175,6 +175,10 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. | **Delete it after Phase 4.** The replay corpus must be complete before it goes (Phase 4). |
 | D8 | The picture | As the original drew it, at integer scale, corrected to 4:3. | **CGA mode 4 as this build draws it, at integer scale, corrected to 4:3.** |
 | D9 | A second build beside the reference | Keep one if available: diffing two builds separates the display code from the game logic. | **Moot:** there is no second build. Phase 1 finds the hardware boundary by hand. |
+| D10 | Code shared between shaders | Keep §2 as written: vertex and pixel shaders only. | **Allow `<Name>.hlsli` in `Shader/`,** registered as a `None` item; AGENTS.md §2 and the checker say so. |
+| D11 | `.clang-tidy`'s example command defines the Windows macros AGENTS.md §4 reserves for one header | Remove the two defines. | **Removed.** |
+| D12 | The Amstrad path (§7.7) | Port the IBM PC behaviour only. | **IBM PC only** (ADR-001 item 5). |
+| D13 | What answers a design question | The reference is the design. | **The reference is the design.** AGENTS.md names ADR-001's reference as what the game is and this plan as what sequences the work; the owner rules only where the reference is silent or a change is wanted. |
 
 ## 9. ADRs this plan produces
 

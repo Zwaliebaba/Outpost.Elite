@@ -26,7 +26,7 @@
 # INCLUDE variable is what makes the Windows SDK visible to clang):
 #
 #   clang-tidy --quiet <Project>/YourNewFile.cpp -- --driver-mode=cl /std:c++latest /EHsc `
-#     /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_DEBUG /I <Project>
+#     /DUNICODE /D_UNICODE /D_DEBUG /I <Project>
 #
 # UNICODE and _UNICODE are not optional in that command. Every project sets CharacterSet=Unicode,
 # so `IDC_ARROW` is `MAKEINTRESOURCEW`; without the defines clang-tidy reports a type error at

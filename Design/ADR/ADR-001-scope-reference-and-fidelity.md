@@ -32,7 +32,7 @@ The MZ header's checksum field (0x1399) does not satisfy the documented definiti
 
 4. **The picture is CGA mode 4 as this build draws it (D8):** its 320×200 four-colour frame and palette, scaled by a whole number and corrected to a 4:3 shape. Anything sharper, smoother or larger is Phase 5.
 
-5. **Only the IBM PC behaviour is ported.** The Amstrad path (DS:0x2000 and the timer chaining that depends on it) runs in the hosted original as the reference does, but the port does not carry it. This follows the plan's §7.7 default rather than a separate ruling, and the owner can reopen it.
+5. **Only the IBM PC behaviour is ported** (ruled by the owner, D12). The Amstrad path — the ROM check at start-up, the flag at DS:0x2000 and the timer chaining that depends on it — stays in the hosted original as the reference has it. It never executes there, because the emulated PC has no Amstrad ROM string at FC00:0016, and the port does not carry it.
 
 6. **Speed is not defined here.** What "the same speed" means (D6) is decided in ADR-005, after Phase 1 shows how the game paces itself and Phase 2 measures it at 4.77 MHz.
 

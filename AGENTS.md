@@ -2,7 +2,7 @@
 
 Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-This repository is a greenfield C++23 game and a hobby project with one developer: a Direct3D 12 game built on Windows with MSVC. This file is about **how code is written here** — naming, layout, build settings and the standing rules of the codebase. It is not the design: what the game *is* belongs in a design document that does not exist yet.
+This repository is a greenfield C++23 game and a hobby project with one developer: a Direct3D 12 game built on Windows with MSVC. This file is about **how code is written here** — naming, layout, build settings and the standing rules of the codebase. It is not the design. What the game *is* is the reference binary that [ADR-001](Design/ADR/ADR-001-scope-reference-and-fidelity.md) names — the 1987 *Elite* in `ELITEL.EXE`, with its patches and the one change ADR-001 makes — and [`Design/Reverse-Engineering-Plan.md`](Design/Reverse-Engineering-Plan.md) sequences the work of porting it.
 
 **There is no C++ yet.** This repository holds this file, the root configuration files, `.gitignore`, `.github/`, the reference binary `ELITEL.EXE`, the design record under `Design/`, the checkers under `Build/` and a development tool under `Tools/` — no solution, no projects, no source. Nothing below is a target to migrate towards; it describes the code as it must be written from the first line. There is no legacy here and nothing is grandfathered, so a whole-tree run of any checker comes back clean — trivially today, and by conformance from then on.
 
@@ -14,7 +14,7 @@ This repository is a greenfield C++23 game and a hobby project with one develope
 2. **`Design/ADR/`** — engineering decisions taken while building, one file per decision (§6). Numbering started at `ADR-001` in this repository and does not continue another's.
 3. **The surrounding code** — for anything neither of the above covers, match the file you are editing.
 
-A design document, when there is one, sits alongside rather than above: it says what is built and this file says how. Until it exists there is no design authority, and a task that needs a design answer asks the owner and gets the answer written down before the code is.
+The design sits alongside this file rather than above it: the reference says what is built, and this file says how. A design question is answered by what the reference does — measured, not remembered — and goes to the owner only where the reference is silent or a change from it is wanted, and the owner's answer is written down before the code is.
 
 If a rule here conflicts with a habit from another codebase, this file wins. If you think a rule is wrong or your task cannot be done without deviating, **say so in your report — never deviate silently.**
 
