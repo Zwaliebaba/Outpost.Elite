@@ -19,8 +19,14 @@
     <Filter Include="Verification">
       <UniqueIdentifier>{747F9A38-ADFD-527B-843F-548997B33CDF}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{BD77D3FD-363E-5FBF-B551-013BF256F01E}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CgaFont.h">
+      <Filter>Video</Filter>
+    </ClInclude>
     <ClInclude Include="Cpu.h">
       <Filter>Cpu</Filter>
     </ClInclude>
@@ -50,6 +56,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CgaFont.cpp">
+      <Filter>Video</Filter>
+    </ClCompile>
     <ClCompile Include="Cpu.cpp">
       <Filter>Cpu</Filter>
     </ClCompile>

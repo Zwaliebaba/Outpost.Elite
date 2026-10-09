@@ -73,6 +73,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Cpu.h" />
     <ClInclude Include="HostServices.h" />
     <ClInclude Include="InterruptSource.h" />
@@ -84,6 +85,7 @@
     <ClInclude Include="Sha256.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="Cpu.cpp" />
     <ClCompile Include="Memory.cpp" />
     <ClCompile Include="pch.cpp">
