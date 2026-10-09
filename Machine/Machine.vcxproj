@@ -82,6 +82,7 @@
     <ClInclude Include="PortRouter.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="Timing.h" />
+    <ClInclude Include="Keyboard.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Pic.h" />
@@ -93,6 +94,7 @@
     <ClCompile Include="Cga.cpp" />
     <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="Cpu.cpp" />
+    <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Memory.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>

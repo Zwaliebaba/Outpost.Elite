@@ -57,6 +57,9 @@
     <ClInclude Include="Timing.h">
       <Filter>Cpu</Filter>
     </ClInclude>
+    <ClInclude Include="Keyboard.h">
+      <Filter>Devices</Filter>
+    </ClInclude>
     <ClInclude Include="Memory.h">
       <Filter>Memory</Filter>
     </ClInclude>
@@ -85,6 +88,9 @@
     </ClCompile>
     <ClCompile Include="Cpu.cpp">
       <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="Keyboard.cpp">
+      <Filter>Devices</Filter>
     </ClCompile>
     <ClCompile Include="Memory.cpp">
       <Filter>Memory</Filter>
