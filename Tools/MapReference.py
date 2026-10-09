@@ -152,9 +152,10 @@ def branch_target(_instruction: CsInsn) -> int | None:
   return operand.imm & 0xFFFF if operand is not None and operand.type == CS_OP_IMM else None
 
 
-# A displacement below this, added to a base register, is a field offset inside a record rather than
-# the address of a table; the data segment's first bytes are not indexed that way anywhere in the code.
-TABLE_BASE_MINIMUM = 0x0200
+# A displacement this close to zero, added to a base register, is a field offset inside a record
+# (`[di+0x1E]`, `[di-1]`) rather than the address of a table; the data segment's first and last bytes
+# are not indexed that way anywhere in the code.
+FIELD_OFFSET_REACH = 0x0200
 
 
 def memory_references(_instruction: CsInsn) -> list[tuple[str, int, int]]:
@@ -166,7 +167,7 @@ def memory_references(_instruction: CsInsn) -> list[tuple[str, int, int]]:
     memory = operand.mem
     if memory.index != 0 or memory.base == X86.X86_REG_BP:
       continue
-    if memory.base != 0 and (memory.disp & 0xFFFF) < TABLE_BASE_MINIMUM:
+    if memory.base != 0 and not FIELD_OFFSET_REACH <= (memory.disp & 0xFFFF) <= 0x10000 - FIELD_OFFSET_REACH:
       continue
     segment = {0: "DS", X86.X86_REG_DS: "DS", X86.X86_REG_CS: "CS"}.get(memory.segment)
     if segment is None:
@@ -280,13 +281,15 @@ def annotate(_instruction: CsInsn, _rows: dict[tuple[str, int], Row]) -> str:
     name = label(_rows, segment, offset)
     if name:
       notes.append(name)
-  for operand in _instruction.operands:
-    if operand.type == CS_OP_IMM and target is None and _instruction.operands[0].type != CS_OP_MEM:
-      first = _instruction.operands[0]
-      if first.type == 1 and first.reg in POINTER_REGISTERS:
-        name = label(_rows, "DS", operand.imm & 0xFFFF) or label(_rows, "CS", operand.imm & 0xFFFF)
-        if name:
-          notes.append(f"&{name}")
+  # `mov si, imm` and the like load an address only when the immediate names a data row; an `add` or
+  # `cmp` with the same number is arithmetic, and a code address in an immediate is rare enough to
+  # leave to the reader.
+  if _instruction.mnemonic == "mov" and len(_instruction.operands) == 2:
+    first, second = _instruction.operands
+    if first.type == 1 and first.reg in POINTER_REGISTERS and second.type == CS_OP_IMM:
+      row = _rows.get(("DS", second.imm & 0xFFFF))
+      if row is not None and row.kind in ("data", "table", "text"):
+        notes.append(f"&{row.name}")
   return text + (f"    ; {', '.join(notes)}" if notes else "")
 
 
