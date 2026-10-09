@@ -10,6 +10,7 @@ namespace Machine
 {
 
 class HostServices;
+class InstructionObserver;
 class InterruptSource;
 class Memory;
 class PortBus;
@@ -80,6 +81,10 @@ public:
   /// Memory::SIZE_BYTES entries is grown to that size with zeros, which is why this is not noexcept.
   /// Marks are only ever set; clearing the map is the caller's business.
   void SetExecutionMap(std::vector<std::uint8_t>* _map);
+
+  /// Told about every instruction as it starts (InstructionObserver), or null to stop. Without one
+  /// it costs a branch per step.
+  void SetInstructionObserver(InstructionObserver* _observer) noexcept;
 
   /// The 8088's reset state: CS:IP = FFFF:0000, flags clear, everything else zero.
   void Reset() noexcept;
@@ -191,6 +196,7 @@ private:
   Registers m_regs{};
   InterruptSource* m_interrupts = nullptr;
   std::vector<std::uint8_t>* m_executionMap = nullptr;
+  InstructionObserver* m_observer = nullptr;
   std::uint64_t m_instructionCount = 0;
   std::uint32_t m_cycles = 0;
 

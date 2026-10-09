@@ -72,6 +72,9 @@
     <ClInclude Include="HostServices.h">
       <Filter>Services</Filter>
     </ClInclude>
+    <ClInclude Include="InstructionObserver.h">
+      <Filter>Cpu</Filter>
+    </ClInclude>
     <ClInclude Include="InterruptSource.h">
       <Filter>Io</Filter>
     </ClInclude>

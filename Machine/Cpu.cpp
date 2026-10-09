@@ -3,6 +3,7 @@
 #include "Cpu.h"
 
 #include "HostServices.h"
+#include "InstructionObserver.h"
 #include "InterruptSource.h"
 #include "Memory.h"
 #include "PortBus.h"
@@ -122,6 +123,11 @@ void Cpu::SetExecutionMap(std::vector<std::uint8_t>* _map)
   m_executionMap = _map;
 }
 
+void Cpu::SetInstructionObserver(InstructionObserver* _observer) noexcept
+{
+  m_observer = _observer;
+}
+
 void Cpu::Reset() noexcept
 {
   m_regs = Registers{};
@@ -151,6 +157,10 @@ std::uint32_t Cpu::Step()
   if (m_executionMap != nullptr)
   {
     (*m_executionMap)[Memory::Linear(m_regs.cs, m_regs.ip)] = 1;
+  }
+  if (m_observer != nullptr)
+  {
+    m_observer->BeforeInstruction(m_regs);
   }
 
   m_segmentOverride = -1;

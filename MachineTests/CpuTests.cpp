@@ -2,6 +2,7 @@
 
 #include "Cpu.h"
 #include "HostServices.h"
+#include "InstructionObserver.h"
 #include "InterruptSource.h"
 #include "Memory.h"
 #include "PortBus.h"
@@ -94,6 +95,24 @@ private:
   std::size_t m_acknowledged = 0;
   std::uint8_t m_vector = 0;
   bool m_pending = false;
+};
+
+// Keeps CS:IP of every instruction it is told about.
+class AddressRecorder final : public Machine::InstructionObserver
+{
+public:
+  void BeforeInstruction(const Machine::Registers& _registers) override
+  {
+    m_addresses.push_back(Machine::Memory::Linear(_registers.cs, _registers.ip));
+  }
+
+  [[nodiscard]] const std::vector<std::uint32_t>& Addresses() const noexcept
+  {
+    return m_addresses;
+  }
+
+private:
+  std::vector<std::uint32_t> m_addresses;
 };
 
 // A machine with code at CODE_SEGMENT:0000 and an empty stack at STACK_SEGMENT:STACK_TOP.
@@ -356,6 +375,37 @@ public:
     map[base] = 0;
     (void)rig.Processor().Step();
     Assert::AreEqual(0u, std::uint32_t{map[base]}, L"no map, no marks");
+  }
+
+  // A step that takes an interrupt reports the handler's first instruction, the one it executes,
+  // and never the interrupted one, which runs only after the IRET.
+  TEST_METHOD(ObserverSeesEachExecutedInstructionOnce)
+  {
+    Rig rig({0x90, 0x90}); // nop; nop
+    rig.Ram().Write16(0x08u * 4, 0x0010);
+    rig.Ram().Write16(0x08u * 4 + 2, 0x5000);
+    rig.Ram().Write8(0x5000, 0x0010, 0x90); // nop
+    rig.Ram().Write8(0x5000, 0x0011, 0xCF); // iret
+    ScriptedSource source;
+    AddressRecorder recorder;
+    rig.Processor().SetInterruptSource(&source);
+    rig.Processor().SetInstructionObserver(&recorder);
+
+    (void)rig.Processor().Step();
+    source.Raise(0x08);
+    for (int step = 0; step < 3; ++step)
+    {
+      (void)rig.Processor().Step();
+    }
+
+    const std::uint32_t code = Machine::Memory::Linear(CODE_SEGMENT, 0);
+    const std::uint32_t handler = Machine::Memory::Linear(0x5000, 0x0010);
+    const std::vector<std::uint32_t> expected = {code, handler, handler + 1, code + 1};
+    Assert::IsTrue(recorder.Addresses() == expected, L"nop, handler nop, iret, second nop");
+
+    rig.Processor().SetInstructionObserver(nullptr);
+    (void)rig.Processor().Step();
+    Assert::AreEqual(std::size_t{4}, recorder.Addresses().size(), L"no observer, no reports");
   }
 };
 

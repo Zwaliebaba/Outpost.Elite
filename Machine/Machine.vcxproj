@@ -84,6 +84,7 @@
     <ClInclude Include="Firmware.h" />
     <ClInclude Include="GamePort.h" />
     <ClInclude Include="HostServices.h" />
+    <ClInclude Include="InstructionObserver.h" />
     <ClInclude Include="InterruptSource.h" />
     <ClInclude Include="Mouse.h" />
     <ClInclude Include="PcServices.h" />
