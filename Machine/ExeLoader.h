@@ -46,7 +46,7 @@ struct LoadedProgram
 /// below its environment belongs to DOS.
 ///
 /// The allocation honours the header as EXEC does: the program needs the PSP, the image and its minimum allocation,
-/// and is given up to its maximum allocation (FFFFh, as ELITEL.EXE asks, means everything to the memory top). If what
+/// and is given up to its maximum allocation (FFFFh, as the reference asks, means everything to the memory top). If what
 /// it needs does not fit, the load fails with DoesNotFit.
 ///
 /// The PSP: CD 20 (int 20h) at 00h; the memory top at 02h; at 0Ah, 0Eh and 12h the int 22h, 23h and 24h vectors
@@ -81,7 +81,7 @@ public:
     std::uint16_t initialAx = 0;
     std::uint16_t initialBx = 0;
     std::string_view commandTail;                    ///< As COMMAND.COM passes it, leading space included: " cheat"
-    std::string_view programPath = "C:\\ELITEL.EXE"; ///< For the environment
+    std::string_view programPath = "C:\\ELITES.EXE"; ///< For the environment
   };
 
   /// Loads _file. On success fills _program and returns LoadError::None; on failure returns why, having written
@@ -91,7 +91,7 @@ public:
 
   /// Replaces the byte at (_program's load segment + _imageSegment):_offset with _replacement if it holds _expected,
   /// and returns whether it did; otherwise it writes nothing. ADR-001's D5 patch is
-  /// PatchByte(memory, program, 0x08F6, 0x25E4, 0x00, 0x01): DS:25E4h, the protection's "already shown" flag.
+  /// PatchByte(memory, program, 0x08F4, 0x25E4, 0x00, 0x01): DS:25E4h, the protection's "already shown" flag.
   [[nodiscard]] static bool PatchByte(Memory& _memory, const LoadedProgram& _program, std::uint16_t _imageSegment, std::uint16_t _offset,
                                       std::uint8_t _expected, std::uint8_t _replacement) noexcept;
 };

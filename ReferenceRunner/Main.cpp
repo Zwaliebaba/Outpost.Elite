@@ -27,12 +27,12 @@
 //   ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT] [--trace FILE] [--trace-until OFFSET]
 //                   [--coverage FILE]
 //
-// It checks that FILE (default ELITEL.EXE) is the binary ADR-001 names, loads it, applies the D5 byte
+// It checks that FILE (default ELITES.EXE) is the binary ADR-001 names, loads it, applies the D5 byte
 // in memory, and follows the steps Tools/ReferenceScreens.py also reads (StepScript.h): shots go to
 // DIR/NAME.png, digests to standard output. DOS's files live in DIR/files.
 //
 // --trace writes the boot trace, every instruction from the entry until the first one at OFFSET in the
-// program's code segment (default 0x7636, GetKey). --coverage writes the offsets in that segment of every
+// program's code segment (default 0x7616, GetKey). --coverage writes the offsets in that segment of every
 // instruction start the run executed, one per line in hex. Exit status: 0 the steps ran, 1 the program
 // stopped them (a refused call, its end, or a deadlock), 2 usage or file errors.
 
@@ -43,9 +43,9 @@ constexpr char USAGE[] = "usage: ReferenceRunner [--exe FILE] [--out DIR] [--ste
                          "[--coverage FILE]\n";
 
 // ADR-001: the reference binary, and the one byte the host changes in memory (D5): the protection's
-// "already shown" flag at DS:25E4, in the data segment's image paragraph 08F6.
-constexpr std::string_view REFERENCE_SHA256 = "440b06de18c121855635d55e7a95308d5748144d8c4c63f082cbb864af95e55e";
-constexpr std::uint16_t D5_SEGMENT = 0x08F6;
+// "already shown" flag at DS:25E4, in the data segment's image paragraph 08F4.
+constexpr std::string_view REFERENCE_SHA256 = "18b5076a54733dea2d45b1e3b280fd1377067b6cb1b27166d3873aa7e7744363";
+constexpr std::uint16_t D5_SEGMENT = 0x08F4;
 constexpr std::uint16_t D5_OFFSET = 0x25E4;
 
 // Where DOSBox-X puts the PSP, measured from its trace, so the two boot traces compare register for
@@ -54,14 +54,14 @@ constexpr std::uint16_t D5_OFFSET = 0x25E4;
 constexpr std::uint16_t PSP_SEGMENT = 0x0813;
 constexpr Machine::Dos::DateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 
-constexpr std::uint16_t GET_KEY_OFFSET = 0x7636;
-constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F60;
+constexpr std::uint16_t GET_KEY_OFFSET = 0x7616;
+constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F40;
 // A trace with no steps to run runs until it ends, or for at most this long.
 constexpr std::uint64_t TRACE_LIMIT_MILLISECONDS = 60'000;
 
 struct Options
 {
-  std::filesystem::path exe = "ELITEL.EXE";
+  std::filesystem::path exe = "ELITES.EXE";
   std::filesystem::path out = ".";
   std::string steps;
   std::filesystem::path trace;

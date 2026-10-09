@@ -23,7 +23,7 @@ the program's. Each is set aside before the comparison:
                       watches dictates. Records whose IP lies in a --wait range of the entry code
                       segment are dropped. By default those are the reference's three polling loops:
                       the frame-time wait in PresentSpaceView (0599-05A2) and the vertical-retrace
-                      waits it and CopyChartBufferToScreen call (461B-4620, 05D0-05D5). Whatever
+                      waits it and CopyChartBufferToScreen call (4602-4607, 05D0-05D5). Whatever
                       registers differ when a wait ends hold what it read, and become input registers
                       (below).
 
@@ -75,7 +75,7 @@ INTERRUPT_TABLE_BYTES = 0x400
 # savedSpeakerPort (port 0x61 at start-up), and the int 0 and int 9 vectors the game saves at 226B-2272.
 DEFAULT_INPUT_ADDRESSES = [0x2008, 0x226A, 0x226B, 0x226D, 0x226F, 0x2271]
 TIMED_PORTS = {0x40, 0x41, 0x42, 0x61, 0x3DA, 0x201}
-DEFAULT_WAITS = ["0599-05A2", "461B-4620", "05D0-05D5"]
+DEFAULT_WAITS = ["0599-05A2", "4602-4607", "05D0-05D5"]
 # The ModRM reg field's register, as a record index, for word and for byte operands (AH-BH are halves).
 WORD_REGISTERS = (AX, CX, DX, BX, SP, BP, SI, DI)
 BYTE_REGISTERS = (AX, CX, DX, BX, AX, CX, DX, BX)
@@ -197,11 +197,11 @@ def main() -> int:
                       help="an interrupt handler's offset in the entry code segment (default 0x0215 and 0x0201)")
   parser.add_argument("--wait", action="append",
                       help="START-END, a half-open hex IP range in the entry code segment that waits on time "
-                           "(default 0599-05A2, 461B-4620 and 05D0-05D5)")
+                           "(default 0599-05A2, 4602-4607 and 05D0-05D5)")
   parser.add_argument("--context", type=int, default=6, help="matching records to print before a divergence")
   parser.add_argument("--input-address", type=lambda text: int(text, 0), action="append",
                       help="a data-segment offset that holds an input (default: the port 0x61 copies and saved vectors)")
-  parser.add_argument("--exe", type=Path, default=ROOT / "ELITEL.EXE", help="the reference binary, to decode inputs")
+  parser.add_argument("--exe", type=Path, default=ROOT / "ELITES.EXE", help="the reference binary, to decode inputs")
   args = parser.parse_args()
 
   try:

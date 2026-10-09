@@ -1,6 +1,6 @@
 # ADR-002 — Original data and the repository
 
-**Status:** accepted 2026-10-09, from the owner's rulings D2 and D3 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner). **Carried out 2026-10-09:** the owner made `Zwaliebaba/Outpost.Elite` private the same day.
+**Status:** accepted 2026-10-09, from the owner's rulings D2 and D3 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner). **Carried out 2026-10-09:** the owner made `Zwaliebaba/Outpost.Elite` private the same day. **Amended 2026-10-09** by ADR-007: the binary in the tree is now `ELITES.EXE`, the solid-ship build of the same release, which is a commercial work and a cracked copy in exactly the same way. `ELITEL.EXE`, which the context below describes, has left the tree and stays in its history.
 
 ## Context
 
@@ -14,7 +14,7 @@ AGENTS.md R14 puts third-party content under the owner's approval and asks for i
 
 1. **The repository becomes private (D2).** That stops further distribution of the binary and of anything derived from it. The owner made the change on 2026-10-09; before then the binary had been public on `main` since `4cfcee3`, together with the plan, ADRs and symbol table merged in PR #28.
 
-2. **The reference binary stays in the tree** at the root, as `ELITEL.EXE`, byte-identical to the hash in ADR-001. Tooling (`Tools/ScanReference.py`), the Phase 2 host and the test suites read it from there. CI can therefore run every test that needs the original, with no secret and no private download.
+2. **The reference binary stays in the tree** at the root, as `ELITES.EXE`, byte-identical to the hash in ADR-007. Tooling (`Tools/ScanReference.py`), the Phase 2 host and the test suites read it from there. CI can therefore run every test that needs the original, with no secret and no private download.
 
 3. **Original data is generated and checked in (D3).** In Phase 4 a script under `Tools/` extracts the ship models, font, text and tables from the reference into C++ source. The generated files are committed and reviewed like any other source, and the script stays so that the extraction can be repeated and checked. The shipping executable embeds them and does not need `ELITEL.EXE` at run time. Until Phase 4 the host reads the reference at start-up instead (ADR-001).
 

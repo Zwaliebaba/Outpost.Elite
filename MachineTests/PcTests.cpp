@@ -129,13 +129,13 @@ public:
   }
 
   // ADR-003's boot, on the whole machine: the reference, with the D5 byte, from its entry to the first
-  // call of GetKey (CS:7636). It matches DOSBox-X's trace register for register (Tools/CompareTrace.py).
+  // call of GetKey (CS:7616). It matches DOSBox-X's trace register for register (Tools/CompareTrace.py).
   // These figures pin it: any change to the CPU, a device or a service that alters the boot by one
   // instruction, one cycle or one byte of memory fails here, and has to say why.
   TEST_METHOD(ReferenceBootsToItsFirstKeyRead)
   {
     const std::vector<std::uint8_t> file = ReadReferenceBinary();
-    Assert::IsFalse(file.empty(), L"ELITEL.EXE at the repository root");
+    Assert::IsFalse(file.empty(), L"ELITES.EXE at the repository root");
     ScratchDirectory directory("ReferenceBoot");
     Machine::DirectoryFileStore files(directory.Path());
     Machine::Pc::Desc desc;
@@ -145,19 +145,19 @@ public:
     load.pspSegment = 0x0813; // DOSBox-X's, so the traces compare
     Machine::LoadedProgram program;
     Assert::IsTrue(pc->Load(file, load, program) == Machine::LoadError::None);
-    Assert::IsTrue(Machine::ExeLoader::PatchByte(pc->Ram(), program, 0x08F6, 0x25E4, 0x00, 0x01), L"D5");
+    Assert::IsTrue(Machine::ExeLoader::PatchByte(pc->Ram(), program, 0x08F4, 0x25E4, 0x00, 0x01), L"D5");
 
     const Machine::Registers& regs = pc->Processor().Regs();
-    while (!(regs.cs == program.loadSegment && regs.ip == 0x7636) && pc->Clock() < 2'000'000)
+    while (!(regs.cs == program.loadSegment && regs.ip == 0x7616) && pc->Clock() < 2'000'000)
     {
       pc->Step();
       Assert::IsFalse(pc->Services().Fault().has_value(), L"no call refused");
     }
-    Assert::AreEqual(0x7636u, std::uint32_t{regs.ip}, L"GetKey reached");
-    Assert::AreEqual(std::uint64_t{28'576}, pc->Processor().InstructionCount());
-    Assert::AreEqual(std::uint64_t{655'906}, pc->Clock());
+    Assert::AreEqual(0x7616u, std::uint32_t{regs.ip}, L"GetKey reached");
+    Assert::AreEqual(std::uint64_t{39'255}, pc->Processor().InstructionCount());
+    Assert::AreEqual(std::uint64_t{761'619}, pc->Clock());
     Assert::AreEqual(0x2Au, std::uint32_t{pc->Video().ModeControl()}, L"mode 4: 320x200 graphics, video on");
-    Assert::AreEqual("c167165cc1a8854f78291db0737f252e3bcb700489f6ba597624385cfc1473b2",
+    Assert::AreEqual("e4cbdeaf063301c53f6bc54b65484c721ed6fa88b0c591f7098a789110e1f3fc",
                      Machine::Sha256::ToHex(Machine::Sha256::Of(pc->Ram().Bytes())).c_str());
   }
 

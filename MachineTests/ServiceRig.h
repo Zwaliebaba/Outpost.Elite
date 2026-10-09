@@ -273,7 +273,7 @@ private:
   Machine::Cpu m_cpu;
 };
 
-/// IsMouseDriverInstalled, CS:02D4-02EF of ELITEL.EXE, byte for byte: ZF=0 when the int 33h vector is non-zero and
+/// IsMouseDriverInstalled, CS:02D4-02EF of ELITES.EXE, byte for byte: ZF=0 when the int 33h vector is non-zero and
 /// its first byte is not CF (IRET). ExeLoaderTests checks these against the file.
 inline constexpr std::array<std::uint8_t, 28> IS_MOUSE_DRIVER_INSTALLED = {
   0x50,                         // push ax
@@ -291,7 +291,7 @@ inline constexpr std::array<std::uint8_t, 28> IS_MOUSE_DRIVER_INSTALLED = {
   0xC3,                         // ret
 };
 
-/// ELITEL.EXE, found by walking up from the working directory to the repository root, or else beside the source
+/// ELITES.EXE, found by walking up from the working directory to the repository root, or else beside the source
 /// tree this file was compiled from (the parent of MachineTests/). Empty if neither has it.
 inline std::vector<std::uint8_t> ReadReferenceBinary()
 {
@@ -300,14 +300,14 @@ inline std::vector<std::uint8_t> ReadReferenceBinary()
   for (std::filesystem::path directory = std::filesystem::current_path(error); !error && !directory.empty();
        directory = directory.parent_path())
   {
-    candidates.push_back(directory / "ELITEL.EXE");
+    candidates.push_back(directory / "ELITES.EXE");
     if (directory == directory.parent_path())
     {
       break;
     }
   }
   const std::filesystem::path source = std::source_location::current().file_name();
-  candidates.push_back(source.parent_path().parent_path() / "ELITEL.EXE");
+  candidates.push_back(source.parent_path().parent_path() / "ELITES.EXE");
   for (const std::filesystem::path& candidate : candidates)
   {
     std::error_code found;

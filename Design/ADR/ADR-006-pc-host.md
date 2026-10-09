@@ -78,17 +78,17 @@ Each is a choice about how much of the real part to model. The game's own use of
 - **A shot** is a 640×200 palette PNG on the CGA's dot grid, the grid of DOSBox-X's shots.
 - **A digest** is SHA-256 over all of memory and the registers.
 - **The boot trace** is written through the instruction observer (ADR-005 item 10), and **the code coverage** from the execution map (item 9).
-- **Speed:** 30 s of emulated time, 9.4 million instructions, ran in 0.37 s with a g++ -O2 build (measured 2026-10-09).
+- **Speed:** 30 s of emulated time, 10.65 million instructions of `ELITES.EXE`, ran in 0.41 s with a g++ -O2 build (measured 2026-10-09).
 
 **6. What checks it.**
 
 - **123 tests in `MachineTests`:** DOS 16, CGA 12, PIC 10, CPU 10, PIT 9, firmware 8, BIOS 7, loader 7, speaker 7, PC 6, keyboard 6, game port 5, mouse 5, SHA-256 5, port router 4, memory 3, font 3.
-- **`PcTests.ReferenceBootsToItsFirstKeyRead` pins the boot:** 28,576 instructions and 655,906 cycles from the entry to the first `GetKey`, the CGA in mode 4, and the SHA-256 of memory at that point. A change to the CPU, a device or a service that alters the boot by one instruction, one cycle or one byte fails CI, and has to say why.
-- **The boot trace matches DOSBox-X's** register for register at all 23,413 comparable records (ADR-003 item 1).
+- **`PcTests.ReferenceBootsToItsFirstKeyRead` pins the boot of `ELITES.EXE` (ADR-007):** 39,255 instructions and 761,619 cycles from the entry to the first `GetKey`, the CGA in mode 4, and the SHA-256 of memory at that point. A change to the CPU, a device or a service that alters the boot by one instruction, one cycle or one byte fails CI, and has to say why.
+- **The boot trace matches DOSBox-X's** register for register at all 28,652 comparable records (ADR-003 item 1).
 - **The screens match DOSBox-X's shots** taken by the same script. Measured with ImageMagick at 10% fuzz:
   - The palettes are identical.
   - The status and market screens differ in 1,602 and 1,756 of 128,000 pixels, all in glyphs (our font, D14).
-  - The title differs only inside a 278×85 box in the 3D view, where the ship turns.
+  - The title differs only inside a 308×98 box in the 3D view, where the filled ship turns.
 
 **7. Two flag errors in DOSBox-X, not in the host.** The trace comparison found them, and DOSBox-X 2024.03.01's source confirms them:
 

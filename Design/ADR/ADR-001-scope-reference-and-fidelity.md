@@ -1,6 +1,6 @@
 # ADR-001 — Scope, reference binary and fidelity
 
-**Status:** accepted 2026-10-09, from the owner's rulings D1, D4, D5, D8 and D9 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner).
+**Status:** accepted 2026-10-09, from the owner's rulings D1, D4, D5, D8 and D9 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner). **Superseded in part 2026-10-09 by [ADR-007](ADR-007-reference-elites.md):** the reference is now `ELITES.EXE`, the solid-ship build of the same release, and item 3's byte is at its file offset 0xB564. The rest of this ADR stands. Its description of `ELITEL.EXE` below is kept as the record of the file it was written about.
 
 ## Context
 
@@ -36,7 +36,7 @@ The MZ header's checksum field (0x1399) does not satisfy the documented definiti
 
 5. **Only the IBM PC behaviour is ported** (ruled by the owner, D12). The Amstrad path — the ROM check at start-up, the flag at DS:0x2000 and the timer chaining that depends on it — stays in the hosted original as the reference has it. It never executes there, because the emulated PC has no Amstrad ROM string at FC00:0016, and the port does not carry it.
 
-6. **Speed is not defined here.** What "the same speed" means (D6) is decided in ADR-007, after Phase 1 shows how the game paces itself and Phase 2 measures it at 4.77 MHz.
+6. **Speed is not defined here.** What "the same speed" means (D6) is decided in ADR-008, after Phase 1 shows how the game paces itself and Phase 2 measures it at 4.77 MHz.
 
 ## What this forecloses
 

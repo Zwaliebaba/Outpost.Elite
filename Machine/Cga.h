@@ -116,7 +116,7 @@ enum class CrtcRegister : std::uint8_t
 ///     at or past line 262 never comes round, and there is then no sync;
 ///   - bit 2 set and bit 1 clear, the light pen's switch open and no trigger: no pen is fitted;
 ///   - bits 4-7 set: they are not driven.
-/// The reference reads 0x3DA at 0x04C4, 0x05D0 and 0x461B, and each masks the value with
+/// The reference reads 0x3DA at 0x04C4, 0x05D0 and 0x4602, and each masks the value with
 /// `and al, 8` at once, so only bit 3 reaches it.
 ///
 /// Memory. Video memory is the 16 KiB at B8000h in Machine::Memory, which the CPU reads and writes

@@ -4,7 +4,7 @@
   python Tools/ReferenceScreens.py --out DIR [--steps "wait 20; shot title; key space; wait 5; shot launch"]
 
 ADR-003 checks our interpreter's picture against an independent one before anything is ported against
-it. This runs ELITEL.EXE in DOSBox-X, headless on a virtual X display, with the same one-byte patch
+it. This runs ELITES.EXE in DOSBox-X, headless on a virtual X display, with the same one-byte patch
 the host applies in memory (ADR-001, D5) applied to a scratch copy of the file. It then follows a
 small script of steps:
 
@@ -36,9 +36,9 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REFERENCE_SHA256 = "440b06de18c121855635d55e7a95308d5748144d8c4c63f082cbb864af95e55e"
-# ADR-001 D5: the protection's "already shown" flag, DS:0x25E4, is file offset 0x40 + 0x8F60 + 0x25E4.
-PATCH_OFFSET = 0xB584
+REFERENCE_SHA256 = "18b5076a54733dea2d45b1e3b280fd1377067b6cb1b27166d3873aa7e7744363"
+# ADR-001 D5: the protection's "already shown" flag, DS:0x25E4, is file offset 0x40 + 0x8F40 + 0x25E4.
+PATCH_OFFSET = 0xB564
 PATCH_FROM = 0x00
 PATCH_TO = 0x01
 # DOSBox-X's fixed instructions per emulated millisecond: about a 4.77 MHz 8088's pace, so that `wait N`
@@ -86,7 +86,7 @@ def patched_copy(_exe: Path, _drive: Path) -> None:
   if data[PATCH_OFFSET] != PATCH_FROM:
     sys.exit(f"byte at 0x{PATCH_OFFSET:X} is 0x{data[PATCH_OFFSET]:02X}, not 0x{PATCH_FROM:02X}")
   data[PATCH_OFFSET] = PATCH_TO
-  (_drive / "ELITEL.EXE").write_bytes(data)
+  (_drive / "ELITES.EXE").write_bytes(data)
 
 
 def free_display() -> str:
@@ -135,7 +135,7 @@ def capture(_env: dict[str, str], _window: str, _scratch: Path, _target: Path) -
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-  parser.add_argument("--exe", type=Path, default=ROOT / "ELITEL.EXE", help="the reference binary")
+  parser.add_argument("--exe", type=Path, default=ROOT / "ELITES.EXE", help="the reference binary")
   parser.add_argument("--out", type=Path, required=True, help="directory for the PNG shots")
   parser.add_argument("--steps", default="wait 20; shot title", help="the script, steps separated by ';'")
   args = parser.parse_args()
@@ -154,7 +154,7 @@ def main() -> int:
     drive.mkdir()
     patched_copy(args.exe, drive)
     config = Path(scratch) / "dosbox.conf"
-    config.write_text(CONFIG.format(drive=drive, command="ELITEL.EXE", cycles=CYCLES_PER_MILLISECOND), encoding="ascii")
+    config.write_text(CONFIG.format(drive=drive, command="ELITES.EXE", cycles=CYCLES_PER_MILLISECOND), encoding="ascii")
 
     display = free_display()
     env = dict(os.environ, DISPLAY=display, SDL_AUDIODRIVER="dummy")

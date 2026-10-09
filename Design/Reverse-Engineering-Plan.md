@@ -1,8 +1,8 @@
-# ELITEL.EXE — reverse-engineering and native port plan
+# ELITES.EXE — reverse-engineering and native port plan
 
 **Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day, D10–D13 after Phase 0's work, and D6 and D14 from Phase 1's findings (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). **Phase 0's work is done on its branch, and closes when that branch is merged:** ADR-001 to ADR-003 are written, the provenance check found this copy cracked (ADR-001), and the three checkers are in `Build/`, with their CI steps no longer guarded.
 
-**The goal as stated:** reverse-engineer `ELITEL.EXE` so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
+**The goal as stated:** reverse-engineer `ELITEL.EXE` (since D15, its solid-ship build `ELITES.EXE`) so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
 
 ## 1. What the binary is
 
@@ -124,11 +124,11 @@ A replacement is accepted when it matches the original on every captured call (�
 
 The interpreter leaves the shipping executable. Video memory becomes a native index buffer handed to the presenter; the speaker becomes a native synthesiser; the timer and keyboard handlers become a fixed-tick scheduler at the rate D6 sets; DOS file calls become `std::filesystem`, with the `.cdr` format kept byte-compatible so that commanders saved by the original still load. The protection is not ported (D5). The data-segment overlay is re-laid as typed state, now that nothing interpreted reads its bytes, and the ship models, font, text and tables become C++ tables generated from the reference by a script under `Tools/` and checked in (D3).
 
-At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-007.
+At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-008.
 
-This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-007 with its cause, never a re-baseline to make CI green.
+This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-008 with its cause, never a re-baseline to make CI green.
 
-**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-007, passes; the game has been played and looked at, not only built (AGENTS.md §3).
+**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-008, passes; the game has been played and looked at, not only built (AGENTS.md §3).
 
 ### Phase 5 — Beyond the original (outside this plan)
 
@@ -173,7 +173,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D3 | Original data in the port | Read it from the user's copy at start-up (the OpenRCT2 model). | **Follows from D2:** generated tables are checked in, and the reference binary is committed so CI can run the oracle until Phase 4 ends. |
 | D4 | The reference binary | An unpatched copy with a recorded hash. | **This file, `ELITEL.EXE`, with its known patch documented** — the only copy available. Phase 0 looks for further patches (§2.3). |
 | D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** One byte, DS:0x25E4, set in the loaded image so the file keeps its hash (ADR-001). |
-| D6 | What "the same speed" means | The original's own minimum frame time, once Phase 1 showed how it paces itself. | **The game's own frame time:** 50 ms by default, selectable with F1–F10 as on the original's pause screen. No model of 1987 slowdowns (Reference-Map.md). ADR-007 records it with the change that implements it. |
+| D6 | What "the same speed" means | The original's own minimum frame time, once Phase 1 showed how it paces itself. | **The game's own frame time:** 50 ms by default, selectable with F1–F10 as on the original's pause screen. No model of 1987 slowdowns (Reference-Map.md). ADR-008 records it with the change that implements it. |
 | D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. | **Delete it after Phase 4.** The replay corpus must be complete before it goes (Phase 4). |
 | D8 | The picture | As the original drew it, at integer scale, corrected to 4:3. | **CGA mode 4 as this build draws it, at integer scale, corrected to 4:3.** |
 | D9 | A second build beside the reference | Keep one if available: diffing two builds separates the display code from the game logic. | **Moot:** there is no second build. Phase 1 finds the hardware boundary by hand. |
@@ -182,6 +182,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D12 | The Amstrad path (§7.7) | Port the IBM PC behaviour only. | **IBM PC only** (ADR-001 item 5). |
 | D13 | What answers a design question | The reference is the design. | **The reference is the design.** AGENTS.md names ADR-001's reference as what the game is and this plan as what sequences the work; the owner rules only where the reference is silent or a change is wanted. |
 | D14 | The 8×8 font for the docked screens' text mode, which the binary does not contain | Draw our own lookalike. | **Draw our own** 8×8 code-page 437 font matching the CGA's, for the characters the game uses. |
+| D15 | Which build is the reference, now that a second one exists | — (raised by the owner) | **`ELITES.EXE`**, the solid-ship build of the same release, replaces `ELITEL.EXE` as the reference, and `ELITEL.EXE` leaves the tree (ADR-007). |
 
 ## 9. ADRs this plan produces
 
@@ -193,4 +194,5 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | Phase 2 — written |
 | [ADR-005](ADR/ADR-005-interpreter.md) | The 8086 interpreter: what one step is, interrupts, timing, and what checks it | Phase 2 — written |
 | [ADR-006](ADR/ADR-006-pc-host.md) | The PC host: the machine the reference runs on, its devices and services, and the headless runner | Phase 2 — written |
-| ADR-007 | Time, pacing and the replay digests (D6) | Phase 4, with the change that implements it |
+| [ADR-007](ADR/ADR-007-reference-elites.md) | The reference becomes `ELITES.EXE` (D15) | Phase 2 — written |
+| ADR-008 | Time, pacing and the replay digests (D6) | Phase 4, with the change that implements it |

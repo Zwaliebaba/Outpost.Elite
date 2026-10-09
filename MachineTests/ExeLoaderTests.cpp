@@ -17,9 +17,9 @@ namespace MachineTests
 namespace
 {
 
-constexpr std::size_t REFERENCE_BYTES = 97'200;
+constexpr std::size_t REFERENCE_BYTES = 98'144;
 constexpr std::size_t REFERENCE_HEADER_BYTES = 0x40;
-constexpr std::uint16_t REFERENCE_DATA_SEGMENT = 0x08F6;
+constexpr std::uint16_t REFERENCE_DATA_SEGMENT = 0x08F4;
 
 // A word of the image, by offset. A plain aggregate rather than std::pair: brace-initializing a
 // pair of 16-bit words from int literals narrows inside MSVC's <utility>, which /W4 /WX rejects.
@@ -84,12 +84,12 @@ std::string ReadText(Machine::Memory& _memory, std::uint16_t _segment, std::uint
 TEST_CLASS(ExeLoaderTests)
 {
 public:
-  // The reference has 7 relocations: five load DS with the data segment 08F6, one is the segment constant 13CF of the
-  // cockpit image (CS:7C03, ShowCockpitScreen), and one is the 0000 in StartContinuousNoise's immediate (CS:7B7D).
+  // The reference has 7 relocations: five load DS with the data segment 08F4, one is the segment constant 140A of the
+  // cockpit image (CS:7BE3, ShowCockpitScreen), and one is the 0000 in StartContinuousNoise's immediate (CS:7B5D).
   TEST_METHOD(LoadsTheReferenceAndAppliesItsSevenRelocations)
   {
     const std::vector<std::uint8_t> file = ReadReferenceBinary();
-    Assert::AreEqual(REFERENCE_BYTES, file.size(), L"ELITEL.EXE at the repository root");
+    Assert::AreEqual(REFERENCE_BYTES, file.size(), L"ELITES.EXE at the repository root");
     ServiceRig rig("LoaderReference");
     Machine::ExeLoader::Desc desc;
     desc.pspSegment = ServiceRig::PSP_SEGMENT;
@@ -100,19 +100,19 @@ public:
     Assert::AreEqual(0x1000u, std::uint32_t{program.pspSegment});
     Assert::AreEqual(0x1010u, std::uint32_t{program.loadSegment});
     Assert::AreEqual(0xA000u, std::uint32_t{program.memoryTopSegment}, L"maximum allocation FFFFh takes everything");
-    Assert::AreEqual(97'136u, program.imageBytes);
-    const std::vector<ImageWord> relocated = {{0x0007, 0x08F6}, {0x020A, 0x08F6}, {0x021E, 0x08F6}, {0x02F2, 0x08F6},
-                                              {0x060E, 0x08F6}, {0x7B7D, 0x0000}, {0x7C03, 0x13CF}};
+    Assert::AreEqual(98'080u, program.imageBytes);
+    const std::vector<ImageWord> relocated = {{0x0007, 0x08F4}, {0x020A, 0x08F4}, {0x021E, 0x08F4}, {0x02F2, 0x08F4},
+                                              {0x060E, 0x08F4}, {0x7B5D, 0x0000}, {0x7BE3, 0x140A}};
     for (const auto& [offset, value] : relocated)
     {
       Assert::AreEqual(std::uint32_t{value} + 0x1010u, std::uint32_t{rig.Ram().Read16(program.loadSegment, offset)});
     }
     // Everything else is the file's bytes.
-    for (const std::uint16_t offset : std::initializer_list<std::uint16_t>{0x0000, 0x0005, 0x0009, 0x7C05})
+    for (const std::uint16_t offset : std::initializer_list<std::uint16_t>{0x0000, 0x0005, 0x0009, 0x7BE5})
     {
       Assert::AreEqual(std::uint32_t{file[REFERENCE_HEADER_BYTES + offset]}, std::uint32_t{rig.Ram().Read8(program.loadSegment, offset)});
     }
-    Assert::AreEqual(std::uint32_t{file.back()}, std::uint32_t{rig.Ram().Read8(Machine::Memory::Linear(program.loadSegment, 0) + 97'135u)});
+    Assert::AreEqual(std::uint32_t{file.back()}, std::uint32_t{rig.Ram().Read8(Machine::Memory::Linear(program.loadSegment, 0) + 98'079u)});
     // The bytes the mouse test runs are the game's IsMouseDriverInstalled.
     for (std::size_t index = 0; index < IS_MOUSE_DRIVER_INSTALLED.size(); ++index)
     {
@@ -135,7 +135,7 @@ public:
     const Machine::Registers& regs = program.registers;
     Assert::AreEqual(0x01A2u, std::uint32_t{regs.cs}, L"CS = load segment + 0");
     Assert::AreEqual(0x0000u, std::uint32_t{regs.ip});
-    Assert::AreEqual(0x01A2u + 0x138Fu, std::uint32_t{regs.ss}, L"SS = load segment + 138F");
+    Assert::AreEqual(0x01A2u + 0x13CAu, std::uint32_t{regs.ss}, L"SS = load segment + 13CA");
     Assert::AreEqual(0x03F8u, std::uint32_t{regs.sp});
     Assert::AreEqual(0x0192u, std::uint32_t{regs.ds});
     Assert::AreEqual(0x0192u, std::uint32_t{regs.es});
@@ -186,7 +186,7 @@ public:
     Assert::IsTrue(ReadText(ram, psp, 0x81, 7) == " cheat\r");
 
     const std::string environment = ReadText(ram, program.environmentSegment, 0, 40);
-    const std::string expected = std::string("COMSPEC=C:\\COMMAND.COM\0\0\x01\0C:\\ELITEL.EXE\0", 40);
+    const std::string expected = std::string("COMSPEC=C:\\COMMAND.COM\0\0\x01\0C:\\ELITES.EXE\0", 40);
     Assert::IsTrue(environment == expected);
 
     desc.commandTail = std::string_view("0123456789012345678901234567890123456789012345678901234567890123456789"
@@ -194,12 +194,12 @@ public:
     Assert::IsTrue(Load(rig, file, desc, program) == Machine::LoadError::CommandTailTooLong);
   }
 
-  // ADR-001 D5: DS:25E4h, file offset B584h, from 00 to 01.
+  // ADR-001 D5: DS:25E4h, file offset B564h, from 00 to 01.
   TEST_METHOD(PatchByteAppliesD5OnlyOverTheExpectedValue)
   {
     const std::vector<std::uint8_t> file = ReadReferenceBinary();
     Assert::AreEqual(REFERENCE_BYTES, file.size());
-    Assert::AreEqual(0u, std::uint32_t{file[0xB584]});
+    Assert::AreEqual(0u, std::uint32_t{file[0xB564]});
     ServiceRig rig("LoaderPatch");
     Machine::LoadedProgram program;
     Assert::IsTrue(Load(rig, file, Machine::ExeLoader::Desc{}, program) == Machine::LoadError::None);

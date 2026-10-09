@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Record the reference's boot trace in DOSBox-X's debugger, for comparison with the host's (ADR-003).
 
-  python Tools/ReferenceTrace.py --dosbox PATH --out FILE [--until-offset 0x7636] [--limit N]
+  python Tools/ReferenceTrace.py --dosbox PATH --out FILE [--until-offset 0x7616] [--limit N]
 
 ADR-003 compares the host's interpreter, instruction by instruction, with an independent emulator from
 the program's entry to its first keyboard read. This produces the independent half. It starts
-ELITEL.EXE with DEBUGBOX in a DOSBox-X built with its heavy debugger (`./build-debug`, which configures
+ELITES.EXE with DEBUGBOX in a DOSBox-X built with its heavy debugger (`./build-debug`, which configures
 `--enable-debug=heavy`; the distributions' packages leave the debugger out). The D5 byte is applied to a
 scratch copy, and the machine is the one Tools/ReferenceScreens.py uses. DEBUGBOX stops at the entry
 point, and the debugger's LOGL command then logs every instruction. Its log file is a named pipe, read
@@ -21,7 +21,7 @@ instruction DOSBox-X executes is recorded, including those of its own BIOS and D
 F000, which the host does not execute; the comparison sets those aside.
 
 The trace ends just before the first instruction at --until-offset in the entry code segment
-(default 0x7636, GetKey, Design/Symbols.tsv), or after --limit instructions.
+(default 0x7616, GetKey, Design/Symbols.tsv), or after --limit instructions.
 
 Development tool only (AGENTS.md R14): it needs that DOSBox-X build, Xvfb and a POSIX pseudo-terminal.
 """
@@ -93,10 +93,10 @@ def read_log(_pipe: Path, _out: Path, _entry_ip: int, _until_offset: int, _limit
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
   parser.add_argument("--dosbox", type=Path, required=True, help="a DOSBox-X built with --enable-debug=heavy")
-  parser.add_argument("--exe", type=Path, default=ReferenceScreens.ROOT / "ELITEL.EXE", help="the reference binary")
+  parser.add_argument("--exe", type=Path, default=ReferenceScreens.ROOT / "ELITES.EXE", help="the reference binary")
   parser.add_argument("--out", type=Path, required=True, help="the trace file to write")
-  parser.add_argument("--until-offset", type=lambda text: int(text, 0), default=0x7636,
-                      help="stop before this IP in the entry code segment (default 0x7636, GetKey)")
+  parser.add_argument("--until-offset", type=lambda text: int(text, 0), default=0x7616,
+                      help="stop before this IP in the entry code segment (default 0x7616, GetKey)")
   parser.add_argument("--limit", type=int, default=20_000_000, help="stop after this many instructions")
   parser.add_argument("--cycles", type=int, default=ReferenceScreens.CYCLES_PER_MILLISECOND,
                       help="DOSBox-X's fixed cycles; a different value moves where the timer interrupts land")
@@ -108,7 +108,7 @@ def main() -> int:
     drive.mkdir()
     ReferenceScreens.patched_copy(args.exe, drive)
     config = Path(scratch) / "dosbox.conf"
-    config.write_text(ReferenceScreens.CONFIG.format(drive=drive, command="DEBUGBOX ELITEL.EXE", cycles=args.cycles),
+    config.write_text(ReferenceScreens.CONFIG.format(drive=drive, command="DEBUGBOX ELITES.EXE", cycles=args.cycles),
                       encoding="ascii")
     pipe = Path(scratch) / "LOGCPU.TXT"  # where LOGL writes, relative to DOSBox-X's working directory
     os.mkfifo(pipe)
