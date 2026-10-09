@@ -84,14 +84,20 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ServiceRig.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BiosTests.cpp" />
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="CpuTests.cpp" />
+    <ClCompile Include="DosTests.cpp" />
+    <ClCompile Include="ExeLoaderTests.cpp" />
+    <ClCompile Include="FirmwareTests.cpp" />
     <ClCompile Include="GamePortTests.cpp" />
     <ClCompile Include="KeyboardTests.cpp" />
     <ClCompile Include="MemoryTests.cpp" />
+    <ClCompile Include="MouseTests.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

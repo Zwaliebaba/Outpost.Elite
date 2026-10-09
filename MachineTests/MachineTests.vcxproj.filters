@@ -10,8 +10,20 @@
     <Filter Include="Devices">
       <UniqueIdentifier>{4247BB1B-1667-5080-A1D7-C8D79DD0FAF1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Dos">
+      <UniqueIdentifier>{0B41E6E2-9CB7-545D-A331-B26C3C50DEB5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Firmware">
+      <UniqueIdentifier>{23A8AABB-5BEB-503F-9A27-FF274ADE16F5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Loader">
+      <UniqueIdentifier>{56703538-0074-5434-89F2-3C3BB01A5A6D}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Memory">
       <UniqueIdentifier>{5EEA54AE-6298-556E-99E1-676603292BE3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Services">
+      <UniqueIdentifier>{C629C94A-1F95-558B-B2D2-1AF3FD9AE872}</UniqueIdentifier>
     </Filter>
     <Filter Include="Sound">
       <UniqueIdentifier>{2248FD5B-4609-5B65-AA3B-E7BD96271643}</UniqueIdentifier>
@@ -27,8 +39,14 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="ServiceRig.h">
+      <Filter>Services</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BiosTests.cpp">
+      <Filter>Firmware</Filter>
+    </ClCompile>
     <ClCompile Include="CgaFontTests.cpp">
       <Filter>Video</Filter>
     </ClCompile>
@@ -38,6 +56,15 @@
     <ClCompile Include="CpuTests.cpp">
       <Filter>Cpu</Filter>
     </ClCompile>
+    <ClCompile Include="DosTests.cpp">
+      <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="ExeLoaderTests.cpp">
+      <Filter>Loader</Filter>
+    </ClCompile>
+    <ClCompile Include="FirmwareTests.cpp">
+      <Filter>Firmware</Filter>
+    </ClCompile>
     <ClCompile Include="GamePortTests.cpp">
       <Filter>Devices</Filter>
     </ClCompile>
@@ -46,6 +73,9 @@
     </ClCompile>
     <ClCompile Include="MemoryTests.cpp">
       <Filter>Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="MouseTests.cpp">
+      <Filter>Services</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
