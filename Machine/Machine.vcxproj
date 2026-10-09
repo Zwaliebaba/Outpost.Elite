@@ -73,14 +73,17 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Bios.h" />
     <ClInclude Include="Cga.h" />
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Cpu.h" />
+    <ClInclude Include="Firmware.h" />
     <ClInclude Include="GamePort.h" />
     <ClInclude Include="HostServices.h" />
     <ClInclude Include="InterruptSource.h" />
     <ClInclude Include="Pit.h" />
     <ClInclude Include="PortRouter.h" />
+    <ClInclude Include="ServiceFault.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Keyboard.h" />
@@ -92,9 +95,11 @@
     <ClInclude Include="Sha256.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Bios.cpp" />
     <ClCompile Include="Cga.cpp" />
     <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="Cpu.cpp" />
+    <ClCompile Include="Firmware.cpp" />
     <ClCompile Include="GamePort.cpp" />
     <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Memory.cpp" />

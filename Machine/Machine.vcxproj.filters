@@ -10,6 +10,9 @@
     <Filter Include="Devices">
       <UniqueIdentifier>{4247BB1B-1667-5080-A1D7-C8D79DD0FAF1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Firmware">
+      <UniqueIdentifier>{23A8AABB-5BEB-503F-9A27-FF274ADE16F5}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Io">
       <UniqueIdentifier>{D724A654-3C77-526C-A9C5-CB5309721AA7}</UniqueIdentifier>
     </Filter>
@@ -30,6 +33,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Bios.h">
+      <Filter>Firmware</Filter>
+    </ClInclude>
     <ClInclude Include="Cga.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -38,6 +44,9 @@
     </ClInclude>
     <ClInclude Include="Cpu.h">
       <Filter>Cpu</Filter>
+    </ClInclude>
+    <ClInclude Include="Firmware.h">
+      <Filter>Firmware</Filter>
     </ClInclude>
     <ClInclude Include="GamePort.h">
       <Filter>Devices</Filter>
@@ -53,6 +62,9 @@
     </ClInclude>
     <ClInclude Include="PortRouter.h">
       <Filter>Devices</Filter>
+    </ClInclude>
+    <ClInclude Include="ServiceFault.h">
+      <Filter>Services</Filter>
     </ClInclude>
     <ClInclude Include="Speaker.h">
       <Filter>Sound</Filter>
@@ -83,6 +95,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Bios.cpp">
+      <Filter>Firmware</Filter>
+    </ClCompile>
     <ClCompile Include="Cga.cpp">
       <Filter>Video</Filter>
     </ClCompile>
@@ -91,6 +106,9 @@
     </ClCompile>
     <ClCompile Include="Cpu.cpp">
       <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="Firmware.cpp">
+      <Filter>Firmware</Filter>
     </ClCompile>
     <ClCompile Include="GamePort.cpp">
       <Filter>Devices</Filter>
