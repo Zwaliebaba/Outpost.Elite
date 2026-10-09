@@ -16,7 +16,7 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
 - **The boot trace.** Every instruction from the program entry to the first keyboard read, with the ADR-001 patch applied, compared register for register with DOSBox-X's debugger trace of the same binary. No input happens in that stretch, so both traces are deterministic.
 - **Static screens.** The title, the status, market, equipment and inventory screens, and both charts, compared pixel for pixel with DOSBox-X screenshots taken at the same points.
 
-**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-005, which records the cause of each change. The corpus is built to reach every subsystem:
+**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-006, which records the cause of each change. The corpus is built to reach every subsystem:
 
 - trading, and every equipment item;
 - combat with every ship type;
@@ -32,7 +32,7 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
 **5. The oracle ends with Phase 4 (D7).** At the end of Phase 4 the interpreter, the capture harness and the per-routine differential tests are deleted from the tree. Before that:
 
 - the replay corpus has to reach everything in item 2;
-- its digests have to be re-based under ADR-005;
+- its digests have to be re-based under ADR-006;
 - the known-answer tests have to be in the suite.
 
 From then on, the replays and the known answers are what the port is held to.
@@ -42,5 +42,5 @@ From then on, the replays and the known answers are what the port is held to.
 ## What this forecloses
 
 - Porting a routine against the interpreter before item 1 holds.
-- Re-basing a digest to get a red build green. A digest moves only through ADR-005, with its cause.
+- Re-basing a digest to get a red build green. A digest moves only through ADR-006, with its cause.
 - Any per-routine comparison against the original after Phase 4. A behaviour question raised later is answered from the replays, from the known answers, or by restoring the interpreter from history, not by asking the original directly.

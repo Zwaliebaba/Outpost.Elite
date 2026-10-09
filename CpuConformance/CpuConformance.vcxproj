@@ -82,13 +82,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="OpenBus.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="TestCase.h" />
+    <ClInclude Include="TestReader.h" />
+    <ClInclude Include="TestRunner.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Main.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="TestReader.cpp" />
+    <ClCompile Include="TestRunner.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Machine\Machine.vcxproj">

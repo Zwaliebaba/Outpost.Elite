@@ -73,9 +73,16 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Cpu.h" />
+    <ClInclude Include="HostServices.h" />
+    <ClInclude Include="Memory.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="PortBus.h" />
+    <ClInclude Include="Registers.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Cpu.cpp" />
+    <ClCompile Include="Memory.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

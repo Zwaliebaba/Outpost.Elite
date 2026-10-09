@@ -7,17 +7,38 @@
     <Filter Include="Runner">
       <UniqueIdentifier>{7D9BB439-BE54-58EC-B2FB-74C947F75BD6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Suite">
+      <UniqueIdentifier>{E27C3C26-493F-50EA-B165-5B3851F64396}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="OpenBus.h">
+      <Filter>Runner</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="TestCase.h">
+      <Filter>Suite</Filter>
+    </ClInclude>
+    <ClInclude Include="TestReader.h">
+      <Filter>Suite</Filter>
+    </ClInclude>
+    <ClInclude Include="TestRunner.h">
+      <Filter>Runner</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Runner</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>
-    <ClCompile Include="Main.cpp">
+    <ClCompile Include="TestReader.cpp">
+      <Filter>Suite</Filter>
+    </ClCompile>
+    <ClCompile Include="TestRunner.cpp">
       <Filter>Runner</Filter>
     </ClCompile>
   </ItemGroup>

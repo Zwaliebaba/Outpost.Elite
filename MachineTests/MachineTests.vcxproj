@@ -86,10 +86,11 @@
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CpuTests.cpp" />
+    <ClCompile Include="MemoryTests.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="SuiteSmoke.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Machine\Machine.vcxproj">

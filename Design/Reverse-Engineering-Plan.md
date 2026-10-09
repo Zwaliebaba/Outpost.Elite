@@ -124,11 +124,11 @@ A replacement is accepted when it matches the original on every captured call (�
 
 The interpreter leaves the shipping executable. Video memory becomes a native index buffer handed to the presenter; the speaker becomes a native synthesiser; the timer and keyboard handlers become a fixed-tick scheduler at the rate D6 sets; DOS file calls become `std::filesystem`, with the `.cdr` format kept byte-compatible so that commanders saved by the original still load. The protection is not ported (D5). The data-segment overlay is re-laid as typed state, now that nothing interpreted reads its bytes, and the ship models, font, text and tables become C++ tables generated from the reference by a script under `Tools/` and checked in (D3).
 
-At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-005.
+At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-006.
 
-This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-005 with its cause, never a re-baseline to make CI green.
+This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-006 with its cause, never a re-baseline to make CI green.
 
-**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-005, passes; the game has been played and looked at, not only built (AGENTS.md §3).
+**Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-006, passes; the game has been played and looked at, not only built (AGENTS.md §3).
 
 ### Phase 5 — Beyond the original (outside this plan)
 
@@ -173,7 +173,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D3 | Original data in the port | Read it from the user's copy at start-up (the OpenRCT2 model). | **Follows from D2:** generated tables are checked in, and the reference binary is committed so CI can run the oracle until Phase 4 ends. |
 | D4 | The reference binary | An unpatched copy with a recorded hash. | **This file, `ELITEL.EXE`, with its known patch documented** — the only copy available. Phase 0 looks for further patches (§2.3). |
 | D5 | Copy protection | Remove it from the port; answer it in the hosted original without altering the binary. | **Remove it by patching.** One byte, DS:0x25E4, set in the loaded image so the file keeps its hash (ADR-001). |
-| D6 | What "the same speed" means | The original's own minimum frame time, once Phase 1 showed how it paces itself. | **The game's own frame time:** 50 ms by default, selectable with F1–F10 as on the original's pause screen. No model of 1987 slowdowns (Reference-Map.md). ADR-005 records it with the change that implements it. |
+| D6 | What "the same speed" means | The original's own minimum frame time, once Phase 1 showed how it paces itself. | **The game's own frame time:** 50 ms by default, selectable with F1–F10 as on the original's pause screen. No model of 1987 slowdowns (Reference-Map.md). ADR-006 records it with the change that implements it. |
 | D7 | The oracle after Phase 4 | Keep the interpreter in the test project for as long as the code changes. | **Delete it after Phase 4.** The replay corpus must be complete before it goes (Phase 4). |
 | D8 | The picture | As the original drew it, at integer scale, corrected to 4:3. | **CGA mode 4 as this build draws it, at integer scale, corrected to 4:3.** |
 | D9 | A second build beside the reference | Keep one if available: diffing two builds separates the display code from the game logic. | **Moot:** there is no second build. Phase 1 finds the hardware boundary by hand. |
@@ -191,4 +191,5 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-002](ADR/ADR-002-original-data-and-the-repository.md) | Original data and the repository (D2, D3) | Phase 0 — written |
 | [ADR-003](ADR/ADR-003-verification.md) | Verification: interpreter validation, replays, differential tests, the oracle's lifetime (§6, D7) | Phase 0 — written |
 | ADR-004 | Projects and layout | Phase 2, when the first project is created |
-| ADR-005 | Time, pacing and the replay digests (D6) | Start of Phase 4, from the measurements |
+| [ADR-005](ADR/ADR-005-interpreter.md) | The 8086 interpreter: what one step is, interrupts, timing, and what checks it | Phase 2 — written |
+| ADR-006 | Time, pacing and the replay digests (D6) | Phase 4, with the change that implements it |
