@@ -95,7 +95,7 @@ constexpr std::int32_t AsSigned(std::uint32_t _value, bool _word) noexcept
 
 } // namespace
 
-Cpu::Cpu(Memory& _memory, PortBus& _ports) noexcept
+Cpu::Cpu(Memory& _memory, PortBus& _ports)
   : m_memory(_memory),
     m_ports(_ports)
 {

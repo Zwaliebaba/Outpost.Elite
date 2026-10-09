@@ -62,7 +62,8 @@ class PortBus;
 class Cpu
 {
 public:
-  Cpu(Memory& _memory, PortBus& _ports) noexcept;
+  /// Not noexcept: constructing the pending-interrupt queue may allocate (MSVC's debug library does).
+  Cpu(Memory& _memory, PortBus& _ports);
 
   /// The hook consulted on INT n, INT 3 and INTO. Null (the default) means every interrupt vectors.
   void SetHostServices(HostServices* _host) noexcept;
