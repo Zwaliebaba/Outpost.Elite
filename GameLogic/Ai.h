@@ -31,9 +31,6 @@ void SkipInertObjectAi(Guest& _guest);
 /// UpdateStationAi (CS:5595): class 1: the station spins, launches police or traders at an offender, and answers missiles.
 void UpdateStationAi(Guest& _guest);
 
-/// UpdateDriftingObjectAi (CS:5681): class 3: moves, and tumbles if a rock.
-void UpdateDriftingObjectAi(Guest& _guest);
-
 /// UpdateTraderOrPoliceAi (CS:569C): class 4: traders and the police: deciding, attacking, fleeing with jinks, breaking off; rocks
 /// only spin.
 void UpdateTraderOrPoliceAi(Guest& _guest);
@@ -81,6 +78,13 @@ struct HoldFire
   std::optional<SafeZone> zone; ///< what InSafeZone read, when it was asked: neither in an invasion nor for a police Viper
 };
 
+/// What UpdateDriftingObjectAi did with a slot.
+struct DriftingObject
+{
+  MovedObject moved;          ///< what MoveObject did
+  std::optional<Pair> tumble; ///< for a rock, what it added to the pitch, then to the roll
+};
+
 /// ScaleSpawnOdds (CS:4C0E): _odds multiplied by 32 (shifted left 5) while jumpDriveEngaged is 1.
 [[nodiscard]] std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds);
 
@@ -107,6 +111,10 @@ Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted);
 /// _halfSize / 4 on every axis (VectorWithinBox).
 [[nodiscard]] VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize);
 
+/// UpdateDriftingObjectAi (CS:5681): class 3: _slot moved (MoveObject), and a rock (IsDebrisType) tumbled: 37h added to its
+/// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear.
+DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot);
+
 /// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
 /// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.
 [[nodiscard]] HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
@@ -124,6 +132,8 @@ void ClampTurnStepEntry(Guest& _guest);
 void CountOtherHuntersOnScannerEntry(Guest& _guest); ///< DI = the slot. Out: AL the count, BP the last found; CX, SI clobbered.
 /// DI = the slot, SI = the object, DX = the box's half size. Out: AX, BX, CX the vector; CF set within the box; DX, BP clobbered.
 void GetVectorToObjectEntry(Guest& _guest);
+/// DI = the slot. Out: every register as the original leaves it: MoveObject's, AL the type, and a rock's tumble in AX and BX.
+void UpdateDriftingObjectAiEntry(Guest& _guest);
 /// DI = the slot. Out: CF set when it must hold its fire; AL what InSafeZone leaves there, when it is asked.
 void CheckSafeZoneHoldFireEntry(Guest& _guest);
 

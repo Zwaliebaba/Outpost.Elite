@@ -137,6 +137,10 @@ void UseMaskingDevice(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+/// The registers RemoveAllMissiles' original leaves, _erased saying whether it erased a scanner blip: DI past the slots it looked
+/// at, and ES = B800h once it erased one. For its entry, and for UpdateStationAi's register code, whose contract compares them.
+void RemoveAllMissilesOut(Guest& _guest, bool _erased);
+
 void DrawLaserSightsEntry(Guest& _guest);             ///< AX, BX, CX, SI, DI clobbered.
 void GetViewLaserEntry(Guest& _guest);                ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
 void TakeDamageEntry(Guest& _guest);                  ///< AX = the damage. Out: AX and BX as the original leaves them; IF=1 when it kills.

@@ -334,14 +334,14 @@ void SpawnFragments(Guest& _guest)
     _guest.SetByte(At(debris, SLOT_LIFETIME), lifetime);
     SetLow(regs.ax, SPLINTER_ACTIVE);
     _guest.SetByte(debris, SPLINTER_ACTIVE);
-    UpdateDebrisAi(_guest);
+    UpdateDebrisAiEntry(_guest);
     if (_guest.Get(DS.explodingStation) == 1)
     {
       // A station's fragments are flung ten frames further at once.
       for (regs.cx = STATION_FRAGMENT_STEPS; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
       {
         const std::uint16_t steps = regs.cx;
-        UpdateDebrisAi(_guest);
+        UpdateDebrisAiEntry(_guest);
         regs.cx = steps;
       }
     }
@@ -1007,7 +1007,7 @@ void SpawnPlayerWreckage(Guest& _guest)
     _guest.SetByte(At(regs.di, SLOT_LIFETIME), WRECK_LIFETIME);
     SetLow(regs.ax, SPLINTER_ACTIVE);
     _guest.SetByte(regs.di, SPLINTER_ACTIVE);
-    UpdateDebrisAi(_guest);
+    UpdateDebrisAiEntry(_guest);
     regs.cx = static_cast<std::uint16_t>(splinters - 1);
   } while (regs.cx != 0);
   if (_guest.Get(DS.cargoUsedTonnes) == 0)
@@ -1431,17 +1431,22 @@ void KillPlayerEntry(Guest& _guest)
   _guest.Clobber(KILLS_PLAYER);
 }
 
-void RemoveAllMissilesEntry(Guest& _guest)
+void RemoveAllMissilesOut(Guest& _guest, bool _erased)
 {
+  // DI past the slots it looked at, by the count it loaded, which nothing it does changes, and ES on the video memory once
+  // RemoveObject's EraseScannerBlip has erased a blip.
   Machine::Registers& regs = _guest.Regs();
-  // DI past the slots it looked at, the count it loaded, and ES on the video memory once RemoveObject's EraseScannerBlip has
-  // erased a blip: UpdateStationAi's contract compares both after it.
-  const std::uint8_t slots = _guest.Get(DS.objectSlotCount);
-  if (RemoveAllMissiles(_guest.State()))
+  if (_erased)
   {
     regs.es = GameState::VIDEO_SEGMENT;
   }
-  regs.di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(slots) * ObjectSlot::BYTES);
+  regs.di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.objectSlotCount)) * ObjectSlot::BYTES);
+}
+
+void RemoveAllMissilesEntry(Guest& _guest)
+{
+  // UpdateStationAi's contract compares the DI and ES it leaves after it.
+  RemoveAllMissilesOut(_guest, RemoveAllMissiles(_guest.State()));
   _guest.Clobber(REMOVES_MISSILES);
 }
 

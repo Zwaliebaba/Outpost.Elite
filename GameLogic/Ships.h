@@ -79,22 +79,6 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> ShipsEntries() noexcept;
 
-/// SpawnRandomDrifter (CS:4CE7): one of the eight drifters from entry 1 in the free slot at DI, class 3, turn rate 1Eh.
-void SpawnRandomDrifter(Guest& _guest);
-
-/// SpawnRandomTrader (CS:4D08): one of the six traders from entry 9 in the free slot at DI, class 4; a Viper is police half the time.
-void SpawnRandomTrader(Guest& _guest);
-
-/// SpawnMaskMissionShip (CS:4DAE): a mask-mission ship in the free slot at DI from the Asp's record: the Asp when CF is set,
-/// otherwise type 12h or 13h by a random sign.
-void SpawnMaskMissionShip(Guest& _guest);
-
-/// SpawnInvasionThargoid (CS:4DF0): an invasion's Thargoid in the free slot at DI, with 8 Thargons.
-void SpawnInvasionThargoid(Guest& _guest);
-
-/// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, its spin, MoveObject.
-void UpdateDebrisAi(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // A slot that a routine reads or writes by its fields is an ObjectSlot; one it searches for, copies or clears whole is the
@@ -188,6 +172,27 @@ void InitKraitHunter(GameState& _state, ObjectSlot _slot);
 /// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
 void InitThargon(GameState& _state, ObjectSlot _slot);
 
+/// SpawnRandomDrifter (CS:4CE7): _slot, a free one, made one of the eight drifters from spawnTemplates' entry 1 by a random
+/// word rotated right and its two bytes XORed, placed at the spawn point and turned to the player, of class 3 with turn rate
+/// 1Eh, and its velocity set.
+void SpawnRandomDrifter(GameState& _state, ObjectSlot _slot);
+
+/// SpawnRandomTrader (CS:4D08): _slot, a free one, made one of the six traders from spawnTemplates' entry 9 by a random byte /
+/// 43, placed and turned as SpawnRandomDrifter does, of class 4, and its velocity set. A Viper gets a random bit for +3Ah,
+/// police when 1, and then a word write of legalStatus at +30h, which zeroes the bounty above it. Returns what
+/// FacePlayerWithRandomRoll gave it.
+RandomRollFacing SpawnRandomTrader(GameState& _state, ObjectSlot _slot);
+
+/// SpawnMaskMissionShip (CS:4DAE): _slot, a free one, from the Asp's record, placed and turned as SpawnRandomDrifter does: the
+/// Asp when _maskShip, otherwise type 12h or 13h by the sign of a random word; class 5, a random aggression below 80h, energy
+/// 96h, no cargo, 6 missiles and a bounty of C8h.
+void SpawnMaskMissionShip(GameState& _state, ObjectSlot _slot, bool _maskShip);
+
+/// SpawnInvasionThargoid (CS:4DF0): _slot, a free one, made the Thargoid of an invasion (spawnTemplates entry 27), placed and
+/// turned as SpawnRandomDrifter does; class 5, a random aggression below 80h, energy 32h, no cargo, 6 missiles and 8
+/// Thargons.
+void SpawnInvasionThargoid(GameState& _state, ObjectSlot _slot);
+
 /// SpawnRandomHunter (CS:4D3B): _slot, a free one, made one of the seven hunters from spawnTemplates' entry 15 by a random
 /// byte / 37, placed at the spawn point and turned to the player, of class 6 with a random aggression below 20h, and its velocity
 /// set.
@@ -252,6 +257,11 @@ void ClearAllObjects(GameState& _state, bool _backward);
 /// _backward (the direction flag) is set.
 void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destination, bool _backward);
 
+/// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age
+/// counted up, its spin bytes, sign-extended, added to its roll and then its pitch, and MoveObject. Returns what MoveObject
+/// did, when it ran.
+std::optional<MovedObject> UpdateDebrisAi(GameState& _state, ObjectSlot _slot);
+
 /// IsDebrisType (CS:53FE): whether _slot is a rock: a plate (0Ch), a boulder (6), an asteroid (5) or a splinter (0Bh).
 [[nodiscard]] bool IsDebrisType(const ObjectSlot& _slot);
 
@@ -274,6 +284,11 @@ void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destina
 /// of the routines that call it, whose contracts compare what it leaves.
 void IsObjectNearOut(Guest& _guest, const ObjectSlot& _slot, const NearTest& _test);
 
+/// The registers MoveObject's original leaves once it moved _slot as _moved says: AX and DX the z velocity, sign-extended, then
+/// what IsObjectNear leaves (IsObjectNearOut), then what RemoveObject's EraseScannerBlip leaves once it erased a blip. For its
+/// entry, and for the entries of the routines that end with it, whose contracts compare what it leaves.
+void MoveObjectOut(Guest& _guest, const ObjectSlot& _slot, const MovedObject& _moved);
+
 void ClearObjectSlotEntry(Guest& _guest);        ///< SI = the slot. Out: DI = the slot, SI = the slot + 40h, CX = 0.
 void IsObjectNearEntry(Guest& _guest);           ///< DI = the slot. Out: CF set when near; AL the last high byte looked at.
 void IsSunOrPlanetEntry(Guest& _guest);          ///< DI = the slot. Out: AL = the type; ZF set for the sun or the planet.
@@ -287,8 +302,12 @@ void InitEscapePodEntry(Guest& _guest);          ///< DI = the slot. AX, BX clob
 void InitShuttleEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
 void InitKraitHunterEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
 void InitThargonEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
+void SpawnRandomDrifterEntry(Guest& _guest);     ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
+void SpawnRandomTraderEntry(Guest& _guest);      ///< DI = the slot. Out: BP = the pitch; AX, BX, CX, DX clobbered.
 void SpawnRandomHunterEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
 void SpawnRandomWolfEntry(Guest& _guest);        ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
+void SpawnMaskMissionShipEntry(Guest& _guest);   ///< DI = the slot, CF set for the mask ship. AX, BX, CX, DX, BP clobbered.
+void SpawnInvasionThargoidEntry(Guest& _guest);  ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
 void InitObjectFromTemplateEntry(Guest& _guest); ///< BX = the table, AL = the record, DI = the slot. AX, BX clobbered.
 void PlaceAtSpawnPointEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX clobbered.
 void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
@@ -303,6 +322,7 @@ void ReclaimShipSlotEntry(Guest& _guest);        ///< Out: SI = the slot, and DI
 void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
 void FindDebrisSlotEntry(Guest& _guest);         ///< Out: SI = the slot.
 void CopyObjectEntry(Guest& _guest);             ///< SI = the source, DI = the destination. Out: ES = DS.
+void UpdateDebrisAiEntry(Guest& _guest);         ///< DI = the slot. AX, BX, CX, DX, ES clobbered.
 void IsDebrisTypeEntry(Guest& _guest);           ///< DI = the slot. Out: AL = the type; ZF set for a rock.
 void IsViperTypeEntry(Guest& _guest);            ///< DI = the slot. Out: ZF set for a Viper; AX kept.
 void IsPoliceViperEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a police Viper; AX kept.

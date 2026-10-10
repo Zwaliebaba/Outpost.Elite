@@ -282,7 +282,7 @@ void SpawnByGovernment(Guest& _guest)
       {
         return;
       }
-      SpawnRandomDrifter(_guest);
+      SpawnRandomDrifterEntry(_guest);
     }
     if (BelowSpawnLimitOnRegisters(_guest, DS.traderLimitColumn.offset, DS.traderCount) &&
         SpawnOddsMetOnRegisters(_guest, DS.traderOddsColumn.offset))
@@ -291,7 +291,7 @@ void SpawnByGovernment(Guest& _guest)
       {
         return;
       }
-      SpawnRandomTrader(_guest);
+      SpawnRandomTraderEntry(_guest);
     }
     if (BelowSpawnLimitOnRegisters(_guest, DS.hunterLimitColumn.offset, DS.hunterCount) &&
         SpawnOddsMetOnRegisters(_guest, DS.hunterOddsColumn.offset))
@@ -341,7 +341,7 @@ void MarkMaskShip(ObjectSlot _slot)
     return false;
   }
   _guest.SetFlag(FLAG_CARRY, _maskShip);
-  SpawnMaskMissionShip(_guest);
+  SpawnMaskMissionShipEntry(_guest);
   return true;
 }
 
@@ -367,7 +367,7 @@ void SpawnMaskMissionShips(Guest& _guest)
     }
     _guest.Set(DS.maskShipSlot, regs.si);
     _guest.SetFlag(FLAG_CARRY, true);
-    SpawnMaskMissionShip(_guest);
+    SpawnMaskMissionShipEntry(_guest);
     MarkMaskShip(ObjectSlot(_guest.State(), regs.di));
     for (int escort = 0; escort < 2; ++escort)
     {
@@ -404,7 +404,7 @@ void SpawnInvasionWave(Guest& _guest)
   }
   if (TakeFreeShipSlotOnRegisters(_guest))
   {
-    SpawnInvasionThargoid(_guest);
+    SpawnInvasionThargoidEntry(_guest);
   }
 }
 
@@ -446,7 +446,7 @@ void LaunchAtOffender(Guest& _guest)
   }
   else
   {
-    SpawnRandomTrader(_guest);
+    SpawnRandomTraderEntry(_guest);
   }
   // ADD [DI+8],0F0h / ADC [DI+3],0: out along z, turned round, its roll reversed.
   const std::uint16_t z = At(regs.di, SLOT_Z);
@@ -460,73 +460,72 @@ void LaunchAtOffender(Guest& _guest)
   regs.di = station;
 }
 
-// CheckMissilesAtStation (5611): a missile aimed at the station, or at a police Viper in the safe zone, is a crime and starts
-// the station's ECM, which then removes every missile for npcEcmFrames frames.
-void CheckMissilesAtStation(Guest& _guest)
+// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
+void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.npcEcmFrames) == 0)
+  const unsigned sum = _state.Get(_field) + unsigned{_value};
+  _state.Set(_field, static_cast<std::uint8_t>(sum));
+  if (sum > 0xFF)
   {
-    regs.cx = _guest.Get(DS.objectSlotCount);
-    regs.si = DS.shipSlots.offset;
-    bool crime = false;
-    do
+    _state.Set(_field, 0xFF);
+  }
+}
+
+// What CheckMissilesAtStation did with the station's ECM.
+struct StationEcm
+{
+  bool removed; // the ECM ran, and RemoveAllMissiles with it
+  bool erased;  // that erased a scanner blip
+};
+
+// CheckMissilesAtStation (5611): a missile aimed at the station at _station, or at a police Viper in the safe zone, is a crime,
+// added to legalStatus up to FFh (the sum written, then FFh over it on a carry, 5650 and 5656), and starts the station's ECM
+// unless the player's anti-ECM is on; while npcEcmFrames runs, the ECM removes every missile, and an invasion stops it.
+StationEcm CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
+{
+  if (_state.Get(DS.npcEcmFrames) == 0)
+  {
+    // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
+    std::optional<std::uint8_t> crime;
+    std::uint16_t slot = DS.shipSlots.offset;
+    for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0 && !crime; --count)
     {
-      const std::uint8_t first = _guest.Byte(regs.si);
-      SetLow(regs.ax, static_cast<std::uint8_t>(first >> 1));
-      if ((first & SLOT_ACTIVE) != 0)
+      const ObjectSlot missile(_state, slot);
+      const std::uint8_t type = missile.Get(SlotByte::Type);
+      const std::uint16_t target = missile.Get(SlotWord::Target);
+      if ((type & ObjectSlot::ACTIVE) != 0 && ((type >> 1) & TYPE_MASK) == TYPE_MISSILE && target != 0)
       {
-        SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & TYPE_MASK));
-        if (Low(regs.ax) == TYPE_MISSILE)
+        if (target == _station.Offset())
         {
-          regs.bx = _guest.Word(At(regs.si, SLOT_TARGET));
+          crime = STATION_MISSILE_CRIME;
         }
-        if (Low(regs.ax) == TYPE_MISSILE && regs.bx != 0)
+        else if (IsPoliceViper(ObjectSlot(_state, target)) && InSafeZone(_state).inside)
         {
-          SetLow(regs.ax, STATION_MISSILE_CRIME);
-          if (regs.bx == regs.di)
-          {
-            crime = true;
-            break;
-          }
-          std::swap(regs.di, regs.bx);
-          IsPoliceViperEntry(_guest);
-          std::swap(regs.di, regs.bx);
-          if (_guest.Flag(FLAG_ZERO))
-          {
-            _guest.Call(IN_SAFE_ZONE);
-            SetLow(regs.ax, POLICE_MISSILE_CRIME);
-            if (_guest.Flag(FLAG_CARRY))
-            {
-              crime = true;
-              break;
-            }
-          }
+          crime = POLICE_MISSILE_CRIME;
         }
       }
-      regs.si = At(regs.si, SLOT_BYTES);
-      regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
-    } while (regs.cx != 0);
+      slot = Offset(slot, ObjectSlot::BYTES);
+    }
     if (!crime)
     {
-      return;
+      return StationEcm{false, false};
     }
-    const unsigned status = _guest.Get(DS.legalStatus) + unsigned{Low(regs.ax)};
-    _guest.Set(DS.legalStatus, status > 0xFF ? std::uint8_t{0xFF} : static_cast<std::uint8_t>(status));
-    if (_guest.Get(DS.antiEcmActive) == 1)
+    AddSaturating(_state, DS.legalStatus, *crime);
+    if (_state.Get(DS.antiEcmActive) == 1)
     {
-      return;
+      return StationEcm{false, false};
     }
-    _guest.Set(DS.npcEcmFrames, STATION_ECM_FRAMES);
+    _state.Set(DS.npcEcmFrames, STATION_ECM_FRAMES);
   }
-  if (_guest.Get(DS.thargoidInvasionActive) == 1)
+  if (_state.Get(DS.thargoidInvasionActive) == 1)
   {
-    _guest.Set(DS.npcEcmFrames, 0);
-    return;
+    _state.Set(DS.npcEcmFrames, 0);
+    return StationEcm{false, false};
   }
-  _guest.Set(DS.ecmFired, 1);
-  RemoveAllMissilesEntry(_guest);
-  _guest.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_guest.Get(DS.npcEcmFrames) - 1));
+  _state.Set(DS.ecmFired, 1);
+  const bool erased = RemoveAllMissiles(_state);
+  _state.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_state.Get(DS.npcEcmFrames) - 1));
+  return StationEcm{true, erased};
 }
 
 // UpdateWolfAi's state 3 (586D): turning away until beyond its range, then a pass is counted off.
@@ -626,64 +625,55 @@ void HunterEvade(Guest& _guest)
   MoveObjectEntry(_guest);
 }
 
-// UpdateHunterAi's state 0 (58E4): flying at the player until it turns hostile, then picking how to hunt.
-void HunterIdle(Guest& _guest)
+// UpdateHunterAi's state 0 (58E4): flying at the player until it turns hostile, then picking how to hunt: with two or more
+// pack mates on the scanner it attacks a fugitive, or at odds of 32h in 65536 anyone; with one it flies in formation with it.
+void HunterIdle(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t flags = _guest.Byte(At(regs.di, SLOT_FLAGS));
+  const std::uint8_t flags = _slot.Get(SlotByte::Flags);
   if ((flags & FLAG_BLIP_DRAWN) == 0)
   {
-    GetVectorToPlayerEntry(_guest);
-    TurnToVectorOnRegisters(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
+    (void)TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
+    (void)ComputeVelocity(_state, _slot);
+    (void)MoveObject(_state, _slot);
     return;
   }
   if ((flags & FLAG_HOSTILE) != 0)
   {
-    SetState(_guest, STATE_TURN_AWAY);
+    _slot.Set(SlotByte::State, STATE_TURN_AWAY);
   }
   else
   {
-    CountOtherHuntersOnScannerEntry(_guest);
-    if (Low(regs.ax) >= 2)
+    const HunterCount hunters = CountOtherHuntersOnScanner(_state, _slot.Offset());
+    if (hunters.count >= 2)
     {
-      bool attack = _guest.Get(DS.legalStatus) >= FUGITIVE;
-      if (!attack)
+      if (_state.Get(DS.legalStatus) >= FUGITIVE || NextRandom(_state) < PACK_ATTACK_ODDS)
       {
-        NextRandomEntry(_guest);
-        attack = regs.ax < PACK_ATTACK_ODDS;
-      }
-      if (attack)
-      {
-        SetState(_guest, STATE_ATTACK);
+        _slot.Set(SlotByte::State, STATE_ATTACK);
       }
     }
-    else if (Low(regs.ax) == 1)
+    else if (hunters.count == 1)
     {
-      _guest.SetWord(At(regs.di, SLOT_TARGET), regs.bp);
-      SetState(_guest, STATE_FORMATION);
+      // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last.
+      _slot.Set(SlotWord::Target, *hunters.last);
+      _slot.Set(SlotByte::State, STATE_FORMATION);
     }
   }
-  MoveObjectEntry(_guest);
+  (void)MoveObject(_state, _slot);
 }
 
 // UpdateTraderOrPoliceAi's state 1 (56CE): a police Viper attacks a player of legal status 5 or more; otherwise one the player
 // has hit flees, at odds of 53FCh in 65536, or attacks.
-void TraderDecide(Guest& _guest)
+void TraderDecide(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  IsPoliceViperEntry(_guest);
-  if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) >= POLICE_ATTACK_STATUS)
+  if (IsPoliceViper(_slot) && _state.Get(DS.legalStatus) >= POLICE_ATTACK_STATUS)
   {
-    SetState(_guest, TRADER_ATTACKING);
+    _slot.Set(SlotByte::State, TRADER_ATTACKING);
   }
-  else if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) != 0)
+  else if ((_slot.Get(SlotByte::Flags) & FLAG_HOSTILE) != 0)
   {
-    NextRandomEntry(_guest);
-    SetState(_guest, regs.ax < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING);
+    _slot.Set(SlotByte::State, NextRandom(_state) < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING);
   }
-  MoveObjectEntry(_guest);
+  (void)MoveObject(_state, _slot);
 }
 
 // UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until close or,
@@ -760,30 +750,24 @@ void TraderFlee(Guest& _guest)
 }
 
 // UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
-// the police flee.
-void TraderBreakOff(Guest& _guest)
+// the police flee. Its range's box takes _rangeLow, what DL holds there, for its low byte.
+void TraderBreakOff(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (!WithinRangeOnRegisters(_guest))
+  if (!WithinRange(_slot, _rangeLow))
   {
-    SetState(_guest, TRADER_ATTACKING);
-    MoveObjectEntry(_guest);
+    _slot.Set(SlotByte::State, TRADER_ATTACKING);
+    (void)MoveObject(_state, _slot);
     return;
   }
-  if (_guest.Byte(At(regs.di, SLOT_ENERGY)) < RETURN_ENERGY)
+  if (_slot.Get(SlotByte::Energy) < RETURN_ENERGY && !IsPoliceViper(_slot))
   {
-    IsPoliceViperEntry(_guest);
-    if (!_guest.Flag(FLAG_ZERO))
-    {
-      SetState(_guest, TRADER_FLEEING);
-      MoveObjectEntry(_guest);
-      return;
-    }
+    _slot.Set(SlotByte::State, TRADER_FLEEING);
+    (void)MoveObject(_state, _slot);
+    return;
   }
-  GetObjectPositionEntry(_guest);
-  TurnToVectorOnRegisters(_guest);
-  ComputeVelocityEntry(_guest);
-  MoveObjectEntry(_guest);
+  (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
+  (void)ComputeVelocity(_state, _slot);
+  (void)MoveObject(_state, _slot);
 }
 
 } // namespace
@@ -951,26 +935,32 @@ void UpdateStationAi(Guest& _guest)
   {
     LaunchAtOffender(_guest);
   }
-  CheckMissilesAtStation(_guest);
+  // DI past the slots and ES as RemoveAllMissiles leaves them, which the contract compares, once the ECM ran. The AX, BX, CX and
+  // SI its look at the missiles leaves, which the contract does not compare, are not reproduced: poisoned, every comparison and
+  // digest still agrees.
+  const StationEcm ecm = CheckMissilesAtStation(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+  if (ecm.removed)
+  {
+    RemoveAllMissilesOut(_guest, ecm.erased);
+  }
 }
 
-void UpdateDriftingObjectAi(Guest& _guest)
+DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
 {
-  MoveObjectEntry(_guest);
-  IsDebrisTypeEntry(_guest);
-  if (!_guest.Flag(FLAG_ZERO))
+  const MovedObject moved = MoveObject(_state, _slot);
+  if (!IsDebrisType(_slot))
   {
-    return;
+    return DriftingObject{moved, std::nullopt};
   }
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = ROCK_TUMBLE_A;
-  regs.bx = ROCK_TUMBLE_B;
-  if ((_guest.Byte(regs.di) & ROCK_TUMBLE_SWAP) == 0)
+  // MOV AX,37h / MOV BX,0FFDFh, exchanged unless bit 1 of the type byte is set: AX to the pitch, then BX to the roll.
+  Pair tumble{static_cast<std::int16_t>(ROCK_TUMBLE_A), static_cast<std::int16_t>(ROCK_TUMBLE_B)};
+  if ((_slot.Get(SlotByte::Type) & ROCK_TUMBLE_SWAP) == 0)
   {
-    std::swap(regs.ax, regs.bx);
+    std::swap(tumble.first, tumble.second);
   }
-  AddWord(_guest, At(regs.di, SLOT_PITCH), regs.ax);
-  AddWord(_guest, At(regs.di, SLOT_ROLL), regs.bx);
+  _slot.Set(SlotWord::Pitch, Offset(_slot.Get(SlotWord::Pitch), static_cast<std::uint16_t>(tumble.first)));
+  _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), static_cast<std::uint16_t>(tumble.second)));
+  return DriftingObject{moved, tumble};
 }
 
 void UpdateTraderOrPoliceAi(Guest& _guest)
@@ -992,9 +982,11 @@ void UpdateTraderOrPoliceAi(Guest& _guest)
     MoveObjectEntry(_guest);
     return;
   }
+  // The states de-assembled leave the registers but DI as they were: the contract compares none of them, and poisoned, every
+  // comparison and digest still agrees.
   if (state == TRADER_DECIDING)
   {
-    TraderDecide(_guest);
+    TraderDecide(_guest.State(), ObjectSlot(_guest.State(), regs.di));
     return;
   }
   if (state == TRADER_ATTACKING)
@@ -1007,7 +999,7 @@ void UpdateTraderOrPoliceAi(Guest& _guest)
     TraderFlee(_guest);
     return;
   }
-  TraderBreakOff(_guest);
+  TraderBreakOff(_guest.State(), ObjectSlot(_guest.State(), regs.di), Low(regs.dx));
 }
 
 void UpdateWolfAi(Guest& _guest)
@@ -1091,7 +1083,9 @@ void UpdateHunterAi(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   if (State(_guest) == STATE_IDLE)
   {
-    HunterIdle(_guest);
+    // The registers but DI as they were: the contract compares none of them, and poisoned, every comparison and digest still
+    // agrees.
+    HunterIdle(_guest.State(), ObjectSlot(_guest.State(), regs.di));
     return;
   }
   if (State(_guest) == STATE_ATTACK)
@@ -1257,6 +1251,23 @@ void GetVectorToObjectEntry(Guest& _guest)
   _guest.Clobber(OBJECT_VECTOR);
 }
 
+void UpdateDriftingObjectAiEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const DriftingObject drift = UpdateDriftingObjectAi(_guest.State(), slot);
+  // The contract compares every register: what MoveObject leaves, then IsDebrisType's AL, the type, and a rock's tumble in AX and
+  // BX.
+  MoveObjectOut(_guest, slot, drift.moved);
+  SetLow(regs.ax, static_cast<std::uint8_t>((slot.Get(SlotByte::Type) >> 1) & TYPE_MASK));
+  if (drift.tumble)
+  {
+    regs.ax = static_cast<std::uint16_t>(drift.tumble->first);
+    regs.bx = static_cast<std::uint16_t>(drift.tumble->second);
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void CheckSafeZoneHoldFireEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1285,7 +1296,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x5594, "SkipInertObjectAi", &SkipInertObjectAi, PRESERVES_ALL},
   NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAi,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
-  NativeEntry{0x5681, "UpdateDriftingObjectAi", &UpdateDriftingObjectAi, PRESERVES_ALL},
+  NativeEntry{0x5681, "UpdateDriftingObjectAi", &UpdateDriftingObjectAiEntry, PRESERVES_ALL},
   NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAi, CLOBBERS_MOST},
   NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAi, CLOBBERS_MOST},
   NativeEntry{0x58DE, "UpdateHunterAi", &UpdateHunterAi, CLOBBERS_MOST},

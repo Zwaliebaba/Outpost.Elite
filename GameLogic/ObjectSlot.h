@@ -75,8 +75,9 @@ enum class SlotWord : std::uint16_t
   CompassX = 0x20, ///< the station's direction for the compass
   CompassY = 0x22,
   CompassZ = 0x24,
-  Target = 0x29,    ///< a missile's target, a hunter's pack mate
-  JinkPitch = 0x36, ///< the jink added to the wanted heading
+  Target = 0x29,     ///< a missile's target, a hunter's pack mate
+  Aggression = 0x30, ///< the aggression and the bounty above it, which SpawnRandomTrader writes as a word
+  JinkPitch = 0x36,  ///< the jink added to the wanted heading
   JinkYaw = 0x38,
   Owner = 0x3A, ///< a Thargon's mother; 1 for a police Viper
 };
