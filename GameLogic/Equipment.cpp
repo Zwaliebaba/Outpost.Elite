@@ -822,7 +822,7 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
       // The screen's own F4 does nothing here.
       if (code != SCAN_F4 && IsScreenKey(code))
       {
-        return ScreenKey{code, loop.al};
+        return ScreenKey{code, loop.al, std::nullopt};
       }
       _hardware.LoopTurn(EQUIP_STEER, {loop.row, loop.al});
       break;

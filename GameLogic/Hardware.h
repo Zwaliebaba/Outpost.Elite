@@ -1,6 +1,7 @@
 // GameLogic/Hardware.h
 #pragma once
 
+#include "Pacing.h"
 #include "Timing.h"
 
 #include <cstdint>
@@ -221,6 +222,12 @@ public:
   /// original's CPU does at the instruction after an STI that finds one pending. Reprogramming the PIT raises IRQ 0 at once
   /// when its output was low, and the original takes it with whichever handler the table names then.
   void TakeDueInterrupts();
+
+  // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
+
+  /// _point's cycles pass as they pass in a wait (Pc::Spend): the time the IBM PC spent on work the reference sets no pace
+  /// for, paid where an interpreted run pays it (ADR-013). Only a routine hooked as one that waits may call it.
+  void Spend(const PacingPoint& _point);
 
 private:
   Machine::Pc& m_pc;

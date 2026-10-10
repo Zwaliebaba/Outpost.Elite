@@ -6,7 +6,9 @@
 #include "DataOverlay.h"
 #include "Input.h"
 #include "Maths.h"
+#include "Text.h"
 #include "Timer.h"
+#include "Video.h"
 
 namespace Elite
 {
@@ -16,7 +18,6 @@ namespace
 
 constexpr std::uint16_t DIVIDE_OVERFLOW_INTERRUPT = 0x025E;
 constexpr std::uint16_t KEYBOARD_INTERRUPT = 0x0201;
-constexpr std::uint16_t WAIT_FOR_TIMER_TICK = 0x7772;
 
 // The interrupt table's words, at 0000:vector*4.
 constexpr std::uint16_t DIVIDE_VECTOR_OFFSET = 0x0000;
@@ -53,9 +54,6 @@ constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
 constexpr std::uint16_t PERFORM_DISK_REQUEST = 0x02FF;
 constexpr std::uint16_t COPY_PROTECTION = 0x04A3;
 constexpr std::uint16_t WIPE_PROGRAM = 0x0554;
-constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
-constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t SAVE_STARTUP_COMMANDER = 0x4660;
 constexpr std::uint16_t GAME_LOOP = 0x7D30;
 constexpr std::uint16_t RUN_TITLE_AND_DOCKED = 0x7D81;
@@ -88,7 +86,8 @@ constexpr std::uint16_t CREDITS_FIRST_LINE = 0x202;
 constexpr std::uint16_t CREDITS_LINES = 9;
 constexpr std::uint16_t CREDITS_LINE_STEP = 0x200;
 constexpr std::uint16_t WHITE_MASK = 0xFFFF;
-constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
+constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000;   // 3 s
+constexpr std::uint16_t PRESENT_SPACE_VIEW_BP = 0x20; // PresentSpaceView's MOV BP,20h: the words of a line it copies
 
 // REP MOVSB: _count bytes from _sourceSegment:_source to _destinationSegment:_destination, forwards or, with DF set
 // (_backward), backwards. Returns how far each offset moved, which the original leaves added to SI and DI.
@@ -392,39 +391,34 @@ void GameLoop(Guest& _guest)
   }
 }
 
-void ShowCredits(Guest& _guest)
+void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(CLEAR_DRAW_BUFFER);
-  regs.si = DS.creditsScreenText.offset;
-  regs.di = CREDITS_FIRST_LINE;
-  regs.cx = CREDITS_LINES;
-  for (;;)
+  ClearDrawBuffer(_state, _backward);
+  // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
+  // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place.
+  std::uint16_t text = DS.creditsScreenText.offset;
+  std::uint16_t place = CREDITS_FIRST_LINE;
+  for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
-    _guest.Push(regs.cx);
-    _guest.Push(regs.di);
-    _guest.Set(DS.textPaperPattern, 0);
-    regs.bx = WHITE_MASK;
-    _guest.Call(DRAW_VIEW_STRING);
-    ++regs.si;
-    regs.di = static_cast<std::uint16_t>(_guest.Pop() + CREDITS_LINE_STEP);
-    regs.cx = _guest.Pop();
-    if (--regs.cx == 0)
+    _state.Set(DS.textPaperPattern, 0);
+    text = Offset(DrawViewString(_state, text, WHITE_MASK, place).end, 1);
+    place = Offset(place, CREDITS_LINE_STEP);
+    if (--linesLeft == 0)
     {
       break;
     }
-    _guest.JumpBack(CREDITS_LINE);
+    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, text, place});
   }
-  _guest.Call(FINISH_SPACE_VIEW_FRAME);
-  regs.cx = CREDITS_TIMER_TICKS;
-  for (;;)
+  FinishSpaceViewFrame(_state, _hardware);
+  // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.
+  for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {
-    _guest.Call(WAIT_FOR_TIMER_TICK);
-    if (--regs.cx == 0)
+    WaitForTimerTick(_state, _hardware);
+    if (--ticksLeft == 0)
     {
       break;
     }
-    _guest.JumpBack(CREDITS_WAIT);
+    _hardware.LoopTurn(CREDITS_WAIT, {ticksLeft});
   }
 }
 
@@ -454,6 +448,9 @@ constexpr Machine::NativeContract PROTECTION{
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF{REGISTER_AX | REGISTER_CX | REGISTER_DI | REGISTER_ES,
                                                                       Machine::FLAG_INTERRUPT};
+// ShowCredits': all but DS, and BP, which the status screen after the title reads (ShowCreditsEntry).
+constexpr Machine::NativeContract SHOWS_CREDITS{
+  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
 // Start sets DS to the data segment, and never returns.
 constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{REGISTER_ALL, 0};
 
@@ -497,6 +494,16 @@ void CopyProtectionEntry(Guest& _guest)
   _guest.Clobber(PROTECTION);
 }
 
+void ShowCreditsEntry(Guest& _guest)
+{
+  ShowCredits(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  // FinishSpaceViewFrame's CLD, which StartNewGame's copy goes by after it, and PresentSpaceView's MOV BP,20h, which the status
+  // screen after the title hands SelectSystemAtCursor as the count when no system is on the chart; WaitForTimerTick keeps both.
+  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  _guest.Regs().bp = PRESENT_SPACE_VIEW_BP;
+  _guest.Clobber(SHOWS_CREDITS);
+}
+
 void StartNewGameEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -520,7 +527,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0554, "WipeProgram", &WipeProgramEntry, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
   NativeEntry{0x4671, "StartNewGame", &StartNewGameEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x7D30, "GameLoop", &GameLoop, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},
-  NativeEntry{0x8F02, "ShowCredits", &ShowCredits, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},
+  NativeEntry{0x8F02, "ShowCredits", &ShowCreditsEntry, SHOWS_CREDITS, Machine::NativeReturn::Near, 0, ALWAYS},
 };
 
 } // namespace

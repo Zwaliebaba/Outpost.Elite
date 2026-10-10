@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 18).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 19).
 
 ## Context
 
@@ -442,6 +442,46 @@ The 4 contracts widened:
 **Left.** `DrawSunOrPlanet`, `SizeSun` and `SupernovaHeat` wait on `DetonateEnergyBomb`. `ClassifyObject` waits on `UpdateCompass`. The object drawers above them wait on both.
 
 **The suites.** `GameLogicTests` passes 185 of 185 with poisoning on, under g++ and clang++, without warnings, with items 16 and 17 and the D20 replays in the same tree. The coverage check is clean, and no digest moved.
+
+**19. Level 5's charts and docked dispatch, measured 2026-10-10.** One worker converted 11 routines in Galaxy, Docked, StartUp and Scene. Galaxy has no register code left. Everything still left waits on the world's routines.
+
+| | Count |
+|---|---|
+| Routines converted | 11 |
+| Contracts narrowed | 1 |
+| Contracts widened, with every test passing poisoned and the callers read | 2 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 1,717 before, 1,599 after |
+| Register functions left | 77: 59 routines and 18 register adapters |
+| Routines ready | 15, all in Ai, Combat, Docking, Flight and Hyperspace |
+
+- **What converted.**
+  - The two charts as one unit with `ReadChartKey`, which ends their loop. The charts share a frame loop, which pays D18's cost through `Hardware::Spend` (ADR-013 item 3).
+  - What the charts draw: `DrawGalacticChart`, `DrawShortRangeChart`, `DrawChartCursor`, `DrawCross` and `DrawChartItems`.
+  - `DispatchDockedKeys`, with a table of the screens' value routines.
+  - `ShowCredits`.
+  - `TransformShip`.
+- **`RunTitleAndDocked` stays register code** until `RunTitle` converts. It writes back what the dispatch leaves. When the disc menu leaves for the disk, it pops its own return address as the original does, and SP and IP end where they did.
+- **BP from screen to screen.** The docked screens hand BP on to the next one. It is the count `SelectSystemAtCursor` uses when no system is on the chart. A static walk of each screen's code for writes to BP and the direction flag found three behaviours:
+  - the trade, equipment and disc screens keep BP;
+  - the four screens that end in `SelectSystemAtCursor` leave `FindNearestSystem`'s count;
+  - the charts leave that count, or 20h from `PresentChartFrame`.
+
+  So `SelectSystemAtCursor` returns the count, and a screen's result carries it when the screen leaves one. Like `ReadSteering`'s trigger byte (item 15), it is a value the original passes by accident, made explicit.
+- **Loop turns.**
+  - The charts' frame turns carry nothing: the frame loads every register it reads.
+  - The galactic dots' loop and the short-range systems' loop carry their counts.
+  - The dispatch's turns carry the key and BP.
+  - The credits' line loop carries its count, text and place, and its tick loop the ticks left.
+
+**Contracts.**
+- **Narrowed:** `ShowCredits` keeps BP: 20h, as `PresentSpaceView` leaves it, which the status screen after the title reads as the count. This rests on reading the code: poisoning cannot reach that path. Keeping more only makes the comparison stricter.
+- **Widened:** `ShowGalacticChart` and `ShowShortRangeChart` were said to preserve every register, which the register code never applied. They now leave BX, CX, DX, SI and DI. Both callers, `DispatchDockedKeys` and the flight screens' dispatch (CS:0BF8), read only AH and pass ES and BP on, and `flight-screens` runs the second.
+
+**Interrupts.** `GetKey` now takes the interrupts due when it turns them on, where its hook call took them (ADR-014 item 10). That covers every caller that calls it as a value: the charts' key loop, and the menus that item 17 converted.
+
+**Coverage.** `ClearChartTextLines` lost its compared callers, and `GalaxyTests.ChartTextLinesClearInEveryInk` now compares it.
+
+**The suites.** `GameLogicTests` passes 186 of 186 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 

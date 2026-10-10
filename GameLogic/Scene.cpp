@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "Combat.h"
 #include "DataOverlay.h"
+#include "Equipment.h"
 #include "Maths.h"
 #include "Video.h"
 
@@ -34,7 +35,6 @@ constexpr std::uint16_t IS_SUN_OR_PLANET = 0x3F2A;
 constexpr std::uint16_t IS_PLANET = 0x3F37;
 constexpr std::uint16_t IS_STATION = 0x3F40;
 constexpr std::uint16_t UPDATE_COMPASS = 0x418F;
-constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
 constexpr std::uint16_t REMOVE_OBJECT = 0x4F98;
 
 // The blueprint handlers, as a blueprint's first word names them, and the bytes before the rest of a blueprint: that word and the
@@ -54,9 +54,6 @@ constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
 
 // An object slot's fields beyond those Ships.h names (SLOT_BYTES, SLOT_PITCH, SLOT_YAW, SLOT_ROLL, SLOT_VIEW_X, SLOT_VIEW_Y,
 // SLOT_VIEW_Z, SLOT_FLAGS, SLOT_DETAIL).
-constexpr std::uint16_t SLOT_POSITION_X = 0x04; // the low words of the 24-bit position
-constexpr std::uint16_t SLOT_POSITION_Y = 0x06;
-constexpr std::uint16_t SLOT_POSITION_Z = 0x08;
 constexpr std::uint16_t SLOT_FRAMES_AWAY = 0x34;
 constexpr std::uint16_t SLOT_DEPTH = 0x3D;
 constexpr std::uint16_t SLOT_SIZE = 0x3E;
@@ -487,14 +484,6 @@ void ClassifyViewOut(Guest& _guest, Vector _view, ViewTest _test)
                 static_cast<std::int16_t>(_slot.Get(SlotWord::ViewZ))};
 }
 
-// ClassifyViewPosition on the view position in AX, BX and CX of the slot at DI, with the registers its code leaves.
-void ClassifyViewPositionOnRegisters(Guest& _guest)
-{
-  const Machine::Registers& regs = _guest.Regs();
-  const Vector view = PositionIn(regs);
-  ClassifyViewOut(_guest, view, ClassifyViewPosition(_guest.State(), ObjectSlot(_guest.State(), regs.di), view));
-}
-
 // RotateToViewDirection (CS:3EE6), the shared tail of the two TransformToView entries: _view with (x, z) rotated by -viewAngle
 // through rotation pair 8, which it sets, when the view is not the front one. PUSH BX, AX and CX round SetSinCos8 keep the
 // position, which comes back in the registers it went in.
@@ -609,7 +598,7 @@ void ClassifyObject(Guest& _guest)
     CheckShipInRangeEntry(_guest);
     if (!Flag(_guest, Machine::FLAG_CARRY))
     {
-      TransformShip(_guest);
+      TransformShipEntry(_guest);
     }
     return;
   }
@@ -1239,21 +1228,23 @@ ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
   return ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
-void TransformShip(Guest& _guest)
+TransformedShip TransformShip(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_POSITION_X));
-  regs.bx = _guest.Word(Offset(regs.di, SLOT_POSITION_Y));
-  regs.cx = _guest.Word(Offset(regs.di, SLOT_POSITION_Z));
-  const std::uint16_t slot = regs.di;
-  TransformToViewWithBlipEntry(_guest);
-  if (_guest.Get(DS.fuelScoopsFitted) == 1 && _guest.Get(DS.gameOverFrames) == 0)
+  // MOV AX,[DI+4] / MOV BX,[DI+6] / MOV CX,[DI+8], then PUSH DI / POP DI round the transform and the scoop, which keep the slot.
+  const Vector position{static_cast<std::int16_t>(_slot.Get(SlotWord::X)), static_cast<std::int16_t>(_slot.Get(SlotWord::Y)),
+                        static_cast<std::int16_t>(_slot.Get(SlotWord::Z))};
+  const ViewWithBlip transformed = TransformToViewWithBlip(_state, _slot, position);
+  bool blipTouched = transformed.blip.has_value();
+  if (_state.Get(DS.fuelScoopsFitted) == 1 && _state.Get(DS.gameOverFrames) == 0)
   {
-    _guest.Call(TRY_SCOOP_OBJECT);
+    // The scoop keeps AX, BX and CX, the view position, round its work.
+    if (TryScoopObject(_state, _slot, transformed.view).removedBlip)
+    {
+      blipTouched = true;
+    }
   }
-  regs.di = slot;
-  _guest.SetByte(Offset(regs.di, SLOT_DEPTH), 0);
-  ClassifyViewPositionOnRegisters(_guest);
+  _slot.Set(SlotByte::Depth, 0);
+  return TransformedShip{transformed.view, ClassifyViewPosition(_state, _slot, transformed.view), blipTouched};
 }
 
 bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _backward)
@@ -1549,6 +1540,20 @@ void TransformSunOrPlanetEntry(Guest& _guest)
   _guest.Clobber(TRANSFORMS_SUN_OR_PLANET);
 }
 
+void TransformShipEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const TransformedShip ship = TransformShip(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+  // XorScannerBlip, drawing the blip or erasing it in the scoop, leaves ES on the video segment, and the contract compares ES. DI
+  // is popped back to the slot, and AX, BX and CX, CF with them, are as ClassifyViewPosition's code leaves the view position.
+  if (ship.blipTouched)
+  {
+    regs.es = GameState::VIDEO_SEGMENT;
+  }
+  ClassifyViewOut(_guest, ship.view, ship.test);
+  _guest.Clobber(TRANSFORMS_SHIP);
+}
+
 void TransformToViewWithBlipEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1646,7 +1651,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3BEA, "CheckShipInRange", &CheckShipInRangeEntry, RETURNS_CARRY},
   NativeEntry{0x3C52, "TransformSunOrPlanet", &TransformSunOrPlanetEntry, TRANSFORMS_SUN_OR_PLANET},
   NativeEntry{0x3C72, "ClassifyStationPosition", &ClassifyStationPositionEntry, RETURNS_CARRY},
-  NativeEntry{0x3C7E, "TransformShip", &TransformShip, TRANSFORMS_SHIP},
+  NativeEntry{0x3C7E, "TransformShip", &TransformShipEntry, TRANSFORMS_SHIP},
   NativeEntry{0x3CDD, "RunBlueprintHandler", &RunBlueprintHandlerEntry, RENDERS_BLUEPRINT},
   NativeEntry{0x3CF2, "RenderBlueprintBody", &RenderBlueprintBodyEntry, RENDERS_BLUEPRINT},
   NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjects, Machine::NativeContract{ALL_BUT_DS, 0}},

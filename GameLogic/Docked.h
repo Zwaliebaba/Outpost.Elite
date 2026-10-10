@@ -6,6 +6,7 @@
 #include "Text.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -34,6 +35,9 @@ struct ScreenKey
 {
   std::uint8_t scanCode; ///< Esc, or the F-key of the screen to show next
   std::uint8_t al;       ///< what the screen left in AL, shifted left by each GetKey that took a code, its Shift in bit 0
+  /// BP as the screen leaves it when it selects the system at the cursor as it closes (SelectSystemAtCursor), as the screens
+  /// shown next read it; a screen that does not leaves BP as it found it.
+  std::optional<std::uint16_t> countLeft;
 };
 
 /// AL as GetKey leaves it, from _al, for _key: shifted left with the key's Shift in bit 0 when it took a code, and as it was
