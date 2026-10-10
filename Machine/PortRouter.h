@@ -5,8 +5,6 @@
 
 #include <cstdint>
 #include <map>
-#include <span>
-#include <string>
 #include <vector>
 
 namespace Machine
@@ -58,13 +56,6 @@ public:
     return m_writes;
   }
 
-  /// Sets the count WriteCount returns. A comparison of native code with the original (ADR-010) runs
-  /// the same call twice and keeps one outcome; it puts back the count that outcome left.
-  void SetWriteCount(std::uint64_t _writes) noexcept
-  {
-    m_writes = _writes;
-  }
-
   /// One read or write that reached the bus.
   struct Access
   {
@@ -76,28 +67,13 @@ public:
     [[nodiscard]] bool operator==(const Access&) const noexcept = default;
   };
 
-  /// Appends every access to _log from now on, in order, or stops when it is null (ADR-010). A word
-  /// access the device does not take as a word is logged as the two byte accesses it becomes.
+  /// Appends every access to _log from now on, in order, or stops when it is null: how a test sees the
+  /// sequence of accesses native code makes. A word access the device does not take as a word is logged
+  /// as the two byte accesses it becomes.
   void SetLog(std::vector<Access>* _log) noexcept
   {
     m_log = _log;
   }
-
-  /// From now on, until EndReplay, accesses do not reach the devices: each must be the next one in
-  /// _expected, a read returns the value logged for it, and a write is only compared (ADR-010). How
-  /// native code runs a second time over accesses the original already made. _expected must outlive
-  /// the replay.
-  void StartReplay(std::span<const Access> _expected) noexcept;
-
-  /// Ends a replay; accesses reach the devices again.
-  void EndReplay() noexcept
-  {
-    m_replaying = false;
-  }
-
-  /// After a replay: an empty string when every access matched and every expected one was made, or
-  /// else the first difference.
-  [[nodiscard]] std::string ReplayDifference() const;
 
   void ClearUnmapped() noexcept
   {
@@ -114,13 +90,7 @@ private:
   std::vector<PortBus*> m_devices;   // m_devices[0] is null
   std::map<std::uint16_t, UnmappedCount> m_unmapped;
   std::uint64_t m_writes = 0;
-  [[nodiscard]] bool Replayed(const Access& _access);
-
   std::vector<Access>* m_log = nullptr;
-  std::span<const Access> m_expected;
-  std::size_t m_replayed = 0;
-  bool m_replaying = false;
-  std::string m_replayDifference;
 };
 
 } // namespace Machine

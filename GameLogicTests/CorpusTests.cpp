@@ -1,7 +1,5 @@
 #include "pch.h"
 
-#include "ComparisonRig.h"
-#include "NativeRoutines.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
 
@@ -37,33 +35,9 @@ std::string ReadText(const std::filesystem::path& _path)
   return text.str();
 }
 
-// How the corpus runs the reference.
-enum class Running : std::uint8_t
-{
-  Original, // interpreted throughout
-  Native,   // with every ported routine in place of the original's (ADR-010), on a Dispatcher: nothing is interpreted (ADR-011)
-  Compared  // with every ported routine, each call compared with the original as it is made
-};
-
-// The scratch directory of each way of running, so that the three corpus tests can run at once in different
-// processes, as Build/RunTests.py's shards run them: a rig empties its directory when it starts and when it ends.
-[[nodiscard]] const char* ScratchName(Running _running) noexcept
-{
-  switch (_running)
-  {
-  case Running::Native:
-    return "Corpus-Native";
-  case Running::Compared:
-    return "Corpus-Compared";
-  case Running::Original:
-    break;
-  }
-  return "Corpus-Original";
-}
-
-// Every Replays/*.replay, played as _running says. Every digest it names must come out as recorded;
-// _check then looks at the machine after each replay.
-template <typename Check> void PlayEveryReplay(Running _running, Check _check)
+// Every Replays/*.replay, played on the native routines (ReferenceRig). Every digest it names must come out as
+// recorded; _check then looks at the machine after each replay.
+template <typename Check> void PlayEveryReplay(Check _check)
 {
   const std::filesystem::path directory = Elite::FindInRepository("Replays");
   Assert::IsFalse(directory.empty(), L"Replays/ at the repository root");
@@ -84,22 +58,8 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
     if (!Elite::ParseSteps(ReadText(path), steps, error))
       Assert::Fail((name + L": " + Widen(error)).c_str());
 
-    // What the interpreted run executes, which the native runs' digests are compared with. Made before
-    // the machine that marks it, so that it outlives it.
-    std::vector<std::uint8_t> executed;
-    ReferenceRig rig(ScratchName(_running), Elite::START_MOMENT,
-                     _running == Running::Native ? &Machine::MakeDispatcher : &Machine::MakeCpu);
+    ReferenceRig rig("Corpus");
     Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
-    if (_running == Running::Original)
-    {
-      rig.Host().Processor().SetExecutionMap(&executed);
-    }
-    else
-    {
-      Elite::InstallNativeRoutines(rig.Host(), rig.Program());
-      rig.Host().Native().SetVerifying(_running == Running::Compared);
-      rig.Host().Native().SetPoisoning(true); // what a routine's contract leaves to it, no caller reads (ADR-012)
-    }
     Elite::ReplayPlayer player(rig.Host(), rig.Program(), rig.Store(), directory); // file steps copy from Replays/
     std::size_t checked = 0;
     for (const Elite::Step& step : steps)
@@ -128,10 +88,6 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       ++checked;
     }
     Assert::IsTrue(checked > 0, (name + L": checks no digest").c_str());
-    if (_running == Running::Original)
-      SaveExecutedOffsets("Corpus-" + path.stem().string(), executed, rig.Program());
-    if (_running == Running::Compared)
-      SaveNativeReport("Corpus-" + path.stem().string(), rig.Host().Native());
     _check(name, rig.Host());
   }
 }
@@ -141,42 +97,19 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
 TEST_CLASS(CorpusTests)
 {
 public:
-  // The replay corpus (ADR-008): every Replays/*.replay plays on the reference in paced time, and every
-  // digest it names comes out as recorded. Phases 2 and 3 never change one (plan §6.2).
-  TEST_METHOD(EveryReplayReproducesItsDigests)
-  {
-    PlayEveryReplay(Running::Original, [](const std::wstring&, Machine::Pc&) {});
-  }
-
-  // Phase 3 (ADR-010): with the ported routines in place of the original's, every digest is unchanged; and on
-  // a Dispatcher (ADR-011), which interprets nothing, so no instruction of the original can have run.
+  // The replay corpus (ADR-008): every Replays/*.replay plays on the native routines in paced time, and every digest it
+  // names comes out as it was recorded from the original. It runs on a Dispatcher (ADR-011), which interprets nothing, so
+  // no instruction of the original runs. Since D7 deleted the interpreter, the corpus and the twins' known answers are what
+  // the port is held to (ADR-003 item 5).
   TEST_METHOD(NativeCodeKeepsEveryDigest)
   {
-    PlayEveryReplay(Running::Native,
-                    [](const std::wstring& _name, Machine::Pc& _pc)
-                    {
-                      std::uint64_t calls = 0;
-                      for (const auto& [linear, hook] : _pc.Native().Hooks())
-                        calls += hook.calls;
-                      Assert::IsTrue(calls > 0, (_name + L": no native routine ran").c_str());
-                    });
-  }
-
-  // Phase 3's acceptance (plan §5, §6.3): run on the original's every call in the corpus, each ported
-  // routine agrees with it on everything its contract names, and the digests are unchanged.
-  TEST_METHOD(NativeCodeAgreesWithTheOriginalOnEveryCall)
-  {
     PlayEveryReplay(
-      Running::Compared,
       [](const std::wstring& _name, Machine::Pc& _pc)
       {
-        const std::vector<Machine::NativeCode::Mismatch>& mismatches = _pc.Native().Mismatches();
-        if (!mismatches.empty())
-        {
-          const Machine::NativeCode::Mismatch& first = mismatches.front();
-          Assert::Fail(
-            (_name + L": " + Widen(first.routine) + L" call " + std::to_wstring(first.call) + L": " + Widen(first.difference)).c_str());
-        }
+        std::uint64_t calls = 0;
+        for (const auto& [linear, hook] : _pc.Native().Hooks())
+          calls += hook.calls;
+        Assert::IsTrue(calls > 0, (_name + L": no native routine ran").c_str());
       });
   }
 };

@@ -7,7 +7,7 @@
 - the corpus run three ways;
 - the first 23 entries ported: the maths leaves.
 
-It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 requires. **Amended 2026-10-10:** native code waits on a thread of its own (item 8), and each subsystem has its own file (item 9). **Amended again with the first 262 entries,** every subsystem's work routines:
+It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 requires. **Amended 2026-10-10 by [ADR-017](ADR-017-the-interpreter-deleted.md):** the comparison with the original, its coverage check and `Design/NativeCoverage.tsv` are deleted with the interpreter (D7). **Amended 2026-10-10:** native code waits on a thread of its own (item 8), and each subsystem has its own file (item 9). **Amended again with the first 262 entries,** every subsystem's work routines:
 
 - a compared call leaves the original's whole outcome (item 4);
 - constructed tests' coverage is measured, and CI checks coverage (item 5);

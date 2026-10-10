@@ -14,8 +14,8 @@ namespace Elite
 /// memory. It has no registers: a routine that takes a GameState takes its inputs as parameters and
 /// gives its results back, and only its entry (Guest) knows the original's register contract.
 ///
-/// It reads and writes through Machine::Memory, so paced time's change count and the comparison's
-/// journals see every byte as they did, until Phase 4 puts plain structs behind it (ADR-011, D17).
+/// It reads and writes through Machine::Memory, so paced time's change count sees every byte as it did,
+/// until Phase 4 puts plain structs behind it (ADR-011, D17).
 class GameState
 {
 public:

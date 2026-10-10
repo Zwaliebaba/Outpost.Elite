@@ -4,7 +4,6 @@
 
 #include "AudioStream.h"
 #include "DirectoryFileStore.h"
-#include "Dispatcher.h"
 #include "NativeRoutines.h"
 #include "Pc.h"
 #include "Presenter.h"
@@ -104,8 +103,6 @@ std::wstring Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
   {
   case Machine::StopReason::Fault:
     return L"The game made a DOS or BIOS call the host does not provide.";
-  case Machine::StopReason::Deadlocked:
-    return L"The game halted with interrupts off.";
   case Machine::StopReason::Spinning:
     return std::format(L"The game ran {} steps without waiting, at {:04X}:{:04X}.", _pc.SpinLimit(), registers.cs, registers.ip);
   case Machine::StopReason::Unported:
@@ -153,8 +150,8 @@ int Application::Run(HINSTANCE _instance)
   Machine::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
   Machine::Pc::Desc desc;
   desc.startMoment = Elite::START_MOMENT; // fixed, so the session's replay plays back exactly (ADR-008)
-  // Every routine is native, so nothing is interpreted: the Dispatcher runs them (ADR-011).
-  const auto pc = std::make_unique<Machine::Pc>(files, desc, &Machine::MakeDispatcher);
+  // Every routine is native, so nothing is interpreted: the Pc's Dispatcher runs them (ADR-011).
+  const auto pc = std::make_unique<Machine::Pc>(files, desc);
   Machine::LoadedProgram program;
   if (Elite::LoadReference(*pc, reference, Elite::PSP_SEGMENT, program) != Elite::ReferenceFailure::None)
   {

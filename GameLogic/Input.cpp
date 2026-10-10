@@ -42,7 +42,7 @@ constexpr std::uint16_t X_COUNT_TURN = 0x778F;
 constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
 constexpr std::uint16_t Y_COUNT_TURN = 0x779D;
 
-// The cycles the 8088 model (Machine/Cpu.cpp) charges for ReadJoystickAxes's instructions: the game port times its one-shots by
+// The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
 // them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
 constexpr Machine::Cycles BEFORE_FIRING_CYCLES = 12;    // CLI 2, MOV BX,imm16 4, MOV CX,BX 2, MOV DX,imm16 4
 constexpr Machine::Cycles OUT_CYCLES = 8;               // OUT DX,AL

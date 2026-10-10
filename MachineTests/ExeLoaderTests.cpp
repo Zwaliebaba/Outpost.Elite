@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "PcRig.h"
 #include "ServiceRig.h"
 
 #include "ExeLoader.h"
@@ -113,12 +114,6 @@ public:
       Assert::AreEqual(std::uint32_t{file[REFERENCE_HEADER_BYTES + offset]}, std::uint32_t{rig.Ram().Read8(program.loadSegment, offset)});
     }
     Assert::AreEqual(std::uint32_t{file.back()}, std::uint32_t{rig.Ram().Read8(Machine::Memory::Linear(program.loadSegment, 0) + 98'079u)});
-    // The bytes the mouse test runs are the game's IsMouseDriverInstalled.
-    for (std::size_t index = 0; index < IS_MOUSE_DRIVER_INSTALLED.size(); ++index)
-    {
-      Assert::AreEqual(std::uint32_t{IS_MOUSE_DRIVER_INSTALLED[index]},
-                       std::uint32_t{rig.Ram().Read8(program.loadSegment, static_cast<std::uint16_t>(0x02D4 + index))});
-    }
   }
 
   // MS-DOS's entry state, as DOSBox-X copies it, so that boot traces compare register for register.
@@ -254,32 +249,38 @@ public:
     Assert::IsTrue(Load(rig, MakeExecutable(code, 0x10, 0x10), low, program) == Machine::LoadError::PspTooLow);
   }
 
-  // ExitToDos (CS:00C5): Start pushed PSP:0000, and the RETF lands on the PSP's CD 20.
+  // ExitToDos (CS:00C5): Start pushed PSP:0000, and the RETF lands on the PSP's CD 20. The program's entry is native, as
+  // the reference's Start is, and the Pc's Dispatcher runs the PSP's INT 20h (DispatcherTests).
   TEST_METHOD(ProgramEndsThroughRetfToThePsp)
   {
-    ServiceRig rig("LoaderExit");
-    // Start's first instructions, then straight to the exit: mov ax,ds; push ax; xor bx,bx; push bx; retf.
-    const std::vector<std::uint8_t> code = {0x8C, 0xD8, 0x50, 0x33, 0xDB, 0x53, 0xCB};
+    PcRig rig("LoaderExit");
+    Machine::Pc& pc = rig.Host();
     Machine::ExeLoader::Desc desc;
     desc.pspSegment = ServiceRig::PSP_SEGMENT;
     Machine::LoadedProgram program;
-    Assert::IsTrue(Load(rig, MakeExecutable(code, 0x10, 0xFFFF), desc, program) == Machine::LoadError::None);
-    rig.Services().StartProgram(program.pspSegment);
-    rig.Regs() = program.registers;
+    Assert::IsTrue(pc.Load(MakeExecutable({0x90}, 0x10, 0xFFFF), desc, program) == Machine::LoadError::None);
+    // Start's first instructions, then straight to the exit: mov ax,ds; push ax; xor bx,bx; push bx; retf.
+    pc.Hook(
+      program.registers.cs, program.registers.ip, "Start",
+      [](Machine::Pc& _pc)
+      {
+        Machine::Registers& regs = _pc.Processor().Regs();
+        regs.ax = regs.ds;
+        regs.bx = 0;
+        for (const std::uint16_t word : {regs.ax, regs.bx})
+        {
+          regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+          _pc.Ram().Write16(regs.ss, regs.sp, word);
+        }
+        _pc.ReturnFar();
+      },
+      Machine::NativeContract{}, Machine::NativeReturn::Far);
 
-    for (int step = 0; step < 6; ++step) // five instructions, then the PSP's int 20h
-    {
-      (void)rig.Processor().Step();
-    }
-
-    Assert::IsTrue(rig.Services().Terminated());
-    Assert::AreEqual(0u, std::uint32_t{rig.Services().ExitCode()});
-    Assert::IsFalse(rig.Services().Fault().has_value());
-    Assert::AreEqual(0xF000u, std::uint32_t{rig.Regs().cs}, L"gone to the terminate address");
-    Assert::AreEqual(std::uint32_t{Machine::Firmware::HALT_OFFSET}, std::uint32_t{rig.Regs().ip});
-    (void)rig.Processor().Step();
-    (void)rig.Processor().Step();
-    Assert::IsTrue(rig.Processor().Halted(), L"and halted there");
+    Assert::IsTrue(pc.RunUntil(1'000) == Machine::StopReason::Terminated, L"the PSP's int 20h ends the program");
+    Assert::AreEqual(0u, std::uint32_t{pc.Services().ExitCode()});
+    Assert::IsFalse(pc.Services().Fault().has_value());
+    Assert::AreEqual(0xF000u, std::uint32_t{pc.Processor().Regs().cs}, L"gone to the terminate address");
+    Assert::AreEqual(std::uint32_t{Machine::Firmware::HALT_OFFSET}, std::uint32_t{pc.Processor().Regs().ip});
   }
 };
 

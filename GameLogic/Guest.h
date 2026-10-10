@@ -13,10 +13,10 @@ namespace Elite
 {
 
 /// The machine as a native routine sees it (ADR-010): the registers, the reference's data segment by
-/// name (DataOverlay.h) or by offset, its code segment, video memory, the stack, the ports, and the way
-/// back into the original's code. One is made for each call of a native routine, around the Pc that
-/// runs the program; everything it reads and writes goes through that Pc, so the replays, the journals
-/// and paced time's wait detection see it.
+/// name (DataOverlay.h) or by offset, its code segment, video memory, the stack, the ports, and the
+/// interrupts it makes. One is made for each call of a native routine, around the Pc that
+/// runs the program; everything it reads and writes goes through that Pc, so the replays and paced
+/// time's wait detection see it.
 class Guest
 {
 public:
@@ -230,12 +230,6 @@ public:
     flags = static_cast<std::uint16_t>(_set ? (flags | _flag) : (flags & ~_flag));
   }
 
-  /// Calls the original routine at CS:_offset and runs it to its return (Pc::CallNear).
-  void Call(std::uint16_t _offset)
-  {
-    m_pc.CallNear(_offset);
-  }
-
   /// What the original's instructions here would have taken, in 8088 cycles, for a device timed by the
   /// instructions executed (Pc::CountInstructionCycles): the game port, which a stick read counts.
   void CountCycles(Machine::Cycles _cycles) noexcept
@@ -252,7 +246,7 @@ public:
   }
 
   /// _point's cycles pass as they pass in a wait (Pc::Spend): the time the IBM PC spent on work the reference
-  /// sets no pace for, paid where an interpreted run pays it (ADR-013). Only a routine hooked as one that
+  /// sets no pace for, paid where an interpreted run paid it (ADR-013). Only a routine hooked as one that
   /// waits may call it.
   void Spend(const PacingPoint& _point)
   {
@@ -277,14 +271,10 @@ public:
     m_pc.LoopTurn();
   }
 
-  /// What an entry does for the registers and flags its contract leaves to it (ADR-012): the registers it
-  /// clobbers, and every status flag it does not name. Nothing, so they keep what they held, unless a test
-  /// has switched poisoning on (NativeCode::SetPoisoning), when they get marked values that show up wherever
-  /// code reads them.
-  void Clobber(const Machine::NativeContract& _contract) noexcept
-  {
-    m_pc.Native().Poison(Regs(), _contract.clobbers, static_cast<std::uint16_t>(~_contract.flags));
-  }
+  /// What an entry does for the registers and flags its contract leaves to it (ADR-012): nothing, so they keep what they
+  /// held. Until D7 deleted the comparison, a test could have them poisoned, given marked values that showed up wherever code
+  /// read them. The entries that call this go with the register layer (ADR-012 item 4), and this with them.
+  void Clobber(const Machine::NativeContract& /*_contract*/) noexcept {}
 
 private:
   Machine::Pc& m_pc;

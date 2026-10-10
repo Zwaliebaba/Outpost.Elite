@@ -13,16 +13,22 @@ namespace MachineTests
 TEST_CLASS(MouseTests)
 {
 public:
-  // Without a driver, int 33h goes through the table to an IRET, as on a PC with none loaded.
+  // Without a driver, the services do not take int 33h, so it goes through the table, to an IRET in the ROM, as on a PC with
+  // none loaded; the Dispatcher runs that IRET (DispatcherTests).
   TEST_METHOD(WithoutADriverInt33hVectorsThroughTheTable)
   {
     ServiceRig rig("MouseAbsent", false);
     rig.Regs().ax = 0x0000;
 
-    rig.Interrupt(0x33);
+    Assert::IsFalse(rig.Interrupt(0x33), L"not serviced");
 
-    Assert::AreEqual(std::uint32_t{Machine::Firmware::ROM_SEGMENT}, std::uint32_t{rig.Regs().cs});
-    Assert::AreEqual(Machine::Firmware::IRET_STUBS_OFFSET + 0x33u, std::uint32_t{rig.Regs().ip});
+    const Machine::Memory& ram = rig.Ram();
+    Assert::AreEqual(std::uint32_t{Machine::Firmware::ROM_SEGMENT}, std::uint32_t{ram.Read16(0x33u * 4 + 2)});
+    Assert::AreEqual(Machine::Firmware::IRET_STUBS_OFFSET + 0x33u, std::uint32_t{ram.Read16(0x33u * 4)});
+    Assert::AreEqual(
+      0xCFu,
+      std::uint32_t{ram.Read8(Machine::Firmware::ROM_SEGMENT, static_cast<std::uint16_t>(Machine::Firmware::IRET_STUBS_OFFSET + 0x33))},
+      L"an IRET");
     Assert::AreEqual(0x0000u, std::uint32_t{rig.Regs().ax}, L"AX = 0: no driver");
     Assert::IsFalse(rig.Services().Fault().has_value());
   }
@@ -32,7 +38,7 @@ public:
   {
     ServiceRig rig("MouseReset", true);
     rig.Regs().ax = 0x0000;
-    rig.Interrupt(0x33);
+    Assert::IsTrue(rig.Interrupt(0x33), L"serviced");
     Assert::AreEqual(0xFFFFu, std::uint32_t{rig.Regs().ax}, L"installed");
     Assert::AreEqual(2u, std::uint32_t{rig.Regs().bx});
     Assert::AreEqual(2u, std::uint32_t{rig.Regs().ip}, L"serviced, not vectored");

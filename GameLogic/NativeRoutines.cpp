@@ -21,11 +21,7 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
-#include "Firmware.h"
 #include "Reference.h"
-
-#include <format>
-#include <ostream>
 
 namespace Elite
 {
@@ -77,7 +73,6 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
         entry.contract, exit, entry.wait);
     }
   }
-  _pc.Native().SetStackFloor(Machine::Memory::Linear(data, STACK_FIRST_OFFSET));
 }
 
 std::size_t NativeRoutineCount() noexcept
@@ -88,36 +83,6 @@ std::size_t NativeRoutineCount() noexcept
     count += entries().size();
   }
   return count;
-}
-
-void WriteNativeReport(const Machine::NativeCode& _native, std::ostream& _out)
-{
-  _out << "entry\troutine\twait\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
-  for (const auto& [linear, hook] : _native.Hooks())
-  {
-    if (hook.segment == Machine::Firmware::ROM_SEGMENT)
-    {
-      continue; // the machine's own firmware (NativeFirmware.h), not a routine of the program
-    }
-    std::string executed;
-    for (const std::uint16_t offset : hook.executed.Offsets())
-      executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);
-    const std::string_view wait = hook.wait == Machine::NativeWait::Never       ? "never"
-                                  : hook.wait == Machine::NativeWait::Sometimes ? "sometimes"
-                                                                                : "always";
-    _out << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, wait, hook.calls, hook.verified, hook.unverifiable,
-                        hook.mismatches, executed);
-  }
-}
-
-void WriteExecutedOffsets(std::span<const std::uint8_t> _executionMap, const Machine::LoadedProgram& _program, std::ostream& _out)
-{
-  const std::uint32_t base = Machine::Memory::Linear(_program.loadSegment, 0);
-  for (std::uint32_t offset = 0; offset < CODE_SEGMENT_BYTES && base + offset < _executionMap.size(); ++offset)
-  {
-    if (_executionMap[base + offset] != 0)
-      _out << std::format("{:04X}\n", offset);
-  }
 }
 
 } // namespace Elite

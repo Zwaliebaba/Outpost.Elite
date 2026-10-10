@@ -1,15 +1,11 @@
 #include "pch.h"
 
-#include "ComparisonRig.h"
 #include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
 #include "ObjectSlot.h"
 #include "Ships.h"
 #include "TwinRig.h"
-
-#include <array>
-#include <initializer_list>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -21,62 +17,13 @@ namespace
 
 using Elite::DS;
 
-constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
-constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
-constexpr std::uint16_t SELECT_LASER_TYPE = 0x633B;
-constexpr std::uint16_t DRAW_LASER_MOUNT_MENU = 0x6367;
-constexpr std::uint16_t REDRAW_EQUIP_HELP_TEXT = 0x653F;
-constexpr std::uint16_t PAINT_LASER_MOUNT_BOX = 0x6564;
-constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
-constexpr std::uint16_t PAY_FOR_EQUIPMENT_ITEM = 0x65A3;
-constexpr std::uint16_t CLEAR_EQUIPMENT_SELL_PRICE = 0x6946;
-constexpr std::uint16_t SHOW_EQUIPMENT_SELL_PRICE = 0x6972;
-constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
-constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
-constexpr std::uint16_t EQUIP_MENU_FIRST_ROW = 0x325; // the first item's row, its first attribute byte
-constexpr std::uint16_t LAST_MOUNT_BOX = 0x21B;       // the mount menu's LEFT box
-constexpr std::uint8_t EQUIPMENT_ROWS = 14;
-constexpr std::uint16_t SCREEN_PRICES = 0x823B; // four bytes a row, the price first
-constexpr std::uint8_t FUEL_ROW = 1;
-constexpr std::uint8_t MISSILE_ROW = 2;
-
-// An object slot: 64 bytes, the type in bits 1-5 of the first with the active bit, the flags at +1Eh.
+// An object slot: 64 bytes, the type in bits 1-5 of the first with the active bit; the flags a splinter and a barrel carry.
 constexpr std::uint16_t SLOT_BYTES = 0x40;
-constexpr std::uint16_t SLOT_FLAGS = 0x1E;
-constexpr std::uint8_t TYPE_THARGON = 0x07;
 constexpr std::uint8_t TYPE_SPLINTER = 0x0B;
-constexpr std::uint8_t TYPE_CARGO_BARREL = 0x11;
-constexpr std::uint8_t TYPE_ESCAPE_POD = 0x15;
-constexpr std::uint8_t TYPE_ASP = 0x18;
 constexpr std::uint8_t FLAG_PRECIOUS = 0x10;
 constexpr std::uint8_t FLAG_MASKING_DEVICE = 0x40;
-constexpr std::uint8_t SHIP_SLOTS = 17;
 
-// A fuel level and the price of a light year. A plain aggregate rather than std::pair: brace-initializing
-// a pair of narrow integers from int literals narrows inside MSVC's <utility>, which /W4 /WX rejects.
-struct FuelFill
-{
-  std::uint8_t fuel;
-  std::uint16_t price;
-};
-
-// A view position TryScoopObject is given: AX, BX, CX.
-struct ViewPosition
-{
-  std::uint16_t x;
-  std::uint16_t y;
-  std::uint16_t z;
-};
-
-// What is scooped: the slot's type and flags, and the tonnes already aboard.
-struct Scooped
-{
-  std::uint8_t type;
-  std::uint8_t flags;
-  std::uint8_t usedTonnes;
-};
-
-// The data segment byte at _offset, set to _value on both twins.
+// The data segment byte at _offset, set to _value on the twin.
 void SetByte(TwinRig& _rig, std::uint16_t _offset, std::uint8_t _value)
 {
   _rig.Both([_offset, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
@@ -88,7 +35,7 @@ void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t 
   SetByte(_rig, _field.offset, _value);
 }
 
-// The cash, in tenths of credits, on both twins.
+// The cash, in tenths of credits, on the twin.
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
   _rig.Both(
@@ -100,7 +47,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
     });
 }
 
-// The byte _field as the native twin holds it; the interpreted twin's is the same, or the digests would differ.
+// The byte _field as the twin holds it.
 [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
 {
   std::uint8_t value = 0;
@@ -109,7 +56,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
   return value;
 }
 
-// The message line's text, as the native twin has it.
+// The message line's text, as the twin has it.
 [[nodiscard]] std::uint16_t TwinMessage(TwinRig& _rig)
 {
   std::uint16_t message = 0;
@@ -180,7 +127,7 @@ void MakeMineralSplinter(Elite::GameState& _state, Elite::ObjectSlot _slot)
   _slot.Set(Elite::SlotByte::Type, SPLINTER_ACTIVE);
 }
 
-// _what made below the nose of both twins' ships by the game's own routines, as the game makes it where it is made in play, in
+// _what made below the nose of the twin's ship by the game's own routines, as the game makes it where it is made in play, in
 // the slot it would take (FindFreeShipSlot, or for a splinter FindDebrisSlot), cleared (ClearObjectSlot) where the game copies
 // the object it comes from; and put below the nose, where a thing the player flies over passes.
 // * A barrel as DropCargo drops one: InitCargoBarrel, resting, with the masking device's bit when the ship it came from
@@ -240,133 +187,10 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
 
 } // namespace
 
-// Constructed inputs for buying equipment (plan §6.3): too little cash, and fuel, whose price divides.
+// Twins for the equipment screen and the fuel scoops in states no replay reaches (ADR-016).
 TEST_CLASS(EquipmentTests)
 {
 public:
-  TEST_METHOD(PayForEquipmentItemAgreesOnShortCashAndFuel)
-  {
-    ComparisonRig rig("PayForEquipmentItem");
-    Machine::Memory& ram = rig.Host().Ram();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    const auto credits = [&](std::uint32_t _tenths)
-    {
-      ram.Write16(data, DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
-      ram.Write16(data, DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
-    };
-    std::uint64_t calls = 0;
-
-    // More than the cash: nothing is paid.
-    credits(100);
-    ram.Write8(data, DS.menuSelectedRow.offset, MISSILE_ROW);
-    ram.Write16(data, static_cast<std::uint16_t>(SCREEN_PRICES + MISSILE_ROW * 4), 0xFFFF);
-    rig.Call(PAY_FOR_EQUIPMENT_ITEM, {});
-    ++calls;
-
-    // Fuel: a full tank (still 1), some, and an empty tank at a price whose quotient overflows the divide.
-    credits(0x10000);
-    ram.Write8(data, DS.menuSelectedRow.offset, FUEL_ROW);
-    const std::initializer_list<FuelFill> fills = {{255, 0x0002}, {100, 0x0114}, {0, 0x00FF}};
-    for (const auto& [fuel, price] : fills)
-    {
-      ram.Write8(data, DS.fuel.offset, fuel);
-      ram.Write16(data, DS.data823F.offset, price);
-      rig.Call(PAY_FOR_EQUIPMENT_ITEM, {.bx = 0x5A00});
-      ++calls;
-    }
-    rig.AssertAllAgreed(PAY_FOR_EQUIPMENT_ITEM, calls);
-  }
-
-  // The escape pod from the title screen's slots: once with a slot free, once with every ship slot taken, so that
-  // ReclaimShipSlot makes room.
-  TEST_METHOD(LaunchEscapePodAgreesWithAndWithoutAFreeSlot)
-  {
-    ComparisonRig rig("LaunchEscapePod");
-    Machine::Memory& ram = rig.Host().Ram();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    rig.Call(LAUNCH_ESCAPE_POD, {});
-    for (std::uint16_t slot = 0; slot < SHIP_SLOTS; ++slot)
-    {
-      const auto type = static_cast<std::uint16_t>(DS.firstShipSlot.offset + slot * SLOT_BYTES);
-      ram.Write8(data, type, static_cast<std::uint8_t>(ram.Read8(data, type) | 1));
-    }
-    rig.Call(LAUNCH_ESCAPE_POD, {});
-    rig.AssertAllAgreed(LAUNCH_ESCAPE_POD, 2);
-  }
-
-  // The scoop's box at each of its edges, and inside it everything there is to scoop: a barrel's random product
-  // (furs for slaves), its masking device, the splinters with and without precious metals at their 250 cap, an
-  // escape pod, a Thargon, a ship, each with the hold full and not, and with the cargo bay extension.
-  TEST_METHOD(TryScoopObjectAgreesOnTheBoxAndEveryCargo)
-  {
-    ComparisonRig rig("TryScoopObject");
-    Machine::Memory& ram = rig.Host().Ram();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    const std::uint16_t slot = DS.firstShipSlot.offset;
-    std::uint64_t calls = 0;
-    const auto scoop = [&](const Scooped& _what, const ViewPosition& _at)
-    {
-      ram.Write8(data, slot, static_cast<std::uint8_t>((_what.type << 1) | 1));
-      ram.Write8(data, static_cast<std::uint16_t>(slot + SLOT_FLAGS), _what.flags);
-      ram.Write8(data, DS.cargoUsedTonnes.offset, _what.usedTonnes);
-      rig.Call(TRY_SCOOP_OBJECT, {.ax = _at.x, .bx = _at.y, .cx = _at.z, .dx = 0x4444, .si = 0x5555, .di = slot, .bp = 0x7777});
-      ++calls;
-    };
-
-    constexpr Scooped BARREL{TYPE_CARGO_BARREL, 0, 0};
-    constexpr std::array<ViewPosition, 12> EDGES = {{{0, 0x8000, 0},
-                                                     {0, 0x001D, 0},
-                                                     {0, 0x001E, 0},
-                                                     {0, 0x00E5, 0},
-                                                     {0, 0x00E6, 0},
-                                                     {0x0095, 0x0080, 0},
-                                                     {0x0096, 0x0080, 0},
-                                                     {0xFF6B, 0x0080, 0},
-                                                     {0xFF6A, 0x0080, 0},
-                                                     {0x8000, 0x0080, 0},
-                                                     {0, 0x0080, 0xFF6B},
-                                                     {0, 0x0080, 0x0096}}};
-    for (const ViewPosition& at : EDGES)
-    {
-      scoop(BARREL, at);
-    }
-
-    constexpr ViewPosition INSIDE{0x0010, 0x0080, 0xFFF0};
-    // A barrel's product from the random state: AL/24, so 72-95 gives slaves, which become furs.
-    for (std::uint16_t random = 0; random < 0x100; random = static_cast<std::uint16_t>(random + 12))
-    {
-      ram.Write16(data, DS.randomState0.offset, random);
-      ram.Write16(data, DS.randomState1.offset, 0);
-      scoop(BARREL, INSIDE);
-    }
-    ram.Write8(data, DS.largeCargoBayFitted.offset, 1);
-    scoop({TYPE_CARGO_BARREL, 0, 0x22}, INSIDE);
-    scoop({TYPE_CARGO_BARREL, 0, 0x23}, INSIDE);
-    ram.Write8(data, DS.largeCargoBayFitted.offset, 0);
-    scoop({TYPE_CARGO_BARREL, FLAG_MASKING_DEVICE, 0}, INSIDE);
-    scoop({TYPE_CARGO_BARREL, FLAG_MASKING_DEVICE, 0x14}, INSIDE);
-    scoop({TYPE_CARGO_BARREL, 0, 0x14}, INSIDE);
-
-    // Precious metals: below, at and past the cap, with room for minerals or alloys and without.
-    for (std::uint16_t random = 0; random < 0x200; random = static_cast<std::uint16_t>(random + 0x1D))
-    {
-      ram.Write16(data, DS.randomState0.offset, random);
-      ram.Write16(data, DS.randomState1.offset, static_cast<std::uint16_t>(random * 0x0101));
-      ram.Write16(data, DS.randomState2.offset, static_cast<std::uint16_t>(random << 7));
-      const auto held = static_cast<std::uint8_t>(0xF0 + (random & 0x0F));
-      ram.Write8(data, DS.cargoGemStonesGrams.offset, held);
-      ram.Write8(data, DS.cargoGoldKg.offset, held);
-      ram.Write8(data, DS.cargoPlatinumKg.offset, held);
-      scoop({TYPE_SPLINTER, FLAG_PRECIOUS, static_cast<std::uint8_t>((random & 1) != 0 ? 0x14 : 0x02)}, INSIDE);
-    }
-    for (const std::uint8_t type : {TYPE_SPLINTER, TYPE_ESCAPE_POD, TYPE_THARGON, TYPE_ASP})
-    {
-      scoop({type, 0, 0}, INSIDE);
-      scoop({type, 0, 0x14}, INSIDE);
-    }
-    rig.AssertAllAgreed(TRY_SCOOP_OBJECT, calls);
-  }
-
   // Every message of the equipment menu, B and S on each kind of row, the cursor round both ends by keys and by the
   // steering, and the keys it ignores: what RunEquipShipMenu does that docked-screens.replay does not.
   TEST_METHOD(EquipmentMenuBuysAndSellsEveryKindOfItem)
@@ -429,80 +253,6 @@ public:
     rig.Play("wait 0.3");
     SetByte(rig, DS.keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest removed");
-  }
-
-  // The equipment menu's work, which it calls as value routines since level 5 of the de-assembly (ADR-012 item 12), so that
-  // only calls like these compare it: SelectLaserType on every row, each row's resale price shown from prices whose cut halves
-  // and from none, and cleared, FormatTenths across its digits, the credits on the message line, the mount menu with every
-  // mount free, fitted and of each type, and a mount box painted.
-  TEST_METHOD(EquipmentMenuWorkAgreesOnEveryRow)
-  {
-    ComparisonRig rig("EquipmentMenuWork");
-    Machine::Memory& ram = rig.Host().Ram();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    ram.Write16(data, DS.menuFirstRowAttr.offset, EQUIP_MENU_FIRST_ROW);
-    const std::initializer_list<std::uint16_t> prices = {0, 1, 20, 0x0C80, 0x7530, 0xFFFF};
-    std::uint64_t rows = 0;
-    std::uint64_t shown = 0;
-    for (std::uint8_t row = 1; row <= EQUIPMENT_ROWS; ++row)
-    {
-      ram.Write8(data, DS.menuSelectedRow.offset, row);
-      rig.Call(SELECT_LASER_TYPE, {});
-      for (const std::uint16_t price : prices)
-      {
-        ram.Write16(data, static_cast<std::uint16_t>(SCREEN_PRICES + row * 4), price);
-        rig.Call(SHOW_EQUIPMENT_SELL_PRICE, {});
-        ++shown;
-      }
-      rig.Call(CLEAR_EQUIPMENT_SELL_PRICE, {});
-      ++rows;
-    }
-    rig.AssertAllAgreed(SELECT_LASER_TYPE, rows);
-    rig.AssertAllAgreed(SHOW_EQUIPMENT_SELL_PRICE, shown);
-    rig.AssertAllAgreed(CLEAR_EQUIPMENT_SELL_PRICE, rows);
-
-    for (const std::uint16_t tenths : prices)
-    {
-      rig.Call(FORMAT_TENTHS, {.ax = tenths});
-    }
-    rig.AssertAllAgreed(FORMAT_TENTHS, prices.size());
-    rig.Call(PRINT_CREDITS_ON_MESSAGE_LINE, {});
-    rig.AssertAllAgreed(PRINT_CREDITS_ON_MESSAGE_LINE, 1);
-
-    // Each mount's bit of laserMountsFitted and its two bits of laserMountTypes.
-    const std::initializer_list<std::uint16_t> mounts = {0x0000, 0x000F, 0x1B05, 0xE40A, 0x390F};
-    for (const std::uint16_t fitting : mounts)
-    {
-      ram.Write8(data, DS.laserMountsFitted.offset, static_cast<std::uint8_t>(fitting));
-      ram.Write8(data, DS.laserMountTypes.offset, static_cast<std::uint8_t>(fitting >> 8));
-      rig.Call(DRAW_LASER_MOUNT_MENU, {});
-    }
-    rig.AssertAllAgreed(DRAW_LASER_MOUNT_MENU, mounts.size());
-
-    // PaintLaserMountBox takes ES on the text page, which a constructed call does not set.
-    Machine::Registers& regs = rig.Host().Processor().Regs();
-    const Machine::Registers saved = regs;
-    regs.ds = data;
-    regs.es = VIDEO_SEGMENT;
-    regs.si = LAST_MOUNT_BOX;
-    rig.Host().CallNear(PAINT_LASER_MOUNT_BOX);
-    regs = saved;
-    rig.AssertAllAgreed(PAINT_LASER_MOUNT_BOX, 1);
-  }
-
-  // RedrawEquipHelpText, which only the mount choosers call once Space fits or removes a laser: they wait, so no replay
-  // compares it. The help's lines in their attribute from the menu's attribute and from the mount box's highlight.
-  TEST_METHOD(RedrawEquipHelpTextAgreesFromEitherAttribute)
-  {
-    ComparisonRig rig("RedrawEquipHelpText");
-    Machine::Memory& ram = rig.Host().Ram();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    for (const std::uint8_t attribute : std::initializer_list<std::uint8_t>{0x1E, 0x70})
-    {
-      ram.Write8(data, DS.textAttribute.offset, attribute);
-      rig.Call(REDRAW_EQUIP_HELP_TEXT, {});
-    }
-    rig.AssertAllAgreed(REDRAW_EQUIP_HELP_TEXT, 2);
   }
 
   // The fuel scoops' rare paths (ADR-008 item 8, D20), which TryScoopObject takes for what TransformShip offers it below the

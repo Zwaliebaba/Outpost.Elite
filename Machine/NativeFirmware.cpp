@@ -28,7 +28,7 @@ constexpr std::uint16_t KEYBOARD_DATA_PORT = 0x60;
 constexpr std::uint16_t KEYBOARD_CONTROL_PORT = 0x61;
 constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
-// What Cpu charges for each instruction of the two handlers, measured by stepping it through them.
+// What the interpreter charged for each instruction of the two handlers, measured by stepping it through them.
 constexpr Cycles STI = 2;
 constexpr Cycles PUSH_SEGMENT = 14;
 constexpr Cycles PUSH_REGISTER = 15;
@@ -56,7 +56,7 @@ constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
   return (bits & 1u) == 0;
 }
 
-// _flags with the six an ALU operation sets replaced, as Cpu sets them for a word.
+// _flags with the six an ALU operation sets replaced, as the 8088 sets them for a word.
 [[nodiscard]] std::uint16_t WithArithmeticFlags(std::uint16_t _flags, bool _carry, bool _auxiliary, bool _overflow,
                                                 std::uint16_t _result) noexcept
 {
@@ -163,7 +163,7 @@ void RunTimerHandler(Pc& _pc)
     }
     else
     {
-      // XOR AX,AX, as Cpu's Logic leaves the flags for a zero result; then the two words and the flag.
+      // XOR AX,AX, as the 8088 leaves the flags for a zero result; then the two words and the flag.
       regs.ax = 0;
       regs.flags = WithArithmeticFlags(regs.flags, false, false, false, 0);
       memory.Write16(BIOS_DATA, TIMER_HIGH, 0);
