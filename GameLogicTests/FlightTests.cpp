@@ -59,21 +59,17 @@ public:
     TwinRig rig("TwinGameOverCargo");
     Launch(rig);
     SetBoth(rig, DS.cargoUsedTonnes, 1);
-    rig.Both(
-      [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-      {
-        Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-        for (std::uint16_t index = 3; index < 20; ++index)
-        {
-          const std::uint16_t slot = Slot(index);
-          state.SetByte(slot, 0x85); // a Sidewinder, active
-          for (std::uint16_t offset = 1; offset < SLOT_BYTES; ++offset)
-            state.SetByte(static_cast<std::uint16_t>(slot + offset), 0);
-          state.SetWord(static_cast<std::uint16_t>(slot + 4), static_cast<std::uint16_t>(index * 0x100));
-          state.SetWord(static_cast<std::uint16_t>(slot + 8), 0x2000);
-          state.SetByte(static_cast<std::uint16_t>(slot + 0x1E), 2); // its blip drawn
-        }
-      });
+    Elite::GameState& state = rig.State();
+    for (std::uint16_t index = 3; index < 20; ++index)
+    {
+      const std::uint16_t slot = Slot(index);
+      state.SetByte(slot, 0x85); // a Sidewinder, active
+      for (std::uint16_t offset = 1; offset < SLOT_BYTES; ++offset)
+        state.SetByte(static_cast<std::uint16_t>(slot + offset), 0);
+      state.SetWord(static_cast<std::uint16_t>(slot + 4), static_cast<std::uint16_t>(index * 0x100));
+      state.SetWord(static_cast<std::uint16_t>(slot + 8), 0x2000);
+      state.SetByte(static_cast<std::uint16_t>(slot + 0x1E), 2); // its blip drawn
+    }
     SetBoth(rig, DS.playerDead, 1);
     rig.Play("wait 5\ndigest game-over");
   }

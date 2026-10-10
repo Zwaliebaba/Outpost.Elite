@@ -60,7 +60,7 @@ template <typename Check> void PlayEveryReplay(Check _check)
 
     ReferenceRig rig("Corpus");
     Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
-    Elite::ReplayPlayer player(rig.Host(), rig.Program(), rig.Store(), directory); // file steps copy from Replays/
+    Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory); // file steps copy from Replays/
     std::size_t checked = 0;
     for (const Elite::Step& step : steps)
     {

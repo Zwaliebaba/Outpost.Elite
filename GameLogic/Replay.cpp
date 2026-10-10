@@ -296,17 +296,16 @@ Machine::StopReason ExpectedStop(const Step& _step) noexcept
   return _step.kind == StepKind::End ? Machine::StopReason::Terminated : Machine::StopReason::Reached;
 }
 
-ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program) noexcept
+ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const GameState& _state) noexcept
   : m_pc(_pc),
-    m_program(_program),
+    m_state(_state),
     m_start(_pc.Clock())
 {
 }
 
-ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program, Machine::FileStore& _files,
-                           std::filesystem::path _sources)
+ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const GameState& _state, Machine::FileStore& _files, std::filesystem::path _sources)
   : m_pc(_pc),
-    m_program(_program),
+    m_state(_state),
     m_files(&_files),
     m_sources(std::move(_sources)),
     m_start(_pc.Clock())
@@ -332,7 +331,7 @@ Machine::StopReason ReplayPlayer::Play(const Step& _step, std::string& _digest)
     m_pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Digest:
-    _digest = GameStateDigest(m_pc, m_program);
+    _digest = GameStateDigest(m_state, m_pc.Video());
     break;
   case StepKind::File:
     CopyFile(_step);

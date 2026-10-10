@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "DirectoryFileStore.h"
-#include "NativeRoutines.h"
+#include "Game.h"
 #include "Pc.h"
 #include "PngWriter.h"
 #include "Reference.h"
@@ -169,9 +169,9 @@ int Run(int _argc, char** _argv)
   Machine::DirectoryFileStore files(options.out / "files");
   Machine::Pc::Desc desc;
   desc.startMoment = Elite::START_MOMENT;
-  const auto pc = std::make_unique<Machine::Pc>(files, desc);
-  Machine::LoadedProgram program;
-  switch (Elite::LoadReference(*pc, Elite::ReadWholeFile(options.exe), Elite::PSP_SEGMENT, program))
+  // The GameState owns the game's memory and the Pc maps it, the native routines in place of the original's (D19).
+  const auto game = std::make_unique<Elite::Game>(files, desc);
+  switch (game->Load(Elite::ReadWholeFile(options.exe), Elite::PSP_SEGMENT))
   {
   case Elite::ReferenceFailure::NotTheReference:
     std::fprintf(stderr, "ReferenceRunner: %s is not the reference binary; see ADR-001 and ADR-007\n", options.exe.string().c_str());
@@ -182,14 +182,14 @@ int Run(int _argc, char** _argv)
   case Elite::ReferenceFailure::None:
     break;
   }
-  Elite::InstallNativeRoutines(*pc, program);
+  Machine::Pc& pc = game->Host();
 
   // reason: why the last step that ran the machine returned; asExpected: every step so far left the run as it must
   // (Elite::ExpectedStop), which for an end step is with the program ended.
   Machine::StopReason reason = Machine::StopReason::Reached;
   bool asExpected = true;
   const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
-  Elite::ReplayPlayer player(*pc, program, files, sources);
+  Elite::ReplayPlayer player(pc, game->State(), files, sources);
   std::size_t mismatches = 0;
   for (std::size_t index = 0; index < steps.size() && asExpected; ++index)
   {
@@ -204,7 +204,7 @@ int Run(int _argc, char** _argv)
     if (step.kind == Elite::StepKind::Shot)
     {
       const std::filesystem::path path = options.out / (step.name + ".png");
-      if (!WriteShot(*pc, path))
+      if (!WriteShot(pc, path))
       {
         std::fprintf(stderr, "ReferenceRunner: cannot write %s\n", path.string().c_str());
         return 2;
@@ -221,11 +221,11 @@ int Run(int _argc, char** _argv)
     }
   }
 
-  for (const auto& [port, counts] : pc->Ports().Unmapped())
+  for (const auto& [port, counts] : pc.Ports().Unmapped())
     Print(std::format("unmapped\tport {:04X}h\t{} reads\t{} writes\n", port, counts.reads, counts.writes));
-  Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc->Processor().InstructionCount(), pc->Clock(),
-                    static_cast<double>(pc->Clock()) * Machine::CPU_CLOCK_DIVISOR / static_cast<double>(Machine::CRYSTAL_HZ),
-                    Describe(reason, *pc)));
+  Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc.Processor().InstructionCount(), pc.Clock(),
+                    static_cast<double>(pc.Clock()) * Machine::CPU_CLOCK_DIVISOR / static_cast<double>(Machine::CRYSTAL_HZ),
+                    Describe(reason, pc)));
   if (mismatches > 0)
   {
     std::fprintf(stderr, "ReferenceRunner: %zu digest(s) did not match\n", mismatches);

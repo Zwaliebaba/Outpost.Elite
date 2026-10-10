@@ -30,7 +30,8 @@ inline constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F40;
 inline constexpr std::uint16_t DATA_SEGMENT_PARAGRAPH = 0x08F4;
 
 // The stack segment, DS:AD60 (SS:0000) up to the initial SP of 03F8 and the rest of its paragraph. What
-// lies below SP there is whatever the last calls and interrupts left, so the game-state digest skips it.
+// lies below SP there is whatever the last calls and interrupts left, so the game-state digest skips it,
+// and with it triangleEdgeMasks at its foot (DS:AD60-AD6F), which is constant.
 inline constexpr std::uint16_t STACK_FIRST_OFFSET = 0xAD60;
 inline constexpr std::uint16_t STACK_END_OFFSET = 0xB160;
 

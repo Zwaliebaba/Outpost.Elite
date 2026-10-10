@@ -81,7 +81,7 @@ Asked, the owner ruled Phase 4 in full and detach first (D17), in this order:
 
 **7. The rest of Phase 4, in D17's order.** Each step gets its own ADR when it is taken:
 - **De-assembly.** Ordinary C++ functions with parameters and results replace register contracts and flags, subsystem by subsystem, on typed views of the data segment. The register contract stays only at the entries the comparison still needs.
-- **Plain state and native devices.** The views get plain structs behind them, and the digests are computed from them. Video, sound, the tick scheduler and the files become native.
+- **Plain state and native devices.** The views get plain structs behind them, and the digests are computed from them. Video, sound, the tick scheduler and the files become native. *The structs: ADR-018 (D19). The native devices are Phase 5's (D23).*
 - **The end.** The corpus is completed and the interpreter deleted.
 
 ## What this forecloses

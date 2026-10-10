@@ -105,6 +105,12 @@
     <ClInclude Include="Galaxy.h">
       <Filter>Galaxy</Filter>
     </ClInclude>
+    <ClInclude Include="Game.h">
+      <Filter>Reference</Filter>
+    </ClInclude>
+    <ClInclude Include="GameData.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="GameState.h">
       <Filter>State</Filter>
     </ClInclude>
@@ -196,6 +202,9 @@
     </ClCompile>
     <ClCompile Include="Galaxy.cpp">
       <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Game.cpp">
+      <Filter>Reference</Filter>
     </ClCompile>
     <ClCompile Include="Hardware.cpp">
       <Filter>State</Filter>

@@ -5,7 +5,6 @@
 #include "Input.h"
 #include "StartUp.h"
 #include "Timer.h"
-#include "Reference.h"
 
 namespace Elite
 {
@@ -21,10 +20,10 @@ constexpr std::array<EntryList, 3> SUBSYSTEMS = {&InputEntries, &StartUpEntries,
 
 } // namespace
 
-void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+void InstallNativeRoutines(Machine::Pc& _pc, GameState& _state)
 {
-  const std::uint16_t code = _program.loadSegment;
-  const std::uint16_t data = DataSegment(_program);
+  const std::uint16_t code = _state.CodeSegment();
+  GameState* const state = &_state;
   for (const EntryList entries : SUBSYSTEMS)
   {
     for (const NativeEntry& entry : entries())
@@ -33,9 +32,9 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
       const EntryReturn exit = entry.exit;
       _pc.Hook(
         code, entry.offset, std::string(entry.name),
-        [body, exit, code, data](Machine::Pc& _host)
+        [body, exit, state](Machine::Pc& _host)
         {
-          Guest guest(_host, code, data);
+          Guest guest(_host, *state);
           body(guest);
           switch (exit)
           {

@@ -142,7 +142,7 @@ public:
   explicit TwinRig(std::string_view _name, const TwinOptions& _options = {})
     : m_name(_name),
       m_rig(_name, _options.startMoment, _options.mousePresent),
-      m_player(m_rig.Host(), m_rig.Program())
+      m_player(m_rig.Host(), m_rig.State())
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
     Assert::IsTrue(m_rig.Loaded(), L"ELITES.EXE at the repository root");
@@ -165,6 +165,12 @@ public:
     _change(m_rig.Host(), m_rig.Program());
   }
 
+  /// The game's memory, for a set-up that calls the game's own routines on it.
+  [[nodiscard]] Elite::GameState& State() noexcept
+  {
+    return m_rig.State();
+  }
+
   /// Plays _steps, in Replay.h's syntax. Each must reach the end of every step but the last, which must stop the run as
   /// _end says: StopReason::Terminated for a test that leaves the program. Every digest step, and the state the steps end
   /// in, must be the twin's next known answer.
@@ -181,7 +187,7 @@ public:
         Answer(digest, where);
       }
     }
-    Answer(Elite::GameStateDigest(m_rig.Host(), m_rig.Program()), Widen(m_name) + L", the state Play ends in");
+    Answer(Elite::GameStateDigest(m_rig.State(), m_rig.Host().Video()), Widen(m_name) + L", the state Play ends in");
   }
 
   [[nodiscard]] Machine::Pc& Host() noexcept

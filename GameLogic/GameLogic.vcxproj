@@ -84,6 +84,8 @@
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="Flight.h" />
     <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="Game.h" />
+    <ClInclude Include="GameData.h" />
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Guest.h" />
     <ClInclude Include="Hardware.h" />
@@ -116,6 +118,7 @@
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="Flight.cpp" />
     <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="Game.cpp" />
     <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />

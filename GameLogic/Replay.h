@@ -15,12 +15,13 @@ namespace Machine
 {
 class Pc;
 class FileStore;
-struct LoadedProgram;
 enum class StopReason : std::uint8_t;
 } // namespace Machine
 
 namespace Elite
 {
+
+class GameState;
 
 enum class StepKind : std::uint8_t
 {
@@ -119,16 +120,17 @@ private:
   std::uint64_t m_lastMilliseconds = 0;
 };
 
-/// Plays steps on a machine running the reference, from the moment it is made.
+/// Plays steps on a machine running the reference, from the moment it is made: _pc, and _state, the game's memory it maps
+/// (Game).
 class ReplayPlayer
 {
 public:
   /// A player for steps that copy no file.
-  ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program) noexcept;
+  ReplayPlayer(Machine::Pc& _pc, const GameState& _state) noexcept;
 
   /// A player whose file steps copy from _sources, the directory the replay is in, into _files, the store the
   /// machine's DOS was given.
-  ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program, Machine::FileStore& _files, std::filesystem::path _sources);
+  ReplayPlayer(Machine::Pc& _pc, const GameState& _state, Machine::FileStore& _files, std::filesystem::path _sources);
 
   /// Plays one step: a wait or an end runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle),
   /// a key queues its codes on the keyboard, a digest sets _digest to GameStateDigest, a file step copies its
@@ -149,7 +151,7 @@ private:
   void CopyFile(const Step& _step);
 
   Machine::Pc& m_pc;
-  const Machine::LoadedProgram& m_program;
+  const GameState& m_state;
   Machine::FileStore* m_files = nullptr;
   std::filesystem::path m_sources;
   Machine::Cycles m_start = 0;

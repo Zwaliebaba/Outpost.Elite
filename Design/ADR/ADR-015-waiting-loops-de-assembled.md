@@ -1,6 +1,6 @@
 # ADR-015 — Waiting loops de-assembled: turn signatures
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Pc::LoopTurn` taking a turn signature, `Hardware::LoopTurn`, and `WaitForTimerTick` de-assembled onto it. Amended the same day: a value that changes only with memory or a port may be left out of a signature (item 2).
+**Status:** accepted 2026-10-10, with the change that implements it: `Pc::LoopTurn` taking a turn signature, `Hardware::LoopTurn`, and `WaitForTimerTick` de-assembled onto it. Amended the same day: a value that changes only with memory or a port may be left out of a signature (item 2). Item 5's choice is settled by [ADR-018](ADR-018-the-gamestate-owns-the-games-memory.md) item 4: not yet needed.
 
 ## Context
 
@@ -34,7 +34,7 @@ So in both cases the clock moves, and the interrupts are taken, at the same poin
 - **Nothing reads them.** The stack is neither state the game reads there nor in the digest (ADR-008 item 5).
 - **When a push carries data.** A push whose value another routine reads is a different case: the stack carries data between routines, which a later decision covers.
 
-**5. When D19's structs replace `Machine::Memory`,** the change count goes with it, because the structs are written directly. The rule then needs another way to tell a turn that changed nothing. One option is to compare the data segment and video memory with their copy at the last turn, but that misses a turn that writes a byte and writes it back. That choice is made with D19's ADR, and measured against the corpus.
+**5. When D19's structs replace `Machine::Memory`,** the change count goes with it, because the structs are written directly. The rule then needs another way to tell a turn that changed nothing. One option is to compare the data segment and video memory with their copy at the last turn, but that misses a turn that writes a byte and writes it back. That choice is made with D19's ADR, and measured against the corpus. *ADR-018 item 4: D19's structs did not replace `Memory`, because the devices still read the game's memory through it (D23), so the count is unchanged. The choice moves to Phase 5's native platform.*
 
 **6. Measured 2026-10-10, with the pilot:**
 - **The routine.** `WaitForTimerTick` is de-assembled. It is reached by address from Docking, Equipment, StartUp and Text, among them the docking computer's delays and the menus' cursor delays.

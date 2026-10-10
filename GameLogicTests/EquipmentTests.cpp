@@ -137,52 +137,48 @@ void MakeMineralSplinter(Elite::GameState& _state, Elite::ObjectSlot _slot)
 // * A splinter with minerals (MakeMineralSplinter).
 void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
 {
-  _rig.Both(
-    [_what](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      std::uint16_t slot = 0;
-      if (_what == Scoopable::MineralSplinter)
-      {
-        slot = Elite::FindDebrisSlot(state);
-      }
-      else
-      {
-        const Elite::SlotSearch free = Elite::FindFreeShipSlot(state);
-        Assert::IsTrue(free.found, L"a free ship slot");
-        slot = free.slot;
-      }
-      Elite::ClearObjectSlot(state, slot);
-      Elite::ObjectSlot object(state, slot);
-      switch (_what)
-      {
-      case Scoopable::Barrel:
-      case Scoopable::MaskingDeviceBarrel:
-      {
-        Elite::InitCargoBarrel(state, object);
-        object.Set(Elite::SlotByte::Flags,
-                   static_cast<std::uint8_t>(FLAG_RESTING | (_what == Scoopable::MaskingDeviceBarrel ? FLAG_MASKING_DEVICE : 0)));
-        const std::uint16_t heading = Elite::NextRandom(state);
-        object.Set(Elite::SlotWord::Pitch, heading);
-        object.Set(Elite::SlotWord::Yaw, static_cast<std::uint16_t>((heading << 8) | (heading >> 8)));
-        (void)Elite::ComputeVelocity(state, object);
-        break;
-      }
-      case Scoopable::Thargon:
-        Elite::InitThargon(state, object);
-        (void)Elite::ComputeVelocity(state, object);
-        object.Set(Elite::SlotWord::Owner, static_cast<std::uint16_t>(slot + SLOT_BYTES));
-        break;
-      case Scoopable::MineralSplinter:
-        MakeMineralSplinter(state, object);
-        break;
-      }
-      object.Set(Elite::SlotWord::X, 0);
-      object.Set(Elite::SlotWord::Y, static_cast<std::uint16_t>(SCOOP_BELOW));
-      object.Set(Elite::SlotWord::Z, static_cast<std::uint16_t>(SCOOP_AHEAD));
-      object.Set(Elite::SlotWord::XYHigh, 0);
-      object.Set(Elite::SlotByte::ZHigh, 0);
-    });
+  Elite::GameState& state = _rig.State();
+  std::uint16_t slot = 0;
+  if (_what == Scoopable::MineralSplinter)
+  {
+    slot = Elite::FindDebrisSlot(state);
+  }
+  else
+  {
+    const Elite::SlotSearch free = Elite::FindFreeShipSlot(state);
+    Assert::IsTrue(free.found, L"a free ship slot");
+    slot = free.slot;
+  }
+  Elite::ClearObjectSlot(state, slot);
+  Elite::ObjectSlot object(state, slot);
+  switch (_what)
+  {
+  case Scoopable::Barrel:
+  case Scoopable::MaskingDeviceBarrel:
+  {
+    Elite::InitCargoBarrel(state, object);
+    object.Set(Elite::SlotByte::Flags,
+               static_cast<std::uint8_t>(FLAG_RESTING | (_what == Scoopable::MaskingDeviceBarrel ? FLAG_MASKING_DEVICE : 0)));
+    const std::uint16_t heading = Elite::NextRandom(state);
+    object.Set(Elite::SlotWord::Pitch, heading);
+    object.Set(Elite::SlotWord::Yaw, static_cast<std::uint16_t>((heading << 8) | (heading >> 8)));
+    (void)Elite::ComputeVelocity(state, object);
+    break;
+  }
+  case Scoopable::Thargon:
+    Elite::InitThargon(state, object);
+    (void)Elite::ComputeVelocity(state, object);
+    object.Set(Elite::SlotWord::Owner, static_cast<std::uint16_t>(slot + SLOT_BYTES));
+    break;
+  case Scoopable::MineralSplinter:
+    MakeMineralSplinter(state, object);
+    break;
+  }
+  object.Set(Elite::SlotWord::X, 0);
+  object.Set(Elite::SlotWord::Y, static_cast<std::uint16_t>(SCOOP_BELOW));
+  object.Set(Elite::SlotWord::Z, static_cast<std::uint16_t>(SCOOP_AHEAD));
+  object.Set(Elite::SlotWord::XYHigh, 0);
+  object.Set(Elite::SlotByte::ZHigh, 0);
 }
 
 } // namespace
