@@ -3,22 +3,17 @@
 
 #include "Flight.h"
 #include "GameState.h"
-#include "NativeEntry.h"
+#include "Hardware.h"
 #include "ObjectSlot.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's combat routines, ported (plan §5 Phase 3, ADR-010): lasers, missiles, hits and explosions. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012) take values and give
-// values back, below the register bodies, and their entries keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> CombatEntries() noexcept;
+// The reference's combat routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): lasers, missiles, hits and explosions.
+// Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
@@ -147,9 +142,9 @@ void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pi
 void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward);
 
 /// LaunchShipFromObject (CS:534E): a copy of _launcher (CopyObject, backwards when _backward) in a free ship slot, made what
-/// _kind names and moved clear of it: 14h a missile at the player, moved three times; 15h an escape pod, its heading random,
-/// moved three times; 7 a Thargon whose mother is _launcher, and 5 a Krait, each moved twice. Returns the slot, or nothing
-/// when no slot is free or _kind is none of these.
+/// _kind names and moved clear of it: 14h a missile at the player, moved three times, and 7 a Thargon whose mother is _launcher,
+/// moved twice. Returns the slot, or nothing when no slot is free or _kind is neither. The original's 15h, an escape pod, and 5, a
+/// Krait, which no caller passes, went with InitEscapePod and InitKraitHunter (D22).
 std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const ObjectSlot& _launcher, std::uint8_t _kind, bool _backward);
 
 /// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject, the copy backwards when
@@ -208,40 +203,5 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware);
 /// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
 /// shipSlots, its state and hostility cleared and 2 off its aggression, at least 0.
 void UseMaskingDevice(GameState& _state);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-/// The registers RemoveAllMissiles' original leaves, _erased saying whether it erased a scanner blip: DI past the slots it looked
-/// at, and ES = B800h once it erased one. For its entry, and for UpdateStationAi's, whose contract compares them.
-void RemoveAllMissilesOut(Guest& _guest, bool _erased);
-
-void DrawLaserSightsEntry(Guest& _guest);      ///< AX, BX, CX, SI, DI clobbered.
-void GetViewLaserEntry(Guest& _guest);         ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
-void DrawLaserBeamsEntry(Guest& _guest);       ///< Out: ES = DS once a beam was horizontal; AX-DX, BP, DI clobbered.
-void TakeDamageEntry(Guest& _guest);           ///< AX = the damage. Out: AX and BX as the original leaves them; IF=1 when it kills.
-void SpawnPlayerWreckageEntry(Guest& _guest);  ///< Clobbers all but DS.
-void KillPlayerEntry(Guest& _guest);           ///< Out: AL the sound's step length and IF=1, when it starts.
-void InitMissileEntry(Guest& _guest);          ///< DI = the slot. AX, BX clobbered.
-void RemoveAllMissilesEntry(Guest& _guest);    ///< Out: DI past the slots, ES = B800h once a blip is erased; AX-DX clobbered.
-void TallyMaskMissionKillEntry(Guest& _guest); ///< DI = the slot. Out: AL = its type while the mission runs.
-void TryFireLaserAtPlayerEntry(Guest& _guest); ///< DI = the slot, AX, BX = the aim errors. AX, BX, CX, DX clobbered.
-void LaunchPlayerMissileEntry(Guest& _guest);  ///< DI = the 64 bytes to copy. Clobbers all but DS.
-/// DI = the launcher, DL = what to launch. Out: CF set when launched, DI kept; a Krait returns to CS:DI. AX-DX, SI, BP, ES clobbered.
-void LaunchShipFromObjectEntry(Guest& _guest);
-void TryLaunchMissileAtPlayerEntry(Guest& _guest);    ///< DI = the slot, BX = the odds. Out: DI kept; AX-DX, SI, BP, ES clobbered.
-void TryLaunchThargonEntry(Guest& _guest);            ///< DI = the slot. Out: DI kept; AX-DX, SI, BP, ES clobbered.
-void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
-void CreditKillEntry(Guest& _guest);                  ///< DI = the slot. Out: AX, BX, CX and SI as the original leaves them.
-void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.
-void UseMaskingDeviceEntry(Guest& _guest);            ///< Out: SI past the slots, CX = 0.
-void DetonateEnergyBombEntry(Guest& _guest);          ///< Clobbers all.
-void ExplodeObjectEntry(Guest& _guest);               ///< DI = the object. Clobbers all.
-/// DI = the missile. Out: DI and DX as the original leaves them, which UpdateObjectsAndSpawn goes on with; AX, BX, CX, SI, BP and
-/// ES clobbered.
-void UpdateMissileAiEntry(Guest& _guest);
-/// Out: CF set and DI = the slot when one is in the crosshairs, else DI past the slots. AX, BX, CX, DX, SI, BP clobbered.
-void FindShipInCrosshairsEntry(Guest& _guest);
-void ResolveLaserFireEntry(Guest& _guest);   ///< Out: DF clear once a beam was horizontal. Clobbers all.
-void ApplyEnemyLaserHitEntry(Guest& _guest); ///< Out: DF clear once the beam was horizontal; IF=1 after a hit. Clobbers all but DS.
 
 } // namespace Elite

@@ -12,7 +12,7 @@ namespace Elite
 /// The game's state as de-assembled routines see it (ADR-012): the reference's data segment by name
 /// (DataOverlay.h) or by offset, the code segment it keeps data and patches in, and the CGA's video
 /// memory. It has no registers: a routine that takes a GameState takes its inputs as parameters and
-/// gives its results back, and only its entry (Guest) knows the original's register contract.
+/// gives its results back. Only the entries the Dispatcher reaches see the registers (Guest).
 ///
 /// It reads and writes through Machine::Memory, so paced time's change count sees every byte as it did,
 /// until Phase 4 puts plain structs behind it (ADR-011, D17).

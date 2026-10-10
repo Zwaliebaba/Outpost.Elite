@@ -1,6 +1,6 @@
 # ADR-017 — The interpreter deleted (D7)
 
-**Status:** accepted 2026-10-10, with the change that implements it. This is the first half of D7 ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)): the interpreter and everything that served only to compare the native code with it. The second half follows separately: the entries and hooks nothing reaches any more, and D22's two routines.
+**Status:** accepted 2026-10-10, with the change that implements it. D7 ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)) in two changes. The first deleted the interpreter and everything that served only to compare the native code with it. The second, the same day, deleted the entries and hooks nothing reaches any more, and D22's two routines (item 6).
 
 ## Context
 
@@ -71,6 +71,43 @@
 | clang-tidy | clean on every changed `.cpp` |
 | The checkers | CheckFormat and CheckProjectFiles are clean |
 | `Build/RunTests.py` | two shards: the corpus, and the rest |
+
+**6. D7's second half: what only the comparison reached, deleted 2026-10-10.** 6,524 lines in 57 files.
+
+**Hooks.** Of the 387 entries, three remain, with the firmware's two handlers. Hook calls were counted over all 47 tests and all 26 replays, before the change and after it, and the counts are identical.
+
+| Hook | Why it stays |
+|---|---|
+| `Start` (CS:0000) | the program's entry |
+| `TimerInterrupt` (CS:0215) | int 8, whose vector `InstallTimerInterrupt` writes |
+| `KeyboardInterrupt` (CS:0201) | int 9, whose vector `InstallDivideAndKeyboardInterrupts` writes |
+| the BIOS's timer and keyboard handlers (F000:E000, F000:E040) | the machine's own firmware, which int 8 and int 9 reach whenever the game puts the BIOS's vectors back |
+
+**Two vectors the game writes have no hook.**
+- **Int 0, the divide trap.** The Dispatcher executes no divide: each divide calls `DivideOverflowInterrupt` itself.
+- **Int 24h, DOS's critical-error handler.** The emulated DOS answers a failure with CF set and never raises int 24h. `CriticalErrorInterrupt`, whose only caller was its hook, went with it.
+- Both vector writes stay, as the original's writes. If either vector were ever taken, the run would stop as `Unported`.
+
+**What went:**
+- every other entry, its `NativeContract` and its table row;
+- the `…Out` helpers that rebuilt registers;
+- `Guest::Clobber`, `Hook::contract` and the register-contract bits;
+- the value routines that only entries called: four warning checks `UpdateWarnings` runs itself, and three that only read back register leftovers.
+
+**What is left of `Guest`** is what the three entries use: `Start` reads DS, BP and the direction flag and pushes the far return to PSP:0000, and the timer's handler passes on the direction flag.
+
+**D22.** `InitEscapePod`, `InitKraitHunter` and `RandomizeOrientation`, which only the escape pod's branch called, are deleted. `LaunchShipFromObject`'s branches for DL=15h (CS:5386) and DL=5 (CS:53B5) went with them. Its reachable paths make the same writes in the same order.
+
+**`TimeMode::Clocked` is deleted.** A `Pc` is paced from power-on. Clocked time had no meaning on a Dispatcher, and every caller already set paced time.
+
+**Measured.**
+- `GameLogicTests` passes 47 of 47 and `MachineTests` 131 of 131, under g++ and clang++, without warnings.
+- All 26 replays meet all 134 digests.
+- Each of the 356 known answers is checked once and met.
+
+**For the native devices.**
+- The timer's handler takes the direction flag from the registers at the interrupt. A scheduler must supply it.
+- Interrupts still reach native code through the vector table in memory (ADR-014 item 5).
 
 ## What this forecloses
 

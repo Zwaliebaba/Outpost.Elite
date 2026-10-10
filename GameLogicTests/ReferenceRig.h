@@ -64,7 +64,6 @@ public:
       m_files(m_directory.Path()),
       m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent)))
   {
-    m_pc->SetTimeMode(Machine::TimeMode::Paced);
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
     m_loaded = Elite::LoadReference(*m_pc, file, Elite::PSP_SEGMENT, m_program) == Elite::ReferenceFailure::None;
     if (m_loaded)

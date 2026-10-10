@@ -24,7 +24,7 @@ constexpr std::uint16_t BIOS_TICKS = 0x6C;
 Machine::LoadedProgram LoadNative(PcRig& _rig, Machine::NativeRoutine _routine, Machine::NativeWait _wait = Machine::NativeWait::Always)
 {
   const Machine::LoadedProgram program = _rig.Load(TinyExe({NOP}));
-  _rig.Host().Hook(program.loadSegment, 0, "Program", std::move(_routine), {}, Machine::NativeReturn::Near, _wait);
+  _rig.Host().Hook(program.loadSegment, 0, "Program", std::move(_routine), _wait);
   return program;
 }
 
@@ -109,7 +109,6 @@ public:
                        }
                        _pc.CallInterrupt(0x20);
                      });
-    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"no time passed");
   }
@@ -132,7 +131,6 @@ public:
                          _pc.LoopTurn();
                        _pc.CallInterrupt(0x20);
                      });
-    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
   }
@@ -149,7 +147,6 @@ public:
                        for (;;)
                          _pc.LoopTurn();
                      });
-    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
     Assert::IsTrue(rig.Host().RunUntil(500'000) == Machine::StopReason::Reached);
     Assert::AreEqual(std::uint64_t{500'000}, rig.Host().Clock());
   }
@@ -170,7 +167,6 @@ public:
                          _pc.LoopTurn();
                        }
                      });
-    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
     rig.Host().SetSpinLimit(10'000);
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock());

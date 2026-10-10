@@ -2,25 +2,9 @@
 
 #include "NativeRoutines.h"
 
-#include "Ai.h"
-#include "Combat.h"
-#include "Docked.h"
-#include "Docking.h"
-#include "Equipment.h"
-#include "Flight.h"
-#include "Galaxy.h"
-#include "Hyperspace.h"
 #include "Input.h"
-#include "Market.h"
-#include "Maths.h"
-#include "SaveLoad.h"
-#include "Scene.h"
-#include "Ships.h"
-#include "Sound.h"
 #include "StartUp.h"
-#include "Text.h"
 #include "Timer.h"
-#include "Video.h"
 #include "Reference.h"
 
 namespace Elite
@@ -31,12 +15,9 @@ namespace
 
 using EntryList = std::span<const NativeEntry> (*)() noexcept;
 
-// Every subsystem's list of ported entries (plan §5 Phase 3).
-constexpr std::array<EntryList, 19> SUBSYSTEMS = {
-  &AiEntries,         &CombatEntries,  &DockedEntries, &DockingEntries, &EquipmentEntries, &FlightEntries, &GalaxyEntries,
-  &HyperspaceEntries, &InputEntries,   &MarketEntries, &MathsEntries,   &SaveLoadEntries,  &SceneEntries,  &ShipsEntries,
-  &SoundEntries,      &StartUpEntries, &TextEntries,   &TimerEntries,   &VideoEntries,
-};
+// The lists of the subsystems with an entry the program reaches: the program's own, and the timer's and the keyboard's interrupt
+// handlers, which the vector table names (int 8 and int 9).
+constexpr std::array<EntryList, 3> SUBSYSTEMS = {&InputEntries, &StartUpEntries, &TimerEntries};
 
 } // namespace
 
@@ -49,40 +30,26 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
     for (const NativeEntry& entry : entries())
     {
       const auto body = entry.body;
-      const Machine::NativeReturn exit = entry.exit;
-      const std::uint16_t popBytes = entry.popBytes;
+      const EntryReturn exit = entry.exit;
       _pc.Hook(
         code, entry.offset, std::string(entry.name),
-        [body, exit, popBytes, code, data](Machine::Pc& _host)
+        [body, exit, code, data](Machine::Pc& _host)
         {
           Guest guest(_host, code, data);
           body(guest);
           switch (exit)
           {
-          case Machine::NativeReturn::Near:
-            _host.ReturnNear(popBytes);
+          case EntryReturn::Far:
+            _host.ReturnFar();
             break;
-          case Machine::NativeReturn::Far:
-            _host.ReturnFar(popBytes);
-            break;
-          case Machine::NativeReturn::Interrupt:
+          case EntryReturn::Interrupt:
             _host.ReturnInterrupt();
             break;
           }
         },
-        entry.contract, exit, entry.wait);
+        entry.wait);
     }
   }
-}
-
-std::size_t NativeRoutineCount() noexcept
-{
-  std::size_t count = 0;
-  for (const EntryList entries : SUBSYSTEMS)
-  {
-    count += entries().size();
-  }
-  return count;
 }
 
 } // namespace Elite

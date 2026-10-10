@@ -16,9 +16,6 @@ namespace Elite
 namespace
 {
 
-using Machine::FLAG_CARRY;
-using Machine::FLAG_DIRECTION;
-
 constexpr std::uint8_t FLAG_HOSTILE = 0x01;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint8_t FLAG_DEVICE = 0x20;
@@ -126,18 +123,6 @@ constexpr std::uint8_t STATE_CLOSING = 4;
 [[nodiscard]] bool WithinRange(const ObjectSlot& _slot, std::uint8_t _low)
 {
   return ObjectWithinBox(_slot, Join(_slot.Get(SlotByte::Range), _low));
-}
-
-// What TurnTowardAngles leaves in the registers, which its entry and TurnToVector's register code reproduce: AX and BX the
-// errors' magnitudes, which TryFireLaserAtPlayer takes as its aim errors; CX the yaw's turn rate, negated when it is the
-// step, and BP the pitch error's magnitude, which UpdateMissileAi's contract compares.
-void TurnOut(Machine::Registers& _regs, const ObjectSlot& _slot, Turn _turn) noexcept
-{
-  _regs.ax = _turn.pitch.errorMagnitude;
-  _regs.bx = _turn.yaw.errorMagnitude;
-  const std::uint16_t rate = _slot.Get(SlotByte::TurnRate);
-  _regs.cx = _turn.yaw.errorMagnitude < rate ? rate : static_cast<std::uint16_t>(_turn.yaw.step);
-  _regs.bp = _turn.pitch.errorMagnitude;
 }
 
 // TurnToVector: _slot turned toward the angles of _vector, ConvertVectorToAngles' then TurnTowardAngles'.
@@ -826,8 +811,6 @@ VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _obj
   return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
-void SkipInertObjectAi(Guest& /*_guest*/) {}
-
 StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
 {
   _station.Set(SlotWord::Roll, Offset(_station.Get(SlotWord::Roll), STATION_SPIN));
@@ -1031,230 +1014,6 @@ HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
   }
   const SafeZone zone = InSafeZone(_state);
   return HoldFire{zone.inside, zone};
-}
-
-namespace
-{
-
-using Machine::REGISTER_ALL;
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BP;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
-using Machine::REGISTER_SI;
-
-// "Clobbers most registers": all but DI, the slot, and DS; and DX, as MoveObject leaves it, whose DL the next slot's handler can
-// take for its range's box (WithinRange; MovingHandlerEntry).
-constexpr Machine::NativeContract CLOBBERS_MOST{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP | REGISTER_ES, 0};
-
-constexpr Machine::NativeContract CLOBBERS_CX_SI{REGISTER_CX | REGISTER_SI, 0};
-constexpr Machine::NativeContract MASK_SHIP_SEARCH{REGISTER_CX, FLAG_CARRY};
-constexpr Machine::NativeContract ESCORT_PLACED{REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0};
-// TurnTowardAngles: the CX and BP it leaves are compared (TurnTowardAnglesEntry).
-constexpr Machine::NativeContract TURNED{REGISTER_DX, 0};
-constexpr Machine::NativeContract OBJECT_VECTOR{REGISTER_DX | REGISTER_BP, FLAG_CARRY};
-// CheckSafeZoneHoldFire: every register compared, AL as InSafeZone leaves it (CheckSafeZoneHoldFireEntry).
-constexpr Machine::NativeContract HOLD_FIRE{0, FLAG_CARRY};
-// UpdateStationAi's: DI, BP and ES as the original leaves them, and DX, of which the next slot's handler can take DL
-// (UpdateStationAiEntry).
-constexpr Machine::NativeContract STATION_TURN{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
-constexpr Machine::NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
-
-} // namespace
-
-// ── The entries of the routines de-assembled (ADR-012) ──
-
-void ScaleSpawnOddsEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = ScaleSpawnOdds(_guest.State(), regs.bx);
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void IsMaskShipPresentEntry(Guest& _guest)
-{
-  const SlotSearch search = IsMaskShipPresent(_guest.State());
-  _guest.Regs().si = search.slot;
-  _guest.SetFlag(FLAG_CARRY, search.found);
-  _guest.Clobber(MASK_SHIP_SEARCH);
-}
-
-void PlaceEscortNearEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  PlaceEscortNear(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.si);
-  _guest.Clobber(ESCORT_PLACED);
-}
-
-void TurnTowardAnglesEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot slot(_guest.State(), regs.di);
-  // The original leaves the yaw's ClampTurnStep in CX, the turn rate, negated when it is the step, and the pitch's error in BP;
-  // UpdateMissileAi's contract compares both after it.
-  TurnOut(regs, slot, TurnTowardAngles(slot, Angles{regs.ax, regs.bx}));
-  _guest.Clobber(TURNED);
-}
-
-void ClampTurnStepEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot slot(_guest.State(), regs.di);
-  const TurnStep step = ClampTurnStep(slot, regs.ax, regs.cx);
-  regs.ax = static_cast<std::uint16_t>(step.step);
-  regs.bx = step.errorMagnitude;
-  // The original leaves the turn rate in CX, negated when it is the step, and UpdateMissileAi's contract compares CX after
-  // TurnTowardAngles.
-  const std::uint16_t rate = slot.Get(SlotByte::TurnRate);
-  regs.cx = step.errorMagnitude < rate ? rate : regs.ax;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void CountOtherHuntersOnScannerEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const HunterCount hunters = CountOtherHuntersOnScanner(_guest.State(), regs.di);
-  SetLow(regs.ax, hunters.count);
-  if (hunters.last.has_value())
-  {
-    regs.bp = *hunters.last;
-  }
-  _guest.Clobber(CLOBBERS_CX_SI);
-}
-
-void GetVectorToObjectEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const VectorToObject toObject = GetVectorToObject(ObjectSlot(_guest.State(), regs.di), ObjectSlot(_guest.State(), regs.si), regs.dx);
-  regs.ax = static_cast<std::uint16_t>(toObject.vector.x);
-  regs.bx = static_cast<std::uint16_t>(toObject.vector.y);
-  regs.cx = static_cast<std::uint16_t>(toObject.vector.z);
-  _guest.SetFlag(FLAG_CARRY, toObject.within);
-  _guest.Clobber(OBJECT_VECTOR);
-}
-
-namespace
-{
-
-// The entry of a behaviour handler whose every path ends with MoveObject: what that leaves (MoveObjectOut), and the contract's
-// marks on the rest.
-template <MovedObject (*Handler)(GameState&, ObjectSlot, std::uint8_t, bool)> void MovingHandlerEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot slot(_guest.State(), regs.di);
-  MoveObjectOut(_guest, slot, Handler(_guest.State(), slot, Low(regs.dx), _guest.Flag(FLAG_DIRECTION)));
-  _guest.Clobber(CLOBBERS_MOST);
-}
-
-} // namespace
-
-void UpdateTraderOrPoliceAiEntry(Guest& _guest)
-{
-  MovingHandlerEntry<&UpdateTraderOrPoliceAi>(_guest);
-}
-
-void UpdateWolfAiEntry(Guest& _guest)
-{
-  MovingHandlerEntry<&UpdateWolfAi>(_guest);
-}
-
-void UpdateHunterAiEntry(Guest& _guest)
-{
-  MovingHandlerEntry<&UpdateHunterAi>(_guest);
-}
-
-void UpdateDriftingObjectAiEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot slot(_guest.State(), regs.di);
-  const DriftingObject drift = UpdateDriftingObjectAi(_guest.State(), slot);
-  // The contract compares every register: what MoveObject leaves, then IsDebrisType's AL, the type, and a rock's tumble in AX and
-  // BX.
-  MoveObjectOut(_guest, slot, drift.moved);
-  SetLow(regs.ax, static_cast<std::uint8_t>((slot.Get(SlotByte::Type) >> 1) & TYPE_MASK));
-  if (drift.tumble)
-  {
-    regs.ax = static_cast<std::uint16_t>(drift.tumble->first);
-    regs.bx = static_cast<std::uint16_t>(drift.tumble->second);
-  }
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void UpdateObjectsAndSpawnEntry(Guest& _guest)
-{
-  // The DX the caller left goes on to the first handler that measures its range's box, as the original's does.
-  UpdateObjectsAndSpawn(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION), _guest.Regs().dx);
-  _guest.Clobber(CLOBBERS_ALL);
-}
-
-void UpdateStationAiEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot station(_guest.State(), regs.di);
-  const StationTurn turn = UpdateStationAi(_guest.State(), station, _guest.Flag(FLAG_DIRECTION), regs.dx);
-  // What the contract compares: what IsObjectNear leaves; CopyObject's ES = DS once it launched; the pitch FacePlayerWithRandomRoll
-  // leaves in BP once that was a trader; DI past the slots and ES as RemoveAllMissiles leaves them once the ECM ran; and DX.
-  if (turn.near)
-  {
-    IsObjectNearOut(_guest, station, *turn.near);
-  }
-  if (turn.launched)
-  {
-    regs.es = regs.ds;
-  }
-  if (turn.traderPitch)
-  {
-    regs.bp = *turn.traderPitch;
-  }
-  if (turn.missilesRemoved)
-  {
-    RemoveAllMissilesOut(_guest, turn.blipErased);
-  }
-  regs.dx = turn.dx;
-  _guest.Clobber(STATION_TURN);
-}
-
-void CheckSafeZoneHoldFireEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const HoldFire hold = CheckSafeZoneHoldFire(_guest.State(), ObjectSlot(_guest.State(), regs.di));
-  // The contract compares AX: once it asks InSafeZone, the original leaves AL what that leaves, the rest of safeZoneFlags.
-  if (hold.zone.has_value())
-  {
-    SetLow(regs.ax, hold.zone->rest);
-  }
-  _guest.SetFlag(FLAG_CARRY, hold.hold);
-  _guest.Clobber(HOLD_FIRE);
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{0x4A10, "UpdateObjectsAndSpawn", &UpdateObjectsAndSpawnEntry, CLOBBERS_ALL},
-  NativeEntry{0x4C0E, "ScaleSpawnOdds", &ScaleSpawnOddsEntry, PRESERVES_ALL},
-  NativeEntry{0x4C20, "IsMaskShipPresent", &IsMaskShipPresentEntry, MASK_SHIP_SEARCH},
-  NativeEntry{0x4C38, "PlaceEscortNear", &PlaceEscortNearEntry, ESCORT_PLACED},
-  NativeEntry{0x514B, "TurnTowardAngles", &TurnTowardAnglesEntry, TURNED},
-  NativeEntry{0x5166, "ClampTurnStep", &ClampTurnStepEntry, PRESERVES_ALL},
-  NativeEntry{0x548F, "CountOtherHuntersOnScanner", &CountOtherHuntersOnScannerEntry, CLOBBERS_CX_SI},
-  NativeEntry{0x54B4, "GetVectorToObject", &GetVectorToObjectEntry, OBJECT_VECTOR},
-  NativeEntry{0x5594, "SkipInertObjectAi", &SkipInertObjectAi, PRESERVES_ALL},
-  NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAiEntry, STATION_TURN},
-  NativeEntry{0x5681, "UpdateDriftingObjectAi", &UpdateDriftingObjectAiEntry, PRESERVES_ALL},
-  NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAiEntry, CLOBBERS_MOST},
-  NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAiEntry, CLOBBERS_MOST},
-  NativeEntry{0x58DE, "UpdateHunterAi", &UpdateHunterAiEntry, CLOBBERS_MOST},
-  NativeEntry{0x5A10, "CheckSafeZoneHoldFire", &CheckSafeZoneHoldFireEntry, HOLD_FIRE},
-};
-
-} // namespace
-
-std::span<const NativeEntry> AiEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

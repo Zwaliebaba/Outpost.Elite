@@ -10,8 +10,9 @@
 namespace Elite
 {
 
-// The reference's timer routines, ported (plan §5 Phase 3, ADR-010): the 1 kHz tick and what it drives. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// The reference's timer routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the 1 kHz tick and what it drives. Each
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014). The timer's interrupt handler
+// also has its entry, at the end, which int 8 reaches (ADR-010).
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> TimerEntries() noexcept;
@@ -43,14 +44,8 @@ void WaitForTimerTick(GameState& _state, Hardware& _hardware);
 /// flag the interrupted code left, which the answer check compares with.
 void TimerTick(GameState& _state, Hardware& _hardware, bool _backward);
 
-// ── Their entries ──
+// ── The entry of the timer's interrupt handler ──
 
-void TimerInterruptEntry(Guest& _guest);        ///< Preserves every register; the hook's IRET takes the flags.
-void InstallTimerInterruptEntry(Guest& _guest); ///< Out: ES=0; AX clobbered.
-void TimerTickEntry(Guest& _guest);             ///< AX clobbered.
-void WaitForTimerTickEntry(Guest& _guest);      ///< Preserves every register.
-
-/// Out: ES=0, or the int 33h segment on the Amstrad; CX the high word of the clock less a day. AX, BX and DX clobbered.
-void RestoreTimerInterruptEntry(Guest& _guest);
+void TimerInterruptEntry(Guest& _guest); ///< Preserves every register; the hook's IRET takes the flags.
 
 } // namespace Elite

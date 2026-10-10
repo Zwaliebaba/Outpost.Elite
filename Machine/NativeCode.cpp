@@ -8,8 +8,7 @@
 namespace Machine
 {
 
-void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine,
-                     const NativeContract& _contract, NativeReturn _exit, NativeWait _wait)
+void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, NativeWait _wait)
 {
   const std::uint32_t linear = Memory::Linear(_segment, _offset);
   // Made in place, in a node the map never moves: Pc holds on to a Hook while its routine waits.
@@ -21,11 +20,7 @@ void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string 
   Hook& hook = found->second;
   hook.name = std::move(_name);
   hook.routine = std::move(_routine);
-  hook.contract = _contract;
-  hook.exit = _exit;
   hook.wait = _wait;
-  hook.segment = _segment;
-  hook.offset = _offset;
   m_map.resize(Memory::SIZE_BYTES, 0);
   m_map[linear] = 1;
 }

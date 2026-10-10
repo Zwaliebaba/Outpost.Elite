@@ -3,21 +3,15 @@
 
 #include "GameState.h"
 #include "Hardware.h"
-#include "NativeEntry.h"
 #include "ObjectSlot.h"
 
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's docking routines, ported (plan §5 Phase 3, ADR-010): docking, by hand and by computer. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv. The routines de-assembled so far (ADR-012) take
-// values and give values back, and their entries, at the end, keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> DockingEntries() noexcept;
+// The reference's docking routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): docking, by hand and by computer. Each
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
@@ -47,7 +41,7 @@ struct DockingStep
 DockingStep RunDockingComputer(GameState& _state);
 
 /// DrawTunnelRectangle (CS:1AA0): the four edges between the five points at DS:_points, x and y signed bytes about the view's
-/// centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB (DrawLineOut).
+/// centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.
 bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points);
 
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the
@@ -69,16 +63,5 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware);
 /// CancelDockingComputer (CS:8BAA): the docking computer off, if it is on: dataA137 cleared, the view unlocked and all sound
 /// stopped (StopAllSound).
 void CancelDockingComputer(GameState& _state, Hardware& _hardware);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-void DrawTunnelRectangleEntry(Guest& _guest);   ///< In: SI the points. Out: ES=DS and DF=0 after a REP STOSB; clobbers all.
-void PlayStationTunnelEntry(Guest& _guest);     ///< Out: DF=0, BP=20h. Clobbers all but DS and BP.
-void CheckDockingAlignmentEntry(Guest& _guest); ///< In: BX the tolerance, DI the station's slot. Out: CF; AX, CX and DX clobbered.
-void MaskOutsideTunnelEntry(Guest& _guest);     ///< In: SI the rectangle. Out: ES=B800, DF=0; clobbers all but ES.
-void ToggleDockingComputerEntry(Guest& _guest); ///< Out: AX the message, and BX the station's slot once it looks at it.
-void CancelDockingComputerEntry(Guest& _guest); ///< Preserves every register.
-/// Out: AX, SI and DI as each state leaves them (DockingStep); BX, CX and DX clobbered.
-void RunDockingComputerEntry(Guest& _guest);
 
 } // namespace Elite

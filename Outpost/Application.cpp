@@ -159,7 +159,6 @@ int Application::Run(HINSTANCE _instance)
     Fail(std::format(L"{} was not found, or is not the reference binary (ADR-001, ADR-007).", shown.wstring()));
     return 1;
   }
-  pc->SetTimeMode(Machine::TimeMode::Paced);
   Elite::InstallNativeRoutines(*pc, program); // in place of the original (ADR-010)
 
   const std::string session = SessionName();

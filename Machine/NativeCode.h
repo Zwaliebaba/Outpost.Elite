@@ -2,7 +2,6 @@
 #pragma once
 
 #include "Memory.h"
-#include "Registers.h"
 
 #include <cstdint>
 #include <functional>
@@ -15,37 +14,6 @@ namespace Machine
 {
 
 class Pc;
-
-// Registers, as bits of NativeContract::clobbers. SP, SS, CS and IP are not among them: a routine
-// must always return where the original does, with the stack as the original leaves it.
-inline constexpr std::uint16_t REGISTER_AX = 0x0001;
-inline constexpr std::uint16_t REGISTER_BX = 0x0002;
-inline constexpr std::uint16_t REGISTER_CX = 0x0004;
-inline constexpr std::uint16_t REGISTER_DX = 0x0008;
-inline constexpr std::uint16_t REGISTER_SI = 0x0010;
-inline constexpr std::uint16_t REGISTER_DI = 0x0020;
-inline constexpr std::uint16_t REGISTER_BP = 0x0040;
-inline constexpr std::uint16_t REGISTER_DS = 0x0080;
-inline constexpr std::uint16_t REGISTER_ES = 0x0100;
-inline constexpr std::uint16_t REGISTER_ALL = 0x01FF;
-
-/// A routine's register contract, from Symbols.tsv (ADR-010): the registers it may leave as it likes, and the flags its
-/// callers read. Every register a contract does not mention is one the routine leaves alone, and its callers may rely
-/// on that. The comparison with the original held each routine to its contract until D7 deleted the comparison; the
-/// entries that still pass one go with the register layer (ADR-012 item 4).
-struct NativeContract
-{
-  std::uint16_t clobbers = 0; ///< REGISTER_* bits: registers the routine may leave as it likes
-  std::uint16_t flags = 0;    ///< FLAG_* bits (Registers.h): flags its callers read
-};
-
-/// How the original at a hooked entry returns, which is what the native routine does to leave.
-enum class NativeReturn : std::uint8_t
-{
-  Near,     ///< RET or RET n: the return offset on the stack, in the same code segment
-  Far,      ///< RETF or RETF n: offset, then segment
-  Interrupt ///< IRET: offset, segment, then flags; an interrupt handler's entry
-};
 
 /// Whether a native routine can wait, which says where it runs (ADR-010 item 8).
 enum class NativeWait : std::uint8_t
@@ -69,17 +37,12 @@ public:
   {
     std::string name;
     NativeRoutine routine;
-    NativeContract contract;
-    NativeReturn exit = NativeReturn::Near;
     NativeWait wait = NativeWait::Never; ///< whether it can wait, and so where it runs (Pc::Hook)
-    std::uint16_t segment = 0;
-    std::uint16_t offset = 0;
-    std::uint64_t calls = 0; ///< times execution reached the entry
+    std::uint64_t calls = 0;             ///< times execution reached the entry
   };
 
   /// Adds _routine at _segment:_offset. Throws std::logic_error if there is one there already.
-  void Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-           NativeReturn _exit, NativeWait _wait);
+  void Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, NativeWait _wait);
 
   /// A non-zero byte at the linear address of every entry: what the Dispatcher stops at. Empty until the
   /// first routine is added.

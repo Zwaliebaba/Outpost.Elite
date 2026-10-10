@@ -2,21 +2,17 @@
 #pragma once
 
 #include "Docked.h"
-#include "NativeEntry.h"
+#include "GameState.h"
+#include "Hardware.h"
 #include "Text.h"
 
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's market routines, ported (plan §5 Phase 3, ADR-010): the market, cargo and prices. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv. The routines de-assembled so far (ADR-012) take
-// values and give values back, and their entries, at the end, keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> MarketEntries() noexcept;
+// The reference's market routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the market, cargo and prices. Each takes
+// values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -75,22 +71,5 @@ PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
 /// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
 /// is 0. Returns that sum.
 std::uint8_t AddContrabandPenalty(GameState& _state);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-//
-// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
-// results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
-
-void RunCargoTradeMenuEntry(Guest& _guest);      ///< Out: AX the key; all but DS clobbered.
-void ShowMarketPricesScreenEntry(Guest& _guest); ///< In: BP as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
-void SubtractCreditsEntry(Guest& _guest);        ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
-void SpendCreditsEntry(Guest& _guest);           ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
-void AddCreditsEntry(Guest& _guest);             ///< In: BX:AX the tenths.
-void ComputeResalePriceEntry(Guest& _guest);
-void ComputeMarketPricesEntry(Guest& _guest);
-void NextMarketRandomEntry(Guest& _guest);
-void ParseQuantityEntry(Guest& _guest);
-void PrintCargoQuantityEntry(Guest& _guest);
-void AddContrabandPenaltyEntry(Guest& _guest);
 
 } // namespace Elite

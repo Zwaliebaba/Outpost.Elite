@@ -15,7 +15,6 @@ namespace
 {
 
 constexpr std::uint16_t DOS_NO_MORE_FILES = 0x12;
-constexpr std::uint8_t IGNORE_ERROR = 0;   // what a critical-error handler answers DOS in AL
 constexpr std::uint8_t READ_ACCESS = 0;    // a file opened to read
 constexpr std::uint16_t NO_ATTRIBUTES = 0; // a commander's file is neither read-only, hidden nor system
 
@@ -284,8 +283,8 @@ PrintedText BlankHelpRows(GameState& _state)
 
 // LeaveGameLoopForDisk (CS:7E90): diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
 // work came to when it runs again. The two POP AX between its writes, which drop the return address of the call it is in and the
-// one under it, so that its RET takes GameLoop's back to Start, are the entries' (DiscMenuExitOut): they read the stack and write
-// no memory, so the writes keep the original's order.
+// one under it, so that its RET takes GameLoop's back to Start, are its callers' return (DiscMenuExit::leaves): they read the stack
+// and write no memory, so the writes keep the original's order.
 DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
 {
   _state.Set(DS.diskOperation, _operation);
@@ -529,22 +528,6 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
   return (_character >= '0' && _character <= '9') || (_character >= 'A' && _character <= 'Z');
 }
 
-// What the disc menu leaves when it is done, as its entries hand it back: AX the F-key it returns with, and AL as its GetKey left
-// it; or, once it leaves for the disk, the second of the two return addresses LeaveGameLoopForDisk pops; and ES on the text page,
-// from its prints.
-void DiscMenuExitOut(Guest& _guest, const DiscMenuExit& _exit)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = Guest::VIDEO_SEGMENT;
-  if (_exit.leaves)
-  {
-    regs.ax = _guest.Pop();
-    regs.ax = _guest.Pop();
-    return;
-  }
-  regs.ax = Join(_exit.scanCode, _exit.al);
-}
-
 } // namespace
 
 void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes)
@@ -580,12 +563,6 @@ void SaveStartupCommander(GameState& _state, bool _backward)
     from = Offset(from, step);
     to = Offset(to, step);
   }
-}
-
-std::uint8_t CriticalErrorInterrupt(GameState& _state)
-{
-  _state.Set(DS.diskError, 1);
-  return IGNORE_ERROR;
 }
 
 void ShowDiskError(GameState& _state)
@@ -695,115 +672,6 @@ void PrintCommanderCatalogue(GameState& _state)
     const auto cell = static_cast<std::uint16_t>(CATALOGUE_POSITION + column * CATALOGUE_COLUMN_BYTES + row * TEXT_ROW_BYTES);
     name = Offset(PrintAt(_state, name, cell).end, 1);
   }
-}
-
-namespace
-{
-
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BP;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DI;
-using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
-using Machine::REGISTER_SI;
-
-constexpr Machine::NativeContract DISK_REQUEST{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI, 0};
-constexpr Machine::NativeContract COPY{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
-
-constexpr Machine::NativeContract SHOWS_DISK_ERROR{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
-constexpr Machine::NativeContract CLOBBERS_GENERAL{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
-constexpr Machine::NativeContract PROMPTS_FOR_NAME{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, Machine::FLAG_CARRY};
-// The disc menu's: the general registers but AX, the key it returns with in AH.
-constexpr Machine::NativeContract DISC_MENU{REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
-
-// The disc menu and its file name prompt wait for keys as a rule: they run on the native thread, and the digests
-// accept them (ADR-010 items 5 and 8).
-constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
-
-} // namespace
-
-// ── The entries of the de-assembled routines ──
-
-void CriticalErrorInterruptEntry(Guest& _guest)
-{
-  // DS pushed, MOV AX,data / MOV DS,AX, and XOR AL,AL after the write, then DS popped: AH is left the data segment's high
-  // byte.
-  _guest.Regs().ax = Join(High(_guest.DataSegment()), CriticalErrorInterrupt(_guest.State()));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void PerformDiskRequestEntry(Guest& _guest)
-{
-  const Machine::Registers& regs = _guest.Regs();
-  PerformDiskRequest(_guest.State(), _guest.Devices(), Low(regs.ax), regs.cx);
-  _guest.Clobber(DISK_REQUEST);
-}
-
-void ShowDiskErrorEntry(Guest& _guest)
-{
-  ShowDiskError(_guest.State());
-  _guest.Regs().es = Guest::VIDEO_SEGMENT;
-  _guest.Clobber(SHOWS_DISK_ERROR);
-}
-
-void ShowDiscControlScreenEntry(Guest& _guest)
-{
-  DiscMenuExitOut(_guest, ShowDiscControlScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)));
-  _guest.Clobber(DISC_MENU);
-}
-
-void PromptCommanderFileNameEntry(Guest& _guest)
-{
-  if (PromptCommanderFileName(_guest.State(), _guest.Devices()))
-  {
-    _guest.SetFlag(Machine::FLAG_CARRY, false);
-    _guest.Clobber(PROMPTS_FOR_NAME);
-    return;
-  }
-  // A bad name: RejectFileName drops this call's return address, and the disc menu's keys read on in its place, to leave as
-  // ShowDiscControlScreen does.
-  _guest.Regs().ax = _guest.Pop();
-  RejectFileName(_guest.State(), _guest.Devices());
-  DiscMenuExitOut(_guest, RunDiscControlKeys(_guest.State(), _guest.Devices(), false, 0));
-  _guest.Clobber(DISC_MENU);
-}
-
-void PrintCommanderCatalogueEntry(Guest& _guest)
-{
-  PrintCommanderCatalogue(_guest.State());
-  // PrintTextModeString's ES, on the text page: the contract keeps ES.
-  _guest.Regs().es = Guest::VIDEO_SEGMENT;
-  _guest.Clobber(CLOBBERS_GENERAL);
-}
-
-void SaveStartupCommanderEntry(Guest& _guest)
-{
-  SaveStartupCommander(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(COPY);
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequestEntry, DISK_REQUEST},
-  NativeEntry{0x0470, "ShowDiskError", &ShowDiskErrorEntry, SHOWS_DISK_ERROR},
-  NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},
-  NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreenEntry, DISC_MENU, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x6862, "PromptCommanderFileName", &PromptCommanderFileNameEntry, PROMPTS_FOR_NAME, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x68CE, "PrintCommanderCatalogue", &PrintCommanderCatalogueEntry, CLOBBERS_GENERAL},
-};
-
-} // namespace
-
-std::span<const NativeEntry> SaveLoadEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

@@ -19,8 +19,6 @@ namespace Elite
 namespace
 {
 
-using Machine::FLAG_CARRY;
-
 // The station tunnel: ten frames of one to ten of tunnelRectangles' ten rectangles, ten bytes each, and
 // ten of ten to one; docked, each frame waits for timer ticks first.
 constexpr std::uint16_t TUNNEL_FRAMES = 10;
@@ -122,7 +120,7 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
 struct TunnelDrawn
 {
   std::uint16_t next; // past the last rectangle drawn, where the original leaves SI
-  bool filled;        // a DrawLine filled bytes with REP STOSB (DrawLineOut)
+  bool filled;        // a DrawLine filled bytes with REP STOSB
 };
 
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
@@ -713,156 +711,6 @@ void CancelDockingComputer(GameState& _state, Hardware& _hardware)
   _state.Set(DS.viewLocked, 0);
   // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
   StopAllSound(_state, _hardware);
-}
-
-namespace
-{
-
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BP;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DI;
-using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
-using Machine::REGISTER_SI;
-
-constexpr Machine::NativeContract CLOBBERS_ALL{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
-// MaskOutsideTunnel's: the original reads the rectangle through SI and leaves it there, and PlayStationTunnel draws the
-// rectangles from it.
-constexpr Machine::NativeContract CLOBBERS_ALL_BUT_SI_ES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP,
-                                                         0};
-constexpr Machine::NativeContract ALIGNMENT{REGISTER_AX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
-// ArcTangent2's leftovers, which no caller reads (ADR-012).
-constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
-// PlayStationTunnel's: every register but DS and BP, which its last FinishSpaceViewFrame leaves (PlayStationTunnelEntry).
-constexpr Machine::NativeContract PLAYS_STATION_TUNNEL{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
-
-} // namespace
-
-void DrawTunnelRectangleEntry(Guest& _guest)
-{
-  DrawLineOut(_guest, DrawTunnelRectangle(_guest.State(), _guest.Regs().si));
-  _guest.Clobber(CLOBBERS_ALL);
-}
-
-void PlayStationTunnelEntry(Guest& _guest)
-{
-  PlayStationTunnel(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // The last FinishSpaceViewFrame's CLD, which the first frame of flight draws by, and its PresentSpaceView's MOV BP,20h, which
-  // nothing after it changes: after docking, the status screen RunTitleAndDocked shows next hands it to SelectSystemAtCursor as the
-  // count when no system is on the chart, as after the credits (ShowCreditsEntry).
-  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-  _guest.Regs().bp = PRESENT_SPACE_VIEW_BP;
-  _guest.Clobber(PLAYS_STATION_TUNNEL);
-}
-
-void CheckDockingAlignmentEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetFlag(FLAG_CARRY, CheckDockingAlignment(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.bx));
-  _guest.Clobber(ALIGNMENT);
-}
-
-void ToggleDockingComputerEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  // The original leaves the message in AX and, once inside the safe zone with the computer off, the station's slot in BX, which
-  // the contract compares.
-  const bool looksAtStation = _guest.Get(DS.dockingComputerOn) != 1 && InSafeZone(_guest.State()).inside;
-  regs.ax = ToggleDockingComputer(_guest.State(), _guest.Devices());
-  if (looksAtStation)
-  {
-    regs.bx = DS.stationSlot.offset;
-  }
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void RunDockingComputerEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const DockingStep step = RunDockingComputer(_guest.State());
-  // What each state leaves in AX, SI and DI, which the contract compares: the state's result in AX; DI the station's slot from
-  // LoadStationPosition and the docking states that read it; SI past the slots as MoveObjectsByVelocity leaves it, once it ran;
-  // and, once state 8 stopped, DI past the particles as ResetStardust leaves it. States 0 and 12 and up leave them alone.
-  const auto pastShipSlots = [&_guest]
-  { return static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES); };
-  switch (step.state)
-  {
-  case AIM_ROLL_AT_APPROACH:
-  case PITCH_TO_APPROACH:
-  case AIM_ROLL_AT_STATION:
-  case PITCH_TO_STATION:
-    regs.ax = step.result;
-    regs.di = DS.stationSlot.offset;
-    break;
-  case ROLL_TO_APPROACH:
-  case ROLL_TO_STATION:
-    regs.ax = step.result;
-    break;
-  case CLOSE_IN:
-    regs.ax = step.result;
-    if (step.stopped)
-    {
-      regs.di = DS.stardust.At(DS.stardust.ENTRY_COUNT);
-      break;
-    }
-    regs.si = pastShipSlots();
-    regs.di = DS.stationSlot.offset;
-    break;
-  case FLY_TO_APPROACH:
-  case MATCH_SPIN:
-  case ROLL_WITH_SPIN:
-  case ROLL_WITH_SPIN_TURNED:
-    regs.ax = step.result;
-    regs.si = pastShipSlots();
-    regs.di = DS.stationSlot.offset;
-    break;
-  default:
-    break;
-  }
-  _guest.Clobber(CLOBBERS_BX_CX_DX);
-}
-
-void CancelDockingComputerEntry(Guest& _guest)
-{
-  CancelDockingComputer(_guest.State(), _guest.Devices());
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void MaskOutsideTunnelEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  MaskOutsideTunnel(_guest.State(), regs.si, _guest.Flag(Machine::FLAG_DIRECTION));
-  // CLD, and ES back on the CGA's memory through AX.
-  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  _guest.Clobber(CLOBBERS_ALL_BUT_SI_ES);
-}
-
-namespace
-{
-
-// PlayStationTunnel waits as a rule: for frames, and docking for the timer too.
-constexpr std::array ENTRIES = {
-  NativeEntry{0x1AA0, "DrawTunnelRectangle", &DrawTunnelRectangleEntry, CLOBBERS_ALL},
-  NativeEntry{0x2D0F, "CheckDockingAlignment", &CheckDockingAlignmentEntry, ALIGNMENT},
-  NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnelEntry, PLAYS_STATION_TUNNEL, Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Always},
-  NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnelEntry, CLOBBERS_ALL_BUT_SI_ES},
-  NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputerEntry, PRESERVES_ALL},
-  NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputerEntry, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x8BAA, "CancelDockingComputer", &CancelDockingComputerEntry, PRESERVES_ALL},
-};
-
-} // namespace
-
-std::span<const NativeEntry> DockingEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

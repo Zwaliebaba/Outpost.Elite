@@ -211,10 +211,8 @@ void RunKeyboardHandler(Pc& _pc)
 
 void HookNativeFirmware(Pc& _pc)
 {
-  _pc.Hook(Firmware::ROM_SEGMENT, Firmware::TIMER_HANDLER_OFFSET, "BiosTimerHandler", &RunTimerHandler, NativeContract{},
-           NativeReturn::Interrupt);
-  _pc.Hook(Firmware::ROM_SEGMENT, Firmware::KEYBOARD_HANDLER_OFFSET, "BiosKeyboardHandler", &RunKeyboardHandler, NativeContract{},
-           NativeReturn::Interrupt);
+  _pc.Hook(Firmware::ROM_SEGMENT, Firmware::TIMER_HANDLER_OFFSET, "BiosTimerHandler", &RunTimerHandler);
+  _pc.Hook(Firmware::ROM_SEGMENT, Firmware::KEYBOARD_HANDLER_OFFSET, "BiosKeyboardHandler", &RunKeyboardHandler);
 }
 
 } // namespace Machine

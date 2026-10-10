@@ -10,8 +10,9 @@
 namespace Elite
 {
 
-// The reference's start-up and protection routines, ported (plan §5 Phase 3, ADR-010): start-up, the copy protection's remains and the way out to DOS. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// The reference's start-up and protection routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): start-up, the copy
+// protection's remains and the way out to DOS. Each takes values and gives values back, on the GameState and, where it drives a device, the
+// devices (ADR-014). Start also has its entry, at the end, where DOS starts the program (ADR-010).
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> StartUpEntries() noexcept;
@@ -69,20 +70,10 @@ void StartNewGame(GameState& _state, bool _backward);
 /// nine lines of creditsScreenText drawn in it, presented (FinishSpaceViewFrame), then 3000 timer ticks, about 3 s. Waits.
 void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward);
 
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+// ── The entry of the program ──
 
-void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< In: ES=0. Out: ES=B800, IF=1; AX clobbered.
-void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< Out: ES=0, IF=1; AX clobbered.
-void CheckCheatArgumentEntry(Guest& _guest);                 ///< AX, BX, CX and SI clobbered.
-void CopyProtectionEntry(Guest& _guest);                     ///< Clobbers all. Waits sometimes.
-void WipeProgramEntry(Guest& _guest);                        ///< Out: IF=0; AX, CX, DI and ES clobbered.
-void StartNewGameEntry(Guest& _guest);                       ///< Out: ES=DS; AX, CX, SI and DI clobbered.
-void ShowCreditsEntry(Guest& _guest);                        ///< Out: DF clear, BP=20h; all but DS clobbered. Waits.
 /// DS = the PSP, BP and DF as DOS leaves them. Pushes the far return to PSP:0000 first, as the original does, so that the hook's
 /// RETF, once the program ends, reaches INT 20h there. Out: DS the data segment. Waits.
 void StartEntry(Guest& _guest);
-/// BP and DF as GameLoop takes them. Out: BP and DF as the docked screens leave them, once the disc menu leaves for the disk. All
-/// but BP and DS clobbered. Waits.
-void GameLoopEntry(Guest& _guest);
 
 } // namespace Elite

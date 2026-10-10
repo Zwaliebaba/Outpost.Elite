@@ -46,7 +46,7 @@ More operations come as the routines that need them convert: the keyboard, the g
 
 **4. The interrupt flag belongs to the devices.** STI and CLI are `Hardware` operations, not a register a routine sets. In the end state they gate the scheduler's ticks.
 
-**5. Interrupt vectors stay memory.** `InstallTimerInterrupt` writes int 8's vector into the table at 0000:0020 through the `GameState`, because the interpreter's interrupt dispatch reads the table while it lasts. The writes go when the scheduler replaces the handlers.
+**5. Interrupt vectors stay memory.** *Since ADR-017 item 6, int 8 and int 9 are the only vectors native code is entered through; the game's writes to int 0 and int 24h stay, with no hook behind them.* `InstallTimerInterrupt` writes int 8's vector into the table at 0000:0020 through the `GameState`, because the interpreter's interrupt dispatch reads the table while it lasts. The writes go when the scheduler replaces the handlers.
 
 **6. Converted with this decision: the timer's tick and the speaker.**
 - **Sound:** `StartMusic`, `StopAllSound`, `SilenceSpeakerTimer`, `EmitNoiseSample` and `ToggleSpeaker`. `StopAllSound` keeps `StopSoundEffects`' STI, as `EnableInterrupts`.

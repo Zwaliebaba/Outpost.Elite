@@ -107,7 +107,6 @@ struct HandlerRun
 {
   PcRig rig("RomHandler");
   Machine::Pc& pc = rig.Host();
-  pc.SetTimeMode(Machine::TimeMode::Paced);
   Machine::Registers& regs = pc.Processor().Regs();
   regs.ss = STACK_SEGMENT;
   regs.sp = STACK_POINTER;
@@ -210,25 +209,23 @@ public:
     const Machine::LoadedProgram program = rig.Load(TinyExe({NOP}));
     Machine::Pc& pc = rig.Host();
     const std::uint16_t psp = program.pspSegment;
-    pc.Hook(
-      program.loadSegment, 0, "Entry",
-      [psp](Machine::Pc& _pc)
-      {
-        Machine::Registers& regs = _pc.Processor().Regs();
-        const Machine::Registers before = regs;
-        _pc.CallInterrupt(0x33);
-        // IP is where Pc::CallInterrupt parks it; the rest is as it was.
-        Machine::Registers after = regs;
-        after.ip = before.ip;
-        Assert::IsTrue(after == before, L"the ROM's IRET put everything back");
-        for (const std::uint16_t word : {psp, std::uint16_t{0}})
-        {
-          regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
-          _pc.Ram().Write16(regs.ss, regs.sp, word);
-        }
-        _pc.ReturnFar();
-      },
-      Machine::NativeContract{}, Machine::NativeReturn::Far);
+    pc.Hook(program.loadSegment, 0, "Entry",
+            [psp](Machine::Pc& _pc)
+            {
+              Machine::Registers& regs = _pc.Processor().Regs();
+              const Machine::Registers before = regs;
+              _pc.CallInterrupt(0x33);
+              // IP is where Pc::CallInterrupt parks it; the rest is as it was.
+              Machine::Registers after = regs;
+              after.ip = before.ip;
+              Assert::IsTrue(after == before, L"the ROM's IRET put everything back");
+              for (const std::uint16_t word : {psp, std::uint16_t{0}})
+              {
+                regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+                _pc.Ram().Write16(regs.ss, regs.sp, word);
+              }
+              _pc.ReturnFar();
+            });
     Assert::IsTrue(pc.RunUntil(1'000) == Machine::StopReason::Terminated, L"the PSP's INT 20h ends the program");
     Assert::AreEqual(std::uint64_t{2}, pc.Processor().InstructionCount(), L"the IRET and the INT 20h");
   }

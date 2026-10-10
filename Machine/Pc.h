@@ -35,33 +35,19 @@ enum class StopReason : std::uint8_t
   Reached,    ///< The clock reached the cycle asked for.
   Fault,      ///< The services refused a call; PcServices::Fault says which.
   Terminated, ///< The program ended through int 20h.
-  Spinning,   ///< Paced time only: the program ran SpinLimit() steps without waiting once.
+  Spinning,   ///< The program ran SpinLimit() steps without waiting once.
   Overran,    ///< Native code off the native thread waited past the end of the run (NativeCode::Overran).
   Unported    ///< The Dispatcher reached code no native routine stands in for.
-};
-
-/// How the machine's clock advances (ADR-008).
-enum class TimeMode : std::uint8_t
-{
-  /// Every step takes its 8088 cycles, as on the real machine: the interrupt entries and the ROM's IRETs the
-  /// Dispatcher runs move the clock. What the DOSBox-X comparisons ran in while there was an interpreter (ADR-003).
-  Clocked,
-
-  /// Instructions take no time. The clock moves only while the program waits, and then straight to
-  /// the next thing a device will do: the next timer interrupt, keyboard delivery or change of the
-  /// CGA's status. So interrupts land only inside the program's waits, at the same points however
-  /// long its work took. What replays and the game run in.
-  Paced
 };
 
 /// The IBM PC the reference runs on, put together (ADR-006): an 8088, which is a Dispatcher, since every routine of
 /// the program is native (ADR-011), 1 MiB of memory, the 8259, the 8253, the keyboard's 8255, the speaker, the game
 /// port and the CGA on one I/O bus, and the ROM, BIOS, DOS and mouse driver at the call level.
 ///
-/// Time is the machine's own cycle count, the 8088's clock at a third of the crystal (Timing.h). How it
-/// advances is the TimeMode. When Clocked, Step() runs one step of the Dispatcher, adds its cycles to the
-/// clock, and then lets the devices that raise interrupts catch up with it. When Paced, the clock moves only
-/// when the program waits.
+/// Time is the machine's own cycle count, the 8088's clock at a third of the crystal (Timing.h), and it is paced
+/// (ADR-008): instructions take no time. The clock moves only while the program waits, and then straight to the next
+/// thing a device will do: the next timer interrupt, keyboard delivery or change of the CGA's status. So interrupts land
+/// only inside the program's waits, at the same points however long its work took.
 ///
 /// Waiting is recognised, not declared. A program waits by going round a loop until an interrupt or a
 /// device changes something. One turn of such a loop changes nothing: at its backward jump, the registers,
@@ -74,7 +60,7 @@ enum class TimeMode : std::uint8_t
 /// read that sees it (Cga::SetRetraceSeenOnce), because the game waits for a retrace's level rather than
 /// its edge, and only its drawing time made those the same.
 ///
-/// The game port is timed differently in both modes: its one-shots are measured against the cycles of
+/// The game port is timed differently: its one-shots are measured against the cycles of
 /// the instructions executed (InstructionCycles()), because the program reads a stick by counting
 /// polling loops with interrupts off; native code counts the cycles of the instructions it stands in for.
 ///
@@ -97,16 +83,7 @@ public:
   /// MS-DOS gives a program. Nothing changes if the load fails.
   [[nodiscard]] LoadError Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _desc, LoadedProgram& _program);
 
-  /// Clocked (the default) or Paced. Changing it mid-run is allowed: the clock carries on from where
-  /// it is.
-  void SetTimeMode(TimeMode _mode) noexcept;
-
-  [[nodiscard]] TimeMode Mode() const noexcept
-  {
-    return m_timeMode;
-  }
-
-  /// Paced time: the number of steps the program may run without waiting before RunUntil stops with
+  /// The number of steps the program may run without waiting before RunUntil stops with
   /// StopReason::Spinning. A loop that waits for time without ever completing an idle turn would
   /// otherwise run for ever with the clock standing still.
   void SetSpinLimit(std::uint64_t _steps) noexcept;
@@ -116,7 +93,7 @@ public:
     return m_spinLimit;
   }
 
-  /// One step of the Dispatcher, then the timer and the keyboard catch up with the clock. While a native
+  /// One step of the Dispatcher, which takes no time: its cycles count only on the instruction clock. While a native
   /// routine that waits is in progress, it runs to its next wait instead (ADR-010 item 8).
   void Step();
 
@@ -125,7 +102,7 @@ public:
 
   /// Moves the clock to the next device event, or to _limit if that comes first, and lets the devices
   /// raise what falls due. What paced time does when the program waits; native code that stands in for a
-  /// waiting loop calls it in the loop's place. Clocked, it does the same.
+  /// waiting loop calls it in the loop's place.
   void Idle(Cycles _limit);
 
   /// The machine's clock.
@@ -134,7 +111,7 @@ public:
     return m_clock;
   }
 
-  /// The cycles of every instruction executed, or stood in for, since power-on, in either mode: the game port's clock.
+  /// The cycles of every instruction executed, or stood in for, since power-on: the game port's clock.
   [[nodiscard]] Cycles InstructionCycles() const noexcept
   {
     return m_instructionCycles;
@@ -222,8 +199,7 @@ public:
   /// carries on where it stopped. Only one thread runs at a time, so a run is still a function of its
   /// inputs (ADR-010 item 8). Any other native routine runs as a plain call; if it waits past the end of a
   /// run after all, the run stops there as Overran.
-  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-            NativeReturn _exit = NativeReturn::Near, NativeWait _wait = NativeWait::Never);
+  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, NativeWait _wait = NativeWait::Never);
 
   /// The native routines, and how often each was called.
   [[nodiscard]] NativeCode& Native() noexcept
@@ -314,13 +290,11 @@ private:
   void NativeMain();
   void ReachedRunLimit();
   void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer);
-  void StepPaced();
   void NoteBackwardJump();
   void NoteTurn(const Turn& _turn);
   void EndTurn();
   [[nodiscard]] StopReason Stopped() const noexcept;
 
-  TimeMode m_timeMode = TimeMode::Clocked;
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;

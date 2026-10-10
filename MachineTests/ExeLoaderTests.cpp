@@ -260,21 +260,19 @@ public:
     Machine::LoadedProgram program;
     Assert::IsTrue(pc.Load(MakeExecutable({0x90}, 0x10, 0xFFFF), desc, program) == Machine::LoadError::None);
     // Start's first instructions, then straight to the exit: mov ax,ds; push ax; xor bx,bx; push bx; retf.
-    pc.Hook(
-      program.registers.cs, program.registers.ip, "Start",
-      [](Machine::Pc& _pc)
-      {
-        Machine::Registers& regs = _pc.Processor().Regs();
-        regs.ax = regs.ds;
-        regs.bx = 0;
-        for (const std::uint16_t word : {regs.ax, regs.bx})
-        {
-          regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
-          _pc.Ram().Write16(regs.ss, regs.sp, word);
-        }
-        _pc.ReturnFar();
-      },
-      Machine::NativeContract{}, Machine::NativeReturn::Far);
+    pc.Hook(program.registers.cs, program.registers.ip, "Start",
+            [](Machine::Pc& _pc)
+            {
+              Machine::Registers& regs = _pc.Processor().Regs();
+              regs.ax = regs.ds;
+              regs.bx = 0;
+              for (const std::uint16_t word : {regs.ax, regs.bx})
+              {
+                regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+                _pc.Ram().Write16(regs.ss, regs.sp, word);
+              }
+              _pc.ReturnFar();
+            });
 
     Assert::IsTrue(pc.RunUntil(1'000) == Machine::StopReason::Terminated, L"the PSP's int 20h ends the program");
     Assert::AreEqual(0u, std::uint32_t{pc.Services().ExitCode()});
