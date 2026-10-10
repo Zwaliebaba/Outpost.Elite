@@ -4,7 +4,6 @@
 #include "DataOverlay.h"
 
 #include <initializer_list>
-#include <utility>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -21,6 +20,14 @@ constexpr std::uint16_t TOGGLE_INPUT_CURSOR = 0x7727;
 constexpr std::uint16_t PRINT_STRING_FOR_LAYOUT = 0x7750;
 constexpr std::uint8_t GRAPHICS_LAYOUT = 0;
 
+// A view angle and the text naming the view. A plain aggregate rather than std::pair, for the reason
+// EquipmentTests gives.
+struct ViewName
+{
+  std::uint16_t angle;
+  std::uint16_t text;
+};
+
 } // namespace
 
 // Constructed inputs for the text routines (plan §6.3): the views and the layout no replay shows them in.
@@ -33,7 +40,7 @@ public:
     ComparisonRig rig("UpdateMessageLine");
     Machine::Memory& ram = rig.Host().Ram();
     const std::uint16_t data = Elite::DataSegment(rig.Program());
-    const std::initializer_list<std::pair<std::uint16_t, std::uint16_t>> views = {
+    const std::initializer_list<ViewName> views = {
       {0x400, DS.rearViewText.offset}, {0x200, DS.leftViewText.offset}, {0x600, DS.rightViewText.offset}};
     for (const auto& [angle, text] : views)
     {
