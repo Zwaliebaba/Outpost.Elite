@@ -84,9 +84,6 @@ constexpr std::uint16_t MISSILE_MESSAGE_FRAMES = 0x19;
 constexpr std::uint16_t REPAIR_MESSAGE_FRAMES = 0x1E;
 constexpr std::uint8_t MISSILE_LOCKED = 2;
 
-// What else a launch can put in DL, besides MISSILE_LAUNCH and THARGON_LAUNCH.
-constexpr std::uint8_t ESCAPE_POD_LAUNCH = 0x15;
-constexpr std::uint8_t KRAIT_LAUNCH = 5;
 constexpr std::size_t MISSILE_TEMPLATE = 0; // spawnTemplates' first record
 constexpr std::uint8_t MISSILE_CLASS = 2;
 constexpr std::uint16_t MISSILE_LAUNCH_DISTANCE = 100; // the player's missile starts this far along the nose
@@ -1128,43 +1125,30 @@ std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const Objec
   {
     return std::nullopt;
   }
-  if (_kind != MISSILE_LAUNCH && _kind != ESCAPE_POD_LAUNCH && _kind != THARGON_LAUNCH && _kind != KRAIT_LAUNCH)
+  // Any other DL launches nothing (CS:536C). The original also takes 15h, an escape pod (CS:5386), and 5, a Krait (CS:53B5), which
+  // no caller passes: those branches were deleted with InitEscapePod and InitKraitHunter (D22).
+  if (_kind != MISSILE_LAUNCH && _kind != THARGON_LAUNCH)
   {
     return std::nullopt;
   }
   // A copy of the launcher in the free slot, made what _kind names, and moved clear of it.
   CopyObject(_state, _launcher.Offset(), free.slot, _backward);
   ObjectSlot ship(_state, free.slot);
-  switch (_kind)
+  if (_kind == MISSILE_LAUNCH)
   {
-  case MISSILE_LAUNCH:
     InitMissile(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
     ship.Set(SlotWord::Target, 0); // at the player
-    break;
-  case ESCAPE_POD_LAUNCH:
-    InitEscapePod(_state, ship);
-    RandomizeOrientation(_state, ship);
-    (void)ComputeVelocity(_state, ship);
-    (void)MoveObject(_state, ship);
-    (void)MoveObject(_state, ship);
-    (void)MoveObject(_state, ship);
-    break;
-  case THARGON_LAUNCH:
+  }
+  else
+  {
     InitThargon(_state, ship);
     (void)ComputeVelocity(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
     ship.Set(SlotWord::Owner, _launcher.Offset());
-    break;
-  default:
-    InitKraitHunter(_state, ship);
-    (void)ComputeVelocity(_state, ship);
-    (void)MoveObject(_state, ship);
-    (void)MoveObject(_state, ship);
-    break;
   }
   return free.slot;
 }

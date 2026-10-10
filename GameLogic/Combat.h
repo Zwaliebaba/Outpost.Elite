@@ -142,9 +142,9 @@ void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pi
 void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward);
 
 /// LaunchShipFromObject (CS:534E): a copy of _launcher (CopyObject, backwards when _backward) in a free ship slot, made what
-/// _kind names and moved clear of it: 14h a missile at the player, moved three times; 15h an escape pod, its heading random,
-/// moved three times; 7 a Thargon whose mother is _launcher, and 5 a Krait, each moved twice. Returns the slot, or nothing
-/// when no slot is free or _kind is none of these.
+/// _kind names and moved clear of it: 14h a missile at the player, moved three times, and 7 a Thargon whose mother is _launcher,
+/// moved twice. Returns the slot, or nothing when no slot is free or _kind is neither. The original's 15h, an escape pod, and 5, a
+/// Krait, which no caller passes, went with InitEscapePod and InitKraitHunter (D22).
 std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const ObjectSlot& _launcher, std::uint8_t _kind, bool _backward);
 
 /// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject, the copy backwards when

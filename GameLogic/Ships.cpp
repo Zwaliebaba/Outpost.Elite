@@ -22,7 +22,6 @@ constexpr std::size_t SHUTTLE_TEMPLATE = 7;
 constexpr std::size_t COBRA_TEMPLATE = 9; // the first of the six traders'
 constexpr std::size_t VIPER_TEMPLATE = 14;
 constexpr std::size_t HUNTER_TEMPLATES = 15;
-constexpr std::size_t KRAIT_TEMPLATE = 17;
 constexpr std::size_t WOLF_TEMPLATES = 22;
 constexpr std::size_t ASP_TEMPLATE = 23;
 constexpr std::size_t THARGOID_TEMPLATE = 27;
@@ -75,9 +74,6 @@ constexpr std::uint16_t FIRST_EVICTED_SLOT = 4; // ReclaimShipSlot evicts one of
 
 constexpr std::uint16_t SPAWN_DISTANCE = 10000;
 constexpr std::uint16_t SPAWN_SCATTER_MASK = 0x7FF; // halved and signed by its low bit: +-1023
-
-// The heading's three words, in the order RandomizeOrientation writes them.
-constexpr std::array<SlotWord, 3> ORIENTATION = {SlotWord::Pitch, SlotWord::Yaw, SlotWord::Roll};
 
 // The step of a string instruction: backwards when DF is set.
 [[nodiscard]] std::uint16_t StringStep(bool _backward, std::uint16_t _bytes) noexcept
@@ -198,19 +194,9 @@ void InitAbandonedCobra(GameState& _state, ObjectSlot _slot)
   InitFromRecord(_state, _slot, COBRA_TEMPLATE, ABANDONED_CLASS);
 }
 
-void InitEscapePod(GameState& _state, ObjectSlot _slot)
-{
-  InitFromRecord(_state, _slot, ESCAPE_POD_TEMPLATE, DRIFTER_CLASS);
-}
-
 void InitShuttle(GameState& _state, ObjectSlot _slot)
 {
   InitFromRecord(_state, _slot, SHUTTLE_TEMPLATE, DRIFTER_CLASS);
-}
-
-void InitKraitHunter(GameState& _state, ObjectSlot _slot)
-{
-  InitFromRecord(_state, _slot, KRAIT_TEMPLATE, HUNTER_CLASS);
 }
 
 void InitThargon(GameState& _state, ObjectSlot _slot)
@@ -280,14 +266,6 @@ void SpawnInvasionThargoid(GameState& _state, ObjectSlot _slot)
   _slot.Set(SlotByte::Cargo, 0);
   _slot.Set(SlotByte::Missiles, MISSION_MISSILES);
   _slot.Set(SlotByte::Thargons, INVADER_THARGONS);
-}
-
-void RandomizeOrientation(GameState& _state, ObjectSlot _slot)
-{
-  for (const SlotWord field : ORIENTATION)
-  {
-    _slot.Set(field, NextRandom(_state));
-  }
 }
 
 ReclaimedSlot ReclaimShipSlot(GameState& _state)

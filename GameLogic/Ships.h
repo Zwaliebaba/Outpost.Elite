@@ -166,14 +166,8 @@ void InitCargoBarrel(GameState& _state, ObjectSlot _slot);
 /// InitAbandonedCobra (CS:4CA6): _slot made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
 void InitAbandonedCobra(GameState& _state, ObjectSlot _slot);
 
-/// InitEscapePod (CS:4CB3): _slot made an escape pod (entry 1), class 3.
-void InitEscapePod(GameState& _state, ObjectSlot _slot);
-
 /// InitShuttle (CS:4CC0): _slot made a shuttle (entry 7), class 3.
 void InitShuttle(GameState& _state, ObjectSlot _slot);
-
-/// InitKraitHunter (CS:4CCD): _slot made a Krait (entry 17), class 6.
-void InitKraitHunter(GameState& _state, ObjectSlot _slot);
 
 /// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
 void InitThargon(GameState& _state, ObjectSlot _slot);
@@ -225,9 +219,6 @@ RandomRollFacing FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot);
 
 /// GetVectorToPlayer (CS:4EFE): the low words of _slot's position, negated.
 [[nodiscard]] Vector GetVectorToPlayer(const ObjectSlot& _slot);
-
-/// RandomizeOrientation (CS:4F35): _slot's pitch, yaw and roll, a random word each.
-void RandomizeOrientation(GameState& _state, ObjectSlot _slot);
 
 /// ComputeVelocity (CS:4F48): _slot's velocity bytes from its speed and heading: the pitch into rotation pair 7 and the yaw
 /// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
