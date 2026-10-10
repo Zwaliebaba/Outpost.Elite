@@ -89,8 +89,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CorpusTests.cpp" />
+    <ClCompile Include="DockingTests.cpp" />
+    <ClCompile Include="EquipmentTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
+    <ClCompile Include="InputTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MathsTests.cpp" />
     <ClCompile Include="pch.cpp">
@@ -98,7 +101,10 @@
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SceneTests.cpp" />
+    <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
+    <ClCompile Include="TextTests.cpp" />
+    <ClCompile Include="TimerTests.cpp" />
     <ClCompile Include="VideoTests.cpp" />
   </ItemGroup>
   <ItemGroup>

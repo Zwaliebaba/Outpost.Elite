@@ -31,6 +31,24 @@
     <Filter Include="Video">
       <UniqueIdentifier>{0C4EA93F-6C12-5283-BD50-39A6C84D4FD2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Docking">
+      <UniqueIdentifier>{027C1AA0-6DB8-59C9-A360-44B3B51C78D7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Equipment">
+      <UniqueIdentifier>{678F3192-9712-5927-AD32-64A4E6413C09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{F492B550-0A02-59D8-AE88-A18C3F4B347B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="StartUp">
+      <UniqueIdentifier>{C1408AF3-FF90-53E3-8BC0-CBD3C71A0EB6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Text">
+      <UniqueIdentifier>{BD8E5B46-DE28-51D3-90F9-DACF2F377D36}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Timer">
+      <UniqueIdentifier>{52F90B14-86F6-5D05-AE86-2E76796DD87E}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -47,11 +65,20 @@
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="DockingTests.cpp">
+      <Filter>Docking</Filter>
+    </ClCompile>
+    <ClCompile Include="EquipmentTests.cpp">
+      <Filter>Equipment</Filter>
+    </ClCompile>
     <ClCompile Include="GalaxyTests.cpp">
       <Filter>Galaxy</Filter>
     </ClCompile>
     <ClCompile Include="HyperspaceTests.cpp">
       <Filter>Hyperspace</Filter>
+    </ClCompile>
+    <ClCompile Include="InputTests.cpp">
+      <Filter>Input</Filter>
     </ClCompile>
     <ClCompile Include="MarketTests.cpp">
       <Filter>Market</Filter>
@@ -68,8 +95,17 @@
     <ClCompile Include="SceneTests.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
+    <ClCompile Include="StartUpTests.cpp">
+      <Filter>StartUp</Filter>
+    </ClCompile>
     <ClCompile Include="StateDigestTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="TextTests.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="TimerTests.cpp">
+      <Filter>Timer</Filter>
     </ClCompile>
     <ClCompile Include="VideoTests.cpp">
       <Filter>Video</Filter>
