@@ -102,3 +102,6 @@
 # normalization pass can never corrupt one.
 *.rc            -text
 *.rc2           -text
+
+# Commander files (Replays/*.cdr) are the game's own 208 bytes, loaded verbatim: never normalized.
+*.cdr           -text
