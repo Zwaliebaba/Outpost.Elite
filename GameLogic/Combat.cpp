@@ -1294,8 +1294,13 @@ ThargoidTest Routine8C51(const ObjectSlot& _slot)
 
 void UseMaskingDevice(GameState& _state)
 {
+  // SUB, then 0 written over it on a borrow: two writes (8ECF, 8ED6).
   const std::uint16_t energy = _state.Get(DS.playerEnergy);
-  _state.Set(DS.playerEnergy, energy >= MASKING_ENERGY ? static_cast<std::uint16_t>(energy - MASKING_ENERGY) : std::uint16_t{0});
+  _state.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - MASKING_ENERGY));
+  if (energy < MASKING_ENERGY)
+  {
+    _state.Set(DS.playerEnergy, 0);
+  }
   _state.Set(DS.maskingBackgroundColor, MASKING_COLOR);
   // Every ship forgets its state and that the player hit it, and calms a little: LOOP from CX = objectSlotCount.
   std::uint16_t slot = DS.shipSlots.offset;
@@ -1305,8 +1310,11 @@ void UseMaskingDevice(GameState& _state)
     ship.Set(SlotByte::State, 0);
     ship.Set(SlotByte::Flags, static_cast<std::uint8_t>(ship.Get(SlotByte::Flags) & ~FLAG_HOSTILE));
     const std::uint8_t aggression = ship.Get(SlotByte::Aggression);
-    ship.Set(SlotByte::Aggression,
-             aggression >= MASKING_CALMING ? static_cast<std::uint8_t>(aggression - MASKING_CALMING) : std::uint8_t{0});
+    ship.Set(SlotByte::Aggression, static_cast<std::uint8_t>(aggression - MASKING_CALMING));
+    if (aggression < MASKING_CALMING)
+    {
+      ship.Set(SlotByte::Aggression, 0);
+    }
     slot = Offset(slot, ObjectSlot::BYTES);
   }
 }

@@ -279,9 +279,11 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
   std::uint16_t address = _place.at;
   for (std::uint16_t line = 0; line < SMALL_GLYPH_ROWS; ++line)
   {
-    // The letter's pixels cleared from the buffer, then set in the ink.
+    // The letter's pixels cleared from the buffer, then set in the ink: AND [DI],BP and OR [DI],AX, two word
+    // writes (34C2, 34C4).
     const std::uint16_t pixels = SmallGlyphRow(_state, letter, line, _place.shift);
-    _state.SetWord(address, static_cast<std::uint16_t>((_state.Word(address) & ~pixels) | (pixels & _ink)));
+    _state.SetWord(address, static_cast<std::uint16_t>(_state.Word(address) & ~pixels));
+    _state.SetWord(address, static_cast<std::uint16_t>(_state.Word(address) | (pixels & _ink)));
     address = static_cast<std::uint16_t>(address + VIEW_ROW_BYTES);
   }
   const auto shift = static_cast<std::uint8_t>(_place.shift ^ SMALL_GLYPH_SHIFT);
