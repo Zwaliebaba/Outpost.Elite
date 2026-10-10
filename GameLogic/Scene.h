@@ -23,14 +23,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SceneEntries() noexcept;
 
-/// TransformAndDrawObjects (CS:3D25): classifies and transforms every slot, then draws the visible ones
-/// from the farthest in. Clobbers every register.
-void TransformAndDrawObjects(Guest& _guest);
-
-/// DrawSunOrPlanet (CS:3F4F): the disc of the sun or planet in slot DI, with its altitude, cabin
-/// temperature, fuel scooping and death by heat. Every register but DS clobbered.
-void DrawSunOrPlanet(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI. A string
@@ -178,6 +170,17 @@ ViewWithBlip TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector
 /// by -viewAngle through rotationSinCos[8], which it sets.
 Vector TransformToView(GameState& _state, Vector _position);
 
+/// TransformAndDrawObjects (CS:3D25): the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
+/// classified and transformed (ClassifyObject), from the slot each leaves DI on; then, from the farthest in, the visible objects
+/// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint. _backward is the direction flag;
+/// returns it as the drawing leaves it.
+bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward);
+
+/// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
+/// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc. _backward is the direction
+/// flag, which the disc and a supernova's energy bomb go by.
+void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward);
+
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
 void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward);
@@ -217,9 +220,12 @@ void RunBlueprintHandlerEntry(Guest& _guest);
 /// SI = the blueprint past its handler's bytes, BP, BX, DX the accumulator, and the slot under the return address. Out: DI = the
 /// slot, popped; DF as the faces leave it. Every other register but DS clobbered.
 void RenderBlueprintBodyEntry(Guest& _guest);
+/// Out: DF as the drawing leaves it. Every register but DS clobbered.
+void TransformAndDrawObjectsEntry(Guest& _guest);
 /// DI = the slot, AX, BX, CX the position, in and out. Out: ES = B800h once UpdateScannerBlip draws a blip; DX clobbered.
 void TransformToViewWithBlipEntry(Guest& _guest);
 void TransformToViewEntry(Guest& _guest);    ///< AX, BX, CX the position, in and out. DX clobbered.
+void DrawSunOrPlanetEntry(Guest& _guest);    ///< DI = the slot. Every register but DS clobbered.
 void DrawDistantStationEntry(Guest& _guest); ///< DI = the slot. Every register but DS clobbered.
 void LoadPlayerAnglesEntry(Guest& _guest);   ///< Out: AX, BX the roll's sine and cosine.
 void ProjectToScreenEntry(Guest& _guest);    ///< AX, BX, CX = x, y, z. Out: AX, BX the point. DX, BP clobbered.

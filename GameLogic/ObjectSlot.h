@@ -51,7 +51,7 @@ enum class SlotByte : std::uint16_t
   Missiles = 0x32,
   Class = 0x33, ///< the behaviour class, behaviorHandlers' index
   Scanned = 0x34,
-  FramesAway = 0x34,  ///< the sun's or planet's
+  FramesAway = 0x34,  ///< from Scanned's 1, the frames an object spends off the scanner: ClassifyObject removes it at the 255th
   JinkFrames = 0x35,  ///< frames to the next evasive jink
   CameraZHigh = 0x3C, ///< the high byte of the camera-frame z: bit 7 set behind
   Depth = 0x3D,       ///< the drawing order; for the sun and planet, their scale shift again
