@@ -2,6 +2,7 @@
 
 #include "Input.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -42,36 +43,6 @@ constexpr std::uint8_t STICK_BUTTON_B = 0x10;
 constexpr std::int8_t MOST_RATE = 23;             // either way
 constexpr std::uint8_t MOST_NEGATIVE_RATE = 0xE9; // -23
 constexpr std::uint8_t RATE_DECAY_STEPS = 3;
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0x00FF) | (_high << 8));
-}
-
-[[nodiscard]] std::uint16_t Pair(std::uint8_t _high, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_high << 8) | _low);
-}
-
-[[nodiscard]] std::uint8_t Negate(std::uint8_t _value) noexcept
-{
-  return static_cast<std::uint8_t>(0u - _value);
-}
 
 // SHR AL,1 of a button byte: CF is the button, AL the rest.
 void ShiftOutButton(Guest& _guest, std::uint8_t _buttons)
@@ -146,7 +117,7 @@ void ApplyKeyboardRates(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   const std::uint8_t roll = IntegrateRate(_guest, Low(regs.ax), DS.keyboardRollRate);
   const std::uint8_t pitch = IntegrateRate(_guest, High(regs.ax), DS.keyboardPitchRate);
-  regs.ax = Pair(pitch, roll);
+  regs.ax = Join(pitch, roll);
   _guest.SetWord(DS.keyboardRollRate.offset, regs.ax);
 }
 
@@ -222,7 +193,7 @@ void ReadScanCode(Guest& _guest)
         code |= SHIFT_BIT;
       }
       const std::uint8_t count = _guest.Get(DS.keyBufferCount);
-      regs.ax = Pair(count, code);
+      regs.ax = Join(count, code);
       if (count != KEY_BUFFER_CODES)
       {
         const std::uint16_t write = _guest.Get(DS.keyBufferWrite);
@@ -317,9 +288,9 @@ void GetKey(Guest& _guest)
     _guest.Set(DS.keyBufferRead, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
     _guest.Set(DS.keyBufferCount, static_cast<std::uint8_t>(count - 1));
     // ROL AX,1 then SHR AH,1: the Shift bit moves into AL's bit 0.
-    const std::uint16_t word = Pair(code, Low(regs.ax));
+    const std::uint16_t word = Join(code, Low(regs.ax));
     const auto rotated = static_cast<std::uint16_t>((word << 1) | (word >> 15));
-    regs.ax = Pair(static_cast<std::uint8_t>(High(rotated) >> 1), Low(rotated));
+    regs.ax = Join(static_cast<std::uint8_t>(High(rotated) >> 1), Low(rotated));
   }
   _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
   SaveScreenshotIfAsked(_guest);
@@ -368,7 +339,7 @@ void ReadKeyboardSteering(Guest& _guest)
   }
   RampAxis(_guest, roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
   RampAxis(_guest, pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
-  regs.ax = Pair(Negate(_guest.Get(DS.keyboardPitchRamp)), _guest.Get(DS.keyboardRollRamp));
+  regs.ax = Join(Negate(_guest.Get(DS.keyboardPitchRamp)), _guest.Get(DS.keyboardRollRamp));
 }
 
 void PollScreenDumpKey(Guest& _guest)
@@ -395,7 +366,7 @@ void ApplyReverseControls(Guest& _guest)
   }
   if (_guest.Get(DS.reverseXAndY) == 1)
   {
-    regs.ax = Pair(Negate(High(regs.ax)), Negate(Low(regs.ax)));
+    regs.ax = Join(Negate(High(regs.ax)), Negate(Low(regs.ax)));
   }
 }
 
@@ -408,7 +379,7 @@ void ApplyReverseControlsToDx(Guest& _guest)
   }
   if (_guest.Get(DS.reverseXAndY) == 1)
   {
-    regs.dx = Pair(Negate(High(regs.dx)), Negate(Low(regs.dx)));
+    regs.dx = Join(Negate(High(regs.dx)), Negate(Low(regs.dx)));
   }
 }
 

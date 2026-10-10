@@ -27,6 +27,20 @@ void DivideOverflowInterrupt(Guest& _guest);
 /// CS:_returnOffset. That instruction must not itself be a divide.
 void DivideUnsigned(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset);
 
+/// DIV r/m8 by _divisor, in native code: AX / _divisor to AL and the remainder to AH, or, when the
+/// quotient does not fit, what DivideOverflowInterrupt does for a byte divide: AL = 7Fh, AH as it was.
+/// The handler reads every byte divide in the program as one.
+void DivideByte(Guest& _guest, std::uint8_t _divisor);
+
+/// DIV r/m16 by _divisor: DX:AX / _divisor to AX and the remainder to DX, or AX = 7FFFh and DX as it
+/// was. The handler reads every word divide in the program as one but ProjectVertices' two, at
+/// CS:2369 and CS:2392, which DivideUnsigned serves.
+void DivideWord(Guest& _guest, std::uint16_t _divisor);
+
+/// IDIV r/m16 by _divisor, as the 8088 does it: the magnitudes divided, and the trap as DivideWord's
+/// when the quotient's magnitude reaches the sign bit, so that -32768 traps too.
+void DivideSignedWord(Guest& _guest, std::uint16_t _divisor);
+
 /// NextRandom (CS:061C): the lagged-Fibonacci step on randomState0-2. Out: AX.
 void NextRandom(Guest& _guest);
 

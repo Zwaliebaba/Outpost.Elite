@@ -2,6 +2,7 @@
 
 #include "Flight.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 
@@ -85,12 +86,6 @@ constexpr std::uint16_t FIND_SHIP_IN_CROSSHAIRS = 0x8A46;
 constexpr std::uint16_t FLIGHT_SCREEN_KEY_WAIT = 0x0BF3;
 constexpr std::uint16_t FROZEN_KEY_WAIT = 0x8153;
 
-// DivideOverflowInterrupt's scratch words in the code segment, and what it leaves in AL or AX.
-constexpr std::uint16_t DIVIDE_SAVED_BX_OFFSET = 0x02A1;
-constexpr std::uint16_t DIVIDE_SAVED_DS_OFFSET = 0x02A3;
-constexpr std::uint8_t DIVIDE_OVERFLOW_BYTE = 0x7F;
-constexpr std::uint16_t DIVIDE_OVERFLOW_WORD = 0x7FFF;
-
 // The stardust: 30 particles of 6 bytes, x and y words, a lifetime byte and a spare; stardustPrevious
 // follows at +0xB4 with the same layout, its lifetime copy at +0xB8 and its new-particle flag at +0xB9.
 constexpr std::uint16_t STARDUST_COUNT = 30;
@@ -143,110 +138,14 @@ constexpr std::uint8_t SCAN_F8 = 0x42;
 constexpr std::uint8_t SCAN_F9 = 0x43;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] std::uint16_t Pair(std::uint8_t _high, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_high << 8) | _low);
-}
-
-void SetLow(std::uint16_t& _word, int _byte) noexcept
-{
-  _word = Pair(High(_word), static_cast<std::uint8_t>(_byte));
-}
-
-void SetHigh(std::uint16_t& _word, int _byte) noexcept
-{
-  _word = Pair(static_cast<std::uint8_t>(_byte), Low(_word));
-}
-
 [[nodiscard]] std::uint16_t Plus(std::uint16_t _word, int _value) noexcept
 {
   return static_cast<std::uint16_t>(_word + _value);
 }
 
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _value);
-}
-
 [[nodiscard]] bool Negative(std::uint16_t _value) noexcept
 {
   return (_value & 0x8000) != 0;
-}
-
-[[nodiscard]] std::uint16_t SignExtend(std::uint8_t _byte) noexcept // CBW
-{
-  return static_cast<std::uint16_t>(static_cast<std::int16_t>(static_cast<std::int8_t>(_byte)));
-}
-
-[[nodiscard]] std::uint16_t SignOf(std::uint16_t _value) noexcept // the DX of CWD
-{
-  return Negative(_value) ? std::uint16_t{0xFFFF} : std::uint16_t{0};
-}
-
-// SAR by a count the 8088 does not mask: every bit the sign once the count reaches the width.
-[[nodiscard]] std::uint16_t Sar(std::uint16_t _value, unsigned _count) noexcept
-{
-  return static_cast<std::uint16_t>(static_cast<std::int16_t>(_value) >> (_count < 16 ? _count : 15));
-}
-
-[[nodiscard]] std::uint8_t SarByte(std::uint8_t _value, unsigned _count) noexcept
-{
-  return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> (_count < 8 ? _count : 7));
-}
-
-[[nodiscard]] bool Carry(Guest& _guest) noexcept
-{
-  return (_guest.Regs().flags & FLAG_CARRY) != 0;
-}
-
-[[nodiscard]] bool Zero(Guest& _guest) noexcept
-{
-  return (_guest.Regs().flags & FLAG_ZERO) != 0;
-}
-
-// What DivideOverflowInterrupt does before it saturates the quotient.
-void TrapDivide(Guest& _guest)
-{
-  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, _guest.Regs().bx);
-  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, _guest.Regs().ds);
-}
-
-// DIV r8: AL = AX / _divisor, AH = the remainder; on overflow the trap leaves AL = 7Fh and AH alone.
-void DivideByte(Guest& _guest, std::uint8_t _divisor)
-{
-  Registers& regs = _guest.Regs();
-  if (_divisor == 0 || regs.ax / _divisor > 0xFF)
-  {
-    TrapDivide(_guest);
-    SetLow(regs.ax, DIVIDE_OVERFLOW_BYTE);
-    return;
-  }
-  regs.ax = Pair(static_cast<std::uint8_t>(regs.ax % _divisor), static_cast<std::uint8_t>(regs.ax / _divisor));
-}
-
-// DIV r16: AX = DX:AX / _divisor, DX = the remainder; on overflow the trap leaves AX = 7FFFh and DX alone.
-void DivideWord(Guest& _guest, std::uint16_t _divisor)
-{
-  Registers& regs = _guest.Regs();
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  if (_divisor == 0 || dividend / _divisor > 0xFFFF)
-  {
-    TrapDivide(_guest);
-    regs.ax = DIVIDE_OVERFLOW_WORD;
-    return;
-  }
-  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
-  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
 }
 
 // MUL r8: AX = AL * _factor.
@@ -329,7 +228,7 @@ void DrawDust(Guest& _guest)
     return;
   }
   _guest.Call(GET_PREVIOUS_DUST_SCREEN_POSITION);
-  if (!Carry(_guest))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.Call(DRAW_LINE);
   }
@@ -363,7 +262,7 @@ void UpdateFrontStardust(Guest& _guest)
     const std::uint16_t count = regs.cx;
     LoadDustPosition(_guest);
     IsDustOnScreen(_guest);
-    if (Carry(_guest))
+    if (_guest.Flag(FLAG_CARRY))
     {
       if (_guest.Get(DS.playerSpeed) != 0)
       {
@@ -375,7 +274,7 @@ void UpdateFrontStardust(Guest& _guest)
       {
         StoreDustPosition(_guest);
         IsDustOnScreen(_guest);
-        if (Carry(_guest))
+        if (_guest.Flag(FLAG_CARRY))
         {
           break;
         }
@@ -418,7 +317,7 @@ void UpdateRearStardust(Guest& _guest)
     const std::uint16_t count = regs.cx;
     LoadDustPosition(_guest);
     IsDustOnScreen(_guest);
-    if (Carry(_guest))
+    if (_guest.Flag(FLAG_CARRY))
     {
       if (_guest.Get(DS.playerSpeed) != 0)
       {
@@ -430,7 +329,7 @@ void UpdateRearStardust(Guest& _guest)
       {
         StoreDustPosition(_guest);
         _guest.Call(IS_DUST_NEAR_CENTER);
-        if (!Carry(_guest))
+        if (!_guest.Flag(FLAG_CARRY))
         {
           const std::uint16_t lifetime = Plus(regs.si, PARTICLE_LIFETIME);
           _guest.SetByte(lifetime, static_cast<std::uint8_t>(_guest.Byte(lifetime) - 1));
@@ -461,7 +360,7 @@ void DrawSideStardust(Guest& _guest)
     const std::uint16_t particle = regs.si;
     LoadDustPosition(_guest);
     IsDustOnScreen(_guest);
-    if (Carry(_guest))
+    if (_guest.Flag(FLAG_CARRY))
     {
       DrawDust(_guest);
     }
@@ -617,10 +516,10 @@ void CheckCollision(Guest& _guest)
   regs.bx = static_cast<std::uint16_t>(regs.bx & 0x3E);
   regs.dx = _guest.Word(Plus(DS.collisionRanges.offset, regs.bx));
   _guest.Call(OBJECT_WITHIN_BOX);
-  if (!Carry(_guest))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.Call(IS_STATION);
-    if (Zero(_guest))
+    if (_guest.Flag(FLAG_ZERO))
     {
       _guest.SetByte(collided, static_cast<std::uint8_t>(_guest.Byte(collided) & 0xFE));
     }
@@ -628,7 +527,7 @@ void CheckCollision(Guest& _guest)
   }
   std::uint16_t damage = 0x5DC;
   _guest.Call(IS_STATION);
-  if (!Zero(_guest))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     damage = 0x1C2;
   }
@@ -639,7 +538,7 @@ void CheckCollision(Guest& _guest)
     {
       regs.bx = 0x64;
       _guest.Call(CHECK_DOCKING_ALIGNMENT);
-      if (Carry(_guest))
+      if (_guest.Flag(FLAG_CARRY))
       {
         // Aligned: docked, if inside the slot and the station is not the Thargoids'.
         if (_guest.Get(DS.thargoidInvasionActive) != 1)
@@ -649,7 +548,7 @@ void CheckCollision(Guest& _guest)
           regs.cx = 0;
           regs.dx = 0x5A;
           _guest.Call(VECTOR_WITHIN_BOX);
-          if (Carry(_guest) && (_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 1) == 0)
+          if (_guest.Flag(FLAG_CARRY) && (_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 1) == 0)
           {
             _guest.Set(DS.playerDocked, 1);
             _guest.Set(DS.dockingComputerOn, 0);
@@ -663,7 +562,7 @@ void CheckCollision(Guest& _guest)
       {
         regs.bx = 0xFA;
         _guest.Call(CHECK_DOCKING_ALIGNMENT);
-        if (Carry(_guest))
+        if (_guest.Flag(FLAG_CARRY))
         {
           // Nearly aligned: a scrape if inside the slot, a crash if not.
           regs.ax = _guest.Word(Plus(regs.di, SLOT_X));
@@ -672,7 +571,7 @@ void CheckCollision(Guest& _guest)
           regs.dx = 0x6E;
           _guest.Call(VECTOR_WITHIN_BOX);
           damage = 0x190;
-          if (Carry(_guest))
+          if (_guest.Flag(FLAG_CARRY))
           {
             _guest.SetByte(collided, static_cast<std::uint8_t>(_guest.Byte(collided) & 0xFE));
             damage = 0x1E;
@@ -689,7 +588,7 @@ void CheckCollision(Guest& _guest)
   if (damage != 0x5DC)
   {
     _guest.Call(IS_STATION);
-    remove = !Zero(_guest);
+    remove = !_guest.Flag(FLAG_ZERO);
   }
   if (remove)
   {
@@ -717,7 +616,7 @@ void SetWarning(Guest& _guest)
 // 0x370E, 0x371A, 0x3726): warning _check, with AL = its number. The missile check clears its alert.
 [[nodiscard]] bool WarningApplies(Guest& _guest, std::uint16_t _check)
 {
-  SetLow(_guest.Regs().ax, _check);
+  SetLow(_guest.Regs().ax, static_cast<std::uint8_t>(_check));
   switch (_check)
   {
   case 0:
@@ -743,7 +642,7 @@ void ScaleCompassAxis(Guest& _guest)
   Registers& regs = _guest.Regs();
   if (regs.cx >= regs.ax)
   {
-    regs.dx = SignOf(regs.ax);
+    regs.dx = SignWord(regs.ax);
     const std::uint32_t dividend = ((std::uint32_t{regs.dx} << 16) | regs.ax) << 3;
     regs.dx = static_cast<std::uint16_t>(dividend >> 16);
     regs.ax = static_cast<std::uint16_t>(dividend);
@@ -962,7 +861,7 @@ void HandleMissileKeys(Guest& _guest)
   if (_guest.Get(DS.missileState) == 1)
   {
     _guest.Call(FIND_SHIP_IN_CROSSHAIRS);
-    if (Carry(_guest) && (_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 0x20) == 0)
+    if (_guest.Flag(FLAG_CARRY) && (_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 0x20) == 0)
     {
       _guest.Set(DS.missileTarget, regs.di);
       _guest.Set(DS.missileState, 2);
@@ -1009,12 +908,12 @@ void HandleFireButton(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   _guest.Call(READ_FIRE_BUTTON);
-  if (!Carry(_guest))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     return;
   }
   _guest.Call(GET_VIEW_LASER);
-  if (!Carry(_guest) || _guest.Get(DS.laserTemperature) >= 0xF0)
+  if (!_guest.Flag(FLAG_CARRY) || _guest.Get(DS.laserTemperature) >= 0xF0)
   {
     return;
   }
@@ -1050,12 +949,12 @@ void HandleIdentifyKey(Guest& _guest)
     SetMessage(_guest, DS.idIndicatorMessage, 0x19);
   }
   _guest.Call(FIND_SHIP_IN_CROSSHAIRS);
-  if (!Carry(_guest))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     return;
   }
   _guest.Call(IS_STATION);
-  if (Zero(_guest))
+  if (_guest.Flag(FLAG_ZERO))
   {
     return;
   }
@@ -1205,7 +1104,7 @@ void PlaceSunPlanetAndStation(Guest& _guest)
 
   // The station, just behind: a Dodo (type 0) at tech level 9 and up, else a Coriolis (type 1).
   SetLow(regs.ax, _guest.Get(DS.currentTechLevel) >= 9 ? 0 : 1);
-  SetLow(regs.ax, (Low(regs.ax) << 1) | 1);
+  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) << 1) | 1));
   regs.di = Plus(regs.di, SLOT_BYTES);
   setByte(0, Low(regs.ax));
   regs.ax = 0x400;
@@ -1220,7 +1119,7 @@ void PlaceSunPlanetAndStation(Guest& _guest)
   setByte(2, Low(regs.dx));
   regs.ax = 0xFED4;
   setWord(SLOT_Z, regs.ax);
-  regs.dx = SignOf(regs.ax);
+  regs.dx = SignWord(regs.ax);
   setByte(3, Low(regs.dx));
   setByte(SLOT_FLAGS, 4);
   setByte(SLOT_CLASS, 1);
@@ -1342,11 +1241,11 @@ void ShiftStardustVertically(Guest& _guest)
   {
     LoadDustPosition(_guest);
     IsDustOnScreen(_guest);
-    if (Carry(_guest))
+    if (_guest.Flag(FLAG_CARRY))
     {
       regs.bx = Plus(regs.bx, regs.dx);
       IsDustOnScreen(_guest);
-      if (!Carry(_guest))
+      if (!_guest.Flag(FLAG_CARRY))
       {
         RespawnDustAtVerticalEdge(_guest);
         StorePreviousDustPosition(_guest);
@@ -1379,7 +1278,7 @@ void RespawnDustAnywhere(Guest& _guest)
   NextRandom(_guest);
   regs.bx = regs.ax;
   regs.ax = RandomDustX(regs.ax);
-  regs.bx = Sar(Pair(Low(regs.bx), High(regs.bx)), 3);
+  regs.bx = Sar(Join(Low(regs.bx), High(regs.bx)), 3);
   if (High(regs.bx) == 0x10)
   {
     SetHigh(regs.bx, 0x0F);
@@ -1432,7 +1331,7 @@ void DustToScreen(Guest& _guest)
     const auto doubled = static_cast<std::uint16_t>(_value << 1);
     const std::uint8_t high = High(doubled);
     std::uint16_t result = SignExtend(high);
-    SetLow(result, (high << 1) | ((doubled & 0x80) != 0 ? 1 : 0));
+    SetLow(result, static_cast<std::uint8_t>((high << 1) | ((doubled & 0x80) != 0 ? 1 : 0)));
     return Plus(result, _center);
   };
   const std::uint16_t x = toScreen(regs.ax, 0x80);
@@ -1531,7 +1430,7 @@ void UpdateDashboard(Guest& _guest)
   InSafeZone(_guest);
 
   // The S glyph inside the station's safe zone, and E for a frame when the ECM fires.
-  SetLow(regs.ax, Carry(_guest) ? 0x82 : 0x20);
+  SetLow(regs.ax, _guest.Flag(FLAG_CARRY) ? 0x82 : 0x20);
   regs.di = 0x1658;
   regs.bx = 0xFFFF;
   if (ExchangeShown(_guest, DS.safeZoneGlyphShown))
@@ -1772,7 +1671,7 @@ void UpdateEnergyAndLaserHeat(Guest& _guest)
     }
     else
     {
-      SetLow(regs.ax, (_guest.Get(DS.energyUnitFitted) << 1) + 1);
+      SetLow(regs.ax, static_cast<std::uint8_t>((_guest.Get(DS.energyUnitFitted) << 1) + 1));
       regs.ax = SignExtend(Low(regs.ax));
       const std::uint16_t energy = Plus(_guest.Get(DS.playerEnergy), regs.ax);
       _guest.Set(DS.playerEnergy, energy >= 0x400 ? std::uint16_t{0x3FF} : energy);
@@ -1826,7 +1725,7 @@ void DrawConditionLight(Guest& _guest)
   const auto swapped = [&](std::uint16_t _offset)
   {
     const std::uint16_t word = _guest.Word(_offset);
-    return static_cast<std::uint16_t>(Pair(Low(word), High(word)) & regs.bx);
+    return static_cast<std::uint16_t>(Join(Low(word), High(word)) & regs.bx);
   };
   do
   {
@@ -1935,14 +1834,14 @@ void UpdateSafeZone(Guest& _guest)
     return;
   }
   _guest.Call(IS_STATION);
-  if (!Zero(_guest))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     _guest.Set(DS.safeZoneFlags, 0);
     return;
   }
   _guest.Call(IS_OBJECT_NEAR);
   bool inside = false;
-  if (Carry(_guest))
+  if (_guest.Flag(FLAG_CARRY))
   {
     regs.ax = _guest.Word(Plus(regs.di, SLOT_X));
     regs.bx = _guest.Word(Plus(regs.di, SLOT_Y));
@@ -1951,7 +1850,7 @@ void UpdateSafeZone(Guest& _guest)
     inside = regs.ax < 0x32C8;
   }
   // rcl al,1: bit 0 the answer, the rest whatever AL held.
-  SetLow(regs.ax, (Low(regs.ax) << 1) | (inside ? 1 : 0));
+  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) << 1) | (inside ? 1 : 0)));
   _guest.Set(DS.safeZoneFlags, Low(regs.ax));
 }
 
@@ -2003,13 +1902,13 @@ void UpdateScannerBlip(Guest& _guest)
   regs.dx = regs.ax;
   _guest.Call(IS_STATION);
   regs.ax = regs.dx;
-  if (Zero(_guest))
+  if (_guest.Flag(FLAG_ZERO))
   {
     return;
   }
   _guest.Call(IS_SUN_OR_PLANET);
   regs.ax = regs.dx;
-  if (Zero(_guest))
+  if (_guest.Flag(FLAG_ZERO))
   {
     return;
   }
@@ -2061,7 +1960,7 @@ void UpdateCompass(Guest& _guest)
   regs.di = DS.planetSlot.offset;
   _guest.Set(DS.compassTargetIsStation, 0);
   _guest.Call(IS_OBJECT_NEAR_KEEP_BLIP);
-  if (Carry(_guest))
+  if (_guest.Flag(FLAG_CARRY))
   {
     regs.di = Plus(regs.di, SLOT_BYTES);
     _guest.Set(DS.compassTargetIsStation, 1);
@@ -2182,8 +2081,8 @@ void XorCompassDot(Guest& _guest)
   }
   for (const DotStep step : COMPASS_RING)
   {
-    SetLow(regs.dx, Low(regs.dx) + step.x);
-    SetHigh(regs.dx, High(regs.dx) + step.y);
+    SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) + step.x));
+    SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + step.y));
     XorDashboardPixel(_guest);
   }
   regs.di = slot;
@@ -2195,7 +2094,7 @@ void EraseScannerBlip(Guest& _guest)
   const std::uint16_t saved = regs.ax;
   _guest.Call(IS_STATION);
   regs.ax = saved;
-  if (Zero(_guest))
+  if (_guest.Flag(FLAG_ZERO))
   {
     return;
   }
@@ -2216,8 +2115,8 @@ void EraseScannerBlip(Guest& _guest)
 void XorScannerBlip(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  SetHigh(regs.bx, SarByte(High(regs.bx), 2));
-  SetHigh(regs.cx, SarByte(High(regs.cx), 2));
+  SetHigh(regs.bx, Sar(High(regs.bx), 2));
+  SetHigh(regs.cx, Sar(High(regs.cx), 2));
   SetLow(regs.dx, High(regs.ax) + 0x3D);
   SetHigh(regs.dx, 0x1F - High(regs.cx));
   // A stick of |y| pixels from the dot, then one more to the right at its end.
@@ -2226,7 +2125,7 @@ void XorScannerBlip(Guest& _guest)
   if ((Low(regs.cx) & 0x80) != 0)
   {
     SetLow(regs.cx, -Low(regs.cx));
-    SetHigh(regs.cx, -1);
+    SetHigh(regs.cx, 0xFF);
   }
   for (;;)
   {
@@ -2529,13 +2428,13 @@ void MoveObjectsByVelocity(Guest& _guest)
   do
   {
     regs.ax = _guest.Get(DS.playerVelocityX);
-    regs.dx = SignOf(regs.ax);
+    regs.dx = SignWord(regs.ax);
     SubtractVelocity(_guest, SLOT_X, 1, SLOT_VIEW_X);
     regs.ax = _guest.Get(DS.playerVelocityY);
-    regs.dx = SignOf(regs.ax);
+    regs.dx = SignWord(regs.ax);
     SubtractVelocity(_guest, SLOT_Y, 2, SLOT_VIEW_Y);
     regs.ax = _guest.Get(DS.playerVelocityZ);
-    regs.dx = SignOf(regs.ax);
+    regs.dx = SignWord(regs.ax);
     SubtractVelocity(_guest, SLOT_Z, 3, SLOT_VIEW_Z);
     regs.si = Plus(regs.si, SLOT_BYTES);
   } while (--regs.cx != 0);

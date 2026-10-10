@@ -2,6 +2,7 @@
 
 #include "Scene.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 
@@ -122,11 +123,6 @@ constexpr std::uint8_t FRINGE_LARGE = 7;
 constexpr std::uint8_t SCOOP_FUEL = 6;
 constexpr std::uint16_t SCOOP_MESSAGE_FRAMES = 5;
 
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _value);
-}
-
 [[nodiscard]] bool Negative(std::uint16_t _value) noexcept
 {
   return (_value & 0x8000) != 0;
@@ -136,31 +132,6 @@ constexpr std::uint16_t SCOOP_MESSAGE_FRAMES = 5;
 [[nodiscard]] std::uint16_t Magnitude(std::uint16_t _value) noexcept
 {
   return Negative(_value) ? Negate(_value) : _value;
-}
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _register) noexcept
-{
-  return static_cast<std::uint8_t>(_register);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _register) noexcept
-{
-  return static_cast<std::uint8_t>(_register >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _register, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_register & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _register, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_register & 0x00FF) | (_high << 8));
-}
-
-[[nodiscard]] std::uint16_t Offset(std::uint16_t _base, std::uint16_t _bytes) noexcept
-{
-  return static_cast<std::uint16_t>(_base + _bytes);
 }
 
 // LOOP: decrements the counter, and says whether to go round again.

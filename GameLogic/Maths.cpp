@@ -2,6 +2,7 @@
 
 #include "Maths.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 #include <utility>
@@ -60,11 +61,6 @@ constexpr std::uint16_t SCALE_LIMIT = 0xFF;
   return static_cast<std::uint16_t>((doubled >> 16) + ((doubled >> 15) & 1));
 }
 
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _value);
-}
-
 [[nodiscard]] std::uint16_t SignExtendAngle(std::uint16_t _angle) noexcept
 {
   const auto angle = static_cast<std::uint16_t>(_angle & ANGLE_MASK);
@@ -84,31 +80,6 @@ constexpr std::uint16_t SCALE_LIMIT = 0xFF;
   return static_cast<std::uint32_t>(value * value);
 }
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _register) noexcept
-{
-  return static_cast<std::uint8_t>(_register);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _register) noexcept
-{
-  return static_cast<std::uint8_t>(_register >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _register, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_register & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _register, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_register & 0x00FF) | (_high << 8));
-}
-
-[[nodiscard]] std::uint16_t Offset(std::uint16_t _base, std::uint16_t _bytes) noexcept
-{
-  return static_cast<std::uint16_t>(_base + _bytes);
-}
-
 // The magnitude of a 24-bit coordinate with its high byte at DS:_high and low word at DS:_low: not,
 // not, add 1, adc 0, so that 800000h stays 800000h.
 [[nodiscard]] std::uint32_t Magnitude24(const Guest& _guest, std::uint16_t _high, std::uint16_t _low) noexcept
@@ -117,13 +88,20 @@ constexpr std::uint16_t SCALE_LIMIT = 0xFF;
   return (value & SIGN_24_BITS) != 0 ? (0u - value) & MASK_24_BITS : value;
 }
 
+// What DivideOverflowInterrupt does first, whatever the divide: BX and DS kept in the code segment.
+void SaveDivideRegisters(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
+  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
+}
+
 // DivideOverflowInterrupt from its saves to its IRET, for a divide whose return address is
 // _segment:_offset. Returns the offset it resumes at.
 std::uint16_t TrapDivideOverflow(Guest& _guest, std::uint16_t _segment, std::uint16_t _offset)
 {
   Machine::Registers& regs = _guest.Regs();
-  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
+  SaveDivideRegisters(_guest);
   std::uint16_t resume = _offset;
   if ((_guest.FarWord(_segment, _offset) & DIVIDE_OPCODE_MASK) == DIVIDE_OPCODE)
   {
@@ -154,6 +132,53 @@ void DivideUnsigned(Guest& _guest, std::uint16_t _divisor, std::uint16_t _return
   }
   regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
   regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
+}
+
+void DivideByte(Guest& _guest, std::uint8_t _divisor)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (High(regs.ax) >= _divisor)
+  {
+    SaveDivideRegisters(_guest);
+    SetLow(regs.ax, DIVIDE_OVERFLOW_BYTE);
+    return;
+  }
+  const std::uint16_t dividend = regs.ax;
+  regs.ax = Join(static_cast<std::uint8_t>(dividend % _divisor), static_cast<std::uint8_t>(dividend / _divisor));
+}
+
+void DivideWord(Guest& _guest, std::uint16_t _divisor)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (regs.dx >= _divisor)
+  {
+    SaveDivideRegisters(_guest);
+    regs.ax = DIVIDE_OVERFLOW_WORD;
+    return;
+  }
+  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
+  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
+  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
+}
+
+void DivideSignedWord(Guest& _guest, std::uint16_t _divisor)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
+  const bool dividendNegative = (dividend & 0x80000000u) != 0;
+  const bool divisorNegative = SignWord(_divisor) != 0;
+  const std::uint32_t dividendMagnitude = dividendNegative ? 0u - dividend : dividend;
+  const std::uint32_t divisorMagnitude = divisorNegative ? 0x10000u - _divisor : _divisor;
+  const std::uint32_t quotient = (dividendMagnitude >> 16) >= divisorMagnitude ? 0x8000u : dividendMagnitude / divisorMagnitude;
+  if ((quotient & 0x8000u) != 0)
+  {
+    SaveDivideRegisters(_guest);
+    regs.ax = DIVIDE_OVERFLOW_WORD;
+    return;
+  }
+  const std::uint32_t remainder = dividendMagnitude % divisorMagnitude;
+  regs.ax = static_cast<std::uint16_t>(dividendNegative != divisorNegative ? 0u - quotient : quotient);
+  regs.dx = static_cast<std::uint16_t>(dividendNegative ? 0u - remainder : remainder);
 }
 
 void NextRandom(Guest& _guest)

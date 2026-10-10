@@ -2,6 +2,7 @@
 
 #include "Ai.h"
 
+#include "Arithmetic.h"
 #include "Combat.h"
 #include "DataOverlay.h"
 #include "Maths.h"
@@ -105,36 +106,6 @@ constexpr std::uint8_t STATE_CLOSING = 4;
   return static_cast<std::uint16_t>(_slot + _field);
 }
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word & 0xFF);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = static_cast<std::uint16_t>((_word & 0xFF00) | _value);
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = static_cast<std::uint16_t>((_word & 0x00FF) | (_value << 8));
-}
-
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _value);
-}
-
-[[nodiscard]] bool FlagSet(Guest& _guest, std::uint16_t _flag) noexcept
-{
-  return (_guest.Regs().flags & _flag) != 0;
-}
-
 void AddWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value) noexcept
 {
   _guest.SetWord(_offset, static_cast<std::uint16_t>(_guest.Word(_offset) + _value));
@@ -155,7 +126,7 @@ void SetState(Guest& _guest, std::uint8_t _state) noexcept
 {
   _guest.Regs().dx = _halfSize;
   _guest.Call(OBJECT_WITHIN_BOX);
-  return FlagSet(_guest, FLAG_CARRY);
+  return _guest.Flag(FLAG_CARRY);
 }
 
 // ObjectWithinBox with DH = the slot's range byte, DL as it is.
@@ -164,7 +135,7 @@ void SetState(Guest& _guest, std::uint8_t _state) noexcept
   Machine::Registers& regs = _guest.Regs();
   SetHigh(regs.dx, _guest.Byte(At(regs.di, SLOT_RANGE)));
   _guest.Call(OBJECT_WITHIN_BOX);
-  return FlagSet(_guest, FLAG_CARRY);
+  return _guest.Flag(FLAG_CARRY);
 }
 
 // ConvertVectorToAngles on AX, BX, CX, then TurnTowardAngles.
@@ -198,7 +169,7 @@ void TurnToVector(Guest& _guest)
 [[nodiscard]] bool TakeFreeShipSlot(Guest& _guest)
 {
   FindFreeShipSlot(_guest);
-  if (!FlagSet(_guest, FLAG_CARRY))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     return false;
   }
@@ -331,7 +302,7 @@ void SpawnMaskMissionShips(Guest& _guest)
     return;
   }
   _guest.Call(IS_MASK_SHIP_PRESENT);
-  if (FlagSet(_guest, FLAG_CARRY) || _guest.Get(DS.maskShipDestroyed) == 1)
+  if (_guest.Flag(FLAG_CARRY) || _guest.Get(DS.maskShipDestroyed) == 1)
   {
     return;
   }
@@ -343,7 +314,7 @@ void SpawnMaskMissionShips(Guest& _guest)
 void SpawnInvasionWave(Guest& _guest)
 {
   _guest.Call(IN_SAFE_ZONE);
-  if (!FlagSet(_guest, FLAG_CARRY) || _guest.Get(DS.wolfCount) >= MOST_INVADERS)
+  if (!_guest.Flag(FLAG_CARRY) || _guest.Get(DS.wolfCount) >= MOST_INVADERS)
   {
     return;
   }
@@ -358,7 +329,7 @@ void LaunchAtOffender(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   IsObjectNear(_guest);
-  if (!FlagSet(_guest, FLAG_CARRY) || WithinBox(_guest, STATION_GUARD_BOX))
+  if (!_guest.Flag(FLAG_CARRY) || WithinBox(_guest, STATION_GUARD_BOX))
   {
     return;
   }
@@ -373,7 +344,7 @@ void LaunchAtOffender(Guest& _guest)
     return;
   }
   FindFreeShipSlot(_guest);
-  if (!FlagSet(_guest, FLAG_CARRY))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     return;
   }
@@ -437,11 +408,11 @@ void CheckMissilesAtStation(Guest& _guest)
           std::swap(regs.di, regs.bx);
           IsPoliceViper(_guest);
           std::swap(regs.di, regs.bx);
-          if (FlagSet(_guest, FLAG_ZERO))
+          if (_guest.Flag(FLAG_ZERO))
           {
             _guest.Call(IN_SAFE_ZONE);
             SetLow(regs.ax, POLICE_MISSILE_CRIME);
-            if (FlagSet(_guest, FLAG_CARRY))
+            if (_guest.Flag(FLAG_CARRY))
             {
               crime = true;
               break;
@@ -494,7 +465,7 @@ void WolfTurnAway(Guest& _guest)
   {
     // A Thargon goes back to its run only while its mother is a Thargoid with a blip.
     IsThargonType(_guest);
-    if (FlagSet(_guest, FLAG_ZERO))
+    if (_guest.Flag(FLAG_ZERO))
     {
       regs.si = _guest.Word(At(regs.di, SLOT_OWNER));
       if (regs.si != 0)
@@ -510,7 +481,7 @@ void WolfTurnAway(Guest& _guest)
     _guest.SetByte(At(regs.di, SLOT_FLAGS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_FLAGS)) & ~FLAG_HOSTILE));
     SetState(_guest, STATE_ATTACK);
     IsThargonType(_guest);
-    if (FlagSet(_guest, FLAG_ZERO))
+    if (_guest.Flag(FLAG_ZERO))
     {
       SetState(_guest, THARGON_ADRIFT);
     }
@@ -622,7 +593,7 @@ void UpdateObjectsAndSpawn(Guest& _guest)
   // REP STOSB of AL = 0 over activeObjectCount and behaviorClassCounts.
   regs.di = DS.activeObjectCount.offset;
   SetLow(regs.ax, 0);
-  const std::uint16_t step = FlagSet(_guest, FLAG_DIRECTION) ? std::uint16_t{0xFFFF} : std::uint16_t{1};
+  const std::uint16_t step = _guest.Flag(FLAG_DIRECTION) ? std::uint16_t{0xFFFF} : std::uint16_t{1};
   for (regs.cx = CLASS_COUNTS_CLEARED; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
   {
     _guest.SetFarByte(regs.es, regs.di, 0);
@@ -763,7 +734,7 @@ void UpdateDriftingObjectAi(Guest& _guest)
 {
   MoveObject(_guest);
   IsDebrisType(_guest);
-  if (!FlagSet(_guest, FLAG_ZERO))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     return;
   }
@@ -782,7 +753,7 @@ void UpdateWolfAi(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   IsThargoidType(_guest);
-  bool spins = FlagSet(_guest, FLAG_ZERO);
+  bool spins = _guest.Flag(FLAG_ZERO);
   if (spins)
   {
     NextRandom(_guest);
@@ -794,7 +765,7 @@ void UpdateWolfAi(Guest& _guest)
   else
   {
     IsThargonType(_guest);
-    spins = FlagSet(_guest, FLAG_ZERO);
+    spins = _guest.Flag(FLAG_ZERO);
   }
   if (spins)
   {
@@ -885,7 +856,7 @@ void UpdateHunterAi(Guest& _guest)
     regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
     regs.dx = FORMATION_BOX;
     _guest.Call(GET_VECTOR_TO_OBJECT);
-    if (FlagSet(_guest, FLAG_CARRY))
+    if (_guest.Flag(FLAG_CARRY))
     {
       SetState(_guest, STATE_CLOSING);
       MoveObject(_guest);
@@ -925,7 +896,7 @@ void CheckSafeZoneHoldFire(Guest& _guest)
     return;
   }
   IsPoliceViper(_guest);
-  if (FlagSet(_guest, FLAG_ZERO))
+  if (_guest.Flag(FLAG_ZERO))
   {
     _guest.SetFlag(FLAG_CARRY, false);
     return;

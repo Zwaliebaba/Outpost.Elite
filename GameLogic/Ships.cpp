@@ -2,6 +2,7 @@
 
 #include "Ships.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 
@@ -62,53 +63,10 @@ constexpr std::array<std::uint8_t, 1> THARGON = {TYPE_THARGON};
   return static_cast<std::uint16_t>(_slot + _field);
 }
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word & 0xFF);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = static_cast<std::uint16_t>((_word & 0xFF00) | _value);
-}
-
-// CBW.
-[[nodiscard]] std::uint16_t SignExtend(std::uint8_t _byte) noexcept
-{
-  return static_cast<std::uint16_t>(static_cast<std::int16_t>(static_cast<std::int8_t>(_byte)));
-}
-
-// CWD: the DX that sign-extends _word.
-[[nodiscard]] std::uint16_t SignWord(std::uint16_t _word) noexcept
-{
-  return (_word & 0x8000) != 0 ? std::uint16_t{0xFFFF} : std::uint16_t{0};
-}
-
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _value);
-}
-
-[[nodiscard]] bool FlagSet(Guest& _guest, std::uint16_t _flag) noexcept
-{
-  return (_guest.Regs().flags & _flag) != 0;
-}
-
-// What LOOP runs on CX: a count of 0 goes round 65536 times.
-[[nodiscard]] std::uint32_t LoopCount(std::uint16_t _count) noexcept
-{
-  return _count == 0 ? 0x10000u : _count;
-}
-
 // The step of a string instruction: backwards when DF is set.
 [[nodiscard]] std::uint16_t StringStep(Guest& _guest, std::uint16_t _bytes) noexcept
 {
-  return FlagSet(_guest, FLAG_DIRECTION) ? Negate(_bytes) : _bytes;
+  return _guest.Flag(FLAG_DIRECTION) ? Negate(_bytes) : _bytes;
 }
 
 // The flags CMP _a,_b leaves, byte-sized or word-sized: what the type tests return.
@@ -270,7 +228,7 @@ void SpawnRandomWolf(Guest& _guest)
   _guest.SetByte(At(regs.di, SLOT_AGGRESSION), aggression);
   ComputeVelocity(_guest);
   IsThargoidType(_guest);
-  if (!FlagSet(_guest, FLAG_ZERO))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     return;
   }
@@ -386,7 +344,7 @@ void MoveObject(Guest& _guest)
     _guest.SetByte(high, static_cast<std::uint8_t>(_guest.Byte(high) + Low(regs.dx) + (sum >> 16)));
   }
   IsObjectNear(_guest);
-  if (!FlagSet(_guest, FLAG_CARRY))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     RemoveObject(_guest);
   }
@@ -520,7 +478,7 @@ void IsViperType(Guest& _guest)
 void IsPoliceViper(Guest& _guest)
 {
   IsViperType(_guest);
-  if (!FlagSet(_guest, FLAG_ZERO))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     return;
   }

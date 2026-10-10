@@ -2,6 +2,7 @@
 
 #include "Docked.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Text.h"
 
@@ -38,16 +39,6 @@ constexpr std::uint16_t FRAME_RIGHT_SIDE = 0x4E; // column 39
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint16_t FRAME_CORNERS = 6;
 constexpr std::uint16_t FRAME_CORNER_BYTES = 3; // the cell's offset, then the character
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
 
 } // namespace
 

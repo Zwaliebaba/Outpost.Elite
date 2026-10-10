@@ -2,6 +2,7 @@
 
 #include "StartUp.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Input.h"
 #include "Maths.h"
@@ -43,21 +44,6 @@ constexpr std::uint16_t NEW_GAME_ENERGY = 0x3FF;
 constexpr std::uint8_t FULL_SHIELD = 0xFF;
 constexpr std::uint8_t NEW_GAME_CABIN_TEMPERATURE = 0x0C;
 constexpr std::uint8_t NEW_GAME_ALTITUDE = 0xFF;
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0x00FF) | (_high << 8));
-}
 
 // REP MOVSB from DS:SI to ES:DI, forwards or, with DF set, backwards.
 void MoveBytes(Guest& _guest)

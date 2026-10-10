@@ -2,6 +2,7 @@
 
 #include "Timer.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -56,26 +57,6 @@ constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 
 constexpr std::uint16_t DECODED_ANSWER = 0xA5B7; // a length byte and the decoded answer, past dockingKeyReleased
 constexpr std::uint8_t ANSWER_KEY = 0x61;
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0x00FF) | (_high << 8));
-}
 
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
 std::uint8_t Decrement(Guest& _guest, DataField<std::uint8_t> _field)

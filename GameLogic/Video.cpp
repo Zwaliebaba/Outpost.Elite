@@ -2,7 +2,9 @@
 
 #include "Video.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Maths.h"
 
 #include <utility>
 
@@ -36,12 +38,6 @@ constexpr std::uint8_t BIOS_VIDEO = 0x10;
 constexpr std::uint16_t CRTC_INDEX_PORT = 0x3D4;
 constexpr std::uint16_t CGA_MODE_PORT = 0x3D8;
 constexpr std::uint16_t CGA_COLOR_PORT = 0x3D9;
-
-// DivideOverflowInterrupt's scratch words in the code segment, and what it leaves in AX after a word
-// divide overflows (see Maths.cpp).
-constexpr std::uint16_t DIVIDE_SAVED_BX_OFFSET = 0x02A1;
-constexpr std::uint16_t DIVIDE_SAVED_DS_OFFSET = 0x02A3;
-constexpr std::uint16_t DIVIDE_OVERFLOW_WORD = 0x7FFF;
 
 // triangleStepOpcodes (CS:1CF3), after FillTriangle's RET: SUB AX,SI; SUB BX,DI; ADD AX,SI; ADD BX,DI.
 constexpr std::uint16_t SUB_AX_SI = 0x1CF3;
@@ -81,35 +77,10 @@ constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte
 constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
 
-[[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] constexpr std::uint16_t Pair(std::uint8_t _high, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_high << 8) | _low);
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = Pair(High(_word), _value);
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = Pair(_value, Low(_word));
-}
-
 // XCHG AH,AL.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
 {
-  return Pair(Low(_word), High(_word));
+  return Join(Low(_word), High(_word));
 }
 
 [[nodiscard]] constexpr bool Negative(std::uint16_t _word) noexcept
@@ -132,11 +103,6 @@ void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
   return static_cast<std::int8_t>(_byte);
 }
 
-[[nodiscard]] constexpr std::uint16_t Negate(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _word);
-}
-
 [[nodiscard]] constexpr std::uint8_t Negate8(std::uint8_t _byte) noexcept
 {
   return static_cast<std::uint8_t>(0u - _byte);
@@ -157,7 +123,7 @@ void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
 [[nodiscard]] std::uint16_t ColorFillByteOffset(std::uint8_t _color) noexcept
 {
   const std::uint16_t table = DS.colorFillBytes.offset;
-  return Pair(High(table), static_cast<std::uint8_t>(Low(table) + _color));
+  return Join(High(table), static_cast<std::uint8_t>(Low(table) + _color));
 }
 
 // AND [_offset],_keep / OR [_offset],_color.
@@ -212,56 +178,6 @@ void RepeatMoveWords(Guest& _guest, std::uint16_t _sourceSegment)
     regs.si = static_cast<std::uint16_t>(regs.si + step);
     regs.di = static_cast<std::uint16_t>(regs.di + step);
   }
-}
-
-// DivideOverflowInterrupt (CS:025E) after a word divide: BX and DS saved in the code segment, AX the
-// positive maximum, DX as it was.
-void DivideTrap(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
-  regs.ax = DIVIDE_OVERFLOW_WORD;
-}
-
-// DIV _divisor: DX:AX divided, through the trap when the quotient does not fit.
-void Divide(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  if (regs.dx >= _divisor)
-  {
-    DivideTrap(_guest);
-    return;
-  }
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
-  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
-}
-
-// IDIV _divisor, as the 8088 does it: magnitudes divided, and a trap when the quotient's magnitude
-// reaches the sign bit, so that -32768 traps too.
-void SignedDivide(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  const bool dividendNegative = (dividend & 0x80000000u) != 0;
-  const bool divisorNegative = Negative(_divisor);
-  const std::uint32_t dividendMagnitude = dividendNegative ? 0u - dividend : dividend;
-  const std::uint32_t divisorMagnitude = divisorNegative ? 0x10000u - _divisor : _divisor;
-  if ((dividendMagnitude >> 16) >= divisorMagnitude)
-  {
-    DivideTrap(_guest);
-    return;
-  }
-  const std::uint32_t quotient = dividendMagnitude / divisorMagnitude;
-  if ((quotient & 0x8000u) != 0)
-  {
-    DivideTrap(_guest);
-    return;
-  }
-  const std::uint32_t remainder = dividendMagnitude % divisorMagnitude;
-  regs.ax = static_cast<std::uint16_t>(dividendNegative != divisorNegative ? 0u - quotient : quotient);
-  regs.dx = static_cast<std::uint16_t>(dividendNegative ? 0u - remainder : remainder);
 }
 
 // CWD.
@@ -485,7 +401,7 @@ void MoveEndpointToEdge(Guest& _guest)
   const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(regs.ax)} * Signed(regs.dx));
   regs.ax = static_cast<std::uint16_t>(product);
   regs.dx = static_cast<std::uint16_t>(product >> 16);
-  SignedDivide(_guest, regs.cx);
+  DivideSignedWord(_guest, regs.cx);
   regs.ax = static_cast<std::uint16_t>(regs.ax + regs.bx);
   regs.cx = 0;
   regs.dx = regs.si;
@@ -670,7 +586,7 @@ void DrawSmallDisc(Guest& _guest)
   do
   {
     const std::uint16_t rows = regs.cx;
-    regs.ax = Pair(_guest.Byte(regs.bx), 0);
+    regs.ax = Join(_guest.Byte(regs.bx), 0);
     ++regs.bx;
     SetLow(regs.cx, Low(regs.dx));
     regs.ax = static_cast<std::uint16_t>(regs.ax >> Low(regs.cx));
@@ -696,7 +612,7 @@ void DrawSmallDisc(Guest& _guest)
       {
         // Both bytes, as a word: the sprite's left byte at DI.
         const std::uint16_t sprite = SwapBytes(regs.ax);
-        regs.ax = static_cast<std::uint16_t>(sprite & Pair(fill, fill));
+        regs.ax = static_cast<std::uint16_t>(sprite & Join(fill, fill));
         _guest.SetWord(regs.di, static_cast<std::uint16_t>((_guest.Word(regs.di) & ~sprite) | regs.ax));
       }
     }
@@ -754,7 +670,7 @@ void DrawStackedSpans(Guest& _guest)
   {
     std::swap(left, right);
   }
-  return Pair(right, left);
+  return Join(right, left);
 }
 
 // ADD AX,SI or SUB AX,SI: an 8.8 edge stepped by its slope.
@@ -786,7 +702,7 @@ void EdgeSlope(Guest& _guest)
   SetHigh(regs.ax, 0);
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
-  Divide(_guest, regs.cx);
+  DivideWord(_guest, regs.cx);
 }
 
 // FillFlatBottomTriangle (CS:1C62): A on top, B and C on the bottom row.
@@ -820,8 +736,8 @@ void FillFlatBottomTriangle(Guest& _guest)
   }
   EdgeSlope(_guest);
   regs.di = regs.ax;
-  regs.ax = Pair(_guest.Get(DS.triangleEdgeStartX), 0);
-  regs.bx = Pair(_guest.Get(DS.triangleEdgeStartX2), 0);
+  regs.ax = Join(_guest.Get(DS.triangleEdgeStartX), 0);
+  regs.bx = Join(_guest.Get(DS.triangleEdgeStartX2), 0);
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
   regs.bp = regs.cx;
   TraceTwoEdges(_guest, subtractA, subtractB);
@@ -857,10 +773,10 @@ void FillFlatTopTriangle(Guest& _guest)
   }
   SetLow(regs.ax, 0);
   regs.dx = 0;
-  Divide(_guest, regs.cx);
+  DivideWord(_guest, regs.cx);
   regs.di = regs.ax;
-  regs.ax = Pair(_guest.Get(DS.triangleEdgeStartX2), 0);
-  regs.bx = Pair(_guest.Get(DS.triangleEdgeStartX), 0);
+  regs.ax = Join(_guest.Get(DS.triangleEdgeStartX2), 0);
+  regs.bx = Join(_guest.Get(DS.triangleEdgeStartX), 0);
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
   regs.bp = regs.cx;
   TraceTwoEdges(_guest, subtractA, subtractB);
@@ -894,7 +810,7 @@ void FillOneRowTriangle(Guest& _guest)
   {
     std::swap(dl, dh);
   }
-  regs.dx = Pair(dh, dl);
+  regs.dx = Join(dh, dl);
   _guest.Push(regs.dx);
   regs.cx = 1;
   DrawStackedSpans(_guest);
@@ -947,9 +863,9 @@ void FillGeneralTriangle(Guest& _guest)
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
   SetLow(regs.cx, _guest.Get(DS.triangleUpperRows));
-  Divide(_guest, regs.cx);
+  DivideWord(_guest, regs.cx);
   regs.di = regs.ax;
-  regs.ax = Pair(_guest.Get(DS.triangleEdgeStartX), 0);
+  regs.ax = Join(_guest.Get(DS.triangleEdgeStartX), 0);
   regs.bx = regs.ax;
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
   // TraceUpperEdges (CS:1E15): rows A to B inclusive.
@@ -974,7 +890,7 @@ void FillGeneralTriangle(Guest& _guest)
   }
   EdgeSlope(_guest);
   regs.di = regs.ax;
-  regs.bx = Pair(_guest.Get(DS.triangleMiddleX), 0);
+  regs.bx = Join(_guest.Get(DS.triangleMiddleX), 0);
   regs.ax = longEdge;
   do
   {
@@ -992,7 +908,7 @@ void FillOnScreenTriangle(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   // AL, AH = A's x and row; BL, BH = B's; CL, CH = C's.
-  regs.ax = Pair(Low(regs.dx), Low(regs.si));
+  regs.ax = Join(Low(regs.dx), Low(regs.si));
   regs.dx = regs.bp;
   SetHigh(regs.bx, Low(regs.dx));
   regs.dx = regs.di;
@@ -1092,10 +1008,10 @@ void ClippedSlope(Guest& _guest, std::uint16_t _rows, DataField<std::uint16_t> _
 {
   Machine::Registers& regs = _guest.Regs();
   regs.dx = 0;
-  Divide(_guest, _rows);
+  DivideWord(_guest, _rows);
   _guest.Set(_whole, regs.ax);
   regs.ax = 0;
-  Divide(_guest, _rows);
+  DivideWord(_guest, _rows);
   _guest.Set(_fraction, regs.ax);
 }
 
@@ -1129,7 +1045,7 @@ void PushClippedSpan(Guest& _guest)
     right = High(regs.ax) != 0 ? std::uint8_t{0xFF} : Low(regs.ax);
     left = High(regs.bx) != 0 ? std::uint8_t{0} : Low(regs.bx);
   }
-  regs.dx = Pair(right, left);
+  regs.dx = Join(right, left);
   _guest.Push(regs.dx);
 }
 
@@ -1287,7 +1203,7 @@ void FillClippedOneRow(Guest& _guest)
   {
     right = 0xFF;
   }
-  regs.dx = Pair(right, left);
+  regs.dx = Join(right, left);
   _guest.Push(regs.dx);
   regs.cx = 1;
   DrawStackedSpans(_guest);
@@ -1512,7 +1428,7 @@ void PlotPixel(Guest& _guest)
   regs.bx = ColorFillByteOffset(_guest.Get(DS.drawColor));
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((Low(regs.dx) & 3) << 1));
   const auto color = static_cast<std::uint8_t>(pixel & _guest.Byte(regs.bx));
-  regs.cx = Pair(color, static_cast<std::uint8_t>(~pixel));
+  regs.cx = Join(color, static_cast<std::uint8_t>(~pixel));
   regs.bx = static_cast<std::uint16_t>(regs.dx >> 2);
   Plot(_guest, regs.bx, Low(regs.cx), color);
 }
@@ -1671,7 +1587,7 @@ void DrawLine(Guest& _guest)
     line.bp = Negate(line.bp);
   }
   line.bh = line.al;
-  line.di = static_cast<std::uint16_t>(Pair(dh, dl) >> 2);
+  line.di = static_cast<std::uint16_t>(Join(dh, dl) >> 2);
   line.al = _guest.Byte(ColorFillByteOffset(_guest.Get(DS.drawColor)));
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
@@ -1702,10 +1618,10 @@ void DrawLine(Guest& _guest)
   {
     DrawDiagonalLine(_guest, line);
   }
-  regs.ax = Pair(line.ah, line.al);
-  regs.bx = Pair(line.bh, line.bl);
+  regs.ax = Join(line.ah, line.al);
+  regs.bx = Join(line.bh, line.bl);
   regs.cx = line.cx;
-  regs.dx = Pair(line.dh, line.dl);
+  regs.dx = Join(line.dh, line.dl);
   regs.di = line.di;
   regs.bp = line.bp;
 }
@@ -1738,7 +1654,7 @@ void DrawDisc(Guest& _guest)
   }
   else
   {
-    Divide(_guest, regs.bx);
+    DivideWord(_guest, regs.bx);
   }
   regs.ax = SwapBytes(regs.ax);
   _guest.Set(DS.discProfileStepFraction, regs.ax);
@@ -1790,7 +1706,7 @@ void FillSpan(Guest& _guest)
   if (bytes == 0)
   {
     // One byte holds the whole span: both masks at once.
-    regs.di = static_cast<std::uint16_t>(Pair(row, leftX) >> 2);
+    regs.di = static_cast<std::uint16_t>(Join(row, leftX) >> 2);
     Plot(_guest, regs.di, static_cast<std::uint8_t>(High(rightMask) | High(leftMask)),
          static_cast<std::uint8_t>(Low(rightMask) & Low(leftMask) & fill));
   }
@@ -1808,7 +1724,7 @@ void FillSpan(Guest& _guest)
       {
         StoreByte(_guest, fill);
       }
-      RepeatStoreWords(_guest, Pair(fill, fill));
+      RepeatStoreWords(_guest, Join(fill, fill));
     }
     Plot(_guest, regs.di, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
   }
@@ -2045,7 +1961,7 @@ void ClearTextScreen(Guest& _guest)
   regs.es = regs.ax;
   regs.cx = TEXT_CELLS;
   regs.di = 0;
-  regs.ax = Pair(_guest.Get(DS.textAttribute), SPACE);
+  regs.ax = Join(_guest.Get(DS.textAttribute), SPACE);
   RepeatStoreWords(_guest, regs.ax);
 }
 

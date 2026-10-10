@@ -2,6 +2,7 @@
 
 #include "Docking.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 
@@ -23,26 +24,6 @@ constexpr std::uint16_t HALF_TURN = 0x400; // in 2048ths
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
 constexpr std::uint16_t STATION_SPIN_ANGLE = 0x0E; // in the station's slot
 constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F;      // of the slot's first byte, shifted right once
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] bool Carry(Guest& _guest) noexcept
-{
-  return (_guest.Regs().flags & Machine::FLAG_CARRY) != 0;
-}
 
 // A point about the view's centre, as DrawLine takes it: x and row from the top-left.
 [[nodiscard]] std::uint16_t FromCenter(std::uint16_t _point) noexcept
@@ -96,7 +77,7 @@ void CheckDockingAlignment(Guest& _guest)
   regs.ax = _guest.Get(DS.playerPitchAngle);
   regs.cx = 0;
   AngleWithinTolerance(_guest);
-  if (Carry(_guest))
+  if (_guest.Flag(Machine::FLAG_CARRY))
   {
     regs.cx = HALF_TURN;
   }
@@ -104,7 +85,7 @@ void CheckDockingAlignment(Guest& _guest)
   {
     regs.cx = HALF_TURN;
     AngleWithinTolerance(_guest);
-    if (!Carry(_guest))
+    if (!_guest.Flag(Machine::FLAG_CARRY))
     {
       return;
     }
@@ -112,7 +93,7 @@ void CheckDockingAlignment(Guest& _guest)
   }
   regs.ax = _guest.Get(DS.playerYawAngle);
   AngleWithinTolerance(_guest);
-  if (!Carry(_guest))
+  if (!_guest.Flag(Machine::FLAG_CARRY))
   {
     return;
   }
@@ -127,7 +108,7 @@ void CheckDockingAlignment(Guest& _guest)
   }
   regs.cx &= ANGLE_MASK;
   AngleWithinTolerance(_guest);
-  if (Carry(_guest))
+  if (_guest.Flag(Machine::FLAG_CARRY))
   {
     return;
   }

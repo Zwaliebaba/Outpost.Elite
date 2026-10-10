@@ -3,6 +3,7 @@
 #include "Combat.h"
 
 #include "Ai.h"
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 #include "Ships.h"
@@ -33,12 +34,6 @@ constexpr std::uint16_t START_PLAYER_HIT_SOUND = 0x7B96;
 constexpr std::uint16_t CANCEL_DOCKING_COMPUTER = 0x8BAA;
 constexpr std::uint16_t ROUTINE_8C51 = 0x8C51;
 constexpr std::uint16_t PROJECT_TO_SCREEN = 0x8D2E;
-
-// DivideOverflowInterrupt's scratch words in the code segment, and what it leaves in AL or AX (plan §7.1).
-constexpr std::uint16_t DIVIDE_SAVED_BX_OFFSET = 0x02A1;
-constexpr std::uint16_t DIVIDE_SAVED_DS_OFFSET = 0x02A3;
-constexpr std::uint8_t DIVIDE_OVERFLOW_BYTE = 0x7F;
-constexpr std::uint16_t DIVIDE_OVERFLOW_WORD = 0x7FFF;
 
 // The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type.
 constexpr std::uint16_t VIEW_ROW_BYTES = 64;
@@ -115,65 +110,10 @@ constexpr std::uint8_t SHIELD_HIT = 0x0F;
   return static_cast<std::uint16_t>(_slot + _field);
 }
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word & 0xFF);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = static_cast<std::uint16_t>((_word & 0xFF00) | _value);
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = static_cast<std::uint16_t>((_word & 0x00FF) | (_value << 8));
-}
-
-[[nodiscard]] std::uint16_t Join(std::uint8_t _high, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_high << 8) | _low);
-}
-
-[[nodiscard]] std::uint16_t Swap(std::uint16_t _word) noexcept
-{
-  return Join(Low(_word), High(_word));
-}
-
-[[nodiscard]] std::uint16_t SignExtend(std::uint8_t _byte) noexcept
-{
-  return static_cast<std::uint16_t>(static_cast<std::int16_t>(static_cast<std::int8_t>(_byte)));
-}
-
-[[nodiscard]] std::uint16_t SignWord(std::uint16_t _word) noexcept
-{
-  return (_word & 0x8000) != 0 ? std::uint16_t{0xFFFF} : std::uint16_t{0};
-}
-
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _value);
-}
-
 // SAR r/m8,1.
 [[nodiscard]] std::uint8_t HalveSigned(std::uint8_t _value) noexcept
 {
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> 1);
-}
-
-[[nodiscard]] bool FlagSet(Guest& _guest, std::uint16_t _flag) noexcept
-{
-  return (_guest.Regs().flags & _flag) != 0;
-}
-
-[[nodiscard]] std::uint32_t LoopCount(std::uint16_t _count) noexcept
-{
-  return _count == 0 ? 0x10000u : _count;
 }
 
 [[nodiscard]] std::uint8_t SlotType(const Guest& _guest, std::uint16_t _slot) noexcept
@@ -196,43 +136,6 @@ void AddSaturating(Guest& _guest, std::uint16_t _offset, std::uint8_t _value) no
 {
   const unsigned sum = _guest.Byte(_offset) + unsigned{_value};
   _guest.SetByte(_offset, sum > 0xFF ? std::uint8_t{0xFF} : static_cast<std::uint8_t>(sum));
-}
-
-// What DivideOverflowInterrupt (CS:025E) does before it saturates the quotient: BX and DS kept in the code segment.
-void DivideOverflow(Guest& _guest)
-{
-  const Machine::Registers& regs = _guest.Regs();
-  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
-}
-
-// DIV r/m8: AX / _divisor, quotient in AL and remainder in AH; when it does not fit, the trap leaves AL = 7Fh and AH as it was.
-void DivideByte(Guest& _guest, std::uint8_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  if (High(regs.ax) >= _divisor)
-  {
-    DivideOverflow(_guest);
-    SetLow(regs.ax, DIVIDE_OVERFLOW_BYTE);
-    return;
-  }
-  const std::uint16_t dividend = regs.ax;
-  regs.ax = Join(static_cast<std::uint8_t>(dividend % _divisor), static_cast<std::uint8_t>(dividend / _divisor));
-}
-
-// DIV r/m16: DX:AX / _divisor; when it does not fit, the trap leaves AX = 7FFFh and DX as it was.
-void DivideWord(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  if (regs.dx >= _divisor)
-  {
-    DivideOverflow(_guest);
-    regs.ax = DIVIDE_OVERFLOW_WORD;
-    return;
-  }
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
-  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
 }
 
 // gameOverFrames | escapePodFrames | maskingBackgroundColor into AL: none of them may run when a ship fires.
@@ -301,11 +204,11 @@ void PayBounty(Guest& _guest)
     return;
   }
   _guest.Call(ROUTINE_8C51);
-  if (!FlagSet(_guest, FLAG_ZERO))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     return;
   }
-  const std::uint8_t repair = FlagSet(_guest, FLAG_CARRY) ? THARGOID_REPAIR : THARGON_REPAIR;
+  const std::uint8_t repair = _guest.Flag(FLAG_CARRY) ? THARGOID_REPAIR : THARGON_REPAIR;
   SetLow(regs.ax, repair);
   const std::uint8_t countdown = _guest.Get(DS.witchspaceCountdown);
   auto left = static_cast<std::uint8_t>(countdown - repair);
@@ -440,7 +343,7 @@ void DropCargo(Guest& _guest)
     const std::uint16_t barrels = regs.cx;
     FindFreeShipSlot(_guest);
     std::swap(regs.di, regs.si);
-    if (FlagSet(_guest, FLAG_CARRY))
+    if (_guest.Flag(FLAG_CARRY))
     {
       SetLow(regs.ax, _guest.Byte(At(regs.si, SLOT_FLAGS)));
       const std::uint16_t flags = regs.ax;
@@ -495,7 +398,7 @@ void DestroyTarget(Guest& _guest)
   const std::uint16_t damage = regs.ax;
   IsStation(_guest);
   regs.ax = damage;
-  if (FlagSet(_guest, FLAG_ZERO))
+  if (_guest.Flag(FLAG_ZERO))
   {
     _guest.Call(CANCEL_DOCKING_COMPUTER);
     if (invasion)
@@ -520,7 +423,7 @@ void DestroyTarget(Guest& _guest)
   {
     _guest.SetByte(At(regs.di, SLOT_ENERGY), 0);
     IsStation(_guest);
-    if (!FlagSet(_guest, FLAG_ZERO))
+    if (!_guest.Flag(FLAG_ZERO))
     {
       return true;
     }
@@ -548,7 +451,7 @@ void DestroyTarget(Guest& _guest)
 void DrawLaserSights(Guest& _guest)
 {
   GetViewLaser(_guest);
-  if (!FlagSet(_guest, FLAG_CARRY))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     return;
   }
@@ -664,7 +567,7 @@ void ExplodeObject(Guest& _guest)
   _guest.Call(START_EXPLOSION_SOUND);
   _guest.Set(DS.explodingStation, 1);
   IsStation(_guest);
-  if (!FlagSet(_guest, FLAG_ZERO))
+  if (!_guest.Flag(FLAG_ZERO))
   {
     _guest.Set(DS.explodingStation, 0);
   }
@@ -710,7 +613,7 @@ void TryFireLaserAtPlayer(Guest& _guest)
     return;
   }
   CheckSafeZoneHoldFire(_guest);
-  if (FlagSet(_guest, FLAG_CARRY) || FiringBlocked(_guest))
+  if (_guest.Flag(FLAG_CARRY) || FiringBlocked(_guest))
   {
     return;
   }
@@ -724,7 +627,7 @@ void TryFireLaserAtPlayer(Guest& _guest)
   regs.ax = 0;
   regs.dx = LASER_GRAZE_BOX;
   _guest.Call(VECTOR_WITHIN_BOX);
-  if (!FlagSet(_guest, FLAG_CARRY))
+  if (!_guest.Flag(FLAG_CARRY))
   {
     return;
   }
@@ -734,7 +637,7 @@ void TryFireLaserAtPlayer(Guest& _guest)
   _guest.Set(DS.playerHitByDepth, Low(regs.ax));
   regs.dx = LASER_HIT_BOX;
   _guest.Call(VECTOR_WITHIN_BOX);
-  if (FlagSet(_guest, FLAG_CARRY))
+  if (_guest.Flag(FLAG_CARRY))
   {
     _guest.Set(DS.playerHitPending, HIT_SQUARE);
   }
@@ -748,7 +651,7 @@ void TryLaunchMissileAtPlayer(Guest& _guest)
     return;
   }
   CheckSafeZoneHoldFire(_guest);
-  if (FlagSet(_guest, FLAG_CARRY) || _guest.Byte(At(regs.di, SLOT_MISSILES)) == 0 || FiringBlocked(_guest))
+  if (_guest.Flag(FLAG_CARRY) || _guest.Byte(At(regs.di, SLOT_MISSILES)) == 0 || FiringBlocked(_guest))
   {
     return;
   }
@@ -759,7 +662,7 @@ void TryLaunchMissileAtPlayer(Guest& _guest)
   }
   SetLow(regs.dx, MISSILE_LAUNCH);
   _guest.Call(LAUNCH_SHIP_FROM_OBJECT);
-  if (FlagSet(_guest, FLAG_CARRY))
+  if (_guest.Flag(FLAG_CARRY))
   {
     _guest.SetByte(At(regs.di, SLOT_MISSILES), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_MISSILES)) - 1));
   }
@@ -769,7 +672,7 @@ void TryLaunchThargon(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   IsThargoidType(_guest);
-  if (!FlagSet(_guest, FLAG_ZERO) || _guest.Byte(At(regs.di, SLOT_THARGONS)) == 0)
+  if (!_guest.Flag(FLAG_ZERO) || _guest.Byte(At(regs.di, SLOT_THARGONS)) == 0)
   {
     return;
   }
@@ -780,7 +683,7 @@ void TryLaunchThargon(Guest& _guest)
   }
   SetLow(regs.dx, THARGON_LAUNCH);
   _guest.Call(LAUNCH_SHIP_FROM_OBJECT);
-  if (FlagSet(_guest, FLAG_CARRY))
+  if (_guest.Flag(FLAG_CARRY))
   {
     _guest.SetByte(At(regs.di, SLOT_THARGONS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_THARGONS)) - 1));
   }
@@ -836,7 +739,7 @@ void ResolveLaserFire(Guest& _guest)
     return;
   }
   FindShipInCrosshairs(_guest);
-  if (FlagSet(_guest, FLAG_CARRY) && !HitTarget(_guest))
+  if (_guest.Flag(FLAG_CARRY) && !HitTarget(_guest))
   {
     return;
   }
@@ -879,16 +782,16 @@ void CreditKill(Guest& _guest)
   SetLow(regs.ax, 0); // INC AL
   IsThargoidType(_guest);
   regs.ax = THARGOID_BOUNTY;
-  if (FlagSet(_guest, FLAG_ZERO))
+  if (_guest.Flag(FLAG_ZERO))
   {
     PayBounty(_guest);
     return;
   }
   // Killing what carries no bounty is a crime: 4 for a police Viper anywhere, 2 for anything else inside the safe zone.
   _guest.Call(IN_SAFE_ZONE);
-  const bool inside = FlagSet(_guest, FLAG_CARRY);
+  const bool inside = _guest.Flag(FLAG_CARRY);
   IsPoliceViper(_guest);
-  const bool police = FlagSet(_guest, FLAG_ZERO);
+  const bool police = _guest.Flag(FLAG_ZERO);
   if (!inside && !police)
   {
     return;

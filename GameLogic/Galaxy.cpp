@@ -2,6 +2,7 @@
 
 #include "Galaxy.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -62,29 +63,9 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint8_t DESCRIPTION_PHRASE_CODE = 0x80;
 constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
 
-[[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
 [[nodiscard]] constexpr std::uint16_t MakeWord(std::uint8_t _low, std::uint8_t _high) noexcept
 {
   return static_cast<std::uint16_t>(_low | (_high << 8));
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(_value, High(_word));
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(Low(_word), _value);
 }
 
 [[nodiscard]] bool Carry(const Machine::Registers& _regs) noexcept

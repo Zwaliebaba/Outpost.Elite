@@ -2,6 +2,7 @@
 
 #include "Sound.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -24,11 +25,6 @@ constexpr std::uint16_t NOISE_SOURCE_MASK = 0x3FF;
 
 constexpr std::uint8_t BEEP_TICKS = 70;
 constexpr std::uint8_t NOISE_BURST_TICKS = 100;
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = static_cast<std::uint16_t>((_word & 0xFF00) | _value);
-}
 
 // BeginSweep (CS:7ADD), the tail every sweep starter shares; STI at its end.
 void BeginSweep(Guest& _guest)

@@ -75,6 +75,9 @@
     <ClInclude Include="Ai.h">
       <Filter>Ai</Filter>
     </ClInclude>
+    <ClInclude Include="Arithmetic.h">
+      <Filter>Native</Filter>
+    </ClInclude>
     <ClInclude Include="Combat.h">
       <Filter>Combat</Filter>
     </ClInclude>

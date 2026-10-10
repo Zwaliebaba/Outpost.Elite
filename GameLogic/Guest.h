@@ -201,6 +201,12 @@ public:
     m_pc.CallInterrupt(_vector);
   }
 
+  /// Whether _flag (FLAG_* in Registers.h) is set: what a routine reads of a flag a call left it.
+  [[nodiscard]] bool Flag(std::uint16_t _flag) const noexcept
+  {
+    return (m_pc.Processor().Regs().flags & _flag) != 0;
+  }
+
   /// Sets or clears _flag (FLAG_* in Registers.h): what a routine does for a flag its callers read.
   void SetFlag(std::uint16_t _flag, bool _set) noexcept
   {
@@ -212,6 +218,14 @@ public:
   void Call(std::uint16_t _offset)
   {
     m_pc.CallNear(_offset);
+  }
+
+  /// One turn of a waiting loop that found nothing to do (Pc::Wait): the clock moves to the next device
+  /// event, the run ends there if that is its end, and an interrupt now due is taken. Only a routine
+  /// hooked as one that waits may call it (NativeEntry::wait).
+  void Wait()
+  {
+    m_pc.Wait();
   }
 
 private:

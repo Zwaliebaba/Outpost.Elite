@@ -2,6 +2,7 @@
 
 #include "Hyperspace.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -41,29 +42,9 @@ constexpr std::uint8_t THIRD_MISSION_JUMPS = 0x80;
 constexpr std::uint8_t COUNTDOWN_TEN = 10;
 constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
 
-[[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
 [[nodiscard]] constexpr std::uint16_t MakeWord(std::uint8_t _low, std::uint8_t _high) noexcept
 {
   return static_cast<std::uint16_t>(_low | (_high << 8));
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(_value, High(_word));
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(Low(_word), _value);
 }
 
 // The step MOVSW takes, backwards with the direction flag set.

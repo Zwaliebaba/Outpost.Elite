@@ -2,7 +2,9 @@
 
 #include "Equipment.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Maths.h"
 #include "Text.h"
 
 namespace Elite
@@ -13,12 +15,6 @@ namespace
 
 constexpr std::uint16_t COMPUTE_RESALE_PRICE = 0x6995;
 
-// DivideOverflowInterrupt's scratch words in the code segment, which it writes before anything else.
-constexpr std::uint16_t DIVIDE_SAVED_BX_OFFSET = 0x02A1;
-constexpr std::uint16_t DIVIDE_SAVED_DS_OFFSET = 0x02A3;
-// What it leaves in AL after a byte divide overflows: the positive maximum (plan §7.1).
-constexpr std::uint8_t DIVIDE_OVERFLOW_BYTE = 0x7F;
-
 constexpr std::uint16_t SCREEN_PRICES = 0x823B; // four bytes a row: the price, then the resale price, in tenths
 constexpr std::uint8_t FUEL_ROW = 1;
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24;
@@ -27,21 +23,6 @@ constexpr std::array<std::uint8_t, 4> LASER_ROWS = {0x05, 0x06, 0x0D, 0x0E}; // 
 constexpr std::uint8_t SELL_PRICE_ATTRIBUTE = 0x79;
 constexpr std::uint8_t MENU_ATTRIBUTE = 0x1E;
 constexpr std::uint16_t SELL_PRICE_COLUMN = 0x39;
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
 
 [[nodiscard]] std::uint16_t PriceSlot(std::uint8_t _row) noexcept
 {
@@ -93,19 +74,9 @@ void PayForEquipmentItem(Guest& _guest)
     // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1.
     const auto missing = static_cast<std::uint8_t>(~_guest.Get(DS.fuel));
     regs.dx = _guest.Get(DS.data823F);
-    const auto product = static_cast<std::uint16_t>(missing * Low(regs.dx));
+    regs.ax = static_cast<std::uint16_t>(missing * Low(regs.dx));
     regs.dx = WithLow(regs.dx, FUEL_UNITS_PER_TENTH);
-    if (product / FUEL_UNITS_PER_TENTH > 0xFF)
-    {
-      // DIV DL overflows: DivideOverflowInterrupt saves BX and DS and saturates AL, leaving AH.
-      _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-      _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
-      regs.ax = static_cast<std::uint16_t>((High(product) << 8) | DIVIDE_OVERFLOW_BYTE);
-    }
-    else
-    {
-      regs.ax = static_cast<std::uint16_t>(((product % FUEL_UNITS_PER_TENTH) << 8) | (product / FUEL_UNITS_PER_TENTH));
-    }
+    DivideByte(_guest, FUEL_UNITS_PER_TENTH);
     if (Low(regs.ax) == 0)
     {
       regs.ax = WithLow(regs.ax, 1);

@@ -2,6 +2,7 @@
 
 #include "SaveLoad.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -26,16 +27,6 @@ constexpr std::uint16_t DOS_NO_MORE_FILES = 0x12;
 constexpr std::uint16_t FOUND_ATTRIBUTE = 0x15; // in the transfer area, after find-first or find-next
 constexpr std::uint16_t FOUND_NAME = 0x1E;
 constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0x00FF) | (_high << 8));
-}
 
 // INT 21h with AH=_function; true when DOS reports an error (CF).
 [[nodiscard]] bool CallDos(Guest& _guest, std::uint8_t _function)
