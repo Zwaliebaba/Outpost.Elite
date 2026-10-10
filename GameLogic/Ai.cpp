@@ -564,9 +564,9 @@ MovedObject HunterIdle(GameState& _state, ObjectSlot _slot)
         _slot.Set(SlotByte::State, STATE_ATTACK);
       }
     }
-    else if (hunters.count == 1)
+    else if (hunters.count == 1 && hunters.last)
     {
-      // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last.
+      // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last, which a count of 1 always has.
       _slot.Set(SlotWord::Target, *hunters.last);
       _slot.Set(SlotByte::State, STATE_FORMATION);
     }
