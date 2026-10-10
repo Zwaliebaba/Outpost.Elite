@@ -44,6 +44,20 @@ constexpr std::uint16_t MOUSE_DRIVER = 0x04F0;
 constexpr std::uint8_t MOV_AX = 0xB8;
 constexpr std::uint8_t IRET = 0xCF;
 
+// inputDevice as the disc menu sets it.
+constexpr std::uint8_t JOYSTICK_DEVICE = 1;
+constexpr std::uint8_t MOUSE_DEVICE = 2;
+// The IBM stick's axes: centred, and pushed either way, in ohms.
+constexpr std::uint32_t CENTERED_OHMS = 50'000;
+constexpr std::uint32_t LOW_OHMS = 20'000;
+constexpr std::uint32_t HIGH_OHMS = 80'000;
+// The codes the Amstrad's stick sends through the keyboard (keyDownAmstradFire1 and the rest).
+constexpr std::uint8_t AMSTRAD_FIRE = 0x77;
+constexpr std::uint8_t AMSTRAD_RIGHT = 0x79;
+constexpr std::uint8_t AMSTRAD_LEFT = 0x7A;
+constexpr std::uint8_t AMSTRAD_DOWN = 0x7B;
+constexpr std::uint8_t AMSTRAD_UP = 0x7C;
+
 void Poke(ComparisonRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
   _rig.Host().Ram().Write8(Elite::DataSegment(_rig.Program()), _field.offset, _value);
@@ -147,6 +161,63 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
   _rig.Play("wait 0.5\ndigest left-and-down");
   Assert::IsTrue(centered != low, L"the stick moved the cursor");
   Assert::IsTrue(low != high, L"the stick moved the cursor back");
+}
+
+// Both twins' mice, through the machine's own driver (Machine::Mouse, a twin made with mousePresent): moved _acrossMickeys right
+// and _downMickeys down, which the next read of its motion (int 33h function 0Bh, once a frame) takes all at once, and with
+// _buttons held (Machine::Mouse::BUTTON_LEFT, BUTTON_RIGHT).
+void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _downMickeys, std::uint8_t _buttons = 0)
+{
+  _rig.Both(
+    [=](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    {
+      Machine::Mouse& mouse = _pc.Services().MouseDriver();
+      mouse.Move(_acrossMickeys, _downMickeys);
+      mouse.SetButtons(_buttons);
+    });
+}
+
+// The IBM stick in the game port of both twins: each axis's resistance, and the first button.
+void SetTwinStick(TwinRig& _rig, std::uint32_t _xOhms, std::uint32_t _yOhms, bool _firing = false)
+{
+  _rig.Both(
+    [=](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    {
+      _pc.Joystick().SetAxisResistance(0, _xOhms);
+      _pc.Joystick().SetAxisResistance(1, _yOhms);
+      _pc.Joystick().SetButton(0, _firing);
+    });
+}
+
+// _codes sent by both twins' keyboards, in order: how a twin sends what an Amstrad's stick sends, codes 77h-7Ch that no replay
+// can name. ReadScanCode takes each as it takes a key's.
+void SendTwinCodes(TwinRig& _rig, std::initializer_list<std::uint8_t> _codes)
+{
+  _rig.Both(
+    [_codes](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    {
+      for (const std::uint8_t code : _codes)
+        _pc.KeyboardController().Inject(code);
+    });
+}
+
+// The rates the steering left flight, roll and pitch (rollRate's two bytes), as the native twin has them; the interpreted
+// twin's are the same, or the digests would differ.
+[[nodiscard]] std::pair<std::int8_t, std::int8_t> FlightRates(TwinRig& _rig)
+{
+  std::uint16_t rates = 0;
+  _rig.Both([&rates](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+            { rates = _pc.Ram().Read16(Elite::DataSegment(_program), DS.rollRate.offset); });
+  return {static_cast<std::int8_t>(rates & 0xFF), static_cast<std::int8_t>(rates >> 8)};
+}
+
+// The byte _field as the native twin holds it; the interpreted twin's is the same, or the digests would differ.
+[[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
+{
+  std::uint8_t value = 0;
+  _rig.Both([&value, _field](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+            { value = _pc.Ram().Read8(Elite::DataSegment(_program), _field.offset); });
+  return value;
 }
 
 } // namespace
@@ -516,6 +587,86 @@ public:
     }
     rig.AssertAllAgreed(APPLY_REVERSE_CONTROLS, calls);
     rig.AssertAllAgreed(APPLY_REVERSE_CONTROLS_TO_DX, calls);
+  }
+
+  // Flight steered by the mouse, with the machine's own driver loaded (ADR-008 item 8, D20): M at the disc menu, which takes the
+  // mouse only with a driver; the launch; the mouse moved right and down, then further left and up, which ReadMouseSteering turns
+  // into rates that stay until it moves again; and the left button held, which fires the laser. Uncompared: each read of the
+  // mouse calls int 33h, which leaves a compared call the original's outcome (ADR-010 item 4), so only here does the native
+  // code of the reads run.
+  TEST_METHOD(MouseSteersFlight)
+  {
+    TwinRig rig("TwinMouseFlight", {.compared = false, .mousePresent = true});
+    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey m; wait 0.3\ndigest mouse");
+    Assert::AreEqual(MOUSE_DEVICE, TwinByte(rig, DS.inputDevice), L"the mouse selected");
+    rig.Play("key F1; wait 1\ndigest launched");
+    MoveTwinMouse(rig, 0x100, 0x100);
+    rig.Play("wait 0.5\ndigest right-and-down");
+    const std::pair<std::int8_t, std::int8_t> rightAndDown = FlightRates(rig);
+    MoveTwinMouse(rig, -0x200, -0x200);
+    rig.Play("wait 0.5\ndigest left-and-up");
+    const std::pair<std::int8_t, std::int8_t> leftAndUp = FlightRates(rig);
+    MoveTwinMouse(rig, 0, 0, Machine::Mouse::BUTTON_LEFT);
+    rig.Play("wait 0.5\ndigest firing");
+    Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
+    MoveTwinMouse(rig, 0, 0);
+    rig.Play("wait 0.1");
+    Assert::IsTrue(rightAndDown.first > 0 && leftAndUp.first < 0, L"the mouse rolled the ship either way");
+    Assert::IsTrue(rightAndDown.second < 0 && leftAndUp.second > 0, L"and pitched it either way");
+  }
+
+  // Flight steered by the IBM stick (ADR-008 item 8, D20): plugged in, centred, chosen at the disc menu, which reads its centre;
+  // then, in flight, pushed left and up, right and down, and left and down, and its first button held, which fires the laser.
+  // X's resistance is never above Y's, as SteerTheChartWithTheStick explains.
+  TEST_METHOD(IbmStickSteersFlight)
+  {
+    TwinRig rig("TwinStickFlight");
+    SetTwinStick(rig, CENTERED_OHMS, CENTERED_OHMS);
+    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey j; wait 0.3\nkey i; wait 0.3\nkey space; wait 0.3\ndigest stick");
+    Assert::AreEqual(JOYSTICK_DEVICE, TwinByte(rig, DS.inputDevice), L"the stick selected");
+    rig.Play("key F1; wait 1\ndigest launched");
+    SetTwinStick(rig, LOW_OHMS, LOW_OHMS);
+    rig.Play("wait 0.5\ndigest left-and-up");
+    const std::pair<std::int8_t, std::int8_t> leftAndUp = FlightRates(rig);
+    SetTwinStick(rig, HIGH_OHMS, HIGH_OHMS);
+    rig.Play("wait 0.5\ndigest right-and-down");
+    const std::pair<std::int8_t, std::int8_t> rightAndDown = FlightRates(rig);
+    SetTwinStick(rig, LOW_OHMS, HIGH_OHMS);
+    rig.Play("wait 0.5\ndigest left-and-down");
+    SetTwinStick(rig, CENTERED_OHMS, CENTERED_OHMS, true);
+    rig.Play("wait 0.5\ndigest firing");
+    Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
+    SetTwinStick(rig, CENTERED_OHMS, CENTERED_OHMS);
+    rig.Play("wait 0.1");
+    Assert::IsTrue(leftAndUp.first < 0 && rightAndDown.first > 0, L"the stick rolled the ship either way");
+    Assert::IsTrue(leftAndUp.second != rightAndDown.second, L"and pitched it");
+  }
+
+  // Flight steered by the Amstrad's stick (ADR-008 item 8, D20), which sends codes 77h-7Ch through the keyboard rather than
+  // using the game port: chosen at the disc menu, where it must be moved before a key; then, in flight, held right and down,
+  // left and up, and its fire button held. Its codes go through the keyboard's rates (ApplyKeyboardRates).
+  TEST_METHOD(AmstradStickSteersFlight)
+  {
+    TwinRig rig("TwinAmstradFlight");
+    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey j; wait 0.3\nkey a; wait 0.3");
+    SendTwinCodes(rig, {AMSTRAD_UP, AMSTRAD_UP | BREAK});
+    rig.Play("wait 0.1\nkey space; wait 0.3\ndigest amstrad");
+    Assert::AreEqual(JOYSTICK_DEVICE, TwinByte(rig, DS.inputDevice), L"the Amstrad's stick selected");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.joystickIsAmstrad), L"the Amstrad's");
+    rig.Play("key F1; wait 1\ndigest launched");
+    SendTwinCodes(rig, {AMSTRAD_RIGHT, AMSTRAD_DOWN});
+    rig.Play("wait 0.5\ndigest right-and-down");
+    const std::pair<std::int8_t, std::int8_t> rightAndDown = FlightRates(rig);
+    SendTwinCodes(rig, {AMSTRAD_RIGHT | BREAK, AMSTRAD_DOWN | BREAK, AMSTRAD_LEFT, AMSTRAD_UP});
+    rig.Play("wait 0.5\ndigest left-and-up");
+    const std::pair<std::int8_t, std::int8_t> leftAndUp = FlightRates(rig);
+    SendTwinCodes(rig, {AMSTRAD_LEFT | BREAK, AMSTRAD_UP | BREAK, AMSTRAD_FIRE});
+    rig.Play("wait 0.5\ndigest firing");
+    Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
+    SendTwinCodes(rig, {AMSTRAD_FIRE | BREAK});
+    rig.Play("wait 0.1");
+    Assert::IsTrue(rightAndDown.first > 0 && leftAndUp.first < 0, L"the stick rolled the ship either way");
+    Assert::IsTrue(rightAndDown.second != leftAndUp.second, L"and pitched it");
   }
 };
 
