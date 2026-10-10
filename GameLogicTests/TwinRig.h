@@ -30,7 +30,8 @@ struct TwinOptions
 {
   bool compared = true; ///< the native twin's calls of work routines are compared (ADR-010 item 4); if not, it runs on a Dispatcher
   Machine::Dos::DateTime startMoment = Elite::START_MOMENT; ///< DOS's clock at power-on
-  bool fromPowerOn = false; ///< the twins start at power-on, recording from there, rather than at the title screen
+  bool fromPowerOn = false;  ///< the twins start at power-on, recording from there, rather than at the title screen
+  bool mousePresent = false; ///< a mouse driver is loaded, the emulated one the PC services int 33h with
 };
 
 /// The twins' known answers, from the repository's root. The file's header documents its format.
@@ -289,7 +290,7 @@ private:
   /// _makeProcessor makes, with the native routines in place. Not started: the caller plays its first steps.
   NativeTwin(std::string_view _name, std::string_view _scratch, const TwinOptions& _options, Machine::ProcessorFactory _makeProcessor)
     : m_name(_name),
-      m_rig(_scratch, _options.startMoment, _makeProcessor),
+      m_rig(_scratch, _options.startMoment, _makeProcessor, _options.mousePresent),
       m_player(m_rig.Host(), m_rig.Program())
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
@@ -400,7 +401,7 @@ public:
     : m_name(_name),
       m_recording(KnownAnswers::Recording()),
       m_exceptions(std::uncaught_exceptions()),
-      m_original(m_name + "-Original", _options.startMoment),
+      m_original(m_name + "-Original", _options.startMoment, &Machine::MakeCpu, _options.mousePresent),
       m_native(m_name, m_name + "-Native", _options, _options.compared ? &Machine::MakeCpu : &Machine::MakeDispatcher),
       m_originalPlayer(m_original.Host(), m_original.Program())
   {
