@@ -3,6 +3,7 @@
 #include "Video.h"
 
 #include "Arithmetic.h"
+#include "Combat.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 #include "SaveLoad.h"
@@ -98,11 +99,8 @@ constexpr std::uint8_t STATUS_VERTICAL_RETRACE = 0x08;
 // register's port.
 constexpr std::uint16_t SELECT_PALETTE_BX = 0x0100;
 constexpr std::uint16_t COLOR_SELECT_PORT = 0x03D9;
-// What they call, through the hooks.
-constexpr std::uint16_t DRAW_LASER_SIGHTS = 0x0630;
+// Where their loops jump back to: PresentSpaceView's wait for the frame's time is to its start.
 constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
-constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
-// Where their loops jump back to: PresentSpaceView's wait for the frame's time is to its start, PRESENT_SPACE_VIEW.
 constexpr std::uint16_t SPACE_VIEW_COPY_LOOP = 0x05BC;
 constexpr std::uint16_t CHART_RETRACE_LOOP = 0x05D0;
 constexpr std::uint16_t CHART_DELAY_LOOP = 0x05D8;
@@ -1643,18 +1641,12 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   }
 }
 
-void FinishSpaceViewFrame(Guest& _guest)
+void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.Call(DRAW_LASER_SIGHTS);
-  SetLow(regs.ax, 0);
-  _guest.SetFlag(FLAG_DIRECTION, false);
-  _guest.Call(PRESENT_SPACE_VIEW);
-  _guest.Call(CLEAR_DRAW_BUFFER);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
+  // MOV AX,B800h / MOV ES,AX, the sights, then XOR AL,AL / CLD: the copy and the clear run forwards.
+  DrawLaserSights(_state);
+  PresentSpaceView(_state, _hardware, false);
+  ClearDrawBuffer(_state, false);
 }
 
 void PresentChartFrame(GameState& _state, Hardware& _hardware)
@@ -2356,8 +2348,9 @@ constexpr Machine::NativeContract DRAWS_LINE{REGISTER_AX | REGISTER_BX | REGISTE
 // (FillTriangleSpanEntry).
 constexpr Machine::NativeContract FILLS_TRIANGLE_SPAN{REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
-// PresentSpaceView's: DX as the original leaves it (PresentSpaceViewEntry).
-constexpr Machine::NativeContract PRESENTS_SPACE_VIEW{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
+// FinishSpaceViewFrame's: DX as the original leaves it (FinishSpaceViewFrameEntry).
+constexpr Machine::NativeContract FINISHES_SPACE_VIEW_FRAME{
+  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 // ShowCockpitScreen's: SI and ES as the original leaves them (ShowCockpitScreenEntry).
 constexpr Machine::NativeContract SHOWS_COCKPIT{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
 // DrawChartFrame's: ES as the original leaves it (DrawChartFrameEntry).
@@ -2446,6 +2439,18 @@ void WriteScreenshotFileEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
 }
 
+void FinishSpaceViewFrameEntry(Guest& _guest)
+{
+  FinishSpaceViewFrame(_guest.State(), _guest.Devices());
+  // CLD, and MOV AX,B800h / MOV ES,AX after ClearDrawBuffer's ES = DS. DX is what PresentSpaceView leaves, MOV DX,1FF0h, the copy's
+  // step back to the next even line, which the contract compares: a caller reads it.
+  Machine::Registers& regs = _guest.Regs();
+  _guest.SetFlag(FLAG_DIRECTION, false);
+  regs.es = GameState::VIDEO_SEGMENT;
+  regs.dx = TO_NEXT_EVEN_LINE;
+  _guest.Clobber(FINISHES_SPACE_VIEW_FRAME);
+}
+
 void PresentChartFrameEntry(Guest& _guest)
 {
   PresentChartFrame(_guest.State(), _guest.Devices());
@@ -2458,10 +2463,7 @@ void PresentChartFrameEntry(Guest& _guest)
 void PresentSpaceViewEntry(Guest& _guest)
 {
   PresentSpaceView(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION));
-  // MOV DX,1FF0h, the copy's step back to the next even line, which the contract compares: FinishSpaceViewFrame hands it on, and
-  // a caller of that reads it (hyperspace-and-fight.replay's pirates digest moves with it poisoned).
-  _guest.Regs().dx = TO_NEXT_EVEN_LINE;
-  _guest.Clobber(PRESENTS_SPACE_VIEW);
+  _guest.Clobber(CLOBBERS_GENERAL);
 }
 
 void CopyChartBufferToScreenEntry(Guest& _guest)
@@ -2559,9 +2561,9 @@ constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 constexpr std::array ENTRIES = {
   NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshotEntry, SAVES_SCREENSHOT},
   NativeEntry{0x03FD, "WriteScreenshotFile", &WriteScreenshotFileEntry, CLOBBERS_AX_BX_CX_DX},
-  NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrameEntry, FINISHES_SPACE_VIEW_FRAME, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrameEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceViewEntry, PRESENTS_SPACE_VIEW, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceViewEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x05CC, "CopyChartBufferToScreen", &CopyChartBufferToScreenEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x060D, "ClearDrawBuffer", &ClearDrawBufferEntry, PRESERVES_ALL},
   NativeEntry{0x15E0, "PlotPixel", &PlotPixelEntry, CLOBBERS_BX_CX},

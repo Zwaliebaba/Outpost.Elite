@@ -18,10 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
 
-/// FinishSpaceViewFrame (CS:0570): DrawLaserSights, PresentSpaceView and ClearDrawBuffer, through their hooks.
-/// It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
-void FinishSpaceViewFrame(Guest& _guest);
-
 /// DrawClippedLine (CS:1603): the line from (DX, BX) to (CX, AX), signed words, clipped to the 256x128
 /// buffer, through DrawLine. Everything but DS clobbered.
 void DrawClippedLine(Guest& _guest);
@@ -69,6 +65,9 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware);
 /// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both graphics
 /// banks) written from B800:0000 through DOS, with its disk transfer area at diskTransferArea; diskError = 1 on a failure.
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
+
+/// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
+void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 
 /// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
 /// ClearDrawBuffer, both forwards. It waits.
@@ -143,13 +142,16 @@ void SetTextMode(Hardware& _hardware);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
 // there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
 // leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES,
-// FillTriangleSpanEntry's AX and BP, PresentSpaceViewEntry's DX, ShowCockpitScreenEntry's SI and ES, DrawChartFrameEntry's ES).
+// FillTriangleSpanEntry's AX and BP, FinishSpaceViewFrameEntry's DX, ShowCockpitScreenEntry's SI and ES, DrawChartFrameEntry's
+// ES).
 
 void SaveScreenshotEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, DX, SI, DI clobbered.
 /// AX, BX, CX, DX clobbered.
 void WriteScreenshotFileEntry(Guest& _guest);
+/// Out: ES = B800h, DF clear, DX = 1FF0h as PresentSpaceView leaves it. AX, BX, CX, SI, DI, BP clobbered.
+void FinishSpaceViewFrameEntry(Guest& _guest);
 void PresentChartFrameEntry(Guest& _guest); ///< Out: ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
-void PresentSpaceViewEntry(Guest& _guest);  ///< ES = B800h. Out: DX = 1FF0h. AX, BX, CX, SI, DI, BP clobbered.
+void PresentSpaceViewEntry(Guest& _guest);  ///< ES = B800h. AX, BX, CX, DX, SI, DI, BP clobbered.
 /// AL = the bands to skip, ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
 void CopyChartBufferToScreenEntry(Guest& _guest);
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
