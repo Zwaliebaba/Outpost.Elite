@@ -337,9 +337,9 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
   }
 
-  // Compared, a routine that waits cannot be undone: it counts as unverifiable and the original's
-  // outcome stands.
-  TEST_METHOD(ComparedWaitingRoutineIsUnverifiable)
+  // With comparison on, a routine that waits still runs natively and is not compared: it could not be
+  // undone, and its original might never return.
+  TEST_METHOD(WaitingRoutineIsNotCompared)
   {
     NativeRig rig("NativeWaitCompared", WAIT_FOR_TICK);
     rig.Hook(&WaitForTick, {}, true);
@@ -347,7 +347,8 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
     rig.Run();
     Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().unverifiable);
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
+    Assert::AreEqual(std::uint64_t{0}, rig.Books().verified + rig.Books().unverifiable);
   }
 
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)

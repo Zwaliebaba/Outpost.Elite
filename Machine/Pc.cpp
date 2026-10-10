@@ -313,7 +313,9 @@ void Pc::Dispatch(NativeCode::Hook& _hook)
   ++_hook.calls;
   try
   {
-    if (m_native.Verifying() && !m_comparison->active)
+    // A routine that waits is never compared: it could not be undone, and its original might never
+    // return. The routines it calls through their hooks are, each one a comparison of its own.
+    if (m_native.Verifying() && !m_comparison->active && !_hook.waits)
     {
       Compare(_hook);
     }

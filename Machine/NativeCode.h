@@ -116,7 +116,7 @@ public:
   /// When on, every call of a native routine that is not already inside such a comparison runs the
   /// original first, all of it with no native routine in place, undoes it, runs the native routine,
   /// and compares the two. A native routine that only native code calls is compared through its
-  /// callers. When the two differ the run carries on from the original's outcome, so one mismatch
+  /// callers. A routine that waits is not compared at all; what it calls through hooks is. When the two differ the run carries on from the original's outcome, so one mismatch
   /// does not hide the next.
   void SetVerifying(bool _verifying) noexcept
   {
