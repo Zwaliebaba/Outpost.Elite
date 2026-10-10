@@ -196,9 +196,14 @@ void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uin
 }
 
 // What STOSB, STOSW and MOVSW add to DI (and SI): forward, or back when DF is set.
+[[nodiscard]] std::uint16_t StringStep(bool _backward, std::uint16_t _bytes) noexcept
+{
+  return _backward ? Negate(_bytes) : _bytes;
+}
+
 [[nodiscard]] std::uint16_t StringStep(const Machine::Registers& _regs, std::uint16_t _bytes) noexcept
 {
-  return Flag(_regs, FLAG_DIRECTION) ? Negate(_bytes) : _bytes;
+  return StringStep(Flag(_regs, FLAG_DIRECTION), _bytes);
 }
 
 // STOSB: _value at _segment:_offset. Returns the offset _step on, what DI becomes.
@@ -252,7 +257,8 @@ void ConvertToDoubleWord(Machine::Registers& _regs) noexcept
 
 // ---- Lines ----
 
-// The registers DrawLine works in, as bytes where it uses them so.
+// DrawLine's working state: the registers it draws with, as bytes where it uses them so, which it loads before its
+// line routines and stores after them.
 struct LineState
 {
   std::uint8_t al = 0;
@@ -267,13 +273,14 @@ struct LineState
 };
 
 // DrawLineHorizontal (CS:17BE): BL pixels right of the first, pixel by pixel to a byte boundary, whole
-// bytes with REP STOSB, then the pixels left.
-void DrawHorizontalLine(Guest& _guest, LineState& _line)
+// bytes with REP STOSB, then the pixels left. Returns whether it ran REP STOSB, after MOV BX,DS / MOV ES,BX / CLD:
+// the caller sets ES to DS and clears the direction flag.
+[[nodiscard]] bool DrawHorizontalLine(GameState& _state, LineState& _line)
 {
   if (_line.bl == 0)
   {
-    Plot(_guest.State(), _line.di, _line.dh, _line.dl);
-    return;
+    Plot(_state, _line.di, _line.dh, _line.dl);
+    return false;
   }
   _line.cx = static_cast<std::uint16_t>(_line.bl + 1);
   if ((_line.dh & LEFT_PIXEL_MASK) != 0)
@@ -283,66 +290,65 @@ void DrawHorizontalLine(Guest& _guest, LineState& _line)
       _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
       if (!NextPixel(_line.dl, _line.dh))
       {
-        _guest.SetByte(_line.di, _line.al);
+        _state.SetByte(_line.di, _line.al);
         ++_line.di;
         if (--_line.cx == 0)
         {
-          return;
+          return false;
         }
         break;
       }
       if (--_line.cx == 0)
       {
-        _guest.SetByte(_line.di, _line.al);
-        return;
+        _state.SetByte(_line.di, _line.al);
+        return false;
       }
     }
   }
   _line.al = _line.ah;
   _line.ah = Low(_line.cx);
   _line.cx = static_cast<std::uint16_t>(_line.cx >> 2);
-  if (_line.cx != 0)
+  const bool storesBytes = _line.cx != 0;
+  if (storesBytes)
   {
-    Machine::Registers& regs = _guest.Regs();
-    _line.bl = Low(regs.ds);
-    _line.bh = High(regs.ds);
-    regs.es = regs.ds;
-    _guest.SetFlag(FLAG_DIRECTION, false);
+    _line.bl = Low(_state.DataSegment());
+    _line.bh = High(_state.DataSegment());
     for (; _line.cx != 0; --_line.cx)
     {
-      _guest.SetFarByte(regs.es, _line.di, _line.al);
+      _state.SetByte(_line.di, _line.al);
       ++_line.di;
     }
   }
   _line.ah = static_cast<std::uint8_t>(_line.ah & 3);
   if (_line.ah == 0)
   {
-    return;
+    return storesBytes;
   }
   _line.cx = _line.ah;
-  _line.al = _guest.Byte(_line.di);
+  _line.al = _state.Byte(_line.di);
   do
   {
     _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
     (void)NextPixel(_line.dl, _line.dh);
   } while (--_line.cx != 0);
-  _guest.SetByte(_line.di, _line.al);
+  _state.SetByte(_line.di, _line.al);
+  return storesBytes;
 }
 
 // DrawLineVertical (CS:17AF).
-void DrawVerticalLine(Guest& _guest, LineState& _line)
+void DrawVerticalLine(GameState& _state, LineState& _line)
 {
   _line.cx = _line.bh;
   do
   {
-    Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+    Plot(_state, _line.di, _line.dh, _line.dl);
     _line.di = static_cast<std::uint16_t>(_line.di + _line.bp);
   } while (--_line.cx != 0);
-  Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+  Plot(_state, _line.di, _line.dh, _line.dl);
 }
 
 // DrawLineSteep (CS:177E): a row a pixel, AH the error term.
-void DrawSteepLine(Guest& _guest, LineState& _line)
+void DrawSteepLine(GameState& _state, LineState& _line)
 {
   _line.cx = _line.bh;
   ++_line.bh;
@@ -352,7 +358,7 @@ void DrawSteepLine(Guest& _guest, LineState& _line)
   {
     const bool borrow = _line.ah < _line.bl;
     _line.ah = static_cast<std::uint8_t>(_line.ah - _line.bl);
-    Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+    Plot(_state, _line.di, _line.dh, _line.dl);
     if (borrow)
     {
       _line.ah = static_cast<std::uint8_t>(_line.ah + _line.bh);
@@ -364,11 +370,11 @@ void DrawSteepLine(Guest& _guest, LineState& _line)
       _line.di = static_cast<std::uint16_t>(_line.di + _line.bp);
     }
   } while (--_line.cx != 0);
-  Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+  Plot(_state, _line.di, _line.dh, _line.dl);
 }
 
 // DrawLineShallow (CS:172F): a pixel a step, the byte kept in AL until the line leaves it.
-void DrawShallowLine(Guest& _guest, LineState& _line)
+void DrawShallowLine(GameState& _state, LineState& _line)
 {
   _line.cx = _line.bl;
   if (_line.bl != 0xFF)
@@ -386,45 +392,45 @@ void DrawShallowLine(Guest& _guest, LineState& _line)
     {
       _line.ah = static_cast<std::uint8_t>(_line.ah + _line.bl);
       const bool sameByte = NextPixel(_line.dl, _line.dh);
-      _guest.SetByte(_line.di, _line.al);
+      _state.SetByte(_line.di, _line.al);
       _line.di = static_cast<std::uint16_t>(_line.di + _line.bp + (sameByte ? 0 : 1));
-      _line.al = _guest.Byte(_line.di);
+      _line.al = _state.Byte(_line.di);
     }
     else if (!NextPixel(_line.dl, _line.dh))
     {
-      _guest.SetByte(_line.di, _line.al);
+      _state.SetByte(_line.di, _line.al);
       ++_line.di;
-      _line.al = _guest.Byte(_line.di);
+      _line.al = _state.Byte(_line.di);
     }
     else
     {
       if (--_line.cx == 0)
       {
         _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
-        _guest.SetByte(_line.di, _line.al);
+        _state.SetByte(_line.di, _line.al);
         return;
       }
       continue;
     }
     if (--_line.cx == 0)
     {
-      Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+      Plot(_state, _line.di, _line.dh, _line.dl);
       return;
     }
   }
 }
 
 // DrawLineDiagonal (CS:180E).
-void DrawDiagonalLine(Guest& _guest, LineState& _line)
+void DrawDiagonalLine(GameState& _state, LineState& _line)
 {
   _line.cx = _line.bl;
   do
   {
-    Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+    Plot(_state, _line.di, _line.dh, _line.dl);
     const bool sameByte = NextPixel(_line.dl, _line.dh);
     _line.di = static_cast<std::uint16_t>(_line.di + _line.bp + (sameByte ? 0 : 1));
   } while (--_line.cx != 0);
-  Plot(_guest.State(), _line.di, _line.dh, _line.dl);
+  Plot(_state, _line.di, _line.dh, _line.dl);
 }
 
 // CS:1623: the rows were doubled to clip; DrawLine takes them halved, in DH and CH.
@@ -443,11 +449,26 @@ void SetClipResult(Machine::Registers& _regs, bool _carry, bool _zero) noexcept
   _regs.flags = static_cast<std::uint16_t>(flags | (_carry ? FLAG_CARRY : 0) | (_zero ? FLAG_ZERO : 0));
 }
 
-// CS:16B5: the endpoints stay where they are; SI=1 and ZF clear from its INC, CF set.
-void LeaveEndpoints(Guest& _guest)
+// What a clip routine leaves for DrawClippedLine when it is done with one edge: CF set while the segment is still to
+// draw, ZF set once BP's count of endpoints outside reaches 0, and SI, the cut's scratch.
+struct ClipOutcome
 {
-  _guest.Regs().si = 1;
-  SetClipResult(_guest.Regs(), true, false);
+  bool draw;
+  bool allInside;
+  std::uint16_t scratch;
+};
+
+void ClipOutcomeOut(Machine::Registers& _regs, ClipOutcome _outcome) noexcept
+{
+  _regs.si = _outcome.scratch;
+  SetClipResult(_regs, _outcome.draw, _outcome.allInside);
+}
+
+// LeaveEndpoints (CS:16B5): the endpoints stay where they are, and the segment is still to draw: MOV SI,0 / INC SI / STC,
+// which leave SI = 1, ZF clear from the INC and CF set.
+[[nodiscard]] constexpr ClipOutcome LeaveEndpoints() noexcept
+{
+  return ClipOutcome{true, false, 1};
 }
 
 // MoveEndpointToEdge (CS:1691): endpoint A (CX, AX) onto the edge along the line to B (DX, BX).
@@ -457,7 +478,7 @@ void MoveEndpointToEdge(Guest& _guest)
   regs.si = regs.dx;
   if (regs.dx == 0 || regs.cx == 0)
   {
-    LeaveEndpoints(_guest);
+    ClipOutcomeOut(regs, LeaveEndpoints());
     return;
   }
   regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
@@ -472,7 +493,7 @@ void MoveEndpointToEdge(Guest& _guest)
   regs.dx = regs.si;
   if (High(regs.ax) != 0)
   {
-    LeaveEndpoints(_guest);
+    ClipOutcomeOut(regs, LeaveEndpoints());
     return;
   }
   --regs.bp;
@@ -570,7 +591,7 @@ void DrawDiscUpperRow(Guest& _guest)
   }
   SetHigh(regs.dx, Low(regs.ax));
   std::swap(regs.cx, regs.bx);
-  FillSpan(_guest);
+  FillSpanEntry(_guest);
   std::swap(regs.cx, regs.bx);
 }
 
@@ -587,119 +608,142 @@ void DrawDiscRowPair(Guest& _guest)
     return;
   }
   SetHigh(regs.dx, Low(regs.ax));
-  FillSpan(_guest);
+  FillSpanEntry(_guest);
   if (High(regs.bx) != 0)
   {
     return;
   }
   std::swap(regs.cx, regs.bx);
-  FillSpan(_guest);
+  FillSpanEntry(_guest);
   std::swap(regs.cx, regs.bx);
 }
 
-// DrawSmallDisc (CS:194B): radius 0-4 as a 4-row sprite from smallDiscSprites, clipped a byte at a
-// time at the left and right edges and a row at a time at the top and bottom.
-void DrawSmallDisc(Guest& _guest)
+// Where DrawSmallDisc (CS:194B) puts a disc of radius 0-4: a 4-row sprite from smallDiscSprites, clipped a byte at a
+// time at the left and right edges and a row at a time at the top and bottom. Its fields hold what the original works out
+// before its row loop, as far as it gets: AX is rows and clip, BX sprite, CX row and DX x when the sprite is wholly off
+// the buffer.
+struct SmallDiscPlace
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (Low(regs.bx) == High(regs.bx))
+  std::uint16_t x;      // the sprite's left x: the centre's less half the radius, 4 on when that is left of the buffer
+  std::uint16_t row;    // its top row likewise, 0 once clipped at the top
+  std::uint16_t sprite; // its first byte to draw in smallDiscSprites
+  std::uint8_t rows;    // the rows to draw, 4 less those off the top or the bottom
+  std::uint8_t clip;    // a bit pair a row: bit 0 when only the sprite's right byte is drawn, bit 1 when only its left
+  bool onBuffer;        // false when the sprite is wholly off the buffer, and nothing is drawn
+};
+
+// Where DrawSmallDisc's row loop stops, which the original leaves in the registers.
+struct SmallDiscEnd
+{
+  std::uint16_t next;   // DI: the buffer offset below the last row drawn
+  std::uint16_t sprite; // BX: the sprite byte after the last row drawn
+  std::uint16_t bits;   // AX: the last row's bits, shifted into place, and in the fill the bytes it drew of them
+  std::uint8_t clip;    // DH: the clip bits after their last turn
+  std::uint8_t shift;   // DL: the sprite's shift into its first byte, 2 bits a pixel
+};
+
+// CS:194B-19AA: where the sprite of a disc of radius _radius goes for the centre (_centerX, _centerRow).
+[[nodiscard]] SmallDiscPlace PlaceSmallDisc(std::uint8_t _radius, std::int16_t _centerX, std::int16_t _centerRow) noexcept
+{
+  // CMP BL,BH / JNE / INC BL: radius 0, with BH 0, draws radius 1's sprite. Its corner is half the radius up and left of
+  // the centre.
+  const std::uint8_t radius = _radius == 0 ? 1 : _radius;
+  const auto half = static_cast<std::uint16_t>(radius >> 1);
+  SmallDiscPlace place{static_cast<std::uint16_t>(static_cast<std::uint16_t>(_centerX) - half),
+                       static_cast<std::uint16_t>(static_cast<std::uint16_t>(_centerRow) - half),
+                       Offset(DS.smallDiscSprites.offset, static_cast<std::uint8_t>((radius - 1) << 2)),
+                       SMALL_DISC_ROWS,
+                       0,
+                       false};
+  if (Negative(place.x))
   {
-    SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
-  }
-  regs.ax = regs.bx;
-  SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - 1));
-  regs.ax = static_cast<std::uint16_t>(regs.ax >> 1);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.ax);
-  regs.dx = static_cast<std::uint16_t>(regs.dx - regs.ax);
-  SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) << 2));
-  regs.bx = static_cast<std::uint16_t>(regs.bx + DS.smallDiscSprites.offset);
-  regs.ax = SMALL_DISC_ROWS;
-  if (Negative(regs.dx))
-  {
-    regs.dx = static_cast<std::uint16_t>(regs.dx + 4);
-    if (Negative(regs.dx) || regs.dx == 0)
+    place.x = static_cast<std::uint16_t>(place.x + 4);
+    if (Negative(place.x) || place.x == 0)
     {
-      return;
+      return place;
     }
-    SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) | CLIP_SPRITE_LEFT));
-  }
-  else
-  {
-    if (High(regs.dx) != 0)
-    {
-      return;
-    }
-    if (regs.dx >= 0xFC)
-    {
-      SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) | CLIP_SPRITE_RIGHT));
-    }
-  }
-  if (Negative(regs.cx))
-  {
-    regs.cx = static_cast<std::uint16_t>(regs.cx + 4);
-    if (Negative(regs.cx) || regs.cx == 0)
-    {
-      return;
-    }
-    // The rows above the buffer are skipped: AND clears CF, so CMC / ADC adds one more.
-    SetLow(regs.ax, Low(regs.cx));
-    SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + (~Low(regs.cx) & 3) + 1));
-    SetLow(regs.cx, 0);
+    place.clip = CLIP_SPRITE_LEFT;
   }
   else
   {
-    if (regs.cx >= BUFFER_ROWS)
+    if (High(place.x) != 0)
     {
-      return;
+      return place;
     }
-    if (Low(regs.cx) >= BUFFER_ROWS - 3)
+    if (place.x >= 0xFC)
     {
-      SetLow(regs.ax, static_cast<std::uint8_t>(Negate8(Low(regs.cx)) & 3));
+      place.clip = CLIP_SPRITE_RIGHT;
     }
   }
-  SetHigh(regs.dx, Low(regs.cx));
-  regs.di = static_cast<std::uint16_t>(regs.dx >> 2);
-  regs.cx = Low(regs.ax);
-  SetHigh(regs.dx, High(regs.ax));
-  SetLow(regs.dx, static_cast<std::uint8_t>((Low(regs.dx) & 3) << 1));
-  const std::uint8_t fill = _guest.Get(DS.discFillByte);
-  do
+  if (Negative(place.row))
   {
-    const std::uint16_t rows = regs.cx;
-    regs.ax = Join(_guest.Byte(regs.bx), 0);
-    ++regs.bx;
-    SetLow(regs.cx, Low(regs.dx));
-    regs.ax = static_cast<std::uint16_t>(regs.ax >> Low(regs.cx));
-    std::uint8_t clip = High(regs.dx);
-    bool carry = (clip & 1) != 0;
-    clip = RotateRight(clip, 1);
-    if (carry)
+    place.row = static_cast<std::uint16_t>(place.row + 4);
+    if (Negative(place.row) || place.row == 0)
     {
-      clip = RotateRight(clip, 1);
-      Plot(_guest.State(), regs.di, static_cast<std::uint8_t>(~Low(regs.ax)), static_cast<std::uint8_t>(Low(regs.ax) & fill));
-      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & fill));
+      return place;
+    }
+    // The rows above the buffer are skipped: AND clears CF, so CMC / ADC adds one more. XOR CL,CL starts at row 0.
+    place.rows = Low(place.row);
+    place.sprite = WithLow(place.sprite, static_cast<std::uint8_t>(Low(place.sprite) + (~Low(place.row) & 3) + 1));
+    place.row = 0;
+  }
+  else
+  {
+    if (place.row >= BUFFER_ROWS)
+    {
+      return place;
+    }
+    if (Low(place.row) >= BUFFER_ROWS - 3)
+    {
+      place.rows = static_cast<std::uint8_t>(Negate8(Low(place.row)) & 3);
+    }
+  }
+  place.onBuffer = true;
+  return place;
+}
+
+// DrawSmallDisc (CS:19AB-1A06): the sprite _place gives, in discFillByte, a row at a time from its top: each byte ANDed
+// out and then ORed in, the both bytes of a row as words, as the original writes them.
+[[nodiscard]] SmallDiscEnd DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
+{
+  SmallDiscEnd end{static_cast<std::uint16_t>(Join(Low(_place.row), Low(_place.x)) >> 2), _place.sprite, Join(_place.clip, _place.rows),
+                   _place.clip, static_cast<std::uint8_t>((Low(_place.x) & 3) << 1)};
+  const std::uint8_t fill = _state.Get(DS.discFillByte);
+  for (std::uint8_t rows = _place.rows; rows != 0; --rows)
+  {
+    end.bits = static_cast<std::uint16_t>(Join(_state.Byte(end.sprite), 0) >> end.shift);
+    end.sprite = Offset(end.sprite, 1);
+    const bool rightOnly = (end.clip & 1) != 0;
+    end.clip = RotateRight(end.clip, 1);
+    if (rightOnly)
+    {
+      end.clip = RotateRight(end.clip, 1);
+      Plot(_state, end.next, static_cast<std::uint8_t>(~Low(end.bits)), static_cast<std::uint8_t>(Low(end.bits) & fill));
+      SetLow(end.bits, static_cast<std::uint8_t>(Low(end.bits) & fill));
     }
     else
     {
-      carry = (clip & 1) != 0;
-      clip = RotateRight(clip, 1);
-      if (carry)
+      const bool leftOnly = (end.clip & 1) != 0;
+      end.clip = RotateRight(end.clip, 1);
+      if (leftOnly)
       {
-        Plot(_guest.State(), regs.di, static_cast<std::uint8_t>(~High(regs.ax)), static_cast<std::uint8_t>(High(regs.ax) & fill));
-        SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) & fill));
+        Plot(_state, end.next, static_cast<std::uint8_t>(~High(end.bits)), static_cast<std::uint8_t>(High(end.bits) & fill));
+        SetHigh(end.bits, static_cast<std::uint8_t>(High(end.bits) & fill));
       }
       else
       {
-        // Both bytes, as a word: the sprite's left byte at DI.
-        const std::uint16_t sprite = SwapBytes(regs.ax);
-        regs.ax = static_cast<std::uint16_t>(sprite & Join(fill, fill));
-        _guest.SetWord(regs.di, static_cast<std::uint16_t>((_guest.Word(regs.di) & ~sprite) | regs.ax));
+        // Both bytes, as a word, the sprite's left byte at the lower address: AND WORD [DI] with the bits' complement,
+        // then OR WORD [DI] with the bits in the fill.
+        const std::uint16_t word = SwapBytes(end.bits);
+        end.bits = static_cast<std::uint16_t>(word & Join(fill, fill));
+        const auto kept = static_cast<std::uint16_t>(_state.Word(end.next) & ~word);
+        _state.SetWord(end.next, kept);
+        _state.SetWord(end.next, static_cast<std::uint16_t>(kept | end.bits));
       }
     }
-    SetHigh(regs.dx, clip);
-    regs.di = static_cast<std::uint16_t>(regs.di + ROW_BYTES);
-    regs.cx = rows;
-  } while (--regs.cx != 0);
+    end.next = static_cast<std::uint16_t>(end.next + ROW_BYTES);
+  }
+  return end;
 }
 
 // ---- Triangles ----
@@ -1046,12 +1090,12 @@ void FillOnScreenTriangle(Guest& _guest)
 
 // ---- Clipped triangles ----
 
-// Rewrites the step pair at _site (ADD/ADC or SUB/SBB) from the pair at _source, through _transfer.
-void PatchClippedStep(Guest& _guest, std::uint16_t& _transfer, std::uint16_t _source, std::uint16_t _site)
+// The step pair at _site (ADD/ADC or SUB/SBB) rewritten from the pair at _source, a word at the site and a word 4 bytes on.
+// Returns the second word moved, which the original leaves in the transfer register.
+[[nodiscard]] std::uint16_t PatchClippedStep(GameState& _state, std::uint16_t _source, std::uint16_t _site)
 {
-  _transfer = PatchStep(_guest.State(), _source, _site);
-  _transfer =
-    PatchStep(_guest.State(), static_cast<std::uint16_t>(_source + CARRY_STEP_BYTES), static_cast<std::uint16_t>(_site + CARRY_STEP_BYTES));
+  (void)PatchStep(_state, _source, _site);
+  return PatchStep(_state, static_cast<std::uint16_t>(_source + CARRY_STEP_BYTES), static_cast<std::uint16_t>(_site + CARRY_STEP_BYTES));
 }
 
 // ADD fraction,[m] / ADC whole,[m], or SUB / SBB: a 16.16 edge stepped by its slope.
@@ -1226,7 +1270,7 @@ void FillClippedFlatBottom(Guest& _guest)
   regs.cx = static_cast<std::uint16_t>(regs.cx - regs.ax);
   if (subtractA)
   {
-    PatchClippedStep(_guest, regs.dx, SUBTRACT_FROM_EDGE_A, STEP_CLIPPED_EDGE_A);
+    regs.dx = PatchClippedStep(_guest.State(), SUBTRACT_FROM_EDGE_A, STEP_CLIPPED_EDGE_A);
     regs.cx = Negate(regs.cx);
   }
   std::swap(regs.cx, regs.ax);
@@ -1235,7 +1279,7 @@ void FillClippedFlatBottom(Guest& _guest)
   regs.bx = static_cast<std::uint16_t>(regs.bx - regs.cx);
   if (subtractB)
   {
-    PatchClippedStep(_guest, regs.dx, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_EDGE_B);
+    regs.dx = PatchClippedStep(_guest.State(), SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_EDGE_B);
     regs.bx = Negate(regs.bx);
   }
   regs.ax = regs.bx;
@@ -1263,7 +1307,7 @@ void FillClippedFlatTop(Guest& _guest)
   regs.ax = static_cast<std::uint16_t>(regs.ax - regs.cx);
   if (subtractA)
   {
-    PatchClippedStep(_guest, regs.dx, SUBTRACT_FROM_EDGE_A, STEP_CLIPPED_EDGE_A);
+    regs.dx = PatchClippedStep(_guest.State(), SUBTRACT_FROM_EDGE_A, STEP_CLIPPED_EDGE_A);
     regs.ax = Negate(regs.ax);
   }
   ClippedSlope(_guest, regs.di, DS.clippedSlopeAWhole, DS.clippedSlopeAFraction);
@@ -1272,7 +1316,7 @@ void FillClippedFlatTop(Guest& _guest)
   regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
   if (subtractB)
   {
-    PatchClippedStep(_guest, regs.dx, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_EDGE_B);
+    regs.dx = PatchClippedStep(_guest.State(), SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_EDGE_B);
     regs.ax = Negate(regs.ax);
   }
   ClippedSlope(_guest, regs.di, DS.clippedSlopeBWhole, DS.clippedSlopeBFraction);
@@ -1368,7 +1412,7 @@ void FillClippedGeneral(Guest& _guest)
   regs.bx = static_cast<std::uint16_t>(regs.bx - regs.ax);
   if (subtractUpper)
   {
-    PatchClippedStep(_guest, regs.si, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_UPPER_B);
+    regs.si = PatchClippedStep(_guest.State(), SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_UPPER_B);
     regs.bx = Negate(regs.bx);
   }
   regs.ax = regs.bx;
@@ -1407,7 +1451,7 @@ void FillClippedGeneral(Guest& _guest)
     regs.ax = static_cast<std::uint16_t>(bottomX - middleX);
     if (subtractLower)
     {
-      PatchClippedStep(_guest, regs.si, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_LOWER_B);
+      regs.si = PatchClippedStep(_guest.State(), SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_LOWER_B);
       regs.ax = Negate(regs.ax);
     }
     ClippedSlope(_guest, regs.cx, DS.clippedSlopeBWhole, DS.clippedSlopeBFraction);
@@ -1676,27 +1720,18 @@ void CopyChartBufferToScreen(Guest& _guest)
   CopyLinePairs(_guest, CHART_COPY_LOOP);
 }
 
-void ClearDrawBuffer(Guest& _guest)
+void ClearDrawBuffer(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.DataSegment();
-  regs.es = regs.ax;
-  regs.cx = DRAW_BUFFER_WORDS;
-  regs.ax = 0;
-  regs.di = 0;
-  regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-  regs.cx = 0;
+  // MOV AX,<the data segment> / MOV ES,AX, then REP STOSW of 0 from DI = 0.
+  (void)RepeatStoreWords(_state, _state.DataSegment(), 0, DRAW_BUFFER_WORDS, 0, StringStep(_backward, 2));
 }
 
-void PlotPixel(Guest& _guest)
+void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = ColorFillByteOffset(_guest.Get(DS.drawColor));
-  const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((Low(regs.dx) & 3) << 1));
-  const auto color = static_cast<std::uint8_t>(pixel & _guest.Byte(regs.bx));
-  regs.cx = Join(color, static_cast<std::uint8_t>(~pixel));
-  regs.bx = static_cast<std::uint16_t>(regs.dx >> 2);
-  Plot(_guest.State(), regs.bx, Low(regs.cx), color);
+  // The pixel's two bits in the colour's fill byte, kept from the byte at row * 64 + x / 4 by the AND, set by the OR.
+  const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((_x & 3) << 1));
+  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state.Get(DS.drawColor))));
+  Plot(_state, static_cast<std::uint16_t>(Join(_row, _x) >> 2), static_cast<std::uint8_t>(~pixel), color);
 }
 
 void DrawClippedLine(Guest& _guest)
@@ -1799,7 +1834,7 @@ void ClipLineToLowEdge(Guest& _guest)
   }
   if (!Negative8(High(regs.dx)))
   {
-    LeaveEndpoints(_guest);
+    ClipOutcomeOut(_guest.Regs(), LeaveEndpoints());
     return;
   }
   SwapThenCutLine(_guest);
@@ -1866,23 +1901,27 @@ void DrawLine(Guest& _guest)
   line.cx = shift;
   if (line.bh == 0)
   {
-    DrawHorizontalLine(_guest, line);
+    if (DrawHorizontalLine(_guest.State(), line))
+    {
+      regs.es = regs.ds;
+      _guest.SetFlag(FLAG_DIRECTION, false);
+    }
   }
   else if (line.bl == 0)
   {
-    DrawVerticalLine(_guest, line);
+    DrawVerticalLine(_guest.State(), line);
   }
   else if (line.bl < line.bh)
   {
-    DrawSteepLine(_guest, line);
+    DrawSteepLine(_guest.State(), line);
   }
   else if (line.bl != line.bh)
   {
-    DrawShallowLine(_guest, line);
+    DrawShallowLine(_guest.State(), line);
   }
   else
   {
-    DrawDiagonalLine(_guest, line);
+    DrawDiagonalLine(_guest.State(), line);
   }
   regs.ax = Join(line.ah, line.al);
   regs.bx = Join(line.bh, line.bl);
@@ -1903,7 +1942,22 @@ void DrawDisc(Guest& _guest)
   regs.es = regs.ax;
   if (regs.bx < SMALL_DISC_RADIUS)
   {
-    DrawSmallDisc(_guest);
+    // The registers as the original leaves them, which DrawSunOrPlanet's and DrawDistantStation's contracts compare: the
+    // place as far as it got when the sprite is off the buffer, else where its row loop stopped, with CX = 0 from LOOP.
+    const SmallDiscPlace place = PlaceSmallDisc(Low(regs.bx), Signed(regs.dx), Signed(regs.cx));
+    regs.ax = Join(place.clip, place.rows);
+    regs.bx = place.sprite;
+    regs.cx = place.row;
+    regs.dx = place.x;
+    if (place.onBuffer)
+    {
+      const SmallDiscEnd end = DrawSmallDisc(_guest.State(), place);
+      regs.ax = end.bits;
+      regs.bx = end.sprite;
+      regs.cx = 0;
+      regs.dx = Join(end.clip, end.shift);
+      regs.di = end.next;
+    }
     return;
   }
   regs.bx = static_cast<std::uint16_t>(regs.bx >> 1);
@@ -1956,49 +2010,39 @@ void DrawDisc(Guest& _guest)
   }
 }
 
-void FillSpan(Guest& _guest)
+std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const Machine::Registers saved = regs; // PUSH AX, BX, CX, DX
-  const auto row = static_cast<std::uint8_t>(Low(regs.cx) >> 1);
-  const std::uint8_t fill = _guest.Get(DS.discFillByte);
-  const std::uint8_t leftX = Low(regs.dx);
-  const std::uint8_t rightX = High(regs.dx);
-  const auto leftByte = static_cast<std::uint8_t>(leftX >> 2);
-  const auto rightByte = static_cast<std::uint8_t>(rightX >> 2);
-  const std::uint16_t leftMask = _guest.Word(DS.spanLeftMasks.At(leftX & 3u));
-  const std::uint16_t rightMask = _guest.Word(DS.spanRightMasks.At(rightX & 3u));
+  const auto row = static_cast<std::uint8_t>(_doubledRow >> 1);
+  const std::uint8_t fill = _state.Get(DS.discFillByte);
+  const auto leftByte = static_cast<std::uint8_t>(_left >> 2);
+  const auto rightByte = static_cast<std::uint8_t>(_right >> 2);
+  const std::uint16_t leftMask = _state.Word(DS.spanLeftMasks.At(_left & 3u));
+  const std::uint16_t rightMask = _state.Word(DS.spanRightMasks.At(_right & 3u));
   const auto bytes = static_cast<std::uint8_t>(rightByte - leftByte);
   if (bytes == 0)
   {
     // One byte holds the whole span: both masks at once.
-    regs.di = static_cast<std::uint16_t>(Join(row, leftX) >> 2);
-    Plot(_guest.State(), regs.di, static_cast<std::uint8_t>(High(rightMask) | High(leftMask)),
+    const auto at = static_cast<std::uint16_t>(Join(row, _left) >> 2);
+    Plot(_state, at, static_cast<std::uint8_t>(High(rightMask) | High(leftMask)),
          static_cast<std::uint8_t>(Low(rightMask) & Low(leftMask) & fill));
+    return at;
   }
-  else
+  std::uint16_t at = static_cast<std::uint16_t>(row * ROW_BYTES + leftByte);
+  Plot(_state, at, High(leftMask), static_cast<std::uint8_t>(Low(leftMask) & fill));
+  ++at;
+  // The bytes between the ends: STOSB for an odd one, then REP STOSW, into ES = DS.
+  const auto middle = static_cast<std::uint16_t>(bytes - 1);
+  if (middle != 0)
   {
-    regs.di = static_cast<std::uint16_t>(row * ROW_BYTES + leftByte);
-    Plot(_guest.State(), regs.di, High(leftMask), static_cast<std::uint8_t>(Low(leftMask) & fill));
-    ++regs.di;
-    regs.cx = static_cast<std::uint16_t>(bytes - 1);
-    if (regs.cx != 0)
+    if ((middle & 1) != 0)
     {
-      const bool odd = (regs.cx & 1) != 0;
-      regs.cx = static_cast<std::uint16_t>(regs.cx >> 1);
-      if (odd)
-      {
-        regs.di = StoreByte(_guest.State(), regs.es, regs.di, fill, StringStep(regs, 1));
-      }
-      regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, Join(fill, fill), StringStep(regs, 2));
-      regs.cx = 0;
+      at = StoreByte(_state, _state.DataSegment(), at, fill, StringStep(_backward, 1));
     }
-    Plot(_guest.State(), regs.di, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
+    at = RepeatStoreWords(_state, _state.DataSegment(), at, static_cast<std::uint16_t>(middle >> 1), Join(fill, fill),
+                          StringStep(_backward, 2));
   }
-  regs.ax = saved.ax;
-  regs.bx = saved.bx;
-  regs.cx = saved.cx;
-  regs.dx = saved.dx;
+  Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
+  return at;
 }
 
 void DrawCircle(Guest& _guest)
@@ -2206,8 +2250,8 @@ void FillClippedTriangle(Guest& _guest)
   regs.di = static_cast<std::uint16_t>(Signed(regs.di) >> 1);
   regs.si = regs.ds;
   regs.es = regs.si;
-  PatchClippedStep(_guest, regs.si, ADD_TO_EDGE_A, STEP_CLIPPED_EDGE_A);
-  PatchClippedStep(_guest, regs.si, ADD_TO_EDGE_B, STEP_CLIPPED_EDGE_B);
+  regs.si = PatchClippedStep(_guest.State(), ADD_TO_EDGE_A, STEP_CLIPPED_EDGE_A);
+  regs.si = PatchClippedStep(_guest.State(), ADD_TO_EDGE_B, STEP_CLIPPED_EDGE_B);
   if (regs.dx == regs.bp)
   {
     const std::int16_t topRow = Signed(regs.dx);
@@ -2276,7 +2320,7 @@ void ShowCockpitScreen(Guest& _guest)
   }
   else
   {
-    ClearCgaScreen(_guest);
+    ClearCgaScreenEntry(_guest);
   }
   _guest.Set(DS.screenLayout, 0);
   Machine::Registers& regs = _guest.Regs();
@@ -2297,31 +2341,16 @@ void ShowCockpitScreen(Guest& _guest)
   regs.cx = 0;
 }
 
-void ClearCgaScreen(Guest& _guest)
+void ClearCgaScreen(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  regs.cx = CGA_BANK_WORDS;
-  regs.di = 0;
-  regs.ax = 0;
-  regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-  regs.cx = CGA_BANK_WORDS;
-  regs.di = CGA_ODD_BANK;
-  regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-  regs.cx = 0;
+  (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, 0, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
+  (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, CGA_ODD_BANK, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
 }
 
-void ClearTextScreen(Guest& _guest)
+void ClearTextScreen(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  regs.cx = TEXT_CELLS;
-  regs.di = 0;
-  regs.ax = Join(_guest.Get(DS.textAttribute), SPACE);
-  regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-  regs.cx = 0;
+  (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, 0, TEXT_CELLS, Join(_state.Get(DS.textAttribute), SPACE),
+                         StringStep(_backward, 2));
 }
 
 void DrawChartFrame(Guest& _guest)
@@ -2337,7 +2366,7 @@ void DrawChartFrame(Guest& _guest)
   }
   else
   {
-    ClearCgaScreen(_guest);
+    ClearCgaScreenEntry(_guest);
   }
   _guest.Set(DS.screenLayout, CHART_LAYOUT);
   Machine::Registers& regs = _guest.Regs();
@@ -2424,7 +2453,6 @@ using Machine::REGISTER_SI;
 constexpr std::uint16_t GENERAL_REGISTERS = REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP;
 
 constexpr Machine::NativeContract CLOBBERS_BX_CX{REGISTER_BX | REGISTER_CX, 0};
-constexpr Machine::NativeContract CLOBBERS_DI{REGISTER_DI, 0};
 // "Clobbers all": DS is left alone, and ES comes back equal to it or as it was, so both are compared.
 constexpr Machine::NativeContract CLOBBERS_GENERAL{GENERAL_REGISTERS, 0};
 constexpr Machine::NativeContract CLIPS_LINE{REGISTER_SI, FLAG_CARRY | FLAG_ZERO};
@@ -2439,6 +2467,56 @@ constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract SAVES_SCREENSHOT{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI, 0};
 
+} // namespace
+
+// ── The entries of the routines de-assembled so far ──
+
+void ClearDrawBufferEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const bool backward = Flag(regs, FLAG_DIRECTION);
+  ClearDrawBuffer(_guest.State(), backward);
+  // The contract keeps ES, AX, CX and DI, as REP STOSW leaves them.
+  regs.es = _guest.DataSegment();
+  regs.ax = 0;
+  regs.cx = 0;
+  regs.di = static_cast<std::uint16_t>(DRAW_BUFFER_WORDS * StringStep(backward, 2));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void PlotPixelEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  PlotPixel(_guest.State(), Low(regs.dx), High(regs.dx));
+  _guest.Clobber(CLOBBERS_BX_CX);
+}
+
+void FillSpanEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The contract keeps DI, the span's last byte, which DrawDisc leaves for DrawTitlePlanet and DrawSunOrPlanet to
+  // compare.
+  regs.di = FillSpan(_guest.State(), Low(regs.dx), High(regs.dx), Low(regs.cx), Flag(regs, FLAG_DIRECTION));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ClearCgaScreenEntry(Guest& _guest)
+{
+  ClearCgaScreen(_guest.State(), _guest.Flag(FLAG_DIRECTION));
+  _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_AX_CX_DI);
+}
+
+void ClearTextScreenEntry(Guest& _guest)
+{
+  ClearTextScreen(_guest.State(), _guest.Flag(FLAG_DIRECTION));
+  _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_AX_CX_DI);
+}
+
+namespace
+{
+
 // The frame routines wait for the timer and the CGA's retrace as a rule: they run on the native thread, and the
 // digests accept them (ADR-010 items 5 and 8).
 constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
@@ -2450,22 +2528,22 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceView, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x05CC, "CopyChartBufferToScreen", &CopyChartBufferToScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x060D, "ClearDrawBuffer", &ClearDrawBuffer, PRESERVES_ALL},
-  NativeEntry{0x15E0, "PlotPixel", &PlotPixel, CLOBBERS_BX_CX},
+  NativeEntry{0x060D, "ClearDrawBuffer", &ClearDrawBufferEntry, PRESERVES_ALL},
+  NativeEntry{0x15E0, "PlotPixel", &PlotPixelEntry, CLOBBERS_BX_CX},
   NativeEntry{0x1603, "DrawClippedLine", &DrawClippedLine, CLOBBERS_GENERAL},
   NativeEntry{0x1686, "ClipLineToLowEdge", &ClipLineToLowEdge, CLIPS_LINE},
   NativeEntry{0x16C1, "ClipLineToHighEdge", &ClipLineToHighEdge, CLIPS_LINE},
   NativeEntry{0x16D1, "DrawLine", &DrawLine, DRAWS_LINE},
   NativeEntry{0x1826, "DrawDisc", &DrawDisc, CLOBBERS_GENERAL},
-  NativeEntry{0x1A07, "FillSpan", &FillSpan, CLOBBERS_DI},
+  NativeEntry{0x1A07, "FillSpan", &FillSpanEntry, PRESERVES_ALL},
   NativeEntry{0x1AC1, "DrawCircle", &DrawCircle, CLOBBERS_GENERAL},
   NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpan, FILLS_TRIANGLE_SPAN},
   NativeEntry{0x1BFB, "FillTriangle", &FillTriangle, CLOBBERS_GENERAL},
   NativeEntry{0x1E6E, "FillClippedTriangle", &FillClippedTriangle, CLOBBERS_GENERAL},
   NativeEntry{0x45FF, "WaitRetraceThenDelay", &WaitRetraceThenDelay, CLOBBERS_AX_DX, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x7BC0, "ShowCockpitScreen", &ShowCockpitScreen, CLOBBERS_AX_CX_SI_DI_ES},
-  NativeEntry{0x7BFB, "ClearCgaScreen", &ClearCgaScreen, CLOBBERS_AX_CX_DI},
-  NativeEntry{0x7C12, "ClearTextScreen", &ClearTextScreen, CLOBBERS_AX_CX_DI},
+  NativeEntry{0x7BFB, "ClearCgaScreen", &ClearCgaScreenEntry, CLOBBERS_AX_CX_DI},
+  NativeEntry{0x7C12, "ClearTextScreen", &ClearTextScreenEntry, CLOBBERS_AX_CX_DI},
   NativeEntry{0x7C25, "DrawChartFrame", &DrawChartFrame, CLOBBERS_GENERAL_AND_ES},
   NativeEntry{0x7CFE, "SetGraphicsMode", &SetGraphicsMode, CLOBBERS_AX_BX_DX},
   NativeEntry{0x7D11, "SetTextMode", &SetTextMode, CLOBBERS_AX_DX},

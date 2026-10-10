@@ -16,6 +16,10 @@ enum class SlotByte : std::uint16_t
   XHigh = 0x01, ///< the high bytes of the 24-bit position
   YHigh = 0x02,
   ZHigh = 0x03,
+  XMiddle = 0x05, ///< the high bytes of the low words: with XHigh, YHigh and ZHigh, the top 16 bits of the position
+  YMiddle = 0x07,
+  ZLow = 0x08, ///< the low byte of z
+  ZMiddle = 0x09,
   DiscScale = 0x0A, ///< the sun's or planet's scale shift; for a ship, the low byte of its pitch
   Color = 0x0B,     ///< the sun's or planet's colour
   Collided = 0x0C,  ///< the station's: bit 0 set while the player is inside it; for a ship, the low byte of its yaw
@@ -62,6 +66,7 @@ enum class SlotWord : std::uint16_t
   Y = 0x06,
   Z = 0x08,
   Pitch = 0x0A, ///< the heading, as ConvertVectorToAngles gives it
+  Color = 0x0B, ///< the sun's or planet's colour and the byte after it, which SetUpLocalSpace writes as a word
   Yaw = 0x0C,
   Roll = 0x0E,
   ViewX = 0x10, ///< the position in the camera's frame

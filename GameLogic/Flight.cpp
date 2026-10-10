@@ -143,6 +143,17 @@ constexpr std::uint16_t SLOT_SCALE_SHIFT = 0x3D;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint16_t DEBRIS_SLOTS = 0x6E30;
 
+// What SetUpLocalSpace puts in the first three slots: the sun's and the planet's type bytes and flags, the planet's
+// z (its middle byte), and the station's heading, z, flags and energy.
+constexpr std::uint8_t SUN_TYPE = 0x3D;
+constexpr std::uint8_t PLANET_TYPE = 0x3F;
+constexpr std::uint8_t SUN_OR_PLANET_FLAGS = 0x06; // blip drawn, indestructible
+constexpr std::uint8_t PLANET_Z_TOP = 0x6E;
+constexpr std::uint16_t STATION_YAW = 0x400;
+constexpr std::uint16_t STATION_Z = 0xFED4;  // -300
+constexpr std::uint8_t STATION_FLAGS = 0x04; // indestructible
+constexpr std::uint8_t STATION_ENERGY = 0x96;
+
 // The dashboard in CGA memory: the line DI names, then the next odd-bank lines and the even-bank lines
 // between them.
 constexpr std::array<std::uint16_t, 5> FIVE_LINES = {0x0000, 0x0050, 0x00A0, 0xE050, 0xE0A0};
@@ -161,6 +172,14 @@ constexpr std::uint16_t MISSILE_LOCK_LINE = 0x1E15;
 constexpr std::uint16_t MISSILE_LOCK_LINE_PAIRS = 3;
 constexpr std::uint16_t CONDITION_LIGHT_LINE = 0x176C;
 constexpr std::uint16_t CONDITION_LIGHT_LINE_PAIRS = 4;
+// The roll and pitch indicators: six words of strip, the marker at pixel value + 23, and the column of the strip's
+// last byte, where the marker's word would run past it.
+constexpr std::uint16_t INDICATOR_WORDS = 6;
+constexpr std::uint8_t INDICATOR_CENTER = 0x17;
+constexpr std::uint16_t INDICATOR_LAST_COLUMN = 0x0B;
+// The missile icons: four cells of a word, from x=48, y=193.
+constexpr std::uint16_t MISSILE_ICONS_LINE = 0x3E0C;
+constexpr std::uint8_t MISSILE_CELLS = 4;
 
 constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
@@ -242,15 +261,24 @@ void SetMessage(GameState& _state, std::uint16_t _text, std::uint16_t _frames)
   _state.Set(DS.messageFrames, _frames);
 }
 
-// SetSinCos0-8 and RotateBySinCos0-8: the pairs of rotationSinCos, by number.
-void SetSinCosPair(Guest& _guest, std::size_t _pair)
+// The register code's side of SetSinCos0-8 and RotateBySinCos0-8, which it calls by pair number as Maths' SetSinCos and
+// RotateByStoredSinCos: the pair a rotation turns is in AX and BX, and SetSinCos leaves the sine in AX and the cosine
+// in BX.
+[[nodiscard]] Pair PairIn(const Registers& _regs) noexcept
 {
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(_pair));
+  return Pair{Signed(_regs.ax), Signed(_regs.bx)};
 }
 
-void RotateByPair(Guest& _guest, std::size_t _pair)
+void PairOut(Registers& _regs, Pair _pair) noexcept
 {
-  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(_pair));
+  _regs.ax = Word(_pair.first);
+  _regs.bx = Word(_pair.second);
+}
+
+void SinCosOut(Registers& _regs, SinCos _sinCos) noexcept
+{
+  _regs.ax = Word(_sinCos.sine);
+  _regs.bx = Word(_sinCos.cosine);
 }
 
 // ---- Stardust -------------------------------------------------------------------------------------
@@ -280,6 +308,17 @@ void MarkDustRespawned(GameState& _state, std::uint16_t _particle, std::uint8_t 
   return x;
 }
 
+// sar 3, keeping BH off 10h (which a 16-bit value shifted three times cannot reach).
+[[nodiscard]] std::uint16_t RandomDustY(std::uint16_t _random) noexcept
+{
+  std::uint16_t y = Sar(_random, 3);
+  if (High(y) == 0x10)
+  {
+    SetHigh(y, 0x0F);
+  }
+  return y;
+}
+
 // The particle as a point, or while the jump drive is engaged a streak from where it was last frame,
 // unless it has just respawned.
 void DrawDust(Guest& _guest)
@@ -297,7 +336,7 @@ void DrawDust(Guest& _guest)
   {
     return;
   }
-  GetPreviousDustScreenPosition(_guest);
+  GetPreviousDustScreenPositionEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.Call(DRAW_LINE);
@@ -321,7 +360,7 @@ void UpdateFrontStardust(Guest& _guest)
   regs.ax = static_cast<std::uint16_t>(Negate(SignExtend(Low(regs.ax))) << 1);
   if (regs.ax != 0)
   {
-    SetSinCosPair(_guest, 7);
+    SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
     RollStardust(_guest);
   }
   regs.cx = STARDUST_COUNT;
@@ -348,7 +387,7 @@ void UpdateFrontStardust(Guest& _guest)
         {
           break;
         }
-        RespawnDustAnywhere(_guest);
+        RespawnDustAnywhereEntry(_guest);
         StorePreviousDustPositionEntry(_guest);
       }
       DrawDust(_guest);
@@ -376,7 +415,7 @@ void UpdateRearStardust(Guest& _guest)
   regs.ax = static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 1);
   if (regs.ax != 0)
   {
-    SetSinCosPair(_guest, 7);
+    SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
     RollStardust(_guest);
   }
   regs.cx = STARDUST_COUNT;
@@ -408,7 +447,7 @@ void UpdateRearStardust(Guest& _guest)
             break;
           }
         }
-        RespawnDustAnywhere(_guest);
+        RespawnDustAnywhereEntry(_guest);
         StorePreviousDustPositionEntry(_guest);
       }
       DrawDust(_guest);
@@ -475,7 +514,7 @@ void UpdateSideStardust(Guest& _guest, bool _left)
     {
       regs.ax = Negate(regs.ax);
     }
-    SetSinCosPair(_guest, 7);
+    SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
     RollStardust(_guest);
   }
   DrawSideStardust(_guest);
@@ -702,26 +741,46 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
   }
 }
 
-// The four checks round-robin from _first, each with AL = its number and falling on to the next with LOOP
-// while CX lasts, until one posts its warning: SetWarning leaves BX the table's byte offset and AX the text.
-void RunWarningChecks(Guest& _guest, std::uint16_t _first)
+// What RunWarningChecks finds: the check it stopped at, the count LOOP leaves, and the text of the warning that check
+// posted, if it posted one.
+struct WarningChecks
 {
-  Registers& regs = _guest.Regs();
+  std::uint8_t check;
+  std::uint16_t checksLeft;
+  std::optional<std::uint16_t> text;
+};
+
+// The four checks round-robin from _first, each falling on to the next with LOOP while _checks lasts, until one posts its
+// warning.
+[[nodiscard]] WarningChecks RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
+{
   std::uint16_t check = _first;
+  std::uint16_t checks = _checks;
   for (;;)
   {
-    SetLow(regs.ax, static_cast<std::uint8_t>(check));
-    if (WarningApplies(_guest.State(), check))
+    if (WarningApplies(_state, check))
     {
-      regs.bx = static_cast<std::uint16_t>(Low(regs.ax) << 1);
-      regs.ax = SetWarning(_guest.State(), Low(regs.ax));
-      return;
+      const auto warning = static_cast<std::uint8_t>(check);
+      return WarningChecks{warning, checks, SetWarning(_state, warning)};
     }
-    if (--regs.cx == 0)
+    if (--checks == 0)
     {
-      return;
+      return WarningChecks{static_cast<std::uint8_t>(check), checks, std::nullopt};
     }
     check = static_cast<std::uint16_t>((check + 1) & 3);
+  }
+}
+
+// The register code's side of RunWarningChecks: each check loads AL with its number and LOOP counts CX down, and
+// SetWarning leaves BX the warning's byte offset in warningTexts and AX its text.
+void WarningChecksOut(Registers& _regs, const WarningChecks& _checks) noexcept
+{
+  SetLow(_regs.ax, _checks.check);
+  _regs.cx = _checks.checksLeft;
+  if (_checks.text)
+  {
+    _regs.bx = static_cast<std::uint16_t>(_checks.check << 1);
+    _regs.ax = *_checks.text;
   }
 }
 
@@ -1253,13 +1312,13 @@ void ApplyPitch(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   regs.ax = Negate(static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 1));
-  SetSinCosPair(_guest, 7);
+  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
   regs.ax = Negate(_guest.Get(DS.playerRollAngle));
-  SetSinCosPair(_guest, 2);
+  SinCosOut(regs, SetSinCos(_guest.State(), 2, regs.ax));
   regs.ax = Negate(_guest.Get(DS.playerYawAngle));
-  SetSinCosPair(_guest, 1);
+  SinCosOut(regs, SetSinCos(_guest.State(), 1, regs.ax));
   regs.ax = Negate(_guest.Get(DS.playerPitchAngle));
-  SetSinCosPair(_guest, 0);
+  SinCosOut(regs, SetSinCos(_guest.State(), 0, regs.ax));
 
   // The forward axis, rotated: pitch from its y and z, then yaw from its x and the rotated z.
   regs.ax = 0;
@@ -1275,10 +1334,10 @@ void ApplyPitch(Guest& _guest)
   regs.ax = Negate(regs.ax);
   _guest.Set(DS.pitchAngleScratch, regs.ax);
   regs.ax = Negate(regs.ax);
-  SetSinCosPair(_guest, 6);
+  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
   regs.bx = forwardZ;
   regs.ax = forwardY;
-  RotateByPair(_guest, 6);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
   regs.ax = forwardX;
   ArcTangent2Entry(_guest);
   regs.ax = Negate(regs.ax);
@@ -1286,7 +1345,7 @@ void ApplyPitch(Guest& _guest)
 
   // The up axis, unrotated by pitch and yaw: roll from what is left.
   regs.ax = Negate(Plus(_guest.Get(DS.pitchAngleScratch), 0x400));
-  SetSinCosPair(_guest, 6);
+  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
   regs.ax = 0;
   regs.bx = 0xD8F0;
   regs.cx = 0;
@@ -1294,15 +1353,15 @@ void ApplyPitch(Guest& _guest)
   const std::uint16_t upX = regs.ax;
   regs.ax = regs.bx;
   regs.bx = regs.cx;
-  RotateByPair(_guest, 6);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
   const std::uint16_t upY = regs.ax;
   const std::uint16_t upZ = regs.bx;
   regs.ax = Plus(_guest.Get(DS.yawAngleScratch), 0x400);
-  SetSinCosPair(_guest, 7);
+  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
   regs.bx = upZ;
   regs.cx = upY;
   regs.ax = upX;
-  RotateByPair(_guest, 7);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
   regs.bx = upY;
   ArcTangent2Entry(_guest);
   _guest.Set(DS.playerRollAngle, regs.ax);
@@ -1313,95 +1372,75 @@ void ApplyPitch(Guest& _guest)
   _guest.Set(DS.velocityDirty, 1);
 }
 
-// 0x2A57-0x2B53: the sun in slot 0, the planet in slot 1 and the station in slot 2.
-void PlaceSunPlanetAndStation(Guest& _guest)
+// 0x2A57-0x2B53: the sun in slot 0, the planet in slot 1 and the station in slot 2, each byte written as the original
+// writes it.
+void PlaceSunPlanetAndStation(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  const auto setByte = [&](std::uint16_t _field, int _value) { _guest.SetByte(Plus(regs.di, _field), static_cast<std::uint8_t>(_value)); };
-  const auto setWord = [&](std::uint16_t _field, std::uint16_t _value) { _guest.SetWord(Plus(regs.di, _field), _value); };
+  // The sun, at random far behind: the top 16 bits of x and y within 200h of 0, of z C00h to 801h behind.
+  ObjectSlot sun(_state, DS.shipSlots.offset);
+  sun.Set(SlotByte::Type, SUN_TYPE);
+  const auto randomTop = [&_state](std::uint16_t _less) { return static_cast<std::uint16_t>((NextRandom(_state) & 0x3FF) - _less); };
+  std::uint16_t top = randomTop(0x200);
+  sun.Set(SlotByte::XMiddle, Low(top));
+  sun.Set(SlotByte::XHigh, High(top));
+  top = randomTop(0x200);
+  sun.Set(SlotByte::YMiddle, Low(top));
+  sun.Set(SlotByte::YHigh, High(top));
+  top = randomTop(0xC00);
+  sun.Set(SlotByte::ZHigh, High(top));
+  sun.Set(SlotByte::ZMiddle, Low(top));
+  // Colour 1 or 2 from bit 8 of the system's first seed, written as a word.
+  sun.Set(SlotWord::Color, static_cast<std::uint16_t>((High(_state.Get(DS.systemSeed0)) & 1) + 1));
+  sun.Set(SlotByte::Class, 0);
+  sun.Set(SlotByte::Flags, SUN_OR_PLANET_FLAGS);
+  sun.Set(SlotByte::Detail, 0xFF);
 
-  // The sun, at random far behind: x and y within 2 of 0, z 10 to 12 behind, in 24-bit coordinates.
-  regs.di = DS.shipSlots.offset;
-  setByte(0, 0x3D);
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>((regs.ax & 0x3FF) - 0x200);
-  setByte(5, Low(regs.ax));
-  setByte(1, High(regs.ax));
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>((regs.ax & 0x3FF) - 0x200);
-  setByte(7, Low(regs.ax));
-  setByte(2, High(regs.ax));
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>((regs.ax & 0x3FF) - 0xC00);
-  setByte(3, High(regs.ax));
-  setByte(9, Low(regs.ax));
-  regs.ax = _guest.Get(DS.systemSeed0);
-  SetLow(regs.ax, High(regs.ax));
-  regs.ax = static_cast<std::uint16_t>(regs.ax & 1);
-  SetLow(regs.ax, Low(regs.ax) + 1);
-  setWord(0x0B, regs.ax);
-  setByte(SLOT_CLASS, 0);
-  setByte(SLOT_FLAGS, 6);
-  setByte(0x3F, 0xFF);
+  // The planet, straight ahead at z = 6E00h, its colour from bit 0 of the seed.
+  ObjectSlot planet(_state, Plus(sun.Offset(), ObjectSlot::BYTES));
+  planet.Set(SlotByte::Type, PLANET_TYPE);
+  planet.Set(SlotWord::X, 0);
+  planet.Set(SlotByte::XHigh, 0);
+  planet.Set(SlotWord::Y, 0);
+  planet.Set(SlotByte::YHigh, 0);
+  planet.Set(SlotByte::ZMiddle, PLANET_Z_TOP);
+  planet.Set(SlotByte::ZHigh, 0);
+  planet.Set(SlotByte::ZLow, 0);
+  planet.Set(SlotWord::Color, static_cast<std::uint16_t>((Low(_state.Get(DS.systemSeed0)) & 1) + 1));
+  planet.Set(SlotByte::Class, 0);
+  planet.Set(SlotByte::Flags, SUN_OR_PLANET_FLAGS);
+  planet.Set(SlotByte::Detail, 0xFF);
 
-  // The planet, straight ahead.
-  regs.di = Plus(regs.di, SLOT_BYTES);
-  setByte(0, 0x3F);
-  regs.ax = 0;
-  regs.dx = 0;
-  setWord(SLOT_X, regs.ax);
-  setByte(1, Low(regs.dx));
-  setWord(SLOT_Y, regs.ax);
-  setByte(2, Low(regs.dx));
-  regs.ax = 0x6E;
-  setByte(9, Low(regs.ax));
-  setByte(3, High(regs.ax));
-  setByte(8, 0);
-  regs.ax = static_cast<std::uint16_t>(_guest.Get(DS.systemSeed0) & 1);
-  SetLow(regs.ax, Low(regs.ax) + 1);
-  setWord(0x0B, regs.ax);
-  setByte(SLOT_CLASS, 0);
-  setByte(SLOT_FLAGS, 6);
-  setByte(0x3F, 0xFF);
-
-  // The station, just behind: a Dodo (type 0) at tech level 9 and up, else a Coriolis (type 1).
-  SetLow(regs.ax, _guest.Get(DS.currentTechLevel) >= 9 ? 0 : 1);
-  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) << 1) | 1));
-  regs.di = Plus(regs.di, SLOT_BYTES);
-  setByte(0, Low(regs.ax));
-  regs.ax = 0x400;
-  setWord(0x0C, regs.ax);
-  regs.ax = 0;
-  setWord(0x0E, regs.ax);
-  setWord(0x0A, regs.ax);
-  regs.dx = 0;
-  setWord(SLOT_X, regs.ax);
-  setByte(1, Low(regs.dx));
-  setWord(SLOT_Y, regs.ax);
-  setByte(2, Low(regs.dx));
-  regs.ax = 0xFED4;
-  setWord(SLOT_Z, regs.ax);
-  regs.dx = SignWord(regs.ax);
-  setByte(3, Low(regs.dx));
-  setByte(SLOT_FLAGS, 4);
-  setByte(SLOT_CLASS, 1);
-  NextRandomEntry(_guest);
-  SetHigh(regs.ax, (High(regs.ax) & 7) + 0x0A);
-  setByte(0x1F, High(regs.ax));
-  setByte(0x3F, 0xFF);
-  setByte(0x2B, 0x96);
-  setByte(0x31, 0);
-  if (_guest.Get(DS.thargoidInvasionActive) == 1)
+  // The station, just behind at z = -300: a Dodo (type 0) at tech level 9 and up, else a Coriolis (type 1), with
+  // 10-17 in its Thargons byte. While the Thargoids invade it has no missiles, Thargons or aggression, and is not
+  // hostile.
+  ObjectSlot station(_state, Plus(planet.Offset(), ObjectSlot::BYTES));
+  const std::uint8_t stationType = _state.Get(DS.currentTechLevel) >= 9 ? 0 : 1;
+  station.Set(SlotByte::Type, static_cast<std::uint8_t>((stationType << 1) | ObjectSlot::ACTIVE));
+  station.Set(SlotWord::Yaw, STATION_YAW);
+  station.Set(SlotWord::Roll, 0);
+  station.Set(SlotWord::Pitch, 0);
+  station.Set(SlotWord::X, 0);
+  station.Set(SlotByte::XHigh, 0);
+  station.Set(SlotWord::Y, 0);
+  station.Set(SlotByte::YHigh, 0);
+  station.Set(SlotWord::Z, STATION_Z);
+  station.Set(SlotByte::ZHigh, Low(SignWord(STATION_Z)));
+  station.Set(SlotByte::Flags, STATION_FLAGS);
+  station.Set(SlotByte::Class, 1);
+  station.Set(SlotByte::Thargons, static_cast<std::uint8_t>((High(NextRandom(_state)) & 7) + 0x0A));
+  station.Set(SlotByte::Detail, 0xFF);
+  station.Set(SlotByte::Energy, STATION_ENERGY);
+  station.Set(SlotByte::Bounty, 0);
+  if (_state.Get(DS.thargoidInvasionActive) == 1)
   {
-    setByte(0x32, 0);
-    setByte(0x30, 0);
-    setByte(0x2B, 0x96);
-    setByte(0x1F, 0);
-    setByte(0x2D, 0x0A);
-    setByte(SLOT_FLAGS, _guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 0xFE);
+    station.Set(SlotByte::Missiles, 0);
+    station.Set(SlotByte::Aggression, 0);
+    station.Set(SlotByte::Energy, STATION_ENERGY);
+    station.Set(SlotByte::Thargons, 0);
+    station.Set(SlotByte::Fragments, 0x0A);
+    station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) & 0xFE));
   }
-  SetLow(regs.ax, _guest.Get(DS.currentGovernment));
-  _guest.Set(DS.spawnGovernment, Low(regs.ax));
+  _state.Set(DS.spawnGovernment, _state.Get(DS.currentGovernment));
 }
 
 // sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_compass], ax, with DL:AX = _velocityHigh:_velocity:
@@ -1459,21 +1498,14 @@ void ComputeStardustShift(Guest& _guest)
   _guest.Set(DS.stardustShift, Low(regs.ax));
 }
 
-void GetPreviousDustScreenPosition(Guest& _guest)
+std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::uint16_t _particle)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(Plus(regs.si, PREVIOUS_X));
-  regs.bx = _guest.Word(Plus(regs.si, PREVIOUS_Y));
-  IsDustOnScreenEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  const DustPosition previous{Signed(_state.Word(Plus(_particle, PREVIOUS_X))), Signed(_state.Word(Plus(_particle, PREVIOUS_Y)))};
+  if (!IsDustOnScreen(previous))
   {
-    _guest.SetFlag(FLAG_CARRY, true);
-    return;
+    return std::nullopt;
   }
-  DustToScreenEntry(_guest);
-  SetLow(regs.cx, Low(regs.ax));
-  SetHigh(regs.cx, Low(regs.bx));
-  _guest.SetFlag(FLAG_CARRY, false);
+  return DustToScreen(previous);
 }
 
 std::uint16_t ComputeDustStripMask(std::int16_t _step)
@@ -1508,7 +1540,7 @@ void ShiftStardustSideways(Guest& _guest)
       IsDustOnScreenEntry(_guest);
       if (!_guest.Flag(FLAG_CARRY))
       {
-        RespawnDustAtSideEdge(_guest);
+        RespawnDustAtSideEdgeEntry(_guest);
         StorePreviousDustPositionEntry(_guest);
       }
       StoreDustPositionEntry(_guest);
@@ -1517,22 +1549,15 @@ void ShiftStardustSideways(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-void RespawnDustAtSideEdge(Guest& _guest)
+DustPosition RespawnDustAtSideEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask)
 {
-  Registers& regs = _guest.Regs();
-  NextRandomEntry(_guest);
-  regs.bx = regs.ax;
-  SetLow(regs.ax, RandomLifetime(regs.ax));
-  MarkDustRespawned(_guest.State(), regs.si, Low(regs.ax));
-  regs.bx = Sar(regs.bx, 3);
-  if (High(regs.bx) == 0x10)
-  {
-    SetHigh(regs.bx, 0x0F);
-  }
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>(regs.ax & regs.bp);
+  const std::uint16_t first = NextRandom(_state);
+  MarkDustRespawned(_state, _particle, RandomLifetime(first));
+  const std::uint16_t y = RandomDustY(first);
+  const auto strip = static_cast<std::uint16_t>(NextRandom(_state) & _stripMask);
   // Moving right the particle enters at the left edge, moving left at the right.
-  regs.ax = Negative(regs.dx) ? static_cast<std::uint16_t>(0x1F00 - regs.ax) : Plus(regs.ax, 0xE000);
+  const std::uint16_t x = _step < 0 ? static_cast<std::uint16_t>(0x1F00 - strip) : Plus(strip, 0xE000);
+  return DustPosition{Signed(x), Signed(y)};
 }
 
 void RollStardust(Guest& _guest)
@@ -1543,7 +1568,7 @@ void RollStardust(Guest& _guest)
   do
   {
     LoadDustPositionEntry(_guest);
-    RotateByPair(_guest, 7);
+    PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
     StoreDustPositionEntry(_guest);
     regs.si = Plus(regs.si, PARTICLE_BYTES);
   } while (--regs.cx != 0);
@@ -1566,7 +1591,7 @@ void ShiftStardustVertically(Guest& _guest)
       IsDustOnScreenEntry(_guest);
       if (!_guest.Flag(FLAG_CARRY))
       {
-        RespawnDustAtVerticalEdge(_guest);
+        RespawnDustAtVerticalEdgeEntry(_guest);
         StorePreviousDustPositionEntry(_guest);
       }
       StoreDustPositionEntry(_guest);
@@ -1575,33 +1600,22 @@ void ShiftStardustVertically(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-void RespawnDustAtVerticalEdge(Guest& _guest)
+DustPosition RespawnDustAtVerticalEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask)
 {
-  Registers& regs = _guest.Regs();
-  NextRandomEntry(_guest);
-  SetLow(regs.bx, RandomLifetime(regs.ax));
-  MarkDustRespawned(_guest.State(), regs.si, Low(regs.bx));
-  const std::uint16_t x = RandomDustX(regs.ax);
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>(regs.ax & regs.bp);
-  regs.bx = Negative(regs.dx) ? static_cast<std::uint16_t>(0x0F00 - regs.ax) : Plus(0xF000, regs.ax);
-  regs.ax = x;
+  const std::uint16_t first = NextRandom(_state);
+  MarkDustRespawned(_state, _particle, RandomLifetime(first));
+  const std::uint16_t x = RandomDustX(first);
+  const auto strip = static_cast<std::uint16_t>(NextRandom(_state) & _stripMask);
+  // Moving down the particle enters at the top edge, moving up at the bottom.
+  const std::uint16_t y = _step < 0 ? static_cast<std::uint16_t>(0x0F00 - strip) : Plus(0xF000, strip);
+  return DustPosition{Signed(x), Signed(y)};
 }
 
-void RespawnDustAnywhere(Guest& _guest)
+DustPosition RespawnDustAnywhere(GameState& _state, std::uint16_t _particle)
 {
-  Registers& regs = _guest.Regs();
-  NextRandomEntry(_guest);
-  SetLow(regs.ax, RandomLifetime(regs.ax));
-  MarkDustRespawned(_guest.State(), regs.si, Low(regs.ax));
-  NextRandomEntry(_guest);
-  regs.bx = regs.ax;
-  regs.ax = RandomDustX(regs.ax);
-  regs.bx = Sar(Join(Low(regs.bx), High(regs.bx)), 3);
-  if (High(regs.bx) == 0x10)
-  {
-    SetHigh(regs.bx, 0x0F);
-  }
+  MarkDustRespawned(_state, _particle, RandomLifetime(NextRandom(_state)));
+  const std::uint16_t random = NextRandom(_state);
+  return DustPosition{Signed(RandomDustX(random)), Signed(RandomDustY(Swap(random)))};
 }
 
 bool IsDustOnScreen(DustPosition _position)
@@ -1655,42 +1669,36 @@ DustScreenPosition DustToScreen(DustPosition _position)
   return DustScreenPosition{toScreen(_position.x, 0x80), toScreen(_position.y, 0x40)};
 }
 
-void ResetStardust(Guest& _guest)
+std::uint16_t ResetStardust(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = _guest.Get(DS.messageFrames);
-  if (Low(regs.ax) == 0)
+  // MOV AX,[messageFrames] / AND AL,AL / JNZ / XOR AH,AH / MOV [messageFrames],AX: the word cleared when its low byte is 0.
+  if (Low(_state.Get(DS.messageFrames)) == 0)
   {
-    SetHigh(regs.ax, 0);
-    _guest.Set(DS.messageFrames, regs.ax);
+    _state.Set(DS.messageFrames, 0);
   }
   // Coordinates within 23h of the centre in the high byte, retried until one is.
-  const auto randomCoordinate = [&]()
+  const auto randomCoordinate = [&_state]()
   {
     for (;;)
     {
-      NextRandomEntry(_guest);
-      regs.ax = Sar(regs.ax, 1);
-      const auto high = static_cast<std::int8_t>(High(regs.ax));
+      const std::uint16_t coordinate = Sar(NextRandom(_state), 1);
+      const auto high = static_cast<std::int8_t>(High(coordinate));
       if (high >= -0x23 && high <= 0x23)
       {
-        return;
+        return coordinate;
       }
     }
   };
-  regs.cx = STARDUST_COUNT;
-  regs.di = DS.stardust.offset;
-  do
+  std::uint16_t lifetimeRandom = 0;
+  for (std::uint16_t particle = DS.stardust.offset; particle != Plus(DS.stardust.offset, STARDUST_BYTES);
+       particle = Plus(particle, PARTICLE_BYTES))
   {
-    randomCoordinate();
-    _guest.SetWord(regs.di, regs.ax);
-    randomCoordinate();
-    _guest.SetWord(Plus(regs.di, 2), regs.ax);
-    NextRandomEntry(_guest);
-    SetLow(regs.ax, RandomLifetime(regs.ax));
-    _guest.SetByte(Plus(regs.di, PARTICLE_LIFETIME), Low(regs.ax));
-    regs.di = Plus(regs.di, PARTICLE_BYTES);
-  } while (--regs.cx != 0);
+    _state.SetWord(particle, randomCoordinate());
+    _state.SetWord(Plus(particle, 2), randomCoordinate());
+    lifetimeRandom = NextRandom(_state);
+    _state.SetByte(Plus(particle, PARTICLE_LIFETIME), RandomLifetime(lifetimeRandom));
+  }
+  return lifetimeRandom;
 }
 
 void SaveStardustPositions(GameState& _state)
@@ -1783,7 +1791,7 @@ void UpdateDashboard(Guest& _guest)
 
   DrawEnergyBanks(_guest);
   DrawMissileLockIndicatorEntry(_guest);
-  DrawMissileIcons(_guest);
+  DrawMissileIconsEntry(_guest);
 
   regs.ax = _guest.Get(DS.rollRate);
   SetLow(regs.ax, High(regs.ax));
@@ -1791,14 +1799,14 @@ void UpdateDashboard(Guest& _guest)
   {
     _guest.Set(DS.pitchRateShown, Low(regs.ax));
     regs.di = 0x3938;
-    DrawSignedIndicator(_guest);
+    DrawSignedIndicatorEntry(_guest);
   }
   regs.ax = _guest.Get(DS.rollRate);
   if (Low(regs.ax) != _guest.Get(DS.rollRateShown))
   {
     _guest.Set(DS.rollRateShown, Low(regs.ax));
     regs.di = 0x37F8;
-    DrawSignedIndicator(_guest);
+    DrawSignedIndicatorEntry(_guest);
   }
 
   RedrawThreeLineBar(_guest, DS.laserTemperature, DS.laserTemperatureShown, 0x3B8C, true);
@@ -1825,10 +1833,9 @@ void DrawFiveLineBar(Guest& _guest)
   DrawBarPixels(_guest, FIVE_LINES);
 }
 
-void DrawSignedIndicator(Guest& _guest)
+void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _value)
 {
-  Registers& regs = _guest.Regs();
-  auto value = static_cast<std::int8_t>(Low(regs.ax));
+  std::int8_t value = _value;
   if (value <= -24)
   {
     value = -23;
@@ -1837,32 +1844,25 @@ void DrawSignedIndicator(Guest& _guest)
   {
     value = 23;
   }
-  SetLow(regs.ax, static_cast<std::uint8_t>(value));
-  SetLow(regs.bx, 0x17 + Low(regs.ax));
-  regs.cx = 6;
-  regs.ax = BACKGROUND_WORD;
-  do
+  // The strip: six words of the background, 48 pixels in colour 2.
+  for (std::uint16_t word = 0; word < INDICATOR_WORDS; ++word)
   {
-    FillFiveLineWord(_guest.State(), regs.di, regs.ax);
-    regs.di = Plus(regs.di, 2);
-  } while (--regs.cx != 0);
-  regs.di = static_cast<std::uint16_t>(regs.di - 0x0C);
-
-  // The marker: a word of indicatorMarkers at pixel BL, or its first byte alone at the right end.
-  regs.ax = static_cast<std::uint16_t>((Low(regs.bx) >> 2) & 0x0F);
-  regs.di = Plus(regs.di, regs.ax);
-  regs.bx = Plus(static_cast<std::uint16_t>((regs.bx & 3) << 1), DS.indicatorMarkers.offset);
-  const bool lastByte = regs.ax == 0x0B;
-  regs.ax = _guest.Word(regs.bx);
-  if (lastByte)
+    FillFiveLineWord(_state, Plus(_line, word * 2), BACKGROUND_WORD);
+  }
+  // The marker: a word of indicatorMarkers at pixel value + 23, or its first byte alone at the right end.
+  const auto pixel = static_cast<std::uint8_t>(INDICATOR_CENTER + value);
+  const auto column = static_cast<std::uint16_t>((pixel >> 2) & 0x0F);
+  const std::uint16_t at = Plus(_line, column);
+  const std::uint16_t marker = _state.Word(Plus(DS.indicatorMarkers.offset, static_cast<std::uint16_t>((pixel & 3) << 1)));
+  if (column == INDICATOR_LAST_COLUMN)
   {
-    for (const std::uint16_t line : FIVE_LINES)
+    for (const std::uint16_t scanline : FIVE_LINES)
     {
-      _guest.SetFarByte(regs.es, Plus(regs.di, line), Low(regs.ax));
+      _state.SetVideoByte(Plus(at, scanline), Low(marker));
     }
     return;
   }
-  FillFiveLineWord(_guest.State(), regs.di, regs.ax);
+  FillFiveLineWord(_state, at, marker);
 }
 
 void DrawThreeLineBar(Guest& _guest)
@@ -1871,43 +1871,33 @@ void DrawThreeLineBar(Guest& _guest)
   DrawBarPixels(_guest, THREE_LINES);
 }
 
-void DrawMissileIcons(Guest& _guest)
+bool DrawMissileIcons(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.cx, _guest.Get(DS.missileCount));
-  if (Low(regs.cx) == _guest.Get(DS.missileCountShown))
+  const std::uint8_t count = _state.Get(DS.missileCount);
+  if (count == _state.Get(DS.missileCountShown))
   {
-    return;
+    return false;
   }
-  _guest.Set(DS.missileCountShown, Low(regs.cx));
-  regs.di = 0x3E0C;
-  regs.cx = static_cast<std::uint16_t>(regs.cx & 3);
-  if (regs.cx != 0)
+  _state.Set(DS.missileCountShown, count);
+  // A word a cell: the icons for the count's low two bits, then the background to the fourth cell, a byte count that
+  // wraps past four missiles.
+  std::uint16_t cell = MISSILE_ICONS_LINE;
+  for (std::uint16_t icon = 0; icon < (count & 3u); ++icon)
   {
     // missileIcon holds the icon's five lines in bank order: odd, even, odd, even, odd.
     constexpr std::array<std::uint16_t, 5> ICON_WORDS = {0, 4, 8, 2, 6};
-    do
+    for (std::size_t index = 0; index < FIVE_LINES.size(); ++index)
     {
-      regs.si = DS.missileIcon.offset;
-      for (std::size_t index = 0; index < FIVE_LINES.size(); ++index)
-      {
-        regs.ax = _guest.Word(Plus(regs.si, ICON_WORDS[index]));
-        _guest.SetFarWord(regs.es, Plus(regs.di, FIVE_LINES[index]), regs.ax);
-      }
-      regs.di = Plus(regs.di, 2);
-    } while (--regs.cx != 0);
+      _state.SetVideoWord(Plus(cell, FIVE_LINES[index]), _state.Word(Plus(DS.missileIcon.offset, ICON_WORDS[index])));
+    }
+    cell = Plus(cell, 2);
   }
-  SetLow(regs.cx, 4 - _guest.Get(DS.missileCount));
-  if (Low(regs.cx) == 0)
+  for (auto cells = static_cast<std::uint8_t>(MISSILE_CELLS - count); cells != 0; --cells)
   {
-    return;
+    FillFiveLineWord(_state, cell, BACKGROUND_WORD);
+    cell = Plus(cell, 2);
   }
-  regs.ax = BACKGROUND_WORD;
-  do
-  {
-    FillFiveLineWord(_guest.State(), regs.di, regs.ax);
-    regs.di = Plus(regs.di, 2);
-  } while (--regs.cx != 0);
+  return true;
 }
 
 bool DrawMissileLockIndicator(GameState& _state)
@@ -2093,7 +2083,7 @@ void SetUpLocalSpace(Guest& _guest)
   _guest.Set(DS.shipSlotCount, 0x24);
   _guest.Call(CLEAR_ALL_OBJECTS);
   _guest.Call(SHOW_COCKPIT_SCREEN);
-  ResetStardust(_guest);
+  ResetStardustEntry(_guest);
   _guest.Set(DS.hyperspaceCountdown, 0);
   _guest.Set(DS.dockingComputerOn, 0);
   _guest.Set(DS.dataA137, 0);
@@ -2115,7 +2105,8 @@ void SetUpLocalSpace(Guest& _guest)
     _guest.Set(DS.spawnGovernment, 0);
     return;
   }
-  PlaceSunPlanetAndStation(_guest);
+  // The original leaves AX, DX and DI as the placing leaves them; poisoned, no caller read them.
+  PlaceSunPlanetAndStation(_guest.State());
 }
 
 void CheckCollisions(Guest& _guest)
@@ -2176,33 +2167,33 @@ void ComputeDeathDebrisVector(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   regs.ax = Negate(_guest.Get(DS.viewAngle));
-  SetSinCosPair(_guest, 8);
+  SinCosOut(regs, SetSinCos(_guest.State(), 8, regs.ax));
   regs.ax = Negate(Plus(_guest.Get(DS.playerPitchAngle), 0x400));
-  SetSinCosPair(_guest, 6);
+  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
   regs.ax = Plus(_guest.Get(DS.playerYawAngle), 0x400);
-  SetSinCosPair(_guest, 7);
+  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
   // (0, 40, 0), turned by the view and, off the front view, by the roll, then by yaw and pitch.
   regs.ax = 0;
   regs.bx = 0x28;
   regs.cx = 0;
   if (_guest.Get(DS.viewAngle) != 0)
   {
-    RotateByPair(_guest, 8);
+    PairOut(regs, RotateByStoredSinCos(_guest.State(), 8, PairIn(regs)));
     const std::uint16_t x = regs.ax;
     const std::uint16_t y = regs.bx;
     const std::uint16_t z = regs.cx;
     regs.ax = Negate(_guest.Get(DS.playerRollAngle));
-    SetSinCosPair(_guest, 8);
+    SinCosOut(regs, SetSinCos(_guest.State(), 8, regs.ax));
     // push ax, bx, cx; pop bx, cx, ax: y and z change places.
     regs.bx = z;
     regs.cx = y;
     regs.ax = x;
-    RotateByPair(_guest, 8);
+    PairOut(regs, RotateByStoredSinCos(_guest.State(), 8, PairIn(regs)));
     std::swap(regs.cx, regs.bx);
   }
-  RotateByPair(_guest, 7);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
   std::swap(regs.cx, regs.ax);
-  RotateByPair(_guest, 6);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
   std::swap(regs.cx, regs.ax);
   std::swap(regs.cx, regs.bx);
 }
@@ -2228,27 +2219,31 @@ void UpdateWarnings(Guest& _guest)
   regs.cx = 4;
   SetLow(regs.bx, _guest.Get(DS.warningIndex) + 1);
   regs.bx = static_cast<std::uint16_t>((regs.bx & 3) << 1);
-  RunWarningChecks(_guest, static_cast<std::uint16_t>(regs.bx >> 1));
+  WarningChecksOut(regs, RunWarningChecks(_guest.State(), static_cast<std::uint16_t>(regs.bx >> 1), regs.cx));
 }
 
 void CheckMissileWarning(Guest& _guest)
 {
-  RunWarningChecks(_guest, 0);
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 0, regs.cx));
 }
 
 void CheckAltitudeWarning(Guest& _guest)
 {
-  RunWarningChecks(_guest, 1);
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 1, regs.cx));
 }
 
 void CheckTemperatureWarning(Guest& _guest)
 {
-  RunWarningChecks(_guest, 2);
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 2, regs.cx));
 }
 
 void CheckEnergyWarning(Guest& _guest)
 {
-  RunWarningChecks(_guest, 3);
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 3, regs.cx));
 }
 
 void UpdateScannerBlip(Guest& _guest)
@@ -2293,13 +2288,13 @@ void UpdateScannerBlip(Guest& _guest)
   SetHigh(regs.cx, oldZ);
   if ((_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
   {
-    XorScannerBlip(_guest);
+    XorScannerBlipEntry(_guest);
     regs.di = slot;
   }
   SetHigh(regs.ax, _guest.Byte(blip));
   SetHigh(regs.bx, _guest.Byte(Plus(blip, 1)));
   SetHigh(regs.cx, _guest.Byte(Plus(blip, 2)));
-  XorScannerBlip(_guest);
+  XorScannerBlipEntry(_guest);
   regs.di = slot;
   const std::uint16_t flags = Plus(regs.di, SLOT_FLAGS);
   _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) | FLAG_BLIP_DRAWN));
@@ -2420,31 +2415,30 @@ void UpdateCompass(Guest& _guest)
   regs.bp = regs.ax;
   if ((_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
   {
-    XorCompassDot(_guest);
+    XorCompassDotEntry(_guest);
   }
   regs.ax = SignExtend(_guest.Byte(front));
   regs.bp = regs.ax;
   regs.dx = _guest.Word(dot);
   const std::uint16_t flags = Plus(regs.di, SLOT_FLAGS);
   _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) | FLAG_BLIP_DRAWN));
-  XorCompassDot(_guest);
+  XorCompassDotEntry(_guest);
 }
 
-void XorCompassDot(Guest& _guest)
+DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront)
 {
-  Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  if (regs.bp != 0)
+  if (_inFront)
   {
-    XorDashboardPixelEntry(_guest);
+    (void)XorDashboardPixel(_state, _x, _y);
   }
+  DashboardPixel pixel{_x, _y, 0};
   for (const DotStep step : COMPASS_RING)
   {
-    SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) + step.x));
-    SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + step.y));
-    XorDashboardPixelEntry(_guest);
+    pixel.x = static_cast<std::uint8_t>(pixel.x + step.x);
+    pixel.y = static_cast<std::uint8_t>(pixel.y + step.y);
+    pixel.mask = XorDashboardPixel(_state, pixel.x, pixel.y);
   }
-  regs.di = slot;
+  return pixel;
 }
 
 void EraseScannerBlip(Guest& _guest)
@@ -2466,42 +2460,42 @@ void EraseScannerBlip(Guest& _guest)
   SetHigh(regs.bx, _guest.Byte(Plus(regs.di, SLOT_BLIP + 1)));
   SetHigh(regs.cx, _guest.Byte(Plus(regs.di, SLOT_BLIP + 2)));
   const std::uint16_t slot = regs.di;
-  XorScannerBlip(_guest);
+  XorScannerBlipEntry(_guest);
   regs.di = slot;
   _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) & ~FLAG_BLIP_DRAWN));
 }
 
-void XorScannerBlip(Guest& _guest)
+DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z)
 {
-  Registers& regs = _guest.Regs();
-  SetHigh(regs.bx, Sar(High(regs.bx), 2));
-  SetHigh(regs.cx, Sar(High(regs.cx), 2));
-  SetLow(regs.dx, High(regs.ax) + 0x3D);
-  SetHigh(regs.dx, 0x1F - High(regs.cx));
-  // A stick of |y| pixels from the dot, then one more to the right at its end.
-  SetLow(regs.cx, High(regs.bx));
-  SetHigh(regs.cx, 1);
-  if ((Low(regs.cx) & 0x80) != 0)
+  const std::uint8_t y = Sar(_y, 2);
+  const std::uint8_t z = Sar(_z, 2);
+  DashboardPixel pixel{static_cast<std::uint8_t>(_x + 0x3D), static_cast<std::uint8_t>(0x1F - z), 0};
+  // A stick of |y| pixels from the dot, up or down, then one more to the right at its end. The JNS after DEC CL never
+  // falls through: |y| is at most 20h, and the test for 0 stops the stick first.
+  auto length = y;
+  std::uint8_t step = 1;
+  if ((length & 0x80) != 0)
   {
-    SetLow(regs.cx, -Low(regs.cx));
-    SetHigh(regs.cx, 0xFF);
+    length = Negate(length);
+    step = 0xFF;
   }
   for (;;)
   {
-    XorDashboardPixelEntry(_guest);
-    if (Low(regs.cx) == 0)
+    pixel.mask = XorDashboardPixel(_state, pixel.x, pixel.y);
+    if (length == 0)
     {
       break;
     }
-    SetHigh(regs.dx, High(regs.dx) + High(regs.cx));
-    SetLow(regs.cx, Low(regs.cx) - 1);
-    if ((Low(regs.cx) & 0x80) != 0)
+    pixel.y = static_cast<std::uint8_t>(pixel.y + step);
+    --length;
+    if ((length & 0x80) != 0)
     {
       break;
     }
   }
-  SetLow(regs.dx, Low(regs.dx) + 1);
-  XorDashboardPixelEntry(_guest);
+  ++pixel.x;
+  pixel.mask = XorDashboardPixel(_state, pixel.x, pixel.y);
+  return pixel;
 }
 
 std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y)
@@ -2525,7 +2519,7 @@ void EraseCompassAndBlips(Guest& _guest)
     regs.bp = regs.ax;
     regs.dx = _guest.Word(Plus(regs.di, SLOT_BLIP));
     _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) & ~FLAG_BLIP_DRAWN));
-    XorCompassDot(_guest);
+    XorCompassDotEntry(_guest);
   }
   regs.di = DS.firstShipSlot.offset;
   regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - 3);
@@ -2799,7 +2793,7 @@ void UpdatePlayerMotion(Guest& _guest)
   }
   if (_guest.Get(DS.escapePodFrames) != 0)
   {
-    MoveObjectsByVelocity(_guest);
+    MoveObjectsByVelocityEntry(_guest);
     return;
   }
   if (_guest.Get(DS.dockingComputerOn) != 0)
@@ -2862,7 +2856,7 @@ void UpdatePlayerMotion(Guest& _guest)
     return;
   }
   UpdatePlayerVelocity(_guest);
-  MoveObjectsByVelocity(_guest);
+  MoveObjectsByVelocityEntry(_guest);
 }
 
 void UpdatePlayerVelocity(Guest& _guest)
@@ -2874,9 +2868,9 @@ void UpdatePlayerVelocity(Guest& _guest)
   }
   _guest.Set(DS.velocityDirty, 0);
   regs.ax = Negate(Plus(_guest.Get(DS.playerPitchAngle), 0x400));
-  SetSinCosPair(_guest, 6);
+  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
   regs.ax = Plus(_guest.Get(DS.playerYawAngle), 0x400);
-  SetSinCosPair(_guest, 7);
+  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
   regs.ax = 0;
   regs.bx = _guest.Get(DS.playerSpeed);
   if (_guest.Get(DS.jumpDriveEngaged) == 1)
@@ -2886,33 +2880,29 @@ void UpdatePlayerVelocity(Guest& _guest)
     _guest.Set(DS.jumpDriveEngaged, 0);
     regs.bx = static_cast<std::uint16_t>(regs.bx << 5);
   }
-  RotateByPair(_guest, 7);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
   _guest.Set(DS.playerVelocityX, regs.ax);
   regs.ax = 0;
-  RotateByPair(_guest, 6);
+  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
   _guest.Set(DS.playerVelocityY, regs.ax);
   _guest.Set(DS.playerVelocityZ, regs.bx);
 }
 
-void MoveObjectsByVelocity(Guest& _guest)
+void MoveObjectsByVelocity(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.cx = _guest.Get(DS.shipSlotCount);
-  regs.si = DS.shipSlots.offset;
-  do
+  // LOOP from CX = shipSlotCount: a count of 0 runs 65,536 times.
+  std::uint16_t offset = DS.shipSlots.offset;
+  for (std::uint32_t slots = LoopCount(_state.Get(DS.shipSlotCount)); slots != 0; --slots)
   {
-    ObjectSlot slot(_guest.State(), regs.si);
-    regs.ax = _guest.Get(DS.playerVelocityX);
-    regs.dx = SignWord(regs.ax);
-    SubtractVelocity(slot, SlotByte::XHigh, SlotWord::X, SlotWord::CompassX, regs.ax, Low(regs.dx));
-    regs.ax = _guest.Get(DS.playerVelocityY);
-    regs.dx = SignWord(regs.ax);
-    SubtractVelocity(slot, SlotByte::YHigh, SlotWord::Y, SlotWord::CompassY, regs.ax, Low(regs.dx));
-    regs.ax = _guest.Get(DS.playerVelocityZ);
-    regs.dx = SignWord(regs.ax);
-    SubtractVelocity(slot, SlotByte::ZHigh, SlotWord::Z, SlotWord::CompassZ, regs.ax, Low(regs.dx));
-    regs.si = Plus(regs.si, SLOT_BYTES);
-  } while (--regs.cx != 0);
+    ObjectSlot slot(_state, offset);
+    const std::uint16_t x = _state.Get(DS.playerVelocityX);
+    SubtractVelocity(slot, SlotByte::XHigh, SlotWord::X, SlotWord::CompassX, x, Low(SignWord(x)));
+    const std::uint16_t y = _state.Get(DS.playerVelocityY);
+    SubtractVelocity(slot, SlotByte::YHigh, SlotWord::Y, SlotWord::CompassY, y, Low(SignWord(y)));
+    const std::uint16_t z = _state.Get(DS.playerVelocityZ);
+    SubtractVelocity(slot, SlotByte::ZHigh, SlotWord::Z, SlotWord::CompassZ, z, Low(SignWord(z)));
+    offset = Plus(offset, ObjectSlot::BYTES);
+  }
 }
 
 void RunPauseScreen(Guest& _guest)
@@ -2981,6 +2971,10 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX_DI = Clobbers(REGISTER_AX | REG
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_SI_DI = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI);
 // XorDashboardPixel's: AX, BX and ES as the original leaves them, which its callers' contracts compare.
 constexpr Machine::NativeContract CLOBBERS_DI = Clobbers(REGISTER_DI);
+constexpr Machine::NativeContract PREVIOUS_DUST_OUT{REGISTER_AX | REGISTER_BX, FLAG_CARRY};
+constexpr Machine::NativeContract CLOBBERS_CX = Clobbers(REGISTER_CX);
+constexpr Machine::NativeContract CLOBBERS_AX_SI_DI = Clobbers(REGISTER_AX | REGISTER_SI | REGISTER_DI);
+constexpr Machine::NativeContract CLOBBERS_CX_DX = Clobbers(REGISTER_CX | REGISTER_DX);
 
 // A particle's position as the dust routines hold it: x in AX, y in BX.
 [[nodiscard]] DustPosition DustIn(const Registers& _regs) noexcept
@@ -2994,13 +2988,52 @@ void DustOut(Registers& _regs, DustPosition _position) noexcept
   _regs.bx = Word(_position.y);
 }
 
+// A dashboard pixel's place as DX holds it: x in DL, y in DH.
+[[nodiscard]] std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
+{
+  return Join(_pixel.y, _pixel.x);
+}
+
 } // namespace
+
+void GetPreviousDustScreenPositionEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::optional<DustScreenPosition> previous = GetPreviousDustScreenPosition(_guest.State(), regs.si);
+  if (previous)
+  {
+    regs.cx = Join(Low(Word(previous->row)), Low(Word(previous->x)));
+  }
+  _guest.SetFlag(FLAG_CARRY, !previous);
+  _guest.Clobber(PREVIOUS_DUST_OUT);
+}
 
 void ComputeDustStripMaskEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   regs.bp = ComputeDustStripMask(Signed(regs.dx));
   _guest.Clobber(CLOBBERS_AX);
+}
+
+void RespawnDustAtSideEdgeEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  DustOut(regs, RespawnDustAtSideEdge(_guest.State(), regs.si, Signed(regs.dx), regs.bp));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void RespawnDustAtVerticalEdgeEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  DustOut(regs, RespawnDustAtVerticalEdge(_guest.State(), regs.si, Signed(regs.dx), regs.bp));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void RespawnDustAnywhereEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  DustOut(regs, RespawnDustAnywhere(_guest.State(), regs.si));
+  _guest.Clobber(PRESERVES_ALL);
 }
 
 void IsDustOnScreenEntry(Guest& _guest)
@@ -3055,6 +3088,17 @@ void DustToScreenEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void ResetStardustEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::uint16_t lifetimeRandom = ResetStardust(_guest.State());
+  // The original leaves AX the last random with the last lifetime in AL, and DI past the particles, which
+  // RunDockingComputer's contract compares.
+  regs.ax = WithLow(lifetimeRandom, RandomLifetime(lifetimeRandom));
+  regs.di = Plus(DS.stardust.offset, STARDUST_BYTES);
+  _guest.Clobber(CLOBBERS_CX);
+}
+
 void SaveStardustPositionsEntry(Guest& _guest)
 {
   SaveStardustPositions(_guest.State());
@@ -3072,6 +3116,31 @@ void InvalidateDashboardEntry(Guest& _guest)
   regs.cx = 0;
   regs.di = Plus(DS.missileCountShown.offset, DASHBOARD_CACHE_BYTES);
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void DrawSignedIndicatorEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  DrawSignedIndicator(_guest.State(), regs.di, static_cast<std::int8_t>(Low(regs.ax)));
+  // The strip's LOOP leaves CX = 0, whose CH the next DrawThreeLineBar's second run reads through UpdateDashboard.
+  regs.cx = 0;
+  _guest.Clobber(CLOBBERS_AX_BX_DI);
+}
+
+void DrawMissileIconsEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  // The original leaves CX = 0 once it draws, from AND CX,3 and its LOOPs, and otherwise CL = missileCount with CH as it
+  // was: the next DrawThreeLineBar's second run reads CH through UpdateDashboard.
+  if (DrawMissileIcons(_guest.State()))
+  {
+    regs.cx = 0;
+  }
+  else
+  {
+    SetLow(regs.cx, _guest.Get(DS.missileCount));
+  }
+  _guest.Clobber(CLOBBERS_AX_SI_DI);
 }
 
 void DrawMissileLockIndicatorEntry(Guest& _guest)
@@ -3104,6 +3173,36 @@ void InSafeZoneEntry(Guest& _guest)
   _guest.Clobber(CARRY_OUT);
 }
 
+void XorCompassDotEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const DashboardPixel last = XorCompassDot(_guest.State(), Low(regs.dx), High(regs.dx), regs.bp != 0);
+  // DX comes back one right and one up, and PUSH DI / POP DI keeps DI. The last XorDashboardPixel leaves AX = DX, BX its
+  // mask and ES the video segment, which UpdateCompass's contract compares: it ends with this.
+  regs.dx = PixelPlace(last);
+  regs.ax = regs.dx;
+  regs.bx = last.mask;
+  regs.es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void XorScannerBlipEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  // The stick's step, which the original keeps in CH: up for a negative y.
+  const std::uint8_t step = (Sar(High(regs.bx), 2) & 0x80) != 0 ? 0xFF : 0x01;
+  const DashboardPixel last = XorScannerBlip(_guest.State(), High(regs.ax), High(regs.bx), High(regs.cx));
+  // The last XorDashboardPixel leaves AX = DX, the last pixel, BX its mask and ES the video segment, and the stick's loop
+  // CL = 0: UpdateScannerBlip's contract compares DX and ES, and EngageJumpDrive's and CheckShipInRange's, through
+  // EraseScannerBlip, BX and CX as well.
+  regs.dx = PixelPlace(last);
+  regs.ax = regs.dx;
+  regs.bx = last.mask;
+  regs.cx = Join(step, 0);
+  regs.es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_DI);
+}
+
 void XorDashboardPixelEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -3125,6 +3224,18 @@ void DrainEnergyEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void MoveObjectsByVelocityEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::uint32_t slots = LoopCount(_guest.Get(DS.shipSlotCount));
+  MoveObjectsByVelocity(_guest.State());
+  // The original leaves the last velocity it subtracted, z, in AX and SI past the last slot, which RunDockingComputer's
+  // contract compares.
+  regs.ax = _guest.Get(DS.playerVelocityZ);
+  regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + slots * ObjectSlot::BYTES);
+  _guest.Clobber(CLOBBERS_CX_DX);
+}
+
 namespace
 {
 
@@ -3135,17 +3246,16 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x068F, "UpdateStardust", &UpdateStardust,
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP)},
   NativeEntry{0x0887, "ComputeStardustShift", &ComputeStardustShift, Clobbers(REGISTER_AX)},
-  NativeEntry{0x08A1, "GetPreviousDustScreenPosition", &GetPreviousDustScreenPosition,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX, FLAG_CARRY}},
+  NativeEntry{0x08A1, "GetPreviousDustScreenPosition", &GetPreviousDustScreenPositionEntry, PREVIOUS_DUST_OUT},
   NativeEntry{0x08B9, "ComputeDustStripMask", &ComputeDustStripMaskEntry, CLOBBERS_AX},
   NativeEntry{0x08CB, "ShiftStardustSideways", &ShiftStardustSideways,
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
-  NativeEntry{0x08F2, "RespawnDustAtSideEdge", &RespawnDustAtSideEdge, PRESERVES_ALL},
+  NativeEntry{0x08F2, "RespawnDustAtSideEdge", &RespawnDustAtSideEdgeEntry, PRESERVES_ALL},
   NativeEntry{0x0927, "RollStardust", &RollStardust, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},
   NativeEntry{0x0940, "ShiftStardustVertically", &ShiftStardustVertically,
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
-  NativeEntry{0x0969, "RespawnDustAtVerticalEdge", &RespawnDustAtVerticalEdge, PRESERVES_ALL},
-  NativeEntry{0x09A3, "RespawnDustAnywhere", &RespawnDustAnywhere, PRESERVES_ALL},
+  NativeEntry{0x0969, "RespawnDustAtVerticalEdge", &RespawnDustAtVerticalEdgeEntry, PRESERVES_ALL},
+  NativeEntry{0x09A3, "RespawnDustAnywhere", &RespawnDustAnywhereEntry, PRESERVES_ALL},
   NativeEntry{0x09D6, "IsDustOnScreen", &IsDustOnScreenEntry, CARRY_OUT},
   NativeEntry{0x09EE, "IsDustNearCenter", &IsDustNearCenterEntry, CARRY_OUT},
   NativeEntry{0x0A06, "ScaleDustStep", &ScaleDustStepEntry, PRESERVES_ALL},
@@ -3153,16 +3263,16 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0A19, "StoreDustPosition", &StoreDustPositionEntry, PRESERVES_ALL},
   NativeEntry{0x0A1F, "StorePreviousDustPosition", &StorePreviousDustPositionEntry, PRESERVES_ALL},
   NativeEntry{0x0A28, "DustToScreen", &DustToScreenEntry, PRESERVES_ALL},
-  NativeEntry{0x0A43, "ResetStardust", &ResetStardust, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
+  NativeEntry{0x0A43, "ResetStardust", &ResetStardustEntry, CLOBBERS_CX},
   NativeEntry{0x0A88, "SaveStardustPositions", &SaveStardustPositionsEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x15CF, "RestoreFlightScreen", &RestoreFlightScreen, PRESERVES_ALL},
   NativeEntry{0x2540, "InvalidateDashboard", &InvalidateDashboardEntry, PRESERVES_ALL},
   NativeEntry{0x254F, "UpdateDashboard", &UpdateDashboard, Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_ES))},
   NativeEntry{0x2645, "DrawFiveLineBar", &DrawFiveLineBar, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI)},
-  NativeEntry{0x26BE, "DrawSignedIndicator", &DrawSignedIndicator, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DI)},
+  NativeEntry{0x26BE, "DrawSignedIndicator", &DrawSignedIndicatorEntry, CLOBBERS_AX_BX_DI},
   NativeEntry{0x273E, "DrawThreeLineBar", &DrawThreeLineBar, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI)},
-  NativeEntry{0x2799, "DrawMissileIcons", &DrawMissileIcons, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI)},
+  NativeEntry{0x2799, "DrawMissileIcons", &DrawMissileIconsEntry, CLOBBERS_AX_SI_DI},
   NativeEntry{0x2804, "DrawMissileLockIndicator", &DrawMissileLockIndicatorEntry, CLOBBERS_AX_BX_DI},
   NativeEntry{0x283B, "DrawEnergyBanks", &DrawEnergyBanks, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2882, "UpdateEnergyAndLaserHeat", &UpdateEnergyAndLaserHeat, Clobbers(REGISTER_AX | REGISTER_BX)},
@@ -3180,9 +3290,9 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3726, "CheckEnergyWarning", &CheckEnergyWarning, PRESERVES_ALL},
   NativeEntry{0x40EC, "UpdateScannerBlip", &UpdateScannerBlip, PRESERVES_ALL},
   NativeEntry{0x418F, "UpdateCompass", &UpdateCompass, PRESERVES_ALL},
-  NativeEntry{0x42A4, "XorCompassDot", &XorCompassDot, Clobbers(REGISTER_AX | REGISTER_BX)},
+  NativeEntry{0x42A4, "XorCompassDot", &XorCompassDotEntry, PRESERVES_ALL},
   NativeEntry{0x42D6, "EraseScannerBlip", &EraseScannerBlip, Clobbers(REGISTER_BX | REGISTER_CX | REGISTER_DX)},
-  NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlip, Clobbers(REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_ES)},
+  NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlipEntry, CLOBBERS_DI},
   NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixelEntry, CLOBBERS_DI},
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlips, Clobbers(REGISTER_ALL)},
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeak, Clobbers(REGISTER_AX | REGISTER_DX)},
@@ -3194,7 +3304,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
   NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocity, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX)},
-  NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocity, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},
+  NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocityEntry, CLOBBERS_CX_DX},
   NativeEntry{0x8D6A, "RunPauseScreen", &RunPauseScreen, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
 };
 

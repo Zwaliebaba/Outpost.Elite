@@ -670,7 +670,7 @@ void LaunchEscapePod(Guest& _guest)
   for (regs.cx = ESCAPE_POD_MOVES; regs.cx != 0; --regs.cx)
   {
     const std::uint16_t count = regs.cx;
-    MoveObjectsByVelocity(_guest);
+    MoveObjectsByVelocityEntry(_guest);
     regs.cx = count;
   }
   // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
