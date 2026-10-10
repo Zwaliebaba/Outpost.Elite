@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "NativeEntry.h"
 
 #include <cstdint>
@@ -17,24 +18,23 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SoundEntries() noexcept;
 
-/// StartMusic (CS:7401): SilenceSpeakerTimer, the speaker's gate and data on, and the title tune from
-/// its start. AX clobbered.
-void StartMusic(Guest& _guest);
-
-/// StopAllSound (CS:7423): StopSoundEffects, the music off and the speaker's gate and data cleared. AX
-/// clobbered.
-void StopAllSound(Guest& _guest);
-
-/// SilenceSpeakerTimer (CS:7436): PIT channel 2 in mode 3 with divisor 2, out of hearing. AL clobbered.
-void SilenceSpeakerTimer(Guest& _guest);
-
-/// EmitNoiseSample (CS:7A93): the next bit of noiseSource to the speaker. Out: AL, the port 61h value.
-void EmitNoiseSample(Guest& _guest);
-
-/// ToggleSpeaker (CS:7AB8): flips the speaker's data bit. Out: AL, the port 61h value.
-void ToggleSpeaker(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// StartMusic (CS:7401): SilenceSpeakerTimer, the speaker's gate and data on in port 61h but not in speakerPortImage,
+/// and the title tune from its start.
+void StartMusic(GameState& _state, Hardware& _hardware);
+
+/// StopAllSound (CS:7423): StopSoundEffects and its STI, the music off and the speaker's gate and data cleared.
+void StopAllSound(GameState& _state, Hardware& _hardware);
+
+/// SilenceSpeakerTimer (CS:7436): PIT channel 2 in mode 3 with divisor 2, out of hearing.
+void SilenceSpeakerTimer(Hardware& _hardware);
+
+/// EmitNoiseSample (CS:7A93): the next bit of noiseSource to the speaker. Returns the port 61h value.
+std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware);
+
+/// ToggleSpeaker (CS:7AB8): flips the speaker's data bit. Returns the port 61h value.
+std::uint8_t ToggleSpeaker(GameState& _state, Hardware& _hardware);
 
 /// StartBeep (CS:7A57): beepTicks = 70.
 void StartBeep(GameState& _state);
@@ -70,6 +70,11 @@ void StartPlayerHitSound(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void StartMusicEntry(Guest& _guest);            ///< AX clobbered.
+void StopAllSoundEntry(Guest& _guest);          ///< AX clobbered; IF=1.
+void SilenceSpeakerTimerEntry(Guest& _guest);   ///< AX clobbered.
+void EmitNoiseSampleEntry(Guest& _guest);       ///< Out: AL, the port 61h value.
+void ToggleSpeakerEntry(Guest& _guest);         ///< Out: AL, the port 61h value.
 void StartBeepEntry(Guest& _guest);             ///< Preserves every register.
 void StartLowBeepEntry(Guest& _guest);          ///< Preserves every register.
 void StopSoundEffectsEntry(Guest& _guest);      ///< Out: IF=1.

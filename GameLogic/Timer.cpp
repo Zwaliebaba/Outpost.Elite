@@ -4,6 +4,8 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Input.h"
+#include "Sound.h"
 
 namespace Elite
 {
@@ -12,27 +14,20 @@ namespace
 {
 
 constexpr std::uint16_t IS_MOUSE_DRIVER_INSTALLED = 0x02D4;
-constexpr std::uint16_t EMIT_NOISE_SAMPLE = 0x7A93;
-constexpr std::uint16_t TOGGLE_SPEAKER = 0x7AB8;
 constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 
 // The BIOS's int 8 vector, which InstallTimerInterrupt keeps in the code segment (savedTimerVector).
 constexpr std::uint16_t SAVED_TIMER_OFFSET = 0x025A;
 constexpr std::uint16_t SAVED_TIMER_SEGMENT = 0x025C;
+constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0x0000;
 constexpr std::uint16_t TIMER_VECTOR_OFFSET = 0x0020; // 0000:0020, int 8
 constexpr std::uint16_t TIMER_VECTOR_SEGMENT = 0x0022;
 constexpr std::uint8_t TIMER_VECTOR = 0x08;
 constexpr std::uint8_t TIME_OF_DAY_VECTOR = 0x1A;
 
-constexpr std::uint16_t PIC_COMMAND_PORT = 0x20;
 constexpr std::uint8_t END_OF_INTERRUPT = 0x20;
-constexpr std::uint16_t PIT_CHANNEL0_PORT = 0x40;
-constexpr std::uint16_t PIT_CHANNEL2_PORT = 0x42;
-constexpr std::uint16_t PIT_COMMAND_PORT = 0x43;
-constexpr std::uint16_t SPEAKER_PORT = 0x61;
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
 constexpr std::uint8_t PIT_CHANNEL0_RATE = 0x34;        // channel 0, both bytes, mode 2: the Amstrad's mouse
-constexpr std::uint8_t PIT_CHANNEL2_SQUARE_WAVE = 0xB6; // channel 2, both bytes, mode 3
 constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
 constexpr std::uint16_t AMSTRAD_MOUSE_DIVISOR = 0x5555;
 constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
@@ -69,23 +64,22 @@ std::uint8_t Decrement(GameState& _state, DataField<std::uint8_t> _field)
   return value;
 }
 
-// AL and the speaker's data bit to port 61h, through speakerPortImage.
-void OutSpeaker(Guest& _guest, std::uint8_t _image)
+// _image to speakerPortImage and to port 61h.
+void OutSpeaker(GameState& _state, Hardware& _hardware, std::uint8_t _image)
 {
-  _guest.Set(DS.speakerPortImage, _image);
-  _guest.Regs().ax = WithLow(_guest.Regs().ax, _image);
-  _guest.Out8(SPEAKER_PORT, _image);
+  _state.Set(DS.speakerPortImage, _image);
+  _hardware.SetSystemControl(_image);
 }
 
 // A beep's square wave: bit 1 of _bit replaces the speaker's data bit.
-void SetSpeakerData(Guest& _guest, std::uint8_t _bit)
+void SetSpeakerData(GameState& _state, Hardware& _hardware, std::uint8_t _bit)
 {
-  OutSpeaker(_guest, static_cast<std::uint8_t>((_guest.Get(DS.speakerPortImage) & ~SPEAKER_DATA) | _bit));
+  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>((_state.Get(DS.speakerPortImage) & ~SPEAKER_DATA) | _bit));
 }
 
-void ToggleSpeakerData(Guest& _guest)
+void ToggleSpeakerData(GameState& _state, Hardware& _hardware)
 {
-  OutSpeaker(_guest, static_cast<std::uint8_t>(_guest.Get(DS.speakerPortImage) ^ SPEAKER_DATA));
+  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>(_state.Get(DS.speakerPortImage) ^ SPEAKER_DATA));
 }
 
 // CheckProtectionAnswer (0x739A): decodes the expected answer to the pending question into DS:A5B7 and compares the
@@ -140,214 +134,204 @@ void CheckProtectionAnswer(GameState& _state, bool _backward)
   }
 }
 
-// TimerTickMusic's note change (0x7372): the PIT's channel 2 to _period. BX is the original's, put back.
-void PlayPeriod(Guest& _guest, std::uint16_t _period)
-{
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Out8(PIT_COMMAND_PORT, PIT_CHANNEL2_SQUARE_WAVE);
-  _guest.Out8(PIT_CHANNEL2_PORT, Low(_period));
-  _guest.Out8(PIT_CHANNEL2_PORT, High(_period));
-  regs.ax = static_cast<std::uint16_t>((_period & 0xFF00) | High(_period));
-}
-
 // TimerTickMusic (0x72FF): titleTune's notes, each a byte (negative: no gap after it, 'F' a rest, 'G' the end) and a
-// length in beats.
-void TickMusic(Guest& _guest)
+// length in beats. A note change (0x7372) sets the PIT's channel 2 to its period.
+void TickMusic(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t ticksLeft = _guest.Get(DS.noteTicksLeft);
+  const std::uint16_t ticksLeft = _state.Get(DS.noteTicksLeft);
   if (ticksLeft != 0)
   {
-    _guest.Set(DS.noteTicksLeft, static_cast<std::uint16_t>(ticksLeft - 1));
+    _state.Set(DS.noteTicksLeft, static_cast<std::uint16_t>(ticksLeft - 1));
     if (ticksLeft != 1)
     {
       return;
     }
     // The note is over: its gap, if it has one, as a rest.
-    regs.ax = _guest.Get(DS.noteGapTicks);
-    if (regs.ax == 0)
+    const std::uint16_t gapTicks = _state.Get(DS.noteGapTicks);
+    if (gapTicks == 0)
     {
       return;
     }
-    _guest.Set(DS.noteGapTicks, 0);
-    _guest.Set(DS.noteTicksLeft, regs.ax);
-    PlayPeriod(_guest, REST_PERIOD);
+    _state.Set(DS.noteGapTicks, 0);
+    _state.Set(DS.noteTicksLeft, gapTicks);
+    _hardware.SetToneDivisor(REST_PERIOD);
     return;
   }
 
-  std::uint16_t pointer = _guest.Get(DS.musicPointer);
-  regs.ax = _guest.Word(pointer);
-  const std::uint8_t note = Low(regs.ax);
-  const std::uint8_t beats = High(regs.ax);
+  std::uint16_t pointer = _state.Get(DS.musicPointer);
+  const std::uint16_t entry = _state.Word(pointer);
+  const std::uint8_t note = Low(entry);
+  const std::uint8_t beats = High(entry);
   const auto ticks = static_cast<std::uint16_t>(NOTE_TICKS_PER_BEAT * beats);
   if (note == TUNE_RESTART)
   {
-    _guest.Set(DS.musicPointer, DS.titleTune.offset);
+    _state.Set(DS.musicPointer, DS.titleTune.offset);
   }
   else
   {
     pointer = static_cast<std::uint16_t>(pointer + 2);
-    _guest.Set(DS.musicPointer, pointer);
+    _state.Set(DS.musicPointer, pointer);
     if (note != TUNE_REST)
     {
       std::uint8_t pitch = note;
       std::uint16_t sounding = ticks;
       if ((note & 0x80) != 0)
       {
-        _guest.Set(DS.noteGapTicks, 0);
+        _state.Set(DS.noteGapTicks, 0);
         pitch = static_cast<std::uint8_t>(0u - note);
       }
       else
       {
         // An eighth of the note is a gap.
         const auto gap = static_cast<std::uint16_t>(ticks >> 3);
-        _guest.Set(DS.noteGapTicks, gap);
+        _state.Set(DS.noteGapTicks, gap);
         sounding = static_cast<std::uint16_t>(ticks - gap);
       }
-      _guest.Set(DS.noteTicksLeft, sounding);
+      _state.Set(DS.noteTicksLeft, sounding);
       const auto index = static_cast<std::uint8_t>(pitch - NOTE_BASE);
-      PlayPeriod(_guest, _guest.Word(DS.notePeriods.At(index)));
+      _hardware.SetToneDivisor(_state.Word(DS.notePeriods.At(index)));
       return;
     }
   }
-  _guest.Set(DS.noteGapTicks, 0);
-  _guest.Set(DS.noteTicksLeft, ticks);
-  PlayPeriod(_guest, REST_PERIOD);
+  _state.Set(DS.noteGapTicks, 0);
+  _state.Set(DS.noteTicksLeft, ticks);
+  _hardware.SetToneDivisor(REST_PERIOD);
 }
+
+// A sweep's sample: EmitNoiseSample for the noise sweep, ToggleSpeaker for the tone sweep. Each returns the port 61h
+// value, which the sweep does not use.
+using SweepSample = std::uint8_t (*)(GameState&, Hardware&);
 
 // The noise and tone sweeps (0x7215, 0x7289): every sweepPeriodTicks ticks one sample, by _sample; every
 // sweepStepLength samples a longer period and a shorter step, until the period reaches 7.
-void TickSweep(Guest& _guest, std::uint16_t _sample, DataField<std::uint8_t> _active)
+void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, DataField<std::uint8_t> _active)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (Decrement(_guest.State(), DS.sweepTickCounter) != 0)
+  if (Decrement(_state, DS.sweepTickCounter) != 0)
   {
     return;
   }
-  regs.ax = WithLow(regs.ax, _guest.Get(DS.sweepPeriodTicks));
-  _guest.Set(DS.sweepTickCounter, Low(regs.ax));
-  _guest.Call(_sample);
-  if (Decrement(_guest.State(), DS.sweepStepCounter) != 0)
+  _state.Set(DS.sweepTickCounter, _state.Get(DS.sweepPeriodTicks));
+  _sample(_state, _hardware);
+  if (Decrement(_state, DS.sweepStepCounter) != 0)
   {
     return;
   }
-  _guest.Set(DS.sweepStepCounter, _guest.Get(DS.sweepStepLength));
-  const auto period = static_cast<std::uint8_t>(_guest.Get(DS.sweepPeriodTicks) + 1);
-  _guest.Set(DS.sweepPeriodTicks, period);
-  regs.ax = WithLow(regs.ax, _guest.Get(DS.sweepStepShrink));
-  _guest.Set(DS.sweepStepLength, static_cast<std::uint8_t>(_guest.Get(DS.sweepStepLength) - Low(regs.ax)));
+  _state.Set(DS.sweepStepCounter, _state.Get(DS.sweepStepLength));
+  const auto period = static_cast<std::uint8_t>(_state.Get(DS.sweepPeriodTicks) + 1);
+  _state.Set(DS.sweepPeriodTicks, period);
+  _state.Set(DS.sweepStepLength, static_cast<std::uint8_t>(_state.Get(DS.sweepStepLength) - _state.Get(DS.sweepStepShrink)));
   if (period == SWEEP_LAST_PERIOD)
   {
-    _guest.Set(_active, 0);
+    _state.Set(_active, 0);
   }
 }
 
 // The siren (0x72C3): every other tick, a square wave of sirenCountdown's bit 0 or, in stage 1, of every tick.
-void TickSiren(Guest& _guest)
+void TickSiren(GameState& _state, Hardware& _hardware)
 {
-  const auto half = static_cast<std::uint8_t>(_guest.Get(DS.sirenHalfTick) ^ 1);
-  _guest.Set(DS.sirenHalfTick, half);
+  const auto half = static_cast<std::uint8_t>(_state.Get(DS.sirenHalfTick) ^ 1);
+  _state.Set(DS.sirenHalfTick, half);
   if (half != 0)
   {
     return;
   }
-  const std::uint8_t countdown = Decrement(_guest.State(), DS.sirenCountdown);
+  const std::uint8_t countdown = Decrement(_state, DS.sirenCountdown);
   if (countdown == 0)
   {
-    const std::uint8_t stage = Decrement(_guest.State(), DS.sirenStage);
-    _guest.Set(DS.sirenCountdown, SIREN_TICKS);
+    const std::uint8_t stage = Decrement(_state, DS.sirenStage);
+    _state.Set(DS.sirenCountdown, SIREN_TICKS);
     if (stage == 0)
     {
-      _guest.Set(DS.sirenStage, SIREN_FIRST_STAGE);
+      _state.Set(DS.sirenStage, SIREN_FIRST_STAGE);
       return;
     }
-    _guest.Set(DS.sirenCountdown, static_cast<std::uint8_t>(SIREN_TICKS << 1));
+    _state.Set(DS.sirenCountdown, static_cast<std::uint8_t>(SIREN_TICKS << 1));
     return;
   }
-  if (_guest.Get(DS.sirenStage) == 1 || (countdown & 1) == 0)
+  if (_state.Get(DS.sirenStage) == 1 || (countdown & 1) == 0)
   {
-    ToggleSpeakerData(_guest);
+    ToggleSpeakerData(_state, _hardware);
   }
 }
 
 // The two-tone (0x725E): twoToneTicks of a square wave on every tick in stage 1, every other tick otherwise.
-void TickTwoTone(Guest& _guest)
+void TickTwoTone(GameState& _state, Hardware& _hardware)
 {
-  const auto ticks = static_cast<std::uint16_t>(_guest.Get(DS.twoToneTicks) - 1);
-  _guest.Set(DS.twoToneTicks, ticks);
+  const auto ticks = static_cast<std::uint16_t>(_state.Get(DS.twoToneTicks) - 1);
+  _state.Set(DS.twoToneTicks, ticks);
   if (ticks == 0)
   {
-    Decrement(_guest.State(), DS.twoToneStage);
-    _guest.Set(DS.twoToneTicks, TWO_TONE_TICKS);
+    Decrement(_state, DS.twoToneStage);
+    _state.Set(DS.twoToneTicks, TWO_TONE_TICKS);
     return;
   }
-  if (_guest.Get(DS.twoToneStage) == 1 || (ticks & 1) == 0)
+  if (_state.Get(DS.twoToneStage) == 1 || (ticks & 1) == 0)
   {
-    ToggleSpeakerData(_guest);
+    ToggleSpeakerData(_state, _hardware);
   }
 }
 
 // TimerTickSoundEffects (0x717F): the beeps, then the one effect of highest priority.
-void TickSoundEffects(Guest& _guest)
+void TickSoundEffects(GameState& _state, Hardware& _hardware)
 {
-  if (_guest.Get(DS.beepTicks) != 0)
+  if (_state.Get(DS.beepTicks) != 0)
   {
-    SetSpeakerData(_guest, static_cast<std::uint8_t>((Decrement(_guest.State(), DS.beepTicks) << 1) & SPEAKER_DATA));
+    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>((Decrement(_state, DS.beepTicks) << 1) & SPEAKER_DATA));
   }
-  if (_guest.Get(DS.lowBeepTicks) != 0)
+  if (_state.Get(DS.lowBeepTicks) != 0)
   {
-    SetSpeakerData(_guest, static_cast<std::uint8_t>(Decrement(_guest.State(), DS.lowBeepTicks) & SPEAKER_DATA));
+    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>(Decrement(_state, DS.lowBeepTicks) & SPEAKER_DATA));
   }
-  if (_guest.Get(DS.sirenEnabled) == 1)
+  if (_state.Get(DS.sirenEnabled) == 1)
   {
-    TickSiren(_guest);
+    TickSiren(_state, _hardware);
     return;
   }
-  if (_guest.Get(DS.noiseSweepActive) == 1)
+  if (_state.Get(DS.noiseSweepActive) == 1)
   {
-    TickSweep(_guest, EMIT_NOISE_SAMPLE, DS.noiseSweepActive);
+    TickSweep(_state, _hardware, &EmitNoiseSample, DS.noiseSweepActive);
     return;
   }
-  if (_guest.Get(DS.noiseBurstTicks) != 0)
+  if (_state.Get(DS.noiseBurstTicks) != 0)
   {
-    Decrement(_guest.State(), DS.noiseBurstTicks);
-    _guest.Call(EMIT_NOISE_SAMPLE);
+    Decrement(_state, DS.noiseBurstTicks);
+    EmitNoiseSample(_state, _hardware);
     return;
   }
-  if (_guest.Get(DS.toneSweepActive) == 1)
+  if (_state.Get(DS.toneSweepActive) == 1)
   {
-    TickSweep(_guest, TOGGLE_SPEAKER, DS.toneSweepActive);
+    TickSweep(_state, _hardware, &ToggleSpeaker, DS.toneSweepActive);
     return;
   }
-  if (_guest.Get(DS.twoToneStage) != 0)
+  if (_state.Get(DS.twoToneStage) != 0)
   {
-    TickTwoTone(_guest);
+    TickTwoTone(_state, _hardware);
     return;
   }
-  if (_guest.Get(DS.slowNoiseCount) != 0)
+  if (_state.Get(DS.slowNoiseCount) != 0)
   {
-    if (Decrement(_guest.State(), DS.slowNoiseDivider) != 0)
+    if (Decrement(_state, DS.slowNoiseDivider) != 0)
     {
       return;
     }
-    _guest.Set(DS.slowNoiseDivider, SLOW_NOISE_TICKS);
-    Decrement(_guest.State(), DS.slowNoiseCount);
-    _guest.Call(EMIT_NOISE_SAMPLE);
+    _state.Set(DS.slowNoiseDivider, SLOW_NOISE_TICKS);
+    Decrement(_state, DS.slowNoiseCount);
+    EmitNoiseSample(_state, _hardware);
     return;
   }
-  if (_guest.Get(DS.humEnabled) == 1)
+  if (_state.Get(DS.humEnabled) == 1)
   {
-    if (Decrement(_guest.State(), DS.humCountdownTicks) != 0)
+    if (Decrement(_state, DS.humCountdownTicks) != 0)
     {
       return;
     }
-    _guest.Set(DS.humCountdownTicks, HUM_TICKS);
-    ToggleSpeakerData(_guest);
+    _state.Set(DS.humCountdownTicks, HUM_TICKS);
+    ToggleSpeakerData(_state, _hardware);
     return;
   }
-  if (_guest.Get(DS.continuousNoise) == 1)
+  if (_state.Get(DS.continuousNoise) == 1)
   {
-    _guest.Call(EMIT_NOISE_SAMPLE);
+    EmitNoiseSample(_state, _hardware);
   }
 }
 
@@ -367,24 +351,19 @@ void ChainToBiosTimer(Guest& _guest)
 
 } // namespace
 
-void InstallTimerInterrupt(Guest& _guest)
+void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = 0;
-  _guest.Out8(PIT_COMMAND_PORT, PIT_CHANNEL0_SQUARE_WAVE);
-  _guest.Out8(PIT_CHANNEL0_PORT, Low(TICK_DIVISOR));
-  _guest.Out8(PIT_CHANNEL0_PORT, High(TICK_DIVISOR));
-  const std::uint8_t speaker = _guest.In8(SPEAKER_PORT);
-  _guest.Set(DS.savedSpeakerPort, speaker);
+  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, TICK_DIVISOR);
+  const std::uint8_t speaker = _hardware.SystemControl();
+  _state.Set(DS.savedSpeakerPort, speaker);
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
-  _guest.Set(DS.speakerPortImage, image);
-  _guest.Out8(SPEAKER_PORT, image);
-  _guest.SetCodeWord(SAVED_TIMER_OFFSET, _guest.FarWord(regs.es, TIMER_VECTOR_OFFSET));
-  _guest.SetCodeWord(SAVED_TIMER_SEGMENT, _guest.FarWord(regs.es, TIMER_VECTOR_SEGMENT));
-  _guest.SetFarWord(regs.es, TIMER_VECTOR_OFFSET, TIMER_INTERRUPT);
-  _guest.SetFarWord(regs.es, TIMER_VECTOR_SEGMENT, _guest.CodeSegment());
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
-  regs.ax = _guest.CodeSegment();
+  _state.Set(DS.speakerPortImage, image);
+  _hardware.SetSystemControl(image);
+  _state.SetCodeWord(SAVED_TIMER_OFFSET, _state.FarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_OFFSET));
+  _state.SetCodeWord(SAVED_TIMER_SEGMENT, _state.FarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_SEGMENT));
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_OFFSET, TIMER_INTERRUPT);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_SEGMENT, _state.CodeSegment());
+  _hardware.EnableInterrupts();
 }
 
 void RestoreTimerInterrupt(Guest& _guest)
@@ -396,7 +375,7 @@ void RestoreTimerInterrupt(Guest& _guest)
   regs.ax = _guest.CodeWord(SAVED_TIMER_OFFSET);
   _guest.SetFarWord(regs.es, TIMER_VECTOR_OFFSET, regs.ax);
   regs.ax = WithLow(regs.ax, _guest.Get(DS.savedSpeakerPort));
-  _guest.Out8(SPEAKER_PORT, Low(regs.ax));
+  _guest.Devices().SetSystemControl(Low(regs.ax));
   regs.bx = 0;
   regs.ax = WithLow(regs.ax, PIT_CHANNEL0_SQUARE_WAVE);
   if (_guest.Get(DS.amstradPresent) == 1)
@@ -408,12 +387,10 @@ void RestoreTimerInterrupt(Guest& _guest)
       regs.bx = AMSTRAD_MOUSE_DIVISOR;
     }
   }
-  _guest.Out8(PIT_COMMAND_PORT, Low(regs.ax));
-  regs.ax = regs.bx;
-  _guest.Out8(PIT_CHANNEL0_PORT, Low(regs.ax));
-  regs.ax = WithLow(regs.ax, High(regs.ax));
-  _guest.Out8(PIT_CHANNEL0_PORT, Low(regs.ax));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _guest.Devices().SetTickDivisor(Low(regs.ax), regs.bx);
+  // The divisor's bytes go out through AL: AX ends as BH twice.
+  regs.ax = WithLow(regs.bx, High(regs.bx));
+  _guest.Devices().EnableInterrupts();
 
   // The BIOS clock past a day is set back by one: SUB DX / SBB CX, kept in the registers either way.
   regs.ax = WithHigh(regs.ax, 0);
@@ -438,9 +415,10 @@ void TimerInterrupt(Guest& _guest)
   regs.es = Guest::VIDEO_SEGMENT;
   regs.ax = _guest.DataSegment();
   regs.ds = _guest.DataSegment();
-  TimerTick(_guest);
+  TimerTick(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  // What TimerTick leaves in AX goes no further: AL is loaded here and AX popped below.
   regs.ax = WithLow(regs.ax, END_OF_INTERRUPT);
-  _guest.Out8(PIC_COMMAND_PORT, END_OF_INTERRUPT);
+  _guest.Devices().EndOfInterrupt();
   bool chain = false;
   if (_guest.Get(DS.amstradPresent) == 1)
   {
@@ -462,28 +440,26 @@ void TimerInterrupt(Guest& _guest)
   }
 }
 
-void TimerTick(Guest& _guest)
+void TimerTick(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  _guest.Set(DS.millisecondCounter, static_cast<std::uint16_t>(_guest.Get(DS.millisecondCounter) + 1));
-  _guest.Set(DS.timerTicks, static_cast<std::uint16_t>(_guest.Get(DS.timerTicks) + 1));
-  _guest.Set(DS.msSinceFrame, static_cast<std::uint8_t>(_guest.Get(DS.msSinceFrame) + 1));
-  if (_guest.Get(DS.protectionQuestion) != NO_QUESTION)
+  _state.Set(DS.millisecondCounter, static_cast<std::uint16_t>(_state.Get(DS.millisecondCounter) + 1));
+  _state.Set(DS.timerTicks, static_cast<std::uint16_t>(_state.Get(DS.timerTicks) + 1));
+  _state.Set(DS.msSinceFrame, static_cast<std::uint8_t>(_state.Get(DS.msSinceFrame) + 1));
+  if (_state.Get(DS.protectionQuestion) != NO_QUESTION)
   {
-    // What the original leaves in AX here, the question and the last byte it decoded, goes no further: TimerTick
-    // clobbers AX, and TimerInterrupt, its only caller, loads AL and pops AX.
-    CheckProtectionAnswer(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+    CheckProtectionAnswer(_state, _backward);
     return;
   }
-  if (_guest.Get(DS.soundEnabled) == 0 || _guest.Get(DS.gamePaused) == 1)
+  if (_state.Get(DS.soundEnabled) == 0 || _state.Get(DS.gamePaused) == 1)
   {
     return;
   }
-  if (_guest.Get(DS.musicPlaying) == 1)
+  if (_state.Get(DS.musicPlaying) == 1)
   {
-    TickMusic(_guest);
+    TickMusic(_state, _hardware);
     return;
   }
-  TickSoundEffects(_guest);
+  TickSoundEffects(_state, _hardware);
 }
 
 void WaitForTimerTick(Guest& _guest)
@@ -509,11 +485,30 @@ using Machine::REGISTER_DX;
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 
+} // namespace
+
+void InstallTimerInterruptEntry(Guest& _guest)
+{
+  InstallTimerInterrupt(_guest.State(), _guest.Devices());
+  _guest.Regs().es = VECTOR_TABLE_SEGMENT;
+  _guest.Regs().ax = _guest.CodeSegment();
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void TimerTickEntry(Guest& _guest)
+{
+  TimerTick(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
-  NativeEntry{0x00C6, "InstallTimerInterrupt", &InstallTimerInterrupt, CLOBBERS_AX},
+  NativeEntry{0x00C6, "InstallTimerInterrupt", &InstallTimerInterruptEntry, CLOBBERS_AX},
   NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterrupt, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x7150, "TimerTick", &TimerTick, CLOBBERS_AX},
+  NativeEntry{0x7150, "TimerTick", &TimerTickEntry, CLOBBERS_AX},
   // WaitForTimerTick waits for the next tick as a rule.
   NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTick, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
 };

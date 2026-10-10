@@ -3,6 +3,7 @@
 
 #include "DataField.h"
 #include "GameState.h"
+#include "Hardware.h"
 #include "Pacing.h"
 #include "Pc.h"
 
@@ -24,7 +25,8 @@ public:
 
   Guest(Machine::Pc& _pc, std::uint16_t _codeSegment, std::uint16_t _dataSegment) noexcept
     : m_pc(_pc),
-      m_state(_pc.Ram(), _codeSegment, _dataSegment)
+      m_state(_pc.Ram(), _codeSegment, _dataSegment),
+      m_hardware(_pc)
   {
   }
 
@@ -42,6 +44,13 @@ public:
   [[nodiscard]] GameState& State() noexcept
   {
     return m_state;
+  }
+
+  /// The devices as the game drives them: what a de-assembled routine that sounds, times or reads a device is given
+  /// besides the GameState (ADR-014).
+  [[nodiscard]] Hardware& Devices() noexcept
+  {
+    return m_hardware;
   }
 
   [[nodiscard]] Machine::Registers& Regs() noexcept
@@ -280,6 +289,7 @@ public:
 private:
   Machine::Pc& m_pc;
   GameState m_state;
+  Hardware m_hardware;
 };
 
 } // namespace Elite

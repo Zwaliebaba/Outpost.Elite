@@ -11,12 +11,8 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t SPEAKER_PORT = 0x61;
-constexpr std::uint16_t PIT_COMMAND_PORT = 0x43;
-constexpr std::uint16_t PIT_CHANNEL_2_PORT = 0x42;
 constexpr std::uint8_t SPEAKER_GATE_AND_DATA = 0x03; // port 61h bits 0 and 1
 constexpr std::uint8_t SPEAKER_DATA = 0x02;          // port 61h bit 1
-constexpr std::uint8_t PIT_CHANNEL_2_MODE_3 = 0xB6;  // channel 2, low then high byte, square wave
 constexpr std::uint8_t INAUDIBLE_DIVISOR = 2;
 
 // noiseSource: the code bytes at CS:07D0, read as data, 1024 of them.
@@ -52,36 +48,31 @@ std::uint8_t StartNoiseSweep(GameState& _state, std::uint8_t _stepLength, std::u
 
 } // namespace
 
-void StartMusic(Guest& _guest)
+void StartMusic(GameState& _state, Hardware& _hardware)
 {
-  SilenceSpeakerTimer(_guest);
-  Machine::Registers& regs = _guest.Regs();
-  const auto port = static_cast<std::uint8_t>(_guest.Get(DS.speakerPortImage) | SPEAKER_GATE_AND_DATA);
-  SetLow(regs.ax, port);
-  _guest.Out8(SPEAKER_PORT, port);
-  _guest.Set(DS.noteTicksLeft, 0);
-  _guest.Set(DS.noteGapTicks, 0);
-  regs.ax = DS.titleTune.offset;
-  _guest.Set(DS.musicPointer, regs.ax);
-  _guest.Set(DS.musicPlaying, 1);
+  SilenceSpeakerTimer(_hardware);
+  // The gate and data on in the port, but not in speakerPortImage.
+  _hardware.SetSystemControl(static_cast<std::uint8_t>(_state.Get(DS.speakerPortImage) | SPEAKER_GATE_AND_DATA));
+  _state.Set(DS.noteTicksLeft, 0);
+  _state.Set(DS.noteGapTicks, 0);
+  _state.Set(DS.musicPointer, DS.titleTune.offset);
+  _state.Set(DS.musicPlaying, 1);
 }
 
-void StopAllSound(Guest& _guest)
+void StopAllSound(GameState& _state, Hardware& _hardware)
 {
-  StopSoundEffectsEntry(_guest);
-  _guest.Set(DS.musicPlaying, 0);
-  const auto port = static_cast<std::uint8_t>(_guest.Get(DS.speakerPortImage) & ~SPEAKER_GATE_AND_DATA);
-  _guest.Set(DS.speakerPortImage, port);
-  SetLow(_guest.Regs().ax, port);
-  _guest.Out8(SPEAKER_PORT, port);
+  // StopSoundEffects clears the effects under CLI and ends with STI.
+  StopSoundEffects(_state);
+  _hardware.EnableInterrupts();
+  _state.Set(DS.musicPlaying, 0);
+  const auto port = static_cast<std::uint8_t>(_state.Get(DS.speakerPortImage) & ~SPEAKER_GATE_AND_DATA);
+  _state.Set(DS.speakerPortImage, port);
+  _hardware.SetSystemControl(port);
 }
 
-void SilenceSpeakerTimer(Guest& _guest)
+void SilenceSpeakerTimer(Hardware& _hardware)
 {
-  _guest.Out8(PIT_COMMAND_PORT, PIT_CHANNEL_2_MODE_3);
-  _guest.Out8(PIT_CHANNEL_2_PORT, INAUDIBLE_DIVISOR);
-  _guest.Out8(PIT_CHANNEL_2_PORT, 0);
-  SetLow(_guest.Regs().ax, 0);
+  _hardware.SetToneDivisor(INAUDIBLE_DIVISOR);
 }
 
 void StartBeep(GameState& _state)
@@ -107,25 +98,25 @@ void StopSoundEffects(GameState& _state)
   _state.Set(DS.lowBeepTicks, 0);
 }
 
-void EmitNoiseSample(Guest& _guest)
+std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware)
 {
-  const auto index = static_cast<std::uint16_t>((_guest.Get(DS.noiseSourceIndex) + 1) & NOISE_SOURCE_MASK);
-  const std::uint8_t sample = _guest.CodeByte(static_cast<std::uint16_t>(NOISE_SOURCE_OFFSET + index));
-  _guest.Set(DS.noiseSourceIndex, index);
-  const auto image = static_cast<std::uint8_t>(_guest.Get(DS.speakerPortImage) & ~SPEAKER_DATA);
-  _guest.Set(DS.speakerPortImage, image);
+  const auto index = static_cast<std::uint16_t>((_state.Get(DS.noiseSourceIndex) + 1) & NOISE_SOURCE_MASK);
+  const std::uint8_t sample = _state.CodeByte(static_cast<std::uint16_t>(NOISE_SOURCE_OFFSET + index));
+  _state.Set(DS.noiseSourceIndex, index);
+  const auto image = static_cast<std::uint8_t>(_state.Get(DS.speakerPortImage) & ~SPEAKER_DATA);
+  _state.Set(DS.speakerPortImage, image);
   const auto port = static_cast<std::uint8_t>((sample & SPEAKER_DATA) | image);
-  SetLow(_guest.Regs().ax, port);
-  _guest.Out8(SPEAKER_PORT, port);
-  _guest.Set(DS.speakerPortImage, port);
+  _hardware.SetSystemControl(port);
+  _state.Set(DS.speakerPortImage, port);
+  return port;
 }
 
-void ToggleSpeaker(Guest& _guest)
+std::uint8_t ToggleSpeaker(GameState& _state, Hardware& _hardware)
 {
-  const auto port = static_cast<std::uint8_t>(_guest.Get(DS.speakerPortImage) ^ SPEAKER_DATA);
-  _guest.Set(DS.speakerPortImage, port);
-  SetLow(_guest.Regs().ax, port);
-  _guest.Out8(SPEAKER_PORT, port);
+  const auto port = static_cast<std::uint8_t>(_state.Get(DS.speakerPortImage) ^ SPEAKER_DATA);
+  _state.Set(DS.speakerPortImage, port);
+  _hardware.SetSystemControl(port);
+  return port;
 }
 
 std::uint8_t StartImpactSound(GameState& _state)
@@ -186,6 +177,36 @@ constexpr Machine::NativeContract CLOBBERS_AX_ENABLES_INTERRUPTS{REGISTER_AX, FL
 constexpr Machine::NativeContract LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS{0, FLAG_INTERRUPT};
 
 } // namespace
+
+void StartMusicEntry(Guest& _guest)
+{
+  StartMusic(_guest.State(), _guest.Devices());
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void StopAllSoundEntry(Guest& _guest)
+{
+  StopAllSound(_guest.State(), _guest.Devices());
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void SilenceSpeakerTimerEntry(Guest& _guest)
+{
+  SilenceSpeakerTimer(_guest.Devices());
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void EmitNoiseSampleEntry(Guest& _guest)
+{
+  SetLow(_guest.Regs().ax, EmitNoiseSample(_guest.State(), _guest.Devices()));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ToggleSpeakerEntry(Guest& _guest)
+{
+  SetLow(_guest.Regs().ax, ToggleSpeaker(_guest.State(), _guest.Devices()));
+  _guest.Clobber(PRESERVES_ALL);
+}
 
 void StartBeepEntry(Guest& _guest)
 {
@@ -262,14 +283,14 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x7401, "StartMusic", &StartMusic, CLOBBERS_AX},
-  NativeEntry{0x7423, "StopAllSound", &StopAllSound, CLOBBERS_AX},
-  NativeEntry{0x7436, "SilenceSpeakerTimer", &SilenceSpeakerTimer, CLOBBERS_AX},
+  NativeEntry{0x7401, "StartMusic", &StartMusicEntry, CLOBBERS_AX},
+  NativeEntry{0x7423, "StopAllSound", &StopAllSoundEntry, CLOBBERS_AX},
+  NativeEntry{0x7436, "SilenceSpeakerTimer", &SilenceSpeakerTimerEntry, CLOBBERS_AX},
   NativeEntry{0x7A57, "StartBeep", &StartBeepEntry, PRESERVES_ALL},
   NativeEntry{0x7A5D, "StartLowBeep", &StartLowBeepEntry, PRESERVES_ALL},
   NativeEntry{0x7A63, "StopSoundEffects", &StopSoundEffectsEntry, ENABLES_INTERRUPTS},
-  NativeEntry{0x7A93, "EmitNoiseSample", &EmitNoiseSample, PRESERVES_ALL},
-  NativeEntry{0x7AB8, "ToggleSpeaker", &ToggleSpeaker, PRESERVES_ALL},
+  NativeEntry{0x7A93, "EmitNoiseSample", &EmitNoiseSampleEntry, PRESERVES_ALL},
+  NativeEntry{0x7AB8, "ToggleSpeaker", &ToggleSpeakerEntry, PRESERVES_ALL},
   NativeEntry{0x7AC3, "StartImpactSound", &StartImpactSoundEntry, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7AFC, "StartExplosionSound", &StartExplosionSoundEntry, LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS},
   NativeEntry{0x7B09, "StartPlayerDeathSound", &StartPlayerDeathSoundEntry, LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS},
