@@ -383,7 +383,7 @@ struct FlightExit
 {
   FlightEnd end;
   /// BP: PresentSpaceView's 20h after docking, ClearMessageLine's 0 after GAME OVER and the pause screen's A, and after the escape
-  /// pod what the last frame left (RunFlight).
+  /// pod the last frame's 20h, which stands in for what the AI's handlers may leave there (Flight.cpp says why that cannot show).
   std::uint16_t countLeft;
   bool backward; ///< the direction flag
 };

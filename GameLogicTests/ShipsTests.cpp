@@ -35,6 +35,7 @@ constexpr std::uint16_t MOVE_OBJECT = 0x4F6E;
 constexpr std::uint16_t FIND_FREE_SHIP_SLOT = 0x51E0;
 constexpr std::uint16_t RECLAIM_SHIP_SLOT = 0x51FD;
 constexpr std::uint16_t FIND_DEBRIS_SLOT = 0x52EC;
+constexpr std::uint16_t UPDATE_DEBRIS_AI = 0x5330;
 constexpr std::uint16_t IS_POLICE_VIPER = 0x541E;
 
 constexpr std::uint8_t ALL_SLOTS = 36;
@@ -148,6 +149,22 @@ public:
     space.SetByte(static_cast<std::uint16_t>(slot + Elite::SLOT_SPIN_ROLL), 0x10);
     rig.Call(MOVE_OBJECT, {.di = slot});
     rig.AssertAllAgreed(MOVE_OBJECT, 1);
+  }
+
+  // A fragment's last frame takes it out of play; one with frames left ages, spins and moves.
+  TEST_METHOD(UpdateDebrisAiAgreesWhenAFragmentExpires)
+  {
+    ComparisonRig rig("ShipsDebris");
+    Space space(rig);
+    space.Clear();
+    for (const std::uint8_t lifetime : {std::uint8_t{1}, std::uint8_t{5}})
+    {
+      const std::uint16_t slot = space.Object(FIRST_DEBRIS_SLOT, Elite::TYPE_SPLINTER, 0x100, -0x80, 0x400);
+      space.SetByte(static_cast<std::uint16_t>(slot + Elite::SLOT_LIFETIME), lifetime);
+      space.SetByte(static_cast<std::uint16_t>(slot + Elite::SLOT_SPIN_ROLL), 3);
+      rig.Call(UPDATE_DEBRIS_AI, {.di = slot});
+    }
+    rig.AssertAllAgreed(UPDATE_DEBRIS_AI, 2);
   }
 
   // Every ship slot taken, then every debris slot: no free ship slot, and the oldest fragment, the last of equals, reused.

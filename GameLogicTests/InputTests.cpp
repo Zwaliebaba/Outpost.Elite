@@ -275,6 +275,53 @@ public:
     rig.AssertAllAgreed(READ_STEERING, calls);
   }
 
+  // The keyboard's rates: a key that changes starts its ramp again, and a key held on ramps on; the rates stop at 23 either way;
+  // with recentring a key against the rate stops it at once, and with damping an idle axis comes back towards 0 by 3 a frame.
+  TEST_METHOD(ReadSteeringAgreesOnTheKeyboardsRates)
+  {
+    ComparisonRig rig("ReadSteeringKeyboard");
+    struct Frame
+    {
+      bool up;
+      bool down;
+      bool left;
+      bool right;
+      std::uint8_t lastRoll; // the key the ramps went on from: -1, 0 or 1
+      std::uint8_t lastPitch;
+      std::uint8_t rollRamp;
+      std::uint8_t pitchRamp;
+      std::uint8_t rollRate;
+      std::uint8_t pitchRate;
+      std::uint8_t recenter;
+      std::uint8_t damping;
+    };
+    const Frame frames[] = {
+      {true, false, true, false, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0, 0},
+      {false, true, false, true, 0x01, 0x01, 0x05, 0x05, 0x14, 0xEC, 0, 0},
+      {true, false, true, false, 0xFF, 0xFF, 0xFB, 0xFB, 0xEC, 0x14, 0, 0},
+      {false, true, true, false, 0xFF, 0x01, 0xFB, 0x05, 0x05, 0x05, 1, 0},
+      {false, false, false, false, 0x00, 0x00, 0x00, 0x00, 0xFB, 0xFB, 0, 1},
+    };
+    Poke(rig, DS.inputDevice, 0);
+    for (const Frame& frame : frames)
+    {
+      Poke(rig, DS.keyDownUp, frame.up ? 1 : 0);
+      Poke(rig, DS.keyDownDown, frame.down ? 1 : 0);
+      Poke(rig, DS.keyDownLeft, frame.left ? 1 : 0);
+      Poke(rig, DS.keyDownRight, frame.right ? 1 : 0);
+      Poke(rig, DS.keyboardLastRollKey, frame.lastRoll);
+      Poke(rig, DS.keyboardLastPitchKey, frame.lastPitch);
+      Poke(rig, DS.keyboardRollRamp, frame.rollRamp);
+      Poke(rig, DS.keyboardPitchRamp, frame.pitchRamp);
+      Poke(rig, DS.keyboardRollRate, frame.rollRate);
+      Poke(rig, DS.keyboardPitchRate, frame.pitchRate);
+      Poke(rig, DS.keyboardRecenter, frame.recenter);
+      Poke(rig, DS.keyboardDamping, frame.damping);
+      rig.Call(READ_STEERING, {});
+    }
+    rig.AssertAllAgreed(READ_STEERING, std::size(frames));
+  }
+
   // The last code in the buffer, with Shift, and the read pointer's wrap.
   TEST_METHOD(GetKeyAgreesAcrossTheBufferWrap)
   {

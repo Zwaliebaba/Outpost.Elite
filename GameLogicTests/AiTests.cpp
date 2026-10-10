@@ -21,6 +21,7 @@ constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
 constexpr std::uint16_t SCALE_SPAWN_ODDS = 0x4C0E;
 constexpr std::uint16_t IS_MASK_SHIP_PRESENT = 0x4C20;
 constexpr std::uint16_t PLACE_ESCORT_NEAR = 0x4C38;
+constexpr std::uint16_t TURN_TOWARD_ANGLES = 0x514B;
 constexpr std::uint16_t GET_VECTOR_TO_OBJECT = 0x54B4;
 constexpr std::uint16_t UPDATE_STATION_AI = 0x5595;
 constexpr std::uint16_t UPDATE_DRIFTING_OBJECT_AI = 0x5681;
@@ -590,7 +591,37 @@ public:
       space.Random(wolf.random, 0x0100);
       rig.Call(UPDATE_WOLF_AI, {.dx = 0x00C0, .di = slot});
     }
-    rig.AssertAllAgreed(UPDATE_WOLF_AI, std::size(wolves));
+    // An attack run within 1000 of the player on every axis turns away.
+    space.Clear();
+    Ordinary(space);
+    const std::uint16_t close = space.Ship(4, TYPE_COBRA, WOLF_CLASS, 0x100, -0x300, 0x300);
+    space.SetField(close, Elite::SLOT_STATE, 2);
+    space.SetField(close, Elite::SLOT_FLAGS, HOSTILE | BLIP_DRAWN);
+    rig.Call(UPDATE_WOLF_AI, {.dx = 0x00C0, .di = close});
+    rig.AssertAllAgreed(UPDATE_WOLF_AI, std::size(wolves) + 1);
+  }
+
+  // A turn towards wanted angles a little either way of the heading, which it takes whole, and far either way, which it takes
+  // at the turn rate.
+  TEST_METHOD(TurnTowardAnglesAgreesOnEveryStep)
+  {
+    ComparisonRig rig("AiTurn");
+    Space space(rig);
+    space.Clear();
+    const std::uint16_t slot = space.Ship(4, TYPE_COBRA, WOLF_CLASS, 0x100, 0x100, 0x400);
+    struct Turn
+    {
+      std::uint16_t pitch;
+      std::uint16_t yaw;
+    };
+    const Turn turns[] = {{0x0203, 0x0300}, {0x01FD, 0x0100}, {0x0100, 0x01FD}, {0x0300, 0x0203}};
+    for (const Turn& turn : turns)
+    {
+      space.SetFieldWord(slot, Elite::SLOT_PITCH, 0x0200);
+      space.SetFieldWord(slot, Elite::SLOT_YAW, 0x0200);
+      rig.Call(TURN_TOWARD_ANGLES, {.ax = turn.pitch, .bx = turn.yaw, .di = slot});
+    }
+    rig.AssertAllAgreed(TURN_TOWARD_ANGLES, std::size(turns));
   }
 
   // A hunter's states: flying at the player, joining a pack or a mate, attacking, formation flight, evading with jinks,

@@ -373,6 +373,11 @@ public:
       Set(rig, DS.millisecondCounter, milliseconds);
       CallVerified(rig, UPDATE_DASHBOARD);
     }
+    // The laser's and the cabin's temperatures and the fuel, each changed since the last frame drew it.
+    Set(rig, DS.laserTemperature, 0x40);
+    Set(rig, DS.cabinTemperature, 0x50);
+    Set(rig, DS.fuel, 0x20);
+    CallVerified(rig, UPDATE_DASHBOARD);
     SetByte(rig, STATION_SLOT, static_cast<std::uint8_t>(Byte(rig, STATION_SLOT) & 0xFE));
     CallVerified(rig, UPDATE_DASHBOARD);
     CallVerified(rig, UPDATE_SAFE_ZONE);
@@ -519,6 +524,12 @@ public:
     }
     Set(rig, DS.galacticDriveReadyFrames, 0x20);
     CallVerified(rig, PROCESS_FLIGHT_KEYS);
+    // And a system in range with the fuel for it: the countdown starts, as the galactic drive's did.
+    Set(rig, DS.hyperspaceCountdown, 0);
+    Set(rig, DS.galacticDriveReadyFrames, 0);
+    Set(rig, DS.selectedDistanceTenthsLy, 0x10);
+    Set(rig, DS.fuel, 0x46);
+    CallVerified(rig, PROCESS_FLIGHT_KEYS);
     Set(rig, DS.keyDownH, 0);
 
     // D: refused in mission 3, cancelled by a countdown, else the docking computer toggles.
@@ -565,10 +576,14 @@ public:
     }
     Set(rig, DS.keyDownM, 0);
 
-    // Fire with the laser too hot.
+    // Fire with the laser too hot, then cool: the front's pulse laser fires every other frame.
     Set(rig, DS.keyDownSpace, 1);
     Set(rig, DS.laserTemperature, 0xF4);
     CallVerified(rig, PROCESS_FLIGHT_KEYS);
+    Set(rig, DS.laserTemperature, 0x10);
+    CallVerified(rig, PROCESS_FLIGHT_KEYS);
+    CallVerified(rig, PROCESS_FLIGHT_KEYS);
+    Set(rig, DS.laserFiring, 0);
     Set(rig, DS.keyDownSpace, 0);
 
     // E, B, C, I, N and L.

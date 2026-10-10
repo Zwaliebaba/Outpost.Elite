@@ -16,8 +16,15 @@ namespace GameLogicTests
 namespace
 {
 
+constexpr std::uint16_t INSTALL_TIMER_INTERRUPT = 0x00C6;
+constexpr std::uint16_t INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0105;
+constexpr std::uint16_t RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0148;
 constexpr std::uint16_t CHECK_CHEAT_ARGUMENT = 0x02A5;
+constexpr std::uint16_t COPY_PROTECTION = 0x04A3;
+constexpr std::uint16_t WIPE_PROGRAM = 0x0554;
+constexpr std::uint16_t SAVE_STARTUP_COMMANDER = 0x4660;
 constexpr std::uint16_t COMMAND_TAIL = 0x80; // in the PSP: its length, then the text
+constexpr std::uint16_t INTERRUPT_TABLE_SEGMENT = 0;
 
 // The scan code and character of 'q' in the BIOS's key buffer.
 constexpr std::uint16_t BIOS_KEY_Q = 0x1071;
@@ -27,6 +34,17 @@ void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t 
 {
   _rig.Both([_field, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
             { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
+}
+
+// ComparisonRig::Call with ES on the interrupt table, as Start leaves it for InstallDivideAndKeyboardInterrupts.
+void CallOnTheInterruptTable(ComparisonRig& _rig, std::uint16_t _entry)
+{
+  Machine::Registers& regs = _rig.Host().Processor().Regs();
+  const Machine::Registers saved = regs;
+  regs.ds = Elite::DataSegment(_rig.Program());
+  regs.es = INTERRUPT_TABLE_SEGMENT;
+  _rig.Host().CallNear(_entry);
+  regs = saved;
 }
 
 // Both twins are back at the title, out of flight.
@@ -64,6 +82,26 @@ public:
       Assert::IsTrue((ram.Read8(data, Elite::DS.cheatEnabled.offset) == 1) == (tail == " cheat"), L"only ' cheat' enables it");
     }
     rig.AssertAllAgreed(CHECK_CHEAT_ARGUMENT, 2);
+  }
+
+  // What Start does round GameLoop, from the title: the start-up commander kept, int 0 and int 9 put back, the timer's and their
+  // interrupts installed again, the protection that shows once passed over, and the program wiped on the way out. Start calls them
+  // as value routines since level 5 of the de-assembly (ADR-012 item 12), so only calls like these compare them with the original.
+  TEST_METHOD(StartUpRoutinesAgree)
+  {
+    ComparisonRig rig("StartUpRoutines");
+    rig.Host().Ram().Write8(Elite::DataSegment(rig.Program()), Elite::DS.protectionShown.offset, 1);
+    rig.Call(SAVE_STARTUP_COMMANDER, {});
+    rig.Call(RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS, {});
+    rig.Call(INSTALL_TIMER_INTERRUPT, {});
+    rig.Call(COPY_PROTECTION, {});
+    CallOnTheInterruptTable(rig, INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS);
+    rig.Call(WIPE_PROGRAM, {});
+    for (const std::uint16_t entry : {SAVE_STARTUP_COMMANDER, RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS, INSTALL_TIMER_INTERRUPT,
+                                      COPY_PROTECTION, INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS, WIPE_PROGRAM})
+    {
+      rig.AssertAllAgreed(entry, 1);
+    }
   }
 
   // Start (ADR-010 item 5) when DOS's clock reads 55 seconds, where the start-up wait's target second wraps
