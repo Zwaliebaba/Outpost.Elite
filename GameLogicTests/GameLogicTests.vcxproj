@@ -93,6 +93,7 @@
     <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="DockingTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
+    <ClCompile Include="FlightTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />

@@ -58,6 +58,9 @@
     <Filter Include="Ships">
       <UniqueIdentifier>{ACD5DF42-5567-5C37-979B-79BDBF0ECA03}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Flight">
+      <UniqueIdentifier>{B4D92709-259D-5C8F-BBFF-8CBB010A7723}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -85,6 +88,9 @@
     </ClCompile>
     <ClCompile Include="EquipmentTests.cpp">
       <Filter>Equipment</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightTests.cpp">
+      <Filter>Flight</Filter>
     </ClCompile>
     <ClCompile Include="GalaxyTests.cpp">
       <Filter>Galaxy</Filter>
