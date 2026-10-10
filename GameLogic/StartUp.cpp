@@ -31,7 +31,6 @@ constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
 constexpr std::uint8_t VIDEO_VECTOR = 0x10;
 constexpr std::uint8_t DOS_VECTOR = 0x21;
-constexpr std::uint8_t DOS_PRINT_STRING = 0x09;
 constexpr std::uint8_t DOS_FLUSH_AND_READ = 0x0C;
 constexpr std::uint8_t DOS_BUFFERED_INPUT = 0x0A;
 constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
@@ -79,10 +78,7 @@ constexpr std::uint8_t DOS_GET_TIME = 0x2C;
 constexpr std::uint8_t DOS_GET_VERSION = 0x30;
 constexpr std::uint8_t STARTUP_WAIT_SECONDS = 7;
 constexpr std::uint8_t SECONDS_PER_MINUTE = 60;
-constexpr std::uint8_t BIOS_KEYBOARD_VECTOR = 0x16;
-constexpr std::uint8_t BIOS_KEY_STATUS = 0x01;
-constexpr std::uint8_t BIOS_READ_KEY = 0x00;
-constexpr std::uint16_t VIDEO_MODE_TEXT_80 = 0x0002; // AH=0 set mode, AL=2: 80x25 text
+constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
 
 // WipeProgram: the code segment from just past it to the end of the program.
 constexpr std::uint16_t WIPE_FIRST = 0x0564;
@@ -109,62 +105,52 @@ std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::ui
   return moved;
 }
 
-// INT 21h AH=09h: the $-terminated text at DS:_text.
-void PrintDosString(Guest& _guest, std::uint16_t _text)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = _text;
-  regs.ax = WithHigh(regs.ax, DOS_PRINT_STRING);
-  _guest.Interrupt(DOS_VECTOR);
-}
-
 // ExitToDos (CS:00AD): the BIOS's text mode, the farewell, and the BIOS's key buffer emptied. The RETF
-// that follows, to PSP:0000 where Start pushed it, is the entry's own return.
+// that follows, to PSP:0000 where Start pushed it, is the entry's own return. Its devices are Hardware's; it
+// keeps the Guest for its loop's turns, inside Start, which waits. Of what the services leave, the original
+// reads only ZF, the loop's test, which is PeekBiosKey's answer here, and the program ends at the RETF. Each
+// turn takes a key out of the BIOS's buffer, a change paced time sees at the jump back whatever the registers
+// hold.
 void ExitToDos(Guest& _guest)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = VIDEO_MODE_TEXT_80;
-  _guest.Interrupt(VIDEO_VECTOR);
-  PrintDosString(_guest, DS.exitMessage.offset);
-  for (;;)
+  Hardware& hardware = _guest.Devices();
+  hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
+  hardware.PrintDosString(_guest.DataSegment(), DS.exitMessage.offset);
+  while (hardware.PeekBiosKey().has_value())
   {
-    SetHigh(regs.ax, BIOS_KEY_STATUS);
-    _guest.Interrupt(BIOS_KEYBOARD_VECTOR);
-    if (_guest.Flag(Machine::FLAG_ZERO))
-    {
-      return;
-    }
-    SetHigh(regs.ax, BIOS_READ_KEY);
-    _guest.Interrupt(BIOS_KEYBOARD_VECTOR);
+    hardware.ReadBiosKey();
     _guest.JumpBack(EXIT_KEY_DRAIN);
   }
 }
 
 } // namespace
 
-void InstallDivideAndKeyboardInterrupts(GameState& _state, std::uint16_t _vectors)
+void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware, std::uint16_t _vectors)
 {
   _state.SetWord(DS.savedDivideVector.offset, _state.FarWord(_vectors, DIVIDE_VECTOR_OFFSET));
   _state.Set(DS.data226D, _state.FarWord(_vectors, DIVIDE_VECTOR_SEGMENT));
   _state.SetWord(DS.savedKeyboardVector.offset, _state.FarWord(_vectors, KEYBOARD_VECTOR_OFFSET));
   _state.Set(DS.data2271, _state.FarWord(_vectors, KEYBOARD_VECTOR_SEGMENT));
-  // Under CLI in the original, which nothing interrupts in native code.
+  _hardware.DisableInterrupts();
   _state.SetFarWord(_vectors, DIVIDE_VECTOR_OFFSET, DIVIDE_OVERFLOW_INTERRUPT);
   _state.SetFarWord(_vectors, KEYBOARD_VECTOR_OFFSET, KEYBOARD_INTERRUPT);
   const std::uint16_t code = _state.CodeSegment();
   _state.SetFarWord(_vectors, DIVIDE_VECTOR_SEGMENT, code);
   _state.SetFarWord(_vectors, TIMER_VECTOR_SEGMENT, code);
   _state.SetFarWord(_vectors, KEYBOARD_VECTOR_SEGMENT, code);
-  ResetKeyboard(_state);
+  _hardware.EnableInterrupts();
+  ResetKeyboard(_state, _hardware);
 }
 
-void RestoreDivideAndKeyboardInterrupts(GameState& _state)
+void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 {
-  // The interrupt table at 0000:0000, written under CLI.
+  // The interrupt table at 0000:0000.
+  _hardware.DisableInterrupts();
   _state.SetFarWord(0, KEYBOARD_VECTOR_SEGMENT, _state.Get(DS.data2271));
   _state.SetFarWord(0, KEYBOARD_VECTOR_OFFSET, _state.Word(DS.savedKeyboardVector.offset));
   _state.SetFarWord(0, DIVIDE_VECTOR_SEGMENT, _state.Get(DS.data226D));
   _state.SetFarWord(0, DIVIDE_VECTOR_OFFSET, _state.Word(DS.savedDivideVector.offset));
+  _hardware.EnableInterrupts();
 }
 
 void CheckCheatArgument(GameState& _state)
@@ -198,7 +184,8 @@ void CopyProtection(Guest& _guest)
   regs.ax = 0;
   _guest.Interrupt(VIDEO_VECTOR);
   regs.di = _guest.Get(DS.protectionDescriptor);
-  PrintDosString(_guest, _guest.Word(regs.di));
+  // What the print leaves, DX the text and AH 9, the next instructions overwrite.
+  _guest.Devices().PrintDosString(_guest.DataSegment(), _guest.Word(regs.di));
 
   // The question depends on how long the random generator runs before a vertical retrace.
   regs.dx = CGA_STATUS_PORT;
@@ -222,7 +209,7 @@ void CopyProtection(Guest& _guest)
     regs.ax = static_cast<std::uint16_t>(regs.bx ^ _guest.Word(static_cast<std::uint16_t>(regs.si + field * 2)));
     _guest.SetWord(_guest.Word(static_cast<std::uint16_t>(regs.di + 2 + field * 2)), regs.ax);
   }
-  PrintDosString(_guest, _guest.Word(static_cast<std::uint16_t>(regs.di + 2)));
+  _guest.Devices().PrintDosString(_guest.DataSegment(), _guest.Word(static_cast<std::uint16_t>(regs.di + 2)));
 
   regs.dx = DS.protectionInput.offset;
   regs.ax = static_cast<std::uint16_t>((DOS_FLUSH_AND_READ << 8) | DOS_BUFFERED_INPUT);
@@ -292,8 +279,8 @@ void Start(Guest& _guest)
   _guest.Interrupt(DOS_VECTOR);
   if (Low(regs.ax) == 0)
   {
-    // DOS 1 reports no major version, and is not enough.
-    PrintDosString(_guest, DS.dosVersionMessage.offset);
+    // DOS 1 reports no major version, and is not enough. What the print leaves ExitToDos overwrites.
+    _guest.Devices().PrintDosString(_guest.DataSegment(), DS.dosVersionMessage.offset);
     ExitToDos(_guest);
     return;
   }
@@ -374,8 +361,9 @@ void Start(Guest& _guest)
   }
 }
 
-void WipeProgram(GameState& _state, bool _backward)
+void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward)
 {
+  _hardware.DisableInterrupts();
   // REP STOSB of AL, the code segment's low byte, CX = 8F31h - 0564h times from DI = 0564h.
   const std::uint8_t fill = Low(_state.CodeSegment());
   const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
@@ -472,20 +460,17 @@ constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
 void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  InstallDivideAndKeyboardInterrupts(_guest.State(), regs.es);
-  // ES on the CGA's memory through AX, and the STIs, the original's own and ResetKeyboard's.
+  InstallDivideAndKeyboardInterrupts(_guest.State(), _guest.Devices(), regs.es);
+  // ES on the CGA's memory through AX.
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = Guest::VIDEO_SEGMENT;
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
   _guest.Clobber(CLOBBERS_AX);
 }
 
 void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest)
 {
-  // CLI round the writes, which nothing interrupts in native code, then STI.
-  RestoreDivideAndKeyboardInterrupts(_guest.State());
+  RestoreDivideAndKeyboardInterrupts(_guest.State(), _guest.Devices());
   _guest.Regs().es = 0;
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
   _guest.Clobber(CLOBBERS_AX);
 }
 
@@ -497,8 +482,7 @@ void CheckCheatArgumentEntry(Guest& _guest)
 
 void WipeProgramEntry(Guest& _guest)
 {
-  WipeProgram(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
+  WipeProgram(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
   _guest.Clobber(CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF);
 }
 
