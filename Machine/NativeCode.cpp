@@ -13,6 +13,8 @@ namespace Machine
 namespace
 {
 
+constexpr std::uint16_t POISON_FIRST = 0xA5A1;
+
 struct NamedRegister
 {
   std::string_view name;
@@ -78,6 +80,29 @@ NativeCode::Hook* NativeCode::At(std::uint32_t _linear) noexcept
 {
   const auto found = m_hooks.find(_linear);
   return found == m_hooks.end() ? nullptr : &found->second;
+}
+
+void NativeCode::Poison(Registers& _registers, std::uint16_t _registersToPoison, std::uint16_t _flagsToPoison) noexcept
+{
+  if (!m_poisoning)
+  {
+    return;
+  }
+  // A marked value per register, A5h in the high byte: nothing the game computes is likely to land on it.
+  std::uint16_t mark = POISON_FIRST;
+  for (const NamedRegister& named : NAMED_REGISTERS)
+  {
+    if (named.bit != 0 && (_registersToPoison & named.bit) != 0)
+    {
+      _registers.*named.field = mark;
+    }
+    mark = static_cast<std::uint16_t>(mark + 1);
+  }
+  // A flag has no unlikely value, so the marked flags are all set on one call and all clear on the next: a
+  // caller that reads one, reached twice, disagrees with the original at least once.
+  const std::uint16_t flags = _flagsToPoison & POISONABLE_FLAGS;
+  _registers.flags = static_cast<std::uint16_t>(m_poisonSetsFlags ? _registers.flags | flags : _registers.flags & ~flags);
+  m_poisonSetsFlags = !m_poisonSetsFlags;
 }
 
 void NativeCode::AddMismatch(Mismatch _mismatch)

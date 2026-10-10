@@ -49,6 +49,7 @@ public:
     Assert::IsTrue(m_original.Loaded() && m_native.Loaded(), L"ELITES.EXE at the repository root");
     Elite::InstallNativeRoutines(m_native.Host(), m_native.Program());
     m_native.Host().Native().SetVerifying(_options.compared);
+    m_native.Host().Native().SetPoisoning(true); // what a routine's contract leaves to it, no caller reads (ADR-012)
     if (!_options.fromPowerOn)
     {
       Play("wait 3");

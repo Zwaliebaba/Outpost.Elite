@@ -163,7 +163,7 @@ void TurnToVector(Guest& _guest)
 [[nodiscard]] bool SpawnOddsMet(Guest& _guest, std::uint16_t _column)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.bx = _guest.Get(DS.spawnOddsOffset);
   regs.bx = _guest.Word(At(_column, regs.bx));
   ScaleSpawnOdds(_guest);
@@ -352,7 +352,7 @@ void LaunchAtOffender(Guest& _guest)
   {
     return;
   }
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (regs.ax >= (status >= FUGITIVE ? FUGITIVE_LAUNCH_ODDS : OFFENDER_LAUNCH_ODDS))
   {
     return;
@@ -365,7 +365,7 @@ void LaunchAtOffender(Guest& _guest)
   const std::uint16_t station = regs.di;
   std::swap(regs.di, regs.si);
   CopyObject(_guest);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (regs.ax >= POLICE_FROM)
   {
     InitPoliceViper(_guest);
@@ -529,10 +529,10 @@ void HunterEvade(Guest& _guest)
   const std::uint16_t frames = At(regs.di, SLOT_JINK_FRAMES);
   if (_guest.Byte(frames) == 0)
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = Jink(regs.ax);
     _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), regs.ax);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = Jink(regs.ax);
     _guest.SetWord(At(regs.di, SLOT_JINK_YAW), regs.ax);
     _guest.SetByte(frames, JINK_FRAMES);
@@ -581,7 +581,7 @@ void HunterIdle(Guest& _guest)
       bool attack = _guest.Get(DS.legalStatus) >= FUGITIVE;
       if (!attack)
       {
-        NextRandom(_guest);
+        NextRandomEntry(_guest);
         attack = regs.ax < PACK_ATTACK_ODDS;
       }
       if (attack)
@@ -610,7 +610,7 @@ void TraderDecide(Guest& _guest)
   }
   else if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) != 0)
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     SetState(_guest, regs.ax < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING);
   }
   MoveObject(_guest);
@@ -660,10 +660,10 @@ void TraderFlee(Guest& _guest)
   const std::uint16_t frames = At(regs.di, SLOT_JINK_FRAMES);
   if (_guest.Byte(frames) == 0)
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = Jink(regs.ax);
     _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), regs.ax);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = Jink(regs.ax);
     _guest.SetWord(At(regs.di, SLOT_JINK_YAW), regs.ax);
     _guest.SetByte(frames, JINK_FRAMES);
@@ -681,7 +681,7 @@ void TraderFlee(Guest& _guest)
   regs.bx = static_cast<std::uint16_t>(regs.bx + _guest.Word(At(regs.di, SLOT_JINK_YAW)));
   TurnTowardAngles(_guest);
   ComputeVelocity(_guest);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (regs.ax < TRADER_ECM_ODDS)
   {
     _guest.Set(DS.npcEcmFrames, TRADER_ECM_FRAMES);
@@ -828,7 +828,7 @@ void PlaceEscortNear(Guest& _guest)
   regs.di = escort;
   for (int axis = 0; axis < 3; ++axis)
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = static_cast<std::uint16_t>((regs.ax & ESCORT_SCATTER_MASK) - ESCORT_SCATTER_CENTER);
     regs.dx = SignWord(regs.ax);
     AddToCoordinate(_guest, regs.di, axis, regs.ax);
@@ -908,7 +908,7 @@ void GetVectorToObject(Guest& _guest)
   const std::uint16_t x = regs.ax;
   const std::uint16_t y = regs.bx;
   const std::uint16_t z = regs.cx;
-  VectorWithinBox(_guest);
+  VectorWithinBoxEntry(_guest);
   regs.cx = z;
   regs.bx = y;
   regs.ax = x;
@@ -990,7 +990,7 @@ void UpdateWolfAi(Guest& _guest)
   bool spins = _guest.Flag(FLAG_ZERO);
   if (spins)
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     if (regs.ax < THARGOID_ECM_ODDS)
     {
       _guest.Set(DS.npcEcmFrames, THARGOID_ECM_FRAMES);
@@ -1017,7 +1017,7 @@ void UpdateWolfAi(Guest& _guest)
     // Resting: a new set of 2-5 passes once it is not hostile, or calm no more.
     if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) == 0 || _guest.Byte(At(regs.di, SLOT_AGGRESSION)) >= CALM)
     {
-      NextRandom(_guest);
+      NextRandomEntry(_guest);
       SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & PASS_COUNT_MASK) + FEWEST_PASSES));
       _guest.SetByte(At(regs.di, SLOT_PASSES), High(regs.ax));
       SetState(_guest, STATE_ATTACK_RUN);

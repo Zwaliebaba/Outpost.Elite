@@ -94,6 +94,7 @@ public:
     Assert::IsTrue(player.Play(steps.front(), digest) == Machine::StopReason::Reached, L"boots");
     Elite::InstallNativeRoutines(m_rig.Host(), m_rig.Program());
     m_rig.Host().Native().SetVerifying(true);
+    m_rig.Host().Native().SetPoisoning(true);
   }
 
   ComparisonRig(const ComparisonRig&) = delete;

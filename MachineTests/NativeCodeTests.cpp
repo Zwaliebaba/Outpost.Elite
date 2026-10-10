@@ -240,6 +240,28 @@ public:
     Assert::AreEqual(std::uint64_t{1}, kept.Books().mismatches);
   }
 
+  // Poisoning (ADR-012) marks exactly the registers named, each with its own value, and only while it is on.
+  TEST_METHOD(PoisoningMarksTheNamedRegistersWhileOn)
+  {
+    NativeRig rig("NativePoison", COUNT_UP);
+    Machine::NativeCode& native = rig.Host().Native();
+    Machine::Registers regs;
+    const std::uint16_t clear = regs.flags;
+    native.Poison(regs, Machine::REGISTER_DX | Machine::REGISTER_BP, Machine::FLAG_CARRY);
+    Assert::AreEqual(0u, std::uint32_t{regs.dx}, L"off: nothing is marked");
+    Assert::AreEqual(std::uint32_t{clear}, std::uint32_t{regs.flags}, L"off: no flag is marked");
+
+    native.SetPoisoning(true);
+    native.Poison(regs, Machine::REGISTER_DX | Machine::REGISTER_BP, Machine::FLAG_CARRY | Machine::FLAG_DIRECTION);
+    Assert::AreEqual(0xA5A4u, std::uint32_t{regs.dx});
+    Assert::AreEqual(0xA5A7u, std::uint32_t{regs.bp});
+    Assert::AreEqual(0u, std::uint32_t{regs.ax}, L"AX is not named");
+    Assert::AreEqual(std::uint32_t{clear} | Machine::FLAG_CARRY, std::uint32_t{regs.flags}, L"CF set, DF never");
+
+    native.Poison(regs, 0, Machine::FLAG_CARRY | Machine::FLAG_ZERO);
+    Assert::AreEqual(std::uint32_t{clear}, std::uint32_t{regs.flags}, L"the next call clears them");
+  }
+
   // The native run sees the port reads the original made, and its writes are compared rather than
   // made a second time.
   TEST_METHOD(PortAccessesAreReplayed)

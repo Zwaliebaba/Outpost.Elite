@@ -163,6 +163,27 @@ public:
     return m_verifying;
   }
 
+  /// When on, Poison fills registers with marked values, so that code which reads a register a routine's
+  /// contract leaves to it gets a value the original is unlikely to have left there, and a comparison or a digest
+  /// shows it (ADR-012). A test switches it on; the game never does.
+  void SetPoisoning(bool _poisoning) noexcept
+  {
+    m_poisoning = _poisoning;
+  }
+
+  [[nodiscard]] bool Poisoning() const noexcept
+  {
+    return m_poisoning;
+  }
+
+  /// When Poisoning(), sets each register in _registersToPoison (REGISTER_* bits) to its own marked value,
+  /// and the status flags in _flagsToPoison (FLAG_* bits) all set or all clear, in turn from one call to the
+  /// next; otherwise leaves them as they are.
+  void Poison(Registers& _registers, std::uint16_t _registersToPoison, std::uint16_t _flagsToPoison) noexcept;
+
+  /// The flags Poison marks: the six status flags, never IF, TF or DF.
+  static constexpr std::uint16_t POISONABLE_FLAGS = FLAG_CARRY | FLAG_PARITY | FLAG_AUXILIARY | FLAG_ZERO | FLAG_SIGN | FLAG_OVERFLOW;
+
   /// The lowest linear address of the program's stack. Once a routine has returned, what lies from
   /// here up to SS:SP is dead, and the two runs may differ there. Zero (the default) means nothing is.
   void SetStackFloor(std::uint32_t _linear) noexcept
@@ -213,6 +234,8 @@ private:
   std::vector<std::uint8_t> m_marks; // a byte per address: changed by a run Compare is looking at
   std::string m_overran;
   bool m_verifying = false;
+  bool m_poisoning = false;
+  bool m_poisonSetsFlags = true;
 };
 
 } // namespace Machine

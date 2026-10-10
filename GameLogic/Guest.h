@@ -2,6 +2,7 @@
 #pragma once
 
 #include "DataField.h"
+#include "GameState.h"
 #include "Pc.h"
 
 #include <cstdint>
@@ -18,23 +19,28 @@ class Guest
 {
 public:
   /// The CGA's video memory, which the reference writes directly.
-  static constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
+  static constexpr std::uint16_t VIDEO_SEGMENT = GameState::VIDEO_SEGMENT;
 
   Guest(Machine::Pc& _pc, std::uint16_t _codeSegment, std::uint16_t _dataSegment) noexcept
     : m_pc(_pc),
-      m_codeSegment(_codeSegment),
-      m_dataSegment(_dataSegment)
+      m_state(_pc.Ram(), _codeSegment, _dataSegment)
   {
   }
 
   [[nodiscard]] std::uint16_t CodeSegment() const noexcept
   {
-    return m_codeSegment;
+    return m_state.CodeSegment();
   }
 
   [[nodiscard]] std::uint16_t DataSegment() const noexcept
   {
-    return m_dataSegment;
+    return m_state.DataSegment();
+  }
+
+  /// The game's memory without the registers: what a de-assembled routine is given (ADR-012).
+  [[nodiscard]] GameState& State() noexcept
+  {
+    return m_state;
   }
 
   [[nodiscard]] Machine::Registers& Regs() noexcept
@@ -70,65 +76,65 @@ public:
   /// The byte at DS:_offset, where DS is the reference's data segment.
   [[nodiscard]] std::uint8_t Byte(std::uint16_t _offset) const noexcept
   {
-    return m_pc.Ram().Read8(m_dataSegment, _offset);
+    return m_state.Byte(_offset);
   }
 
   /// The word at DS:_offset; at offset FFFFh its high byte is at offset 0, as on the 8088.
   [[nodiscard]] std::uint16_t Word(std::uint16_t _offset) const noexcept
   {
-    return m_pc.Ram().Read16(m_dataSegment, _offset);
+    return m_state.Word(_offset);
   }
 
   void SetByte(std::uint16_t _offset, std::uint8_t _value) noexcept
   {
-    m_pc.Ram().Write8(m_dataSegment, _offset, _value);
+    m_state.SetByte(_offset, _value);
   }
 
   void SetWord(std::uint16_t _offset, std::uint16_t _value) noexcept
   {
-    m_pc.Ram().Write16(m_dataSegment, _offset, _value);
+    m_state.SetWord(_offset, _value);
   }
 
   /// The byte at _segment:_offset, in any segment.
   [[nodiscard]] std::uint8_t FarByte(std::uint16_t _segment, std::uint16_t _offset) const noexcept
   {
-    return m_pc.Ram().Read8(_segment, _offset);
+    return m_state.FarByte(_segment, _offset);
   }
 
   [[nodiscard]] std::uint16_t FarWord(std::uint16_t _segment, std::uint16_t _offset) const noexcept
   {
-    return m_pc.Ram().Read16(_segment, _offset);
+    return m_state.FarWord(_segment, _offset);
   }
 
   void SetFarByte(std::uint16_t _segment, std::uint16_t _offset, std::uint8_t _value) noexcept
   {
-    m_pc.Ram().Write8(_segment, _offset, _value);
+    m_state.SetFarByte(_segment, _offset, _value);
   }
 
   void SetFarWord(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _value) noexcept
   {
-    m_pc.Ram().Write16(_segment, _offset, _value);
+    m_state.SetFarWord(_segment, _offset, _value);
   }
 
   /// The byte at CS:_offset: data the original keeps in its code segment, and the code it patches.
   [[nodiscard]] std::uint8_t CodeByte(std::uint16_t _offset) const noexcept
   {
-    return FarByte(m_codeSegment, _offset);
+    return m_state.CodeByte(_offset);
   }
 
   [[nodiscard]] std::uint16_t CodeWord(std::uint16_t _offset) const noexcept
   {
-    return FarWord(m_codeSegment, _offset);
+    return m_state.CodeWord(_offset);
   }
 
   void SetCodeByte(std::uint16_t _offset, std::uint8_t _value) noexcept
   {
-    SetFarByte(m_codeSegment, _offset, _value);
+    m_state.SetCodeByte(_offset, _value);
   }
 
   void SetCodeWord(std::uint16_t _offset, std::uint16_t _value) noexcept
   {
-    SetFarWord(m_codeSegment, _offset, _value);
+    m_state.SetCodeWord(_offset, _value);
   }
 
   /// The byte at B800:_offset, in the CGA's video memory.
@@ -253,10 +259,18 @@ public:
     m_pc.LoopTurn();
   }
 
+  /// What an entry does for the registers and flags its contract leaves to it (ADR-012): the registers it
+  /// clobbers, and every status flag it does not name. Nothing, so they keep what they held, unless a test
+  /// has switched poisoning on (NativeCode::SetPoisoning), when they get marked values that show up wherever
+  /// code reads them.
+  void Clobber(const Machine::NativeContract& _contract) noexcept
+  {
+    m_pc.Native().Poison(Regs(), _contract.clobbers, static_cast<std::uint16_t>(~_contract.flags));
+  }
+
 private:
   Machine::Pc& m_pc;
-  std::uint16_t m_codeSegment;
-  std::uint16_t m_dataSegment;
+  GameState m_state;
 };
 
 } // namespace Elite

@@ -35,17 +35,6 @@ constexpr std::uint16_t COSINE_OFFSET_BYTES = 0x400; // a quarter turn of sineTa
 constexpr std::uint16_t TANGENT_SEARCH_STEPS = 9;
 constexpr std::uint16_t TANGENT_TOP_BYTES = 0x1FE;
 
-// A slot's 24-bit position: the low words at +4, +6, +8, the high bytes at +1, +2, +3.
-constexpr std::uint16_t POSITION_X_OFFSET = 4;
-constexpr std::uint16_t POSITION_Y_OFFSET = 6;
-constexpr std::uint16_t POSITION_Z_OFFSET = 8;
-constexpr std::uint16_t POSITION_X_HIGH_OFFSET = 1;
-constexpr std::uint16_t POSITION_Y_HIGH_OFFSET = 2;
-constexpr std::uint16_t POSITION_Z_HIGH_OFFSET = 3;
-constexpr std::uint16_t SCALE_SHIFT_OFFSET = 0x0A; // a slot's scale shift, a byte
-constexpr std::uint16_t VIEW_X_OFFSET = 0x10;      // a slot's view position, words
-constexpr std::uint16_t VIEW_Y_OFFSET = 0x12;
-constexpr std::uint16_t VIEW_Z_OFFSET = 0x14;
 constexpr std::uint32_t MASK_24_BITS = 0xFFFFFF;
 constexpr std::uint32_t SIGN_24_BITS = 0x800000;
 constexpr std::uint16_t SCALED_POSITION_LIMIT = 0x24B8; // GetPositionScaleShift's ceiling
@@ -80,20 +69,43 @@ constexpr std::uint16_t SCALE_LIMIT = 0xFF;
   return static_cast<std::uint32_t>(value * value);
 }
 
-// The magnitude of a 24-bit coordinate with its high byte at DS:_high and low word at DS:_low: not,
-// not, add 1, adc 0, so that 800000h stays 800000h.
-[[nodiscard]] std::uint32_t Magnitude24(const Guest& _guest, std::uint16_t _high, std::uint16_t _low) noexcept
+// The magnitude of a 24-bit coordinate: not, not, add 1, adc 0, so that 800000h stays 800000h.
+[[nodiscard]] std::uint32_t Magnitude24(std::uint32_t _value) noexcept
 {
-  const std::uint32_t value = (std::uint32_t{_guest.Byte(_high)} << 16) | _guest.Word(_low);
-  return (value & SIGN_24_BITS) != 0 ? (0u - value) & MASK_24_BITS : value;
+  return (_value & SIGN_24_BITS) != 0 ? (0u - _value) & MASK_24_BITS : _value;
 }
 
 // What DivideOverflowInterrupt does first, whatever the divide: BX and DS kept in the code segment.
+void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds)
+{
+  _state.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, _bx);
+  _state.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, _ds);
+}
+
 void SaveDivideRegisters(Guest& _guest)
 {
   const Machine::Registers& regs = _guest.Regs();
-  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
+  SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
+}
+
+// DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: the
+// offset it resumes at, and AX as it leaves AX = _ax.
+struct TrapOutcome
+{
+  std::uint16_t resume;
+  std::uint16_t ax;
+};
+
+[[nodiscard]] TrapOutcome SaturateDivide(const GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax)
+{
+  std::uint16_t resume = _offset;
+  if ((_state.FarWord(_segment, _offset) & DIVIDE_OPCODE_MASK) == DIVIDE_OPCODE)
+  {
+    resume = static_cast<std::uint16_t>(resume + REGISTER_DIVIDE_BYTES);
+  }
+  // Two bytes back: the opcode of a register divide, but the ModRM byte of a memory one.
+  const std::uint8_t opcode = _state.FarByte(_segment, static_cast<std::uint16_t>(resume - REGISTER_DIVIDE_BYTES));
+  return TrapOutcome{resume, (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE)};
 }
 
 // DivideOverflowInterrupt from its saves to its IRET, for a divide whose return address is
@@ -102,15 +114,25 @@ std::uint16_t TrapDivideOverflow(Guest& _guest, std::uint16_t _segment, std::uin
 {
   Machine::Registers& regs = _guest.Regs();
   SaveDivideRegisters(_guest);
-  std::uint16_t resume = _offset;
-  if ((_guest.FarWord(_segment, _offset) & DIVIDE_OPCODE_MASK) == DIVIDE_OPCODE)
-  {
-    resume = static_cast<std::uint16_t>(resume + REGISTER_DIVIDE_BYTES);
-  }
-  // Two bytes back: the opcode of a register divide, but the ModRM byte of a memory one.
-  const std::uint8_t opcode = _guest.FarByte(_segment, static_cast<std::uint16_t>(resume - REGISTER_DIVIDE_BYTES));
-  regs.ax = (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(regs.ax, DIVIDE_OVERFLOW_BYTE);
-  return resume;
+  const TrapOutcome outcome = SaturateDivide(_guest.State(), _segment, _offset, regs.ax);
+  regs.ax = outcome.ax;
+  return outcome.resume;
+}
+
+[[nodiscard]] std::uint16_t Word(std::int16_t _value) noexcept
+{
+  return static_cast<std::uint16_t>(_value);
+}
+
+[[nodiscard]] std::int16_t Signed(std::uint16_t _value) noexcept
+{
+  return static_cast<std::int16_t>(_value);
+}
+
+// A rotationSinCos entry's index from its offset, as BX holds it in the register contracts.
+[[nodiscard]] std::size_t PairIndex(std::uint16_t _pairOffset) noexcept
+{
+  return static_cast<std::size_t>(_pairOffset - DS.rotationSinCos.offset) / decltype(DS.rotationSinCos)::ENTRY_BYTES;
 }
 
 } // namespace
@@ -181,129 +203,98 @@ void DivideSignedWord(Guest& _guest, std::uint16_t _divisor)
   regs.dx = static_cast<std::uint16_t>(dividendNegative ? 0u - remainder : remainder);
 }
 
-void NextRandom(Guest& _guest)
+// ── The routines ──
+
+std::uint16_t NextRandom(GameState& _state)
 {
-  const std::uint16_t a = _guest.Get(DS.randomState0);
-  const std::uint16_t b = _guest.Get(DS.randomState1);
-  const std::uint16_t c = _guest.Get(DS.randomState2);
+  const std::uint16_t a = _state.Get(DS.randomState0);
+  const std::uint16_t b = _state.Get(DS.randomState1);
+  const std::uint16_t c = _state.Get(DS.randomState2);
   const auto sum = static_cast<std::uint16_t>(a + b);
-  _guest.Set(DS.randomState1, c);
-  _guest.Set(DS.randomState0, b);
-  _guest.Set(DS.randomState2, static_cast<std::uint16_t>(c + sum));
-  _guest.Regs().ax = sum;
+  _state.Set(DS.randomState1, c);
+  _state.Set(DS.randomState0, b);
+  _state.Set(DS.randomState2, static_cast<std::uint16_t>(c + sum));
+  return sum;
 }
 
-void SetSinCos(Guest& _guest, std::uint16_t _pair)
+SinCos SinCosOf(const GameState& _state, std::uint16_t _angle)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto index = static_cast<std::uint16_t>((regs.ax & ANGLE_MASK) * 2);
-  const std::uint16_t sine = _guest.Word(DS.sineTable.At(index / 2));
-  const auto cosineIndex = static_cast<std::uint16_t>((index + COSINE_OFFSET_BYTES) & (SINE_WORDS * 2 - 1));
-  const std::uint16_t cosine = _guest.Word(DS.sineTable.At(cosineIndex / 2));
-  _guest.SetWord(_pair, sine);
-  _guest.SetWord(static_cast<std::uint16_t>(_pair + 2), cosine);
-  regs.ax = sine;
-  regs.bx = cosine;
+  const auto index = static_cast<std::uint16_t>(_angle & ANGLE_MASK);
+  const auto cosineIndex = static_cast<std::uint16_t>((index + COSINE_OFFSET_BYTES / 2) & (SINE_WORDS - 1));
+  return SinCos{Signed(_state.Word(DS.sineTable.At(index))), Signed(_state.Word(DS.sineTable.At(cosineIndex)))};
 }
 
-void RotateBySinCos(Guest& _guest)
+SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto a = static_cast<std::uint16_t>(regs.ax << 1);
-  const auto b = static_cast<std::uint16_t>(regs.bx << 1);
-  const std::uint16_t bCos = RoundedProduct(b, regs.bp);
-  const std::uint16_t aCos = RoundedProduct(a, regs.bp);
-  const std::uint16_t aSin = RoundedProduct(a, regs.di);
-  const std::uint16_t bSin = RoundedProduct(b, regs.di);
-  const auto rotatedA = static_cast<std::uint16_t>(aCos - bSin);
-  regs.bx = static_cast<std::uint16_t>(bCos + aSin);
-  regs.dx = bSin;
-  regs.bp = rotatedA;
-  regs.ax = rotatedA;
+  const SinCos pair = SinCosOf(_state, _angle);
+  const std::uint16_t at = DS.rotationSinCos.At(_pair);
+  _state.SetWord(at, Word(pair.sine));
+  _state.SetWord(static_cast<std::uint16_t>(at + 2), Word(pair.cosine));
+  return pair;
 }
 
-void RotateByStoredSinCos(Guest& _guest, std::uint16_t _pair)
+Pair RotateBySinCos(Pair _point, SinCos _by)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t di = regs.di;
-  const std::uint16_t bp = regs.bp;
-  regs.di = _guest.Word(_pair);
-  regs.bp = _guest.Word(static_cast<std::uint16_t>(_pair + 2));
-  RotateBySinCos(_guest);
-  regs.di = di;
-  regs.bp = bp;
+  const auto a = static_cast<std::uint16_t>(Word(_point.first) << 1);
+  const auto b = static_cast<std::uint16_t>(Word(_point.second) << 1);
+  const std::uint16_t bCos = RoundedProduct(b, Word(_by.cosine));
+  const std::uint16_t aCos = RoundedProduct(a, Word(_by.cosine));
+  const std::uint16_t aSin = RoundedProduct(a, Word(_by.sine));
+  const std::uint16_t bSin = RoundedProduct(b, Word(_by.sine));
+  return Pair{Signed(static_cast<std::uint16_t>(aCos - bSin)), Signed(static_cast<std::uint16_t>(bCos + aSin))};
 }
 
-void ArcTangent2(Guest& _guest)
+Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const bool negativeA = (regs.ax & 0x8000) != 0;
-  const bool negativeB = (regs.bx & 0x8000) != 0;
-  if (negativeA)
-  {
-    regs.ax = Negate(regs.ax);
-  }
-  if (negativeB)
-  {
-    regs.bx = Negate(regs.bx);
-  }
-  QuadrantArcTangent(_guest);
-  std::uint16_t angle = regs.ax;
+  const std::uint16_t at = DS.rotationSinCos.At(_pair);
+  return RotateBySinCos(_point, SinCos{Signed(_state.Word(at)), Signed(_state.Word(static_cast<std::uint16_t>(at + 2)))});
+}
+
+std::uint16_t ArcTangent2(GameState& _state, std::int16_t _a, std::int16_t _b)
+{
+  const bool negativeA = _a < 0;
+  const bool negativeB = _b < 0;
+  std::uint16_t angle = QuadrantArcTangent(_state, Magnitude(Word(_a)), Magnitude(Word(_b)));
   if (negativeA == negativeB)
   {
     angle = Negate(angle);
   }
   angle = static_cast<std::uint16_t>(negativeA ? angle - QUARTER_TURN : angle + QUARTER_TURN);
-  regs.ax = static_cast<std::uint16_t>(angle & ANGLE_MASK);
+  return static_cast<std::uint16_t>(angle & ANGLE_MASK);
 }
 
-void QuadrantArcTangent(Guest& _guest)
+std::uint16_t QuadrantArcTangent(GameState& _state, std::uint16_t _a, std::uint16_t _b)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (regs.bx < regs.ax)
+  if (_b < _a)
   {
-    std::swap(regs.ax, regs.bx);
-    RatioArcTangent(_guest);
-    return;
+    return RatioArcTangent(_state, _b, _a);
   }
-  RatioArcTangent(_guest);
-  regs.ax = static_cast<std::uint16_t>(Negate(regs.ax) + QUARTER_TURN);
+  return static_cast<std::uint16_t>(Negate(RatioArcTangent(_state, _a, _b)) + QUARTER_TURN);
 }
 
-void RatioArcTangent(Guest& _guest)
+std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::uint16_t _denominator)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // DX:AX = AX * 32768, divided by BX.
-  const std::uint32_t dividend = std::uint32_t{regs.ax} << 15;
-  std::uint16_t ratio = DIVIDE_OVERFLOW_WORD;
-  if (regs.bx == 0 || dividend / regs.bx > 0xFFFF)
+  // _numerator * 32768 over _denominator; a quotient that does not fit goes through the trap.
+  const std::uint32_t dividend = std::uint32_t{_numerator} << 15;
+  if (_denominator == 0 || dividend / _denominator > 0xFFFF)
   {
-    // The divide overflows: DivideOverflowInterrupt saves BX and DS, saturates AX and leaves DX.
-    _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-    _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
-    regs.dx = static_cast<std::uint16_t>(dividend >> 16);
+    SaveDivideRegisters(_state, _denominator, _state.DataSegment());
+    return EIGHTH_TURN;
   }
-  else
-  {
-    ratio = static_cast<std::uint16_t>(dividend / regs.bx);
-    regs.dx = static_cast<std::uint16_t>(dividend % regs.bx);
-  }
-  regs.ax = ratio;
+  const auto ratio = static_cast<std::uint16_t>(dividend / _denominator);
   if (ratio >= DIVIDE_OVERFLOW_WORD)
   {
-    regs.ax = EIGHTH_TURN;
-    return;
+    return EIGHTH_TURN;
   }
 
   // A binary search of tangentTable's 256 words for the ratio, nine halvings, in byte offsets.
   std::uint16_t low = 0;
   std::uint16_t high = TANGENT_TOP_BYTES;
   std::uint16_t middle = 0;
-  std::uint16_t steps = TANGENT_SEARCH_STEPS;
-  for (;;)
+  for (std::uint16_t steps = TANGENT_SEARCH_STEPS; steps != 0; --steps)
   {
     middle = static_cast<std::uint16_t>(((low + high) >> 1) & 0xFFFE);
-    const std::uint16_t tangent = _guest.Word(static_cast<std::uint16_t>(DS.tangentTable.offset + middle));
+    const std::uint16_t tangent = _state.Word(static_cast<std::uint16_t>(DS.tangentTable.offset + middle));
     if (tangent == ratio)
     {
       break;
@@ -316,36 +307,23 @@ void RatioArcTangent(Guest& _guest)
     {
       high = middle;
     }
-    if (--steps == 0)
-    {
-      break;
-    }
   }
-  regs.ax = static_cast<std::uint16_t>(middle >> 1);
-  regs.bx = middle;
-  regs.cx = steps;
-  regs.dx = high;
+  return static_cast<std::uint16_t>(middle >> 1);
 }
 
-void AngleWithinTolerance(Guest& _guest)
+AngleTolerance AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t first = SignExtendAngle(regs.ax);
-  regs.cx = SignExtendAngle(regs.cx);
-  std::uint16_t difference = SignExtendAngle(static_cast<std::uint16_t>(first - regs.cx));
+  std::uint16_t difference = SignExtendAngle(static_cast<std::uint16_t>(SignExtendAngle(_a) - SignExtendAngle(_b)));
   if ((difference & 0x8000) != 0)
   {
     difference = Negate(difference);
   }
-  _guest.SetFlag(Machine::FLAG_CARRY, difference < regs.bx);
-  regs.dx = static_cast<std::uint16_t>(difference - regs.bx);
+  return AngleTolerance{difference < _tolerance, static_cast<std::uint16_t>(difference - _tolerance)};
 }
 
-void VectorLength(Guest& _guest)
+std::uint16_t VectorLength(Vector _vector)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t partial = Square(regs.ax) + Square(regs.cx); // CX:BX
-  const std::uint32_t sum = partial + Square(regs.bx);
+  const std::uint32_t sum = Square(Word(_vector.x)) + Square(Word(_vector.z)) + Square(Word(_vector.y));
   // The 16 bits from the highest non-zero byte down, and how far that shifts the root back.
   auto top = static_cast<std::uint16_t>(sum >> 16);
   std::uint8_t shift = 8;
@@ -369,98 +347,54 @@ void VectorLength(Guest& _guest)
     borrow = top < odd;
     top = static_cast<std::uint16_t>(top - odd);
   } while (!borrow);
-  regs.ax = static_cast<std::uint16_t>(root << shift);
-  regs.bx = odd;
-  regs.cx = static_cast<std::uint16_t>(((partial >> 16) & 0xFF00) | shift);
-  regs.dx = top;
+  return static_cast<std::uint16_t>(root << shift);
 }
 
-void ObjectWithinBox(Guest& _guest)
+bool VectorWithinBox(Vector _vector, std::uint16_t _halfSize)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(Offset(regs.di, POSITION_X_OFFSET));
-  regs.bx = _guest.Word(Offset(regs.di, POSITION_Y_OFFSET));
-  regs.cx = _guest.Word(Offset(regs.di, POSITION_Z_OFFSET));
-  VectorWithinBox(_guest);
+  // Each axis in turn, stopping at the first outside, as the original does.
+  return Magnitude(Word(_vector.x)) < _halfSize && Magnitude(Word(_vector.y)) < _halfSize && Magnitude(Word(_vector.z)) < _halfSize;
 }
 
-void VectorWithinBox(Guest& _guest)
+bool ObjectWithinBox(const ObjectSlot& _slot, std::uint16_t _halfSize)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Magnitude(regs.ax);
-  bool within = regs.ax < regs.dx;
-  if (within)
-  {
-    regs.bx = Magnitude(regs.bx);
-    within = regs.bx < regs.dx;
-  }
-  if (within)
-  {
-    regs.cx = Magnitude(regs.cx);
-    within = regs.cx < regs.dx;
-  }
-  _guest.SetFlag(Machine::FLAG_CARRY, within);
+  return VectorWithinBox(Vector{Signed(_slot.Get(SlotWord::X)), Signed(_slot.Get(SlotWord::Y)), Signed(_slot.Get(SlotWord::Z))}, _halfSize);
 }
 
-void RotatePitchYawRoll(Guest& _guest)
+Vector RotatePitchYawRoll(GameState& _state, Vector _vector)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t x = regs.ax;
-  regs.ax = regs.bx;
-  regs.bx = regs.cx;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(0));
-  _guest.Set(DS.rotateScratch, regs.ax);
-  regs.ax = x;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(1));
-  const std::uint16_t z = regs.bx;
-  regs.bx = _guest.Get(DS.rotateScratch);
-  _guest.Set(DS.rotateScratch, z);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(2));
-  regs.cx = _guest.Get(DS.rotateScratch);
+  const Pair yz = RotateByStoredSinCos(_state, 0, Pair{_vector.y, _vector.z});
+  _state.Set(DS.rotateScratch, Word(yz.first));
+  const Pair xz = RotateByStoredSinCos(_state, 1, Pair{_vector.x, yz.second});
+  _state.Set(DS.rotateScratch, Word(xz.second));
+  const Pair xy = RotateByStoredSinCos(_state, 2, Pair{xz.first, yz.first});
+  return Vector{xy.first, xy.second, xz.second};
 }
 
-void RotateRollYawPitch(Guest& _guest)
+Vector RotateRollYawPitch(const GameState& _state, Vector _vector)
 {
-  Machine::Registers& regs = _guest.Regs();
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(2));
-  std::swap(regs.cx, regs.bx);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(1));
-  std::swap(regs.cx, regs.ax);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(0));
-  std::swap(regs.cx, regs.ax);
-  std::swap(regs.cx, regs.bx);
+  const Pair xy = RotateByStoredSinCos(_state, 2, Pair{_vector.x, _vector.y});
+  const Pair xz = RotateByStoredSinCos(_state, 1, Pair{xy.first, _vector.z});
+  const Pair yz = RotateByStoredSinCos(_state, 0, Pair{xy.second, xz.second});
+  return Vector{xz.first, yz.first, yz.second};
 }
 
-void RotateBySinCos7210(Guest& _guest)
+Vector RotateBySinCos7210(GameState& _state, Vector _vector)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t x = regs.ax;
-  regs.ax = regs.bx;
-  regs.bx = regs.cx;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(7));
-  _guest.Set(DS.rotateScratch, regs.bx);
-  regs.bx = regs.ax;
-  regs.ax = x;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(2));
-  const std::uint16_t y = regs.bx;
-  regs.bx = _guest.Get(DS.rotateScratch);
-  _guest.Set(DS.rotateScratch, y);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(1));
-  const std::uint16_t rotatedX = regs.ax;
-  regs.ax = _guest.Get(DS.rotateScratch);
-  _guest.Set(DS.rotateScratch, rotatedX);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(0));
-  regs.cx = regs.bx;
-  regs.bx = regs.ax;
-  regs.ax = _guest.Get(DS.rotateScratch);
+  const Pair yz = RotateByStoredSinCos(_state, 7, Pair{_vector.y, _vector.z});
+  _state.Set(DS.rotateScratch, Word(yz.second));
+  const Pair xy = RotateByStoredSinCos(_state, 2, Pair{_vector.x, yz.first});
+  _state.Set(DS.rotateScratch, Word(xy.second));
+  const Pair xz = RotateByStoredSinCos(_state, 1, Pair{xy.first, yz.second});
+  _state.Set(DS.rotateScratch, Word(xz.first));
+  const Pair rotatedYz = RotateByStoredSinCos(_state, 0, Pair{xy.second, xz.second});
+  return Vector{xz.first, rotatedYz.first, rotatedYz.second};
 }
 
-void ScaleByInverseDistance(Guest& _guest)
+InverseDistanceScale ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t sum = Square(_guest.Word(Offset(regs.di, VIEW_X_OFFSET))) + Square(_guest.Word(Offset(regs.di, VIEW_Y_OFFSET))) +
-                            Square(_guest.Word(Offset(regs.di, VIEW_Z_OFFSET)));
-  // One more than the root of the high word, counted in BH: a count of 256 wraps to 0.
+  const std::uint32_t sum = Square(_slot.Get(SlotWord::ViewX)) + Square(_slot.Get(SlotWord::ViewY)) + Square(_slot.Get(SlotWord::ViewZ));
+  // One more than the root of the high word, counted in the divisor's high byte: a count of 256 wraps to 0.
   auto remaining = static_cast<std::uint16_t>(sum >> 16);
   std::uint16_t odd = 0xFFFF;
   std::uint8_t count = 0;
@@ -472,46 +406,43 @@ void ScaleByInverseDistance(Guest& _guest)
     borrow = remaining < odd;
     remaining = static_cast<std::uint16_t>(remaining - odd);
   } while (!borrow);
-  regs.bx = static_cast<std::uint16_t>(count << 8);
-  // DX:AX, as the caller gave it, shifted arithmetically right by the scale shift.
-  const std::uint8_t shift = _guest.Byte(Offset(regs.di, SCALE_SHIFT_OFFSET));
-  auto value = static_cast<std::int32_t>((std::uint32_t{regs.dx} << 16) | regs.ax);
-  value >>= shift < 31 ? shift : 31;
-  regs.ax = static_cast<std::uint16_t>(value);
-  regs.dx = static_cast<std::uint16_t>(static_cast<std::uint32_t>(value) >> 16);
-  regs.cx = 0;
-  DivideUnsigned(_guest, regs.bx, SCALE_DIVIDE_RETURN);
-  if (regs.ax > SCALE_LIMIT)
+  const auto divisor = static_cast<std::uint16_t>(count << 8);
+  // The value shifted arithmetically right by the disc scale, then divided through the trap.
+  const std::uint8_t shift = _slot.Get(SlotByte::DiscScale);
+  auto shifted = static_cast<std::int32_t>(_value);
+  shifted >>= shift < 31 ? shift : 31;
+  const auto dividend = static_cast<std::uint32_t>(shifted);
+  std::uint16_t scaled = 0;
+  if (divisor == 0 || dividend / divisor > 0xFFFF)
   {
-    regs.ax = SCALE_LIMIT;
+    SaveDivideRegisters(_state, divisor, _state.DataSegment());
+    scaled = SaturateDivide(_state, _state.CodeSegment(), SCALE_DIVIDE_RETURN, static_cast<std::uint16_t>(dividend)).ax;
   }
+  else
+  {
+    scaled = static_cast<std::uint16_t>(dividend / divisor);
+  }
+  return InverseDistanceScale{scaled > SCALE_LIMIT ? SCALE_LIMIT : scaled, divisor};
 }
 
-void ShiftRight24(Guest& _guest)
+std::uint32_t ShiftRight24(std::uint32_t _value, std::uint8_t _count)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t count = High(regs.dx);
-  if (count == 0)
+  if (_count == 0)
   {
-    return;
+    return _value;
   }
-  const auto high = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int8_t>(Low(regs.dx))));
-  auto value = static_cast<std::int32_t>((high << 16) | regs.ax);
-  value >>= count < 31 ? count : 31;
-  regs.ax = static_cast<std::uint16_t>(value);
-  regs.dx = Low(static_cast<std::uint16_t>(static_cast<std::uint32_t>(value) >> 16));
+  const auto high = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int8_t>(_value >> 16)));
+  auto value = static_cast<std::int32_t>((high << 16) | (_value & 0xFFFF));
+  value >>= _count < 31 ? _count : 31;
+  return static_cast<std::uint32_t>(value) & MASK_24_BITS;
 }
 
-void GetPositionScaleShift(Guest& _guest)
+PositionScale GetPositionScaleShift(const ObjectSlot& _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  const std::uint32_t x = Magnitude24(_guest, Offset(slot, POSITION_X_HIGH_OFFSET), Offset(slot, POSITION_X_OFFSET));
-  const std::uint32_t y = Magnitude24(_guest, Offset(slot, POSITION_Y_HIGH_OFFSET), Offset(slot, POSITION_Y_OFFSET));
-  const std::uint32_t z = Magnitude24(_guest, Offset(slot, POSITION_Z_HIGH_OFFSET), Offset(slot, POSITION_Z_OFFSET));
-  // DH:BX keeps the largest; DL:AX is left holding the last 24-bit difference.
+  const std::uint32_t x = Magnitude24(_slot.PositionX());
+  const std::uint32_t y = Magnitude24(_slot.PositionY());
+  const std::uint32_t z = Magnitude24(_slot.PositionZ());
   std::uint32_t largest = x >= y ? x : y;
-  const std::uint32_t difference = (z - largest) & MASK_24_BITS;
   largest = z >= largest ? z : largest;
   std::uint8_t shift = 0;
   while (largest > 0xFFFF)
@@ -524,74 +455,38 @@ void GetPositionScaleShift(Guest& _guest)
     ++shift;
     largest >>= 1;
   }
-  regs.ax = static_cast<std::uint16_t>(difference);
-  regs.bx = static_cast<std::uint16_t>(largest);
-  regs.cx = WithLow(regs.cx, shift);
-  regs.dx = static_cast<std::uint16_t>(difference >> 16);
+  return PositionScale{shift, static_cast<std::uint16_t>(largest)};
 }
 
-void ScalePositionDown(Guest& _guest)
+Vector ScalePositionDown(const ObjectSlot& _slot, std::uint8_t _shift)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  regs.bp = regs.dx;
-  regs.dx = WithLow(regs.bp, _guest.Byte(Offset(slot, POSITION_Z_HIGH_OFFSET)));
-  regs.ax = _guest.Word(Offset(slot, POSITION_Z_OFFSET));
-  ShiftRight24(_guest);
-  regs.cx = regs.ax;
-  regs.dx = WithLow(regs.bp, _guest.Byte(Offset(slot, POSITION_Y_HIGH_OFFSET)));
-  regs.ax = _guest.Word(Offset(slot, POSITION_Y_OFFSET));
-  ShiftRight24(_guest);
-  regs.bx = regs.ax;
-  regs.dx = WithLow(regs.bp, _guest.Byte(Offset(slot, POSITION_X_HIGH_OFFSET)));
-  regs.ax = _guest.Word(Offset(slot, POSITION_X_OFFSET));
-  ShiftRight24(_guest);
+  const auto lowWord = [_shift](std::uint32_t _coordinate)
+  { return Signed(static_cast<std::uint16_t>(ShiftRight24(_coordinate, _shift))); };
+  return Vector{lowWord(_slot.PositionX()), lowWord(_slot.PositionY()), lowWord(_slot.PositionZ())};
 }
 
-void ComputeAnglesToObject(Guest& _guest)
+Angles ComputeAnglesToObject(GameState& _state, const ObjectSlot& _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  GetPositionScaleShift(_guest);
-  regs.dx = WithHigh(regs.dx, Low(regs.cx));
-  ScalePositionDown(_guest);
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  regs.ax = y;
-  regs.bx = z;
-  ArcTangent2(_guest);
-  regs.bp = regs.ax;
-  SetSinCos(_guest, DS.rotationSinCos.At(6));
-  regs.bx = z;
-  regs.ax = y;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(6));
-  regs.ax = x;
-  ArcTangent2(_guest);
-  regs.bx = regs.ax;
-  regs.ax = regs.bp;
+  const Vector scaled = ScalePositionDown(_slot, GetPositionScaleShift(_slot).shift);
+  const std::uint16_t first = ArcTangent2(_state, scaled.y, scaled.z);
+  (void)SetSinCos(_state, 6, first);
+  const Pair yz = RotateByStoredSinCos(_state, 6, Pair{scaled.y, scaled.z});
+  return Angles{first, ArcTangent2(_state, scaled.x, yz.second)};
 }
 
-void ConvertVectorToAngles(Guest& _guest)
+Angles ConvertVectorToAngles(GameState& _state, Vector _vector)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto quarter = [](std::uint16_t _value) { return static_cast<std::uint16_t>(static_cast<std::int16_t>(_value) >> 2); };
-  const std::uint16_t x = quarter(regs.ax);
-  const std::uint16_t y = quarter(regs.bx);
-  const std::uint16_t z = quarter(regs.cx);
-  regs.cx = z;
-  regs.ax = y;
-  regs.bx = z;
-  ArcTangent2(_guest);
-  regs.bp = Negate(regs.ax);
-  SetSinCos(_guest, DS.rotationSinCos.At(8));
-  regs.bx = z;
-  regs.ax = y;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(8));
-  regs.ax = x;
-  ArcTangent2(_guest);
-  regs.bx = Negate(regs.ax);
-  regs.ax = regs.bp;
+  const auto quarter = [](std::int16_t _value) { return static_cast<std::int16_t>(_value >> 2); };
+  const std::int16_t x = quarter(_vector.x);
+  const std::int16_t y = quarter(_vector.y);
+  const std::int16_t z = quarter(_vector.z);
+  const std::uint16_t first = ArcTangent2(_state, y, z);
+  (void)SetSinCos(_state, 8, first);
+  const Pair yz = RotateByStoredSinCos(_state, 8, Pair{y, z});
+  return Angles{Negate(first), Negate(ArcTangent2(_state, x, yz.second))};
 }
+
+// ── Their entries ──
 
 namespace
 {
@@ -608,47 +503,248 @@ constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_CX_DX{REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_DX_BP{REGISTER_DX | REGISTER_BP, 0};
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
-constexpr Machine::NativeContract CLOBBERS_CX_DX_BP{REGISTER_CX | REGISTER_DX | REGISTER_BP, 0};
-constexpr Machine::NativeContract BOX_TEST{REGISTER_AX | REGISTER_BX | REGISTER_CX, FLAG_CARRY};
+// The box tests and AngleWithinTolerance: every register as the original leaves it, a caller reading
+// the box tests' magnitudes (VectorWithinBoxEntry).
+constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
+
+[[nodiscard]] Vector VectorIn(const Machine::Registers& _regs) noexcept
+{
+  return Vector{Signed(_regs.ax), Signed(_regs.bx), Signed(_regs.cx)};
+}
+
+void VectorOut(Machine::Registers& _regs, Vector _vector) noexcept
+{
+  _regs.ax = Word(_vector.x);
+  _regs.bx = Word(_vector.y);
+  _regs.cx = Word(_vector.z);
+}
+
+} // namespace
+
+void NextRandomEntry(Guest& _guest)
+{
+  _guest.Regs().ax = NextRandom(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void SetSinCosEntry(Guest& _guest, std::uint16_t _pairOffset)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const SinCos pair = SetSinCos(_guest.State(), PairIndex(_pairOffset), regs.ax);
+  regs.ax = Word(pair.sine);
+  regs.bx = Word(pair.cosine);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void RotateBySinCosEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Pair rotated = RotateBySinCos(Pair{Signed(regs.ax), Signed(regs.bx)}, SinCos{Signed(regs.di), Signed(regs.bp)});
+  regs.ax = Word(rotated.first);
+  regs.bx = Word(rotated.second);
+  _guest.Clobber(CLOBBERS_DX_BP);
+}
+
+void RotateByStoredSinCosEntry(Guest& _guest, std::uint16_t _pairOffset)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Pair rotated = RotateByStoredSinCos(_guest.State(), PairIndex(_pairOffset), Pair{Signed(regs.ax), Signed(regs.bx)});
+  regs.ax = Word(rotated.first);
+  regs.bx = Word(rotated.second);
+  _guest.Clobber(CLOBBERS_DX);
+}
+
+void ArcTangent2Entry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = ArcTangent2(_guest.State(), Signed(regs.ax), Signed(regs.bx));
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
+}
+
+void QuadrantArcTangentEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = QuadrantArcTangent(_guest.State(), regs.ax, regs.bx);
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
+}
+
+void RatioArcTangentEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = RatioArcTangent(_guest.State(), regs.ax, regs.bx);
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
+}
+
+void AngleWithinToleranceEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const AngleTolerance tolerance = AngleWithinTolerance(regs.ax, regs.cx, regs.bx);
+  // The contract keeps CX, which the original leaves sign-extended, and DX, the excess.
+  regs.cx = SignExtendAngle(regs.cx);
+  regs.dx = tolerance.excess;
+  _guest.SetFlag(Machine::FLAG_CARRY, tolerance.within);
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void VectorLengthEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = VectorLength(VectorIn(regs));
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
+}
+
+void ObjectWithinBoxEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  regs.ax = slot.Get(SlotWord::X);
+  regs.bx = slot.Get(SlotWord::Y);
+  regs.cx = slot.Get(SlotWord::Z);
+  VectorWithinBoxEntry(_guest);
+}
+
+void VectorWithinBoxEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.SetFlag(Machine::FLAG_CARRY, VectorWithinBox(VectorIn(regs), regs.dx));
+  // The original leaves each magnitude it took in its register, and UpdateObjectsAndSpawn reads them
+  // (51BE, 51D5): AX always, BX once x is inside, CX once y is too.
+  regs.ax = Magnitude(regs.ax);
+  if (regs.ax < regs.dx)
+  {
+    regs.bx = Magnitude(regs.bx);
+    if (regs.bx < regs.dx)
+    {
+      regs.cx = Magnitude(regs.cx);
+    }
+  }
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void RotatePitchYawRollEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  VectorOut(regs, RotatePitchYawRoll(_guest.State(), VectorIn(regs)));
+  _guest.Clobber(CLOBBERS_DX);
+}
+
+void RotateRollYawPitchEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  VectorOut(regs, RotateRollYawPitch(_guest.State(), VectorIn(regs)));
+  _guest.Clobber(CLOBBERS_DX);
+}
+
+void RotateBySinCos7210Entry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  VectorOut(regs, RotateBySinCos7210(_guest.State(), VectorIn(regs)));
+  _guest.Clobber(CLOBBERS_DX);
+}
+
+void ScaleByInverseDistanceEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const InverseDistanceScale scale =
+    ScaleByInverseDistance(_guest.State(), ObjectSlot(_guest.State(), regs.di), (std::uint32_t{regs.dx} << 16) | regs.ax);
+  regs.ax = scale.scaled;
+  regs.bx = scale.divisor;
+  _guest.Clobber(CLOBBERS_CX_DX);
+}
+
+void ShiftRight24Entry(Guest& _guest)
+{
+  _guest.Clobber(PRESERVES_ALL);
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t count = High(regs.dx);
+  if (count == 0)
+  {
+    return;
+  }
+  const std::uint32_t shifted = ShiftRight24((std::uint32_t{Low(regs.dx)} << 16) | regs.ax, count);
+  regs.ax = static_cast<std::uint16_t>(shifted);
+  regs.dx = static_cast<std::uint16_t>(shifted >> 16);
+}
+
+void GetPositionScaleShiftEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const PositionScale scale = GetPositionScaleShift(ObjectSlot(_guest.State(), regs.di));
+  regs.bx = scale.magnitude;
+  SetLow(regs.cx, scale.shift);
+  _guest.Clobber(CLOBBERS_AX_DX);
+}
+
+void ScalePositionDownEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  VectorOut(regs, ScalePositionDown(ObjectSlot(_guest.State(), regs.di), High(regs.dx)));
+  _guest.Clobber(CLOBBERS_DX_BP);
+}
+
+void ComputeAnglesToObjectEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Angles angles = ComputeAnglesToObject(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+  regs.ax = angles.first;
+  regs.bx = angles.second;
+  // The original keeps the first angle in BP, and leaves it there.
+  regs.bp = regs.ax;
+  _guest.Clobber(CLOBBERS_CX_DX);
+}
+
+void ConvertVectorToAnglesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Angles angles = ConvertVectorToAngles(_guest.State(), VectorIn(regs));
+  regs.ax = angles.first;
+  regs.bx = angles.second;
+  // The original keeps the first angle in BP, and leaves it there.
+  regs.bp = regs.ax;
+  _guest.Clobber(CLOBBERS_CX_DX);
+}
+
+namespace
+{
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x025E, "DivideOverflowInterrupt", &DivideOverflowInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x061C, "NextRandom", &NextRandom, PRESERVES_ALL},
-  NativeEntry{0x23DB, "RotateBySinCos", &RotateBySinCos, CLOBBERS_DX_BP},
-  NativeEntry{0x2421, "SetSinCos0", [](Guest& _guest) { SetSinCos(_guest, 0x41A0); }, PRESERVES_ALL},
-  NativeEntry{0x2426, "SetSinCos1", [](Guest& _guest) { SetSinCos(_guest, 0x41A4); }, PRESERVES_ALL},
-  NativeEntry{0x242B, "SetSinCos2", [](Guest& _guest) { SetSinCos(_guest, 0x41A8); }, PRESERVES_ALL},
-  NativeEntry{0x2430, "SetSinCos3", [](Guest& _guest) { SetSinCos(_guest, 0x41AC); }, PRESERVES_ALL},
-  NativeEntry{0x2435, "SetSinCos4", [](Guest& _guest) { SetSinCos(_guest, 0x41B0); }, PRESERVES_ALL},
-  NativeEntry{0x243B, "SetSinCos5", [](Guest& _guest) { SetSinCos(_guest, 0x41B4); }, PRESERVES_ALL},
-  NativeEntry{0x2441, "SetSinCos6", [](Guest& _guest) { SetSinCos(_guest, 0x41B8); }, PRESERVES_ALL},
-  NativeEntry{0x2447, "SetSinCos8", [](Guest& _guest) { SetSinCos(_guest, 0x41C0); }, PRESERVES_ALL},
-  NativeEntry{0x244D, "SetSinCos7", [](Guest& _guest) { SetSinCos(_guest, 0x41BC); }, PRESERVES_ALL},
-  NativeEntry{0x2453, "RotateBySinCos0", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41A0); }, CLOBBERS_DX},
-  NativeEntry{0x2465, "RotateBySinCos1", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41A4); }, CLOBBERS_DX},
-  NativeEntry{0x246D, "RotateBySinCos2", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41A8); }, CLOBBERS_DX},
-  NativeEntry{0x2475, "RotateBySinCos3", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41AC); }, CLOBBERS_DX},
-  NativeEntry{0x247D, "RotateBySinCos4", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41B0); }, CLOBBERS_DX},
-  NativeEntry{0x2485, "RotateBySinCos5", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41B4); }, CLOBBERS_DX},
-  NativeEntry{0x248D, "RotateBySinCos6", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41B8); }, CLOBBERS_DX},
-  NativeEntry{0x2495, "RotateBySinCos7", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41BC); }, CLOBBERS_DX},
-  NativeEntry{0x249D, "RotateBySinCos8", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41C0); }, CLOBBERS_DX},
-  NativeEntry{0x24A5, "ArcTangent2", &ArcTangent2, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x24E5, "QuadrantArcTangent", &QuadrantArcTangent, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x24F7, "RatioArcTangent", &RatioArcTangent, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x2CDB, "AngleWithinTolerance", &AngleWithinTolerance, Machine::NativeContract{0, FLAG_CARRY}},
-  NativeEntry{0x2E96, "VectorLength", &VectorLength, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x2F65, "ObjectWithinBox", &ObjectWithinBox, BOX_TEST},
-  NativeEntry{0x2F6E, "VectorWithinBox", &VectorWithinBox, BOX_TEST},
-  NativeEntry{0x3EAC, "RotatePitchYawRoll", &RotatePitchYawRoll, PRESERVES_ALL},
-  NativeEntry{0x3EC7, "RotateRollYawPitch", &RotateRollYawPitch, PRESERVES_ALL},
-  NativeEntry{0x3F02, "RotateBySinCos7210", &RotateBySinCos7210, PRESERVES_ALL},
-  NativeEntry{0x40A4, "ScaleByInverseDistance", &ScaleByInverseDistance, CLOBBERS_CX_DX},
-  NativeEntry{0x4326, "ShiftRight24", &ShiftRight24, PRESERVES_ALL},
-  NativeEntry{0x4333, "GetPositionScaleShift", &GetPositionScaleShift, CLOBBERS_AX_DX},
-  NativeEntry{0x439E, "ScalePositionDown", &ScalePositionDown, CLOBBERS_DX_BP},
-  NativeEntry{0x4ECF, "ComputeAnglesToObject", &ComputeAnglesToObject, CLOBBERS_CX_DX_BP},
-  NativeEntry{0x4F08, "ConvertVectorToAngles", &ConvertVectorToAngles, CLOBBERS_CX_DX_BP},
+  NativeEntry{0x061C, "NextRandom", &NextRandomEntry, PRESERVES_ALL},
+  NativeEntry{0x23DB, "RotateBySinCos", &RotateBySinCosEntry, CLOBBERS_DX_BP},
+  NativeEntry{0x2421, "SetSinCos0", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41A0); }, PRESERVES_ALL},
+  NativeEntry{0x2426, "SetSinCos1", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41A4); }, PRESERVES_ALL},
+  NativeEntry{0x242B, "SetSinCos2", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41A8); }, PRESERVES_ALL},
+  NativeEntry{0x2430, "SetSinCos3", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41AC); }, PRESERVES_ALL},
+  NativeEntry{0x2435, "SetSinCos4", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41B0); }, PRESERVES_ALL},
+  NativeEntry{0x243B, "SetSinCos5", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41B4); }, PRESERVES_ALL},
+  NativeEntry{0x2441, "SetSinCos6", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41B8); }, PRESERVES_ALL},
+  NativeEntry{0x2447, "SetSinCos8", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41C0); }, PRESERVES_ALL},
+  NativeEntry{0x244D, "SetSinCos7", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41BC); }, PRESERVES_ALL},
+  NativeEntry{0x2453, "RotateBySinCos0", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41A0); }, CLOBBERS_DX},
+  NativeEntry{0x2465, "RotateBySinCos1", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41A4); }, CLOBBERS_DX},
+  NativeEntry{0x246D, "RotateBySinCos2", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41A8); }, CLOBBERS_DX},
+  NativeEntry{0x2475, "RotateBySinCos3", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41AC); }, CLOBBERS_DX},
+  NativeEntry{0x247D, "RotateBySinCos4", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41B0); }, CLOBBERS_DX},
+  NativeEntry{0x2485, "RotateBySinCos5", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41B4); }, CLOBBERS_DX},
+  NativeEntry{0x248D, "RotateBySinCos6", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41B8); }, CLOBBERS_DX},
+  NativeEntry{0x2495, "RotateBySinCos7", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41BC); }, CLOBBERS_DX},
+  NativeEntry{0x249D, "RotateBySinCos8", [](Guest& _guest) { RotateByStoredSinCosEntry(_guest, 0x41C0); }, CLOBBERS_DX},
+  NativeEntry{0x24A5, "ArcTangent2", &ArcTangent2Entry, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x24E5, "QuadrantArcTangent", &QuadrantArcTangentEntry, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x24F7, "RatioArcTangent", &RatioArcTangentEntry, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x2CDB, "AngleWithinTolerance", &AngleWithinToleranceEntry, RETURNS_CARRY},
+  NativeEntry{0x2E96, "VectorLength", &VectorLengthEntry, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x2F65, "ObjectWithinBox", &ObjectWithinBoxEntry, RETURNS_CARRY},
+  NativeEntry{0x2F6E, "VectorWithinBox", &VectorWithinBoxEntry, RETURNS_CARRY},
+  NativeEntry{0x3EAC, "RotatePitchYawRoll", &RotatePitchYawRollEntry, CLOBBERS_DX},
+  NativeEntry{0x3EC7, "RotateRollYawPitch", &RotateRollYawPitchEntry, CLOBBERS_DX},
+  NativeEntry{0x3F02, "RotateBySinCos7210", &RotateBySinCos7210Entry, CLOBBERS_DX},
+  NativeEntry{0x40A4, "ScaleByInverseDistance", &ScaleByInverseDistanceEntry, CLOBBERS_CX_DX},
+  NativeEntry{0x4326, "ShiftRight24", &ShiftRight24Entry, PRESERVES_ALL},
+  NativeEntry{0x4333, "GetPositionScaleShift", &GetPositionScaleShiftEntry, CLOBBERS_AX_DX},
+  NativeEntry{0x439E, "ScalePositionDown", &ScalePositionDownEntry, CLOBBERS_DX_BP},
+  NativeEntry{0x4ECF, "ComputeAnglesToObject", &ComputeAnglesToObjectEntry, CLOBBERS_CX_DX},
+  NativeEntry{0x4F08, "ConvertVectorToAngles", &ConvertVectorToAnglesEntry, CLOBBERS_CX_DX},
 };
 
 } // namespace

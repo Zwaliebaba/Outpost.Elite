@@ -84,6 +84,7 @@
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="Flight.h" />
     <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="GameState.h" />
     <ClInclude Include="Guest.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="Input.h" />
@@ -91,6 +92,7 @@
     <ClInclude Include="Maths.h" />
     <ClInclude Include="NativeEntry.h" />
     <ClInclude Include="NativeRoutines.h" />
+    <ClInclude Include="ObjectSlot.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="Replay.h" />

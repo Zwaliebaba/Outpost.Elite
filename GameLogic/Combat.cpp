@@ -274,7 +274,7 @@ void SpawnFragments(Guest& _guest)
     CopyObject(_guest);
     const std::uint16_t debris = regs.di;
     _guest.SetByte(At(debris, SLOT_STATE), 0);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     _guest.SetWord(At(debris, SLOT_SPIN_ROLL), regs.ax);
     regs.bx = regs.ax;
     const bool mining = _guest.Get(DS.miningLaserOnAsteroid) == 1;
@@ -304,7 +304,7 @@ void SpawnFragments(Guest& _guest)
     _guest.SetByte(At(debris, SLOT_FLAGS), FLAG_RESTING);
     if (mining)
     {
-      NextRandom(_guest);
+      NextRandomEntry(_guest);
       if (regs.ax < MINERALS_ODDS)
       {
         OrByte(_guest, At(debris, SLOT_FLAGS), FLAG_MINERALS);
@@ -314,7 +314,7 @@ void SpawnFragments(Guest& _guest)
     _guest.SetWord(At(debris, SLOT_CARGO), 0);
     _guest.SetByte(At(debris, SLOT_AGE), 0);
     _guest.SetByte(At(debris, SLOT_CLASS), DEBRIS_CLASS);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     auto lifetime = static_cast<std::uint8_t>(Low(regs.ax) & FRAGMENT_LIFETIME_MASK);
     if (mining)
     {
@@ -365,7 +365,7 @@ void DropCargo(Guest& _guest)
     SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
     DivideByte(_guest, Low(regs.bx));
     SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     SetHigh(regs.ax, 0);
     DivideByte(_guest, Low(regs.bx));
     if (Low(regs.ax) == 0)
@@ -390,7 +390,7 @@ void DropCargo(Guest& _guest)
       // The device's bit (5) becomes the barrel's bit 6.
       SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) & FLAG_DEVICE) << 1));
       OrByte(_guest, At(regs.di, SLOT_FLAGS), Low(regs.ax));
-      NextRandom(_guest);
+      NextRandomEntry(_guest);
       _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
       regs.ax = Swap(regs.ax);
       _guest.SetWord(At(regs.di, SLOT_YAW), regs.ax);
@@ -552,7 +552,7 @@ void GetViewLaser(Guest& _guest)
 void DrawLaserBeams(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>(regs.ax & BEAM_SCATTER_MASK);
   regs.ax = Join(static_cast<std::uint8_t>(High(regs.ax) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(regs.ax) + BEAM_TARGET_X));
   regs.dx = regs.ax;
@@ -649,7 +649,7 @@ void TryFireLaserAtPlayer(Guest& _guest)
     return;
   }
   regs.cx = regs.ax;
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (Low(regs.ax) >= _guest.Byte(At(regs.di, SLOT_AGGRESSION)))
   {
     return;
@@ -697,7 +697,7 @@ void TryLaunchMissileAtPlayer(Guest& _guest)
   {
     return;
   }
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (regs.ax >= regs.bx)
   {
     return;
@@ -718,7 +718,7 @@ void TryLaunchThargon(Guest& _guest)
   {
     return;
   }
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (regs.ax >= THARGON_ODDS)
   {
     return;
@@ -859,7 +859,7 @@ void ApplyEnemyLaserHit(Guest& _guest)
     regs.cx = _guest.Word(At(regs.di, SLOT_VIEW_Z));
     _guest.Call(PROJECT_TO_SCREEN);
     regs.dx = regs.ax;
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     if (regs.ax < EDGE_LEFT_BELOW)
     {
       regs.cx = Low(regs.ax);
@@ -993,7 +993,7 @@ void SpawnPlayerWreckage(Guest& _guest)
     FindDebrisSlot(_guest);
     ClearObjectSlot(_guest);
     _guest.SetByte(At(regs.di, SLOT_STATE), 0);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     _guest.SetWord(At(regs.di, SLOT_SPIN_ROLL), regs.ax);
     regs.bx = regs.ax;
     // Each velocity byte from its own bits of the random word: x from BL, y from BH, z from BL shifted right twice.
@@ -1026,7 +1026,7 @@ void SpawnPlayerWreckage(Guest& _guest)
   for (int axis = 0; axis < 3; ++axis)
   {
     const std::uint16_t axisDrift = _guest.Get(drift[static_cast<std::size_t>(axis)]);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = Sar(WreckScatter(Low(regs.ax), BARREL_SCATTER_MASK, BARREL_SCATTER_CENTER, axisDrift), 2);
     _guest.SetByte(At(regs.di, SLOT_VELOCITY + axis), Low(regs.ax));
     regs.ax = static_cast<std::uint16_t>(axisDrift << 2);
@@ -1036,11 +1036,11 @@ void SpawnPlayerWreckage(Guest& _guest)
   }
   InitCargoBarrel(_guest);
   GetObjectPosition(_guest);
-  ConvertVectorToAngles(_guest);
+  ConvertVectorToAnglesEntry(_guest);
   _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
   _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
   // The same random -31..32 added to x and to y.
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.bx = regs.ax;
   regs.ax = static_cast<std::uint16_t>((regs.ax & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
   regs.dx = SignWord(regs.ax);
@@ -1112,11 +1112,11 @@ void LaunchPlayerMissile(Guest& _guest)
   InitMissile(_guest);
   // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
   regs.ax = Negate(_guest.Get(DS.playerPitchAngle));
-  SetSinCos(_guest, DS.rotationSinCos.At(0));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(0));
   regs.ax = Negate(_guest.Get(DS.playerYawAngle));
-  SetSinCos(_guest, DS.rotationSinCos.At(1));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(1));
   regs.ax = Negate(_guest.Get(DS.playerRollAngle));
-  SetSinCos(_guest, DS.rotationSinCos.At(2));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(2));
   regs.ax = 0;
   regs.bx = MISSILE_LAUNCH_DISTANCE;
   regs.cx = 0;
@@ -1135,7 +1135,7 @@ void LaunchPlayerMissile(Guest& _guest)
   regs.ax = _guest.Word(At(regs.si, SLOT_X));
   regs.bx = _guest.Word(At(regs.si, SLOT_Y));
   regs.cx = _guest.Word(At(regs.si, SLOT_Z));
-  ConvertVectorToAngles(_guest);
+  ConvertVectorToAnglesEntry(_guest);
   _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
   _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
   ComputeVelocity(_guest);
@@ -1231,13 +1231,13 @@ void UpdateMissileAi(Guest& _guest)
   const std::uint16_t y = regs.bx;
   const std::uint16_t z = regs.cx;
   regs.dx = MISSILE_HIT_BOX;
-  VectorWithinBox(_guest);
+  VectorWithinBoxEntry(_guest);
   regs.cx = z;
   regs.bx = y;
   regs.ax = x;
   if (!_guest.Flag(FLAG_CARRY))
   {
-    ConvertVectorToAngles(_guest);
+    ConvertVectorToAnglesEntry(_guest);
     TurnTowardAngles(_guest);
     ComputeVelocity(_guest);
     MoveObject(_guest);
