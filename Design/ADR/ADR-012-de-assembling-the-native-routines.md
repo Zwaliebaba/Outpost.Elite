@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's first slices (item 15).
 
 ## Context
 
@@ -266,6 +266,55 @@ Most of these menus wait on `GetKey`, `ReadSteering` and `ReadTextLine`, which a
 **Hooks.** `CopyProtection` reports its loops' turns now, so it is hooked as a routine that sometimes waits. The D5 byte keeps the game off that path.
 
 **The suites.** `GameLogicTests` passes 177 of 177 with poisoning on, under g++ and clang++. The coverage check is clean, and the corpus keeps all 98 digests in all three of its runs.
+
+**15. Level 5's first slices, measured 2026-10-10.** From level 5 on, a worker owns files, not a list: it converts bottom-up whatever in its files is ready, then what its own conversions make ready (item 13). Three slices are in.
+
+| | Count |
+|---|---|
+| Routines converted | 42: the input chain (Maths, Input, Text and `SaveScreenshot`) 17; the docked frame, the escape pod, the mounts and the disc request 14; the renderer's frame waits, screens, presenters and transforms 11 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 5 |
+| Contracts widened, because no caller reads what they compared | 2 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp`, a stricter count than item 14's | 3,759 at level 4's end, 3,503 after |
+| Register functions left | 231: 194 routines and 37 register adapters |
+| Routines ready | 61 |
+
+The 5 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `GetKey` | CF, PF, AF, SF and OF besides ZF and IF. The register loops that wait for a key compare every flag from turn to turn (ADR-008 item 1); with these poisoned, six twins and `attack-the-station` stopped as `Spinning`. The entry leaves `AND AH,AH`'s flags. |
+| `LaunchEscapePod` | DS: it was said to clobber every register, and with DS poisoned `escape-pod`'s `ejected` digest moved |
+| `ShowCockpitScreen` | SI and ES. `RestoreFlightScreen`, whose contract compares every register, ends with its SI; with ES poisoned, `death`'s title digest and six twins moved. |
+| `DrawChartFrame` | ES, through which the charts draw their titles |
+| `FinishSpaceViewFrame` | DX, 1FF0h as `PresentSpaceView`'s copy leaves it: poisoned, `hyperspace-and-fight`'s `pirates` digest moved. The instruction that reads it has not been found; poisoning is the evidence. |
+
+The 2 contracts widened, each with every test passing poisoned and every caller read:
+
+| Routine | What it no longer compares, and why |
+|---|---|
+| `TransformShip` | DX. Its one caller, `ClassifyObject` (CS:3D87), returns to `TransformAndDrawObjects`' first pass, which sets DX at CS:3DA2 before it reads it, and nothing on the way reads it. |
+| `TransformSunOrPlanet` | DX and BP, which it was said to preserve. The same first pass sets both (CS:3D9E–3DA2) before it reads them. |
+
+**The divides.** `DivideByte`, `DivideWord`, `DivideSignedWord` and `DivideUnsigned` are value routines that return the quotient and the remainder. The divide trap, now `DivideOverflowInterrupt`, keeps its two saves into the code segment, in order. Register code still calls the divides at 28 sites in seven subsystems, through four `…OnRegisters` adapters, which go when their last register caller converts.
+
+**A unit.** `ReadTextLine` converted with `RedrawTypedLine` and `RestartInputBlink`, its turns carrying the length typed. With the input chain converted, the menu units of item 14 wait only on their own routines and on the renderer.
+
+**A parameter the original passes by accident.** `ReadSteering` and `ReadJoystickSteering` take a trigger byte: the AL their caller left, which the stick read writes to port 201h. A converted caller passes what the original holds in AL there.
+
+**Write order.** `FitLaserOnMount` writes `laserMountTypes`' AND and then its OR (CS:6463 and CS:6467), where the Phase 3 port made one write.
+
+**Interrupts.** `SaveScreenshot` takes the interrupts that are due where its callees' hooks took them (ADR-014 item 10).
+
+**Two simplifications, each commented in the code:**
+- **A key code of 0.** The original shifts AL left once for each code `GetKey` takes, Shift in bit 0. `WaitForKeyPress`' entry rebuilds AL for the code that ends the wait only. A code of 0 would end no wait, and the original would have shifted AL once more for it. The shell drops a key event with scan code 0 (`Engine/Window.cpp`), so the port never sends one.
+- **AL in two signatures.** `WaitForKeyPress` and `ReadTextLine` leave AL out of their turns' signatures, as ADR-015 item 2 allows.
+
+**Coverage.** Three routines lost their only compared callers to value calls inside routines that wait. Constructed tests now compare them:
+- `EquipmentTests.RedrawEquipHelpTextAgreesFromEitherAttribute`;
+- `TextTests.InputLineRedrawAgreesInBothLayouts`, for `ToggleInputCursor`, `RedrawInputLine` and `PrintStringForLayout`;
+- `VideoTests.LaserSightsAgreeForEveryLaser`, for Combat's `DrawLaserSights`.
+
+**The suites.** `GameLogicTests` passes 180 of 180 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 
