@@ -144,8 +144,6 @@ public:
       m_rig(_name, _options.startMoment, _options.mousePresent),
       m_player(m_rig.Host(), m_rig.State())
   {
-    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    Assert::IsTrue(m_rig.Loaded(), L"ELITES.EXE at the repository root");
     if (!_options.fromPowerOn)
     {
       Play("wait 3");

@@ -16,7 +16,7 @@ AGENTS.md R14 puts third-party content under the owner's approval and asks for i
 
 2. **The reference binary stays in the tree** at the root, as `ELITES.EXE`, byte-identical to the hash in ADR-007. Tooling (`Tools/ScanReference.py`), the Phase 2 host and the test suites read it from there. CI can therefore run every test that needs the original, with no secret and no private download.
 
-3. **Original data is generated and checked in (D3).** In Phase 4 a script under `Tools/` extracts the ship models, font, text and tables from the reference into C++ source. The generated files are committed and reviewed like any other source, and the script stays so that the extraction can be repeated and checked. The shipping executable embeds them and does not need `ELITEL.EXE` at run time. Until Phase 4 the host reads the reference at start-up instead (ADR-001).
+3. **Original data is generated and checked in (D3).** In Phase 4 a script under `Tools/` extracts the ship models, font, text and tables from the reference into C++ source. The generated files are committed and reviewed like any other source, and the script stays so that the extraction can be repeated and checked. The shipping executable embeds them and does not need `ELITEL.EXE` at run time. Until Phase 4 the host reads the reference at start-up instead (ADR-001). *Done 2026-10-10 ([ADR-019](ADR-019-the-reference-as-generated-tables.md)): the load image is generated, at the original layout (D19), and no host reads the file at run time. The file stays at the root as the tables' source.*
 
 4. **History is not rewritten.** What the public period exposed stays in forks and caches whatever happens to this repository's history. A rewrite would cost every clone and buy little, and nobody has asked for one.
 

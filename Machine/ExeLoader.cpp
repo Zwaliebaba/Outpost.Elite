@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 
 namespace Machine
 {
@@ -83,9 +84,8 @@ void WriteText(Memory& _memory, std::uint16_t _segment, std::uint16_t _offset, s
 
 } // namespace
 
-LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, const Desc& _desc, LoadedProgram& _program) noexcept
+LoadError ExeLoader::Parse(std::span<const std::uint8_t> _file, Executable& _executable)
 {
-  // Check everything first, so that a failed load writes nothing.
   if (_file.size() < HEADER_MIN_BYTES)
   {
     return LoadError::NotExecutable;
@@ -95,8 +95,6 @@ LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, 
   const std::uint32_t pages = HeaderWord(_file, HEADER_PAGES);
   const std::uint32_t relocations = HeaderWord(_file, HEADER_RELOCATIONS);
   const std::uint32_t headerBytes = std::uint32_t{HeaderWord(_file, HEADER_PARAGRAPHS)} * PARAGRAPH_BYTES;
-  const std::uint32_t minAllocation = HeaderWord(_file, HEADER_MIN_ALLOCATION);
-  const std::uint32_t maxAllocation = HeaderWord(_file, HEADER_MAX_ALLOCATION);
   const std::uint32_t relocationTable = HeaderWord(_file, HEADER_RELOCATION_TABLE);
   if ((signature != SIGNATURE_MZ && signature != SIGNATURE_ZM) || pages == 0 || lastPageBytes > PAGE_BYTES)
   {
@@ -111,21 +109,48 @@ LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, 
   {
     return LoadError::NotExecutable;
   }
-  const std::uint32_t imageBytes = fileBytes - headerBytes;
   if (relocationTable + relocations * RELOCATION_BYTES > _file.size())
   {
     return LoadError::Truncated;
   }
+
+  Executable executable;
+  executable.initialCs = HeaderWord(_file, HEADER_CS);
+  executable.initialIp = HeaderWord(_file, HEADER_IP);
+  executable.initialSs = HeaderWord(_file, HEADER_SS);
+  executable.initialSp = HeaderWord(_file, HEADER_SP);
+  executable.minAllocationParagraphs = HeaderWord(_file, HEADER_MIN_ALLOCATION);
+  executable.maxAllocationParagraphs = HeaderWord(_file, HEADER_MAX_ALLOCATION);
+  executable.image = _file.subspan(headerBytes, fileBytes - headerBytes);
+  executable.relocations.reserve(relocations);
   for (std::uint32_t index = 0; index < relocations; ++index)
   {
     const std::size_t entry = relocationTable + index * RELOCATION_BYTES;
-    const std::uint32_t position = std::uint32_t{HeaderWord(_file, entry + 2)} * PARAGRAPH_BYTES + HeaderWord(_file, entry);
-    if (position + 2 > imageBytes)
+    executable.relocations.push_back({HeaderWord(_file, entry), HeaderWord(_file, entry + 2)});
+  }
+  _executable = std::move(executable);
+  return LoadError::None;
+}
+
+LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, const Desc& _desc, LoadedProgram& _program)
+{
+  Executable executable;
+  const LoadError error = Parse(_file, executable);
+  return error != LoadError::None ? error : Load(_memory, executable, _desc, _program);
+}
+
+LoadError ExeLoader::Load(Memory& _memory, const Executable& _executable, const Desc& _desc, LoadedProgram& _program) noexcept
+{
+  // Check everything first, so that a failed load writes nothing.
+  const std::size_t imageBytes = _executable.image.size();
+  for (const Relocation& relocation : _executable.relocations)
+  {
+    if (std::size_t{relocation.segment} * PARAGRAPH_BYTES + relocation.offset + 2 > imageBytes)
     {
       return LoadError::BadRelocation;
     }
   }
-  if (minAllocation == 0 && maxAllocation == 0)
+  if (_executable.minAllocationParagraphs == 0 && _executable.maxAllocationParagraphs == 0)
   {
     return LoadError::Unsupported;
   }
@@ -140,15 +165,16 @@ LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, 
   {
     return LoadError::PspTooLow;
   }
-  const std::uint32_t top = _desc.memoryTopSegment;
-  const std::uint32_t imageParagraphs = (imageBytes + PARAGRAPH_BYTES - 1) / PARAGRAPH_BYTES;
-  const std::uint32_t needed = PSP_PARAGRAPHS + imageParagraphs + minAllocation;
+  const std::size_t top = _desc.memoryTopSegment;
+  const std::size_t imageParagraphs = (imageBytes + PARAGRAPH_BYTES - 1) / PARAGRAPH_BYTES;
+  const std::size_t needed = PSP_PARAGRAPHS + imageParagraphs + _executable.minAllocationParagraphs;
   if (top <= psp || needed > top - psp)
   {
     return LoadError::DoesNotFit;
   }
-  const std::uint32_t available = top - psp;
-  const std::uint32_t allocated = std::min(available, std::max(needed, PSP_PARAGRAPHS + imageParagraphs + maxAllocation));
+  const std::size_t available = top - psp;
+  const std::size_t allocated =
+    std::min(available, std::max(needed, PSP_PARAGRAPHS + imageParagraphs + _executable.maxAllocationParagraphs));
 
   // The image, relocated.
   const auto pspSegment = static_cast<std::uint16_t>(psp);
@@ -156,12 +182,10 @@ LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, 
   const auto memoryTop = static_cast<std::uint16_t>(psp + allocated);
   const auto environmentSegment = static_cast<std::uint16_t>(psp - environmentParagraphs);
   const std::uint32_t loadBase = Memory::Linear(loadSegment, 0);
-  _memory.Load(loadBase, _file.subspan(headerBytes, imageBytes));
-  for (std::uint32_t index = 0; index < relocations; ++index)
+  _memory.Load(loadBase, _executable.image);
+  for (const Relocation& relocation : _executable.relocations)
   {
-    const std::size_t entry = relocationTable + index * RELOCATION_BYTES;
-    const std::uint32_t position = std::uint32_t{HeaderWord(_file, entry + 2)} * PARAGRAPH_BYTES + HeaderWord(_file, entry);
-    const std::uint32_t linear = loadBase + position;
+    const std::uint32_t linear = loadBase + std::uint32_t{relocation.segment} * PARAGRAPH_BYTES + relocation.offset;
     _memory.Write16(linear, static_cast<std::uint16_t>(_memory.Read16(linear) + loadSegment));
   }
 
@@ -221,10 +245,10 @@ LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, 
   // The registers, and the RETF frame DOS enters the program through.
   Registers& regs = _program.registers;
   regs = Registers{};
-  regs.cs = static_cast<std::uint16_t>(loadSegment + HeaderWord(_file, HEADER_CS));
-  regs.ip = HeaderWord(_file, HEADER_IP);
-  regs.ss = static_cast<std::uint16_t>(loadSegment + HeaderWord(_file, HEADER_SS));
-  regs.sp = HeaderWord(_file, HEADER_SP);
+  regs.cs = static_cast<std::uint16_t>(loadSegment + _executable.initialCs);
+  regs.ip = _executable.initialIp;
+  regs.ss = static_cast<std::uint16_t>(loadSegment + _executable.initialSs);
+  regs.sp = _executable.initialSp;
   regs.ds = pspSegment;
   regs.es = pspSegment;
   regs.ax = _desc.initialAx;
@@ -242,7 +266,7 @@ LoadError ExeLoader::Load(Memory& _memory, std::span<const std::uint8_t> _file, 
   _program.loadSegment = loadSegment;
   _program.environmentSegment = environmentSegment;
   _program.memoryTopSegment = memoryTop;
-  _program.imageBytes = imageBytes;
+  _program.imageBytes = static_cast<std::uint32_t>(imageBytes);
   return LoadError::None;
 }
 

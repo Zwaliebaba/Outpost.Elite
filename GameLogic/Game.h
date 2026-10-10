@@ -6,7 +6,6 @@
 #include "Reference.h"
 
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
@@ -27,11 +26,11 @@ public:
   Game(const Game&) = delete;
   Game& operator=(const Game&) = delete;
 
-  /// Loads the reference once, as LoadReference does: _file checked, loaded as DOS would with the PSP at _pspSegment, and the
-  /// D5 byte written. Then the GameState takes over the code segment, the data segment and video memory, at the segments
-  /// the load put the program at, with the bytes it wrote there, and the native routines go in place of the original's
-  /// (InstallNativeRoutines). On failure nothing is mapped and nothing is started.
-  [[nodiscard]] ReferenceFailure Load(std::span<const std::uint8_t> _file, std::uint16_t _pspSegment);
+  /// Loads the reference once, as LoadReference does: from its generated image (D3), as DOS would with the PSP at _pspSegment,
+  /// and the D5 byte written. Then the GameState takes over the code segment, the data segment and video memory, at the
+  /// segments the load put the program at, with the bytes it wrote there, and the native routines go in place of the
+  /// original's (InstallNativeRoutines). False on failure, and then nothing is mapped and nothing is started.
+  [[nodiscard]] bool Load(std::uint16_t _pspSegment);
 
   /// The PC the game runs on: its clock, its devices and its picture.
   [[nodiscard]] Machine::Pc& Host() noexcept

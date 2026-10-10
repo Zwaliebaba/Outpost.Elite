@@ -75,7 +75,6 @@ public:
     for (int run = 0; run < 2; ++run)
     {
       ReferenceRig rig("Waits");
-      Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
       Elite::ReplayPlayer player(rig.Host(), rig.State());
       std::string digest;
       for (const Elite::Step& step : run == 0 ? one : many)
@@ -103,7 +102,6 @@ public:
     constexpr std::uint64_t END_MILLISECONDS = 15'500;
 
     ReferenceRig live("RecordLive");
-    Assert::IsTrue(live.Loaded(), L"ELITES.EXE at the repository root");
     Elite::ReplayRecorder recorder("a test session");
     const Machine::Cycles start = live.Host().Clock();
     std::uint64_t now = 0;
@@ -204,7 +202,6 @@ public:
     for (const Ending& ending : endings)
     {
       ReferenceRig rig("EndStep");
-      Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
       std::vector<Elite::Step> steps;
       std::string error;
       Assert::IsTrue(Elite::ParseSteps(TO_THE_QUESTION, steps, error), L"parses");
@@ -253,7 +250,6 @@ public:
     write("second.cdr", second);
 
     ReferenceRig rig("FileStep");
-    Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), sources.Path());
     std::vector<Elite::Step> steps;
     std::string error;
@@ -284,7 +280,6 @@ public:
   {
     ScratchDirectory sources("FileStepMissing");
     ReferenceRig rig("FileStepFails");
-    Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps("wait 0.5\nfile PILOT.CDR missing.cdr", steps, error), L"parses");

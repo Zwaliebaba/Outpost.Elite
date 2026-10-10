@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace Machine
 {
@@ -25,6 +26,29 @@ enum class LoadError : std::uint8_t
   DoesNotFit          ///< The PSP, the image and the minimum allocation do not fit below the memory top.
 };
 
+/// One entry of an MZ relocation table: the word at segment:offset from the image's start holds a segment number,
+/// to which the load adds the load segment. A plain record (R8), in the table's order.
+struct Relocation
+{
+  std::uint16_t offset = 0;
+  std::uint16_t segment = 0;
+};
+
+/// A DOS MZ executable as ExeLoader places it, whether parsed from a file (ExeLoader::Parse) or built into the program:
+/// what its header says, its load image and its relocations. A plain record (R8). CS and SS are relative to the load
+/// segment, as the header gives them.
+struct Executable
+{
+  std::uint16_t initialCs = 0;
+  std::uint16_t initialIp = 0;
+  std::uint16_t initialSs = 0;
+  std::uint16_t initialSp = 0;
+  std::uint16_t minAllocationParagraphs = 0; ///< Past the image: what the program needs.
+  std::uint16_t maxAllocationParagraphs = 0; ///< And what it asks for; FFFFh means everything up to the memory top.
+  std::span<const std::uint8_t> image;       ///< The load module. Not owned: it must outlive the load.
+  std::vector<Relocation> relocations;
+};
+
 /// Where a program was loaded and how it starts. A plain record (R8).
 struct LoadedProgram
 {
@@ -34,10 +58,16 @@ struct LoadedProgram
   std::uint16_t memoryTopSegment = 0; ///< The first paragraph past the program's memory, as PSP:0002 says.
   std::uint32_t imageBytes = 0;
   Registers registers;
+
+  [[nodiscard]] bool operator==(const LoadedProgram&) const noexcept = default;
 };
 
 /// Loads a DOS MZ executable the way DOS 3.30's EXEC does, into memory with the firmware already installed. Nothing is
 /// written unless the whole load succeeds.
+///
+/// Parsing and placing are separate steps. Parse reads a file's header and relocation table into an Executable, a plain
+/// description; Load places a description in memory. Loading a file is the two in turn, and a program that carries its
+/// own image provides the description directly.
 ///
 /// Memory layout, from the bottom: the interrupt table, the BIOS data area and the DOS communication area up to
 /// 0060:0000 (Firmware); free memory; the environment, in the paragraphs directly below the PSP; the PSP at the
@@ -84,10 +114,17 @@ public:
     std::string_view programPath = "C:\\ELITES.EXE"; ///< For the environment
   };
 
-  /// Loads _file. On success fills _program and returns LoadError::None; on failure returns why, having written
-  /// nothing.
-  [[nodiscard]] static LoadError Load(Memory& _memory, std::span<const std::uint8_t> _file, const Desc& _desc,
-                                      LoadedProgram& _program) noexcept;
+  /// Reads _file's MZ header and relocation table. On success fills _executable, whose image is then a view of _file,
+  /// and returns LoadError::None; on failure returns why (NotExecutable or Truncated), having changed nothing. Not
+  /// noexcept: the relocations are copied out.
+  [[nodiscard]] static LoadError Parse(std::span<const std::uint8_t> _file, Executable& _executable);
+
+  /// Places _executable: the image, its relocations, the PSP, the environment, the allocation and the registers. On
+  /// success fills _program and returns LoadError::None; on failure returns why, having written nothing.
+  [[nodiscard]] static LoadError Load(Memory& _memory, const Executable& _executable, const Desc& _desc, LoadedProgram& _program) noexcept;
+
+  /// Parses _file and places it, with the errors of both. Not noexcept, as Parse is not.
+  [[nodiscard]] static LoadError Load(Memory& _memory, std::span<const std::uint8_t> _file, const Desc& _desc, LoadedProgram& _program);
 
   /// Replaces the byte at (_program's load segment + _imageSegment):_offset with _replacement if it holds _expected,
   /// and returns whether it did; otherwise it writes nothing. ADR-001's D5 patch is

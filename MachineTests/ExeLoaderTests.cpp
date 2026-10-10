@@ -6,6 +6,7 @@
 #include "ExeLoader.h"
 #include "Firmware.h"
 
+#include <algorithm>
 #include <initializer_list>
 #include <string_view>
 #include <vector>
@@ -247,6 +248,44 @@ public:
     Machine::ExeLoader::Desc low;
     low.pspSegment = Machine::ExeLoader::LOWEST_FREE_SEGMENT;
     Assert::IsTrue(Load(rig, MakeExecutable(code, 0x10, 0x10), low, program) == Machine::LoadError::PspTooLow);
+  }
+
+  // Parsing and placing are separate (Executable): a file parses into its header's facts, a view of its image and its
+  // relocations, and that description loads as the file does. A description is checked as a file is: one with a
+  // relocation outside its image is refused, and nothing is written.
+  TEST_METHOD(ParsesAFileIntoTheDescriptionItLoads)
+  {
+    const std::vector<std::uint8_t> code = {0x90, 0x90, 0x34, 0x12, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+    const std::vector<std::uint8_t> file = MakeExecutable(code, 0x10, 0x20, {{0x0002, 0x0000}});
+    Machine::Executable executable;
+    Assert::IsTrue(Machine::ExeLoader::Parse(file, executable) == Machine::LoadError::None);
+    Assert::AreEqual(0x0000u, std::uint32_t{executable.initialCs});
+    Assert::AreEqual(0x0000u, std::uint32_t{executable.initialIp});
+    Assert::AreEqual(0x0000u, std::uint32_t{executable.initialSs});
+    Assert::AreEqual(0x0100u, std::uint32_t{executable.initialSp});
+    Assert::AreEqual(0x10u, std::uint32_t{executable.minAllocationParagraphs});
+    Assert::AreEqual(0x20u, std::uint32_t{executable.maxAllocationParagraphs});
+    Assert::IsTrue(executable.image.data() == file.data() + 0x20 && executable.image.size() == code.size(), L"a view of the file's image");
+    Assert::AreEqual(std::size_t{1}, executable.relocations.size());
+    Assert::AreEqual(0x0002u, std::uint32_t{executable.relocations[0].offset});
+    Assert::AreEqual(0x0000u, std::uint32_t{executable.relocations[0].segment});
+
+    ServiceRig fromFile("LoaderParsedFile");
+    ServiceRig fromDescription("LoaderParsedDescription");
+    const Machine::ExeLoader::Desc desc{};
+    Machine::LoadedProgram filed;
+    Machine::LoadedProgram described;
+    Assert::IsTrue(Load(fromFile, file, desc, filed) == Machine::LoadError::None);
+    Assert::IsTrue(Machine::ExeLoader::Load(fromDescription.Ram(), executable, desc, described) == Machine::LoadError::None);
+    Assert::IsTrue(filed == described, L"loaded at the same place, in the same registers");
+    Assert::IsTrue(std::ranges::equal(fromFile.Ram().Bytes(), fromDescription.Ram().Bytes()), L"with the same bytes");
+    Assert::AreEqual(0x1234u + described.loadSegment, std::uint32_t{fromDescription.Ram().Read16(described.loadSegment, 0x0002)},
+                     L"relocated");
+
+    executable.relocations.push_back({0x000F, 0x0000});
+    fromDescription.Ram().Write8(desc.pspSegment, 0, 0x5A);
+    Assert::IsTrue(Machine::ExeLoader::Load(fromDescription.Ram(), executable, desc, described) == Machine::LoadError::BadRelocation);
+    Assert::AreEqual(0x5Au, std::uint32_t{fromDescription.Ram().Read8(desc.pspSegment, 0)}, L"a refused load writes nothing");
   }
 
   // ExitToDos (CS:00C5): Start pushed PSP:0000, and the RETF lands on the PSP's CD 20. The program's entry is native, as

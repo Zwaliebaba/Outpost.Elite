@@ -98,7 +98,7 @@ A `.cdr` file is still `commanderBlock`'s bytes, written and read through DOS on
 | The checkers | `GenerateOverlay --check`, CheckFormat and CheckProjectFiles are clean |
 | MSVC | not built here: CI's Debug build is the first MSVC build of `GameData.h`'s `#pragma pack` and offsets, and of the shell's change |
 
-**7. For D3, the generated tables.**
+**7. For D3, the generated tables.** *Done: [ADR-019](ADR-019-the-reference-as-generated-tables.md).*
 - **Where the image comes from today.** Each host reads `ELITES.EXE` from disk, and `LoadReference` checks its SHA-256. `ExeLoader` then:
   - writes the 98,080-byte image at load segment 0823h;
   - applies its 7 relocations;

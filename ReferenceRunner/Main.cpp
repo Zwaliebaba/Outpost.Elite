@@ -23,9 +23,9 @@
 // Plays the reference headless on Machine::Pc (ADR-006), natively: a replay (ADR-008), or steps given on the command
 // line:
 //
-//   ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT | --replay FILE]
+//   ReferenceRunner [--out DIR] [--steps TEXT | --replay FILE]
 //
-// It checks that FILE (default ELITES.EXE) is the binary ADR-001 names, loads it, applies the D5 byte in memory, puts
+// It loads the reference from its generated image (D3), so it reads no ELITES.EXE, applies the D5 byte in memory, puts
 // the native routines in place of the original's (ADR-010) on the Pc's Dispatcher, which interprets nothing (ADR-011),
 // and follows the steps (Replay.h) in paced time: shots go to DIR/NAME.png, digests to standard output. DOS's files live
 // in DIR/files, which must be empty when the run starts, as a replay's conditions require (ADR-008); a run refuses one
@@ -42,11 +42,10 @@
 namespace
 {
 
-constexpr char USAGE[] = "usage: ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT | --replay FILE]\n";
+constexpr char USAGE[] = "usage: ReferenceRunner [--out DIR] [--steps TEXT | --replay FILE]\n";
 
 struct Options
 {
-  std::filesystem::path exe = Elite::REFERENCE_FILE_NAME;
   std::filesystem::path out = ".";
   std::string steps;
   std::filesystem::path replay;
@@ -65,9 +64,7 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
     if (index + 1 >= _argc)
       return false;
     const std::string_view value = _argv[++index];
-    if (argument == "--exe")
-      _options.exe = value;
-    else if (argument == "--out")
+    if (argument == "--out")
       _options.out = value;
     else if (argument == "--steps")
       _options.steps = value;
@@ -171,16 +168,10 @@ int Run(int _argc, char** _argv)
   desc.startMoment = Elite::START_MOMENT;
   // The GameState owns the game's memory and the Pc maps it, the native routines in place of the original's (D19).
   const auto game = std::make_unique<Elite::Game>(files, desc);
-  switch (game->Load(Elite::ReadWholeFile(options.exe), Elite::PSP_SEGMENT))
+  if (!game->Load(Elite::PSP_SEGMENT))
   {
-  case Elite::ReferenceFailure::NotTheReference:
-    std::fprintf(stderr, "ReferenceRunner: %s is not the reference binary; see ADR-001 and ADR-007\n", options.exe.string().c_str());
-    return 2;
-  case Elite::ReferenceFailure::DidNotLoad:
     std::fputs("ReferenceRunner: the reference did not load\n", stderr);
     return 2;
-  case Elite::ReferenceFailure::None:
-    break;
   }
   Machine::Pc& pc = game->Host();
 

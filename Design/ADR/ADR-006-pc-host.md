@@ -1,6 +1,6 @@
 # ADR-006 — The PC host
 
-**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Pc` and the devices and services it puts together, and the `ReferenceRunner` (ADR-004). **Amended 2026-10-10:** item 1's clock has a second mode, paced time, which ADR-008 decides.
+**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Pc` and the devices and services it puts together, and the `ReferenceRunner` (ADR-004). **Amended 2026-10-10:** item 1's clock has a second mode, paced time, which ADR-008 decides. **Amended 2026-10-10 by [ADR-019](ADR-019-the-reference-as-generated-tables.md):** item 4's hosts load the generated image, not the file.
 
 ## Context
 
@@ -70,7 +70,7 @@ Each is a choice about how much of the real part to model. The game's own use of
 
 - `ExeLoader` loads as DOS 3.30's EXEC does: the environment below the PSP, the image at PSP + 10h, and the allocation the header asks for.
 - The program starts in the registers MS-DOS gives it, which DOSBox-X copies.
-- Before anything else, the host checks the file's SHA-256 against ADR-001. It writes the D5 byte in memory, and only if that byte holds 00.
+- Before anything else, the host checks the file's SHA-256 against ADR-001. It writes the D5 byte in memory, and only if that byte holds 00. *Since ADR-019 the host loads the image generated from the file, whose generator and test check the hash; the D5 byte is written as before.*
 - To match DOSBox-X for ADR-003, the runner puts the PSP at 0813h, where DOSBox-X puts it. The clock starts at 00:00 on 1 January 1980, where ADR-003 pins DOSBox-X's, and DOS reports 3.30 in both.
 
 **5. The headless runner.** `ReferenceRunner` reads the step script that `Tools/ReferenceScreens.py` reads: `wait`, `key`, `shot` and `digest`.
