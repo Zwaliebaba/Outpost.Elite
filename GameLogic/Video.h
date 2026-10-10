@@ -18,23 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
 
-/// DrawClippedLine (CS:1603): the line from (DX, BX) to (CX, AX), signed words, clipped to the 256x128
-/// buffer, through DrawLine. Everything but DS clobbered.
-void DrawClippedLine(Guest& _guest);
-
-/// ClipLineToLowEdge (CS:1686): moves the endpoint of (CX, AX)-(DX, BX) below 0 on the CX/DX axis onto
-/// 0; BP counts the endpoints still outside. CF clear when both are below, else set, with ZF once BP
-/// reaches 0. SI clobbered.
-void ClipLineToLowEdge(Guest& _guest);
-
-/// ClipLineToHighEdge (CS:16C1): ClipLineToLowEdge for the edge at 255, the caller having subtracted
-/// 0FFh from the clipped coordinates.
-void ClipLineToHighEdge(Guest& _guest);
-
-/// DrawCircle (CS:1AC1): 32 chords round (CX, DX) with radius BL, through DrawClippedLine. Everything but
-/// DS clobbered.
-void DrawCircle(Guest& _guest);
-
 /// FillTriangle (CS:1BFB) and FillClippedTriangle (CS:1E6E), which it runs into: the triangle (AX, DX),
 /// (BX, BP), (CX, DI) filled with triangleFillPattern. Out: ES=DS unless it is wholly outside;
 /// everything else but DS clobbered.
@@ -79,6 +62,44 @@ void ClearDrawBuffer(GameState& _state, bool _backward);
 
 /// PlotPixel (CS:15E0): the pixel at _x, _row of the drawing buffer set to colorFillBytes[drawColor].
 void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
+
+/// DrawClippedLine (CS:1603): the line from (_fromX, _fromRow) to (_toX, _toRow), signed words, clipped to the 256x128 buffer and
+/// drawn (DrawLine). Returns what DrawLine returns: whether it filled a horizontal line's bytes, for which the original sets ES to
+/// DS and clears the direction flag.
+bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fromRow, std::uint16_t _toX, std::uint16_t _toRow);
+
+/// A line as DrawClippedLine's clip routines hold it: its ends (CX, AX) and (DX, BX), the first coordinate of each the one an edge
+/// cuts and the second the one along it, and BP, the count of ends still outside 0-255.
+struct ClipLine
+{
+  std::uint16_t firstCut;    ///< CX
+  std::uint16_t firstAlong;  ///< AX
+  std::uint16_t secondCut;   ///< DX
+  std::uint16_t secondAlong; ///< BX
+  std::uint16_t outside;     ///< BP
+};
+
+/// What a clip routine leaves: the line, an end moved onto the edge where one was cut, and the flags DrawClippedLine reads.
+struct ClipStep
+{
+  ClipLine line;
+  bool draw;      ///< CF: some of the line may still show
+  bool allInside; ///< ZF: no end is outside any more
+};
+
+/// ClipLineToLowEdge (CS:1686): of _line's ends, the one below 0 on the cut axis moved along the line onto 0, the first end, or
+/// the second with the ends swapped (SwapThenCutLine); BP less one when the moved end lands inside. Both below: nothing to draw.
+[[nodiscard]] ClipStep ClipLineToLowEdge(GameState& _state, ClipLine _line);
+
+/// ClipLineToHighEdge (CS:16C1): ClipLineToLowEdge for the edge at 255, the caller having subtracted 0FFh from the cut
+/// coordinates: the end at or beyond 0 is the one moved. Both inside: still to draw; both beyond: nothing to draw, ZF set when
+/// the first end's high byte is 0.
+[[nodiscard]] ClipStep ClipLineToHighEdge(GameState& _state, ClipLine _line);
+
+/// DrawCircle (CS:1AC1): a circle of radius _radius about (_centerX, _centerRow) as 32 chords through DrawClippedLine, its points
+/// circleOctant scaled by _radius/128 and turned through the eight octants into circlePoints. Returns whether any chord's
+/// DrawLine filled a horizontal line's bytes.
+bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
 /// DrawLine (CS:16D1): Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor].
 /// Returns whether it filled whole bytes of a horizontal line with REP STOSB, for which the original sets ES to DS and clears
@@ -156,12 +177,19 @@ void PresentSpaceViewEntry(Guest& _guest);  ///< ES = B800h. AX, BX, CX, DX, SI,
 void CopyChartBufferToScreenEntry(Guest& _guest);
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
 void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
-void DrawLineEntry(Guest& _guest);        ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
+/// DX, BX to CX, AX. Out: ES = DS and DF clear after DrawLine's REP STOSB. AX, BX, CX, DX, SI, DI, BP clobbered.
+void DrawClippedLineEntry(Guest& _guest);
+/// CX, AX and DX, BX the ends, BP the count outside, in and out. Out: CF, ZF. SI clobbered.
+void ClipLineToLowEdgeEntry(Guest& _guest);
+void ClipLineToHighEdgeEntry(Guest& _guest); ///< As ClipLineToLowEdgeEntry.
+void DrawLineEntry(Guest& _guest);           ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
 /// What DrawLine leaves of the machine when it returns _filled: ES = DS and the direction flag clear, which it sets before a
 /// horizontal line's REP STOSB. For the entries and the register code of the routines that call it, whose originals go on
 /// with them.
 void DrawLineOut(Guest& _guest, bool _filled);
-void DrawDiscEntry(Guest& _guest);        ///< BX = the radius, DX, CX the centre. Out: ES = DS. AX, BX, CX, DX, SI, DI, BP clobbered.
+void DrawDiscEntry(Guest& _guest); ///< BX = the radius, DX, CX the centre. Out: ES = DS. AX, BX, CX, DX, SI, DI, BP clobbered.
+/// BL = the radius, CX, DX the centre. Out: ES = DS and DF clear once a chord's DrawLine fills. AX, BX, CX, DX, SI, DI, BP clobbered.
+void DrawCircleEntry(Guest& _guest);
 void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
 void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
 void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.

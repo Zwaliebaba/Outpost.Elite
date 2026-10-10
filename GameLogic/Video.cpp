@@ -441,71 +441,59 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
   return DrawLine(_state, _fromX, static_cast<std::uint8_t>(_fromDoubledRow >> 1), _toX, static_cast<std::uint8_t>(_toDoubledRow >> 1));
 }
 
-// The clip routines' result: CF and ZF, the flags their contract names.
-void SetClipResult(Machine::Registers& _regs, bool _carry, bool _zero) noexcept
+// LeaveEndpoints (CS:16B5): the ends stay where they are, and the line is still to draw: MOV SI,0 / INC SI / STC, which leave
+// ZF clear from the INC and CF set.
+[[nodiscard]] constexpr ClipStep LeaveEndpoints(ClipLine _line) noexcept
 {
-  const auto flags = static_cast<std::uint16_t>(_regs.flags & ~(FLAG_CARRY | FLAG_ZERO));
-  _regs.flags = static_cast<std::uint16_t>(flags | (_carry ? FLAG_CARRY : 0) | (_zero ? FLAG_ZERO : 0));
+  return ClipStep{_line, true, false};
 }
 
-// What a clip routine leaves for DrawClippedLine when it is done with one edge: CF set while the segment is still to
-// draw, ZF set once BP's count of endpoints outside reaches 0, and SI, the cut's scratch.
-struct ClipOutcome
+// MoveEndpointToEdge (CS:1691): the first end (CX, AX) onto the edge at 0 along the line to the second (DX, BX): MOV SI,DX, then
+// unless an end is on the edge already, SUB AX,BX / SUB CX,DX / NEG DX / IMUL DX / IDIV CX / ADD AX,BX / MOV CX,0 / MOV DX,SI. The
+// divide saves BX, the second end's other coordinate, when it overflows. The moved end inside 0-255 counts off BP, DEC BP setting
+// ZF once none is outside; outside it, the ends stay as they now are (LeaveEndpoints).
+[[nodiscard]] ClipStep MoveEndpointToEdge(GameState& _state, ClipLine _line)
 {
-  bool draw;
-  bool allInside;
-  std::uint16_t scratch;
-};
-
-void ClipOutcomeOut(Machine::Registers& _regs, ClipOutcome _outcome) noexcept
-{
-  _regs.si = _outcome.scratch;
-  SetClipResult(_regs, _outcome.draw, _outcome.allInside);
-}
-
-// LeaveEndpoints (CS:16B5): the endpoints stay where they are, and the segment is still to draw: MOV SI,0 / INC SI / STC,
-// which leave SI = 1, ZF clear from the INC and CF set.
-[[nodiscard]] constexpr ClipOutcome LeaveEndpoints() noexcept
-{
-  return ClipOutcome{true, false, 1};
-}
-
-// MoveEndpointToEdge (CS:1691): endpoint A (CX, AX) onto the edge along the line to B (DX, BX).
-void MoveEndpointToEdge(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = regs.dx;
-  if (regs.dx == 0 || regs.cx == 0)
+  if (_line.secondCut == 0 || _line.firstCut == 0)
   {
-    ClipOutcomeOut(regs, LeaveEndpoints());
-    return;
+    return LeaveEndpoints(_line);
   }
-  regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.dx);
-  regs.dx = Negate(regs.dx);
-  const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(regs.ax)} * Signed(regs.dx));
-  regs.ax = static_cast<std::uint16_t>(product);
-  regs.dx = static_cast<std::uint16_t>(product >> 16);
-  DivideSignedWordOnRegisters(_guest, regs.cx);
-  regs.ax = static_cast<std::uint16_t>(regs.ax + regs.bx);
-  regs.cx = 0;
-  regs.dx = regs.si;
-  if (High(regs.ax) != 0)
+  const auto along = static_cast<std::uint16_t>(_line.firstAlong - _line.secondAlong);
+  const auto cut = static_cast<std::uint16_t>(_line.firstCut - _line.secondCut);
+  const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(along)} * Signed(Negate(_line.secondCut)));
+  const std::uint16_t moved = DivideSignedWord(_state, product, cut, _line.secondAlong).quotient;
+  _line.firstAlong = static_cast<std::uint16_t>(moved + _line.secondAlong);
+  _line.firstCut = 0;
+  if (High(_line.firstAlong) != 0)
   {
-    ClipOutcomeOut(regs, LeaveEndpoints());
-    return;
+    return LeaveEndpoints(_line);
   }
-  --regs.bp;
-  SetClipResult(regs, true, regs.bp == 0);
+  _line.outside = static_cast<std::uint16_t>(_line.outside - 1);
+  return ClipStep{_line, true, _line.outside == 0};
 }
 
-// SwapThenCutLine (CS:168E).
-void SwapThenCutLine(Guest& _guest)
+// SwapThenCutLine (CS:168E): XCHG CX,DX / XCHG BX,AX, then MoveEndpointToEdge: the second end moved, the ends left swapped.
+[[nodiscard]] ClipStep SwapThenCutLine(GameState& _state, ClipLine _line)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::swap(regs.cx, regs.dx);
-  std::swap(regs.bx, regs.ax);
-  MoveEndpointToEdge(_guest);
+  std::swap(_line.firstCut, _line.secondCut);
+  std::swap(_line.firstAlong, _line.secondAlong);
+  return MoveEndpointToEdge(_state, _line);
+}
+
+// XCHG CX,AX / XCHG DX,BX: the other axis cut.
+[[nodiscard]] constexpr ClipLine Transpose(ClipLine _line) noexcept
+{
+  std::swap(_line.firstCut, _line.firstAlong);
+  std::swap(_line.secondCut, _line.secondAlong);
+  return _line;
+}
+
+// SUB CX,0FFh / SUB DX,0FFh, or ADD with _bytes 0FFh: the cut coordinates moved so that the edge at 255 is at 0, or back.
+[[nodiscard]] constexpr ClipLine ShiftCut(ClipLine _line, std::uint16_t _bytes) noexcept
+{
+  _line.firstCut = static_cast<std::uint16_t>(_line.firstCut + _bytes);
+  _line.secondCut = static_cast<std::uint16_t>(_line.secondCut + _bytes);
+  return _line;
 }
 
 // ---- Discs ----
@@ -1663,136 +1651,99 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
   Plot(_state, static_cast<std::uint16_t>(Join(_row, _x) >> 2), static_cast<std::uint8_t>(~pixel), color);
 }
 
-void DrawClippedLine(Guest& _guest)
+bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fromRow, std::uint16_t _toX, std::uint16_t _toRow)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // CS:1623 on the endpoints as they stand, DL, BL and CL, AL, and what DrawLine leaves of ES and the direction flag.
-  const auto drawHalvedRows = [&_guest, &regs]
-  { DrawLineOut(_guest, DrawHalvedRows(_guest.State(), Low(regs.dx), Low(regs.bx), Low(regs.cx), Low(regs.ax))); };
-  regs.bp = 0;
-  regs.bx = static_cast<std::uint16_t>(regs.bx << 1);
-  regs.ax = static_cast<std::uint16_t>(regs.ax << 1);
-  regs.si = regs.ax;
-  // BP counts the endpoints with a coordinate outside 0-255.
-  SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) | High(regs.cx)));
-  if (High(regs.ax) != 0)
+  // ADD BX,BX / ADD AX,AX: the rows doubled, so that 0-127 spans 0-255 as x does. The line is held as its ends (CX, AX), the to
+  // end, and (DX, BX), the from end, x the coordinate cut first; MOV SI,AX keeps the doubled row while BP counts the ends with a
+  // coordinate outside 0-255.
+  ClipLine line{_toX, static_cast<std::uint16_t>(_toRow << 1), _fromX, static_cast<std::uint16_t>(_fromRow << 1), 0};
+  const bool firstOutside = (High(line.firstAlong) | High(line.firstCut)) != 0;
+  const bool secondOutside = (High(line.secondAlong) | High(line.secondCut)) != 0;
+  line.outside = static_cast<std::uint16_t>((firstOutside ? 1 : 0) + (secondOutside ? 1 : 0));
+  // CS:1623: DrawLine on the ends as they stand.
+  const auto draw = [&_state](const ClipLine& _ends)
+  { return DrawHalvedRows(_state, Low(_ends.secondCut), Low(_ends.secondAlong), Low(_ends.firstCut), Low(_ends.firstAlong)); };
+  if (line.outside == 0)
   {
-    ++regs.bp;
-    SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.bx) | High(regs.dx)));
-    if (High(regs.ax) != 0)
-    {
-      ++regs.bp;
-    }
+    return draw(line);
   }
-  else
+  // x below 0, then the row below 0, each through ClipLineToLowEdge.
+  ClipStep step = ClipLineToLowEdge(_state, line);
+  if (step.allInside)
   {
-    SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.bx) | High(regs.dx)));
-    if (High(regs.ax) == 0)
-    {
-      drawHalvedRows();
-      return;
-    }
-    ++regs.bp;
+    return draw(step.line);
   }
-  regs.ax = regs.si;
-  ClipLineToLowEdge(_guest);
-  if (Flag(regs, FLAG_ZERO))
+  if (!step.draw)
   {
-    drawHalvedRows();
-    return;
+    return false;
   }
-  if (!Flag(regs, FLAG_CARRY))
+  step = ClipLineToLowEdge(_state, Transpose(step.line));
+  line = Transpose(step.line);
+  if (step.allInside)
   {
-    return;
+    return draw(line);
   }
-  std::swap(regs.cx, regs.ax);
-  std::swap(regs.dx, regs.bx);
-  ClipLineToLowEdge(_guest);
-  std::swap(regs.cx, regs.ax);
-  std::swap(regs.dx, regs.bx);
-  if (Flag(regs, FLAG_ZERO))
+  if (!step.draw)
   {
-    drawHalvedRows();
-    return;
+    return false;
   }
-  if (!Flag(regs, FLAG_CARRY))
-  {
-    return;
-  }
+  // x beyond 255, then the row, each through ClipLineToHighEdge with 0FFh taken off the cut coordinates and put back.
   constexpr std::uint16_t HIGH_EDGE = 0xFF;
-  regs.cx = static_cast<std::uint16_t>(regs.cx - HIGH_EDGE);
-  regs.dx = static_cast<std::uint16_t>(regs.dx - HIGH_EDGE);
-  ClipLineToHighEdge(_guest);
-  if (!Flag(regs, FLAG_CARRY))
+  step = ClipLineToHighEdge(_state, ShiftCut(line, Negate(HIGH_EDGE)));
+  if (!step.draw)
   {
-    return;
+    return false;
   }
-  regs.cx = static_cast<std::uint16_t>(regs.cx + HIGH_EDGE);
-  regs.dx = static_cast<std::uint16_t>(regs.dx + HIGH_EDGE);
-  if (Flag(regs, FLAG_ZERO))
+  line = ShiftCut(step.line, HIGH_EDGE);
+  if (step.allInside)
   {
-    drawHalvedRows();
-    return;
+    return draw(line);
   }
-  std::swap(regs.cx, regs.ax);
-  std::swap(regs.dx, regs.bx);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - HIGH_EDGE);
-  regs.dx = static_cast<std::uint16_t>(regs.dx - HIGH_EDGE);
-  ClipLineToHighEdge(_guest);
-  if (!Flag(regs, FLAG_CARRY) || !Flag(regs, FLAG_ZERO))
+  step = ClipLineToHighEdge(_state, ShiftCut(Transpose(line), Negate(HIGH_EDGE)));
+  if (!step.draw || !step.allInside)
   {
-    return;
+    return false;
   }
-  regs.cx = static_cast<std::uint16_t>(regs.cx + HIGH_EDGE);
-  regs.dx = static_cast<std::uint16_t>(regs.dx + HIGH_EDGE);
-  std::swap(regs.cx, regs.ax);
-  std::swap(regs.dx, regs.bx);
-  drawHalvedRows();
+  return draw(Transpose(ShiftCut(step.line, HIGH_EDGE)));
 }
 
-void ClipLineToLowEdge(Guest& _guest)
+ClipStep ClipLineToLowEdge(GameState& _state, ClipLine _line)
 {
-  const Machine::Registers& regs = _guest.Regs();
-  if (Negative8(High(regs.cx)))
+  // AND CH,CH / JS, then AND DH,DH / JNS.
+  if (Negative(_line.firstCut))
   {
-    if (!Negative8(High(regs.dx)))
+    if (!Negative(_line.secondCut))
     {
-      MoveEndpointToEdge(_guest);
-      return;
+      return MoveEndpointToEdge(_state, _line);
     }
-    // Both below the edge: CF clear, and ZF clear from AND DH,DH.
-    SetClipResult(_guest.Regs(), false, false);
-    return;
+    // Both below the edge: CLC, with ZF clear from AND DH,DH.
+    return ClipStep{_line, false, false};
   }
-  if (!Negative8(High(regs.dx)))
+  if (!Negative(_line.secondCut))
   {
-    ClipOutcomeOut(_guest.Regs(), LeaveEndpoints());
-    return;
+    return LeaveEndpoints(_line);
   }
-  SwapThenCutLine(_guest);
+  return SwapThenCutLine(_state, _line);
 }
 
-void ClipLineToHighEdge(Guest& _guest)
+ClipStep ClipLineToHighEdge(GameState& _state, ClipLine _line)
 {
-  const Machine::Registers& regs = _guest.Regs();
-  if (Negative8(High(regs.dx)))
+  // AND DH,DH / JS, then AND CH,CH / JNS or JS.
+  if (Negative(_line.secondCut))
   {
-    if (!Negative8(High(regs.cx)))
+    if (!Negative(_line.firstCut))
     {
-      MoveEndpointToEdge(_guest);
-      return;
+      return MoveEndpointToEdge(_state, _line);
     }
-    // Both inside: CF set, and ZF clear from AND CH,CH.
-    SetClipResult(_guest.Regs(), true, false);
-    return;
+    // Both inside: STC, with ZF clear from AND CH,CH.
+    return ClipStep{_line, true, false};
   }
-  if (Negative8(High(regs.cx)))
+  if (Negative(_line.firstCut))
   {
-    SwapThenCutLine(_guest);
-    return;
+    return SwapThenCutLine(_state, _line);
   }
-  // Both beyond 255: CF clear, ZF from AND CH,CH.
-  SetClipResult(_guest.Regs(), false, High(regs.cx) == 0);
+  // Both beyond 255: CLC, with ZF from AND CH,CH.
+  return ClipStep{_line, false, High(_line.firstCut) == 0};
 }
 
 bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow)
@@ -1942,98 +1893,68 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
   return at;
 }
 
-void DrawCircle(Guest& _guest)
+bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t centerX = regs.cx;
-  const std::uint16_t centerRow = regs.dx;
-  // The first octant, circleOctant scaled by BL/128, as four points.
-  regs.cx = 8;
-  regs.si = DS.circleOctant.offset;
-  regs.di = DS.circlePoints.offset;
-  do
+  // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
+  // MOV AL,AH), a byte of 0 staying 0, as four points of words.
+  std::uint16_t point = DS.circlePoints.offset;
+  for (std::uint16_t octantByte = 0; octantByte != 8; ++octantByte)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    if (Low(regs.ax) != 0)
-    {
-      regs.ax = static_cast<std::uint16_t>(Low(regs.ax) * Low(regs.bx));
-      regs.ax = static_cast<std::uint16_t>(regs.ax << 1);
-      SetLow(regs.ax, High(regs.ax));
-    }
-    SetHigh(regs.ax, 0);
-    _guest.SetWord(regs.di, regs.ax);
-    ++regs.si;
-    regs.di = static_cast<std::uint16_t>(regs.di + 2);
-  } while (--regs.cx != 0);
-  // The second octant mirrors the first across the diagonal.
-  regs.si = DS.circlePoints.offset;
-  regs.di = DS.circlePoints.At(7);
-  regs.cx = 4;
-  do
+    const std::uint8_t unit = _state.Byte(Offset(DS.circleOctant.offset, octantByte));
+    const std::uint8_t scaled = unit == 0 ? std::uint8_t{0} : High(static_cast<std::uint16_t>((unit * _radius) << 1));
+    _state.SetWord(point, scaled);
+    point = Offset(point, 2);
+  }
+  // The second octant mirrors the first across the diagonal, from its last point back.
+  std::uint16_t from = DS.circlePoints.offset;
+  std::uint16_t to = DS.circlePoints.At(7);
+  for (std::uint16_t points = 4; points != 0; --points)
   {
-    regs.ax = _guest.Word(regs.si);
-    _guest.SetWord(static_cast<std::uint16_t>(regs.di + 2), regs.ax);
-    regs.ax = _guest.Word(static_cast<std::uint16_t>(regs.si + 2));
-    _guest.SetWord(regs.di, regs.ax);
-    regs.si = static_cast<std::uint16_t>(regs.si + 4);
-    regs.di = static_cast<std::uint16_t>(regs.di - 4);
-  } while (--regs.cx != 0);
+    _state.SetWord(Offset(to, 2), _state.Word(from));
+    _state.SetWord(to, _state.Word(Offset(from, 2)));
+    from = Offset(from, 4);
+    to = static_cast<std::uint16_t>(to - 4);
+  }
   // The next quarter turns the first by 90 degrees, and the half after that by 180.
-  regs.si = DS.circlePoints.offset;
-  regs.di = DS.circlePoints.At(8);
-  regs.cx = 8;
-  do
+  from = DS.circlePoints.offset;
+  to = DS.circlePoints.At(8);
+  for (std::uint16_t points = 8; points != 0; --points)
   {
-    regs.ax = _guest.Word(regs.si);
-    _guest.SetWord(static_cast<std::uint16_t>(regs.di + 2), regs.ax);
-    regs.ax = Negate(_guest.Word(static_cast<std::uint16_t>(regs.si + 2)));
-    _guest.SetWord(regs.di, regs.ax);
-    regs.si = static_cast<std::uint16_t>(regs.si + 4);
-    regs.di = static_cast<std::uint16_t>(regs.di + 4);
-  } while (--regs.cx != 0);
-  regs.si = DS.circlePoints.offset;
-  regs.di = DS.circlePoints.At(16);
-  regs.cx = 16;
-  do
+    _state.SetWord(Offset(to, 2), _state.Word(from));
+    _state.SetWord(to, Negate(_state.Word(Offset(from, 2))));
+    from = Offset(from, 4);
+    to = Offset(to, 4);
+  }
+  from = DS.circlePoints.offset;
+  to = DS.circlePoints.At(16);
+  for (std::uint16_t points = 16; points != 0; --points)
   {
-    regs.ax = Negate(_guest.Word(regs.si));
-    _guest.SetWord(regs.di, regs.ax);
-    regs.ax = Negate(_guest.Word(static_cast<std::uint16_t>(regs.si + 2)));
-    _guest.SetWord(static_cast<std::uint16_t>(regs.di + 2), regs.ax);
-    regs.si = static_cast<std::uint16_t>(regs.si + 4);
-    regs.di = static_cast<std::uint16_t>(regs.di + 4);
-  } while (--regs.cx != 0);
-  regs.si = DS.circlePoints.offset;
-  regs.bx = centerRow;
-  regs.ax = centerX;
-  regs.cx = CIRCLE_CHORDS;
-  do
+    _state.SetWord(to, Negate(_state.Word(from)));
+    _state.SetWord(Offset(to, 2), Negate(_state.Word(Offset(from, 2))));
+    from = Offset(from, 4);
+    to = Offset(to, 4);
+  }
+  // POP BX / POP AX: every point moved to the centre.
+  point = DS.circlePoints.offset;
+  for (std::uint16_t points = CIRCLE_CHORDS; points != 0; --points)
   {
-    _guest.SetWord(regs.si, static_cast<std::uint16_t>(_guest.Word(regs.si) + regs.ax));
-    const auto row = static_cast<std::uint16_t>(regs.si + 2);
-    _guest.SetWord(row, static_cast<std::uint16_t>(_guest.Word(row) + regs.bx));
-    regs.si = static_cast<std::uint16_t>(regs.si + 4);
-  } while (--regs.cx != 0);
-  // The chord from the last point to the first, then each to the next.
-  regs.cx = _guest.Word(DS.circlePoints.offset);
-  regs.ax = _guest.Get(DS.data2EFE);
-  regs.dx = _guest.Word(static_cast<std::uint16_t>(regs.si - 4));
-  regs.bx = _guest.Word(static_cast<std::uint16_t>(regs.si - 2));
-  DrawClippedLine(_guest);
-  regs.si = DS.circlePoints.offset;
-  regs.bp = CIRCLE_CHORDS - 1;
-  do
+    _state.SetWord(point, Offset(_state.Word(point), _centerX));
+    _state.SetWord(Offset(point, 2), Offset(_state.Word(Offset(point, 2)), _centerRow));
+    point = Offset(point, 4);
+  }
+  // The chord from the last point to the first, then each to the next, x and row each.
+  const std::uint16_t last = DS.circlePoints.At(CIRCLE_CHORDS - 1);
+  bool filled =
+    DrawClippedLine(_state, _state.Word(last), _state.Word(Offset(last, 2)), _state.Word(DS.circlePoints.offset), _state.Get(DS.data2EFE));
+  point = DS.circlePoints.offset;
+  for (std::uint16_t chords = CIRCLE_CHORDS - 1; chords != 0; --chords)
   {
-    const std::uint16_t point = regs.si;
-    const std::uint16_t chords = regs.bp;
-    regs.cx = _guest.Word(regs.si);
-    regs.ax = _guest.Word(static_cast<std::uint16_t>(regs.si + 2));
-    regs.dx = _guest.Word(static_cast<std::uint16_t>(regs.si + 4));
-    regs.bx = _guest.Word(static_cast<std::uint16_t>(regs.si + 6));
-    DrawClippedLine(_guest);
-    regs.bp = chords;
-    regs.si = static_cast<std::uint16_t>(point + 4);
-  } while (--regs.bp != 0);
+    const bool chordFilled = DrawClippedLine(_state, _state.Word(Offset(point, 4)), _state.Word(Offset(point, 6)), _state.Word(point),
+                                             _state.Word(Offset(point, 2)));
+    filled = filled || chordFilled;
+    point = Offset(point, 4);
+  }
+  return filled;
 }
 
 void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward)
@@ -2302,6 +2223,56 @@ constexpr Machine::NativeContract DRAWS_TITLE_PLANET = CLOBBERS_GENERAL;
 
 // ── The entries of the routines de-assembled so far ──
 
+namespace
+{
+
+// A line as the clip routines take it in the registers: (CX, AX), (DX, BX) and BP.
+[[nodiscard]] ClipLine ClipLineIn(const Machine::Registers& _regs) noexcept
+{
+  return ClipLine{_regs.cx, _regs.ax, _regs.dx, _regs.bx, _regs.bp};
+}
+
+// What a clip routine leaves in the registers and the flags its contract names, CF and ZF.
+void ClipStepOut(Guest& _guest, const ClipStep& _step) noexcept
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.cx = _step.line.firstCut;
+  regs.ax = _step.line.firstAlong;
+  regs.dx = _step.line.secondCut;
+  regs.bx = _step.line.secondAlong;
+  regs.bp = _step.line.outside;
+  _guest.SetFlag(FLAG_CARRY, _step.draw);
+  _guest.SetFlag(FLAG_ZERO, _step.allInside);
+}
+
+} // namespace
+
+void DrawClippedLineEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  DrawLineOut(_guest, DrawClippedLine(_guest.State(), regs.dx, regs.bx, regs.cx, regs.ax));
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
+void ClipLineToLowEdgeEntry(Guest& _guest)
+{
+  ClipStepOut(_guest, ClipLineToLowEdge(_guest.State(), ClipLineIn(_guest.Regs())));
+  _guest.Clobber(CLIPS_LINE);
+}
+
+void ClipLineToHighEdgeEntry(Guest& _guest)
+{
+  ClipStepOut(_guest, ClipLineToHighEdge(_guest.State(), ClipLineIn(_guest.Regs())));
+  _guest.Clobber(CLIPS_LINE);
+}
+
+void DrawCircleEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  DrawLineOut(_guest, DrawCircle(_guest.State(), Low(regs.bx), regs.cx, regs.dx));
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
 void ClearDrawBufferEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -2523,13 +2494,13 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x05CC, "CopyChartBufferToScreen", &CopyChartBufferToScreenEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x060D, "ClearDrawBuffer", &ClearDrawBufferEntry, PRESERVES_ALL},
   NativeEntry{0x15E0, "PlotPixel", &PlotPixelEntry, CLOBBERS_BX_CX},
-  NativeEntry{0x1603, "DrawClippedLine", &DrawClippedLine, CLOBBERS_GENERAL},
-  NativeEntry{0x1686, "ClipLineToLowEdge", &ClipLineToLowEdge, CLIPS_LINE},
-  NativeEntry{0x16C1, "ClipLineToHighEdge", &ClipLineToHighEdge, CLIPS_LINE},
+  NativeEntry{0x1603, "DrawClippedLine", &DrawClippedLineEntry, CLOBBERS_GENERAL},
+  NativeEntry{0x1686, "ClipLineToLowEdge", &ClipLineToLowEdgeEntry, CLIPS_LINE},
+  NativeEntry{0x16C1, "ClipLineToHighEdge", &ClipLineToHighEdgeEntry, CLIPS_LINE},
   NativeEntry{0x16D1, "DrawLine", &DrawLineEntry, DRAWS_LINE},
   NativeEntry{0x1826, "DrawDisc", &DrawDiscEntry, CLOBBERS_GENERAL},
   NativeEntry{0x1A07, "FillSpan", &FillSpanEntry, PRESERVES_ALL},
-  NativeEntry{0x1AC1, "DrawCircle", &DrawCircle, CLOBBERS_GENERAL},
+  NativeEntry{0x1AC1, "DrawCircle", &DrawCircleEntry, CLOBBERS_GENERAL},
   NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpanEntry, FILLS_TRIANGLE_SPAN},
   NativeEntry{0x1BFB, "FillTriangle", &FillTriangle, CLOBBERS_GENERAL},
   NativeEntry{0x1E6E, "FillClippedTriangle", &FillClippedTriangle, CLOBBERS_GENERAL},
