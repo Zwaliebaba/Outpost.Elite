@@ -20,8 +20,8 @@ struct NativeEntry
   void (*body)(Guest&);
   Machine::NativeContract contract;
   Machine::NativeReturn exit = Machine::NativeReturn::Near;
-  std::uint16_t popBytes = 0; ///< what RET n or RETF n also pops
-  bool waits = false;         ///< the routine can wait (Pc::Wait, or original code it calls): it runs on the native thread
+  std::uint16_t popBytes = 0;                            ///< what RET n or RETF n also pops
+  Machine::NativeWait wait = Machine::NativeWait::Never; ///< whether it can wait (Pc::Wait, or original code it calls)
 };
 
 // The contracts most entries have.

@@ -1,0 +1,41 @@
+# Launches from Lave and, in flight, shows every screen the function keys show, then pauses and resumes,
+# and freezes with Ctrl+Esc and thaws. Each of these waits for a key inside ProcessFlightKeys, which
+# otherwise does its work once a frame: native code that waits only sometimes (ADR-010 item 8).
+wait 3
+key space; wait 4
+key F1                             # launch: the tunnel, then space
+wait 6
+digest launched a344af805daa84d4bf8a877cca04491dae9342d47b68024d03f38c895870d377
+down F5; wait 0.1; up F5           # the galactic chart, read from the key-down table in flight
+wait 2
+shot galactic-chart
+digest galactic-chart ae2c9ab82d68911356b3d299e8e78c4fd67398d58b423142e0237ec6e8bc98f7
+key F6; wait 2                     # then each screen in turn, read from the key buffer
+shot short-range-chart
+digest short-range-chart 7bf4a95fc0538d359f63b9fbac1ce0cb771e489077fe78800fa9867d900cd7b8
+key F7; wait 1
+shot system-data
+key F8; wait 1
+shot market
+key F9; wait 1
+shot status
+key F10; wait 1
+shot inventory
+digest inventory f99791f485bfde9074d2b8302eb3ee4fa9448dc0fd2e3c4318a6a3f3dc3e737b
+key F1; wait 2                     # back to the front view
+shot front-view
+digest front-view edd3505aff5f790b61be89281da81f3653d2db6a0380c24042284ac98715812d
+down Escape; wait 0.1; up Escape   # the pause screen
+wait 1
+shot paused
+digest paused 75d2b0c7df1e9c904331b3f50e4c054aea8037c91297acfc5148a53a758546da
+down space; wait 0.1; up space     # resumes
+wait 2
+shot resumed
+digest resumed 8e01a4138fe862d7a6226e4565027b34c88d5f0398873ca127d63b69b2462cd8
+down Control_L; down Escape; wait 0.1; up Escape; up Control_L   # freezes until a key
+wait 1
+digest frozen b9501acd9275430b8bfbda9abd6553b5d0b2c6533e6cd138e37a377655492d67
+key space; wait 2
+shot thawed
+digest thawed 0a8878475cd52a6376867c34e135d9469dd15d44eea396f5ce1674f1377c98da

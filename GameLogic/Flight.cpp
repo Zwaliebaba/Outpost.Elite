@@ -79,8 +79,9 @@ constexpr std::uint16_t APPLY_REVERSE_CONTROLS = 0x8EA5;
 constexpr std::uint16_t APPLY_REVERSE_CONTROLS_TO_DX = 0x8EBA;
 constexpr std::uint16_t FIND_SHIP_IN_CROSSHAIRS = 0x8A46;
 
-// Where two of these routines wait for a key with GetKey. Native code cannot wait yet (ADR-010 item
-// 8), so from there the original runs the rest of the routine, to its return.
+// Where two of these routines wait for a key with GetKey. From there the original runs the rest of the
+// routine, to its return. Both are hooked as routines that sometimes wait, so they run on the native
+// thread, where such a wait ends a run as any other does (ADR-010 item 8).
 constexpr std::uint16_t FLIGHT_SCREEN_KEY_WAIT = 0x0BF3;
 constexpr std::uint16_t FROZEN_KEY_WAIT = 0x8153;
 
@@ -2577,7 +2578,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0A1F, "StorePreviousDustPosition", &StorePreviousDustPosition, PRESERVES_ALL},
   NativeEntry{0x0A28, "DustToScreen", &DustToScreen, PRESERVES_ALL},
   NativeEntry{0x0A43, "ResetStardust", &ResetStardust, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
-  NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL},
+  NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL, Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Sometimes},
   NativeEntry{0x2540, "InvalidateDashboard", &InvalidateDashboard, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
   NativeEntry{0x254F, "UpdateDashboard", &UpdateDashboard, Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_ES))},
   NativeEntry{0x2645, "DrawFiveLineBar", &DrawFiveLineBar, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI)},
@@ -2605,7 +2607,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlips, Clobbers(REGISTER_ALL)},
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeak, Clobbers(REGISTER_AX | REGISTER_DX)},
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePod, PRESERVES_ALL},
-  NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL)},
+  NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Sometimes},
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL)},
   NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocity, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX)},
   NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocity, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},

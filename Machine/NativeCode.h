@@ -11,6 +11,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Machine
@@ -52,6 +53,15 @@ enum class NativeReturn : std::uint8_t
   Interrupt ///< IRET: offset, segment, then flags; an interrupt handler's entry
 };
 
+/// Whether a native routine can wait, which says where it runs and which of its calls are compared
+/// with the original (ADR-010 item 8).
+enum class NativeWait : std::uint8_t
+{
+  Never,     ///< work: it runs where it is called, and every call is compared
+  Sometimes, ///< it waits on some paths: it runs on the native thread, and a call is compared when the original returns without waiting
+  Always     ///< it waits as a rule, or never returns: it runs on the native thread and is never compared, what it calls is
+};
+
 /// A routine in C++ that stands in for the program's own code at an entry (ADR-010). It is entered as
 /// the original is, with CS:IP at the entry and the caller's return address on the stack, and leaves
 /// the way the original does: through Pc::ReturnNear, or whatever return the original makes.
@@ -69,7 +79,7 @@ public:
     NativeRoutine routine;
     NativeContract contract;
     NativeReturn exit = NativeReturn::Near;
-    bool waits = false; ///< the routine can wait, so it runs on the native thread (Pc::Hook)
+    NativeWait wait = NativeWait::Never; ///< whether it can wait, and so where it runs (Pc::Hook)
     std::uint16_t segment = 0;
     std::uint16_t offset = 0;
     std::uint64_t calls = 0;        ///< times execution reached the entry
@@ -96,7 +106,7 @@ public:
 
   /// Adds _routine at _segment:_offset. Throws std::logic_error if there is one there already.
   void Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-           NativeReturn _exit, bool _waits);
+           NativeReturn _exit, NativeWait _wait);
 
   /// A non-zero byte at the linear address of every entry: what the CPU stops at. Empty until the
   /// first routine is added.
@@ -116,8 +126,9 @@ public:
   /// When on, every call of a native routine that is not already inside such a comparison runs the
   /// original first, all of it with no native routine in place, undoes it, runs the native routine,
   /// and compares the two. A native routine that only native code calls is compared through its
-  /// callers. A routine that waits is not compared at all; what it calls through hooks is. When the two differ the run carries on from the original's outcome, so one mismatch
-  /// does not hide the next.
+  /// callers. A routine that waits as a rule is not compared at all, and one that waits sometimes only
+  /// on the calls where its original does not; what they call through hooks is. Whatever the
+  /// comparison finds, the run carries on from the original's outcome.
   void SetVerifying(bool _verifying) noexcept
   {
     m_verifying = _verifying;
@@ -145,12 +156,12 @@ public:
     return m_mismatches;
   }
 
-  /// Times native code that does not run on the native thread waited past the end of a run, which it
-  /// cannot stop at (ADR-010 item 8): the run went on to the end of the call. A routine that can wait
-  /// must be hooked as one that does.
-  [[nodiscard]] std::uint64_t Overruns() const noexcept
+  /// The native routine, the innermost, that waited past the end of a run off the native thread, or
+  /// empty. It cannot stop there and go on in the next run, so the run stopped, StopReason::Overran
+  /// (ADR-010 item 8): a routine that can wait must be hooked as one that does.
+  [[nodiscard]] const std::string& Overran() const noexcept
   {
-    return m_overruns;
+    return m_overran;
   }
 
   /// What a comparison found: an empty string when the native outcome is the original's, or the
@@ -162,9 +173,12 @@ public:
                                     const WriteJournal& _nativeWrites, const Memory& _memory) const;
 
   void AddMismatch(Mismatch _mismatch);
-  void AddOverrun() noexcept
+  void SetOverran(std::string_view _routine)
   {
-    ++m_overruns;
+    if (m_overran.empty())
+    {
+      m_overran = _routine;
+    }
   }
 
 private:
@@ -172,7 +186,7 @@ private:
   std::map<std::uint32_t, Hook> m_hooks;
   std::vector<Mismatch> m_mismatches;
   std::uint32_t m_stackFloor = 0;
-  std::uint64_t m_overruns = 0;
+  std::string m_overran;
   bool m_verifying = false;
 };
 

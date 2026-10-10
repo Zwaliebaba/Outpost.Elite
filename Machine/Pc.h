@@ -36,7 +36,8 @@ enum class StopReason : std::uint8_t
   Fault,      ///< The services refused a call; PcServices::Fault says which.
   Terminated, ///< The program ended through int 20h.
   Deadlocked, ///< The CPU halted with interrupts off, and nothing can wake it.
-  Spinning    ///< Paced time only: the program ran SpinLimit() steps without waiting once.
+  Spinning,   ///< Paced time only: the program ran SpinLimit() steps without waiting once.
+  Overran     ///< Native code off the native thread waited past the end of the run (NativeCode::Overran).
 };
 
 /// How the machine's clock advances (ADR-008).
@@ -207,13 +208,13 @@ public:
   /// takes no time, which is what paced time expects of work (ADR-008). Throws std::logic_error if a
   /// routine is there already.
   ///
-  /// A routine that can wait (_waits) runs on a thread of its own, the native thread, and with it
-  /// everything it calls. When the clock reaches the end of a run there, in Wait or in original code
-  /// it calls, the native thread hands the machine back and RunUntil returns; the next RunUntil
+  /// A routine that can wait (_wait not Never) runs on a thread of its own, the native thread, and with
+  /// it everything it calls. When the clock reaches the end of a run there, in Wait or in original
+  /// code it calls, the native thread hands the machine back and RunUntil returns; the next RunUntil
   /// carries on where it stopped. Only one thread runs at a time, so a run is still a function of its
   /// inputs (ADR-010 item 8). Any other native routine runs as a plain call.
   void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-            NativeReturn _exit = NativeReturn::Near, bool _waits = false);
+            NativeReturn _exit = NativeReturn::Near, NativeWait _wait = NativeWait::Never);
 
   /// The native routines, whether they are being compared with the original, and what that found.
   [[nodiscard]] NativeCode& Native() noexcept
@@ -229,8 +230,8 @@ public:
   /// For native code: calls the program's code at CS:_offset as a near CALL from CS:IP would, and runs it
   /// until it returns. Hooked entries it reaches run natively. If the program stops on the way (a
   /// fault, the end of the program), the native code is abandoned by an exception that the step which
-  /// started it catches, and RunUntil reports the stop. A call that waits past the end of a run goes
-  /// on to its return, and counts as an overrun (NativeCode::Overruns).
+  /// started it catches, and RunUntil reports the stop. Off the native thread, a call that waits past
+  /// the end of a run stops the run there: StopReason::Overran.
   void CallNear(std::uint16_t _offset);
 
   /// For native code: returns from a near call as RET _popBytes does.
@@ -275,7 +276,8 @@ private:
     WriteJournal nativeWrites{NativeCode::JOURNAL_CAPACITY};
     std::vector<std::uint8_t> originalAfter;
     std::vector<PortRouter::Access> originalPorts;
-    std::set<std::uint16_t> executed;
+    std::uint16_t segment = 0;        // the compared entry's code segment
+    std::set<std::uint16_t> executed; // offsets in it the original ran
     bool active = false;
   };
 
@@ -289,8 +291,7 @@ private:
   void ReachedRunLimit();
   void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
-  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, std::uint16_t _coveredSegment = 0,
-                   std::set<std::uint16_t>* _covered = nullptr);
+  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original = nullptr);
   void StepPaced();
   void NoteBackwardJump();
   [[nodiscard]] StopReason Stopped() const noexcept;
@@ -329,6 +330,7 @@ private:
   bool m_onNativeThread = false; // the native thread holds the machine
   bool m_abandon = false;        // the native thread is to unwind what it is running
   bool m_shutdown = false;       // the native thread is to end
+  bool m_overran = false;        // native code off the native thread waited past the end of a run
 };
 
 } // namespace Machine

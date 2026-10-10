@@ -73,7 +73,7 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
             break;
           }
         },
-        entry.contract, exit, entry.waits);
+        entry.contract, exit, entry.wait);
     }
   }
   _pc.Native().SetStackFloor(Machine::Memory::Linear(data, STACK_FIRST_OFFSET));

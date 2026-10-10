@@ -307,10 +307,6 @@ void GetKey(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
-  // PUSH BX / POP BX, for the dead stack: callers wait in loops around GetKey, and a compared run only sees such a
-  // loop wait when each turn leaves memory as the last did (ADR-008).
-  _guest.Push(regs.bx);
-  regs.bx = _guest.Pop();
   regs.ax = WithHigh(regs.ax, 0);
   const std::uint8_t count = _guest.Get(DS.keyBufferCount);
   if (count != 0)

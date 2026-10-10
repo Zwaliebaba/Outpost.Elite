@@ -142,7 +142,7 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
 }
 
 // Each native routine's books, every mismatch, and the report file if one was asked for. Returns the
-// number of calls that did not match the original, and of overruns.
+// number of calls that did not match the original.
 std::uint64_t ReportNativeCode(const Machine::Pc& _pc, const Options& _options)
 {
   if (!_options.nativeReport.empty())
@@ -157,9 +157,7 @@ std::uint64_t ReportNativeCode(const Machine::Pc& _pc, const Options& _options)
   }
   for (const Machine::NativeCode::Mismatch& mismatch : _pc.Native().Mismatches())
     Print(std::format("mismatch\t{}\tcall {}\tcycle {}\t{}\n", mismatch.routine, mismatch.call, mismatch.clock, mismatch.difference));
-  if (_pc.Native().Overruns() > 0)
-    Print(std::format("overruns\t{}\n", _pc.Native().Overruns()));
-  return _pc.Native().Mismatches().size() + _pc.Native().Overruns();
+  return _pc.Native().Mismatches().size();
 }
 
 std::optional<std::string> ReadText(const std::filesystem::path& _path)
@@ -236,6 +234,8 @@ std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
     return "the CPU halted with interrupts off";
   case Machine::StopReason::Spinning:
     return std::format("{} steps without waiting, at {:04X}:{:04X}", _pc.SpinLimit(), _pc.Processor().Regs().cs, _pc.Processor().Regs().ip);
+  case Machine::StopReason::Overran:
+    return std::format("native {} waited past the end of a run, and is not hooked as a routine that waits", _pc.Native().Overran());
   case Machine::StopReason::Reached:
     break;
   }
@@ -391,7 +391,7 @@ int Run(int _argc, char** _argv)
   }
   if (nativeFailures > 0)
   {
-    std::fprintf(stderr, "ReferenceRunner: native code did not match the original, or ran past a run's end\n");
+    std::fprintf(stderr, "ReferenceRunner: native code did not match the original\n");
     return 1;
   }
   return reason == Machine::StopReason::Reached ? 0 : 1;
