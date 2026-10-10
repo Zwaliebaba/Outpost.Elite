@@ -19,10 +19,6 @@ namespace MachineTests
 namespace
 {
 
-constexpr std::size_t REFERENCE_BYTES = 98'144;
-constexpr std::size_t REFERENCE_HEADER_BYTES = 0x40;
-constexpr std::uint16_t REFERENCE_DATA_SEGMENT = 0x08F4;
-
 // A word of the image, by offset. A plain aggregate rather than std::pair: brace-initializing a
 // pair of 16-bit words from int literals narrows inside MSVC's <utility>, which /W4 /WX rejects.
 struct ImageWord
@@ -31,12 +27,23 @@ struct ImageWord
   std::uint16_t value;
 };
 
-// A small MZ executable: a two-paragraph header, then _code as the image, entry 0000:0000, stack 0000:0100.
-// Each relocation is the offset and segment of the word to relocate.
-std::vector<std::uint8_t> MakeExecutable(const std::vector<std::uint8_t>& _code, std::uint16_t _minAllocation, std::uint16_t _maxAllocation,
-                                         const std::vector<ImageWord>& _relocations = {})
+// Where an executable starts and where its stack is, relative to its load segment, as its MZ header says.
+struct Entry
 {
-  std::vector<std::uint8_t> file(0x20, 0);
+  std::uint16_t cs = 0x0000;
+  std::uint16_t ip = 0x0000;
+  std::uint16_t ss = 0x0000;
+  std::uint16_t sp = 0x0100;
+};
+
+// A small MZ executable: a header of whole paragraphs holding the relocation table, then _code as the image. Each
+// relocation is the offset and segment, from the image's start, of a word the load adds the load segment to.
+std::vector<std::uint8_t> MakeExecutable(const std::vector<std::uint8_t>& _code, std::uint16_t _minAllocation, std::uint16_t _maxAllocation,
+                                         const std::vector<ImageWord>& _relocations = {}, const Entry& _entry = {})
+{
+  constexpr std::size_t RELOCATION_TABLE = 0x1C;
+  const std::size_t headerBytes = (RELOCATION_TABLE + 4 * _relocations.size() + 15) / 16 * 16;
+  std::vector<std::uint8_t> file(headerBytes, 0);
   const auto put = [&file](std::size_t _offset, std::uint16_t _value)
   {
     file[_offset] = static_cast<std::uint8_t>(_value & 0xFF);
@@ -47,19 +54,20 @@ std::vector<std::uint8_t> MakeExecutable(const std::vector<std::uint8_t>& _code,
   put(0x02, static_cast<std::uint16_t>(bytes % 512));
   put(0x04, static_cast<std::uint16_t>((bytes + 511) / 512));
   put(0x06, static_cast<std::uint16_t>(_relocations.size()));
-  put(0x08, 0x0002);
+  put(0x08, static_cast<std::uint16_t>(headerBytes / 16));
   put(0x0A, _minAllocation);
   put(0x0C, _maxAllocation);
-  put(0x0E, 0x0000);
-  put(0x10, 0x0100);
-  put(0x14, 0x0000);
-  put(0x16, 0x0000);
-  put(0x18, 0x001C);
-  Assert::IsTrue(_relocations.size() <= 1, L"the header has room for one relocation");
+  put(0x0E, _entry.ss);
+  put(0x10, _entry.sp);
+  put(0x14, _entry.ip);
+  put(0x16, _entry.cs);
+  put(0x18, static_cast<std::uint16_t>(RELOCATION_TABLE));
+  std::size_t at = RELOCATION_TABLE;
   for (const auto& [offset, segment] : _relocations)
   {
-    put(0x1C, offset);
-    put(0x1E, segment);
+    put(at, offset);
+    put(at + 2, segment);
+    at += 4;
   }
   file.insert(file.end(), _code.begin(), _code.end());
   return file;
@@ -86,13 +94,21 @@ std::string ReadText(Machine::Memory& _memory, std::uint16_t _segment, std::uint
 TEST_CLASS(ExeLoaderTests)
 {
 public:
-  // The reference has 7 relocations: five load DS with the data segment 08F4, one is the segment constant 140A of the
-  // cockpit image (CS:7BE3, ShowCockpitScreen), and one is the 0000 in StartContinuousNoise's immediate (CS:7B5D).
-  TEST_METHOD(LoadsTheReferenceAndAppliesItsSevenRelocations)
+  // Each relocation adds the load segment to its word, wherever its segment and offset put it in the image; every other
+  // byte is the file's.
+  TEST_METHOD(AppliesEveryRelocation)
   {
-    const std::vector<std::uint8_t> file = ReadReferenceBinary();
-    Assert::AreEqual(REFERENCE_BYTES, file.size(), L"ELITES.EXE at the repository root");
-    ServiceRig rig("LoaderReference");
+    std::vector<std::uint8_t> code(0x40, 0x90);
+    const auto put = [&code](std::size_t _offset, std::uint16_t _value)
+    {
+      code[_offset] = static_cast<std::uint8_t>(_value & 0xFF);
+      code[_offset + 1] = static_cast<std::uint8_t>(_value >> 8);
+    };
+    put(0x0002, 0x08F4);
+    put(0x0010, 0x0000);
+    put(0x0024, 0x140A);
+    const std::vector<std::uint8_t> file = MakeExecutable(code, 0x10, 0xFFFF, {{0x0002, 0x0000}, {0x0010, 0x0000}, {0x0004, 0x0002}});
+    ServiceRig rig("LoaderRelocations");
     Machine::ExeLoader::Desc desc;
     desc.pspSegment = ServiceRig::PSP_SEGMENT;
     Machine::LoadedProgram program;
@@ -102,26 +118,23 @@ public:
     Assert::AreEqual(0x1000u, std::uint32_t{program.pspSegment});
     Assert::AreEqual(0x1010u, std::uint32_t{program.loadSegment});
     Assert::AreEqual(0xA000u, std::uint32_t{program.memoryTopSegment}, L"maximum allocation FFFFh takes everything");
-    Assert::AreEqual(98'080u, program.imageBytes);
-    const std::vector<ImageWord> relocated = {{0x0007, 0x08F4}, {0x020A, 0x08F4}, {0x021E, 0x08F4}, {0x02F2, 0x08F4},
-                                              {0x060E, 0x08F4}, {0x7B5D, 0x0000}, {0x7BE3, 0x140A}};
+    Assert::AreEqual(static_cast<std::uint32_t>(code.size()), program.imageBytes);
+    const std::vector<ImageWord> relocated = {{0x0002, 0x08F4}, {0x0010, 0x0000}, {0x0024, 0x140A}};
     for (const auto& [offset, value] : relocated)
     {
       Assert::AreEqual(std::uint32_t{value} + 0x1010u, std::uint32_t{rig.Ram().Read16(program.loadSegment, offset)});
     }
-    // Everything else is the file's bytes.
-    for (const std::uint16_t offset : std::initializer_list<std::uint16_t>{0x0000, 0x0005, 0x0009, 0x7BE5})
+    for (const std::uint16_t offset : std::initializer_list<std::uint16_t>{0x0000, 0x0005, 0x0012, 0x0026, 0x003F})
     {
-      Assert::AreEqual(std::uint32_t{file[REFERENCE_HEADER_BYTES + offset]}, std::uint32_t{rig.Ram().Read8(program.loadSegment, offset)});
+      Assert::AreEqual(std::uint32_t{code[offset]}, std::uint32_t{rig.Ram().Read8(program.loadSegment, offset)}, L"the file's byte");
     }
-    Assert::AreEqual(std::uint32_t{file.back()}, std::uint32_t{rig.Ram().Read8(Machine::Memory::Linear(program.loadSegment, 0) + 98'079u)});
   }
 
   // MS-DOS's entry state, as DOSBox-X copies it, so that boot traces compare register for register.
-  TEST_METHOD(StartsTheReferenceInDosRegisterState)
+  TEST_METHOD(StartsInDosRegisterState)
   {
-    const std::vector<std::uint8_t> file = ReadReferenceBinary();
-    Assert::AreEqual(REFERENCE_BYTES, file.size());
+    const std::vector<std::uint8_t> file =
+      MakeExecutable(std::vector<std::uint8_t>(0x40, 0x90), 0x10, 0xFFFF, {}, {0x0001, 0x0004, 0x0003, 0x0080});
     ServiceRig rig("LoaderRegisters");
     Machine::ExeLoader::Desc desc;
     desc.pspSegment = 0x0192;
@@ -129,22 +142,22 @@ public:
     Assert::IsTrue(Load(rig, file, desc, program) == Machine::LoadError::None);
 
     const Machine::Registers& regs = program.registers;
-    Assert::AreEqual(0x01A2u, std::uint32_t{regs.cs}, L"CS = load segment + 0");
-    Assert::AreEqual(0x0000u, std::uint32_t{regs.ip});
-    Assert::AreEqual(0x01A2u + 0x13CAu, std::uint32_t{regs.ss}, L"SS = load segment + 13CA");
-    Assert::AreEqual(0x03F8u, std::uint32_t{regs.sp});
+    Assert::AreEqual(0x01A3u, std::uint32_t{regs.cs}, L"CS = load segment + 1");
+    Assert::AreEqual(0x0004u, std::uint32_t{regs.ip});
+    Assert::AreEqual(0x01A5u, std::uint32_t{regs.ss}, L"SS = load segment + 3");
+    Assert::AreEqual(0x0080u, std::uint32_t{regs.sp});
     Assert::AreEqual(0x0192u, std::uint32_t{regs.ds});
     Assert::AreEqual(0x0192u, std::uint32_t{regs.es});
     Assert::AreEqual(0x0000u, std::uint32_t{regs.ax});
     Assert::AreEqual(0x0000u, std::uint32_t{regs.bx});
     Assert::AreEqual(0x00FFu, std::uint32_t{regs.cx});
     Assert::AreEqual(0x0192u, std::uint32_t{regs.dx}, L"DX = PSP");
-    Assert::AreEqual(0x0000u, std::uint32_t{regs.si}, L"SI = IP");
-    Assert::AreEqual(0x03F8u, std::uint32_t{regs.di}, L"DI = SP");
+    Assert::AreEqual(0x0004u, std::uint32_t{regs.si}, L"SI = IP");
+    Assert::AreEqual(0x0080u, std::uint32_t{regs.di}, L"DI = SP");
     Assert::AreEqual(0x091Cu, std::uint32_t{regs.bp});
     Assert::AreEqual(0xF202u, std::uint32_t{regs.flags});
-    Assert::AreEqual(0x0000u, std::uint32_t{rig.Ram().Read16(regs.ss, 0x03F4)}, L"the RETF frame: IP");
-    Assert::AreEqual(0x01A2u, std::uint32_t{rig.Ram().Read16(regs.ss, 0x03F6)}, L"the RETF frame: CS");
+    Assert::AreEqual(0x0004u, std::uint32_t{rig.Ram().Read16(regs.ss, 0x007C)}, L"the RETF frame: IP");
+    Assert::AreEqual(0x01A3u, std::uint32_t{rig.Ram().Read16(regs.ss, 0x007E)}, L"the RETF frame: CS");
     Assert::IsTrue(program.environmentSegment < program.pspSegment, L"the environment sits below the PSP");
 
     desc.initialAx = 0x1234;
@@ -156,8 +169,7 @@ public:
 
   TEST_METHOD(BuildsThePspAndTheEnvironment)
   {
-    const std::vector<std::uint8_t> file = ReadReferenceBinary();
-    Assert::AreEqual(REFERENCE_BYTES, file.size());
+    const std::vector<std::uint8_t> file = MakeExecutable(std::vector<std::uint8_t>(0x10, 0x90), 0x10, 0xFFFF);
     ServiceRig rig("LoaderPsp");
     Machine::ExeLoader::Desc desc;
     desc.commandTail = " cheat";
@@ -177,7 +189,7 @@ public:
     Assert::AreEqual(20u, std::uint32_t{ram.Read16(psp, 0x32)});
     Assert::IsTrue(ReadText(ram, psp, 0x50, 3) == "\xCD\x21\xCB");
     Assert::IsTrue(ReadText(ram, psp, 0x5D, 11) == "           ", L"FCB 1, blank");
-    // CheckCheatArgument (CS:02A5) wants length 6 and " cheat".
+    // The reference's CheckCheatArgument (CS:02A5) wants length 6 and " cheat".
     Assert::AreEqual(6u, std::uint32_t{ram.Read8(psp, 0x80)});
     Assert::IsTrue(ReadText(ram, psp, 0x81, 7) == " cheat\r");
 
@@ -190,21 +202,20 @@ public:
     Assert::IsTrue(Load(rig, file, desc, program) == Machine::LoadError::CommandTailTooLong);
   }
 
-  // ADR-001 D5: DS:25E4h, file offset B564h, from 00 to 01.
-  TEST_METHOD(PatchByteAppliesD5OnlyOverTheExpectedValue)
+  // PatchByte writes only over the byte it expects, as ADR-001's D5 does at the reference's DS:25E4h (08F4:25E4).
+  TEST_METHOD(PatchByteWritesOnlyOverTheExpectedValue)
   {
-    const std::vector<std::uint8_t> file = ReadReferenceBinary();
-    Assert::AreEqual(REFERENCE_BYTES, file.size());
-    Assert::AreEqual(0u, std::uint32_t{file[0xB564]});
+    std::vector<std::uint8_t> code(0x40, 0x90);
+    code[0x25] = 0x00;
     ServiceRig rig("LoaderPatch");
     Machine::LoadedProgram program;
-    Assert::IsTrue(Load(rig, file, Machine::ExeLoader::Desc{}, program) == Machine::LoadError::None);
-    const auto dataSegment = static_cast<std::uint16_t>(program.loadSegment + REFERENCE_DATA_SEGMENT);
+    Assert::IsTrue(Load(rig, MakeExecutable(code, 0x10, 0xFFFF), Machine::ExeLoader::Desc{}, program) == Machine::LoadError::None);
+    const auto segment = static_cast<std::uint16_t>(program.loadSegment + 0x0002);
 
-    Assert::IsTrue(Machine::ExeLoader::PatchByte(rig.Ram(), program, REFERENCE_DATA_SEGMENT, 0x25E4, 0x00, 0x01));
-    Assert::AreEqual(1u, std::uint32_t{rig.Ram().Read8(dataSegment, 0x25E4)});
-    Assert::IsFalse(Machine::ExeLoader::PatchByte(rig.Ram(), program, REFERENCE_DATA_SEGMENT, 0x25E4, 0x00, 0x02), L"not 00 any more");
-    Assert::AreEqual(1u, std::uint32_t{rig.Ram().Read8(dataSegment, 0x25E4)}, L"and nothing was written");
+    Assert::IsTrue(Machine::ExeLoader::PatchByte(rig.Ram(), program, 0x0002, 0x0005, 0x00, 0x01));
+    Assert::AreEqual(1u, std::uint32_t{rig.Ram().Read8(segment, 0x0005)});
+    Assert::IsFalse(Machine::ExeLoader::PatchByte(rig.Ram(), program, 0x0002, 0x0005, 0x00, 0x02), L"not 00 any more");
+    Assert::AreEqual(1u, std::uint32_t{rig.Ram().Read8(segment, 0x0005)}, L"and nothing was written");
   }
 
   TEST_METHOD(AllocationHonoursTheHeader)
