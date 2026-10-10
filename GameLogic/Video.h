@@ -11,27 +11,35 @@
 namespace Elite
 {
 
-// The reference's video routines, ported (plan §5 Phase 3, ADR-010): drawing: lines, spans, the space view and the dashboard into CGA memory. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv. Those de-assembled so far (ADR-012) follow
-// the bodies: they take values and give values back, and their entries keep the register contracts.
+// The reference's video routines, ported (plan §5 Phase 3, ADR-010): drawing: lines, spans, the space view and the dashboard into CGA memory. All
+// of them are de-assembled (ADR-012): they take values and give values back, and their entries keep the register contracts of
+// Symbols.tsv for the hooks and the callers not yet de-assembled.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
-
-/// FillTriangle (CS:1BFB) and FillClippedTriangle (CS:1E6E), which it runs into: the triangle (AX, DX),
-/// (BX, BP), (CX, DI) filled with triangleFillPattern. Out: ES=DS unless it is wholly outside;
-/// everything else but DS clobbered.
-void FillTriangle(Guest& _guest);
-
-/// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly inside the buffer, entered with SI
-/// = A's x and the rows doubled.
-void FillClippedTriangle(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight, and every byte it writes is written as the
 // original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
 // entry finds: _backward.
+
+/// A point of the screen, x and row, signed: a vertex of vertexBuffer once ProjectVertices has projected it, what ProjectToScreen
+/// gives, or a corner FillTriangle takes, which may lie off the drawing buffer.
+struct ScreenPoint
+{
+  std::int16_t x;
+  std::int16_t y;
+};
+
+/// Three projected vertices: a face's first three, which say which way it faces, or a filled triangle's corners A, B and C, as
+/// the original holds them in (AX, DX), (BX, BP) and (CX, DI).
+struct Triangle
+{
+  ScreenPoint first;
+  ScreenPoint second;
+  ScreenPoint third;
+};
 
 /// SaveScreenshot (CS:01B7): with the game's divide, keyboard and timer handlers taken out and CriticalErrorInterrupt on
 /// int 24h, WriteScreenshotFile, then ShowDiskError if it failed; then int 24h as it was, and the game's handlers put back.
@@ -121,6 +129,18 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
 /// them by STOSB and REP STOSW into ES = DS.
 void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward);
 
+/// FillTriangle (CS:1BFB): _triangle filled with triangleFillPattern, its low byte on even rows and its high on odd ones. Wholly
+/// on the drawing buffer, the rows' spans are walked down from the top on 8.8 edges into a container, as the original pushes
+/// them, and drawn from the bottom up, as it pops them (DrawStackedSpansFromRow, FillTriangleSpan); otherwise FillClippedTriangle.
+/// The edges' steps are the instructions it patches into its code, ADD or SUB, which it writes as the original does. Returns
+/// false when the triangle is wholly off the buffer and nothing is drawn; otherwise the original sets ES to DS.
+bool FillTriangle(GameState& _state, Triangle _triangle, bool _backward);
+
+/// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly on the buffer, _doubled's rows twice the rows: one
+/// wholly left, above, right or below the buffer is not drawn; otherwise its rows are walked on 16.16 edges, only those on the
+/// buffer kept and each span held to 0-255. Returns false when nothing is drawn for being wholly off the buffer.
+bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward);
+
 /// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
 /// 8088's speed made. Its loops turn through _hardware.
 void WaitRetraceThenDelay(Hardware& _hardware);
@@ -196,6 +216,11 @@ void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobb
 /// DL = left x, DH = right x, SI = the row, BL = the fill, ES = DS. Out: DL = DH when the span crosses a byte, else DX the
 /// right end's mask word; AX the right end's AND and OR, BP its mask's index; DI clobbered.
 void FillTriangleSpanEntry(Guest& _guest);
+/// (AX, DX), (BX, BP), (CX, DI) the corners. Out: ES = DS unless the triangle is wholly off the buffer. AX, BX, CX, DX, SI, DI, BP
+/// clobbered.
+void FillTriangleEntry(Guest& _guest);
+/// (SI, DX), (BX, BP), (CX, DI) the corners, the rows doubled. Out as FillTriangleEntry.
+void FillClippedTriangleEntry(Guest& _guest);
 void WaitRetraceThenDelayEntry(Guest& _guest); ///< AX, DX clobbered.
 /// Out, once it draws: DF clear, SI past the image and ES = B800h; and BX = 0100h and DX = 03D9h, as SetGraphicsMode leaves them,
 /// once it sets the mode. AX, CX, DI clobbered.
