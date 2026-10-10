@@ -116,6 +116,8 @@ def main() -> int:
     print("error: vstest.console.exe not found.", file=sys.stderr)
     return 2
 
+  # vstest's output is passed through as it is, and a Windows console's code page cannot print all of it.
+  sys.stdout.reconfigure(encoding="utf-8", errors="replace")
   shards = [(name, command(vstest, suites, name, expression)) for name, expression in shard_filters()]
   if arguments.dry_run:
     for name, arguments_list in shards:
@@ -124,37 +126,46 @@ def main() -> int:
 
   # Each shard's output goes to a file of its own and is printed whole when the shard ends, so that
   # concurrent shards do not interleave.
+  print(f"{len(shards)} shards, {min(arguments.jobs, len(shards))} at a time, on {os.cpu_count()} logical processors.", flush=True)
   failed = []
   total = 0
   pending = list(shards)
   running = []
-  with tempfile.TemporaryDirectory(prefix="RunTests-") as scratch:
-    while pending or running:
-      while pending and len(running) < arguments.jobs:
-        name, arguments_list = pending.pop(0)
-        (ROOT / RESULTS / f"{name}.trx").unlink(missing_ok=True)  # a shard that dies must not be read from an old run
-        log = open(Path(scratch) / f"{name}.log", "w+", encoding="utf-8", errors="replace")
-        process = subprocess.Popen(arguments_list, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
-        running.append((name, process, log, time.monotonic()))
-      time.sleep(1)
-      for entry in list(running):
-        name, process, log, started = entry
-        if process.poll() is None:
-          continue
-        running.remove(entry)
-        log.seek(0)
-        found = counts(name)
-        summary = "no results" if found is None else f"{found.get('executed', 0)} run, {found.get('passed', 0)} passed"
-        print(f"── shard {name}: exit {process.returncode} after {time.monotonic() - started:.0f} s, {summary} ──")
-        print(log.read(), flush=True)
+  with tempfile.TemporaryDirectory(prefix="RunTests-", ignore_cleanup_errors=True) as scratch:
+    try:
+      while pending or running:
+        while pending and len(running) < arguments.jobs:
+          name, arguments_list = pending.pop(0)
+          (ROOT / RESULTS / f"{name}.trx").unlink(missing_ok=True)  # a shard that dies must not be read from an old run
+          log = open(Path(scratch) / f"{name}.log", "w+", encoding="utf-8", errors="replace")
+          process = subprocess.Popen(arguments_list, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+          running.append((name, process, log, time.monotonic()))
+        time.sleep(1)
+        for entry in list(running):
+          name, process, log, started = entry
+          if process.poll() is None:
+            continue
+          running.remove(entry)
+          log.seek(0)
+          output = log.read()
+          log.close()
+          found = counts(name)
+          summary = "no results" if found is None else f"{found.get('executed', 0)} run, {found.get('passed', 0)} passed"
+          print(f"== shard {name}: exit {process.returncode} after {time.monotonic() - started:.0f} s, {summary} ==")
+          print(output, flush=True)
+          if process.returncode != 0:
+            failed.append(name)
+          elif found is None or found.get("executed", 0) == 0:
+            print(f"error: shard {name} ran no test: does a class it names still exist?", file=sys.stderr)
+            failed.append(name)
+          else:
+            total += found.get("executed", 0)
+    finally:
+      # Whatever stopped the loop, no shard is left running or holding its log open.
+      for _, process, log, _ in running:
+        process.kill()
+        process.wait()
         log.close()
-        if process.returncode != 0:
-          failed.append(name)
-        elif found is None or found.get("executed", 0) == 0:
-          print(f"error: shard {name} ran no test: does a class it names still exist?", file=sys.stderr)
-          failed.append(name)
-        else:
-          total += found.get("executed", 0)
 
   if failed:
     print(f"Shards failed: {', '.join(failed)}.", file=sys.stderr)
