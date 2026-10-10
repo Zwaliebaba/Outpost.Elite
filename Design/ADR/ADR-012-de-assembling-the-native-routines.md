@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 19).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 20).
 
 ## Context
 
@@ -482,6 +482,52 @@ The 4 contracts widened:
 **Coverage.** `ClearChartTextLines` lost its compared callers, and `GalaxyTests.ChartTextLinesClearInEveryInk` now compares it.
 
 **The suites.** `GameLogicTests` passes 186 of 186 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
+
+**20. Level 5's world, second slice, measured 2026-10-10.** One worker converted 35 routines in Combat, Ships, Flight, Docking, Hyperspace and Ai.
+
+| | Count |
+|---|---|
+| Routines converted | 35 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 7 |
+| Contracts widened, with every test passing poisoned and the caller read | 1 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 1,599 before, 1,140 after |
+| Register functions left | 41: 24 routines and 17 register adapters |
+
+- **What converted.**
+  - **Combat:** the explosions, the energy bomb, the missile's flight, the laser's hit and the crosshair search.
+  - **Flight:** the stardust, the dashboard, the compass, the screens' restore, the motion, and the missile, identify and H keys.
+  - **Docking:** the docking computer.
+  - **Hyperspace:** the arrival.
+  - **Ai:** the AI's object loop, `UpdateObjectsAndSpawn`, with `UpdateStationAi`, which item 16 left.
+- **Every collapsed write is made in full,** as the listing has it:
+  - `HitTarget`'s two pairs (CS:8B16 and CS:8B1D, CS:8B22 and CS:8B27), which Combat's register `AddSaturating` had collapsed;
+  - `DetonateEnergyBomb`'s (CS:2EDB, CS:2EE2);
+  - `UpdateMissileAi`'s (CS:5551, CS:5558);
+  - four in `UpdateEnergyAndLaserHeat`.
+
+  No register code collapses a write now.
+- **Values the original passes by accident, made explicit.**
+  - **DX, from one AI handler to the next.** `UpdateObjectsAndSpawn` starts from its caller's DX, and each handler takes it and returns what it leaves. Depending on the handler and the path, that is:
+    - `MoveObject`'s;
+    - `ComputeVelocity`'s after a launch;
+    - the last pixel of a blip erased;
+    - 1C2h once the station is found near.
+
+    The traders', wolves' and hunters' range boxes read it, after `MOV DH,[DI+1Ch]` at CS:57BC, CS:5873 and CS:5987. With it poisoned, `attack-the-station` wrote four bytes the original does not and lost its `police` digest.
+  - **BX, the class doubled,** for the divide trap of a missile's explosion.
+  - **DI, from `ProcessFlightKeys` to `HandleMissileKeys`.** `LaunchPlayerMissile` copies 64 bytes from there when the crosshair search did not run that frame.
+  - **The divide trap's BX.** Each divide is passed the exact BX the original holds at it.
+  - **The direction flag is read once per object loop.** The program's only STD (CS:2E4A) is cleared at CS:2E5C in the same routine, and no handler reaches a CLD, so it cannot change between handlers.
+- **One `SlotWord` field:** `CompassDot` (26h), which `UpdateCompass` exchanges as a word. It shares its offset with `Spin` (item 16): the same bytes mean one thing in the station's slot and another in a fragment's.
+
+**Contracts.**
+- **Narrowed:**
+  - **Kept DS:** `ResolveLaserFire`, `UpdateDashboard`, `SetUpLocalSpace` and `UpdatePlayerMotion` (with DS poisoned, `attack-the-station`'s `missile` digest moved and three twins diverged), and `ArriveInSystem` (`combat-orerve-drifters`' `orerve` digest moved).
+  - **Kept DS, DI, SI and ES:** `DetonateEnergyBomb`. `DrawSunOrPlanet`'s constructed test ended with all four wrong when they were poisoned.
+  - **Compares DX:** `UpdateStationAi`.
+- **Widened:** `UpdateMissileAi` was said to preserve every register. It now leaves AX, BX, CX, SI, BP and ES. Its only caller pops DI and CX after each handler and loads BX for the next, and the next handler reads only DL and the direction flag.
+
+**The suites.** `GameLogicTests` passes 186 of 186 with poisoning on, under g++ and clang++, without warnings, with items 15 to 19 in the same tree. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 
