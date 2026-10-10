@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's first slices (item 15).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 and 16).
 
 ## Context
 
@@ -315,6 +315,51 @@ The 2 contracts widened, each with every test passing poisoned and every caller 
 - `VideoTests.LaserSightsAgreeForEveryLaser`, for Combat's `DrawLaserSights`.
 
 **The suites.** `GameLogicTests` passes 180 of 180 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
+
+**16. Level 5's world slice, measured 2026-10-10.** One worker converted 38 routines in Ai, Combat, Ships, Docking, Flight, Hyperspace and Timer, and skipped one that was ready.
+
+| | Count |
+|---|---|
+| Routines converted | 38: Ai 17, Combat 7, Ships 5, Flight 5, Docking 2, Hyperspace 1, Timer 1 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 7 |
+| Contracts widened | 0 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 3,503 before, 3,129 after |
+| Register functions left | 188: 156 routines and 32 register adapters |
+| Routines ready | 43 |
+
+- **What converted.**
+  - The spawners.
+  - Ai's trader, wolf and hunter handlers, with the states they run through.
+  - Combat's beams, launches and wreckage.
+  - The collisions and the side views' stardust.
+  - The docking computer's spins.
+  - The jump drive and `GalacticJump`.
+  - `TimerInterrupt`, whose hook stays and whose entry calls the value routine.
+  - Eight register adapters went with their last callers.
+
+The 7 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `SpawnRandomTrader` | BP, the trader's pitch, which `UpdateStationAi` leaves after a launch and its contract compares |
+| `LaunchPlayerMissile` | DS: poisoned, `attack-the-station`'s `missile` digest moved |
+| `SpawnPlayerWreckage` | DS: poisoned, `death`'s `game-over` digest moved |
+| `CheckCollisions` | DS, and DI past the slots, which `ProcessFlightKeys` hands to `LaunchPlayerMissile` as the 64 bytes it copies |
+| `UpdateTraderOrPoliceAi`, `UpdateWolfAi`, `UpdateHunterAi` | DX, as `MoveObject` leaves it: poisoned, `UpdateObjectsAndSpawn` wrote two bytes the original does not, and `attack-the-station`'s `police` digest moved |
+
+**Skipped: `UpdateStationAi`.** The DX it leaves goes on to the next slot's handler, which reads DL as its range box (`WithinRange`). That DX is `ComputeVelocity`'s leftover after a launch, and `EraseScannerBlip`'s after the station's ECM. No value routine computed either, so no entry could rebuild it. The next slice threads the value through `UpdateObjectsAndSpawn`'s handlers explicitly, as `ReadSteering`'s trigger byte is (item 15).
+
+**Write order.** `CheckMissilesAtStation` writes `legalStatus`' ADD (CS:5650) and then FFh on a carry (CS:5656). Combat's register-side `AddSaturating` still collapses the sum and FFh for `HitTarget`, `DetonateEnergyBomb` and `UpdateMissileAi`, which wait on the divides' callers.
+
+**Interrupts.** No conversion needed `Hardware::TakeDueInterrupts` (ADR-014 item 10). The new value calls of routines that turn interrupts on are `CheckCollision`'s of `StartImpactSound` and of `TakeDamage`'s kill, and each is followed by the original's own STI.
+
+**Views.**
+- **Three `SlotWord` fields,** each a word the original writes over two bytes: `Spin` (26h), `Cargo` (2Ch) and `Aggression` (30h).
+- **`JumpDriveRequest`** is defined in `Hyperspace.h` and declared ahead in `Flight.h`, which cannot include it without an include cycle through `Ships.h`.
+
+**One assumption, commented in the code.** `GalacticJump` hands `SelectSystemAtCursor` the BP that `FindNearestSystem` leaves, 100h less the system's index. That holds because the galactic chart always yields a system.
+
+**The suites.** `GameLogicTests` passes 180 of 180 with poisoning on, under g++ and clang++, without warnings, with level 5's first slices in the same tree. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 
