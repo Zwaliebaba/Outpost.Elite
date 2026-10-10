@@ -670,54 +670,39 @@ void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pi
   }
 }
 
-void TryLaunchMissileAtPlayer(Guest& _guest)
+void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _odds, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.killCount) < MISSILE_KILLS_NEEDED || (_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) == 0)
+  if (_state.Get(DS.killCount) < MISSILE_KILLS_NEEDED || (_slot.Get(SlotByte::Flags) & FLAG_HOSTILE) == 0)
   {
     return;
   }
-  CheckSafeZoneHoldFireEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY) || _guest.Byte(At(regs.di, SLOT_MISSILES)) == 0)
+  if (CheckSafeZoneHoldFire(_state, _slot).hold || _slot.Get(SlotByte::Missiles) == 0 || FiringBlocked(_state) != 0)
   {
     return;
   }
-  SetLow(regs.ax, FiringBlocked(_guest.State()));
-  if (Low(regs.ax) != 0)
+  if (NextRandom(_state) >= _odds)
   {
     return;
   }
-  NextRandomEntry(_guest);
-  if (regs.ax >= regs.bx)
+  if (LaunchShipFromObject(_state, _slot, MISSILE_LAUNCH, _backward))
   {
-    return;
-  }
-  SetLow(regs.dx, MISSILE_LAUNCH);
-  LaunchShipFromObjectEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY))
-  {
-    _guest.SetByte(At(regs.di, SLOT_MISSILES), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_MISSILES)) - 1));
+    _slot.Set(SlotByte::Missiles, static_cast<std::uint8_t>(_slot.Get(SlotByte::Missiles) - 1));
   }
 }
 
-void TryLaunchThargon(Guest& _guest)
+void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  IsThargoidTypeEntry(_guest);
-  if (!_guest.Flag(FLAG_ZERO) || _guest.Byte(At(regs.di, SLOT_THARGONS)) == 0)
+  if (!IsThargoidType(_slot) || _slot.Get(SlotByte::Thargons) == 0)
   {
     return;
   }
-  NextRandomEntry(_guest);
-  if (regs.ax >= THARGON_ODDS)
+  if (NextRandom(_state) >= THARGON_ODDS)
   {
     return;
   }
-  SetLow(regs.dx, THARGON_LAUNCH);
-  LaunchShipFromObjectEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY))
+  if (LaunchShipFromObject(_state, _slot, THARGON_LAUNCH, _backward))
   {
-    _guest.SetByte(At(regs.di, SLOT_THARGONS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_THARGONS)) - 1));
+    _slot.Set(SlotByte::Thargons, static_cast<std::uint8_t>(_slot.Get(SlotByte::Thargons) - 1));
   }
 }
 
@@ -1332,6 +1317,19 @@ void LaunchShipFromObjectEntry(Guest& _guest)
   _guest.Clobber(LAUNCHES_SHIP);
 }
 
+void TryLaunchMissileAtPlayerEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  TryLaunchMissileAtPlayer(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.bx, _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(LAUNCHES);
+}
+
+void TryLaunchThargonEntry(Guest& _guest)
+{
+  TryLaunchThargon(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(LAUNCHES);
+}
+
 void DrawLaserSightsEntry(Guest& _guest)
 {
   DrawLaserSights(_guest.State());
@@ -1523,8 +1521,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x518B, "TryFireLaserAtPlayer", &TryFireLaserAtPlayerEntry, FIRES_LASER},
   NativeEntry{0x5242, "LaunchPlayerMissile", &LaunchPlayerMissileEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x534E, "LaunchShipFromObject", &LaunchShipFromObjectEntry, LAUNCHES_SHIP},
-  NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayer, LAUNCHES},
-  NativeEntry{0x5471, "TryLaunchThargon", &TryLaunchThargon, LAUNCHES},
+  NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayerEntry, LAUNCHES},
+  NativeEntry{0x5471, "TryLaunchThargon", &TryLaunchThargonEntry, LAUNCHES},
   NativeEntry{0x54F2, "UpdateMissileAi", &UpdateMissileAi, PRESERVES_ALL},
   NativeEntry{0x8A46, "FindShipInCrosshairs", &FindShipInCrosshairs,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_SI, FLAG_CARRY}},

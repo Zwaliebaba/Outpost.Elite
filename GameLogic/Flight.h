@@ -55,9 +55,6 @@ void UpdateEnergyAndLaserHeat(Guest& _guest);
 /// reset.
 void SetUpLocalSpace(Guest& _guest);
 
-/// CheckCollisions (CS:2BC5): the player against every object slot: damage, or docking.
-void CheckCollisions(Guest& _guest);
-
 /// UpdateCompass (CS:418F): moves the compass dot to the planet or the station. Every register comes
 /// back as the original leaves it; DI = stationSlot.
 void UpdateCompass(Guest& _guest);
@@ -228,6 +225,10 @@ void UpdateSafeZone(GameState& _state);
 /// and the pitch, through rotationSinCos[8], [7] and [6], which it sets.
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
+/// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's
+/// collisionRanges box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each.
+void CheckCollisions(GameState& _state, Hardware& _hardware);
+
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
 void UpdateWarnings(GameState& _state);
@@ -328,6 +329,7 @@ void DrawConditionLightEntry(Guest& _guest);
 void UpdateConditionColorEntry(Guest& _guest);
 void InSafeZoneEntry(Guest& _guest);
 void ComputeDeathDebrisVectorEntry(Guest& _guest); ///< Out: AX, BX, CX.
+void CheckCollisionsEntry(Guest& _guest);          ///< Out: DI past the slots. Clobbers all but DS.
 void UpdateWarningsEntry(Guest& _guest);
 void CheckMissileWarningEntry(Guest& _guest); ///< CX = the checks. Out: AL = the check, CX as LOOP leaves it; BX, AX once one posts.
 void CheckAltitudeWarningEntry(Guest& _guest);

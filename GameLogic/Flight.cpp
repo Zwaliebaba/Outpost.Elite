@@ -482,51 +482,37 @@ bool DrawSideStardust(GameState& _state)
   return filled;
 }
 
-// UpdateLeftStardust (0x07C5) and UpdateRightStardust (0x0809): pitch rolls the dust and speed moves it
-// sideways; _left mirrors both.
-void UpdateSideStardust(Guest& _guest, bool _left)
+// UpdateLeftStardust (0x07C5) and UpdateRightStardust (0x0809), which UpdateStardust jumps to: pitch rolls the dust and speed
+// moves it sideways, _left mirroring both, and then they draw it (DrawSideStardust). Returns whether a DrawLine filled bytes
+// with REP STOSB.
+bool UpdateSideStardust(GameState& _state, bool _left)
 {
-  Registers& regs = _guest.Regs();
-  regs.dx = _guest.Get(DS.rollRate);
-  _guest.Call(APPLY_REVERSE_CONTROLS_TO_DX);
-  SetHigh(regs.dx, Low(regs.dx));
-  if (High(regs.dx) != 0)
+  // MOV DX,rollRate / ApplyReverseControlsToDx / MOV DH,DL: the reversed roll byte, as DX = roll:00, negated for the right view
+  // and halved, shifts the dust vertically.
+  const std::uint16_t rollRate = _state.Get(DS.rollRate);
+  const std::uint8_t roll = ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll;
+  if (roll != 0)
   {
-    SetLow(regs.dx, 0);
-    regs.dx = Sar(_left ? regs.dx : Negate(regs.dx), 1);
-    ShiftStardustVerticallyEntry(_guest);
+    const std::uint16_t step = Join(roll, 0);
+    ShiftStardustVertically(_state, Signed(Sar(_left ? step : Negate(step), 1)));
   }
-  regs.dx = _guest.Get(DS.playerSpeed);
-  if (regs.dx != 0)
+  // The speed, negated for the left view, as DX = its low byte:00, shifted right three times, moves it sideways.
+  if (const std::uint16_t speed = _state.Get(DS.playerSpeed); speed != 0)
   {
-    if (_left)
-    {
-      regs.dx = Negate(regs.dx);
-    }
-    SetHigh(regs.dx, Low(regs.dx));
-    SetLow(regs.dx, 0);
-    regs.dx = Sar(regs.dx, 3);
-    ShiftStardustSidewaysEntry(_guest);
+    const std::uint16_t step = Join(Low(_left ? Negate(speed) : speed), 0);
+    ShiftStardustSideways(_state, Signed(Sar(step, 3)));
   }
-  regs.ax = _guest.Get(DS.rollRate);
-  _guest.Call(APPLY_REVERSE_CONTROLS);
-  SetLow(regs.ax, High(regs.ax));
-  regs.ax = static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 1);
-  if (regs.ax != 0)
+  // MOV AX,rollRate / ApplyReverseControls / MOV AL,AH / CBW / SHL AX,1: the reversed pitch byte, doubled and negated for the
+  // left view, rolls it.
+  const std::uint16_t pitchRate = _state.Get(DS.rollRate);
+  const auto angle =
+    static_cast<std::uint16_t>(SignExtend(ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch) << 1);
+  if (angle != 0)
   {
-    if (_left)
-    {
-      regs.ax = Negate(regs.ax);
-    }
-    SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-    RollStardustEntry(_guest);
+    (void)SetSinCos(_state, 7, _left ? Negate(angle) : angle);
+    RollStardust(_state);
   }
-  // What the original leaves that the contract compares: DrawLine's ES = DS and CLD once a streak filled bytes. SI past the
-  // particles and CX = 0 as its loop leaves them; the AX, BX, DX, DI and BP the last particle leaves are not reproduced:
-  // poisoned, every comparison and digest still agrees.
-  DrawLineOut(_guest, DrawSideStardust(_guest.State()));
-  regs.si = Plus(DS.stardust.offset, STARDUST_BYTES);
-  regs.cx = 0;
+  return DrawSideStardust(_state);
 }
 
 // ---- The dashboard --------------------------------------------------------------------------------
@@ -1417,10 +1403,13 @@ void UpdateStardust(Guest& _guest)
   switch (_guest.Get(DS.viewAngle))
   {
   case RIGHT_VIEW:
-    UpdateSideStardust(_guest, false);
-    break;
   case LEFT_VIEW:
-    UpdateSideStardust(_guest, true);
+    // What the side views leave that the contract compares: DrawLine's ES = DS and CLD once a streak filled bytes. SI past the
+    // particles and CX = 0 as the drawing's loop leaves them; the AX, BX, DX, DI and BP its last particle leaves are not
+    // reproduced: poisoned, every comparison and digest still agrees.
+    DrawLineOut(_guest, UpdateSideStardust(_guest.State(), _guest.Get(DS.viewAngle) == LEFT_VIEW));
+    regs.si = Plus(DS.stardust.offset, STARDUST_BYTES);
+    regs.cx = 0;
     break;
   case REAR_VIEW:
     UpdateRearStardust(_guest);
@@ -2045,24 +2034,19 @@ void SetUpLocalSpace(Guest& _guest)
   PlaceSunPlanetAndStation(_guest.State());
 }
 
-void CheckCollisions(Guest& _guest)
+void CheckCollisions(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.shipSlots.offset;
-  regs.cx = _guest.Get(DS.objectSlotCount);
-  do
+  // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
   {
-    const std::uint16_t count = regs.cx;
-    SetLow(regs.bx, _guest.Byte(regs.di));
-    if ((Low(regs.bx) & 1) != 0)
+    const ObjectSlot object(_state, slot);
+    if ((object.Get(SlotByte::Type) & ObjectSlot::ACTIVE) != 0)
     {
-      // The registers but DI, which this goes on with, as they were: the contract compares none, and poisoned, every comparison
-      // and digest still agrees.
-      CheckCollision(_guest.State(), _guest.Devices(), ObjectSlot(_guest.State(), regs.di));
+      CheckCollision(_state, _hardware, object);
     }
-    regs.di = Plus(regs.di, SLOT_BYTES);
-    regs.cx = count;
-  } while (--regs.cx != 0);
+    slot = Plus(slot, SLOT_BYTES);
+  }
 }
 
 SafeZone InSafeZone(const GameState& _state)
@@ -2832,6 +2816,9 @@ constexpr Machine::NativeContract Clobbers(std::uint16_t _registers) noexcept
 
 constexpr Machine::NativeContract CARRY_OUT{0, FLAG_CARRY};
 constexpr Machine::NativeContract CLOBBERS_AX = Clobbers(REGISTER_AX);
+// CheckCollisions': all but DS, which the original leaves alone and the flight loop goes on with, and DI, past the slots, from
+// which LaunchPlayerMissile copies (CheckCollisionsEntry).
+constexpr Machine::NativeContract COLLISIONS_CHECKED = Clobbers(REGISTER_ALL & ~REGISTER_DS & ~REGISTER_DI);
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI = Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI);
 // DrawMissileLockIndicator's: CX as the original leaves it, which DrawThreeLineBar's second run reads in CH
 // through UpdateDashboard (ADR-012 item 6).
@@ -3244,6 +3231,15 @@ void UpdatePlayerVelocityEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX_DX);
 }
 
+void CheckCollisionsEntry(Guest& _guest)
+{
+  // DI past the slots it looked at, by the count it loaded, which nothing it does changes: LaunchPlayerMissile, through
+  // ProcessFlightKeys, copies the 64 bytes there.
+  CheckCollisions(_guest.State(), _guest.Devices());
+  _guest.Regs().di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.objectSlotCount)) * ObjectSlot::BYTES);
+  _guest.Clobber(COLLISIONS_CHECKED);
+}
+
 void EngageJumpDriveEntry(Guest& _guest)
 {
   const JumpDriveRequest request = EngageJumpDrive(_guest.State());
@@ -3333,7 +3329,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x290C, "DrawConditionLight", &DrawConditionLightEntry, CLOBBERS_AX_BX_CX_SI_DI},
   NativeEntry{0x2959, "UpdateConditionColor", &UpdateConditionColorEntry, PRESERVES_ALL},
   NativeEntry{0x29D0, "SetUpLocalSpace", &SetUpLocalSpace, Clobbers(REGISTER_ALL)},
-  NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisions, Clobbers(REGISTER_ALL)},
+  NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisionsEntry, COLLISIONS_CHECKED},
   NativeEntry{0x2E63, "InSafeZone", &InSafeZoneEntry, CARRY_OUT},
   NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZoneEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVectorEntry, CLOBBERS_DX_DI_BP},

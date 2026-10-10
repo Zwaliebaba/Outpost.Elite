@@ -26,12 +26,6 @@ void DetonateEnergyBomb(Guest& _guest);
 /// ExplodeObject (CS:4FC1): the object at DI removed, and when it was drawn, its fragments and its cargo barrels spawned.
 void ExplodeObject(Guest& _guest);
 
-/// TryLaunchMissileAtPlayer (CS:543A): the ship at DI launches a missile when it may, with odds BX out of 65536.
-void TryLaunchMissileAtPlayer(Guest& _guest);
-
-/// TryLaunchThargon (CS:5471): a Thargoid at DI launches a Thargon, at odds of 300 in 65536.
-void TryLaunchThargon(Guest& _guest);
-
 /// UpdateMissileAi (CS:54F2): class 2: the missile at DI flies at its target, or the player, and explodes on it.
 void UpdateMissileAi(Guest& _guest);
 
@@ -126,6 +120,15 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
 /// when no slot is free or _kind is none of these.
 std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const ObjectSlot& _launcher, std::uint8_t _kind, bool _backward);
 
+/// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject, the copy backwards when
+/// _backward) when it may: once the player has three kills, while it is hostile, does not hold its fire (CheckSafeZoneHoldFire),
+/// has missiles and nothing blocks firing, at odds of _odds in 65536; one launched is one missile fewer.
+void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _odds, bool _backward);
+
+/// TryLaunchThargon (CS:5471): a Thargoid at _slot with Thargons left launches one (LaunchShipFromObject, the copy backwards
+/// when _backward), at odds of 300 in 65536; one launched is one Thargon fewer.
+void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward);
+
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 /// Returns whether it was.
 bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
@@ -164,6 +167,8 @@ void TryFireLaserAtPlayerEntry(Guest& _guest); ///< DI = the slot, AX, BX = the 
 void LaunchPlayerMissileEntry(Guest& _guest);  ///< DI = the 64 bytes to copy. Clobbers all but DS.
 /// DI = the launcher, DL = what to launch. Out: CF set when launched, DI kept; a Krait returns to CS:DI. AX-DX, SI, BP, ES clobbered.
 void LaunchShipFromObjectEntry(Guest& _guest);
+void TryLaunchMissileAtPlayerEntry(Guest& _guest);    ///< DI = the slot, BX = the odds. Out: DI kept; AX-DX, SI, BP, ES clobbered.
+void TryLaunchThargonEntry(Guest& _guest);            ///< DI = the slot. Out: DI kept; AX-DX, SI, BP, ES clobbered.
 void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
 void CreditKillEntry(Guest& _guest);                  ///< DI = the slot. Out: AX, BX, CX and SI as the original leaves them.
 void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.
