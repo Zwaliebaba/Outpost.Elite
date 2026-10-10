@@ -477,9 +477,6 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
 std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, const ChartKeys& _chart, std::uint8_t _al)
 {
   const KeyPress key = GetKey(_state, _hardware);
-  // GetKey turns interrupts on, and its hook call took the interrupts due then: ReadSteering leaves them off when the IBM stick
-  // does not answer, and its read counts the time an interrupt can fall due in (ADR-014 item 10).
-  _hardware.TakeDueInterrupts();
   std::uint8_t al = AlAfterKey(_al, key);
   const std::uint8_t scanCode = key.scanCode;
   if (scanCode == 0)

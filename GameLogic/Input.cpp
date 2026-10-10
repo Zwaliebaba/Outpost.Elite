@@ -323,6 +323,10 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
   }
   _hardware.EnableInterrupts();
   key.screenshot = SaveScreenshotIfAsked(_state, _hardware);
+  // The interrupts due now that they are on, where GetKey's hook call took them, for every caller that calls it as a value:
+  // ReadSteering leaves them off when the IBM stick does not answer, and its read counts the time one can fall due in (ADR-014
+  // item 10).
+  _hardware.TakeDueInterrupts();
   return key;
 }
 
