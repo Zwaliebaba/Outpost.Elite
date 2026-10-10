@@ -1,6 +1,6 @@
 # ADR-005 — The 8086 interpreter
 
-**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Cpu`, `Machine::Memory`, `Machine::PortBus`, `Machine::HostServices` and the `CpuConformance` runner (ADR-004). **Amended 2026-10-09** with the PC host (ADR-006): the 8259 replaces the interrupt queue (item 3), item 7's figures are brought up to date, and the execution map and the instruction observer are added (items 9 and 10).
+**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Cpu`, `Machine::Memory`, `Machine::PortBus`, `Machine::HostServices` and the `CpuConformance` runner (ADR-004). **Amended 2026-10-09** with the PC host (ADR-006): the 8259 replaces the interrupt queue (item 3), item 7's figures are brought up to date, and the execution map and the instruction observer are added (items 9 and 10). **Superseded 2026-10-10 by [ADR-017](ADR-017-the-interpreter-deleted.md):** the interpreter is deleted (D7). This ADR records what it was.
 
 ## Context
 

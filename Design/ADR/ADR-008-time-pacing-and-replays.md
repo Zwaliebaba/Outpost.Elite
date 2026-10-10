@@ -119,7 +119,7 @@ The fight was played by a scratch program that steered by the targets' positions
 - `GameLogicTests`, which includes it, runs in 14 s with a g++ -O0 build.
 - The corpus executes 8,717 of the 13,831 instructions the static map reaches.
 
-**7. Digests change only by a ruling recorded here, with its cause,** in Phase 3 and Phase 4 alike. Re-recording a replay's digests is `ReferenceRunner --replay FILE --update`. That is how a new replay is finished, and never how a failing one is made to pass.
+**7. Digests change only by a ruling recorded here, with its cause,** in Phase 3 and Phase 4 alike. Re-recording a replay's digests was `ReferenceRunner --replay FILE --update`. That was how a new replay was finished, and never how a failing one was made to pass. Since D7 there is no original to record from (ADR-017), and a digest changes only by a ruling recorded here.
 
 **8. The corpus that the interpreter's deletion waits on** (D7, plan §6.2). Thirteen replays were added on 2026-10-10, so that the corpus reaches the subsystems the plan lists before the interpreter goes.
 
