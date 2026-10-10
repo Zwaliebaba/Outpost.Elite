@@ -8,6 +8,20 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 namespace GameLogicTests
 {
 
+namespace
+{
+
+// The commander's fuel set on every machine of _twin before space loads the commander and docks: TwinSetUp's scenario,
+// written once for the TwinRig and for the NativeTwin that takes its place at D7.
+template <typename Twin> void LoadTheCommanderAfterASetUp(Twin& _twin)
+{
+  _twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+             { _pc.Ram().Write8(Elite::DataSegment(_program), Elite::DS.fuel.offset, 0x20); });
+  _twin.Play("key space; wait 4\ndigest docked");
+}
+
+} // namespace
+
 TEST_CLASS(TwinRigTests)
 {
 public:
@@ -23,9 +37,16 @@ public:
   TEST_METHOD(TwinsTakeTheSameSetUp)
   {
     TwinRig rig("TwinSetUp");
-    rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-             { _pc.Ram().Write8(Elite::DataSegment(_program), Elite::DS.fuel.offset, 0x20); });
-    rig.Play("key space; wait 4\ndigest docked");
+    LoadTheCommanderAfterASetUp(rig);
+  }
+
+  // A twin as D7 leaves it, run today (D20): TwinSetUp's scenario on the native machine alone, on a Dispatcher, each of
+  // its three digests (the boot's, the dock's and the end's) checked against the answers the interpreted original
+  // recorded for TwinSetUp, with no original to compare it with.
+  TEST_METHOD(NativeTwinAloneMeetsTheKnownAnswers)
+  {
+    NativeTwin twin("TwinSetUp");
+    LoadTheCommanderAfterASetUp(twin);
   }
 };
 
