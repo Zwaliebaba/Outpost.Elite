@@ -7,7 +7,7 @@
 - the corpus run three ways;
 - the first 23 entries ported: the maths leaves.
 
-It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 requires.
+It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 requires. **Amended 2026-10-10:** native code waits on a thread of its own (item 8), and each subsystem has its own file (item 9).
 
 ## Context
 
@@ -94,15 +94,24 @@ A call whose original cannot be undone is not compared: its outcome stands, and 
 
 **7. How far Phase 3 has got** is the number of the original's instructions the corpus still executes, from `ReferenceRunner --native --coverage`. The phase's exit is zero. Measured 2026-10-10: interpreted, the corpus executes 8,717 distinct instructions; with this change's native routines, 8,500.
 
-**8. Native code does not wait yet.**
+**8. Native code waits on a thread of its own.**
 
-- **The gap.** A native routine cannot stop in the middle when a run reaches its end (`Pc::RunUntil`'s cycle) and carry on at the next. A call into the original that waits past that point goes on to its return, and counts as an overrun. The corpus tests fail on any overrun.
-- **What needs it.** Plan §5 ports the docked screens, the main loop and the interrupt handlers last, and they wait.
-- **When it is built, and how.** It comes with the first port that needs it: native code will run on a thread of its own, handing control to and from the host strictly in turn. One side runs at a time, so a run stays a function of its inputs (ADR-008).
-- **Alternatives considered and why each was rejected:**
-  - **C++20 coroutines** would make every routine above a wait a coroutine.
-  - **Platform fibers** do not exist where the Linux tools run.
-  - **A routine-by-routine state machine** is the Phase 4 scheduler, built too early.
+- **Which routines.** A routine hooked as one that waits (`NativeEntry::waits`, `Pc::Hook`) runs on the native thread, and so does everything it calls. It waits through `Pc::Wait`, one idle turn of a waiting loop: `Idle`, then the end of the run if that is where the clock now is, then any interrupt now due, taken as the CPU takes it at the loop's next instruction.
+- **How a run ends inside one.** When the clock reaches the end of a run there, in `Wait` or in original code it calls, the native thread hands the machine back and `RunUntil` returns. The next `RunUntil` carries on where it stopped.
+- **Why it stays deterministic.** The host thread and the native thread take turns through two semaphores, so only one runs at a time and a run is still a function of its inputs (ADR-008). `MachineTests` is clean under ThreadSanitizer.
+- **Teardown.** A machine destroyed while a routine waits unwinds the native thread by an exception.
+- **Every other native routine is a plain call,** with no thread switch. If one waits past the end of a run, the call goes on to its return and counts as an overrun. The corpus tests fail on any overrun, which is how a routine that should have been marked as waiting is found.
+- **A routine that waits is never compared.** Its original could not be undone, and the original of `Start` or `GameLoop` would never return. What it calls through hooks is compared instead, each call on its own. So native code that waits calls the work routines through `Guest::Call`, and work routines call each other directly.
+- **The alternatives weighed:**
+  - C++20 coroutines would have made every routine above a wait a coroutine.
+  - Platform fibers do not exist where the Linux tools run.
+  - A state machine for each routine is the Phase 4 scheduler, built too early.
+
+**9. Each subsystem has its own file.**
+
+- **Lists and registration.** The 19 subsystems of Symbols.tsv each have a source file in `GameLogic` with a list of `NativeEntry`, and `InstallNativeRoutines` walks every list. A port therefore touches only its own subsystem's file.
+- **Returns.** An entry says how the original returns: `RET n`, `RETF n`, or `IRET` for an interrupt handler's entry, which is hooked like any other because the CPU takes a due interrupt before it stops at a hook.
+- **What native code can do.** It makes interrupts through `Pc::CallInterrupt`, as it makes calls through `Pc::CallNear`. It reaches the code segment, any segment, CGA memory, the stack and the ports through `Guest`.
 
 ## What this forecloses
 
