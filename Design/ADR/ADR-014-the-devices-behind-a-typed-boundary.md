@@ -1,6 +1,6 @@
 # ADR-014 — The devices behind a typed boundary
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), with taking interrupts where they fall due (item 10), and with `Start`'s DOS services (item 11).
+**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), with taking interrupts where they fall due (item 10), with `Start`'s DOS services (item 11), and by D23, which moves the native devices to Phase 5 (item 3).
 
 ## Context
 
@@ -42,7 +42,7 @@ More operations come as the routines that need them convert: the keyboard, the g
 
 **2. For now, each operation is the original's own sequence of port accesses,** in its order and at its width, through the path `Guest::In8` and `Guest::Out8` take. So the emulated devices, paced time's count of port writes and the comparison see exactly what they saw. Every port access the original makes stays, as every memory write does (ADR-012 item 3).
 
-**3. When D7 deletes the interpreter, `Hardware`'s implementation becomes the native devices, and the routines do not change.** `Hardware` is a concrete class. Today's implementation and the one that replaces it are never needed together, so it has no interface beside it (AGENTS.md R2).
+**3. When D7 deletes the interpreter, `Hardware`'s implementation becomes the native devices, and the routines do not change.** *Amended by D23 (2026-10-10, ADR-018): the interpreter is deleted and `Hardware`'s implementation is still the emulated devices. The native devices are Phase 5's (plan §5), and the routines still do not change when they come.* `Hardware` is a concrete class. Today's implementation and the one that replaces it are never needed together, so it has no interface beside it (AGENTS.md R2).
 
 **4. The interrupt flag belongs to the devices.** STI and CLI are `Hardware` operations, not a register a routine sets. In the end state they gate the scheduler's ticks.
 
