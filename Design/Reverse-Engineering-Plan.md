@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day, D10–D13 after Phase 0's work, and D6 and D14 from Phase 1's findings (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). **Phase 0's work is done on its branch, and closes when that branch is merged:** ADR-001 to ADR-003 are written, the provenance check found this copy cracked (ADR-001), and the three checkers are in `Build/`, with their CI steps no longer guarded.
+**Status:** proposed 2026-10-09; the owner ruled D1–D5, D7 and D8 the same day, D10–D13 after Phase 0's work, and D6 and D14 from Phase 1's findings (§8). D4 was first ruled for the EGA build, then reverted to this file the same day because no EGA build is available, which also made D9 moot. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Phase 0 is closed: ADR-001 to ADR-003 are written, the provenance check found this copy cracked (ADR-001), and the three checkers gate in CI. **Phase 1 is closed (2026-10-10):** its exit's three conditions hold (§5). **Phase 2's exit is met headless (2026-10-10):** the seed corpus boots, docks, launches, flies, fights, hyperspaces, saves and reloads (ADR-008); the Windows shell, which makes it playable, is still to come.
 
 **The goal as stated:** reverse-engineer `ELITEL.EXE` (since D15, its solid-ship build `ELITES.EXE`) so the game runs in a modern Windows environment without major functionality change. **The goal as this plan reads it:** a native x64 C++23 / Direct3D 12 program, built under AGENTS.md, that plays the same game as the DOS original and whose source can be read and changed. §2.1 explains the difference: the first half of the stated goal can be met today without any reverse engineering.
 
@@ -98,7 +98,7 @@ Three questions have to be answered here because later phases depend on them: wh
 
 Phase 1 runs alongside Phase 2: static analysis bounds the routines, and the interpreter's traces show which addresses actually run.
 
-**Exit:** no unclassified byte in the code segment; every routine executed by the replay corpus is in the symbol table with its contract; the three questions are answered in writing.
+**Exit:** no unclassified byte in the code segment; every routine executed by the replay corpus is in the symbol table with its contract; the three questions are answered in writing. *Met 2026-10-10:* every region the static walk does not reach has a row that classifies it; the seed corpus executes 303 routines, entries and handlers, every one named and with a contract; and Reference-Map.md answers the three questions.
 
 ### Phase 2 — The host
 
@@ -106,7 +106,7 @@ An 8086 interpreter covering the instructions this binary uses. Every flag the 8
 
 The shell is a Win32 window with a D3D12 presenter (the original's resolution and palette, integer scale, corrected to 4:3, D8), XAudio2 synthesising the speaker from time-stamped port writes, the keyboard mapped to scan codes, the joystick through XInput, the mouse through raw input, and `.cdr` files in a user folder. The reference binary is read from the repository at start-up, not embedded. The protection patch (D5) is applied to the loaded image from the byte list in ADR-001, so the file keeps its recorded hash and every comparison is against the original plus exactly that patch.
 
-Interrupts are injected at instruction-count boundaries rather than wall-clock moments, so a session recorded as inputs against instruction count replays bit for bit. That replay is the regression gate for everything after it.
+Interrupts land only while the program waits, in paced time (ADR-008), so a session recorded as inputs at moments of paced time replays bit for bit, and goes on doing so as routines are replaced. That replay is the regression gate for everything after it.
 
 ADR-004 settles the projects when the first one is created. A starting point to argue with: an interpreter library; an `Engine` library for the window, D3D12, audio and input; a `GameLogic` library (namespace `Elite`) for the port; the executable; a test project per library, each added to `.clang-tidy`'s `HeaderFilterRegex`.
 
@@ -126,7 +126,7 @@ The interpreter leaves the shipping executable. Video memory becomes a native in
 
 At the end of the phase the interpreter, its harness and the per-routine differential tests are deleted (D7). From then on the replay corpus and §6.4's known answers are the only guard, so the corpus has to be complete before the deletion: every subsystem in §6.2 reached, and every digest re-based under ADR-008.
 
-This is the phase in which replay digests are expected to change, because the interleaving and the clock change. Each change is a ruling recorded in ADR-008 with its cause, never a re-baseline to make CI green.
+Paced time (ADR-008) already lands interrupts where the fixed-tick scheduler will, so the digests are not expected to move here. If one does, the change is a ruling recorded in ADR-008 with its cause, never a re-baseline to make CI green.
 
 **Exit:** the interpreter is gone from the shipping executable and from the tree; the replay corpus, re-based under ADR-008, passes; the game has been played and looked at, not only built (AGENTS.md §3).
 
@@ -142,7 +142,7 @@ First, a published per-instruction test corpus for the 8088 (such as the SingleS
 
 ### 6.2 Replays
 
-Inputs are recorded against instruction count, with a digest of the data segment and video memory at fixed intervals. Phases 2 and 3 never change a digest; Phase 4 changes them only by recorded ruling. The corpus is built to reach every subsystem: trading, every equipment item, combat with each ship type, docking by hand and by computer, hyperspace and galactic hyperspace, witch space, death, the escape pod, saving and loading.
+Inputs are recorded at moments of paced time, with a digest of the data segment and video memory at the points the replay names (ADR-008). Phases 2 and 3 never change a digest; Phase 4 changes them only by recorded ruling. The corpus is built to reach every subsystem: trading, every equipment item, combat with each ship type, docking by hand and by computer, hyperspace and galactic hyperspace, witch space, death, the escape pod, saving and loading.
 
 ### 6.3 Differential tests per routine
 
@@ -183,6 +183,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D13 | What answers a design question | The reference is the design. | **The reference is the design.** AGENTS.md names ADR-001's reference as what the game is and this plan as what sequences the work; the owner rules only where the reference is silent or a change is wanted. |
 | D14 | The 8×8 font for the docked screens' text mode, which the binary does not contain | Draw our own lookalike. | **Draw our own** 8×8 code-page 437 font matching the CGA's, for the characters the game uses. |
 | D15 | Which build is the reference, now that a second one exists | — (raised by the owner) | **`ELITES.EXE`**, the solid-ship build of the same release, replaces `ELITEL.EXE` as the reference, and `ELITEL.EXE` leaves the tree (ADR-007). |
+| D16 | How replays stay a gate through Phase 3, when native routines take none of the original's cycles | Frame replays by the game's own pace and digest at those points; write ADR-008 now. | **Frame-based replays, ADR-008 now** (2026-10-10). ADR-008 does it with paced time. The ruling allowed leaving the timer counters and sound channels out of the digest, and paced time makes that unnecessary. |
 
 ## 9. ADRs this plan produces
 
@@ -195,4 +196,4 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-005](ADR/ADR-005-interpreter.md) | The 8086 interpreter: what one step is, interrupts, timing, and what checks it | Phase 2 — written |
 | [ADR-006](ADR/ADR-006-pc-host.md) | The PC host: the machine the reference runs on, its devices and services, and the headless runner | Phase 2 — written |
 | [ADR-007](ADR/ADR-007-reference-elites.md) | The reference becomes `ELITES.EXE` (D15) | Phase 2 — written |
-| ADR-008 | Time, pacing and the replay digests (D6) | Phase 4, with the change that implements it |
+| [ADR-008](ADR/ADR-008-time-pacing-and-replays.md) | Time, pacing and the replay digests (D6) | Phase 2 — written, moved forward by the owner's ruling of 2026-10-10 |

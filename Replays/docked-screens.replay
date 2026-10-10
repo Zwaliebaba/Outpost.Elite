@@ -1,0 +1,29 @@
+# Every docked screen at Lave, from the start of a game: the status screen it opens on, then F2 to F10
+# and Esc. Both charts move their cursor; the equipment screen buys a missile.
+wait 3
+key space; wait 4                  # any key: the credits, then the status screen
+digest status 792adf1cdbd7874f6ad97b723312a5fbf12086b5637952458669794127a42548
+key F2; wait 1
+digest sell-cargo c3ed0ec986efab0444712b1473e608efef944116f8e6b414c5076757e88904f8
+key F3; wait 1
+digest buy-cargo 50a77972be460404a6af88edaad1db673472fe9a59ea4612f84d954b248c4bf6
+key F4; wait 1
+key Down; wait 0.5                 # from fuel to the missile
+key b; wait 1                      # buy one
+digest equip-bought-missile 11632798c37bee4b25aaa56cd418100b572ca89c799849fe20305db573c5add4
+key F5; wait 1
+down Right; wait 0.3; up Right; wait 0.5
+digest galactic-chart 4859da740299e4381d829b5c217a743d7dd0f1cc75117ab6f54c269ad546960c
+key F6; wait 1
+down Left; wait 0.1; up Left; wait 0.5
+digest short-range-chart 3a9e79b5df1997a1feebc29d9b5374b5dd971a2ac63bb9adad6d9a907eac8afb
+key F7; wait 1                     # data on the system at the cursor: Riedquat
+digest data-on-riedquat 049c9ec52733a60c3dcc223ce11f0cd8d54766e1d6328354aaf4d37e359971cf
+key F8; wait 1
+digest market-prices 5bbb9ba76ec8a7383c726c10f88c0257dd0f66ad72f5637c115332abaca2a9e3
+key F10; wait 1
+digest inventory 9238599fd2abff897aa20e84a570d6cba557c58c74c2b6d9cbc5dcd7cec84713
+key Escape; wait 1
+digest disc-menu ce307ab6ba05d23d28c6adc4f80f4c51e728fb5f40b25a9d52c64a9322d49e2e
+key F9; wait 1
+digest status-again 1db6bc2198a21b003947095c181b53c799a7d75a6445d0f2c119697e29e0a6b9

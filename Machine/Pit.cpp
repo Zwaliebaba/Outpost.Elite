@@ -345,6 +345,15 @@ void Pit::Advance() noexcept
   m_nextEdgeTick = m_channels[0].NextRisingEdge(now);
 }
 
+Cycles Pit::NextInterruptAt() const noexcept
+{
+  if (m_nextEdgeTick == NEVER)
+  {
+    return NO_EVENT;
+  }
+  return static_cast<Cycles>(m_nextEdgeTick) * CYCLES_PER_PIT_TICK;
+}
+
 bool Pit::OutputAt(std::size_t _channel, Cycles _cycle) const noexcept
 {
   return m_channels[_channel].OutputHigh(TickAt(_cycle));

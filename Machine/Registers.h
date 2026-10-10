@@ -41,6 +41,8 @@ struct Registers
   std::uint16_t ss = 0;
   std::uint16_t ip = 0;
   std::uint16_t flags = FLAGS_FIXED_ONES;
+
+  [[nodiscard]] bool operator==(const Registers&) const noexcept = default;
 };
 
 } // namespace Machine

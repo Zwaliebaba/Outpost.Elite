@@ -161,6 +161,64 @@ public:
                      Machine::Sha256::ToHex(Machine::Sha256::Of(pc->Ram().Bytes())).c_str());
   }
 
+  // Paced time (ADR-008): a loop that counts is work, and work takes no time.
+  TEST_METHOD(PacedWorkTakesNoTime)
+  {
+    PcRig rig("PacedWork");
+    (void)rig.Load(TinyExe({0xB9, 0xE8, 0x03, 0xE2, 0xFE, 0xCD, 0x20})); // mov cx,1000; loop $; int 20h
+    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated);
+    Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"no time passed");
+    Assert::IsTrue(rig.Host().InstructionCycles() > 1'000u, L"the instructions still have their cycles");
+  }
+
+  // A loop that waits for the BIOS tick count to change changes nothing on its turns, so the clock
+  // moves from event to event until the first IRQ0, at cycle 262,144, and the loop ends right there.
+  TEST_METHOD(PacedWaitEndsAtTheEventItWaitsFor)
+  {
+    PcRig rig("PacedWait");
+    (void)rig.Load(TinyExe({0xFB,                   // sti
+                            0xBB, 0x40, 0x00,       // mov bx,40h
+                            0x8E, 0xDB,             // mov ds,bx
+                            0xA1, 0x6C, 0x00,       // mov ax,[6Ch]
+                            0x3B, 0x06, 0x6C, 0x00, // wait: cmp ax,[6Ch]
+                            0x74, 0xFA,             // je wait
+                            0xCD, 0x20}));          // int 20h
+    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated);
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+  }
+
+  TEST_METHOD(PacedHaltWaitsForTheNextInterrupt)
+  {
+    PcRig rig("PacedHalt");
+    (void)rig.Load(TinyExe({0xFB, 0xF4, 0xCD, 0x20})); // sti; hlt; int 20h
+    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated);
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+  }
+
+  // An idle loop with interrupts off waits for ever, as on the real machine; the run reaches its end.
+  TEST_METHOD(PacedIdleLoopRunsToTheLimit)
+  {
+    PcRig rig("PacedLimit");
+    (void)rig.Load(TinyExe({0xFA, 0xEB, 0xFE})); // cli; jmp $
+    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+    Assert::IsTrue(rig.Host().RunUntil(500'000) == Machine::StopReason::Reached);
+    Assert::AreEqual(std::uint64_t{500'000}, rig.Host().Clock());
+  }
+
+  // A loop that changes something every turn never waits, so paced time would stand still for ever.
+  TEST_METHOD(PacedSpinIsStopped)
+  {
+    PcRig rig("PacedSpin");
+    (void)rig.Load(TinyExe({0xFB, 0x40, 0xEB, 0xFD})); // sti; inc ax; jmp back to the inc
+    rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+    rig.Host().SetSpinLimit(10'000);
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
+    Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock());
+  }
+
   TEST_METHOD(RunsAreIdenticalToTheCycle)
   {
     std::uint64_t clocks[2] = {};

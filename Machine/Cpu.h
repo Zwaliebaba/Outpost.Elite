@@ -109,10 +109,16 @@ public:
     return m_halted;
   }
 
-  /// Instructions executed since construction or Reset(): the clock replays are recorded against.
+  /// Instructions executed since construction or Reset().
   [[nodiscard]] std::uint64_t InstructionCount() const noexcept
   {
     return m_instructionCount;
+  }
+
+  /// Hardware interrupts taken since construction or Reset().
+  [[nodiscard]] std::uint64_t HardwareInterruptCount() const noexcept
+  {
+    return m_hardwareInterrupts;
   }
 
   static constexpr std::uint32_t HALT_IDLE_CYCLES = 4;
@@ -198,6 +204,7 @@ private:
   std::vector<std::uint8_t>* m_executionMap = nullptr;
   InstructionObserver* m_observer = nullptr;
   std::uint64_t m_instructionCount = 0;
+  std::uint64_t m_hardwareInterrupts = 0;
   std::uint32_t m_cycles = 0;
 
   // Prefix state for the instruction being executed.

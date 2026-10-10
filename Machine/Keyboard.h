@@ -56,6 +56,12 @@ public:
   /// Delivers the next code if its time has come.
   void Advance();
 
+  /// The cycle at which the next code is delivered, or NO_EVENT if none is on its way.
+  [[nodiscard]] Cycles NextDeliveryAt() const noexcept
+  {
+    return m_scheduled ? m_deliverAt : NO_EVENT;
+  }
+
   [[nodiscard]] std::uint8_t In8(std::uint16_t _port) override;
   void Out8(std::uint16_t _port, std::uint8_t _value) override;
 

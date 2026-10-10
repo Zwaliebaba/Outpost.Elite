@@ -1,6 +1,6 @@
 # ADR-003 — Verification
 
-**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8. **Amended 2026-10-09:** item 1's boot trace and static screens, after the first DOSBox-X traces and the CGA showed that neither could be compared the way this ADR first said.
+**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8. **Amended 2026-10-09:** item 1's boot trace and static screens, after the first DOSBox-X traces and the CGA showed that neither could be compared the way this ADR first said. **Amended 2026-10-10:** item 2's replays are recorded in paced time and digested as ADR-008 says.
 
 ## Context
 
@@ -38,7 +38,7 @@ The owner has ruled that the interpreter does not outlive Phase 4 (D7). The C64 
   - **The title's ship turns**, so a screenshot catches whichever frame the wall clock gives. It is compared with the host frame that matches it, and finding no match is the failure.
   - **The status, market, equipment and inventory screens** are text mode, drawn with our own font (D14), which is close to the CGA's but not the same. They are compared by character and attribute in video memory, not by pixel.
 
-**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs recorded against the interpreter's instruction count, not against wall-clock time, so it reproduces bit for bit. At fixed intervals it records a digest of the data segment and video memory. Phases 2 and 3 never change a digest. Phase 4 changes them only through ADR-008, which records the cause of each change. The corpus is built to reach every subsystem:
+**2. Replays are the regression gate from Phase 2 onward.** A replay is a list of inputs played in paced time (ADR-008), not against wall-clock time or the interpreter's instruction count, so it reproduces bit for bit however long the code between two waits takes. At points the replay names, it records a digest of the data segment and video memory (ADR-008 item 5). Phases 2 and 3 never change a digest, and Phase 4 changes one only through ADR-008, which records the cause. The corpus is built to reach every subsystem:
 
 - trading, and every equipment item;
 - combat with every ship type;

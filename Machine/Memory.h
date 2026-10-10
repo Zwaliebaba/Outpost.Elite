@@ -37,7 +37,12 @@ public:
 
   void Write8(std::uint32_t _linear, std::uint8_t _value) noexcept
   {
-    m_bytes[_linear & ADDRESS_MASK] = _value;
+    std::uint8_t& byte = m_bytes[_linear & ADDRESS_MASK];
+    if (byte != _value)
+    {
+      byte = _value;
+      ++m_changes;
+    }
   }
 
   [[nodiscard]] std::uint16_t Read16(std::uint32_t _linear) const noexcept
@@ -80,6 +85,14 @@ public:
   /// Sets every byte to zero.
   void Clear() noexcept;
 
+  /// Writes that changed a byte, counted since construction. A write of the value already there is
+  /// not counted, so a loop that only stores what it found leaves the count alone: Pc's paced time
+  /// uses that to tell a program that is waiting from one that is working.
+  [[nodiscard]] std::uint64_t ChangeCount() const noexcept
+  {
+    return m_changes;
+  }
+
   /// The whole address space, for loaders, snapshots and the conformance runner.
   [[nodiscard]] std::span<std::uint8_t> Bytes() noexcept
   {
@@ -93,6 +106,7 @@ public:
 
 private:
   std::vector<std::uint8_t> m_bytes;
+  std::uint64_t m_changes = 0;
 };
 
 } // namespace Machine

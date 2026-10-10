@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 namespace Machine
 {
@@ -23,6 +24,10 @@ inline constexpr Cycles CGA_CYCLES_PER_LINE = 304;
 inline constexpr std::uint32_t CGA_LINES_PER_FRAME = 262;
 inline constexpr std::uint32_t CGA_VISIBLE_LINES = 200;
 inline constexpr Cycles CGA_CYCLES_PER_FRAME = CGA_CYCLES_PER_LINE * CGA_LINES_PER_FRAME;
+
+/// The time of an event that is not coming: what a device's "next event" query returns when it has
+/// nothing scheduled.
+inline constexpr Cycles NO_EVENT = std::numeric_limits<Cycles>::max();
 
 /// Converts a duration in microseconds to CPU cycles, rounding down.
 [[nodiscard]] constexpr Cycles MicrosecondsToCycles(std::uint64_t _microseconds) noexcept

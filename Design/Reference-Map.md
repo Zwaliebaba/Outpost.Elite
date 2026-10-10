@@ -381,4 +381,4 @@ The waits on vertical retrace at 0x45FF and 0x05CC precede block copies to the s
 
 ## Naming status
 
-Every range is named: 384 of 387 routines, with Routine3F02, Routine7D4E and Routine8C51 left by their addresses and described in their notes, and 412 of the 444 data addresses the code references. `python Tools/MapReference.py` prints the current counts. A name is a claim, and a claim with no evidence in its notes is a defect in the table.
+Every range is named: 386 of 387 routines, with Routine8C51, which the replay corpus does not run, left by its address and described in its notes, and 412 of the 444 data addresses the code references. `python Tools/MapReference.py` prints the current counts. A name is a claim, and a claim with no evidence in its notes is a defect in the table.

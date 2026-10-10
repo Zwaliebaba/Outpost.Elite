@@ -103,6 +103,10 @@ public:
   /// Raises IRQ0 if channel 0's output rose since the last call.
   void Advance() noexcept;
 
+  /// The cycle at which the next IRQ0 is due: channel 0's next rising edge after the last Advance(),
+  /// or NO_EVENT if its output will not rise again as it is programmed.
+  [[nodiscard]] Cycles NextInterruptAt() const noexcept;
+
   /// Port 0x61 bit 0. Not noexcept: the speaker logs the change.
   void SetChannel2Gate(bool _high);
 
