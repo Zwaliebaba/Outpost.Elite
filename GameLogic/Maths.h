@@ -12,10 +12,9 @@
 namespace Elite
 {
 
-// The reference's arithmetic, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the routines
-// take values and give values back, and their entries, below, keep the register contracts the hooks and
-// the callers not yet de-assembled use. The divides that go through the game's trap are value routines
-// too.
+// The reference's arithmetic, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the maths leaves, the divides that go through
+// the game's trap, and the trap. Each takes values and gives values back, on the GameState and, where it drives a device, the devices
+// (ADR-014). The divide trap also has its entry, at the end, which int 0 reaches (ADR-010).
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MathsEntries() noexcept;
@@ -193,33 +192,8 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 /// and rotationSinCos[8], which it sets.
 [[nodiscard]] Angles ConvertVectorToAngles(GameState& _state, Vector _vector);
 
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-//
-// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes
-// its results back there. The registers the contract leaves to the routine it hands to Guest::Clobber,
-// unless a caller reads what the original leaves in one: then the entry leaves that, and the contract
-// compares it (VectorWithinBoxEntry, and BP of the two angle entries).
+// ── The entry of the divide trap ──
 
 void DivideOverflowInterruptEntry(Guest& _guest); ///< The return address on the stack, IP then CS; DS the divide's.
-void NextRandomEntry(Guest& _guest);
-void SetSinCosEntry(Guest& _guest, std::uint16_t _pairOffset); ///< BX = _pairOffset, an entry of rotationSinCos
-void RotateBySinCosEntry(Guest& _guest);
-void RotateByStoredSinCosEntry(Guest& _guest, std::uint16_t _pairOffset);
-void ArcTangent2Entry(Guest& _guest);
-void QuadrantArcTangentEntry(Guest& _guest);
-void RatioArcTangentEntry(Guest& _guest);
-void AngleWithinToleranceEntry(Guest& _guest);
-void VectorLengthEntry(Guest& _guest);
-void ObjectWithinBoxEntry(Guest& _guest);
-void VectorWithinBoxEntry(Guest& _guest);
-void RotatePitchYawRollEntry(Guest& _guest);
-void RotateRollYawPitchEntry(Guest& _guest);
-void RotateBySinCos7210Entry(Guest& _guest);
-void ScaleByInverseDistanceEntry(Guest& _guest);
-void ShiftRight24Entry(Guest& _guest);
-void GetPositionScaleShiftEntry(Guest& _guest);
-void ScalePositionDownEntry(Guest& _guest);
-void ComputeAnglesToObjectEntry(Guest& _guest);
-void ConvertVectorToAnglesEntry(Guest& _guest);
 
 } // namespace Elite

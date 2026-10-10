@@ -3,20 +3,15 @@
 
 #include "GameState.h"
 #include "Hardware.h"
-#include "NativeEntry.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's sound routines, ported (plan §5 Phase 3, ADR-010): the sound effects and the title tune. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> SoundEntries() noexcept;
+// The reference's sound routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the sound effects and the title tune. Each
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
@@ -67,22 +62,5 @@ std::optional<std::uint8_t> StartLaserSound(GameState& _state);
 /// StartPlayerHitSound (CS:7B96): 100 ticks of noise, the tone sweep and the two-tone stopped. The original does it
 /// under CLI.
 void StartPlayerHitSound(GameState& _state);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-void StartMusicEntry(Guest& _guest);            ///< AX clobbered.
-void StopAllSoundEntry(Guest& _guest);          ///< AX clobbered; IF=1.
-void SilenceSpeakerTimerEntry(Guest& _guest);   ///< AX clobbered.
-void EmitNoiseSampleEntry(Guest& _guest);       ///< Out: AL, the port 61h value.
-void ToggleSpeakerEntry(Guest& _guest);         ///< Out: AL, the port 61h value.
-void StartBeepEntry(Guest& _guest);             ///< Preserves every register.
-void StartLowBeepEntry(Guest& _guest);          ///< Preserves every register.
-void StopSoundEffectsEntry(Guest& _guest);      ///< Out: IF=1.
-void StartImpactSoundEntry(Guest& _guest);      ///< AL clobbered; IF set on return.
-void StartExplosionSoundEntry(Guest& _guest);   ///< Out: AL the step length, AH as it was; IF=1.
-void StartPlayerDeathSoundEntry(Guest& _guest); ///< Out: AL the step length, AH as it was; IF=1.
-void StopContinuousNoiseEntry(Guest& _guest);   ///< Preserves every register.
-void StartLaserSoundEntry(Guest& _guest);       ///< AL clobbered; IF set on return when it starts a sweep.
-void StartPlayerHitSoundEntry(Guest& _guest);   ///< Out: IF=1.
 
 } // namespace Elite

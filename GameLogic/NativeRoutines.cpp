@@ -2,25 +2,11 @@
 
 #include "NativeRoutines.h"
 
-#include "Ai.h"
-#include "Combat.h"
-#include "Docked.h"
-#include "Docking.h"
-#include "Equipment.h"
-#include "Flight.h"
-#include "Galaxy.h"
-#include "Hyperspace.h"
 #include "Input.h"
-#include "Market.h"
 #include "Maths.h"
 #include "SaveLoad.h"
-#include "Scene.h"
-#include "Ships.h"
-#include "Sound.h"
 #include "StartUp.h"
-#include "Text.h"
 #include "Timer.h"
-#include "Video.h"
 #include "Reference.h"
 
 namespace Elite
@@ -31,12 +17,9 @@ namespace
 
 using EntryList = std::span<const NativeEntry> (*)() noexcept;
 
-// Every subsystem's list of ported entries (plan §5 Phase 3).
-constexpr std::array<EntryList, 19> SUBSYSTEMS = {
-  &AiEntries,         &CombatEntries,  &DockedEntries, &DockingEntries, &EquipmentEntries, &FlightEntries, &GalaxyEntries,
-  &HyperspaceEntries, &InputEntries,   &MarketEntries, &MathsEntries,   &SaveLoadEntries,  &SceneEntries,  &ShipsEntries,
-  &SoundEntries,      &StartUpEntries, &TextEntries,   &TimerEntries,   &VideoEntries,
-};
+// The lists of the subsystems with an entry the program reaches: the program's own, and the interrupt handlers the vector table
+// names.
+constexpr std::array<EntryList, 5> SUBSYSTEMS = {&InputEntries, &MathsEntries, &SaveLoadEntries, &StartUpEntries, &TimerEntries};
 
 } // namespace
 
@@ -73,16 +56,6 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
         entry.contract, exit, entry.wait);
     }
   }
-}
-
-std::size_t NativeRoutineCount() noexcept
-{
-  std::size_t count = 0;
-  for (const EntryList entries : SUBSYSTEMS)
-  {
-    count += entries().size();
-  }
-  return count;
 }
 
 } // namespace Elite

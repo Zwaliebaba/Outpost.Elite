@@ -2,21 +2,18 @@
 #pragma once
 
 #include "Docked.h"
-#include "NativeEntry.h"
+#include "GameState.h"
+#include "Hardware.h"
 #include "Text.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's galaxy routines, ported (plan §5 Phase 3, ADR-010): the procedural galaxy, its systems and the charts. All of them
-// are de-assembled (ADR-012): they take values and give values back, and their entries, at the end, keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> GalaxyEntries() noexcept;
+// The reference's galaxy routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the procedural galaxy, its systems and the
+// charts. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -242,48 +239,5 @@ std::uint16_t NextDescriptionRandom(GameState& _state);
 /// CopySelectedNameLower (CS:7124): selectedSystemName, terminated, into descriptionNameBuffer, all but its first
 /// letter lower-cased, then a space and a NUL. Returns the offset of the space.
 std::uint16_t CopySelectedNameLower(GameState& _state);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-//
-// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
-// results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
-
-/// In: ES the screen, as ShowGalacticChart's _segment. Out: AX the closing key, BP as SelectSystemAtCursor's search leaves it,
-/// ES = B800h and DF clear; BX, CX, DX, SI and DI clobbered.
-void ShowGalacticChartEntry(Guest& _guest);
-void ShowShortRangeChartEntry(Guest& _guest); ///< As ShowGalacticChartEntry.
-void DrawChartItemsEntry(Guest& _guest);      ///< Out: ES = DS once a disc is drawn. Every other register but DS clobbered.
-void GetShortRangeOffsetEntry(Guest& _guest);
-void IsSystemOnChartEntry(Guest& _guest);
-void TwistSystemSeedsEntry(Guest& _guest);
-void LoadGalaxySeedsEntry(Guest& _guest);
-void GetCursorGalaxyPositionEntry(Guest& _guest);
-void MoveCursorToSystemEntry(Guest& _guest);
-void SelectSystemAtCursorEntry(Guest& _guest); ///< In: BP, the count when no system is on the chart.
-void FindNearestSystemEntry(Guest& _guest);    ///< In: BP, the count when no system is on the chart.
-void ComputeDistanceToSystemEntry(Guest& _guest);
-void ShowNearestSystemDistanceEntry(Guest& _guest); ///< In: BP, as SelectSystemAtCursorEntry; ES the screen.
-void LoadSystemSeedsEntry(Guest& _guest);           ///< In: CL the system. Out: CX = 0.
-void AdvanceToNextSystemEntry(Guest& _guest);
-void GenerateSystemNameEntry(Guest& _guest);
-void FindSystemByNameEntry(Guest& _guest);     ///< In: ES the chart's segment, BP as SelectSystemAtCursorEntry. Clobbers all but DS.
-void ShowSystemDataScreenEntry(Guest& _guest); ///< In: BP as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
-void PlaceChartLabelsEntry(Guest& _guest);
-void AddChartLabelEntry(Guest& _guest);
-void NudgeChartLabelEntry(Guest& _guest);
-void ChartItemOverlapsEntry(Guest& _guest);
-void ClearChartTextLinesEntry(Guest& _guest); ///< In: BX the ink, ES the screen.
-void TerminateSelectedSystemNameEntry(Guest& _guest);
-void FormatSelectedSystemDistanceEntry(Guest& _guest);
-void ShowSystemDescriptionEntry(Guest& _guest);
-void ExpandDescriptionTextEntry(Guest& _guest); ///< In: SI the coded text, DI the output. Out: SI past its NUL, DI past the output.
-void InsertSystemNameEntry(Guest& _guest);      ///< In: DI the output. Out: DI past it.
-void InsertSystemAdjectiveEntry(Guest& _guest); ///< In: DI the output. Out: DI past it.
-void InsertRandomNameEntry(Guest& _guest);      ///< In: DI the output. Out: DI past it.
-void BackspaceDescriptionEntry(Guest& _guest);
-void StartCapitalizingEntry(Guest& _guest);
-void StopCapitalizingEntry(Guest& _guest);
-void NextDescriptionRandomEntry(Guest& _guest);
-void CopySelectedNameLowerEntry(Guest& _guest);
 
 } // namespace Elite

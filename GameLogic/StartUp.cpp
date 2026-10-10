@@ -400,98 +400,15 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   }
 }
 
-// ── The entries of the de-assembled routines ──
+// ── The entry of the program ──
 
 namespace
 {
 
-using Machine::REGISTER_ALL;
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BP;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DI;
-using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
-using Machine::REGISTER_SI;
-
-constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_SI{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
-// GameLoop's: all but DS, and BP, which Start hands back to it after a disk request (GameLoopEntry).
-constexpr Machine::NativeContract LOOPS_GAME{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
-// CopyProtection never writes ES, and Start goes on with it into InstallDivideAndKeyboardInterrupts, which takes the
-// interrupt table's segment there: compared.
-constexpr Machine::NativeContract PROTECTION{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF{REGISTER_AX | REGISTER_CX | REGISTER_DI | REGISTER_ES,
-                                                                      Machine::FLAG_INTERRUPT};
-// ShowCredits': all but DS, and BP, which the status screen after the title reads (ShowCreditsEntry).
-constexpr Machine::NativeContract SHOWS_CREDITS{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
 // Start sets DS to the data segment, and never returns.
-constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{REGISTER_ALL, 0};
-
-constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
-constexpr Machine::NativeWait SOMETIMES = Machine::NativeWait::Sometimes;
+constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{Machine::REGISTER_ALL, 0};
 
 } // namespace
-
-void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  InstallDivideAndKeyboardInterrupts(_guest.State(), _guest.Devices(), regs.es);
-  // ES on the CGA's memory through AX.
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  _guest.Clobber(CLOBBERS_AX);
-}
-
-void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest)
-{
-  RestoreDivideAndKeyboardInterrupts(_guest.State(), _guest.Devices());
-  _guest.Regs().es = 0;
-  _guest.Clobber(CLOBBERS_AX);
-}
-
-void CheckCheatArgumentEntry(Guest& _guest)
-{
-  CheckCheatArgument(_guest.State());
-  _guest.Clobber(CLOBBERS_AX_BX_CX_SI);
-}
-
-void WipeProgramEntry(Guest& _guest)
-{
-  WipeProgram(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF);
-}
-
-void CopyProtectionEntry(Guest& _guest)
-{
-  CopyProtection(_guest.State(), _guest.Devices());
-  _guest.Clobber(PROTECTION);
-}
-
-void ShowCreditsEntry(Guest& _guest)
-{
-  ShowCredits(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // FinishSpaceViewFrame's CLD, which StartNewGame's copy goes by after it, and PresentSpaceView's MOV BP,20h, which the status
-  // screen after the title hands SelectSystemAtCursor as the count when no system is on the chart; WaitForTimerTick keeps both.
-  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-  _guest.Regs().bp = PRESENT_SPACE_VIEW_BP;
-  _guest.Clobber(SHOWS_CREDITS);
-}
-
-void StartNewGameEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  StartNewGame(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // MOV AX,DS / MOV ES,AX for the copy.
-  regs.ax = regs.ds;
-  regs.es = regs.ds;
-  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
-}
 
 void StartEntry(Guest& _guest)
 {
@@ -509,31 +426,11 @@ void StartEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_EVERY_REGISTER);
 }
 
-void GameLoopEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const GameLoopExit exit = GameLoop(_guest.State(), _guest.Devices(), regs.bp, _guest.Flag(Machine::FLAG_DIRECTION));
-  // Once the disc menu leaves for the disk: BP and the direction flag as the docked screens leave them, which Start hands back to
-  // GameLoop after the request. The hook's RET is RunTitleAndDocked's, which LeaveGameLoopForDisk left to return into Start.
-  regs.bp = exit.countLeft;
-  _guest.SetFlag(Machine::FLAG_DIRECTION, exit.backward);
-  _guest.Clobber(LOOPS_GAME);
-}
-
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0000, "Start", &StartEntry, CLOBBERS_EVERY_REGISTER, Machine::NativeReturn::Far, 0, ALWAYS},
-  NativeEntry{0x0105, "InstallDivideAndKeyboardInterrupts", &InstallDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
-  NativeEntry{0x0148, "RestoreDivideAndKeyboardInterrupts", &RestoreDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
-  NativeEntry{0x02A5, "CheckCheatArgument", &CheckCheatArgumentEntry, CLOBBERS_AX_BX_CX_SI},
-  // CopyProtection waits on the question's path, in its loops and WaitForTimerTick, which the D5 byte closes.
-  NativeEntry{0x04A3, "CopyProtection", &CopyProtectionEntry, PROTECTION, Machine::NativeReturn::Near, 0, SOMETIMES},
-  NativeEntry{0x0554, "WipeProgram", &WipeProgramEntry, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
-  NativeEntry{0x4671, "StartNewGame", &StartNewGameEntry, CLOBBERS_AX_CX_SI_DI},
-  NativeEntry{0x7D30, "GameLoop", &GameLoopEntry, LOOPS_GAME, Machine::NativeReturn::Near, 0, ALWAYS},
-  NativeEntry{0x8F02, "ShowCredits", &ShowCreditsEntry, SHOWS_CREDITS, Machine::NativeReturn::Near, 0, ALWAYS},
+  NativeEntry{0x0000, "Start", &StartEntry, CLOBBERS_EVERY_REGISTER, Machine::NativeReturn::Far, 0, Machine::NativeWait::Always},
 };
 
 } // namespace

@@ -10,8 +10,9 @@
 namespace Elite
 {
 
-// The reference's save-load routines, ported (plan §5 Phase 3, ADR-010): saving and loading commanders. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// The reference's save-load routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): saving and loading commanders. Each
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014). The critical-error handler
+// also has its entry, at the end, which int 24h reaches (ADR-010).
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SaveLoadEntries() noexcept;
@@ -61,24 +62,8 @@ void PrintCommanderCatalogue(GameState& _state);
 /// going up, or down from each start when _backward (REP MOVSB with the direction flag set).
 void SaveStartupCommander(GameState& _state, bool _backward);
 
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+// ── The entry of the critical-error handler ──
 
 void CriticalErrorInterruptEntry(Guest& _guest); ///< Out: AL=0, AH the data segment's high byte.
-
-void PerformDiskRequestEntry(Guest& _guest); ///< In: AL=the request, CX=the attributes a listing searches with. AX, BX, CX, DX,
-                                             ///< SI and DI clobbered.
-
-void ShowDiskErrorEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
-
-void PrintCommanderCatalogueEntry(Guest& _guest); ///< Out: ES=B800h; every general register clobbered.
-
-/// Out: AX the F-key that ends it, or after LeaveGameLoopForDisk's pops the return address it took last; ES=B800h; the other
-/// general registers clobbered.
-void ShowDiscControlScreenEntry(Guest& _guest);
-
-/// Out: CF=0 for a good name. A bad name drops the return address and reads the menu's keys on, as ShowDiscControlScreenEntry.
-void PromptCommanderFileNameEntry(Guest& _guest);
-
-void SaveStartupCommanderEntry(Guest& _guest); ///< AX, CX, SI, DI and ES clobbered.
 
 } // namespace Elite

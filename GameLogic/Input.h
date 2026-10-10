@@ -11,9 +11,9 @@
 namespace Elite
 {
 
-// The reference's input routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the keyboard, the joystick and
-// the mouse. The routines take values and give values back, on the GameState and the devices (ADR-014), and their entries keep
-// the register contracts.
+// The reference's input routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the keyboard, the joystick and the mouse.
+// Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014). The keyboard's interrupt
+// handler also has its entry, at the end, which int 9 reaches (ADR-010).
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> InputEntries() noexcept;
@@ -110,27 +110,11 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 bool PollScreenDumpKey(GameState& _state, Hardware& _hardware);
 
 /// ApplyReverseControls (CS:8EA5): the reversing options on _steering: reverseYControl negates the pitch, and
-/// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH: its entry calls this.
+/// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH, and its callers call this.
 [[nodiscard]] Steering ApplyReverseControls(const GameState& _state, Steering _steering);
 
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+// ── The entry of the keyboard's interrupt handler ──
 
-void KeyboardInterruptEntry(Guest& _guest);        ///< Preserves every register.
-void ReadJoystickAxesEntry(Guest& _guest);         ///< In: AL, to fire. Out: CF=1 on a time-out; BX=X, CX=Y, DX=201h; AX clobbered.
-void IsMouseDriverInstalledEntry(Guest& _guest);   ///< Out: ZF=0 if installed; ES the vector's segment.
-void ResetKeyboardEntry(Guest& _guest);            ///< Out: IF=1.
-void ReadScanCodeEntry(Guest& _guest);             ///< AX clobbered.
-void ReadFireButtonEntry(Guest& _guest);           ///< Out: CF=1 while fire is pressed; AX, BX, CX and DX clobbered.
-void ReadMouseSteeringEntry(Guest& _guest);        ///< Out: AL=roll, AH=pitch; BX, CX and DX clobbered.
-void ResetMouseIfSelectedEntry(Guest& _guest);     ///< AX and BX clobbered.
-void ReadKeyboardSteeringEntry(Guest& _guest);     ///< Out: AL=roll, AH=pitch; BX clobbered.
-void ApplyReverseControlsEntry(Guest& _guest);     ///< In/out: AL=roll, AH=pitch.
-void ApplyReverseControlsToDxEntry(Guest& _guest); ///< In/out: DL=roll, DH=pitch.
-void WaitForKeyPressEntry(Guest& _guest);          ///< Out: AH=scan code, AL=AL<<1 | Shift, as GetKey leaves them.
-void ReadSteeringEntry(Guest& _guest);             ///< In: AL, to fire the stick. Out: AL=roll, AH=pitch; BX, CX and DX clobbered.
-/// Out: ZF=0, AH=scan code and AL=AL<<1 | Shift; or ZF=1 and AH=0 when there is none. IF=1, and ES=B800h after a screenshot.
-void GetKeyEntry(Guest& _guest);
-void ReadJoystickSteeringEntry(Guest& _guest); ///< In: AL, to fire the stick. Out: AL=roll, AH=pitch; BX, CX and DX clobbered.
-void PollScreenDumpKeyEntry(Guest& _guest);    ///< Out: ES=B800h after a screenshot.
+void KeyboardInterruptEntry(Guest& _guest); ///< Preserves every register.
 
 } // namespace Elite

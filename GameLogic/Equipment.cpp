@@ -18,10 +18,6 @@ namespace Elite
 namespace
 {
 
-using Machine::FLAG_CARRY;
-using Machine::FLAG_ZERO;
-using Machine::Registers;
-
 // Where the original's backward jumps land, for the turns of its loops (Hardware::LoopTurn).
 constexpr std::uint16_t EQUIPMENT_LIST_ROW = 0x5C1E;
 constexpr std::uint16_t EQUIP_STEER = 0x612F;
@@ -93,7 +89,6 @@ constexpr std::uint16_t NO_LASER_ON_MOUNT_TEXT = 0x8E06;
 constexpr std::uint16_t WRONG_LASER_TYPE_TEXT = 0x8E1A;
 
 constexpr std::uint16_t SCREEN_PRICES = 0x823B;   // four bytes a row: the price, then the resale price, in tenths
-constexpr std::uint8_t TENTHS_DIGITS_BLANKED = 3; // the leading zeros FormatTenths blanks
 constexpr std::uint8_t RESALE_DIGITS_BLANKED = 3; // and those the equipment screen blanks in a resale price
 
 // The equipment menu's rows, from 1. Row r's fitted count is the byte at FITTED_BEFORE_FUEL + r: fuel's is row 1.
@@ -228,15 +223,6 @@ PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
   const PrintedText printed = PrintTextModeString(_state, _text, cell);
   _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
   return printed;
-}
-
-// What PrintEquipmentSellColumn leaves in the registers: PrintTextModeString's, the resale price's attribute in AH.
-void SellColumnOut(Registers& _regs, PrintedText _printed) noexcept
-{
-  _regs.si = _printed.end;
-  _regs.di = _printed.nextCell;
-  _regs.es = Guest::VIDEO_SEGMENT;
-  _regs.ax = Join(SELL_PRICE_ATTRIBUTE, 0);
 }
 
 // The place of the laser type name's pointer for mount _mount, from its two bits of laserMountTypes _types.
@@ -1012,202 +998,6 @@ KeyPress PollMenuKey(GameState& _state, Hardware& _hardware, std::uint16_t _tick
     _hardware.LoopTurn(_tickLoop, {ticks});
   }
   return GetKey(_state, _hardware);
-}
-
-// ── The entries of the de-assembled routines ──
-
-namespace
-{
-
-using Machine::NativeContract;
-using Machine::NativeReturn;
-using Machine::NativeWait;
-using Machine::REGISTER_ALL;
-
-// Symbols.tsv's "clobbers all", but for DS, which the original keeps and its caller goes on with.
-constexpr NativeContract CLOBBERS_ALL_BUT_DS{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
-constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
-constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
-// The menus' and the equipment screen's: all but AX, the closing key in AH, and DS.
-constexpr NativeContract SHOWS_SCREEN{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_AX & ~Machine::REGISTER_DS), 0};
-
-} // namespace
-
-void LaunchEscapePodEntry(Guest& _guest)
-{
-  LaunchEscapePod(_guest.State());
-  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
-}
-
-void TryScoopObjectEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  const Vector view{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)};
-  const ObjectSlot slot(_guest.State(), regs.di);
-  const Scoop scoop = TryScoopObject(_guest.State(), slot, view);
-  // The contract keeps every register, so the entry leaves what the original does: DX with the free tonnes in DL, then what the
-  // box's test measured last, and once RemoveObject erases a blip, EraseScannerBlip's DX and ES. AX, BX and CX are pushed and
-  // popped round the scoop.
-  regs.dx = TestScoopBox(view).lastMeasure.value_or(WithLow(regs.dx, _guest.Get(DS.freeCargoTonnes)));
-  if (scoop.removedBlip)
-  {
-    EraseScannerBlipOut(_guest, slot, scoop.removedBlip);
-    regs.ax = x;
-    regs.bx = y;
-    regs.cx = z;
-  }
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void PayForEquipmentItemEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const EquipmentPayment payment = PayForEquipmentItem(_guest.State(), regs.bx);
-  // AX the price and BX 0, as SubtractCredits takes them, and for fuel DX the price word with the divisor in DL; SI where
-  // FormatCredits leaves it once they are paid.
-  if (_guest.Get(DS.menuSelectedRow) == FUEL_ROW)
-  {
-    regs.dx = WithLow(_guest.Get(DS.data823F), FUEL_UNITS_PER_TENTH);
-  }
-  regs.ax = payment.tenths;
-  regs.bx = 0;
-  if (payment.paid)
-  {
-    regs.si = DS.creditBalanceText.offset;
-  }
-  _guest.SetFlag(FLAG_CARRY, !payment.paid);
-  _guest.Clobber(RETURNS_CARRY);
-}
-
-void SelectLaserTypeEntry(Guest& _guest)
-{
-  _guest.SetFlag(FLAG_ZERO, SelectLaserType(_guest.State()));
-  _guest.Clobber(RETURNS_ZERO);
-}
-
-void DrawLaserMountMenuEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const PrintedText names = DrawLaserMountMenu(_guest.State());
-  // The contract keeps every register, so the entry leaves what the original does: the last PrintTextModeString's DI
-  // and ES, and AH the attribute it printed in; BX the place of the last fitted mount's name, when one is; DH what the
-  // four SHR DH,1 leave of laserMountsFitted; and PaintLaserMountBox's AL, the highlight, DL and CX counted down to 0,
-  // and SI on FORE's box.
-  const std::uint8_t types = _guest.Get(DS.laserMountTypes);
-  const std::uint8_t fitted = _guest.Get(DS.laserMountsFitted);
-  for (std::uint16_t mount = 0; mount < MOUNT_COUNT; ++mount)
-  {
-    if (((fitted >> mount) & 1) != 0)
-    {
-      regs.bx = MountLaserName(types, mount);
-    }
-  }
-  regs.di = names.nextCell;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = Join(HELP_ATTRIBUTE, MOUNT_HIGHLIGHT_ATTRIBUTE);
-  regs.dx = Join(static_cast<std::uint8_t>(fitted >> MOUNT_COUNT), 0);
-  regs.cx = 0;
-  regs.si = FIRST_MOUNT_BOX;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void RedrawEquipHelpTextEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const PrintedLines printed = RedrawEquipHelpText(_guest.State());
-  regs.si = printed.end;
-  regs.di = printed.nextLine;
-  regs.es = Guest::VIDEO_SEGMENT;
-  // PrintCountedTextLines' AX, the help's attribute with the NUL in AL, and its LOOP's CX = 0.
-  regs.ax = Join(HELP_ATTRIBUTE, 0);
-  regs.cx = 0;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void PaintLaserMountBoxEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  PaintLaserMountBox(_guest.State(), regs.si);
-  // The contract keeps every register, so the entry leaves what the original's loops do: AL the attribute, DL and CX
-  // counted down to 0. SI comes back as it was.
-  SetLow(regs.ax, _guest.Get(DS.textAttribute));
-  SetLow(regs.dx, 0);
-  regs.cx = 0;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ClearEquipmentSellPriceEntry(Guest& _guest)
-{
-  SellColumnOut(_guest.Regs(), ClearEquipmentSellPrice(_guest.State()));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ShowEquipmentSellPriceEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const PrintedText printed = ShowEquipmentSellPrice(_guest.State());
-  // BX the price's slot, and CX as FormatTenths' BlankLeadingZeros leaves it; the print's SI, DI, ES and AX.
-  regs.bx = PriceSlot(_guest.Get(DS.menuSelectedRow));
-  regs.cx = BlankedLeadingZeros(_guest.State(), DS.priceText.offset, TENTHS_DIGITS_BLANKED).triesLeft;
-  SellColumnOut(regs, printed);
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ShowEquipShipScreenEntry(Guest& _guest)
-{
-  const ScreenKey key = ShowEquipShipScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Regs().ax = Join(key.scanCode, key.al);
-  _guest.Clobber(SHOWS_SCREEN);
-}
-
-void RunEquipShipMenuEntry(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const ScreenKey key = RunEquipShipMenu(_guest.State(), _guest.Devices(), regs.si);
-  regs.ax = Join(key.scanCode, key.al);
-  _guest.Clobber(SHOWS_SCREEN);
-}
-
-void ChooseMountToFitLaserEntry(Guest& _guest)
-{
-  ChooseMountToFitLaser(_guest.State(), _guest.Devices());
-  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
-}
-
-void ChooseMountToRemoveLaserEntry(Guest& _guest)
-{
-  ChooseMountToRemoveLaser(_guest.State(), _guest.Devices());
-  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{0x2F0F, "LaunchEscapePod", &LaunchEscapePodEntry, CLOBBERS_ALL_BUT_DS},
-  NativeEntry{0x4401, "TryScoopObject", &TryScoopObjectEntry, PRESERVES_ALL},
-  NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreenEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenuEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x633B, "SelectLaserType", &SelectLaserTypeEntry, RETURNS_ZERO},
-  NativeEntry{0x6367, "DrawLaserMountMenu", &DrawLaserMountMenuEntry, PRESERVES_ALL},
-  NativeEntry{0x63B2, "ChooseMountToFitLaser", &ChooseMountToFitLaserEntry, CLOBBERS_ALL_BUT_DS, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x646F, "ChooseMountToRemoveLaser", &ChooseMountToRemoveLaserEntry, CLOBBERS_ALL_BUT_DS, NativeReturn::Near, 0,
-              NativeWait::Always},
-  NativeEntry{0x653F, "RedrawEquipHelpText", &RedrawEquipHelpTextEntry, PRESERVES_ALL},
-  NativeEntry{0x6564, "PaintLaserMountBox", &PaintLaserMountBoxEntry, PRESERVES_ALL},
-  NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItemEntry, RETURNS_CARRY},
-  NativeEntry{0x6946, "ClearEquipmentSellPrice", &ClearEquipmentSellPriceEntry, PRESERVES_ALL},
-  NativeEntry{0x6972, "ShowEquipmentSellPrice", &ShowEquipmentSellPriceEntry, PRESERVES_ALL},
-};
-
-} // namespace
-
-std::span<const NativeEntry> EquipmentEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

@@ -3,20 +3,15 @@
 
 #include "GameState.h"
 #include "Hardware.h"
-#include "NativeEntry.h"
 
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's video routines, ported (plan §5 Phase 3, ADR-010): drawing: lines, spans, the space view and the dashboard into CGA memory. All
-// of them are de-assembled (ADR-012): they take values and give values back, and their entries keep the register contracts of
-// Symbols.tsv for the hooks and the callers not yet de-assembled.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
+// The reference's video routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): drawing: lines, spans, the space view and
+// the dashboard into CGA memory. Each takes values and gives values back, on the GameState and, where it drives a device, the devices
+// (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -185,57 +180,5 @@ void SetTextMode(Hardware& _hardware);
 
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then sunFringeMask 0.
 void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-//
-// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
-// there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
-// leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES,
-// FillTriangleSpanEntry's AX and BP, FinishSpaceViewFrameEntry's DX, ShowCockpitScreenEntry's SI and ES, DrawChartFrameEntry's
-// ES).
-
-void SaveScreenshotEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, DX, SI, DI clobbered.
-/// AX, BX, CX, DX clobbered.
-void WriteScreenshotFileEntry(Guest& _guest);
-/// Out: ES = B800h, DF clear, DX = 1FF0h as PresentSpaceView leaves it. AX, BX, CX, SI, DI, BP clobbered.
-void FinishSpaceViewFrameEntry(Guest& _guest);
-void PresentChartFrameEntry(Guest& _guest); ///< Out: ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
-void PresentSpaceViewEntry(Guest& _guest);  ///< ES = B800h. AX, BX, CX, DX, SI, DI, BP clobbered.
-/// AL = the bands to skip, ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
-void CopyChartBufferToScreenEntry(Guest& _guest);
-void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
-void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
-/// DX, BX to CX, AX. Out: ES = DS and DF clear after DrawLine's REP STOSB. AX, BX, CX, DX, SI, DI, BP clobbered.
-void DrawClippedLineEntry(Guest& _guest);
-/// CX, AX and DX, BX the ends, BP the count outside, in and out. Out: CF, ZF. SI clobbered.
-void ClipLineToLowEdgeEntry(Guest& _guest);
-void ClipLineToHighEdgeEntry(Guest& _guest); ///< As ClipLineToLowEdgeEntry.
-void DrawLineEntry(Guest& _guest);           ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
-/// What DrawLine leaves of the machine when it returns _filled: ES = DS and the direction flag clear, which it sets before a
-/// horizontal line's REP STOSB. For the entries and the register code of the routines that call it, whose originals go on
-/// with them.
-void DrawLineOut(Guest& _guest, bool _filled);
-void DrawDiscEntry(Guest& _guest); ///< BX = the radius, DX, CX the centre. Out: ES = DS. AX, BX, CX, DX, SI, DI, BP clobbered.
-/// BL = the radius, CX, DX the centre. Out: ES = DS and DF clear once a chord's DrawLine fills. AX, BX, CX, DX, SI, DI, BP clobbered.
-void DrawCircleEntry(Guest& _guest);
-void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
-void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
-void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.
-/// DL = left x, DH = right x, SI = the row, BL = the fill, ES = DS. Out: DL = DH when the span crosses a byte, else DX the
-/// right end's mask word; AX the right end's AND and OR, BP its mask's index; DI clobbered.
-void FillTriangleSpanEntry(Guest& _guest);
-/// (AX, DX), (BX, BP), (CX, DI) the corners. Out: ES = DS unless the triangle is wholly off the buffer. AX, BX, CX, DX, SI, DI, BP
-/// clobbered.
-void FillTriangleEntry(Guest& _guest);
-/// (SI, DX), (BX, BP), (CX, DI) the corners, the rows doubled. Out as FillTriangleEntry.
-void FillClippedTriangleEntry(Guest& _guest);
-void WaitRetraceThenDelayEntry(Guest& _guest); ///< AX, DX clobbered.
-/// Out, once it draws: DF clear, SI past the image and ES = B800h; and BX = 0100h and DX = 03D9h, as SetGraphicsMode leaves them,
-/// once it sets the mode. AX, CX, DI clobbered.
-void ShowCockpitScreenEntry(Guest& _guest);
-void DrawChartFrameEntry(Guest& _guest);  ///< Out: ES = B800h once it draws. Every other register but DS clobbered.
-void SetGraphicsModeEntry(Guest& _guest); ///< AX, BX, DX clobbered.
-void SetTextModeEntry(Guest& _guest);     ///< AX, DX clobbered.
-void DrawTitlePlanetEntry(Guest& _guest); ///< BX = the radius, DX, CX the centre. Out: ES = DS. AX, BX, CX, DX, SI, DI, BP clobbered.
 
 } // namespace Elite
