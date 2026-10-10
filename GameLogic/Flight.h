@@ -22,20 +22,9 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> FlightEntries() noexcept;
 
-/// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight. Out: AH = the F1-F4 scan code or 0; BX and CX
-/// come back as the scan leaves them.
-void HandleFlightFunctionKeys(Guest& _guest);
-
 /// RunFlight (CS:7E9B): the station tunnel, then a frame at a time until the player docks or is 40
 /// frames dead; when the escape pod arrives TickEscapePod returns past it. Waits.
 void RunFlight(Guest& _guest);
-
-/// ProcessFlightKeys (CS:7FA8): the flight controls other than steering.
-void ProcessFlightKeys(Guest& _guest);
-
-/// RunPauseScreen (CS:8D6A): the pause menu, until space resumes; its keys toggle the options and set
-/// the frame time, and A drops two return addresses to leave RunFlight for the title. Waits.
-void RunPauseScreen(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -331,6 +320,57 @@ void UpdatePlayerVelocity(GameState& _state);
 /// shipSlotCount slots from shipSlots, and from its compass words: the player stays at the origin.
 void MoveObjectsByVelocity(GameState& _state);
 
+/// What HandleFlightFunctionKeys leaves: the view key ProcessFlightKeys reads, and the registers the screens carry from one to the
+/// next, which the original passes on by accident.
+struct FlightScreens
+{
+  std::uint8_t view;               ///< AH: the F1-F4 that ended it, or 0: no key, or the navigation computer's error
+  std::uint8_t al;                 ///< AL: as it came in, 9Eh after the navigation computer's error, or as the screens and waits left it
+  std::optional<std::uint8_t> key; ///< the first F key keyDown held, where the scan stopped, when it found one
+  std::optional<ScreenChange> restored; ///< what RestoreFlightScreen did, once a screen was shown
+  /// BP: as it came in, the compass dot's in-front byte sign-extended once EraseCompassAndBlips erased the dot, or as the screens
+  /// that select the system at the cursor leave it.
+  std::uint16_t countLeft;
+  bool backward; ///< the direction flag, which a chart and the cockpit drawn again clear
+};
+
+/// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight, scanned in keyDown. A key held is flushed (ResetKeyboard), and the screens
+/// shown from it (FlightScreenDispatch): F5 the galactic chart, F6 the short-range chart, F7 the system's data, F8 the market
+/// prices, F9 the commander's status and F10 the inventory, each from the key the last returned, any other key waited past, until
+/// F1-F4; in witch space F5, F7, F8, and F6 until its countdown is down to 1, post the navigation computer's error instead. A screen
+/// shown first sets flightScreenShown and erases the compass and the blips, and the cockpit comes back as it leaves
+/// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. _al, _countIfNone, _segment and _backward are AL, BP,
+/// ES and the direction flag it is called with, which the screens and their waits read: BP is the count SelectSystemAtCursor makes
+/// the index from when no system is on the chart, ES what a chart draws its title through when its frame shows already. Waits
+/// for keys on the screens' paths (ADR-015).
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _countIfNone,
+                                       std::uint16_t _segment, bool _backward);
+
+/// How ProcessFlightKeys ends.
+struct FlightKeysExit
+{
+  /// The pause screen's A: the original drops its own return address and ProcessFlightKeys', so that the RET leaves RunFlight for
+  /// the title (RunPauseScreen).
+  bool aborted;
+  bool backward; ///< the direction flag, as the function keys' screens leave it
+};
+
+/// ProcessFlightKeys (CS:7FA8): the flight controls other than steering, unless the game is over or the escape pod flies: the
+/// function keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace
+/// countdown, which ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes
+/// until a key; T, U and M the missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device;
+/// L the anti-ECM emulator. _al, _countIfNone, _segment and _backward are AL, BP, ES and the direction flag it is called with, which
+/// HandleFlightFunctionKeys takes; _di is DI, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine
+/// before it moves DI. Waits for keys on the screens', the pause's and the freeze's paths (ADR-015).
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _di, std::uint16_t _countIfNone,
+                                 std::uint16_t _segment, bool _backward);
+
+/// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
+/// a key ends it: space resumes; R, D, Y, B and S toggle the options; F1-F10 set the frame time and draw the menu again; A leaves
+/// for the title, titleShown cleared. _backward is the direction flag, which nothing in it changes. Returns whether A left, when the
+/// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
+bool RunPauseScreen(GameState& _state, Hardware& _hardware, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results
@@ -400,6 +440,14 @@ void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, 
 void UpdateSafeZoneEntry(Guest& _guest);        ///< Out: DI = stationSlot. AX, BX, CX, DX clobbered.
 void UpdateFuelLeakEntry(Guest& _guest);        ///< AX, DX clobbered.
 void TickEscapePodEntry(Guest& _guest);         ///< When the pod arrives, pops the return address into AX: the RET leaves RunFlight.
+/// AL, BP, ES and DF as HandleFlightFunctionKeys takes them. Out: AH the view key or 0, AL; CX, and once a screen was shown
+/// RestoreFlightScreen's AX, CX, DI and ES; BP and DF as the screens leave them. BX, DX and SI clobbered.
+void HandleFlightFunctionKeysEntry(Guest& _guest);
+/// AL, DI, BP, ES and DF as ProcessFlightKeys takes them. Out: DF as the screens leave it; when the pause screen's A leaves, pops
+/// this routine's return address into AX, so that the RET leaves RunFlight. Clobbers all but DS.
+void ProcessFlightKeysEntry(Guest& _guest);
+/// Out: when A leaves, pops its own return address and its caller's into AX, so that the RET leaves RunFlight. Clobbers all.
+void RunPauseScreenEntry(Guest& _guest);
 
 /// What EraseScannerBlip leaves in the registers for _slot once it has _erased its blip: AX = DX the last pixel, BX its mask, CX
 /// the stick's step and 0, and ES the video segment. For the entries of the routines that end with it, whose callers go on

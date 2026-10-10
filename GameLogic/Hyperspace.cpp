@@ -9,6 +9,8 @@
 #include "Maths.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "Text.h"
+#include "Video.h"
 
 #include <algorithm>
 
@@ -21,20 +23,12 @@ namespace
 using Machine::FLAG_CARRY;
 using Machine::Registers;
 
-// The routines these call through their entries: the original's, or a native routine hooked there.
-constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t NEXT_RANDOM = 0x061C;
-constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
-constexpr std::uint16_t DRAW_CIRCLE = 0x1AC1;
-constexpr std::uint16_t ARRIVE_IN_SYSTEM = 0x2B5A;
-constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
-constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
-constexpr std::uint16_t COMPLETE_HYPERSPACE_JUMP = 0x4707;
-constexpr std::uint16_t DRAW_HYPERSPACE_RINGS = 0x48C0;
-constexpr std::uint16_t PLAY_HYPERSPACE_TUNNEL = 0x4906;
-constexpr std::uint16_t ENTER_WITCH_SPACE = 0x4917;
-constexpr std::uint16_t UPDATE_MISSION_SCHEDULE = 0x4953;
-constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
+// The backward jumps the jump and the tunnel take: CompleteHyperspaceJump's tail, which GalacticJump jumps back to, and its copy's
+// loop; the mis-jump, which a forced one jumps back to; and the tunnel's frames.
+constexpr std::uint16_t DESTINATION_COPY = 0x4733;
+constexpr std::uint16_t DESTINATION_COPY_LOOP = 0x474C;
+constexpr std::uint16_t MIS_JUMP = 0x4781;
+constexpr std::uint16_t TUNNEL_FRAME_LOOP = 0x4909;
 
 // IsMassLocked: the ships that do not lock the jump drive, by type, and the slot flag of a ship on the
 // scanner.
@@ -252,97 +246,95 @@ MassLock IsMassLocked(GameState& _state)
   return lock;
 }
 
-void CompleteHyperspaceJump(Guest& _guest)
+void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(ERASE_COMPASS_AND_BLIPS);
-  regs.ax = DS.hyperspaceEngagedText.offset;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, ENGAGED_MESSAGE_FRAMES);
-  if (_guest.Get(DS.galacticJumpPending) == 1)
+  (void)EraseCompassAndBlips(_state);
+  _state.Set(DS.messagePointer, DS.hyperspaceEngagedText.offset);
+  _state.Set(DS.messageFrames, ENGAGED_MESSAGE_FRAMES);
+  if (_state.Get(DS.galacticJumpPending) == 1)
   {
-    // What SelectSystemAtCursor leaves in the registers, which its contract clobbers, is not reproduced: poisoned, every
-    // comparison and digest still agrees.
-    GalacticJump(_guest.State(), regs.bp);
-    _guest.JumpBack(0x4733);
+    GalacticJump(_state, _countIfNone);
+    // JMP 4733h, back into the shared tail below: not a loop, so its turn carries nothing.
+    _hardware.LoopTurn(DESTINATION_COPY, {});
   }
   else
   {
-    SetLow(regs.ax, _guest.Get(DS.hyperspaceFuelCost));
-    _guest.Set(DS.fuel, static_cast<std::uint8_t>(_guest.Get(DS.fuel) - Low(regs.ax)));
-    const std::uint8_t legal = _guest.Get(DS.legalStatus);
-    _guest.Set(DS.legalStatus, legal < LEGAL_STATUS_PER_JUMP ? std::uint8_t{0} : static_cast<std::uint8_t>(legal - LEGAL_STATUS_PER_JUMP));
+    // SUB [fuel],AL; then SUB [legalStatus],5, and 0 written over it on a borrow.
+    _state.Set(DS.fuel, static_cast<std::uint8_t>(_state.Get(DS.fuel) - _state.Get(DS.hyperspaceFuelCost)));
+    const std::uint8_t legal = _state.Get(DS.legalStatus);
+    _state.Set(DS.legalStatus, static_cast<std::uint8_t>(legal - LEGAL_STATUS_PER_JUMP));
+    if (legal < LEGAL_STATUS_PER_JUMP)
+    {
+      _state.Set(DS.legalStatus, 0);
+    }
   }
 
-  // 0x4733: the destination becomes the current system.
-  regs.ax = 0;
-  _guest.Set(DS.selectedDistanceTenthsLy, regs.ax);
-  const bool galactic = _guest.Get(DS.galacticJumpPending) == 1;
-  regs.si = galactic ? DS.selectedSystemName.offset : DS.hyperspaceTargetRecord.offset;
-  regs.di = DS.currentSystemName.offset;
-  regs.cx = _guest.Get(DS.systemRecordBytes);
+  // 0x4733: the destination becomes the current system, a byte at a time, LOOP from CX = systemRecordBytes: a count of 0 copies
+  // 65,536. Each turn carries the count, SI and DI.
+  _state.Set(DS.selectedDistanceTenthsLy, 0);
+  const bool galactic = _state.Get(DS.galacticJumpPending) == 1;
+  std::uint16_t from = galactic ? DS.selectedSystemName.offset : DS.hyperspaceTargetRecord.offset;
+  std::uint16_t to = DS.currentSystemName.offset;
+  std::uint16_t bytes = _state.Get(DS.systemRecordBytes);
   for (;;)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.si;
-    ++regs.di;
-    if (--regs.cx == 0)
+    _state.SetByte(to, _state.Byte(from));
+    from = Offset(from, 1);
+    to = Offset(to, 1);
+    if (--bytes == 0)
     {
       break;
     }
-    _guest.JumpBack(0x474C);
+    _hardware.LoopTurn(DESTINATION_COPY_LOOP, {bytes, from, to});
   }
-  _guest.Set(DS.marketQuantitiesSet, 0);
-  SetLow(regs.cx, _guest.Get(galactic ? DS.selectedSystemIndex : DS.hyperspaceTargetIndex));
-  _guest.Call(LOAD_SYSTEM_SEEDS);
+  _state.Set(DS.marketQuantitiesSet, 0);
+  LoadSystemSeeds(_state, _state.Get(galactic ? DS.selectedSystemIndex : DS.hyperspaceTargetIndex));
 
   // A mis-jump into witch space: 200 in 65536 outside the missions, or when forceMisjump asks.
   bool misjump = false;
-  if (_guest.Get(DS.galacticJumpPending) != 1)
+  if (_state.Get(DS.galacticJumpPending) != 1)
   {
-    _guest.Call(NEXT_RANDOM);
-    misjump = regs.ax < MISJUMP_ODDS && _guest.Get(DS.missionNumber) == 0;
+    misjump = NextRandom(_state) < MISJUMP_ODDS && _state.Get(DS.missionNumber) == 0;
   }
-  if (!misjump && _guest.Get(DS.forceMisjump) == 1)
+  if (!misjump && _state.Get(DS.forceMisjump) == 1)
   {
-    _guest.JumpBack(0x4781); // MisJump
+    // JE MisJump, back into the code above: not a loop, so its turn carries nothing.
+    _hardware.LoopTurn(MIS_JUMP, {});
     misjump = true;
   }
   if (misjump)
   {
-    _guest.Set(DS.forceMisjump, 0);
-    _guest.Call(ENTER_WITCH_SPACE);
+    _state.Set(DS.forceMisjump, 0);
+    EnterWitchSpace(_state);
   }
   else
   {
-    _guest.Set(DS.witchspaceCountdown, 0);
-    SetLow(regs.ax, _guest.Get(DS.systemX));
-    _guest.Set(DS.currentSystemX, Low(regs.ax));
-    _guest.Set(DS.chartCursorX, Low(regs.ax));
-    _guest.Set(DS.galacticCursorX, Low(regs.ax));
-    _guest.Set(DS.shortRangeCursorX, CHART_CENTER_X);
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
-    _guest.Set(DS.currentSystemChartY, Low(regs.ax));
-    _guest.Set(DS.chartCursorY, Low(regs.ax));
-    _guest.Set(DS.galacticCursorY, Low(regs.ax));
-    _guest.Set(DS.shortRangeCursorY, CHART_CENTER_Y);
-    if (_guest.Get(DS.chartIsShortRange) == 1)
+    _state.Set(DS.witchspaceCountdown, 0);
+    const std::uint8_t x = _state.Get(DS.systemX);
+    _state.Set(DS.currentSystemX, x);
+    _state.Set(DS.chartCursorX, x);
+    _state.Set(DS.galacticCursorX, x);
+    _state.Set(DS.shortRangeCursorX, CHART_CENTER_X);
+    const auto y = static_cast<std::uint8_t>(_state.Get(DS.systemY) >> 1);
+    _state.Set(DS.currentSystemChartY, y);
+    _state.Set(DS.chartCursorY, y);
+    _state.Set(DS.galacticCursorY, y);
+    _state.Set(DS.shortRangeCursorY, CHART_CENTER_Y);
+    if (_state.Get(DS.chartIsShortRange) == 1)
     {
-      _guest.Set(DS.chartCursorX, CHART_CENTER_X);
-      _guest.Set(DS.chartCursorY, CHART_CENTER_Y);
+      _state.Set(DS.chartCursorX, CHART_CENTER_X);
+      _state.Set(DS.chartCursorY, CHART_CENTER_Y);
     }
   }
 
-  _guest.Call(PLAY_HYPERSPACE_TUNNEL);
-  _guest.Call(ARRIVE_IN_SYSTEM);
-  _guest.Call(UPDATE_MISSION_SCHEDULE);
-  _guest.Set(DS.supernovaHeat, 0);
-  _guest.Set(DS.supernovaFrames, 0);
-  _guest.Set(DS.jumpedSinceBriefing, 1);
-  regs.si = PostArrival(_guest.State());
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
+  // The tunnel's frames end with FinishSpaceViewFrame's CLD, so the arrival copies forwards.
+  PlayHyperspaceTunnel(_state, _hardware, _backward);
+  (void)ArriveInSystem(_state, _hardware, false);
+  (void)UpdateMissionSchedule(_state);
+  _state.Set(DS.supernovaHeat, 0);
+  _state.Set(DS.supernovaFrames, 0);
+  _state.Set(DS.jumpedSinceBriefing, 1);
+  (void)PostArrival(_state);
 }
 
 void ResetHyperspaceRings(GameState& _state, bool _backward)
@@ -359,65 +351,55 @@ void ResetHyperspaceRings(GameState& _state, bool _backward)
   }
 }
 
-void DrawHyperspaceRings(Guest& _guest)
+bool DrawHyperspaceRings(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.hyperspaceRings.offset;
-  for (regs.cx = HYPERSPACE_RING_COUNT; regs.cx != 0; --regs.cx)
+  // LOOP over the ten rings, three bytes each: the delay, the radius and the colour. PUSH CX and PUSH SI keep the count and
+  // the ring round DrawCircle.
+  bool filled = false;
+  std::uint16_t ring = DS.hyperspaceRings.offset;
+  for (std::uint16_t rings = HYPERSPACE_RING_COUNT; rings != 0; --rings)
   {
-    const std::uint8_t delay = _guest.Byte(regs.si);
-    const auto radius = static_cast<std::uint16_t>(regs.si + 1);
+    const std::uint8_t delay = _state.Byte(ring);
     if (delay != 0)
     {
-      _guest.SetByte(regs.si, static_cast<std::uint8_t>(delay - 1));
+      _state.SetByte(ring, static_cast<std::uint8_t>(delay - 1));
     }
-    else
+    else if (const std::uint8_t radius = _state.Byte(Offset(ring, 1)); radius < HYPERSPACE_RING_LARGEST)
     {
-      SetLow(regs.bx, _guest.Byte(radius));
-      if (Low(regs.bx) < HYPERSPACE_RING_LARGEST)
+      // Grows by an eighth, at least 1, and is drawn from 20 on in its colour about the space view's centre.
+      const auto eighth = static_cast<std::uint8_t>(radius >> 3);
+      const auto grown = static_cast<std::uint8_t>(radius + (eighth == 0 ? 1 : eighth));
+      _state.SetByte(Offset(ring, 1), grown);
+      if (grown >= HYPERSPACE_RING_SMALLEST_DRAWN)
       {
-        // Grows by an eighth, at least 1.
-        SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.bx) >> 3));
-        if (Low(regs.ax) == 0)
+        _state.Set(DS.drawColor, _state.Byte(Offset(ring, 2)));
+        if (DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW))
         {
-          SetLow(regs.ax, 1);
-        }
-        SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + Low(regs.ax)));
-        _guest.SetByte(radius, Low(regs.bx));
-        if (Low(regs.bx) >= HYPERSPACE_RING_SMALLEST_DRAWN)
-        {
-          const std::uint16_t count = regs.cx;
-          const std::uint16_t ring = regs.si;
-          regs.cx = SPACE_VIEW_CENTER_X;
-          regs.dx = SPACE_VIEW_CENTER_ROW;
-          SetLow(regs.ax, _guest.Byte(static_cast<std::uint16_t>(ring + 2)));
-          _guest.Set(DS.drawColor, Low(regs.ax));
-          _guest.Call(DRAW_CIRCLE);
-          regs.si = ring;
-          regs.cx = count;
+          filled = true;
         }
       }
     }
-    regs.si = static_cast<std::uint16_t>(regs.si + HYPERSPACE_RING_BYTES);
+    ring = Offset(ring, HYPERSPACE_RING_BYTES);
   }
+  return filled;
 }
 
-void PlayHyperspaceTunnel(Guest& _guest)
+void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  regs.cx = HYPERSPACE_TUNNEL_FRAMES;
-  for (;;)
+  // PUSH CX / POP CX keep the frames left round the frame's work, and each turn carries them. Every frame ends with
+  // FinishSpaceViewFrame's CLD, so only the first message line runs by _backward.
+  bool backward = _backward;
+  for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
-    const std::uint16_t frames = regs.cx;
-    _guest.Call(UPDATE_MESSAGE_LINE);
-    _guest.Call(DRAW_HYPERSPACE_RINGS);
-    _guest.Call(FINISH_SPACE_VIEW_FRAME);
-    regs.cx = frames;
-    if (--regs.cx == 0)
+    (void)UpdateMessageLine(_state, backward);
+    (void)DrawHyperspaceRings(_state);
+    FinishSpaceViewFrame(_state, _hardware);
+    backward = false;
+    if (--frames == 0)
     {
       return;
     }
-    _guest.JumpBack(0x4909);
+    _hardware.LoopTurn(TUNNEL_FRAME_LOOP, {frames});
   }
 }
 
@@ -479,28 +461,30 @@ void LatchHyperspaceTarget(GameState& _state)
   }
 }
 
-void TickHyperspaceCountdown(Guest& _guest)
+bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
-  if (_guest.Get(DS.galacticDriveReadyFrames) != 0)
+  if (_state.Get(DS.galacticDriveReadyFrames) != 0)
   {
-    _guest.Set(DS.galacticDriveReadyFrames, static_cast<std::uint8_t>(_guest.Get(DS.galacticDriveReadyFrames) - 1));
+    _state.Set(DS.galacticDriveReadyFrames, static_cast<std::uint8_t>(_state.Get(DS.galacticDriveReadyFrames) - 1));
   }
-  if (_guest.Get(DS.hyperspaceCountdown) == 0)
+  if (_state.Get(DS.hyperspaceCountdown) == 0)
   {
-    return;
+    return false;
   }
-  _guest.Set(DS.hyperspaceCountdownFrames, static_cast<std::uint8_t>(_guest.Get(DS.hyperspaceCountdownFrames) - 1));
-  if (_guest.Get(DS.hyperspaceCountdownFrames) != 0)
+  _state.Set(DS.hyperspaceCountdownFrames, static_cast<std::uint8_t>(_state.Get(DS.hyperspaceCountdownFrames) - 1));
+  if (_state.Get(DS.hyperspaceCountdownFrames) != 0)
   {
-    return;
+    return false;
   }
-  _guest.Set(DS.hyperspaceCountdownFrames, COUNTDOWN_STEP_FRAMES);
-  _guest.Set(DS.hyperspaceCountdown, static_cast<std::uint8_t>(_guest.Get(DS.hyperspaceCountdown) - 1));
-  _guest.Call(SHOW_HYPERSPACE_COUNTDOWN);
-  if (_guest.Get(DS.hyperspaceCountdown) == 0)
+  _state.Set(DS.hyperspaceCountdownFrames, COUNTDOWN_STEP_FRAMES);
+  _state.Set(DS.hyperspaceCountdown, static_cast<std::uint8_t>(_state.Get(DS.hyperspaceCountdown) - 1));
+  ShowHyperspaceCountdown(_state);
+  if (_state.Get(DS.hyperspaceCountdown) != 0)
   {
-    _guest.Call(COMPLETE_HYPERSPACE_JUMP);
+    return false;
   }
+  CompleteHyperspaceJump(_state, _hardware, _countIfNone, _backward);
+  return true;
 }
 
 void ShowHyperspaceCountdown(GameState& _state)
@@ -539,6 +523,11 @@ constexpr Machine::NativeContract CLOBBERS_CX_SI_DI{REGISTER_CX | REGISTER_SI | 
 constexpr Machine::NativeContract MASS_LOCK{0, FLAG_CARRY};
 // ArriveInSystem's: all but DS, which the original leaves alone and CompleteHyperspaceJump goes on with.
 constexpr Machine::NativeContract ARRIVES{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
+constexpr Machine::NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
+// CompleteHyperspaceJump's: the general registers; ES = B800h, and DS, which it leaves alone.
+constexpr Machine::NativeContract JUMPS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
+// TickHyperspaceCountdown's: all but DS, which the original leaves alone and the flight loop goes on with.
+constexpr Machine::NativeContract TICKS_COUNTDOWN{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
 
 } // namespace
 
@@ -626,6 +615,41 @@ void ArriveInSystemEntry(Guest& _guest)
   _guest.Clobber(ARRIVES);
 }
 
+void CompleteHyperspaceJumpEntry(Guest& _guest)
+{
+  CompleteHyperspaceJump(_guest.State(), _guest.Devices(), _guest.Regs().bp, _guest.Flag(Machine::FLAG_DIRECTION));
+  // MOV AX,0B800h / MOV ES,AX, which the contract compares, and the tunnel's CLD.
+  _guest.Regs().es = Guest::VIDEO_SEGMENT;
+  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  _guest.Clobber(JUMPS);
+}
+
+void DrawHyperspaceRingsEntry(Guest& _guest)
+{
+  // DrawLine's ES = DS and CLD, once a ring's chord was a horizontal line.
+  DrawLineOut(_guest, DrawHyperspaceRings(_guest.State()));
+  _guest.Clobber(CLOBBERS_ALL);
+}
+
+void PlayHyperspaceTunnelEntry(Guest& _guest)
+{
+  PlayHyperspaceTunnel(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  // FinishSpaceViewFrame's CLD, every frame.
+  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  _guest.Clobber(CLOBBERS_ALL);
+}
+
+void TickHyperspaceCountdownEntry(Guest& _guest)
+{
+  if (TickHyperspaceCountdown(_guest.State(), _guest.Devices(), _guest.Regs().bp, _guest.Flag(Machine::FLAG_DIRECTION)))
+  {
+    // CompleteHyperspaceJump's ES = B800h, and the tunnel's CLD.
+    _guest.Regs().es = Guest::VIDEO_SEGMENT;
+    _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  }
+  _guest.Clobber(TICKS_COUNTDOWN);
+}
+
 namespace
 {
 
@@ -637,20 +661,16 @@ namespace
 constexpr std::array ENTRIES = {
   NativeEntry{0x2B5A, "ArriveInSystem", &ArriveInSystemEntry, ARRIVES},
   NativeEntry{0x4144, "IsMassLocked", &IsMassLockedEntry, MASS_LOCK},
-  NativeEntry{0x4707, "CompleteHyperspaceJump", &CompleteHyperspaceJump,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0},
-              NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x4707, "CompleteHyperspaceJump", &CompleteHyperspaceJumpEntry, JUMPS, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x48AB, "ResetHyperspaceRings", &ResetHyperspaceRingsEntry, CLOBBERS_AX_CX_SI_DI},
-  NativeEntry{0x48C0, "DrawHyperspaceRings", &DrawHyperspaceRings, Machine::NativeContract{REGISTER_ALL, 0}},
-  NativeEntry{0x4906, "PlayHyperspaceTunnel", &PlayHyperspaceTunnel, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
-              NativeWait::Always},
+  NativeEntry{0x48C0, "DrawHyperspaceRings", &DrawHyperspaceRingsEntry, CLOBBERS_ALL},
+  NativeEntry{0x4906, "PlayHyperspaceTunnel", &PlayHyperspaceTunnelEntry, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x4917, "EnterWitchSpace", &EnterWitchSpaceEntry, CLOBBERS_AX_BX},
   // UpdateMissionSchedule and LatchHyperspaceTarget clobber AL but keep AH: AX is compared whole, and their entries
   // leave AL as the original does.
   NativeEntry{0x4953, "UpdateMissionSchedule", &UpdateMissionScheduleEntry, PRESERVES_ALL},
   NativeEntry{0x49F6, "LatchHyperspaceTarget", &LatchHyperspaceTargetEntry, CLOBBERS_CX_SI_DI},
-  NativeEntry{0x7F79, "TickHyperspaceCountdown", &TickHyperspaceCountdown, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
-              NativeWait::Always},
+  NativeEntry{0x7F79, "TickHyperspaceCountdown", &TickHyperspaceCountdownEntry, TICKS_COUNTDOWN, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x8C62, "ShowHyperspaceCountdown", &ShowHyperspaceCountdownEntry, CLOBBERS_AX},
 };
 
