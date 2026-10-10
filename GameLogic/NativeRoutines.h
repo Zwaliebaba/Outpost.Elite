@@ -3,6 +3,8 @@
 
 #include "Pc.h"
 
+#include <iosfwd>
+
 namespace Elite
 {
 
@@ -14,5 +16,10 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
 
 /// How many entries InstallNativeRoutines hooks.
 [[nodiscard]] std::size_t NativeRoutineCount() noexcept;
+
+/// Each hooked entry's books as Tools/RoutineCoverage.py reads them, one tab-separated row per entry
+/// under a header: entry, routine, calls, verified, unverifiable, mismatches, and the offsets the
+/// original ran in the calls that were compared.
+void WriteNativeReport(const Machine::NativeCode& _native, std::ostream& _out);
 
 } // namespace Elite

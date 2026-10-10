@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "ComparisonRig.h"
 #include "NativeRoutines.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
@@ -85,6 +86,8 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       ++checked;
     }
     Assert::IsTrue(checked > 0, (name + L": checks no digest").c_str());
+    if (_running == Running::Compared)
+      SaveNativeReport("Corpus-" + path.stem().string(), rig.Host().Native());
     _check(name, rig.Host());
   }
 }

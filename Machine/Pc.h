@@ -19,6 +19,7 @@
 #include <exception>
 #include <memory>
 #include <semaphore>
+#include <set>
 #include <span>
 #include <string>
 #include <thread>
@@ -274,6 +275,7 @@ private:
     WriteJournal nativeWrites{NativeCode::JOURNAL_CAPACITY};
     std::vector<std::uint8_t> originalAfter;
     std::vector<PortRouter::Access> originalPorts;
+    std::set<std::uint16_t> executed;
     bool active = false;
   };
 
@@ -287,7 +289,8 @@ private:
   void ReachedRunLimit();
   void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
-  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, NativeCode::Hook* _covering);
+  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, std::uint16_t _coveredSegment = 0,
+                   std::set<std::uint16_t>* _covered = nullptr);
   void StepPaced();
   void NoteBackwardJump();
   [[nodiscard]] StopReason Stopped() const noexcept;

@@ -145,24 +145,15 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
 // number of calls that did not match the original, and of overruns.
 std::uint64_t ReportNativeCode(const Machine::Pc& _pc, const Options& _options)
 {
-  std::ofstream report;
   if (!_options.nativeReport.empty())
   {
-    report.open(_options.nativeReport, std::ios::trunc);
-    report << "entry\troutine\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
+    std::ofstream report(_options.nativeReport, std::ios::trunc);
+    Elite::WriteNativeReport(_pc.Native(), report);
   }
   for (const auto& [linear, hook] : _pc.Native().Hooks())
   {
     Print(std::format("native\t{:04X}\t{}\t{} calls\t{} verified\t{} unverifiable\t{} mismatches\n", hook.offset, hook.name, hook.calls,
                       hook.verified, hook.unverifiable, hook.mismatches));
-    if (report.is_open())
-    {
-      std::string executed;
-      for (const std::uint16_t offset : hook.executed)
-        executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);
-      report << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, hook.calls, hook.verified, hook.unverifiable,
-                            hook.mismatches, executed);
-    }
   }
   for (const Machine::NativeCode::Mismatch& mismatch : _pc.Native().Mismatches())
     Print(std::format("mismatch\t{}\tcall {}\tcycle {}\t{}\n", mismatch.routine, mismatch.call, mismatch.clock, mismatch.difference));

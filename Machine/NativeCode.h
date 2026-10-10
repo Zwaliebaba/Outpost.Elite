@@ -77,7 +77,7 @@ public:
     std::uint64_t unverifiable = 0; ///< calls whose original could not be undone: it waited, took an interrupt or called the services
     std::uint64_t mismatches = 0;   ///< calls run both ways that did not agree
     std::set<std::uint16_t>
-      executed; ///< offsets in the entry's segment the original ran while it was being compared, its callees' included
+      executed; ///< offsets in the entry's segment the original ran in calls that were compared, its callees' included
   };
 
   /// One call where the native routine and the original did not agree.

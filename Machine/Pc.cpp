@@ -236,7 +236,7 @@ void Pc::CallNear(std::uint16_t _offset)
   m_memory.Write16(regs.ss, regs.sp, CALL_RETURN_OFFSET);
   const auto returned = static_cast<std::uint16_t>(regs.sp + 2);
   regs.ip = _offset;
-  RunToReturn(regs.cs, CALL_RETURN_OFFSET, returned, nullptr);
+  RunToReturn(regs.cs, CALL_RETURN_OFFSET, returned);
 }
 
 void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
@@ -289,7 +289,7 @@ void Pc::CallInterrupt(std::uint8_t _vector)
   const std::uint32_t entry = static_cast<std::uint32_t>(_vector) * 4;
   regs.ip = m_memory.Read16(entry);
   regs.cs = m_memory.Read16(entry + 2);
-  RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer, nullptr);
+  RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer);
 }
 
 void Pc::RunHook()
@@ -311,8 +311,14 @@ void Pc::RunHook()
 void Pc::Dispatch(NativeCode::Hook& _hook)
 {
   ++_hook.calls;
-  // A loop turn seen before the native code ran says nothing about the next one after it.
-  const OnExit forget([this]() noexcept { m_lastTurn.valid = false; });
+  // A routine that waits loops inside, where no turn of the caller's loop is seen; a turn seen before
+  // it says nothing about the next one after it.
+  const OnExit forget(
+    [this, &_hook]() noexcept
+    {
+      if (_hook.waits)
+        m_lastTurn.valid = false;
+    });
   try
   {
     // A routine that waits is never compared: it could not be undone, and its original might never
@@ -430,12 +436,13 @@ void Pc::TakeDueInterrupts()
     {
       throw ProgramStopped{};
     }
-    RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer, nullptr);
+    RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer);
     regs.ip = offset;
   }
 }
 
-void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, NativeCode::Hook* _covering)
+void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, std::uint16_t _coveredSegment,
+                     std::set<std::uint16_t>* _covered)
 {
   const Registers& regs = m_cpu.Regs();
   while (regs.cs != _segment || regs.ip != _offset || regs.sp < _stackPointer)
@@ -443,11 +450,11 @@ void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_
     const std::uint16_t segment = regs.cs;
     const std::uint16_t offset = regs.ip;
     const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
-    const bool covered = _covering != nullptr && segment == _covering->segment;
+    const bool covered = _covered != nullptr && segment == _coveredSegment;
     Step();
     if (covered && m_cpu.HardwareInterruptCount() == interrupts)
     {
-      _covering->executed.insert(offset);
+      _covered->insert(offset);
     }
     if (Stopped() != StopReason::Reached)
     {
@@ -478,6 +485,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
   // through it. Every byte it changes and every port access it makes is recorded.
   work.originalWrites.Clear();
   work.originalPorts.clear();
+  work.executed.clear();
   {
     work.active = true;
     m_cpu.SetHookMap(nullptr);
@@ -491,15 +499,19 @@ void Pc::Compare(NativeCode::Hook& _hook)
         m_cpu.SetHookMap(&m_native.Map());
         work.active = false;
       });
-    RunToReturn(returnSegment, returnOffset, static_cast<std::uint16_t>(entry.sp + frameBytes), &_hook);
+    RunToReturn(returnSegment, returnOffset, static_cast<std::uint16_t>(entry.sp + frameBytes), _hook.segment, &work.executed);
   }
   if (m_clock != clock || m_cpu.HardwareInterruptCount() != interrupts || m_services.CallCount() != services ||
       work.originalWrites.Overflowed())
   {
-    ++_hook.unverifiable; // what it did cannot be undone, so its outcome stands
+    ++_hook.unverifiable; // what it did cannot be undone, so its outcome stands, and covers nothing
     return;
   }
+  // From here the call is compared, so what the original ran counts towards its coverage.
+  _hook.executed.insert(work.executed.begin(), work.executed.end());
   const Registers original = regs;
+  const std::uint64_t changes = m_memory.ChangeCount();
+  const LoopTurn turn = m_lastTurn;
   const std::span<const WriteJournal::Entry> written = work.originalWrites.Entries();
   work.originalAfter.resize(written.size());
   for (std::size_t index = 0; index < written.size(); ++index)
@@ -547,6 +559,18 @@ void Pc::Compare(NativeCode::Hook& _hook)
   {
     add("the native routine changed more bytes than a journal holds");
   }
+  // The run carries on from the original's outcome, whatever the comparison found: its memory, dead
+  // stack included, its registers, and what paced time saw of it. A compared run is then the
+  // interpreted run, observed, and one mismatch does not hide the next.
+  m_memory.Undo(work.nativeWrites);
+  const std::span<std::uint8_t> bytes = m_memory.Bytes();
+  for (std::size_t index = 0; index < written.size(); ++index)
+  {
+    bytes[written[index].linear] = work.originalAfter[index];
+  }
+  m_memory.SetChangeCount(changes);
+  m_lastTurn = turn;
+  regs = original;
   if (difference.empty())
   {
     ++_hook.verified;
@@ -554,14 +578,6 @@ void Pc::Compare(NativeCode::Hook& _hook)
   }
   ++_hook.mismatches;
   m_native.AddMismatch(NativeCode::Mismatch{_hook.name, _hook.calls, clock, std::move(difference)});
-  // Carry on from the original's outcome, so that one mismatch does not hide the next.
-  m_memory.Undo(work.nativeWrites);
-  const std::span<std::uint8_t> bytes = m_memory.Bytes();
-  for (std::size_t index = 0; index < written.size(); ++index)
-  {
-    bytes[written[index].linear] = work.originalAfter[index];
-  }
-  regs = original;
 }
 
 void Pc::MapPorts(std::uint16_t _first, std::uint16_t _last, PortBus& _device)

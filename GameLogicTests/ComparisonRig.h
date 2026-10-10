@@ -5,12 +5,39 @@
 #include "ReferenceRig.h"
 #include "Replay.h"
 
+#include <fstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace GameLogicTests
 {
+
+/// Where compared runs leave their native reports: the corpus's and each constructed test's.
+/// Tools/RoutineCoverage.py reads every report there (ADR-010 item 5).
+inline std::filesystem::path NativeReportDirectory()
+{
+  return std::filesystem::temp_directory_path() / "OutpostEliteNativeReports";
+}
+
+/// Writes _native's report as NativeReportDirectory()/_name.tsv. One that cannot be written is left
+/// out, and RoutineCoverage then reports what only it covered as not covered.
+inline void SaveNativeReport(std::string_view _name, const Machine::NativeCode& _native) noexcept
+{
+  try
+  {
+    const std::filesystem::path directory = NativeReportDirectory();
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    std::ofstream report(directory / (std::string(_name) + ".tsv"), std::ios::trunc);
+    Elite::WriteNativeReport(_native, report);
+  }
+  catch (...)
+  {
+    return;
+  }
+}
 
 /// The registers one constructed call gives a routine. DS and ES are the reference's data segment.
 struct Inputs
@@ -27,12 +54,14 @@ struct Inputs
 /// The reference booted to its title screen, so that its own interrupt handlers (the divide trap's
 /// among them) are in place, with the native routines installed and every call compared (ADR-010):
 /// how a test gives a ported routine the inputs the replays do not reach (plan §6.3). Set up memory
-/// through Host() first where a routine reads it.
+/// through Host() first where a routine reads it. What the comparisons ran is saved as _name's native
+/// report when the rig is done.
 class ComparisonRig
 {
 public:
   explicit ComparisonRig(std::string_view _name)
-    : m_rig(_name)
+    : m_name(_name),
+      m_rig(_name)
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
     Assert::IsTrue(m_rig.Loaded(), L"ELITES.EXE at the repository root");
@@ -44,6 +73,16 @@ public:
     Assert::IsTrue(player.Play(steps.front(), digest) == Machine::StopReason::Reached, L"boots");
     Elite::InstallNativeRoutines(m_rig.Host(), m_rig.Program());
     m_rig.Host().Native().SetVerifying(true);
+  }
+
+  ComparisonRig(const ComparisonRig&) = delete;
+  ComparisonRig& operator=(const ComparisonRig&) = delete;
+  ComparisonRig(ComparisonRig&&) = delete;
+  ComparisonRig& operator=(ComparisonRig&&) = delete;
+
+  ~ComparisonRig()
+  {
+    SaveNativeReport(m_name, m_rig.Host().Native());
   }
 
   [[nodiscard]] Machine::Pc& Host() noexcept
@@ -93,6 +132,7 @@ public:
   }
 
 private:
+  std::string m_name;
   ReferenceRig m_rig;
 };
 

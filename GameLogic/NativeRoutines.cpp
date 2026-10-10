@@ -23,6 +23,9 @@
 #include "Video.h"
 #include "Reference.h"
 
+#include <format>
+#include <ostream>
+
 namespace Elite
 {
 
@@ -84,6 +87,19 @@ std::size_t NativeRoutineCount() noexcept
     count += entries().size();
   }
   return count;
+}
+
+void WriteNativeReport(const Machine::NativeCode& _native, std::ostream& _out)
+{
+  _out << "entry\troutine\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
+  for (const auto& [linear, hook] : _native.Hooks())
+  {
+    std::string executed;
+    for (const std::uint16_t offset : hook.executed)
+      executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);
+    _out << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, hook.calls, hook.verified, hook.unverifiable,
+                        hook.mismatches, executed);
+  }
 }
 
 } // namespace Elite

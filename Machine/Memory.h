@@ -159,6 +159,13 @@ public:
   /// Neither counted as changes nor recorded.
   void Undo(const WriteJournal& _journal) noexcept;
 
+  /// Sets the count ChangeCount returns. A comparison of native code with the original (ADR-010) runs
+  /// the same call twice and keeps one outcome; it puts back the count that outcome left.
+  void SetChangeCount(std::uint64_t _changes) noexcept
+  {
+    m_changes = _changes;
+  }
+
   /// The whole address space, for loaders, snapshots and the conformance runner.
   [[nodiscard]] std::span<std::uint8_t> Bytes() noexcept
   {
