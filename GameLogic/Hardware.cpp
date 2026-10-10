@@ -183,7 +183,14 @@ std::uint16_t Hardware::ReadBiosKey()
 namespace
 {
 
+constexpr std::uint16_t CRTC_INDEX_PORT = 0x3D4;
+constexpr std::uint16_t CRTC_DATA_PORT = 0x3D5;
+constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
+constexpr std::uint16_t CGA_MODE_CONTROL_PORT = 0x3D8;
+constexpr std::uint16_t CGA_COLOR_SELECT_PORT = 0x3D9;
 constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
+constexpr std::uint8_t VIDEO_SET_PALETTE = 0x0B;
+constexpr std::uint8_t VIDEO_PALETTE_SELECT = 0x01; // BH=1: BL picks mode 4's palette
 constexpr std::uint8_t TIMER_VECTOR = 0x08;
 constexpr std::uint16_t TIMER_VECTOR_OFFSET = TIMER_VECTOR * 4; // in the interrupt table at 0000:0000
 constexpr std::uint16_t TIMER_VECTOR_SEGMENT = TIMER_VECTOR_OFFSET + 2;
@@ -249,6 +256,32 @@ void SetNothingMore(Machine::Registers&) noexcept {}
 std::uint8_t Hardware::CgaStatus()
 {
   return m_pc.Ports().In8(CGA_STATUS_PORT);
+}
+
+void Hardware::SetColorSelect(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(CGA_COLOR_SELECT_PORT, _value);
+}
+
+void Hardware::SetCursorAddressHigh(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(CRTC_INDEX_PORT, CRTC_CURSOR_ADDRESS_HIGH);
+  m_pc.Ports().Out8(CRTC_DATA_PORT, _value);
+}
+
+void Hardware::SetModeControl(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(CGA_MODE_CONTROL_PORT, _value);
+}
+
+void Hardware::SelectPalette(std::uint8_t _palette)
+{
+  CallService(m_pc, VIDEO_VECTOR,
+              [_palette](Machine::Registers& _regs)
+              {
+                SetHigh(_regs.ax, VIDEO_SET_PALETTE);
+                _regs.bx = Join(VIDEO_PALETTE_SELECT, _palette);
+              });
 }
 
 void Hardware::FireGamePort(std::uint8_t _value)

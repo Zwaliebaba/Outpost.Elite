@@ -343,11 +343,12 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state)
 
 NearTest IsObjectNear(GameState& _state, ObjectSlot _slot)
 {
-  if (PositionFitsWords(_slot).fits)
+  const PositionFit fit = PositionFitsWords(_slot);
+  if (fit.fits)
   {
-    return NearTest{true, std::nullopt};
+    return NearTest{true, std::nullopt, fit.lastHigh};
   }
-  return NearTest{false, EraseScannerBlip(_state, _slot)};
+  return NearTest{false, EraseScannerBlip(_state, _slot), fit.lastHigh};
 }
 
 bool IsSunOrPlanet(const ObjectSlot& _slot)

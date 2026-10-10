@@ -112,6 +112,7 @@ struct NearTest
 {
   bool nearby;                              ///< each 24-bit coordinate fits a signed word
   std::optional<DashboardPixel> erasedBlip; ///< when one does not, the last pixel of the blip EraseScannerBlip erased, if it erased one
+  std::uint8_t lastHigh;                    ///< the last high byte the test looked at, INC'd and DEC'd back: what the original leaves in AL
 };
 
 /// What FacePlayerWithRandomRoll gives a slot.

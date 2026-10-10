@@ -3,10 +3,12 @@
 #include "Scene.h"
 
 #include "Arithmetic.h"
+#include "Combat.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 
 #include <initializer_list>
+#include <optional>
 #include <utility>
 
 namespace Elite
@@ -21,13 +23,11 @@ constexpr std::uint16_t DRAW_DISC = 0x1826;
 constexpr std::uint16_t FILL_TRIANGLE = 0x1BFB;
 constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
 constexpr std::uint16_t KILL_PLAYER = 0x3115;
-constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
 constexpr std::uint16_t IS_SUN_OR_PLANET = 0x3F2A;
 constexpr std::uint16_t IS_PLANET = 0x3F37;
 constexpr std::uint16_t IS_STATION = 0x3F40;
 constexpr std::uint16_t UPDATE_SCANNER_BLIP = 0x40EC;
 constexpr std::uint16_t UPDATE_COMPASS = 0x418F;
-constexpr std::uint16_t ERASE_SCANNER_BLIP = 0x42D6;
 constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
 constexpr std::uint16_t DRAW_DISTANT_STATION = 0x45C6;
 constexpr std::uint16_t REMOVE_OBJECT = 0x4F98;
@@ -41,21 +41,13 @@ constexpr std::uint16_t DISC_X_DIVIDE_RETURN = 0x4064;
 constexpr std::uint16_t SCREEN_X_DIVIDE_RETURN = 0x8D4B;
 constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
 
-// An object slot: 64 bytes from shipSlots.
-constexpr std::uint16_t SLOT_BYTES = 0x40;
+// An object slot's fields beyond those Ships.h names (SLOT_BYTES, SLOT_PITCH, SLOT_YAW, SLOT_ROLL, SLOT_VIEW_X, SLOT_VIEW_Y,
+// SLOT_VIEW_Z, SLOT_FLAGS, SLOT_DETAIL).
 constexpr std::uint16_t SLOT_POSITION_X = 0x04; // the low words of the 24-bit position
 constexpr std::uint16_t SLOT_POSITION_Y = 0x06;
 constexpr std::uint16_t SLOT_POSITION_Z = 0x08;
 constexpr std::uint16_t SLOT_SCALE_SHIFT = 0x0A; // byte; for a ship, the word is its pitch angle
 constexpr std::uint16_t SLOT_COLOR = 0x0B;
-constexpr std::uint16_t SLOT_PITCH = 0x0A;
-constexpr std::uint16_t SLOT_YAW = 0x0C;
-constexpr std::uint16_t SLOT_ROLL = 0x0E;
-constexpr std::uint16_t SLOT_VIEW_X = 0x10;
-constexpr std::uint16_t SLOT_VIEW_Y = 0x12;
-constexpr std::uint16_t SLOT_VIEW_Z = 0x14;
-constexpr std::uint16_t SLOT_VIEW_Z_HIGH = 0x15;
-constexpr std::uint16_t SLOT_STATE = 0x1E;
 constexpr std::uint16_t SLOT_COMPASS_X = 0x20;
 constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
 constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
@@ -63,16 +55,14 @@ constexpr std::uint16_t SLOT_FRAMES_AWAY = 0x34;
 constexpr std::uint16_t SLOT_CAMERA_Z_HIGH = 0x3C;
 constexpr std::uint16_t SLOT_DEPTH = 0x3D;
 constexpr std::uint16_t SLOT_SIZE = 0x3E;
-constexpr std::uint16_t SLOT_DETAIL = 0x3F;
 
-// Byte 0 of a slot.
-constexpr std::uint8_t SLOT_ACTIVE = 0x01;
+// Byte 0 of a slot, with Ships.h's SLOT_ACTIVE.
 constexpr std::uint8_t SLOT_TYPE_BITS = 0x3E;
 constexpr std::uint8_t SLOT_IN_RANGE = 0x40;
 constexpr std::uint8_t SLOT_VISIBLE = 0x80;
 constexpr std::uint8_t SLOT_KEEP_BITS = 0x3F;
 constexpr std::uint8_t SLOT_DRAWABLE = SLOT_VISIBLE | SLOT_ACTIVE;
-// Byte +1Eh.
+// Byte +1Eh, SLOT_FLAGS.
 constexpr std::uint8_t STATE_DRAWN = 0x80;
 constexpr std::uint8_t STATE_FLASH_OFF = 0x40;
 constexpr std::uint8_t STATE_FLASHING = 0x20;
@@ -526,16 +516,6 @@ void RotateToViewDirectionOnRegisters(Guest& _guest)
   regs.cx = static_cast<std::uint16_t>(view.z);
 }
 
-// What CheckShipInRange's test measured of a ship, as far as it went: it stops at the first bound the ship exceeds.
-struct ShipRange
-{
-  bool within;
-  std::uint8_t axes;                       // the magnitudes it took, 1-3
-  std::array<std::uint16_t, 3> magnitudes; // |x|, |y|, |z|
-  std::uint8_t squares;                    // the squares it summed, 0, 2 or 3: none until every axis is within maxAxisDistance
-  std::uint16_t squaredHigh;               // the sum of their high words
-};
-
 // mul of a word by itself: DX:AX.
 [[nodiscard]] std::uint32_t UnsignedSquare(std::uint16_t _value) noexcept
 {
@@ -605,7 +585,7 @@ void ShipRangeOut(Machine::Registers& _regs, const ShipRange& _range) noexcept
 void ClassifyObject(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t state = Offset(regs.di, SLOT_STATE);
+  const std::uint16_t state = Offset(regs.di, SLOT_FLAGS);
   _guest.SetByte(state, static_cast<std::uint8_t>(_guest.Byte(state) & ~STATE_DRAWN));
   if ((_guest.Byte(regs.di) & SLOT_ACTIVE) == 0)
   {
@@ -632,7 +612,7 @@ void ClassifyObject(Guest& _guest)
   _guest.Call(IS_STATION);
   if (!Flag(_guest, Machine::FLAG_ZERO))
   {
-    CheckShipInRange(_guest);
+    CheckShipInRangeEntry(_guest);
     if (!Flag(_guest, Machine::FLAG_CARRY))
     {
       TransformShip(_guest);
@@ -771,7 +751,7 @@ void DrawObject(Guest& _guest)
   do
   {
     regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(_guest.Byte(regs.di) & SLOT_DRAWABLE));
-    if (Low(regs.ax) == SLOT_DRAWABLE && (_guest.Byte(Offset(regs.di, SLOT_STATE)) & STATE_DRAWN) == 0)
+    if (Low(regs.ax) == SLOT_DRAWABLE && (_guest.Byte(Offset(regs.di, SLOT_FLAGS)) & STATE_DRAWN) == 0)
     {
       const std::uint8_t depth = _guest.Byte(Offset(regs.di, SLOT_DEPTH));
       if (High(regs.ax) < depth || (High(regs.ax) == depth && regs.bp < _guest.Word(Offset(regs.di, SLOT_VIEW_Z))))
@@ -789,7 +769,7 @@ void DrawObject(Guest& _guest)
     return false;
   }
   regs.di = regs.dx;
-  OrByte(_guest, Offset(regs.di, SLOT_STATE), STATE_DRAWN);
+  OrByte(_guest, Offset(regs.di, SLOT_FLAGS), STATE_DRAWN);
   DrawObject(_guest);
   return true;
 }
@@ -915,7 +895,7 @@ void DrawSunOrPlanetDisc(Guest& _guest)
     ScaleByInverseDistanceEntry(_guest);
   }
   _guest.Set(DS.cabinTemperature, Low(regs.ax));
-  if ((_guest.Byte(Offset(regs.di, SLOT_VIEW_Z_HIGH)) & 0x80) != 0)
+  if ((ObjectSlot(_guest.State(), regs.di).Get(SlotByte::ViewZHigh) & 0x80) != 0)
   {
     return false;
   }
@@ -958,37 +938,61 @@ void DrawSunOrPlanetDisc(Guest& _guest)
   return true;
 }
 
-// The planet's size and the altitude it gives, and death by collision: false when it is behind the view.
-[[nodiscard]] bool SizePlanet(Guest& _guest)
+// What SizePlanet finds.
+struct PlanetSize
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.sunFringeMask, FRINGE_NONE);
-  regs.dx = PLANET_SCALE;
-  regs.ax = 0;
-  ScaleByInverseDistanceEntry(_guest);
-  auto altitude = static_cast<std::uint8_t>(~Low(regs.ax));
+  InverseDistanceScale scale;          // ScaleByInverseDistance's result, which the original leaves in AX and BX
+  std::uint8_t altitude;               // over BL
+  std::optional<std::uint16_t> radius; // in front of the view, the disc's radius
+};
+
+// SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
+// altitude, twice 255 less that radius held to 127. In front of the view, a radius of FDh or more kills the player, with
+// StartPlayerDeathSound's STI, and one past a byte draws as FFh.
+PlanetSize SizePlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
+{
+  _state.Set(DS.sunFringeMask, FRINGE_NONE);
+  // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
+  const InverseDistanceScale scale = ScaleByInverseDistance(_state, _slot, std::uint32_t{PLANET_SCALE} << 16);
+  auto altitude = static_cast<std::uint8_t>(~Low(scale.scaled));
   if (altitude > ALTITUDE_LIMIT)
   {
     altitude = ALTITUDE_LIMIT;
   }
   altitude = static_cast<std::uint8_t>(altitude << 1);
-  regs.bx = WithLow(regs.bx, altitude);
-  _guest.Set(DS.altitude, altitude);
-  if ((_guest.Byte(Offset(regs.di, SLOT_VIEW_Z_HIGH)) & 0x80) != 0)
+  _state.Set(DS.altitude, altitude);
+  PlanetSize size{scale, altitude, std::nullopt};
+  if ((_slot.Get(SlotByte::ViewZHigh) & 0x80) != 0)
   {
-    return false;
+    return size;
   }
-  if (regs.ax >= FATAL_RADIUS)
+  std::uint16_t radius = scale.scaled;
+  if (radius >= FATAL_RADIUS)
   {
-    const std::uint16_t radius = regs.ax;
-    _guest.Call(KILL_PLAYER);
-    regs.ax = radius;
-    if (High(regs.ax) != 0)
+    // PUSH AX / CALL KillPlayer / POP AX.
+    if (KillPlayer(_state))
     {
-      regs.ax = RADIUS_LIMIT;
+      _hardware.EnableInterrupts();
+    }
+    if (High(radius) != 0)
+    {
+      radius = RADIUS_LIMIT;
     }
   }
-  return true;
+  size.radius = radius;
+  return size;
+}
+
+// SizePlanet for slot DI, and what it leaves for DrawSunOrPlanetDisc and DrawSunOrPlanet's callers: AX the radius, or
+// ScaleByInverseDistance's result behind the view, and BX the divisor's high byte over the altitude. False when the planet is
+// behind the view and not drawn.
+[[nodiscard]] bool SizePlanetOnRegisters(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const PlanetSize size = SizePlanet(_guest.State(), _guest.Devices(), ObjectSlot(_guest.State(), regs.di));
+  regs.ax = size.radius.value_or(size.scale.scaled);
+  regs.bx = Join(High(size.scale.divisor), size.altitude);
+  return size.radius.has_value();
 }
 
 } // namespace
@@ -1279,22 +1283,19 @@ void DrawVisibleFaces(Guest& _guest)
   } while (Loop(regs.cx));
 }
 
-void CheckShipInRange(Guest& _guest)
+ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
 {
-  _guest.Call(IS_OBJECT_NEAR);
-  if (Flag(_guest, Machine::FLAG_CARRY))
+  ShipRangeCheck check{IsObjectNear(_state, _slot), ShipRange{}, std::nullopt};
+  if (check.near.nearby)
   {
-    Machine::Registers& regs = _guest.Regs();
-    const ShipRange range = ShipWithinRange(_guest.State(), ObjectSlot(_guest.State(), regs.di));
-    ShipRangeOut(regs, range);
-    if (range.within)
+    check.range = ShipWithinRange(_state, _slot);
+    if (check.range.within)
     {
-      _guest.SetFlag(Machine::FLAG_CARRY, false);
-      return;
+      return check;
     }
   }
-  _guest.Call(ERASE_SCANNER_BLIP);
-  _guest.SetFlag(Machine::FLAG_CARRY, true);
+  check.erasedBlip = EraseScannerBlip(_state, _slot);
+  return check;
 }
 
 void TransformSunOrPlanet(Guest& _guest)
@@ -1402,7 +1403,7 @@ void TransformToView(Guest& _guest)
 void DrawSunOrPlanet(Guest& _guest)
 {
   _guest.Call(IS_PLANET);
-  const bool drawn = Flag(_guest, Machine::FLAG_ZERO) ? SizePlanet(_guest) : SizeSun(_guest);
+  const bool drawn = Flag(_guest, Machine::FLAG_ZERO) ? SizePlanetOnRegisters(_guest) : SizeSun(_guest);
   if (drawn)
   {
     DrawSunOrPlanetDisc(_guest);
@@ -1587,6 +1588,25 @@ void RunVertexProgramEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_DI);
 }
 
+void CheckShipInRangeEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const ShipRangeCheck check = CheckShipInRange(_guest.State(), slot);
+  // Every register as the original leaves it, which the contract compares: IsObjectNear's AL, and EraseScannerBlip's registers
+  // once it erased a blip; near, the magnitudes and squares the test took (ShipRangeOut); and out of range, the registers of
+  // the EraseScannerBlip after it.
+  SetLow(regs.ax, check.near.lastHigh);
+  EraseScannerBlipOut(_guest, slot, check.near.erasedBlip);
+  if (check.near.nearby)
+  {
+    ShipRangeOut(regs, check.range);
+  }
+  EraseScannerBlipOut(_guest, slot, check.erasedBlip);
+  _guest.SetFlag(Machine::FLAG_CARRY, !check.InRange());
+  _guest.Clobber(RETURNS_CARRY);
+}
+
 void TriangleWindingSignEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1620,7 +1640,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3A9B, "TriangleWindingSign", &TriangleWindingSignEntry, WINDING_SIGN},
   NativeEntry{0x3AB3, "DrawVisibleFaces", &DrawVisibleFaces,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0}},
-  NativeEntry{0x3BEA, "CheckShipInRange", &CheckShipInRange, RETURNS_CARRY},
+  NativeEntry{0x3BEA, "CheckShipInRange", &CheckShipInRangeEntry, RETURNS_CARRY},
   NativeEntry{0x3C52, "TransformSunOrPlanet", &TransformSunOrPlanet, PRESERVES_ALL},
   NativeEntry{0x3C72, "ClassifyStationPosition", &ClassifyStationPosition, RETURNS_CARRY},
   NativeEntry{0x3C7E, "TransformShip", &TransformShip, RETURNS_CARRY},

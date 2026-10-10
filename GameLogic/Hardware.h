@@ -142,6 +142,19 @@ public:
   /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
   [[nodiscard]] std::uint8_t CgaStatus();
 
+  /// OUT 3D9h,_value: the CGA's colour select register: the border's colour, and in graphics mode the background's, in
+  /// bits 0-3, the bright palette in bit 4.
+  void SetColorSelect(std::uint8_t _value);
+
+  /// OUT 3D4h,0Eh, then OUT 3D5h,_value: the CRTC's register 14, the high byte of the cursor's address.
+  void SetCursorAddressHigh(std::uint8_t _value);
+
+  /// OUT 3D8h,_value: the CGA's mode control register: bit 3 the video on, bit 5 blinking.
+  void SetModeControl(std::uint8_t _value);
+
+  /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
+  void SelectPalette(std::uint8_t _palette);
+
   /// OUT 201h,_value: fires the game port's one-shots, each high until its stick's resistance times it out. The port does
   /// not read the byte written.
   void FireGamePort(std::uint8_t _value);

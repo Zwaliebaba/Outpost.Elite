@@ -35,10 +35,12 @@ constexpr std::uint16_t COCKPIT_PARAGRAPH = 0x140A;
 constexpr std::uint8_t CHART_LAYOUT = 1;
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;
 
-constexpr std::uint8_t BIOS_VIDEO = 0x10;
-constexpr std::uint16_t CRTC_INDEX_PORT = 0x3D4;
-constexpr std::uint16_t CGA_MODE_PORT = 0x3D8;
-constexpr std::uint16_t CGA_COLOR_PORT = 0x3D9;
+constexpr std::uint8_t GRAPHICS_MODE = 4;         // BIOS mode 4: 320x200 in four colours
+constexpr std::uint8_t GRAPHICS_PALETTE = 0;      // green, red and brown
+constexpr std::uint8_t BRIGHT_ON_BLACK = 0x10;    // the colour select register: the bright palette, a black background
+constexpr std::uint8_t TEXT_MODE = 1;             // BIOS mode 1: 40x25 colour text
+constexpr std::uint8_t CURSOR_OFF_PAGE = 0x0E;    // the cursor address's high byte, past the 40x25 page
+constexpr std::uint8_t VIDEO_ON_BLINK_OFF = 0x08; // the mode control register: attribute bit 7 a bright background
 
 // triangleStepOpcodes (CS:1CF3), after FillTriangle's RET: SUB AX,SI; SUB BX,DI; ADD AX,SI; ADD BX,DI.
 constexpr std::uint16_t SUB_AX_SI = 0x1CF3;
@@ -114,11 +116,6 @@ constexpr std::uint16_t SHOW_DISK_ERROR = 0x0470;
 constexpr std::uint16_t CRITICAL_ERROR_VECTOR_OFFSET = 0x0090;
 constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
-constexpr std::uint8_t DOS_VECTOR = 0x21;
-constexpr std::uint8_t DOS_SET_TRANSFER_AREA = 0x1A;
-constexpr std::uint8_t DOS_CREATE = 0x3C;
-constexpr std::uint8_t DOS_CLOSE = 0x3E;
-constexpr std::uint8_t DOS_WRITE = 0x40;
 constexpr std::uint8_t FIRST_DIGIT = '0';
 constexpr std::uint8_t PAST_DIGITS = ':';               // the character after '9'
 constexpr std::uint16_t TEXT_PAGE_BYTES = 0x07D0;       // 40x25 cells of character and attribute
@@ -763,6 +760,14 @@ struct SmallDiscEnd
   return opcodes;
 }
 
+// MOV BP,DX / AND BP,3 / SHL BP,1, then MOV AX,[BP] for a span's left end or [BP+8] for its right: triangleEdgeMasks' word for
+// an end at x = _x, its fill bits in the low byte and the bits it keeps in the high. BP addresses the stack segment, and
+// SS:0000 is DS:AD60, where the table is.
+[[nodiscard]] std::uint16_t TriangleEdgeMask(const GameState& _state, std::uint8_t _x, bool _right) noexcept
+{
+  return _state.Word(DS.triangleEdgeMasks.At((_right ? 4u : 0u) + (_x & 3u)));
+}
+
 // FillTriangleSpan's row walk (DrawStackedSpansFromRow, CS:1CD5), with AH the bottom row and CX the
 // spans pushed: pops each and fills it, bottom row first, the pattern's bytes alternating by row.
 void DrawStackedSpansFromRow(Guest& _guest)
@@ -779,7 +784,7 @@ void DrawStackedSpansFromRow(Guest& _guest)
   do
   {
     regs.dx = _guest.Pop();
-    FillTriangleSpan(_guest);
+    FillTriangleSpanEntry(_guest);
     regs.si = static_cast<std::uint16_t>(regs.si - ROW_BYTES);
     regs.bx = SwapBytes(regs.bx);
   } while (--regs.cx != 0);
@@ -1497,72 +1502,76 @@ void FillClippedGeneral(Guest& _guest)
 // ---- Frames ----
 
 // IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace, the loop at CS:_loop. A read
-// that sees a retrace uses it up (Cga::SetRetraceSeenOnce), so these are the original's reads, one a turn.
-void WaitForRetrace(Guest& _guest, std::uint16_t _loop)
+// that sees a retrace uses it up (Cga::SetRetraceSeenOnce), so these are the original's reads, one a turn. Each turn
+// carries the bit AL holds at the jump, what it read.
+void WaitForRetrace(Hardware& _hardware, std::uint16_t _loop)
 {
-  Machine::Registers& regs = _guest.Regs();
   for (;;)
   {
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(regs.dx) & STATUS_VERTICAL_RETRACE));
-    if (Low(regs.ax) != 0)
+    const auto retrace = static_cast<std::uint8_t>(_hardware.CgaStatus() & STATUS_VERTICAL_RETRACE);
+    if (retrace != 0)
     {
       return;
     }
-    _guest.JumpBack(_loop);
+    _hardware.LoopTurn(_loop, {retrace});
   }
 }
 
-// MOV AX,_turns / DEC AX / JNZ at CS:_loop: a delay the 8088's speed made. Each turn changes AX, so paced time
-// never idles in it.
-void SpinDelay(Guest& _guest, std::uint16_t _turns, std::uint16_t _loop)
+// MOV AX,_turns / DEC AX / JNZ at CS:_loop: a delay the 8088's speed made. Each turn carries AX, the count, so paced
+// time never idles in it.
+void SpinDelay(Hardware& _hardware, std::uint16_t _turns, std::uint16_t _loop)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _turns;
+  std::uint16_t count = _turns;
+  while (--count != 0)
+  {
+    _hardware.LoopTurn(_loop, {count});
+  }
+}
+
+// The copy loop at CS:_loop: _linePairs line pairs of a 64-byte buffer line from DS:_source to B800:_destination, the even
+// line, then the odd one below it, then back to the next even line: MOV CX,BP / REP MOVSW / ADD DI,AX / MOV CX,BP /
+// REP MOVSW / SUB DI,DX / DEC BX / JNZ, with BP, AX and DX the steps SetLinePairSteps gives. Each turn carries what the
+// next reads and changes: SI, DI and BX. Returns where SI and DI end.
+StringOffsets CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_t _loop, std::uint16_t _source, std::uint16_t _destination,
+                            std::uint16_t _linePairs, bool _backward)
+{
+  StringOffsets at{_source, _destination};
+  std::uint16_t pairs = _linePairs;
   for (;;)
   {
-    --regs.ax;
-    if (regs.ax == 0)
+    at = RepeatMoveWords(_state, _state.DataSegment(), at.source, GameState::VIDEO_SEGMENT, at.destination, BUFFER_LINE_WORDS,
+                         StringStep(_backward, 2));
+    at.destination = static_cast<std::uint16_t>(at.destination + TO_ODD_LINE);
+    at = RepeatMoveWords(_state, _state.DataSegment(), at.source, GameState::VIDEO_SEGMENT, at.destination, BUFFER_LINE_WORDS,
+                         StringStep(_backward, 2));
+    at.destination = static_cast<std::uint16_t>(at.destination - TO_NEXT_EVEN_LINE);
+    if (--pairs == 0)
     {
-      return;
+      return at;
     }
-    _guest.JumpBack(_loop);
+    _hardware.LoopTurn(_loop, {at.source, at.destination, pairs});
   }
 }
 
-// BX line pairs of BP words from DS:SI to ES:DI, the even line and then the odd one AX on, DI back by DX for the
-// next pair: the copy loop at CS:_loop.
-void CopyLinePairs(Guest& _guest, std::uint16_t _loop)
-{
-  Machine::Registers& regs = _guest.Regs();
-  for (;;)
-  {
-    regs.cx = regs.bp;
-    StringOffsets moved = RepeatMoveWords(_guest.State(), regs.ds, regs.si, regs.es, regs.di, regs.cx, StringStep(regs, 2));
-    regs.si = moved.source;
-    regs.di = moved.destination;
-    regs.di = static_cast<std::uint16_t>(regs.di + regs.ax);
-    regs.cx = regs.bp;
-    moved = RepeatMoveWords(_guest.State(), regs.ds, regs.si, regs.es, regs.di, regs.cx, StringStep(regs, 2));
-    regs.si = moved.source;
-    regs.di = moved.destination;
-    regs.cx = 0;
-    regs.di = static_cast<std::uint16_t>(regs.di - regs.dx);
-    --regs.bx;
-    if (regs.bx == 0)
-    {
-      return;
-    }
-    _guest.JumpBack(_loop);
-  }
-}
-
-// The registers CopyLinePairs takes for a 64-byte buffer line onto the screen: 32 words, then the odd bank,
+// The registers CopyLinePairs' original takes for a 64-byte buffer line onto the screen: 32 words, then the odd bank,
 // then back to the next even line.
 void SetLinePairSteps(Machine::Registers& _regs) noexcept
 {
   _regs.bp = BUFFER_LINE_WORDS;
   _regs.ax = TO_ODD_LINE;
   _regs.dx = TO_NEXT_EVEN_LINE;
+}
+
+// CopyLinePairs from the registers the original holds, BX line pairs from DS:SI to ES:DI = B800h, and what it leaves
+// them: SI and DI where it ends, BX and CX 0.
+void CopyLinePairsOnRegisters(Guest& _guest, std::uint16_t _loop)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const StringOffsets end = CopyLinePairs(_guest.State(), _guest.Devices(), _loop, regs.si, regs.di, regs.bx, Flag(regs, FLAG_DIRECTION));
+  regs.si = end.source;
+  regs.di = end.destination;
+  regs.bx = 0;
+  regs.cx = 0;
 }
 
 } // namespace
@@ -1594,65 +1603,43 @@ void SaveScreenshot(Guest& _guest)
   _guest.Call(INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS);
 }
 
-void WriteScreenshotFile(Guest& _guest)
+void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SetHigh(regs.ax, DOS_SET_TRANSFER_AREA);
-  regs.dx = DS.diskTransferArea.offset;
-  _guest.Interrupt(DOS_VECTOR);
+  _hardware.SetDiskTransferArea(_state.DataSegment(), DS.diskTransferArea.offset);
   // The two digits, the second counting fastest: '00', '01' ... '99', '00'.
-  regs.ax = _guest.Get(DS.screenshotNumber);
-  SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) + 1));
-  if (High(regs.ax) == PAST_DIGITS)
+  std::uint16_t digits = _state.Get(DS.screenshotNumber);
+  SetHigh(digits, static_cast<std::uint8_t>(High(digits) + 1));
+  if (High(digits) == PAST_DIGITS)
   {
-    SetHigh(regs.ax, FIRST_DIGIT);
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-    if (Low(regs.ax) == PAST_DIGITS)
+    SetHigh(digits, FIRST_DIGIT);
+    SetLow(digits, static_cast<std::uint8_t>(Low(digits) + 1));
+    if (Low(digits) == PAST_DIGITS)
     {
-      SetLow(regs.ax, FIRST_DIGIT);
+      SetLow(digits, FIRST_DIGIT);
     }
   }
-  _guest.Set(DS.screenshotNumber, regs.ax);
-  _guest.Set(DS.screenshotTextFileDigits, regs.ax);
-  _guest.Set(DS.screenshotGraphicsFileDigits, regs.ax);
-  SetHigh(regs.ax, DOS_CREATE);
-  regs.dx = DS.screenshotTextFileName.offset;
-  if ((_guest.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) == 0)
+  _state.Set(DS.screenshotNumber, digits);
+  _state.Set(DS.screenshotTextFileDigits, digits);
+  _state.Set(DS.screenshotGraphicsFileDigits, digits);
+  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen.
+  const std::uint16_t name =
+    (_state.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) != 0 ? DS.screenshotTextFileName.offset : DS.screenshotGraphicsFileName.offset;
+  const DosAnswer created = _hardware.CreateFile(_state.DataSegment(), name, 0);
+  if (created.failed)
   {
-    regs.dx = DS.screenshotGraphicsFileName.offset;
-  }
-  regs.cx = 0;
-  _guest.Interrupt(DOS_VECTOR);
-  if (Flag(regs, FLAG_CARRY))
-  {
-    _guest.Set(DS.diskError, 1);
+    _state.Set(DS.diskError, 1);
     return;
   }
-  _guest.Set(DS.fileHandle, regs.ax);
-  SetHigh(regs.ax, DOS_WRITE);
-  regs.bx = _guest.Get(DS.fileHandle);
-  regs.cx = TEXT_PAGE_BYTES;
-  if ((_guest.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) == 0)
+  _state.Set(DS.fileHandle, created.value);
+  // From B800:0000: the text page, or both graphics banks and the gap between them.
+  const std::uint16_t bytes = (_state.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) != 0 ? TEXT_PAGE_BYTES : GRAPHICS_SCREEN_BYTES;
+  if (_hardware.WriteFile(_state.Get(DS.fileHandle), GameState::VIDEO_SEGMENT, 0, bytes).failed)
   {
-    regs.cx = GRAPHICS_SCREEN_BYTES;
+    _state.Set(DS.diskError, 1);
   }
-  // From B800:0000, with DS pointing there for the call.
-  _guest.Push(regs.ds);
-  regs.dx = Guest::VIDEO_SEGMENT;
-  regs.ds = regs.dx;
-  regs.dx = 0;
-  _guest.Interrupt(DOS_VECTOR);
-  regs.ds = _guest.Pop();
-  if (Flag(regs, FLAG_CARRY))
+  if (_hardware.CloseFile(_state.Get(DS.fileHandle)).failed)
   {
-    _guest.Set(DS.diskError, 1);
-  }
-  SetHigh(regs.ax, DOS_CLOSE);
-  regs.bx = _guest.Get(DS.fileHandle);
-  _guest.Interrupt(DOS_VECTOR);
-  if (Flag(regs, FLAG_CARRY))
-  {
-    _guest.Set(DS.diskError, 1);
+    _state.Set(DS.diskError, 1);
   }
 }
 
@@ -1702,7 +1689,7 @@ void PresentSpaceView(Guest& _guest)
   regs.di = SPACE_VIEW_SCREEN_OFFSET;
   SetLinePairSteps(regs);
   regs.bx = SPACE_VIEW_LINE_PAIRS;
-  CopyLinePairs(_guest, SPACE_VIEW_COPY_LOOP);
+  CopyLinePairsOnRegisters(_guest, SPACE_VIEW_COPY_LOOP);
 }
 
 void CopyChartBufferToScreen(Guest& _guest)
@@ -1710,8 +1697,8 @@ void CopyChartBufferToScreen(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   regs.dx = CGA_STATUS_PORT;
   _guest.Push(regs.ax);
-  WaitForRetrace(_guest, CHART_RETRACE_LOOP);
-  SpinDelay(_guest, CHART_DELAY_TURNS, CHART_DELAY_LOOP);
+  WaitForRetrace(_guest.Devices(), CHART_RETRACE_LOOP);
+  SpinDelay(_guest.Devices(), CHART_DELAY_TURNS, CHART_DELAY_LOOP);
   regs.ax = _guest.Pop();
   // AL bands of 8 lines skipped: 64 - 4*AL line pairs from DS:AL*512.
   SetLow(regs.bx, Low(regs.ax));
@@ -1723,7 +1710,7 @@ void CopyChartBufferToScreen(Guest& _guest)
   regs.si = regs.ax;
   regs.di = CHART_SCREEN_OFFSET;
   SetLinePairSteps(regs);
-  CopyLinePairs(_guest, CHART_COPY_LOOP);
+  CopyLinePairsOnRegisters(_guest, CHART_COPY_LOOP);
 }
 
 void ClearDrawBuffer(GameState& _state, bool _backward)
@@ -2144,70 +2131,44 @@ void DrawCircle(Guest& _guest)
   } while (--regs.bp != 0);
 }
 
-void FillTriangleSpan(Guest& _guest)
+void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t cx = regs.cx; // PUSH CX
-  regs.di = regs.si;
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.dx) >> 2));
-  SetHigh(regs.ax, Negative8(Low(regs.ax)) ? std::uint8_t{0xFF} : std::uint8_t{0}); // CBW
-  regs.di = static_cast<std::uint16_t>(regs.di + regs.ax);
-  SetLow(regs.cx, static_cast<std::uint8_t>((High(regs.dx) >> 2) - Low(regs.ax)));
-  // triangleEdgeMasks at SS:0000: the left edge's mask at [BP], the right edge's at [BP+8].
-  const auto edgeMask = [&](std::uint8_t _x, std::uint16_t _table)
-  {
-    regs.bp = static_cast<std::uint16_t>((_x & 3) << 1);
-    return _guest.FarWord(regs.ss, static_cast<std::uint16_t>(regs.bp + _table));
-  };
-  if (Low(regs.cx) == 0)
+  // MOV AL,DL / SHR AL,1 twice / CBW / ADD DI,AX: the left x over 4 is below 40h, so AH is 0.
+  const auto leftByte = static_cast<std::uint8_t>(_left >> 2);
+  auto at = static_cast<std::uint16_t>(_row + leftByte);
+  const auto bytes = static_cast<std::uint8_t>((_right >> 2) - leftByte);
+  const std::uint16_t leftMask = TriangleEdgeMask(_state, _left, false);
+  if (bytes == 0)
   {
     // FillTriangleSpanOneByte (CS:1BD5): both edges in one byte.
-    regs.ax = edgeMask(Low(regs.dx), 0);
-    SetLow(regs.dx, High(regs.dx));
-    regs.dx = edgeMask(Low(regs.dx), 8);
-    SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) | High(regs.dx)));
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & Low(regs.dx) & Low(regs.bx)));
-    Plot(_guest.State(), regs.di, High(regs.ax), Low(regs.ax));
-    regs.cx = cx;
+    const std::uint16_t rightMask = TriangleEdgeMask(_state, _right, true);
+    Plot(_state, at, static_cast<std::uint8_t>(High(leftMask) | High(rightMask)),
+         static_cast<std::uint8_t>(Low(leftMask) & Low(rightMask) & _fill));
     return;
   }
-  SetHigh(regs.cx, 0);
-  regs.ax = edgeMask(Low(regs.dx), 0);
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & Low(regs.bx)));
-  Plot(_guest.State(), regs.di, High(regs.ax), Low(regs.ax));
-  ++regs.di;
-  SetLow(regs.dx, High(regs.dx));
-  regs.bp = static_cast<std::uint16_t>((regs.dx & 3) << 1);
-  if (--regs.cx != 0)
+  Plot(_state, at, High(leftMask), static_cast<std::uint8_t>(Low(leftMask) & _fill));
+  ++at;
+  // The bytes between, into ES = DS: STOSB to reach an even DI, then REP STOSW, then STOSB for an odd one left.
+  auto middle = static_cast<std::uint16_t>(bytes - 1);
+  if (middle != 0 && (at & 1) != 0)
   {
-    // The bytes between: one to reach an even DI, then words.
-    SetLow(regs.ax, Low(regs.bx));
-    bool filled = false;
-    if ((regs.di & 1) != 0)
+    at = StoreByte(_state, _state.DataSegment(), at, _fill, StringStep(_backward, 1));
+    --middle;
+  }
+  if (middle != 0)
+  {
+    const auto words = static_cast<std::uint16_t>(middle >> 1);
+    if (words != 0)
     {
-      regs.di = StoreByte(_guest.State(), regs.es, regs.di, Low(regs.ax), StringStep(regs, 1));
-      filled = --regs.cx == 0;
+      at = RepeatStoreWords(_state, _state.DataSegment(), at, words, Join(_fill, _fill), StringStep(_backward, 2));
     }
-    if (!filled)
+    if ((middle & 1) != 0)
     {
-      const bool odd = (regs.cx & 1) != 0;
-      regs.cx = static_cast<std::uint16_t>(regs.cx >> 1);
-      if (regs.cx != 0)
-      {
-        SetHigh(regs.ax, Low(regs.ax));
-        regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-        regs.cx = 0;
-      }
-      if (odd)
-      {
-        regs.di = StoreByte(_guest.State(), regs.es, regs.di, Low(regs.ax), StringStep(regs, 1));
-      }
+      at = StoreByte(_state, _state.DataSegment(), at, _fill, StringStep(_backward, 1));
     }
   }
-  regs.ax = edgeMask(Low(regs.dx), 8);
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & Low(regs.bx)));
-  Plot(_guest.State(), regs.di, High(regs.ax), Low(regs.ax));
-  regs.cx = cx;
+  const std::uint16_t rightMask = TriangleEdgeMask(_state, _right, true);
+  Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & _fill));
 }
 
 void FillTriangle(Guest& _guest)
@@ -2308,8 +2269,10 @@ void WaitRetraceThenDelay(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.dx = CGA_STATUS_PORT;
-  WaitForRetrace(_guest, SPACE_VIEW_RETRACE_LOOP);
-  SpinDelay(_guest, SPACE_VIEW_DELAY_TURNS, SPACE_VIEW_DELAY_LOOP);
+  WaitForRetrace(_guest.Devices(), SPACE_VIEW_RETRACE_LOOP);
+  SpinDelay(_guest.Devices(), SPACE_VIEW_DELAY_TURNS, SPACE_VIEW_DELAY_LOOP);
+  // The delay counts AX down to 0.
+  regs.ax = 0;
 }
 
 void ShowCockpitScreen(Guest& _guest)
@@ -2321,7 +2284,7 @@ void ShowCockpitScreen(Guest& _guest)
   }
   if ((layout & TEXT_LAYOUT_BIT) != 0)
   {
-    SetGraphicsMode(_guest);
+    SetGraphicsModeEntry(_guest);
   }
   else
   {
@@ -2367,7 +2330,7 @@ void DrawChartFrame(Guest& _guest)
   }
   if ((layout & TEXT_LAYOUT_BIT) != 0)
   {
-    SetGraphicsMode(_guest);
+    SetGraphicsModeEntry(_guest);
   }
   else
   {
@@ -2408,32 +2371,18 @@ void DrawChartFrame(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-void SetGraphicsMode(Guest& _guest)
+void SetGraphicsMode(Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = 4; // set mode 4: 320x200 in four colours
-  _guest.Interrupt(BIOS_VIDEO);
-  regs.bx = 0x0100; // palette 0
-  SetHigh(regs.ax, 0x0B);
-  _guest.Interrupt(BIOS_VIDEO);
-  regs.dx = CGA_COLOR_PORT;
-  SetLow(regs.ax, 0x10); // the bright palette, black background
-  _guest.Out8(regs.dx, Low(regs.ax));
+  _hardware.SetVideoMode(GRAPHICS_MODE);
+  _hardware.SelectPalette(GRAPHICS_PALETTE);
+  _hardware.SetColorSelect(BRIGHT_ON_BLACK);
 }
 
-void SetTextMode(Guest& _guest)
+void SetTextMode(Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = 1; // set mode 1: 40x25 colour text
-  _guest.Interrupt(BIOS_VIDEO);
-  regs.dx = CRTC_INDEX_PORT;
-  SetLow(regs.ax, 0x0E); // CRTC register 14, the cursor address's high byte, = 0Eh: off the page
-  _guest.Out8(regs.dx, Low(regs.ax));
-  ++regs.dx;
-  _guest.Out8(regs.dx, Low(regs.ax));
-  regs.dx = CGA_MODE_PORT;
-  SetLow(regs.ax, 0x08); // video on, blink off
-  _guest.Out8(regs.dx, Low(regs.ax));
+  _hardware.SetVideoMode(TEXT_MODE);
+  _hardware.SetCursorAddressHigh(CURSOR_OFF_PAGE);
+  _hardware.SetModeControl(VIDEO_ON_BLINK_OFF);
 }
 
 void DrawTitlePlanet(Guest& _guest)
@@ -2464,7 +2413,9 @@ constexpr Machine::NativeContract CLIPS_LINE{REGISTER_SI, FLAG_CARRY | FLAG_ZERO
 // DrawLine's: ES as the original leaves it, DS after a horizontal line's REP STOSB, which DrawClippedLine's, DrawLaserBeams'
 // and UpdateStardust's contracts compare.
 constexpr Machine::NativeContract DRAWS_LINE{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP, 0};
-constexpr Machine::NativeContract FILLS_TRIANGLE_SPAN{REGISTER_AX | REGISTER_DI | REGISTER_BP, 0};
+// FillTriangleSpan's: AX and BP as the original leaves them, which RenderBlueprintBody's contract compares
+// (FillTriangleSpanEntry).
+constexpr Machine::NativeContract FILLS_TRIANGLE_SPAN{REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI_ES{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_GENERAL_AND_ES{GENERAL_REGISTERS | REGISTER_ES, 0};
@@ -2538,6 +2489,52 @@ void ClearTextScreenEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_CX_DI);
 }
 
+void WriteScreenshotFileEntry(Guest& _guest)
+{
+  WriteScreenshotFile(_guest.State(), _guest.Devices());
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
+}
+
+void FillTriangleSpanEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t left = Low(regs.dx);
+  const std::uint8_t right = High(regs.dx);
+  const std::uint8_t fill = Low(regs.bx);
+  FillTriangleSpan(_guest.State(), regs.si, left, right, fill, Flag(regs, FLAG_DIRECTION));
+  // AX, DX and BP as the original leaves them, which the contract compares: after a face's last triangle, DrawVisibleFaces
+  // returns them to RenderBlueprintBody, whose contract compares them. BP indexes the right end's mask word; AX is the right
+  // end's AND and OR, with the left end's merged in when both ends are in one byte; DX is the right end's mask word then,
+  // else DL = DH from MOV DL,DH.
+  const std::uint16_t leftMask = TriangleEdgeMask(_guest.State(), left, false);
+  const std::uint16_t rightMask = TriangleEdgeMask(_guest.State(), right, true);
+  if ((left >> 2) == (right >> 2))
+  {
+    regs.ax =
+      Join(static_cast<std::uint8_t>(High(leftMask) | High(rightMask)), static_cast<std::uint8_t>(Low(leftMask) & Low(rightMask) & fill));
+    regs.dx = rightMask;
+  }
+  else
+  {
+    regs.ax = Join(High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
+    regs.dx = Join(right, right);
+  }
+  regs.bp = static_cast<std::uint16_t>((right & 3u) << 1);
+  _guest.Clobber(FILLS_TRIANGLE_SPAN);
+}
+
+void SetGraphicsModeEntry(Guest& _guest)
+{
+  SetGraphicsMode(_guest.Devices());
+  _guest.Clobber(CLOBBERS_AX_BX_DX);
+}
+
+void SetTextModeEntry(Guest& _guest)
+{
+  SetTextMode(_guest.Devices());
+  _guest.Clobber(CLOBBERS_AX_DX);
+}
+
 namespace
 {
 
@@ -2547,7 +2544,7 @@ constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshot, SAVES_SCREENSHOT},
-  NativeEntry{0x03FD, "WriteScreenshotFile", &WriteScreenshotFile, CLOBBERS_AX_BX_CX_DX},
+  NativeEntry{0x03FD, "WriteScreenshotFile", &WriteScreenshotFileEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceView, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
@@ -2561,7 +2558,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x1826, "DrawDisc", &DrawDisc, CLOBBERS_GENERAL},
   NativeEntry{0x1A07, "FillSpan", &FillSpanEntry, PRESERVES_ALL},
   NativeEntry{0x1AC1, "DrawCircle", &DrawCircle, CLOBBERS_GENERAL},
-  NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpan, FILLS_TRIANGLE_SPAN},
+  NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpanEntry, FILLS_TRIANGLE_SPAN},
   NativeEntry{0x1BFB, "FillTriangle", &FillTriangle, CLOBBERS_GENERAL},
   NativeEntry{0x1E6E, "FillClippedTriangle", &FillClippedTriangle, CLOBBERS_GENERAL},
   NativeEntry{0x45FF, "WaitRetraceThenDelay", &WaitRetraceThenDelay, CLOBBERS_AX_DX, Machine::NativeReturn::Near, 0, WAITS},
@@ -2569,8 +2566,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7BFB, "ClearCgaScreen", &ClearCgaScreenEntry, CLOBBERS_AX_CX_DI},
   NativeEntry{0x7C12, "ClearTextScreen", &ClearTextScreenEntry, CLOBBERS_AX_CX_DI},
   NativeEntry{0x7C25, "DrawChartFrame", &DrawChartFrame, CLOBBERS_GENERAL_AND_ES},
-  NativeEntry{0x7CFE, "SetGraphicsMode", &SetGraphicsMode, CLOBBERS_AX_BX_DX},
-  NativeEntry{0x7D11, "SetTextMode", &SetTextMode, CLOBBERS_AX_DX},
+  NativeEntry{0x7CFE, "SetGraphicsMode", &SetGraphicsModeEntry, CLOBBERS_AX_BX_DX},
+  NativeEntry{0x7D11, "SetTextMode", &SetTextModeEntry, CLOBBERS_AX_DX},
   NativeEntry{0x7D4E, "DrawTitlePlanet", &DrawTitlePlanet, PRESERVES_ALL},
 };
 

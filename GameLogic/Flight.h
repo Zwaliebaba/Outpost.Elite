@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "Maths.h"
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
@@ -57,23 +58,13 @@ void SetUpLocalSpace(Guest& _guest);
 /// CheckCollisions (CS:2BC5): the player against every object slot: damage, or docking.
 void CheckCollisions(Guest& _guest);
 
-/// UpdateSafeZone (CS:2E69): safeZoneFlags from the station's distance. DI comes back stationSlot.
-void UpdateSafeZone(Guest& _guest);
-
 /// UpdateCompass (CS:418F): moves the compass dot to the planet or the station. Every register comes
 /// back as the original leaves it; DI = stationSlot.
 void UpdateCompass(Guest& _guest);
 
-/// UpdateFuelLeak (CS:499F): runs a fuel leak, and sets the border colour.
-void UpdateFuelLeak(Guest& _guest);
-
 /// RunFlight (CS:7E9B): the station tunnel, then a frame at a time until the player docks or is 40
 /// frames dead; when the escape pod arrives TickEscapePod returns past it. Waits.
 void RunFlight(Guest& _guest);
-
-/// TickEscapePod (CS:7F69): counts the escape pod down; when it arrives, pops the return address
-/// into AX so that the caller's caller is returned to.
-void TickEscapePod(Guest& _guest);
 
 /// ProcessFlightKeys (CS:7FA8): the flight controls other than steering.
 void ProcessFlightKeys(Guest& _guest);
@@ -232,6 +223,10 @@ std::uint8_t UpdateConditionColor(GameState& _state);
 /// InSafeZone (CS:2E63): safeZoneFlags, read.
 [[nodiscard]] SafeZone InSafeZone(const GameState& _state);
 
+/// UpdateSafeZone (CS:2E69): safeZoneFlags from the station in stationSlot: bit 0 set while it is an active station, IsObjectNear
+/// and nearer than 32C8h, over what the original's AL held: IsObjectNear's last high byte, or the low byte of the distance.
+void UpdateSafeZone(GameState& _state);
+
 /// ComputeDeathDebrisVector (CS:2F8B): (0, 40, 0) turned by the view and, off the front view, by the roll, then by the yaw
 /// and the pitch, through rotationSinCos[8], [7] and [6], which it sets.
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
@@ -273,6 +268,14 @@ DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _
 /// XorDashboardPixel (CS:43C4): the colour-2 pixel at _x, _y from the dashboard's origin (96, 144) XORed into
 /// video memory. Returns the mask, from dashboardPixelMasks.
 std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y);
+
+/// UpdateFuelLeak (CS:499F): a fuel leak's delay counted down, then its frames, each taking 5 fuel and posting fuelLeakText;
+/// the border red while it leaks and maskingBackgroundColor otherwise, with the bright palette, unless the delay has just run out.
+void UpdateFuelLeak(GameState& _state, Hardware& _hardware);
+
+/// TickEscapePod (CS:7F69): escapePodFrames counted down while it runs. Returns whether the pod has arrived, when the original
+/// drops its own return address so that its RET leaves RunFlight.
+bool TickEscapePod(GameState& _state);
 
 /// DrainEnergy (CS:839F): playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
 void DrainEnergy(GameState& _state, std::int8_t _amount);
@@ -334,6 +337,9 @@ void EraseCompassAndBlipsEntry(Guest& _guest); ///< Out: ES = B800h once it eras
 void DrainEnergyEntry(Guest& _guest);
 void UpdatePlayerVelocityEntry(Guest& _guest);
 void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, SI past the last slot.
+void UpdateSafeZoneEntry(Guest& _guest);        ///< Out: DI = stationSlot. AX, BX, CX, DX clobbered.
+void UpdateFuelLeakEntry(Guest& _guest);        ///< AX, DX clobbered.
+void TickEscapePodEntry(Guest& _guest);         ///< When the pod arrives, pops the return address into AX: the RET leaves RunFlight.
 
 /// What EraseScannerBlip leaves in the registers for _slot once it has _erased its blip: AX = DX the last pixel, BX its mask, CX
 /// the stick's step and 0, and ES the video segment. For the entries of the routines that end with it, whose callers go on
