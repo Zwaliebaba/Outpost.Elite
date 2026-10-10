@@ -87,6 +87,10 @@ jobs:
       # machine; the runner's bundled LLVM cannot be asked for by version at all.
       CLANG_TIDY_VERSION: 22.1.8
 
+      # The disassembler Tools/MapReference.py and Tools/RoutineCoverage.py walk the code with: the
+      # version MapReference.py names, pinned for the same reason as clang-tidy.
+      CAPSTONE_VERSION: 5.0.7
+
     steps:
       - uses: actions/checkout@v4
 
@@ -193,6 +197,17 @@ jobs:
           if (-not $vstest) { throw "vstest.console.exe not found." }
           & $vstest $suites /Platform:x64 /Logger:trx /ResultsDirectory:TestResults
           if ($LASTEXITCODE -ne 0) { throw "vstest reported failures." }
+
+      # Phase 3's acceptance (ADR-010 item 5): every instruction of every ported routine, and of what it
+      # calls or runs into, ran in a compared call that agreed -- in a corpus replay or a constructed
+      # test, whose native reports the test run leaves under the temporary directory -- or has a written
+      # reason in Design/NativeCoverage.tsv. After the tests, which write the reports it reads.
+      - name: Check the native routines' coverage
+        if: steps.solution.outputs.path != ''
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "capstone==$env:CAPSTONE_VERSION"
+          python Tools\RoutineCoverage.py
 
       # After the build, so that a compile error is reported as a compile error rather than as
       # forty linter findings about a file that does not parse.
