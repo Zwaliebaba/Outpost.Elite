@@ -227,6 +227,12 @@ def fighter(_commander: Commander) -> None:
   _commander.set("killCount", 20)
 
 
+def armed(_commander: Commander) -> None:
+  fighter(_commander)
+  _commander.fit("energyBombFitted")
+  _commander.fit_laser("pulse", "aft")
+
+
 def mask_mission(_commander: Commander) -> None:
   fighter(_commander)
   _commander.brief_mask_mission()
@@ -264,6 +270,7 @@ COMMANDERS = [
    rich_at_leesti),
   ("fighter.cdr", "at Lave, with a military laser for the pulse laser, ECM, an energy unit and 20 kills: enough "
    "for enemies to fire missiles (3)", fighter),
+  ("armed.cdr", "the fighter, with an energy bomb and a pulse laser aft", armed),
   ("combat-orerve.cdr", "the fighter, 3,261,171 random draws on", fighter_after(3261171)),
   ("combat-reorte.cdr", "the fighter, 4,148,768 random draws on", fighter_after(4148768)),
   ("combat-orerve-drifters.cdr", "the fighter, 3,350,928 random draws on", fighter_after(3350928)),

@@ -1,0 +1,28 @@
+# Attacks Lave's station from just outside it, with the weapons a commander buys: I locks a missile on the station
+# in the rear view, M fires it (legal status 40, and the station's ECM removes it), the aft pulse laser hits it, and
+# the station, now angry with a fugitive, launches police Vipers; E sets off the ECM, and B the energy bomb, which
+# destroys the Vipers. Then the left and the right views, the two the other replays do not show. It starts from
+# armed.cdr (Tools/PrepareCommanders.py): the fighter with an energy bomb and a pulse laser aft.
+file JAMESON.CDR armed.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded ce5f5991267f2d3bd4a3b95a1b377308d215dbcdda1564c1ef6dabb90488a11e
+key F1; wait 1                     # launch
+down F2; wait 0.1; up F2; wait 0.3 # the rear view, the station in its sights
+down i; wait 0.1; up i; wait 0.3   # Missile Locked-on Target
+down m; wait 0.1; up m; wait 0.1   # Missile Launched
+digest missile e04a91880e55f6fb48f4c7812230baf89a51da94a67924fc407fef31f0305985
+down space; wait 0.5; up space     # the aft laser on the station
+digest fired c732617a1e5dff09d0a351beb3ba221130868961f2b8b30b1aad1d8d92f16cb0
+wait 3.5                           # the station launches police Vipers
+digest police d99797042a828dbb54b65ffbbd7431ea9180ed20a2b8a3a0c17918250a2312bf
+down e; wait 0.1; up e; wait 0.3   # ECM
+down b; wait 0.1; up b; wait 0.3   # the energy bomb
+digest bombed fc679d147e3c0c78e887f7b7eb05208cdb7aef6899dfbcb87c3a613505a89eb8
+wait 1
+digest wreckage 57c4058c60e9aba16dfbf2172b7bb11c3a5cdf10f18b727c3f328b2725511af7
+down F3; wait 0.1; up F3; wait 0.5 # the left view, and the right: the stardust streams sideways
+down F4; wait 0.1; up F4; wait 0.5
+digest side-views 09b48cd1985af6b3b1718fb47824c144b0d858b8e06be728db48bda76d1b8263
