@@ -117,6 +117,9 @@
     <ClCompile Include="VideoTests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="KnownAnswers.txt" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\GameLogic\GameLogic.vcxproj">
       <Project>{092FB942-D1C6-56A9-BD38-795B1F453D7F}</Project>
     </ProjectReference>
