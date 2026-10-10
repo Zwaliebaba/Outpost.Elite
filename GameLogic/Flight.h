@@ -251,6 +251,10 @@ std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _s
 /// the centre.
 DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
 
+/// A dashboard pixel's place as the original holds it in DX: x in DL, y in DH. What a routine that ends by XORing a pixel
+/// leaves there.
+[[nodiscard]] std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept;
+
 /// EraseScannerBlip (CS:42D6): unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
 /// says so cleared. Returns the blip's last pixel, when it erased one.
 std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot);

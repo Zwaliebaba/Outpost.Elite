@@ -441,7 +441,7 @@ StationEcm CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
     return StationEcm{false, false};
   }
   _state.Set(DS.ecmFired, 1);
-  const bool erased = RemoveAllMissiles(_state);
+  const bool erased = RemoveAllMissiles(_state).has_value();
   _state.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_state.Get(DS.npcEcmFrames) - 1));
   return StationEcm{true, erased};
 }

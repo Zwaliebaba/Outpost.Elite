@@ -2303,6 +2303,11 @@ DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y
   return pixel;
 }
 
+std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
+{
+  return Join(_pixel.y, _pixel.x);
+}
+
 std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot)
 {
   if (IsStation(_slot).station || (_slot.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0)
@@ -2852,12 +2857,6 @@ void DustOut(Registers& _regs, DustPosition _position) noexcept
 {
   _regs.ax = Word(_position.x);
   _regs.bx = Word(_position.y);
-}
-
-// A dashboard pixel's place as DX holds it: x in DL, y in DH.
-[[nodiscard]] std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
-{
-  return Join(_pixel.y, _pixel.x);
 }
 
 // What the last XorDashboardPixel of a scanner blip leaves: AX = DX the last pixel, BX its mask and ES the video segment;
