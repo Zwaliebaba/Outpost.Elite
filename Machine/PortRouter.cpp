@@ -53,6 +53,7 @@ std::uint8_t PortRouter::In8(std::uint16_t _port)
 
 void PortRouter::Out8(std::uint16_t _port, std::uint8_t _value)
 {
+  ++m_writes;
   PortBus* device = DeviceAt(_port);
   if (device == nullptr)
   {
@@ -77,6 +78,7 @@ void PortRouter::Out16(std::uint16_t _port, std::uint16_t _value)
   PortBus* device = DeviceAt(_port);
   if (device != nullptr && device == DeviceAt(static_cast<std::uint16_t>(_port + 1)))
   {
+    ++m_writes;
     device->Out16(_port, _value);
     return;
   }

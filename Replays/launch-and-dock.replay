@@ -1,0 +1,22 @@
+# Launches from Lave station and docks again by hand: a half loop back along the slot's axis, a roll to
+# match the station's spin, and straight in. The timings were found by probing the reference, which
+# paced time makes repeatable to the frame.
+wait 3
+key space; wait 4
+key F1                             # launch: the tunnel, then space
+wait 2
+digest tunnel 2fa7b59ec4605c86e49f4b43b333427a251b2c0e20066e3f0ea2360492bcc3b3
+wait 4
+digest launched a344af805daa84d4bf8a877cca04491dae9342d47b68024d03f38c895870d377
+down Down; wait 1.17; up Down      # pitch through 180 degrees, to 3E7h: aimed a little low, at the slot
+wait 0.5
+digest turned 5171a83b2092f8131b65552da9a7ae04ae925854b2fa330884f9d79f5ff7299a
+down Right; wait 0.65; up Right    # roll to the station's spin at arrival
+wait 3
+shot approach
+digest approach 5eb688d7f27d8bf88a13688905096ccf796de39bc5487e407dbd7237645532e4
+wait 3
+digest docking 4ea4d3c8253a489500c9d2c9b550c6450cb203b6c7a992f7a7a7f905a73af7a9
+wait 4                             # the tunnel, then the status screen
+shot docked
+digest docked f39357b391a56594a54a11c068e7d116d61a07bc35b2c1a17fd586e4a9d14431

@@ -134,6 +134,7 @@ void Cpu::Reset() noexcept
   m_regs.cs = 0xFFFF;
   m_regs.flags = FLAGS_FIXED_ONES;
   m_instructionCount = 0;
+  m_hardwareInterrupts = 0;
   m_halted = false;
   m_interruptShadow = false;
 }
@@ -147,6 +148,7 @@ std::uint32_t Cpu::Step()
     const std::uint8_t vector = m_interrupts->AcknowledgeInterrupt();
     EnterInterrupt(vector);
     m_cycles += HARDWARE_INTERRUPT_CYCLES;
+    ++m_hardwareInterrupts;
   }
   if (m_halted)
   {

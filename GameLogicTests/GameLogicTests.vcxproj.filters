@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Build">
+      <UniqueIdentifier>{A38D8D19-E84C-5174-93B5-6D72C91EA9D8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Replay">
+      <UniqueIdentifier>{4FA17651-43F5-57B9-8147-888A2272841C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rigs">
+      <UniqueIdentifier>{DF447284-EDA8-587E-83FB-9FC68DF62CE6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>Build</Filter>
+    </ClInclude>
+    <ClInclude Include="ReferenceRig.h">
+      <Filter>Rigs</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="CorpusTests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="ReplayTests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="StateDigestTests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

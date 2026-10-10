@@ -1,6 +1,6 @@
 # ADR-006 — The PC host
 
-**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Pc` and the devices and services it puts together, and the `ReferenceRunner` (ADR-004).
+**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Pc` and the devices and services it puts together, and the `ReferenceRunner` (ADR-004). **Amended 2026-10-10:** item 1's clock has a second mode, paced time, which ADR-008 decides.
 
 ## Context
 
@@ -24,6 +24,7 @@ Each is a choice about how much of the real part to model. The game's own use of
 - Time is the 8088's cycle count, a third of the 14.31818 MHz crystal (`Timing.h`).
 - A step is one CPU step. The clock then advances by its cycles, and the timer and the keyboard catch up with it, raising whatever interrupt falls due. The interrupt is seen at the next instruction boundary.
 - The CGA's status and the game port's one-shots are computed from the clock when they are read, not ticked.
+- That is clocked time, the real machine's. Paced time, in which instructions take no time and the clock moves only while the program waits, is ADR-008's; replays and the game run in it.
 - There is no wall clock and no randomness, so a run is a function of the program, its start moment and its inputs.
 - Measured 2026-10-09: two runs, and builds by g++ 13 and clang++ 18, write byte-identical boot traces.
 
@@ -82,7 +83,7 @@ Each is a choice about how much of the real part to model. The game's own use of
 
 **6. What checks it.**
 
-- **123 tests in `MachineTests`:** DOS 16, CGA 12, PIC 10, CPU 10, PIT 9, firmware 8, BIOS 7, loader 7, speaker 7, PC 6, keyboard 6, game port 5, mouse 5, SHA-256 5, port router 4, memory 3, font 3.
+- **128 tests in `MachineTests`:** DOS 16, CGA 12, PC 11 (five of them paced time, ADR-008), PIC 10, CPU 10, PIT 9, firmware 8, BIOS 7, loader 7, speaker 7, keyboard 6, game port 5, mouse 5, SHA-256 5, port router 4, memory 3, font 3.
 - **`PcTests.ReferenceBootsToItsFirstKeyRead` pins the boot of `ELITES.EXE` (ADR-007):** 39,255 instructions and 761,619 cycles from the entry to the first `GetKey`, the CGA in mode 4, and the SHA-256 of memory at that point. A change to the CPU, a device or a service that alters the boot by one instruction, one cycle or one byte fails CI, and has to say why.
 - **The boot trace matches DOSBox-X's** register for register at all 28,652 comparable records (ADR-003 item 1).
 - **The screens match DOSBox-X's shots** taken by the same script. Measured with ImageMagick at 10% fuzz:

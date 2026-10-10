@@ -203,6 +203,22 @@ public:
   /// What a read of 0x3DA returns now.
   [[nodiscard]] std::uint8_t Status() const noexcept;
 
+  /// Paced time only (Pc, ADR-008): report each vertical retrace to the first read of 0x3DA that sees it,
+  /// and to no later one. The game waits for a retrace by reading the status until bit 3 is set, a level
+  /// rather than an edge. On the real machine the drawing between two such waits outlasts the 16 lines
+  /// of the retrace, so each wait meets the next one. In paced time the drawing takes no time and the
+  /// retrace would still be on, so the second wait would not wait at all. With this set, a retrace that
+  /// has been seen is over for the program, and each wait meets the next one, as it did.
+  void SetRetraceSeenOnce(bool _once) noexcept
+  {
+    m_retraceSeenOnce = _once;
+  }
+
+  /// The next cycle after now at which Status() can change: the next end of a line's display period
+  /// or the next start of a line. Some of these leave it as it was (in the vertical blank, for one),
+  /// but no change falls between two of them.
+  [[nodiscard]] Cycles NextStatusChangeAt() const noexcept;
+
   /// Frames begun since power-on: clock / CGA_CYCLES_PER_FRAME.
   [[nodiscard]] std::uint64_t FrameNumber() const noexcept;
 
@@ -222,6 +238,8 @@ public:
   }
 
 private:
+  /// The cycle at which the vertical retrace in progress began, or NO_EVENT if there is none.
+  [[nodiscard]] Cycles RetraceStart() const noexcept;
   [[nodiscard]] std::uint32_t StartAddress() const noexcept;
   [[nodiscard]] std::uint32_t CursorAddress() const noexcept;
   [[nodiscard]] bool CursorShown() const noexcept;
@@ -236,6 +254,8 @@ private:
   std::uint8_t m_crtcIndex = 0;
   std::uint8_t m_modeControl = 0;
   std::uint8_t m_colorSelect = 0;
+  bool m_retraceSeenOnce = false;
+  Cycles m_retraceSeen = NO_EVENT; // the start of the last retrace a read reported
 };
 
 } // namespace Machine

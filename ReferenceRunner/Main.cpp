@@ -3,8 +3,8 @@
 #include "DirectoryFileStore.h"
 #include "Pc.h"
 #include "PngWriter.h"
-#include "Sha256.h"
-#include "StepScript.h"
+#include "Reference.h"
+#include "Replay.h"
 #include "TraceWriter.h"
 
 #include <array>
@@ -14,58 +14,54 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iterator>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
 
-// Runs the reference headless on Machine::Pc and records what ADR-003 compares (ADR-006):
+// Runs the reference headless on Machine::Pc and records what ADR-003 compares (ADR-006), or plays a
+// replay (ADR-008):
 //
-//   ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT] [--trace FILE] [--trace-until OFFSET]
-//                   [--coverage FILE]
+//   ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT | --replay FILE [--update]] [--paced]
+//                   [--trace FILE] [--trace-until OFFSET] [--coverage FILE]
 //
 // It checks that FILE (default ELITES.EXE) is the binary ADR-001 names, loads it, applies the D5 byte
-// in memory, and follows the steps Tools/ReferenceScreens.py also reads (StepScript.h): shots go to
+// in memory, and follows the steps (Replay.h), from --steps or from a replay file: shots go to
 // DIR/NAME.png, digests to standard output. DOS's files live in DIR/files.
+//
+// Time is clocked, as on the real machine, unless --paced is given; a replay is always paced. A digest
+// with an expected value that does not match fails the run. --update writes each digest's value into the
+// replay file instead: what recording a replay ends with, and never a way to make a failing one pass
+// (ADR-008).
 //
 // --trace writes the boot trace, every instruction from the entry until the first one at OFFSET in the
 // program's code segment (default 0x7616, GetKey). --coverage writes the offsets in that segment of every
 // instruction start the run executed, one per line in hex. Exit status: 0 the steps ran, 1 the program
-// stopped them (a refused call, its end, or a deadlock), 2 usage or file errors.
+// stopped them (a refused call, its end, a deadlock or a spin) or a digest did not match, 2 usage or
+// file errors.
 
 namespace
 {
 
-constexpr char USAGE[] = "usage: ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT] [--trace FILE] [--trace-until OFFSET] "
-                         "[--coverage FILE]\n";
+constexpr char USAGE[] = "usage: ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT | --replay FILE [--update]] [--paced] "
+                         "[--trace FILE] [--trace-until OFFSET] [--coverage FILE]\n";
 
-// ADR-001: the reference binary, and the one byte the host changes in memory (D5): the protection's
-// "already shown" flag at DS:25E4, in the data segment's image paragraph 08F4.
-constexpr std::string_view REFERENCE_SHA256 = "18b5076a54733dea2d45b1e3b280fd1377067b6cb1b27166d3873aa7e7744363";
-constexpr std::uint16_t D5_SEGMENT = 0x08F4;
-constexpr std::uint16_t D5_OFFSET = 0x25E4;
-
-// Where DOSBox-X puts the PSP, measured from its trace, so the two boot traces compare register for
-// register (ADR-003). The clock starts as a PC/XT without a clock card does, as Tools/ReferenceScreens.py
-// sets DOSBox-X's.
-constexpr std::uint16_t PSP_SEGMENT = 0x0813;
-constexpr Machine::Dos::DateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
-
-constexpr std::uint16_t GET_KEY_OFFSET = 0x7616;
-constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F40;
 // A trace with no steps to run runs until it ends, or for at most this long.
 constexpr std::uint64_t TRACE_LIMIT_MILLISECONDS = 60'000;
 
 struct Options
 {
-  std::filesystem::path exe = "ELITES.EXE";
+  std::filesystem::path exe = Elite::REFERENCE_FILE_NAME;
   std::filesystem::path out = ".";
   std::string steps;
+  std::filesystem::path replay;
+  bool update = false;
+  bool paced = false;
   std::filesystem::path trace;
-  std::uint16_t traceUntil = GET_KEY_OFFSET;
+  std::uint16_t traceUntil = Elite::GET_KEY_OFFSET;
   std::filesystem::path coverage;
 };
 
@@ -79,6 +75,16 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
   for (int index = 1; index < _argc; ++index)
   {
     const std::string_view argument = _argv[index];
+    if (argument == "--paced")
+    {
+      _options.paced = true;
+      continue;
+    }
+    if (argument == "--update")
+    {
+      _options.update = true;
+      continue;
+    }
     if (index + 1 >= _argc)
       return false;
     const std::string_view value = _argv[++index];
@@ -88,6 +94,8 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
       _options.out = value;
     else if (argument == "--steps")
       _options.steps = value;
+    else if (argument == "--replay")
+      _options.replay = value;
     else if (argument == "--trace")
       _options.trace = value;
     else if (argument == "--coverage")
@@ -102,30 +110,23 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
     else
       return false;
   }
-  return true;
+  if (!_options.replay.empty())
+  {
+    if (!_options.steps.empty())
+      return false;
+    _options.paced = true;
+  }
+  return !_options.update || !_options.replay.empty();
 }
 
-std::vector<std::uint8_t> ReadFile(const std::filesystem::path& _path)
+std::optional<std::string> ReadText(const std::filesystem::path& _path)
 {
   std::ifstream stream(_path, std::ios::binary);
-  return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-}
-
-// SHA-256 of all of memory and then the fourteen registers, little-endian: two runs that agree on this
-// agree on everything the program can see.
-std::string StateDigest(Machine::Pc& _pc)
-{
-  Machine::Sha256 hash;
-  hash.Update(_pc.Ram().Bytes());
-  const Machine::Registers& regs = _pc.Processor().Regs();
-  const std::array<std::uint16_t, 14> words = {regs.cs, regs.ip, regs.ax, regs.bx, regs.cx, regs.dx, regs.si,
-                                               regs.di, regs.bp, regs.sp, regs.ds, regs.es, regs.ss, regs.flags};
-  for (const std::uint16_t word : words)
-  {
-    const std::array<std::uint8_t, 2> bytes = {static_cast<std::uint8_t>(word & 0xFF), static_cast<std::uint8_t>(word >> 8)};
-    hash.Update(bytes);
-  }
-  return Machine::Sha256::ToHex(hash.Finish());
+  if (!stream)
+    return std::nullopt;
+  std::ostringstream text;
+  text << stream.rdbuf();
+  return text.str();
 }
 
 bool WriteShot(Machine::Pc& _pc, const std::filesystem::path& _path)
@@ -138,6 +139,43 @@ bool WriteShot(Machine::Pc& _pc, const std::filesystem::path& _path)
     palette[index] = (std::uint32_t{colors[index].red} << 16) | (std::uint32_t{colors[index].green} << 8) | colors[index].blue;
   return ReferenceRunner::WritePalettePng(_path, Machine::FrameImage::WIDTH_PIXELS, Machine::FrameImage::HEIGHT_PIXELS, image->pixels,
                                           palette);
+}
+
+// Writes each digest's value into the replay's text, on the line its step came from.
+std::string WithDigests(std::string_view _text, const std::vector<Elite::Step>& _steps, const std::vector<std::string>& _digests)
+{
+  std::vector<std::string> lines;
+  for (std::size_t start = 0; start <= _text.size();)
+  {
+    const std::size_t end = _text.find('\n', start);
+    lines.emplace_back(_text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
+    if (end == std::string_view::npos)
+      break;
+    start = end + 1;
+  }
+  for (std::size_t index = 0; index < _steps.size(); ++index)
+  {
+    const Elite::Step& step = _steps[index];
+    if (step.kind != Elite::StepKind::Digest || _digests[index].empty() || step.line == 0 || step.line > lines.size())
+      continue;
+    std::string& line = lines[step.line - 1];
+    const bool crlf = !line.empty() && line.back() == '\r';
+    if (crlf)
+      line.pop_back();
+    const std::size_t comment = line.find('#');
+    const std::string tail = comment == std::string::npos ? std::string{} : "  " + line.substr(comment);
+    line = std::format("digest {} {}{}", step.name, _digests[index], tail);
+    if (crlf)
+      line.push_back('\r');
+  }
+  std::string text;
+  for (std::size_t index = 0; index < lines.size(); ++index)
+  {
+    text += lines[index];
+    if (index + 1 < lines.size())
+      text += '\n';
+  }
+  return text;
 }
 
 std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
@@ -153,6 +191,8 @@ std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
     return "the program ended";
   case Machine::StopReason::Deadlocked:
     return "the CPU halted with interrupts off";
+  case Machine::StopReason::Spinning:
+    return std::format("{} steps without waiting, at {:04X}:{:04X}", _pc.SpinLimit(), _pc.Processor().Regs().cs, _pc.Processor().Regs().ip);
   case Machine::StopReason::Reached:
     break;
   }
@@ -162,24 +202,30 @@ std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
 int Run(int _argc, char** _argv)
 {
   Options options;
-  std::vector<ReferenceRunner::Step> steps;
+  std::vector<Elite::Step> steps;
   std::string error;
-  if (!ParseOptions(_argc, _argv, options) || !ReferenceRunner::ParseSteps(options.steps, steps, error))
+  std::string replayText;
+  if (!ParseOptions(_argc, _argv, options))
   {
-    if (!error.empty())
-      std::fprintf(stderr, "ReferenceRunner: %s\n", error.c_str());
     std::fputs(USAGE, stderr);
     return 2;
   }
-
-  const std::vector<std::uint8_t> file = ReadFile(options.exe);
-  const std::string digest = Machine::Sha256::ToHex(Machine::Sha256::Of(file));
-  if (digest != REFERENCE_SHA256)
+  if (!options.replay.empty())
   {
-    std::fprintf(stderr, "ReferenceRunner: %s is not the reference binary (SHA-256 %s); see ADR-001\n", options.exe.string().c_str(),
-                 digest.c_str());
+    const std::optional<std::string> text = ReadText(options.replay);
+    if (!text)
+    {
+      std::fprintf(stderr, "ReferenceRunner: cannot read %s\n", options.replay.string().c_str());
+      return 2;
+    }
+    replayText = *text;
+  }
+  if (!Elite::ParseSteps(options.replay.empty() ? std::string_view{options.steps} : std::string_view{replayText}, steps, error))
+  {
+    std::fprintf(stderr, "ReferenceRunner: %s\n", error.c_str());
     return 2;
   }
+
   std::error_code created;
   std::filesystem::create_directories(options.out / "files", created);
   if (created)
@@ -187,20 +233,24 @@ int Run(int _argc, char** _argv)
     std::fprintf(stderr, "ReferenceRunner: cannot create %s\n", (options.out / "files").string().c_str());
     return 2;
   }
-
   Machine::DirectoryFileStore files(options.out / "files");
   Machine::Pc::Desc desc;
-  desc.startMoment = START_MOMENT;
+  desc.startMoment = Elite::START_MOMENT;
   const auto pc = std::make_unique<Machine::Pc>(files, desc);
-  Machine::ExeLoader::Desc load;
-  load.pspSegment = PSP_SEGMENT;
   Machine::LoadedProgram program;
-  if (pc->Load(file, load, program) != Machine::LoadError::None ||
-      !Machine::ExeLoader::PatchByte(pc->Ram(), program, D5_SEGMENT, D5_OFFSET, 0x00, 0x01))
+  switch (Elite::LoadReference(*pc, Elite::ReadWholeFile(options.exe), Elite::PSP_SEGMENT, program))
   {
+  case Elite::ReferenceFailure::NotTheReference:
+    std::fprintf(stderr, "ReferenceRunner: %s is not the reference binary; see ADR-001 and ADR-007\n", options.exe.string().c_str());
+    return 2;
+  case Elite::ReferenceFailure::DidNotLoad:
     std::fputs("ReferenceRunner: the reference did not load\n", stderr);
     return 2;
+  case Elite::ReferenceFailure::None:
+    break;
   }
+  if (options.paced)
+    pc->SetTimeMode(Machine::TimeMode::Paced);
 
   std::vector<std::uint8_t> executed;
   pc->Processor().SetExecutionMap(&executed);
@@ -217,16 +267,13 @@ int Run(int _argc, char** _argv)
   }
 
   Machine::StopReason reason = Machine::StopReason::Reached;
-  for (const ReferenceRunner::Step& step : steps)
+  std::vector<std::string> digests(steps.size());
+  std::size_t mismatches = 0;
+  for (std::size_t index = 0; index < steps.size() && reason == Machine::StopReason::Reached; ++index)
   {
-    if (step.kind == ReferenceRunner::StepKind::Wait)
-      reason = pc->RunUntil(pc->Clock() + Machine::MicrosecondsToCycles(step.waitMilliseconds * 1000));
-    else if (step.kind == ReferenceRunner::StepKind::Key)
-    {
-      pc->KeyboardController().Inject(step.scanCode);
-      pc->KeyboardController().Inject(static_cast<std::uint8_t>(step.scanCode | 0x80));
-    }
-    else if (step.kind == ReferenceRunner::StepKind::Shot)
+    const Elite::Step& step = steps[index];
+    reason = Elite::PlayStep(*pc, program, step, digests[index]);
+    if (step.kind == Elite::StepKind::Shot)
     {
       const std::filesystem::path path = options.out / (step.name + ".png");
       if (!WriteShot(*pc, path))
@@ -236,10 +283,14 @@ int Run(int _argc, char** _argv)
       }
       Print(std::format("shot\t{}\n", path.string()));
     }
-    else
-      Print(std::format("digest\t{}\t{}\n", step.name, StateDigest(*pc)));
-    if (reason != Machine::StopReason::Reached)
-      break;
+    else if (step.kind == Elite::StepKind::Digest)
+    {
+      const bool checked = !step.expectedDigest.empty() && !options.update;
+      const bool matches = digests[index] == step.expectedDigest;
+      if (checked && !matches)
+        ++mismatches;
+      Print(std::format("digest\t{}\t{}{}\n", step.name, digests[index], !checked ? "" : matches ? "\tmatches" : "\tDOES NOT MATCH"));
+    }
   }
   if (trace && !trace->Finished() && reason == Machine::StopReason::Reached)
   {
@@ -257,7 +308,7 @@ int Run(int _argc, char** _argv)
     std::ofstream out(options.coverage, std::ios::trunc);
     std::size_t count = 0;
     const std::uint32_t base = Machine::Memory::Linear(program.loadSegment, 0);
-    for (std::uint32_t offset = 0; offset < CODE_SEGMENT_BYTES; ++offset)
+    for (std::uint32_t offset = 0; offset < Elite::CODE_SEGMENT_BYTES; ++offset)
     {
       if (executed[base + offset] != 0)
       {
@@ -267,11 +318,27 @@ int Run(int _argc, char** _argv)
     }
     Print(std::format("coverage\t{}\t{} instruction starts\n", options.coverage.string(), count));
   }
+  if (options.update && reason == Machine::StopReason::Reached)
+  {
+    std::ofstream out(options.replay, std::ios::binary | std::ios::trunc);
+    out << WithDigests(replayText, steps, digests);
+    if (!out)
+    {
+      std::fprintf(stderr, "ReferenceRunner: cannot write %s\n", options.replay.string().c_str());
+      return 2;
+    }
+    Print(std::format("updated\t{}\n", options.replay.string()));
+  }
   for (const auto& [port, counts] : pc->Ports().Unmapped())
     Print(std::format("unmapped\tport {:04X}h\t{} reads\t{} writes\n", port, counts.reads, counts.writes));
   Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc->Processor().InstructionCount(), pc->Clock(),
                     static_cast<double>(pc->Clock()) * Machine::CPU_CLOCK_DIVISOR / static_cast<double>(Machine::CRYSTAL_HZ),
                     Describe(reason, *pc)));
+  if (mismatches > 0)
+  {
+    std::fprintf(stderr, "ReferenceRunner: %zu digest(s) did not match\n", mismatches);
+    return 1;
+  }
   return reason == Machine::StopReason::Reached ? 0 : 1;
 }
 

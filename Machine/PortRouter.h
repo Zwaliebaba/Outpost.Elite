@@ -49,6 +49,13 @@ public:
     return m_unmapped;
   }
 
+  /// Byte writes to any port, mapped or not, since construction. A word write counts as the device
+  /// takes it: once when one device decodes both bytes, twice when it is split.
+  [[nodiscard]] std::uint64_t WriteCount() const noexcept
+  {
+    return m_writes;
+  }
+
   void ClearUnmapped() noexcept
   {
     m_unmapped.clear();
@@ -63,6 +70,7 @@ private:
   std::vector<std::uint8_t> m_owner; // per port: an index into m_devices, 0 for none
   std::vector<PortBus*> m_devices;   // m_devices[0] is null
   std::map<std::uint16_t, UnmappedCount> m_unmapped;
+  std::uint64_t m_writes = 0;
 };
 
 } // namespace Machine

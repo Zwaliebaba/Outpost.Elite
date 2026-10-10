@@ -1,0 +1,21 @@
+# Saves the starting commander, spends money, and loads it back: the commander file goes through DOS
+# (int 21h) into the replay's own directory, and loading it restores the 100 credits.
+wait 3
+key space; wait 4
+key Escape; wait 1
+key s; wait 1                      # Save Commander: it asks for a file name
+key t; key e; key s; key t; wait 0.5
+key Return; wait 2
+digest saved 01e26920db1cb3d689142f06163bbdcdb3739fcbb7df0e55fda0117f7c21b58a
+key F4; wait 1
+key Down; wait 0.5
+key b; wait 1                      # a missile: 100.0 credits become 66.4
+digest spent 3678d735f0dc23e8fa487f9e24f14854fab845da158832cfa81506eb2abffed5
+key Escape; wait 1
+key l; wait 1                      # Load Commander
+key t; key e; key s; key t; wait 0.5
+key Return; wait 2
+digest loaded e8c3d003bcac5d9c2b2f99a3c3685292e2c1e6116b31cb8ab32c66f1b17cb9f5
+key F9; wait 1
+shot status-after-load
+digest status-after-load f194060e2ebff66634142a7833a0874868481684122a00a7e62f20d23974dd79

@@ -1,0 +1,18 @@
+# The title screen (ADR-008): the boot, the solid-ship renderer turning the title ship, and F10 stepping
+# through the ship types. Paced time, so every frame is the game's own 50 ms.
+wait 3
+shot title
+digest title-start dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
+wait 5
+digest title-turned c91007204ddd45f9687a5e3a9f6948b5c10793dc345ae5ab8e0b8e24d4ba08fe
+key F10; wait 2
+digest ship-type-27 195a7d2257b7ba89daf73be4142688ec61395240a3e0291fa52ffaad2f60252e
+key F10; wait 2
+key F10; wait 2
+key F10; wait 2
+digest ship-type-2 3cdfc043b3231ccb5d1563c682842dd3e214a01048503c9a48ff841a657fc878
+key F9; wait 2
+key F9; wait 2
+digest ship-type-29 ee0428b7730837904d19d14ce766e759ca4ad1706e35f5cf27b0cb29876d0436
+wait 4
+digest title-end 6c53ee85d100c7c2023a5798c1af6bdf661052c37ec948f93329b4e752d9770f

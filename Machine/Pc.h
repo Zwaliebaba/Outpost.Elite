@@ -28,18 +28,50 @@ enum class StopReason : std::uint8_t
   Reached,    ///< The clock reached the cycle asked for.
   Fault,      ///< The services refused a call; PcServices::Fault says which.
   Terminated, ///< The program ended through int 20h.
-  Deadlocked  ///< The CPU halted with interrupts off, and nothing can wake it.
+  Deadlocked, ///< The CPU halted with interrupts off, and nothing can wake it.
+  Spinning    ///< Paced time only: the program ran SpinLimit() steps without waiting once.
+};
+
+/// How the machine's clock advances (ADR-008).
+enum class TimeMode : std::uint8_t
+{
+  /// Every instruction takes its 8088 cycles, as on the real machine: interrupts land wherever the
+  /// clock says, between any two instructions. What the DOSBox-X comparisons run in (ADR-003).
+  Clocked,
+
+  /// Instructions take no time. The clock moves only while the program waits, and then straight to
+  /// the next thing a device will do: the next timer interrupt, keyboard delivery or change of the
+  /// CGA's status. So interrupts land only inside the program's waits, at the same points however
+  /// long its work took. What replays and the game run in.
+  Paced
 };
 
 /// The IBM PC the reference runs on, put together (ADR-006): an 8088, 1 MiB of memory, the 8259, the
 /// 8253, the keyboard's 8255, the speaker, the game port and the CGA on one I/O bus, and the ROM, BIOS,
 /// DOS and mouse driver at the call level.
 ///
-/// Time is the machine's own cycle count, the 8088's clock at a third of the crystal (Timing.h). Step()
-/// runs one CPU step, adds its cycles to the clock, and then lets the devices that raise interrupts
-/// catch up with it, so a request raised during a step is seen at the next instruction boundary. There
-/// is no wall clock anywhere: a run is a function of the program, its start moment and its inputs, and
-/// two runs given the same are identical to the cycle.
+/// Time is the machine's own cycle count, the 8088's clock at a third of the crystal (Timing.h). How it
+/// advances is the TimeMode. When Clocked, Step() runs one CPU step, adds its cycles to the clock, and
+/// then lets the devices that raise interrupts catch up with it, so a request raised during a step is
+/// seen at the next instruction boundary. When Paced, the clock moves only when the program waits.
+///
+/// Waiting is recognised, not declared. A program waits by going round a loop until an interrupt or a
+/// device changes something. One turn of such a loop changes nothing: when it takes its backward jump,
+/// the registers are what they were the last time that jump was taken, no byte of memory has changed
+/// and no port has been written. Paced time watches every taken backward jump, and when one closes a
+/// turn like that, the clock moves to the next device event (Idle()). A loop that counts, copies or
+/// draws changes something each turn, so it is work and takes no time.
+///
+/// Paced time has one more consequence: the CGA reports each vertical retrace only to the first status
+/// read that sees it (Cga::SetRetraceSeenOnce), because the game waits for a retrace's level rather than
+/// its edge, and only its drawing time made those the same.
+///
+/// The game port is timed differently in both modes: its one-shots are measured against the cycles of
+/// the instructions executed (InstructionCycles()), because the program reads a stick by counting
+/// polling loops with interrupts off.
+///
+/// There is no wall clock anywhere: a run is a function of the program, its start moment and its
+/// inputs, and two runs given the same are identical to the cycle.
 class Pc
 {
 public:
@@ -56,15 +88,46 @@ public:
   /// MS-DOS gives a program. Nothing changes if the load fails.
   [[nodiscard]] LoadError Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _desc, LoadedProgram& _program);
 
+  /// Clocked (the default) or Paced. Changing it mid-run is allowed: the clock carries on from where
+  /// it is.
+  void SetTimeMode(TimeMode _mode) noexcept;
+
+  [[nodiscard]] TimeMode Mode() const noexcept
+  {
+    return m_timeMode;
+  }
+
+  /// Paced time: the number of steps the program may run without waiting before RunUntil stops with
+  /// StopReason::Spinning. A loop that waits for time without ever completing an idle turn would
+  /// otherwise run for ever with the clock standing still.
+  void SetSpinLimit(std::uint64_t _steps) noexcept;
+
+  [[nodiscard]] std::uint64_t SpinLimit() const noexcept
+  {
+    return m_spinLimit;
+  }
+
   /// One CPU step, then the timer and the keyboard catch up with the clock.
   void Step();
 
   /// Steps until the clock reaches _cycle, or until the program can go no further.
   [[nodiscard]] StopReason RunUntil(Cycles _cycle);
 
+  /// Moves the clock to the next device event, or to _limit if that comes first, and lets the devices
+  /// raise what falls due. What paced time does when the program waits; native code that replaces a
+  /// waiting loop calls it in the loop's place (Phase 3). Clocked, it does the same.
+  void Idle(Cycles _limit);
+
+  /// The machine's clock.
   [[nodiscard]] Cycles Clock() const noexcept
   {
     return m_clock;
+  }
+
+  /// The cycles of every instruction executed since power-on, in either mode: the game port's clock.
+  [[nodiscard]] Cycles InstructionCycles() const noexcept
+  {
+    return m_instructionCycles;
   }
 
   [[nodiscard]] Cpu& Processor() noexcept
@@ -72,7 +135,17 @@ public:
     return m_cpu;
   }
 
+  [[nodiscard]] const Cpu& Processor() const noexcept
+  {
+    return m_cpu;
+  }
+
   [[nodiscard]] Memory& Ram() noexcept
+  {
+    return m_memory;
+  }
+
+  [[nodiscard]] const Memory& Ram() const noexcept
   {
     return m_memory;
   }
@@ -112,12 +185,35 @@ public:
     return m_ports;
   }
 
+  /// Steps the default spin limit allows: far more than the longest stretch of work the game does
+  /// between two waits, far fewer than a host would run before someone notices.
+  static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
+
 private:
+  // The state at a taken backward jump, kept to tell whether the next turn of the loop changed
+  // anything.
+  struct LoopTurn
+  {
+    Registers registers{};
+    std::uint64_t memoryChanges = 0;
+    std::uint64_t portWrites = 0;
+    bool valid = false;
+  };
+
   void MapPorts(std::uint16_t _first, std::uint16_t _last, PortBus& _device);
+  void StepPaced();
+  void NoteBackwardJump();
   [[nodiscard]] StopReason Stopped() const noexcept;
+
+  TimeMode m_timeMode = TimeMode::Clocked;
+  std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
+  std::uint64_t m_stepsSinceIdle = 0;
+  Cycles m_runLimit = NO_EVENT;
+  LoopTurn m_lastTurn{};
 
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;
+  Cycles m_instructionCycles = 0;
   Memory m_memory;
   Pic m_pic;
   Speaker m_speaker;

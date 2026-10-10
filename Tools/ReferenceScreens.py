@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """Take reference screenshots of the original game running in DOSBox-X (ADR-003 item 1).
 
-  python Tools/ReferenceScreens.py --out DIR [--steps "wait 20; shot title; key space; wait 5; shot launch"]
+  python Tools/ReferenceScreens.py --out DIR [--steps "wait 20; shot title; key space; wait 5; shot launch" | --replay FILE]
 
 ADR-003 checks our interpreter's picture against an independent one before anything is ported against
 it. This runs ELITES.EXE in DOSBox-X, headless on a virtual X display, with the same one-byte patch
 the host applies in memory (ADR-001, D5) applied to a scratch copy of the file. It then follows a
-small script of steps:
+small script of steps, the format GameLogic/Replay.h defines (steps separated by ';' or a new line,
+'#' starting a comment):
 
-  wait N       let N seconds of wall time pass
-  key NAME     press and release one key (xdotool key names: F1, space, Escape, Return, a, ...)
-  shot NAME    write NAME.png to --out
-  digest NAME  ignored here: ReferenceRunner prints a state digest, and one script serves both
+  wait N             let N seconds of wall time pass
+  key NAME           press and release one key (xdotool key names: F1, space, Escape, Return, a, ...)
+  down NAME, up NAME press a key and hold it; release it
+  shot NAME          write NAME.png to --out
+  digest NAME [HEX]  ignored here: ReferenceRunner prints a state digest, and one script serves both
+
+A replay (ADR-008) is timed in paced time and DOSBox-X runs in wall time, so a replay played here is
+an approximation of the run it records: good for comparing static screens, not for flight.
 
 Each shot is the emulated screen as a 640x200 image on the CGA's dot grid, the same grid
 Machine::Cga renders: DOSBox-X draws the 200-line picture doubled to 400, so every other row is
@@ -138,15 +143,19 @@ def main() -> int:
   parser.add_argument("--exe", type=Path, default=ROOT / "ELITES.EXE", help="the reference binary")
   parser.add_argument("--out", type=Path, required=True, help="directory for the PNG shots")
   parser.add_argument("--steps", default="wait 20; shot title", help="the script, steps separated by ';'")
+  parser.add_argument("--replay", type=Path, help="read the steps from a replay file instead")
   args = parser.parse_args()
 
   for tool in ("dosbox-x", "Xvfb", "xdotool", "import", "convert"):
     if shutil.which(tool) is None:
       sys.exit(f"{tool} is not installed; see this script's docstring")
-  steps = [step.split(maxsplit=1) for step in (part.strip() for part in args.steps.split(";")) if step]
+  text = args.replay.read_text(encoding="utf-8") if args.replay else args.steps
+  lines = (line.split("#", 1)[0] for line in text.splitlines())
+  steps = [part.split() for line in lines for part in line.split(";") if part.strip()]
   for step in steps:
-    if len(step) != 2 or step[0] not in ("wait", "key", "shot", "digest"):
-      sys.exit(f"bad step {' '.join(step)!r}; steps are 'wait N', 'key NAME', 'shot NAME' and 'digest NAME'")
+    if step[0] not in ("wait", "key", "down", "up", "shot", "digest") or len(step) not in ((2, 3) if step[0] == "digest" else (2,)):
+      sys.exit(f"bad step {' '.join(step)!r}; steps are wait, key, down, up, shot and digest (GameLogic/Replay.h)")
+  steps = [(step[0], step[1]) for step in steps]
   args.out.mkdir(parents=True, exist_ok=True)
 
   with tempfile.TemporaryDirectory(prefix="reference-screens-") as scratch:
@@ -169,8 +178,9 @@ def main() -> int:
       for verb, argument in steps:
         if verb == "wait":
           time.sleep(float(argument))
-        elif verb == "key":
-          run(["xdotool", "key", "--window", window, argument], env)
+        elif verb in ("key", "down", "up"):
+          action = {"key": "key", "down": "keydown", "up": "keyup"}[verb]
+          run(["xdotool", action, "--window", window, argument], env)
         elif verb == "digest":
           pass  # only the host can fingerprint its own state; the step is accepted so one script serves both
         else:
