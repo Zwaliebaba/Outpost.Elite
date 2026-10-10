@@ -547,20 +547,26 @@ void MoveMountBoxRightOnRegisters(Guest& _guest)
   MountBoxOut(regs, _guest.State(), MoveMountBoxRight(_guest.State(), regs.si));
 }
 
-// 6438 and 6505: a mount message on the message line, SI kept.
-void PrintMountMessage(Guest& _guest, std::uint16_t _text, std::uint16_t _jumpedTo)
+// 6438 and 6505: the mount message at DS:_text on the message line, in the menu's attribute. _jumpedTo, when not 0, is
+// where the original jumps back to on the way: 6509, from 653D, the tail the two messages share (ADR-015). The PUSH SI /
+// POP SI round it keep the box, which the routine never touches.
+PrintedText PrintMountMessage(GameState& _state, Hardware& _hardware, std::uint16_t _text, std::uint16_t _jumpedTo)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Push(regs.si);
-  regs.si = _text;
   if (_jumpedTo != 0)
   {
-    _guest.JumpBack(_jumpedTo);
+    _hardware.LoopTurn(_jumpedTo, {});
   }
-  regs.di = MESSAGE_OFFSET;
-  _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = _guest.Pop();
+  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  return PrintTextModeString(_state, _text, MESSAGE_OFFSET);
+}
+
+// What PrintMountMessage leaves in the registers: SI kept, and PrintTextModeString's DI, ES and AX, the attribute it
+// printed in with the NUL in AL.
+void MountMessageOut(Registers& _regs, PrintedText _printed) noexcept
+{
+  _regs.di = _printed.nextCell;
+  _regs.es = Guest::VIDEO_SEGMENT;
+  _regs.ax = Join(MENU_ATTRIBUTE, 0);
 }
 
 // What SHR CH,CL leaves, with CL the selected mount + 1 and CH laserMountsFitted.
@@ -586,7 +592,7 @@ bool FitLaserOnMount(Guest& _guest)
   regs.cx = Join(bit.mountsAbove, bit.shiftCount);
   if (bit.fitted)
   {
-    PrintMountMessage(_guest, MOUNT_OCCUPIED_TEXT, 0);
+    MountMessageOut(regs, PrintMountMessage(_guest.State(), _guest.Devices(), MOUNT_OCCUPIED_TEXT, 0));
     return false;
   }
   SetLow(regs.cx, _guest.Get(DS.selectedLaserMount));
@@ -610,7 +616,7 @@ bool RemoveLaserFromMount(Guest& _guest)
   regs.cx = Join(bit.mountsAbove, bit.shiftCount);
   if (!bit.fitted)
   {
-    PrintMountMessage(_guest, NO_LASER_ON_MOUNT_TEXT, 0);
+    MountMessageOut(regs, PrintMountMessage(_guest.State(), _guest.Devices(), NO_LASER_ON_MOUNT_TEXT, 0));
     return false;
   }
   SetLow(regs.ax, _guest.Get(DS.laserMountTypes));
@@ -618,7 +624,7 @@ bool RemoveLaserFromMount(Guest& _guest)
   SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) >> Low(regs.cx)) & MOUNT_TYPE_BITS));
   if (Low(regs.ax) != _guest.Get(DS.selectedLaserType))
   {
-    PrintMountMessage(_guest, WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE);
+    MountMessageOut(regs, PrintMountMessage(_guest.State(), _guest.Devices(), WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE));
     return false;
   }
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) >> 1));
