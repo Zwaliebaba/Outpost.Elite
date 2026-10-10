@@ -4,19 +4,16 @@
 #include "Flight.h"
 #include "GameState.h"
 #include "Maths.h"
-#include "NativeEntry.h"
 #include "ObjectSlot.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's ships routines, ported (plan §5 Phase 3, ADR-010): the ship slots, blueprints and their vertex programs. Each body
-// is declared here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012) take values and
-// give values back, below the register bodies, and their entries keep the register contracts.
+// The reference's ships routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the ship slots, blueprints and their vertex
+// programs. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // The 64-byte object record of shipSlots: the fields the ported routines use, as offsets into it. Combat and Ai use them too.
 inline constexpr std::uint16_t SLOT_BYTES = 0x40;
@@ -75,9 +72,6 @@ inline constexpr std::uint8_t TYPE_ASP = 0x18;
 inline constexpr std::uint8_t TYPE_VIPER = 0x1C;
 inline constexpr std::uint8_t TYPE_SUN = 0x1E;
 inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> ShipsEntries() noexcept;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -172,14 +166,8 @@ void InitCargoBarrel(GameState& _state, ObjectSlot _slot);
 /// InitAbandonedCobra (CS:4CA6): _slot made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
 void InitAbandonedCobra(GameState& _state, ObjectSlot _slot);
 
-/// InitEscapePod (CS:4CB3): _slot made an escape pod (entry 1), class 3.
-void InitEscapePod(GameState& _state, ObjectSlot _slot);
-
 /// InitShuttle (CS:4CC0): _slot made a shuttle (entry 7), class 3.
 void InitShuttle(GameState& _state, ObjectSlot _slot);
-
-/// InitKraitHunter (CS:4CCD): _slot made a Krait (entry 17), class 6.
-void InitKraitHunter(GameState& _state, ObjectSlot _slot);
 
 /// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
 void InitThargon(GameState& _state, ObjectSlot _slot);
@@ -231,9 +219,6 @@ RandomRollFacing FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot);
 
 /// GetVectorToPlayer (CS:4EFE): the low words of _slot's position, negated.
 [[nodiscard]] Vector GetVectorToPlayer(const ObjectSlot& _slot);
-
-/// RandomizeOrientation (CS:4F35): _slot's pitch, yaw and roll, a random word each.
-void RandomizeOrientation(GameState& _state, ObjectSlot _slot);
 
 /// ComputeVelocity (CS:4F48): _slot's velocity bytes from its speed and heading: the pitch into rotation pair 7 and the yaw
 /// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
@@ -288,59 +273,5 @@ std::optional<MovedObject> UpdateDebrisAi(GameState& _state, ObjectSlot _slot);
 
 /// IsThargonType (CS:5431): whether _slot is a Thargon (type 7).
 [[nodiscard]] bool IsThargonType(const ObjectSlot& _slot);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-/// The registers and the flag IsObjectNear's original leaves for _test of _slot: AL the last high byte it looked at, the registers
-/// EraseScannerBlip leaves once it erased a blip (EraseScannerBlipOut), and CF set when near. For its entry, and for the entries
-/// of the routines that call it, whose contracts compare what it leaves.
-void IsObjectNearOut(Guest& _guest, const ObjectSlot& _slot, const NearTest& _test);
-
-/// The registers MoveObject's original leaves once it moved _slot as _moved says: AX and DX the z velocity, sign-extended, then
-/// what IsObjectNear leaves (IsObjectNearOut), then what RemoveObject's EraseScannerBlip leaves once it erased a blip. For its
-/// entry, and for the entries of the routines that end with it, whose contracts compare what it leaves.
-void MoveObjectOut(Guest& _guest, const ObjectSlot& _slot, const MovedObject& _moved);
-
-void ClearObjectSlotEntry(Guest& _guest);        ///< SI = the slot. Out: DI = the slot, SI = the slot + 40h, CX = 0.
-void IsObjectNearEntry(Guest& _guest);           ///< DI = the slot. Out: CF set when near; AL the last high byte looked at.
-void IsSunOrPlanetEntry(Guest& _guest);          ///< DI = the slot. Out: AL = the type; ZF set for the sun or the planet.
-void IsPlanetEntry(Guest& _guest);               ///< DI = the slot. Out: AL = the type; ZF set for the planet.
-void IsStationEntry(Guest& _guest);              ///< DI = the slot. Out: AL = the type; ZF set for a station, CF for the Dodo.
-void IsObjectNearKeepBlipEntry(Guest& _guest);   ///< DI = the slot. Out: CF set when near; AX clobbered.
-void InitPoliceViperEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
-void InitCargoBarrelEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
-void InitAbandonedCobraEntry(Guest& _guest);     ///< DI = the slot. AX, BX clobbered.
-void InitEscapePodEntry(Guest& _guest);          ///< DI = the slot. AX, BX clobbered.
-void InitShuttleEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
-void InitKraitHunterEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
-void InitThargonEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
-void SpawnRandomDrifterEntry(Guest& _guest);     ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
-void SpawnRandomTraderEntry(Guest& _guest);      ///< DI = the slot. Out: BP = the pitch; AX, BX, CX, DX clobbered.
-void SpawnRandomHunterEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
-void SpawnRandomWolfEntry(Guest& _guest);        ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
-void SpawnMaskMissionShipEntry(Guest& _guest);   ///< DI = the slot, CF set for the mask ship. AX, BX, CX, DX, BP clobbered.
-void SpawnInvasionThargoidEntry(Guest& _guest);  ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
-void InitObjectFromTemplateEntry(Guest& _guest); ///< BX = the table, AL = the record, DI = the slot. AX, BX clobbered.
-void PlaceAtSpawnPointEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX clobbered.
-void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
-void GetVectorToPlayerEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
-void RandomizeOrientationEntry(Guest& _guest);   ///< DI = the slot. AX clobbered.
-void ComputeVelocityEntry(Guest& _guest);        ///< DI = the slot. Out: BX = the z word; AX, DX clobbered.
-void MoveObjectEntry(Guest& _guest);             ///< DI = the slot. Out: every register as the original leaves it.
-void RemoveObjectEntry(Guest& _guest);           ///< DI = the slot.
-void FacePlayerEntry(Guest& _guest);             ///< DI = the slot. Out: BP = the pitch; AX, BX, CX, DX clobbered.
-void FindFreeShipSlotEntry(Guest& _guest);       ///< Out: CF set and SI = the slot when one is free, else SI past the slots.
-void ReclaimShipSlotEntry(Guest& _guest);        ///< Out: SI = the slot, and DI = SI once it evicts. AX, BX, CX, DX, ES clobbered.
-void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
-void FindDebrisSlotEntry(Guest& _guest);         ///< Out: SI = the slot.
-void CopyObjectEntry(Guest& _guest);             ///< SI = the source, DI = the destination. Out: ES = DS.
-void UpdateDebrisAiEntry(Guest& _guest);         ///< DI = the slot. AX, BX, CX, DX, ES clobbered.
-void IsDebrisTypeEntry(Guest& _guest);           ///< DI = the slot. Out: AL = the type; ZF set for a rock.
-void IsViperTypeEntry(Guest& _guest);            ///< DI = the slot. Out: ZF set for a Viper; AX kept.
-void IsPoliceViperEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a police Viper; AX kept.
-void IsThargoidTypeEntry(Guest& _guest);         ///< DI = the slot. Out: ZF set for a Thargoid; AX clobbered.
-void IsThargonTypeEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a Thargon; AX clobbered.
-/// DI = the slot. Out: AX = the roll, BP = the pitch; BX, CX, DX clobbered.
-void FacePlayerWithRandomRollEntry(Guest& _guest);
 
 } // namespace Elite

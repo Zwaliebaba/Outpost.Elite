@@ -11,16 +11,17 @@ namespace GameLogicTests
 TEST_CLASS(TwinRigTests)
 {
 public:
-  // The title screen's ship types stepped with F9 and F10, and the commander loaded with space: the two
-  // machines agree on every digest and end in one state.
+  // The title screen's ship types stepped with F9 and F10, and the commander loaded with space: every digest is the
+  // twin's known answer.
   TEST_METHOD(TwinsAgreeFromTheTitleScreenToTheDock)
   {
     TwinRig rig("TwinTitle");
     rig.Play("key F9; wait 1\nkey F10; wait 1\ndigest ships\nkey space; wait 4\ndigest docked");
   }
 
-  // The native twin changes nothing the interpreted one does not: memory set up on both stays equal.
-  TEST_METHOD(TwinsTakeTheSameSetUp)
+  // A twin's set-up changes what the game does from there: the commander's fuel set before space loads the commander and
+  // docks, and each of its three digests (the boot's, the dock's and the end's) the answer the original gave.
+  TEST_METHOD(TwinTakesASetUp)
   {
     TwinRig rig("TwinSetUp");
     rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)

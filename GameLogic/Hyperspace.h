@@ -2,21 +2,17 @@
 #pragma once
 
 #include "GameState.h"
-#include "NativeEntry.h"
+#include "Hardware.h"
 #include "Ships.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's hyperspace routines, ported (plan §5 Phase 3, ADR-010): hyperspace, galactic hyperspace and witchspace. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> HyperspaceEntries() noexcept;
+// The reference's hyperspace routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): hyperspace, galactic hyperspace and
+// witchspace. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
@@ -95,25 +91,5 @@ void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward
 /// (ShowHyperspaceCountdown), which jumps (CompleteHyperspaceJump, with _countIfNone and _backward) when it runs out. Returns
 /// whether it jumped. Waits then.
 bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-/// The registers IsMassLocked's original leaves once it found _lock: AL as InSafeZone leaves it; then what each IsObjectNear
-/// leaves (IsObjectNearOut), with DI on its slot; then DI and CX where the look at the ships stopped, and AL the last slot's type
-/// byte, SHR AL,1, and AND AL,1Fh once it is active. For its entry, and for EngageJumpDrive's, whose contract compares them.
-void MassLockOut(Guest& _guest, const MassLock& _lock);
-
-void IsMassLockedEntry(Guest& _guest);            ///< Out: CF set when locked; every register as the original leaves it.
-void ResetHyperspaceRingsEntry(Guest& _guest);    ///< Out: ES=B800h; AX, CX, SI and DI clobbered.
-void EnterWitchSpaceEntry(Guest& _guest);         ///< AX and BX clobbered.
-void UpdateMissionScheduleEntry(Guest& _guest);   ///< Out: AL the mission picked, once the jump counts.
-void LatchHyperspaceTargetEntry(Guest& _guest);   ///< Out: AL the last byte copied; CX, SI and DI clobbered.
-void ShowHyperspaceCountdownEntry(Guest& _guest); ///< AX clobbered.
-void ArriveInSystemEntry(Guest& _guest);          ///< Out: DF clear once the cockpit was drawn. Clobbers all.
-/// BP, as GalacticJump's search takes it. Out: ES = B800h, DF clear. AX, BX, CX, DX, SI, DI and BP clobbered.
-void CompleteHyperspaceJumpEntry(Guest& _guest);
-void DrawHyperspaceRingsEntry(Guest& _guest);     ///< Out: DF clear once a chord was a horizontal line. Clobbers all.
-void PlayHyperspaceTunnelEntry(Guest& _guest);    ///< Out: DF clear. Clobbers all.
-void TickHyperspaceCountdownEntry(Guest& _guest); ///< BP, as CompleteHyperspaceJumpEntry. Out: once it jumps, as it. Clobbers all but DS.
 
 } // namespace Elite

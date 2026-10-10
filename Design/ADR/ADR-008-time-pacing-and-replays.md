@@ -119,7 +119,7 @@ The fight was played by a scratch program that steered by the targets' positions
 - `GameLogicTests`, which includes it, runs in 14 s with a g++ -O0 build.
 - The corpus executes 8,717 of the 13,831 instructions the static map reaches.
 
-**7. Digests change only by a ruling recorded here, with its cause,** in Phase 3 and Phase 4 alike. Re-recording a replay's digests is `ReferenceRunner --replay FILE --update`. That is how a new replay is finished, and never how a failing one is made to pass.
+**7. Digests change only by a ruling recorded here, with its cause,** in Phase 3 and Phase 4 alike. Re-recording a replay's digests was `ReferenceRunner --replay FILE --update`. That was how a new replay was finished, and never how a failing one was made to pass. Since D7 there is no original to record from (ADR-017), and a digest changes only by a ruling recorded here.
 
 **8. The corpus that the interpreter's deletion waits on** (D7, plan §6.2). Thirteen replays were added on 2026-10-10, so that the corpus reaches the subsystems the plan lists before the interpreter goes.
 
@@ -191,6 +191,7 @@ The routines these leave unreached are compared by constructed tests (ADR-010 it
   - the paths of `TryScoopObject` the replays miss: the masking device's barrel, a full hold, splinters that carry minerals, and Thargons;
   - `ShowShipIdentity`'s labels other than Debris;
   - mission 1 declined, and its 1,400-credit reward.
+- **The known answers, 2026-10-10.** Every twin's digests are recorded from the original, and eight new twins reach the paths left to known answers (ADR-016). One label, `ShowShipIdentity`'s "None", is unreachable in the original: its only ship, the Cobra an escape capsule leaves behind, can be identified only while the capsule flies, and then no key is read.
 - **Found in the original on the way.**
   - An escape capsule's arrival does not set `playerDocked`. So the status screen briefs after one but never debriefs, and both mission replays dock for real before their debriefings.
   - The fuel leak's counters are in the commander block.

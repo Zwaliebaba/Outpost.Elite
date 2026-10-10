@@ -1,22 +1,17 @@
 // GameLogic/Text.h
 #pragma once
 
+#include "GameState.h"
 #include "Hardware.h"
-#include "NativeEntry.h"
 #include "ObjectSlot.h"
 
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's text routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): printing text and numbers, and
-// reading a line typed. The routines take values and give values back, and their entries, at the end, keep the register
-// contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> TextEntries() noexcept;
+// The reference's text routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): printing text and numbers, and reading a
+// line typed. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -81,12 +76,6 @@ std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::ui
 /// DrawScreenString (CS:32D8): DrawScreenChar for each character of the text at DS:_text, from _segment:_cell.
 PrintedText DrawScreenString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
-/// What DrawScreenString leaves in AX, for the entries of the routines that call it, whose originals leave it there:
-/// the NUL in AL, over the last row of the last glyph it drew in _ink, or over _ax when it drew none. _text is where it
-/// began and _drawn what it returned.
-[[nodiscard]] std::uint16_t DrawnScreenStringAx(const GameState& _state, std::uint16_t _text, PrintedText _drawn, std::uint16_t _ink,
-                                                std::uint16_t _ax);
-
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits at DS:_digits. Returns what is left of it below the last
 /// divisor: its units.
 std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::uint16_t _digits);
@@ -94,10 +83,6 @@ std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::uint1
 /// BlankLeadingZeros (CS:3432): up to _most of the leading characters below '1' at DS:_text become spaces; a _most of
 /// 0 lets 65,536 go, as LOOP counts.
 BlankedZeros BlankLeadingZeros(GameState& _state, std::uint16_t _text, std::uint8_t _most);
-
-/// What BlankLeadingZeros returned for the digits at DS:_text, _most of 1 to 255, read back from the spaces it left
-/// there: for the entries of the routines that call it, whose originals leave its DI and CX.
-[[nodiscard]] BlankedZeros BlankedLeadingZeros(const GameState& _state, std::uint16_t _text, std::uint8_t _most);
 
 /// DrawSmallViewChar (CS:349A): the 5-row letter _letter ('A'-'Z') in _ink over the space-view buffer at _place, the
 /// buffer kept around the letter's shape. Returns the next letter's place, six pixels on.
@@ -122,10 +107,6 @@ void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards
 
 /// ShowBountyMessage (CS:3626): _tenths of a credit into bountyText as "nnnn.n", shown for 20 frames.
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
-
-/// What ShowBountyMessage's BlankLeadingZeros returned for the bounty's digits, read back from bountyText: for the entries and
-/// the register code of the routines that call it, whose originals leave its CX.
-[[nodiscard]] BlankedZeros BlankedBountyZeros(const GameState& _state);
 
 /// ShowShipIdentity (CS:364D): 'CLASS: <class> TYPE: <type>' for ship type _type and class _class on the message line for
 /// 30 frames; class 3 is Simple unless IsDebrisType says _slot is debris, a class 4 of type 5 is a Hermit, and type 1Ch
@@ -173,38 +154,5 @@ RedrawnInputLine RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::
 /// PrintStringForLayout (CS:7750): the text at DS:_text by PrintTextModeString at B800:_cell in the text layout, and by
 /// DrawScreenString in _ink at _segment:_cell otherwise.
 PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-//
-// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
-// results back there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a
-// caller reads what the original leaves in one: then the entry leaves that, and the contract compares it.
-
-void DrawViewCharEntry(Guest& _guest);
-void DrawViewStringEntry(Guest& _guest);
-void DrawScreenCharEntry(Guest& _guest);
-void DrawScreenStringEntry(Guest& _guest);
-void FormatDecimal5Entry(Guest& _guest);
-void BlankLeadingZerosEntry(Guest& _guest);
-void DrawSmallViewCharEntry(Guest& _guest);
-void DrawSmallViewStringEntry(Guest& _guest);
-void FormatCreditsEntry(Guest& _guest);
-void UpdateMessageLineEntry(Guest& _guest); ///< Out: ES = B800h once it draws a message.
-void ClearMessageLineEntry(Guest& _guest);
-void ShowBountyMessageEntry(Guest& _guest);
-void ShowShipIdentityEntry(Guest& _guest); ///< In: AL the type, AH the class, DI the slot. Out: AX, BX, CX and DI as the original's.
-void PrintTextModeStringEntry(Guest& _guest);
-void ToggleMenuRowHighlightEntry(Guest& _guest);
-void ClearDockedMessageLineEntry(Guest& _guest);
-void SwapTextAttributeNibblesEntry(Guest& _guest);
-void PrintCountedTextLinesEntry(Guest& _guest);
-void FormatTenthsEntry(Guest& _guest);
-void PrintTextLinesEntry(Guest& _guest);
-/// In: SI the buffer, CL the most characters, ES:DI the place. Out: BX the length, and ES = B800h in the text layout; AX, CX
-/// and DX clobbered.
-void ReadTextLineEntry(Guest& _guest);
-void ToggleInputCursorEntry(Guest& _guest);
-void RedrawInputLineEntry(Guest& _guest); ///< In: SI the buffer, BX the length, ES:DI the place. Out: AX, and ES in the text layout.
-void PrintStringForLayoutEntry(Guest& _guest);
 
 } // namespace Elite

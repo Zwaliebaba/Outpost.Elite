@@ -2,8 +2,8 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "Maths.h"
-#include "NativeEntry.h"
 #include "ObjectSlot.h"
 #include "Ships.h"
 #include "Video.h"
@@ -11,17 +11,12 @@
 #include <array>
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's 3d routines, ported (plan §5 Phase 3, ADR-010): the 3D scene: transforming, projecting and drawing objects. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012) take values and give values
-// back, below the register bodies, and their entries keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> SceneEntries() noexcept;
+// The reference's 3d routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the 3D scene: transforming, projecting and
+// drawing objects. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -191,43 +186,5 @@ SinCos LoadPlayerAngles(GameState& _state);
 /// ProjectToScreen (CS:8D2E): _view on the screen, 80h + 256x/z and 40h + 256y/z, each divide saturated by the trap when it
 /// overflows.
 [[nodiscard]] ScreenPoint ProjectToScreen(GameState& _state, Vector _view);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-void ProjectVerticesEntry(Guest& _guest);          ///< BH saved by the trap. SI, BP kept; AX, BX, CX, DX, DI clobbered.
-void ReflectVertexAboutCenterEntry(Guest& _guest); ///< SI = the vertex, DI = its reflection. Out: BX = drawCenterZ; AX clobbered.
-void OffsetVertexByCenterEntry(Guest& _guest);     ///< SI = the vertex. Out: AX = drawCenterZ.
-void BuildBoxCornerVerticesEntry(Guest& _guest);   ///< SI = blueprint+3. Out: SI = blueprint+5; AX, BX, CX, DX, BP, DI clobbered.
-void BuildDodoVerticesEntry(Guest& _guest);        ///< Out: AX = BX = drawCenterZ, CX = 0, DI past the reflections; SI kept.
-void ScaleDodoRadiiEntry(Guest& _guest);           ///< AL = the value. Out: CX inner, DX outer; AX clobbered.
-void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the accumulator, in and out. Out: CX = 0; AX, DI clobbered.
-/// p0 = (AX, DX), p1 = (BX, BP), p2 = (CX, DI). Out: SF; DX:AX = (y0-y1)(x2-x1), BX = the low word of (x0-x1)(y2-y1), less AX when the
-/// high words agree; CX, DI clobbered.
-void TriangleWindingSignEntry(Guest& _guest);
-/// SI = the faces, CX their count. Out: SI past them; DF clear once an edge's DrawLine fills. AX, BX, CX, DX, DI, BP, ES clobbered.
-void DrawVisibleFacesEntry(Guest& _guest);
-void CheckShipInRangeEntry(Guest& _guest); ///< DI = the slot. Out: CF clear in range; every register as the original leaves it.
-/// DI = the slot. Out: AX, BX, CX the view position; ES = B800h once UpdateScannerBlip draws a blip. DX, BP clobbered.
-void TransformSunOrPlanetEntry(Guest& _guest);
-/// DI = the slot. Out: CF clear when visible; AX, BX and CX the view position, AX doubled |x| once z passes and BX doubled |y| once
-/// x does; ES = B800h once a blip is drawn or erased. DX clobbered.
-void TransformShipEntry(Guest& _guest);
-/// DI = the slot. Out: CF clear when visible; AX, BX and CX the compass position, AX doubled |x| once z passes and BX doubled |y|
-/// once x does, as the original leaves them.
-void ClassifyStationPositionEntry(Guest& _guest);
-/// SI = the blueprint, DI = the slot. Out: DI kept; DF as the faces leave it. Every other register but DS clobbered.
-void RunBlueprintHandlerEntry(Guest& _guest);
-/// SI = the blueprint past its handler's bytes, BP, BX, DX the accumulator, and the slot under the return address. Out: DI = the
-/// slot, popped; DF as the faces leave it. Every other register but DS clobbered.
-void RenderBlueprintBodyEntry(Guest& _guest);
-/// Out: DF as the drawing leaves it. Every register but DS clobbered.
-void TransformAndDrawObjectsEntry(Guest& _guest);
-/// DI = the slot, AX, BX, CX the position, in and out. Out: ES = B800h once UpdateScannerBlip draws a blip; DX clobbered.
-void TransformToViewWithBlipEntry(Guest& _guest);
-void TransformToViewEntry(Guest& _guest);    ///< AX, BX, CX the position, in and out. DX clobbered.
-void DrawSunOrPlanetEntry(Guest& _guest);    ///< DI = the slot. Every register but DS clobbered.
-void DrawDistantStationEntry(Guest& _guest); ///< DI = the slot. Every register but DS clobbered.
-void LoadPlayerAnglesEntry(Guest& _guest);   ///< Out: AX, BX the roll's sine and cosine.
-void ProjectToScreenEntry(Guest& _guest);    ///< AX, BX, CX = x, y, z. Out: AX, BX the point. DX, BP clobbered.
 
 } // namespace Elite

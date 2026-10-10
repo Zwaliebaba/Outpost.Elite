@@ -18,9 +18,6 @@
     <ClInclude Include="PngWriter.h">
       <Filter>Recording</Filter>
     </ClInclude>
-    <ClInclude Include="TraceWriter.h">
-      <Filter>Recording</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -30,9 +27,6 @@
       <Filter>Build</Filter>
     </ClCompile>
     <ClCompile Include="PngWriter.cpp">
-      <Filter>Recording</Filter>
-    </ClCompile>
-    <ClCompile Include="TraceWriter.cpp">
       <Filter>Recording</Filter>
     </ClCompile>
   </ItemGroup>

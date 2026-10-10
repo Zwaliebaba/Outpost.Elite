@@ -1,6 +1,6 @@
 # ADR-011 — Detaching the interpreter: the Dispatcher
 
-**Status:** accepted 2026-10-10, with the change that implements it, Phase 4's first step. It records D17, the owner's ruling of 2026-10-10 on how far Phase 4 goes ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)).
+**Status:** accepted 2026-10-10, with the change that implements it, Phase 4's first step. It records D17, the owner's ruling of 2026-10-10 on how far Phase 4 goes ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). **Amended 2026-10-10 by [ADR-017](ADR-017-the-interpreter-deleted.md):** the interpreter it detached is now deleted, and the `Processor` interface with it: the `Pc` owns a `Dispatcher` (D7).
 
 ## Context
 

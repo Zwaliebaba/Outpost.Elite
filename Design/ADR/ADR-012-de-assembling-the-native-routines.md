@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 21).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 21), and the end of the de-assembly (item 22).
 
 ## Context
 
@@ -584,6 +584,55 @@ The 4 contracts widened:
 `HyperspaceTests.HyperspaceRingsAgreeAtEverySize` starts its rings at radius 4, so that it reaches CS:48E1.
 
 **The suites.** `GameLogicTests` passes 188 of 188 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
+
+**22. The de-assembly is complete, 2026-10-10.** The last worker converted `RunFlight`, `GameLoop` and `Start`. No routine is register code now.
+
+| | Count |
+|---|---|
+| Register routines left | 0 |
+| Register functions left | 11 `…Out` helpers, with which entries rebuild the registers their contracts compare. They go with the entries at D7. |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 873 before, 834 after, every one of them in an entry or an `…Out` helper |
+| Contracts narrowed, by reading the code | 2 |
+
+**Exits that popped a return address are return values.** `RunFlight` returns how the flight ended:
+- **Docked.**
+- **GameOver.**
+- **EscapePod.** The escape pod's arrival (`TickEscapePod`) used to leave `RunFlight` by popping its return address.
+- **Aborted.** So did the pause screen's A.
+
+It returns the BP and direction flag it leaves with that. `GameLoop` returns when the disc menu leaves for the disk. `Start` returns when the program ends; its entry pushes the far return to PSP:0000 first, as the original does.
+
+**Values the original passes by accident, made explicit.**
+- **The direction flag** is threaded through every callee of the three. It is false after `Start`'s CLD.
+- **DI.** `CheckCollisions` returns where its look at the slots stopped, which `ProcessFlightKeys` takes.
+- **DX into `UpdateObjectsAndSpawn`:** 1FF0h, `PresentSpaceView`'s `MOV DX,1FF0h`. A register-flow analysis of the listing shows that is its only source.
+- **BP out of `RunFlight`:** 20h after docking, 0 after GAME OVER and after the pause screen's A. `GameLoop` and `Start` hand it on.
+- **ES for `InstallDivideAndKeyboardInterrupts`:** 0, as `InstallTimerInterrupt` leaves it.
+- **CX for `PerformDiskRequest`:** `RestoreTimerInterrupt`'s, computed from the clock (item 14).
+- **AL for the DOS version call:** the PSP's low byte.
+
+**Assumptions carried over, each named and commented in the code.**
+- **`UpdateStardust`'s BX is 0 in flight,** as item 21 has it in the station tunnel. The original's is whatever the drawing leaves, and it reaches only `ComputeStardustShift`'s divide trap.
+  - That trap is reachable. If the station is shot while the docking computer holds the speed at 0, `,` takes the speed from 0 to FCh, and the trap fires.
+  - The trap uses BX only as a scratch word in the code segment. It writes it at CS:025E and reads it back at CS:029B, in the same call, to restore BX. Nothing else reads that word.
+  - So the stand-in changes nothing the game or a digest reads.
+- **`ProcessFlightKeys`' AL is 0.** Nothing reads it.
+- **`ProcessFlightKeys`' ES is DS.** The original's is DS or B800h. Only a chart drawn while its frame already shows reads it, and in flight the cockpit always shows.
+- **BP is 20h for `ProcessFlightKeys`, for `TickHyperspaceCountdown` and at the escape pod's exit.** An AI handler can leave another. It feeds only `SelectSystemAtCursor`'s count for when no system is on the chart, and a system always is.
+  - On the galactic chart, every cursor position in galaxies 0 to 8 was measured: the farthest nearest system is 19,962 away, well inside the count.
+  - On the short-range chart the current system is at the centre.
+  - An edited commander could break this; play cannot. The same measurement confirms item 16's assumption in `GalacticJump`.
+
+**Contracts.** `RunFlight` keeps BP and DS, and `GameLoop` also keeps BP. Both rest on reading the code and a register-flow analysis. Both routines always wait, so they are never compared, and poisoning cannot reach their readers.
+
+**The devices.** Two DOS services were added: `ReadDosVersion` (int 21h AH=30h, with the AL the original passes) and `ReadDosTime` (AH=2Ch), which `Start` calls (ADR-014 item 9's form).
+
+**What the corpus's compared run checks now.**
+- **What changed.** Every routine is called as a value, so the corpus's compared run reaches only the two interrupt handlers' hooks: 690,003 calls of `TimerInterrupt` and 2,299 of `KeyboardInterrupt`. It had compared about 100,000 routine calls besides.
+- **What still guards.** All three runs still check all 134 digests. The coverage check still requires every instruction of every hooked routine to be compared, which constructed tests now do: six new ones, and five extended, for the 22 routines only `RunFlight`'s and `Start`'s hook calls had reached.
+- **Why that is enough.** A compared run that left the top routines to the original would compare their callees' whole subtrees again. It is not built, because no routine changes before D7: D19's structs become storage only after D7 (ADR-014 item 3), and the generated tables are guarded by the digests.
+
+**The suites.** `GameLogicTests` passes 194 of 194 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 

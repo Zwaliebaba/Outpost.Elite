@@ -1,7 +1,6 @@
 // MachineTests/PcRig.h
 #pragma once
 
-#include "Cpu.h"
 #include "DirectoryFileStore.h"
 #include "Pc.h"
 #include "ServiceRig.h"
@@ -39,15 +38,15 @@ inline std::vector<std::uint8_t> TinyExe(std::initializer_list<std::uint8_t> _co
   return file;
 }
 
-/// A PC with its files in a scratch directory, the clock starting at midnight, interpreting its program
-/// unless _makeProcessor makes a Dispatcher.
+/// A PC with its files in a scratch directory and the clock starting at midnight. Its program runs on the Pc's
+/// Dispatcher, so every entry it reaches must be hooked (Pc::Hook).
 class PcRig
 {
 public:
-  explicit PcRig(std::string_view _name, Machine::ProcessorFactory _makeProcessor = &Machine::MakeCpu)
+  explicit PcRig(std::string_view _name)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(m_files, Desc(), _makeProcessor)
+      m_pc(m_files, Desc())
   {
   }
 

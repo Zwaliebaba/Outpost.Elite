@@ -1,156 +1,266 @@
 // GameLogicTests/TwinRig.h
 #pragma once
 
-#include "ComparisonRig.h"
-#include "NativeRoutines.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
 #include "StateDigest.h"
 
+#include <charconv>
+#include <cstddef>
 #include <filesystem>
 #include <format>
+#include <fstream>
+#include <map>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace GameLogicTests
 {
 
-/// How a TwinRig runs its two machines.
+/// How a TwinRig sets up its machine.
 struct TwinOptions
 {
-  bool compared = true; ///< the native twin's calls of work routines are compared (ADR-010 item 4); if not, it runs on a Dispatcher
   Machine::Dos::DateTime startMoment = Elite::START_MOMENT; ///< DOS's clock at power-on
-  bool fromPowerOn = false; ///< the twins start at power-on, recording from there, rather than at the title screen
+  bool fromPowerOn = false;  ///< the twin starts at power-on, its digests counted from there, rather than at the title screen
+  bool mousePresent = false; ///< a mouse driver is loaded, the emulated one the PC services int 33h with
 };
 
-/// The reference twice, from one state (ADR-010 item 8): one machine interpreted, the other with the
-/// native routines in place and, unless the options say not, every call of a work routine compared.
-/// Both boot to the title screen, or start at power-on, and then get the same memory and the same
-/// steps. A routine that waits cannot be compared call by call, so this is how a test drives one
-/// through a state no replay reaches: every digest of the native twin must be the interpreted one's,
-/// and so must the state both end in. An uncompared native twin runs the native code of a routine
-/// that waits only sometimes, or that calls DOS, where a compared one keeps the original's outcome; and it
-/// runs on a Dispatcher (ADR-011), which interprets nothing, so it also shows the run reaches no code that
-/// no native routine stands in for.
-/// When the rig is done, what the interpreted twin ran is saved as _name's offsets, and the native
-/// twin's comparisons as _name's native report, for Tools/RoutineCoverage.py.
+/// The twins' known answers, from the repository's root. The file's header documents its format.
+inline constexpr std::string_view KNOWN_ANSWERS_FILE = "GameLogicTests/KnownAnswers.txt";
+
+/// The twins' known answers (D20, ADR-008 item 8), as KNOWN_ANSWERS_FILE holds them: every digest a twin gives, at each
+/// digest step and at the end of each Play, recorded from the interpreted original before D7 deleted it, under the twin's
+/// name and the digest's ordinal within the twin, counted from 1 over all its Play calls. They are what a twin's machine
+/// is checked against, and an answer changes only by a ruling recorded with its cause (ADR-016 item 4).
+class KnownAnswers
+{
+public:
+  /// Every answer in the file. A file that is not found, a line that is neither blank, a comment nor an answer, and an
+  /// answer given twice fail the test.
+  KnownAnswers()
+  {
+    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
+    const std::filesystem::path path = Elite::FindInRepository(KNOWN_ANSWERS_FILE);
+    Assert::IsFalse(path.empty(), L"GameLogicTests/KnownAnswers.txt in the repository");
+    std::string error;
+    const bool read = Read(path, m_answers, error); // before the message, which names what it found
+    Assert::IsTrue(read, Widen(std::string(KNOWN_ANSWERS_FILE) + ": " + error).c_str());
+  }
+
+  /// Asserts that _digest, which _what names, is _twin's known answer _ordinal. A missing answer fails too, naming the
+  /// twin and the ordinal.
+  void Check(const std::string& _twin, std::size_t _ordinal, std::string_view _digest, const std::wstring& _what) const
+  {
+    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
+    const auto found = m_answers.find(std::pair{_twin, _ordinal});
+    if (found == m_answers.end())
+    {
+      Assert::Fail((_what + L" is " + Widen(_digest) + L", and " +
+                    Widen(std::format("{} has no known answer {} in {}", _twin, _ordinal, KNOWN_ANSWERS_FILE)))
+                     .c_str());
+    }
+    else if (found->second != _digest)
+    {
+      Assert::Fail(
+        (_what + L" is " + Widen(_digest) + L", and " + Widen(std::format("{}'s known answer {} is {}", _twin, _ordinal, found->second)))
+          .c_str());
+    }
+  }
+
+private:
+  /// The answers, by the twin's name and the ordinal.
+  using Answers = std::map<std::pair<std::string, std::size_t>, std::string>;
+
+  static constexpr std::size_t DIGEST_CHARACTERS = 64; // a SHA-256 in hex
+
+  /// Reads every answer in _path into _answers. Returns false, with _error naming the line, for a line that is neither
+  /// blank, a comment nor an answer, or an answer given twice.
+  static bool Read(const std::filesystem::path& _path, Answers& _answers, std::string& _error)
+  {
+    std::ifstream file(_path);
+    if (!file)
+    {
+      _error = "cannot be read";
+      return false;
+    }
+    std::string line;
+    for (std::size_t number = 1; std::getline(file, line); ++number)
+    {
+      if (!line.empty() && line.back() == '\r')
+      {
+        line.pop_back();
+      }
+      if (line.empty() || line.front() == '#')
+      {
+        continue;
+      }
+      std::istringstream fields(line);
+      std::string twin;
+      std::string ordinalText;
+      std::string digest;
+      std::string extra;
+      fields >> twin >> ordinalText >> digest;
+      std::size_t ordinal = 0;
+      const char* const ordinalEnd = ordinalText.data() + ordinalText.size();
+      const std::from_chars_result parsed = std::from_chars(ordinalText.data(), ordinalEnd, ordinal);
+      const bool hex = digest.find_first_not_of("0123456789abcdef") == std::string::npos;
+      if (twin.empty() || parsed.ec != std::errc() || parsed.ptr != ordinalEnd || ordinal == 0 || digest.size() != DIGEST_CHARACTERS ||
+          !hex || (fields >> extra))
+      {
+        _error = std::format("line {} is not a twin's name, an ordinal from 1 and a SHA-256 in lowercase hex", number);
+        return false;
+      }
+      if (!_answers.emplace(std::pair{twin, ordinal}, digest).second)
+      {
+        _error = std::format("line {} gives {}'s answer {} again", number, twin, ordinal);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  [[nodiscard]] static std::wstring Widen(std::string_view _text)
+  {
+    return std::wstring(_text.begin(), _text.end());
+  }
+
+  Answers m_answers;
+};
+
+/// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on a Dispatcher with the native
+/// routines in place (ReferenceRig), and then a scenario no replay reaches, played step by step. A test sets up its state
+/// through Both, from the values the game's own code writes, and plays it with Play. Each digest it gives, at every digest
+/// step and at the end of every Play, must be the twin's next known answer (KnownAnswers), which the interpreted original
+/// gave for the same scenario before D7 deleted it. On a Dispatcher nothing is interpreted, so a twin also shows that its
+/// scenario reaches no code that no native routine stands in for.
 class TwinRig
 {
 public:
   explicit TwinRig(std::string_view _name, const TwinOptions& _options = {})
     : m_name(_name),
-      m_original(m_name + "-Original", _options.startMoment),
-      m_native(m_name + "-Native", _options.startMoment, _options.compared ? &Machine::MakeCpu : &Machine::MakeDispatcher),
-      m_originalPlayer(m_original.Host(), m_original.Program()),
-      m_nativePlayer(m_native.Host(), m_native.Program())
+      m_rig(_name, _options.startMoment, _options.mousePresent),
+      m_player(m_rig.Host(), m_rig.Program())
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    Assert::IsTrue(m_original.Loaded() && m_native.Loaded(), L"ELITES.EXE at the repository root");
-    Elite::InstallNativeRoutines(m_native.Host(), m_native.Program());
-    m_native.Host().Native().SetVerifying(_options.compared);
-    m_native.Host().Native().SetPoisoning(true); // what a routine's contract leaves to it, no caller reads (ADR-012)
+    Assert::IsTrue(m_rig.Loaded(), L"ELITES.EXE at the repository root");
     if (!_options.fromPowerOn)
     {
       Play("wait 3");
     }
-    m_original.Host().Processor().SetExecutionMap(&m_executed);
   }
 
   TwinRig(const TwinRig&) = delete;
   TwinRig& operator=(const TwinRig&) = delete;
   TwinRig(TwinRig&&) = delete;
   TwinRig& operator=(TwinRig&&) = delete;
+  ~TwinRig() = default;
 
-  ~TwinRig()
-  {
-    SaveExecutedOffsets(m_name, m_executed, m_original.Program());
-    SaveNativeReport(m_name, m_native.Host().Native());
-  }
-
-  /// Calls _change(pc, program) on the interpreted machine and then on the native one: how a test sets
-  /// up a state no replay reaches, through Ram() and the data segment (Elite::DataSegment).
+  /// Calls _change(pc, program) on the machine: how a test sets up a state no replay reaches, through Ram() and the data
+  /// segment (Elite::DataSegment). The name is the one the twins' set-ups were written with, when there were two machines.
   template <typename Change> void Both(Change _change)
   {
-    _change(m_original.Host(), m_original.Program());
-    _change(m_native.Host(), m_native.Program());
+    _change(m_rig.Host(), m_rig.Program());
   }
 
-  /// Plays _steps, in Replay.h's syntax, on both machines. Each must reach the end of every step but the
-  /// last, which must stop both as _end says: StopReason::Terminated for a test that leaves the program.
-  /// Every digest step, and the state they end in, must agree; and no compared call may have disagreed.
+  /// Plays _steps, in Replay.h's syntax. Each must reach the end of every step but the last, which must stop the run as
+  /// _end says: StopReason::Terminated for a test that leaves the program. Every digest step, and the state the steps end
+  /// in, must be the twin's next known answer.
   void Play(std::string_view _steps, Machine::StopReason _end = Machine::StopReason::Reached)
+  {
+    const std::vector<Elite::Step> steps = Parse(_steps);
+    for (std::size_t index = 0; index < steps.size(); ++index)
+    {
+      const Elite::Step& step = steps[index];
+      const std::wstring where = Where(step);
+      const std::string digest = PlayStep(step, Stop(index, steps.size(), _end), where);
+      if (step.kind == Elite::StepKind::Digest)
+      {
+        Answer(digest, where);
+      }
+    }
+    Answer(Elite::GameStateDigest(m_rig.Host(), m_rig.Program()), Widen(m_name) + L", the state Play ends in");
+  }
+
+  [[nodiscard]] Machine::Pc& Host() noexcept
+  {
+    return m_rig.Host();
+  }
+
+  /// Where the machine's DOS keeps its files.
+  [[nodiscard]] const std::filesystem::path& Files() const noexcept
+  {
+    return m_rig.Files();
+  }
+
+private:
+  [[nodiscard]] static std::vector<Elite::Step> Parse(std::string_view _steps)
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
     std::vector<Elite::Step> steps;
     std::string error;
-    Assert::IsTrue(Elite::ParseSteps(_steps, steps, error), Widen(error).c_str());
-    for (std::size_t index = 0; index < steps.size(); ++index)
+    const bool parsed = Elite::ParseSteps(_steps, steps, error); // before the message, which names the step it could not read
+    Assert::IsTrue(parsed, Widen(error).c_str());
+    return steps;
+  }
+
+  /// How step _index of _count must stop the run: the last as _end says, every other at its end.
+  [[nodiscard]] static Machine::StopReason Stop(std::size_t _index, std::size_t _count, Machine::StopReason _end) noexcept
+  {
+    return _index + 1 == _count ? _end : Machine::StopReason::Reached;
+  }
+
+  /// _step, for a message: the twin, the line, and a digest step's label.
+  [[nodiscard]] std::wstring Where(const Elite::Step& _step) const
+  {
+    std::wstring where = Widen(m_name) + L" line " + std::to_wstring(_step.line);
+    if (_step.kind == Elite::StepKind::Digest)
     {
-      const Elite::Step& step = steps[index];
-      const Machine::StopReason expected = index + 1 == steps.size() ? _end : Machine::StopReason::Reached;
-      std::string original;
-      std::string native;
-      const std::wstring where = Widen(m_name) + L" line " + std::to_wstring(step.line);
-      Assert::IsTrue(m_originalPlayer.Play(step, original) == expected, (where + L": the interpreted run stopped otherwise").c_str());
-      const Machine::StopReason stopped = m_nativePlayer.Play(step, native);
-      if (stopped == Machine::StopReason::Unported)
-      {
-        const Machine::Registers& at = m_native.Host().Processor().Regs();
-        Assert::Fail((where + L": the native twin reached code no native routine stands in for, at " +
-                      Widen(std::format("{:04X}:{:04X}", at.cs, at.ip)))
-                       .c_str());
-      }
-      if (stopped == Machine::StopReason::Overran)
-      {
-        Assert::Fail(
-          (where + L": native " + Widen(m_native.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits")
-            .c_str());
-      }
-      Assert::IsTrue(stopped == expected, (where + L": the native run stopped otherwise").c_str());
-      Assert::IsTrue(original == native, (where + L": the digests differ").c_str());
+      where += L" (digest " + Widen(_step.name) + L")";
     }
-    Assert::IsTrue(Elite::GameStateDigest(m_original.Host(), m_original.Program()) ==
-                     Elite::GameStateDigest(m_native.Host(), m_native.Program()),
-                   (Widen(m_name) + L": the two end in different states").c_str());
-    const std::vector<Machine::NativeCode::Mismatch>& mismatches = m_native.Host().Native().Mismatches();
-    if (!mismatches.empty())
+    return where;
+  }
+
+  /// Plays _step, which must stop the run as _expected says, and returns its digest: a digest step's, or empty.
+  [[nodiscard]] std::string PlayStep(const Elite::Step& _step, Machine::StopReason _expected, const std::wstring& _where)
+  {
+    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
+    std::string digest;
+    const Machine::StopReason stopped = m_player.Play(_step, digest);
+    if (stopped == Machine::StopReason::Unported)
     {
-      const Machine::NativeCode::Mismatch& first = mismatches.front();
-      Assert::Fail(Widen(first.routine + " call " + std::to_string(first.call) + ": " + first.difference).c_str());
+      const Machine::Registers& at = m_rig.Host().Processor().Regs();
+      Assert::Fail(
+        (_where + L": the twin reached code no native routine stands in for, at " + Widen(std::format("{:04X}:{:04X}", at.cs, at.ip)))
+          .c_str());
     }
+    if (stopped == Machine::StopReason::Overran)
+    {
+      Assert::Fail(
+        (_where + L": native " + Widen(m_rig.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits").c_str());
+    }
+    Assert::IsTrue(stopped == _expected, (_where + L": the run stopped otherwise").c_str());
+    return digest;
   }
 
-  [[nodiscard]] Machine::Pc& Original() noexcept
+  /// _digest, which _what names, is the twin's next known answer.
+  void Answer(std::string_view _digest, const std::wstring& _what)
   {
-    return m_original.Host();
+    m_answers.Check(m_name, ++m_digests, _digest, _what + L": the digest");
   }
 
-  [[nodiscard]] Machine::Pc& Native() noexcept
-  {
-    return m_native.Host();
-  }
-
-  /// Where a twin's DOS keeps its files.
-  [[nodiscard]] const std::filesystem::path& Files(bool _native) const noexcept
-  {
-    return _native ? m_native.Files() : m_original.Files();
-  }
-
-private:
   [[nodiscard]] static std::wstring Widen(std::string_view _text)
   {
     return std::wstring(_text.begin(), _text.end());
   }
 
   std::string m_name;
-  // What the interpreted twin runs once booted. Made before the machine that marks it, so that it
-  // outlives it.
-  std::vector<std::uint8_t> m_executed;
-  ReferenceRig m_original;
-  ReferenceRig m_native;
-  Elite::ReplayPlayer m_originalPlayer;
-  Elite::ReplayPlayer m_nativePlayer;
+  KnownAnswers m_answers;
+  std::size_t m_digests = 0; // the twin's digests so far, the last one's ordinal
+  ReferenceRig m_rig;
+  Elite::ReplayPlayer m_player;
 };
 
 } // namespace GameLogicTests

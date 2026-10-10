@@ -4,8 +4,11 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Docked.h"
+#include "Flight.h"
 #include "Input.h"
 #include "Maths.h"
+#include "SaveLoad.h"
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
@@ -16,6 +19,8 @@ namespace Elite
 namespace
 {
 
+// The game's int 0 handler, the divide trap. Nothing raises int 0 here: no divide runs on the CPU, and each divide calls
+// DivideOverflowInterrupt itself when its quotient overflows. So no native routine stands at the vector's address.
 constexpr std::uint16_t DIVIDE_OVERFLOW_INTERRUPT = 0x025E;
 constexpr std::uint16_t KEYBOARD_INTERRUPT = 0x0201;
 
@@ -31,7 +36,6 @@ constexpr std::uint16_t COMMAND_TAIL_TEXT = 0x81;
 constexpr std::uint8_t CHEAT_KEY = 0xAA;
 constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
-constexpr std::uint8_t DOS_VECTOR = 0x21;
 constexpr std::uint8_t VIDEO_MODE_TEXT_40 = 0x00; // 40x25 text, the colour burst off
 constexpr std::uint8_t CGA_VERTICAL_RETRACE = 0x08;
 constexpr std::uint8_t QUESTION_MASK = 0x3F; // 64 questions
@@ -44,23 +48,13 @@ constexpr std::uint8_t FULL_SHIELD = 0xFF;
 constexpr std::uint8_t NEW_GAME_CABIN_TEMPERATURE = 0x0C;
 constexpr std::uint8_t NEW_GAME_ALTITUDE = 0xFF;
 
-// The routines start-up calls, each through its hook or the original (ADR-010 item 8).
-constexpr std::uint16_t INSTALL_TIMER_INTERRUPT = 0x00C6;
-constexpr std::uint16_t INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0105;
-constexpr std::uint16_t RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0148;
-constexpr std::uint16_t RESTORE_TIMER_INTERRUPT = 0x016B;
-constexpr std::uint16_t CHECK_CHEAT_ARGUMENT = 0x02A5;
+// The game's int 24h handler, which Start puts in the interrupt table round a disk request. Nothing raises int 24h here: DOS
+// answers a failed call with CF set and an error. So no native routine stands at the vector's address.
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
-constexpr std::uint16_t PERFORM_DISK_REQUEST = 0x02FF;
-constexpr std::uint16_t COPY_PROTECTION = 0x04A3;
-constexpr std::uint16_t WIPE_PROGRAM = 0x0554;
-constexpr std::uint16_t SAVE_STARTUP_COMMANDER = 0x4660;
-constexpr std::uint16_t GAME_LOOP = 0x7D30;
-constexpr std::uint16_t RUN_TITLE_AND_DOCKED = 0x7D81;
-constexpr std::uint16_t RUN_FLIGHT = 0x7E9B;
 
-// Where the original jumps back (Guest::LoopTurn, Hardware::LoopTurn).
+// Where the original jumps back (Hardware::LoopTurn).
 constexpr std::uint16_t RESTART_PLAY = 0x003B;
+constexpr std::uint16_t GAME_LOOP = 0x7D30;
 constexpr std::uint16_t EXIT_KEY_DRAIN = 0x00B9;
 constexpr std::uint16_t RETRACE_POLL = 0x04C1;
 constexpr std::uint16_t UPPER_CASE_LOOP = 0x0529;
@@ -72,11 +66,11 @@ constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
 constexpr std::uint16_t AMSTRAD_ROM_SEGMENT = 0xFC00;
 constexpr std::uint16_t AMSTRAD_ROM_SIGNATURE = 0x0016;
 constexpr std::uint16_t AMSTRAD_SIGNATURE_BYTES = 7;
-constexpr std::uint8_t DOS_GET_TIME = 0x2C;
-constexpr std::uint8_t DOS_GET_VERSION = 0x30;
-constexpr std::uint8_t STARTUP_WAIT_SECONDS = 7;
-constexpr std::uint8_t SECONDS_PER_MINUTE = 60;
 constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
+// The interrupt table's segment, 0000h: where InstallDivideAndKeyboardInterrupts finds it, in the ES InstallTimerInterrupt leaves
+// (XOR AX,AX / MOV ES,AX) and CopyProtection keeps, and where Start puts int 24h's handler round a disk request (XOR BX,BX /
+// MOV ES,BX).
+constexpr std::uint16_t INTERRUPT_TABLE_SEGMENT = 0;
 
 // WipeProgram: the code segment from just past it to the end of the program.
 constexpr std::uint16_t WIPE_FIRST = 0x0564;
@@ -262,100 +256,76 @@ void StartNewGame(GameState& _state, bool _backward)
   _state.Set(DS.maskSystemJumps, 0);
 }
 
-void Start(Guest& _guest)
+void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint16_t _countIfNone, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // The far return to PSP:0000, where INT 20h ends the program.
-  regs.ax = regs.ds;
-  _guest.Push(regs.ax);
-  regs.bx = 0;
-  _guest.Push(regs.bx);
-  regs.bx = _guest.DataSegment();
-  regs.ds = regs.bx;
-  _guest.Set(DS.pspSegment, regs.ax);
-  SetHigh(regs.ax, DOS_GET_VERSION);
-  _guest.Interrupt(DOS_VECTOR);
-  if (Low(regs.ax) == 0)
+  _state.Set(DS.pspSegment, _psp);
+  // MOV AX,DS / MOV AH,30h: AL goes in as the PSP's low byte.
+  if (_hardware.ReadDosVersion(Low(_psp)).major == 0)
   {
-    // DOS 1 reports no major version, and is not enough. What the print leaves ExitToDos overwrites.
-    _guest.Devices().PrintDosString(_guest.DataSegment(), DS.dosVersionMessage.offset);
-    ExitToDos(_guest.State(), _guest.Devices());
+    // DOS 1 reports no major version, and is not enough.
+    _hardware.PrintDosString(_state.DataSegment(), DS.dosVersionMessage.offset);
+    ExitToDos(_state, _hardware);
     return;
   }
-  _guest.Call(SAVE_STARTUP_COMMANDER);
+  SaveStartupCommander(_state, _backward);
 
-  // REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last
-  // differs.
-  regs.ax = AMSTRAD_ROM_SEGMENT;
-  regs.es = AMSTRAD_ROM_SEGMENT;
-  regs.di = AMSTRAD_ROM_SIGNATURE;
-  regs.si = DS.amstradSignature.offset;
-  regs.cx = AMSTRAD_SIGNATURE_BYTES;
-  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-  while (regs.cx != 0)
+  // CLD / REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last differs.
+  std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
+  for (std::uint16_t at = 0; bytesLeft != 0;)
   {
-    const bool same = _guest.Byte(regs.si) == _guest.FarByte(regs.es, regs.di);
-    ++regs.si;
-    ++regs.di;
-    --regs.cx;
+    const bool same =
+      _state.Byte(Offset(DS.amstradSignature.offset, at)) == _state.FarByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
+    ++at;
+    --bytesLeft;
     if (!same)
     {
       break;
     }
   }
-  if (regs.cx != 0)
+  if (bytesLeft != 0)
   {
-    _guest.Set(DS.amstradPresent, 0);
+    _state.Set(DS.amstradPresent, 0);
   }
 
+  // From here on the direction flag is as the CLD left it, and as GameLoop leaves it; BP as DOS left it, and as GameLoop leaves it.
+  std::uint16_t countIfNone = _countIfNone;
+  bool backward = false;
   for (;;)
   {
-    // RestartPlay (CS:003B): the DOS clock read twice for a 7-second wait whose closing branch the NOPs at
-    // StartupWaitPatched replaced, so only the reads remain.
-    SetHigh(regs.ax, DOS_GET_TIME);
-    _guest.Interrupt(DOS_VECTOR);
-    SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + STARTUP_WAIT_SECONDS));
-    if (High(regs.dx) >= SECONDS_PER_MINUTE)
-    {
-      SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) - SECONDS_PER_MINUTE));
-    }
-    _guest.Push(regs.dx);
-    SetHigh(regs.ax, DOS_GET_TIME);
-    _guest.Interrupt(DOS_VECTOR);
-    SetHigh(regs.cx, High(regs.dx));
-    regs.dx = _guest.Pop();
-    _guest.Call(INSTALL_TIMER_INTERRUPT);
-    _guest.Call(COPY_PROTECTION);
-    _guest.Call(INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS);
-    _guest.Call(CHECK_CHEAT_ARGUMENT);
-    _guest.Call(GAME_LOOP);
+    // RestartPlay: the DOS clock read twice for a 7-second wait, whose closing branch the NOPs at StartupWaitPatched replaced, so
+    // only the reads remain, and nothing reads what they give.
+    (void)_hardware.ReadDosTime();
+    (void)_hardware.ReadDosTime();
+    InstallTimerInterrupt(_state, _hardware);
+    CopyProtection(_state, _hardware);
+    InstallDivideAndKeyboardInterrupts(_state, _hardware, INTERRUPT_TABLE_SEGMENT);
+    CheckCheatArgument(_state);
+    const GameLoopExit loopExit = GameLoop(_state, _hardware, countIfNone, backward);
+    countIfNone = loopExit.countLeft;
+    backward = loopExit.backward;
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
-    _guest.Call(RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS);
-    _guest.Call(RESTORE_TIMER_INTERRUPT);
-    SetLow(regs.ax, _guest.Get(DS.diskOperation));
-    if (Low(regs.ax) == 0)
+    RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+    const BiosClock clock = RestoreTimerInterrupt(_state, _hardware);
+    const std::uint8_t request = _state.Get(DS.diskOperation);
+    if (request == 0)
     {
-      _guest.Call(WIPE_PROGRAM);
-      ExitToDos(_guest.State(), _guest.Devices());
+      WipeProgram(_state, _hardware, backward);
+      ExitToDos(_state, _hardware);
       return;
     }
-    // The request, with the game's own critical-error handler on int 24h.
-    _guest.Set(DS.diskError, 0);
-    regs.bx = 0;
-    regs.es = 0;
-    _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET));
-    _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT));
-    regs.bx = CRITICAL_ERROR_INTERRUPT;
-    _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, regs.bx);
-    regs.bx = _guest.CodeSegment();
-    _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, regs.bx);
-    _guest.Call(PERFORM_DISK_REQUEST);
-    regs.ax = 0;
-    regs.es = 0;
-    _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, _guest.Pop());
-    _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, _guest.Pop());
-    _guest.JumpBack(RESTART_PLAY);
+    // The request, with the game's own critical-error handler on int 24h: the vector's two words pushed, and popped back segment
+    // first. A listing searches with the attributes RestoreTimerInterrupt leaves in CX.
+    _state.Set(DS.diskError, 0);
+    const std::uint16_t savedOffset = _state.FarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET);
+    const std::uint16_t savedSegment = _state.FarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT);
+    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, CRITICAL_ERROR_INTERRUPT);
+    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, _state.CodeSegment());
+    PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
+    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, savedSegment);
+    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, savedOffset);
+    // JMP RestartPlay: the next turn reads BP, in GameLoop, before it writes it.
+    _hardware.LoopTurn(RESTART_PLAY, {countIfNone});
   }
 }
 
@@ -373,20 +343,32 @@ void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward)
   }
 }
 
-void GameLoop(Guest& _guest)
+GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
+  // BP and the direction flag go round: RunTitleAndDocked's screens read them, and RunFlight leaves them.
+  std::uint16_t countIfNone = _countIfNone;
+  bool backward = _backward;
   for (;;)
   {
-    _guest.Set(DS.inFlight, 0);
-    _guest.Call(RUN_TITLE_AND_DOCKED);
-    _guest.Set(DS.inFlight, 1);
-    _guest.Call(RUN_FLIGHT);
-    // After a death the title runs again.
-    if (_guest.Get(DS.playerDead) == 1)
+    _state.Set(DS.inFlight, 0);
+    const DockedExit docked = RunTitleAndDocked(_state, _hardware, countIfNone, backward);
+    if (docked.leaves)
     {
-      _guest.Set(DS.titleShown, 0);
+      // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that its RET returns
+      // into Start.
+      return GameLoopExit{docked.countLeft, docked.backward};
     }
-    _guest.JumpBack(GAME_LOOP);
+    _state.Set(DS.inFlight, 1);
+    const FlightExit flight = RunFlight(_state, _hardware, docked.backward);
+    countIfNone = flight.countLeft;
+    backward = flight.backward;
+    // After a death the title runs again.
+    if (_state.Get(DS.playerDead) == 1)
+    {
+      _state.Set(DS.titleShown, 0);
+    }
+    // JMP GameLoop: the next turn reads BP, in RunTitleAndDocked, before it writes it.
+    _hardware.LoopTurn(GAME_LOOP, {countIfNone});
   }
 }
 
@@ -421,112 +403,28 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   }
 }
 
-// ── The entries of the de-assembled routines ──
+// ── The entry of the program ──
 
-namespace
-{
-
-using Machine::REGISTER_ALL;
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BP;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DI;
-using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
-using Machine::REGISTER_SI;
-
-constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_SI{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
-constexpr Machine::NativeContract CLOBBERS_ALL{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
-// CopyProtection never writes ES, and Start goes on with it into InstallDivideAndKeyboardInterrupts, which takes the
-// interrupt table's segment there: compared.
-constexpr Machine::NativeContract PROTECTION{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF{REGISTER_AX | REGISTER_CX | REGISTER_DI | REGISTER_ES,
-                                                                      Machine::FLAG_INTERRUPT};
-// ShowCredits': all but DS, and BP, which the status screen after the title reads (ShowCreditsEntry).
-constexpr Machine::NativeContract SHOWS_CREDITS{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
-// Start sets DS to the data segment, and never returns.
-constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{REGISTER_ALL, 0};
-
-constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
-constexpr Machine::NativeWait SOMETIMES = Machine::NativeWait::Sometimes;
-
-} // namespace
-
-void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest)
+void StartEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  InstallDivideAndKeyboardInterrupts(_guest.State(), _guest.Devices(), regs.es);
-  // ES on the CGA's memory through AX.
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  _guest.Clobber(CLOBBERS_AX);
-}
-
-void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest)
-{
-  RestoreDivideAndKeyboardInterrupts(_guest.State(), _guest.Devices());
-  _guest.Regs().es = 0;
-  _guest.Clobber(CLOBBERS_AX);
-}
-
-void CheckCheatArgumentEntry(Guest& _guest)
-{
-  CheckCheatArgument(_guest.State());
-  _guest.Clobber(CLOBBERS_AX_BX_CX_SI);
-}
-
-void WipeProgramEntry(Guest& _guest)
-{
-  WipeProgram(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF);
-}
-
-void CopyProtectionEntry(Guest& _guest)
-{
-  CopyProtection(_guest.State(), _guest.Devices());
-  _guest.Clobber(PROTECTION);
-}
-
-void ShowCreditsEntry(Guest& _guest)
-{
-  ShowCredits(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // FinishSpaceViewFrame's CLD, which StartNewGame's copy goes by after it, and PresentSpaceView's MOV BP,20h, which the status
-  // screen after the title hands SelectSystemAtCursor as the count when no system is on the chart; WaitForTimerTick keeps both.
-  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-  _guest.Regs().bp = PRESENT_SPACE_VIEW_BP;
-  _guest.Clobber(SHOWS_CREDITS);
-}
-
-void StartNewGameEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  StartNewGame(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // MOV AX,DS / MOV ES,AX for the copy.
-  regs.ax = regs.ds;
-  regs.es = regs.ds;
-  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
+  // MOV AX,DS / PUSH AX / XOR BX,BX / PUSH BX: the far return to PSP:0000, where INT 20h ends the program, which the hook's RETF
+  // takes once Start returns. Then MOV BX,<data> / MOV DS,BX.
+  const std::uint16_t psp = regs.ds;
+  regs.ax = psp;
+  _guest.Push(psp);
+  regs.bx = 0;
+  _guest.Push(regs.bx);
+  regs.bx = _guest.State().DataSegment();
+  regs.ds = regs.bx;
+  Start(_guest.State(), _guest.Devices(), psp, regs.bp, _guest.Flag(Machine::FLAG_DIRECTION));
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0000, "Start", &Start, CLOBBERS_EVERY_REGISTER, Machine::NativeReturn::Far, 0, ALWAYS},
-  NativeEntry{0x0105, "InstallDivideAndKeyboardInterrupts", &InstallDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
-  NativeEntry{0x0148, "RestoreDivideAndKeyboardInterrupts", &RestoreDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
-  NativeEntry{0x02A5, "CheckCheatArgument", &CheckCheatArgumentEntry, CLOBBERS_AX_BX_CX_SI},
-  // CopyProtection waits on the question's path, in its loops and WaitForTimerTick, which the D5 byte closes.
-  NativeEntry{0x04A3, "CopyProtection", &CopyProtectionEntry, PROTECTION, Machine::NativeReturn::Near, 0, SOMETIMES},
-  NativeEntry{0x0554, "WipeProgram", &WipeProgramEntry, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
-  NativeEntry{0x4671, "StartNewGame", &StartNewGameEntry, CLOBBERS_AX_CX_SI_DI},
-  NativeEntry{0x7D30, "GameLoop", &GameLoop, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},
-  NativeEntry{0x8F02, "ShowCredits", &ShowCreditsEntry, SHOWS_CREDITS, Machine::NativeReturn::Near, 0, ALWAYS},
+  NativeEntry{0x0000, "Start", &StartEntry, EntryReturn::Far, Machine::NativeWait::Always},
 };
 
 } // namespace

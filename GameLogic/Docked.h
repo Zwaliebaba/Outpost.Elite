@@ -1,23 +1,19 @@
 // GameLogic/Docked.h
 #pragma once
 
+#include "GameState.h"
+#include "Hardware.h"
 #include "Input.h"
-#include "NativeEntry.h"
 #include "Text.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's docked routines, ported (plan §5 Phase 3, ADR-010): the docked screens and their menus. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv. The routines de-assembled so far (ADR-012) take values
-// and give values back, and their entries, at the end, keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> DockedEntries() noexcept;
+// The reference's docked routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the docked screens and their menus. Each
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -109,26 +105,5 @@ struct DockedExit
 /// disc menu leaves for the disk. _countIfNone is BP and _backward the direction flag as GameLoop leaves them, which the screens
 /// carry from one to the next; after the title they are its 20h, PresentSpaceView's, and clear. Waits as a rule (ADR-015).
 DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-//
-// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
-// results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
-
-void AwardArchangelTitleEntry(Guest& _guest);
-void PrintCreditsOnMessageLineEntry(Guest& _guest); ///< In: ES=B800, which it sets again.
-void FormatFuelLightYearsEntry(Guest& _guest);      ///< Out: SI=DS:83E9, the fuel text; AX, BX and DI clobbered.
-void DrawDockedFrameEntry(Guest& _guest);           ///< In: SI=the descriptor. Out: SI=the title, ES=B800h.
-void DrawFrameSidesEntry(Guest& _guest);
-void DrawFrameRowEntry(Guest& _guest);
-/// In: BP and DF, carried to the screens. Out: ES=B800h, BP and DF as the screens leave them, AX the F1 that ends it; or, once the
-/// disc menu leaves for the disk, its own return address popped, so that its RET returns from GameLoop. All but DS clobbered.
-void RunTitleAndDockedEntry(Guest& _guest);
-void ShowSellCargoScreenEntry(Guest& _guest);       ///< Out: AX the key; all but DS clobbered.
-void ShowBuyCargoScreenEntry(Guest& _guest);        ///< Out: AX the key; all but DS clobbered.
-void ShowCommanderStatusScreenEntry(Guest& _guest); ///< In: BP, as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
-void ShowInventoryScreenEntry(Guest& _guest);       ///< As ShowCommanderStatusScreenEntry.
-void ShowMissionBriefingEntry(Guest& _guest);       ///< Clobbers all but DS.
-void ShowMissionDebriefingEntry(Guest& _guest);     ///< Clobbers all but DS.
 
 } // namespace Elite

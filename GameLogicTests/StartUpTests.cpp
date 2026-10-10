@@ -1,12 +1,8 @@
 #include "pch.h"
 
-#include "ComparisonRig.h"
 #include "DataOverlay.h"
 #include "Firmware.h"
-#include "StateDigest.h"
 #include "TwinRig.h"
-
-#include <string_view>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -16,20 +12,17 @@ namespace GameLogicTests
 namespace
 {
 
-constexpr std::uint16_t CHECK_CHEAT_ARGUMENT = 0x02A5;
-constexpr std::uint16_t COMMAND_TAIL = 0x80; // in the PSP: its length, then the text
-
 // The scan code and character of 'q' in the BIOS's key buffer.
 constexpr std::uint16_t BIOS_KEY_Q = 0x1071;
 
-// Sets the byte _field to _value on both twins.
+// Sets the byte _field to _value on the twin.
 void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
   _rig.Both([_field, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
             { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
 }
 
-// Both twins are back at the title, out of flight.
+// The twin is back at the title, out of flight.
 void AssertAtTheTitle(TwinRig& _rig)
 {
   _rig.Both(
@@ -43,30 +36,11 @@ void AssertAtTheTitle(TwinRig& _rig)
 
 } // namespace
 
-// Constructed inputs for start-up (plan §6.3): the command tails, start moments and ways out no replay
-// gives.
+// Twins for start-up and GameLoop: the start moments and ways out no replay gives (ADR-016).
 TEST_CLASS(StartUpTests)
 {
 public:
-  // ' cheat' itself, and a tail of the same length that differs only in its last letter.
-  TEST_METHOD(CheckCheatArgumentAgreesOnTheCheatAndANearMiss)
-  {
-    ComparisonRig rig("CheckCheatArgument");
-    Machine::Memory& ram = rig.Host().Ram();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    const std::uint16_t psp = ram.Read16(data, Elite::DS.pspSegment.offset);
-    for (const std::string_view tail : {std::string_view(" cheat"), std::string_view(" cheaT")})
-    {
-      ram.Write8(psp, COMMAND_TAIL, static_cast<std::uint8_t>(tail.size()));
-      for (std::size_t index = 0; index < tail.size(); ++index)
-        ram.Write8(psp, static_cast<std::uint16_t>(COMMAND_TAIL + 1 + index), static_cast<std::uint8_t>(tail[index]));
-      rig.Call(CHECK_CHEAT_ARGUMENT, {});
-      Assert::IsTrue((ram.Read8(data, Elite::DS.cheatEnabled.offset) == 1) == (tail == " cheat"), L"only ' cheat' enables it");
-    }
-    rig.AssertAllAgreed(CHECK_CHEAT_ARGUMENT, 2);
-  }
-
-  // Start (ADR-010 item 5) when DOS's clock reads 55 seconds, where the start-up wait's target second wraps
+  // Start when DOS's clock reads 55 seconds, where the start-up wait's target second wraps
   // past the minute; then the disc menu's Exit to DOS, with a key left in the BIOS's buffer to empty:
   // WipeProgram and ExitToDos, to the end of the program.
   TEST_METHOD(StartAgreesLateInAMinuteAndOnTheWayOut)
@@ -86,7 +60,7 @@ public:
     twin.Play("key y; wait 0.5", Machine::StopReason::Terminated);
   }
 
-  // GameLoop (ADR-010 item 5) after a death: RunFlight returns 40 frames after GAME OVER, and the title runs
+  // GameLoop after a death: RunFlight returns 40 frames after GAME OVER, and the title runs
   // again.
   TEST_METHOD(GameLoopAgreesAfterADeath)
   {

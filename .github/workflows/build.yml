@@ -87,10 +87,6 @@ jobs:
       # machine; the runner's bundled LLVM cannot be asked for by version at all.
       CLANG_TIDY_VERSION: 22.1.8
 
-      # The disassembler Tools/MapReference.py and Tools/RoutineCoverage.py walk the code with: the
-      # version MapReference.py names, pinned for the same reason as clang-tidy.
-      CAPSTONE_VERSION: 5.0.7
-
     steps:
       - uses: actions/checkout@v4
 
@@ -179,26 +175,15 @@ jobs:
       # vstest reports "no tests found" as a pass, so a suite that did not build is not a suite
       # that passed. No suites at all is a state this repository is still legitimately in.
       #
-      # Build\RunTests.py runs them as four vstest processes at once, one per shard of test classes;
-      # one shard takes every class the others do not name, so nothing is left out, and a shard that
-      # runs no test fails. One after another they took 10 to 15 minutes, nearly all of it
-      # GameLogicTests' comparisons in Debug, on one of the runner's two vCPUs (a private
-      # repository's windows-latest has two; a public one's has four).
+      # Build\RunTests.py runs them as vstest processes at once, one per shard of test classes; one
+      # shard takes every class the others do not name, so nothing is left out, and a shard that runs
+      # no test fails. The shards are balanced on the classes' measured times; the replay corpus is
+      # about half of the whole (a private repository's windows-latest has two vCPUs; a public one's
+      # has four).
       - name: Run the tests
         if: steps.solution.outputs.path != ''
         shell: pwsh
         run: python Build\RunTests.py --configuration $env:CONFIGURATION
-
-      # Phase 3's acceptance (ADR-010 item 5): every instruction of every ported routine, and of what it
-      # calls or runs into, ran in a compared call that agreed -- in a corpus replay or a constructed
-      # test, whose native reports the test run leaves under the temporary directory -- or has a written
-      # reason in Design/NativeCoverage.tsv. After the tests, which write the reports it reads.
-      - name: Check the native routines' coverage
-        if: steps.solution.outputs.path != ''
-        shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check "capstone==$env:CAPSTONE_VERSION"
-          python Tools\RoutineCoverage.py
 
       # After the build, so that a compile error is reported as a compile error rather than as
       # forty linter findings about a file that does not parse.

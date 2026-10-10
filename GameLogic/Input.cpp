@@ -18,7 +18,6 @@ namespace
 // WaitForKeyPress's loop: GetKey, and JE back to it while there is no key (Hardware::LoopTurn).
 constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
 
-constexpr std::uint16_t GAME_PORT = 0x201;
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 // The button int 33h AX=5 is asked about: BX=1, the right. The game reads only AX, the buttons held, and discards the
 // right button's presses.
@@ -42,7 +41,7 @@ constexpr std::uint16_t X_COUNT_TURN = 0x778F;
 constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
 constexpr std::uint16_t Y_COUNT_TURN = 0x779D;
 
-// The cycles the 8088 model (Machine/Cpu.cpp) charges for ReadJoystickAxes's instructions: the game port times its one-shots by
+// The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
 // them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
 constexpr Machine::Cycles BEFORE_FIRING_CYCLES = 12;    // CLI 2, MOV BX,imm16 4, MOV CX,BX 2, MOV DX,imm16 4
 constexpr Machine::Cycles OUT_CYCLES = 8;               // OUT DX,AL
@@ -87,7 +86,7 @@ constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
 }
 
 // SaveScreenshot (CS:01B7) while Alt and PrtSc are held. Returns whether it saved one. The original pushes and pops every
-// register but ES around the call, so that a screenshot leaves only ES, on the CGA's memory, which the entries put there.
+// register but ES around the call, so that a screenshot leaves only ES, on the CGA's memory.
 bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 {
   if (_state.Get(DS.keyDownPrintScreen) != 1 || _state.Get(DS.keyDownAlt) != 1)
@@ -608,235 +607,19 @@ Steering ApplyReverseControls(const GameState& _state, Steering _steering)
   return steering;
 }
 
-// ── The entries of the de-assembled routines ──
-
-namespace
-{
-
-using Machine::FLAG_AUXILIARY;
-using Machine::FLAG_CARRY;
-using Machine::FLAG_INTERRUPT;
-using Machine::FLAG_OVERFLOW;
-using Machine::FLAG_PARITY;
-using Machine::FLAG_SIGN;
-using Machine::FLAG_ZERO;
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DX;
-
-constexpr Machine::NativeContract RETURNS_ZERO{0, FLAG_ZERO};
-constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
-constexpr Machine::NativeContract CLOBBERS_BX{REGISTER_BX, 0};
-constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
-constexpr Machine::NativeContract FIRE_BUTTON{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
-// The stick's read leaves interrupts off on a time-out, which its callers live with: compared too.
-constexpr Machine::NativeContract STICK_AXES{REGISTER_AX, FLAG_CARRY | FLAG_INTERRUPT};
-// GetKey's AND AH,AH: every status flag, which the loops that wait for a key compare from one turn to the next (GetKeyEntry).
-constexpr std::uint16_t STATUS_FLAGS = FLAG_CARRY | FLAG_PARITY | FLAG_AUXILIARY | FLAG_ZERO | FLAG_SIGN | FLAG_OVERFLOW;
-constexpr Machine::NativeContract KEY{0, STATUS_FLAGS | FLAG_INTERRUPT};
-// The stick's routines leave interrupts off on a time-out, which their callers live with: compared too. They wait when the stick's
-// X one-shot drops before its Y one-shot (ReadJoystickAxes's loop at 7797), and so does ReadSteering through them.
-constexpr Machine::NativeContract STICK_STEERING{REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_INTERRUPT};
-
-// The steering bytes of a register, roll in the low byte and pitch in the high, and back.
-[[nodiscard]] Steering SteeringIn(std::uint16_t _register) noexcept
-{
-  return Steering{Low(_register), High(_register)};
-}
-
-[[nodiscard]] std::uint16_t SteeringOut(Steering _steering) noexcept
-{
-  return Join(_steering.pitch, _steering.roll);
-}
-
-// _flags with the status flags AND _value,_value leaves, as the 8088 sets them: CF, OF and AF clear, and SF, ZF and PF from
-// _value.
-[[nodiscard]] std::uint16_t LogicFlags(std::uint16_t _flags, std::uint8_t _value) noexcept
-{
-  std::uint16_t flags = static_cast<std::uint16_t>(_flags & ~STATUS_FLAGS);
-  if ((_value & 0x80) != 0)
-  {
-    flags |= FLAG_SIGN;
-  }
-  if (_value == 0)
-  {
-    flags |= FLAG_ZERO;
-  }
-  if ((std::popcount(_value) & 1) == 0)
-  {
-    flags |= FLAG_PARITY;
-  }
-  return flags;
-}
-
-// AX as GetKey leaves it from _ax: XOR AH,AH; then, when it takes a code, ROL AX,1 and SHR AH,1, which leave the scan code in
-// AH and AL shifted left with Shift in bit 0.
-[[nodiscard]] std::uint16_t KeyOut(KeyPress _key, std::uint16_t _ax) noexcept
-{
-  if (!_key.taken)
-  {
-    return WithHigh(_ax, 0);
-  }
-  return Join(_key.scanCode, static_cast<std::uint8_t>((Low(_ax) << 1) | (_key.shift ? 1 : 0)));
-}
-
-} // namespace
-
-void IsMouseDriverInstalledEntry(Guest& _guest)
-{
-  const MouseDriver driver = IsMouseDriverInstalled(_guest.State());
-  _guest.Regs().es = driver.segment;
-  _guest.SetFlag(FLAG_ZERO, !driver.installed);
-  _guest.Clobber(RETURNS_ZERO);
-}
-
-void ResetKeyboardEntry(Guest& _guest)
-{
-  ResetKeyboard(_guest.State(), _guest.Devices());
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ApplyReverseControlsEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = SteeringOut(ApplyReverseControls(_guest.State(), SteeringIn(regs.ax)));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ApplyReverseControlsToDxEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = SteeringOut(ApplyReverseControls(_guest.State(), SteeringIn(regs.dx)));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ReadKeyboardSteeringEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = SteeringOut(ReadKeyboardSteering(_guest.State()));
-  _guest.Clobber(CLOBBERS_BX);
-}
-
-void ReadScanCodeEntry(Guest& _guest)
-{
-  ReadScanCode(_guest.State(), _guest.Devices());
-  _guest.Clobber(CLOBBERS_AX);
-}
-
-void ReadFireButtonEntry(Guest& _guest)
-{
-  _guest.SetFlag(FLAG_CARRY, ReadFireButton(_guest.State(), _guest.Devices()));
-  _guest.Clobber(FIRE_BUTTON);
-}
-
-void ReadMouseSteeringEntry(Guest& _guest)
-{
-  _guest.Regs().ax = SteeringOut(ReadMouseSteering(_guest.State(), _guest.Devices()));
-  _guest.Clobber(CLOBBERS_BX_CX_DX);
-}
-
-void ResetMouseIfSelectedEntry(Guest& _guest)
-{
-  ResetMouseIfSelected(_guest.State(), _guest.Devices());
-  _guest.Clobber(CLOBBERS_AX_BX);
-}
+// ── The entry of the keyboard's interrupt handler ──
 
 void KeyboardInterruptEntry(Guest& _guest)
 {
   // AX, DS and ES pushed round MOV ES,B800h / MOV DS,data and the call, and popped: every register is kept.
   KeyboardInterrupt(_guest.State(), _guest.Devices());
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void WaitForKeyPressEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const KeyPress key = WaitForKeyPress(_guest.State(), _guest.Devices());
-  // AX as the last GetKey leaves it. A code 0, which no key sends, would end no wait, and in the original would have shifted AL
-  // once more for each one taken before the key.
-  regs.ax = KeyOut(key, regs.ax);
-  if (key.screenshot)
-  {
-    regs.es = GameState::VIDEO_SEGMENT;
-  }
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ReadSteeringEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = SteeringOut(ReadSteering(_guest.State(), _guest.Devices(), Low(regs.ax)));
-  _guest.Clobber(CLOBBERS_BX_CX_DX);
-}
-
-void GetKeyEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const KeyPress key = GetKey(_guest.State(), _guest.Devices());
-  regs.ax = KeyOut(key, regs.ax);
-  if (key.screenshot)
-  {
-    regs.es = GameState::VIDEO_SEGMENT;
-  }
-  // The callers that wait for a key go round a loop on ZF, and paced time compares every flag from turn to turn: all of
-  // AND AH,AH's, not only ZF, as the original leaves them.
-  regs.flags = LogicFlags(regs.flags, key.scanCode);
-  _guest.Clobber(KEY);
-}
-
-void ReadJoystickSteeringEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = SteeringOut(ReadJoystickSteering(_guest.State(), _guest.Devices(), Low(regs.ax)));
-  _guest.Clobber(STICK_STEERING);
-}
-
-void PollScreenDumpKeyEntry(Guest& _guest)
-{
-  if (PollScreenDumpKey(_guest.State(), _guest.Devices()))
-  {
-    _guest.Regs().es = GameState::VIDEO_SEGMENT;
-  }
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void ReadJoystickAxesEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const StickAxes axes = ReadJoystickAxes(_guest.State(), _guest.Devices(), Low(regs.ax));
-  regs.bx = axes.x;
-  regs.cx = axes.y;
-  regs.dx = GAME_PORT;
-  _guest.SetFlag(FLAG_CARRY, axes.timedOut);
-  _guest.Clobber(STICK_AXES);
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x02D4, "IsMouseDriverInstalled", &IsMouseDriverInstalledEntry, RETURNS_ZERO},
-  // It waits as a rule: the mission briefings call it for the key that ends them.
-  NativeEntry{0x6DEC, "WaitForKeyPress", &WaitForKeyPressEntry, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
-  NativeEntry{0x7443, "ReadScanCode", &ReadScanCodeEntry, CLOBBERS_AX},
-  NativeEntry{0x74E0, "ReadFireButton", &ReadFireButtonEntry, FIRE_BUTTON},
-  NativeEntry{0x7536, "ReadSteering", &ReadSteeringEntry, CLOBBERS_BX_CX_DX, Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Sometimes},
-  NativeEntry{0x7616, "GetKey", &GetKeyEntry, KEY},
-  NativeEntry{0x7668, "ResetKeyboard", &ResetKeyboardEntry, PRESERVES_ALL},
-  NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxesEntry, STICK_AXES, Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Sometimes},
-  NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteeringEntry, STICK_STEERING, Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Sometimes},
-  NativeEntry{0x78EF, "ReadKeyboardSteering", &ReadKeyboardSteeringEntry, CLOBBERS_BX},
-  NativeEntry{0x797E, "ReadMouseSteering", &ReadMouseSteeringEntry, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x7F3D, "PollScreenDumpKey", &PollScreenDumpKeyEntry, PRESERVES_ALL},
-  NativeEntry{0x7F5D, "ResetMouseIfSelected", &ResetMouseIfSelectedEntry, CLOBBERS_AX_BX},
-  NativeEntry{0x8EA5, "ApplyReverseControls", &ApplyReverseControlsEntry, PRESERVES_ALL},
-  NativeEntry{0x8EBA, "ApplyReverseControlsToDx", &ApplyReverseControlsToDxEntry, PRESERVES_ALL},
+  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

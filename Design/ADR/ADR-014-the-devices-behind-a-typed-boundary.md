@@ -1,6 +1,6 @@
 # ADR-014 — The devices behind a typed boundary
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), and with taking interrupts where they fall due (item 10).
+**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), with taking interrupts where they fall due (item 10), and with `Start`'s DOS services (item 11).
 
 ## Context
 
@@ -46,7 +46,7 @@ More operations come as the routines that need them convert: the keyboard, the g
 
 **4. The interrupt flag belongs to the devices.** STI and CLI are `Hardware` operations, not a register a routine sets. In the end state they gate the scheduler's ticks.
 
-**5. Interrupt vectors stay memory.** `InstallTimerInterrupt` writes int 8's vector into the table at 0000:0020 through the `GameState`, because the interpreter's interrupt dispatch reads the table while it lasts. The writes go when the scheduler replaces the handlers.
+**5. Interrupt vectors stay memory.** *Since ADR-017 item 6, int 8 and int 9 are the only vectors native code is entered through; the game's writes to int 0 and int 24h stay, with no hook behind them.* `InstallTimerInterrupt` writes int 8's vector into the table at 0000:0020 through the `GameState`, because the interpreter's interrupt dispatch reads the table while it lasts. The writes go when the scheduler replaces the handlers.
 
 **6. Converted with this decision: the timer's tick and the speaker.**
 - **Sound:** `StartMusic`, `StopAllSound`, `SilenceSpeakerTimer`, `EmitNoiseSample` and `ToggleSpeaker`. `StopAllSound` keeps `StopSoundEffects`' STI, as `EnableInterrupts`.
@@ -126,6 +126,8 @@ Each runs `Pc::TakeDueInterrupts`, which is public for it. The three per-site ca
 **In the end state** these three operations run the scheduler's due ticks.
 
 **`Hardware::Spend`** charges a pacing point's cost (ADR-013 item 3), as `Guest::Spend` does for register code. The charts' frame loop calls it.
+
+**11. `Start`'s DOS services, 2026-10-10** (ADR-012 item 22). `ReadDosVersion` is int 21h AH=30h, with the AL the original passes in, the PSP's low byte. `ReadDosTime` is int 21h AH=2Ch. Each returns a typed result, as item 8 says. With them, every device access in the game goes through `Hardware`.
 
 ## What this forecloses
 

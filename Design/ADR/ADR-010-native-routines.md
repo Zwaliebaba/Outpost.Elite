@@ -7,7 +7,7 @@
 - the corpus run three ways;
 - the first 23 entries ported: the maths leaves.
 
-It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 requires. **Amended 2026-10-10:** native code waits on a thread of its own (item 8), and each subsystem has its own file (item 9). **Amended again with the first 262 entries,** every subsystem's work routines:
+It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 requires. **Amended 2026-10-10 by [ADR-017](ADR-017-the-interpreter-deleted.md):** the comparison with the original, its coverage check and `Design/NativeCoverage.tsv` are deleted with the interpreter (D7). **Amended 2026-10-10:** native code waits on a thread of its own (item 8), and each subsystem has its own file (item 9). **Amended again with the first 262 entries,** every subsystem's work routines:
 
 - a compared call leaves the original's whole outcome (item 4);
 - constructed tests' coverage is measured, and CI checks coverage (item 5);
@@ -223,7 +223,7 @@ The compared runs made 1,274,741 calls of ported entries, with no mismatch:
   - Platform fibers do not exist where the Linux tools run.
   - A state machine for each routine is the Phase 4 scheduler, built too early.
 
-**9. Each subsystem has its own file.**
+**9. Each subsystem has its own file.** *Since ADR-017 item 6, only `Start`, the timer's handler and the keyboard's handler keep an entry.*
 
 - **Lists and registration.** The 19 subsystems of Symbols.tsv each have a source file in `GameLogic` with a list of `NativeEntry`, and `InstallNativeRoutines` walks every list. A port therefore touches only its own subsystem's file.
 - **Returns.** An entry says how the original returns: `RET n`, `RETF n`, or `IRET` for an interrupt handler's entry, which is hooked like any other because the CPU takes a due interrupt before it stops at a hook.

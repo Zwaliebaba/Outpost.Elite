@@ -4,22 +4,18 @@
 #include "Docked.h"
 #include "Flight.h"
 #include "GameState.h"
+#include "Hardware.h"
 #include "Input.h"
-#include "NativeEntry.h"
 #include "Text.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's equipment routines, ported (plan §5 Phase 3, ADR-010): buying and fitting equipment. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> EquipmentEntries() noexcept;
+// The reference's equipment routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): buying and fitting equipment. Each
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 /// Whether _key ends a menu screen: Esc, or F1 to F10.
 [[nodiscard]] bool IsScreenKey(std::uint8_t _key) noexcept;
@@ -127,21 +123,5 @@ MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop)
 
 /// 100 timer ticks, each turn of the LOOP jumping back to CS:_tickLoop with its count (ADR-015), then GetKey. Returns the key.
 KeyPress PollMenuKey(GameState& _state, Hardware& _hardware, std::uint16_t _tickLoop);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-void LaunchEscapePodEntry(Guest& _guest);          ///< Clobbers all but DS.
-void TryScoopObjectEntry(Guest& _guest);           ///< In: AX, BX, CX the view position, DI the slot. Preserves every register.
-void PayForEquipmentItemEntry(Guest& _guest);      ///< Out: CF=1, and the credits unchanged, when they are not enough.
-void SelectLaserTypeEntry(Guest& _guest);          ///< Out: ZF=1 if the row is a laser's.
-void DrawLaserMountMenuEntry(Guest& _guest);       ///< Out: SI=1E5h.
-void RedrawEquipHelpTextEntry(Guest& _guest);      ///< Out: AX=1F00h, CX=0.
-void PaintLaserMountBoxEntry(Guest& _guest);       ///< In: SI=_box, ES=B800h. Out: AL=textAttribute, DL=0, CX=0.
-void ClearEquipmentSellPriceEntry(Guest& _guest);  ///< Out: AX=7900h, SI and DI where it stops printing, ES=B800h.
-void ShowEquipmentSellPriceEntry(Guest& _guest);   ///< Out: as ClearEquipmentSellPriceEntry, BX the price's slot.
-void ShowEquipShipScreenEntry(Guest& _guest);      ///< Out: AX the key; all but DS clobbered.
-void RunEquipShipMenuEntry(Guest& _guest);         ///< In: SI the first row. Out: AX the key; all but DS clobbered.
-void ChooseMountToFitLaserEntry(Guest& _guest);    ///< Clobbers all but DS.
-void ChooseMountToRemoveLaserEntry(Guest& _guest); ///< Clobbers all but DS.
 
 } // namespace Elite

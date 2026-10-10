@@ -33,7 +33,6 @@ constexpr std::uint16_t FUEL_TEXT = 0x83E9;         // 'Fuel:  n.n Light Years'
 constexpr std::uint16_t FUEL_DIGITS = 0x8407;       // FormatDecimal5's five, of which the last two are shown
 
 constexpr std::uint8_t TEXT_LAYOUT = 2;
-constexpr std::uint16_t BORDER_COLOR_PORT = 0x3D9;
 constexpr std::uint8_t ATTRIBUTE_MASK = 0x7F; // no blinking
 constexpr std::uint8_t FRAME_ROW_CHARACTER = 0xCD;
 constexpr std::uint8_t FRAME_SIDE_CHARACTER = 0xBA;
@@ -449,24 +448,6 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
       key = ScreenKey{next.scanCode, AlAfterKey(key.al, next), std::nullopt};
     }
   }
-}
-
-// What the screens leave that no value routine computes: BX, CX, DX, SI and DI, as the last of them leaves them.
-constexpr Machine::NativeContract DOCKED_SCREENS_LEAVE{
-  Machine::REGISTER_BX | Machine::REGISTER_CX | Machine::REGISTER_DX | Machine::REGISTER_SI | Machine::REGISTER_DI, 0};
-
-// What DockedKeyDispatch leaves for RunTitleAndDocked's entry: ES = B800h, as every screen leaves it; BP and the direction flag as
-// the screens carry them; and AX the F1 that ends it or, once the disc menu leaves for the disk, the return address
-// LeaveGameLoopForDisk's second POP AX takes, RunTitleAndDocked's own, so that its RET returns from GameLoop. The first POP takes
-// the disc menu's return address, which a value call has none of.
-void DockedExitOut(Guest& _guest, const DockedExit& _exit)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.bp = _exit.countLeft;
-  _guest.SetFlag(Machine::FLAG_DIRECTION, _exit.backward);
-  regs.ax = _exit.leaves ? _guest.Pop() : Join(_exit.key.scanCode, _exit.key.al);
-  _guest.Clobber(DOCKED_SCREENS_LEAVE);
 }
 
 } // namespace
@@ -964,172 +945,6 @@ DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16
   }
   _hardware.LoopTurn(DOCKED_STATUS_ENTRY, {countIfNone});
   return DispatchDockedKeys(_state, _hardware, SCAN_F9, countIfNone, backward);
-}
-
-// ── Their entries ──
-
-namespace
-{
-
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BP;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
-using Machine::REGISTER_DI;
-using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
-using Machine::REGISTER_SI;
-
-constexpr Machine::NativeContract CLOBBERS_AX_BX_DI{REGISTER_AX | REGISTER_BX | REGISTER_DI, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
-// What a docked screen leaves: everything but DS (it waits as a rule, so it is never compared).
-constexpr Machine::NativeContract CLOBBERS_ALL{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
-// What a docked screen that returns its closing key leaves: everything but AX, the key in AH, and DS.
-constexpr Machine::NativeContract SHOWS_SCREEN{
-  REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
-
-} // namespace
-
-void ShowSellCargoScreenEntry(Guest& _guest)
-{
-  const ScreenKey key = ShowSellCargoScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Regs().ax = Join(key.scanCode, key.al);
-  _guest.Clobber(SHOWS_SCREEN);
-}
-
-void ShowBuyCargoScreenEntry(Guest& _guest)
-{
-  const ScreenKey key = ShowBuyCargoScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Regs().ax = Join(key.scanCode, key.al);
-  _guest.Clobber(SHOWS_SCREEN);
-}
-
-void ShowCommanderStatusScreenEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  // BP, the count SelectSystemAtCursor makes the index from when no system is on the chart.
-  const ScreenKey key = ShowCommanderStatusScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), regs.bp);
-  regs.ax = Join(key.scanCode, key.al);
-  _guest.Clobber(SHOWS_SCREEN);
-}
-
-void ShowInventoryScreenEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ScreenKey key = ShowInventoryScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), regs.bp);
-  regs.ax = Join(key.scanCode, key.al);
-  _guest.Clobber(SHOWS_SCREEN);
-}
-
-void ShowMissionBriefingEntry(Guest& _guest)
-{
-  ShowMissionBriefing(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(CLOBBERS_ALL);
-}
-
-void ShowMissionDebriefingEntry(Guest& _guest)
-{
-  ShowMissionDebriefing(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(CLOBBERS_ALL);
-}
-
-void AwardArchangelTitleEntry(Guest& _guest)
-{
-  AwardArchangelTitle(_guest.State());
-  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
-}
-
-void PrintCreditsOnMessageLineEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const PrintedText printed = PrintCreditsOnMessageLine(_guest.State());
-  regs.di = printed.nextCell;
-  regs.es = Guest::VIDEO_SEGMENT;
-  // The original keeps SI and CX round the print. It leaves AH the swapped attribute PrintTextModeString printed in,
-  // and AL the attribute swapped back.
-  const std::uint8_t attribute = _guest.Get(DS.textAttribute);
-  regs.ax = Join(static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4)), attribute);
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void FormatFuelLightYearsEntry(Guest& _guest)
-{
-  FormatFuelLightYears(_guest.State());
-  _guest.Regs().si = FUEL_TEXT;
-  _guest.Clobber(CLOBBERS_AX_BX_DI);
-}
-
-void DrawDockedFrameEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t descriptor = regs.si;
-  regs.si = DrawDockedFrame(_guest.State(), _guest.Devices(), descriptor, _guest.Flag(Machine::FLAG_DIRECTION));
-  // The contract keeps every register, so the entry leaves what the original does: DX the colour select port it wrote,
-  // ES on the text page, and from the corners' LOOP, BX past frameCorners, CX = 0, DI on the last corner, and AX its
-  // character in the frame's attribute.
-  const auto lastCorner = static_cast<std::uint16_t>(DS.frameCorners.offset + (FRAME_CORNERS - 1) * FRAME_CORNER_BYTES);
-  regs.dx = BORDER_COLOR_PORT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.bx = Offset(lastCorner, FRAME_CORNER_BYTES);
-  regs.cx = 0;
-  regs.di = _guest.Word(lastCorner);
-  regs.ax = Join(_guest.Byte(Offset(descriptor, 1)), _guest.Byte(Offset(lastCorner, 2)));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void DrawFrameSidesEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = DrawFrameSides(_guest.State(), regs.es, regs.di, regs.cx, High(regs.ax));
-  // The original puts the side's character in AL, and its LOOP leaves CX at 0.
-  SetLow(regs.ax, FRAME_SIDE_CHARACTER);
-  regs.cx = 0;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void RunTitleAndDockedEntry(Guest& _guest)
-{
-  // BP, the count the status screen hands SelectSystemAtCursor when no system is on the chart, as the flight left it.
-  DockedExitOut(_guest, RunTitleAndDocked(_guest.State(), _guest.Devices(), _guest.Regs().bp, _guest.Flag(Machine::FLAG_DIRECTION)));
-}
-
-void DrawFrameRowEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = DrawFrameRow(_guest.State(), regs.es, regs.di, regs.ax, _guest.Flag(Machine::FLAG_DIRECTION));
-  // Its REP STOSW leaves CX at 0.
-  regs.cx = 0;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-namespace
-{
-
-constexpr Machine::NativeReturn NEAR = Machine::NativeReturn::Near;
-constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
-
-constexpr std::array ENTRIES = {
-  NativeEntry{0x49E4, "AwardArchangelTitle", &AwardArchangelTitleEntry, CLOBBERS_AX_CX_SI_DI},
-  NativeEntry{0x5A30, "ShowSellCargoScreen", &ShowSellCargoScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
-  NativeEntry{0x5AE9, "ShowBuyCargoScreen", &ShowBuyCargoScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
-  NativeEntry{0x5EA9, "ShowCommanderStatusScreen", &ShowCommanderStatusScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
-  NativeEntry{0x6020, "ShowInventoryScreen", &ShowInventoryScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
-  NativeEntry{0x658F, "PrintCreditsOnMessageLine", &PrintCreditsOnMessageLineEntry, PRESERVES_ALL},
-  NativeEntry{0x6923, "FormatFuelLightYears", &FormatFuelLightYearsEntry, CLOBBERS_AX_BX_DI},
-  NativeEntry{0x6DF2, "ShowMissionBriefing", &ShowMissionBriefingEntry, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x6EB7, "ShowMissionDebriefing", &ShowMissionDebriefingEntry, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrameEntry, PRESERVES_ALL},
-  NativeEntry{0x7CE9, "DrawFrameSides", &DrawFrameSidesEntry, PRESERVES_ALL},
-  NativeEntry{0x7CF8, "DrawFrameRow", &DrawFrameRowEntry, PRESERVES_ALL},
-  NativeEntry{0x7D81, "RunTitleAndDocked", &RunTitleAndDockedEntry, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-};
-
-} // namespace
-
-std::span<const NativeEntry> DockedEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

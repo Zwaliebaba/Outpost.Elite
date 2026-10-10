@@ -3,31 +3,23 @@
 
 #include "Flight.h"
 #include "GameState.h"
+#include "Hardware.h"
 #include "Maths.h"
-#include "NativeEntry.h"
 #include "ObjectSlot.h"
 #include "Ships.h"
 
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace Elite
 {
 
-// The reference's ai routines, ported (plan §5 Phase 3, ADR-010): the ships' behaviour: traders, police, pirates, the station.
-// Each body is declared here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012)
-// take values and give values back, below the register bodies, and their entries keep the register contracts.
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> AiEntries() noexcept;
-
-/// SkipInertObjectAi (CS:5594): class 0's handler, which does nothing.
-void SkipInertObjectAi(Guest& _guest);
+// The reference's ai routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the ships' behaviour: traders, police,
+// pirates, the station. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
-/// What UpdateStationAi did, for its entry, and what it leaves in DX.
+/// What UpdateStationAi did, and what it leaves in DX.
 struct StationTurn
 {
   std::optional<NearTest> near;             ///< what IsObjectNear found of the station, when it looked for an offender
@@ -142,30 +134,5 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
 /// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
 /// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.
 [[nodiscard]] HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
-
-// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
-
-void ScaleSpawnOddsEntry(Guest& _guest);    ///< BX = the odds, in and out.
-void IsMaskShipPresentEntry(Guest& _guest); ///< Out: CF set and SI = the slot when found, else SI past the slots; CX clobbered.
-void PlaceEscortNearEntry(Guest& _guest);   ///< DI = the escort, SI = the leader. AX, CX, DX, SI clobbered.
-/// AX, BX = the angles wanted, DI = the slot. Out: AX, BX the errors' magnitudes, BP = AX, CX the turn rate, negated when it is
-/// the yaw's step; DX clobbered.
-void TurnTowardAnglesEntry(Guest& _guest);
-/// AX = wanted, CX = current, DI = the slot. Out: AX the step, BX |error|, CX the turn rate, negated when the step is.
-void ClampTurnStepEntry(Guest& _guest);
-void CountOtherHuntersOnScannerEntry(Guest& _guest); ///< DI = the slot. Out: AL the count, BP the last found; CX, SI clobbered.
-/// DI = the slot, SI = the object, DX = the box's half size. Out: AX, BX, CX the vector; CF set within the box; DX, BP clobbered.
-void GetVectorToObjectEntry(Guest& _guest);
-/// DI = the slot, DL the low byte of a range's box. Out: DI kept; AX, BX, CX, DX, SI, BP and ES clobbered.
-void UpdateTraderOrPoliceAiEntry(Guest& _guest);
-void UpdateWolfAiEntry(Guest& _guest);   ///< As UpdateTraderOrPoliceAiEntry.
-void UpdateHunterAiEntry(Guest& _guest); ///< As UpdateTraderOrPoliceAiEntry.
-/// DI = the slot. Out: every register as the original leaves it: MoveObject's, AL the type, and a rock's tumble in AX and BX.
-void UpdateDriftingObjectAiEntry(Guest& _guest);
-/// DI = the slot. Out: CF set when it must hold its fire; AL what InSafeZone leaves there, when it is asked.
-void CheckSafeZoneHoldFireEntry(Guest& _guest);
-void UpdateObjectsAndSpawnEntry(Guest& _guest); ///< DX goes on to the handlers. Clobbers all.
-/// DI = the station. Out: DI, BP, ES and DX as the original leaves them (StationTurn); AX, BX, CX, SI clobbered.
-void UpdateStationAiEntry(Guest& _guest);
 
 } // namespace Elite

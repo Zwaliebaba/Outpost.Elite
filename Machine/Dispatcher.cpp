@@ -4,7 +4,6 @@
 
 #include "Firmware.h"
 #include "HostServices.h"
-#include "InstructionObserver.h"
 #include "InterruptSource.h"
 #include "Memory.h"
 
@@ -19,7 +18,7 @@ constexpr std::uint8_t OPCODE_INT = 0xCD;
 constexpr std::uint8_t VECTOR_TERMINATE = 0x20;
 constexpr std::uint16_t INT_BYTES = 2;
 
-// What Cpu charges for the two instructions, from Intel's 8086 table plus 4 clocks for every word the
+// What the interpreter charged for the two instructions, from Intel's 8086 table plus 4 clocks for every word the
 // 8088 moves over its 8-bit bus: IRET pops three words; INT pushes three and reads the vector's two.
 constexpr std::uint32_t WORD_TRANSFER_CYCLES = 4;
 constexpr std::uint32_t IRET_CYCLES = 24 + 3 * WORD_TRANSFER_CYCLES;
@@ -43,20 +42,6 @@ void Dispatcher::SetInterruptSource(InterruptSource* _source) noexcept
   m_interrupts = _source;
 }
 
-void Dispatcher::SetExecutionMap(std::vector<std::uint8_t>* _map)
-{
-  if (_map != nullptr && _map->size() < Memory::SIZE_BYTES)
-  {
-    _map->resize(Memory::SIZE_BYTES, 0);
-  }
-  m_executionMap = _map;
-}
-
-void Dispatcher::SetInstructionObserver(InstructionObserver* _observer) noexcept
-{
-  m_observer = _observer;
-}
-
 void Dispatcher::SetHookMap(const std::vector<std::uint8_t>* _map) noexcept
 {
   m_hookMap = _map;
@@ -75,7 +60,6 @@ void Dispatcher::Reset() noexcept
   m_regs.flags = FLAGS_FIXED_ONES;
   m_instructionCount = 0;
   m_hardwareInterrupts = 0;
-  m_halted = false;
   m_atHook = false;
   m_atUnportedCode = false;
 }
@@ -91,10 +75,6 @@ std::uint32_t Dispatcher::Step()
     EnterInterrupt(m_interrupts->AcknowledgeInterrupt());
     cycles += HARDWARE_INTERRUPT_CYCLES;
     ++m_hardwareInterrupts;
-  }
-  if (m_halted)
-  {
-    return HALT_IDLE_CYCLES;
   }
   if (m_hookMap != nullptr && (*m_hookMap)[Memory::Linear(m_regs.cs, m_regs.ip)] != 0)
   {
@@ -114,14 +94,6 @@ std::uint32_t Dispatcher::RunMachineCode()
     m_atUnportedCode = true;
     return 0;
   }
-  if (m_executionMap != nullptr)
-  {
-    (*m_executionMap)[Memory::Linear(m_regs.cs, m_regs.ip)] = 1;
-  }
-  if (m_observer != nullptr)
-  {
-    m_observer->BeforeInstruction(m_regs);
-  }
   ++m_instructionCount;
   if (romIret)
   {
@@ -140,7 +112,7 @@ std::uint32_t Dispatcher::RunMachineCode()
 
 void Dispatcher::EnterInterrupt(std::uint8_t _vector) noexcept
 {
-  // As Cpu enters one: the flags pushed as they are, IF and TF cleared, then CS and IP.
+  // As the 8088 enters one: the flags pushed as they are, IF and TF cleared, then CS and IP.
   Push(m_regs.flags);
   m_regs.flags = static_cast<std::uint16_t>(m_regs.flags & ~(FLAG_INTERRUPT | FLAG_TRAP));
   Push(m_regs.cs);
@@ -148,7 +120,6 @@ void Dispatcher::EnterInterrupt(std::uint8_t _vector) noexcept
   const std::uint32_t entry = static_cast<std::uint32_t>(_vector) * 4u;
   m_regs.ip = m_memory.Read16(entry);
   m_regs.cs = m_memory.Read16(entry + 2u);
-  m_halted = false;
 }
 
 void Dispatcher::Push(std::uint16_t _value) noexcept
@@ -162,11 +133,6 @@ std::uint16_t Dispatcher::Pop() noexcept
   const std::uint16_t value = m_memory.Read16(m_regs.ss, m_regs.sp);
   m_regs.sp = static_cast<std::uint16_t>(m_regs.sp + 2);
   return value;
-}
-
-std::unique_ptr<Processor> MakeDispatcher(Memory& _memory, PortBus& /*_ports*/)
-{
-  return std::make_unique<Dispatcher>(_memory);
 }
 
 } // namespace Machine

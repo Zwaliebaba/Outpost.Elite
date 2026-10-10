@@ -385,6 +385,11 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   return clock;
 }
 
+std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
+{
+  return static_cast<std::uint16_t>((_clock.ticks - TICKS_PER_DAY) >> 16);
+}
+
 void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // PUSH AX / PUSH DS / PUSH ES, and their POPs before the IRET or the chain: what it loads into them, the data segment, B800h
@@ -438,69 +443,19 @@ void WaitForTimerTick(GameState& _state, Hardware& _hardware)
   }
 }
 
-namespace
-{
-
-using Machine::REGISTER_AX;
-using Machine::REGISTER_BX;
-using Machine::REGISTER_DX;
-
-constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-// RestoreTimerInterrupt: CX, the clock less a day, is compared (RestoreTimerInterruptEntry).
-constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | REGISTER_DX, 0};
-
-} // namespace
+// ── The entry of the timer's interrupt handler ──
 
 void TimerInterruptEntry(Guest& _guest)
 {
+  // AX, DS and ES pushed round what it loads into them, and popped: every register is kept, and the IRET takes the flags.
   TimerInterrupt(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void InstallTimerInterruptEntry(Guest& _guest)
-{
-  InstallTimerInterrupt(_guest.State(), _guest.Devices());
-  _guest.Regs().es = VECTOR_TABLE_SEGMENT;
-  _guest.Regs().ax = _guest.CodeSegment();
-  _guest.Clobber(CLOBBERS_AX);
-}
-
-void RestoreTimerInterruptEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const BiosClock clock = RestoreTimerInterrupt(_guest.State(), _guest.Devices());
-  // XOR AX,AX / MOV ES,AX for the interrupt table; on the Amstrad, IsMouseDriverInstalled leaves the int 33h vector's
-  // segment there.
-  regs.es = _guest.Get(DS.amstradPresent) == 1 ? IsMouseDriverInstalled(_guest.State()).segment : VECTOR_TABLE_SEGMENT;
-  // CX is left the high word of SUB DX / SBB CX, the clock less a day, whether or not the clock was set back: Start goes on with
-  // it into PerformDiskRequest, whose catalogue searches with it as the attributes (ListCommanderFiles, CS:03B8).
-  regs.cx = static_cast<std::uint16_t>((clock.ticks - TICKS_PER_DAY) >> 16);
-  _guest.Clobber(CLOBBERS_AX_BX_DX);
-}
-
-void WaitForTimerTickEntry(Guest& _guest)
-{
-  WaitForTimerTick(_guest.State(), _guest.Devices());
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-void TimerTickEntry(Guest& _guest)
-{
-  TimerTick(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(CLOBBERS_AX);
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x00C6, "InstallTimerInterrupt", &InstallTimerInterruptEntry, CLOBBERS_AX},
-  NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterruptEntry, CLOBBERS_AX_BX_DX},
-  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x7150, "TimerTick", &TimerTickEntry, CLOBBERS_AX},
-  // WaitForTimerTick waits for the next tick as a rule.
-  NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTickEntry, PRESERVES_ALL, Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Always},
+  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

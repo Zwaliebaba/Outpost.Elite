@@ -215,9 +215,6 @@
     <ClCompile Include="NativeRoutines.cpp">
       <Filter>Native</Filter>
     </ClCompile>
-    <ClCompile Include="Pacing.cpp">
-      <Filter>Timer</Filter>
-    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>

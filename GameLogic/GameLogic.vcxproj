@@ -122,7 +122,6 @@
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="NativeRoutines.cpp" />
-    <ClCompile Include="Pacing.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
