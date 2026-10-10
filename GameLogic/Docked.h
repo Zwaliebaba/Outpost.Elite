@@ -1,6 +1,7 @@
 // GameLogic/Docked.h
 #pragma once
 
+#include "Input.h"
 #include "NativeEntry.h"
 #include "Text.h"
 
@@ -17,12 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockedEntries() noexcept;
 
-/// WaitForScreenExitKey (CS:60B4), the tail that ShowSystemDataScreen, ShowMarketPricesScreen,
-/// ShowCommanderStatusScreen and ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the
-/// screen's own in DL, then SelectSystemAtCursor. Waits. Out: AH=the key; what SelectSystemAtCursor
-/// clobbers but AX.
-void WaitForScreenExitKey(Guest& _guest);
-
 /// ShowSellCargoScreen (CS:5A30), F2: the products with their sell prices and the units held, then
 /// RunCargoTradeMenu, which waits. Out: AH=the Esc or F-key that closed it; clobbers all but DS.
 void ShowSellCargoScreen(Guest& _guest);
@@ -31,23 +26,6 @@ void ShowSellCargoScreen(Guest& _guest);
 /// from the market's random state the first time after an arrival, then RunCargoTradeMenu, which waits.
 /// Out: AH=the Esc or F-key that closed it; clobbers all but DS.
 void ShowBuyCargoScreen(Guest& _guest);
-
-/// ShowCommanderStatusScreen (CS:5EA9), F9, docked or in flight: docked, a mission's briefing or debriefing
-/// first; then the commander, systems, fuel, cash, legal status, rating and equipment, and it waits for the
-/// key that closes it (WaitForScreenExitKey). Out: AH=that key; clobbers all but DS.
-void ShowCommanderStatusScreen(Guest& _guest);
-
-/// ShowInventoryScreen (CS:6020), F10: fuel, cash and every product held, and it waits for the key that
-/// closes it. Out: AH=that key; clobbers all but DS.
-void ShowInventoryScreen(Guest& _guest);
-
-/// ShowMissionBriefing (CS:6DF2): the EMERGENCY screen of missionNumber, which waits for a key (Y or N for
-/// the supernova's refugees). missionStage=1. Clobbers all but DS.
-void ShowMissionBriefing(Guest& _guest);
-
-/// ShowMissionDebriefing (CS:6EB7): returns at once while the mission is not done; otherwise the TASK
-/// COMPLETE screen, which waits for a key, and the reward. Clobbers all but DS.
-void ShowMissionDebriefing(Guest& _guest);
 
 /// RunTitleAndDocked (CS:7D81): unless titleShown, the title until a key, the credits and a new game; then
 /// the docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a
@@ -60,8 +38,41 @@ void RunTitleAndDocked(Guest& _guest);
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
+/// The key that closed a docked screen, and AL as the original leaves it with the key in AH.
+struct ScreenKey
+{
+  std::uint8_t scanCode; ///< Esc, or the F-key of the screen to show next
+  std::uint8_t al;       ///< what the screen left in AL, shifted left by each GetKey that took a code, its Shift in bit 0
+};
+
+/// AL as GetKey leaves it, from _al, for _key: shifted left with the key's Shift in bit 0 when it took a code, and as it was
+/// otherwise. The docked menus hold AL from one turn of their loops to the next, and fire the stick with it (ReadSteering).
+[[nodiscard]] std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept;
+
 /// AwardArchangelTitle (CS:49E4): 'ARCHANGEL' over the rank in commanderRankText.
 void AwardArchangelTitle(GameState& _state);
+
+/// WaitForScreenExitKey (CS:60B4), the tail that ShowSystemDataScreen, ShowMarketPricesScreen, ShowCommanderStatusScreen and
+/// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor
+/// with _countIfNone. _al is what the screen left in AL. Waits for keys as a rule (ADR-015).
+ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone);
+
+/// ShowCommanderStatusScreen (CS:5EA9), F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
+/// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
+/// (WaitForScreenExitKey, with _countIfNone). _backward is the direction flag, which DrawDockedFrame goes by.
+ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+
+/// ShowInventoryScreen (CS:6020), F10: fuel, cash and every product held, and the wait for the key that closes it, as
+/// ShowCommanderStatusScreen's.
+ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+
+/// ShowMissionBriefing (CS:6DF2): missionStage=1, and the EMERGENCY screen of missionNumber, which waits for a key (Y or N
+/// for the supernova's refugees, who take the hold).
+void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward);
+
+/// ShowMissionDebriefing (CS:6EB7): nothing while the mission is not done; otherwise the TASK COMPLETE screen, which waits
+/// for a key, and the reward.
+void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
 /// back after.
@@ -96,5 +107,9 @@ void FormatFuelLightYearsEntry(Guest& _guest);      ///< Out: SI=DS:83E9, the fu
 void DrawDockedFrameEntry(Guest& _guest);           ///< In: SI=the descriptor. Out: SI=the title, ES=B800h.
 void DrawFrameSidesEntry(Guest& _guest);
 void DrawFrameRowEntry(Guest& _guest);
+void ShowCommanderStatusScreenEntry(Guest& _guest); ///< In: BP, as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
+void ShowInventoryScreenEntry(Guest& _guest);       ///< As ShowCommanderStatusScreenEntry.
+void ShowMissionBriefingEntry(Guest& _guest);       ///< Clobbers all but DS.
+void ShowMissionDebriefingEntry(Guest& _guest);     ///< Clobbers all but DS.
 
 } // namespace Elite

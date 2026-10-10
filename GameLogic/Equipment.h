@@ -1,11 +1,13 @@
 // GameLogic/Equipment.h
 #pragma once
 
+#include "Flight.h"
 #include "GameState.h"
 #include "NativeEntry.h"
 #include "Text.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -16,10 +18,6 @@ namespace Elite
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> EquipmentEntries() noexcept;
-
-/// TryScoopObject (CS:4401): freeCargoTonnes, and the object at DI scooped into the hold if its view position AX, BX, CX
-/// is in the scoop's box, with its message. Preserves AX, BX and CX.
-void TryScoopObject(Guest& _guest);
 
 /// ShowEquipShipScreen (CS:5BF2): the F4 screen, its prices into screenPrices, then RunEquipShipMenu. Waits. Out: AH=the
 /// key that ended it.
@@ -34,10 +32,6 @@ void ChooseMountToFitLaser(Guest& _guest);
 
 /// ChooseMountToRemoveLaser (CS:646F): the mount a sold laser comes off, chosen with the cursor and Space. Waits.
 void ChooseMountToRemoveLaser(Guest& _guest);
-
-/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price (fuel by the tank's emptiness) off creditsTenths, and
-/// creditBalanceText formatted. Out: CF=1, and the credits unchanged, when they are not enough.
-void PayForEquipmentItem(Guest& _guest);
 
 // What the menus that wait share (RunEquipShipMenu, RunCargoTradeMenu and the two mount choosers): the same code at
 // each one's own addresses. Only a routine hooked as one that waits may call them (Guest::LoopTurn).
@@ -61,6 +55,30 @@ void MoveMenuCursorDownOnRegisters(Guest& _guest);
 [[nodiscard]] bool IsScreenKey(std::uint8_t _key) noexcept;
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// What TryScoopObject did.
+struct Scoop
+{
+  bool inBox;                                ///< the view position is in the scoop's box, and the object was offered to the hold
+  std::optional<DashboardPixel> removedBlip; ///< once it is scooped, what RemoveObject erased of its blip
+};
+
+/// What PayForEquipmentItem charged.
+struct EquipmentPayment
+{
+  bool paid;            ///< the credits were enough, and are now less the price
+  std::uint16_t tenths; ///< the price, in tenths of a credit
+};
+
+/// TryScoopObject (CS:4401): freeCargoTonnes, and the object in _slot scooped into the hold if its view position _view is in
+/// the scoop's box: a barrel's random product or its masking device, a splinter's alloys or precious metals, an escape pod's
+/// slaves, a Thargon's alien items, each removed (RemoveObject) with its message, or the message that the hold is full or the
+/// object cannot be scooped.
+Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view);
+
+/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness,
+/// by a divide whose trap saves _bx, its caller's BX, with the row in BL.
+[[nodiscard]] EquipmentPayment PayForEquipmentItem(GameState& _state, std::uint16_t _bx);
 
 /// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.
@@ -110,6 +128,8 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row);
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void LaunchEscapePodEntry(Guest& _guest);         ///< Clobbers all but DS.
+void TryScoopObjectEntry(Guest& _guest);          ///< In: AX, BX, CX the view position, DI the slot. Preserves every register.
+void PayForEquipmentItemEntry(Guest& _guest);     ///< Out: CF=1, and the credits unchanged, when they are not enough.
 void SelectLaserTypeEntry(Guest& _guest);         ///< Out: ZF=1 if the row is a laser's.
 void DrawLaserMountMenuEntry(Guest& _guest);      ///< Out: SI=1E5h.
 void RedrawEquipHelpTextEntry(Guest& _guest);     ///< Out: AX=1F00h, CX=0.

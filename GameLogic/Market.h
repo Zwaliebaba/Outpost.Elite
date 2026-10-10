@@ -1,6 +1,7 @@
 // GameLogic/Market.h
 #pragma once
 
+#include "Docked.h"
 #include "NativeEntry.h"
 #include "Text.h"
 
@@ -16,10 +17,6 @@ namespace Elite
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MarketEntries() noexcept;
-
-/// ShowMarketPricesScreen (CS:5E2C): the F8 screen, every commodity's buy and sell price, then the wait for a key. Waits.
-/// Out: AH=the key that ended it.
-void ShowMarketPricesScreen(Guest& _guest);
 
 /// RunCargoTradeMenu (CS:6B1E): the cargo menu: the cursor, and B or S with a typed quantity on the buy or sell
 /// screen (tradeScreenIsBuy). Waits. Out: AH=Esc or the F-key that ended it.
@@ -39,6 +36,11 @@ struct Quantity
   std::uint16_t end;     ///< one past the last character it read
   std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
 };
+
+/// ShowMarketPricesScreen (CS:5E2C): the F8 screen, the system's name cut at its first space and every commodity's buy and
+/// sell price, then the wait for the key that closes it (WaitForScreenExitKey, with _countIfNone). _backward is the direction
+/// flag, which DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
+ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
 
 /// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
 /// creditsTenths, and the balance reformatted. Returns false, and the credits as they were, when they are not enough.
@@ -77,9 +79,10 @@ std::uint8_t AddContrabandPenalty(GameState& _state);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
-void SubtractCreditsEntry(Guest& _guest); ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
-void SpendCreditsEntry(Guest& _guest);    ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
-void AddCreditsEntry(Guest& _guest);      ///< In: BX:AX the tenths.
+void ShowMarketPricesScreenEntry(Guest& _guest); ///< In: BP as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
+void SubtractCreditsEntry(Guest& _guest);        ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
+void SpendCreditsEntry(Guest& _guest);           ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
+void AddCreditsEntry(Guest& _guest);             ///< In: BX:AX the tenths.
 void ComputeResalePriceEntry(Guest& _guest);
 void ComputeMarketPricesEntry(Guest& _guest);
 void NextMarketRandomEntry(Guest& _guest);

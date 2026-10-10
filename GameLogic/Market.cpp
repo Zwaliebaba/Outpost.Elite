@@ -24,13 +24,10 @@ constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
 constexpr std::uint16_t SPEND_CREDITS = 0x65EC;
 constexpr std::uint16_t ADD_CREDITS = 0x65EE;
-constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
-constexpr std::uint16_t COMPUTE_MARKET_PRICES = 0x69CE;
 constexpr std::uint16_t PARSE_QUANTITY = 0x6A99;
 constexpr std::uint16_t PRINT_CARGO_QUANTITY = 0x6AD9;
 constexpr std::uint16_t ADD_CONTRABAND_PENALTY = 0x6DC1;
 constexpr std::uint16_t READ_TEXT_LINE = 0x7694;
-constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
 
 // Where the original's backward jumps land, for the turns of its loops (JumpBack).
 constexpr std::uint16_t SYSTEM_NAME_SCAN = 0x5E39;
@@ -372,79 +369,53 @@ void BuyCargo(Guest& _guest)
 
 } // namespace
 
-void ShowMarketPricesScreen(Guest& _guest)
+ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  Registers& regs = _guest.Regs();
-  regs.si = DS.marketPricesFrame.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_OFFSET;
-  _guest.Push(regs.si);
-  // The system's name, cut for good at its first space after the first letter.
-  regs.si = DS.currentSystemName.offset;
+  const std::uint16_t title = DrawDockedFrame(_state, _hardware, DS.marketPricesFrame.offset, _backward);
+  // The system's name, cut for good at its first space after the first letter; each turn of the scan carries its place.
+  std::uint16_t letter = DS.currentSystemName.offset;
   for (;;)
   {
-    ++regs.si;
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    if (Low(regs.ax) == 0)
+    letter = Offset(letter, 1);
+    const std::uint8_t character = _state.Byte(letter);
+    if (character == 0)
     {
       break;
     }
-    if (Low(regs.ax) == ' ')
+    if (character == ' ')
     {
-      _guest.SetByte(regs.si, 0);
+      _state.SetByte(letter, 0);
       break;
     }
-    _guest.JumpBack(SYSTEM_NAME_SCAN);
+    _hardware.LoopTurn(SYSTEM_NAME_SCAN, {letter});
   }
-  regs.si = DS.currentSystemName.offset;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = _guest.Pop();
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = PRICES_HEADER_TEXT;
-  regs.di = PRICES_HEADER_OFFSET;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Call(COMPUTE_MARKET_PRICES);
+  const PrintedText name = PrintTextModeString(_state, DS.currentSystemName.offset, TITLE_OFFSET);
+  PrintTextModeString(_state, title, name.nextCell);
+  PrintTextModeString(_state, PRICES_HEADER_TEXT, PRICES_HEADER_OFFSET);
+  ComputeMarketPrices(_state);
 
-  // Each commodity's name, buy price and sell price.
-  regs.si = DS.productNames.offset;
-  regs.di = FIRST_PRODUCT_OFFSET;
-  regs.bx = DS.screenPrices.offset;
-  regs.cx = COMMODITY_COUNT;
-  for (;;)
+  // Each commodity's name, buy price and sell price. Each turn carries the count, the name, the row and the prices.
+  std::uint16_t product = DS.productNames.offset;
+  std::uint16_t row = FIRST_PRODUCT_OFFSET;
+  std::uint16_t prices = DS.screenPrices.offset;
+  for (std::uint16_t left = COMMODITY_COUNT;;)
   {
-    _guest.Push(regs.cx);
-    _guest.Push(regs.si);
-    _guest.Push(regs.di);
-    _guest.Push(regs.bx);
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    regs.bx = _guest.Pop();
-    regs.ax = _guest.Word(regs.bx);
-    _guest.Push(regs.bx);
-    _guest.Push(regs.di);
-    _guest.Call(FORMAT_TENTHS);
-    regs.si = DS.priceText.offset;
-    regs.di = static_cast<std::uint16_t>(_guest.Pop() + BUY_PRICE_COLUMN);
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    regs.bx = _guest.Pop();
-    regs.ax = _guest.Word(static_cast<std::uint16_t>(regs.bx + 2));
-    _guest.Push(regs.bx);
-    _guest.Push(regs.di);
-    _guest.Call(FORMAT_TENTHS);
-    regs.si = DS.priceText.offset;
-    regs.di = static_cast<std::uint16_t>(_guest.Pop() + SELL_PRICE_COLUMN);
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    regs.bx = static_cast<std::uint16_t>(_guest.Pop() + 4);
-    regs.di = static_cast<std::uint16_t>(_guest.Pop() + ROW_BYTES);
-    regs.si = static_cast<std::uint16_t>(_guest.Pop() + PRODUCT_NAME_BYTES);
-    regs.cx = static_cast<std::uint16_t>(_guest.Pop() - 1);
-    if (regs.cx == 0)
+    const PrintedText named = PrintTextModeString(_state, product, row);
+    FormatTenths(_state, _state.Word(prices));
+    const PrintedText buy = PrintTextModeString(_state, DS.priceText.offset, Offset(named.nextCell, BUY_PRICE_COLUMN));
+    FormatTenths(_state, _state.Word(Offset(prices, 2)));
+    PrintTextModeString(_state, DS.priceText.offset, Offset(buy.nextCell, SELL_PRICE_COLUMN));
+    prices = Offset(prices, 4);
+    row = Offset(row, ROW_BYTES);
+    product = Offset(product, PRODUCT_NAME_BYTES);
+    if (--left == 0)
     {
       break;
     }
-    _guest.JumpBack(PRICE_ROW);
+    _hardware.LoopTurn(PRICE_ROW, {left, product, row, prices});
   }
-  SetLow(regs.dx, SCAN_F8);
-  WaitForScreenExitKey(_guest);
+  // The last print leaves AL 0.
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F8, 0, _countIfNone);
 }
 
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
@@ -694,8 +665,19 @@ constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
 constexpr NativeContract CLOBBERS_ALL_BUT_DS_BP{static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS & ~REGISTER_BP), 0};
 constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+// ShowMarketPricesScreen's: all but AX, the closing key in AH, and DS.
+constexpr NativeContract SHOWS_SCREEN{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_AX & ~REGISTER_DS), 0};
 
 } // namespace
+
+void ShowMarketPricesScreenEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  // BP, the count SelectSystemAtCursor makes the index from when no system is on the chart.
+  const ScreenKey key = ShowMarketPricesScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), regs.bp);
+  regs.ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
 
 void SubtractCreditsEntry(Guest& _guest)
 {
@@ -794,7 +776,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x5E2C, "ShowMarketPricesScreen", &ShowMarketPricesScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x5E2C, "ShowMarketPricesScreen", &ShowMarketPricesScreenEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x65EC, "SpendCredits", &SpendCreditsEntry, RETURNS_CARRY},
   NativeEntry{0x65EE, "AddCredits", &AddCreditsEntry, PRESERVES_ALL},
   NativeEntry{0x6995, "ComputeResalePrice", &ComputeResalePriceEntry, RETURNS_ZERO},

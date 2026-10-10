@@ -27,10 +27,6 @@ void ShowDiscControlScreen(Guest& _guest);
 /// and carries on in ShowDiscControlScreen's key loop in its place.
 void PromptCommanderFileName(Guest& _guest);
 
-/// PrintCommanderCatalogue (CS:68CE): ten text rows blanked, and commanderFileList printed in columns of ten. Every
-/// general register clobbered.
-void PrintCommanderCatalogue(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
 /// CriticalErrorInterrupt (CS:02F0), the int 24h handler while PerformDiskRequest or SaveScreenshot works: diskError=1.
@@ -47,6 +43,10 @@ void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _re
 /// screenLayout says the text page shows, and drawn in colour 3 on the graphics screen otherwise.
 void ShowDiskError(GameState& _state);
 
+/// PrintCommanderCatalogue (CS:68CE): ten text rows blanked, and commanderFileList's commanderFileCount names printed in
+/// columns of ten.
+void PrintCommanderCatalogue(GameState& _state);
+
 /// SaveStartupCommander (CS:4660): commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time,
 /// going up, or down from each start when _backward (REP MOVSB with the direction flag set).
 void SaveStartupCommander(GameState& _state, bool _backward);
@@ -59,6 +59,8 @@ void PerformDiskRequestEntry(Guest& _guest); ///< In: AL=the request, CX=the att
                                              ///< SI and DI clobbered.
 
 void ShowDiskErrorEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
+
+void PrintCommanderCatalogueEntry(Guest& _guest); ///< Out: ES=B800h; every general register clobbered.
 
 void SaveStartupCommanderEntry(Guest& _guest); ///< AX, CX, SI, DI and ES clobbered.
 

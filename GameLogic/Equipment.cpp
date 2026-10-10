@@ -207,6 +207,38 @@ void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t
   }
 }
 
+// What TryScoopObject's box test (4414-443F) finds: y from 30 to 229, then x and z within 149 either side.
+struct ScoopBoxTest
+{
+  bool inside;
+  std::optional<std::uint16_t> lastMeasure; ///< what it measured last, which the original leaves in DX: none when y is negative
+};
+
+[[nodiscard]] ScoopBoxTest TestScoopBox(const Vector& _view) noexcept
+{
+  const auto y = static_cast<std::uint16_t>(_view.y);
+  if ((y & 0x8000) != 0)
+  {
+    return ScoopBoxTest{false, std::nullopt};
+  }
+  const auto above = static_cast<std::uint16_t>(y - SCOOP_LOWEST);
+  if (y < SCOOP_LOWEST)
+  {
+    return ScoopBoxTest{false, above};
+  }
+  if (above >= SCOOP_HEIGHT)
+  {
+    return ScoopBoxTest{false, static_cast<std::uint16_t>(above - SCOOP_HEIGHT)};
+  }
+  const std::uint16_t across = Magnitude(static_cast<std::uint16_t>(_view.x));
+  if (across >= SCOOP_HALF_WIDTH)
+  {
+    return ScoopBoxTest{false, across};
+  }
+  const std::uint16_t deep = Magnitude(static_cast<std::uint16_t>(_view.z));
+  return ScoopBoxTest{deep < SCOOP_HALF_WIDTH, deep};
+}
+
 // PrintEquipmentSellColumn (0x6949): the text at DS:_text in the resale column of menuSelectedRow's row, in the resale
 // price's attribute, and the menu's attribute put back.
 PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
@@ -760,53 +792,27 @@ void LaunchEscapePod(GameState& _state)
   }
 }
 
-void TryScoopObject(Guest& _guest)
+Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
 {
-  Registers& regs = _guest.Regs();
-  std::uint8_t space = _guest.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
-  space = static_cast<std::uint8_t>(space - _guest.Get(DS.cargoUsedTonnes));
-  SetLow(regs.dx, space);
-  _guest.Set(DS.freeCargoTonnes, space);
-  // The box: y from 30 to 229, x and z within 149 either side.
-  if ((regs.bx & 0x8000) != 0)
+  std::uint8_t space = _state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
+  space = static_cast<std::uint8_t>(space - _state.Get(DS.cargoUsedTonnes));
+  _state.Set(DS.freeCargoTonnes, space);
+  if (!TestScoopBox(_view).inside)
   {
-    return;
-  }
-  const auto above = static_cast<std::uint16_t>(regs.bx - SCOOP_LOWEST);
-  regs.dx = above;
-  if (regs.bx < SCOOP_LOWEST)
-  {
-    return;
-  }
-  regs.dx = static_cast<std::uint16_t>(above - SCOOP_HEIGHT);
-  if (above >= SCOOP_HEIGHT)
-  {
-    return;
-  }
-  regs.dx = Magnitude(regs.ax);
-  if (regs.dx >= SCOOP_HALF_WIDTH)
-  {
-    return;
-  }
-  regs.dx = Magnitude(regs.cx);
-  if (regs.dx >= SCOOP_HALF_WIDTH)
-  {
-    return;
+    return Scoop{false, {}};
   }
 
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  const auto type = static_cast<std::uint8_t>((_guest.Byte(regs.di) >> 1) & TYPE_MASK);
-  const std::uint8_t flags = _guest.Byte(static_cast<std::uint16_t>(regs.di + SLOT_FLAGS));
-  const bool full = _guest.Get(DS.freeCargoTonnes) == 0;
+  const auto type = static_cast<std::uint8_t>((_slot.Get(SlotByte::Type) >> 1) & TYPE_MASK);
+  const std::uint8_t flags = _slot.Get(SlotByte::Flags);
+  const bool full = _state.Get(DS.freeCargoTonnes) == 0;
+  Scoop scoop{true, {}};
   std::uint16_t message = DS.scoopRetrievalInactiveText.offset;
   if (type == TYPE_CARGO_BARREL)
   {
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
-      RemoveObjectEntry(_guest);
-      _guest.Set(DS.maskingDeviceRecovered, 1);
+      scoop.removedBlip = RemoveObject(_state, _slot);
+      _state.Set(DS.maskingDeviceRecovered, 1);
       message = DS.maskingDeviceText.offset;
     }
     else if (full)
@@ -815,58 +821,38 @@ void TryScoopObject(Guest& _guest)
     }
     else
     {
-      // A random product 0-10, furs for slaves, into the hold, and its name for the message.
-      RemoveObjectEntry(_guest);
-      NextRandomEntry(_guest);
-      regs.ax = Low(regs.ax);
-      SetLow(regs.bx, RANDOM_PRODUCT_DIVISOR);
-      DivideByteOnRegisters(_guest, RANDOM_PRODUCT_DIVISOR);
-      if (Low(regs.ax) == PRODUCT_SLAVES)
+      // A random product 0-10, furs for slaves, into the hold, and its name for the message. The divide cannot overflow; the
+      // BX its trap would save is y's high byte over the divisor.
+      scoop.removedBlip = RemoveObject(_state, _slot);
+      const std::uint8_t random = Low(NextRandom(_state));
+      const auto y = static_cast<std::uint16_t>(_view.y);
+      std::uint8_t product = DivideByte(_state, random, RANDOM_PRODUCT_DIVISOR, Join(High(y), RANDOM_PRODUCT_DIVISOR)).quotient;
+      if (product == PRODUCT_SLAVES)
       {
-        SetLow(regs.ax, PRODUCT_FURS);
+        product = PRODUCT_FURS;
       }
-      regs.ax = Low(regs.ax);
-      regs.bx = static_cast<std::uint16_t>(regs.ax << 1);
-      IncrementByte(_guest.State(), static_cast<std::uint16_t>(regs.bx + DS.cargoHold.offset));
-      _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
-      regs.bx = static_cast<std::uint16_t>(regs.ax * PRODUCT_NAME_BYTES + DS.productNames.offset);
-      const std::uint16_t slot = regs.di;
-      regs.di = DS.scoopedCargoText.offset;
-      for (regs.cx = SCOOPED_NAME_BYTES; regs.cx != 0; --regs.cx)
+      IncrementByte(_state, DS.cargoHold.At(product));
+      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
+      const auto name = static_cast<std::uint16_t>(product * PRODUCT_NAME_BYTES + DS.productNames.offset);
+      for (std::uint16_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
-        SetLow(regs.ax, _guest.Byte(regs.bx));
-        ++regs.bx;
-        _guest.SetByte(regs.di, Low(regs.ax));
-        ++regs.di;
+        _state.SetByte(Offset(DS.scoopedCargoText.offset, letter), _state.Byte(Offset(name, letter)));
       }
-      regs.di = slot;
       message = DS.scoopedCargoText.offset;
     }
   }
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
   {
-    // Gems, gold and platinum always; minerals or alloys too if there is room.
-    RemoveObjectEntry(_guest);
-    NextRandomEntry(_guest);
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & 7));
-    AddPrecious(_guest.State(), DS.cargoGemStonesGrams, Low(regs.ax));
-    SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) & 3));
-    AddPrecious(_guest.State(), DS.cargoGoldKg, Low(regs.ax));
-    NextRandomEntry(_guest);
-    SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & 3) + 1));
-    AddPrecious(_guest.State(), DS.cargoPlatinumKg, High(regs.ax));
-    if (_guest.Get(DS.freeCargoTonnes) != 0)
+    // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' AL, as the original adds it.
+    scoop.removedBlip = RemoveObject(_state, _slot);
+    const std::uint8_t gems = Low(NextRandom(_state)) & 7;
+    AddPrecious(_state, DS.cargoGemStonesGrams, gems);
+    AddPrecious(_state, DS.cargoGoldKg, gems);
+    AddPrecious(_state, DS.cargoPlatinumKg, static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
+    if (_state.Get(DS.freeCargoTonnes) != 0)
     {
-      NextRandomEntry(_guest);
-      if (Low(regs.ax) >= MINERALS_FROM)
-      {
-        IncrementByte(_guest.State(), DS.cargoMineralsTonnes.offset);
-      }
-      else
-      {
-        IncrementByte(_guest.State(), DS.cargoAlloysTonnes.offset);
-      }
-      _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
+      IncrementByte(_state, Low(NextRandom(_state)) >= MINERALS_FROM ? DS.cargoMineralsTonnes.offset : DS.cargoAlloysTonnes.offset);
+      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
     }
     message = DS.preciousMetalsText.offset;
   }
@@ -878,23 +864,20 @@ void TryScoopObject(Guest& _guest)
     }
     else
     {
-      RemoveObjectEntry(_guest);
+      scoop.removedBlip = RemoveObject(_state, _slot);
       const DataField<std::uint8_t> held = type == TYPE_SPLINTER     ? DS.cargoAlloysTonnes
                                            : type == TYPE_ESCAPE_POD ? DS.cargoSlavesTonnes
                                                                      : DS.cargoAlienItemsTonnes;
-      IncrementByte(_guest.State(), held.offset);
-      _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
+      IncrementByte(_state, held.offset);
+      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
       message = type == TYPE_SPLINTER     ? DS.metalAlloysText.offset
                 : type == TYPE_ESCAPE_POD ? DS.escapePodRetrievedText.offset
                                           : DS.alienItemsText.offset;
     }
   }
-  regs.ax = message;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
+  _state.Set(DS.messagePointer, message);
+  _state.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
+  return scoop;
 }
 
 void ShowEquipShipScreen(Guest& _guest)
@@ -1128,32 +1111,28 @@ void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
   }
 }
 
-void PayForEquipmentItem(Guest& _guest)
+EquipmentPayment PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t row = _guest.Get(DS.menuSelectedRow);
-  regs.bx = WithLow(regs.bx, row);
+  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  std::uint16_t tenths = 0;
   if (row == FUEL_ROW)
   {
-    // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1.
-    const auto missing = static_cast<std::uint8_t>(~_guest.Get(DS.fuel));
-    regs.dx = _guest.Get(DS.data823F);
-    regs.ax = static_cast<std::uint16_t>(missing * Low(regs.dx));
-    regs.dx = WithLow(regs.dx, FUEL_UNITS_PER_TENTH);
-    DivideByteOnRegisters(_guest, FUEL_UNITS_PER_TENTH);
-    if (Low(regs.ax) == 0)
+    // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1, by a DIV that can overflow into the game's trap,
+    // which saves BX with the row in BL.
+    const auto missing = static_cast<std::uint8_t>(~_state.Get(DS.fuel));
+    const auto product = static_cast<std::uint16_t>(missing * Low(_state.Get(DS.data823F)));
+    std::uint8_t units = DivideByte(_state, product, FUEL_UNITS_PER_TENTH, WithLow(_bx, row)).quotient;
+    if (units == 0)
     {
-      regs.ax = WithLow(regs.ax, 1);
+      units = 1;
     }
-    regs.ax = Low(regs.ax);
+    tenths = units;
   }
   else
   {
-    regs.bx = PriceSlot(row);
-    regs.ax = _guest.Word(regs.bx);
+    tenths = _state.Word(PriceSlot(row));
   }
-  regs.bx = 0;
-  SubtractCreditsEntry(_guest);
+  return EquipmentPayment{SubtractCredits(_state, tenths), tenths};
 }
 
 PrintedText ClearEquipmentSellPrice(GameState& _state)
@@ -1301,6 +1280,7 @@ constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
 // Symbols.tsv's "clobbers all", but for DS, which the original keeps and its caller goes on with.
 constexpr NativeContract CLOBBERS_ALL_BUT_DS{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
 constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 
 } // namespace
 
@@ -1308,6 +1288,49 @@ void LaunchEscapePodEntry(Guest& _guest)
 {
   LaunchEscapePod(_guest.State());
   _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
+void TryScoopObjectEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::uint16_t x = regs.ax;
+  const std::uint16_t y = regs.bx;
+  const std::uint16_t z = regs.cx;
+  const Vector view{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)};
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const Scoop scoop = TryScoopObject(_guest.State(), slot, view);
+  // The contract keeps every register, so the entry leaves what the original does: DX with the free tonnes in DL, then what the
+  // box's test measured last, and once RemoveObject erases a blip, EraseScannerBlip's DX and ES. AX, BX and CX are pushed and
+  // popped round the scoop.
+  regs.dx = TestScoopBox(view).lastMeasure.value_or(WithLow(regs.dx, _guest.Get(DS.freeCargoTonnes)));
+  if (scoop.removedBlip)
+  {
+    EraseScannerBlipOut(_guest, slot, scoop.removedBlip);
+    regs.ax = x;
+    regs.bx = y;
+    regs.cx = z;
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void PayForEquipmentItemEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const EquipmentPayment payment = PayForEquipmentItem(_guest.State(), regs.bx);
+  // AX the price and BX 0, as SubtractCredits takes them, and for fuel DX the price word with the divisor in DL; SI where
+  // FormatCredits leaves it once they are paid.
+  if (_guest.Get(DS.menuSelectedRow) == FUEL_ROW)
+  {
+    regs.dx = WithLow(_guest.Get(DS.data823F), FUEL_UNITS_PER_TENTH);
+  }
+  regs.ax = payment.tenths;
+  regs.bx = 0;
+  if (payment.paid)
+  {
+    regs.si = DS.creditBalanceText.offset;
+  }
+  _guest.SetFlag(FLAG_CARRY, !payment.paid);
+  _guest.Clobber(RETURNS_CARRY);
 }
 
 void SelectLaserTypeEntry(Guest& _guest)
@@ -1389,7 +1412,7 @@ namespace
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x2F0F, "LaunchEscapePod", &LaunchEscapePodEntry, CLOBBERS_ALL_BUT_DS},
-  NativeEntry{0x4401, "TryScoopObject", &TryScoopObject, PRESERVES_ALL},
+  NativeEntry{0x4401, "TryScoopObject", &TryScoopObjectEntry, PRESERVES_ALL},
   NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x633B, "SelectLaserType", &SelectLaserTypeEntry, RETURNS_ZERO},
@@ -1398,7 +1421,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x646F, "ChooseMountToRemoveLaser", &ChooseMountToRemoveLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x653F, "RedrawEquipHelpText", &RedrawEquipHelpTextEntry, PRESERVES_ALL},
   NativeEntry{0x6564, "PaintLaserMountBox", &PaintLaserMountBoxEntry, PRESERVES_ALL},
-  NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItem, NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItemEntry, RETURNS_CARRY},
   NativeEntry{0x6946, "ClearEquipmentSellPrice", &ClearEquipmentSellPriceEntry, PRESERVES_ALL},
   NativeEntry{0x6972, "ShowEquipmentSellPrice", &ShowEquipmentSellPriceEntry, PRESERVES_ALL},
 };

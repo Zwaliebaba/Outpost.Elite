@@ -115,7 +115,8 @@ constexpr std::uint8_t MOST_NAME_CHARACTERS = 8;
 constexpr std::uint8_t LOWER_CASE_BIT_CLEAR = 0xDF;
 constexpr std::uint16_t EXTENSION_BYTES = 5; // ".CDR" and its NUL
 constexpr std::uint16_t CATALOGUE_ROWS = 10;
-constexpr std::uint8_t TEXT_LAYOUT_BIT = 2; // screenLayout: the text page shows
+constexpr std::uint16_t CATALOGUE_COLUMN_BYTES = 0x12; // nine cells
+constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;            // screenLayout: the text page shows
 constexpr std::uint16_t GRAPHICS_ERROR_POSITION = 0x0C90;
 constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
 constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
@@ -746,50 +747,23 @@ void PromptCommanderFileName(Guest& _guest)
   _guest.SetFlag(Machine::FLAG_CARRY, false);
 }
 
-void PrintCommanderCatalogue(Guest& _guest)
+void PrintCommanderCatalogue(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = CATALOGUE_POSITION;
-  regs.cx = CATALOGUE_ROWS;
-  do
+  for (std::uint16_t row = 0; row < CATALOGUE_ROWS; ++row)
   {
-    _guest.Push(regs.cx);
-    _guest.Push(regs.di);
-    regs.si = BLANK_LINE_TEXT;
-    PrintTextModeStringEntry(_guest);
-    regs.di = _guest.Pop();
-    regs.di = static_cast<std::uint16_t>(regs.di + TEXT_ROW_BYTES);
-    regs.cx = _guest.Pop();
-  } while (--regs.cx != 0);
-  SetLow(regs.cx, _guest.Get(DS.commanderFileCount));
-  if (Low(regs.cx) == 0)
-  {
-    return;
+    PrintAt(_state, BLANK_LINE_TEXT, static_cast<std::uint16_t>(CATALOGUE_POSITION + row * TEXT_ROW_BYTES));
   }
-  // Name DH at row DH mod 10, column DH / 10, 9 cells apart.
-  regs.si = DS.commanderFileList.offset;
-  SetHigh(regs.cx, 0);
-  regs.dx = CATALOGUE_ROWS;
-  do
+  // Name n at row n mod 10, column n / 10, 9 cells apart: CBW and DIV DL by 10, which cannot overflow, as ListCommanderFiles
+  // lists at most 40.
+  std::uint16_t name = DS.commanderFileList.offset;
+  const std::uint8_t count = _state.Get(DS.commanderFileCount);
+  for (std::uint8_t index = 0; index < count; ++index)
   {
-    regs.ax = SignExtend(High(regs.dx));
-    DivideByteOnRegisters(_guest, Low(regs.dx));
-    SetHigh(regs.bx, High(regs.ax));
-    regs.ax = SignExtend(Low(regs.ax));
-    regs.di = regs.ax;
-    regs.ax = static_cast<std::uint16_t>(regs.ax << 3);
-    regs.di = static_cast<std::uint16_t>(regs.di + regs.ax);
-    regs.di = static_cast<std::uint16_t>(regs.di << 1);
-    SetLow(regs.bx, 0);
-    regs.bx = static_cast<std::uint16_t>(regs.bx >> 2);
-    regs.di = static_cast<std::uint16_t>(regs.di + regs.bx);
-    regs.bx = static_cast<std::uint16_t>(regs.bx >> 2);
-    regs.di = static_cast<std::uint16_t>(regs.di + regs.bx);
-    regs.di = static_cast<std::uint16_t>(regs.di + CATALOGUE_POSITION);
-    PrintTextModeStringEntry(_guest);
-    ++regs.si;
-    SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + 1));
-  } while (--regs.cx != 0);
+    const auto column = static_cast<std::uint16_t>(index / CATALOGUE_ROWS);
+    const auto row = static_cast<std::uint16_t>(index % CATALOGUE_ROWS);
+    const auto cell = static_cast<std::uint16_t>(CATALOGUE_POSITION + column * CATALOGUE_COLUMN_BYTES + row * TEXT_ROW_BYTES);
+    name = Offset(PrintAt(_state, name, cell).end, 1);
+  }
 }
 
 namespace
@@ -843,6 +817,14 @@ void ShowDiskErrorEntry(Guest& _guest)
   _guest.Clobber(SHOWS_DISK_ERROR);
 }
 
+void PrintCommanderCatalogueEntry(Guest& _guest)
+{
+  PrintCommanderCatalogue(_guest.State());
+  // PrintTextModeString's ES, on the text page: the contract keeps ES.
+  _guest.Regs().es = Guest::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
 void SaveStartupCommanderEntry(Guest& _guest)
 {
   SaveStartupCommander(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
@@ -859,7 +841,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},
   NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x6862, "PromptCommanderFileName", &PromptCommanderFileName, PROMPTS_FOR_NAME, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x68CE, "PrintCommanderCatalogue", &PrintCommanderCatalogue, CLOBBERS_GENERAL},
+  NativeEntry{0x68CE, "PrintCommanderCatalogue", &PrintCommanderCatalogueEntry, CLOBBERS_GENERAL},
 };
 
 } // namespace

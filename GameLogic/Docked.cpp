@@ -4,6 +4,9 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Equipment.h"
+#include "Galaxy.h"
+#include "Input.h"
 #include "Market.h"
 #include "Ships.h"
 #include "Text.h"
@@ -45,13 +48,11 @@ constexpr std::uint16_t FRAME_CORNER_BYTES = 3; // the cell's offset, then the c
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
 constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
-constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
 constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t START_NEW_GAME = 0x4671;
-constexpr std::uint16_t AWARD_ARCHANGEL_TITLE = 0x49E4;
 constexpr std::uint16_t CLEAR_ALL_OBJECTS = 0x52B2;
 constexpr std::uint16_t SHOW_SELL_CARGO_SCREEN = 0x5A30;
 constexpr std::uint16_t SHOW_BUY_CARGO_SCREEN = 0x5AE9;
@@ -61,23 +62,15 @@ constexpr std::uint16_t SHOW_MARKET_PRICES_SCREEN = 0x5E2C;
 constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
 constexpr std::uint16_t SHOW_INVENTORY_SCREEN = 0x6020;
 constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
-constexpr std::uint16_t SELECT_LASER_TYPE = 0x633B;
-constexpr std::uint16_t ADD_CREDITS = 0x65EE;
 constexpr std::uint16_t SHOW_DISC_CONTROL_SCREEN = 0x660B;
-constexpr std::uint16_t FORMAT_FUEL_LIGHT_YEARS = 0x6923;
 constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
 constexpr std::uint16_t NEXT_MARKET_RANDOM = 0x6A85;
 constexpr std::uint16_t RUN_CARGO_TRADE_MENU = 0x6B1E;
-constexpr std::uint16_t PRINT_TEXT_LINES = 0x6DDE;
-constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
-constexpr std::uint16_t SHOW_MISSION_BRIEFING = 0x6DF2;
-constexpr std::uint16_t SHOW_MISSION_DEBRIEFING = 0x6EB7;
 constexpr std::uint16_t START_MUSIC = 0x7401;
 constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
 constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
 constexpr std::uint16_t SHOW_COCKPIT_SCREEN = 0x7BC0;
-constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
 constexpr std::uint16_t DRAW_TITLE_PLANET = 0x7D4E;
 constexpr std::uint16_t SHOW_CREDITS = 0x8F02;
 
@@ -232,6 +225,37 @@ void WaitForKey(Guest& _guest, std::uint16_t _loop)
       return;
     }
     _guest.JumpBack(_loop);
+  }
+}
+
+// CALL GetKey; JE _loop, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015). The turns
+// carry nothing, as WaitForKeyPress's do. Returns the key.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
+{
+  for (;;)
+  {
+    const KeyPress key = GetKey(_state, _hardware);
+    if (key.scanCode != 0)
+    {
+      return key;
+    }
+    _hardware.LoopTurn(_loop, {});
+  }
+}
+
+// The cash without its leading spaces: INC SI from the byte before creditBalanceText while it is on a space, each turn of the
+// scan jumping back to _loop with SI. Returns the first character that is not a space.
+std::uint16_t SkipCashSpaces(const GameState& _state, Hardware& _hardware, std::uint16_t _loop)
+{
+  auto cash = static_cast<std::uint16_t>(DS.creditBalanceText.offset - 1);
+  for (;;)
+  {
+    cash = Offset(cash, 1);
+    if (_state.Byte(cash) != SPACE)
+    {
+      return cash;
+    }
+    _hardware.LoopTurn(_loop, {cash});
   }
 }
 
@@ -543,25 +567,29 @@ std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint1
   return cell;
 }
 
-void WaitForScreenExitKey(Guest& _guest)
+std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept
 {
-  Machine::Registers& regs = _guest.Regs();
+  // ROL AX,1 / SHR AH,1 when it takes a code: AL shifted left, Shift in bit 0.
+  return _key.taken ? static_cast<std::uint8_t>((_al << 1) | (_key.shift ? 1 : 0)) : _al;
+}
+
+ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone)
+{
+  // GetKey until Esc or another screen's F-key, every other turn ending at the jump back to 60B4. The turns carry nothing, as
+  // WaitForKeyPress's do: GetKey writes AH before it reads it, and reads AL only when it takes a code, which changes keyBuffer.
+  std::uint8_t al = _al;
   for (;;)
   {
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(Machine::FLAG_ZERO))
+    const KeyPress key = GetKey(_state, _hardware);
+    al = AlAfterKey(al, key);
+    const std::uint8_t scanCode = key.scanCode;
+    if (scanCode != 0 && scanCode != _ownKey && (scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10)))
     {
-      const std::uint8_t key = High(regs.ax);
-      if (key != Low(regs.dx) && (key == SCAN_ESCAPE || (key >= SCAN_F1 && key <= SCAN_F10)))
-      {
-        break;
-      }
+      SelectSystemAtCursor(_state, _countIfNone);
+      return ScreenKey{scanCode, al};
     }
-    _guest.JumpBack(WAIT_FOR_SCREEN_EXIT_KEY);
+    _hardware.LoopTurn(WAIT_FOR_SCREEN_EXIT_KEY, {});
   }
-  _guest.Push(regs.ax);
-  _guest.Call(SELECT_SYSTEM_AT_CURSOR);
-  regs.ax = _guest.Pop();
 }
 
 void AwardArchangelTitle(GameState& _state)
@@ -688,401 +716,284 @@ void ShowBuyCargoScreen(Guest& _guest)
   _guest.Call(RUN_CARGO_TRADE_MENU);
 }
 
-void ShowCommanderStatusScreen(Guest& _guest)
+ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.inFlight) != 1 && _guest.Get(DS.missionNumber) != 0)
+  if (_state.Get(DS.inFlight) != 1 && _state.Get(DS.missionNumber) != 0)
   {
-    if (_guest.Get(DS.missionStage) == 0)
+    if (_state.Get(DS.missionStage) == 0)
     {
-      _guest.Call(SHOW_MISSION_BRIEFING);
+      ShowMissionBriefing(_state, _hardware, _backward);
     }
-    else if (_guest.Get(DS.missionStage) == STAGE_BRIEFED && _guest.Get(DS.playerDocked) == 1)
+    else if (_state.Get(DS.missionStage) == STAGE_BRIEFED && _state.Get(DS.playerDocked) == 1)
     {
-      _guest.Call(SHOW_MISSION_DEBRIEFING);
+      ShowMissionDebriefing(_state, _hardware, _backward);
     }
   }
-  regs.si = DS.commanderTitle.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_CELL;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = DS.defaultCommanderName.offset;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Set(DS.textAttribute, STATUS_ATTRIBUTE);
-  regs.si = SYSTEM_LABEL_TEXT;
-  regs.di = LINE_3;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = _guest.Get(DS.witchspaceCountdown) != 0 ? WITCH_SPACE_TEXT : DS.currentSystemName.offset;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = HYPERSYSTEM_LABEL_TEXT;
-  regs.di = LINE_4;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = _guest.Get(DS.witchspaceCountdown) != 0 ? WITCH_SPACE_TEXT : DS.selectedSystemName.offset;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Call(FORMAT_FUEL_LIGHT_YEARS);
-  regs.di = LINE_5;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = CASH_LABEL_TEXT;
-  regs.di = LINE_6;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  // The cash, without its leading spaces.
-  regs.si = static_cast<std::uint16_t>(DS.creditBalanceText.offset - 1);
+  const PrintedText title =
+    PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.commanderTitle.offset, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DS.defaultCommanderName.offset, title.nextCell);
+  _state.Set(DS.textAttribute, STATUS_ATTRIBUTE);
+  const bool inWitchSpace = _state.Get(DS.witchspaceCountdown) != 0;
+  PrintedText printed = PrintTextModeString(_state, SYSTEM_LABEL_TEXT, LINE_3);
+  PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : DS.currentSystemName.offset, printed.nextCell);
+  printed = PrintTextModeString(_state, HYPERSYSTEM_LABEL_TEXT, LINE_4);
+  PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : DS.selectedSystemName.offset, printed.nextCell);
+  FormatFuelLightYears(_state);
+  PrintTextModeString(_state, FUEL_TEXT, LINE_5);
+  printed = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_6);
+  PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, STATUS_CASH_SPACE), printed.nextCell);
+  printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
+  const std::uint8_t legal = _state.Get(DS.legalStatus);
+  const std::uint16_t standing = legal < LEGAL_STATUS_OFFENDER ? 0 : legal < LEGAL_STATUS_FUGITIVE ? 1 : 2;
+  PrintTextModeString(_state, _state.Word(DS.legalStatusNames.At(standing)), printed.nextCell);
+  printed = PrintTextModeString(_state, RATING_LABEL_TEXT, LINE_8);
+  // The rating: the first threshold above the kill count, each turn of the search carrying the threshold's place and the rating.
+  const std::uint8_t kills = _state.Get(DS.killCount);
+  std::uint16_t threshold = static_cast<std::uint16_t>(DS.ratingThresholds.offset - 1);
+  std::uint16_t rating = 0xFFFF;
   for (;;)
   {
-    ++regs.si;
-    if (_guest.Byte(regs.si) != SPACE)
+    threshold = Offset(threshold, 1);
+    rating = Offset(rating, 1);
+    if (kills < _state.Byte(threshold))
     {
       break;
     }
-    _guest.JumpBack(STATUS_CASH_SPACE);
+    _hardware.LoopTurn(STATUS_RATING, {threshold, rating});
   }
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = LEGAL_STATUS_LABEL_TEXT;
-  regs.di = LINE_7;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  SetLow(regs.ax, _guest.Get(DS.legalStatus));
-  regs.bx = static_cast<std::uint16_t>(Low(regs.ax) < LEGAL_STATUS_OFFENDER ? 0 : Low(regs.ax) < LEGAL_STATUS_FUGITIVE ? 1 : 2);
-  regs.bx = DS.legalStatusNames.At(regs.bx);
-  regs.si = _guest.Word(regs.bx);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = RATING_LABEL_TEXT;
-  regs.di = LINE_8;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  // The rating: the first threshold above the kill count.
-  regs.si = static_cast<std::uint16_t>(DS.ratingThresholds.offset - 1);
-  SetLow(regs.ax, _guest.Get(DS.killCount));
-  regs.bx = 0xFFFF;
-  for (;;)
-  {
-    ++regs.si;
-    ++regs.bx;
-    if (Low(regs.ax) < _guest.Byte(regs.si))
-    {
-      break;
-    }
-    _guest.JumpBack(STATUS_RATING);
-  }
-  regs.bx = DS.ratingNames.At(regs.bx);
-  regs.si = _guest.Word(regs.bx);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = EQUIPMENT_HEADING_TEXT;
-  regs.di = LINE_9;
-  _guest.Set(DS.textAttribute, EQUIPMENT_HEADING_ATTRIBUTE);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Set(DS.textAttribute, STATUS_ATTRIBUTE);
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.missileCount) + DIGIT_ZERO));
-  _guest.Set(DS.data84F5, Low(regs.ax));
+  PrintTextModeString(_state, _state.Word(DS.ratingNames.At(rating)), printed.nextCell);
+  _state.Set(DS.textAttribute, EQUIPMENT_HEADING_ATTRIBUTE);
+  PrintTextModeString(_state, EQUIPMENT_HEADING_TEXT, LINE_9);
+  _state.Set(DS.textAttribute, STATUS_ATTRIBUTE);
+  // AL keeps the missiles' digit until a row prints, whose NUL then leaves 0 there.
+  auto al = static_cast<std::uint8_t>(_state.Get(DS.missileCount) + DIGIT_ZERO);
+  _state.Set(DS.data84F5, al);
 
-  // One row for each item fitted, and after a laser the mounts it is fitted to.
-  regs.di = LINE_10;
-  regs.cx = EQUIPMENT_ROWS;
-  regs.bx = DS.missileCount.offset;
-  regs.si = DS.equipmentNames.offset;
-  _guest.Set(DS.menuSelectedRow, FIRST_EQUIPMENT_MENU_ROW);
-  for (;;)
+  // One row for each item fitted, and after a laser the mounts it is fitted to. Each turn carries the count, the row's place,
+  // the item's count and its name's pointer.
+  std::uint16_t row = LINE_10;
+  std::uint16_t fitted = DS.missileCount.offset;
+  std::uint16_t name = DS.equipmentNames.offset;
+  _state.Set(DS.menuSelectedRow, FIRST_EQUIPMENT_MENU_ROW);
+  for (std::uint16_t left = EQUIPMENT_ROWS;;)
   {
-    for (const std::uint16_t value : {regs.cx, regs.di, regs.bx, regs.si})
+    if (_state.Byte(fitted) != 0)
     {
-      _guest.Push(value);
-    }
-    if (_guest.Byte(regs.bx) == 0)
-    {
-      regs.si = Offset(_guest.Pop(), 2);
-      regs.bx = Offset(_guest.Pop(), 1);
-      regs.di = _guest.Pop();
-    }
-    else
-    {
-      regs.si = _guest.Word(regs.si);
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      _guest.Call(SELECT_LASER_TYPE);
-      if (_guest.Flag(Machine::FLAG_ZERO))
+      printed = PrintTextModeString(_state, _state.Word(name), row);
+      al = 0;
+      if (SelectLaserType(_state))
       {
-        regs.si = MOUNTS_OPEN_TEXT;
-        _guest.Call(PRINT_TEXT_MODE_STRING);
-        SetLow(regs.dx, _guest.Get(DS.laserMountsFitted));
-        SetHigh(regs.dx, _guest.Get(DS.laserMountTypes));
-        regs.bx = DS.laserMountNames.offset;
-        regs.cx = LASER_MOUNTS;
-        for (;;)
+        printed = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, printed.nextCell);
+        // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH, which each turn carries
+        // with the mount name's pointer, the count and where the next name prints.
+        std::uint8_t mounts = _state.Get(DS.laserMountsFitted);
+        std::uint8_t types = _state.Get(DS.laserMountTypes);
+        std::uint16_t mountName = DS.laserMountNames.offset;
+        for (std::uint16_t mount = LASER_MOUNTS;;)
         {
-          const bool fitted = (Low(regs.dx) & 1) != 0;
-          SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) >> 1));
-          if (fitted)
+          const bool on = (mounts & 1) != 0;
+          mounts = static_cast<std::uint8_t>(mounts >> 1);
+          if (on && (types & LASER_MOUNT_TYPE_MASK) == _state.Get(DS.selectedLaserType))
           {
-            SetLow(regs.ax, static_cast<std::uint8_t>(High(regs.dx) & LASER_MOUNT_TYPE_MASK));
-            if (Low(regs.ax) == _guest.Get(DS.selectedLaserType))
-            {
-              regs.si = _guest.Word(regs.bx);
-              _guest.Call(PRINT_TEXT_MODE_STRING);
-            }
+            printed = PrintTextModeString(_state, _state.Word(mountName), printed.nextCell);
           }
-          regs.bx = Offset(regs.bx, 2);
-          SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) >> 2));
-          if (--regs.cx == 0)
+          mountName = Offset(mountName, 2);
+          types = static_cast<std::uint8_t>(types >> 2);
+          if (--mount == 0)
           {
             break;
           }
-          _guest.JumpBack(STATUS_LASER_MOUNT);
+          _hardware.LoopTurn(STATUS_LASER_MOUNT, {Join(types, mounts), mountName, mount, printed.nextCell});
         }
-        regs.di = static_cast<std::uint16_t>(regs.di - 2);
-        regs.si = MOUNTS_CLOSE_TEXT;
-        _guest.Call(PRINT_TEXT_MODE_STRING);
+        PrintTextModeString(_state, MOUNTS_CLOSE_TEXT, static_cast<std::uint16_t>(printed.nextCell - 2));
       }
-      regs.si = Offset(_guest.Pop(), 2);
-      regs.bx = Offset(_guest.Pop(), 1);
-      regs.di = Offset(_guest.Pop(), TEXT_ROW_BYTES);
+      row = Offset(row, TEXT_ROW_BYTES);
     }
-    regs.cx = _guest.Pop();
-    _guest.Set(DS.menuSelectedRow, static_cast<std::uint8_t>(_guest.Get(DS.menuSelectedRow) + 1));
-    if (--regs.cx == 0)
+    fitted = Offset(fitted, 1);
+    name = Offset(name, 2);
+    _state.Set(DS.menuSelectedRow, static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) + 1));
+    if (--left == 0)
     {
       break;
     }
-    _guest.JumpBack(STATUS_EQUIPMENT_ROW);
+    _hardware.LoopTurn(STATUS_EQUIPMENT_ROW, {left, row, fitted, name});
   }
-  SetLow(regs.dx, SCAN_F9);
-  WaitForScreenExitKey(_guest);
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
 }
 
-void ShowInventoryScreen(Guest& _guest)
+ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.inventoryFrame.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_CELL;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  // The fuel text without the padding the status screen has: 'Fuel: ', then 'n.n Light Years'.
-  _guest.Call(FORMAT_FUEL_LIGHT_YEARS);
-  regs.di = LINE_3;
-  _guest.SetByte(Offset(regs.si, FUEL_LABEL_BYTES), NUL);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.SetByte(regs.si, SPACE);
-  regs.si = Offset(regs.si, FUEL_DIGITS_AFTER_LABEL);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = CASH_LABEL_TEXT;
-  regs.di = LINE_4;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.di = static_cast<std::uint16_t>(regs.di - INVENTORY_CASH_BACK);
-  regs.si = static_cast<std::uint16_t>(DS.creditBalanceText.offset - 1);
-  for (;;)
-  {
-    ++regs.si;
-    if (_guest.Byte(regs.si) != SPACE)
-    {
-      break;
-    }
-    _guest.JumpBack(INVENTORY_CASH_SPACE);
-  }
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.inventoryFrame.offset, _backward), TITLE_CELL);
+  // The fuel text without the padding the status screen has: 'Fuel: ', cut by a NUL that becomes a space again, then
+  // 'n.n Light Years'.
+  FormatFuelLightYears(_state);
+  _state.SetByte(Offset(FUEL_TEXT, FUEL_LABEL_BYTES), NUL);
+  const PrintedText label = PrintTextModeString(_state, FUEL_TEXT, LINE_3);
+  _state.SetByte(label.end, SPACE);
+  PrintTextModeString(_state, Offset(label.end, FUEL_DIGITS_AFTER_LABEL), label.nextCell);
+  const PrintedText cash = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_4);
+  const auto cashCell = static_cast<std::uint16_t>(cash.nextCell - INVENTORY_CASH_BACK);
+  PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, INVENTORY_CASH_SPACE), cashCell);
 
-  // Every product held, and the refugees: name, quantity, unit.
-  regs.di = LINE_6;
-  regs.si = DS.productNames.offset;
-  regs.bx = DS.cargoHold.offset;
-  regs.cx = INVENTORY_ROWS;
-  for (;;)
+  // Every product held, and the refugees: name, quantity, unit, a row each. Each turn carries the count, the name, the amount's
+  // place and the row's place, which an empty row does not move on.
+  std::uint16_t row = LINE_6;
+  std::uint16_t name = DS.productNames.offset;
+  std::uint16_t held = DS.cargoHold.offset;
+  for (std::uint16_t left = INVENTORY_ROWS;;)
   {
-    for (const std::uint16_t value : {regs.cx, regs.si, regs.bx, regs.di})
+    const std::uint8_t amount = _state.Byte(held);
+    if (amount == 0)
     {
-      _guest.Push(value);
-    }
-    SetLow(regs.ax, _guest.Byte(regs.bx));
-    if (Low(regs.ax) == 0)
-    {
-      regs.di = _guest.Pop();
-      _guest.JumpBack(INVENTORY_ROW_END);
+      _hardware.LoopTurn(INVENTORY_ROW_END, {left, name, held, row});
     }
     else
     {
-      _guest.SetByte(Offset(regs.si, PRODUCT_NAME_END), NUL);
-      _guest.Push(regs.ax);
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      regs.ax = _guest.Pop();
-      _guest.SetByte(regs.si, SPACE);
-      _guest.Push(regs.si);
-      SetHigh(regs.ax, 0);
-      _guest.Push(regs.di);
-      FormatQuantityOnRegisters(_guest, INVENTORY_QUANTITY_TEXT);
-      regs.di = Offset(_guest.Pop(), 4);
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      regs.si = _guest.Pop();
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      regs.di = Offset(_guest.Pop(), TEXT_ROW_BYTES);
+      // The name cut at its twelfth character by a NUL, which becomes a space again before the unit after it.
+      _state.SetByte(Offset(name, PRODUCT_NAME_END), NUL);
+      const PrintedText product = PrintTextModeString(_state, name, row);
+      _state.SetByte(product.end, SPACE);
+      FormatQuantity(_state, amount, INVENTORY_QUANTITY_TEXT);
+      const PrintedText quantity = PrintTextModeString(_state, INVENTORY_QUANTITY_TEXT, Offset(product.nextCell, 4));
+      PrintTextModeString(_state, product.end, quantity.nextCell);
+      row = Offset(row, TEXT_ROW_BYTES);
     }
-    regs.bx = Offset(_guest.Pop(), 2);
-    regs.si = Offset(_guest.Pop(), PRODUCT_NAME_BYTES);
-    regs.cx = _guest.Pop();
-    if (--regs.cx == 0)
+    held = Offset(held, 2);
+    name = Offset(name, PRODUCT_NAME_BYTES);
+    if (--left == 0)
     {
       break;
     }
-    _guest.JumpBack(INVENTORY_ROW);
+    _hardware.LoopTurn(INVENTORY_ROW, {left, name, held, row});
   }
-  SetLow(regs.dx, SCAN_F10);
-  WaitForScreenExitKey(_guest);
+  // The last row leaves AL 0: an empty one its amount, a printed one the NUL its last print stops at.
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F10, 0, _countIfNone);
 }
 
-void ShowMissionBriefing(Guest& _guest)
+void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.missionStage, STAGE_BRIEFED);
-  regs.si = DS.emergencyFrame.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_CELL;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  const std::uint8_t mission = _guest.Get(DS.missionNumber);
+  _state.Set(DS.missionStage, STAGE_BRIEFED);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.emergencyFrame.offset, _backward), TITLE_CELL);
+  const std::uint8_t mission = _state.Get(DS.missionNumber);
   if (mission == MISSION_SUPERNOVA)
   {
-    regs.cx = SUPERNOVA_BRIEFING_LINES;
-    regs.di = LINE_4;
-    regs.si = DS.supernovaBriefingText.offset;
-    _guest.Call(PRINT_TEXT_LINES);
-    // Y takes the refugees, N refuses; nothing else answers.
+    PrintTextLines(_state, DS.supernovaBriefingText.offset, LINE_4, SUPERNOVA_BRIEFING_LINES);
+    // Y takes the refugees, N refuses; every other key goes back to the GetKey at 6E23, as an empty one does.
+    std::uint8_t answer = 0;
     for (;;)
     {
-      WaitForKey(_guest, SUPERNOVA_ANSWER);
-      if (High(regs.ax) == SCAN_Y || High(regs.ax) == SCAN_N)
+      answer = WaitForKey(_state, _hardware, SUPERNOVA_ANSWER).scanCode;
+      if (answer == SCAN_Y || answer == SCAN_N)
       {
         break;
       }
-      _guest.JumpBack(SUPERNOVA_ANSWER);
+      _hardware.LoopTurn(SUPERNOVA_ANSWER, {});
     }
-    if (High(regs.ax) == SCAN_N)
+    std::uint16_t reply = SUPERNOVA_REFUSED_TEXT;
+    if (answer == SCAN_Y)
     {
-      regs.si = SUPERNOVA_REFUSED_TEXT;
-    }
-    else
-    {
-      // The hold is emptied for the refugees.
-      regs.di = DS.cargoHold.offset;
-      regs.cx = TRADE_ROWS;
-      for (;;)
+      // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts, the LOOP's turns carrying DI
+      // and CX.
+      std::uint16_t held = DS.cargoHold.offset;
+      for (std::uint16_t left = TRADE_ROWS;;)
       {
-        _guest.SetByte(regs.di, High(regs.cx));
-        regs.di = Offset(regs.di, 2);
-        if (--regs.cx == 0)
+        _state.SetByte(held, 0);
+        held = Offset(held, 2);
+        if (--left == 0)
         {
           break;
         }
-        _guest.JumpBack(EVACUATE_CARGO);
+        _hardware.LoopTurn(EVACUATE_CARGO, {held, left});
       }
-      _guest.Set(DS.cargoUsedTonnes, REFUGEE_TONNES);
-      if (_guest.Get(DS.largeCargoBayFitted) == 1)
+      _state.Set(DS.cargoUsedTonnes, REFUGEE_TONNES);
+      if (_state.Get(DS.largeCargoBayFitted) == 1)
       {
-        _guest.Set(DS.cargoUsedTonnes, REFUGEE_TONNES_LARGE_BAY);
+        _state.Set(DS.cargoUsedTonnes, REFUGEE_TONNES_LARGE_BAY);
       }
-      SetLow(regs.ax, _guest.Get(DS.cargoUsedTonnes));
-      _guest.Set(DS.refugeesTonnes, Low(regs.ax));
-      regs.si = SUPERNOVA_ACCEPTED_TEXT;
+      _state.Set(DS.refugeesTonnes, _state.Get(DS.cargoUsedTonnes));
+      reply = SUPERNOVA_ACCEPTED_TEXT;
     }
-    regs.di = LINE_10;
-    regs.cx = SUPERNOVA_ANSWER_LINES;
-    _guest.Call(PRINT_TEXT_LINES);
-    _guest.Call(WAIT_FOR_KEY_PRESS);
-    _guest.Set(DS.supernovaFrames, SUPERNOVA_DELAY_FRAMES);
-    _guest.Set(DS.jumpedSinceBriefing, 0);
+    PrintTextLines(_state, reply, LINE_10, SUPERNOVA_ANSWER_LINES);
+    (void)WaitForKeyPress(_state, _hardware);
+    _state.Set(DS.supernovaFrames, SUPERNOVA_DELAY_FRAMES);
+    _state.Set(DS.jumpedSinceBriefing, 0);
     return;
   }
   if (mission == MISSION_MASK_SHIP)
   {
-    regs.cx = MASK_BRIEFING_LINES;
-    regs.di = LINE_4;
-    regs.si = DS.maskBriefingText.offset;
-    _guest.Call(PRINT_TEXT_LINES);
-    _guest.Call(WAIT_FOR_KEY_PRESS);
-    _guest.Set(DS.maskMissionShipsLeft, MASK_SHIPS);
-    _guest.Set(DS.maskSystemJumps, MASK_SYSTEM_JUMPS);
+    PrintTextLines(_state, DS.maskBriefingText.offset, LINE_4, MASK_BRIEFING_LINES);
+    (void)WaitForKeyPress(_state, _hardware);
+    _state.Set(DS.maskMissionShipsLeft, MASK_SHIPS);
+    _state.Set(DS.maskSystemJumps, MASK_SYSTEM_JUMPS);
     return;
   }
-  regs.di = LINE_4;
-  regs.si = DS.invasionBriefingText.offset;
-  regs.cx = INVASION_BRIEFING_LINES;
-  _guest.Call(PRINT_TEXT_LINES);
-  _guest.Call(WAIT_FOR_KEY_PRESS);
-  _guest.Set(DS.thargoidInvasionActive, 1);
-  _guest.Set(DS.jumpedSinceBriefing, 0);
+  PrintTextLines(_state, DS.invasionBriefingText.offset, LINE_4, INVASION_BRIEFING_LINES);
+  (void)WaitForKeyPress(_state, _hardware);
+  _state.Set(DS.thargoidInvasionActive, 1);
+  _state.Set(DS.jumpedSinceBriefing, 0);
 }
 
-void ShowMissionDebriefing(Guest& _guest)
+void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
   // Not yet: the mask ship is still about, or the supernova's refugees have not been taken away.
-  if (_guest.Get(DS.missionNumber) == MISSION_MASK_SHIP
-        ? _guest.Get(DS.maskShipDestroyed) != 1
-        : _guest.Get(DS.missionNumber) == MISSION_SUPERNOVA && _guest.Get(DS.jumpedSinceBriefing) != 1)
+  if (_state.Get(DS.missionNumber) == MISSION_MASK_SHIP
+        ? _state.Get(DS.maskShipDestroyed) != 1
+        : _state.Get(DS.missionNumber) == MISSION_SUPERNOVA && _state.Get(DS.jumpedSinceBriefing) != 1)
   {
     return;
   }
-  regs.si = DS.taskCompleteFrame.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_CELL;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Set(DS.missionStage, STAGE_DEBRIEFED);
-  const std::uint8_t mission = _guest.Get(DS.missionNumber);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.taskCompleteFrame.offset, _backward), TITLE_CELL);
+  _state.Set(DS.missionStage, STAGE_DEBRIEFED);
+  const std::uint8_t mission = _state.Get(DS.missionNumber);
   if (mission == MISSION_SUPERNOVA)
   {
-    const bool fullHold = _guest.Get(DS.refugeesTonnes) == REFUGEE_TONNES;
-    SetLow(regs.ax, fullHold ? REWARD_DIGIT_FULL_HOLD : REWARD_DIGIT_OTHERWISE);
-    regs.bx = fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS;
-    _guest.Set(DS.refugeeRewardDigit, Low(regs.ax));
-    _guest.Set(DS.refugeesTonnes, 0);
-    _guest.Set(DS.cargoUsedTonnes, 0);
-    regs.ax = regs.bx;
-    regs.bx = 0;
-    _guest.Call(ADD_CREDITS);
-    regs.si = SUPERNOVA_DEBRIEFING_TEXT;
-    regs.cx = SUPERNOVA_DEBRIEFING_LINES;
-    regs.di = LINE_4;
-    _guest.Call(PRINT_TEXT_LINES);
-    _guest.Call(WAIT_FOR_KEY_PRESS);
-    _guest.Set(DS.missionNumber, 0);
-    _guest.Set(DS.missionStage, 0);
+    const bool fullHold = _state.Get(DS.refugeesTonnes) == REFUGEE_TONNES;
+    _state.Set(DS.refugeeRewardDigit, fullHold ? REWARD_DIGIT_FULL_HOLD : REWARD_DIGIT_OTHERWISE);
+    _state.Set(DS.refugeesTonnes, 0);
+    _state.Set(DS.cargoUsedTonnes, 0);
+    AddCredits(_state, fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS);
+    PrintTextLines(_state, SUPERNOVA_DEBRIEFING_TEXT, LINE_4, SUPERNOVA_DEBRIEFING_LINES);
+    (void)WaitForKeyPress(_state, _hardware);
+    _state.Set(DS.missionNumber, 0);
+    _state.Set(DS.missionStage, 0);
     return;
   }
   if (mission == MISSION_MASK_SHIP)
   {
-    regs.di = LINE_4;
-    if (_guest.Get(DS.maskingDeviceRecovered) == 1)
+    std::uint16_t text = MASK_DESTROYED_TEXT;
+    std::uint16_t lines = MASK_DESTROYED_LINES;
+    if (_state.Get(DS.maskingDeviceRecovered) == 1)
     {
-      _guest.Set(DS.maskingDeviceFitted, 1);
-      regs.cx = MASK_RECOVERED_LINES;
-      regs.si = MASK_RECOVERED_TEXT;
-      _guest.JumpBack(MASK_DEBRIEFING_TEXT);
+      _state.Set(DS.maskingDeviceFitted, 1);
+      text = MASK_RECOVERED_TEXT;
+      lines = MASK_RECOVERED_LINES;
+      _hardware.LoopTurn(MASK_DEBRIEFING_TEXT, {}); // the JMP back to the print the other two run on into
     }
-    else if (_guest.Get(DS.fledMaskShip) == 1)
+    else if (_state.Get(DS.fledMaskShip) == 1)
     {
-      regs.cx = MASK_FLED_LINES;
-      regs.si = MASK_FLED_TEXT;
+      text = MASK_FLED_TEXT;
+      lines = MASK_FLED_LINES;
     }
-    else
-    {
-      regs.cx = MASK_DESTROYED_LINES;
-      regs.si = MASK_DESTROYED_TEXT;
-    }
-    _guest.Call(PRINT_TEXT_LINES);
-    _guest.Call(WAIT_FOR_KEY_PRESS);
-    _guest.Set(DS.maskMissionShipsLeft, 0);
-    _guest.Set(DS.maskShipDestroyed, 0);
-    _guest.Set(DS.missionNumber, 0);
-    _guest.Set(DS.maskingDeviceRecovered, 0);
-    _guest.Set(DS.maskSystemJumps, 0);
-    _guest.Set(DS.fledMaskShip, 0);
-    _guest.Set(DS.missionStage, 0);
+    PrintTextLines(_state, text, LINE_4, lines);
+    (void)WaitForKeyPress(_state, _hardware);
+    _state.Set(DS.maskMissionShipsLeft, 0);
+    _state.Set(DS.maskShipDestroyed, 0);
+    _state.Set(DS.missionNumber, 0);
+    _state.Set(DS.maskingDeviceRecovered, 0);
+    _state.Set(DS.maskSystemJumps, 0);
+    _state.Set(DS.fledMaskShip, 0);
+    _state.Set(DS.missionStage, 0);
     return;
   }
-  regs.di = LINE_4;
-  regs.si = DS.invasionDebriefText.offset;
-  regs.cx = INVASION_DEBRIEFING_LINES;
-  _guest.Call(PRINT_TEXT_LINES);
-  _guest.Call(WAIT_FOR_KEY_PRESS);
-  _guest.Call(AWARD_ARCHANGEL_TITLE);
-  _guest.Set(DS.antiEcmEmulatorFitted, 1);
-  _guest.Set(DS.missionNumber, 0);
-  _guest.Set(DS.missionStage, 0);
-  _guest.Set(DS.invadedStationDestroyed, 0);
-  _guest.Set(DS.thargoidInvasionActive, 0);
-  _guest.Set(DS.missionStage, 0);
+  PrintTextLines(_state, DS.invasionDebriefText.offset, LINE_4, INVASION_DEBRIEFING_LINES);
+  (void)WaitForKeyPress(_state, _hardware);
+  AwardArchangelTitle(_state);
+  _state.Set(DS.antiEcmEmulatorFitted, 1);
+  _state.Set(DS.missionNumber, 0);
+  _state.Set(DS.missionStage, 0);
+  _state.Set(DS.invadedStationDestroyed, 0);
+  _state.Set(DS.thargoidInvasionActive, 0);
+  _state.Set(DS.missionStage, 0);
 }
 
 void RunTitleAndDocked(Guest& _guest)
@@ -1121,8 +1032,40 @@ constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX
 // What a docked screen leaves: everything but DS (it waits as a rule, so it is never compared).
 constexpr Machine::NativeContract CLOBBERS_ALL{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
+// What a docked screen that returns its closing key leaves: everything but AX, the key in AH, and DS.
+constexpr Machine::NativeContract SHOWS_SCREEN{
+  REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
 
 } // namespace
+
+void ShowCommanderStatusScreenEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // BP, the count SelectSystemAtCursor makes the index from when no system is on the chart.
+  const ScreenKey key = ShowCommanderStatusScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), regs.bp);
+  regs.ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
+
+void ShowInventoryScreenEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ScreenKey key = ShowInventoryScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), regs.bp);
+  regs.ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
+
+void ShowMissionBriefingEntry(Guest& _guest)
+{
+  ShowMissionBriefing(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_ALL);
+}
+
+void ShowMissionDebriefingEntry(Guest& _guest)
+{
+  ShowMissionDebriefing(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_ALL);
+}
 
 void AwardArchangelTitleEntry(Guest& _guest)
 {
@@ -1197,12 +1140,12 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x49E4, "AwardArchangelTitle", &AwardArchangelTitleEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x5A30, "ShowSellCargoScreen", &ShowSellCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x5AE9, "ShowBuyCargoScreen", &ShowBuyCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x5EA9, "ShowCommanderStatusScreen", &ShowCommanderStatusScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x6020, "ShowInventoryScreen", &ShowInventoryScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
+  NativeEntry{0x5EA9, "ShowCommanderStatusScreen", &ShowCommanderStatusScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
+  NativeEntry{0x6020, "ShowInventoryScreen", &ShowInventoryScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
   NativeEntry{0x658F, "PrintCreditsOnMessageLine", &PrintCreditsOnMessageLineEntry, PRESERVES_ALL},
   NativeEntry{0x6923, "FormatFuelLightYears", &FormatFuelLightYearsEntry, CLOBBERS_AX_BX_DI},
-  NativeEntry{0x6DF2, "ShowMissionBriefing", &ShowMissionBriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x6EB7, "ShowMissionDebriefing", &ShowMissionDebriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
+  NativeEntry{0x6DF2, "ShowMissionBriefing", &ShowMissionBriefingEntry, CLOBBERS_ALL, NEAR, 0, ALWAYS},
+  NativeEntry{0x6EB7, "ShowMissionDebriefing", &ShowMissionDebriefingEntry, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrameEntry, PRESERVES_ALL},
   NativeEntry{0x7CE9, "DrawFrameSides", &DrawFrameSidesEntry, PRESERVES_ALL},
   NativeEntry{0x7CF8, "DrawFrameRow", &DrawFrameRowEntry, PRESERVES_ALL},

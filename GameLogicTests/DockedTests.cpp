@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "ComparisonRig.h"
 #include "DataOverlay.h"
 #include "TwinRig.h"
 
@@ -12,6 +13,9 @@ namespace GameLogicTests
 
 namespace
 {
+
+constexpr std::uint16_t AWARD_ARCHANGEL_TITLE = 0x49E4;
+constexpr std::uint16_t FORMAT_FUEL_LIGHT_YEARS = 0x6923;
 
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
@@ -112,6 +116,25 @@ public:
     SetBoth(rig, Elite::DS.missionNumber, 3);
     rig.Play(StatusAgain("digest invasion-briefing\nkey space; wait 0.2"));
     rig.Play(StatusAgain("digest invasion-debriefing\nkey space; wait 0.2\ndigest archangel"));
+  }
+
+  // The fuel's text from an empty tank to a full one, and the Archangel's title: the status and inventory screens and the
+  // invasion's debriefing call them as value routines since level 5 of the de-assembly (ADR-012 item 12), so only calls like
+  // these compare them with the original.
+  TEST_METHOD(FuelTextAndArchangelTitleAgree)
+  {
+    ComparisonRig rig("DockedHelpers");
+    Machine::Memory& ram = rig.Host().Ram();
+    const std::uint16_t data = Elite::DataSegment(rig.Program());
+    const std::initializer_list<std::uint8_t> fuels = {0, 1, 35, 36, 100, 254, 255};
+    for (const std::uint8_t fuel : fuels)
+    {
+      ram.Write8(data, Elite::DS.fuel.offset, fuel);
+      rig.Call(FORMAT_FUEL_LIGHT_YEARS, {});
+    }
+    rig.AssertAllAgreed(FORMAT_FUEL_LIGHT_YEARS, fuels.size());
+    rig.Call(AWARD_ARCHANGEL_TITLE, {});
+    rig.AssertAllAgreed(AWARD_ARCHANGEL_TITLE, 1);
   }
 };
 

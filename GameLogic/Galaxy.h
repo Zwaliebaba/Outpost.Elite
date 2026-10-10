@@ -1,6 +1,7 @@
 // GameLogic/Galaxy.h
 #pragma once
 
+#include "Docked.h"
 #include "NativeEntry.h"
 #include "Text.h"
 
@@ -27,18 +28,8 @@ void ShowGalacticChart(Guest& _guest);
 /// runs its own. Waits for keys. Out: AX the closing key.
 void ShowShortRangeChart(Guest& _guest);
 
-/// FindSystemByName (CS:140D): reads a name under the chart (ReadTextLine) and, if a system of the galaxy has it
-/// and it is on the chart, moves the cursor there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing
-/// typed is ShowNearestSystemDistance alone. Waits for keys. Clobbers AX, BX, CX, DX, SI, DI, BP, ES.
-void FindSystemByName(Guest& _guest);
-
 /// DrawChartItems (CS:14C5): the short-range chart's discs and labels.
 void DrawChartItems(Guest& _guest);
-
-/// ShowSystemDataScreen (CS:5CDE): F7's data on the selected system, then the keys until Esc or another F key
-/// (WaitForScreenExitKey, CS:60B4), which selects the system at the chart cursor again. Waits for keys. Out: AX the
-/// closing key.
-void ShowSystemDataScreen(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -171,6 +162,17 @@ void AdvanceToNextSystem(GameState& _state);
 /// system. Returns the length.
 std::uint8_t GenerateSystemName(GameState& _state);
 
+/// FindSystemByName (CS:140D): a name read under the chart at _segment (ReadTextLine) and, if a system of the galaxy has it and
+/// it is on the chart, the cursor moved there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing typed is
+/// ShowNearestSystemDistance alone. _countIfNone is ShowNearestSystemDistance's; _backward is the direction flag, which the
+/// names' comparison (REPE CMPSB) goes by. Waits for keys as a rule (ADR-015).
+void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _segment, std::uint16_t _countIfNone, bool _backward);
+
+/// ShowSystemDataScreen (CS:5CDE): F7's data on the selected system and its description, then the keys until Esc or another F
+/// key (WaitForScreenExitKey, with _countIfNone), which selects the system at the chart cursor again. _backward is the
+/// direction flag, which DrawDockedFrame and ShowSystemDescription go by. Waits for keys as a rule (ADR-015).
+ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+
 /// PlaceChartLabels (CS:1505): each of chartItemCount pending labels, nudged clear of every chart item until
 /// NudgeChartLabel runs out of tries, added to chartItems by AddChartLabel.
 void PlaceChartLabels(GameState& _state);
@@ -254,6 +256,8 @@ void ShowNearestSystemDistanceEntry(Guest& _guest); ///< In: BP, as SelectSystem
 void LoadSystemSeedsEntry(Guest& _guest);           ///< In: CL the system. Out: CX = 0.
 void AdvanceToNextSystemEntry(Guest& _guest);
 void GenerateSystemNameEntry(Guest& _guest);
+void FindSystemByNameEntry(Guest& _guest);     ///< In: ES the chart's segment, BP as SelectSystemAtCursorEntry. Clobbers all but DS.
+void ShowSystemDataScreenEntry(Guest& _guest); ///< In: BP as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
 void PlaceChartLabelsEntry(Guest& _guest);
 void AddChartLabelEntry(Guest& _guest);
 void NudgeChartLabelEntry(Guest& _guest);
