@@ -1,15 +1,19 @@
 // GameLogic/Scene.h
 #pragma once
 
+#include "GameState.h"
+#include "Maths.h"
 #include "NativeEntry.h"
 
+#include <cstdint>
 #include <span>
 
 namespace Elite
 {
 
 // The reference's 3d routines, ported (plan §5 Phase 3, ADR-010): the 3D scene: transforming, projecting and drawing objects. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012) take values and give values
+// back, below the register bodies, and their entries keep the register contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SceneEntries() noexcept;
@@ -20,13 +24,6 @@ namespace Elite
 /// AX, BX, CX, DX, DI clobbered.
 void ProjectVertices(Guest& _guest);
 
-/// ReflectVertexAboutCenter (CS:3740): [DI] = drawCenter - [SI], then [SI] += drawCenter, three words
-/// each. AX, BX clobbered.
-void ReflectVertexAboutCenter(Guest& _guest);
-
-/// OffsetVertexByCenter (CS:3768): the vertex at SI plus drawCenter, three words. AX clobbered.
-void OffsetVertexByCenter(Guest& _guest);
-
 /// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from SI = blueprint+3. The eight corners
 /// (+-boxHalfWidth, +-byte +3, +-byte +4) about drawCenter, rotated by the drawn angles, the player's pitch and the
 /// view direction, as vertices 34-41. Out: SI = blueprint+5; AX, BX, CX, DX, BP, DI clobbered.
@@ -36,18 +33,6 @@ void BuildBoxCornerVertices(Guest& _guest);
 /// table in 72-degree steps from the roll angle, a slot of four, rotated as BuildBoxCornerVertices rotates, and the
 /// rings reflected through drawCenter, as vertices 0-23. Keeps SI.
 void BuildDodoVertices(Guest& _guest);
-
-/// ScaleDodoRadii (CS:3A13): the signed byte AL by shifts and adds. Out: CX = AL * 2.34, DX = AL * 3.80; AX
-/// clobbered.
-void ScaleDodoRadii(Guest& _guest);
-
-/// RunVertexProgram (CS:3A40): runs the count byte and ops at SI on vertexBuffer, with BP, BX, DX as the
-/// accumulator. Out: SI past the program; AX, CX, DI clobbered.
-void RunVertexProgram(Guest& _guest);
-
-/// TriangleWindingSign (CS:3A9B): SF from (x0-x1)(y2-y1) - (y0-y1)(x2-x1), with p0 = (AX, DX), p1 =
-/// (BX, BP), p2 = (CX, DI): the high words' difference, or the low words' when the high words agree.
-void TriangleWindingSign(Guest& _guest);
 
 /// DrawVisibleFaces (CS:3AB3): for each of CX faces at SI that faces the viewer, its edges
 /// (DrawClippedLine) and filled triangles (FillTriangle) in order. Out: SI past the list.
@@ -104,5 +89,68 @@ void LoadPlayerAngles(Guest& _guest);
 /// ProjectToScreen (CS:8D2E): AX = 80h + 256x/z, BX = 40h + 256y/z for x = AX, y = BX, z = CX, an
 /// overflowing divide saturated by the trap. DX, BP clobbered.
 void ProjectToScreen(Guest& _guest);
+
+// ── The routines (ADR-012): values in, values out, on the GameState ──
+//
+// A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI.
+
+/// A vertex of vertexBuffer once ProjectVertices has projected it: its screen x and y.
+struct ScreenPoint
+{
+  std::int16_t x;
+  std::int16_t y;
+};
+
+/// Three projected vertices: a face's first three, which say which way it faces, or a filled triangle's corners.
+struct Triangle
+{
+  ScreenPoint first;
+  ScreenPoint second;
+  ScreenPoint third;
+};
+
+/// ScaleDodoRadii's two radii, in the ratio of a dodecahedron's two rings, about 1.62.
+struct DodoRadii
+{
+  std::int16_t inner; ///< 2a + a/4 + a/8 - a/32, about 2.34a
+  std::int16_t outer; ///< 3a + a/2 + a/4 + a/16 - a/64, about 3.80a
+};
+
+/// Where RunVertexProgram leaves the program and its accumulator.
+struct VertexProgramEnd
+{
+  std::uint16_t next; ///< the offset past the program
+  Vector accumulator;
+};
+
+/// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
+/// then the vertex at _vertex += drawCenter. Returns drawCenter, each coordinate as it read it.
+Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection);
+
+/// OffsetVertexByCenter (CS:3768): the vertex at _vertex plus drawCenter, x, y and z in turn. Returns drawCenter, each
+/// coordinate as it read it.
+Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex);
+
+/// ScaleDodoRadii (CS:3A13): the signed byte _value scaled to the Dodo's two ring radii by arithmetic shifts and adds.
+[[nodiscard]] DodoRadii ScaleDodoRadii(std::int8_t _value);
+
+/// RunVertexProgram (CS:3A40): runs the count byte and ops at _program on vertexBuffer, from _accumulator. An op's bits 0-5
+/// are a vertex; bits 6-7 load it into the accumulator, store the accumulator there, average the two (the 16-bit sum
+/// halved arithmetically), or add it.
+[[nodiscard]] VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vector _accumulator);
+
+/// TriangleWindingSign (CS:3A9B): whether (x0-x1)(y2-y1) - (y0-y1)(x2-x1) is negative, by the sign of the high words'
+/// difference, or of the low words' when the high words agree: true when _triangle faces the viewer.
+[[nodiscard]] bool TriangleWindingSign(Triangle _triangle);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void ReflectVertexAboutCenterEntry(Guest& _guest); ///< SI = the vertex, DI = its reflection. Out: BX = drawCenterZ; AX clobbered.
+void OffsetVertexByCenterEntry(Guest& _guest);     ///< SI = the vertex. Out: AX = drawCenterZ.
+void ScaleDodoRadiiEntry(Guest& _guest);           ///< AL = the value. Out: CX inner, DX outer; AX clobbered.
+void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the accumulator, in and out. Out: CX = 0; AX, DI clobbered.
+/// p0 = (AX, DX), p1 = (BX, BP), p2 = (CX, DI). Out: SF; DX:AX = (y0-y1)(x2-x1), BX = the low word of (x0-x1)(y2-y1), less AX when the
+/// high words agree; CX, DI clobbered.
+void TriangleWindingSignEntry(Guest& _guest);
 
 } // namespace Elite

@@ -652,7 +652,7 @@ void LaunchEscapePod(Guest& _guest)
   Registers& regs = _guest.Regs();
   _guest.Set(DS.hyperspaceCountdown, 0);
   _guest.Set(DS.escapePodFrames, ESCAPE_POD_FRAMES);
-  FindFreeShipSlot(_guest);
+  FindFreeShipSlotEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.Call(RECLAIM_SHIP_SLOT);

@@ -38,7 +38,7 @@ enum class SlotByte : std::uint16_t
   BlipZ = 0x28,
   Energy = 0x2B,
   Cargo = 0x2C,
-  FlashFrames = 0x2C, ///< the sun's or planet's
+  FlashFrames = 0x2C, ///< a ship's that carries the device (Flags bit 5): frames to its next flash on or off
   Fragments = 0x2D,
   Lifetime = 0x2E, ///< frames a fragment has left
   Age = 0x2F,

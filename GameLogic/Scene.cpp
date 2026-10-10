@@ -59,7 +59,6 @@ constexpr std::uint16_t SLOT_STATE = 0x1E;
 constexpr std::uint16_t SLOT_COMPASS_X = 0x20;
 constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
 constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
-constexpr std::uint16_t SLOT_FLASH_FRAMES = 0x2C;
 constexpr std::uint16_t SLOT_FRAMES_AWAY = 0x34;
 constexpr std::uint16_t SLOT_CAMERA_Z_HIGH = 0x3C;
 constexpr std::uint16_t SLOT_DEPTH = 0x3D;
@@ -250,7 +249,7 @@ void RotateVerticesToView(Guest& _guest, std::uint16_t _first, std::uint16_t _co
 void RenderBlueprint(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  RunVertexProgram(_guest);
+  RunVertexProgramEntry(_guest);
   regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
   _guest.Set(DS.projectedVertexCount, regs.cx);
   regs.si = Offset(regs.si, 1);
@@ -308,29 +307,62 @@ void ProjectVertexCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t 
   }
 }
 
-// The three vertex bytes at SI, each shifted left by _shift into an offset in vertexBuffer, as
-// TriangleWindingSign and FillTriangle take them: (AX, DX), (BX, BP) through faceTestScratch, (CX, DI).
-void LoadTriangle(Guest& _guest, std::uint8_t _shift)
+// The bytes LoadTriangle takes, one a vertex.
+constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
+
+// The three vertex bytes at _indices, each shifted left by _shift, as a byte, into an offset in vertexBuffer, and the points
+// there. The second's x goes through faceTestScratch, written before its y is read, as the original keeps it there.
+[[nodiscard]] Triangle LoadTriangle(GameState& _state, std::uint16_t _indices, std::uint8_t _shift)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto nextVertex = [&_guest, &regs, _shift]()
-  {
-    regs.bx = static_cast<std::uint8_t>(_guest.Byte(regs.si) << _shift);
-    regs.si = Offset(regs.si, 1);
-    return Offset(regs.bx, regs.di);
-  };
-  regs.di = DS.vertexBuffer.offset;
-  std::uint16_t vertex = nextVertex();
-  regs.ax = _guest.Word(vertex);
-  regs.dx = _guest.Word(Offset(vertex, 2));
-  vertex = nextVertex();
-  regs.cx = _guest.Word(vertex);
-  _guest.Set(DS.faceTestScratch, regs.cx);
-  regs.bp = _guest.Word(Offset(vertex, 2));
-  vertex = nextVertex();
-  regs.cx = _guest.Word(vertex);
-  regs.di = _guest.Word(Offset(vertex, 2));
-  regs.bx = _guest.Get(DS.faceTestScratch);
+  const auto vertex = [&_state, _indices, _shift](std::uint16_t _which)
+  { return Offset(DS.vertexBuffer.offset, static_cast<std::uint8_t>(_state.Byte(Offset(_indices, _which)) << _shift)); };
+  const auto coordinate = [&_state](std::uint16_t _vertex, std::uint16_t _bytes)
+  { return static_cast<std::int16_t>(_state.Word(Offset(_vertex, _bytes))); };
+  const std::uint16_t first = vertex(0);
+  const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
+  const std::uint16_t second = vertex(1);
+  const std::int16_t secondX = coordinate(second, 0);
+  _state.Set(DS.faceTestScratch, static_cast<std::uint16_t>(secondX));
+  const ScreenPoint secondPoint{secondX, coordinate(second, 2)};
+  const std::uint16_t third = vertex(2);
+  return Triangle{firstPoint, secondPoint, ScreenPoint{coordinate(third, 0), coordinate(third, 2)}};
+}
+
+// A triangle in the registers TriangleWindingSign and FillTriangle take it in: (AX, DX), (BX, BP), (CX, DI).
+[[nodiscard]] Triangle TriangleIn(const Machine::Registers& _regs) noexcept
+{
+  const auto point = [](std::uint16_t _x, std::uint16_t _y)
+  { return ScreenPoint{static_cast<std::int16_t>(_x), static_cast<std::int16_t>(_y)}; };
+  return Triangle{point(_regs.ax, _regs.dx), point(_regs.bx, _regs.bp), point(_regs.cx, _regs.di)};
+}
+
+// The two products TriangleWindingSign compares, each as IMUL leaves it in DX:AX.
+struct WindingProducts
+{
+  std::uint32_t first;  // (x0-x1)(y2-y1)
+  std::uint32_t second; // (y0-y1)(x2-x1)
+};
+
+// SUB in 16 bits, then IMUL.
+[[nodiscard]] WindingProducts Winding(const Triangle& _triangle) noexcept
+{
+  const auto difference = [](std::int16_t _a, std::int16_t _b)
+  { return static_cast<std::int16_t>(static_cast<std::uint16_t>(static_cast<std::uint16_t>(_a) - static_cast<std::uint16_t>(_b))); };
+  const auto product = [](std::int16_t _a, std::int16_t _b) { return static_cast<std::uint32_t>(std::int32_t{_a} * _b); };
+  return WindingProducts{product(difference(_triangle.first.x, _triangle.second.x), difference(_triangle.third.y, _triangle.second.y)),
+                         product(difference(_triangle.first.y, _triangle.second.y), difference(_triangle.third.x, _triangle.second.x))};
+}
+
+// What LoadTriangle's code leaves: the triangle in those registers, and SI past its three vertex bytes.
+void TriangleOut(Machine::Registers& _regs, const Triangle& _triangle) noexcept
+{
+  _regs.ax = static_cast<std::uint16_t>(_triangle.first.x);
+  _regs.dx = static_cast<std::uint16_t>(_triangle.first.y);
+  _regs.bx = static_cast<std::uint16_t>(_triangle.second.x);
+  _regs.bp = static_cast<std::uint16_t>(_triangle.second.y);
+  _regs.cx = static_cast<std::uint16_t>(_triangle.third.x);
+  _regs.di = static_cast<std::uint16_t>(_triangle.third.y);
+  _regs.si = Offset(_regs.si, TRIANGLE_VERTEX_BYTES);
 }
 
 // An edge item, BX = twice the edge's index in faceEdgeList: its colour, then DrawClippedLine unless an
@@ -366,7 +398,7 @@ void DrawFaceTriangle(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   regs.ax = _guest.Word(Offset(DS.faceFillPatterns.offset, regs.bx));
   _guest.Set(DS.triangleFillPattern, regs.ax);
-  LoadTriangle(_guest, 1);
+  TriangleOut(regs, LoadTriangle(_guest.State(), regs.si, 1));
   if (regs.ax == OFF_SCREEN || regs.bx == OFF_SCREEN || regs.cx == OFF_SCREEN)
   {
     return;
@@ -409,37 +441,68 @@ void DrawFaceItems(Guest& _guest)
   }
 }
 
-// ClassifyViewPosition (CS:3CA1), the shared tail of TransformShip and ClassifyStationPosition: AX, BX,
-// CX are slot DI's view position. Visible, CF clear and byte 0 bit 7 set, when z is at least nearClipZ
-// and twice |x| and twice |y| are at most z; the position is stored when z passes.
-void ClassifyViewPosition(Guest& _guest)
+// How far ClassifyViewPosition got with a view position.
+enum class ViewTest : std::uint8_t
+{
+  TooNear, // z negative or below nearClipZ: nothing stored
+  WideX,   // stored, but twice |x| is beyond z
+  WideY,   // twice |y| is beyond z
+  Visible, // and byte 0 bit 7 set
+};
+
+// shl of the magnitude: what ClassifyViewPosition compares with z.
+[[nodiscard]] std::uint16_t DoubledMagnitude(std::uint16_t _value) noexcept
+{
+  return static_cast<std::uint16_t>(Magnitude(_value) << 1);
+}
+
+// ClassifyViewPosition (CS:3CA1), the shared tail of TransformShip and ClassifyStationPosition: _view is _slot's view
+// position. Visible, with byte 0 bit 7 set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the
+// position is stored, in the slot and as drawCenter, when z passes.
+[[nodiscard]] ViewTest ClassifyViewPosition(GameState& _state, ObjectSlot _slot, Vector _view)
+{
+  const auto x = static_cast<std::uint16_t>(_view.x);
+  const auto y = static_cast<std::uint16_t>(_view.y);
+  const auto z = static_cast<std::uint16_t>(_view.z);
+  if (Negative(z) || z < _state.Get(DS.nearClipZ))
+  {
+    return ViewTest::TooNear;
+  }
+  _slot.Set(SlotWord::ViewX, x);
+  _state.Set(DS.drawCenterX, x);
+  _slot.Set(SlotWord::ViewY, y);
+  _state.Set(DS.drawCenterY, y);
+  _slot.Set(SlotWord::ViewZ, z);
+  _state.Set(DS.drawCenterZ, z);
+  if (z < DoubledMagnitude(x))
+  {
+    return ViewTest::WideX;
+  }
+  if (z < DoubledMagnitude(y))
+  {
+    return ViewTest::WideY;
+  }
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_VISIBLE));
+  return ViewTest::Visible;
+}
+
+// ClassifyViewPosition on the view position in AX, BX and CX of the slot at DI, with the registers its code leaves: twice |x|
+// in AX once z passes, twice |y| in BX once x does, and CF clear only when the object is visible.
+void ClassifyViewPositionOnRegisters(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  if (Negative(regs.cx) || regs.cx < _guest.Get(DS.nearClipZ))
+  const ViewTest test = ClassifyViewPosition(
+    _guest.State(), ObjectSlot(_guest.State(), regs.di),
+    Vector{static_cast<std::int16_t>(regs.ax), static_cast<std::int16_t>(regs.bx), static_cast<std::int16_t>(regs.cx)});
+  if (test != ViewTest::TooNear)
   {
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
-    return;
+    regs.ax = DoubledMagnitude(regs.ax);
   }
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_X), regs.ax);
-  _guest.Set(DS.drawCenterX, regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_Y), regs.bx);
-  _guest.Set(DS.drawCenterY, regs.bx);
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_Z), regs.cx);
-  _guest.Set(DS.drawCenterZ, regs.cx);
-  regs.ax = static_cast<std::uint16_t>(Magnitude(regs.ax) << 1);
-  if (regs.cx < regs.ax)
+  if (test == ViewTest::WideY || test == ViewTest::Visible)
   {
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
-    return;
+    regs.bx = DoubledMagnitude(regs.bx);
   }
-  regs.bx = static_cast<std::uint16_t>(Magnitude(regs.bx) << 1);
-  if (regs.cx < regs.bx)
-  {
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
-    return;
-  }
-  OrByte(_guest, regs.di, SLOT_VISIBLE);
-  _guest.SetFlag(Machine::FLAG_CARRY, false);
+  _guest.SetFlag(Machine::FLAG_CARRY, test != ViewTest::Visible);
 }
 
 // RotateToViewDirection (CS:3EE6), the shared tail of the two TransformToView entries: rotates (x, z)
@@ -464,52 +527,79 @@ void RotateToViewDirection(Guest& _guest)
   regs.bx = y;
 }
 
-// CheckShipInRange's test once IsObjectNear has passed: false at the first bound the slot exceeds.
-[[nodiscard]] bool ShipWithinRange(Guest& _guest)
+// What CheckShipInRange's test measured of a ship, as far as it went: it stops at the first bound the ship exceeds.
+struct ShipRange
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t axisLimit = _guest.Get(DS.maxAxisDistance);
-  regs.ax = Magnitude(_guest.Word(Offset(regs.di, SLOT_POSITION_X)));
-  if (regs.ax >= axisLimit)
+  bool within;
+  std::uint8_t axes;                       // the magnitudes it took, 1-3
+  std::array<std::uint16_t, 3> magnitudes; // |x|, |y|, |z|
+  std::uint8_t squares;                    // the squares it summed, 0, 2 or 3: none until every axis is within maxAxisDistance
+  std::uint16_t squaredHigh;               // the sum of their high words
+};
+
+// mul of a word by itself: DX:AX.
+[[nodiscard]] std::uint32_t UnsignedSquare(std::uint16_t _value) noexcept
+{
+  return std::uint32_t{_value} * _value;
+}
+
+// CheckShipInRange's test once IsObjectNear has passed (CS:3BEF): |x|, |y| and |z| below maxAxisDistance, then the high words
+// of their unsigned squares, summed, below maxDistanceSquaredHigh after the second and the third. Within, the sum shifted
+// right 6 is the ship's size, and byte 0 bit 6 is set.
+[[nodiscard]] ShipRange ShipWithinRange(GameState& _state, ObjectSlot _slot)
+{
+  ShipRange range{};
+  constexpr std::array<SlotWord, 3> POSITION = {SlotWord::X, SlotWord::Y, SlotWord::Z};
+  for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
-    return false;
+    range.magnitudes[axis] = Magnitude(_slot.Get(POSITION[axis]));
+    range.axes = static_cast<std::uint8_t>(axis + 1);
+    if (range.magnitudes[axis] >= _state.Get(DS.maxAxisDistance))
+    {
+      return range;
+    }
   }
-  regs.bx = Magnitude(_guest.Word(Offset(regs.di, SLOT_POSITION_Y)));
-  if (regs.bx >= axisLimit)
+  for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
-    return false;
+    range.squaredHigh = Offset(range.squaredHigh, static_cast<std::uint16_t>(UnsignedSquare(range.magnitudes[axis]) >> 16));
+    range.squares = static_cast<std::uint8_t>(axis + 1);
+    if (axis != 0 && range.squaredHigh >= _state.Get(DS.maxDistanceSquaredHigh))
+    {
+      return range;
+    }
   }
-  regs.cx = Magnitude(_guest.Word(Offset(regs.di, SLOT_POSITION_Z)));
-  if (regs.cx >= _guest.Get(DS.maxAxisDistance))
+  range.within = true;
+  _slot.Set(SlotByte::Size, Low(static_cast<std::uint16_t>(range.squaredHigh >> SQUARED_DISTANCE_SHIFT)));
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_IN_RANGE));
+  return range;
+}
+
+// What ShipWithinRange's code leaves in the registers, which CheckShipInRange's contract compares: the magnitudes it took in
+// AX, BX and CX, then the last square in DX:AX and the high words' sum in BP, and within, that sum shifted right 6 in BP and AX.
+void ShipRangeOut(Machine::Registers& _regs, const ShipRange& _range) noexcept
+{
+  _regs.ax = _range.magnitudes[0];
+  if (_range.axes > 1)
   {
-    return false;
+    _regs.bx = _range.magnitudes[1];
   }
-  // mul: the high words of the unsigned squares, summed in BP.
-  const auto square = [&regs](std::uint16_t _value)
+  if (_range.axes > 2)
   {
-    const std::uint32_t product = std::uint32_t{_value} * _value;
-    regs.ax = static_cast<std::uint16_t>(product);
-    regs.dx = static_cast<std::uint16_t>(product >> 16);
-  };
-  square(regs.ax);
-  regs.bp = regs.dx;
-  square(regs.bx);
-  regs.bp = Offset(regs.bp, regs.dx);
-  if (regs.bp >= _guest.Get(DS.maxDistanceSquaredHigh))
-  {
-    return false;
+    _regs.cx = _range.magnitudes[2];
   }
-  square(regs.cx);
-  regs.bp = Offset(regs.bp, regs.dx);
-  if (regs.bp >= _guest.Get(DS.maxDistanceSquaredHigh))
+  if (_range.squares == 0)
   {
-    return false;
+    return;
   }
-  regs.bp = static_cast<std::uint16_t>(regs.bp >> SQUARED_DISTANCE_SHIFT);
-  regs.ax = regs.bp;
-  _guest.SetByte(Offset(regs.di, SLOT_SIZE), Low(regs.ax));
-  OrByte(_guest, regs.di, SLOT_IN_RANGE);
-  return true;
+  const std::uint32_t lastSquare = UnsignedSquare(_range.magnitudes[_range.squares - 1u]);
+  _regs.ax = static_cast<std::uint16_t>(lastSquare);
+  _regs.dx = static_cast<std::uint16_t>(lastSquare >> 16);
+  _regs.bp = _range.squaredHigh;
+  if (_range.within)
+  {
+    _regs.bp = static_cast<std::uint16_t>(_regs.bp >> SQUARED_DISTANCE_SHIFT);
+    _regs.ax = _regs.bp;
+  }
 }
 
 // One slot of TransformAndDrawObjects' first pass, DI the slot.
@@ -589,24 +679,22 @@ void ClassifyObject(Guest& _guest)
   return true;
 }
 
-// Slot DI's flashing, for an object with +1Eh bit 5: true when it is in its off frames and not drawn.
-[[nodiscard]] bool FlashedOff(Guest& _guest)
+// _slot's flashing, for an object with +1Eh bit 5, the one that carries the device: true when it is in its off frames and not
+// drawn.
+[[nodiscard]] bool FlashedOff(ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t state = Offset(regs.di, SLOT_STATE);
-  if ((_guest.Byte(state) & STATE_FLASHING) == 0)
+  if ((_slot.Get(SlotByte::Flags) & STATE_FLASHING) == 0)
   {
     return false;
   }
-  const std::uint16_t frames = Offset(regs.di, SLOT_FLASH_FRAMES);
-  const bool off = (_guest.Byte(state) & STATE_FLASH_OFF) != 0;
-  _guest.SetByte(frames, static_cast<std::uint8_t>(_guest.Byte(frames) - 1));
-  if (_guest.Byte(frames) != 0)
+  const bool off = (_slot.Get(SlotByte::Flags) & STATE_FLASH_OFF) != 0;
+  _slot.Set(SlotByte::FlashFrames, static_cast<std::uint8_t>(_slot.Get(SlotByte::FlashFrames) - 1));
+  if (_slot.Get(SlotByte::FlashFrames) != 0)
   {
     return off;
   }
-  _guest.SetByte(state, static_cast<std::uint8_t>(_guest.Byte(state) ^ STATE_FLASH_OFF));
-  _guest.SetByte(frames, off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES);
+  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) ^ STATE_FLASH_OFF));
+  _slot.Set(SlotByte::FlashFrames, off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES);
   return false;
 }
 
@@ -644,7 +732,7 @@ void DrawObject(Guest& _guest)
   {
     return;
   }
-  if (FlashedOff(_guest))
+  if (FlashedOff(ObjectSlot(_guest.State(), regs.di)))
   {
     return;
   }
@@ -728,18 +816,24 @@ void ProjectDiscCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t _r
   }
 }
 
-// center + BX must not overflow or be negative, and center - BX must not overflow or pass _limit.
-[[nodiscard]] bool DiscWithin(Guest& _guest, std::uint16_t _center, std::uint16_t _limit)
+// What DiscWithin finds, and the last edge it computed, center + radius or center - radius, where the original leaves it in AX.
+struct DiscFit
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = static_cast<std::uint16_t>(_center + regs.bx);
-  if (AddOverflows(_center, regs.bx) || Negative(regs.ax))
+  bool within;
+  std::uint16_t edge;
+};
+
+// _center + _radius must not overflow or be negative, and _center - _radius must not overflow or pass _limit.
+[[nodiscard]] DiscFit DiscWithin(std::uint16_t _center, std::uint16_t _radius, std::uint16_t _limit) noexcept
+{
+  const auto upperEdge = static_cast<std::uint16_t>(_center + _radius);
+  if (AddOverflows(_center, _radius) || Negative(upperEdge))
   {
-    return false;
+    return DiscFit{false, upperEdge};
   }
-  const auto once = static_cast<std::uint16_t>(regs.ax - regs.bx);
-  regs.ax = static_cast<std::uint16_t>(once - regs.bx);
-  return !SubtractOverflows(once, regs.bx) && static_cast<std::int16_t>(regs.ax) <= static_cast<std::int16_t>(_limit);
+  const auto once = static_cast<std::uint16_t>(upperEdge - _radius);
+  const auto lowerEdge = static_cast<std::uint16_t>(once - _radius);
+  return DiscFit{!SubtractOverflows(once, _radius) && static_cast<std::int16_t>(lowerEdge) <= static_cast<std::int16_t>(_limit), lowerEdge};
 }
 
 // DrawSunOrPlanetDisc (CS:402C): radius AX at slot DI's projected center, in its colour (+0Bh), drawn only
@@ -754,7 +848,15 @@ void DrawSunOrPlanetDisc(Guest& _guest)
   ProjectDiscCoordinate(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_X)), DISC_X_DIVIDE_RETURN);
   regs.ax = Offset(regs.ax, SCREEN_CENTER_X);
   regs.dx = regs.ax;
-  if (!DiscWithin(_guest, regs.dx, SCREEN_RIGHT) || !DiscWithin(_guest, regs.cx, SCREEN_BOTTOM))
+  const DiscFit across = DiscWithin(regs.dx, regs.bx, SCREEN_RIGHT);
+  regs.ax = across.edge;
+  if (!across.within)
+  {
+    return;
+  }
+  const DiscFit down = DiscWithin(regs.cx, regs.bx, SCREEN_BOTTOM);
+  regs.ax = down.edge;
+  if (!down.within)
   {
     return;
   }
@@ -925,31 +1027,31 @@ void ProjectVertices(Guest& _guest)
   regs.si = caller;
 }
 
-void ReflectVertexAboutCenter(Guest& _guest)
+Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::uint16_t bytes = 0;
-  for (const DataField<std::uint16_t> center : {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ})
+  std::array<std::uint16_t, 3> center{};
+  constexpr std::array<DataField<std::uint16_t>, 3> CENTER = {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ};
+  for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
-    regs.ax = _guest.Get(center);
-    regs.bx = regs.ax;
-    regs.ax = static_cast<std::uint16_t>(regs.ax - _guest.Word(Offset(regs.si, bytes)));
-    _guest.SetWord(Offset(regs.di, bytes), regs.ax);
-    _guest.SetWord(Offset(regs.si, bytes), Offset(_guest.Word(Offset(regs.si, bytes)), regs.bx));
-    bytes = Offset(bytes, 2);
+    const auto bytes = static_cast<std::uint16_t>(2 * axis);
+    center[axis] = _state.Get(CENTER[axis]);
+    _state.SetWord(Offset(_reflection, bytes), static_cast<std::uint16_t>(center[axis] - _state.Word(Offset(_vertex, bytes))));
+    _state.SetWord(Offset(_vertex, bytes), Offset(_state.Word(Offset(_vertex, bytes)), center[axis]));
   }
+  return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
-void OffsetVertexByCenter(Guest& _guest)
+Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::uint16_t bytes = 0;
-  for (const DataField<std::uint16_t> center : {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ})
+  std::array<std::uint16_t, 3> center{};
+  constexpr std::array<DataField<std::uint16_t>, 3> CENTER = {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ};
+  for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
-    regs.ax = _guest.Get(center);
-    _guest.SetWord(Offset(regs.si, bytes), Offset(_guest.Word(Offset(regs.si, bytes)), regs.ax));
-    bytes = Offset(bytes, 2);
+    const auto bytes = static_cast<std::uint16_t>(2 * axis);
+    center[axis] = _state.Get(CENTER[axis]);
+    _state.SetWord(Offset(_vertex, bytes), Offset(_state.Word(Offset(_vertex, bytes)), center[axis]));
   }
+  return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
 void BuildBoxCornerVertices(Guest& _guest)
@@ -1016,16 +1118,16 @@ void BuildBoxCornerVertices(Guest& _guest)
   }
   regs.si = DS.boxCornerVertices.offset;
   regs.di = BOX_SEVENTH_CORNER;
-  ReflectVertexAboutCenter(_guest);
+  ReflectVertexAboutCenterEntry(_guest);
   regs.si = Offset(regs.si, BOX_REFLECTION_STEP);
   regs.di = static_cast<std::uint16_t>(regs.di - BOX_REFLECTION_STEP);
-  ReflectVertexAboutCenter(_guest);
+  ReflectVertexAboutCenterEntry(_guest);
   regs.si = Offset(regs.si, BOX_REFLECTION_SKIP);
   regs.di = static_cast<std::uint16_t>(regs.di - VERTEX_BYTES);
-  ReflectVertexAboutCenter(_guest);
+  ReflectVertexAboutCenterEntry(_guest);
   regs.si = static_cast<std::uint16_t>(regs.si - BOX_REFLECTION_STEP);
   regs.di = Offset(regs.di, BOX_REFLECTION_STEP);
-  ReflectVertexAboutCenter(_guest);
+  ReflectVertexAboutCenterEntry(_guest);
   regs.si = blueprint;
 }
 
@@ -1043,14 +1145,14 @@ void BuildDodoVertices(Guest& _guest)
   {
     const std::uint16_t left = regs.cx;
     regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.bx, regs.si)));
-    ScaleDodoRadii(_guest);
+    ScaleDodoRadiiEntry(_guest);
     _guest.SetWord(regs.di, regs.cx);
     _guest.SetWord(Offset(regs.di, DODO_OUTER_RING), regs.dx);
     _guest.SetWord(Offset(regs.di, VERTEX_Z), DODO_NEAR_RING_Z);
     _guest.SetWord(Offset(regs.di, DODO_OUTER_RING + VERTEX_Z), DODO_FAR_RING_Z);
     regs.bx = static_cast<std::uint16_t>((regs.bx - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
     regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.bx, regs.si)));
-    ScaleDodoRadii(_guest);
+    ScaleDodoRadiiEntry(_guest);
     _guest.SetWord(Offset(regs.di, 2), regs.cx);
     _guest.SetWord(Offset(regs.di, DODO_OUTER_RING + 2), regs.dx);
     regs.bx = static_cast<std::uint16_t>((regs.bx + DODO_RING_STEP_BYTES) & SINE_BYTE_BITS);
@@ -1088,111 +1190,93 @@ void BuildDodoVertices(Guest& _guest)
   regs.cx = DODO_REFLECTED_VERTICES;
   do
   {
-    ReflectVertexAboutCenter(_guest);
+    ReflectVertexAboutCenterEntry(_guest);
     regs.si = Offset(regs.si, VERTEX_BYTES);
     regs.di = Offset(regs.di, VERTEX_BYTES);
   } while (Loop(regs.cx));
   regs.cx = DODO_SLOT_CORNERS;
   do
   {
-    OffsetVertexByCenter(_guest);
+    OffsetVertexByCenterEntry(_guest);
     regs.si = Offset(regs.si, VERTEX_BYTES);
   } while (Loop(regs.cx));
   regs.si = blueprint;
 }
 
-void ScaleDodoRadii(Guest& _guest)
+DodoRadii ScaleDodoRadii(std::int8_t _value)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // CX = 2a + a/4 + a/8 - a/32 and DX = 3a + a/2 + a/4 + a/16 - a/64, each shift arithmetic.
-  regs.ax = SignExtend(Low(regs.ax));
-  regs.cx = static_cast<std::uint16_t>(regs.ax << 1);
-  regs.dx = static_cast<std::uint16_t>((regs.ax << 1) + regs.ax);
-  regs.ax = Sar(regs.ax, 1);
-  regs.dx = Offset(regs.dx, regs.ax);
-  regs.ax = Sar(regs.ax, 1);
-  regs.cx = Offset(regs.cx, regs.ax);
-  regs.dx = Offset(regs.dx, regs.ax);
-  regs.ax = Sar(regs.ax, 1);
-  regs.cx = Offset(regs.cx, regs.ax);
-  regs.ax = Sar(regs.ax, 1);
-  regs.dx = Offset(regs.dx, regs.ax);
-  regs.ax = Sar(regs.ax, 1);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.ax);
-  regs.ax = Sar(regs.ax, 1);
-  regs.dx = static_cast<std::uint16_t>(regs.dx - regs.ax);
+  // CBW, then CX = 2a + a/4 + a/8 - a/32 and DX = 3a + a/2 + a/4 + a/16 - a/64, each shift arithmetic, in 16 bits.
+  auto value = static_cast<std::uint16_t>(static_cast<std::int16_t>(_value));
+  auto inner = static_cast<std::uint16_t>(value << 1);
+  auto outer = static_cast<std::uint16_t>((value << 1) + value);
+  value = Sar(value, 1);
+  outer = Offset(outer, value);
+  value = Sar(value, 1);
+  inner = Offset(inner, value);
+  outer = Offset(outer, value);
+  value = Sar(value, 1);
+  inner = Offset(inner, value);
+  value = Sar(value, 1);
+  outer = Offset(outer, value);
+  value = Sar(value, 1);
+  inner = static_cast<std::uint16_t>(inner - value);
+  value = Sar(value, 1);
+  outer = static_cast<std::uint16_t>(outer - value);
+  return DodoRadii{static_cast<std::int16_t>(inner), static_cast<std::int16_t>(outer)};
 }
 
-void RunVertexProgram(Guest& _guest)
+VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vector _accumulator)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = _guest.Byte(regs.si);
-  regs.si = Offset(regs.si, 1);
-  if (regs.cx == 0)
+  auto x = static_cast<std::uint16_t>(_accumulator.x);
+  auto y = static_cast<std::uint16_t>(_accumulator.y);
+  auto z = static_cast<std::uint16_t>(_accumulator.z);
+  const std::uint8_t ops = _state.Byte(_program);
+  std::uint16_t next = Offset(_program, 1);
+  for (std::uint16_t left = ops; left != 0; --left)
   {
-    return;
-  }
-  do
-  {
-    const std::uint8_t op = _guest.Byte(regs.si);
-    regs.si = Offset(regs.si, 1);
-    regs.di = DS.vertexBuffer.At(op & VERTEX_INDEX_BITS);
-    regs.ax = static_cast<std::uint8_t>(op & VERTEX_OP_BITS);
-    const std::uint16_t x = _guest.Word(regs.di);
-    const std::uint16_t y = _guest.Word(Offset(regs.di, 2));
-    const std::uint16_t z = _guest.Word(Offset(regs.di, 4));
-    switch (regs.ax)
+    const std::uint8_t op = _state.Byte(next);
+    next = Offset(next, 1);
+    const std::uint16_t vertex = DS.vertexBuffer.At(op & VERTEX_INDEX_BITS);
+    const std::uint16_t vertexX = _state.Word(vertex);
+    const std::uint16_t vertexY = _state.Word(Offset(vertex, 2));
+    const std::uint16_t vertexZ = _state.Word(Offset(vertex, 4));
+    switch (static_cast<std::uint8_t>(op & VERTEX_OP_BITS))
     {
     case VERTEX_OP_LOAD:
-      regs.bp = x;
-      regs.bx = y;
-      regs.dx = z;
+      x = vertexX;
+      y = vertexY;
+      z = vertexZ;
       break;
     case VERTEX_OP_STORE:
-      _guest.SetWord(regs.di, regs.bp);
-      _guest.SetWord(Offset(regs.di, 2), regs.bx);
-      _guest.SetWord(Offset(regs.di, 4), regs.dx);
+      _state.SetWord(vertex, x);
+      _state.SetWord(Offset(vertex, 2), y);
+      _state.SetWord(Offset(vertex, 4), z);
       break;
     case VERTEX_OP_AVERAGE:
     {
       const auto average = [](std::uint16_t _sum, std::uint16_t _value)
       { return static_cast<std::uint16_t>(static_cast<std::int16_t>(Offset(_sum, _value)) >> 1); };
-      regs.bp = average(regs.bp, x);
-      regs.bx = average(regs.bx, y);
-      regs.dx = average(regs.dx, z);
+      x = average(x, vertexX);
+      y = average(y, vertexY);
+      z = average(z, vertexZ);
       break;
     }
     default:
-      regs.bp = Offset(regs.bp, x);
-      regs.bx = Offset(regs.bx, y);
-      regs.dx = Offset(regs.dx, z);
+      x = Offset(x, vertexX);
+      y = Offset(y, vertexY);
+      z = Offset(z, vertexZ);
       break;
     }
-  } while (Loop(regs.cx));
+  }
+  return VertexProgramEnd{next, Vector{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)}};
 }
 
-void TriangleWindingSign(Guest& _guest)
+bool TriangleWindingSign(Triangle _triangle)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto product = [](std::uint16_t _a, std::uint16_t _b)
-  { return static_cast<std::uint32_t>(std::int32_t{static_cast<std::int16_t>(_a)} * static_cast<std::int16_t>(_b)); };
-  regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.bx);
-  regs.dx = static_cast<std::uint16_t>(regs.dx - regs.bp);
-  regs.di = static_cast<std::uint16_t>(regs.di - regs.bp);
-  const std::uint32_t first = product(regs.ax, regs.di);
-  const std::uint32_t second = product(regs.dx, regs.cx);
-  regs.ax = static_cast<std::uint16_t>(second);
-  regs.dx = static_cast<std::uint16_t>(second >> 16);
-  regs.bx = static_cast<std::uint16_t>(first);
-  regs.cx = static_cast<std::uint16_t>((first >> 16) - regs.dx);
-  std::uint16_t sign = regs.cx;
-  if (regs.cx == 0)
-  {
-    regs.bx = static_cast<std::uint16_t>(regs.bx - regs.ax);
-    sign = regs.bx;
-  }
-  _guest.SetFlag(Machine::FLAG_SIGN, Negative(sign));
+  const WindingProducts products = Winding(_triangle);
+  const auto high = static_cast<std::uint16_t>((products.first >> 16) - (products.second >> 16));
+  const std::uint16_t sign = high != 0 ? high : static_cast<std::uint16_t>(products.first - products.second);
+  return Negative(sign);
 }
 
 void DrawVisibleFaces(Guest& _guest)
@@ -1205,8 +1289,8 @@ void DrawVisibleFaces(Guest& _guest)
   do
   {
     const std::uint16_t faces = regs.cx;
-    LoadTriangle(_guest, 0);
-    TriangleWindingSign(_guest);
+    TriangleOut(regs, LoadTriangle(_guest.State(), regs.si, 0));
+    TriangleWindingSignEntry(_guest);
     regs.cx = WithHigh(regs.cx, 0);
     if (Flag(_guest, Machine::FLAG_SIGN))
     {
@@ -1225,10 +1309,16 @@ void DrawVisibleFaces(Guest& _guest)
 void CheckShipInRange(Guest& _guest)
 {
   _guest.Call(IS_OBJECT_NEAR);
-  if (Flag(_guest, Machine::FLAG_CARRY) && ShipWithinRange(_guest))
+  if (Flag(_guest, Machine::FLAG_CARRY))
   {
-    _guest.SetFlag(Machine::FLAG_CARRY, false);
-    return;
+    Machine::Registers& regs = _guest.Regs();
+    const ShipRange range = ShipWithinRange(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+    ShipRangeOut(regs, range);
+    if (range.within)
+    {
+      _guest.SetFlag(Machine::FLAG_CARRY, false);
+      return;
+    }
   }
   _guest.Call(ERASE_SCANNER_BLIP);
   _guest.SetFlag(Machine::FLAG_CARRY, true);
@@ -1257,7 +1347,7 @@ void ClassifyStationPosition(Guest& _guest)
   regs.ax = _guest.Word(Offset(regs.di, SLOT_COMPASS_X));
   regs.bx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Y));
   regs.cx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Z));
-  ClassifyViewPosition(_guest);
+  ClassifyViewPositionOnRegisters(_guest);
 }
 
 void TransformShip(Guest& _guest)
@@ -1274,7 +1364,7 @@ void TransformShip(Guest& _guest)
   }
   regs.di = slot;
   _guest.SetByte(Offset(regs.di, SLOT_DEPTH), 0);
-  ClassifyViewPosition(_guest);
+  ClassifyViewPositionOnRegisters(_guest);
 }
 
 void RunBlueprintHandler(Guest& _guest)
@@ -1447,17 +1537,89 @@ constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 // The rotations' leftover in DX, which no caller reads (ADR-012).
 constexpr Machine::NativeContract CLOBBERS_DX{REGISTER_DX, 0};
 
+constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_DI{REGISTER_AX | REGISTER_DI, 0};
+// TriangleWindingSign changes only AX, BX, CX, DX and DI. DrawVisibleFaces reads SI after it, and RenderBlueprintBody's contract
+// compares the AX, BX, DX, BP and ES it leaves after a hidden last face (ADR-012).
+constexpr Machine::NativeContract WINDING_SIGN{REGISTER_CX | REGISTER_DI, FLAG_SIGN};
+
+} // namespace
+
+// ── The entries of the routines de-assembled (ADR-012) ──
+
+void ReflectVertexAboutCenterEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Vector center = ReflectVertexAboutCenter(_guest.State(), regs.si, regs.di);
+  // The original leaves drawCenterZ in BX, and BuildDodoVertices, whose contract compares BX, ends with it there.
+  regs.bx = static_cast<std::uint16_t>(center.z);
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void OffsetVertexByCenterEntry(Guest& _guest)
+{
+  const Vector center = OffsetVertexByCenter(_guest.State(), _guest.Regs().si);
+  // The original leaves drawCenterZ in AX, and BuildDodoVertices, whose contract compares AX, ends with it there.
+  _guest.Regs().ax = static_cast<std::uint16_t>(center.z);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ScaleDodoRadiiEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const DodoRadii radii = ScaleDodoRadii(static_cast<std::int8_t>(Low(regs.ax)));
+  regs.cx = static_cast<std::uint16_t>(radii.inner);
+  regs.dx = static_cast<std::uint16_t>(radii.outer);
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void RunVertexProgramEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const VertexProgramEnd end =
+    RunVertexProgram(_guest.State(), regs.si,
+                     Vector{static_cast<std::int16_t>(regs.bp), static_cast<std::int16_t>(regs.bx), static_cast<std::int16_t>(regs.dx)});
+  regs.si = end.next;
+  regs.bp = static_cast<std::uint16_t>(end.accumulator.x);
+  regs.bx = static_cast<std::uint16_t>(end.accumulator.y);
+  regs.dx = static_cast<std::uint16_t>(end.accumulator.z);
+  // The original's LOOP leaves CX = 0, and RenderBlueprintBody (CS:3CF5) loads only CL before storing CX as a count.
+  regs.cx = 0;
+  _guest.Clobber(CLOBBERS_AX_DI);
+}
+
+void TriangleWindingSignEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Triangle triangle = TriangleIn(regs);
+  _guest.SetFlag(Machine::FLAG_SIGN, TriangleWindingSign(triangle));
+  // The original leaves the second product in DX:AX, and in BX the first's low word, less the second's when the high words
+  // agree. After a hidden last face DrawVisibleFaces returns them, and RenderBlueprintBody's contract compares them.
+  const WindingProducts products = Winding(triangle);
+  regs.ax = static_cast<std::uint16_t>(products.second);
+  regs.dx = static_cast<std::uint16_t>(products.second >> 16);
+  regs.bx = static_cast<std::uint16_t>(products.first);
+  if ((products.first >> 16) == (products.second >> 16))
+  {
+    regs.bx = static_cast<std::uint16_t>(regs.bx - regs.ax);
+  }
+  _guest.Clobber(WINDING_SIGN);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
   NativeEntry{0x2340, "ProjectVertices", &ProjectVertices,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
-  NativeEntry{0x3740, "ReflectVertexAboutCenter", &ReflectVertexAboutCenter, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
-  NativeEntry{0x3768, "OffsetVertexByCenter", &OffsetVertexByCenter, Machine::NativeContract{REGISTER_AX, 0}},
+  NativeEntry{0x3740, "ReflectVertexAboutCenter", &ReflectVertexAboutCenterEntry, CLOBBERS_AX},
+  NativeEntry{0x3768, "OffsetVertexByCenter", &OffsetVertexByCenterEntry, PRESERVES_ALL},
   NativeEntry{0x377A, "BuildBoxCornerVertices", &BuildBoxCornerVertices,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
   NativeEntry{0x38BF, "BuildDodoVertices", &BuildDodoVertices, CLOBBERS_DX},
-  NativeEntry{0x3A13, "ScaleDodoRadii", &ScaleDodoRadii, Machine::NativeContract{REGISTER_AX, 0}},
-  NativeEntry{0x3A40, "RunVertexProgram", &RunVertexProgram, Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0}},
-  NativeEntry{0x3A9B, "TriangleWindingSign", &TriangleWindingSign, Machine::NativeContract{ALL_BUT_DS, FLAG_SIGN}},
+  NativeEntry{0x3A13, "ScaleDodoRadii", &ScaleDodoRadiiEntry, CLOBBERS_AX},
+  NativeEntry{0x3A40, "RunVertexProgram", &RunVertexProgramEntry, CLOBBERS_AX_DI},
+  NativeEntry{0x3A9B, "TriangleWindingSign", &TriangleWindingSignEntry, WINDING_SIGN},
   NativeEntry{0x3AB3, "DrawVisibleFaces", &DrawVisibleFaces,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0}},
   NativeEntry{0x3BEA, "CheckShipInRange", &CheckShipInRange, RETURNS_CARRY},

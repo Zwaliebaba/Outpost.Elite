@@ -43,8 +43,13 @@ constexpr std::size_t THARGOID_TEMPLATE = 27;
 constexpr std::size_t THARGON_TEMPLATE = 28;
 constexpr std::uint16_t TEMPLATE_BYTES = 10;
 // Where InitObjectFromTemplate puts bytes 1-9 of a record.
-constexpr std::array<std::uint16_t, 9> TEMPLATE_FIELDS = {SLOT_SPEED,     SLOT_TURN_RATE, SLOT_BOUNTY, SLOT_MISSILES, SLOT_CARGO,
-                                                          SLOT_FRAGMENTS, SLOT_ENERGY,    SLOT_DETAIL, SLOT_RANGE};
+constexpr std::array<SlotByte, 9> TEMPLATE_FIELDS = {SlotByte::Speed,    SlotByte::TurnRate, SlotByte::Bounty,
+                                                     SlotByte::Missiles, SlotByte::Cargo,    SlotByte::Fragments,
+                                                     SlotByte::Energy,   SlotByte::Detail,   SlotByte::Range};
+
+// The 24-bit position, by axis: the low words and the high bytes.
+constexpr std::array<SlotWord, 3> POSITION_LOW = {SlotWord::X, SlotWord::Y, SlotWord::Z};
+constexpr std::array<SlotByte, 3> POSITION_HIGH = {SlotByte::XHigh, SlotByte::YHigh, SlotByte::ZHigh};
 
 constexpr std::uint8_t ABANDONED_CLASS = 0; // no behaviour
 constexpr std::uint8_t BARREL_CLASS = 3;
@@ -95,9 +100,9 @@ constexpr std::array<std::uint8_t, 1> THARGON = {TYPE_THARGON};
 }
 
 // The step of a string instruction: backwards when DF is set.
-[[nodiscard]] std::uint16_t StringStep(Guest& _guest, std::uint16_t _bytes) noexcept
+[[nodiscard]] std::uint16_t StringStep(bool _backward, std::uint16_t _bytes) noexcept
 {
-  return _guest.Flag(FLAG_DIRECTION) ? Negate(_bytes) : _bytes;
+  return _backward ? Negate(_bytes) : _bytes;
 }
 
 // The flags CMP _a,_b leaves, byte-sized or word-sized: what the type tests return.
@@ -116,44 +121,58 @@ void SetCompareFlags(Guest& _guest, std::uint16_t _a, std::uint16_t _b, bool _wo
 }
 
 // MOV AL,[DI] / SHR AL,1 / AND AL,1Fh.
-[[nodiscard]] std::uint8_t SlotType(const Guest& _guest, std::uint16_t _slot) noexcept
+[[nodiscard]] std::uint8_t TypeOf(const ObjectSlot& _slot) noexcept
 {
-  return static_cast<std::uint8_t>((_guest.Byte(_slot) >> 1) & TYPE_MASK);
+  return static_cast<std::uint8_t>((_slot.Get(SlotByte::Type) >> 1) & TYPE_MASK);
 }
 
-// The type of the slot at DI into AL, then CMP AL with each of _types until one matches, as the type tests chain them.
-void CompareType(Guest& _guest, std::span<const std::uint8_t> _types)
+// What a type test built on CompareType finds: the type, and the last of the types it compared it with.
+struct TypeMatch
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t type = SlotType(_guest, regs.di);
-  SetLow(regs.ax, type);
+  std::uint8_t type;
+  std::uint8_t compared; // the one the type matched, or the last of them: the CMP whose flags the test leaves
+};
+
+// The type of _slot, compared with each of _types (at least one) until one matches, as the type tests chain their CMPs.
+[[nodiscard]] TypeMatch CompareType(const ObjectSlot& _slot, std::span<const std::uint8_t> _types) noexcept
+{
+  const std::uint8_t type = TypeOf(_slot);
+  std::uint8_t compared = type;
   for (const std::uint8_t candidate : _types)
   {
-    SetCompareFlags(_guest, type, candidate, false);
+    compared = candidate;
     if (type == candidate)
     {
-      return;
+      break;
     }
   }
+  return TypeMatch{type, compared};
 }
 
-// The test IsObjectNear and IsObjectNearKeepBlip share: each high byte of the slot's 24-bit position is the sign extension
-// of its low word. AL is left as the last high byte looked at, INC'd and DEC'd back, which leaves 0 for FFh.
-[[nodiscard]] bool PositionFitsWords(Guest& _guest)
+// What PositionFitsWords finds.
+struct PositionFit
 {
-  Machine::Registers& regs = _guest.Regs();
-  for (int axis = 0; axis < 3; ++axis)
+  bool fits;
+  std::uint8_t lastHigh; // the last high byte looked at, INC'd and DEC'd back, which leaves 0 for FFh: what the original leaves in AL
+};
+
+// The test IsObjectNear and IsObjectNearKeepBlip share: each high byte of _slot's 24-bit position is the sign extension of
+// its low word, axis by axis until one is not.
+[[nodiscard]] PositionFit PositionFitsWords(const ObjectSlot& _slot) noexcept
+{
+  std::uint8_t lastHigh = 0;
+  for (std::size_t axis = 0; axis < POSITION_HIGH.size(); ++axis)
   {
-    const std::uint8_t high = _guest.Byte(At(regs.di, SLOT_X_HIGH + axis));
-    const bool negative = (_guest.Byte(At(regs.di, SLOT_X + 2 * axis + 1)) & 0x80) != 0;
-    SetLow(regs.ax, high == 0xFF ? std::uint8_t{0} : high);
+    const std::uint8_t high = _slot.Get(POSITION_HIGH[axis]);
+    const bool negative = (_slot.Get(POSITION_LOW[axis]) & 0x8000) != 0;
+    lastHigh = high == 0xFF ? std::uint8_t{0} : high;
     const bool fits = high == 0xFF ? negative : high == 0 && !negative;
     if (!fits)
     {
-      return false;
+      return PositionFit{false, lastHigh};
     }
   }
-  return true;
+  return PositionFit{true, lastHigh};
 }
 
 // AND AX,7FFh / SHR AX,1 / NEG AX when the bit shifted out was set: a scatter of +-1023.
@@ -170,38 +189,35 @@ void InitFromRecord(Guest& _guest, std::size_t _record, std::uint8_t _class)
   Machine::Registers& regs = _guest.Regs();
   regs.bx = DS.spawnTemplates.At(_record);
   SetLow(regs.ax, 0);
-  InitObjectFromTemplate(_guest);
+  InitObjectFromTemplateEntry(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), _class);
 }
 
 // The start every spawned ship shares: record AL of the table at BX, placed at the spawn point and turned to the player.
 void SpawnFromRecord(Guest& _guest)
 {
-  InitObjectFromTemplate(_guest);
+  InitObjectFromTemplateEntry(_guest);
   PlaceAtSpawnPoint(_guest);
   FacePlayerWithRandomRoll(_guest);
 }
 
 } // namespace
 
-void AddToCoordinate(Guest& _guest, std::uint16_t _slot, int _axis, std::uint16_t _value)
+void AddToCoordinate(ObjectSlot _slot, int _axis, std::int16_t _value)
 {
-  const std::uint16_t low = At(_slot, SLOT_X + 2 * _axis);
-  const std::uint32_t sum = std::uint32_t{_guest.Word(low)} + _value;
-  _guest.SetWord(low, static_cast<std::uint16_t>(sum));
-  const std::uint16_t high = At(_slot, SLOT_X_HIGH + _axis);
-  _guest.SetByte(high, static_cast<std::uint8_t>(_guest.Byte(high) + Low(SignWord(_value)) + (sum >> 16)));
+  const auto axis = static_cast<std::size_t>(_axis);
+  const auto value = static_cast<std::uint16_t>(_value);
+  const std::uint32_t sum = std::uint32_t{_slot.Get(POSITION_LOW[axis])} + value;
+  _slot.Set(POSITION_LOW[axis], static_cast<std::uint16_t>(sum));
+  _slot.Set(POSITION_HIGH[axis], static_cast<std::uint8_t>(_slot.Get(POSITION_HIGH[axis]) + Low(SignWord(value)) + (sum >> 16)));
 }
 
-void ClearObjectSlot(Guest& _guest)
+void ClearObjectSlot(GameState& _state, std::uint16_t _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = regs.si;
   // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout.
-  for (regs.cx = SLOT_BYTES; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+  for (std::uint16_t index = 0; index < ObjectSlot::BYTES; ++index)
   {
-    _guest.SetByte(regs.si, High(regs.cx));
-    regs.si = static_cast<std::uint16_t>(regs.si + 1);
+    _state.SetByte(Offset(_slot, index), 0);
   }
 }
 
@@ -263,7 +279,7 @@ void SpawnRandomTrader(Guest& _guest)
   SpawnFromRecord(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), TRADER_CLASS);
   ComputeVelocity(_guest);
-  IsViperType(_guest);
+  IsViperTypeEntry(_guest);
   if (!_guest.Flag(FLAG_ZERO))
   {
     return;
@@ -360,7 +376,10 @@ void ReclaimShipSlot(Guest& _guest)
 
 void IsObjectNear(Guest& _guest)
 {
-  if (PositionFitsWords(_guest))
+  Machine::Registers& regs = _guest.Regs();
+  const PositionFit fit = PositionFitsWords(ObjectSlot(_guest.State(), regs.di));
+  SetLow(regs.ax, fit.lastHigh);
+  if (fit.fits)
   {
     _guest.SetFlag(FLAG_CARRY, true);
     return;
@@ -371,32 +390,30 @@ void IsObjectNear(Guest& _guest)
 
 void IsSunOrPlanet(Guest& _guest)
 {
-  CompareType(_guest, SUN_OR_PLANET);
+  const TypeMatch match = CompareType(ObjectSlot(_guest.State(), _guest.Regs().di), SUN_OR_PLANET);
+  SetLow(_guest.Regs().ax, match.type);
+  SetCompareFlags(_guest, match.type, match.compared, false);
 }
 
 void IsPlanet(Guest& _guest)
 {
-  CompareType(_guest, PLANET);
+  const TypeMatch match = CompareType(ObjectSlot(_guest.State(), _guest.Regs().di), PLANET);
+  SetLow(_guest.Regs().ax, match.type);
+  SetCompareFlags(_guest, match.type, match.compared, false);
 }
 
-void IsStation(Guest& _guest)
+StationTest IsStation(const ObjectSlot& _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t type = SlotType(_guest, regs.di);
-  SetLow(regs.ax, type);
-  if (type == TYPE_DODO)
-  {
-    SetCompareFlags(_guest, type, TYPE_DODO, false);
-    _guest.SetFlag(FLAG_CARRY, true);
-    return;
-  }
-  SetCompareFlags(_guest, type, TYPE_CORIOLIS, false);
-  _guest.SetFlag(FLAG_CARRY, false);
+  const std::uint8_t type = TypeOf(_slot);
+  return StationTest{type, type == TYPE_DODO || type == TYPE_CORIOLIS, type == TYPE_DODO};
 }
 
 void IsObjectNearKeepBlip(Guest& _guest)
 {
-  _guest.SetFlag(FLAG_CARRY, PositionFitsWords(_guest));
+  Machine::Registers& regs = _guest.Regs();
+  const PositionFit fit = PositionFitsWords(ObjectSlot(_guest.State(), regs.di));
+  SetLow(regs.ax, fit.lastHigh);
+  _guest.SetFlag(FLAG_CARRY, fit.fits);
 }
 
 void InitCargoBarrel(Guest& _guest)
@@ -404,7 +421,7 @@ void InitCargoBarrel(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   regs.bx = DS.spawnTemplates.At(BARREL_TEMPLATE);
   SetLow(regs.ax, 0);
-  InitObjectFromTemplate(_guest);
+  InitObjectFromTemplateEntry(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), BARREL_CLASS);
 }
 
@@ -416,7 +433,7 @@ void SpawnRandomHunter(Guest& _guest)
   const std::uint8_t random = Low(regs.ax);
   regs.ax = static_cast<std::uint16_t>(((random % HUNTER_CHOICE_DIVISOR) << 8) | (random / HUNTER_CHOICE_DIVISOR));
   regs.bx = DS.spawnTemplates.At(HUNTER_TEMPLATES);
-  InitObjectFromTemplate(_guest);
+  InitObjectFromTemplateEntry(_guest);
   PlaceAtSpawnPoint(_guest);
   FacePlayerWithRandomRoll(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), HUNTER_CLASS);
@@ -437,7 +454,7 @@ void SpawnRandomWolf(Guest& _guest)
     regs.ax = static_cast<std::uint16_t>(((random % WOLF_CHOICE_DIVISOR) << 8) | (random / WOLF_CHOICE_DIVISOR));
   }
   regs.bx = DS.spawnTemplates.At(WOLF_TEMPLATES);
-  InitObjectFromTemplate(_guest);
+  InitObjectFromTemplateEntry(_guest);
   PlaceAtSpawnPoint(_guest);
   FacePlayerWithRandomRoll(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
@@ -461,26 +478,19 @@ void SpawnRandomWolf(Guest& _guest)
   _guest.SetByte(At(regs.di, SLOT_THARGONS), thargons);
 }
 
-void InitObjectFromTemplate(Guest& _guest)
+void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  _guest.SetByte(At(slot, SLOT_STATE), 0);
-  _guest.SetByte(At(slot, SLOT_FLAGS), 0);
-  _guest.SetByte(At(slot, SLOT_AGGRESSION), 0);
-  _guest.SetByte(At(slot, SLOT_SCANNED), 1);
-  // XOR AH,AH, then BX += AL*2 and BX += AL*8 with the doublings done in AX, which keeps AL*8.
-  const std::uint8_t index = Low(regs.ax);
-  regs.bx = static_cast<std::uint16_t>(regs.bx + index * TEMPLATE_BYTES);
-  regs.ax = static_cast<std::uint16_t>(index * 8);
-  const std::uint16_t record = regs.bx;
+  _slot.Set(SlotByte::State, 0);
+  _slot.Set(SlotByte::Flags, 0);
+  _slot.Set(SlotByte::Aggression, 0);
+  _slot.Set(SlotByte::Scanned, 1);
+  // BX += AL*2, then BX += AL*8.
+  const std::uint16_t record = Offset(_table, static_cast<std::uint16_t>(_index * TEMPLATE_BYTES));
   // STC / RCL AL,1: the type, active.
-  _guest.SetByte(slot, static_cast<std::uint8_t>((_guest.Byte(record) << 1) | SLOT_ACTIVE));
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>((_state.Byte(record) << 1) | ObjectSlot::ACTIVE));
   for (std::size_t field = 0; field < TEMPLATE_FIELDS.size(); ++field)
   {
-    const std::uint8_t value = _guest.Byte(At(record, static_cast<int>(field) + 1));
-    _guest.SetByte(At(slot, TEMPLATE_FIELDS[field]), value);
-    SetLow(regs.ax, value);
+    _slot.Set(TEMPLATE_FIELDS[field], _state.Byte(Offset(record, static_cast<std::uint16_t>(field + 1))));
   }
 }
 
@@ -516,17 +526,15 @@ void FacePlayerWithRandomRoll(Guest& _guest)
   _guest.SetWord(At(regs.di, SLOT_ROLL), regs.ax);
 }
 
-void GetObjectPosition(Guest& _guest)
+Vector GetObjectPosition(const ObjectSlot& _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(At(regs.di, SLOT_X));
-  regs.bx = _guest.Word(At(regs.di, SLOT_Y));
-  regs.cx = _guest.Word(At(regs.di, SLOT_Z));
+  return Vector{static_cast<std::int16_t>(_slot.Get(SlotWord::X)), static_cast<std::int16_t>(_slot.Get(SlotWord::Y)),
+                static_cast<std::int16_t>(_slot.Get(SlotWord::Z))};
 }
 
 void GetVectorToPlayer(Guest& _guest)
 {
-  GetObjectPosition(_guest);
+  GetObjectPositionEntry(_guest);
   Machine::Registers& regs = _guest.Regs();
   regs.ax = Negate(regs.ax);
   regs.bx = Negate(regs.bx);
@@ -589,82 +597,74 @@ void FacePlayer(Guest& _guest)
   _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
 }
 
-void FindFreeShipSlot(Guest& _guest)
+SlotSearch FindFreeShipSlot(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.firstShipSlot.offset;
-  const auto slots = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  std::uint16_t slot = DS.firstShipSlot.offset;
+  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((_guest.Byte(regs.si) & SLOT_ACTIVE) == 0)
+    if ((ObjectSlot(_state, slot).Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0)
     {
-      _guest.SetFlag(FLAG_CARRY, true);
-      return;
+      return SlotSearch{true, slot};
     }
-    regs.si = At(regs.si, SLOT_BYTES);
+    slot = Offset(slot, ObjectSlot::BYTES);
   }
-  _guest.SetFlag(FLAG_CARRY, false);
+  return SlotSearch{false, slot};
 }
 
-void ClearAllObjects(Guest& _guest)
+void ClearAllObjects(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = regs.ds;
-  regs.di = DS.shipSlots.offset;
-  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW.
-  const std::uint16_t step = StringStep(_guest, 2);
-  for (std::uint16_t words = static_cast<std::uint16_t>(_guest.Get(DS.shipSlotCount) << 5); words != 0; --words)
+  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS.
+  const std::uint16_t step = StringStep(_backward, 2);
+  std::uint16_t at = DS.shipSlots.offset;
+  for (auto words = static_cast<std::uint16_t>(_state.Get(DS.shipSlotCount) << 5); words != 0; --words)
   {
-    _guest.SetFarWord(regs.es, regs.di, 0);
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetWord(at, 0);
+    at = Offset(at, step);
   }
-  regs.ax = 0;
-  regs.cx = 0;
 }
 
-void FindDebrisSlot(Guest& _guest)
+std::uint16_t FindDebrisSlot(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t slots = _guest.Get(DS.debrisSlotCount);
-  regs.si = DS.debrisSlots.offset;
+  const std::uint8_t slots = _state.Get(DS.debrisSlotCount);
+  std::uint16_t slot = DS.debrisSlots.offset;
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((_guest.Byte(regs.si) & SLOT_ACTIVE) == 0)
+    if ((ObjectSlot(_state, slot).Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0)
     {
-      return;
+      return slot;
     }
-    regs.si = At(regs.si, SLOT_BYTES);
+    slot = Offset(slot, ObjectSlot::BYTES);
   }
-  // None is free: the oldest, the last of equals. BX is kept, so with no slot at all SI comes back as BX.
-  std::uint16_t oldest = regs.bx;
+  // None is free: the oldest, the last of equals. The first slot always passes the test (an age of at least 0), so the
+  // original's BX, its first candidate, never comes back.
+  std::uint16_t oldest = DS.debrisSlots.offset;
   std::uint8_t age = 0;
-  regs.si = DS.debrisSlots.offset;
+  slot = DS.debrisSlots.offset;
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    const std::uint8_t slotAge = _guest.Byte(At(regs.si, SLOT_AGE));
+    const std::uint8_t slotAge = ObjectSlot(_state, slot).Get(SlotByte::Age);
     if (slotAge >= age)
     {
       age = slotAge;
-      oldest = regs.si;
+      oldest = slot;
     }
-    regs.si = At(regs.si, SLOT_BYTES);
+    slot = Offset(slot, ObjectSlot::BYTES);
   }
-  regs.si = oldest;
+  return oldest;
 }
 
-void CopyObject(Guest& _guest)
+void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destination, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = regs.ds;
-  // REP MOVSW, 32 words, word by word as the 8088 does it; SI, DI and CX are pushed and popped round it.
-  const std::uint16_t step = StringStep(_guest, 2);
-  std::uint16_t source = regs.si;
-  std::uint16_t destination = regs.di;
-  for (std::uint16_t words = SLOT_BYTES / 2; words != 0; --words)
+  // REP MOVSW from DS:SI to ES:DI, ES = DS: 32 words, word by word as the 8088 does it.
+  const std::uint16_t step = StringStep(_backward, 2);
+  std::uint16_t source = _source;
+  std::uint16_t destination = _destination;
+  for (std::uint16_t words = ObjectSlot::BYTES / 2; words != 0; --words)
   {
-    _guest.SetFarWord(regs.es, destination, _guest.FarWord(regs.ds, source));
-    source = static_cast<std::uint16_t>(source + step);
-    destination = static_cast<std::uint16_t>(destination + step);
+    _state.SetWord(destination, _state.Word(source));
+    source = Offset(source, step);
+    destination = Offset(destination, step);
   }
 }
 
@@ -689,18 +689,19 @@ void UpdateDebrisAi(Guest& _guest)
 
 void IsDebrisType(Guest& _guest)
 {
-  CompareType(_guest, DEBRIS_TYPES);
+  const TypeMatch match = CompareType(ObjectSlot(_guest.State(), _guest.Regs().di), DEBRIS_TYPES);
+  SetLow(_guest.Regs().ax, match.type);
+  SetCompareFlags(_guest, match.type, match.compared, false);
 }
 
-void IsViperType(Guest& _guest)
+bool IsViperType(const ObjectSlot& _slot)
 {
-  // PUSH AX / POP AX round the test: only the flags change.
-  SetCompareFlags(_guest, SlotType(_guest, _guest.Regs().di), TYPE_VIPER, false);
+  return TypeOf(_slot) == TYPE_VIPER;
 }
 
 void IsPoliceViper(Guest& _guest)
 {
-  IsViperType(_guest);
+  IsViperTypeEntry(_guest);
   if (!_guest.Flag(FLAG_ZERO))
   {
     return;
@@ -710,13 +711,19 @@ void IsPoliceViper(Guest& _guest)
 
 void IsThargoidType(Guest& _guest)
 {
-  CompareType(_guest, THARGOID);
+  const TypeMatch match = CompareType(ObjectSlot(_guest.State(), _guest.Regs().di), THARGOID);
+  SetLow(_guest.Regs().ax, match.type);
+  SetCompareFlags(_guest, match.type, match.compared, false);
 }
 
 void IsThargonType(Guest& _guest)
 {
-  CompareType(_guest, THARGON);
+  const TypeMatch match = CompareType(ObjectSlot(_guest.State(), _guest.Regs().di), THARGON);
+  SetLow(_guest.Regs().ax, match.type);
+  SetCompareFlags(_guest, match.type, match.compared, false);
 }
+
+// ── The entries of the routines de-assembled (ADR-012) ──
 
 namespace
 {
@@ -735,16 +742,103 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX_BP{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
 constexpr Machine::NativeContract NEAR_TEST{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
+constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
+constexpr Machine::NativeContract STATION_TEST{0, FLAG_ZERO | FLAG_CARRY};
 constexpr Machine::NativeContract TYPE_IN_AL{0, FLAG_ZERO};
 constexpr Machine::NativeContract TYPE_CLOBBERS_AL{REGISTER_AX, FLAG_ZERO};
 
+[[nodiscard]] ObjectSlot SlotAtDi(Guest& _guest) noexcept
+{
+  return ObjectSlot(_guest.State(), _guest.Regs().di);
+}
+
+} // namespace
+
+void ClearObjectSlotEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t slot = regs.si;
+  ClearObjectSlot(_guest.State(), slot);
+  regs.di = slot;
+  regs.si = Offset(slot, ObjectSlot::BYTES);
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void IsStationEntry(Guest& _guest)
+{
+  const StationTest test = IsStation(SlotAtDi(_guest));
+  SetLow(_guest.Regs().ax, test.type);
+  _guest.SetFlag(FLAG_ZERO, test.station);
+  _guest.SetFlag(FLAG_CARRY, test.dodo);
+  _guest.Clobber(STATION_TEST);
+}
+
+void InitObjectFromTemplateEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  InitObjectFromTemplate(_guest.State(), SlotAtDi(_guest), regs.bx, Low(regs.ax));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void GetObjectPositionEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Vector position = GetObjectPosition(SlotAtDi(_guest));
+  regs.ax = static_cast<std::uint16_t>(position.x);
+  regs.bx = static_cast<std::uint16_t>(position.y);
+  regs.cx = static_cast<std::uint16_t>(position.z);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void FindFreeShipSlotEntry(Guest& _guest)
+{
+  const SlotSearch search = FindFreeShipSlot(_guest.State());
+  _guest.Regs().si = search.slot;
+  _guest.SetFlag(FLAG_CARRY, search.found);
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void ClearAllObjectsEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.es = regs.ds;
+  ClearAllObjects(_guest.State(), _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_AX_CX_DI);
+}
+
+void FindDebrisSlotEntry(Guest& _guest)
+{
+  _guest.Regs().si = FindDebrisSlot(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void CopyObjectEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.es = regs.ds;
+  CopyObject(_guest.State(), regs.si, regs.di, _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void IsViperTypeEntry(Guest& _guest)
+{
+  // PUSH AX / POP AX round the test: only ZF is its result.
+  _guest.SetFlag(FLAG_ZERO, IsViperType(SlotAtDi(_guest)));
+  _guest.Clobber(TYPE_IN_AL);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
-  NativeEntry{0x2FD8, "ClearObjectSlot", &ClearObjectSlot, PRESERVES_ALL},
+  NativeEntry{0x2FD8, "ClearObjectSlot", &ClearObjectSlotEntry, PRESERVES_ALL},
   NativeEntry{0x3B9A, "IsObjectNear", &IsObjectNear, NEAR_TEST},
   NativeEntry{0x3F2A, "IsSunOrPlanet", &IsSunOrPlanet, TYPE_IN_AL},
   NativeEntry{0x3F37, "IsPlanet", &IsPlanet, TYPE_IN_AL},
-  NativeEntry{0x3F40, "IsStation", &IsStation, Machine::NativeContract{0, FLAG_ZERO | FLAG_CARRY}},
+  NativeEntry{0x3F40, "IsStation", &IsStationEntry, STATION_TEST},
   NativeEntry{0x460E, "IsObjectNearKeepBlip", &IsObjectNearKeepBlip, Machine::NativeContract{REGISTER_AX, FLAG_CARRY}},
   NativeEntry{0x4C76, "InitPoliceViper", &InitPoliceViper, CLOBBERS_AX_BX},
   NativeEntry{0x4C99, "InitCargoBarrel", &InitCargoBarrel, CLOBBERS_AX_BX},
@@ -759,24 +853,24 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4D60, "SpawnRandomWolf", &SpawnRandomWolf, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4DAE, "SpawnMaskMissionShip", &SpawnMaskMissionShip, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4DF0, "SpawnInvasionThargoid", &SpawnInvasionThargoid, CLOBBERS_AX_BX_CX_DX_BP},
-  NativeEntry{0x4E1B, "InitObjectFromTemplate", &InitObjectFromTemplate, CLOBBERS_AX_BX},
+  NativeEntry{0x4E1B, "InitObjectFromTemplate", &InitObjectFromTemplateEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4E75, "PlaceAtSpawnPoint", &PlaceAtSpawnPoint, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x4EC5, "FacePlayerWithRandomRoll", &FacePlayerWithRandomRoll, CLOBBERS_AX_BX_CX_DX_BP},
-  NativeEntry{0x4EF4, "GetObjectPosition", &GetObjectPosition, PRESERVES_ALL},
+  NativeEntry{0x4EF4, "GetObjectPosition", &GetObjectPositionEntry, PRESERVES_ALL},
   NativeEntry{0x4EFE, "GetVectorToPlayer", &GetVectorToPlayer, PRESERVES_ALL},
   NativeEntry{0x4F35, "RandomizeOrientation", &RandomizeOrientation, CLOBBERS_AX},
   NativeEntry{0x4F48, "ComputeVelocity", &ComputeVelocity, CLOBBERS_AX_BX_DX},
   NativeEntry{0x4F6E, "MoveObject", &MoveObject, REMOVES},
   NativeEntry{0x4F98, "RemoveObject", &RemoveObject, REMOVES},
   NativeEntry{0x513E, "FacePlayer", &FacePlayer, CLOBBERS_AX_BX_CX_DX_BP},
-  NativeEntry{0x51E0, "FindFreeShipSlot", &FindFreeShipSlot, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x51E0, "FindFreeShipSlot", &FindFreeShipSlotEntry, RETURNS_CARRY},
   NativeEntry{0x51FD, "ReclaimShipSlot", &ReclaimShipSlot, REMOVES},
-  NativeEntry{0x52B2, "ClearAllObjects", &ClearAllObjects, Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0}},
-  NativeEntry{0x52EC, "FindDebrisSlot", &FindDebrisSlot, PRESERVES_ALL},
-  NativeEntry{0x5320, "CopyObject", &CopyObject, PRESERVES_ALL},
+  NativeEntry{0x52B2, "ClearAllObjects", &ClearAllObjectsEntry, CLOBBERS_AX_CX_DI},
+  NativeEntry{0x52EC, "FindDebrisSlot", &FindDebrisSlotEntry, PRESERVES_ALL},
+  NativeEntry{0x5320, "CopyObject", &CopyObjectEntry, PRESERVES_ALL},
   NativeEntry{0x5330, "UpdateDebrisAi", &UpdateDebrisAi, REMOVES},
   NativeEntry{0x53FE, "IsDebrisType", &IsDebrisType, TYPE_CLOBBERS_AL},
-  NativeEntry{0x5413, "IsViperType", &IsViperType, TYPE_IN_AL},
+  NativeEntry{0x5413, "IsViperType", &IsViperTypeEntry, TYPE_IN_AL},
   NativeEntry{0x541E, "IsPoliceViper", &IsPoliceViper, TYPE_IN_AL},
   NativeEntry{0x5428, "IsThargoidType", &IsThargoidType, TYPE_CLOBBERS_AL},
   NativeEntry{0x5431, "IsThargonType", &IsThargonType, TYPE_CLOBBERS_AL},

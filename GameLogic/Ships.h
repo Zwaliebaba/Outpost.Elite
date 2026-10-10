@@ -1,7 +1,10 @@
 // GameLogic/Ships.h
 #pragma once
 
+#include "GameState.h"
+#include "Maths.h"
 #include "NativeEntry.h"
+#include "ObjectSlot.h"
 
 #include <cstdint>
 #include <span>
@@ -10,7 +13,8 @@ namespace Elite
 {
 
 // The reference's ships routines, ported (plan §5 Phase 3, ADR-010): the ship slots, blueprints and their vertex programs. Each body
-// is declared here once it is ported, on the registers of its contract in Symbols.tsv.
+// is declared here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012) take values and
+// give values back, below the register bodies, and their entries keep the register contracts.
 
 // The 64-byte object record of shipSlots: the fields the ported routines use, as offsets into it. Combat and Ai use them too.
 inline constexpr std::uint16_t SLOT_BYTES = 0x40;
@@ -73,13 +77,6 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> ShipsEntries() noexcept;
 
-/// ADD [slot+4+2*axis],_value / ADC [slot+1+axis],DL with DL from CWD: a signed word added to one 24-bit coordinate of the slot at
-/// _slot. Not an entry: the idiom several routines share.
-void AddToCoordinate(Guest& _guest, std::uint16_t _slot, int _axis, std::uint16_t _value);
-
-/// ClearObjectSlot (CS:2FD8): the 64 bytes at SI zeroed. Out: DI = the slot, SI = the slot + 40h, CX = 0.
-void ClearObjectSlot(Guest& _guest);
-
 /// IsObjectNear (CS:3B9A): CF set when each 24-bit coordinate of the slot at DI fits a signed word; otherwise
 /// EraseScannerBlip, and CF clear. AL is the last high byte looked at (0 for FFh).
 void IsObjectNear(Guest& _guest);
@@ -89,9 +86,6 @@ void IsSunOrPlanet(Guest& _guest);
 
 /// IsPlanet (CS:3F37): AL = the type of the slot at DI; ZF set for 1Fh.
 void IsPlanet(Guest& _guest);
-
-/// IsStation (CS:3F40): AL = the type of the slot at DI; ZF set for 0 or 1, CF set for 0 (the Dodo).
-void IsStation(Guest& _guest);
 
 /// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone.
 void IsObjectNearKeepBlip(Guest& _guest);
@@ -136,17 +130,11 @@ void SpawnMaskMissionShip(Guest& _guest);
 /// SpawnInvasionThargoid (CS:4DF0): an invasion's Thargoid in the free slot at DI, with 8 Thargons.
 void SpawnInvasionThargoid(Guest& _guest);
 
-/// InitObjectFromTemplate (CS:4E1B): the slot at DI from the 10-byte record AL of the table at BX. Out: BX the record, AL its last byte.
-void InitObjectFromTemplate(Guest& _guest);
-
 /// PlaceAtSpawnPoint (CS:4E75): the slot at DI placed at a random point 10000 out along the rotations in DS:41B8 and DS:41BC.
 void PlaceAtSpawnPoint(Guest& _guest);
 
 /// FacePlayerWithRandomRoll (CS:4EC5): FacePlayer, then a random roll.
 void FacePlayerWithRandomRoll(Guest& _guest);
-
-/// GetObjectPosition (CS:4EF4): AX, BX, CX = the low words of the position of the slot at DI.
-void GetObjectPosition(Guest& _guest);
 
 /// GetVectorToPlayer (CS:4EFE): AX, BX, CX = the position of the slot at DI, negated.
 void GetVectorToPlayer(Guest& _guest);
@@ -166,30 +154,15 @@ void RemoveObject(Guest& _guest);
 /// FacePlayer (CS:513E): the heading of the slot at DI turned to the player.
 void FacePlayer(Guest& _guest);
 
-/// FindFreeShipSlot (CS:51E0): CF set and SI = the first inactive ship slot; CF clear when none is.
-void FindFreeShipSlot(Guest& _guest);
-
 /// ReclaimShipSlot (CS:51FD): SI = the first ship slot whose blip is not drawn; when every one has a blip, one of slots 4-19 at
 /// random, removed (DI = SI).
 void ReclaimShipSlot(Guest& _guest);
-
-/// ClearAllObjects (CS:52B2): zeroes shipSlotCount slots. Out: ES = DS, AX = CX = 0, DI past the end.
-void ClearAllObjects(Guest& _guest);
-
-/// FindDebrisSlot (CS:52EC): SI = the first inactive debris slot, or the oldest.
-void FindDebrisSlot(Guest& _guest);
-
-/// CopyObject (CS:5320): the 64 bytes at SI copied to DI. Out: ES = DS.
-void CopyObject(Guest& _guest);
 
 /// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, its spin, MoveObject.
 void UpdateDebrisAi(Guest& _guest);
 
 /// IsDebrisType (CS:53FE): AL = the type of the slot at DI; ZF set for 5, 6, 0Bh or 0Ch.
 void IsDebrisType(Guest& _guest);
-
-/// IsViperType (CS:5413): ZF set when the slot at DI is a Viper (type 1Ch). Keeps AX.
-void IsViperType(Guest& _guest);
 
 /// IsPoliceViper (CS:541E): ZF set when the slot at DI is a Viper with word +3Ah = 1.
 void IsPoliceViper(Guest& _guest);
@@ -199,5 +172,71 @@ void IsThargoidType(Guest& _guest);
 
 /// IsThargonType (CS:5431): AL = the type of the slot at DI; ZF set for 7.
 void IsThargonType(Guest& _guest);
+
+// ── The routines (ADR-012): values in, values out, on the GameState ──
+//
+// A slot that a routine reads or writes by its fields is an ObjectSlot; one it searches for, copies or clears whole is the
+// offset in the data segment the original holds in SI or DI.
+
+/// Where a search of the object slots stopped.
+struct SlotSearch
+{
+  bool found;         ///< a slot was found
+  std::uint16_t slot; ///< its offset; when none was, the offset past the last one looked at, where the original leaves SI
+};
+
+/// What IsStation finds of a slot.
+struct StationTest
+{
+  std::uint8_t type; ///< bits 1-5 of the type byte
+  bool station;      ///< a Dodo (type 0) or a Coriolis (type 1)
+  bool dodo;
+};
+
+/// ADD [slot+4+2*axis],_value / ADC [slot+1+axis],DL with DL from CWD: _value added to the 24-bit coordinate _axis (0 x, 1 y,
+/// 2 z) of _slot, the low word, then the high byte. Not an entry: the idiom several routines share.
+void AddToCoordinate(ObjectSlot _slot, int _axis, std::int16_t _value);
+
+/// ClearObjectSlot (CS:2FD8): the 64 bytes of the slot at _slot zeroed, byte by byte.
+void ClearObjectSlot(GameState& _state, std::uint16_t _slot);
+
+/// IsStation (CS:3F40): _slot's type, and whether it is a station's.
+[[nodiscard]] StationTest IsStation(const ObjectSlot& _slot);
+
+/// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of the table at _table: its state, flags and
+/// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
+void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index);
+
+/// GetObjectPosition (CS:4EF4): the low words of _slot's position.
+[[nodiscard]] Vector GetObjectPosition(const ObjectSlot& _slot);
+
+/// FindFreeShipSlot (CS:51E0): the first inactive ship slot, from firstShipSlot.
+[[nodiscard]] SlotSearch FindFreeShipSlot(GameState& _state);
+
+/// ClearAllObjects (CS:52B2): shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, backwards when
+/// _backward (the direction flag) is set.
+void ClearAllObjects(GameState& _state, bool _backward);
+
+/// FindDebrisSlot (CS:52EC): the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
+[[nodiscard]] std::uint16_t FindDebrisSlot(GameState& _state);
+
+/// CopyObject (CS:5320): the 64 bytes at _source copied to _destination a word at a time as REP MOVSW does, backwards when
+/// _backward (the direction flag) is set.
+void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destination, bool _backward);
+
+/// IsViperType (CS:5413): whether _slot is a Viper (type 1Ch).
+[[nodiscard]] bool IsViperType(const ObjectSlot& _slot);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void ClearObjectSlotEntry(Guest& _guest);        ///< SI = the slot. Out: DI = the slot, SI = the slot + 40h, CX = 0.
+void IsStationEntry(Guest& _guest);              ///< DI = the slot. Out: AL = the type; ZF set for a station, CF for the Dodo.
+void InitObjectFromTemplateEntry(Guest& _guest); ///< BX = the table, AL = the record, DI = the slot. AX, BX clobbered.
+void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
+void FindFreeShipSlotEntry(Guest& _guest);       ///< Out: CF set and SI = the slot when one is free, else SI past the slots.
+void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
+void FindDebrisSlotEntry(Guest& _guest);         ///< Out: SI = the slot.
+void CopyObjectEntry(Guest& _guest);             ///< SI = the source, DI = the destination. Out: ES = DS.
+void IsViperTypeEntry(Guest& _guest);            ///< DI = the slot. Out: ZF set for a Viper; AX kept.
 
 } // namespace Elite
