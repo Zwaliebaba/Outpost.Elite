@@ -88,6 +88,8 @@
     <ClInclude Include="ReferenceRig.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AiTests.cpp" />
+    <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="DockingTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
@@ -101,6 +103,7 @@
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SceneTests.cpp" />
+    <ClCompile Include="ShipsTests.cpp" />
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />

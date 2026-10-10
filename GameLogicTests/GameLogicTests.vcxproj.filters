@@ -49,6 +49,15 @@
     <Filter Include="Timer">
       <UniqueIdentifier>{52F90B14-86F6-5D05-AE86-2E76796DD87E}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Ai">
+      <UniqueIdentifier>{6B9ABE2E-9006-5C03-9E05-5121D202DE00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Combat">
+      <UniqueIdentifier>{C9F74B3F-0A59-5222-98C8-75DE20830A8A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ships">
+      <UniqueIdentifier>{ACD5DF42-5567-5C37-979B-79BDBF0ECA03}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -62,6 +71,12 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AiTests.cpp">
+      <Filter>Ai</Filter>
+    </ClCompile>
+    <ClCompile Include="CombatTests.cpp">
+      <Filter>Combat</Filter>
+    </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -94,6 +109,9 @@
     </ClCompile>
     <ClCompile Include="SceneTests.cpp">
       <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipsTests.cpp">
+      <Filter>Ships</Filter>
     </ClCompile>
     <ClCompile Include="StartUpTests.cpp">
       <Filter>StartUp</Filter>
