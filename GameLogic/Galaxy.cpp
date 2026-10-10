@@ -184,11 +184,6 @@ constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
   return static_cast<std::uint16_t>(_low | (_high << 8));
 }
 
-[[nodiscard]] bool Carry(const Machine::Registers& _regs) noexcept
-{
-  return (_regs.flags & Machine::FLAG_CARRY) != 0;
-}
-
 // The difference of two bytes as a word, then made positive with neg.
 [[nodiscard]] std::uint16_t Magnitude(std::uint16_t _value) noexcept
 {
@@ -202,9 +197,9 @@ constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
 }
 
 // The step STOSW takes, backwards with the direction flag set.
-[[nodiscard]] std::uint16_t WordStep(const Machine::Registers& _regs) noexcept
+[[nodiscard]] std::uint16_t WordStep(bool _backward) noexcept
 {
-  return (_regs.flags & Machine::FLAG_DIRECTION) != 0 ? static_cast<std::uint16_t>(0xFFFE) : static_cast<std::uint16_t>(2);
+  return _backward ? static_cast<std::uint16_t>(0xFFFE) : static_cast<std::uint16_t>(2);
 }
 
 // The galaxy-unit offset of a short-range chart coordinate from the chart's centre: shl ax,1 then idiv
@@ -904,7 +899,7 @@ void MoveCursorToSystem(GameState& _state)
 void SelectSystemAtCursor(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  FindNearestSystem(_guest);
+  FindNearestSystemEntry(_guest);
   ComputeDistanceToSystemEntry(_guest);
   regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
   regs.di = DS.distanceDigits.offset;
@@ -959,43 +954,31 @@ void SelectSystemAtCursor(Guest& _guest)
   GenerateSystemNameEntry(_guest);
 }
 
-void FindNearestSystem(Guest& _guest)
+std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 {
-  Machine::Registers& regs = _guest.Regs();
-  LoadGalaxySeedsEntry(_guest);
-  GetCursorGalaxyPositionEntry(_guest);
-  const std::uint16_t cursor = regs.bx;
-  regs.si = 0xFFFF;
-  for (regs.cx = GALAXY_SYSTEMS; regs.cx != 0; --regs.cx)
+  LoadGalaxySeeds(_state);
+  const ChartPoint cursor = GetCursorGalaxyPosition(_state);
+  // SI the nearest distance so far, and BP the loop's count, CL, at the nearest.
+  std::uint16_t nearest = 0xFFFF;
+  std::uint16_t nearestCount = _countIfNone;
+  for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
   {
-    const std::uint16_t count = regs.cx;
-    // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply.
-    regs.cx = MakeWord(Low(count), High(cursor));
-    regs.bx = Low(cursor);
-    regs.ax = Square(Low(Magnitude(static_cast<std::uint16_t>(_guest.Get(DS.systemX) - regs.bx))));
-    regs.dx = regs.ax;
-    regs.bx = High(cursor);
-    regs.ax = Square(Low(Magnitude(static_cast<std::uint16_t>((_guest.Get(DS.systemY) >> 1) - regs.bx))));
-    const std::uint32_t distance = std::uint32_t{regs.ax} + regs.dx;
-    regs.ax = static_cast<std::uint16_t>(distance);
-    if (distance <= 0xFFFF && regs.ax < regs.si)
+    // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply; a sum that carries is passed over.
+    const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(_state.Get(DS.systemX) - cursor.x))));
+    const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>((_state.Get(DS.systemY) >> 1) - cursor.row))));
+    const std::uint32_t distance = std::uint32_t{across} + down;
+    if (distance <= 0xFFFF && distance < nearest && IsSystemOnChart(_state))
     {
-      IsSystemOnChartEntry(_guest);
-      if (Carry(regs))
-      {
-        regs.si = regs.ax;
-        regs.cx = Low(regs.cx);
-        regs.bp = regs.cx;
-      }
+      nearest = static_cast<std::uint16_t>(distance);
+      nearestCount = Low(count);
     }
-    AdvanceToNextSystemEntry(_guest);
-    regs.bx = cursor;
-    regs.cx = count;
+    AdvanceToNextSystem(_state);
   }
-  regs.cx = static_cast<std::uint16_t>(GALAXY_SYSTEMS - regs.bp);
-  _guest.Set(DS.selectedSystemIndex, Low(regs.cx));
-  LoadSystemSeedsEntry(_guest);
-  MoveCursorToSystemEntry(_guest);
+  const auto index = static_cast<std::uint8_t>(GALAXY_SYSTEMS - nearestCount);
+  _state.Set(DS.selectedSystemIndex, index);
+  LoadSystemSeeds(_state, index);
+  MoveCursorToSystem(_state);
+  return index;
 }
 
 std::uint16_t ComputeDistanceToSystem(GameState& _state)
@@ -1022,7 +1005,7 @@ std::uint16_t ComputeDistanceToSystem(GameState& _state)
 void ShowNearestSystemDistance(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  FindNearestSystem(_guest);
+  FindNearestSystemEntry(_guest);
   ComputeDistanceToSystemEntry(_guest);
   regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
   regs.di = DS.distanceDigits.offset;
@@ -1478,51 +1461,36 @@ std::uint16_t FormatSelectedSystemDistance(GameState& _state)
   return Offset(to, 1);
 }
 
-void ShowSystemDescription(Guest& _guest)
+void ShowSystemDescription(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = regs.ds;
-  regs.es = regs.ax;
-  regs.ax = 0;
-  regs.di = DS.descriptionBuffer.offset;
-  for (regs.cx = DESCRIPTION_BUFFER_WORDS; regs.cx != 0; --regs.cx)
+  // REP STOSW of zeros over descriptionBuffer, ES = DS, forwards or, _backward, down.
+  std::uint16_t word = DS.descriptionBuffer.offset;
+  for (std::uint16_t words = DESCRIPTION_BUFFER_WORDS; words != 0; --words)
   {
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    regs.di = static_cast<std::uint16_t>(regs.di + WordStep(regs));
+    _state.SetWord(word, 0);
+    word = Offset(word, WordStep(_backward));
   }
-  regs.di = DS.descriptionBuffer.offset;
-  regs.si = DS.descriptionTemplate.offset;
-  ExpandDescriptionTextEntry(_guest);
-  _guest.SetByte(regs.di, 0);
+  const ExpandedText expanded = ExpandDescriptionText(_state, DS.descriptionTemplate.offset, DS.descriptionBuffer.offset);
+  _state.SetByte(expanded.output.next, 0);
 
   // Word-wrapped at the last space within 36 characters, a text row at a time.
-  regs.si = DS.descriptionBuffer.offset;
-  regs.di = DESCRIPTION_SCREEN_OFFSET;
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
+  std::uint16_t line = DS.descriptionBuffer.offset;
+  std::uint16_t cell = DESCRIPTION_SCREEN_OFFSET;
   for (;;)
   {
-    regs.ax = MakeWord(0, SPACE);
-    const std::uint16_t line = regs.si;
-    const std::uint16_t cell = regs.di;
-    regs.si = static_cast<std::uint16_t>(regs.si + DESCRIPTION_LINE_CHARACTERS);
-    if (_guest.Byte(regs.si) == 0)
+    std::uint16_t end = Offset(line, DESCRIPTION_LINE_CHARACTERS);
+    if (_state.Byte(end) == 0)
     {
-      regs.si = line;
-      regs.di = cell;
-      _guest.Call(PRINT_TEXT_MODE_STRING);
+      (void)PrintTextModeString(_state, line, cell);
       return;
     }
-    while (_guest.Byte(regs.si) != SPACE)
+    while (_state.Byte(end) != SPACE)
     {
-      --regs.si;
+      --end;
     }
-    _guest.SetByte(regs.si, 0);
-    regs.si = line;
-    regs.di = cell;
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    ++regs.si;
-    regs.di = static_cast<std::uint16_t>(cell + TEXT_ROW_BYTES);
+    _state.SetByte(end, 0);
+    line = Offset(PrintTextModeString(_state, line, cell).end, 1);
+    cell = Offset(cell, TEXT_ROW_BYTES);
   }
 }
 
@@ -1668,6 +1636,7 @@ using Machine::REGISTER_BP;
 using Machine::REGISTER_BX;
 using Machine::REGISTER_CX;
 using Machine::REGISTER_DI;
+using Machine::REGISTER_DS;
 using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
@@ -1688,6 +1657,9 @@ constexpr NativeContract CLOBBERS_AX_RETURNS_CARRY{REGISTER_AX, FLAG_CARRY};
 constexpr NativeContract PLACES_LABELS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0};
 constexpr NativeContract CLEARS_TEXT_LINES{REGISTER_SI | REGISTER_DI, 0};
 constexpr NativeContract EXPANDS_TEXT{REGISTER_AX | REGISTER_BX | REGISTER_CX, 0};
+constexpr NativeContract FINDS_NEAREST{static_cast<std::uint16_t>(GENERAL & ~REGISTER_DI), 0};
+// ShowSystemDescription's: all but DS, which the original leaves alone and ShowSystemDataScreen goes on with.
+constexpr NativeContract SHOWS_DESCRIPTION{static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS), 0};
 
 // What the control codes that expand a name leave of _output: DI past it, DX as the last GenerateSystemName leaves it
 // when one ran, and BX the length TerminateSelectedSystemName indexes the name by. A name is letters (systemNameDigrams),
@@ -1753,6 +1725,13 @@ void MoveCursorToSystemEntry(Guest& _guest)
 {
   MoveCursorToSystem(_guest.State());
   _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void FindNearestSystemEntry(Guest& _guest)
+{
+  // BP, the count the index is made from when no system is on the chart.
+  (void)FindNearestSystem(_guest.State(), _guest.Regs().bp);
+  _guest.Clobber(FINDS_NEAREST);
 }
 
 void ComputeDistanceToSystemEntry(Guest& _guest)
@@ -1852,6 +1831,12 @@ void FormatSelectedSystemDistanceEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX);
 }
 
+void ShowSystemDescriptionEntry(Guest& _guest)
+{
+  ShowSystemDescription(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(SHOWS_DESCRIPTION);
+}
+
 void ExpandDescriptionTextEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1949,8 +1934,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x10FE, "GetCursorGalaxyPosition", &GetCursorGalaxyPositionEntry, CLOBBERS_CX},
   NativeEntry{0x1146, "MoveCursorToSystem", &MoveCursorToSystemEntry, CLOBBERS_AX_BX},
   NativeEntry{0x1199, "SelectSystemAtCursor", &SelectSystemAtCursor, Machine::NativeContract{GENERAL, 0}},
-  NativeEntry{0x1292, "FindNearestSystem", &FindNearestSystem,
-              Machine::NativeContract{static_cast<std::uint16_t>(GENERAL & ~REGISTER_DI), 0}},
+  NativeEntry{0x1292, "FindNearestSystem", &FindNearestSystemEntry, FINDS_NEAREST},
   NativeEntry{0x12F9, "ComputeDistanceToSystem", &ComputeDistanceToSystemEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x1341, "ShowNearestSystemDistance", &ShowNearestSystemDistance, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeedsEntry, PRESERVES_ALL},
@@ -1967,7 +1951,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x5CDE, "ShowSystemDataScreen", &ShowSystemDataScreen, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x60EB, "TerminateSelectedSystemName", &TerminateSelectedSystemNameEntry, PRESERVES_ALL},
   NativeEntry{0x60F7, "FormatSelectedSystemDistance", &FormatSelectedSystemDistanceEntry, CLOBBERS_AX_BX},
-  NativeEntry{0x6FC0, "ShowSystemDescription", &ShowSystemDescription, Machine::NativeContract{REGISTER_ALL, 0}},
+  NativeEntry{0x6FC0, "ShowSystemDescription", &ShowSystemDescriptionEntry, SHOWS_DESCRIPTION},
   NativeEntry{0x700F, "ExpandDescriptionText", &ExpandDescriptionTextEntry, EXPANDS_TEXT},
   NativeEntry{0x707A, "InsertSystemName", &InsertSystemNameEntry, PRESERVES_ALL},
   NativeEntry{0x708D, "InsertSystemAdjective", &InsertSystemAdjectiveEntry, PRESERVES_ALL},

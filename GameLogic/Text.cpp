@@ -4,8 +4,8 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Flight.h"
 
-#include <optional>
 #include <utility>
 
 namespace Elite
@@ -14,7 +14,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t UPDATE_WARNINGS = 0x36B6;
 constexpr std::uint16_t IS_DEBRIS_TYPE = 0x53FE;
 constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
@@ -147,16 +146,10 @@ void RestartInputBlink(Guest& _guest)
   RedrawTypedLine(_guest);
 }
 
-// What ShowMessage does.
-struct ShownMessage
-{
-  std::uint16_t message;            // messagePointer: the message it shows
-  std::optional<PrintedText> drawn; // where DrawScreenString stopped, unless the message was already shown
-};
-
 // MessageLine's second half (0x35B9): the message at messagePointer, unless it is already shown, on the message line,
 // cleared first a row at a time forwards or, _backwards, down. The original keeps SI round ClearMessageLine on the stack.
-ShownMessage ShowMessage(GameState& _state, bool _backwards)
+// Returns whether it drew the message.
+bool ShowMessage(GameState& _state, bool _backwards)
 {
   _state.Set(DS.messageDrawn, MESSAGE_DRAWN);
   const std::uint16_t message = _state.Get(DS.messagePointer);
@@ -164,10 +157,11 @@ ShownMessage ShowMessage(GameState& _state, bool _backwards)
   _state.Set(DS.messageShown, message);
   if (shown)
   {
-    return ShownMessage{message, std::nullopt};
+    return false;
   }
   ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backwards);
-  return ShownMessage{message, DrawScreenString(_state, message, MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET)};
+  (void)DrawScreenString(_state, message, MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET);
+  return true;
 }
 
 // The bounty's digits within bountyText.
@@ -371,38 +365,25 @@ void FormatCredits(GameState& _state)
   _state.SetByte(tenths, '.');
 }
 
-void UpdateMessageLine(Guest& _guest)
+bool UpdateMessageLine(GameState& _state, bool _backwards)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(UPDATE_WARNINGS);
-  if (_guest.Get(DS.messageDrawn) != 0)
+  UpdateWarnings(_state);
+  if (_state.Get(DS.messageDrawn) != 0)
   {
     // messageFrames is a byte here, though ShowBountyMessage writes it as a word.
-    const std::uint8_t frames = _guest.Byte(DS.messageFrames.offset);
+    const std::uint8_t frames = _state.Byte(DS.messageFrames.offset);
     if (frames != 0)
     {
-      _guest.SetByte(DS.messageFrames.offset, static_cast<std::uint8_t>(frames - 1));
-      return;
+      _state.SetByte(DS.messageFrames.offset, static_cast<std::uint8_t>(frames - 1));
+      return false;
     }
-    const std::uint16_t view = _guest.Get(DS.viewAngle);
-    regs.si = view == 0           ? DS.frontViewText.offset
-              : view == VIEW_REAR ? DS.rearViewText.offset
-              : view == VIEW_LEFT ? DS.leftViewText.offset
-                                  : DS.rightViewText.offset;
-    _guest.Set(DS.messagePointer, regs.si);
+    const std::uint16_t view = _state.Get(DS.viewAngle);
+    _state.Set(DS.messagePointer, view == 0           ? DS.frontViewText.offset
+                                  : view == VIEW_REAR ? DS.rearViewText.offset
+                                  : view == VIEW_LEFT ? DS.leftViewText.offset
+                                                      : DS.rightViewText.offset);
   }
-  const ShownMessage shown = ShowMessage(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // The registers as the original leaves them: SI the message, and once it is drawn, ES the CGA's memory and SI, DI, BX
-  // and AX as DrawScreenString leaves them, AX over the 0 ClearMessageLine leaves.
-  regs.si = shown.message;
-  if (shown.drawn)
-  {
-    regs.es = Guest::VIDEO_SEGMENT;
-    regs.bx = MESSAGE_INK;
-    regs.ax = DrawnScreenStringAx(_guest.State(), shown.message, *shown.drawn, MESSAGE_INK, 0);
-    regs.si = shown.drawn->end;
-    regs.di = shown.drawn->nextCell;
-  }
+  return ShowMessage(_state, _backwards);
 }
 
 void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards)
@@ -428,6 +409,11 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
   _state.SetWord(tenths, Join(_state.Byte(tenths), '.'));
   _state.Set(DS.messagePointer, DS.bountyText.offset);
   _state.Set(DS.messageFrames, BOUNTY_FRAMES);
+}
+
+BlankedZeros BlankedBountyZeros(const GameState& _state)
+{
+  return BlankedLeadingZeros(_state, BountyDigits(), TENTHS_BLANKS);
 }
 
 void ShowShipIdentity(Guest& _guest)
@@ -646,20 +632,12 @@ void ToggleInputCursor(GameState& _state)
   _state.SetByte(cursor, static_cast<std::uint8_t>(_state.Byte(cursor) ^ toggle));
 }
 
-void RedrawInputLine(Guest& _guest)
+RedrawnInputLine RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment,
+                                 std::uint16_t _cell)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t di = regs.di;
-  const std::uint16_t si = regs.si;
-  const std::uint16_t bx = regs.bx;
-  _guest.SetByte(static_cast<std::uint16_t>(regs.bx + regs.si), 0);
-  regs.bx = MESSAGE_INK;
-  PrintStringForLayoutEntry(_guest);
-  regs.si = DS.inputCursorText.offset;
-  PrintStringForLayoutEntry(_guest);
-  regs.bx = bx;
-  regs.si = si;
-  regs.di = di;
+  _state.SetByte(Offset(_length, _buffer), 0);
+  const PrintedText line = PrintStringForLayout(_state, _buffer, MESSAGE_INK, _segment, _cell);
+  return RedrawnInputLine{line, PrintStringForLayout(_state, DS.inputCursorText.offset, MESSAGE_INK, _segment, line.nextCell)};
 }
 
 PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
@@ -823,10 +801,20 @@ void ShowBountyMessageEntry(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   ShowBountyMessage(_guest.State(), regs.ax);
   // The original leaves DI on the digits, CX as BlankLeadingZeros leaves it, and AX the message.
-  regs.cx = BlankedLeadingZeros(_guest.State(), BountyDigits(), TENTHS_BLANKS).triesLeft;
+  regs.cx = BlankedBountyZeros(_guest.State()).triesLeft;
   regs.di = BountyDigits();
   regs.ax = DS.bountyText.offset;
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void UpdateMessageLineEntry(Guest& _guest)
+{
+  // MOV AX,0B800h / MOV ES,AX before a message is drawn, which the contract compares.
+  if (UpdateMessageLine(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION)))
+  {
+    _guest.Regs().es = Guest::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(CLOBBERS_ALL_BUT_ES);
 }
 
 void PrintTextModeStringEntry(Guest& _guest)
@@ -909,6 +897,25 @@ void ToggleInputCursorEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void RedrawInputLineEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const bool textLayout = _guest.Get(DS.screenLayout) == TEXT_LAYOUT;
+  const RedrawnInputLine redrawn = RedrawInputLine(_guest.State(), regs.si, regs.bx, regs.es, regs.di);
+  // PUSH DI / SI / BX and their POPs keep those; the second PrintStringForLayout leaves AX, and in the text layout ES.
+  if (textLayout)
+  {
+    regs.es = Guest::VIDEO_SEGMENT;
+    regs.ax = Join(_guest.Get(DS.textAttribute), 0);
+  }
+  else
+  {
+    const std::uint16_t ax = DrawnScreenStringAx(_guest.State(), regs.si, redrawn.line, MESSAGE_INK, regs.ax);
+    regs.ax = DrawnScreenStringAx(_guest.State(), DS.inputCursorText.offset, redrawn.cursor, MESSAGE_INK, ax);
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void PrintStringForLayoutEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -943,7 +950,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x349A, "DrawSmallViewChar", &DrawSmallViewCharEntry, PRESERVES_ALL},
   NativeEntry{0x3527, "DrawSmallViewString", &DrawSmallViewStringEntry, PRESERVES_ALL},
   NativeEntry{0x3543, "FormatCredits", &FormatCreditsEntry, PRESERVES_ALL},
-  NativeEntry{0x35A3, "UpdateMessageLine", &UpdateMessageLine, CLOBBERS_ALL_BUT_ES},
+  NativeEntry{0x35A3, "UpdateMessageLine", &UpdateMessageLineEntry, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3609, "ClearMessageLine", &ClearMessageLineEntry, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3626, "ShowBountyMessage", &ShowBountyMessageEntry, PRESERVES_ALL},
   NativeEntry{0x364D, "ShowShipIdentity", &ShowShipIdentity, PRESERVES_ALL},
@@ -957,7 +964,7 @@ constexpr std::array ENTRIES = {
   // ReadTextLine waits for keys as a rule.
   NativeEntry{0x7694, "ReadTextLine", &ReadTextLine, CLOBBERS_AX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7727, "ToggleInputCursor", &ToggleInputCursorEntry, PRESERVES_ALL},
-  NativeEntry{0x773A, "RedrawInputLine", &RedrawInputLine, PRESERVES_ALL},
+  NativeEntry{0x773A, "RedrawInputLine", &RedrawInputLineEntry, PRESERVES_ALL},
   NativeEntry{0x7750, "PrintStringForLayout", &PrintStringForLayoutEntry, PRESERVES_ALL},
 };
 

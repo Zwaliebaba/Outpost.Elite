@@ -137,6 +137,10 @@ void ClearTextScreen(GameState& _state, bool _backward);
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
 void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
 void DrawLineEntry(Guest& _guest);        ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
+/// What DrawLine leaves of the machine when it returns _filled: ES = DS and the direction flag clear, which it sets before a
+/// horizontal line's REP STOSB. For the entries and the register code of the routines that call it, whose originals go on
+/// with them.
+void DrawLineOut(Guest& _guest, bool _filled);
 void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
 void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
 void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.

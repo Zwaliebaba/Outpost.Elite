@@ -64,9 +64,6 @@ void UpdateSafeZone(Guest& _guest);
 /// back as the original leaves it; DI = stationSlot.
 void UpdateCompass(Guest& _guest);
 
-/// EraseCompassAndBlips (CS:4594): erases the compass dot and every scanner blip.
-void EraseCompassAndBlips(Guest& _guest);
-
 /// UpdateFuelLeak (CS:499F): runs a fuel leak, and sets the border colour.
 void UpdateFuelLeak(Guest& _guest);
 
@@ -265,6 +262,10 @@ DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y
 /// says so cleared. Returns the blip's last pixel, when it erased one.
 std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot);
 
+/// EraseCompassAndBlips (CS:4594): the compass dot XORed out of video memory when stationSlot's blip flag says it is drawn, the
+/// flag cleared first, and then each ship slot's scanner blip, EraseScannerBlip. Returns whether it erased anything.
+bool EraseCompassAndBlips(GameState& _state);
+
 /// XorScannerBlip (CS:42F6): the scanner blip for the scanner bytes _x, _y and _z XORed into video memory: a stick from
 /// (3Dh + _x, 1Fh - _z / 4) of |_y / 4| pixels, up or down, and a pixel right of its end. Returns that last pixel.
 DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z);
@@ -329,8 +330,14 @@ void XorCompassDotEntry(Guest& _guest);     ///< DL, DH = the dot, BP = 0 behind
 void EraseScannerBlipEntry(Guest& _guest);  ///< DI = the slot. Out, once it erases: AX = DX the last pixel, BX its mask, CX, ES.
 void XorScannerBlipEntry(Guest& _guest);    ///< AH, BH, CH = the scanner bytes. Out: AX = DX the last pixel, BX its mask, CX.
 void XorDashboardPixelEntry(Guest& _guest);
+void EraseCompassAndBlipsEntry(Guest& _guest); ///< Out: ES = B800h once it erases anything.
 void DrainEnergyEntry(Guest& _guest);
 void UpdatePlayerVelocityEntry(Guest& _guest);
 void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, SI past the last slot.
+
+/// What EraseScannerBlip leaves in the registers for _slot once it has _erased its blip: AX = DX the last pixel, BX its mask, CX
+/// the stick's step and 0, and ES the video segment. For the entries of the routines that end with it, whose callers go on
+/// with them.
+void EraseScannerBlipOut(Guest& _guest, const ObjectSlot& _slot, const std::optional<DashboardPixel>& _erased);
 
 } // namespace Elite

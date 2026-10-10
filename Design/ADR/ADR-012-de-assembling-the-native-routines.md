@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 2 of the call graph (items 10 to 12).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 3 of the call graph (items 10 to 13).
 
 ## Context
 
@@ -190,6 +190,41 @@ The 5 contracts poisoning narrowed:
 **A routine called only as a value is no longer compared on its own.** `ToggleMenuRowHighlight` was reached through its hook from the equipment and cargo menus; their cursor routines now call its value routine, and the menus that call them wait, so only the digests compared it and the coverage check failed. `TextTests.MenuRowHighlightAgreesOnAndOff` now calls it directly. The same will happen to more routines as their callers convert, and each needs a constructed call or a converted caller that is compared.
 
 **The suites.** `GameLogicTests` passes 174 of 174 with poisoning on, under g++ and clang++, and the coverage check is clean. The corpus keeps all 40 digests in all three of its runs.
+
+**13. Level 3, measured 2026-10-10, and what is ready from level 4 on.** One worker converted the 17 routines ready after level 2, none skipped. With them, Input's and StartUp's device routines moved onto `Hardware` (ADR-014 item 8).
+
+| | Count |
+|---|---|
+| Routines converted | 17, and the device routines ADR-014 item 8 lists |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 6 |
+| Contracts widened | 0 |
+| Lines touching a register in `GameLogic/*.cpp` | 4,445 before, 4,211 after |
+| Register functions left | 302 on 19 levels: 280 routines and 22 register adapters |
+
+The 6 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `IsObjectNear` | everything but CF: AL, the last high byte it compared, and `EraseScannerBlip`'s registers once it erased a blip, which `IsMassLocked`, `UpdateSafeZone`, `EngageJumpDrive`, `CheckShipInRange` and the AI read |
+| `RemoveObject` | all it clobbered but CX: `ExplodeObject`, `TryScoopObject`, `TransformShip` and `UpdateMissileAi` read the rest |
+| `KillPlayer` | AX: AL = 3Ch from the death sound, with AH as it came in |
+| `FacePlayerWithRandomRoll` | BP, the pitch, and AX, the roll, which `UpdateStationAi` reads |
+| `EraseCompassAndBlips` | DS and ES, which the flight screens' drawing goes on with |
+| `ShowSystemDescription` | DS |
+
+**Two corrections to the Phase 3 port.**
+- **`TryFireLaserAtPlayer`'s second box test** takes x from AX after `MOV AL,[DI+3Ch]`, the depth byte. A first draft used 0, and the corpus caught it: in `attack-the-station`, `UpdateObjectsAndSpawn` call 32 left `playerHitPending` 01 where the original leaves 02.
+- **`PayBounty`** collapsed the countdown's SUB and the 1 written over a borrow into one write. It now makes both, as the listing does.
+
+`CreditKill`, still register code, collapses its INC and its `MOV FEh` on `killCount` (CS:8BCD, CS:8BD8) the same way. It is fixed when `CreditKill` converts.
+
+**From level 4 on, a routine is ready when everything it calls is converted.** Its own port accesses and services go through `Hardware` (ADR-014), its loops' turns through `Hardware::LoopTurn` (ADR-015), and a value it pushes and pops itself becomes a local, so none of them holds it back any more.
+- **Routines that pass data on the stack to one another,** or that jump back into another routine's loop, convert as one unit with the routine whose loop it is. Market's `OpenCargoMessage` and `ShowCargoMessage`, for example, convert with the cargo menu, not on their own.
+- **A unit reports every backward jump the original takes,** a shared tail's included, so that paced time's last turn stays the original's. A tail's jump needs only its address: it is never idle, because the jump before it always lands elsewhere.
+
+By that rule, 55 routines are ready for level 4.
+
+**The suites.** `GameLogicTests` passes 176 of 176 with poisoning on, under g++ and clang++. The coverage check is clean, and the corpus keeps all 98 digests in all three of its runs.
 
 ## What this forecloses
 

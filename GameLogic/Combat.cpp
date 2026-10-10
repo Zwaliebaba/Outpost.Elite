@@ -5,8 +5,12 @@
 #include "Ai.h"
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Market.h"
 #include "Maths.h"
 #include "Ships.h"
+#include "Sound.h"
+#include "Text.h"
+#include "Video.h"
 
 #include <utility>
 
@@ -21,16 +25,11 @@ using Machine::FLAG_ZERO;
 
 // Routines outside this file, run through the original.
 constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
-constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
-constexpr std::uint16_t VECTOR_WITHIN_BOX = 0x2F6E;
 constexpr std::uint16_t COMPUTE_DEATH_DEBRIS_VECTOR = 0x2F8B;
-constexpr std::uint16_t SHOW_BOUNTY_MESSAGE = 0x3626;
 constexpr std::uint16_t ROTATE_ROLL_YAW_PITCH = 0x3EC7;
-constexpr std::uint16_t ADD_CREDITS = 0x65EE;
 constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
 constexpr std::uint16_t START_EXPLOSION_SOUND = 0x7AFC;
-constexpr std::uint16_t START_PLAYER_DEATH_SOUND = 0x7B09;
 constexpr std::uint16_t START_LASER_SOUND = 0x7B71;
 constexpr std::uint16_t START_PLAYER_HIT_SOUND = 0x7B96;
 constexpr std::uint16_t CANCEL_DOCKING_COMPUTER = 0x8BAA;
@@ -198,17 +197,11 @@ void AddSaturating(Guest& _guest, std::uint16_t _offset, std::uint8_t _value) no
   return color;
 }
 
-// One beam: DrawLine from (_x, the bottom row) to DL, DH. DX is kept (PUSH DX / POP DX) unless it is the last.
-void DrawBeam(Guest& _guest, std::uint8_t _x, bool _last)
+// One beam: DrawLine from (_x, the bottom row) to _target, its x in the low byte and its row in the high, as DL and DH hold it.
+// Returns what DrawLine returns.
+bool DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t target = regs.dx;
-  regs.cx = Join(BEAM_ROW, _x);
-  _guest.Call(DRAW_LINE);
-  if (!_last)
-  {
-    regs.dx = target;
-  }
+  return DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
 }
 
 // |the coordinate at _field| * 256, divided by the view z, below BX: the crosshairs' test on one axis.
@@ -227,43 +220,45 @@ void DrawBeam(Guest& _guest, std::uint8_t _x, bool _last)
   return regs.ax < regs.bx;
 }
 
-// 8BE5: ShowBountyMessage and AddCredits with AX, DI kept round them; then a kill in a mis-jump's witch space counts the
-// countdown to the Nav-Comp's repair down.
-void PayBounty(Guest& _guest)
+// What PayBounty found after paying: what Routine8C51 found of the slot, when a mis-jump's countdown runs, and whether the
+// countdown reached 1 and the Nav-Comp's repair was announced.
+struct PaidBounty
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  const std::uint16_t bounty = regs.ax;
-  _guest.Call(SHOW_BOUNTY_MESSAGE);
-  regs.ax = bounty;
-  regs.bx = 0;
-  _guest.Call(ADD_CREDITS);
-  regs.di = slot;
-  if (_guest.Get(DS.witchspaceCountdown) == 0)
+  std::optional<ThargoidTest> killed;
+  bool repaired;
+};
+
+// 8BE5: _tenths shown (ShowBountyMessage) and added to the credits (AddCredits); then, while a mis-jump's countdown runs, the
+// kill of a Thargon or a Thargoid counts it down by 5 or 35, the SUB written before the 1 written over a borrow or a 0, and
+// at 1 the Nav-Comp's repair is announced.
+PaidBounty PayBounty(GameState& _state, const ObjectSlot& _slot, std::uint16_t _tenths)
+{
+  ShowBountyMessage(_state, _tenths);
+  AddCredits(_state, _tenths);
+  if (_state.Get(DS.witchspaceCountdown) == 0)
   {
-    return;
+    return PaidBounty{std::nullopt, false};
   }
-  Routine8C51Entry(_guest);
-  if (!_guest.Flag(FLAG_ZERO))
+  const ThargoidTest killed = Routine8C51(_slot);
+  if (!killed.thargoidOrThargon)
   {
-    return;
+    return PaidBounty{killed, false};
   }
-  const std::uint8_t repair = _guest.Flag(FLAG_CARRY) ? THARGOID_REPAIR : THARGON_REPAIR;
-  SetLow(regs.ax, repair);
-  const std::uint8_t countdown = _guest.Get(DS.witchspaceCountdown);
-  auto left = static_cast<std::uint8_t>(countdown - repair);
+  const std::uint8_t repair = killed.thargoid ? THARGOID_REPAIR : THARGON_REPAIR;
+  const std::uint8_t countdown = _state.Get(DS.witchspaceCountdown);
+  const auto left = static_cast<std::uint8_t>(countdown - repair);
+  _state.Set(DS.witchspaceCountdown, left);
   if (countdown < repair || left == 0)
   {
-    left = 1;
+    _state.Set(DS.witchspaceCountdown, 1);
   }
-  _guest.Set(DS.witchspaceCountdown, left);
-  if (left != 1)
+  if (_state.Get(DS.witchspaceCountdown) != 1)
   {
-    return;
+    return PaidBounty{killed, false};
   }
-  regs.ax = DS.navCompRepairedMessage.offset;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, REPAIR_MESSAGE_FRAMES);
+  _state.Set(DS.messagePointer, DS.navCompRepairedMessage.offset);
+  _state.Set(DS.messageFrames, REPAIR_MESSAGE_FRAMES);
+  return PaidBounty{killed, true};
 }
 
 // The fragments of an exploding object: from 4FEE, CX of them, each a Splinter in a debris slot.
@@ -559,8 +554,8 @@ void DrawLaserBeams(Guest& _guest)
       SetLow(regs.ax, _guest.Get(DS.laserBeamColorToggle));
       _guest.Set(DS.drawColor, Low(regs.ax));
       _guest.Set(DS.laserBeamColorToggle, static_cast<std::uint8_t>(_guest.Get(DS.laserBeamColorToggle) ^ BEAM_TOGGLE));
-      DrawBeam(_guest, BEAM_INNER_LEFT, false);
-      DrawBeam(_guest, BEAM_INNER_RIGHT, false);
+      DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_LEFT, regs.dx));
+      DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_RIGHT, regs.dx));
       _guest.Set(DS.drawColor, static_cast<std::uint8_t>(_guest.Get(DS.drawColor) ^ BEAM_TOGGLE));
     }
     else
@@ -570,8 +565,8 @@ void DrawLaserBeams(Guest& _guest)
       _guest.Set(DS.laserBeamColor, Low(regs.ax));
       _guest.Set(DS.drawColor, Low(regs.ax));
     }
-    DrawBeam(_guest, BEAM_OUTER_LEFT, false);
-    DrawBeam(_guest, BEAM_OUTER_RIGHT, true);
+    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_LEFT, regs.dx));
+    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_RIGHT, regs.dx));
     return;
   }
   // Types 0 and 2: one side a shot, alternately.
@@ -582,12 +577,12 @@ void DrawLaserBeams(Guest& _guest)
   _guest.Set(DS.laserBeamSide, side);
   if (side != 0)
   {
-    DrawBeam(_guest, BEAM_OUTER_LEFT, false);
-    DrawBeam(_guest, BEAM_INNER_LEFT, true);
+    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_LEFT, regs.dx));
+    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_LEFT, regs.dx));
     return;
   }
-  DrawBeam(_guest, BEAM_OUTER_RIGHT, false);
-  DrawBeam(_guest, BEAM_INNER_RIGHT, true);
+  DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_RIGHT, regs.dx));
+  DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_RIGHT, regs.dx));
 }
 
 void ExplodeObject(Guest& _guest)
@@ -596,10 +591,10 @@ void ExplodeObject(Guest& _guest)
   TallyMaskMissionKillEntry(_guest);
   if ((_guest.Byte(regs.di) & SLOT_DRAWN) == 0)
   {
-    RemoveObject(_guest);
+    RemoveObjectEntry(_guest);
     return;
   }
-  RemoveObject(_guest);
+  RemoveObjectEntry(_guest);
   _guest.Call(START_EXPLOSION_SOUND);
   _guest.Set(DS.explodingStation, 1);
   IsStationEntry(_guest);
@@ -633,52 +628,42 @@ void TallyMaskMissionKill(GameState& _state, const ObjectSlot& _slot)
   }
 }
 
-void TryFireLaserAtPlayer(Guest& _guest)
+void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pitchError, std::uint16_t _yawError)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) == 0)
+  if ((_slot.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0)
   {
     return;
   }
-  regs.cx = regs.ax;
-  NextRandomEntry(_guest);
-  if (Low(regs.ax) >= _guest.Byte(At(regs.di, SLOT_AGGRESSION)))
+  if (Low(NextRandom(_state)) >= _slot.Get(SlotByte::Aggression))
   {
     return;
   }
-  CheckSafeZoneHoldFireEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY))
-  {
-    return;
-  }
-  SetLow(regs.ax, FiringBlocked(_guest.State()));
-  if (Low(regs.ax) != 0)
+  if (CheckSafeZoneHoldFire(_state, _slot).hold || FiringBlocked(_state) != 0)
   {
     return;
   }
   // Each shot calms the ship by 5, unless that would take it below 20.
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_AGGRESSION)) - CALMER_STEP));
-  if (Low(regs.ax) >= CALMEST)
+  const auto calmer = static_cast<std::uint8_t>(_slot.Get(SlotByte::Aggression) - CALMER_STEP);
+  if (calmer >= CALMEST)
   {
-    _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
+    _slot.Set(SlotByte::Aggression, calmer);
   }
-  // VectorWithinBox on AX = 0 and the aim errors in BX and CX.
-  regs.ax = 0;
-  regs.dx = LASER_GRAZE_BOX;
-  _guest.Call(VECTOR_WITHIN_BOX);
-  if (!_guest.Flag(FLAG_CARRY))
+  // VectorWithinBox on x = 0, the yaw error and the pitch error.
+  const auto yaw = static_cast<std::int16_t>(_yawError);
+  const auto pitch = static_cast<std::int16_t>(_pitchError);
+  if (!VectorWithinBox(Vector{0, yaw, pitch}, LASER_GRAZE_BOX))
   {
     return;
   }
-  _guest.Set(DS.playerHitBy, regs.di);
-  _guest.Set(DS.playerHitPending, HIT_GRAZED);
-  SetLow(regs.ax, _guest.Byte(At(regs.di, SLOT_VIEW_Z_HIGH)));
-  _guest.Set(DS.playerHitByDepth, Low(regs.ax));
-  regs.dx = LASER_HIT_BOX;
-  _guest.Call(VECTOR_WITHIN_BOX);
-  if (_guest.Flag(FLAG_CARRY))
+  _state.Set(DS.playerHitBy, _slot.Offset());
+  _state.Set(DS.playerHitPending, HIT_GRAZED);
+  const std::uint8_t depth = _slot.Get(SlotByte::CameraZHigh);
+  _state.Set(DS.playerHitByDepth, depth);
+  // Again within 70, on the registers the first test leaves: x is AX, the depth MOV AL,[DI+3Ch] put over its 0, and the
+  // errors are their magnitudes, which the test takes again.
+  if (VectorWithinBox(Vector{depth, yaw, pitch}, LASER_HIT_BOX))
   {
-    _guest.Set(DS.playerHitPending, HIT_SQUARE);
+    _state.Set(DS.playerHitPending, HIT_SQUARE);
   }
 }
 
@@ -808,6 +793,29 @@ bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot)
 void CreditKill(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  // PayBounty on AX, with the registers its code leaves: PUSH DI / POP DI keep DI; POP AX brings the bounty back, then AL is the
+  // type Routine8C51 finds, the repair it takes, or AX the repair's message; BX the 0 AddCredits takes for the high word, CX as
+  // ShowBountyMessage leaves it and SI as FormatCredits does.
+  const auto payBounty = [&_guest, &regs]
+  {
+    const std::uint16_t tenths = regs.ax;
+    const PaidBounty paid = PayBounty(_guest.State(), ObjectSlot(_guest.State(), regs.di), tenths);
+    regs.bx = 0;
+    regs.cx = BlankedBountyZeros(_guest.State()).triesLeft;
+    regs.si = DS.creditBalanceText.offset;
+    if (paid.killed)
+    {
+      SetLow(regs.ax, paid.killed->type);
+      if (paid.killed->thargoidOrThargon)
+      {
+        SetLow(regs.ax, paid.killed->thargoid ? THARGOID_REPAIR : THARGON_REPAIR);
+      }
+    }
+    if (paid.repaired)
+    {
+      regs.ax = DS.navCompRepairedMessage.offset;
+    }
+  };
   SetLow(regs.ax, _guest.Byte(At(regs.di, SLOT_BOUNTY)));
   if (Low(regs.ax) == 0)
   {
@@ -819,7 +827,7 @@ void CreditKill(Guest& _guest)
   if (Low(regs.ax) != NO_BOUNTY_TYPE)
   {
     regs.ax = Low(regs.ax);
-    PayBounty(_guest);
+    payBounty();
     return;
   }
   SetLow(regs.ax, 0); // INC AL
@@ -827,7 +835,7 @@ void CreditKill(Guest& _guest)
   regs.ax = THARGOID_BOUNTY;
   if (_guest.Flag(FLAG_ZERO))
   {
-    PayBounty(_guest);
+    payBounty();
     return;
   }
   // Killing what carries no bounty is a crime: 4 for a police Viper anywhere, 2 for anything else inside the safe zone.
@@ -943,7 +951,7 @@ void TakeDamage(Guest& _guest)
   {
     return;
   }
-  KillPlayer(_guest);
+  KillPlayerEntry(_guest);
   _guest.Set(DS.playerEnergy, 0);
 }
 
@@ -1052,14 +1060,14 @@ void SpawnPlayerWreckage(Guest& _guest)
   AddToCoordinate(ObjectSlot(_guest.State(), regs.di), 1, static_cast<std::int16_t>(regs.ax));
 }
 
-void KillPlayer(Guest& _guest)
+std::optional<std::uint8_t> KillPlayer(GameState& _state)
 {
-  if (_guest.Get(DS.escapePodFrames) != 0)
+  if (_state.Get(DS.escapePodFrames) != 0)
   {
-    return;
+    return std::nullopt;
   }
-  _guest.Set(DS.playerDead, 1);
-  _guest.Call(START_PLAYER_DEATH_SOUND);
+  _state.Set(DS.playerDead, 1);
+  return StartPlayerDeathSound(_state);
 }
 
 void InitMissile(GameState& _state, ObjectSlot _slot)
@@ -1085,7 +1093,7 @@ void RemoveAllMissiles(Guest& _guest)
       {
         const std::uint16_t remaining = regs.cx;
         const std::uint16_t slot = regs.di;
-        RemoveObject(_guest);
+        RemoveObjectEntry(_guest);
         regs.di = slot;
         regs.cx = remaining;
       }
@@ -1332,6 +1340,10 @@ constexpr Machine::NativeContract VIEW_LASER{REGISTER_AX | REGISTER_BX | REGISTE
 constexpr Machine::NativeContract LASER_SIGHTS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract THARGOID_TEST{0, FLAG_ZERO | FLAG_CARRY};
+// KillPlayer's: DrawSunOrPlanet goes on with the AX StartPlayerDeathSound leaves, and UpdateMissileAi's contract compares it
+// (KillPlayerEntry).
+constexpr Machine::NativeContract KILLS_PLAYER{0, 0};
+constexpr Machine::NativeContract FIRES_LASER{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 
 } // namespace
 
@@ -1393,6 +1405,24 @@ void Routine8C51Entry(Guest& _guest)
   _guest.Clobber(THARGOID_TEST);
 }
 
+void KillPlayerEntry(Guest& _guest)
+{
+  // StartPlayerDeathSound's STI, and the step length it leaves in AL.
+  if (const std::optional<std::uint8_t> stepLength = KillPlayer(_guest.State()))
+  {
+    SetLow(_guest.Regs().ax, *stepLength);
+    _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  }
+  _guest.Clobber(KILLS_PLAYER);
+}
+
+void TryFireLaserAtPlayerEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  TryFireLaserAtPlayer(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.ax, regs.bx);
+  _guest.Clobber(FIRES_LASER);
+}
+
 void UseMaskingDeviceEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1419,14 +1449,13 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2C9B, "TakeDamage", &TakeDamage, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
   NativeEntry{0x2ED6, "DetonateEnergyBomb", &DetonateEnergyBomb, CLOBBERS_ALL},
   NativeEntry{0x2FE3, "SpawnPlayerWreckage", &SpawnPlayerWreckage, CLOBBERS_ALL},
-  NativeEntry{0x3115, "KillPlayer", &KillPlayer, Machine::NativeContract{REGISTER_AX, 0}},
+  NativeEntry{0x3115, "KillPlayer", &KillPlayerEntry, KILLS_PLAYER},
   NativeEntry{0x4C8C, "InitMissile", &InitMissileEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4F9F, "RemoveAllMissiles", &RemoveAllMissiles,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_ES, 0}},
   NativeEntry{0x4FC1, "ExplodeObject", &ExplodeObject, CLOBBERS_ALL},
   NativeEntry{0x50FE, "TallyMaskMissionKill", &TallyMaskMissionKillEntry, PRESERVES_ALL},
-  NativeEntry{0x518B, "TryFireLaserAtPlayer", &TryFireLaserAtPlayer,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0}},
+  NativeEntry{0x518B, "TryFireLaserAtPlayer", &TryFireLaserAtPlayerEntry, FIRES_LASER},
   NativeEntry{0x5242, "LaunchPlayerMissile", &LaunchPlayerMissile, CLOBBERS_ALL},
   NativeEntry{0x534E, "LaunchShipFromObject", &LaunchShipFromObject, Machine::NativeContract{LAUNCHES.clobbers, FLAG_CARRY}},
   NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayer, LAUNCHES},

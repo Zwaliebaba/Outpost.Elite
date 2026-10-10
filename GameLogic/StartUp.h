@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "NativeEntry.h"
 
 #include <span>
@@ -34,22 +35,22 @@ void ShowCredits(Guest& _guest);
 /// Clobbers all.
 void CopyProtection(Guest& _guest);
 
-// ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+// ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
-/// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 in the interrupt table at _vectors:0000 saved and
-/// replaced by the game's, int 8's segment rewritten, then ResetKeyboard.
-void InstallDivideAndKeyboardInterrupts(GameState& _state, std::uint16_t _vectors);
+/// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 in the interrupt table at _vectors:0000 saved and,
+/// with interrupts off, replaced by the game's, int 8's segment rewritten; then interrupts on, and ResetKeyboard.
+void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware, std::uint16_t _vectors);
 
-/// RestoreDivideAndKeyboardInterrupts (CS:0148): int 9 and int 0 put back in the interrupt table, segment then
-/// offset, from what InstallDivideAndKeyboardInterrupts saved.
-void RestoreDivideAndKeyboardInterrupts(GameState& _state);
+/// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, int 9 and int 0 put back in the interrupt table,
+/// segment then offset, from what InstallDivideAndKeyboardInterrupts saved; then interrupts on.
+void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 
 /// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail is exactly ' cheat', 0 otherwise.
 void CheckCheatArgument(GameState& _state);
 
-/// WipeProgram (CS:0554): CS:0564-8F30 filled with the code segment's low byte, a byte at a time, going up from
-/// 0564h, or down from it when _backward (REP STOSB with the direction flag set).
-void WipeProgram(GameState& _state, bool _backward);
+/// WipeProgram (CS:0554): interrupts off, and CS:0564-8F30 filled with the code segment's low byte, a byte at a time,
+/// going up from 0564h, or down from it when _backward (REP STOSB with the direction flag set).
+void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// StartNewGame (CS:4671): the start-up commander copied back over the commander, a byte at a time, going up or, when
 /// _backward, down (REP MOVSB), and the per-game state reset.

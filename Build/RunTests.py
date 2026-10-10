@@ -7,10 +7,10 @@ The suites are every *Tests.vcxproj in the tree (AGENTS.md §3), as x64/<configu
 every one must have been built: vstest reports "no tests found" as a pass, so a suite that did not
 build is not a suite that passed. No suites at all is not an error.
 
-The tests run as concurrent vstest processes, one per shard. Each shard is a group of test classes,
-matched on the test's fully qualified name, and one more shard takes every test the groups do not name,
-so a class added or renamed still runs. A group that runs no test fails, which is how a group left
-naming a renamed class is found. The groups are a balance of measured times, not a rule: moving a class
+The tests run as concurrent vstest processes, one per shard. Each shard is a group of names, each a
+test class or a single test's method, matched on the test's fully qualified name, and one more shard
+takes every test the groups do not name, so a class added or renamed still runs. A group that runs no
+test fails, which is how a group left naming a renamed class is found. The groups are a balance of measured times, not a rule: moving a class
 between them changes how long CI takes, never what it runs. Each shard writes TestResults/<shard>.trx,
 and its counts are read back from it.
 
@@ -30,15 +30,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The groups, by Debug time measured 2026-10-10 over GameLogicTests' 173 tests (381 s in all, g++ -O0;
-# MSVC's Debug is about 1.6 times slower): CorpusTests 83 s and FlightTests 81 s are the two heaviest
-# classes, and each group comes to 90-105 s with the shard that takes the rest. MachineTests runs in
-# well under a second and is left to the rest. Four even shards keep every core busy to the end on
-# a runner with two or four; each test is one thread, so more cores than shards are idle.
+# The groups, by CI's Debug times on 2026-10-10 over GameLogicTests' 176 tests and MachineTests, 2,295 s
+# in all. The 19-replay corpus is 824 s of it: 503 s interpreted, 284 s compared call by call and 37 s
+# native, so its two heavy tests go to different shards. FlightTests is 457 s. Each group, and the shard
+# that takes the rest, comes to 560-620 s. MachineTests runs in about a second and is left to the rest.
+# Four even shards keep every core of a four-core runner busy to the end; each test is one thread.
 GROUPS = [
-  ("corpus", ["CorpusTests", "StartUpTests"]),
-  ("flight", ["FlightTests", "DockedTests"]),
-  ("screens", ["GalaxyTests", "InputTests", "DockingTests", "MarketTests", "SaveLoadTests"]),
+  ("corpus", ["EveryReplayReproducesItsDigests", "StartUpTests", "TimerTests", "SoundTests", "VideoTests"]),
+  ("compared", ["NativeCodeAgreesWithTheOriginalOnEveryCall", "NativeCodeKeepsEveryDigest", "GalaxyTests", "MarketTests", "TextTests"]),
+  ("flight", ["FlightTests", "DockedTests", "MathsTests", "TwinRigTests"]),
 ]
 REST = "rest"
 RESULTS = "TestResults"
@@ -72,9 +72,9 @@ def find_vstest() -> str | None:
 
 def shard_filters() -> list[tuple[str, str]]:
   """Each shard's name and its /TestCaseFilter expression: the groups, then the rest."""
-  shards = [(name, "|".join(f"FullyQualifiedName~{test_class}" for test_class in classes)) for name, classes in GROUPS]
-  every_class = [test_class for _, classes in GROUPS for test_class in classes]
-  shards.append((REST, "&".join(f"FullyQualifiedName!~{test_class}" for test_class in every_class)))
+  shards = [(name, "|".join(f"FullyQualifiedName~{test_name}" for test_name in names)) for name, names in GROUPS]
+  every_name = [test_name for _, names in GROUPS for test_name in names]
+  shards.append((REST, "&".join(f"FullyQualifiedName!~{test_name}" for test_name in every_name)))
   return shards
 
 
@@ -156,7 +156,7 @@ def main() -> int:
           if process.returncode != 0:
             failed.append(name)
           elif found is None or found.get("executed", 0) == 0:
-            print(f"error: shard {name} ran no test: does a class it names still exist?", file=sys.stderr)
+            print(f"error: shard {name} ran no test: does every class or test it names still exist?", file=sys.stderr)
             failed.append(name)
           else:
             total += found.get("executed", 0)

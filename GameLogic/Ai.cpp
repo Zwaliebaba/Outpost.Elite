@@ -412,7 +412,7 @@ void SpawnInvasionWave(Guest& _guest)
 void LaunchAtOffender(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  IsObjectNear(_guest);
+  IsObjectNearEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY) || WithinBoxOnRegisters(_guest, STATION_GUARD_BOX))
   {
     return;
@@ -706,7 +706,7 @@ void TraderAttack(Guest& _guest)
   }
   GetVectorToPlayerEntry(_guest);
   TurnToVectorOnRegisters(_guest);
-  TryFireLaserAtPlayer(_guest);
+  TryFireLaserAtPlayerEntry(_guest);
   IsPoliceViperEntry(_guest);
   if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) != 0)
   {
@@ -1062,7 +1062,7 @@ void UpdateWolfAi(Guest& _guest)
     }
     GetVectorToPlayerEntry(_guest);
     TurnToVectorOnRegisters(_guest);
-    TryFireLaserAtPlayer(_guest);
+    TryFireLaserAtPlayerEntry(_guest);
     regs.bx = WOLF_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
     TryLaunchThargon(_guest);
@@ -1104,7 +1104,7 @@ void UpdateHunterAi(Guest& _guest)
     }
     GetVectorToPlayerEntry(_guest);
     TurnToVectorOnRegisters(_guest);
-    TryFireLaserAtPlayer(_guest);
+    TryFireLaserAtPlayerEntry(_guest);
     regs.bx = HUNTER_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
     ComputeVelocityEntry(_guest);
@@ -1142,7 +1142,7 @@ void UpdateHunterAi(Guest& _guest)
   }
   GetVectorToPlayerEntry(_guest);
   TurnToVectorOnRegisters(_guest);
-  TryFireLaserAtPlayer(_guest);
+  TryFireLaserAtPlayerEntry(_guest);
   regs.bx = CLOSING_MISSILE_ODDS;
   TryLaunchMissileAtPlayer(_guest);
   ComputeVelocityEntry(_guest);

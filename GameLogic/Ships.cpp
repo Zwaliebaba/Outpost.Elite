@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Flight.h"
 #include "Maths.h"
 
 namespace Elite
@@ -15,9 +16,6 @@ namespace
 using Machine::FLAG_CARRY;
 using Machine::FLAG_DIRECTION;
 using Machine::FLAG_ZERO;
-
-// Routines outside this file, run through the original.
-constexpr std::uint16_t ERASE_SCANNER_BLIP = 0x42D6;
 
 constexpr std::uint16_t FIRST_SHIP_SLOT = 3; // firstShipSlot's index: the sun, the planet and the station come first
 
@@ -156,7 +154,7 @@ void SpawnFromRecord(Guest& _guest)
 {
   InitObjectFromTemplateEntry(_guest);
   PlaceAtSpawnPointEntry(_guest);
-  FacePlayerWithRandomRoll(_guest);
+  FacePlayerWithRandomRollEntry(_guest);
 }
 
 } // namespace
@@ -325,22 +323,17 @@ void ReclaimShipSlot(Guest& _guest)
   regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * SLOT_BYTES + regs.ax);
   const std::uint16_t slot = regs.si;
   regs.di = slot;
-  RemoveObject(_guest);
+  RemoveObjectEntry(_guest);
   regs.si = slot;
 }
 
-void IsObjectNear(Guest& _guest)
+NearTest IsObjectNear(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const PositionFit fit = PositionFitsWords(ObjectSlot(_guest.State(), regs.di));
-  SetLow(regs.ax, fit.lastHigh);
-  if (fit.fits)
+  if (PositionFitsWords(_slot).fits)
   {
-    _guest.SetFlag(FLAG_CARRY, true);
-    return;
+    return NearTest{true, std::nullopt};
   }
-  _guest.Call(ERASE_SCANNER_BLIP);
-  _guest.SetFlag(FLAG_CARRY, false);
+  return NearTest{false, EraseScannerBlip(_state, _slot)};
 }
 
 bool IsSunOrPlanet(const ObjectSlot& _slot)
@@ -380,7 +373,7 @@ void SpawnRandomHunter(Guest& _guest)
   regs.bx = DS.spawnTemplates.At(HUNTER_TEMPLATES);
   InitObjectFromTemplateEntry(_guest);
   PlaceAtSpawnPointEntry(_guest);
-  FacePlayerWithRandomRoll(_guest);
+  FacePlayerWithRandomRollEntry(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), HUNTER_CLASS);
   NextRandomEntry(_guest);
   SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & HUNTER_AGGRESSION_MASK));
@@ -401,7 +394,7 @@ void SpawnRandomWolf(Guest& _guest)
   regs.bx = DS.spawnTemplates.At(WOLF_TEMPLATES);
   InitObjectFromTemplateEntry(_guest);
   PlaceAtSpawnPointEntry(_guest);
-  FacePlayerWithRandomRoll(_guest);
+  FacePlayerWithRandomRollEntry(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
   NextRandomEntry(_guest);
   auto aggression = static_cast<std::uint8_t>(Low(regs.ax) & WOLF_AGGRESSION_MASK);
@@ -451,12 +444,12 @@ void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot)
   SetCoordinate(_slot, 2, second.second);
 }
 
-void FacePlayerWithRandomRoll(Guest& _guest)
+RandomRollFacing FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot)
 {
-  FacePlayerEntry(_guest);
-  NextRandomEntry(_guest);
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetWord(At(regs.di, SLOT_ROLL), regs.ax);
+  const Angles heading = FacePlayer(_state, _slot);
+  const std::uint16_t roll = NextRandom(_state);
+  _slot.Set(SlotWord::Roll, roll);
+  return RandomRollFacing{heading, roll};
 }
 
 Vector GetObjectPosition(const ObjectSlot& _slot)
@@ -501,18 +494,17 @@ void MoveObject(Guest& _guest)
     const std::uint16_t high = At(slot, SLOT_X_HIGH + axis);
     _guest.SetByte(high, static_cast<std::uint8_t>(_guest.Byte(high) + Low(regs.dx) + (sum >> 16)));
   }
-  IsObjectNear(_guest);
+  IsObjectNearEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
-    RemoveObject(_guest);
+    RemoveObjectEntry(_guest);
   }
 }
 
-void RemoveObject(Guest& _guest)
+std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot)
 {
-  const std::uint16_t slot = _guest.Regs().di;
-  _guest.SetByte(slot, static_cast<std::uint8_t>(_guest.Byte(slot) & ~SLOT_ACTIVE));
-  _guest.Call(ERASE_SCANNER_BLIP);
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) & ~ObjectSlot::ACTIVE));
+  return EraseScannerBlip(_state, _slot);
 }
 
 Angles FacePlayer(GameState& _state, ObjectSlot _slot)
@@ -657,11 +649,15 @@ constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 // ComputeVelocity: the BX it leaves is compared (ComputeVelocityEntry).
 constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
-// PlaceAtSpawnPoint's, and FacePlayer's, whose BP is compared (FacePlayerEntry).
+// PlaceAtSpawnPoint's, and FacePlayer's and FacePlayerWithRandomRoll's, whose BP is compared (FacePlayerEntry).
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX_BP{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
-constexpr Machine::NativeContract NEAR_TEST{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
+// IsObjectNear's: every register as the original leaves it, from EraseScannerBlip once it erases a blip (IsObjectNearEntry).
+constexpr Machine::NativeContract NEAR_TEST{0, FLAG_CARRY};
+// RemoveObject's: the AX, BX, DX and ES EraseScannerBlip leaves once it erases a blip are compared (RemoveObjectEntry); nothing
+// reads its CX.
+constexpr Machine::NativeContract REMOVES_OBJECT{REGISTER_CX, 0};
 constexpr Machine::NativeContract KEEP_BLIP_TEST{REGISTER_AX, FLAG_CARRY};
 constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 constexpr Machine::NativeContract STATION_TEST{0, FLAG_ZERO | FLAG_CARRY};
@@ -684,6 +680,20 @@ void ClearObjectSlotEntry(Guest& _guest)
   regs.si = Offset(slot, ObjectSlot::BYTES);
   regs.cx = 0;
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void IsObjectNearEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot = SlotAtDi(_guest);
+  // AL, the last high byte the test looked at, INC'd and DEC'd back, and the registers EraseScannerBlip leaves once it erases a
+  // blip. The contract compares them all: UpdateSafeZone and UpdateDashboard go on with AL, IsMassLocked with AH, BX and DX,
+  // EngageJumpDrive and CheckShipInRange with what EraseScannerBlip leaves, and UpdateDriftingObjectAi with CX and DX.
+  SetLow(regs.ax, PositionFitsWords(slot).lastHigh);
+  const NearTest test = IsObjectNear(_guest.State(), slot);
+  EraseScannerBlipOut(_guest, slot, test.erasedBlip);
+  _guest.SetFlag(FLAG_CARRY, test.nearby);
+  _guest.Clobber(NEAR_TEST);
 }
 
 void IsSunOrPlanetEntry(Guest& _guest)
@@ -774,6 +784,16 @@ void PlaceAtSpawnPointEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
 }
 
+void FacePlayerWithRandomRollEntry(Guest& _guest)
+{
+  // NextRandom's word in AX, and the pitch ConvertVectorToAngles leaves in BP (FacePlayerEntry).
+  Machine::Registers& regs = _guest.Regs();
+  const RandomRollFacing facing = FacePlayerWithRandomRoll(_guest.State(), SlotAtDi(_guest));
+  regs.ax = facing.roll;
+  regs.bp = facing.heading.first;
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
+}
+
 void GetObjectPositionEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -806,6 +826,16 @@ void ComputeVelocityEntry(Guest& _guest)
   // The original leaves the z word in BX, and UpdateMissileAi's contract compares BX after it.
   _guest.Regs().bx = static_cast<std::uint16_t>(velocity.z);
   _guest.Clobber(CLOBBERS_AX_DX);
+}
+
+void RemoveObjectEntry(Guest& _guest)
+{
+  // The registers EraseScannerBlip leaves once it erases a blip, which the contract compares but for CX: ExplodeObject stores
+  // what it finds in them, UpdateMissileAi's contract compares AX and BX after it, and TryScoopObject and TransformShip go on
+  // with DX and ES.
+  const ObjectSlot slot = SlotAtDi(_guest);
+  EraseScannerBlipOut(_guest, slot, RemoveObject(_guest.State(), slot));
+  _guest.Clobber(REMOVES_OBJECT);
 }
 
 void FacePlayerEntry(Guest& _guest)
@@ -885,7 +915,7 @@ namespace
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x2FD8, "ClearObjectSlot", &ClearObjectSlotEntry, PRESERVES_ALL},
-  NativeEntry{0x3B9A, "IsObjectNear", &IsObjectNear, NEAR_TEST},
+  NativeEntry{0x3B9A, "IsObjectNear", &IsObjectNearEntry, NEAR_TEST},
   NativeEntry{0x3F2A, "IsSunOrPlanet", &IsSunOrPlanetEntry, TYPE_IN_AL},
   NativeEntry{0x3F37, "IsPlanet", &IsPlanetEntry, TYPE_IN_AL},
   NativeEntry{0x3F40, "IsStation", &IsStationEntry, STATION_TEST},
@@ -905,13 +935,13 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4DF0, "SpawnInvasionThargoid", &SpawnInvasionThargoid, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4E1B, "InitObjectFromTemplate", &InitObjectFromTemplateEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4E75, "PlaceAtSpawnPoint", &PlaceAtSpawnPointEntry, CLOBBERS_AX_BX_CX_DX},
-  NativeEntry{0x4EC5, "FacePlayerWithRandomRoll", &FacePlayerWithRandomRoll, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x4EC5, "FacePlayerWithRandomRoll", &FacePlayerWithRandomRollEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x4EF4, "GetObjectPosition", &GetObjectPositionEntry, PRESERVES_ALL},
   NativeEntry{0x4EFE, "GetVectorToPlayer", &GetVectorToPlayerEntry, PRESERVES_ALL},
   NativeEntry{0x4F35, "RandomizeOrientation", &RandomizeOrientationEntry, CLOBBERS_AX},
   NativeEntry{0x4F48, "ComputeVelocity", &ComputeVelocityEntry, CLOBBERS_AX_DX},
   NativeEntry{0x4F6E, "MoveObject", &MoveObject, REMOVES},
-  NativeEntry{0x4F98, "RemoveObject", &RemoveObject, REMOVES},
+  NativeEntry{0x4F98, "RemoveObject", &RemoveObjectEntry, REMOVES_OBJECT},
   NativeEntry{0x513E, "FacePlayer", &FacePlayerEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x51E0, "FindFreeShipSlot", &FindFreeShipSlotEntry, RETURNS_CARRY},
   NativeEntry{0x51FD, "ReclaimShipSlot", &ReclaimShipSlot, REMOVES},

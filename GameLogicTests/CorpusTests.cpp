@@ -45,6 +45,22 @@ enum class Running : std::uint8_t
   Compared  // with every ported routine, each call compared with the original as it is made
 };
 
+// The scratch directory of each way of running, so that the three corpus tests can run at once in different
+// processes, as Build/RunTests.py's shards run them: a rig empties its directory when it starts and when it ends.
+[[nodiscard]] const char* ScratchName(Running _running) noexcept
+{
+  switch (_running)
+  {
+  case Running::Native:
+    return "Corpus-Native";
+  case Running::Compared:
+    return "Corpus-Compared";
+  case Running::Original:
+    break;
+  }
+  return "Corpus-Original";
+}
+
 // Every Replays/*.replay, played as _running says. Every digest it names must come out as recorded;
 // _check then looks at the machine after each replay.
 template <typename Check> void PlayEveryReplay(Running _running, Check _check)
@@ -71,7 +87,8 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
     // What the interpreted run executes, which the native runs' digests are compared with. Made before
     // the machine that marks it, so that it outlives it.
     std::vector<std::uint8_t> executed;
-    ReferenceRig rig("Corpus", Elite::START_MOMENT, _running == Running::Native ? &Machine::MakeDispatcher : &Machine::MakeCpu);
+    ReferenceRig rig(ScratchName(_running), Elite::START_MOMENT,
+                     _running == Running::Native ? &Machine::MakeDispatcher : &Machine::MakeCpu);
     Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
     if (_running == Running::Original)
     {

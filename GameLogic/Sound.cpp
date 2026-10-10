@@ -224,7 +224,7 @@ void StopSoundEffectsEntry(Guest& _guest)
 {
   // CLI round the writes, which nothing interrupts in native code, then STI.
   StopSoundEffects(_guest.State());
-  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   _guest.Clobber(ENABLES_INTERRUPTS);
 }
 
@@ -233,7 +233,7 @@ void StartImpactSoundEntry(Guest& _guest)
   // CLI before the writes, which nothing interrupts in native code, and the STI that ends BeginSweep: AL the step
   // length, and interrupts on.
   SetLow(_guest.Regs().ax, StartImpactSound(_guest.State()));
-  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   _guest.Clobber(CLOBBERS_AX_ENABLES_INTERRUPTS);
 }
 
@@ -241,7 +241,7 @@ void StartExplosionSoundEntry(Guest& _guest)
 {
   // As StartImpactSoundEntry; the contract compares AX.
   SetLow(_guest.Regs().ax, StartExplosionSound(_guest.State()));
-  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   _guest.Clobber(LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS);
 }
 
@@ -249,7 +249,7 @@ void StartPlayerDeathSoundEntry(Guest& _guest)
 {
   // As StartImpactSoundEntry; the contract compares AX.
   SetLow(_guest.Regs().ax, StartPlayerDeathSound(_guest.State()));
-  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   _guest.Clobber(LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS);
 }
 
@@ -266,7 +266,7 @@ void StartLaserSoundEntry(Guest& _guest)
   if (const std::optional<std::uint8_t> stepLength = StartLaserSound(_guest.State()))
   {
     SetLow(_guest.Regs().ax, *stepLength);
-    _guest.SetFlag(FLAG_INTERRUPT, true);
+    _guest.Devices().EnableInterrupts();
   }
   _guest.Clobber(CLOBBERS_AX_ENABLES_INTERRUPTS);
 }
@@ -275,7 +275,7 @@ void StartPlayerHitSoundEntry(Guest& _guest)
 {
   // CLI round the writes, which nothing interrupts in native code, then STI.
   StartPlayerHitSound(_guest.State());
-  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   _guest.Clobber(ENABLES_INTERRUPTS);
 }
 

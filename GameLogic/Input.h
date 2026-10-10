@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "NativeEntry.h"
 
 #include <cstdint>
@@ -16,20 +17,12 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> InputEntries() noexcept;
 
-/// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode with DS and ES set.
+/// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode with DS and ES set, and AX, DS and ES kept.
 void KeyboardInterrupt(Guest& _guest);
 
 /// WaitForKeyPress (CS:6DEC): GetKey until a key comes, the loop's turns ended where the original's are. Out: AH = its scan code.
 /// Waits as a rule.
 void WaitForKeyPress(Guest& _guest);
-
-/// ReadScanCode (CS:7443): one scan code from the keyboard into keyDown and keyBuffer, then the end of the interrupt.
-/// AX clobbered.
-void ReadScanCode(Guest& _guest);
-
-/// ReadFireButton (CS:74E0): CF=1 while fire is pressed on the selected device. AL clobbered (and BX, CX and DX by
-/// the mouse, DX by the IBM stick).
-void ReadFireButton(Guest& _guest);
 
 /// ReadSteering (CS:7536): AL=roll and AH=pitch input from the selected device, +-23. BX clobbered (and CX and DX by
 /// the joystick and the mouse). Waits sometimes, in ReadJoystickAxes.
@@ -49,17 +42,10 @@ void ReadJoystickAxes(Guest& _guest);
 /// ReadJoystickAxes.
 void ReadJoystickSteering(Guest& _guest);
 
-/// ReadMouseSteering (CS:797E): AL = roll and AH = pitch from the mouse's motion (int 33h), added to the rates the last frame
-/// left, within -23..23, with -1 and 1 snapped to 0; the buttons into mouseButtons and fireLatch. BX, CX and DX clobbered.
-void ReadMouseSteering(Guest& _guest);
-
 /// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held.
 void PollScreenDumpKey(Guest& _guest);
 
-/// ResetMouseIfSelected (CS:7F5D): int 33h AX=0 when the mouse is the input device. AX and BX clobbered.
-void ResetMouseIfSelected(Guest& _guest);
-
-// ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+// ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
 /// What IsMouseDriverInstalled finds at the int 33h vector.
 struct MouseDriver
@@ -78,8 +64,24 @@ struct Steering
 /// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it.
 [[nodiscard]] MouseDriver IsMouseDriverInstalled(const GameState& _state);
 
-/// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero.
-void ResetKeyboard(GameState& _state);
+/// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero, with interrupts off; then interrupts on.
+void ResetKeyboard(GameState& _state, Hardware& _hardware);
+
+/// ReadScanCode (CS:7443): one scan code from the keyboard, acknowledged, into keyDown and keyBuffer, then the end of the
+/// interrupt.
+void ReadScanCode(GameState& _state, Hardware& _hardware);
+
+/// ReadFireButton (CS:74E0): whether fire is pressed on the selected device: the keyboard's space, the Amstrad stick's fire
+/// keys, the IBM stick's two buttons (IN 201h), or the mouse's buttons (int 33h AX=5) or the Amstrad mouse's keys.
+[[nodiscard]] bool ReadFireButton(const GameState& _state, Hardware& _hardware);
+
+/// ReadMouseSteering (CS:797E): the roll and the pitch from the mouse's motion (int 33h AX=0Bh), added to the rates the last
+/// frame left, within -23..23, with -1 and 1 snapped to 0; the buttons (int 33h AX=5, or the Amstrad mouse's keys) into
+/// mouseButtons, and the left one into fireLatch.
+[[nodiscard]] Steering ReadMouseSteering(GameState& _state, Hardware& _hardware);
+
+/// ResetMouseIfSelected (CS:7F5D): the mouse driver reset (int 33h AX=0) when the mouse is the input device.
+void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 
 /// ReadKeyboardSteering (CS:78EF): the cursor and QAOP keys ramped into keyboardRollRamp and keyboardPitchRamp. Returns
 /// the roll ramp and the pitch ramp negated.
@@ -93,6 +95,10 @@ void ResetKeyboard(GameState& _state);
 
 void IsMouseDriverInstalledEntry(Guest& _guest);   ///< Out: ZF=0 if installed; ES the vector's segment.
 void ResetKeyboardEntry(Guest& _guest);            ///< Out: IF=1.
+void ReadScanCodeEntry(Guest& _guest);             ///< AX clobbered.
+void ReadFireButtonEntry(Guest& _guest);           ///< Out: CF=1 while fire is pressed; AX, BX, CX and DX clobbered.
+void ReadMouseSteeringEntry(Guest& _guest);        ///< Out: AL=roll, AH=pitch; BX, CX and DX clobbered.
+void ResetMouseIfSelectedEntry(Guest& _guest);     ///< AX and BX clobbered.
 void ReadKeyboardSteeringEntry(Guest& _guest);     ///< Out: AL=roll, AH=pitch; BX clobbered.
 void ApplyReverseControlsEntry(Guest& _guest);     ///< In/out: AL=roll, AH=pitch.
 void ApplyReverseControlsToDxEntry(Guest& _guest); ///< In/out: DL=roll, DH=pitch.

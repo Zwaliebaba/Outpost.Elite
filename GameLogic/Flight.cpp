@@ -8,6 +8,7 @@
 #include "ObjectSlot.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "Video.h"
 
 #include <utility>
 
@@ -33,8 +34,6 @@ constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
 constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
 constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t RESTORE_FLIGHT_SCREEN = 0x15CF;
-constexpr std::uint16_t PLOT_PIXEL = 0x15E0;
-constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
 constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
@@ -312,28 +311,31 @@ void ResetStardustOut(Registers& _regs, std::uint16_t _lifetimeRandom) noexcept
   return y;
 }
 
-// The particle as a point, or while the jump drive is engaged a streak from where it was last frame,
-// unless it has just respawned.
-void DrawDust(Guest& _guest)
+// The particle at DS:_particle, at _position, as a point, or while the jump drive is engaged a streak from where it was last
+// frame, unless it has just respawned. Returns whether DrawLine filled bytes with REP STOSB (DrawLineOut).
+bool DrawDust(GameState& _state, std::uint16_t _particle, DustPosition _position)
 {
-  Registers& regs = _guest.Regs();
-  DustToScreenEntry(_guest);
-  SetLow(regs.dx, Low(regs.ax));
-  SetHigh(regs.dx, Low(regs.bx));
-  if (_guest.Get(DS.jumpDriveEngaged) == 0)
+  const DustScreenPosition screen = DustToScreen(_position);
+  const std::uint8_t x = Low(Word(screen.x));
+  const std::uint8_t row = Low(Word(screen.row));
+  if (_state.Get(DS.jumpDriveEngaged) == 0)
   {
-    _guest.Call(PLOT_PIXEL);
-    return;
+    PlotPixel(_state, x, row);
+    return false;
   }
-  if (_guest.Byte(Plus(regs.si, PREVIOUS_NEW)) != 0)
+  if (_state.Byte(Plus(_particle, PREVIOUS_NEW)) != 0)
   {
-    return;
+    return false;
   }
-  GetPreviousDustScreenPositionEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
-  {
-    _guest.Call(DRAW_LINE);
-  }
+  const std::optional<DustScreenPosition> previous = GetPreviousDustScreenPosition(_state, _particle);
+  return previous && DrawLine(_state, x, row, Low(Word(previous->x)), Low(Word(previous->row)));
+}
+
+// DrawDust for the particle at SI, at AX and BX, and what DrawLine leaves of ES and the direction flag.
+void DrawDustOnRegisters(Guest& _guest)
+{
+  const Registers& regs = _guest.Regs();
+  DrawLineOut(_guest, DrawDust(_guest.State(), regs.si, DustPosition{Signed(regs.ax), Signed(regs.bx)}));
 }
 
 // UpdateFrontStardust (0x06C0): the dust streams outwards from the centre.
@@ -383,7 +385,7 @@ void UpdateFrontStardust(Guest& _guest)
         RespawnDustAnywhereEntry(_guest);
         StorePreviousDustPositionEntry(_guest);
       }
-      DrawDust(_guest);
+      DrawDustOnRegisters(_guest);
     }
     regs.si = Plus(regs.si, PARTICLE_BYTES);
     regs.cx = count;
@@ -443,7 +445,7 @@ void UpdateRearStardust(Guest& _guest)
         RespawnDustAnywhereEntry(_guest);
         StorePreviousDustPositionEntry(_guest);
       }
-      DrawDust(_guest);
+      DrawDustOnRegisters(_guest);
     }
     regs.si = Plus(regs.si, PARTICLE_BYTES);
     regs.cx = count;
@@ -464,7 +466,7 @@ void DrawSideStardust(Guest& _guest)
     IsDustOnScreenEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
-      DrawDust(_guest);
+      DrawDustOnRegisters(_guest);
     }
     regs.si = Plus(particle, PARTICLE_BYTES);
     regs.cx = count;
@@ -2371,29 +2373,29 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
   return mask;
 }
 
-void EraseCompassAndBlips(Guest& _guest)
+bool EraseCompassAndBlips(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.stationSlot.offset;
-  const std::uint16_t flags = Plus(regs.di, SLOT_FLAGS);
-  if ((_guest.Byte(flags) & FLAG_BLIP_DRAWN) != 0)
+  bool erased = false;
+  ObjectSlot station(_state, DS.stationSlot.offset);
+  if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
   {
-    regs.ax = SignExtend(_guest.Byte(Plus(regs.di, SLOT_BLIP + 2)));
-    regs.bp = regs.ax;
-    regs.dx = _guest.Word(Plus(regs.di, SLOT_BLIP));
-    _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) & ~FLAG_BLIP_DRAWN));
-    XorCompassDotEntry(_guest);
+    // The dot at BlipX and BlipY, solid while BlipZ is not 0 (CBW into BP), its flag cleared first.
+    const bool inFront = station.Get(SlotByte::BlipZ) != 0;
+    const std::uint8_t x = station.Get(SlotByte::BlipX);
+    const std::uint8_t y = station.Get(SlotByte::BlipY);
+    station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) & ~FLAG_BLIP_DRAWN));
+    (void)XorCompassDot(_state, x, y, inFront);
+    erased = true;
   }
-  regs.di = DS.firstShipSlot.offset;
-  regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - 3);
-  do
+  // MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3, and LOOP: 65,536 slots for a count of 3.
+  std::uint16_t slot = DS.firstShipSlot.offset;
+  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - 3);
+  for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    const std::uint16_t count = regs.cx;
-    const std::uint16_t slot = regs.di;
-    EraseScannerBlipEntry(_guest);
-    regs.di = Plus(slot, SLOT_BYTES);
-    regs.cx = count;
-  } while (--regs.cx != 0);
+    erased = EraseScannerBlip(_state, ObjectSlot(_state, slot)).has_value() || erased;
+    slot = Plus(slot, SLOT_BYTES);
+  }
+  return erased;
 }
 
 void UpdateFuelLeak(Guest& _guest)
@@ -2816,6 +2818,7 @@ using Machine::REGISTER_BP;
 using Machine::REGISTER_BX;
 using Machine::REGISTER_CX;
 using Machine::REGISTER_DI;
+using Machine::REGISTER_DS;
 using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
@@ -2846,6 +2849,10 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX_CX = Clobbers(REGISTER_AX | REG
 constexpr Machine::NativeContract CLOBBERS_DX_DI_BP = Clobbers(REGISTER_DX | REGISTER_DI | REGISTER_BP);
 constexpr Machine::NativeContract SHIFTS_STARDUST = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP);
 constexpr Machine::NativeContract ROLLS_STARDUST = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI);
+// EraseCompassAndBlips': all but DS, which the original leaves alone, and ES, which ShowShortRangeChart goes on with
+// (EraseCompassAndBlipsEntry).
+constexpr Machine::NativeContract ERASES_COMPASS_AND_BLIPS =
+  Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS & ~REGISTER_ES));
 
 // A particle's position as the dust routines hold it: x in AX, y in BX.
 [[nodiscard]] DustPosition DustIn(const Registers& _regs) noexcept
@@ -3102,6 +3109,16 @@ void ComputeDeathDebrisVectorEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_DX_DI_BP);
 }
 
+void EraseCompassAndBlipsEntry(Guest& _guest)
+{
+  // XorDashboardPixel leaves ES on the video segment once anything is erased, and ShowShortRangeChart goes on with ES.
+  if (EraseCompassAndBlips(_guest.State()))
+  {
+    _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(ERASES_COMPASS_AND_BLIPS);
+}
+
 void UpdateWarningsEntry(Guest& _guest)
 {
   UpdateWarnings(_guest.State());
@@ -3175,11 +3192,16 @@ void EraseScannerBlipEntry(Guest& _guest)
   // last XorScannerBlip does, and the contract compares them all: through IsObjectNear, EngageJumpDrive, CheckShipInRange and
   // IsMassLocked compare BX, CX and DX, UpdateMissileAi, TryScoopObject and TransformShip compare DX, and ExplodeObject,
   // through RemoveObject, stores what it finds there.
-  if (const std::optional<DashboardPixel> last = EraseScannerBlip(_guest.State(), slot))
-  {
-    ScannerBlipOut(regs, *last, slot.Get(SlotByte::BlipY));
-  }
+  EraseScannerBlipOut(_guest, slot, EraseScannerBlip(_guest.State(), slot));
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void EraseScannerBlipOut(Guest& _guest, const ObjectSlot& _slot, const std::optional<DashboardPixel>& _erased)
+{
+  if (_erased)
+  {
+    ScannerBlipOut(_guest.Regs(), *_erased, _slot.Get(SlotByte::BlipY));
+  }
 }
 
 void XorScannerBlipEntry(Guest& _guest)
@@ -3289,7 +3311,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x42D6, "EraseScannerBlip", &EraseScannerBlipEntry, PRESERVES_ALL},
   NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlipEntry, CLOBBERS_DI},
   NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixelEntry, CLOBBERS_DI},
-  NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlips, Clobbers(REGISTER_ALL)},
+  NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlipsEntry, ERASES_COMPASS_AND_BLIPS},
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeak, Clobbers(REGISTER_AX | REGISTER_DX)},
   NativeEntry{0x7E9B, "RunFlight", &RunFlight, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePod, PRESERVES_ALL},

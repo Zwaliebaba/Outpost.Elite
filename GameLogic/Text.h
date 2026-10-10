@@ -16,9 +16,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> TextEntries() noexcept;
 
-/// UpdateMessageLine (CS:35A3): the message line's work for one frame. Clobbers all.
-void UpdateMessageLine(Guest& _guest);
-
 /// ShowShipIdentity (CS:364D): 'CLASS: <class> TYPE: <type>' for ship type AL and class AH on the message line for 30
 /// frames; class 3 is Simple unless IsDebrisType says the slot at DI is debris, a class 4 of type 5 is a Hermit, and
 /// type 1Ch the police. Out: AX = shipIdentityText, BX, CX = 0 and DI past the copies.
@@ -28,9 +25,6 @@ void ShowShipIdentity(Guest& _guest);
 /// cursor; Enter ends it, Backspace deletes, letters are lower case unless Shift is held. Waits for keys. Out: BX the
 /// length; AX, CX, DX clobbered.
 void ReadTextLine(Guest& _guest);
-
-/// RedrawInputLine (CS:773A): the BX characters at SI, then the cursor, printed for the layout. Preserves BX, SI, DI.
-void RedrawInputLine(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -57,6 +51,13 @@ struct PrintedLines
 {
   std::uint16_t end;      ///< past the last line's NUL
   std::uint16_t nextLine; ///< the text page's cell a row below the last line's first
+};
+
+/// Where RedrawInputLine's two prints stop: the line typed, and the cursor after it.
+struct RedrawnInputLine
+{
+  PrintedText line;
+  PrintedText cursor;
 };
 
 /// Where DrawSmallViewChar draws a letter: the byte of the space-view buffer, and the shift, 0 or 4, of the
@@ -118,12 +119,21 @@ DrawnSmallText DrawSmallViewString(GameState& _state, std::uint16_t _text, std::
 /// blanked and a decimal point before the last.
 void FormatCredits(GameState& _state);
 
+/// UpdateMessageLine (CS:35A3): the message line's work for a frame: UpdateWarnings; then while the message drawn has frames
+/// left, one fewer; else, once they run out, the view's name as the message, and the message shown, the line cleared a row at a
+/// time forwards or, _backwards, down, unless it is shown already. Returns whether it drew one.
+bool UpdateMessageLine(GameState& _state, bool _backwards);
+
 /// ClearMessageLine (CS:3609): zeroes the message line's eight rows of 32 words from _segment:0058, each row forwards
 /// or, _backwards, down (REP STOSW with the direction flag set).
 void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards);
 
 /// ShowBountyMessage (CS:3626): _tenths of a credit into bountyText as "nnnn.n", shown for 20 frames.
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
+
+/// What ShowBountyMessage's BlankLeadingZeros returned for the bounty's digits, read back from bountyText: for the entries and
+/// the register code of the routines that call it, whose originals leave its CX.
+[[nodiscard]] BlankedZeros BlankedBountyZeros(const GameState& _state);
 
 /// PrintTextModeString (CS:60D2): the text at DS:_text to the text page at B800:_cell, in textAttribute.
 PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell);
@@ -151,6 +161,11 @@ PrintedLines PrintTextLines(GameState& _state, std::uint16_t _text, std::uint16_
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);
 
+/// RedrawInputLine (CS:773A): a NUL after the _length characters typed at DS:_buffer, then they and inputCursorText after them,
+/// each by PrintStringForLayout from _segment:_cell in the ink FFFFh.
+RedrawnInputLine RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment,
+                                 std::uint16_t _cell);
+
 /// PrintStringForLayout (CS:7750): the text at DS:_text by PrintTextModeString at B800:_cell in the text layout, and by
 /// DrawScreenString in _ink at _segment:_cell otherwise.
 PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
@@ -170,6 +185,7 @@ void BlankLeadingZerosEntry(Guest& _guest);
 void DrawSmallViewCharEntry(Guest& _guest);
 void DrawSmallViewStringEntry(Guest& _guest);
 void FormatCreditsEntry(Guest& _guest);
+void UpdateMessageLineEntry(Guest& _guest); ///< Out: ES = B800h once it draws a message.
 void ClearMessageLineEntry(Guest& _guest);
 void ShowBountyMessageEntry(Guest& _guest);
 void PrintTextModeStringEntry(Guest& _guest);
@@ -180,6 +196,7 @@ void PrintCountedTextLinesEntry(Guest& _guest);
 void FormatTenthsEntry(Guest& _guest);
 void PrintTextLinesEntry(Guest& _guest);
 void ToggleInputCursorEntry(Guest& _guest);
+void RedrawInputLineEntry(Guest& _guest); ///< In: SI the buffer, BX the length, ES:DI the place. Out: AX, and ES in the text layout.
 void PrintStringForLayoutEntry(Guest& _guest);
 
 } // namespace Elite
