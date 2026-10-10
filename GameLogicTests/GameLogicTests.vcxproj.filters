@@ -10,6 +10,15 @@
     <Filter Include="Scene">
       <UniqueIdentifier>{9A0E1B24-5E84-5CB3-9BDD-3E1066249ABA}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Galaxy">
+      <UniqueIdentifier>{B77FFEC9-7450-50BB-8F03-717940D096D3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Hyperspace">
+      <UniqueIdentifier>{2465F5AE-D8CE-5D39-BBAB-ECD299DDDF0D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Market">
+      <UniqueIdentifier>{0F1A4831-1711-5CF5-9821-5AC2A3EC686E}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Build">
       <UniqueIdentifier>{A38D8D19-E84C-5174-93B5-6D72C91EA9D8}</UniqueIdentifier>
     </Filter>
@@ -37,6 +46,15 @@
   <ItemGroup>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="GalaxyTests.cpp">
+      <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="HyperspaceTests.cpp">
+      <Filter>Hyperspace</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketTests.cpp">
+      <Filter>Market</Filter>
     </ClCompile>
     <ClCompile Include="MathsTests.cpp">
       <Filter>Maths</Filter>

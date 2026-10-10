@@ -89,6 +89,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CorpusTests.cpp" />
+    <ClCompile Include="GalaxyTests.cpp" />
+    <ClCompile Include="HyperspaceTests.cpp" />
+    <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MathsTests.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
