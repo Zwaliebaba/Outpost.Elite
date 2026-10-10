@@ -224,27 +224,20 @@ void UpdateWarnings(GameState& _state);
 
 /// UpdateScannerBlip (CS:40EC): unless _slot is debris, a station, the sun or the planet, its scanner blip moved to the
 /// camera-frame position _camera, y and z scaled by 1.25: the slot marked scanned, the old blip XORed out if one is drawn
-/// and the new one in. Returns the last pixel of the new blip, when it drew one.
-std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera);
-
-/// What UpdateCompass leaves.
-struct CompassUpdate
-{
-  DashboardPixel last; ///< the last pixel of the dot it drew, one right of and one above its centre
-  std::uint16_t range; ///< |z| + 1000 of the target in the camera's frame, the dot's divisor, which CX keeps
-};
+/// and the new one in.
+void UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera);
 
 /// UpdateCompass (CS:418F): while titleShown, the compass dot moved to the station when the planet is near
 /// (IsObjectNearKeepBlip), else to the planet (compassTargetIsStation 1 or 0). The target's and the station's scale shifts go to
 /// their depth bytes (+3Dh); the target's scaled position turned to the view goes to the station's compass words and, turned to
 /// the camera's frame, gives the dot: x and y as 8 * |c| / (|z| + 1000), at most 7, normalised by sqrtTable when their squares
 /// reach 41h, at (CFh + x, 27h + y). The old dot, kept in the station's blip bytes, is XORed out if drawn and the new one in.
-std::optional<CompassUpdate> UpdateCompass(GameState& _state);
+/// Returns whether it ran: false, doing nothing, unless titleShown.
+bool UpdateCompass(GameState& _state);
 
 /// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
-/// neighbours, a ring, and the centre too while _inFront, solid. Returns the last pixel, one right of and one above
-/// the centre.
-DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
+/// neighbours, a ring, and the centre too while _inFront, solid.
+void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
 
 /// A dashboard pixel's place as the original holds it in DX: x in DL, y in DH. What a routine that ends by XORing a pixel
 /// leaves there.
@@ -293,17 +286,12 @@ void UpdatePlayerVelocity(GameState& _state);
 /// shipSlotCount slots from shipSlots, and from its compass words: the player stays at the origin.
 void MoveObjectsByVelocity(GameState& _state);
 
-/// What HandleFlightFunctionKeys leaves: the view key ProcessFlightKeys reads, and the registers the screens carry from one to the
-/// next, which the original passes on by accident.
+/// What HandleFlightFunctionKeys leaves that ProcessFlightKeys reads.
 struct FlightScreens
 {
-  std::uint8_t view; ///< AH: the F1-F4 that ended it, or 0: no key, or the navigation computer's error
-  std::uint8_t al;   ///< AL: as it came in, 9Eh after the navigation computer's error, or as the screens and waits left it
+  std::uint8_t view;                    ///< AH: the F1-F4 that ended it, or 0: no key, or the navigation computer's error
   std::optional<ScreenChange> restored; ///< what RestoreFlightScreen did, once a screen was shown
-  /// BP: as it came in, the compass dot's in-front byte sign-extended once EraseCompassAndBlips erased the dot, or as the screens
-  /// that select the system at the cursor leave it.
-  std::uint16_t countLeft;
-  bool backward; ///< the direction flag, which a chart and the cockpit drawn again clear
+  bool backward;                        ///< the direction flag, which a chart and the cockpit drawn again clear
 };
 
 /// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight, scanned in keyDown. A key held is flushed (ResetKeyboard), and the screens
@@ -311,12 +299,12 @@ struct FlightScreens
 /// prices, F9 the commander's status and F10 the inventory, each from the key the last returned, any other key waited past, until
 /// F1-F4; in witch space F5, F7, F8, and F6 until its countdown is down to 1, post the navigation computer's error instead. A screen
 /// shown first sets flightScreenShown and erases the compass and the blips, and the cockpit comes back as it leaves
-/// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. _al, _countIfNone, _segment and _backward are AL, BP,
-/// ES and the direction flag it is called with, which the screens and their waits read: BP is the count SelectSystemAtCursor makes
+/// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. _countIfNone, _segment and _backward are BP, ES and
+/// the direction flag it is called with, which the screens and their waits read: BP is the count SelectSystemAtCursor makes
 /// the index from when no system is on the chart, ES what a chart draws its title through when its frame shows already. Waits
 /// for keys on the screens' paths (ADR-015).
-FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _countIfNone,
-                                       std::uint16_t _segment, bool _backward);
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, std::uint16_t _segment,
+                                       bool _backward);
 
 /// How ProcessFlightKeys ends.
 struct FlightKeysExit
@@ -331,10 +319,10 @@ struct FlightKeysExit
 /// function keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace
 /// countdown, which ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes
 /// until a key; T, U and M the missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device;
-/// L the anti-ECM emulator. _al, _countIfNone, _segment and _backward are AL, BP, ES and the direction flag it is called with, which
+/// L the anti-ECM emulator. _countIfNone, _segment and _backward are BP, ES and the direction flag it is called with, which
 /// HandleFlightFunctionKeys takes; _di is DI, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine
 /// before it moves DI. Waits for keys on the screens', the pause's and the freeze's paths (ADR-015).
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _di, std::uint16_t _countIfNone,
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint16_t _di, std::uint16_t _countIfNone,
                                  std::uint16_t _segment, bool _backward);
 
 /// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until

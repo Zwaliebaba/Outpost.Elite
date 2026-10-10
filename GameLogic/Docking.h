@@ -26,9 +26,8 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward);
 /// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState: 0 slow to a stop; 1 to 3
 /// roll and then pitch towards the approach point, 2000 out from the slot, twice; 4 fly to it; 5 to 7 the same towards the
 /// station; 8 close in until within 650, then the front view, locked; 9 to 11 roll to match the station's spin. Its steering for
-/// the frame is in dockingComputerSteering and rollRate, cleared first. Returns whether state 8 came within 650 of the station
-/// and scattered the stardust.
-bool RunDockingComputer(GameState& _state);
+/// the frame is in dockingComputerSteering and rollRate, cleared first.
+void RunDockingComputer(GameState& _state);
 
 /// DrawTunnelRectangle (CS:1AA0): the four edges between the five points at DS:_points, x and y signed bytes about the view's
 /// centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.

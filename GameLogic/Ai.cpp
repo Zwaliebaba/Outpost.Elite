@@ -631,7 +631,7 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, ObjectS
   case INERT_CLASS:
     return _dx;
   case STATION_CLASS:
-    return UpdateStationAi(_state, _slot, _backward, _dx).dx;
+    return UpdateStationAi(_state, _slot, _backward, _dx);
   case MISSILE_CLASS:
     return UpdateMissileAi(_state, _hardware, _slot, _backward, static_cast<std::uint16_t>(_behavior << 1), _dx).dx;
   case DRIFTING_CLASS:
@@ -793,36 +793,34 @@ VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _obj
   return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
-StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
+std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
 {
   _station.Set(SlotWord::Roll, Offset(_station.Get(SlotWord::Roll), STATION_SPIN));
-  StationTurn turn{std::nullopt, false, _dx};
+  std::uint16_t dx = _dx;
   if (_state.Get(DS.spawnGovernment) >= 1 && (_station.Get(SlotByte::Flags) & FLAG_HOSTILE) != 0)
   {
     // DX: the last pixel of the blip IsObjectNear erased, or MOV DX,1C2h, the guarded box, once it is near; then what
     // ComputeVelocity leaves once it launched.
     const OffenderLaunch launch = LaunchAtOffender(_state, _station, _backward);
-    turn.near = launch.near;
     if (launch.near.erasedBlip)
     {
-      turn.dx = PixelPlace(*launch.near.erasedBlip);
+      dx = PixelPlace(*launch.near.erasedBlip);
     }
     if (launch.near.nearby)
     {
-      turn.dx = STATION_GUARD_BOX;
+      dx = STATION_GUARD_BOX;
     }
     if (launch.launched)
     {
-      turn.launched = true;
-      turn.dx = launch.launched->dx;
+      dx = launch.launched->dx;
     }
   }
   // DX: the last pixel of the last blip RemoveAllMissiles erased, once the ECM ran.
   if (const std::optional<DashboardPixel> erased = CheckMissilesAtStation(_state, _station))
   {
-    turn.dx = PixelPlace(*erased);
+    dx = PixelPlace(*erased);
   }
-  return turn;
+  return dx;
 }
 
 MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
@@ -981,14 +979,13 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
   }
 }
 
-HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
+bool CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
 {
   if (_state.Get(DS.thargoidInvasionActive) == 1 || IsPoliceViper(_slot))
   {
-    return HoldFire{false, std::nullopt};
+    return false;
   }
-  const SafeZone zone = InSafeZone(_state);
-  return HoldFire{zone.inside, zone};
+  return InSafeZone(_state).inside;
 }
 
 } // namespace Elite

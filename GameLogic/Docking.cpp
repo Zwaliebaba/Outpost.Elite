@@ -347,9 +347,9 @@ void FlyToApproachPoint(GameState& _state)
   MoveObjectsByVelocity(_state);
 }
 
-// State 8 (CS:8904): straight in along z, slowing within 1000, until within 650: then the front view, locked. Returns whether
-// it stopped there, and the spin is matched next.
-bool CloseIn(GameState& _state)
+// State 8 (CS:8904): straight in along z, slowing within 1000, until within 650: then the front view, locked, and the spin is
+// matched next.
+void CloseIn(GameState& _state)
 {
   const std::uint16_t distance = Negate(ObjectSlot(_state, DS.stationSlot.offset).Get(SlotWord::Z));
   if (distance < STOP_CLOSING_DISTANCE)
@@ -361,7 +361,7 @@ bool CloseIn(GameState& _state)
     }
     (void)ResetStardust(_state);
     _state.Set(DS.viewLocked, 1);
-    return true;
+    return;
   }
   if (distance < CLOSE_SLOWLY_DISTANCE)
   {
@@ -376,7 +376,6 @@ bool CloseIn(GameState& _state)
   _state.Set(DS.playerVelocityZ, Negate(_state.Get(DS.playerSpeed)));
   MoveObjectsByVelocity(_state);
   _state.Set(DS.velocityDirty, 1);
-  return false;
 }
 
 // The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
@@ -611,7 +610,7 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   return PostDockingMessage(_state, DS.dockingComputerOnMessage);
 }
 
-bool RunDockingComputer(GameState& _state)
+void RunDockingComputer(GameState& _state)
 {
   Steer(_state, 0);
   const std::uint8_t state = _state.Get(DS.dockingComputerState);
@@ -623,43 +622,44 @@ bool RunDockingComputer(GameState& _state)
     {
       _state.Set(DS.playerSpeed, static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) - SPEED_STEP));
       _state.Set(DS.velocityDirty, 1);
-      return false;
+      break;
     }
     _state.Set(DS.dockingComputerState, AIM_ROLL_AT_APPROACH);
     _state.Set(DS.dockingAlignPasses, 0);
-    return false;
+    break;
   case AIM_ROLL_AT_APPROACH:
     AimRoll(_state, true, ROLL_TO_APPROACH);
-    return false;
+    break;
   case ROLL_TO_APPROACH:
   case ROLL_TO_STATION:
     RollToTarget(_state, state == ROLL_TO_APPROACH ? PITCH_TO_APPROACH : PITCH_TO_STATION);
-    return false;
+    break;
   case PITCH_TO_APPROACH:
     PitchToTarget(_state, true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH);
-    return false;
+    break;
   case FLY_TO_APPROACH:
     FlyToApproachPoint(_state);
-    return false;
+    break;
   case AIM_ROLL_AT_STATION:
     AimRoll(_state, false, ROLL_TO_STATION);
-    return false;
+    break;
   case PITCH_TO_STATION:
     PitchToTarget(_state, false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN);
-    return false;
+    break;
   case CLOSE_IN:
-    return CloseIn(_state);
+    CloseIn(_state);
+    break;
   case MATCH_SPIN:
     MatchSpin(_state);
-    return false;
+    break;
   case ROLL_WITH_SPIN:
     RollWithSpin(_state, 0);
-    return false;
+    break;
   case ROLL_WITH_SPIN_TURNED:
     RollWithSpin(_state, HALF_TURN);
-    return false;
+    break;
   default:
-    return false;
+    break;
   }
 }
 

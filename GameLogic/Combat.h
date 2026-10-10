@@ -66,8 +66,6 @@ struct MissileFlight
 struct KillCredit
 {
   std::optional<std::uint16_t> paidTenths; ///< what it paid, in tenths of a credit, when it paid
-  std::optional<ThargoidTest> killed;      ///< once it paid while a mis-jump's countdown runs: what Routine8C51 found of the slot
-  bool repaired;                           ///< the countdown reached 1, and the Nav-Comp's repair was announced
   std::optional<SafeZone> zone;            ///< for a kill that paid nothing: what InSafeZone read
   std::optional<std::uint8_t> crime;       ///< what that kill added to legalStatus, when it was a crime
 };

@@ -19,17 +19,6 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
-/// What UpdateStationAi did, and what it leaves in DX.
-struct StationTurn
-{
-  std::optional<NearTest> near; ///< what IsObjectNear found of the station, when it looked for an offender
-  bool launched;                ///< it launched a copy of itself
-  /// DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's box: the DX it was
-  /// called with, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it
-  /// erased.
-  std::uint16_t dx;
-};
-
 /// UpdateObjectsAndSpawn (CS:4A10): once a frame, activeObjectCount and the class counts cleared (REP STOSB, backwards when
 /// _backward, the direction flag, is set), then every active slot of shipSlotCount counted, debris apart, and run by its class's
 /// handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount, the mask
@@ -40,8 +29,9 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
 /// UpdateStationAi (CS:5595): class 1: the station at _station spins; while it is hostile and the government is no anarchy, it
 /// looks for an offender out of the box it guards and launches police, shuttles or traders at one (copies of itself, backwards
 /// when _backward); then it answers missiles aimed at it, or at the police in the safe zone, with its ECM. _dx is the DX it is
-/// called with.
-StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx);
+/// called with. Returns DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's
+/// box: _dx, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it erased.
+std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx);
 
 /// ClampTurnStep's step and the error it was taken from.
 struct TurnStep
@@ -69,13 +59,6 @@ struct HunterCount
 {
   std::uint8_t count;                ///< as a byte, wrapping
   std::optional<std::uint16_t> last; ///< the last slot counted, if any
-};
-
-/// What CheckSafeZoneHoldFire finds.
-struct HoldFire
-{
-  bool hold;                    ///< the ship must not fire
-  std::optional<SafeZone> zone; ///< what InSafeZone read, when it was asked: neither in an invasion nor for a police Viper
 };
 
 /// ScaleSpawnOdds (CS:4C0E): _odds multiplied by 32 (shifted left 5) while jumpDriveEngaged is 1.
@@ -124,6 +107,6 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
 
 /// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
 /// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.
-[[nodiscard]] HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
+[[nodiscard]] bool CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
 
 } // namespace Elite

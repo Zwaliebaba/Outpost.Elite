@@ -491,14 +491,14 @@ struct WindingProducts
   }
   if (IsSunOrPlanet(_slot))
   {
-    (void)TransformSunOrPlanet(_state, _slot);
+    TransformSunOrPlanet(_state, _slot);
     return _slot.Offset();
   }
   if (!IsStation(_slot).station)
   {
     if (CheckShipInRange(_state, _slot).InRange())
     {
-      (void)TransformShip(_state, _slot);
+      TransformShip(_state, _slot);
     }
     return _slot.Offset();
   }
@@ -1115,7 +1115,7 @@ FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t 
 
 ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
 {
-  ShipRangeCheck check{IsObjectNear(_state, _slot), ShipRange{}, std::nullopt};
+  ShipRangeCheck check{IsObjectNear(_state, _slot), ShipRange{}};
   if (check.near.nearby)
   {
     check.range = ShipWithinRange(_state, _slot);
@@ -1124,23 +1124,22 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
       return check;
     }
   }
-  check.erasedBlip = EraseScannerBlip(_state, _slot);
+  (void)EraseScannerBlip(_state, _slot);
   return check;
 }
 
-ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot)
+void TransformSunOrPlanet(GameState& _state, ObjectSlot _slot)
 {
   // MOV [DI+0Ah],CL / MOV [DI+3Dh],CL / MOV DH,CL: the shift, as the disc's scale and its depth, and for ScalePositionDown.
   const std::uint8_t shift = GetPositionScaleShift(_slot).shift;
   _slot.Set(SlotByte::DiscScale, shift);
   _slot.Set(SlotByte::Depth, shift);
   // PUSH DI / POP DI round TransformToViewWithBlip keep the slot.
-  const ViewWithBlip transformed = TransformToViewWithBlip(_state, _slot, ScalePositionDown(_slot, shift));
-  _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(transformed.view.x));
-  _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(transformed.view.y));
-  _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(transformed.view.z));
+  const Vector view = TransformToViewWithBlip(_state, _slot, ScalePositionDown(_slot, shift));
+  _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(view.x));
+  _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(view.y));
+  _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(view.z));
   _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_VISIBLE));
-  return transformed;
 }
 
 ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
@@ -1148,20 +1147,19 @@ ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
   return ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
-Vector TransformShip(GameState& _state, ObjectSlot _slot)
+void TransformShip(GameState& _state, ObjectSlot _slot)
 {
   // MOV AX,[DI+4] / MOV BX,[DI+6] / MOV CX,[DI+8], then PUSH DI / POP DI round the transform and the scoop, which keep the slot.
   const Vector position{static_cast<std::int16_t>(_slot.Get(SlotWord::X)), static_cast<std::int16_t>(_slot.Get(SlotWord::Y)),
                         static_cast<std::int16_t>(_slot.Get(SlotWord::Z))};
-  const ViewWithBlip transformed = TransformToViewWithBlip(_state, _slot, position);
+  const Vector view = TransformToViewWithBlip(_state, _slot, position);
   if (_state.Get(DS.fuelScoopsFitted) == 1 && _state.Get(DS.gameOverFrames) == 0)
   {
     // The scoop keeps AX, BX and CX, the view position, round its work.
-    (void)TryScoopObject(_state, _slot, transformed.view);
+    (void)TryScoopObject(_state, _slot, view);
   }
   _slot.Set(SlotByte::Depth, 0);
-  (void)ClassifyViewPosition(_state, _slot, transformed.view);
-  return transformed.view;
+  (void)ClassifyViewPosition(_state, _slot, view);
 }
 
 bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _backward)
@@ -1206,13 +1204,13 @@ bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backw
   return backward;
 }
 
-ViewWithBlip TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position)
+Vector TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position)
 {
   const Vector camera = RotatePitchYawRoll(_state, _position);
   // MOV [DI+3Ch],CH.
   _slot.Set(SlotByte::CameraZHigh, High(static_cast<std::uint16_t>(camera.z)));
-  const std::optional<DashboardPixel> blip = UpdateScannerBlip(_state, _slot, camera);
-  return ViewWithBlip{RotateToViewDirection(_state, camera), blip};
+  UpdateScannerBlip(_state, _slot, camera);
+  return RotateToViewDirection(_state, camera);
 }
 
 Vector TransformToView(GameState& _state, Vector _position)
