@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
+#include "ObjectSlot.h"
 
 #include <utility>
 
@@ -15,7 +16,6 @@ namespace
 {
 
 using Machine::FLAG_CARRY;
-using Machine::FLAG_DIRECTION;
 using Machine::FLAG_ZERO;
 using Machine::Registers;
 
@@ -153,6 +153,14 @@ constexpr std::uint8_t BAR_REST_BYTE = 0xAA;
 constexpr std::uint8_t BAR_PIXELS = 0x30;
 constexpr std::uint16_t BACKGROUND_WORD = 0xAAAA;
 constexpr std::uint16_t DASHBOARD_ORIGIN = 0x1698;
+constexpr std::uint16_t NEXT_LINE_PAIR = 0x50;        // a line on, in the same bank
+constexpr std::uint16_t NEXT_ODD_LINE = 0xE050;       // from an even-bank line to the odd-bank line below it
+constexpr std::uint16_t DASHBOARD_CACHE_BYTES = 0x16; // missileCountShown to conditionColorShown
+constexpr std::uint8_t DASHBOARD_STALE = 0x80;        // a cached value no gauge shows
+constexpr std::uint16_t MISSILE_LOCK_LINE = 0x1E15;
+constexpr std::uint16_t MISSILE_LOCK_LINE_PAIRS = 3;
+constexpr std::uint16_t CONDITION_LIGHT_LINE = 0x176C;
+constexpr std::uint16_t CONDITION_LIGHT_LINE_PAIRS = 4;
 
 constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
@@ -194,6 +202,22 @@ constexpr std::uint8_t SPACE = 0x20;
   return (_value & 0x8000) != 0;
 }
 
+[[nodiscard]] std::uint16_t Word(std::int16_t _value) noexcept
+{
+  return static_cast<std::uint16_t>(_value);
+}
+
+[[nodiscard]] std::int16_t Signed(std::uint16_t _value) noexcept
+{
+  return static_cast<std::int16_t>(_value);
+}
+
+// The high byte of a signed 8.8 word: its whole part.
+[[nodiscard]] std::int8_t WholePart(std::int16_t _value) noexcept
+{
+  return static_cast<std::int8_t>(High(Word(_value)));
+}
+
 // MUL r8: AX = AL * _factor.
 void MultiplyByte(Registers& _regs, std::uint8_t _factor) noexcept
 {
@@ -210,12 +234,12 @@ void MultiplyByte(Registers& _regs, std::uint8_t _factor) noexcept
   return _value < _subtract ? std::uint8_t{0} : static_cast<std::uint8_t>(_value - _subtract);
 }
 
-// mov ax, _text; mov [messagePointer], ax; mov [messageFrames], _frames.
-void SetMessage(Guest& _guest, DataAt _text, std::uint16_t _frames)
+// mov [messagePointer], ax; mov [messageFrames], _frames, after mov ax, _text: the message at DS:_text, posted for
+// _frames frames. Its callers load AX with _text themselves.
+void SetMessage(GameState& _state, std::uint16_t _text, std::uint16_t _frames)
 {
-  _guest.Regs().ax = _text.offset;
-  _guest.Set(DS.messagePointer, _text.offset);
-  _guest.Set(DS.messageFrames, _frames);
+  _state.Set(DS.messagePointer, _text);
+  _state.Set(DS.messageFrames, _frames);
 }
 
 // SetSinCos0-8 and RotateBySinCos0-8: the pairs of rotationSinCos, by number.
@@ -231,13 +255,13 @@ void RotateByPair(Guest& _guest, std::size_t _pair)
 
 // ---- Stardust -------------------------------------------------------------------------------------
 
-// The lifetime byte, its copy in stardustPrevious, and the copy marked new, for a respawned particle.
-void MarkDustRespawned(Guest& _guest, std::uint8_t _lifetime)
+// The lifetime byte of the particle at DS:_particle, its copy in stardustPrevious, and the copy marked new, for a
+// respawned particle.
+void MarkDustRespawned(GameState& _state, std::uint16_t _particle, std::uint8_t _lifetime)
 {
-  const std::uint16_t particle = _guest.Regs().si;
-  _guest.SetByte(Plus(particle, PARTICLE_LIFETIME), _lifetime);
-  _guest.SetByte(Plus(particle, PREVIOUS_LIFETIME), _lifetime);
-  _guest.SetByte(Plus(particle, PREVIOUS_NEW), 1);
+  _state.SetByte(Plus(_particle, PARTICLE_LIFETIME), _lifetime);
+  _state.SetByte(Plus(_particle, PREVIOUS_LIFETIME), _lifetime);
+  _state.SetByte(Plus(_particle, PREVIOUS_NEW), 1);
 }
 
 [[nodiscard]] std::uint8_t RandomLifetime(std::uint16_t _random) noexcept
@@ -261,7 +285,7 @@ void MarkDustRespawned(Guest& _guest, std::uint8_t _lifetime)
 void DrawDust(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  DustToScreen(_guest);
+  DustToScreenEntry(_guest);
   SetLow(regs.dx, Low(regs.ax));
   SetHigh(regs.dx, Low(regs.bx));
   if (_guest.Get(DS.jumpDriveEngaged) == 0)
@@ -306,26 +330,26 @@ void UpdateFrontStardust(Guest& _guest)
   do
   {
     const std::uint16_t count = regs.cx;
-    LoadDustPosition(_guest);
-    IsDustOnScreen(_guest);
+    LoadDustPositionEntry(_guest);
+    IsDustOnScreenEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       if (_guest.Get(DS.playerSpeed) != 0)
       {
-        ScaleDustStep(_guest);
+        ScaleDustStepEntry(_guest);
         regs.ax = Plus(regs.ax, regs.bp);
         regs.bx = Plus(regs.bx, regs.dx);
       }
       for (;;)
       {
-        StoreDustPosition(_guest);
-        IsDustOnScreen(_guest);
+        StoreDustPositionEntry(_guest);
+        IsDustOnScreenEntry(_guest);
         if (_guest.Flag(FLAG_CARRY))
         {
           break;
         }
         RespawnDustAnywhere(_guest);
-        StorePreviousDustPosition(_guest);
+        StorePreviousDustPositionEntry(_guest);
       }
       DrawDust(_guest);
     }
@@ -361,20 +385,20 @@ void UpdateRearStardust(Guest& _guest)
   do
   {
     const std::uint16_t count = regs.cx;
-    LoadDustPosition(_guest);
-    IsDustOnScreen(_guest);
+    LoadDustPositionEntry(_guest);
+    IsDustOnScreenEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       if (_guest.Get(DS.playerSpeed) != 0)
       {
-        ScaleDustStep(_guest);
+        ScaleDustStepEntry(_guest);
         regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bp);
         regs.bx = static_cast<std::uint16_t>(regs.bx - regs.dx);
       }
       for (;;)
       {
-        StoreDustPosition(_guest);
-        IsDustNearCenter(_guest);
+        StoreDustPositionEntry(_guest);
+        IsDustNearCenterEntry(_guest);
         if (!_guest.Flag(FLAG_CARRY))
         {
           const std::uint16_t lifetime = Plus(regs.si, PARTICLE_LIFETIME);
@@ -385,7 +409,7 @@ void UpdateRearStardust(Guest& _guest)
           }
         }
         RespawnDustAnywhere(_guest);
-        StorePreviousDustPosition(_guest);
+        StorePreviousDustPositionEntry(_guest);
       }
       DrawDust(_guest);
     }
@@ -404,8 +428,8 @@ void DrawSideStardust(Guest& _guest)
   {
     const std::uint16_t count = regs.cx;
     const std::uint16_t particle = regs.si;
-    LoadDustPosition(_guest);
-    IsDustOnScreen(_guest);
+    LoadDustPositionEntry(_guest);
+    IsDustOnScreenEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       DrawDust(_guest);
@@ -469,12 +493,12 @@ template <std::size_t Lines> void FillColumn(Guest& _guest, const std::array<std
   ++regs.di;
 }
 
-void FillFiveLineWord(Guest& _guest, std::uint16_t _word)
+// _word on the five scanlines of the dashboard line at B800:_line.
+void FillFiveLineWord(GameState& _state, std::uint16_t _line, std::uint16_t _word)
 {
-  Registers& regs = _guest.Regs();
-  for (const std::uint16_t line : FIVE_LINES)
+  for (const std::uint16_t scanline : FIVE_LINES)
   {
-    _guest.SetFarWord(regs.es, Plus(regs.di, line), _word);
+    _state.SetVideoWord(Plus(_line, scanline), _word);
   }
 }
 
@@ -543,12 +567,11 @@ void RedrawThreeLineBar(Guest& _guest, DataField<std::uint8_t> _value, DataField
   DrawThreeLineBar(_guest);
 }
 
-// cmp [_shown], al; mov [_shown], al; je: whether the glyph changed.
-[[nodiscard]] bool ExchangeShown(Guest& _guest, DataField<std::uint8_t> _shown)
+// cmp [_shown], al; mov [_shown], al; je, with AL = _glyph: whether the glyph changed.
+[[nodiscard]] bool ExchangeShown(GameState& _state, DataField<std::uint8_t> _shown, std::uint8_t _glyph)
 {
-  const std::uint8_t glyph = Low(_guest.Regs().ax);
-  const bool changed = _guest.Get(_shown) != glyph;
-  _guest.Set(_shown, glyph);
+  const bool changed = _state.Get(_shown) != _glyph;
+  _state.Set(_shown, _glyph);
   return changed;
 }
 
@@ -647,50 +670,51 @@ void CheckCollision(Guest& _guest)
 
 // ---- The warnings ---------------------------------------------------------------------------------
 
-// SetWarning (0x36E7): posts warning AL for 20 frames.
-void SetWarning(Guest& _guest)
+// SetWarning (0x36E7): posts warning _warning for 20 frames. Returns its text, warningTexts[_warning], which the
+// original leaves in AX.
+std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.warningFrames, 0x14);
-  _guest.Set(DS.warningIndex, Low(regs.ax));
-  regs.bx = static_cast<std::uint16_t>(Low(regs.ax) << 1);
-  regs.ax = _guest.Word(Plus(DS.warningTexts.offset, regs.bx));
-  _guest.Set(DS.warningMessage, regs.ax);
+  _state.Set(DS.warningFrames, 0x14);
+  _state.Set(DS.warningIndex, _warning);
+  const std::uint16_t text = _state.Word(DS.warningTexts.At(_warning));
+  _state.Set(DS.warningMessage, text);
+  return text;
 }
 
 // CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning (0x36FD,
-// 0x370E, 0x371A, 0x3726): warning _check, with AL = its number. The missile check clears its alert.
-[[nodiscard]] bool WarningApplies(Guest& _guest, std::uint16_t _check)
+// 0x370E, 0x371A, 0x3726): whether warning _check applies. The missile check clears its alert.
+[[nodiscard]] bool WarningApplies(GameState& _state, std::uint16_t _check)
 {
-  SetLow(_guest.Regs().ax, static_cast<std::uint8_t>(_check));
   switch (_check)
   {
   case 0:
   {
-    const bool alert = _guest.Get(DS.incomingMissileAlert) == 1;
-    _guest.Set(DS.incomingMissileAlert, 0);
+    const bool alert = _state.Get(DS.incomingMissileAlert) == 1;
+    _state.Set(DS.incomingMissileAlert, 0);
     return alert;
   }
   case 1:
-    return _guest.Get(DS.altitude) < 0x32;
+    return _state.Get(DS.altitude) < 0x32;
   case 2:
-    return _guest.Get(DS.cabinTemperature) >= 0xE1;
+    return _state.Get(DS.cabinTemperature) >= 0xE1;
   default:
-    return _guest.Get(DS.playerEnergy) < 0x100;
+    return _state.Get(DS.playerEnergy) < 0x100;
   }
 }
 
-// The four checks round-robin from _first, each falling on to the next with LOOP while CX lasts, until
-// one posts its warning.
+// The four checks round-robin from _first, each with AL = its number and falling on to the next with LOOP
+// while CX lasts, until one posts its warning: SetWarning leaves BX the table's byte offset and AX the text.
 void RunWarningChecks(Guest& _guest, std::uint16_t _first)
 {
   Registers& regs = _guest.Regs();
   std::uint16_t check = _first;
   for (;;)
   {
-    if (WarningApplies(_guest, check))
+    SetLow(regs.ax, static_cast<std::uint8_t>(check));
+    if (WarningApplies(_guest.State(), check))
     {
-      SetWarning(_guest);
+      regs.bx = static_cast<std::uint16_t>(Low(regs.ax) << 1);
+      regs.ax = SetWarning(_guest.State(), Low(regs.ax));
       return;
     }
     if (--regs.cx == 0)
@@ -946,7 +970,8 @@ void DispatchFlightScreens(Guest& _guest)
         {
           _guest.Call(START_BEEP);
         }
-        SetMessage(_guest, DS.navCompErrorMessage, 0x19);
+        regs.ax = DS.navCompErrorMessage.offset;
+        SetMessage(_guest.State(), regs.ax, 0x19);
         SetHigh(regs.ax, 0);
         _guest.JumpBack(0x0BDE);
         LeaveFlightScreens(_guest);
@@ -1000,7 +1025,7 @@ void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
 {
   _guest.Regs().ax = _text.offset;
   _guest.JumpBack(0x80A3);
-  SetMessage(_guest, _text, 0x19);
+  SetMessage(_guest.State(), _text.offset, 0x19);
 }
 
 // 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown
@@ -1017,7 +1042,8 @@ void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
          (_guest.Get(DS.invadedStationDestroyed) ^ 1) & _guest.Get(DS.thargoidInvasionActive) & _guest.Get(DS.jumpedSinceBriefing));
   if (Low(regs.ax) != 0)
   {
-    SetMessage(_guest, DS.hyperspaceJammedMessage, 0x19);
+    regs.ax = DS.hyperspaceJammedMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 0x19);
     return false;
   }
   if (_guest.Get(DS.galacticDriveReadyFrames) != 0)
@@ -1029,7 +1055,8 @@ void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
     regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
     if (regs.ax == 0)
     {
-      SetMessage(_guest, DS.noSystemSelectedMessage, 0x19);
+      regs.ax = DS.noSystemSelectedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 0x19);
       return false;
     }
     if (regs.ax >= 0x47)
@@ -1079,7 +1106,8 @@ void HandleMissileKeys(Guest& _guest)
     _guest.Set(DS.missileState, 1);
     _guest.Set(DS.shipIdRequested, 0);
     _guest.Call(START_BEEP);
-    SetMessage(_guest, DS.missilePrimedMessage, 0x0F);
+    regs.ax = DS.missilePrimedMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 0x0F);
   }
   if (_guest.Get(DS.missileState) == 1)
   {
@@ -1089,7 +1117,8 @@ void HandleMissileKeys(Guest& _guest)
       _guest.Set(DS.missileTarget, regs.di);
       _guest.Set(DS.missileState, 2);
       _guest.Call(START_BEEP);
-      SetMessage(_guest, DS.missileLockedMessage, 0x14);
+      regs.ax = DS.missileLockedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 0x14);
     }
   }
   if (_guest.Get(DS.missileState) == 2)
@@ -1099,7 +1128,8 @@ void HandleMissileKeys(Guest& _guest)
     {
       _guest.Set(DS.missileState, 0);
       _guest.Call(START_LOW_BEEP);
-      SetMessage(_guest, DS.missileTargetDestroyedMessage, 0x14);
+      regs.ax = DS.missileTargetDestroyedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 0x14);
     }
   }
   if (_guest.Get(DS.keyDownU) == 1 && _guest.Get(DS.missileState) != 0)
@@ -1107,7 +1137,8 @@ void HandleMissileKeys(Guest& _guest)
     _guest.Set(DS.missileState, 0);
     _guest.Set(DS.shipIdRequested, 0);
     _guest.Call(START_LOW_BEEP);
-    SetMessage(_guest, DS.missileUnarmedMessage, 0x0F);
+    regs.ax = DS.missileUnarmedMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 0x0F);
   }
   if (_guest.Get(DS.keyDownM) == 1 && _guest.Get(DS.missileState) == 2 && _guest.Get(DS.missileJammed) != 1)
   {
@@ -1115,12 +1146,14 @@ void HandleMissileKeys(Guest& _guest)
     if (regs.ax < 0x1F4)
     {
       _guest.Set(DS.missileJammed, 1);
-      SetMessage(_guest, DS.missileJammedMessage, 0x19);
+      regs.ax = DS.missileJammedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 0x19);
       return;
     }
     _guest.Set(DS.missileState, 0);
     _guest.Set(DS.shipIdRequested, 0);
-    SetMessage(_guest, DS.missileLaunchedMessage, 0x14);
+    regs.ax = DS.missileLaunchedMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 0x14);
     _guest.Set(DS.missileCount, static_cast<std::uint8_t>(_guest.Get(DS.missileCount) - 1));
     _guest.Call(LAUNCH_PLAYER_MISSILE);
   }
@@ -1169,7 +1202,8 @@ void HandleIdentifyKey(Guest& _guest)
       _guest.Set(DS.missileState, 1);
     }
     _guest.Set(DS.shipIdRequested, 1);
-    SetMessage(_guest, DS.idIndicatorMessage, 0x19);
+    regs.ax = DS.idIndicatorMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 0x19);
   }
   _guest.Call(FIND_SHIP_IN_CROSSHAIRS);
   if (!_guest.Flag(FLAG_CARRY))
@@ -1196,17 +1230,22 @@ void HandleIdentifyKey(Guest& _guest)
   }
 }
 
-// 0x8379-0x8398: L runs the anti-ECM emulator, at one unit of energy a frame.
-void HandleAntiEcmKey(Guest& _guest)
+// 0x8379-0x839E: L runs the anti-ECM emulator, at one unit of energy a frame: SUB WORD [playerEnergy],1, and 0
+// written over it on a borrow.
+void HandleAntiEcmKey(GameState& _state)
 {
-  _guest.Set(DS.antiEcmActive, 0);
-  if (_guest.Get(DS.keyDownL) != 1 || _guest.Get(DS.antiEcmEmulatorFitted) != 1)
+  _state.Set(DS.antiEcmActive, 0);
+  if (_state.Get(DS.keyDownL) != 1 || _state.Get(DS.antiEcmEmulatorFitted) != 1)
   {
     return;
   }
-  _guest.Set(DS.antiEcmActive, 1);
-  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
-  _guest.Set(DS.playerEnergy, energy == 0 ? std::uint16_t{0} : static_cast<std::uint16_t>(energy - 1));
+  _state.Set(DS.antiEcmActive, 1);
+  const std::uint16_t energy = _state.Get(DS.playerEnergy);
+  _state.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - 1));
+  if (energy == 0)
+  {
+    _state.Set(DS.playerEnergy, 0);
+  }
 }
 
 // 0x84F2-0x8586: pitch rotates the camera frame, from which the three angles are derived again.
@@ -1365,19 +1404,17 @@ void PlaceSunPlanetAndStation(Guest& _guest)
   _guest.Set(DS.spawnGovernment, Low(regs.ax));
 }
 
-// sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_view], ax: a 24-bit coordinate and its
-// view-frame word, less the velocity in AX.
-void SubtractVelocity(Guest& _guest, std::uint16_t _low, std::uint16_t _high, std::uint16_t _view)
+// sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_compass], ax, with DL:AX = _velocityHigh:_velocity:
+// a 24-bit coordinate of _slot and its compass word, less the velocity. Every slot has its compass words moved,
+// though only the station's are the compass's.
+void SubtractVelocity(ObjectSlot& _slot, SlotByte _high, SlotWord _low, SlotWord _compass, std::uint16_t _velocity,
+                      std::uint8_t _velocityHigh)
 {
-  const Registers& regs = _guest.Regs();
-  const std::uint16_t low = Plus(regs.si, _low);
-  const std::uint16_t high = Plus(regs.si, _high);
-  const std::uint16_t view = Plus(regs.si, _view);
-  const std::uint16_t before = _guest.Word(low);
-  const int borrow = before < regs.ax ? 1 : 0;
-  _guest.SetWord(low, static_cast<std::uint16_t>(before - regs.ax));
-  _guest.SetByte(high, static_cast<std::uint8_t>(_guest.Byte(high) - Low(regs.dx) - borrow));
-  _guest.SetWord(view, static_cast<std::uint16_t>(_guest.Word(view) - regs.ax));
+  const std::uint16_t before = _slot.Get(_low);
+  const int borrow = before < _velocity ? 1 : 0;
+  _slot.Set(_low, static_cast<std::uint16_t>(before - _velocity));
+  _slot.Set(_high, static_cast<std::uint8_t>(_slot.Get(_high) - _velocityHigh - borrow));
+  _slot.Set(_compass, static_cast<std::uint16_t>(_slot.Get(_compass) - _velocity));
 }
 
 } // namespace
@@ -1387,7 +1424,7 @@ void UpdateStardust(Guest& _guest)
   Registers& regs = _guest.Regs();
   if (_guest.Get(DS.jumpDriveEngaged) != 0)
   {
-    SaveStardustPositions(_guest);
+    SaveStardustPositionsEntry(_guest);
   }
   SetLow(regs.ax, _guest.Get(DS.stardustColor));
   _guest.Set(DS.drawColor, Low(regs.ax));
@@ -1427,55 +1464,54 @@ void GetPreviousDustScreenPosition(Guest& _guest)
   Registers& regs = _guest.Regs();
   regs.ax = _guest.Word(Plus(regs.si, PREVIOUS_X));
   regs.bx = _guest.Word(Plus(regs.si, PREVIOUS_Y));
-  IsDustOnScreen(_guest);
+  IsDustOnScreenEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.SetFlag(FLAG_CARRY, true);
     return;
   }
-  DustToScreen(_guest);
+  DustToScreenEntry(_guest);
   SetLow(regs.cx, Low(regs.ax));
   SetHigh(regs.cx, Low(regs.bx));
   _guest.SetFlag(FLAG_CARRY, false);
 }
 
-void ComputeDustStripMask(Guest& _guest)
+std::uint16_t ComputeDustStripMask(std::int16_t _step)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = regs.dx;
-  regs.bp = 0;
+  // SAR until the step is 0 or -1, a bit more of the mask for each halving before that.
+  std::uint16_t step = Word(_step);
+  std::uint16_t mask = 0;
   for (;;)
   {
-    regs.ax = Sar(regs.ax, 1);
-    if (regs.ax == 0xFFFF || regs.ax == 0)
+    step = Sar(step, 1);
+    if (step == 0xFFFF || step == 0)
     {
-      break;
+      return mask;
     }
-    regs.bp = static_cast<std::uint16_t>((regs.bp << 1) | 1);
+    mask = static_cast<std::uint16_t>((mask << 1) | 1);
   }
-  regs.ax = 0; // inc ax, or inc ax and dec ax, on the way out
 }
 
 void ShiftStardustSideways(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  ComputeDustStripMask(_guest);
+  ComputeDustStripMaskEntry(_guest);
   regs.cx = STARDUST_COUNT;
   regs.si = DS.stardust.offset;
   do
   {
-    LoadDustPosition(_guest);
-    IsDustOnScreen(_guest);
+    LoadDustPositionEntry(_guest);
+    IsDustOnScreenEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       regs.ax = Plus(regs.ax, regs.dx);
-      IsDustOnScreen(_guest);
+      IsDustOnScreenEntry(_guest);
       if (!_guest.Flag(FLAG_CARRY))
       {
         RespawnDustAtSideEdge(_guest);
-        StorePreviousDustPosition(_guest);
+        StorePreviousDustPositionEntry(_guest);
       }
-      StoreDustPosition(_guest);
+      StoreDustPositionEntry(_guest);
     }
     regs.si = Plus(regs.si, PARTICLE_BYTES);
   } while (--regs.cx != 0);
@@ -1487,7 +1523,7 @@ void RespawnDustAtSideEdge(Guest& _guest)
   NextRandomEntry(_guest);
   regs.bx = regs.ax;
   SetLow(regs.ax, RandomLifetime(regs.ax));
-  MarkDustRespawned(_guest, Low(regs.ax));
+  MarkDustRespawned(_guest.State(), regs.si, Low(regs.ax));
   regs.bx = Sar(regs.bx, 3);
   if (High(regs.bx) == 0x10)
   {
@@ -1506,9 +1542,9 @@ void RollStardust(Guest& _guest)
   regs.si = DS.stardust.offset;
   do
   {
-    LoadDustPosition(_guest);
+    LoadDustPositionEntry(_guest);
     RotateByPair(_guest, 7);
-    StoreDustPosition(_guest);
+    StoreDustPositionEntry(_guest);
     regs.si = Plus(regs.si, PARTICLE_BYTES);
   } while (--regs.cx != 0);
 }
@@ -1516,24 +1552,24 @@ void RollStardust(Guest& _guest)
 void ShiftStardustVertically(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  ComputeDustStripMask(_guest);
+  ComputeDustStripMaskEntry(_guest);
   regs.si = DS.stardust.offset;
   regs.cx = STARDUST_COUNT;
   regs.ax = 0;
   do
   {
-    LoadDustPosition(_guest);
-    IsDustOnScreen(_guest);
+    LoadDustPositionEntry(_guest);
+    IsDustOnScreenEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       regs.bx = Plus(regs.bx, regs.dx);
-      IsDustOnScreen(_guest);
+      IsDustOnScreenEntry(_guest);
       if (!_guest.Flag(FLAG_CARRY))
       {
         RespawnDustAtVerticalEdge(_guest);
-        StorePreviousDustPosition(_guest);
+        StorePreviousDustPositionEntry(_guest);
       }
-      StoreDustPosition(_guest);
+      StoreDustPositionEntry(_guest);
     }
     regs.si = Plus(regs.si, PARTICLE_BYTES);
   } while (--regs.cx != 0);
@@ -1544,7 +1580,7 @@ void RespawnDustAtVerticalEdge(Guest& _guest)
   Registers& regs = _guest.Regs();
   NextRandomEntry(_guest);
   SetLow(regs.bx, RandomLifetime(regs.ax));
-  MarkDustRespawned(_guest, Low(regs.bx));
+  MarkDustRespawned(_guest.State(), regs.si, Low(regs.bx));
   const std::uint16_t x = RandomDustX(regs.ax);
   NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>(regs.ax & regs.bp);
@@ -1557,7 +1593,7 @@ void RespawnDustAnywhere(Guest& _guest)
   Registers& regs = _guest.Regs();
   NextRandomEntry(_guest);
   SetLow(regs.ax, RandomLifetime(regs.ax));
-  MarkDustRespawned(_guest, Low(regs.ax));
+  MarkDustRespawned(_guest.State(), regs.si, Low(regs.ax));
   NextRandomEntry(_guest);
   regs.bx = regs.ax;
   regs.ax = RandomDustX(regs.ax);
@@ -1568,66 +1604,55 @@ void RespawnDustAnywhere(Guest& _guest)
   }
 }
 
-void IsDustOnScreen(Guest& _guest)
+bool IsDustOnScreen(DustPosition _position)
 {
-  const Registers& regs = _guest.Regs();
-  const auto x = static_cast<std::int8_t>(High(regs.ax));
-  const auto y = static_cast<std::int8_t>(High(regs.bx));
-  _guest.SetFlag(FLAG_CARRY, x >= -0x20 && x <= 0x1F && y >= -0x10 && y <= 0x0F);
+  const std::int8_t x = WholePart(_position.x);
+  const std::int8_t y = WholePart(_position.y);
+  return x >= -0x20 && x <= 0x1F && y >= -0x10 && y <= 0x0F;
 }
 
-void IsDustNearCenter(Guest& _guest)
+bool IsDustNearCenter(DustPosition _position)
 {
-  const Registers& regs = _guest.Regs();
-  const auto x = static_cast<std::int8_t>(High(regs.ax));
-  const auto y = static_cast<std::int8_t>(High(regs.bx));
-  _guest.SetFlag(FLAG_CARRY, x >= -6 && x <= 6 && y >= -3 && y <= 3);
+  const std::int8_t x = WholePart(_position.x);
+  const std::int8_t y = WholePart(_position.y);
+  return x >= -6 && x <= 6 && y >= -3 && y <= 3;
 }
 
-void ScaleDustStep(Guest& _guest)
+DustStep ScaleDustStep(const GameState& _state, DustPosition _position)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.cx, _guest.Get(DS.stardustShift));
-  regs.dx = Sar(regs.bx, Low(regs.cx));
-  regs.bp = Sar(regs.ax, Low(regs.cx));
+  const std::uint8_t shift = _state.Get(DS.stardustShift);
+  return DustStep{Signed(Sar(Word(_position.x), shift)), Signed(Sar(Word(_position.y), shift)), shift};
 }
 
-void LoadDustPosition(Guest& _guest)
+DustPosition LoadDustPosition(const GameState& _state, std::uint16_t _particle)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(regs.si);
-  regs.bx = _guest.Word(Plus(regs.si, 2));
+  return DustPosition{Signed(_state.Word(_particle)), Signed(_state.Word(Plus(_particle, 2)))};
 }
 
-void StoreDustPosition(Guest& _guest)
+void StoreDustPosition(GameState& _state, std::uint16_t _particle, DustPosition _position)
 {
-  const Registers& regs = _guest.Regs();
-  _guest.SetWord(regs.si, regs.ax);
-  _guest.SetWord(Plus(regs.si, 2), regs.bx);
+  _state.SetWord(_particle, Word(_position.x));
+  _state.SetWord(Plus(_particle, 2), Word(_position.y));
 }
 
-void StorePreviousDustPosition(Guest& _guest)
+void StorePreviousDustPosition(GameState& _state, std::uint16_t _particle, DustPosition _position)
 {
-  const Registers& regs = _guest.Regs();
-  _guest.SetWord(Plus(regs.si, PREVIOUS_X), regs.ax);
-  _guest.SetWord(Plus(regs.si, PREVIOUS_Y), regs.bx);
+  _state.SetWord(Plus(_particle, PREVIOUS_X), Word(_position.x));
+  _state.SetWord(Plus(_particle, PREVIOUS_Y), Word(_position.y));
 }
 
-void DustToScreen(Guest& _guest)
+DustScreenPosition DustToScreen(DustPosition _position)
 {
-  Registers& regs = _guest.Regs();
   // shl ax,1 / xchg ah,al / shl ah,1 / cbw / rcl al,1: bits 13-6 in AL, AH the sign of bit 14.
-  const auto toScreen = [](std::uint16_t _value, std::uint16_t _center)
+  const auto toScreen = [](std::int16_t _value, std::uint16_t _center)
   {
-    const auto doubled = static_cast<std::uint16_t>(_value << 1);
+    const auto doubled = static_cast<std::uint16_t>(Word(_value) << 1);
     const std::uint8_t high = High(doubled);
     std::uint16_t result = SignExtend(high);
     SetLow(result, static_cast<std::uint8_t>((high << 1) | ((doubled & 0x80) != 0 ? 1 : 0)));
-    return Plus(result, _center);
+    return Signed(Plus(result, _center));
   };
-  const std::uint16_t x = toScreen(regs.ax, 0x80);
-  regs.bx = toScreen(regs.bx, 0x40);
-  regs.ax = x;
+  return DustScreenPosition{toScreen(_position.x, 0x80), toScreen(_position.y, 0x40)};
 }
 
 void ResetStardust(Guest& _guest)
@@ -1668,23 +1693,14 @@ void ResetStardust(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-void SaveStardustPositions(Guest& _guest)
+void SaveStardustPositions(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  const std::uint16_t es = regs.es;
-  regs.ax = regs.ds;
-  regs.es = regs.ax;
-  regs.si = DS.stardust.offset;
-  regs.di = DS.stardustPrevious.offset;
-  // rep movsb
-  const int step = (regs.flags & FLAG_DIRECTION) != 0 ? -1 : 1;
-  for (regs.cx = STARDUST_BYTES; regs.cx != 0; --regs.cx)
+  // REP MOVSB with ES = DS, upwards: DF is clear wherever the reference calls it (its one STD, at 2E4A, is
+  // cleared again at 2E5C, with no call between).
+  for (std::uint16_t index = 0; index < STARDUST_BYTES; ++index)
   {
-    _guest.SetFarByte(regs.es, regs.di, _guest.FarByte(regs.ds, regs.si));
-    regs.si = Plus(regs.si, step);
-    regs.di = Plus(regs.di, step);
+    _state.SetByte(Plus(DS.stardustPrevious.offset, index), _state.Byte(Plus(DS.stardust.offset, index)));
   }
-  regs.es = es;
 }
 
 void HandleFlightFunctionKeys(Guest& _guest)
@@ -1719,25 +1735,17 @@ void HandleFlightFunctionKeys(Guest& _guest)
 void RestoreFlightScreen(Guest& _guest)
 {
   _guest.Call(SHOW_COCKPIT_SCREEN);
-  InvalidateDashboard(_guest);
+  InvalidateDashboardEntry(_guest);
   _guest.Call(START_BEEP);
   _guest.Set(DS.messageShown, 0);
 }
 
-void InvalidateDashboard(Guest& _guest)
+void InvalidateDashboard(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = regs.ds;
-  regs.es = regs.ax;
-  regs.di = DS.missileCountShown.offset;
-  regs.cx = 0x16;
-  SetLow(regs.ax, 0x80);
-  // rep stosb
-  const bool down = (regs.flags & FLAG_DIRECTION) != 0;
-  for (; regs.cx != 0; --regs.cx)
+  // REP STOSB with ES = DS, upwards: DF is clear wherever the reference calls it, as for SaveStardustPositions.
+  for (std::uint16_t index = 0; index < DASHBOARD_CACHE_BYTES; ++index)
   {
-    _guest.SetFarByte(regs.es, regs.di, Low(regs.ax));
-    regs.di = Plus(regs.di, down ? -1 : 1);
+    _state.SetByte(Plus(DS.missileCountShown.offset, index), DASHBOARD_STALE);
   }
 }
 
@@ -1746,17 +1754,17 @@ void UpdateDashboard(Guest& _guest)
   Registers& regs = _guest.Regs();
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = regs.ax;
-  UpdateConditionColor(_guest);
-  DrawConditionLight(_guest);
+  UpdateConditionColorEntry(_guest);
+  DrawConditionLightEntry(_guest);
   UpdateEnergyAndLaserHeat(_guest);
   UpdateSafeZone(_guest);
-  InSafeZone(_guest);
+  InSafeZoneEntry(_guest);
 
   // The S glyph inside the station's safe zone, and E for a frame when the ECM fires.
   SetLow(regs.ax, _guest.Flag(FLAG_CARRY) ? 0x82 : 0x20);
   regs.di = 0x1658;
   regs.bx = 0xFFFF;
-  if (ExchangeShown(_guest, DS.safeZoneGlyphShown))
+  if (ExchangeShown(_guest.State(), DS.safeZoneGlyphShown, Low(regs.ax)))
   {
     _guest.Call(DRAW_SCREEN_CHAR);
   }
@@ -1768,13 +1776,13 @@ void UpdateDashboard(Guest& _guest)
   }
   regs.bx = 0xFFFF;
   regs.di = 0x1656;
-  if (ExchangeShown(_guest, DS.ecmGlyphShown))
+  if (ExchangeShown(_guest.State(), DS.ecmGlyphShown, Low(regs.ax)))
   {
     _guest.Call(DRAW_SCREEN_CHAR);
   }
 
   DrawEnergyBanks(_guest);
-  DrawMissileLockIndicator(_guest);
+  DrawMissileLockIndicatorEntry(_guest);
   DrawMissileIcons(_guest);
 
   regs.ax = _guest.Get(DS.rollRate);
@@ -1835,7 +1843,7 @@ void DrawSignedIndicator(Guest& _guest)
   regs.ax = BACKGROUND_WORD;
   do
   {
-    FillFiveLineWord(_guest, regs.ax);
+    FillFiveLineWord(_guest.State(), regs.di, regs.ax);
     regs.di = Plus(regs.di, 2);
   } while (--regs.cx != 0);
   regs.di = static_cast<std::uint16_t>(regs.di - 0x0C);
@@ -1854,7 +1862,7 @@ void DrawSignedIndicator(Guest& _guest)
     }
     return;
   }
-  FillFiveLineWord(_guest, regs.ax);
+  FillFiveLineWord(_guest.State(), regs.di, regs.ax);
 }
 
 void DrawThreeLineBar(Guest& _guest)
@@ -1897,33 +1905,32 @@ void DrawMissileIcons(Guest& _guest)
   regs.ax = BACKGROUND_WORD;
   do
   {
-    FillFiveLineWord(_guest, regs.ax);
+    FillFiveLineWord(_guest.State(), regs.di, regs.ax);
     regs.di = Plus(regs.di, 2);
   } while (--regs.cx != 0);
 }
 
-void DrawMissileLockIndicator(Guest& _guest)
+bool DrawMissileLockIndicator(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.bx, _guest.Get(DS.missileState));
-  if (Low(regs.bx) == _guest.Get(DS.missileLockShown))
+  const std::uint8_t missileState = _state.Get(DS.missileState);
+  if (missileState == _state.Get(DS.missileLockShown))
   {
-    return;
+    return false;
   }
-  _guest.Set(DS.missileLockShown, Low(regs.bx));
-  regs.bx = Plus(static_cast<std::uint16_t>(regs.bx & 3), DS.colorFillBytes.offset);
-  SetLow(regs.ax, _guest.Byte(regs.bx));
-  SetHigh(regs.ax, Low(regs.ax));
-  regs.cx = 3;
-  regs.di = 0x1E15;
-  do
+  _state.Set(DS.missileLockShown, missileState);
+  const std::uint8_t fill = _state.Byte(DS.colorFillBytes.At(missileState & 3u));
+  const std::uint16_t fillWord = Join(fill, fill);
+  // Three bytes on each of six lines: a word and a byte in the odd bank, then the same in the even.
+  std::uint16_t line = MISSILE_LOCK_LINE;
+  for (std::uint16_t pair = 0; pair < MISSILE_LOCK_LINE_PAIRS; ++pair)
   {
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    _guest.SetFarByte(regs.es, Plus(regs.di, 2), Low(regs.ax));
-    _guest.SetFarWord(regs.es, Plus(regs.di, EVEN_BANK), regs.ax);
-    _guest.SetFarByte(regs.es, Plus(regs.di, EVEN_BANK + 2), Low(regs.ax));
-    regs.di = Plus(regs.di, 0x50);
-  } while (--regs.cx != 0);
+    _state.SetVideoWord(line, fillWord);
+    _state.SetVideoByte(Plus(line, 2), fill);
+    _state.SetVideoWord(Plus(line, EVEN_BANK), fillWord);
+    _state.SetVideoByte(Plus(line, EVEN_BANK + 2), fill);
+    line = Plus(line, NEXT_LINE_PAIR);
+  }
+  return true;
 }
 
 void DrawEnergyBanks(Guest& _guest)
@@ -2021,54 +2028,43 @@ void UpdateEnergyAndLaserHeat(Guest& _guest)
     return;
   }
   _guest.SetByte(equipment, static_cast<std::uint8_t>(_guest.Byte(equipment) - 1));
-  SetMessage(_guest, DS.equipmentLossMessage, 0x1E);
+  regs.ax = DS.equipmentLossMessage.offset;
+  SetMessage(_guest.State(), regs.ax, 0x1E);
 }
 
-void DrawConditionLight(Guest& _guest)
+void DrawConditionLight(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.bx, _guest.Get(DS.conditionColor));
-  if (Low(regs.bx) == 0)
+  std::uint8_t color = _state.Get(DS.conditionColor);
+  if (color == 0)
   {
     // Flashing: black and red, on bit 9 of millisecondCounter.
-    regs.bx = _guest.Get(DS.millisecondCounter);
-    SetLow(regs.bx, High(regs.bx) & 2);
+    color = static_cast<std::uint8_t>(High(_state.Get(DS.millisecondCounter)) & 2);
   }
-  if (Low(regs.bx) == _guest.Get(DS.conditionColorShown))
+  if (color == _state.Get(DS.conditionColorShown))
   {
     return;
   }
-  _guest.Set(DS.conditionColorShown, Low(regs.bx));
-  SetHigh(regs.bx, 0);
-  SetLow(regs.bx, _guest.Byte(Plus(DS.colorFillBytes.offset, regs.bx)));
-  SetHigh(regs.bx, Low(regs.bx));
-  regs.si = DS.conditionLightBitmap.offset;
-  regs.di = 0x176C;
-  regs.cx = 4;
-  const auto swapped = [&](std::uint16_t _offset)
+  _state.Set(DS.conditionColorShown, color);
+  const std::uint8_t fill = _state.Byte(DS.colorFillBytes.At(color));
+  const std::uint16_t mask = Join(fill, fill);
+  // The bitmap's words, byte-swapped and masked by the colour: a line in the odd bank, then the even line below.
+  std::uint16_t line = CONDITION_LIGHT_LINE;
+  for (std::size_t pair = 0; pair < CONDITION_LIGHT_LINE_PAIRS; ++pair)
   {
-    const std::uint16_t word = _guest.Word(_offset);
-    return static_cast<std::uint16_t>(Join(Low(word), High(word)) & regs.bx);
-  };
-  do
-  {
-    regs.ax = swapped(regs.si);
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    regs.di = Plus(regs.di, EVEN_BANK);
-    regs.ax = swapped(Plus(regs.si, 2));
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    regs.di = Plus(regs.di, 0xE050);
-    regs.si = Plus(regs.si, 4);
-  } while (--regs.cx != 0);
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Word(DS.conditionLightBitmap.At(pair * 2))) & mask));
+    line = Plus(line, EVEN_BANK);
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Word(DS.conditionLightBitmap.At(pair * 2 + 1))) & mask));
+    line = Plus(line, NEXT_ODD_LINE);
+  }
 }
 
-void UpdateConditionColor(Guest& _guest)
+std::uint8_t UpdateConditionColor(GameState& _state)
 {
-  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
-  const std::uint8_t cabin = _guest.Get(DS.cabinTemperature);
-  const std::uint8_t altitude = _guest.Get(DS.altitude);
-  const std::uint8_t fore = _guest.Get(DS.foreShield);
-  const std::uint8_t aft = _guest.Get(DS.aftShield);
+  const std::uint16_t energy = _state.Get(DS.playerEnergy);
+  const std::uint8_t cabin = _state.Get(DS.cabinTemperature);
+  const std::uint8_t altitude = _state.Get(DS.altitude);
+  const std::uint8_t fore = _state.Get(DS.foreShield);
+  const std::uint8_t aft = _state.Get(DS.aftShield);
   std::uint8_t color = 1;
   if (energy < 0x100 || cabin >= 0xE0 || altitude < 0x20)
   {
@@ -2082,8 +2078,8 @@ void UpdateConditionColor(Guest& _guest)
   {
     color = 3;
   }
-  SetLow(_guest.Regs().ax, color);
-  _guest.Set(DS.conditionColor, color);
+  _state.Set(DS.conditionColor, color);
+  return color;
 }
 
 void SetUpLocalSpace(Guest& _guest)
@@ -2091,7 +2087,7 @@ void SetUpLocalSpace(Guest& _guest)
   Registers& regs = _guest.Regs();
   SetLow(regs.cx, _guest.Get(DS.currentSystemIndex));
   _guest.Call(LOAD_SYSTEM_SEEDS);
-  InvalidateDashboard(_guest);
+  InvalidateDashboardEntry(_guest);
   _guest.Set(DS.objectSlotCount, 0x14);
   _guest.Set(DS.debrisSlotCount, 0x10);
   _guest.Set(DS.shipSlotCount, 0x24);
@@ -2140,11 +2136,10 @@ void CheckCollisions(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-void InSafeZone(Guest& _guest)
+SafeZone InSafeZone(const GameState& _state)
 {
-  const std::uint8_t flags = _guest.Get(DS.safeZoneFlags);
-  SetLow(_guest.Regs().ax, flags >> 1);
-  _guest.SetFlag(FLAG_CARRY, (flags & 1) != 0);
+  const std::uint8_t flags = _state.Get(DS.safeZoneFlags);
+  return SafeZone{(flags & 1) != 0, static_cast<std::uint8_t>(flags >> 1)};
 }
 
 void UpdateSafeZone(Guest& _guest)
@@ -2441,13 +2436,13 @@ void XorCompassDot(Guest& _guest)
   const std::uint16_t slot = regs.di;
   if (regs.bp != 0)
   {
-    XorDashboardPixel(_guest);
+    XorDashboardPixelEntry(_guest);
   }
   for (const DotStep step : COMPASS_RING)
   {
     SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) + step.x));
     SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + step.y));
-    XorDashboardPixel(_guest);
+    XorDashboardPixelEntry(_guest);
   }
   regs.di = slot;
 }
@@ -2493,7 +2488,7 @@ void XorScannerBlip(Guest& _guest)
   }
   for (;;)
   {
-    XorDashboardPixel(_guest);
+    XorDashboardPixelEntry(_guest);
     if (Low(regs.cx) == 0)
     {
       break;
@@ -2506,20 +2501,17 @@ void XorScannerBlip(Guest& _guest)
     }
   }
   SetLow(regs.dx, Low(regs.dx) + 1);
-  XorDashboardPixel(_guest);
+  XorDashboardPixelEntry(_guest);
 }
 
-void XorDashboardPixel(Guest& _guest)
+std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y)
 {
-  Registers& regs = _guest.Regs();
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = regs.dx;
-  const std::uint8_t x = Low(regs.dx);
-  const std::uint8_t y = High(regs.dx);
   // The bank from y's parity, 80 bytes a pair of lines, 4 pixels a byte.
-  regs.di = static_cast<std::uint16_t>(((y & 1) != 0 ? EVEN_BANK : 0) + (y >> 1) * 80 + (x >> 2) + DASHBOARD_ORIGIN);
-  regs.bx = _guest.Byte(Plus(DS.dashboardPixelMasks.offset, x & 3));
-  _guest.SetFarByte(regs.es, regs.di, static_cast<std::uint8_t>(_guest.FarByte(regs.es, regs.di) ^ Low(regs.bx)));
+  const auto offset =
+    static_cast<std::uint16_t>(((_y & 1) != 0 ? EVEN_BANK : 0) + (_y >> 1) * NEXT_LINE_PAIR + (_x >> 2) + DASHBOARD_ORIGIN);
+  const std::uint8_t mask = _state.Byte(DS.dashboardPixelMasks.At(_x & 3u));
+  _state.SetVideoByte(offset, static_cast<std::uint8_t>(_state.VideoByte(offset) ^ mask));
+  return mask;
 }
 
 void EraseCompassAndBlips(Guest& _guest)
@@ -2624,7 +2616,8 @@ void RunFlight(Guest& _guest)
     {
       _guest.Call(SPAWN_PLAYER_WRECKAGE);
       _guest.Set(DS.gameOverFrames, 0x28);
-      SetMessage(_guest, DS.gameOverMessage, 0x28);
+      regs.ax = DS.gameOverMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 0x28);
       _guest.Call(STOP_CONTINUOUS_NOISE);
       _guest.JumpBack(0x7EA4);
       continue;
@@ -2683,7 +2676,8 @@ void ProcessFlightKeys(Guest& _guest)
       _guest.Get(DS.hyperspaceCountdown) == 0)
   {
     _guest.Call(START_BEEP);
-    SetMessage(_guest, DS.galacticDriveReadyMessage, 0x28);
+    regs.ax = DS.galacticDriveReadyMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 0x28);
     _guest.Set(DS.galacticDriveReadyFrames, 0x28);
   }
   if (_guest.Get(DS.keyDownH) == 1 && PressHyperspace(_guest))
@@ -2719,7 +2713,8 @@ void ProcessFlightKeys(Guest& _guest)
     }
     else
     {
-      SetMessage(_guest, DS.gamePausedMessage, 1);
+      regs.ax = DS.gamePausedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 1);
       _guest.Call(UPDATE_MESSAGE_LINE);
       _guest.Call(RUN_PAUSE_SCREEN);
     }
@@ -2730,7 +2725,8 @@ void ProcessFlightKeys(Guest& _guest)
   if (_guest.Get(DS.keyDownE) == 1 && _guest.Get(DS.ecmFitted) == 1)
   {
     _guest.Set(DS.ecmFired, 1);
-    SetMessage(_guest, DS.ecmActiveMessage, 5);
+    regs.ax = DS.ecmActiveMessage.offset;
+    SetMessage(_guest.State(), regs.ax, 5);
     _guest.Call(REMOVE_ALL_MISSILES);
     SetLow(regs.ax, 0x14);
     _guest.Call(DRAIN_ENERGY);
@@ -2750,30 +2746,32 @@ void ProcessFlightKeys(Guest& _guest)
   {
     _guest.Call(USE_MASKING_DEVICE);
   }
-  HandleAntiEcmKey(_guest);
+  HandleAntiEcmKey(_guest.State());
 }
 
-void DrainEnergy(Guest& _guest)
+void DrainEnergy(GameState& _state, std::int8_t _amount)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = SignExtend(Low(regs.ax));
-  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
-  _guest.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - regs.ax));
-  if (energy < regs.ax)
+  // CBW / SUB [playerEnergy],AX, and 0 written over it on a borrow.
+  const std::uint16_t amount = Word(_amount);
+  const std::uint16_t energy = _state.Get(DS.playerEnergy);
+  _state.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - amount));
+  if (energy < amount)
   {
-    _guest.Set(DS.playerEnergy, 0);
-    _guest.Set(DS.playerDead, 1);
+    _state.Set(DS.playerEnergy, 0);
+    _state.Set(DS.playerDead, 1);
   }
 }
 
 void EngageJumpDrive(Guest& _guest)
 {
+  Registers& regs = _guest.Regs();
   if (_guest.Get(DS.dockingComputerOn) != 1)
   {
     if (_guest.Get(DS.playerSpeed) != 0x30)
     {
       _guest.Set(DS.jumpDriveEngaged, 0);
-      SetMessage(_guest, DS.jumpDriveVelocityLockedMessage, 5);
+      regs.ax = DS.jumpDriveVelocityLockedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 5);
       return;
     }
     _guest.Call(IS_MASS_LOCKED);
@@ -2781,12 +2779,14 @@ void EngageJumpDrive(Guest& _guest)
     {
       _guest.Set(DS.jumpDriveEngaged, 1);
       _guest.Set(DS.velocityDirty, 1);
-      SetMessage(_guest, DS.jumpDriveEngagedMessage, 5);
+      regs.ax = DS.jumpDriveEngagedMessage.offset;
+      SetMessage(_guest.State(), regs.ax, 5);
       return;
     }
   }
   _guest.Set(DS.jumpDriveEngaged, 0);
-  SetMessage(_guest, DS.jumpDriveMassLockedMessage, 5);
+  regs.ax = DS.jumpDriveMassLockedMessage.offset;
+  SetMessage(_guest.State(), regs.ax, 5);
 }
 
 void UpdatePlayerMotion(Guest& _guest)
@@ -2901,15 +2901,16 @@ void MoveObjectsByVelocity(Guest& _guest)
   regs.si = DS.shipSlots.offset;
   do
   {
+    ObjectSlot slot(_guest.State(), regs.si);
     regs.ax = _guest.Get(DS.playerVelocityX);
     regs.dx = SignWord(regs.ax);
-    SubtractVelocity(_guest, SLOT_X, 1, SLOT_VIEW_X);
+    SubtractVelocity(slot, SlotByte::XHigh, SlotWord::X, SlotWord::CompassX, regs.ax, Low(regs.dx));
     regs.ax = _guest.Get(DS.playerVelocityY);
     regs.dx = SignWord(regs.ax);
-    SubtractVelocity(_guest, SLOT_Y, 2, SLOT_VIEW_Y);
+    SubtractVelocity(slot, SlotByte::YHigh, SlotWord::Y, SlotWord::CompassY, regs.ax, Low(regs.dx));
     regs.ax = _guest.Get(DS.playerVelocityZ);
     regs.dx = SignWord(regs.ax);
-    SubtractVelocity(_guest, SLOT_Z, 3, SLOT_VIEW_Z);
+    SubtractVelocity(slot, SlotByte::ZHigh, SlotWord::Z, SlotWord::CompassZ, regs.ax, Low(regs.dx));
     regs.si = Plus(regs.si, SLOT_BYTES);
   } while (--regs.cx != 0);
 }
@@ -2948,6 +2949,8 @@ void RunPauseScreen(Guest& _guest)
   }
 }
 
+// ── The entries of the routines de-assembled so far ──
+
 namespace
 {
 
@@ -2970,6 +2973,160 @@ constexpr Machine::NativeContract Clobbers(std::uint16_t _registers) noexcept
 }
 
 constexpr Machine::NativeContract CARRY_OUT{0, FLAG_CARRY};
+constexpr Machine::NativeContract CLOBBERS_AX = Clobbers(REGISTER_AX);
+constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI = Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI);
+// DrawMissileLockIndicator's: CX as the original leaves it, which DrawThreeLineBar's second run reads in CH
+// through UpdateDashboard (ADR-012 item 6).
+constexpr Machine::NativeContract CLOBBERS_AX_BX_DI = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DI);
+constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_SI_DI = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI);
+// XorDashboardPixel's: AX, BX and ES as the original leaves them, which its callers' contracts compare.
+constexpr Machine::NativeContract CLOBBERS_DI = Clobbers(REGISTER_DI);
+
+// A particle's position as the dust routines hold it: x in AX, y in BX.
+[[nodiscard]] DustPosition DustIn(const Registers& _regs) noexcept
+{
+  return DustPosition{Signed(_regs.ax), Signed(_regs.bx)};
+}
+
+void DustOut(Registers& _regs, DustPosition _position) noexcept
+{
+  _regs.ax = Word(_position.x);
+  _regs.bx = Word(_position.y);
+}
+
+} // namespace
+
+void ComputeDustStripMaskEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.bp = ComputeDustStripMask(Signed(regs.dx));
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void IsDustOnScreenEntry(Guest& _guest)
+{
+  _guest.SetFlag(FLAG_CARRY, IsDustOnScreen(DustIn(_guest.Regs())));
+  _guest.Clobber(CARRY_OUT);
+}
+
+void IsDustNearCenterEntry(Guest& _guest)
+{
+  _guest.SetFlag(FLAG_CARRY, IsDustNearCenter(DustIn(_guest.Regs())));
+  _guest.Clobber(CARRY_OUT);
+}
+
+void ScaleDustStepEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const DustStep step = ScaleDustStep(_guest.State(), DustIn(regs));
+  SetLow(regs.cx, step.shift);
+  regs.dx = Word(step.y);
+  regs.bp = Word(step.x);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void LoadDustPositionEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  DustOut(regs, LoadDustPosition(_guest.State(), regs.si));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StoreDustPositionEntry(Guest& _guest)
+{
+  const Registers& regs = _guest.Regs();
+  StoreDustPosition(_guest.State(), regs.si, DustIn(regs));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StorePreviousDustPositionEntry(Guest& _guest)
+{
+  const Registers& regs = _guest.Regs();
+  StorePreviousDustPosition(_guest.State(), regs.si, DustIn(regs));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void DustToScreenEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const DustScreenPosition position = DustToScreen(DustIn(regs));
+  regs.ax = Word(position.x);
+  regs.bx = Word(position.row);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void SaveStardustPositionsEntry(Guest& _guest)
+{
+  SaveStardustPositions(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
+}
+
+void InvalidateDashboardEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  InvalidateDashboard(_guest.State());
+  // MOV AX,DS / MOV ES,AX / MOV DI,missileCountShown / MOV CX,16h / MOV AL,80h / REP STOSB: ES = DS, and AX, CX and DI
+  // as that leaves them, which RestoreFlightScreen's contract compares.
+  regs.es = regs.ds;
+  regs.ax = WithLow(regs.ds, DASHBOARD_STALE);
+  regs.cx = 0;
+  regs.di = Plus(DS.missileCountShown.offset, DASHBOARD_CACHE_BYTES);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void DrawMissileLockIndicatorEntry(Guest& _guest)
+{
+  // LOOP leaves CX 0 once the block is drawn; unchanged, the original returns before it touches CX.
+  if (DrawMissileLockIndicator(_guest.State()))
+  {
+    _guest.Regs().cx = 0;
+  }
+  _guest.Clobber(CLOBBERS_AX_BX_DI);
+}
+
+void DrawConditionLightEntry(Guest& _guest)
+{
+  DrawConditionLight(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX_CX_SI_DI);
+}
+
+void UpdateConditionColorEntry(Guest& _guest)
+{
+  SetLow(_guest.Regs().ax, UpdateConditionColor(_guest.State()));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void InSafeZoneEntry(Guest& _guest)
+{
+  const SafeZone zone = InSafeZone(_guest.State());
+  SetLow(_guest.Regs().ax, zone.rest);
+  _guest.SetFlag(FLAG_CARRY, zone.inside);
+  _guest.Clobber(CARRY_OUT);
+}
+
+void XorDashboardPixelEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::uint8_t mask = XorDashboardPixel(_guest.State(), Low(regs.dx), High(regs.dx));
+  // The original keeps DX in AX, and leaves the pixel's mask in BX and the video segment in ES: XorScannerBlip
+  // passes AX on, and UpdateCompass, CheckShipInRange, TransformShip and DrawSunOrPlanet compare BX or ES.
+  regs.ax = regs.dx;
+  regs.bx = mask;
+  regs.es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_DI);
+}
+
+void DrainEnergyEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  // The contract keeps AX, which the original leaves sign-extended (CBW).
+  regs.ax = SignExtend(Low(regs.ax));
+  DrainEnergy(_guest.State(), static_cast<std::int8_t>(Low(regs.ax)));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
 
 // HandleFlightFunctionKeys and ProcessFlightKeys work once a frame and return; they wait for a key only
 // on the paths the F5-F10 screens, the pause and the Ctrl+Esc freeze take, so they wait sometimes.
@@ -2980,7 +3137,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0887, "ComputeStardustShift", &ComputeStardustShift, Clobbers(REGISTER_AX)},
   NativeEntry{0x08A1, "GetPreviousDustScreenPosition", &GetPreviousDustScreenPosition,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX, FLAG_CARRY}},
-  NativeEntry{0x08B9, "ComputeDustStripMask", &ComputeDustStripMask, Clobbers(REGISTER_AX)},
+  NativeEntry{0x08B9, "ComputeDustStripMask", &ComputeDustStripMaskEntry, CLOBBERS_AX},
   NativeEntry{0x08CB, "ShiftStardustSideways", &ShiftStardustSideways,
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
   NativeEntry{0x08F2, "RespawnDustAtSideEdge", &RespawnDustAtSideEdge, PRESERVES_ALL},
@@ -2989,33 +3146,31 @@ constexpr std::array ENTRIES = {
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
   NativeEntry{0x0969, "RespawnDustAtVerticalEdge", &RespawnDustAtVerticalEdge, PRESERVES_ALL},
   NativeEntry{0x09A3, "RespawnDustAnywhere", &RespawnDustAnywhere, PRESERVES_ALL},
-  NativeEntry{0x09D6, "IsDustOnScreen", &IsDustOnScreen, CARRY_OUT},
-  NativeEntry{0x09EE, "IsDustNearCenter", &IsDustNearCenter, CARRY_OUT},
-  NativeEntry{0x0A06, "ScaleDustStep", &ScaleDustStep, PRESERVES_ALL},
-  NativeEntry{0x0A13, "LoadDustPosition", &LoadDustPosition, PRESERVES_ALL},
-  NativeEntry{0x0A19, "StoreDustPosition", &StoreDustPosition, PRESERVES_ALL},
-  NativeEntry{0x0A1F, "StorePreviousDustPosition", &StorePreviousDustPosition, PRESERVES_ALL},
-  NativeEntry{0x0A28, "DustToScreen", &DustToScreen, PRESERVES_ALL},
+  NativeEntry{0x09D6, "IsDustOnScreen", &IsDustOnScreenEntry, CARRY_OUT},
+  NativeEntry{0x09EE, "IsDustNearCenter", &IsDustNearCenterEntry, CARRY_OUT},
+  NativeEntry{0x0A06, "ScaleDustStep", &ScaleDustStepEntry, PRESERVES_ALL},
+  NativeEntry{0x0A13, "LoadDustPosition", &LoadDustPositionEntry, PRESERVES_ALL},
+  NativeEntry{0x0A19, "StoreDustPosition", &StoreDustPositionEntry, PRESERVES_ALL},
+  NativeEntry{0x0A1F, "StorePreviousDustPosition", &StorePreviousDustPositionEntry, PRESERVES_ALL},
+  NativeEntry{0x0A28, "DustToScreen", &DustToScreenEntry, PRESERVES_ALL},
   NativeEntry{0x0A43, "ResetStardust", &ResetStardust, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
-  NativeEntry{0x0A88, "SaveStardustPositions", &SaveStardustPositions, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI)},
+  NativeEntry{0x0A88, "SaveStardustPositions", &SaveStardustPositionsEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x15CF, "RestoreFlightScreen", &RestoreFlightScreen, PRESERVES_ALL},
-  NativeEntry{0x2540, "InvalidateDashboard", &InvalidateDashboard, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
+  NativeEntry{0x2540, "InvalidateDashboard", &InvalidateDashboardEntry, PRESERVES_ALL},
   NativeEntry{0x254F, "UpdateDashboard", &UpdateDashboard, Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_ES))},
   NativeEntry{0x2645, "DrawFiveLineBar", &DrawFiveLineBar, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI)},
   NativeEntry{0x26BE, "DrawSignedIndicator", &DrawSignedIndicator, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DI)},
   NativeEntry{0x273E, "DrawThreeLineBar", &DrawThreeLineBar, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI)},
   NativeEntry{0x2799, "DrawMissileIcons", &DrawMissileIcons, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI)},
-  NativeEntry{0x2804, "DrawMissileLockIndicator", &DrawMissileLockIndicator,
-              Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DI)},
+  NativeEntry{0x2804, "DrawMissileLockIndicator", &DrawMissileLockIndicatorEntry, CLOBBERS_AX_BX_DI},
   NativeEntry{0x283B, "DrawEnergyBanks", &DrawEnergyBanks, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2882, "UpdateEnergyAndLaserHeat", &UpdateEnergyAndLaserHeat, Clobbers(REGISTER_AX | REGISTER_BX)},
-  NativeEntry{0x290C, "DrawConditionLight", &DrawConditionLight,
-              Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI)},
-  NativeEntry{0x2959, "UpdateConditionColor", &UpdateConditionColor, PRESERVES_ALL},
+  NativeEntry{0x290C, "DrawConditionLight", &DrawConditionLightEntry, CLOBBERS_AX_BX_CX_SI_DI},
+  NativeEntry{0x2959, "UpdateConditionColor", &UpdateConditionColorEntry, PRESERVES_ALL},
   NativeEntry{0x29D0, "SetUpLocalSpace", &SetUpLocalSpace, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisions, Clobbers(REGISTER_ALL)},
-  NativeEntry{0x2E63, "InSafeZone", &InSafeZone, CARRY_OUT},
+  NativeEntry{0x2E63, "InSafeZone", &InSafeZoneEntry, CARRY_OUT},
   NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZone, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX)},
   NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVector, Clobbers(REGISTER_DX | REGISTER_DI | REGISTER_BP)},
   NativeEntry{0x36B6, "UpdateWarnings", &UpdateWarnings, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX)},
@@ -3028,13 +3183,13 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x42A4, "XorCompassDot", &XorCompassDot, Clobbers(REGISTER_AX | REGISTER_BX)},
   NativeEntry{0x42D6, "EraseScannerBlip", &EraseScannerBlip, Clobbers(REGISTER_BX | REGISTER_CX | REGISTER_DX)},
   NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlip, Clobbers(REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_ES)},
-  NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixel, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DI | REGISTER_ES)},
+  NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixelEntry, CLOBBERS_DI},
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlips, Clobbers(REGISTER_ALL)},
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeak, Clobbers(REGISTER_AX | REGISTER_DX)},
   NativeEntry{0x7E9B, "RunFlight", &RunFlight, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePod, PRESERVES_ALL},
   NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Sometimes},
-  NativeEntry{0x839F, "DrainEnergy", &DrainEnergy, PRESERVES_ALL},
+  NativeEntry{0x839F, "DrainEnergy", &DrainEnergyEntry, PRESERVES_ALL},
   NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDrive, PRESERVES_ALL},
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},

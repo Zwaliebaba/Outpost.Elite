@@ -1,24 +1,26 @@
 // GameLogic/Combat.h
 #pragma once
 
+#include "GameState.h"
 #include "NativeEntry.h"
+#include "ObjectSlot.h"
 
+#include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
 {
 
 // The reference's combat routines, ported (plan §5 Phase 3, ADR-010): lasers, missiles, hits and explosions. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// here once it is ported, on the registers of its contract in Symbols.tsv; those de-assembled (ADR-012) take values and give
+// values back, below the register bodies, and their entries keep the register contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> CombatEntries() noexcept;
 
 /// DrawLaserSights (CS:0630): the sights of the current view's laser, ANDed and ORed into the centre of the space view.
 void DrawLaserSights(Guest& _guest);
-
-/// GetViewLaser (CS:066C): CF set and AL = the laser type 0-3 when the current view's mount has a laser.
-void GetViewLaser(Guest& _guest);
 
 /// DrawLaserBeams (CS:0A9A): the player's beams, from the bottom of the view to near its centre, in firingLaserType's pattern.
 void DrawLaserBeams(Guest& _guest);
@@ -46,9 +48,6 @@ void RemoveAllMissiles(Guest& _guest);
 /// ExplodeObject (CS:4FC1): the object at DI removed, and when it was drawn, its fragments and its cargo barrels spawned.
 void ExplodeObject(Guest& _guest);
 
-/// TallyMaskMissionKill (CS:50FE): counts a mask-mission Asp off, and notes the mask ship's.
-void TallyMaskMissionKill(Guest& _guest);
-
 /// TryFireLaserAtPlayer (CS:518B): the ship at DI fires at the player when it may, with AX, BX its aim errors.
 void TryFireLaserAtPlayer(Guest& _guest);
 
@@ -75,20 +74,48 @@ void FindShipInCrosshairs(Guest& _guest);
 /// ResolveLaserFire (CS:8AC2): a shot of the player's laser: the hit, its damage and its consequences, then the beams.
 void ResolveLaserFire(Guest& _guest);
 
-/// CheckMissileTargetDestroyed (CS:8B8B): unlocks a missile locked on DI, with its message.
-void CheckMissileTargetDestroyed(Guest& _guest);
-
 /// CreditKill (CS:8BC6): the kill of DI paid for, or held against the player's legal status.
 void CreditKill(Guest& _guest);
-
-/// Routine8C51 (CS:8C51): AL = the type of the slot at DI; ZF set for a Thargon (7) or a Thargoid (16h), CF for the Thargoid.
-void Routine8C51(Guest& _guest);
 
 /// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player: its beam, then the damage to a shield and the energy.
 void ApplyEnemyLaserHit(Guest& _guest);
 
-/// UseMaskingDevice (CS:8ECF): 12 off the energy, the background blue, and every ship's state and hostility cleared, its
-/// aggression less 2. SI and CX are left past the slots.
-void UseMaskingDevice(Guest& _guest);
+// ── The routines (ADR-012): values in, values out, on the GameState ──
+
+/// What Routine8C51 finds of a slot.
+struct ThargoidTest
+{
+  std::uint8_t type;      ///< bits 1-5 of the type byte
+  bool thargoidOrThargon; ///< a Thargon (7) or a Thargoid (16h)
+  bool thargoid;
+};
+
+/// GetViewLaser (CS:066C): the laser type 0-3 of the current view's mount, or none when that mount has no laser. The mount is
+/// viewLaserMount's entry for the view; whether it is fitted, bit mount-1 of laserMountsFitted, which RCR reaches a bit at a
+/// time; its type, the 2-bit field mount-1 of laserMountTypes.
+[[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
+
+/// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
+/// and one that carries the device sets maskShipDestroyed.
+void TallyMaskMissionKill(GameState& _state, const ObjectSlot& _slot);
+
+/// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
+/// Returns whether it was.
+bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
+
+/// Routine8C51 (CS:8C51): _slot's type, and whether it is a Thargon's or a Thargoid's.
+[[nodiscard]] ThargoidTest Routine8C51(const ObjectSlot& _slot);
+
+/// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
+/// shipSlots, its state and hostility cleared and 2 off its aggression, at least 0.
+void UseMaskingDevice(GameState& _state);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void GetViewLaserEntry(Guest& _guest);                ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
+void TallyMaskMissionKillEntry(Guest& _guest);        ///< DI = the slot. Out: AL = its type while the mission runs.
+void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
+void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.
+void UseMaskingDeviceEntry(Guest& _guest);            ///< Out: SI past the slots, CX = 0.
 
 } // namespace Elite

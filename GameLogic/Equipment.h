@@ -1,8 +1,10 @@
 // GameLogic/Equipment.h
 #pragma once
 
+#include "GameState.h"
 #include "NativeEntry.h"
 
+#include <cstdint>
 #include <span>
 
 namespace Elite
@@ -26,9 +28,6 @@ void TryScoopObject(Guest& _guest);
 /// key that ended it.
 void ShowEquipShipScreen(Guest& _guest);
 
-/// SelectLaserType (CS:633B): selectedLaserType 0-3 for the laser at menuSelectedRow. Out: ZF=1 if it is a laser.
-void SelectLaserType(Guest& _guest);
-
 /// RunEquipShipMenu (CS:6111): the equipment menu from the row at SI: the cursor, and B and S to buy and sell. Waits.
 /// Out: AH=Esc or the F-key that ended it.
 void RunEquipShipMenu(Guest& _guest);
@@ -45,9 +44,6 @@ void ChooseMountToRemoveLaser(Guest& _guest);
 
 /// RedrawEquipHelpText (CS:653F): the equipment screen's help lines again, over the mount menu.
 void RedrawEquipHelpText(Guest& _guest);
-
-/// PaintLaserMountBox (CS:6564): textAttribute over the 8x3 cells of the mount box at ES:SI. SI comes back unchanged.
-void PaintLaserMountBox(Guest& _guest);
 
 /// PayForEquipmentItem (CS:65A3): menuSelectedRow's price (fuel by the tank's emptiness) off creditsTenths, and
 /// creditBalanceText formatted. Out: CF=1, and the credits unchanged, when they are not enough.
@@ -79,5 +75,20 @@ void MoveMenuCursorDown(Guest& _guest);
 
 /// Whether _key ends a menu screen: Esc, or F1 to F10.
 [[nodiscard]] bool IsScreenKey(std::uint8_t _key) noexcept;
+
+// ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// SelectLaserType (CS:633B): selectedLaserType 0-3 for the laser at menuSelectedRow, counted up a type at a time as
+/// the original does. Returns whether the row is a laser's.
+[[nodiscard]] bool SelectLaserType(GameState& _state);
+
+/// PaintLaserMountBox (CS:6564): textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
+/// B800:_box.
+void PaintLaserMountBox(GameState& _state, std::uint16_t _box);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void SelectLaserTypeEntry(Guest& _guest);    ///< Out: ZF=1 if the row is a laser's.
+void PaintLaserMountBoxEntry(Guest& _guest); ///< In: SI=_box, ES=B800h. Out: AL=textAttribute, DL=0, CX=0.
 
 } // namespace Elite

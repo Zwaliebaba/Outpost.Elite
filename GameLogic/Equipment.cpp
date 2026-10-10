@@ -152,7 +152,6 @@ constexpr std::uint8_t MOUNT_TYPE_BITS = 3; // a mount's two bits of laserMountT
 constexpr std::uint8_t MOUNT_BOX_ROWS = 3;
 constexpr std::uint16_t MOUNT_BOX_COLUMNS = 8;
 constexpr std::uint16_t MOUNT_BOX_ROW_SKIP = 0x40;
-constexpr std::uint16_t MOUNT_BOX_BYTES = 0xF0;
 
 // LaunchEscapePod.
 constexpr std::uint8_t ESCAPE_POD_FRAMES = 0x50;
@@ -198,18 +197,18 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 }
 
 // INC BYTE PTR [_offset].
-void IncrementByte(Guest& _guest, std::uint16_t _offset)
+void IncrementByte(GameState& _state, std::uint16_t _offset)
 {
-  _guest.SetByte(_offset, static_cast<std::uint8_t>(_guest.Byte(_offset) + 1));
+  _state.SetByte(_offset, static_cast<std::uint8_t>(_state.Byte(_offset) + 1));
 }
 
 // ADD [_field],_amount, held at 250 (FAh) from 251 up: gems, gold and platinum.
-void AddPrecious(Guest& _guest, DataField<std::uint8_t> _field, std::uint8_t _amount)
+void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _amount)
 {
-  _guest.Set(_field, static_cast<std::uint8_t>(_guest.Get(_field) + _amount));
-  if (_guest.Get(_field) > PRECIOUS_MOST)
+  _state.Set(_field, static_cast<std::uint8_t>(_state.Get(_field) + _amount));
+  if (_state.Get(_field) > PRECIOUS_MOST)
   {
-    _guest.Set(_field, PRECIOUS_MOST);
+    _state.Set(_field, PRECIOUS_MOST);
   }
 }
 
@@ -224,7 +223,7 @@ void PrintEquipmentSellColumn(Guest& _guest)
   regs.di = static_cast<std::uint16_t>(_guest.Get(DS.menuFirstRowAttr) + regs.ax);
   regs.ax = static_cast<std::uint16_t>(regs.ax >> 2);
   regs.di = static_cast<std::uint16_t>(regs.di + regs.ax + SELL_PRICE_COLUMN);
-  PrintTextModeString(_guest);
+  PrintTextModeStringEntry(_guest);
   _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
 }
 
@@ -273,7 +272,7 @@ void BuyFittedItem(Guest& _guest)
     _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
-  IncrementByte(_guest, regs.bx);
+  IncrementByte(_guest.State(), regs.bx);
   _guest.Call(SHOW_EQUIPMENT_SELL_PRICE);
   _guest.Call(SELECT_LASER_TYPE);
   if (_guest.Flag(FLAG_ZERO))
@@ -509,22 +508,28 @@ void PrintMountMessage(Guest& _guest, std::uint16_t _text, std::uint16_t _jumped
   regs.si = _guest.Pop();
 }
 
-// SHR CH,CL with CL the selected mount + 1: CH, and the mount's bit of laserMountsFitted in the carry.
-[[nodiscard]] bool ShiftOutMountBit(Guest& _guest)
+// What SHR CH,CL leaves, with CL the selected mount + 1 and CH laserMountsFitted.
+struct MountBit
 {
-  Registers& regs = _guest.Regs();
-  const std::uint8_t mount = _guest.Get(DS.selectedLaserMount);
-  const std::uint8_t fitted = _guest.Get(DS.laserMountsFitted);
-  SetLow(regs.cx, static_cast<std::uint8_t>(mount + 1));
-  SetHigh(regs.cx, static_cast<std::uint8_t>(fitted >> (mount + 1u)));
-  return ((fitted >> mount) & 1) != 0;
+  bool fitted;              ///< the mount's bit of laserMountsFitted, which the shift leaves in the carry
+  std::uint8_t shiftCount;  ///< CL: the selected mount + 1
+  std::uint8_t mountsAbove; ///< CH: laserMountsFitted shifted past the mount's bit
+};
+
+[[nodiscard]] MountBit ShiftOutMountBit(const GameState& _state)
+{
+  const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
+  const std::uint8_t fitted = _state.Get(DS.laserMountsFitted);
+  return MountBit{((fitted >> mount) & 1) != 0, static_cast<std::uint8_t>(mount + 1), static_cast<std::uint8_t>(fitted >> (mount + 1u))};
 }
 
 // 642A: Space in ChooseMountToFitLaser. A free mount gets the bought laser; true once it has.
 bool FitLaserOnMount(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  if (ShiftOutMountBit(_guest))
+  const MountBit bit = ShiftOutMountBit(_guest.State());
+  regs.cx = Join(bit.mountsAbove, bit.shiftCount);
+  if (bit.fitted)
   {
     PrintMountMessage(_guest, MOUNT_OCCUPIED_TEXT, 0);
     return false;
@@ -546,7 +551,9 @@ bool FitLaserOnMount(Guest& _guest)
 bool RemoveLaserFromMount(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  if (!ShiftOutMountBit(_guest))
+  const MountBit bit = ShiftOutMountBit(_guest.State());
+  regs.cx = Join(bit.mountsAbove, bit.shiftCount);
+  if (!bit.fitted)
   {
     PrintMountMessage(_guest, NO_LASER_ON_MOUNT_TEXT, 0);
     return false;
@@ -645,7 +652,7 @@ void LaunchEscapePod(Guest& _guest)
   Registers& regs = _guest.Regs();
   _guest.Set(DS.hyperspaceCountdown, 0);
   _guest.Set(DS.escapePodFrames, ESCAPE_POD_FRAMES);
-  FindFreeShipSlot(_guest);
+  FindFreeShipSlotEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.Call(RECLAIM_SHIP_SLOT);
@@ -742,7 +749,7 @@ void TryScoopObject(Guest& _guest)
       }
       regs.ax = Low(regs.ax);
       regs.bx = static_cast<std::uint16_t>(regs.ax << 1);
-      IncrementByte(_guest, static_cast<std::uint16_t>(regs.bx + DS.cargoHold.offset));
+      IncrementByte(_guest.State(), static_cast<std::uint16_t>(regs.bx + DS.cargoHold.offset));
       _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
       regs.bx = static_cast<std::uint16_t>(regs.ax * PRODUCT_NAME_BYTES + DS.productNames.offset);
       const std::uint16_t slot = regs.di;
@@ -764,22 +771,22 @@ void TryScoopObject(Guest& _guest)
     RemoveObject(_guest);
     NextRandomEntry(_guest);
     SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & 7));
-    AddPrecious(_guest, DS.cargoGemStonesGrams, Low(regs.ax));
+    AddPrecious(_guest.State(), DS.cargoGemStonesGrams, Low(regs.ax));
     SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) & 3));
-    AddPrecious(_guest, DS.cargoGoldKg, Low(regs.ax));
+    AddPrecious(_guest.State(), DS.cargoGoldKg, Low(regs.ax));
     NextRandomEntry(_guest);
     SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & 3) + 1));
-    AddPrecious(_guest, DS.cargoPlatinumKg, High(regs.ax));
+    AddPrecious(_guest.State(), DS.cargoPlatinumKg, High(regs.ax));
     if (_guest.Get(DS.freeCargoTonnes) != 0)
     {
       NextRandomEntry(_guest);
       if (Low(regs.ax) >= MINERALS_FROM)
       {
-        IncrementByte(_guest, DS.cargoMineralsTonnes.offset);
+        IncrementByte(_guest.State(), DS.cargoMineralsTonnes.offset);
       }
       else
       {
-        IncrementByte(_guest, DS.cargoAlloysTonnes.offset);
+        IncrementByte(_guest.State(), DS.cargoAlloysTonnes.offset);
       }
       _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
     }
@@ -797,7 +804,7 @@ void TryScoopObject(Guest& _guest)
       const DataField<std::uint8_t> held = type == TYPE_SPLINTER     ? DS.cargoAlloysTonnes
                                            : type == TYPE_ESCAPE_POD ? DS.cargoSlavesTonnes
                                                                      : DS.cargoAlienItemsTonnes;
-      IncrementByte(_guest, held.offset);
+      IncrementByte(_guest.State(), held.offset);
       _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
       message = type == TYPE_SPLINTER     ? DS.metalAlloysText.offset
                 : type == TYPE_ESCAPE_POD ? DS.escapePodRetrievedText.offset
@@ -904,21 +911,20 @@ void ShowEquipShipScreen(Guest& _guest)
   _guest.Call(RUN_EQUIP_SHIP_MENU);
 }
 
-void SelectLaserType(Guest& _guest)
+bool SelectLaserType(GameState& _state)
 {
-  const std::uint8_t row = _guest.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
   std::uint8_t type = 0;
-  _guest.Set(DS.selectedLaserType, type);
+  _state.Set(DS.selectedLaserType, type);
   for (;;)
   {
     const bool laser = row == LASER_ROWS[type];
     if (laser || type + 1u == LASER_ROWS.size())
     {
-      _guest.SetFlag(Machine::FLAG_ZERO, laser);
-      return;
+      return laser;
     }
     ++type;
-    _guest.Set(DS.selectedLaserType, type);
+    _state.Set(DS.selectedLaserType, type);
   }
 }
 
@@ -999,12 +1005,12 @@ void DrawLaserMountMenu(Guest& _guest)
       regs.bx = DS.laserTypeNames.At(Low(regs.dx) & MOUNT_TYPE_BITS);
       regs.si = _guest.Word(regs.bx);
     }
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) >> 2));
   }
   regs.si = FIRST_MOUNT_BOX;
   _guest.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
-  PaintLaserMountBox(_guest);
+  PaintLaserMountBoxEntry(_guest);
   _guest.Set(DS.selectedLaserMount, 0);
 }
 
@@ -1037,22 +1043,19 @@ void RedrawEquipHelpText(Guest& _guest)
   _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
 }
 
-void PaintLaserMountBox(Guest& _guest)
+void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.ax, _guest.Get(DS.textAttribute));
-  SetLow(regs.dx, MOUNT_BOX_ROWS);
-  do
+  const std::uint8_t attribute = _state.Get(DS.textAttribute);
+  std::uint16_t cell = _box;
+  for (std::uint8_t row = 0; row < MOUNT_BOX_ROWS; ++row)
   {
-    for (regs.cx = MOUNT_BOX_COLUMNS; regs.cx != 0; --regs.cx)
+    for (std::uint16_t column = 0; column < MOUNT_BOX_COLUMNS; ++column)
     {
-      _guest.SetFarByte(regs.es, regs.si, Low(regs.ax));
-      regs.si = static_cast<std::uint16_t>(regs.si + 2);
+      _state.SetVideoByte(cell, attribute);
+      cell = Offset(cell, 2);
     }
-    regs.si = static_cast<std::uint16_t>(regs.si + MOUNT_BOX_ROW_SKIP);
-    SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) - 1));
-  } while (Low(regs.dx) != 0);
-  regs.si = static_cast<std::uint16_t>(regs.si - MOUNT_BOX_BYTES);
+    cell = Offset(cell, MOUNT_BOX_ROW_SKIP);
+  }
 }
 
 void PayForEquipmentItem(Guest& _guest)
@@ -1197,6 +1200,8 @@ bool IsScreenKey(std::uint8_t _key) noexcept
   return _key == SCAN_ESCAPE || (_key >= SCAN_F1 && _key < SCAN_PAST_F10);
 }
 
+// ── The entries of the de-assembled routines ──
+
 namespace
 {
 
@@ -1206,18 +1211,42 @@ using Machine::NativeWait;
 using Machine::REGISTER_ALL;
 
 constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
+constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+
+} // namespace
+
+void SelectLaserTypeEntry(Guest& _guest)
+{
+  _guest.SetFlag(FLAG_ZERO, SelectLaserType(_guest.State()));
+  _guest.Clobber(RETURNS_ZERO);
+}
+
+void PaintLaserMountBoxEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  PaintLaserMountBox(_guest.State(), regs.si);
+  // The contract keeps every register, so the entry leaves what the original's loops do: AL the attribute, DL and CX
+  // counted down to 0. SI comes back as it was.
+  SetLow(regs.ax, _guest.Get(DS.textAttribute));
+  SetLow(regs.dx, 0);
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x2F0F, "LaunchEscapePod", &LaunchEscapePod, CLOBBERS_ALL},
   NativeEntry{0x4401, "TryScoopObject", &TryScoopObject, PRESERVES_ALL},
   NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x633B, "SelectLaserType", &SelectLaserType, NativeContract{0, FLAG_ZERO}},
+  NativeEntry{0x633B, "SelectLaserType", &SelectLaserTypeEntry, RETURNS_ZERO},
   NativeEntry{0x6367, "DrawLaserMountMenu", &DrawLaserMountMenu, PRESERVES_ALL},
   NativeEntry{0x63B2, "ChooseMountToFitLaser", &ChooseMountToFitLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x646F, "ChooseMountToRemoveLaser", &ChooseMountToRemoveLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x653F, "RedrawEquipHelpText", &RedrawEquipHelpText, PRESERVES_ALL},
-  NativeEntry{0x6564, "PaintLaserMountBox", &PaintLaserMountBox, PRESERVES_ALL},
+  NativeEntry{0x6564, "PaintLaserMountBox", &PaintLaserMountBoxEntry, PRESERVES_ALL},
   NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItem, NativeContract{0, FLAG_CARRY}},
   NativeEntry{0x6946, "ClearEquipmentSellPrice", &ClearEquipmentSellPrice, PRESERVES_ALL},
   NativeEntry{0x6972, "ShowEquipmentSellPrice", &ShowEquipmentSellPrice, PRESERVES_ALL},

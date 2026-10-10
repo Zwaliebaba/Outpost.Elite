@@ -97,7 +97,13 @@ constexpr std::uint8_t SHORT_RANGE_DIVISOR = 7;
 
 constexpr std::uint16_t GALAXY_SYSTEMS = 0x100;
 constexpr std::uint8_t GALAXY_SEED_BYTES = 6;
+// A chart item, a disc or a label: its x range and its rows, each a byte for the first and one for the last,
+// then a label's text or a disc's centre, and a disc's radius or a label's mark in the last byte.
 constexpr std::uint8_t CHART_ITEM_BYTES = 8;
+constexpr std::uint16_t CHART_ITEM_X = 0;
+constexpr std::uint16_t CHART_ITEM_ROWS = 2;
+constexpr std::uint16_t CHART_ITEM_TEXT = 4;
+constexpr std::uint16_t CHART_ITEM_IS_LABEL = 7;
 constexpr std::uint8_t CHART_DISC_COLOR = 3;
 constexpr std::uint8_t LABEL_TRIES = 0x23;
 constexpr std::uint8_t LABEL_LOWEST_ROW = 0x7C;
@@ -214,17 +220,40 @@ constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
   return static_cast<std::uint16_t>(_offset * 3 + half + _center);
 }
 
-// The loop of byte moves (mov al,[si]; mov [di],al; inc si; inc di; loop) some routines make.
-void CopyBytes(Guest& _guest)
+[[nodiscard]] constexpr std::uint16_t Word(std::int16_t _value) noexcept
 {
-  Machine::Registers& regs = _guest.Regs();
-  do
+  return static_cast<std::uint16_t>(_value);
+}
+
+// A chart item's x range or rows as DX and BX hold them: the first in the low byte, the last in the high.
+[[nodiscard]] constexpr ChartSpan SpanOf(std::uint16_t _word) noexcept
+{
+  return ChartSpan{Low(_word), High(_word)};
+}
+
+[[nodiscard]] constexpr std::uint16_t Word(ChartSpan _span) noexcept
+{
+  return Join(_span.last, _span.first);
+}
+
+// The two bytes of a span at DS:_offset, the first below the last.
+[[nodiscard]] ChartSpan SpanAt(const GameState& _state, std::uint16_t _offset)
+{
+  return ChartSpan{_state.Byte(_offset), _state.Byte(Offset(_offset, 1))};
+}
+
+// The loop of byte moves (mov al,[si]; mov [di],al; inc si; inc di; loop) some routines make: _count bytes
+// from DS:_from to DS:_to, 65,536 of them for a count of 0. Returns the last byte moved, which the loop leaves
+// in AL; it leaves SI and DI _count bytes on, and CX at 0.
+std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to, std::uint16_t _count)
+{
+  std::uint8_t moved = 0;
+  for (std::uint32_t done = 0; done < LoopCount(_count); ++done)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.si;
-    ++regs.di;
-  } while (--regs.cx != 0);
+    moved = _state.Byte(static_cast<std::uint16_t>(_from + done));
+    _state.SetByte(static_cast<std::uint16_t>(_to + done), moved);
+  }
+  return moved;
 }
 
 // One pass of PlaceChartLabels over chartItems: CF from the first item the label at DL/DH, BL/BH
@@ -236,7 +265,7 @@ void CopyBytes(Guest& _guest)
   regs.cx = _guest.Get(DS.chartItemCount);
   do
   {
-    ChartItemOverlaps(_guest);
+    ChartItemOverlapsEntry(_guest);
     if (Carry(regs))
     {
       return true;
@@ -264,13 +293,13 @@ void RunTextControlCode(Guest& _guest, std::uint16_t _handler)
     InsertRandomName(_guest);
     break;
   case BACKSPACE_DESCRIPTION:
-    BackspaceDescription(_guest);
+    BackspaceDescriptionEntry(_guest);
     break;
   case START_CAPITALIZING:
-    StartCapitalizing(_guest);
+    StartCapitalizingEntry(_guest);
     break;
   case STOP_CAPITALIZING:
-    StopCapitalizing(_guest);
+    StopCapitalizingEntry(_guest);
     break;
   default:
     // Codes 7-31 jump into descriptionPhraseLists, which no text uses: run whatever is there.
@@ -355,38 +384,38 @@ struct ChartKeys
   std::uint16_t frame;   // the start of the chart's frame, where its loop jumps back to
   std::uint16_t ignored; // the jump to it that the key tests reach (CS:0E0A, CS:1030)
   std::uint8_t ownKey;   // the chart's own F key, which leaves it open
-  void (*recenter)(Guest&);
+  void (*recenter)(GameState&);
+  bool recenterThroughAl; // the recentring goes through AL, and leaves the cursor's row there
   DataField<std::uint8_t> keptCursorX;
   DataField<std::uint8_t> keptCursorY;
 };
 
-// The galactic chart's cursor back on the current system, through AL (CS:0E19).
-void RecenterGalacticCursor(Guest& _guest)
+// The galactic chart's cursor back on the current system (CS:0E19).
+void RecenterGalacticCursor(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SetLow(regs.ax, _guest.Get(DS.currentSystemX));
-  _guest.Set(DS.chartCursorX, Low(regs.ax));
-  SetLow(regs.ax, _guest.Get(DS.currentSystemChartY));
-  _guest.Set(DS.chartCursorY, Low(regs.ax));
+  _state.Set(DS.chartCursorX, _state.Get(DS.currentSystemX));
+  _state.Set(DS.chartCursorY, _state.Get(DS.currentSystemChartY));
 }
 
 // The short-range chart's cursor back on its centre (CS:103F).
-void RecenterShortRangeCursor(Guest& _guest)
+void RecenterShortRangeCursor(GameState& _state)
 {
-  _guest.Set(DS.chartCursorX, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_X));
-  _guest.Set(DS.chartCursorY, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_ROW));
+  _state.Set(DS.chartCursorX, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_X));
+  _state.Set(DS.chartCursorY, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_ROW));
 }
 
 constexpr ChartKeys GALACTIC_CHART_KEYS{.frame = GALACTIC_CHART_FRAME,
                                         .ignored = GALACTIC_KEY_IGNORED,
                                         .ownKey = SCAN_F5,
                                         .recenter = &RecenterGalacticCursor,
+                                        .recenterThroughAl = true,
                                         .keptCursorX = DS.galacticCursorX,
                                         .keptCursorY = DS.galacticCursorY};
 constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
                                            .ignored = SHORT_RANGE_KEY_IGNORED,
                                            .ownKey = SCAN_F6,
                                            .recenter = &RecenterShortRangeCursor,
+                                           .recenterThroughAl = false,
                                            .keptCursorX = DS.shortRangeCursorX,
                                            .keptCursorY = DS.shortRangeCursorY};
 
@@ -420,7 +449,11 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
   }
   if (recenter)
   {
-    _chart.recenter(_guest);
+    _chart.recenter(_guest.State());
+    if (_chart.recenterThroughAl)
+    {
+      SetLow(regs.ax, _guest.Get(DS.chartCursorY));
+    }
   }
   const bool closes = key == SCAN_ESCAPE || (key >= SCAN_F1 && key <= SCAN_F10 && key != _chart.ownKey);
   if (!closes)
@@ -586,29 +619,34 @@ void AddShortRangeSystem(Guest& _guest)
   _guest.Set(DS.chartLabelCursor, regs.di);
 }
 
-// REPE CMPSB: DS:SI with ES:DI for at most CX bytes, in DF's direction. ZF set when every byte compared
-// was equal; returned.
-bool CompareBytes(Guest& _guest)
+// What REPE CMPSB finds.
+struct ByteComparison
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (regs.cx == 0)
+  std::uint16_t compared; // the bytes it compared, which SI and DI move on by and CX goes down by
+  bool equal;             // every byte compared was equal: ZF
+  bool below;             // the last byte compared was below the other: CF
+};
+
+// REPE CMPSB: DS:_source with _segment:_destination, for at most _count bytes, backwards when _backwards, until
+// two differ. A count of 0 compares nothing, and the flags keep what they held.
+[[nodiscard]] ByteComparison CompareBytes(const GameState& _state, std::uint16_t _source, std::uint16_t _segment,
+                                          std::uint16_t _destination, std::uint16_t _count, bool _backwards)
+{
+  const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFF : 1);
+  ByteComparison comparison{0, true, false};
+  std::uint16_t source = _source;
+  std::uint16_t destination = _destination;
+  while (comparison.compared < _count && comparison.equal)
   {
-    return _guest.Flag(Machine::FLAG_ZERO);
+    const std::uint8_t sourceByte = _state.Byte(source);
+    const std::uint8_t destinationByte = _state.FarByte(_segment, destination);
+    comparison.equal = sourceByte == destinationByte;
+    comparison.below = sourceByte < destinationByte;
+    source = Offset(source, step);
+    destination = Offset(destination, step);
+    ++comparison.compared;
   }
-  const auto step = static_cast<std::uint16_t>(_guest.Flag(Machine::FLAG_DIRECTION) ? 0xFFFF : 1);
-  bool equal = true;
-  do
-  {
-    const std::uint8_t source = _guest.Byte(regs.si);
-    const std::uint8_t destination = _guest.FarByte(regs.es, regs.di);
-    equal = source == destination;
-    _guest.SetFlag(Machine::FLAG_CARRY, source < destination);
-    regs.si = Offset(regs.si, step);
-    regs.di = Offset(regs.di, step);
-    --regs.cx;
-  } while (regs.cx != 0 && equal);
-  _guest.SetFlag(Machine::FLAG_ZERO, equal);
-  return equal;
+  return comparison;
 }
 
 // FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B).
@@ -724,24 +762,25 @@ void ShowShortRangeChart(Guest& _guest)
   } while (!ReadChartKey(_guest, SHORT_RANGE_CHART_KEYS));
 }
 
-void GetShortRangeOffset(Guest& _guest)
+SystemSeeds ReadSystemSeeds(const GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.chartIsShortRange) == 0)
+  return SystemSeeds{_state.Get(DS.systemSeed0), _state.Get(DS.systemSeed1), _state.Get(DS.systemSeed2)};
+}
+
+ShortRangeOffset GetShortRangeOffset(const GameState& _state)
+{
+  if (_state.Get(DS.chartIsShortRange) == 0)
   {
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
-    return;
+    return ShortRangeOffset{.onChart = true, .x = std::nullopt, .row = std::nullopt};
   }
-  regs.dx = static_cast<std::uint16_t>(_guest.Get(DS.systemX) - _guest.Get(DS.currentSystemX));
-  regs.ax = Magnitude(regs.dx);
-  if (regs.ax >= SHORT_RANGE_HALF_WIDTH)
+  const SystemSeeds seeds = ReadSystemSeeds(_state);
+  const auto x = static_cast<std::int16_t>(seeds.X() - _state.Get(DS.currentSystemX));
+  if (Magnitude(Word(x)) >= SHORT_RANGE_HALF_WIDTH)
   {
-    _guest.SetFlag(Machine::FLAG_CARRY, false);
-    return;
+    return ShortRangeOffset{.onChart = false, .x = x, .row = std::nullopt};
   }
-  regs.cx = static_cast<std::uint16_t>((_guest.Get(DS.systemY) >> 1) - _guest.Get(DS.currentSystemChartY));
-  regs.ax = Magnitude(regs.cx);
-  _guest.SetFlag(Machine::FLAG_CARRY, regs.ax < SHORT_RANGE_HALF_HEIGHT);
+  const auto row = static_cast<std::int16_t>(seeds.Row() - _state.Get(DS.currentSystemChartY));
+  return ShortRangeOffset{.onChart = Magnitude(Word(row)) < SHORT_RANGE_HALF_HEIGHT, .x = x, .row = row};
 }
 
 void IsSystemOnChart(Guest& _guest)
@@ -755,70 +794,64 @@ void IsSystemOnChart(Guest& _guest)
   const std::uint16_t ax = regs.ax;
   const std::uint16_t cx = regs.cx;
   const std::uint16_t dx = regs.dx;
-  GetShortRangeOffset(_guest);
+  GetShortRangeOffsetEntry(_guest);
   regs.dx = dx;
   regs.cx = cx;
   regs.ax = ax;
 }
 
-void TwistSystemSeeds(Guest& _guest)
+void TwistSystemSeeds(GameState& _state)
 {
-  const std::uint16_t a = _guest.Get(DS.systemSeed0);
-  const std::uint16_t b = _guest.Get(DS.systemSeed1);
-  const std::uint16_t c = _guest.Get(DS.systemSeed2);
-  _guest.Set(DS.systemSeed0, b);
-  _guest.Set(DS.systemSeed1, c);
-  _guest.Set(DS.systemSeed2, static_cast<std::uint16_t>(a + b + c));
+  const SystemSeeds seeds = ReadSystemSeeds(_state);
+  // In the order the original's two XCHGs and its ADD write them.
+  _state.Set(DS.systemSeed1, seeds.seed2);
+  _state.Set(DS.systemSeed0, seeds.seed1);
+  _state.Set(DS.systemSeed2, static_cast<std::uint16_t>(seeds.seed0 + seeds.seed1 + seeds.seed2));
 }
 
-void LoadGalaxySeeds(Guest& _guest)
+void LoadGalaxySeeds(GameState& _state)
 {
   // The table offset is figured in BL, so it wraps at a byte.
-  const auto entry = static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) * GALAXY_SEED_BYTES);
-  const auto seeds = static_cast<std::uint16_t>(DS.galaxySeeds.offset + entry);
-  _guest.Set(DS.systemSeed0, _guest.Word(seeds));
-  _guest.Set(DS.systemSeed1, _guest.Word(static_cast<std::uint16_t>(seeds + 2)));
-  _guest.Set(DS.systemSeed2, _guest.Word(static_cast<std::uint16_t>(seeds + 4)));
+  const auto entry = static_cast<std::uint8_t>(_state.Get(DS.galaxyNumber) * GALAXY_SEED_BYTES);
+  const std::uint16_t seeds = Offset(DS.galaxySeeds.offset, entry);
+  _state.Set(DS.systemSeed0, _state.Word(seeds));
+  _state.Set(DS.systemSeed1, _state.Word(Offset(seeds, 2)));
+  _state.Set(DS.systemSeed2, _state.Word(Offset(seeds, 4)));
 }
 
-void GetCursorGalaxyPosition(Guest& _guest)
+ChartPoint GetCursorGalaxyPosition(const GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = MakeWord(_guest.Get(DS.chartCursorX), _guest.Get(DS.chartCursorY));
-  if (_guest.Get(DS.chartIsShortRange) == 1)
+  const ChartPoint cursor{_state.Get(DS.chartCursorX), _state.Get(DS.chartCursorY)};
+  if (_state.Get(DS.chartIsShortRange) != 1)
   {
-    const std::uint8_t cursorRow = High(regs.bx);
-    const auto x = ChartToGalaxy(static_cast<std::uint16_t>(Low(regs.bx) - SHORT_RANGE_CENTER_X), _guest.Get(DS.currentSystemX));
-    const auto y = ChartToGalaxy(static_cast<std::uint16_t>(cursorRow - SHORT_RANGE_CENTER_ROW), _guest.Get(DS.currentSystemChartY));
-    regs.cx = MakeWord(Low(x), SHORT_RANGE_DIVISOR);
-    regs.bx = MakeWord(Low(x), Low(y));
+    return cursor;
   }
-  regs.ax = regs.bx;
+  const std::uint16_t x = ChartToGalaxy(static_cast<std::uint16_t>(cursor.x - SHORT_RANGE_CENTER_X), _state.Get(DS.currentSystemX));
+  const std::uint16_t row =
+    ChartToGalaxy(static_cast<std::uint16_t>(cursor.row - SHORT_RANGE_CENTER_ROW), _state.Get(DS.currentSystemChartY));
+  return ChartPoint{Low(x), Low(row)};
 }
 
-void MoveCursorToSystem(Guest& _guest)
+void MoveCursorToSystem(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.chartIsShortRange) != 1)
+  const SystemSeeds seeds = ReadSystemSeeds(_state);
+  if (_state.Get(DS.chartIsShortRange) != 1)
   {
-    _guest.Set(DS.chartCursorX, _guest.Get(DS.systemX));
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
-    _guest.Set(DS.chartCursorY, Low(regs.ax));
+    _state.Set(DS.chartCursorX, seeds.X());
+    _state.Set(DS.chartCursorY, seeds.Row());
     return;
   }
-  regs.bx = static_cast<std::uint16_t>(_guest.Get(DS.systemX) - _guest.Get(DS.currentSystemX));
-  _guest.Set(DS.chartCursorX, Low(GalaxyToChart(regs.bx, SHORT_RANGE_CENTER_X)));
-  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.systemY) >> 1) - _guest.Get(DS.currentSystemChartY));
-  regs.ax = GalaxyToChart(regs.bx, SHORT_RANGE_CENTER_ROW);
-  regs.bx = static_cast<std::uint16_t>(static_cast<std::int16_t>(regs.bx) >> 1);
-  _guest.Set(DS.chartCursorY, Low(regs.ax));
+  const auto across = static_cast<std::uint16_t>(seeds.X() - _state.Get(DS.currentSystemX));
+  _state.Set(DS.chartCursorX, Low(GalaxyToChart(across, SHORT_RANGE_CENTER_X)));
+  const auto down = static_cast<std::uint16_t>(seeds.Row() - _state.Get(DS.currentSystemChartY));
+  _state.Set(DS.chartCursorY, Low(GalaxyToChart(down, SHORT_RANGE_CENTER_ROW)));
 }
 
 void SelectSystemAtCursor(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   FindNearestSystem(_guest);
-  ComputeDistanceToSystem(_guest);
+  ComputeDistanceToSystemEntry(_guest);
   regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
   regs.di = DS.distanceDigits.offset;
   _guest.Call(FORMAT_DECIMAL_5);
@@ -875,8 +908,8 @@ void SelectSystemAtCursor(Guest& _guest)
 void FindNearestSystem(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  LoadGalaxySeeds(_guest);
-  GetCursorGalaxyPosition(_guest);
+  LoadGalaxySeedsEntry(_guest);
+  GetCursorGalaxyPositionEntry(_guest);
   const std::uint16_t cursor = regs.bx;
   regs.si = 0xFFFF;
   for (regs.cx = GALAXY_SYSTEMS; regs.cx != 0; --regs.cx)
@@ -908,37 +941,35 @@ void FindNearestSystem(Guest& _guest)
   regs.cx = static_cast<std::uint16_t>(GALAXY_SYSTEMS - regs.bp);
   _guest.Set(DS.selectedSystemIndex, Low(regs.cx));
   LoadSystemSeeds(_guest);
-  MoveCursorToSystem(_guest);
+  MoveCursorToSystemEntry(_guest);
 }
 
-void ComputeDistanceToSystem(Guest& _guest)
+std::uint16_t ComputeDistanceToSystem(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = _guest.Get(DS.currentSystemX);
-  regs.ax = Square(Low(Magnitude(static_cast<std::uint16_t>(_guest.Get(DS.systemX) - regs.bx))));
-  regs.dx = regs.ax;
-  regs.bx = _guest.Get(DS.currentSystemChartY);
-  regs.ax = Square(Low(Magnitude(static_cast<std::uint16_t>((_guest.Get(DS.systemY) >> 1) - regs.bx))));
-  // The square root of the 17-bit sum in BX:AX, counting the odd numbers it takes away.
-  std::int32_t remaining = std::int32_t{regs.ax} + regs.dx;
-  regs.dx = 0xFFFF;
-  regs.cx = regs.dx;
+  const SystemSeeds seeds = ReadSystemSeeds(_state);
+  // Each difference made positive, and its low byte squared by a byte multiply.
+  const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(seeds.X() - _state.Get(DS.currentSystemX)))));
+  const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>(seeds.Row() - _state.Get(DS.currentSystemChartY)))));
+  // The square root of their 17-bit sum, counting the odd numbers it takes away.
+  std::int32_t remaining = std::int32_t{across} + down;
+  std::uint16_t odd = 0xFFFF;
+  std::uint16_t root = 0xFFFF;
   do
   {
-    ++regs.cx;
-    regs.dx = static_cast<std::uint16_t>(regs.dx + 2);
-    remaining -= regs.dx;
+    ++root;
+    odd = static_cast<std::uint16_t>(odd + 2);
+    remaining -= odd;
   } while (remaining >= 0);
-  regs.bx = 0xFFFF;
-  regs.ax = static_cast<std::uint16_t>(regs.cx << 2);
-  _guest.Set(DS.selectedDistanceTenthsLy, regs.ax);
+  const auto distanceTenthsLy = static_cast<std::uint16_t>(root << 2);
+  _state.Set(DS.selectedDistanceTenthsLy, distanceTenthsLy);
+  return distanceTenthsLy;
 }
 
 void ShowNearestSystemDistance(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   FindNearestSystem(_guest);
-  ComputeDistanceToSystem(_guest);
+  ComputeDistanceToSystemEntry(_guest);
   regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
   regs.di = DS.distanceDigits.offset;
   _guest.Call(FORMAT_DECIMAL_5);
@@ -972,7 +1003,7 @@ void LoadSystemSeeds(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.cx = Low(regs.cx);
-  LoadGalaxySeeds(_guest);
+  LoadGalaxySeedsEntry(_guest);
   for (; regs.cx != 0; --regs.cx)
   {
     AdvanceToNextSystem(_guest);
@@ -981,10 +1012,10 @@ void LoadSystemSeeds(Guest& _guest)
 
 void AdvanceToNextSystem(Guest& _guest)
 {
-  TwistSystemSeeds(_guest);
-  TwistSystemSeeds(_guest);
-  TwistSystemSeeds(_guest);
-  TwistSystemSeeds(_guest);
+  TwistSystemSeedsEntry(_guest);
+  TwistSystemSeedsEntry(_guest);
+  TwistSystemSeedsEntry(_guest);
+  TwistSystemSeedsEntry(_guest);
 }
 
 void GenerateSystemName(Guest& _guest)
@@ -997,7 +1028,7 @@ void GenerateSystemName(Guest& _guest)
   for (regs.cx = 4; regs.cx != 0; --regs.cx)
   {
     const std::uint8_t pick = _guest.Get(DS.systemSeed2High);
-    TwistSystemSeeds(_guest);
+    TwistSystemSeedsEntry(_guest);
     regs.ax = static_cast<std::uint16_t>((pick & 0x1F) << 1);
     regs.bx = static_cast<std::uint16_t>(DS.systemNameDigrams.offset + regs.ax);
     regs.ax = _guest.Word(regs.bx);
@@ -1091,7 +1122,20 @@ void FindSystemByName(Guest& _guest)
     _guest.Push(regs.cx);
     regs.si = DS.selectedSystemName.offset;
     regs.di = DS.findInput.offset;
-    const bool found = CompareBytes(_guest);
+    // REPE CMPSB, as many bytes as CX says.
+    bool found = _guest.Flag(Machine::FLAG_ZERO);
+    if (regs.cx != 0)
+    {
+      const bool backwards = _guest.Flag(Machine::FLAG_DIRECTION);
+      const ByteComparison comparison = CompareBytes(_guest.State(), regs.si, regs.es, regs.di, regs.cx, backwards);
+      const auto moved = static_cast<std::uint16_t>(backwards ? 0u - comparison.compared : comparison.compared);
+      regs.si = Offset(regs.si, moved);
+      regs.di = Offset(regs.di, moved);
+      regs.cx = static_cast<std::uint16_t>(regs.cx - comparison.compared);
+      _guest.SetFlag(Machine::FLAG_ZERO, comparison.equal);
+      _guest.SetFlag(Machine::FLAG_CARRY, comparison.below);
+      found = comparison.equal;
+    }
     regs.cx = _guest.Pop();
     regs.ax = _guest.Pop();
     if (found)
@@ -1183,82 +1227,74 @@ void PlaceChartLabels(Guest& _guest)
     _guest.Set(DS.labelNudgeCount, 0);
     while (AnyChartItemOverlaps(_guest))
     {
-      NudgeChartLabel(_guest);
+      NudgeChartLabelEntry(_guest);
       if (!Carry(regs))
       {
         break;
       }
     }
-    AddChartLabel(_guest);
+    AddChartLabelEntry(_guest);
     _guest.Set(DS.labelsLeftToPlace, static_cast<std::uint8_t>(_guest.Get(DS.labelsLeftToPlace) - 1));
   } while (_guest.Get(DS.labelsLeftToPlace) != 0);
 }
 
-void AddChartLabel(Guest& _guest)
+void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = _guest.Get(DS.chartItemEnd);
-  _guest.SetWord(regs.di, regs.dx);
-  _guest.SetWord(static_cast<std::uint16_t>(regs.di + 2), regs.bx);
-  regs.bx = _guest.Get(DS.chartLabelCursor);
-  _guest.SetWord(static_cast<std::uint16_t>(regs.di + 4), regs.bx);
-  _guest.SetByte(static_cast<std::uint16_t>(regs.di + 7), 1);
-  regs.di = static_cast<std::uint16_t>(regs.di + CHART_ITEM_BYTES);
-  _guest.Set(DS.chartItemEnd, regs.di);
-  _guest.Set(DS.chartItemCount, static_cast<std::uint8_t>(_guest.Get(DS.chartItemCount) + 1));
+  const std::uint16_t item = _state.Get(DS.chartItemEnd);
+  _state.SetWord(Offset(item, CHART_ITEM_X), Word(_x));
+  _state.SetWord(Offset(item, CHART_ITEM_ROWS), Word(_rows));
+  const std::uint16_t name = _state.Get(DS.chartLabelCursor);
+  _state.SetWord(Offset(item, CHART_ITEM_TEXT), name);
+  _state.SetByte(Offset(item, CHART_ITEM_IS_LABEL), 1);
+  _state.Set(DS.chartItemEnd, Offset(item, CHART_ITEM_BYTES));
+  _state.Set(DS.chartItemCount, static_cast<std::uint8_t>(_state.Get(DS.chartItemCount) + 1));
   // Past the name's NUL; the scan starts at its second byte.
+  std::uint16_t past = name;
   do
   {
-    ++regs.bx;
-  } while (_guest.Byte(regs.bx) != 0);
-  ++regs.bx;
-  _guest.Set(DS.chartLabelCursor, regs.bx);
+    past = Offset(past, 1);
+  } while (_state.Byte(past) != 0);
+  _state.Set(DS.chartLabelCursor, Offset(past, 1));
 }
 
-void NudgeChartLabel(Guest& _guest)
+LabelNudge NudgeChartLabel(GameState& _state, ChartSpan _rows)
 {
-  Machine::Registers& regs = _guest.Regs();
+  ChartSpan rows = _rows;
   for (;;)
   {
-    const auto step = static_cast<std::uint8_t>(_guest.Get(DS.labelNudgeCount) + 1);
-    _guest.Set(DS.labelNudgeCount, step);
+    const auto step = static_cast<std::uint8_t>(_state.Get(DS.labelNudgeCount) + 1);
+    _state.Set(DS.labelNudgeCount, step);
     if (step >= LABEL_TRIES)
     {
-      _guest.SetFlag(Machine::FLAG_CARRY, false);
-      return;
+      return LabelNudge{.moved = false, .rows = rows};
     }
     if ((step & 1) != 0)
     {
-      // Odd steps go up; a move off the top (BL negative) is skipped.
-      SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) - step));
-      SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - step));
-      if ((Low(regs.bx) & 0x80) == 0)
+      // Odd steps go up; a move off the top (the first row negative) is skipped.
+      rows.last = static_cast<std::uint8_t>(rows.last - step);
+      rows.first = static_cast<std::uint8_t>(rows.first - step);
+      if ((rows.first & 0x80) == 0)
       {
-        _guest.SetFlag(Machine::FLAG_CARRY, true);
-        return;
+        return LabelNudge{.moved = true, .rows = rows};
       }
     }
     else
     {
-      SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + step));
-      SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) + step));
-      if (High(regs.bx) < LABEL_LOWEST_ROW)
+      rows.first = static_cast<std::uint8_t>(rows.first + step);
+      rows.last = static_cast<std::uint8_t>(rows.last + step);
+      if (rows.last < LABEL_LOWEST_ROW)
       {
-        _guest.SetFlag(Machine::FLAG_CARRY, true);
-        return;
+        return LabelNudge{.moved = true, .rows = rows};
       }
     }
   }
 }
 
-void ChartItemOverlaps(Guest& _guest)
+bool ChartItemOverlaps(const GameState& _state, std::uint16_t _item, ChartSpan _x, ChartSpan _rows)
 {
-  const Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t item = regs.di;
-  const bool overlaps = _guest.Byte(static_cast<std::uint16_t>(item + 1)) >= Low(regs.dx) && High(regs.dx) >= _guest.Byte(item) &&
-                        _guest.Byte(static_cast<std::uint16_t>(item + 3)) >= Low(regs.bx) &&
-                        High(regs.bx) >= _guest.Byte(static_cast<std::uint16_t>(item + 2));
-  _guest.SetFlag(Machine::FLAG_CARRY, overlaps);
+  const ChartSpan itemX = SpanAt(_state, Offset(_item, CHART_ITEM_X));
+  const ChartSpan itemRows = SpanAt(_state, Offset(_item, CHART_ITEM_ROWS));
+  return itemX.last >= _x.first && _x.last >= itemX.first && itemRows.last >= _rows.first && _rows.last >= itemRows.first;
 }
 
 void ClearChartTextLines(Guest& _guest)
@@ -1373,32 +1409,30 @@ void ShowSystemDataScreen(Guest& _guest)
   WaitForScreenExitKey(_guest);
 }
 
-void TerminateSelectedSystemName(Guest& _guest)
+std::uint8_t TerminateSelectedSystemName(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.selectedSystemName.offset;
-  regs.bx = _guest.Get(DS.selectedSystemNameLength);
-  _guest.SetByte(static_cast<std::uint16_t>(regs.bx + regs.si), 0);
+  const std::uint8_t length = _state.Get(DS.selectedSystemNameLength);
+  _state.SetByte(Offset(DS.selectedSystemName.offset, length), 0);
+  return length;
 }
 
-void FormatSelectedSystemDistance(Guest& _guest)
+std::uint16_t FormatSelectedSystemDistance(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = DS.distanceTenthsDigit.offset;
-  regs.si = SELECTED_DISTANCE_TEXT_END;
-  SetLow(regs.ax, _guest.Byte(regs.bx));
-  _guest.SetByte(regs.si, Low(regs.ax));
-  --regs.si;
-  _guest.SetByte(regs.si, DECIMAL_POINT);
+  std::uint16_t from = DS.distanceTenthsDigit.offset;
+  std::uint16_t to = SELECTED_DISTANCE_TEXT_END;
+  _state.SetByte(to, _state.Byte(from));
+  --to;
+  _state.SetByte(to, DECIMAL_POINT);
   // Backwards through the digits, up to and including the space before them.
+  std::uint8_t copied = 0;
   do
   {
-    --regs.si;
-    --regs.bx;
-    SetLow(regs.ax, _guest.Byte(regs.bx));
-    _guest.SetByte(regs.si, Low(regs.ax));
-  } while (Low(regs.ax) != SPACE);
-  ++regs.si;
+    --to;
+    --from;
+    copied = _state.Byte(from);
+    _state.SetByte(to, copied);
+  } while (copied != SPACE);
+  return Offset(to, 1);
 }
 
 void ShowSystemDescription(Guest& _guest)
@@ -1474,7 +1508,7 @@ void ExpandDescriptionText(Guest& _guest)
       // One of the five phrases in the code's list, by the next random number's low byte / 52.
       regs.ax = static_cast<std::uint16_t>((code - DESCRIPTION_PHRASE_CODE) << 1);
       regs.bx = _guest.Word(static_cast<std::uint16_t>(DS.descriptionPhraseLists.offset + regs.ax));
-      NextDescriptionRandom(_guest);
+      NextDescriptionRandomEntry(_guest);
       SetLow(regs.cx, DESCRIPTION_PHRASE_DIVISOR);
       regs.ax = static_cast<std::uint16_t>((Low(regs.ax) / DESCRIPTION_PHRASE_DIVISOR) << 1);
       regs.bx = static_cast<std::uint16_t>(regs.bx + regs.ax);
@@ -1527,7 +1561,10 @@ void InsertSystemAdjective(Guest& _guest)
   }
   regs.si = DS.adjectiveSuffix.offset;
   regs.cx = ADJECTIVE_SUFFIX_BYTES;
-  CopyBytes(_guest);
+  SetLow(regs.ax, CopyBytes(_guest.State(), regs.si, regs.di, regs.cx));
+  regs.si = Offset(regs.si, regs.cx);
+  regs.di = Offset(regs.di, regs.cx);
+  regs.cx = 0;
   regs.si = DS.descriptionNameBuffer.offset;
   regs.di = output;
   ExpandDescriptionText(_guest);
@@ -1542,7 +1579,10 @@ void InsertRandomName(Guest& _guest)
   regs.si = DS.selectedSystemName.offset;
   regs.di = SAVED_SYSTEM_NAME;
   regs.cx = SYSTEM_NAME_BYTES;
-  CopyBytes(_guest);
+  SetLow(regs.ax, CopyBytes(_guest.State(), regs.si, regs.di, regs.cx));
+  regs.si = Offset(regs.si, regs.cx);
+  regs.di = Offset(regs.di, regs.cx);
+  regs.cx = 0;
   regs.ax = _guest.Get(DS.descriptionSeed0);
   _guest.Set(DS.systemSeed0, regs.ax);
   regs.ax = _guest.Get(DS.descriptionSeed1);
@@ -1554,42 +1594,45 @@ void InsertRandomName(Guest& _guest)
   regs.si = SAVED_SYSTEM_NAME;
   regs.di = DS.selectedSystemName.offset;
   regs.cx = SYSTEM_NAME_BYTES;
-  CopyBytes(_guest);
+  SetLow(regs.ax, CopyBytes(_guest.State(), regs.si, regs.di, regs.cx));
+  regs.si = Offset(regs.si, regs.cx);
+  regs.di = Offset(regs.di, regs.cx);
+  regs.cx = 0;
   regs.di = output;
   regs.si = DS.descriptionNameBuffer.offset;
   ExpandDescriptionText(_guest);
   regs.si = text;
 }
 
-void BackspaceDescription(Guest& _guest)
+std::uint16_t BackspaceDescription(std::uint16_t _output)
 {
-  --_guest.Regs().di;
+  return static_cast<std::uint16_t>(_output - 1);
 }
 
-void StartCapitalizing(Guest& _guest)
+void StartCapitalizing(GameState& _state)
 {
-  _guest.Set(DS.descriptionCapitalize, 1);
+  _state.Set(DS.descriptionCapitalize, 1);
 }
 
-void StopCapitalizing(Guest& _guest)
+void StopCapitalizing(GameState& _state)
 {
-  _guest.Set(DS.descriptionCapitalize, 0);
+  _state.Set(DS.descriptionCapitalize, 0);
 }
 
-void NextDescriptionRandom(Guest& _guest)
+std::uint16_t NextDescriptionRandom(GameState& _state)
 {
-  const std::uint16_t a = _guest.Get(DS.descriptionSeed0);
-  const std::uint16_t b = _guest.Get(DS.descriptionSeed1);
+  const std::uint16_t a = _state.Get(DS.descriptionSeed0);
+  const std::uint16_t b = _state.Get(DS.descriptionSeed1);
   const auto sum = static_cast<std::uint16_t>(a + b);
-  _guest.Set(DS.descriptionSeed0, b);
-  _guest.Set(DS.descriptionSeed1, sum);
-  _guest.Regs().ax = sum;
+  _state.Set(DS.descriptionSeed0, b);
+  _state.Set(DS.descriptionSeed1, sum);
+  return sum;
 }
 
 void CopySelectedNameLower(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  TerminateSelectedSystemName(_guest);
+  TerminateSelectedSystemNameEntry(_guest);
   regs.si = DS.selectedSystemName.offset;
   regs.di = DS.descriptionNameBuffer.offset;
   SetLow(regs.ax, _guest.Byte(regs.si));
@@ -1609,10 +1652,13 @@ void CopySelectedNameLower(Guest& _guest)
   _guest.SetByte(static_cast<std::uint16_t>(regs.di + 1), Low(regs.ax));
 }
 
+// ── Their entries ──
+
 namespace
 {
 
 using Machine::FLAG_CARRY;
+using Machine::NativeContract;
 using Machine::NativeReturn;
 using Machine::NativeWait;
 using Machine::REGISTER_ALL;
@@ -1628,23 +1674,147 @@ using Machine::REGISTER_SI;
 constexpr auto GENERAL =
   static_cast<std::uint16_t>(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP);
 
+constexpr NativeContract CLOBBERS_CX{REGISTER_CX, 0};
+constexpr NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
+constexpr NativeContract CLOBBERS_BX_DI{REGISTER_BX | REGISTER_DI, 0};
+constexpr NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
+constexpr NativeContract CLOBBERS_AX_RETURNS_CARRY{REGISTER_AX, FLAG_CARRY};
+
+} // namespace
+
+void GetShortRangeOffsetEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ShortRangeOffset offset = GetShortRangeOffset(_guest.State());
+  // DX and CX keep what they held where the original measures no x or no row.
+  if (offset.x)
+  {
+    regs.dx = Word(*offset.x);
+  }
+  if (offset.row)
+  {
+    regs.cx = Word(*offset.row);
+  }
+  _guest.SetFlag(FLAG_CARRY, offset.onChart);
+  _guest.Clobber(CLOBBERS_AX_RETURNS_CARRY);
+}
+
+void TwistSystemSeedsEntry(Guest& _guest)
+{
+  TwistSystemSeeds(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void LoadGalaxySeedsEntry(Guest& _guest)
+{
+  LoadGalaxySeeds(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void GetCursorGalaxyPositionEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ChartPoint position = GetCursorGalaxyPosition(_guest.State());
+  regs.bx = Join(position.row, position.x);
+  regs.ax = regs.bx;
+  _guest.Clobber(CLOBBERS_CX);
+}
+
+void MoveCursorToSystemEntry(Guest& _guest)
+{
+  MoveCursorToSystem(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void ComputeDistanceToSystemEntry(Guest& _guest)
+{
+  ComputeDistanceToSystem(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
+}
+
+void AddChartLabelEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  AddChartLabel(_guest.State(), SpanOf(regs.dx), SpanOf(regs.bx));
+  _guest.Clobber(CLOBBERS_BX_DI);
+}
+
+void NudgeChartLabelEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const LabelNudge nudge = NudgeChartLabel(_guest.State(), SpanOf(regs.bx));
+  regs.bx = Word(nudge.rows);
+  _guest.SetFlag(FLAG_CARRY, nudge.moved);
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void ChartItemOverlapsEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  _guest.SetFlag(FLAG_CARRY, ChartItemOverlaps(_guest.State(), regs.di, SpanOf(regs.dx), SpanOf(regs.bx)));
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void TerminateSelectedSystemNameEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The original indexes the name by its length in BX, and leaves it there: CopySelectedNameLower keeps BX.
+  regs.bx = TerminateSelectedSystemName(_guest.State());
+  regs.si = DS.selectedSystemName.offset;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void FormatSelectedSystemDistanceEntry(Guest& _guest)
+{
+  _guest.Regs().si = FormatSelectedSystemDistance(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void BackspaceDescriptionEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = BackspaceDescription(regs.di);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StartCapitalizingEntry(Guest& _guest)
+{
+  StartCapitalizing(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StopCapitalizingEntry(Guest& _guest)
+{
+  StopCapitalizing(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void NextDescriptionRandomEntry(Guest& _guest)
+{
+  _guest.Regs().ax = NextDescriptionRandom(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
+
 // GenerateSystemName clobbers DL but returns DH: DX is compared whole, and the port leaves DL as the
 // original does.
 // The charts and the data screen wait for keys, and FindSystemByName for a line typed: each waits as a rule.
 constexpr std::array ENTRIES = {
   NativeEntry{0x0CAE, "ShowGalacticChart", &ShowGalacticChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x0E52, "ShowShortRangeChart", &ShowShortRangeChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x1076, "GetShortRangeOffset", &GetShortRangeOffset, Machine::NativeContract{REGISTER_AX, FLAG_CARRY}},
+  NativeEntry{0x1076, "GetShortRangeOffset", &GetShortRangeOffsetEntry, CLOBBERS_AX_RETURNS_CARRY},
   NativeEntry{0x10AF, "IsSystemOnChart", &IsSystemOnChart, Machine::NativeContract{0, FLAG_CARRY}},
-  NativeEntry{0x10C0, "TwistSystemSeeds", &TwistSystemSeeds, PRESERVES_ALL},
-  NativeEntry{0x10D6, "LoadGalaxySeeds", &LoadGalaxySeeds, PRESERVES_ALL},
-  NativeEntry{0x10FE, "GetCursorGalaxyPosition", &GetCursorGalaxyPosition, Machine::NativeContract{REGISTER_CX, 0}},
-  NativeEntry{0x1146, "MoveCursorToSystem", &MoveCursorToSystem, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
+  NativeEntry{0x10C0, "TwistSystemSeeds", &TwistSystemSeedsEntry, PRESERVES_ALL},
+  NativeEntry{0x10D6, "LoadGalaxySeeds", &LoadGalaxySeedsEntry, PRESERVES_ALL},
+  NativeEntry{0x10FE, "GetCursorGalaxyPosition", &GetCursorGalaxyPositionEntry, CLOBBERS_CX},
+  NativeEntry{0x1146, "MoveCursorToSystem", &MoveCursorToSystemEntry, CLOBBERS_AX_BX},
   NativeEntry{0x1199, "SelectSystemAtCursor", &SelectSystemAtCursor, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x1292, "FindNearestSystem", &FindNearestSystem,
               Machine::NativeContract{static_cast<std::uint16_t>(GENERAL & ~REGISTER_DI), 0}},
-  NativeEntry{0x12F9, "ComputeDistanceToSystem", &ComputeDistanceToSystem,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0}},
+  NativeEntry{0x12F9, "ComputeDistanceToSystem", &ComputeDistanceToSystemEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x1341, "ShowNearestSystemDistance", &ShowNearestSystemDistance, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeeds, PRESERVES_ALL},
   NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystem, PRESERVES_ALL},
@@ -1655,22 +1825,22 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x14C5, "DrawChartItems", &DrawChartItems, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x1505, "PlaceChartLabels", &PlaceChartLabels,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
-  NativeEntry{0x1552, "AddChartLabel", &AddChartLabel, Machine::NativeContract{REGISTER_BX | REGISTER_DI, 0}},
-  NativeEntry{0x157D, "NudgeChartLabel", &NudgeChartLabel, Machine::NativeContract{0, FLAG_CARRY}},
-  NativeEntry{0x15A9, "ChartItemOverlaps", &ChartItemOverlaps, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x1552, "AddChartLabel", &AddChartLabelEntry, CLOBBERS_BX_DI},
+  NativeEntry{0x157D, "NudgeChartLabel", &NudgeChartLabelEntry, RETURNS_CARRY},
+  NativeEntry{0x15A9, "ChartItemOverlaps", &ChartItemOverlapsEntry, RETURNS_CARRY},
   NativeEntry{0x15BC, "ClearChartTextLines", &ClearChartTextLines, Machine::NativeContract{REGISTER_SI | REGISTER_DI, 0}},
   NativeEntry{0x5CDE, "ShowSystemDataScreen", &ShowSystemDataScreen, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x60EB, "TerminateSelectedSystemName", &TerminateSelectedSystemName, Machine::NativeContract{REGISTER_BX, 0}},
-  NativeEntry{0x60F7, "FormatSelectedSystemDistance", &FormatSelectedSystemDistance, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
+  NativeEntry{0x60EB, "TerminateSelectedSystemName", &TerminateSelectedSystemNameEntry, PRESERVES_ALL},
+  NativeEntry{0x60F7, "FormatSelectedSystemDistance", &FormatSelectedSystemDistanceEntry, CLOBBERS_AX_BX},
   NativeEntry{0x6FC0, "ShowSystemDescription", &ShowSystemDescription, Machine::NativeContract{REGISTER_ALL, 0}},
   NativeEntry{0x700F, "ExpandDescriptionText", &ExpandDescriptionText, Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX, 0}},
   NativeEntry{0x707A, "InsertSystemName", &InsertSystemName, PRESERVES_ALL},
   NativeEntry{0x708D, "InsertSystemAdjective", &InsertSystemAdjective, PRESERVES_ALL},
   NativeEntry{0x70C1, "InsertRandomName", &InsertRandomName, PRESERVES_ALL},
-  NativeEntry{0x7107, "BackspaceDescription", &BackspaceDescription, PRESERVES_ALL},
-  NativeEntry{0x7109, "StartCapitalizing", &StartCapitalizing, PRESERVES_ALL},
-  NativeEntry{0x710F, "StopCapitalizing", &StopCapitalizing, PRESERVES_ALL},
-  NativeEntry{0x7115, "NextDescriptionRandom", &NextDescriptionRandom, PRESERVES_ALL},
+  NativeEntry{0x7107, "BackspaceDescription", &BackspaceDescriptionEntry, PRESERVES_ALL},
+  NativeEntry{0x7109, "StartCapitalizing", &StartCapitalizingEntry, PRESERVES_ALL},
+  NativeEntry{0x710F, "StopCapitalizing", &StopCapitalizingEntry, PRESERVES_ALL},
+  NativeEntry{0x7115, "NextDescriptionRandom", &NextDescriptionRandomEntry, PRESERVES_ALL},
   NativeEntry{0x7124, "CopySelectedNameLower", &CopySelectedNameLower, Machine::NativeContract{REGISTER_AX | REGISTER_SI, 0}},
 };
 

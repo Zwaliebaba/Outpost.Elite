@@ -109,6 +109,7 @@ constexpr std::uint8_t PRECIOUS_MOST = 0xFA;
 constexpr std::uint8_t QUANTITY_DIGITS = 3;
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
 constexpr std::uint16_t QUANTITY_MOST = 0xFA;
+constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the original keeps in BH
 
 // mul by _factor, then mov al,ah / mov ah,dl: AX = DX:AX >> 8, DX the high word.
 void MultiplyScaled(Machine::Registers& _regs, std::uint16_t _factor) noexcept
@@ -465,7 +466,7 @@ void SubtractCredits(Guest& _guest)
     _guest.SetFlag(FLAG_CARRY, true);
     return;
   }
-  FormatCredits(_guest);
+  FormatCreditsEntry(_guest);
   _guest.SetFlag(FLAG_CARRY, false);
 }
 
@@ -483,21 +484,19 @@ void AddCredits(Guest& _guest)
   _guest.Call(FORMAT_CREDITS);
 }
 
-void ComputeResalePrice(Guest& _guest)
+std::uint16_t ComputeResalePrice(const GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t price = _guest.Get(DS.resalePriceInput);
-  regs.ax = price;
-  if (price != 0)
+  const std::uint16_t price = _state.Get(DS.resalePriceInput);
+  if (price == 0)
   {
-    regs.ax = static_cast<std::uint16_t>(regs.ax >> 5);
-    while (regs.ax >= RESALE_PRICE_CEILING)
-    {
-      regs.ax = static_cast<std::uint16_t>(regs.ax >> 1);
-    }
-    regs.ax = static_cast<std::uint16_t>(price - regs.ax - 1);
+    return 0;
   }
-  _guest.SetFlag(Machine::FLAG_ZERO, regs.ax == 0);
+  auto cut = static_cast<std::uint16_t>(price >> 5);
+  while (cut >= RESALE_PRICE_CEILING)
+  {
+    cut = static_cast<std::uint16_t>(cut >> 1);
+  }
+  return static_cast<std::uint16_t>(price - cut - 1);
 }
 
 void ComputeMarketPrices(Guest& _guest)
@@ -550,35 +549,34 @@ void ComputeMarketPrices(Guest& _guest)
 
     _guest.SetWord(regs.di, regs.ax);
     _guest.Set(DS.resalePriceInput, regs.ax);
-    ComputeResalePrice(_guest);
+    ComputeResalePriceEntry(_guest);
     _guest.SetWord(static_cast<std::uint16_t>(regs.di + 2), regs.ax);
     regs.di = static_cast<std::uint16_t>(regs.di + 4);
   }
 }
 
-void NextMarketRandom(Guest& _guest)
+std::uint16_t NextMarketRandom(GameState& _state)
 {
-  const std::uint16_t a = _guest.Word(DS.marketRandomState.offset);
-  const std::uint16_t b = _guest.Get(DS.data8C20);
-  const std::uint16_t c = _guest.Get(DS.data8C22);
+  const std::uint16_t a = _state.Word(DS.marketRandomState.offset);
+  const std::uint16_t b = _state.Get(DS.data8C20);
+  const std::uint16_t c = _state.Get(DS.data8C22);
   const auto sum = static_cast<std::uint16_t>(a + b);
-  _guest.SetWord(DS.marketRandomState.offset, b);
-  _guest.Set(DS.data8C20, c);
-  _guest.Set(DS.data8C22, static_cast<std::uint16_t>(c + sum));
-  _guest.Regs().ax = sum;
+  // In the order the original's two XCHGs and its ADD write them.
+  _state.Set(DS.data8C20, c);
+  _state.SetWord(DS.marketRandomState.offset, b);
+  _state.Set(DS.data8C22, static_cast<std::uint16_t>(c + sum));
+  return sum;
 }
 
-void ParseQuantity(Guest& _guest)
+Quantity ParseQuantity(const GameState& _state, std::uint16_t _text)
 {
-  Registers& regs = _guest.Regs();
-  const auto next = [&_guest, &regs]()
+  Quantity quantity{.value = 0, .valid = false, .end = _text, .lastRead = 0};
+  const auto next = [&_state, &quantity]()
   {
-    SetLow(regs.bx, _guest.Byte(regs.di));
-    ++regs.di;
-    return Low(regs.bx);
+    quantity.lastRead = _state.Byte(quantity.end);
+    quantity.end = Offset(quantity.end, 1);
+    return quantity.lastRead;
   };
-  regs.ax = 0;
-  SetHigh(regs.bx, 10);
   std::uint8_t character = 0;
   do
   {
@@ -587,13 +585,12 @@ void ParseQuantity(Guest& _guest)
   while (character != 0)
   {
     // A digit: AL times ten, plus it. MUL BH takes only AL, so a number past 255 has lost its high byte.
-    SetLow(regs.bx, static_cast<std::uint8_t>(character - '0'));
-    if (character < '0' || Low(regs.bx) >= 10)
+    quantity.lastRead = static_cast<std::uint8_t>(character - '0');
+    if (character < '0' || quantity.lastRead >= 10)
     {
-      _guest.SetFlag(FLAG_CARRY, true);
-      return;
+      return quantity;
     }
-    regs.ax = static_cast<std::uint16_t>(Low(regs.ax) * High(regs.bx) + Low(regs.bx));
+    quantity.value = static_cast<std::uint16_t>(Low(quantity.value) * QUANTITY_BASE + quantity.lastRead);
     character = next();
     if (character == ' ')
     {
@@ -604,12 +601,12 @@ void ParseQuantity(Guest& _guest)
       } while (character == ' ');
       if (character != 0)
       {
-        _guest.SetFlag(FLAG_CARRY, true);
-        return;
+        return quantity;
       }
     }
   }
-  _guest.SetFlag(FLAG_CARRY, regs.ax > QUANTITY_MOST);
+  quantity.valid = quantity.value <= QUANTITY_MOST;
+  return quantity;
 }
 
 void PrintCargoQuantity(Guest& _guest)
@@ -619,10 +616,10 @@ void PrintCargoQuantity(Guest& _guest)
   if (regs.ax != 0)
   {
     regs.di = DS.quantityText.offset;
-    FormatDecimal5(_guest);
+    FormatDecimal5Entry(_guest);
     regs.cx = QUANTITY_DIGITS_BLANKED;
     regs.di = DS.quantityText.offset;
-    BlankLeadingZeros(_guest);
+    BlankLeadingZerosEntry(_guest);
     regs.si = DS.quantityText.offset;
   }
   SetLow(regs.ax, _guest.Get(DS.textAttribute));
@@ -635,7 +632,7 @@ void PrintCargoQuantity(Guest& _guest)
   regs.di = static_cast<std::uint16_t>(regs.di + regs.ax);
   regs.ax = static_cast<std::uint16_t>(regs.ax >> 2);
   regs.di = static_cast<std::uint16_t>(regs.di + regs.ax);
-  PrintTextModeString(_guest);
+  PrintTextModeStringEntry(_guest);
   regs.ax = saved;
   _guest.Set(DS.textAttribute, Low(regs.ax));
 }
@@ -696,19 +693,20 @@ void RunCargoTradeMenu(Guest& _guest)
   }
 }
 
-void AddContrabandPenalty(Guest& _guest)
+std::uint8_t AddContrabandPenalty(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
   // The row's trade record, three bytes from data8BDD, in 8 bits: its third byte is the commodity's legal penalty.
-  const auto index = static_cast<std::uint8_t>(_guest.Get(DS.menuSelectedRow) - 1);
-  regs.bx = static_cast<std::uint8_t>(index * 2 + index);
-  regs.bx = _guest.Byte(static_cast<std::uint16_t>(regs.bx + DS.data8BDF.offset));
-  regs.bx = static_cast<std::uint8_t>(regs.bx + _guest.Get(DS.legalStatus));
-  if (regs.bx != 0)
+  const auto index = static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1);
+  const auto record = static_cast<std::uint8_t>(index * 2 + index);
+  const auto status = static_cast<std::uint8_t>(_state.Byte(Offset(DS.data8BDF.offset, record)) + _state.Get(DS.legalStatus));
+  if (status != 0)
   {
-    _guest.Set(DS.legalStatus, Low(regs.bx));
+    _state.Set(DS.legalStatus, status);
   }
+  return status;
 }
+
+// ── Their entries ──
 
 namespace
 {
@@ -720,19 +718,59 @@ using Machine::REGISTER_ALL;
 using Machine::REGISTER_BP;
 
 constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
+constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
+constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+
+} // namespace
+
+void ComputeResalePriceEntry(Guest& _guest)
+{
+  const std::uint16_t price = ComputeResalePrice(_guest.State());
+  _guest.Regs().ax = price;
+  _guest.SetFlag(FLAG_ZERO, price == 0);
+  _guest.Clobber(RETURNS_ZERO);
+}
+
+void NextMarketRandomEntry(Guest& _guest)
+{
+  _guest.Regs().ax = NextMarketRandom(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ParseQuantityEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const Quantity quantity = ParseQuantity(_guest.State(), regs.di);
+  regs.ax = quantity.value;
+  // The original reads each character into BL, with BH the base it multiplies by, and leaves DI past the last.
+  regs.bx = Join(QUANTITY_BASE, quantity.lastRead);
+  regs.di = quantity.end;
+  _guest.SetFlag(FLAG_CARRY, !quantity.valid);
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void AddContrabandPenaltyEntry(Guest& _guest)
+{
+  // The original sums in BL, BH clear, and leaves the sum there.
+  _guest.Regs().bx = AddContrabandPenalty(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x5E2C, "ShowMarketPricesScreen", &ShowMarketPricesScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x65EC, "SpendCredits", &SpendCredits, NativeContract{0, FLAG_CARRY}},
   NativeEntry{0x65EE, "AddCredits", &AddCredits, PRESERVES_ALL},
-  NativeEntry{0x6995, "ComputeResalePrice", &ComputeResalePrice, NativeContract{0, FLAG_ZERO}},
+  NativeEntry{0x6995, "ComputeResalePrice", &ComputeResalePriceEntry, RETURNS_ZERO},
   NativeEntry{0x69CE, "ComputeMarketPrices", &ComputeMarketPrices,
               NativeContract{static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_BP), 0}},
-  NativeEntry{0x6A85, "NextMarketRandom", &NextMarketRandom, PRESERVES_ALL},
-  NativeEntry{0x6A99, "ParseQuantity", &ParseQuantity, NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x6A85, "NextMarketRandom", &NextMarketRandomEntry, PRESERVES_ALL},
+  NativeEntry{0x6A99, "ParseQuantity", &ParseQuantityEntry, RETURNS_CARRY},
   NativeEntry{0x6AD9, "PrintCargoQuantity", &PrintCargoQuantity, PRESERVES_ALL},
   NativeEntry{0x6B1E, "RunCargoTradeMenu", &RunCargoTradeMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x6DC1, "AddContrabandPenalty", &AddContrabandPenalty, PRESERVES_ALL},
+  NativeEntry{0x6DC1, "AddContrabandPenalty", &AddContrabandPenaltyEntry, PRESERVES_ALL},
 };
 
 } // namespace

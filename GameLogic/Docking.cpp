@@ -100,23 +100,26 @@ constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F;      // of the slot's first byte, 
   return static_cast<std::uint16_t>((row << 8) | x);
 }
 
-// REP STOSB or REP STOSW of AX at ES:DI, CX times, backwards when _backward.
-void Store(Guest& _guest, std::uint16_t _bytes, bool _backward)
+// REP STOSB or REP STOSW: _value, or its low byte, _count times from _segment:_offset, a byte or a word at a time
+// (_bytes), backwards when _backward. Returns the offset after the last, which the original leaves in DI.
+std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value,
+                    std::uint16_t _bytes, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
   const auto step = static_cast<std::uint16_t>(_backward ? 0u - _bytes : _bytes);
-  for (; regs.cx != 0; --regs.cx)
+  std::uint16_t at = _offset;
+  for (std::uint16_t left = _count; left != 0; --left)
   {
     if (_bytes == 2)
     {
-      _guest.SetFarWord(regs.es, regs.di, regs.ax);
+      _state.SetFarWord(_segment, at, _value);
     }
     else
     {
-      _guest.SetFarByte(regs.es, regs.di, Low(regs.ax));
+      _state.SetFarByte(_segment, at, Low(_value));
     }
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    at = Offset(at, step);
   }
+  return at;
 }
 
 // CX of tunnelRectangles from SI, each by DrawTunnelRectangle in the tunnel's colour, the LOOP back to _loop. Out:
@@ -156,48 +159,60 @@ void WaitTimerTicks(Guest& _guest, std::uint16_t _ticks, std::uint16_t _loop)
   }
 }
 
-// mov ax, _text: posted for 25 frames.
-void PostDockingMessage(Guest& _guest, DataAt _text)
+// _text posted for 25 frames. Returns its offset, which the original leaves in AX (mov ax, _text).
+[[nodiscard]] std::uint16_t PostDockingMessage(GameState& _state, DataAt _text)
 {
-  _guest.Regs().ax = _text.offset;
-  _guest.Set(DS.messagePointer, _text.offset);
-  _guest.Set(DS.messageFrames, DOCKING_MESSAGE_FRAMES);
+  _state.Set(DS.messagePointer, _text.offset);
+  _state.Set(DS.messageFrames, DOCKING_MESSAGE_FRAMES);
+  return _text.offset;
 }
 
-// DI = the station's slot; AX, BX, CX = its position, z moved out to the approach point when
-// _approach.
-void LoadStationPosition(Guest& _guest, bool _approach)
+// The station's position, z moved out to the approach point when _approach: what the original loads into AX, BX
+// and CX, with DI the station's slot.
+[[nodiscard]] Vector LoadStationPosition(GameState& _state, bool _approach)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.stationSlot.offset;
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_X));
-  regs.bx = _guest.Word(Offset(regs.di, SLOT_Y));
-  regs.cx = _guest.Word(Offset(regs.di, SLOT_Z));
-  if (_approach)
+  const ObjectSlot station(_state, DS.stationSlot.offset);
+  const std::uint16_t z = station.Get(SlotWord::Z);
+  return Vector{static_cast<std::int16_t>(station.Get(SlotWord::X)), static_cast<std::int16_t>(station.Get(SlotWord::Y)),
+                static_cast<std::int16_t>(_approach ? Offset(z, APPROACH_DISTANCE) : z)};
+}
+
+// DI the station's slot, and AX, BX and CX its position, as LoadStationPosition gives it.
+void LoadStationPositionRegisters(Registers& _regs, Vector _position) noexcept
+{
+  _regs.di = DS.stationSlot.offset;
+  _regs.ax = static_cast<std::uint16_t>(_position.x);
+  _regs.bx = static_cast<std::uint16_t>(_position.y);
+  _regs.cx = static_cast<std::uint16_t>(_position.z);
+}
+
+// dockingComputerSteering and rollRate both _steering.
+void Steer(GameState& _state, std::uint16_t _steering)
+{
+  _state.Set(DS.dockingComputerSteering, _steering);
+  _state.Set(DS.rollRate, _steering);
+}
+
+// playerSpeed up by 4, and then held at 48: ADD and a MOV over it.
+void SpeedUp(GameState& _state)
+{
+  const auto speed = static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) + SPEED_STEP);
+  _state.Set(DS.playerSpeed, speed);
+  if (speed > MOST_SPEED)
   {
-    regs.cx = Offset(regs.cx, APPROACH_DISTANCE);
+    _state.Set(DS.playerSpeed, MOST_SPEED);
   }
 }
 
-// dockingComputerSteering and rollRate both AX.
-void Steer(Guest& _guest)
+// playerSpeed down by 4, and 4 again where that reaches 0: SUB and a MOV over it.
+void SlowDown(GameState& _state)
 {
-  const std::uint16_t steering = _guest.Regs().ax;
-  _guest.Set(DS.dockingComputerSteering, steering);
-  _guest.Set(DS.rollRate, steering);
-}
-
-// playerSpeed up by 4 to at most 48, or down by 4, where 0 becomes 4.
-void SpeedUp(Guest& _guest)
-{
-  const auto speed = static_cast<std::uint16_t>(_guest.Get(DS.playerSpeed) + SPEED_STEP);
-  _guest.Set(DS.playerSpeed, speed >= MOST_SPEED + 1 ? MOST_SPEED : speed);
-}
-
-void SlowDown(Guest& _guest)
-{
-  const auto speed = static_cast<std::uint16_t>(_guest.Get(DS.playerSpeed) - SPEED_STEP);
-  _guest.Set(DS.playerSpeed, speed == 0 ? LEAST_SPEED : speed);
+  const auto speed = static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) - SPEED_STEP);
+  _state.Set(DS.playerSpeed, speed);
+  if (speed == 0)
+  {
+    _state.Set(DS.playerSpeed, LEAST_SPEED);
+  }
 }
 
 // States 1 and 5: dockingTargetAngle, the roll that brings the target (the approach point, or the
@@ -206,7 +221,7 @@ void AimRoll(Guest& _guest, bool _approach, std::uint8_t _next)
 {
   Registers& regs = _guest.Regs();
   _guest.Call(LOAD_PLAYER_ANGLES);
-  LoadStationPosition(_guest, _approach);
+  LoadStationPositionRegisters(regs, LoadStationPosition(_guest.State(), _approach));
   RotatePitchYawRollEntry(_guest);
   regs.ax = Sar(regs.ax, 2);
   regs.bx = Sar(regs.bx, 2);
@@ -244,7 +259,7 @@ void RollToTarget(Guest& _guest, std::uint8_t _next)
   regs.ax = static_cast<std::uint16_t>(_guest.Get(DS.dockingTargetAngle) - _guest.Get(DS.playerRollAngle));
   SetLow(regs.ax, (regs.ax & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP);
   SetHigh(regs.ax, 0);
-  Steer(_guest);
+  Steer(_guest.State(), regs.ax);
 }
 
 // States 3 and 7: pitch towards the target by _step a frame, or by half the angle once within
@@ -256,7 +271,7 @@ void PitchToTarget(Guest& _guest, bool _approach, std::uint16_t _tolerance, std:
   {
     _guest.Call(LOAD_PLAYER_ANGLES);
   }
-  LoadStationPosition(_guest, _approach);
+  LoadStationPositionRegisters(regs, LoadStationPosition(_guest.State(), _approach));
   RotatePitchYawRollEntry(_guest);
   regs.ax = Sar(regs.bx, 2);
   regs.bx = Sar(regs.cx, 2);
@@ -268,11 +283,11 @@ void PitchToTarget(Guest& _guest, bool _approach, std::uint16_t _tolerance, std:
   {
     SetLow(regs.ax, (regs.ax & ANGLE_SIGN) != 0 ? Negate(_step) : _step);
     regs.ax = Join(Low(regs.ax), 0);
-    Steer(_guest);
+    Steer(_guest.State(), regs.ax);
     return;
   }
   regs.ax = Join(Low(Sar(regs.ax, 1)), 0);
-  Steer(_guest);
+  Steer(_guest.State(), regs.ax);
   if (_guest.Get(DS.dockingAlignPasses) != 1)
   {
     _guest.Set(DS.dockingAlignPasses, static_cast<std::uint8_t>(_guest.Get(DS.dockingAlignPasses) + 1));
@@ -301,15 +316,15 @@ void FlyToApproachPoint(Guest& _guest)
   Registers& regs = _guest.Regs();
   _guest.Set(DS.dockingComputerSteering, 0);
   _guest.Set(DS.rollRate, 0);
-  LoadStationPosition(_guest, true);
+  LoadStationPositionRegisters(regs, LoadStationPosition(_guest.State(), true));
   VectorLengthEntry(_guest);
   if (regs.ax >= SLOW_DOWN_DISTANCE)
   {
-    SpeedUp(_guest);
+    SpeedUp(_guest.State());
   }
   else
   {
-    SlowDown(_guest);
+    SlowDown(_guest.State());
   }
   regs.dx = 0;
   DivideWord(_guest, _guest.Get(DS.playerSpeed));
@@ -354,11 +369,11 @@ void CloseIn(Guest& _guest)
   }
   if (regs.ax < CLOSE_SLOWLY_DISTANCE)
   {
-    SlowDown(_guest);
+    SlowDown(_guest.State());
   }
   else
   {
-    SpeedUp(_guest);
+    SpeedUp(_guest.State());
   }
   _guest.Set(DS.playerVelocityX, 0);
   _guest.Set(DS.playerVelocityY, 0);
@@ -410,7 +425,7 @@ void RollWithSpin(Guest& _guest, std::uint16_t _turn)
   regs.bx = static_cast<std::uint16_t>(_guest.Get(DS.playerRollAngle) & ANGLE_MASK);
   regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
   regs.ax = Negate(Low(Sar(regs.ax, 1)));
-  Steer(_guest);
+  Steer(_guest.State(), regs.ax);
 }
 
 } // namespace
@@ -489,13 +504,15 @@ void MaskOutsideTunnel(Guest& _guest)
   regs.ax = 0;
   regs.di = 0;
   regs.cx = regs.bp;
-  Store(_guest, 2, (regs.flags & Machine::FLAG_DIRECTION) != 0);
+  regs.di = Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 2, (regs.flags & Machine::FLAG_DIRECTION) != 0);
+  regs.cx = 0;
   const std::uint16_t rows = regs.bx;
   do
   {
     const std::uint16_t row = regs.di;
     regs.cx = regs.dx;
-    Store(_guest, 1, (regs.flags & Machine::FLAG_DIRECTION) != 0);
+    Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 1, (regs.flags & Machine::FLAG_DIRECTION) != 0);
+    regs.cx = 0;
     regs.di = static_cast<std::uint16_t>(row + VIEW_ROW_BYTES);
     --regs.bx;
   } while (regs.bx != 0);
@@ -505,13 +522,15 @@ void MaskOutsideTunnel(Guest& _guest)
   regs.di = VIEW_LAST_WORD;
   _guest.SetFlag(Machine::FLAG_DIRECTION, true);
   regs.cx = regs.bp;
-  Store(_guest, 2, true);
+  regs.di = Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 2, true);
+  regs.cx = 0;
   ++regs.di;
   do
   {
     const std::uint16_t row = regs.di;
     regs.cx = regs.dx;
-    Store(_guest, 1, true);
+    Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 1, true);
+    regs.cx = 0;
     regs.di = static_cast<std::uint16_t>(row - VIEW_ROW_BYTES);
     --regs.bx;
   } while (regs.bx != 0);
@@ -610,7 +629,7 @@ void ToggleDockingComputer(Guest& _guest)
       _guest.Set(DS.velocityDirty, 1);
     }
     _guest.Call(START_LOW_BEEP);
-    PostDockingMessage(_guest, DS.dockingComputerOffMessage);
+    regs.ax = PostDockingMessage(_guest.State(), DS.dockingComputerOffMessage);
     return;
   }
   _guest.Call(IN_SAFE_ZONE);
@@ -618,7 +637,7 @@ void ToggleDockingComputer(Guest& _guest)
   {
     _guest.Set(DS.dataA137, 0);
     _guest.Call(START_LOW_BEEP);
-    PostDockingMessage(_guest, DS.stationOutOfRangeMessage);
+    regs.ax = PostDockingMessage(_guest.State(), DS.stationOutOfRangeMessage);
     return;
   }
   regs.bx = DS.stationSlot.offset;
@@ -626,7 +645,7 @@ void ToggleDockingComputer(Guest& _guest)
   {
     _guest.Set(DS.dataA137, 0);
     _guest.Call(START_LOW_BEEP);
-    PostDockingMessage(_guest, DS.dockingDeniedMessage);
+    regs.ax = PostDockingMessage(_guest.State(), DS.dockingDeniedMessage);
     return;
   }
   _guest.Set(DS.dockingComputerSteering, 0);
@@ -634,7 +653,7 @@ void ToggleDockingComputer(Guest& _guest)
   _guest.Set(DS.dockingComputerOn, 1);
   _guest.Call(START_MUSIC);
   _guest.Call(START_BEEP);
-  PostDockingMessage(_guest, DS.dockingComputerOnMessage);
+  regs.ax = PostDockingMessage(_guest.State(), DS.dockingComputerOnMessage);
 }
 
 void RunDockingComputer(Guest& _guest)

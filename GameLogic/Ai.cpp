@@ -36,7 +36,7 @@ constexpr std::uint8_t MOST_ACTIVE_FOR_SPAWNING = 10;
 constexpr std::uint16_t WOLF_ODDS_LIMIT = 0x1C2; // outside anarchies, a wolf needs a random word below this too
 constexpr std::uint8_t MOST_INVADERS = 8;
 constexpr std::uint8_t MOST_WOLVES_WITH_MASK_SHIP = 3;
-constexpr std::uint8_t MASK_SHIP_CARGO = 0x14;
+constexpr std::uint8_t MASK_SHIP_FLASH_FRAMES = 0x14; // the frames it is first shown for, as Scene's FlashedOff counts them
 constexpr std::uint8_t ASP_ACTIVE = (TYPE_ASP << 1) | SLOT_ACTIVE;
 constexpr unsigned JUMP_DRIVE_ODDS_SHIFT = 5;
 
@@ -166,23 +166,39 @@ void TurnToVector(Guest& _guest)
   NextRandomEntry(_guest);
   regs.bx = _guest.Get(DS.spawnOddsOffset);
   regs.bx = _guest.Word(At(_column, regs.bx));
-  ScaleSpawnOdds(_guest);
+  ScaleSpawnOddsEntry(_guest);
   return regs.ax < regs.bx;
 }
 
-// The column of spawnLimitsByGovernment at _column into AL, against the class count _count: true while there is room.
-[[nodiscard]] bool BelowSpawnLimit(Guest& _guest, std::uint16_t _column, DataField<std::uint8_t> _count)
+// What BelowSpawnLimit finds: the government's limit for a class, and whether there is room below it.
+struct SpawnLimit
+{
+  bool below;
+  std::uint8_t limit; // what the original loads into AL
+};
+
+// The government's entry, at spawnLimitOffset, of the column of spawnLimitsByGovernment at _column, against the class count
+// _count: below while there is room.
+[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::uint16_t _column, DataField<std::uint8_t> _count)
+{
+  const std::uint8_t limit = _state.Byte(At(_column, _state.Get(DS.spawnLimitOffset)));
+  return SpawnLimit{_state.Get(_count) < limit, limit};
+}
+
+// BelowSpawnLimit with the registers its code leaves: BX = spawnLimitOffset, AL = the limit.
+[[nodiscard]] bool BelowSpawnLimitOnRegisters(Guest& _guest, std::uint16_t _column, DataField<std::uint8_t> _count)
 {
   Machine::Registers& regs = _guest.Regs();
+  const SpawnLimit limit = BelowSpawnLimit(_guest.State(), _column, _count);
   regs.bx = _guest.Get(DS.spawnLimitOffset);
-  SetLow(regs.ax, _guest.Byte(At(_column, regs.bx)));
-  return _guest.Get(_count) < Low(regs.ax);
+  SetLow(regs.ax, limit.limit);
+  return limit.below;
 }
 
 // FindFreeShipSlot, and DI = the slot found. False when there is none, which ends UpdateObjectsAndSpawn.
 [[nodiscard]] bool TakeFreeShipSlot(Guest& _guest)
 {
-  FindFreeShipSlot(_guest);
+  FindFreeShipSlotEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     return false;
@@ -216,7 +232,7 @@ void SpawnByGovernment(Guest& _guest)
       }
       SpawnRandomDrifter(_guest);
     }
-    if (BelowSpawnLimit(_guest, DS.traderLimitColumn.offset, DS.traderCount) && SpawnOddsMet(_guest, DS.traderOddsColumn.offset))
+    if (BelowSpawnLimitOnRegisters(_guest, DS.traderLimitColumn.offset, DS.traderCount) && SpawnOddsMet(_guest, DS.traderOddsColumn.offset))
     {
       if (!TakeFreeShipSlot(_guest))
       {
@@ -224,7 +240,7 @@ void SpawnByGovernment(Guest& _guest)
       }
       SpawnRandomTrader(_guest);
     }
-    if (BelowSpawnLimit(_guest, DS.hunterLimitColumn.offset, DS.hunterCount) && SpawnOddsMet(_guest, DS.hunterOddsColumn.offset))
+    if (BelowSpawnLimitOnRegisters(_guest, DS.hunterLimitColumn.offset, DS.hunterCount) && SpawnOddsMet(_guest, DS.hunterOddsColumn.offset))
     {
       if (!TakeFreeShipSlot(_guest))
       {
@@ -233,7 +249,7 @@ void SpawnByGovernment(Guest& _guest)
       SpawnRandomHunter(_guest);
     }
   }
-  if (!BelowSpawnLimit(_guest, DS.wolfLimitColumn.offset, DS.wolfCount))
+  if (!BelowSpawnLimitOnRegisters(_guest, DS.wolfLimitColumn.offset, DS.wolfCount))
   {
     return;
   }
@@ -254,13 +270,13 @@ void SpawnByGovernment(Guest& _guest)
   }
 }
 
-// The mask mission's Asp made the mask ship: it carries the device, 20 tonnes of cargo, and no aggression yet.
-void MarkMaskShip(Guest& _guest)
+// The mask mission's Asp made the mask ship: it carries the device, its flashing starts with 20 frames shown (in the cargo's
+// byte, which DropCargo does not read for a ship that carries the device), and no aggression yet.
+void MarkMaskShip(ObjectSlot _slot)
 {
-  const std::uint16_t slot = _guest.Regs().di;
-  _guest.SetByte(At(slot, SLOT_FLAGS), static_cast<std::uint8_t>(_guest.Byte(At(slot, SLOT_FLAGS)) | FLAG_DEVICE));
-  _guest.SetByte(At(slot, SLOT_CARGO), MASK_SHIP_CARGO);
-  _guest.SetByte(At(slot, SLOT_AGGRESSION), 0);
+  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) | FLAG_DEVICE));
+  _slot.Set(SlotByte::FlashFrames, MASK_SHIP_FLASH_FRAMES);
+  _slot.Set(SlotByte::Aggression, 0);
 }
 
 // SpawnMaskMissionShip in a free slot, CF in saying whether it is the mask ship. False when there is no slot.
@@ -298,7 +314,7 @@ void SpawnMaskMissionShips(Guest& _guest)
     _guest.Set(DS.maskShipSlot, regs.si);
     _guest.SetFlag(FLAG_CARRY, true);
     SpawnMaskMissionShip(_guest);
-    MarkMaskShip(_guest);
+    MarkMaskShip(ObjectSlot(_guest.State(), regs.di));
     for (int escort = 0; escort < 2; ++escort)
     {
       if (!SpawnMaskMissionShipInFreeSlot(_guest, false))
@@ -315,12 +331,12 @@ void SpawnMaskMissionShips(Guest& _guest)
   {
     return;
   }
-  IsMaskShipPresent(_guest);
+  IsMaskShipPresentEntry(_guest);
   if (_guest.Flag(FLAG_CARRY) || _guest.Get(DS.maskShipDestroyed) == 1)
   {
     return;
   }
-  MarkMaskShip(_guest);
+  MarkMaskShip(ObjectSlot(_guest.State(), regs.di));
   _guest.SetByte(regs.di, ASP_ACTIVE);
 }
 
@@ -357,14 +373,14 @@ void LaunchAtOffender(Guest& _guest)
   {
     return;
   }
-  FindFreeShipSlot(_guest);
+  FindFreeShipSlotEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     return;
   }
   const std::uint16_t station = regs.di;
   std::swap(regs.di, regs.si);
-  CopyObject(_guest);
+  CopyObjectEntry(_guest);
   NextRandomEntry(_guest);
   if (regs.ax >= POLICE_FROM)
   {
@@ -465,7 +481,7 @@ void WolfTurnAway(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   if (WithinRange(_guest))
   {
-    GetObjectPosition(_guest);
+    GetObjectPositionEntry(_guest);
     TurnToVector(_guest);
     ComputeVelocity(_guest);
     TryLaunchThargon(_guest);
@@ -575,7 +591,7 @@ void HunterIdle(Guest& _guest)
   }
   else
   {
-    CountOtherHuntersOnScanner(_guest);
+    CountOtherHuntersOnScannerEntry(_guest);
     if (Low(regs.ax) >= 2)
     {
       bool attack = _guest.Get(DS.legalStatus) >= FUGITIVE;
@@ -710,7 +726,7 @@ void TraderBreakOff(Guest& _guest)
       return;
     }
   }
-  GetObjectPosition(_guest);
+  GetObjectPositionEntry(_guest);
   TurnToVector(_guest);
   ComputeVelocity(_guest);
   MoveObject(_guest);
@@ -785,32 +801,28 @@ void UpdateObjectsAndSpawn(Guest& _guest)
   SpawnByGovernment(_guest);
 }
 
-void ScaleSpawnOdds(Guest& _guest)
+std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds)
 {
-  if (_guest.Get(DS.jumpDriveEngaged) == 1)
+  if (_state.Get(DS.jumpDriveEngaged) != 1)
   {
-    Machine::Registers& regs = _guest.Regs();
-    regs.bx = static_cast<std::uint16_t>(regs.bx << JUMP_DRIVE_ODDS_SHIFT);
+    return _odds;
   }
+  return static_cast<std::uint16_t>(_odds << JUMP_DRIVE_ODDS_SHIFT);
 }
 
-void IsMaskShipPresent(Guest& _guest)
+SlotSearch IsMaskShipPresent(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // Every object slot, active or not, for the device's bit.
-  regs.si = DS.shipSlots.offset;
-  regs.cx = _guest.Get(DS.objectSlotCount);
-  do
+  // Every object slot, active or not, for the device's bit: LOOP from CX = objectSlotCount.
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
   {
-    if ((_guest.Byte(At(regs.si, SLOT_FLAGS)) & FLAG_DEVICE) != 0)
+    if ((ObjectSlot(_state, slot).Get(SlotByte::Flags) & FLAG_DEVICE) != 0)
     {
-      _guest.SetFlag(FLAG_CARRY, true);
-      return;
+      return SlotSearch{true, slot};
     }
-    regs.si = At(regs.si, SLOT_BYTES);
-    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
-  } while (regs.cx != 0);
-  _guest.SetFlag(FLAG_CARRY, false);
+    slot = Offset(slot, ObjectSlot::BYTES);
+  }
+  return SlotSearch{false, slot};
 }
 
 void PlaceEscortNear(Guest& _guest)
@@ -831,7 +843,7 @@ void PlaceEscortNear(Guest& _guest)
     NextRandomEntry(_guest);
     regs.ax = static_cast<std::uint16_t>((regs.ax & ESCORT_SCATTER_MASK) - ESCORT_SCATTER_CENTER);
     regs.dx = SignWord(regs.ax);
-    AddToCoordinate(_guest, regs.di, axis, regs.ax);
+    AddToCoordinate(ObjectSlot(_guest.State(), regs.di), axis, static_cast<std::int16_t>(regs.ax));
   }
 }
 
@@ -840,54 +852,44 @@ void TurnTowardAngles(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   regs.dx = regs.bx;
   regs.cx = _guest.Word(At(regs.di, SLOT_PITCH));
-  ClampTurnStep(_guest);
+  ClampTurnStepEntry(_guest);
   AddWord(_guest, At(regs.di, SLOT_PITCH), regs.ax);
   regs.bp = regs.bx;
   regs.cx = _guest.Word(At(regs.di, SLOT_YAW));
   regs.ax = regs.dx;
-  ClampTurnStep(_guest);
+  ClampTurnStepEntry(_guest);
   AddWord(_guest, At(regs.di, SLOT_YAW), regs.ax);
   regs.ax = regs.bp;
 }
 
-void ClampTurnStep(Guest& _guest)
+TurnStep ClampTurnStep(const ObjectSlot& _slot, std::uint16_t _wanted, std::uint16_t _current)
 {
-  Machine::Registers& regs = _guest.Regs();
   // The error is not wrapped at 2048, so a turn across 0 goes the long way.
-  const auto error = static_cast<std::uint16_t>((regs.ax & ANGLE_MASK) - (regs.cx & ANGLE_MASK));
-  regs.bx = error;
-  regs.ax = (error & 0x8000) != 0 ? Negate(error) : error;
-  regs.cx = _guest.Byte(At(regs.di, SLOT_TURN_RATE));
-  if (regs.ax < regs.cx)
+  const auto error = static_cast<std::uint16_t>((_wanted & ANGLE_MASK) - (_current & ANGLE_MASK));
+  const std::uint16_t magnitude = (error & 0x8000) != 0 ? Negate(error) : error;
+  const std::uint16_t rate = _slot.Get(SlotByte::TurnRate);
+  if (magnitude < rate)
   {
-    std::swap(regs.ax, regs.bx);
-    return;
+    return TurnStep{static_cast<std::int16_t>(error), magnitude};
   }
-  if ((regs.bx & 0x8000) != 0)
-  {
-    regs.cx = Negate(regs.cx);
-  }
-  regs.bx = regs.ax;
-  regs.ax = regs.cx;
+  return TurnStep{static_cast<std::int16_t>((error & 0x8000) != 0 ? Negate(rate) : rate), magnitude};
 }
 
-void CountOtherHuntersOnScanner(Guest& _guest)
+HunterCount CountOtherHuntersOnScanner(GameState& _state, std::uint16_t _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.shipSlots.offset;
-  regs.cx = _guest.Get(DS.objectSlotCount);
-  SetLow(regs.ax, 0);
-  do
+  HunterCount hunters{0, std::nullopt};
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
   {
-    if (_guest.Byte(At(regs.si, SLOT_CLASS)) == HUNTER_CLASS && (_guest.Byte(At(regs.si, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0 &&
-        regs.si != regs.di)
+    const ObjectSlot other(_state, slot);
+    if (other.Get(SlotByte::Class) == HUNTER_CLASS && (other.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0 && slot != _slot)
     {
-      regs.bp = regs.si;
-      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
+      hunters.last = slot;
+      hunters.count = static_cast<std::uint8_t>(hunters.count + 1);
     }
-    regs.si = At(regs.si, SLOT_BYTES);
-    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
-  } while (regs.cx != 0);
+    slot = Offset(slot, ObjectSlot::BYTES);
+  }
+  return hunters;
 }
 
 void GetVectorToObject(Guest& _guest)
@@ -1154,15 +1156,66 @@ using Machine::REGISTER_SI;
 constexpr Machine::NativeContract CLOBBERS_MOST{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_BP | REGISTER_ES, 0};
 
+constexpr Machine::NativeContract CLOBBERS_CX_SI{REGISTER_CX | REGISTER_SI, 0};
+constexpr Machine::NativeContract MASK_SHIP_SEARCH{REGISTER_CX, FLAG_CARRY};
+
+} // namespace
+
+// ── The entries of the routines de-assembled (ADR-012) ──
+
+void ScaleSpawnOddsEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.bx = ScaleSpawnOdds(_guest.State(), regs.bx);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void IsMaskShipPresentEntry(Guest& _guest)
+{
+  const SlotSearch search = IsMaskShipPresent(_guest.State());
+  _guest.Regs().si = search.slot;
+  _guest.SetFlag(FLAG_CARRY, search.found);
+  _guest.Clobber(MASK_SHIP_SEARCH);
+}
+
+void ClampTurnStepEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const TurnStep step = ClampTurnStep(slot, regs.ax, regs.cx);
+  regs.ax = static_cast<std::uint16_t>(step.step);
+  regs.bx = step.errorMagnitude;
+  // The original leaves the turn rate in CX, negated when it is the step, and UpdateMissileAi's contract compares CX after
+  // TurnTowardAngles.
+  const std::uint16_t rate = slot.Get(SlotByte::TurnRate);
+  regs.cx = step.errorMagnitude < rate ? rate : regs.ax;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void CountOtherHuntersOnScannerEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const HunterCount hunters = CountOtherHuntersOnScanner(_guest.State(), regs.di);
+  SetLow(regs.ax, hunters.count);
+  if (hunters.last.has_value())
+  {
+    regs.bp = *hunters.last;
+  }
+  _guest.Clobber(CLOBBERS_CX_SI);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
   NativeEntry{0x4A10, "UpdateObjectsAndSpawn", &UpdateObjectsAndSpawn, Machine::NativeContract{REGISTER_ALL, 0}},
-  NativeEntry{0x4C0E, "ScaleSpawnOdds", &ScaleSpawnOdds, PRESERVES_ALL},
-  NativeEntry{0x4C20, "IsMaskShipPresent", &IsMaskShipPresent, Machine::NativeContract{REGISTER_CX, FLAG_CARRY}},
+  NativeEntry{0x4C0E, "ScaleSpawnOdds", &ScaleSpawnOddsEntry, PRESERVES_ALL},
+  NativeEntry{0x4C20, "IsMaskShipPresent", &IsMaskShipPresentEntry, MASK_SHIP_SEARCH},
   NativeEntry{0x4C38, "PlaceEscortNear", &PlaceEscortNear,
               Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
   NativeEntry{0x514B, "TurnTowardAngles", &TurnTowardAngles, Machine::NativeContract{REGISTER_CX | REGISTER_DX | REGISTER_BP, 0}},
-  NativeEntry{0x5166, "ClampTurnStep", &ClampTurnStep, Machine::NativeContract{REGISTER_CX, 0}},
-  NativeEntry{0x548F, "CountOtherHuntersOnScanner", &CountOtherHuntersOnScanner, Machine::NativeContract{REGISTER_CX | REGISTER_SI, 0}},
+  NativeEntry{0x5166, "ClampTurnStep", &ClampTurnStepEntry, PRESERVES_ALL},
+  NativeEntry{0x548F, "CountOtherHuntersOnScanner", &CountOtherHuntersOnScannerEntry, CLOBBERS_CX_SI},
   NativeEntry{0x54B4, "GetVectorToObject", &GetVectorToObject, Machine::NativeContract{REGISTER_DX | REGISTER_BP, FLAG_CARRY}},
   NativeEntry{0x5594, "SkipInertObjectAi", &SkipInertObjectAi, PRESERVES_ALL},
   NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAi,

@@ -82,12 +82,16 @@ constexpr std::int8_t MOST_RATE = 23;             // either way
 constexpr std::uint8_t MOST_NEGATIVE_RATE = 0xE9; // -23
 constexpr std::uint8_t RATE_DECAY_STEPS = 3;
 
-// SHR AL,1 of a button byte: CF is the button, AL the rest.
-void ShiftOutButton(Guest& _guest, std::uint8_t _buttons)
+// What SHR AL,1 of a button byte leaves.
+struct ShiftedButton
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(_buttons >> 1));
-  _guest.SetFlag(Machine::FLAG_CARRY, (_buttons & 1) != 0);
+  bool pressed;      ///< bit 0, the button, which the shift leaves in CF
+  std::uint8_t rest; ///< AL: the other buttons, shifted down
+};
+
+[[nodiscard]] ShiftedButton ShiftOutButton(std::uint8_t _buttons) noexcept
+{
+  return ShiftedButton{(_buttons & 1) != 0, static_cast<std::uint8_t>(_buttons >> 1)};
 }
 
 // SaveScreenshot (CS:01B7) while Alt and PrtSc are held, with every register but ES and the flags kept around it.
@@ -109,16 +113,22 @@ void SaveScreenshotIfAsked(Guest& _guest)
   regs.si = kept.si;
 }
 
-// One axis of ApplyKeyboardRates (0x7543): a new key adds to the rate, within +-23, or with keyboardRecenter snaps
-// an opposite rate to 0; no key lets keyboardDamping take up to 3 off it.
-[[nodiscard]] std::uint8_t IntegrateRate(Guest& _guest, std::uint8_t _input, DataField<std::uint8_t> _rate)
+// Whether IntegrateRate tests _input against the rate at _rate for a reversal: XOR BL,[rate], which leaves BL the key
+// XOR the rate.
+[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, DataField<std::uint8_t> _rate)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t rate = _guest.Get(_rate);
+  return _input != 0 && _state.Get(DS.keyboardRecenter) == 1 && _state.Get(_rate) != 0;
+}
+
+// One axis of ApplyKeyboardRates (0x7543): a new key adds to the rate, within +-23, or with keyboardRecenter snaps
+// an opposite rate to 0, which it stores at once; no key lets keyboardDamping take up to 3 off it.
+[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, DataField<std::uint8_t> _rate)
+{
+  const std::uint8_t rate = _state.Get(_rate);
   if (_input == 0)
   {
     std::uint8_t value = rate;
-    if (_guest.Get(DS.keyboardDamping) != 1 || value == 0)
+    if (_state.Get(DS.keyboardDamping) != 1 || value == 0)
     {
       return value;
     }
@@ -129,13 +139,10 @@ void SaveScreenshotIfAsked(Guest& _guest)
     }
     return value;
   }
-  if (_guest.Get(DS.keyboardRecenter) == 1 && rate != 0)
+  if (TestsReversal(_state, _input, _rate) && ((_input ^ rate) & 0x80) != 0)
   {
-    regs.bx = WithLow(regs.bx, static_cast<std::uint8_t>(_input ^ rate));
-    if ((Low(regs.bx) & 0x80) != 0)
-    {
-      return 0;
-    }
+    _state.Set(_rate, 0);
+    return 0;
   }
   const auto value = static_cast<std::int8_t>(_input + rate);
   if (value > MOST_RATE)
@@ -153,27 +160,36 @@ void SaveScreenshotIfAsked(Guest& _guest)
 void ApplyKeyboardRates(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t roll = IntegrateRate(_guest, Low(regs.ax), DS.keyboardRollRate);
-  const std::uint8_t pitch = IntegrateRate(_guest, High(regs.ax), DS.keyboardPitchRate);
+  GameState& state = _guest.State();
+  const auto integrate = [&](std::uint8_t _input, DataField<std::uint8_t> _rate)
+  {
+    if (TestsReversal(state, _input, _rate))
+    {
+      SetLow(regs.bx, static_cast<std::uint8_t>(_input ^ state.Get(_rate)));
+    }
+    return IntegrateRate(state, _input, _rate);
+  };
+  const std::uint8_t roll = integrate(Low(regs.ax), DS.keyboardRollRate);
+  const std::uint8_t pitch = integrate(High(regs.ax), DS.keyboardPitchRate);
   regs.ax = Join(pitch, roll);
   _guest.SetWord(DS.keyboardRollRate.offset, regs.ax);
 }
 
 // One axis of ReadKeyboardSteering: the ramp grows while the same key is held, inside +-23, and restarts on a change.
-void RampAxis(Guest& _guest, std::uint8_t _key, DataField<std::uint8_t> _lastKey, DataField<std::uint8_t> _ramp)
+void RampAxis(GameState& _state, std::uint8_t _key, DataField<std::uint8_t> _lastKey, DataField<std::uint8_t> _ramp)
 {
-  const bool held = _key == _guest.Get(_lastKey);
-  _guest.Set(_lastKey, _key);
+  const bool held = _key == _state.Get(_lastKey);
+  _state.Set(_lastKey, _key);
   if (!held)
   {
-    _guest.Set(_ramp, 0);
+    _state.Set(_ramp, 0);
     return;
   }
-  const auto value = static_cast<std::uint8_t>(_key + _guest.Get(_ramp));
+  const auto value = static_cast<std::uint8_t>(_key + _state.Get(_ramp));
   const auto signedValue = static_cast<std::int8_t>(value);
   if (signedValue > -MOST_RATE - 1 && signedValue < MOST_RATE + 1)
   {
-    _guest.Set(_ramp, value);
+    _state.Set(_ramp, value);
   }
 }
 
@@ -199,8 +215,8 @@ void ReadAmstradStick(Guest& _guest)
   {
     ++roll;
   }
-  RampAxis(_guest, roll, DS.amstradStickLastRoll, DS.amstradStickRollRamp);
-  RampAxis(_guest, pitch, DS.amstradStickLastPitch, DS.amstradStickPitchRamp);
+  RampAxis(_guest.State(), roll, DS.amstradStickLastRoll, DS.amstradStickRollRamp);
+  RampAxis(_guest.State(), pitch, DS.amstradStickLastPitch, DS.amstradStickPitchRamp);
   regs.ax = Join(Negate(_guest.Get(DS.amstradStickPitchRamp)), _guest.Get(DS.amstradStickRollRamp));
 }
 
@@ -294,14 +310,12 @@ void KeyboardInterrupt(Guest& _guest)
   regs.ax = ax;
 }
 
-void IsMouseDriverInstalled(Guest& _guest)
+MouseDriver IsMouseDriverInstalled(const GameState& _state)
 {
   // The int 33h vector: installed when it is set and does not point at an IRET.
-  const std::uint16_t offset = _guest.FarWord(0, MOUSE_VECTOR_OFFSET);
-  const std::uint16_t segment = _guest.FarWord(0, static_cast<std::uint16_t>(MOUSE_VECTOR_OFFSET + 2));
-  _guest.Regs().es = segment;
-  const bool installed = (offset | segment) != 0 && _guest.FarByte(segment, offset) != IRET_OPCODE;
-  _guest.SetFlag(Machine::FLAG_ZERO, !installed);
+  const std::uint16_t offset = _state.FarWord(0, MOUSE_VECTOR_OFFSET);
+  const std::uint16_t segment = _state.FarWord(0, static_cast<std::uint16_t>(MOUSE_VECTOR_OFFSET + 2));
+  return MouseDriver{(offset | segment) != 0 && _state.FarByte(segment, offset) != IRET_OPCODE, segment};
 }
 
 void WaitForKeyPress(Guest& _guest)
@@ -373,17 +387,24 @@ void ReadScanCode(Guest& _guest)
 void ReadFireButton(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  // AL and CF as SHR AL,1 leaves them.
+  const auto shiftOut = [&](std::uint8_t _buttons)
+  {
+    const ShiftedButton shifted = ShiftOutButton(_buttons);
+    SetLow(regs.ax, shifted.rest);
+    _guest.SetFlag(Machine::FLAG_CARRY, shifted.pressed);
+  };
   const std::uint8_t device = _guest.Get(DS.inputDevice);
   if (device == KEYBOARD_DEVICE)
   {
-    ShiftOutButton(_guest, _guest.Get(DS.keyDownSpace));
+    shiftOut(_guest.Get(DS.keyDownSpace));
     return;
   }
   if (device == JOYSTICK_DEVICE)
   {
     if (_guest.Get(DS.joystickIsAmstrad) == 1)
     {
-      ShiftOutButton(_guest, static_cast<std::uint8_t>(_guest.Get(DS.keyDownAmstradFire1) | _guest.Get(DS.keyDownAmstradFire2)));
+      shiftOut(static_cast<std::uint8_t>(_guest.Get(DS.keyDownAmstradFire1) | _guest.Get(DS.keyDownAmstradFire2)));
       return;
     }
     // Shifted left until each button falls into CF, inverted: pressed reads 0.
@@ -401,17 +422,17 @@ void ReadFireButton(Guest& _guest)
   }
   if (_guest.Get(DS.amstradPresent) == 1)
   {
-    ShiftOutButton(_guest, static_cast<std::uint8_t>(_guest.Get(DS.keyDownAmstradMouseRight) | _guest.Get(DS.keyDownAmstradMouseLeft)));
+    shiftOut(static_cast<std::uint8_t>(_guest.Get(DS.keyDownAmstradMouseRight) | _guest.Get(DS.keyDownAmstradMouseLeft)));
     return;
   }
   regs.ax = MOUSE_BUTTON_PRESSES;
   regs.bx = MOUSE_LEFT_BUTTON;
   _guest.Interrupt(MOUSE_VECTOR);
   const std::uint8_t buttons = Low(regs.ax);
-  ShiftOutButton(_guest, buttons);
+  shiftOut(buttons);
   if ((buttons & 1) == 0)
   {
-    ShiftOutButton(_guest, static_cast<std::uint8_t>(buttons >> 1));
+    shiftOut(static_cast<std::uint8_t>(buttons >> 1));
   }
 }
 
@@ -459,18 +480,16 @@ void GetKey(Guest& _guest)
   _guest.SetFlag(Machine::FLAG_ZERO, High(regs.ax) == 0);
 }
 
-void ResetKeyboard(Guest& _guest)
+void ResetKeyboard(GameState& _state)
 {
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
   for (std::size_t word = 0; word < KEY_DOWN_WORDS; ++word)
   {
-    _guest.SetWord(DS.keyDown.At(word * 2), 0);
+    _state.SetWord(DS.keyDown.At(word * 2), 0);
   }
-  _guest.Set(DS.keyBufferCount, 0);
-  _guest.Set(DS.keyBufferWrite, DS.keyBuffer.offset);
-  _guest.Set(DS.keyBufferRead, DS.keyBuffer.offset);
-  _guest.Set(DS.rollRate, 0);
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _state.Set(DS.keyBufferCount, 0);
+  _state.Set(DS.keyBufferWrite, DS.keyBuffer.offset);
+  _state.Set(DS.keyBufferRead, DS.keyBuffer.offset);
+  _state.Set(DS.rollRate, 0);
 }
 
 void ReadJoystickAxes(Guest& _guest)
@@ -625,8 +644,8 @@ void ReadKeyboardSteering(Guest& _guest)
   {
     ++roll;
   }
-  RampAxis(_guest, roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
-  RampAxis(_guest, pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
+  RampAxis(_guest.State(), roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
+  RampAxis(_guest.State(), pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
   regs.ax = Join(Negate(_guest.Get(DS.keyboardPitchRamp)), _guest.Get(DS.keyboardRollRamp));
 }
 
@@ -675,31 +694,22 @@ void ResetMouseIfSelected(Guest& _guest)
   _guest.Interrupt(MOUSE_VECTOR);
 }
 
-void ApplyReverseControls(Guest& _guest)
+Steering ApplyReverseControls(const GameState& _state, Steering _steering)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.reverseYControl) == 1)
+  Steering steering = _steering;
+  if (_state.Get(DS.reverseYControl) == 1)
   {
-    regs.ax = WithHigh(regs.ax, Negate(High(regs.ax)));
+    steering.pitch = Negate(steering.pitch);
   }
-  if (_guest.Get(DS.reverseXAndY) == 1)
+  if (_state.Get(DS.reverseXAndY) == 1)
   {
-    regs.ax = Join(Negate(High(regs.ax)), Negate(Low(regs.ax)));
+    steering.roll = Negate(steering.roll);
+    steering.pitch = Negate(steering.pitch);
   }
+  return steering;
 }
 
-void ApplyReverseControlsToDx(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.reverseYControl) == 1)
-  {
-    regs.dx = WithHigh(regs.dx, Negate(High(regs.dx)));
-  }
-  if (_guest.Get(DS.reverseXAndY) == 1)
-  {
-    regs.dx = Join(Negate(High(regs.dx)), Negate(Low(regs.dx)));
-  }
-}
+// ── The entries of the de-assembled routines ──
 
 namespace
 {
@@ -711,6 +721,54 @@ using Machine::REGISTER_AX;
 using Machine::REGISTER_BX;
 using Machine::REGISTER_CX;
 using Machine::REGISTER_DX;
+
+constexpr Machine::NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+
+// The steering bytes of a register, roll in the low byte and pitch in the high, and back.
+[[nodiscard]] Steering SteeringIn(std::uint16_t _register) noexcept
+{
+  return Steering{Low(_register), High(_register)};
+}
+
+[[nodiscard]] std::uint16_t SteeringOut(Steering _steering) noexcept
+{
+  return Join(_steering.pitch, _steering.roll);
+}
+
+} // namespace
+
+void IsMouseDriverInstalledEntry(Guest& _guest)
+{
+  const MouseDriver driver = IsMouseDriverInstalled(_guest.State());
+  _guest.Regs().es = driver.segment;
+  _guest.SetFlag(FLAG_ZERO, !driver.installed);
+  _guest.Clobber(RETURNS_ZERO);
+}
+
+void ResetKeyboardEntry(Guest& _guest)
+{
+  // CLI round the writes, which nothing interrupts in native code, then STI.
+  ResetKeyboard(_guest.State());
+  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ApplyReverseControlsEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = SteeringOut(ApplyReverseControls(_guest.State(), SteeringIn(regs.ax)));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ApplyReverseControlsToDxEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.dx = SteeringOut(ApplyReverseControls(_guest.State(), SteeringIn(regs.dx)));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
 
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_BX{REGISTER_BX, 0};
@@ -725,14 +783,14 @@ constexpr Machine::NativeContract STICK_STEERING{REGISTER_BX | REGISTER_CX | REG
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x02D4, "IsMouseDriverInstalled", &IsMouseDriverInstalled, Machine::NativeContract{0, FLAG_ZERO}},
+  NativeEntry{0x02D4, "IsMouseDriverInstalled", &IsMouseDriverInstalledEntry, RETURNS_ZERO},
   // It waits as a rule: the mission briefings call it for the key that ends them.
   NativeEntry{0x6DEC, "WaitForKeyPress", &WaitForKeyPress, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7443, "ReadScanCode", &ReadScanCode, CLOBBERS_AX},
   NativeEntry{0x74E0, "ReadFireButton", &ReadFireButton, FIRE_BUTTON},
   NativeEntry{0x7536, "ReadSteering", &ReadSteering, CLOBBERS_BX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
   NativeEntry{0x7616, "GetKey", &GetKey, KEY},
-  NativeEntry{0x7668, "ResetKeyboard", &ResetKeyboard, PRESERVES_ALL},
+  NativeEntry{0x7668, "ResetKeyboard", &ResetKeyboardEntry, PRESERVES_ALL},
   NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxes, STICK_AXES, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
   NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteering, STICK_STEERING, Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
@@ -740,8 +798,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x797E, "ReadMouseSteering", &ReadMouseSteering, CLOBBERS_BX_CX_DX},
   NativeEntry{0x7F3D, "PollScreenDumpKey", &PollScreenDumpKey, PRESERVES_ALL},
   NativeEntry{0x7F5D, "ResetMouseIfSelected", &ResetMouseIfSelected, CLOBBERS_AX_BX},
-  NativeEntry{0x8EA5, "ApplyReverseControls", &ApplyReverseControls, PRESERVES_ALL},
-  NativeEntry{0x8EBA, "ApplyReverseControlsToDx", &ApplyReverseControlsToDx, PRESERVES_ALL},
+  NativeEntry{0x8EA5, "ApplyReverseControls", &ApplyReverseControlsEntry, PRESERVES_ALL},
+  NativeEntry{0x8EBA, "ApplyReverseControlsToDx", &ApplyReverseControlsToDxEntry, PRESERVES_ALL},
 };
 
 } // namespace

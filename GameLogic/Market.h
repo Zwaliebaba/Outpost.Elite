@@ -3,13 +3,15 @@
 
 #include "NativeEntry.h"
 
+#include <cstdint>
 #include <span>
 
 namespace Elite
 {
 
 // The reference's market routines, ported (plan §5 Phase 3, ADR-010): the market, cargo and prices. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// here once it is ported, on the registers of its contract in Symbols.tsv. The routines de-assembled so far (ADR-012) take
+// values and give values back, and their entries, at the end, keep the register contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MarketEntries() noexcept;
@@ -29,20 +31,9 @@ void SpendCredits(Guest& _guest);
 /// AddCredits (CS:65EE): BX:AX tenths of credits onto creditsTenths, and the balance reformatted.
 void AddCredits(Guest& _guest);
 
-/// ComputeResalePrice (CS:6995): resalePriceInput less one less a 32nd of it halved below 100. Out: AX;
-/// ZF set if AX is 0.
-void ComputeResalePrice(Guest& _guest);
-
 /// ComputeMarketPrices (CS:69CE): each commodity's buy and sell price into screenPrices, for the current
 /// system.
 void ComputeMarketPrices(Guest& _guest);
-
-/// NextMarketRandom (CS:6A85): NextRandom's step on marketRandomState. Out: AX.
-void NextMarketRandom(Guest& _guest);
-
-/// ParseQuantity (CS:6A99): the decimal number at DI, spaces around it allowed. Out: AX; CF=1 if it is not a
-/// number or is above 250.
-void ParseQuantity(Guest& _guest);
 
 /// PrintCargoQuantity (CS:6AD9): AX, or "-" for 0, in the quantity column of menuSelectedRow's row.
 void PrintCargoQuantity(Guest& _guest);
@@ -51,7 +42,43 @@ void PrintCargoQuantity(Guest& _guest);
 /// screen (tradeScreenIsBuy). Waits. Out: AH=Esc or the F-key that ended it.
 void RunCargoTradeMenu(Guest& _guest);
 
-/// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum is 0.
-void AddContrabandPenalty(Guest& _guest);
+// ── The routines (ADR-012): values in, values out, on the GameState ──
+//
+// Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
+// parameters, its results come back, and every byte it writes is written as the original writes it, in
+// the same order and at the same width.
+
+/// What ParseQuantity reads.
+struct Quantity
+{
+  std::uint16_t value;   ///< each digit added to ten times the low byte of what came before it
+  bool valid;            ///< a number, with nothing but spaces around it, and at most 250
+  std::uint16_t end;     ///< one past the last character it read
+  std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
+};
+
+/// ComputeResalePrice (CS:6995): resalePriceInput less one, less a 32nd of it halved until it is below 100;
+/// 0 for 0.
+[[nodiscard]] std::uint16_t ComputeResalePrice(const GameState& _state);
+
+/// NextMarketRandom (CS:6A85): NextRandom's step on marketRandomState, and the number it makes.
+std::uint16_t NextMarketRandom(GameState& _state);
+
+/// ParseQuantity (CS:6A99): the decimal number at DS:_text, spaces around it allowed.
+[[nodiscard]] Quantity ParseQuantity(const GameState& _state, std::uint16_t _text);
+
+/// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
+/// is 0. Returns that sum.
+std::uint8_t AddContrabandPenalty(GameState& _state);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+//
+// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
+// results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
+
+void ComputeResalePriceEntry(Guest& _guest);
+void NextMarketRandomEntry(Guest& _guest);
+void ParseQuantityEntry(Guest& _guest);
+void AddContrabandPenaltyEntry(Guest& _guest);
 
 } // namespace Elite

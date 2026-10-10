@@ -102,16 +102,33 @@ constexpr std::uint8_t CURSOR_TEXT_TOGGLE = 0xFB;     // space <-> DBh, CP437's 
   return DS.screenFont.At(static_cast<std::uint8_t>(_character - FIRST_GLYPH));
 }
 
-// REP STOSW at ES:DI, forwards or, with DF set, backwards.
-void StoreWords(Guest& _guest, std::uint16_t _value)
+// Row _row of _character's opaque glyph: its pixels in _ink, the rest in _paper.
+[[nodiscard]] std::uint16_t GlyphRow(const GameState& _state, std::uint8_t _character, std::uint16_t _row, std::uint16_t _ink,
+                                     std::uint16_t _paper)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto step = static_cast<std::uint16_t>((regs.flags & Machine::FLAG_DIRECTION) != 0 ? 0xFFFE : 2);
-  for (; regs.cx != 0; --regs.cx)
+  return InkOnPaper(_state.Word(Offset(GlyphOffset(_character), static_cast<std::uint16_t>(_row * 2))), _ink, _paper);
+}
+
+// Row _row of the small letter _letter ('A' is 0), shifted right _shift pixels into a word of the space-view
+// buffer, in memory order: the font holds each row big-endian.
+[[nodiscard]] std::uint16_t SmallGlyphRow(const GameState& _state, std::uint8_t _letter, std::uint16_t _row, std::uint8_t _shift)
+{
+  const std::uint16_t shifted = ShiftLeft(_state.Word(Offset(DS.smallFont.At(_letter), static_cast<std::uint16_t>(_row * 2))), _shift);
+  return Swap(shifted);
+}
+
+// REP STOSW: _count words of _value at _segment:_at, forwards or, _backwards, down. Returns where DI ends.
+std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_t _at, std::uint16_t _count, std::uint16_t _value,
+                         bool _backwards)
+{
+  const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFE : 2);
+  std::uint16_t at = _at;
+  for (std::uint16_t left = _count; left != 0; --left)
   {
-    _guest.SetFarWord(regs.es, regs.di, _value);
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetFarWord(_segment, at, _value);
+    at = static_cast<std::uint16_t>(at + step);
   }
+  return at;
 }
 
 // ReadTextLine's redraw (0x76FF): the line and the cursor printed, then back to counting the blink.
@@ -153,23 +170,17 @@ void ShowMessage(Guest& _guest)
 
 } // namespace
 
-void DrawViewChar(Guest& _guest)
+std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::uint16_t glyph = GlyphOffset(Low(regs.ax));
-  const std::uint16_t paper = _guest.Get(DS.textPaperPattern);
-  std::uint16_t address = regs.di;
-  std::uint16_t row = 0;
+  const std::uint16_t paper = _state.Get(DS.textPaperPattern);
+  std::uint16_t address = _at;
   for (std::uint16_t line = 0; line < GLYPH_ROWS; ++line)
   {
-    row = InkOnPaper(_guest.Word(glyph), regs.bx, paper);
-    glyph = static_cast<std::uint16_t>(glyph + 2);
-    _guest.SetWord(address, row);
+    const std::uint16_t row = GlyphRow(_state, _character, line, _ink, paper);
+    _state.SetWord(address, row);
     address = static_cast<std::uint16_t>(address + VIEW_ROW_BYTES);
   }
-  regs.ax = row;
-  regs.bp = paper;
-  regs.di = static_cast<std::uint16_t>(regs.di + 2);
+  return static_cast<std::uint16_t>(_at + 2);
 }
 
 void DrawViewString(Guest& _guest)
@@ -183,29 +194,27 @@ void DrawViewString(Guest& _guest)
       return;
     }
     ++regs.si;
-    DrawViewChar(_guest);
+    DrawViewCharEntry(_guest);
   }
 }
 
-void DrawScreenChar(Guest& _guest)
+std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = GlyphOffset(Low(regs.ax));
-  std::uint16_t address = regs.di;
+  std::uint16_t address = _cell;
   std::uint16_t down = CGA_TO_ODD_BANK;
   std::uint16_t up = CGA_TO_EVEN_BANK;
   for (std::uint16_t line = 0; line < GLYPH_ROWS; ++line)
   {
-    regs.ax = InkOnPaper(_guest.Word(regs.si), regs.bx, _guest.Get(DS.textPaperPattern));
-    regs.si = static_cast<std::uint16_t>(regs.si + 2);
-    _guest.SetFarWord(regs.es, address, regs.ax);
+    // The paper is read again for each row, as the original does.
+    const std::uint16_t row = GlyphRow(_state, _character, line, _ink, _state.Get(DS.textPaperPattern));
+    _state.SetFarWord(_segment, address, row);
     if (line + 1 < GLYPH_ROWS)
     {
       address = static_cast<std::uint16_t>(address + down);
       std::swap(down, up);
     }
   }
-  regs.di = static_cast<std::uint16_t>(regs.di + 2);
+  return static_cast<std::uint16_t>(_cell + 2);
 }
 
 void DrawScreenString(Guest& _guest)
@@ -220,20 +229,19 @@ void DrawScreenString(Guest& _guest)
     }
     ++regs.si;
     const std::uint16_t next = regs.si;
-    DrawScreenChar(_guest);
+    DrawScreenCharEntry(_guest);
     regs.si = next;
   }
 }
 
-void FormatDecimal5(Guest& _guest)
+std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::uint16_t _digits)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::uint16_t value = regs.ax;
+  std::uint16_t value = _value;
   std::uint16_t divisors = DS.decimalDivisors16.offset;
-  std::uint16_t digit = regs.di;
+  std::uint16_t digit = _digits;
   for (;;)
   {
-    const std::uint16_t divisor = _guest.Word(divisors);
+    const std::uint16_t divisor = _state.Word(divisors);
     divisors = static_cast<std::uint16_t>(divisors + 2);
     if (divisor == 1)
     {
@@ -242,53 +250,44 @@ void FormatDecimal5(Guest& _guest)
     // Repeated subtraction until it borrows: one count more than the quotient, less 1 again by adding 2Fh.
     const auto subtractions = static_cast<std::uint8_t>(value / divisor + 1);
     value = static_cast<std::uint16_t>(value % divisor);
-    _guest.SetByte(digit, static_cast<std::uint8_t>(subtractions + 0x2F));
+    _state.SetByte(digit, static_cast<std::uint8_t>(subtractions + 0x2F));
     digit = static_cast<std::uint16_t>(digit + 1);
   }
-  regs.ax = WithLow(value, static_cast<std::uint8_t>(Low(value) + '0'));
-  _guest.SetByte(digit, Low(regs.ax));
+  _state.SetByte(digit, static_cast<std::uint8_t>(Low(value) + '0'));
+  return value;
 }
 
-void BlankLeadingZeros(Guest& _guest)
+BlankedZeros BlankLeadingZeros(GameState& _state, std::uint16_t _text, std::uint8_t _most)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = WithHigh(regs.cx, 0);
+  BlankedZeros blanked{_text, _most};
   do
   {
-    if (_guest.Byte(regs.di) >= BLANK_BELOW)
+    if (_state.Byte(blanked.firstKept) >= BLANK_BELOW)
     {
-      return;
+      return blanked;
     }
-    _guest.SetByte(regs.di, ' ');
-    ++regs.di;
-    --regs.cx;
-  } while (regs.cx != 0);
+    _state.SetByte(blanked.firstKept, ' ');
+    ++blanked.firstKept;
+    --blanked.triesLeft;
+  } while (blanked.triesLeft != 0);
+  return blanked;
 }
 
-void DrawSmallViewChar(Guest& _guest)
+SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::uint16_t _ink, SmallViewPlace _place)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto letter = static_cast<std::uint8_t>(Low(regs.ax) - FIRST_SMALL_LETTER);
-  std::uint16_t glyph = DS.smallFont.At(letter);
-  const std::uint8_t shift = Low(regs.cx);
-  std::uint16_t address = regs.di;
-  std::uint16_t mask = letter;
-  std::uint16_t pixels = 0;
+  const auto letter = static_cast<std::uint8_t>(_letter - FIRST_SMALL_LETTER);
+  std::uint16_t address = _place.at;
   for (std::uint16_t line = 0; line < SMALL_GLYPH_ROWS; ++line)
   {
-    // The row is a big-endian word, shifted into place and swapped back to memory order.
-    const std::uint16_t shifted = ShiftLeft(_guest.Word(glyph), shift);
-    pixels = static_cast<std::uint16_t>((shifted >> 8) | (shifted << 8));
-    mask = static_cast<std::uint16_t>(~pixels);
-    glyph = static_cast<std::uint16_t>(glyph + 2);
-    pixels = static_cast<std::uint16_t>(pixels & regs.bx);
-    _guest.SetWord(address, static_cast<std::uint16_t>((_guest.Word(address) & mask) | pixels));
+    // The letter's pixels cleared from the buffer, then set in the ink: AND [DI],BP and OR [DI],AX, two word
+    // writes (34C2, 34C4).
+    const std::uint16_t pixels = SmallGlyphRow(_state, letter, line, _place.shift);
+    _state.SetWord(address, static_cast<std::uint16_t>(_state.Word(address) & ~pixels));
+    _state.SetWord(address, static_cast<std::uint16_t>(_state.Word(address) | (pixels & _ink)));
     address = static_cast<std::uint16_t>(address + VIEW_ROW_BYTES);
   }
-  regs.ax = pixels;
-  regs.bp = mask;
-  regs.cx = WithLow(regs.cx, static_cast<std::uint8_t>(shift ^ SMALL_GLYPH_SHIFT));
-  regs.di = static_cast<std::uint16_t>(regs.di + (Low(regs.cx) == 0 ? 1 : 2));
+  const auto shift = static_cast<std::uint8_t>(_place.shift ^ SMALL_GLYPH_SHIFT);
+  return SmallViewPlace{static_cast<std::uint16_t>(_place.at + (shift == 0 ? 1 : 2)), shift};
 }
 
 void DrawSmallViewString(Guest& _guest)
@@ -306,22 +305,21 @@ void DrawSmallViewString(Guest& _guest)
       break;
     }
     ++regs.si;
-    DrawSmallViewChar(_guest);
+    DrawSmallViewCharEntry(_guest);
   }
   regs.cx = cx;
 }
 
-void FormatCredits(Guest& _guest)
+void FormatCredits(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
   const std::uint16_t text = DS.creditBalanceText.offset;
-  std::uint32_t value = _guest.Word(DS.creditsTenths.offset) | (std::uint32_t{_guest.Get(DS.data75F5)} << 16);
+  std::uint32_t value = _state.Word(DS.creditsTenths.offset) | (std::uint32_t{_state.Get(DS.data75F5)} << 16);
   std::uint16_t divisors = DS.decimalDivisors32.offset;
   std::uint16_t digit = text;
   for (;;)
   {
-    const std::uint16_t low = _guest.Word(divisors);
-    const std::uint16_t high = _guest.Word(static_cast<std::uint16_t>(divisors + 2));
+    const std::uint16_t low = _state.Word(divisors);
+    const std::uint16_t high = _state.Word(static_cast<std::uint16_t>(divisors + 2));
     divisors = static_cast<std::uint16_t>(divisors + 4);
     if (low == 1) // only the low word is tested
     {
@@ -330,22 +328,21 @@ void FormatCredits(Guest& _guest)
     const std::uint32_t divisor = low | (std::uint32_t{high} << 16);
     const auto subtractions = static_cast<std::uint8_t>(value / divisor + 1);
     value %= divisor;
-    _guest.SetByte(digit, static_cast<std::uint8_t>(subtractions + 0x2F));
+    _state.SetByte(digit, static_cast<std::uint8_t>(subtractions + 0x2F));
     digit = static_cast<std::uint16_t>(digit + 1);
   }
-  _guest.SetByte(digit, static_cast<std::uint8_t>(value + '0'));
+  _state.SetByte(digit, static_cast<std::uint8_t>(value + '0'));
 
   std::uint16_t blank = text;
-  for (std::uint16_t left = CREDIT_BLANKS; left != 0 && _guest.Byte(blank) == '0'; --left)
+  for (std::uint16_t left = CREDIT_BLANKS; left != 0 && _state.Byte(blank) == '0'; --left)
   {
-    _guest.SetByte(blank, ' ');
+    _state.SetByte(blank, ' ');
     ++blank;
   }
   // The tenths move one place right for the point.
   const auto tenths = static_cast<std::uint16_t>(text + CREDIT_DIGITS - 1);
-  _guest.SetByte(static_cast<std::uint16_t>(tenths + 1), _guest.Byte(tenths));
-  _guest.SetByte(tenths, '.');
-  regs.si = text;
+  _state.SetByte(static_cast<std::uint16_t>(tenths + 1), _state.Byte(tenths));
+  _state.SetByte(tenths, '.');
 }
 
 void UpdateMessageLine(Guest& _guest)
@@ -383,7 +380,8 @@ void ClearMessageLine(Guest& _guest)
   do
   {
     regs.cx = regs.si;
-    StoreWords(_guest, regs.ax);
+    regs.di = StoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, _guest.Flag(Machine::FLAG_DIRECTION));
+    regs.cx = 0;
     regs.di = static_cast<std::uint16_t>(regs.di + regs.bx);
     std::swap(regs.bx, regs.dx);
     --regs.bp;
@@ -395,10 +393,10 @@ void ShowBountyMessage(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   const auto digits = static_cast<std::uint16_t>(DS.bountyText.offset + BOUNTY_DIGITS_OFFSET);
   regs.di = digits;
-  FormatDecimal5(_guest);
+  FormatDecimal5Entry(_guest);
   regs.di = digits;
   regs.cx = TENTHS_BLANKS;
-  BlankLeadingZeros(_guest);
+  BlankLeadingZerosEntry(_guest);
   regs.di = digits;
   // The tenths digit moves right, and the point takes its place, as one word.
   const auto tenths = static_cast<std::uint16_t>(digits + 4);
@@ -457,29 +455,27 @@ void ShowShipIdentity(Guest& _guest)
   _guest.Set(DS.messageFrames, IDENTITY_FRAMES);
 }
 
-void PrintTextModeString(Guest& _guest)
+PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = WithHigh(regs.ax, _guest.Get(DS.textAttribute));
+  const std::uint8_t attribute = _state.Get(DS.textAttribute);
+  PrintedText printed{_text, _cell};
   for (;;)
   {
-    regs.ax = WithLow(regs.ax, _guest.Byte(regs.si));
-    if (Low(regs.ax) == 0)
+    const std::uint8_t character = _state.Byte(printed.end);
+    if (character == 0)
     {
-      return;
+      return printed;
     }
-    ++regs.si;
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    regs.di = static_cast<std::uint16_t>(regs.di + 2);
+    ++printed.end;
+    _state.SetVideoWord(printed.nextCell, Join(attribute, character));
+    printed.nextCell = static_cast<std::uint16_t>(printed.nextCell + 2);
   }
 }
 
 void ToggleMenuRowHighlight(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  SwapTextAttributeNibbles(_guest);
+  SwapTextAttributeNibblesEntry(_guest);
   std::uint16_t attribute = regs.si;
   for (std::uint16_t cell = 0; cell < MENU_ROW_ATTRIBUTES; ++cell)
   {
@@ -488,25 +484,22 @@ void ToggleMenuRowHighlight(Guest& _guest)
   }
 }
 
-void ClearDockedMessageLine(Guest& _guest)
+void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = DOCKED_MESSAGE_OFFSET;
-  SetLow(regs.ax, ' ');
-  for (regs.cx = DOCKED_MESSAGE_CHARACTERS; regs.cx != 0; --regs.cx)
+  std::uint16_t cell = DOCKED_MESSAGE_OFFSET;
+  for (std::uint16_t left = DOCKED_MESSAGE_CHARACTERS; left != 0; --left)
   {
-    _guest.SetFarByte(regs.es, regs.di, Low(regs.ax));
-    regs.di = Offset(regs.di, 2);
+    _state.SetFarByte(_segment, cell, ' ');
+    cell = Offset(cell, 2);
   }
 }
 
-void SwapTextAttributeNibbles(Guest& _guest)
+std::uint8_t SwapTextAttributeNibbles(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t attribute = _guest.Get(DS.textAttribute);
+  const std::uint8_t attribute = _state.Get(DS.textAttribute);
   const auto swapped = static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4));
-  regs.ax = WithLow(regs.ax, swapped);
-  _guest.Set(DS.textAttribute, swapped);
+  _state.Set(DS.textAttribute, swapped);
+  return swapped;
 }
 
 void PrintCountedTextLines(Guest& _guest)
@@ -517,7 +510,7 @@ void PrintCountedTextLines(Guest& _guest)
   do
   {
     const std::uint16_t line = regs.di;
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     regs.di = static_cast<std::uint16_t>(line + TEXT_ROW_BYTES);
     ++regs.si;
     --regs.cx;
@@ -528,10 +521,10 @@ void FormatTenths(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.di = DS.priceText.offset;
-  FormatDecimal5(_guest);
+  FormatDecimal5Entry(_guest);
   regs.di = DS.priceText.offset;
   regs.cx = TENTHS_BLANKS;
-  BlankLeadingZeros(_guest);
+  BlankLeadingZerosEntry(_guest);
   regs.ax = WithLow(regs.ax, _guest.Get(DS.data8040));
   _guest.Set(DS.data8041, Low(regs.ax));
   regs.ax = WithLow(regs.ax, '.');
@@ -544,7 +537,7 @@ void PrintTextLines(Guest& _guest)
   do
   {
     const std::uint16_t line = regs.di;
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     ++regs.si;
     regs.di = Offset(line, TEXT_ROW_BYTES);
   } while (--regs.cx != 0);
@@ -636,11 +629,11 @@ void ReadTextLine(Guest& _guest)
   }
 }
 
-void ToggleInputCursor(Guest& _guest)
+void ToggleInputCursor(GameState& _state)
 {
   const std::uint16_t cursor = DS.inputCursorText.offset;
-  const std::uint8_t toggle = _guest.Get(DS.screenLayout) == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
-  _guest.SetByte(cursor, static_cast<std::uint8_t>(_guest.Byte(cursor) ^ toggle));
+  const std::uint8_t toggle = _state.Get(DS.screenLayout) == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
+  _state.SetByte(cursor, static_cast<std::uint8_t>(_state.Byte(cursor) ^ toggle));
 }
 
 void RedrawInputLine(Guest& _guest)
@@ -663,11 +656,13 @@ void PrintStringForLayout(Guest& _guest)
 {
   if (_guest.Get(DS.screenLayout) == TEXT_LAYOUT)
   {
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     return;
   }
   DrawScreenString(_guest);
 }
+
+// ── Their entries ──
 
 namespace
 {
@@ -680,39 +675,135 @@ using Machine::REGISTER_DI;
 using Machine::REGISTER_DX;
 using Machine::REGISTER_SI;
 
-constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_BP{REGISTER_AX | REGISTER_BP, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_SI{REGISTER_AX | REGISTER_SI, 0};
+constexpr Machine::NativeContract CLOBBERS_SI{REGISTER_SI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX{REGISTER_AX | REGISTER_CX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DX{REGISTER_AX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_ALL_BUT_ES{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 
+} // namespace
+
+void DrawViewCharEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t character = Low(regs.ax);
+  const std::uint16_t paper = _guest.Get(DS.textPaperPattern);
+  regs.di = DrawViewChar(_guest.State(), character, regs.bx, regs.di);
+  // The original leaves the last row it drew in AX and the paper in BP, and DrawViewString keeps BP and AH.
+  regs.ax = GlyphRow(_guest.State(), character, GLYPH_ROWS - 1, regs.bx, paper);
+  regs.bp = paper;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void DrawScreenCharEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t character = Low(regs.ax);
+  regs.di = DrawScreenChar(_guest.State(), character, regs.bx, regs.es, regs.di);
+  // The original leaves the last row it drew in AX, and DrawScreenString keeps its high byte.
+  regs.ax = GlyphRow(_guest.State(), character, GLYPH_ROWS - 1, regs.bx, _guest.Get(DS.textPaperPattern));
+  _guest.Clobber(CLOBBERS_SI);
+}
+
+void FormatDecimal5Entry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t units = FormatDecimal5(_guest.State(), regs.ax, regs.di);
+  // The original leaves the units in AX, AL made their digit, and FormatTenths and PrintCargoQuantity keep AH.
+  regs.ax = WithLow(units, static_cast<std::uint8_t>(Low(units) + '0'));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void BlankLeadingZerosEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const BlankedZeros blanked = BlankLeadingZeros(_guest.State(), regs.di, Low(regs.cx));
+  regs.di = blanked.firstKept;
+  regs.cx = blanked.triesLeft;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void DrawSmallViewCharEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The original leaves the last row's pixels in the ink in AX, and the mask it cleared them with in BP: the
+  // contract keeps both.
+  const auto letter = static_cast<std::uint8_t>(Low(regs.ax) - FIRST_SMALL_LETTER);
+  const std::uint16_t lastRow = SmallGlyphRow(_guest.State(), letter, SMALL_GLYPH_ROWS - 1, Low(regs.cx));
+  const SmallViewPlace next = DrawSmallViewChar(_guest.State(), Low(regs.ax), regs.bx, SmallViewPlace{regs.di, Low(regs.cx)});
+  regs.ax = static_cast<std::uint16_t>(lastRow & regs.bx);
+  regs.bp = static_cast<std::uint16_t>(~lastRow);
+  regs.di = next.at;
+  SetLow(regs.cx, next.shift);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void FormatCreditsEntry(Guest& _guest)
+{
+  FormatCredits(_guest.State());
+  _guest.Regs().si = DS.creditBalanceText.offset;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void PrintTextModeStringEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t attribute = _guest.Get(DS.textAttribute);
+  const PrintedText printed = PrintTextModeString(_guest.State(), regs.si, regs.di);
+  regs.si = printed.end;
+  regs.di = printed.nextCell;
+  regs.es = Guest::VIDEO_SEGMENT;
+  // The original prints from AX, the attribute in AH, and leaves the NUL in AL: PrintTextLines keeps AX.
+  regs.ax = Join(attribute, 0);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ClearDockedMessageLineEntry(Guest& _guest)
+{
+  ClearDockedMessageLine(_guest.State(), _guest.Regs().es);
+  _guest.Clobber(CLOBBERS_AX_CX_DI);
+}
+
+void SwapTextAttributeNibblesEntry(Guest& _guest)
+{
+  SetLow(_guest.Regs().ax, SwapTextAttributeNibbles(_guest.State()));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ToggleInputCursorEntry(Guest& _guest)
+{
+  ToggleInputCursor(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
-  NativeEntry{0x3130, "DrawViewChar", &DrawViewChar, CLOBBERS_AX_BP},
+  NativeEntry{0x3130, "DrawViewChar", &DrawViewCharEntry, PRESERVES_ALL},
   NativeEntry{0x31EC, "DrawViewString", &DrawViewString, PRESERVES_ALL},
-  NativeEntry{0x31F9, "DrawScreenChar", &DrawScreenChar, CLOBBERS_AX_SI},
+  NativeEntry{0x31F9, "DrawScreenChar", &DrawScreenCharEntry, CLOBBERS_SI},
   NativeEntry{0x32D8, "DrawScreenString", &DrawScreenString, PRESERVES_ALL},
-  NativeEntry{0x3407, "FormatDecimal5", &FormatDecimal5, CLOBBERS_AX},
-  NativeEntry{0x3432, "BlankLeadingZeros", &BlankLeadingZeros, PRESERVES_ALL},
-  NativeEntry{0x349A, "DrawSmallViewChar", &DrawSmallViewChar, PRESERVES_ALL},
+  NativeEntry{0x3407, "FormatDecimal5", &FormatDecimal5Entry, PRESERVES_ALL},
+  NativeEntry{0x3432, "BlankLeadingZeros", &BlankLeadingZerosEntry, PRESERVES_ALL},
+  NativeEntry{0x349A, "DrawSmallViewChar", &DrawSmallViewCharEntry, PRESERVES_ALL},
   NativeEntry{0x3527, "DrawSmallViewString", &DrawSmallViewString, PRESERVES_ALL},
-  NativeEntry{0x3543, "FormatCredits", &FormatCredits, PRESERVES_ALL},
+  NativeEntry{0x3543, "FormatCredits", &FormatCreditsEntry, PRESERVES_ALL},
   NativeEntry{0x35A3, "UpdateMessageLine", &UpdateMessageLine, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3609, "ClearMessageLine", &ClearMessageLine, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3626, "ShowBountyMessage", &ShowBountyMessage, PRESERVES_ALL},
   NativeEntry{0x364D, "ShowShipIdentity", &ShowShipIdentity, PRESERVES_ALL},
-  NativeEntry{0x60D2, "PrintTextModeString", &PrintTextModeString, CLOBBERS_AX},
+  NativeEntry{0x60D2, "PrintTextModeString", &PrintTextModeStringEntry, PRESERVES_ALL},
   NativeEntry{0x6328, "ToggleMenuRowHighlight", &ToggleMenuRowHighlight, PRESERVES_ALL},
-  NativeEntry{0x6553, "ClearDockedMessageLine", &ClearDockedMessageLine, CLOBBERS_AX_CX_DI},
-  NativeEntry{0x6580, "SwapTextAttributeNibbles", &SwapTextAttributeNibbles, PRESERVES_ALL},
+  NativeEntry{0x6553, "ClearDockedMessageLine", &ClearDockedMessageLineEntry, CLOBBERS_AX_CX_DI},
+  NativeEntry{0x6580, "SwapTextAttributeNibbles", &SwapTextAttributeNibblesEntry, PRESERVES_ALL},
   NativeEntry{0x65FA, "PrintCountedTextLines", &PrintCountedTextLines, CLOBBERS_AX_CX},
   NativeEntry{0x69B3, "FormatTenths", &FormatTenths, PRESERVES_ALL},
   NativeEntry{0x6DDE, "PrintTextLines", &PrintTextLines, PRESERVES_ALL},
   // ReadTextLine waits for keys as a rule.
   NativeEntry{0x7694, "ReadTextLine", &ReadTextLine, CLOBBERS_AX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
-  NativeEntry{0x7727, "ToggleInputCursor", &ToggleInputCursor, PRESERVES_ALL},
+  NativeEntry{0x7727, "ToggleInputCursor", &ToggleInputCursorEntry, PRESERVES_ALL},
   NativeEntry{0x773A, "RedrawInputLine", &RedrawInputLine, PRESERVES_ALL},
   NativeEntry{0x7750, "PrintStringForLayout", &PrintStringForLayout, PRESERVES_ALL},
 };

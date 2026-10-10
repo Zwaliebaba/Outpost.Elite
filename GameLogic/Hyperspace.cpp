@@ -80,6 +80,9 @@ constexpr std::uint16_t SPACE_VIEW_CENTER_ROW = 0x40;
 constexpr std::uint8_t FIRST_MISSION_JUMPS = 0x20;
 constexpr std::uint8_t SECOND_MISSION_JUMPS = 0x40;
 constexpr std::uint8_t THIRD_MISSION_JUMPS = 0x80;
+constexpr std::uint8_t FIRST_MISSION = 1;
+constexpr std::uint8_t SECOND_MISSION = 2;
+constexpr std::uint8_t THIRD_MISSION = 3;
 
 constexpr std::uint8_t COUNTDOWN_TEN = 10;
 constexpr std::uint8_t COUNTDOWN_STEP_FRAMES = 10;
@@ -90,10 +93,11 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
   return static_cast<std::uint16_t>(_low | (_high << 8));
 }
 
-// The step MOVSW takes, backwards with the direction flag set.
-[[nodiscard]] std::uint16_t WordStep(const Machine::Registers& _regs) noexcept
+// The mission UpdateMissionSchedule picks for a jump count, as the original does: the first at 20h, the second at
+// 40h, and the third at any other, which only 80h stores.
+[[nodiscard]] std::uint8_t MissionStartedAt(std::uint8_t _jumps) noexcept
 {
-  return (_regs.flags & Machine::FLAG_DIRECTION) != 0 ? static_cast<std::uint16_t>(0xFFFE) : static_cast<std::uint16_t>(2);
+  return _jumps == FIRST_MISSION_JUMPS ? FIRST_MISSION : _jumps == SECOND_MISSION_JUMPS ? SECOND_MISSION : THIRD_MISSION;
 }
 
 // NextRandom made an offset of 200h-3FFh in AX, negated when the number's top bit is set (mov dh,ah;
@@ -144,44 +148,43 @@ void GalacticJump(Guest& _guest)
   _guest.Call(SELECT_SYSTEM_AT_CURSOR);
 }
 
-// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages.
-void PostArrival(Guest& _guest)
+// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, which the
+// original leaves in SI.
+[[nodiscard]] std::uint16_t PostArrival(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.si = DS.arrivalSystemText.offset;
-  if (_guest.Get(DS.galacticJumpPending) != 0)
+  std::uint16_t message = DS.arrivalSystemText.offset;
+  if (_state.Get(DS.galacticJumpPending) != 0)
   {
-    regs.si = _guest.Get(DS.galaxyNumber) == NINTH_GALAXY ? DS.ninthGalaxyText.offset : DS.arrivalGalaxyText.offset;
-    _guest.Set(DS.legalStatus, 0);
-    _guest.Set(DS.galacticHyperdriveFitted, 0);
+    message = _state.Get(DS.galaxyNumber) == NINTH_GALAXY ? DS.ninthGalaxyText.offset : DS.arrivalGalaxyText.offset;
+    _state.Set(DS.legalStatus, 0);
+    _state.Set(DS.galacticHyperdriveFitted, 0);
   }
-  if (_guest.Get(DS.witchspaceCountdown) == 1)
+  if (_state.Get(DS.witchspaceCountdown) == 1)
   {
-    regs.si = DS.witchSpaceArrivalText.offset;
+    message = DS.witchSpaceArrivalText.offset;
   }
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.Set(DS.messagePointer, regs.si);
-  _guest.Set(DS.messageFrames, ARRIVAL_MESSAGE_FRAMES);
-  _guest.Set(DS.galacticJumpPending, 0);
-  if (_guest.Get(DS.witchspaceCountdown) == 1)
+  _state.Set(DS.messagePointer, message);
+  _state.Set(DS.messageFrames, ARRIVAL_MESSAGE_FRAMES);
+  _state.Set(DS.galacticJumpPending, 0);
+  if (_state.Get(DS.witchspaceCountdown) == 1)
   {
-    return;
+    return message;
   }
-  const std::uint8_t mission = _guest.Get(DS.missionNumber);
-  const std::uint8_t stage = _guest.Get(DS.missionStage);
-  if ((mission == 1 && stage == 0) || (mission == 3 && stage == 1 && _guest.Get(DS.invadedStationDestroyed) != 1))
+  const std::uint8_t mission = _state.Get(DS.missionNumber);
+  const std::uint8_t stage = _state.Get(DS.missionStage);
+  if ((mission == 1 && stage == 0) || (mission == 3 && stage == 1 && _state.Get(DS.invadedStationDestroyed) != 1))
   {
-    _guest.Set(DS.fuelLeakDelayFrames, FUEL_LEAK_DELAY_FRAMES);
+    _state.Set(DS.fuelLeakDelayFrames, FUEL_LEAK_DELAY_FRAMES);
   }
+  return message;
 }
 
 // add [_low], low byte of _value; adc [_high], high byte.
-void AddCarried(Guest& _guest, std::uint16_t _low, std::uint16_t _high, std::uint16_t _value)
+void AddCarried(GameState& _state, std::uint16_t _low, std::uint16_t _high, std::uint16_t _value)
 {
-  const auto sum = static_cast<unsigned>(_guest.Byte(_low) + Low(_value));
-  _guest.SetByte(_low, static_cast<std::uint8_t>(sum));
-  _guest.SetByte(_high, static_cast<std::uint8_t>(_guest.Byte(_high) + High(_value) + (sum >> 8)));
+  const auto sum = static_cast<unsigned>(_state.Byte(_low) + Low(_value));
+  _state.SetByte(_low, static_cast<std::uint8_t>(sum));
+  _state.SetByte(_high, static_cast<std::uint8_t>(_state.Byte(_high) + High(_value) + (sum >> 8)));
 }
 
 } // namespace
@@ -205,8 +208,8 @@ void ArriveInSystem(Guest& _guest)
   regs.di = DS.shipSlots.offset;
   do
   {
-    AddCarried(_guest, static_cast<std::uint16_t>(regs.di + 5), static_cast<std::uint16_t>(regs.di + 1), regs.ax);
-    AddCarried(_guest, static_cast<std::uint16_t>(regs.di + 7), static_cast<std::uint16_t>(regs.di + 2), regs.bx);
+    AddCarried(_guest.State(), static_cast<std::uint16_t>(regs.di + 5), static_cast<std::uint16_t>(regs.di + 1), regs.ax);
+    AddCarried(_guest.State(), static_cast<std::uint16_t>(regs.di + 7), static_cast<std::uint16_t>(regs.di + 2), regs.bx);
     const auto z = static_cast<std::uint16_t>(regs.di + 8);
     const std::uint32_t sum = std::uint32_t{_guest.Word(z)} + regs.cx;
     _guest.SetWord(z, static_cast<std::uint16_t>(sum));
@@ -358,24 +361,23 @@ void CompleteHyperspaceJump(Guest& _guest)
   _guest.Set(DS.supernovaHeat, 0);
   _guest.Set(DS.supernovaFrames, 0);
   _guest.Set(DS.jumpedSinceBriefing, 1);
-  PostArrival(_guest);
-}
-
-void ResetHyperspaceRings(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.hyperspaceRingStart.offset;
-  regs.ax = regs.ds;
-  regs.es = regs.ax;
-  regs.di = DS.hyperspaceRings.offset;
-  for (regs.cx = HYPERSPACE_RING_WORDS; regs.cx != 0; --regs.cx)
-  {
-    _guest.SetFarWord(regs.es, regs.di, _guest.FarWord(regs.ds, regs.si));
-    regs.si = static_cast<std::uint16_t>(regs.si + WordStep(regs));
-    regs.di = static_cast<std::uint16_t>(regs.di + WordStep(regs));
-  }
+  regs.si = PostArrival(_guest.State());
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = regs.ax;
+}
+
+void ResetHyperspaceRings(GameState& _state, bool _backward)
+{
+  // REP MOVSW within the data segment, a word at a time.
+  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFE : 2);
+  std::uint16_t from = DS.hyperspaceRingStart.offset;
+  std::uint16_t to = DS.hyperspaceRings.offset;
+  for (std::uint16_t word = 0; word < HYPERSPACE_RING_WORDS; ++word)
+  {
+    _state.SetWord(to, _state.Word(from));
+    from = Offset(from, step);
+    to = Offset(to, step);
+  }
 }
 
 void DrawHyperspaceRings(Guest& _guest)
@@ -440,82 +442,62 @@ void PlayHyperspaceTunnel(Guest& _guest)
   }
 }
 
-void EnterWitchSpace(Guest& _guest)
+void EnterWitchSpace(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.witchspaceCountdown, WITCHSPACE_FRAMES);
+  _state.Set(DS.witchspaceCountdown, WITCHSPACE_FRAMES);
   // Halfway along the jump: x the mean of the two, y the mean of the chart's (the destination's halved).
-  regs.ax = _guest.Get(DS.systemX);
-  regs.bx = _guest.Get(DS.currentSystemX);
-  regs.ax = static_cast<std::uint16_t>((regs.ax + regs.bx) >> 1);
-  _guest.Set(DS.currentSystemX, Low(regs.ax));
-  _guest.Set(DS.chartCursorX, Low(regs.ax));
-  _guest.Set(DS.galacticCursorX, Low(regs.ax));
-  _guest.Set(DS.shortRangeCursorX, CHART_CENTER_X);
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
+  const auto x = static_cast<std::uint8_t>((_state.Get(DS.systemX) + _state.Get(DS.currentSystemX)) >> 1);
+  _state.Set(DS.currentSystemX, x);
+  _state.Set(DS.chartCursorX, x);
+  _state.Set(DS.galacticCursorX, x);
+  _state.Set(DS.shortRangeCursorX, CHART_CENTER_X);
   // add al, [currentSystemChartY]; shr al,1: a byte sum, its carry lost.
-  const auto sum = static_cast<std::uint8_t>(Low(regs.ax) + _guest.Get(DS.currentSystemChartY));
-  SetLow(regs.ax, static_cast<std::uint8_t>(sum >> 1));
-  _guest.Set(DS.currentSystemChartY, Low(regs.ax));
-  _guest.Set(DS.chartCursorY, Low(regs.ax));
-  _guest.Set(DS.galacticCursorY, Low(regs.ax));
-  _guest.Set(DS.shortRangeCursorY, CHART_CENTER_Y);
+  const auto sum = static_cast<std::uint8_t>((_state.Get(DS.systemY) >> 1) + _state.Get(DS.currentSystemChartY));
+  const auto y = static_cast<std::uint8_t>(sum >> 1);
+  _state.Set(DS.currentSystemChartY, y);
+  _state.Set(DS.chartCursorY, y);
+  _state.Set(DS.galacticCursorY, y);
+  _state.Set(DS.shortRangeCursorY, CHART_CENTER_Y);
 }
 
-void UpdateMissionSchedule(Guest& _guest)
+bool UpdateMissionSchedule(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.witchspaceCountdown) != 0)
+  if (_state.Get(DS.witchspaceCountdown) != 0)
   {
-    return;
+    return false;
   }
-  if (_guest.Get(DS.maskSystemJumps) != 0)
+  if (_state.Get(DS.maskSystemJumps) != 0)
   {
-    const auto maskJumps = static_cast<std::uint8_t>(_guest.Get(DS.maskSystemJumps) - 1);
-    _guest.Set(DS.maskSystemJumps, maskJumps);
+    const auto maskJumps = static_cast<std::uint8_t>(_state.Get(DS.maskSystemJumps) - 1);
+    _state.Set(DS.maskSystemJumps, maskJumps);
     if (maskJumps == 0)
     {
-      _guest.Set(DS.fledMaskShip, 1);
+      _state.Set(DS.fledMaskShip, 1);
     }
   }
-  if (_guest.Get(DS.galaxyNumber) == 0 && _guest.Get(DS.data7629) != 1)
+  if (_state.Get(DS.galaxyNumber) == 0 && _state.Get(DS.data7629) != 1)
   {
-    return;
+    return false;
   }
-  const auto jumps = static_cast<std::uint8_t>(_guest.Get(DS.missionJumpCount) + 1);
-  _guest.Set(DS.missionJumpCount, jumps);
-  SetLow(regs.ax, 1);
-  if (jumps != FIRST_MISSION_JUMPS)
+  const auto jumps = static_cast<std::uint8_t>(_state.Get(DS.missionJumpCount) + 1);
+  _state.Set(DS.missionJumpCount, jumps);
+  if (jumps == FIRST_MISSION_JUMPS || jumps == SECOND_MISSION_JUMPS || jumps == THIRD_MISSION_JUMPS)
   {
-    SetLow(regs.ax, 2);
-    if (jumps != SECOND_MISSION_JUMPS)
-    {
-      SetLow(regs.ax, 3);
-      if (jumps != THIRD_MISSION_JUMPS)
-      {
-        return;
-      }
-    }
+    _state.Set(DS.missionNumber, MissionStartedAt(jumps));
   }
-  _guest.Set(DS.missionNumber, Low(regs.ax));
+  return true;
 }
 
-void LatchHyperspaceTarget(Guest& _guest)
+void LatchHyperspaceTarget(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SetLow(regs.ax, _guest.Get(DS.selectedSystemIndex));
-  _guest.Set(DS.hyperspaceTargetIndex, Low(regs.ax));
-  regs.si = DS.selectedSystemName.offset;
-  regs.di = DS.hyperspaceTargetRecord.offset;
-  regs.cx = _guest.Get(DS.systemRecordBytes);
-  // loop: a count of 0 copies 65536 bytes.
-  do
+  _state.Set(DS.hyperspaceTargetIndex, _state.Get(DS.selectedSystemIndex));
+  // LOOP: a count of 0 copies 65536 bytes.
+  const std::uint32_t bytes = LoopCount(_state.Get(DS.systemRecordBytes));
+  for (std::uint32_t copied = 0; copied < bytes; ++copied)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.si;
-    ++regs.di;
-  } while (--regs.cx != 0);
+    const auto at = static_cast<std::uint16_t>(copied);
+    _state.SetByte(Offset(DS.hyperspaceTargetRecord.offset, at), _state.Byte(Offset(DS.selectedSystemName.offset, at)));
+  }
 }
 
 void TickHyperspaceCountdown(Guest& _guest)
@@ -556,6 +538,8 @@ void ShowHyperspaceCountdown(Guest& _guest)
   _guest.Set(DS.messageShown, 0);
 }
 
+// ── The entries of the de-assembled routines ──
+
 namespace
 {
 
@@ -570,8 +554,48 @@ using Machine::REGISTER_DI;
 using Machine::REGISTER_DX;
 using Machine::REGISTER_SI;
 
-// UpdateMissionSchedule and LatchHyperspaceTarget clobber AL but keep AH: AX is compared whole, and the
-// ports leave AL as the original does.
+constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
+constexpr Machine::NativeContract CLOBBERS_CX_SI_DI{REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
+
+} // namespace
+
+void ResetHyperspaceRingsEntry(Guest& _guest)
+{
+  ResetHyperspaceRings(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Regs().es = Guest::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
+}
+
+void EnterWitchSpaceEntry(Guest& _guest)
+{
+  EnterWitchSpace(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void UpdateMissionScheduleEntry(Guest& _guest)
+{
+  // The contract keeps AX: once the jump counts, the original leaves AL the mission it picked for the count, stored
+  // or not.
+  if (UpdateMissionSchedule(_guest.State()))
+  {
+    SetLow(_guest.Regs().ax, MissionStartedAt(_guest.Get(DS.missionJumpCount)));
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void LatchHyperspaceTargetEntry(Guest& _guest)
+{
+  LatchHyperspaceTarget(_guest.State());
+  // The contract keeps AX: the original leaves AL the last byte it copied, which is the last it wrote.
+  const auto last = static_cast<std::uint16_t>(DS.hyperspaceTargetRecord.offset + _guest.Get(DS.systemRecordBytes) - 1);
+  SetLow(_guest.Regs().ax, _guest.Byte(last));
+  _guest.Clobber(CLOBBERS_CX_SI_DI);
+}
+
+namespace
+{
+
 // CompleteHyperspaceJump and PlayHyperspaceTunnel wait as a rule, for the tunnel's frames.
 // TickHyperspaceCountdown waits only on the frame the countdown reaches 0, but it is hooked as a routine
 // that always waits: as one that sometimes waits, a compared run would hand that frame's whole jump to
@@ -583,14 +607,15 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4707, "CompleteHyperspaceJump", &CompleteHyperspaceJump,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0},
               NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x48AB, "ResetHyperspaceRings", &ResetHyperspaceRings,
-              Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0}},
+  NativeEntry{0x48AB, "ResetHyperspaceRings", &ResetHyperspaceRingsEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x48C0, "DrawHyperspaceRings", &DrawHyperspaceRings, Machine::NativeContract{REGISTER_ALL, 0}},
   NativeEntry{0x4906, "PlayHyperspaceTunnel", &PlayHyperspaceTunnel, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
               NativeWait::Always},
-  NativeEntry{0x4917, "EnterWitchSpace", &EnterWitchSpace, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
-  NativeEntry{0x4953, "UpdateMissionSchedule", &UpdateMissionSchedule, PRESERVES_ALL},
-  NativeEntry{0x49F6, "LatchHyperspaceTarget", &LatchHyperspaceTarget, Machine::NativeContract{REGISTER_CX | REGISTER_SI | REGISTER_DI, 0}},
+  NativeEntry{0x4917, "EnterWitchSpace", &EnterWitchSpaceEntry, CLOBBERS_AX_BX},
+  // UpdateMissionSchedule and LatchHyperspaceTarget clobber AL but keep AH: AX is compared whole, and their entries
+  // leave AL as the original does.
+  NativeEntry{0x4953, "UpdateMissionSchedule", &UpdateMissionScheduleEntry, PRESERVES_ALL},
+  NativeEntry{0x49F6, "LatchHyperspaceTarget", &LatchHyperspaceTargetEntry, CLOBBERS_CX_SI_DI},
   NativeEntry{0x7F79, "TickHyperspaceCountdown", &TickHyperspaceCountdown, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
               NativeWait::Always},
   NativeEntry{0x8C62, "ShowHyperspaceCountdown", &ShowHyperspaceCountdown, Machine::NativeContract{REGISTER_AX, 0}},

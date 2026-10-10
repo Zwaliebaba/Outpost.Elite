@@ -137,12 +137,12 @@ constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
   return (regs.flags & Machine::FLAG_CARRY) != 0;
 }
 
-// The common failure (0x039D): DOS's error in AX, which is no failure when it only ran out of files.
-void Fail(Guest& _guest)
+// The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
+void Fail(GameState& _state, std::uint16_t _error)
 {
-  if (_guest.Regs().ax != DOS_NO_MORE_FILES)
+  if (_error != DOS_NO_MORE_FILES)
   {
-    _guest.Set(DS.diskError, 1);
+    _state.Set(DS.diskError, 1);
   }
 }
 
@@ -154,7 +154,7 @@ void CloseAndFail(Guest& _guest)
   regs.bx = _guest.Get(DS.fileHandle);
   static_cast<void>(CallDos(_guest, DOS_CLOSE));
   regs.ax = error;
-  Fail(_guest);
+  Fail(_guest.State(), regs.ax);
 }
 
 // LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock.
@@ -165,7 +165,7 @@ void LoadCommanderFile(Guest& _guest)
   regs.ax = WithLow(regs.ax, 0);
   if (CallDos(_guest, DOS_ATTRIBUTES))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
     return;
   }
   if (regs.cx != 0)
@@ -177,7 +177,7 @@ void LoadCommanderFile(Guest& _guest)
   regs.ax = WithLow(regs.ax, 0);
   if (CallDos(_guest, DOS_OPEN))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
     return;
   }
   _guest.Set(DS.fileHandle, regs.ax);
@@ -192,7 +192,7 @@ void LoadCommanderFile(Guest& _guest)
   regs.bx = _guest.Get(DS.fileHandle);
   if (CallDos(_guest, DOS_CLOSE))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
   }
 }
 
@@ -204,7 +204,7 @@ void SaveCommanderFile(Guest& _guest)
   regs.cx = 0;
   if (CallDos(_guest, DOS_CREATE))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
     return;
   }
   _guest.Set(DS.fileHandle, regs.ax);
@@ -219,7 +219,7 @@ void SaveCommanderFile(Guest& _guest)
   regs.bx = _guest.Get(DS.fileHandle);
   if (CallDos(_guest, DOS_CLOSE))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
     return;
   }
   regs.dx = DS.commanderFileName.offset;
@@ -227,7 +227,7 @@ void SaveCommanderFile(Guest& _guest)
   regs.ax = WithLow(regs.ax, 1);
   if (CallDos(_guest, DOS_ATTRIBUTES))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
   }
 }
 
@@ -241,7 +241,7 @@ void ListCommanderFiles(Guest& _guest)
   regs.dx = DS.commanderFilePattern.offset;
   if (CallDos(_guest, DOS_FIND_FIRST))
   {
-    Fail(_guest);
+    Fail(_guest.State(), regs.ax);
     return;
   }
   for (;;)
@@ -274,7 +274,7 @@ void ListCommanderFiles(Guest& _guest)
     }
     if (CallDos(_guest, DOS_FIND_NEXT))
     {
-      Fail(_guest);
+      Fail(_guest.State(), regs.ax);
       return;
     }
   }
@@ -286,7 +286,7 @@ void DeleteCommanderFile(Guest& _guest)
   _guest.Regs().dx = DS.commanderFileName.offset;
   if (CallDos(_guest, DOS_DELETE))
   {
-    Fail(_guest);
+    Fail(_guest.State(), _guest.Regs().ax);
   }
 }
 
@@ -619,21 +619,17 @@ void PerformDiskRequest(Guest& _guest)
   ListCommanderFiles(_guest);
 }
 
-void SaveStartupCommander(Guest& _guest)
+void SaveStartupCommander(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = regs.ds;
-  regs.es = regs.ds;
-  regs.si = DS.commanderBlock.offset;
-  regs.di = DS.startupCommander.offset;
-  regs.cx = _guest.Get(DS.commanderFileBytes);
-  // REP MOVSB, forwards or, with DF set, backwards.
-  const auto step = static_cast<std::uint16_t>((regs.flags & Machine::FLAG_DIRECTION) != 0 ? 0xFFFF : 1);
-  for (; regs.cx != 0; --regs.cx)
+  // REP MOVSB within the data segment, a byte at a time.
+  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
+  std::uint16_t from = DS.commanderBlock.offset;
+  std::uint16_t to = DS.startupCommander.offset;
+  for (std::uint16_t left = _state.Get(DS.commanderFileBytes); left != 0; --left)
   {
-    _guest.SetFarByte(regs.es, regs.di, _guest.FarByte(regs.ds, regs.si));
-    regs.si = static_cast<std::uint16_t>(regs.si + step);
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetByte(to, _state.Byte(from));
+    from = Offset(from, step);
+    to = Offset(to, step);
   }
 }
 
@@ -794,7 +790,7 @@ void PrintCommanderCatalogue(Guest& _guest)
     _guest.Push(regs.cx);
     _guest.Push(regs.di);
     regs.si = BLANK_LINE_TEXT;
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     regs.di = _guest.Pop();
     regs.di = static_cast<std::uint16_t>(regs.di + TEXT_ROW_BYTES);
     regs.cx = _guest.Pop();
@@ -824,7 +820,7 @@ void PrintCommanderCatalogue(Guest& _guest)
     regs.bx = static_cast<std::uint16_t>(regs.bx >> 2);
     regs.di = static_cast<std::uint16_t>(regs.di + regs.bx);
     regs.di = static_cast<std::uint16_t>(regs.di + CATALOGUE_POSITION);
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     ++regs.si;
     SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + 1));
   } while (--regs.cx != 0);
@@ -855,11 +851,24 @@ constexpr Machine::NativeContract PROMPTS_FOR_NAME{
 // accept them (ADR-010 items 5 and 8).
 constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
+} // namespace
+
+// ── The entries of the de-assembled routines ──
+
+void SaveStartupCommanderEntry(Guest& _guest)
+{
+  SaveStartupCommander(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(COPY);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
   NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequest, DISK_REQUEST},
   NativeEntry{0x0470, "ShowDiskError", &ShowDiskError, SHOWS_DISK_ERROR},
-  NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommander, COPY},
+  NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},
   NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x6862, "PromptCommanderFileName", &PromptCommanderFileName, PROMPTS_FOR_NAME, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x68CE, "PrintCommanderCatalogue", &PrintCommanderCatalogue, CLOBBERS_GENERAL},
