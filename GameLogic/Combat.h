@@ -33,17 +33,11 @@ void DetonateEnergyBomb(Guest& _guest);
 /// the cargo if there is any.
 void SpawnPlayerWreckage(Guest& _guest);
 
-/// KillPlayer (CS:3115): playerDead and its sound, unless the escape pod flies.
-void KillPlayer(Guest& _guest);
-
 /// RemoveAllMissiles (CS:4F9F): every active missile among the object slots removed.
 void RemoveAllMissiles(Guest& _guest);
 
 /// ExplodeObject (CS:4FC1): the object at DI removed, and when it was drawn, its fragments and its cargo barrels spawned.
 void ExplodeObject(Guest& _guest);
-
-/// TryFireLaserAtPlayer (CS:518B): the ship at DI fires at the player when it may, with AX, BX its aim errors.
-void TryFireLaserAtPlayer(Guest& _guest);
 
 /// LaunchPlayerMissile (CS:5242): the 64 bytes at DI copied into a slot, free or reclaimed, and made a missile 100 along the
 /// player's nose, locked on missileTarget.
@@ -93,12 +87,22 @@ void DrawLaserSights(GameState& _state);
 /// time; its type, the 2-bit field mount-1 of laserMountTypes.
 [[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
 
+/// KillPlayer (CS:3115): unless the escape pod flies, playerDead and StartPlayerDeathSound. Returns the step length that sound
+/// starts at, when it starts.
+std::optional<std::uint8_t> KillPlayer(GameState& _state);
+
 /// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
 void InitMissile(GameState& _state, ObjectSlot _slot);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
 void TallyMaskMissionKill(GameState& _state, const ObjectSlot& _slot);
+
+/// TryFireLaserAtPlayer (CS:518B): _slot fires at the player when it may: its blip drawn, a random byte below its aggression, not
+/// holding fire (CheckSafeZoneHoldFire) and nothing blocking it; each shot calms it by 5 down to 20. With _pitchError and
+/// _yawError, the magnitudes TurnTowardAngles leaves, within 200 the player is grazed by it, and within 70, the slot's camera-z
+/// high byte below 70 too, hit squarely.
+void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 /// Returns whether it was.
@@ -115,8 +119,10 @@ void UseMaskingDevice(GameState& _state);
 
 void DrawLaserSightsEntry(Guest& _guest);             ///< AX, BX, CX, SI, DI clobbered.
 void GetViewLaserEntry(Guest& _guest);                ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
+void KillPlayerEntry(Guest& _guest);                  ///< Out: AL the sound's step length and IF=1, when it starts.
 void InitMissileEntry(Guest& _guest);                 ///< DI = the slot. AX, BX clobbered.
 void TallyMaskMissionKillEntry(Guest& _guest);        ///< DI = the slot. Out: AL = its type while the mission runs.
+void TryFireLaserAtPlayerEntry(Guest& _guest);        ///< DI = the slot, AX, BX = the aim errors. AX, BX, CX, DX clobbered.
 void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
 void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.
 void UseMaskingDeviceEntry(Guest& _guest);            ///< Out: SI past the slots, CX = 0.

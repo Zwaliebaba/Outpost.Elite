@@ -18,10 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockingEntries() noexcept;
 
-/// DrawTunnelRectangle (CS:1AA0): the four edges between the five points at SI (x, y signed bytes about the view's
-/// centre), by DrawLine in drawColor. Clobbers all.
-void DrawTunnelRectangle(Guest& _guest);
-
 /// PlayStationTunnel (CS:2D5B): the tunnel between the station and space, twenty frames, leaving or
 /// docking as playerDocked says. Waits. Clobbers all.
 void PlayStationTunnel(Guest& _guest);
@@ -39,6 +35,10 @@ void CancelDockingComputer(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
+/// DrawTunnelRectangle (CS:1AA0): the four edges between the five points at DS:_points, x and y signed bytes about the view's
+/// centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB (DrawLineOut).
+bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points);
+
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the
 /// station in _station: pitch near 0 with yaw near a half turn, or the other way round, and roll near the station's
 /// spin or half a turn from it.
@@ -51,6 +51,7 @@ void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwa
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void DrawTunnelRectangleEntry(Guest& _guest);   ///< In: SI the points. Out: ES=DS and DF=0 after a REP STOSB; clobbers all.
 void CheckDockingAlignmentEntry(Guest& _guest); ///< In: BX the tolerance, DI the station's slot. Out: CF; AX, CX and DX clobbered.
 void MaskOutsideTunnelEntry(Guest& _guest);     ///< In: SI the rectangle. Out: ES=B800, DF=0; clobbers all but ES.
 

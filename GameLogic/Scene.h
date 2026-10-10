@@ -24,16 +24,6 @@ namespace Elite
 /// AX, BX, CX, DX, DI clobbered.
 void ProjectVertices(Guest& _guest);
 
-/// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from SI = blueprint+3. The eight corners
-/// (+-boxHalfWidth, +-byte +3, +-byte +4) about drawCenter, rotated by the drawn angles, the player's pitch and the
-/// view direction, as vertices 34-41. Out: SI = blueprint+5; AX, BX, CX, DX, BP, DI clobbered.
-void BuildBoxCornerVertices(Guest& _guest);
-
-/// BuildDodoVertices (CS:38BF): the blueprint handler of type 0, the Dodo station: two rings of five from the sine
-/// table in 72-degree steps from the roll angle, a slot of four, rotated as BuildBoxCornerVertices rotates, and the
-/// rings reflected through drawCenter, as vertices 0-23. Keeps SI.
-void BuildDodoVertices(Guest& _guest);
-
 /// DrawVisibleFaces (CS:3AB3): for each of CX faces at SI that faces the viewer, its edges
 /// (DrawClippedLine) and filled triangles (FillTriangle) in order. Out: SI past the list.
 void DrawVisibleFaces(Guest& _guest);
@@ -127,6 +117,16 @@ Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::u
 /// coordinate as it read it.
 Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex);
 
+/// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from the blueprint's two extent bytes at DS:_extents,
+/// blueprint+3. The eight corners (+-boxHalfWidth, +-the first, +-the second) about drawCenter, rotated by the drawn angles, the
+/// player's pitch and the view direction, as vertices 34-41. Returns the offset past the extents.
+std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents);
+
+/// BuildDodoVertices (CS:38BF): the blueprint handler of type 0, the Dodo station: two rings of five from the sine table in
+/// 72-degree steps from the roll angle, a slot of four, rotated as BuildBoxCornerVertices rotates, and the rings reflected
+/// through drawCenter, as vertices 0-23. Returns drawCenter as the last OffsetVertexByCenter read it.
+Vector BuildDodoVertices(GameState& _state);
+
 /// ScaleDodoRadii (CS:3A13): the signed byte _value scaled to the Dodo's two ring radii by arithmetic shifts and adds.
 [[nodiscard]] DodoRadii ScaleDodoRadii(std::int8_t _value);
 
@@ -146,6 +146,8 @@ SinCos LoadPlayerAngles(GameState& _state);
 
 void ReflectVertexAboutCenterEntry(Guest& _guest); ///< SI = the vertex, DI = its reflection. Out: BX = drawCenterZ; AX clobbered.
 void OffsetVertexByCenterEntry(Guest& _guest);     ///< SI = the vertex. Out: AX = drawCenterZ.
+void BuildBoxCornerVerticesEntry(Guest& _guest);   ///< SI = blueprint+3. Out: SI = blueprint+5; AX, BX, CX, DX, BP, DI clobbered.
+void BuildDodoVerticesEntry(Guest& _guest);        ///< Out: AX = BX = drawCenterZ, CX = 0, DI past the reflections; SI kept.
 void ScaleDodoRadiiEntry(Guest& _guest);           ///< AL = the value. Out: CX inner, DX outer; AX clobbered.
 void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the accumulator, in and out. Out: CX = 0; AX, DI clobbered.
 /// p0 = (AX, DX), p1 = (BX, BP), p2 = (CX, DI). Out: SF; DX:AX = (y0-y1)(x2-x1), BX = the low word of (x0-x1)(y2-y1), less AX when the

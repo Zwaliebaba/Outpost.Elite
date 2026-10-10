@@ -8,6 +8,7 @@
 #include "Maths.h"
 #include "Scene.h"
 #include "Ships.h"
+#include "Video.h"
 
 namespace Elite
 {
@@ -21,7 +22,6 @@ using Machine::Registers;
 // The routines these call through their entries: the original's, or a native routine hooked there.
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t DRAW_TUNNEL_RECTANGLE = 0x1AA0;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
 constexpr std::uint16_t MASK_OUTSIDE_TUNNEL = 0x2E0A;
@@ -445,20 +445,18 @@ void RollWithSpin(Guest& _guest, std::uint16_t _turn)
 
 } // namespace
 
-void DrawTunnelRectangle(Guest& _guest)
+bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = TUNNEL_EDGES;
-  do
+  bool filled = false;
+  std::uint16_t point = _points;
+  for (std::uint16_t edge = 0; edge < TUNNEL_EDGES; ++edge)
   {
-    const std::uint16_t edgesLeft = regs.cx;
-    const std::uint16_t point = regs.si;
-    regs.dx = FromCenter(_guest.Word(point));
-    regs.cx = FromCenter(_guest.Word(static_cast<std::uint16_t>(point + 2)));
-    _guest.Call(DRAW_LINE);
-    regs.si = static_cast<std::uint16_t>(point + 2);
-    regs.cx = static_cast<std::uint16_t>(edgesLeft - 1);
-  } while (regs.cx != 0);
+    const std::uint16_t from = FromCenter(_state.Word(point));
+    const std::uint16_t to = FromCenter(_state.Word(Offset(point, 2)));
+    filled = DrawLine(_state, Low(from), High(from), Low(to), High(to)) || filled;
+    point = Offset(point, 2);
+  }
+  return filled;
 }
 
 bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, std::uint16_t _tolerance)
@@ -771,6 +769,12 @@ constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | 
 
 } // namespace
 
+void DrawTunnelRectangleEntry(Guest& _guest)
+{
+  DrawLineOut(_guest, DrawTunnelRectangle(_guest.State(), _guest.Regs().si));
+  _guest.Clobber(CLOBBERS_ALL);
+}
+
 void CheckDockingAlignmentEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -794,7 +798,7 @@ namespace
 
 // PlayStationTunnel waits as a rule: for frames, and docking for the timer too.
 constexpr std::array ENTRIES = {
-  NativeEntry{0x1AA0, "DrawTunnelRectangle", &DrawTunnelRectangle, CLOBBERS_ALL},
+  NativeEntry{0x1AA0, "DrawTunnelRectangle", &DrawTunnelRectangleEntry, CLOBBERS_ALL},
   NativeEntry{0x2D0F, "CheckDockingAlignment", &CheckDockingAlignmentEntry, ALIGNMENT},
   NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnel, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnelEntry, CLOBBERS_ALL_BUT_SI_ES},

@@ -1053,153 +1053,127 @@ Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex)
   return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
-void BuildBoxCornerVertices(Guest& _guest)
+std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = _guest.Word(regs.si);
-  regs.si = Offset(regs.si, 2);
-  const std::uint16_t blueprint = regs.si;
-  const std::uint16_t extents = regs.bx;
-  SetDrawAngles(_guest.State());
-  // q, the half-height, in BX; h, the half-length, negated in CX; p is boxHalfWidth.
-  regs.bx = extents;
-  regs.cx = High(regs.bx);
-  regs.bx = Low(regs.bx);
-  const std::uint16_t height = regs.bx;
-  regs.ax = _guest.Get(DS.boxHalfWidth);
-  regs.si = DS.boxCornerVertices.offset;
-  regs.cx = Negate(regs.cx);
-  _guest.SetWord(Offset(regs.si, VERTEX_Z), regs.cx);
-  _guest.SetWord(Offset(regs.si, VERTEX_BYTES + VERTEX_Z), regs.cx);
-  _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES + VERTEX_Z), regs.cx);
+  const std::uint16_t extents = _state.Word(_extents);
+  SetDrawAngles(_state);
+  // q, the half-height, from the low byte; h, the half-length, from the high, negated; p is boxHalfWidth.
+  const std::uint16_t height = Low(extents);
+  const std::uint16_t length = Negate(std::uint16_t{High(extents)});
+  const std::uint16_t corners = DS.boxCornerVertices.offset;
+  _state.SetWord(Offset(corners, VERTEX_Z), length);
+  _state.SetWord(Offset(corners, VERTEX_BYTES + VERTEX_Z), length);
+  _state.SetWord(Offset(corners, 2 * VERTEX_BYTES + VERTEX_Z), length);
   // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
-  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(3));
-  _guest.SetWord(regs.si, regs.ax);
-  _guest.SetWord(Offset(regs.si, 2), regs.bx);
-  regs.ax = Negate(regs.ax);
-  regs.bx = Negate(regs.bx);
-  _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES), regs.ax);
-  _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES + 2), regs.bx);
-  regs.bx = Negate(height);
-  regs.ax = _guest.Get(DS.boxHalfWidth);
-  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(3));
-  _guest.SetWord(Offset(regs.si, VERTEX_BYTES), regs.ax);
-  _guest.SetWord(Offset(regs.si, VERTEX_BYTES + 2), regs.bx);
-  RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 4);
-  RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 2, VERTEX_Z, 5);
-  RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 1);
-  RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, 2, 2);
-  RotateVerticesToView(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED);
-  regs.si = DS.boxCornerVertices.offset;
+  const Pair upper =
+    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Get(DS.boxHalfWidth)), static_cast<std::int16_t>(height)});
+  _state.SetWord(corners, static_cast<std::uint16_t>(upper.first));
+  _state.SetWord(Offset(corners, 2), static_cast<std::uint16_t>(upper.second));
+  _state.SetWord(Offset(corners, 2 * VERTEX_BYTES), Negate(static_cast<std::uint16_t>(upper.first)));
+  _state.SetWord(Offset(corners, 2 * VERTEX_BYTES + 2), Negate(static_cast<std::uint16_t>(upper.second)));
+  const Pair lower = RotateByStoredSinCos(
+    _state, 3, Pair{static_cast<std::int16_t>(_state.Get(DS.boxHalfWidth)), static_cast<std::int16_t>(Negate(height))});
+  _state.SetWord(Offset(corners, VERTEX_BYTES), static_cast<std::uint16_t>(lower.first));
+  _state.SetWord(Offset(corners, VERTEX_BYTES + 2), static_cast<std::uint16_t>(lower.second));
+  RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 4);
+  RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 2, VERTEX_Z, 5);
+  RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 1);
+  RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, 2, 2);
+  RotateVerticesToView(_state, corners, BOX_CORNERS_ROTATED);
 
   // The fourth corner completes the parallelogram, v2 - v1 + v0; the fifth and eighth are the second and third
   // again, and four reflections through the centre make the far face.
-  regs.cx = BOX_CORNERS_ROTATED;
-  do
+  for (std::uint16_t word = corners; word != Offset(corners, 2 * BOX_CORNERS_ROTATED); word = Offset(word, 2))
   {
-    regs.ax = static_cast<std::uint16_t>(_guest.Word(Offset(regs.si, 2 * VERTEX_BYTES)) - _guest.Word(Offset(regs.si, VERTEX_BYTES)) +
-                                         _guest.Word(regs.si));
-    _guest.SetWord(Offset(regs.si, BOX_FOURTH_CORNER), regs.ax);
-    regs.si = Offset(regs.si, 2);
-  } while (Loop(regs.cx));
-  regs.si = BOX_SECOND_CORNER;
+    _state.SetWord(Offset(word, BOX_FOURTH_CORNER),
+                   static_cast<std::uint16_t>(_state.Word(Offset(word, 2 * VERTEX_BYTES)) - _state.Word(Offset(word, VERTEX_BYTES)) +
+                                              _state.Word(word)));
+  }
+  std::uint16_t source = BOX_SECOND_CORNER;
   for (const std::uint16_t copy : {BOX_FIFTH_CORNER, BOX_EIGHTH_CORNER})
   {
-    regs.di = copy;
-    regs.cx = BOX_CORNERS_ROTATED;
-    do
+    for (std::uint16_t word = 0; word != 2 * BOX_CORNERS_ROTATED; word = Offset(word, 2))
     {
-      regs.ax = _guest.Word(regs.si);
-      _guest.SetWord(regs.di, regs.ax);
-      regs.si = Offset(regs.si, 2);
-      regs.di = Offset(regs.di, 2);
-    } while (Loop(regs.cx));
+      _state.SetWord(Offset(copy, word), _state.Word(source));
+      source = Offset(source, 2);
+    }
   }
-  regs.si = DS.boxCornerVertices.offset;
-  regs.di = BOX_SEVENTH_CORNER;
-  ReflectVertexAboutCenterEntry(_guest);
-  regs.si = Offset(regs.si, BOX_REFLECTION_STEP);
-  regs.di = static_cast<std::uint16_t>(regs.di - BOX_REFLECTION_STEP);
-  ReflectVertexAboutCenterEntry(_guest);
-  regs.si = Offset(regs.si, BOX_REFLECTION_SKIP);
-  regs.di = static_cast<std::uint16_t>(regs.di - VERTEX_BYTES);
-  ReflectVertexAboutCenterEntry(_guest);
-  regs.si = static_cast<std::uint16_t>(regs.si - BOX_REFLECTION_STEP);
-  regs.di = Offset(regs.di, BOX_REFLECTION_STEP);
-  ReflectVertexAboutCenterEntry(_guest);
-  regs.si = blueprint;
+  std::uint16_t vertex = corners;
+  std::uint16_t reflection = BOX_SEVENTH_CORNER;
+  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  vertex = Offset(vertex, BOX_REFLECTION_STEP);
+  reflection = static_cast<std::uint16_t>(reflection - BOX_REFLECTION_STEP);
+  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  vertex = Offset(vertex, BOX_REFLECTION_SKIP);
+  reflection = static_cast<std::uint16_t>(reflection - VERTEX_BYTES);
+  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  vertex = static_cast<std::uint16_t>(vertex - BOX_REFLECTION_STEP);
+  reflection = Offset(reflection, BOX_REFLECTION_STEP);
+  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  return Offset(_extents, 2);
 }
 
-void BuildDodoVertices(Guest& _guest)
+Vector BuildDodoVertices(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t blueprint = regs.si;
-  SetDrawAngles(_guest.State());
+  SetDrawAngles(_state);
   // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
-  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.drawRollAngle) & ANGLE_BITS) << 1);
-  regs.si = SINE_HIGH_BYTES;
-  regs.cx = DODO_RING_VERTICES;
-  regs.di = DS.vertexBuffer.offset;
-  do
+  const auto ringRadii = [&_state](std::uint16_t _angle)
+  { return ScaleDodoRadii(static_cast<std::int8_t>(_state.Byte(Offset(_angle, SINE_HIGH_BYTES)))); };
+  auto angle = static_cast<std::uint16_t>((_state.Get(DS.drawRollAngle) & ANGLE_BITS) << 1);
+  std::uint16_t vertex = DS.vertexBuffer.offset;
+  for (std::uint16_t left = DODO_RING_VERTICES; left != 0; --left)
   {
-    const std::uint16_t left = regs.cx;
-    regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.bx, regs.si)));
-    ScaleDodoRadiiEntry(_guest);
-    _guest.SetWord(regs.di, regs.cx);
-    _guest.SetWord(Offset(regs.di, DODO_OUTER_RING), regs.dx);
-    _guest.SetWord(Offset(regs.di, VERTEX_Z), DODO_NEAR_RING_Z);
-    _guest.SetWord(Offset(regs.di, DODO_OUTER_RING + VERTEX_Z), DODO_FAR_RING_Z);
-    regs.bx = static_cast<std::uint16_t>((regs.bx - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
-    regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.bx, regs.si)));
-    ScaleDodoRadiiEntry(_guest);
-    _guest.SetWord(Offset(regs.di, 2), regs.cx);
-    _guest.SetWord(Offset(regs.di, DODO_OUTER_RING + 2), regs.dx);
-    regs.bx = static_cast<std::uint16_t>((regs.bx + DODO_RING_STEP_BYTES) & SINE_BYTE_BITS);
-    regs.di = Offset(regs.di, VERTEX_BYTES);
-    regs.cx = left;
-  } while (Loop(regs.cx));
+    const DodoRadii sine = ringRadii(angle);
+    _state.SetWord(vertex, static_cast<std::uint16_t>(sine.inner));
+    _state.SetWord(Offset(vertex, DODO_OUTER_RING), static_cast<std::uint16_t>(sine.outer));
+    _state.SetWord(Offset(vertex, VERTEX_Z), DODO_NEAR_RING_Z);
+    _state.SetWord(Offset(vertex, DODO_OUTER_RING + VERTEX_Z), DODO_FAR_RING_Z);
+    angle = static_cast<std::uint16_t>((angle - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
+    const DodoRadii cosine = ringRadii(angle);
+    _state.SetWord(Offset(vertex, 2), static_cast<std::uint16_t>(cosine.inner));
+    _state.SetWord(Offset(vertex, DODO_OUTER_RING + 2), static_cast<std::uint16_t>(cosine.outer));
+    angle = static_cast<std::uint16_t>((angle + DODO_RING_STEP_BYTES) & SINE_BYTE_BITS);
+    vertex = Offset(vertex, VERTEX_BYTES);
+  }
   // The slot: two corners at half the high bytes, and their opposites.
-  regs.di = Offset(regs.di, DODO_OUTER_RING);
-  regs.bx = static_cast<std::uint16_t>((regs.bx + DODO_SLOT_START_BYTES) & SINE_BYTE_BITS);
-  regs.cx = DODO_SLOT_VERTICES;
-  do
+  const auto slotHalf = [&_state](std::uint16_t _angle) { return Sar(SignExtend(_state.Byte(Offset(_angle, SINE_HIGH_BYTES))), 1); };
+  vertex = Offset(vertex, DODO_OUTER_RING);
+  angle = static_cast<std::uint16_t>((angle + DODO_SLOT_START_BYTES) & SINE_BYTE_BITS);
+  for (std::uint16_t left = DODO_SLOT_VERTICES; left != 0; --left)
   {
-    regs.ax = Sar(SignExtend(_guest.Byte(Offset(regs.bx, regs.si))), 1);
-    _guest.SetWord(regs.di, regs.ax);
-    regs.ax = Negate(regs.ax);
-    _guest.SetWord(Offset(regs.di, DODO_SLOT_OPPOSITE), regs.ax);
-    _guest.SetWord(Offset(regs.di, VERTEX_Z), DODO_SLOT_Z);
-    _guest.SetWord(Offset(regs.di, DODO_SLOT_OPPOSITE + VERTEX_Z), DODO_SLOT_Z);
-    regs.bx = static_cast<std::uint16_t>((regs.bx - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
-    regs.ax = Sar(SignExtend(_guest.Byte(Offset(regs.bx, regs.si))), 1);
-    _guest.SetWord(Offset(regs.di, 2), regs.ax);
-    regs.ax = Negate(regs.ax);
-    _guest.SetWord(Offset(regs.di, DODO_SLOT_OPPOSITE + 2), regs.ax);
-    regs.bx = static_cast<std::uint16_t>((regs.bx + HALF_TURN_BYTES) & SINE_BYTE_BITS);
-    regs.di = Offset(regs.di, VERTEX_BYTES);
-  } while (Loop(regs.cx));
-  RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 4);
-  RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 2, VERTEX_Z, 5);
-  RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 1);
-  RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, 2, 2);
-  RotateVerticesToView(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES);
+    const std::uint16_t x = slotHalf(angle);
+    _state.SetWord(vertex, x);
+    _state.SetWord(Offset(vertex, DODO_SLOT_OPPOSITE), Negate(x));
+    _state.SetWord(Offset(vertex, VERTEX_Z), DODO_SLOT_Z);
+    _state.SetWord(Offset(vertex, DODO_SLOT_OPPOSITE + VERTEX_Z), DODO_SLOT_Z);
+    angle = static_cast<std::uint16_t>((angle - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
+    const std::uint16_t y = slotHalf(angle);
+    _state.SetWord(Offset(vertex, 2), y);
+    _state.SetWord(Offset(vertex, DODO_SLOT_OPPOSITE + 2), Negate(y));
+    angle = static_cast<std::uint16_t>((angle + HALF_TURN_BYTES) & SINE_BYTE_BITS);
+    vertex = Offset(vertex, VERTEX_BYTES);
+  }
+  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 4);
+  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 2, VERTEX_Z, 5);
+  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 1);
+  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, 2, 2);
+  RotateVerticesToView(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES);
   // The first ten reflected through the centre, and the slot's four moved to it.
-  regs.si = DS.vertexBuffer.offset;
-  regs.di = DODO_REFLECTED;
-  regs.cx = DODO_REFLECTED_VERTICES;
-  do
+  vertex = DS.vertexBuffer.offset;
+  std::uint16_t reflection = DODO_REFLECTED;
+  for (std::uint16_t left = DODO_REFLECTED_VERTICES; left != 0; --left)
   {
-    ReflectVertexAboutCenterEntry(_guest);
-    regs.si = Offset(regs.si, VERTEX_BYTES);
-    regs.di = Offset(regs.di, VERTEX_BYTES);
-  } while (Loop(regs.cx));
-  regs.cx = DODO_SLOT_CORNERS;
-  do
+    (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+    vertex = Offset(vertex, VERTEX_BYTES);
+    reflection = Offset(reflection, VERTEX_BYTES);
+  }
+  Vector center{};
+  for (std::uint16_t left = DODO_SLOT_CORNERS; left != 0; --left)
   {
-    OffsetVertexByCenterEntry(_guest);
-    regs.si = Offset(regs.si, VERTEX_BYTES);
-  } while (Loop(regs.cx));
-  regs.si = blueprint;
+    center = OffsetVertexByCenter(_state, vertex);
+    vertex = Offset(vertex, VERTEX_BYTES);
+  }
+  return center;
 }
 
 DodoRadii ScaleDodoRadii(std::int8_t _value)
@@ -1533,6 +1507,7 @@ constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 constexpr Machine::NativeContract CLOBBERS_DX{REGISTER_DX, 0};
 
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
+constexpr Machine::NativeContract BUILDS_BOX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_DI{REGISTER_AX | REGISTER_DI, 0};
 // TriangleWindingSign changes only AX, BX, CX, DX and DI. DrawVisibleFaces reads SI after it, and RenderBlueprintBody's contract
 // compares the AX, BX, DX, BP and ES it leaves after a hidden last face (ADR-012).
@@ -1557,6 +1532,26 @@ void OffsetVertexByCenterEntry(Guest& _guest)
   // The original leaves drawCenterZ in AX, and BuildDodoVertices, whose contract compares AX, ends with it there.
   _guest.Regs().ax = static_cast<std::uint16_t>(center.z);
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void BuildBoxCornerVerticesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.si = BuildBoxCornerVertices(_guest.State(), regs.si);
+  _guest.Clobber(BUILDS_BOX);
+}
+
+void BuildDodoVerticesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const Vector center = BuildDodoVertices(_guest.State());
+  // The contract compares what the original's loops leave: drawCenterZ in AX from the last OffsetVertexByCenter and in BX from the
+  // last ReflectVertexAboutCenter, CX = 0, and DI past the reflections. PUSH SI / POP SI keep SI.
+  regs.ax = static_cast<std::uint16_t>(center.z);
+  regs.bx = regs.ax;
+  regs.cx = 0;
+  regs.di = static_cast<std::uint16_t>(DODO_REFLECTED + DODO_REFLECTED_VERTICES * VERTEX_BYTES);
+  _guest.Clobber(CLOBBERS_DX);
 }
 
 void LoadPlayerAnglesEntry(Guest& _guest)
@@ -1618,9 +1613,8 @@ constexpr std::array ENTRIES = {
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
   NativeEntry{0x3740, "ReflectVertexAboutCenter", &ReflectVertexAboutCenterEntry, CLOBBERS_AX},
   NativeEntry{0x3768, "OffsetVertexByCenter", &OffsetVertexByCenterEntry, PRESERVES_ALL},
-  NativeEntry{0x377A, "BuildBoxCornerVertices", &BuildBoxCornerVertices,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
-  NativeEntry{0x38BF, "BuildDodoVertices", &BuildDodoVertices, CLOBBERS_DX},
+  NativeEntry{0x377A, "BuildBoxCornerVertices", &BuildBoxCornerVerticesEntry, BUILDS_BOX},
+  NativeEntry{0x38BF, "BuildDodoVertices", &BuildDodoVerticesEntry, CLOBBERS_DX},
   NativeEntry{0x3A13, "ScaleDodoRadii", &ScaleDodoRadiiEntry, CLOBBERS_AX},
   NativeEntry{0x3A40, "RunVertexProgram", &RunVertexProgramEntry, CLOBBERS_AX_DI},
   NativeEntry{0x3A9B, "TriangleWindingSign", &TriangleWindingSignEntry, WINDING_SIGN},

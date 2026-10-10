@@ -782,7 +782,7 @@ void TryScoopObject(Guest& _guest)
   {
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
-      RemoveObject(_guest);
+      RemoveObjectEntry(_guest);
       _guest.Set(DS.maskingDeviceRecovered, 1);
       message = DS.maskingDeviceText.offset;
     }
@@ -793,7 +793,7 @@ void TryScoopObject(Guest& _guest)
     else
     {
       // A random product 0-10, furs for slaves, into the hold, and its name for the message.
-      RemoveObject(_guest);
+      RemoveObjectEntry(_guest);
       NextRandomEntry(_guest);
       regs.ax = Low(regs.ax);
       SetLow(regs.bx, RANDOM_PRODUCT_DIVISOR);
@@ -823,7 +823,7 @@ void TryScoopObject(Guest& _guest)
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
   {
     // Gems, gold and platinum always; minerals or alloys too if there is room.
-    RemoveObject(_guest);
+    RemoveObjectEntry(_guest);
     NextRandomEntry(_guest);
     SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & 7));
     AddPrecious(_guest.State(), DS.cargoGemStonesGrams, Low(regs.ax));
@@ -855,7 +855,7 @@ void TryScoopObject(Guest& _guest)
     }
     else
     {
-      RemoveObject(_guest);
+      RemoveObjectEntry(_guest);
       const DataField<std::uint8_t> held = type == TYPE_SPLINTER     ? DS.cargoAlloysTonnes
                                            : type == TYPE_ESCAPE_POD ? DS.cargoSlavesTonnes
                                                                      : DS.cargoAlienItemsTonnes;

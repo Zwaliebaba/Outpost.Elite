@@ -1,12 +1,14 @@
 // GameLogic/Ships.h
 #pragma once
 
+#include "Flight.h"
 #include "GameState.h"
 #include "Maths.h"
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -77,10 +79,6 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> ShipsEntries() noexcept;
 
-/// IsObjectNear (CS:3B9A): CF set when each 24-bit coordinate of the slot at DI fits a signed word; otherwise
-/// EraseScannerBlip, and CF clear. AL is the last high byte looked at (0 for FFh).
-void IsObjectNear(Guest& _guest);
-
 /// SpawnRandomDrifter (CS:4CE7): one of the eight drifters from entry 1 in the free slot at DI, class 3, turn rate 1Eh.
 void SpawnRandomDrifter(Guest& _guest);
 
@@ -100,14 +98,8 @@ void SpawnMaskMissionShip(Guest& _guest);
 /// SpawnInvasionThargoid (CS:4DF0): an invasion's Thargoid in the free slot at DI, with 8 Thargons.
 void SpawnInvasionThargoid(Guest& _guest);
 
-/// FacePlayerWithRandomRoll (CS:4EC5): FacePlayer, then a random roll.
-void FacePlayerWithRandomRoll(Guest& _guest);
-
 /// MoveObject (CS:4F6E): adds the velocity of the slot at DI to its position, and removes it once IsObjectNear fails.
 void MoveObject(Guest& _guest);
-
-/// RemoveObject (CS:4F98): clears the active bit of the slot at DI and erases its blip.
-void RemoveObject(Guest& _guest);
 
 /// ReclaimShipSlot (CS:51FD): SI = the first ship slot whose blip is not drawn; when every one has a blip, one of slots 4-19 at
 /// random, removed (DI = SI).
@@ -128,6 +120,20 @@ struct SlotSearch
   std::uint16_t slot; ///< its offset; when none was, the offset past the last one looked at, where the original leaves SI
 };
 
+/// What IsObjectNear finds of a slot.
+struct NearTest
+{
+  bool nearby;                              ///< each 24-bit coordinate fits a signed word
+  std::optional<DashboardPixel> erasedBlip; ///< when one does not, the last pixel of the blip EraseScannerBlip erased, if it erased one
+};
+
+/// What FacePlayerWithRandomRoll gives a slot.
+struct RandomRollFacing
+{
+  Angles heading;     ///< FacePlayer's pitch and yaw
+  std::uint16_t roll; ///< the random word NextRandom drew for the roll
+};
+
 /// What IsStation finds of a slot.
 struct StationTest
 {
@@ -142,6 +148,9 @@ void AddToCoordinate(ObjectSlot _slot, int _axis, std::int16_t _value);
 
 /// ClearObjectSlot (CS:2FD8): the 64 bytes of the slot at _slot zeroed, byte by byte.
 void ClearObjectSlot(GameState& _state, std::uint16_t _slot);
+
+/// IsObjectNear (CS:3B9A): whether each 24-bit coordinate of _slot fits a signed word; when one does not, EraseScannerBlip.
+NearTest IsObjectNear(GameState& _state, ObjectSlot _slot);
 
 /// IsSunOrPlanet (CS:3F2A): whether _slot is the sun (type 1Eh) or the planet (1Fh).
 [[nodiscard]] bool IsSunOrPlanet(const ObjectSlot& _slot);
@@ -184,6 +193,9 @@ void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _
 /// 10000) turned by pair 7, then (another scatter, what that left of the 10000) by pair 6. Its y, x and z, in that order.
 void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot);
 
+/// FacePlayerWithRandomRoll (CS:4EC5): FacePlayer, then a random word for _slot's roll.
+RandomRollFacing FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot);
+
 /// GetObjectPosition (CS:4EF4): the low words of _slot's position.
 [[nodiscard]] Vector GetObjectPosition(const ObjectSlot& _slot);
 
@@ -197,6 +209,9 @@ void RandomizeOrientation(GameState& _state, ObjectSlot _slot);
 /// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
 /// give it, in words; the slot keeps their low bytes.
 Vector ComputeVelocity(GameState& _state, ObjectSlot _slot);
+
+/// RemoveObject (CS:4F98): _slot's active bit cleared, then EraseScannerBlip. Returns the blip's last pixel, when it erased one.
+std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot);
 
 /// FacePlayer (CS:513E): _slot's heading turned to the player: ConvertVectorToAngles of GetVectorToPlayer, as its pitch, then
 /// its yaw. Returns them.
@@ -234,6 +249,7 @@ void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destina
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void ClearObjectSlotEntry(Guest& _guest);        ///< SI = the slot. Out: DI = the slot, SI = the slot + 40h, CX = 0.
+void IsObjectNearEntry(Guest& _guest);           ///< DI = the slot. Out: CF set when near; AL the last high byte looked at.
 void IsSunOrPlanetEntry(Guest& _guest);          ///< DI = the slot. Out: AL = the type; ZF set for the sun or the planet.
 void IsPlanetEntry(Guest& _guest);               ///< DI = the slot. Out: AL = the type; ZF set for the planet.
 void IsStationEntry(Guest& _guest);              ///< DI = the slot. Out: AL = the type; ZF set for a station, CF for the Dodo.
@@ -251,6 +267,7 @@ void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX
 void GetVectorToPlayerEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
 void RandomizeOrientationEntry(Guest& _guest);   ///< DI = the slot. AX clobbered.
 void ComputeVelocityEntry(Guest& _guest);        ///< DI = the slot. Out: BX = the z word; AX, DX clobbered.
+void RemoveObjectEntry(Guest& _guest);           ///< DI = the slot.
 void FacePlayerEntry(Guest& _guest);             ///< DI = the slot. Out: BP = the pitch; AX, BX, CX, DX clobbered.
 void FindFreeShipSlotEntry(Guest& _guest);       ///< Out: CF set and SI = the slot when one is free, else SI past the slots.
 void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
@@ -261,5 +278,7 @@ void IsViperTypeEntry(Guest& _guest);            ///< DI = the slot. Out: ZF set
 void IsPoliceViperEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a police Viper; AX kept.
 void IsThargoidTypeEntry(Guest& _guest);         ///< DI = the slot. Out: ZF set for a Thargoid; AX clobbered.
 void IsThargonTypeEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a Thargon; AX clobbered.
+/// DI = the slot. Out: AX = the roll, BP = the pitch; BX, CX, DX clobbered.
+void FacePlayerWithRandomRollEntry(Guest& _guest);
 
 } // namespace Elite

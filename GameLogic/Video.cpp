@@ -434,13 +434,11 @@ void DrawDiagonalLine(GameState& _state, LineState& _line)
   Plot(_state, _line.di, _line.dh, _line.dl);
 }
 
-// CS:1623: the rows were doubled to clip; DrawLine takes them halved, in DH and CH.
-void DrawHalvedRows(Guest& _guest)
+// CS:1623: the rows were doubled to clip; DrawLine takes them halved (MOV DH,BL / MOV CH,AL / SHR DH,1 / SHR CH,1). Returns
+// what DrawLine returns.
+bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDoubledRow, std::uint8_t _toX, std::uint8_t _toDoubledRow)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SetHigh(regs.dx, static_cast<std::uint8_t>(Low(regs.bx) >> 1));
-  SetHigh(regs.cx, static_cast<std::uint8_t>(Low(regs.ax) >> 1));
-  DrawLineEntry(_guest);
+  return DrawLine(_state, _fromX, static_cast<std::uint8_t>(_fromDoubledRow >> 1), _toX, static_cast<std::uint8_t>(_toDoubledRow >> 1));
 }
 
 // The clip routines' result: CF and ZF, the flags their contract names.
@@ -1745,6 +1743,9 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
 void DrawClippedLine(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  // CS:1623 on the endpoints as they stand, DL, BL and CL, AL, and what DrawLine leaves of ES and the direction flag.
+  const auto drawHalvedRows = [&_guest, &regs]
+  { DrawLineOut(_guest, DrawHalvedRows(_guest.State(), Low(regs.dx), Low(regs.bx), Low(regs.cx), Low(regs.ax))); };
   regs.bp = 0;
   regs.bx = static_cast<std::uint16_t>(regs.bx << 1);
   regs.ax = static_cast<std::uint16_t>(regs.ax << 1);
@@ -1765,7 +1766,7 @@ void DrawClippedLine(Guest& _guest)
     SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.bx) | High(regs.dx)));
     if (High(regs.ax) == 0)
     {
-      DrawHalvedRows(_guest);
+      drawHalvedRows();
       return;
     }
     ++regs.bp;
@@ -1774,7 +1775,7 @@ void DrawClippedLine(Guest& _guest)
   ClipLineToLowEdge(_guest);
   if (Flag(regs, FLAG_ZERO))
   {
-    DrawHalvedRows(_guest);
+    drawHalvedRows();
     return;
   }
   if (!Flag(regs, FLAG_CARRY))
@@ -1788,7 +1789,7 @@ void DrawClippedLine(Guest& _guest)
   std::swap(regs.dx, regs.bx);
   if (Flag(regs, FLAG_ZERO))
   {
-    DrawHalvedRows(_guest);
+    drawHalvedRows();
     return;
   }
   if (!Flag(regs, FLAG_CARRY))
@@ -1807,7 +1808,7 @@ void DrawClippedLine(Guest& _guest)
   regs.dx = static_cast<std::uint16_t>(regs.dx + HIGH_EDGE);
   if (Flag(regs, FLAG_ZERO))
   {
-    DrawHalvedRows(_guest);
+    drawHalvedRows();
     return;
   }
   std::swap(regs.cx, regs.ax);
@@ -1823,7 +1824,7 @@ void DrawClippedLine(Guest& _guest)
   regs.dx = static_cast<std::uint16_t>(regs.dx + HIGH_EDGE);
   std::swap(regs.cx, regs.ax);
   std::swap(regs.dx, regs.bx);
-  DrawHalvedRows(_guest);
+  drawHalvedRows();
 }
 
 void ClipLineToLowEdge(Guest& _guest)
@@ -2498,14 +2499,20 @@ void PlotPixelEntry(Guest& _guest)
 
 void DrawLineEntry(Guest& _guest)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (DrawLine(_guest.State(), Low(regs.dx), High(regs.dx), Low(regs.cx), High(regs.cx)))
+  const Machine::Registers& regs = _guest.Regs();
+  DrawLineOut(_guest, DrawLine(_guest.State(), Low(regs.dx), High(regs.dx), Low(regs.cx), High(regs.cx)));
+  _guest.Clobber(DRAWS_LINE);
+}
+
+void DrawLineOut(Guest& _guest, bool _filled)
+{
+  if (_filled)
   {
     // MOV BX,DS / MOV ES,BX / CLD, before the horizontal line's REP STOSB.
+    Machine::Registers& regs = _guest.Regs();
     regs.es = regs.ds;
     _guest.SetFlag(FLAG_DIRECTION, false);
   }
-  _guest.Clobber(DRAWS_LINE);
 }
 
 void FillSpanEntry(Guest& _guest)

@@ -30,10 +30,6 @@ void ShowShortRangeChart(Guest& _guest);
 /// SelectSystemAtCursor (CS:1199): the system nearest the cursor, its distance, its data and its name.
 void SelectSystemAtCursor(Guest& _guest);
 
-/// FindNearestSystem (CS:1292): the charted system nearest the cursor into selectedSystemIndex and
-/// systemSeed0-2, and the cursor onto it.
-void FindNearestSystem(Guest& _guest);
-
 /// ShowNearestSystemDistance (CS:1341): the charted system nearest the cursor selected, and its distance and name
 /// on the lines under the chart. Clobbers AX, BX, CX, DX, SI, DI, BP.
 void ShowNearestSystemDistance(Guest& _guest);
@@ -50,10 +46,6 @@ void DrawChartItems(Guest& _guest);
 /// (WaitForScreenExitKey, CS:60B4), which selects the system at the chart cursor again. Waits for keys. Out: AX the
 /// closing key.
 void ShowSystemDataScreen(Guest& _guest);
-
-/// ShowSystemDescription (CS:6FC0): the selected system's description, expanded and word-wrapped onto
-/// the text screen.
-void ShowSystemDescription(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -156,6 +148,12 @@ void LoadGalaxySeeds(GameState& _state);
 /// MoveCursorToSystem (CS:1146): chartCursorX/Y onto the system in systemSeeds.
 void MoveCursorToSystem(GameState& _state);
 
+/// FindNearestSystem (CS:1292): the system nearest the chart cursor, by dx^2 + (dy/2)^2 in chart units, of those on the
+/// current chart: its index into selectedSystemIndex, its seeds into systemSeed0-2, and the cursor onto it. A distance whose
+/// sum carries is passed over. The index is 100h less the count the original's loop had left at the system, or, when no system
+/// is on the chart, less _countIfNone, what the original finds in BP. Returns the index.
+std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone);
+
 /// ComputeDistanceToSystem (CS:12F9): the distance from the current system to the one in systemSeeds, in
 /// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedDistanceTenthsLy.
 std::uint16_t ComputeDistanceToSystem(GameState& _state);
@@ -196,6 +194,11 @@ std::uint8_t TerminateSelectedSystemName(GameState& _state);
 /// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, ending at DS:7D5F.
 /// Returns the offset of the first digit.
 std::uint16_t FormatSelectedSystemDistance(GameState& _state);
+
+/// ShowSystemDescription (CS:6FC0): descriptionBuffer zeroed a word at a time as REP STOSW does, backwards when _backward
+/// (the direction flag), the selected system's description expanded into it from descriptionTemplate, and printed on the text
+/// page from row 19, word-wrapped at the last space within 36 characters.
+void ShowSystemDescription(GameState& _state, bool _backward);
 
 /// ExpandDescriptionText (CS:700F): the coded text at DS:_text expanded into DS:_output, recursively: a byte of
 /// 1-31 runs the control code's handler from textControlCodes, one of 80h up a phrase from descriptionPhraseLists
@@ -242,6 +245,7 @@ void TwistSystemSeedsEntry(Guest& _guest);
 void LoadGalaxySeedsEntry(Guest& _guest);
 void GetCursorGalaxyPositionEntry(Guest& _guest);
 void MoveCursorToSystemEntry(Guest& _guest);
+void FindNearestSystemEntry(Guest& _guest); ///< In: BP, the count when no system is on the chart.
 void ComputeDistanceToSystemEntry(Guest& _guest);
 void LoadSystemSeedsEntry(Guest& _guest); ///< In: CL the system. Out: CX = 0.
 void AdvanceToNextSystemEntry(Guest& _guest);
@@ -253,6 +257,7 @@ void ChartItemOverlapsEntry(Guest& _guest);
 void ClearChartTextLinesEntry(Guest& _guest); ///< In: BX the ink, ES the screen.
 void TerminateSelectedSystemNameEntry(Guest& _guest);
 void FormatSelectedSystemDistanceEntry(Guest& _guest);
+void ShowSystemDescriptionEntry(Guest& _guest);
 void ExpandDescriptionTextEntry(Guest& _guest); ///< In: SI the coded text, DI the output. Out: SI past its NUL, DI past the output.
 void InsertSystemNameEntry(Guest& _guest);      ///< In: DI the output. Out: DI past it.
 void InsertSystemAdjectiveEntry(Guest& _guest); ///< In: DI the output. Out: DI past it.
