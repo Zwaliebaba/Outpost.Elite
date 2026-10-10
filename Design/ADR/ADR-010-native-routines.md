@@ -12,7 +12,8 @@ It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 re
 - a compared call leaves the original's whole outcome (item 4);
 - constructed tests' coverage is measured, and CI checks coverage (item 5);
 - a routine that waits only sometimes is compared when its original does not wait (item 8);
-- native code that waits where it cannot stops the run (item 8).
+- native code that waits where it cannot stops the run (item 8);
+- a routine that always waits is accepted on the digests, with the coverage of interpreted runs (item 5).
 
 ## Context
 
@@ -98,6 +99,15 @@ A call whose original cannot be undone is not compared: its outcome stands, and 
 - `GameLogicTests` for each corpus replay and each constructed test, under the system's temporary directory.
 
 `Tools/RoutineCoverage.py` checks all of them against MapReference's static walk, and CI runs it after the tests. A constructed input is therefore measured rather than listed, and `Design/NativeCoverage.tsv` holds only reasons.
+
+**A routine that always waits is accepted on the digests.** It is never compared on its own (item 8). What shows that it does what the original did is a native run that reproduces an interpreted run's digests from the same inputs. Its coverage is read accordingly:
+
+- **Its instructions** are those of the routine and of what it alone calls or runs into, stopping at any other hooked entry, which answers for itself.
+- **Each must have run in such an interpreted run.** An offsets file records the instructions an interpreted run started:
+  - GameLogicTests writes one for each corpus replay, from the interpreted run whose digests the native runs must reproduce;
+  - `ReferenceRunner --coverage` writes one for a run.
+- **`TwinRig` reaches the states no replay does.** It boots the reference twice, interpreted and native with every call of a work routine compared. It gives both the same memory and the same keys, and requires every digest, and the state both end in, to agree. It writes the interpreted twin's offsets and the native twin's report.
+- **For every other routine,** the instructions it answers for stop at a routine that always waits.
 
 **Measured 2026-10-10 for 262 entries:** 231 covered and 31 with reasons, 1,879 instructions explained. The reasons are of four kinds:
 

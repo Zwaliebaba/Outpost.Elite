@@ -6,6 +6,7 @@
 #include "Replay.h"
 
 #include <fstream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -32,6 +33,26 @@ inline void SaveNativeReport(std::string_view _name, const Machine::NativeCode& 
     std::filesystem::create_directories(directory, error);
     std::ofstream report(directory / (std::string(_name) + ".tsv"), std::ios::trunc);
     Elite::WriteNativeReport(_native, report);
+  }
+  catch (...)
+  {
+    return;
+  }
+}
+
+/// Writes what an interpreted run executed, from the execution map Cpu::SetExecutionMap filled, as
+/// NativeReportDirectory()/_name.offsets: what RoutineCoverage credits to a routine that waits when a
+/// native run reproduces that run's digests. One that cannot be written is left out.
+inline void SaveExecutedOffsets(std::string_view _name, std::span<const std::uint8_t> _executionMap,
+                                const Machine::LoadedProgram& _program) noexcept
+{
+  try
+  {
+    const std::filesystem::path directory = NativeReportDirectory();
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    std::ofstream offsets(directory / (std::string(_name) + ".offsets"), std::ios::trunc);
+    Elite::WriteExecutedOffsets(_executionMap, _program, offsets);
   }
   catch (...)
   {

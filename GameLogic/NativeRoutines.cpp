@@ -91,14 +91,27 @@ std::size_t NativeRoutineCount() noexcept
 
 void WriteNativeReport(const Machine::NativeCode& _native, std::ostream& _out)
 {
-  _out << "entry\troutine\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
+  _out << "entry\troutine\twait\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
   for (const auto& [linear, hook] : _native.Hooks())
   {
     std::string executed;
     for (const std::uint16_t offset : hook.executed.Offsets())
       executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);
-    _out << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, hook.calls, hook.verified, hook.unverifiable,
+    const std::string_view wait = hook.wait == Machine::NativeWait::Never       ? "never"
+                                  : hook.wait == Machine::NativeWait::Sometimes ? "sometimes"
+                                                                                : "always";
+    _out << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, wait, hook.calls, hook.verified, hook.unverifiable,
                         hook.mismatches, executed);
+  }
+}
+
+void WriteExecutedOffsets(std::span<const std::uint8_t> _executionMap, const Machine::LoadedProgram& _program, std::ostream& _out)
+{
+  const std::uint32_t base = Machine::Memory::Linear(_program.loadSegment, 0);
+  for (std::uint32_t offset = 0; offset < CODE_SEGMENT_BYTES && base + offset < _executionMap.size(); ++offset)
+  {
+    if (_executionMap[base + offset] != 0)
+      _out << std::format("{:04X}\n", offset);
   }
 }
 

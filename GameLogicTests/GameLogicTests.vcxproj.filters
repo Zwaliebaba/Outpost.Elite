@@ -72,6 +72,9 @@
     <ClInclude Include="ReferenceRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>
+    <ClInclude Include="TwinRig.h">
+      <Filter>Rigs</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AiTests.cpp">
@@ -130,6 +133,9 @@
     </ClCompile>
     <ClCompile Include="TimerTests.cpp">
       <Filter>Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="TwinRigTests.cpp">
+      <Filter>Rigs</Filter>
     </ClCompile>
     <ClCompile Include="VideoTests.cpp">
       <Filter>Video</Filter>

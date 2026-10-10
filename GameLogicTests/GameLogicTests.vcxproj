@@ -86,6 +86,7 @@
     <ClInclude Include="ComparisonRig.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="ReferenceRig.h" />
+    <ClInclude Include="TwinRig.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AiTests.cpp" />
@@ -109,6 +110,7 @@
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
     <ClCompile Include="TimerTests.cpp" />
+    <ClCompile Include="TwinRigTests.cpp" />
     <ClCompile Include="VideoTests.cpp" />
   </ItemGroup>
   <ItemGroup>
