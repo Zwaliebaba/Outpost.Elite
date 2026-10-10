@@ -50,7 +50,7 @@ void AssertExecuted(ComparisonRig& _rig, std::uint16_t _entry, std::initializer_
     for (int shift = 12; shift >= 0; shift -= 4)
       message += DIGITS[static_cast<std::size_t>((offset >> shift) & 0xF)];
     message += L" was not executed";
-    Assert::IsTrue(found->second.executed.count(offset) == 1, message.c_str());
+    Assert::IsTrue(found->second.executed.Contains(offset), message.c_str());
   }
 }
 

@@ -462,7 +462,7 @@ void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_
     Step();
     if (covered && m_cpu.HardwareInterruptCount() == interrupts)
     {
-      _original->executed.insert(offset);
+      _original->executed.push_back(offset);
     }
     if (Stopped() != StopReason::Reached)
     {
@@ -517,7 +517,10 @@ void Pc::Compare(NativeCode::Hook& _hook)
     return;
   }
   // From here the call is compared, so what the original ran counts towards its coverage.
-  _hook.executed.insert(work.executed.begin(), work.executed.end());
+  for (const std::uint16_t offset : work.executed)
+  {
+    _hook.executed.Insert(offset);
+  }
   const Registers original = regs;
   const std::uint64_t changes = m_memory.ChangeCount();
   const LoopTurn turn = m_lastTurn;

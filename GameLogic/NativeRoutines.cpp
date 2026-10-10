@@ -95,7 +95,7 @@ void WriteNativeReport(const Machine::NativeCode& _native, std::ostream& _out)
   for (const auto& [linear, hook] : _native.Hooks())
   {
     std::string executed;
-    for (const std::uint16_t offset : hook.executed)
+    for (const std::uint16_t offset : hook.executed.Offsets())
       executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);
     _out << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, hook.calls, hook.verified, hook.unverifiable,
                         hook.mismatches, executed);

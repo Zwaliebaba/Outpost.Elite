@@ -6,10 +6,11 @@
 #include "Registers.h"
 #include "Timing.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
-#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -62,6 +63,30 @@ enum class NativeWait : std::uint8_t
   Always     ///< it waits as a rule, or never returns: it runs on the native thread and is never compared, what it calls is
 };
 
+/// A set of offsets in one segment, kept as a bitmap: a hook's coverage, which a comparison adds to for
+/// every instruction the original runs.
+class OffsetSet
+{
+public:
+  void Insert(std::uint16_t _offset) noexcept
+  {
+    m_words[_offset / WORD_BITS] |= std::uint64_t{1} << (_offset % WORD_BITS);
+  }
+
+  [[nodiscard]] bool Contains(std::uint16_t _offset) const noexcept
+  {
+    return (m_words[_offset / WORD_BITS] & (std::uint64_t{1} << (_offset % WORD_BITS))) != 0;
+  }
+
+  /// Every offset in the set, lowest first.
+  [[nodiscard]] std::vector<std::uint16_t> Offsets() const;
+
+private:
+  static constexpr std::size_t WORD_BITS = 64;
+
+  std::array<std::uint64_t, 0x10000 / WORD_BITS> m_words{};
+};
+
 /// A routine in C++ that stands in for the program's own code at an entry (ADR-010). It is entered as
 /// the original is, with CS:IP at the entry and the caller's return address on the stack, and leaves
 /// the way the original does: through Pc::ReturnNear, or whatever return the original makes.
@@ -86,8 +111,7 @@ public:
     std::uint64_t verified = 0;     ///< calls run both ways that agreed
     std::uint64_t unverifiable = 0; ///< calls whose original could not be undone: it waited, took an interrupt or called the services
     std::uint64_t mismatches = 0;   ///< calls run both ways that did not agree
-    std::set<std::uint16_t>
-      executed; ///< offsets in the entry's segment the original ran in calls that were compared, its callees' included
+    OffsetSet executed;             ///< offsets in the entry's segment the original ran in calls that were compared, its callees' included
   };
 
   /// One call where the native routine and the original did not agree.
@@ -170,7 +194,7 @@ public:
   /// memory; _memory, the native outcome.
   [[nodiscard]] std::string Compare(const Hook& _hook, const Registers& _original, const Registers& _native,
                                     const WriteJournal& _originalWrites, std::span<const std::uint8_t> _originalAfter,
-                                    const WriteJournal& _nativeWrites, const Memory& _memory) const;
+                                    const WriteJournal& _nativeWrites, const Memory& _memory);
 
   void AddMismatch(Mismatch _mismatch);
   void SetOverran(std::string_view _routine)
@@ -186,6 +210,7 @@ private:
   std::map<std::uint32_t, Hook> m_hooks;
   std::vector<Mismatch> m_mismatches;
   std::uint32_t m_stackFloor = 0;
+  std::vector<std::uint8_t> m_marks; // a byte per address: changed by a run Compare is looking at
   std::string m_overran;
   bool m_verifying = false;
 };

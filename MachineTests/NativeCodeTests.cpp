@@ -190,7 +190,7 @@ public:
     Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()});
     Assert::AreEqual(std::uint64_t{1}, rig.Books().verified);
     Assert::IsTrue(rig.Host().Native().Mismatches().empty());
-    Assert::IsTrue(rig.Books().executed.count(ROUTINE) == 1, L"the original's instructions are covered");
+    Assert::IsTrue(rig.Books().executed.Contains(ROUTINE), L"the original's instructions are covered");
   }
 
   // A routine that disagrees is reported, and the run carries on from the original's outcome.

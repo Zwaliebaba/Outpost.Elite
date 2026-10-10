@@ -2,6 +2,7 @@
 
 #include "NativeCode.h"
 
+#include <algorithm>
 #include <format>
 #include <stdexcept>
 #include <utility>
@@ -36,6 +37,20 @@ constexpr std::array<NamedRegister, 13> NAMED_REGISTERS = {{
 }};
 
 } // namespace
+
+std::vector<std::uint16_t> OffsetSet::Offsets() const
+{
+  std::vector<std::uint16_t> offsets;
+  for (std::size_t word = 0; word < m_words.size(); ++word)
+  {
+    for (std::size_t bit = 0; bit < WORD_BITS; ++bit)
+    {
+      if ((m_words[word] & (std::uint64_t{1} << bit)) != 0)
+        offsets.push_back(static_cast<std::uint16_t>(word * WORD_BITS + bit));
+    }
+  }
+  return offsets;
+}
 
 void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine,
                      const NativeContract& _contract, NativeReturn _exit, NativeWait _wait)
@@ -72,7 +87,7 @@ void NativeCode::AddMismatch(Mismatch _mismatch)
 
 std::string NativeCode::Compare(const Hook& _hook, const Registers& _original, const Registers& _native,
                                 const WriteJournal& _originalWrites, std::span<const std::uint8_t> _originalAfter,
-                                const WriteJournal& _nativeWrites, const Memory& _memory) const
+                                const WriteJournal& _nativeWrites, const Memory& _memory)
 {
   std::vector<std::string> differences;
   std::size_t total = 0;
@@ -99,28 +114,48 @@ std::string NativeCode::Compare(const Hook& _hook, const Registers& _original, c
   }
 
   // What each byte either run changed must hold: the original's last value, or, for a byte only the
-  // native routine changed, what it held before both.
-  std::map<std::uint32_t, std::uint8_t> expected;
+  // native routine changed, what it held before both, which its first journal entry records. Below SP,
+  // the stack is dead once the routine has returned. Each byte is marked as it is checked, so that a
+  // byte the native routine also changed, or changed twice, is checked once; the marks are cleared after.
+  const std::uint32_t deadFrom = m_stackFloor;
+  const std::uint32_t deadTo = m_stackFloor == 0 ? 0 : Memory::Linear(_native.ss, _native.sp);
+  m_marks.resize(Memory::SIZE_BYTES, 0);
+  std::vector<std::pair<std::uint32_t, std::uint8_t>> wrong; // address, and what it should hold
+  const auto check = [&](std::uint32_t _linear, std::uint8_t _expected)
+  {
+    if (m_marks[_linear] != 0)
+    {
+      return;
+    }
+    m_marks[_linear] = 1;
+    const bool dead = _linear >= deadFrom && _linear < deadTo;
+    if (!dead && _memory.Read8(_linear) != _expected)
+    {
+      wrong.emplace_back(_linear, _expected);
+    }
+  };
   const std::span<const WriteJournal::Entry> originalEntries = _originalWrites.Entries();
   for (std::size_t index = 0; index < originalEntries.size(); ++index)
   {
-    expected[originalEntries[index].linear] = _originalAfter[index];
+    check(originalEntries[index].linear, _originalAfter[index]);
   }
-  for (const WriteJournal::Entry& entry : _nativeWrites.Entries())
+  const std::span<const WriteJournal::Entry> nativeEntries = _nativeWrites.Entries();
+  for (const WriteJournal::Entry& entry : nativeEntries)
   {
-    expected.try_emplace(entry.linear, entry.before);
+    check(entry.linear, entry.before);
   }
-  // Below SP, the stack is dead once the routine has returned.
-  const std::uint32_t deadFrom = m_stackFloor;
-  const std::uint32_t deadTo = m_stackFloor == 0 ? 0 : Memory::Linear(_native.ss, _native.sp);
-  for (const auto& [linear, value] : expected)
+  for (const WriteJournal::Entry& entry : originalEntries)
   {
-    const bool dead = linear >= deadFrom && linear < deadTo;
-    const std::uint8_t actual = _memory.Read8(linear);
-    if (!dead && actual != value)
-    {
-      note(std::format("byte {:05X}h {:02X}, original {:02X}", linear, actual, value));
-    }
+    m_marks[entry.linear] = 0;
+  }
+  for (const WriteJournal::Entry& entry : nativeEntries)
+  {
+    m_marks[entry.linear] = 0;
+  }
+  std::sort(wrong.begin(), wrong.end());
+  for (const auto& [linear, value] : wrong)
+  {
+    note(std::format("byte {:05X}h {:02X}, original {:02X}", linear, _memory.Read8(linear), value));
   }
 
   std::string text;

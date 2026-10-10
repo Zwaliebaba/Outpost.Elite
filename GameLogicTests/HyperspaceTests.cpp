@@ -63,7 +63,7 @@ void AssertExecuted(ComparisonRig& _rig, std::uint16_t _entry, std::initializer_
   for (const std::uint16_t offset : _offsets)
   {
     const std::wstring message = Hex(offset) + L" ran in a comparison";
-    Assert::IsTrue(found->second.executed.contains(offset), message.c_str());
+    Assert::IsTrue(found->second.executed.Contains(offset), message.c_str());
   }
 }
 

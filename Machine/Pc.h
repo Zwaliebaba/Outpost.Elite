@@ -19,10 +19,10 @@
 #include <exception>
 #include <memory>
 #include <semaphore>
-#include <set>
 #include <span>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace Machine
 {
@@ -276,8 +276,8 @@ private:
     WriteJournal nativeWrites{NativeCode::JOURNAL_CAPACITY};
     std::vector<std::uint8_t> originalAfter;
     std::vector<PortRouter::Access> originalPorts;
-    std::uint16_t segment = 0;        // the compared entry's code segment
-    std::set<std::uint16_t> executed; // offsets in it the original ran
+    std::uint16_t segment = 0;           // the compared entry's code segment
+    std::vector<std::uint16_t> executed; // offsets in it the original ran, in order and repeated
     bool active = false;
   };
 

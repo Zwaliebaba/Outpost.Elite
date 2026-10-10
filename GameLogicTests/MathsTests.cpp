@@ -33,7 +33,7 @@ void AssertExecuted(ComparisonRig& _rig, std::uint16_t _entry, std::initializer_
   Assert::IsTrue(found != hooks.end(), L"the routine is ported");
   for (const std::uint16_t offset : _offsets)
   {
-    Assert::IsTrue(found->second.executed.contains(offset), (L"reached CS:" + std::to_wstring(offset)).c_str());
+    Assert::IsTrue(found->second.executed.Contains(offset), (L"reached CS:" + std::to_wstring(offset)).c_str());
   }
 }
 
