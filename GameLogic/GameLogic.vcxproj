@@ -99,6 +99,7 @@
     <ClInclude Include="Pacing.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Reference.h" />
+    <ClInclude Include="ReferenceImage.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="Scene.h" />
@@ -129,6 +130,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Reference.cpp" />
+    <ClCompile Include="ReferenceImage.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
