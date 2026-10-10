@@ -31,10 +31,6 @@ void ClipLineToLowEdge(Guest& _guest);
 /// 0FFh from the clipped coordinates.
 void ClipLineToHighEdge(Guest& _guest);
 
-/// DrawDisc (CS:1826): a filled disc of radius BX at (DX, CX), signed words, with a ragged edge while
-/// sunFringeMask is set. Everything but DS clobbered; ES=DS.
-void DrawDisc(Guest& _guest);
-
 /// DrawCircle (CS:1AC1): 32 chords round (CX, DX) with radius BL, through DrawClippedLine. Everything but
 /// DS clobbered.
 void DrawCircle(Guest& _guest);
@@ -47,10 +43,6 @@ void FillTriangle(Guest& _guest);
 /// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly inside the buffer, entered with SI
 /// = A's x and the rows doubled.
 void FillClippedTriangle(Guest& _guest);
-
-/// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then 0. The registers come back as DrawDisc
-/// leaves them.
-void DrawTitlePlanet(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -92,6 +84,11 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
 /// Returns whether it filled whole bytes of a horizontal line with REP STOSB, for which the original sets ES to DS and clears
 /// the direction flag first.
 bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow);
+
+/// DrawDisc (CS:1826): a disc of radius _radius filled at (_centerX, _centerRow), signed words, in colorFillBytes[drawColor & 3],
+/// which it keeps as discFillByte. Below radius 5, a sprite from smallDiscSprites clipped to the buffer; from 5, the rows of
+/// circleProfile scaled to the radius, each FillSpan, with a ragged edge while sunFringeMask is set.
+void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward);
 
 /// FillSpan (CS:1A07): row _doubledRow / 2 of the drawing buffer filled with discFillByte from x = _left to x = _right, the
 /// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
@@ -137,6 +134,9 @@ void SetGraphicsMode(Hardware& _hardware);
 /// so that attribute bit 7 is a bright background.
 void SetTextMode(Hardware& _hardware);
 
+/// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then sunFringeMask 0.
+void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
@@ -161,6 +161,7 @@ void DrawLineEntry(Guest& _guest);        ///< DL, DH to CL, CH. Out: ES = DS an
 /// horizontal line's REP STOSB. For the entries and the register code of the routines that call it, whose originals go on
 /// with them.
 void DrawLineOut(Guest& _guest, bool _filled);
+void DrawDiscEntry(Guest& _guest);        ///< BX = the radius, DX, CX the centre. Out: ES = DS. AX, BX, CX, DX, SI, DI, BP clobbered.
 void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
 void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
 void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.
@@ -174,5 +175,6 @@ void ShowCockpitScreenEntry(Guest& _guest);
 void DrawChartFrameEntry(Guest& _guest);  ///< Out: ES = B800h once it draws. Every other register but DS clobbered.
 void SetGraphicsModeEntry(Guest& _guest); ///< AX, BX, DX clobbered.
 void SetTextModeEntry(Guest& _guest);     ///< AX, DX clobbered.
+void DrawTitlePlanetEntry(Guest& _guest); ///< BX = the radius, DX, CX the centre. Out: ES = DS. AX, BX, CX, DX, SI, DI, BP clobbered.
 
 } // namespace Elite

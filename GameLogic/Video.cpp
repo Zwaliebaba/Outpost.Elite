@@ -572,62 +572,38 @@ struct DiscRowEdges
   return edges;
 }
 
-// What a disc's row routine finds of a row: its edges, and, when it drew, the offset of the last byte FillSpan wrote.
-struct DiscRow
-{
-  DiscRowEdges edges;
-  std::optional<std::uint16_t> lastByte;
-};
-
 // CS:18EE: the row _upperRow (2*row, moving up) alone, from the profile byte at DS:_profile, while it is on the buffer.
-[[nodiscard]] std::optional<DiscRow> DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _upperRow, bool _backward)
+void DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _upperRow, bool _backward)
 {
   if (High(_upperRow) != 0)
   {
-    return std::nullopt;
+    return;
   }
   const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
-  if (!edges.visible)
+  if (edges.visible)
   {
-    return DiscRow{edges, std::nullopt};
+    (void)FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
   }
-  return DiscRow{edges, FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward)};
 }
 
 // CS:187B: the rows _lowerRow (moving down) and _upperRow (moving up), as 2*row, one half-width for both; the upper while it
 // is on the buffer.
-[[nodiscard]] DiscRow DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow,
-                                      bool _backward)
+void DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow, bool _backward)
 {
   const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
   if (!edges.visible)
   {
-    return DiscRow{edges, std::nullopt};
+    return;
   }
-  std::uint16_t lastByte = FillSpan(_state, Low(edges.left), Low(edges.right), Low(_lowerRow), _backward);
+  (void)FillSpan(_state, Low(edges.left), Low(edges.right), Low(_lowerRow), _backward);
   if (High(_upperRow) == 0)
   {
-    lastByte = FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
-  }
-  return DiscRow{edges, lastByte};
-}
-
-// What DrawDisc's row routines leave in the registers: AX the right edge and DX the left, with DH the right's low byte once
-// the row is on the buffer (MOV DH,AL), and DI the last byte FillSpan wrote.
-void DiscRowOut(Machine::Registers& _regs, const DiscRow& _row) noexcept
-{
-  _regs.ax = _row.edges.right;
-  _regs.dx = _row.edges.visible ? Join(Low(_row.edges.right), Low(_row.edges.left)) : _row.edges.left;
-  if (_row.lastByte)
-  {
-    _regs.di = *_row.lastByte;
+    (void)FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
   }
 }
 
 // Where DrawSmallDisc (CS:194B) puts a disc of radius 0-4: a 4-row sprite from smallDiscSprites, clipped a byte at a
-// time at the left and right edges and a row at a time at the top and bottom. Its fields hold what the original works out
-// before its row loop, as far as it gets: AX is rows and clip, BX sprite, CX row and DX x when the sprite is wholly off
-// the buffer.
+// time at the left and right edges and a row at a time at the top and bottom.
 struct SmallDiscPlace
 {
   std::uint16_t x;      // the sprite's left x: the centre's less half the radius, 4 on when that is left of the buffer
@@ -636,16 +612,6 @@ struct SmallDiscPlace
   std::uint8_t rows;    // the rows to draw, 4 less those off the top or the bottom
   std::uint8_t clip;    // a bit pair a row: bit 0 when only the sprite's right byte is drawn, bit 1 when only its left
   bool onBuffer;        // false when the sprite is wholly off the buffer, and nothing is drawn
-};
-
-// Where DrawSmallDisc's row loop stops, which the original leaves in the registers.
-struct SmallDiscEnd
-{
-  std::uint16_t next;   // DI: the buffer offset below the last row drawn
-  std::uint16_t sprite; // BX: the sprite byte after the last row drawn
-  std::uint16_t bits;   // AX: the last row's bits, shifted into place, and in the fill the bytes it drew of them
-  std::uint8_t clip;    // DH: the clip bits after their last turn
-  std::uint8_t shift;   // DL: the sprite's shift into its first byte, 2 bits a pixel
 };
 
 // CS:194B-19AA: where the sprite of a disc of radius _radius goes for the centre (_centerX, _centerRow).
@@ -710,46 +676,45 @@ struct SmallDiscEnd
 
 // DrawSmallDisc (CS:19AB-1A06): the sprite _place gives, in discFillByte, a row at a time from its top: each byte ANDed
 // out and then ORed in, the both bytes of a row as words, as the original writes them.
-[[nodiscard]] SmallDiscEnd DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
+void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 {
-  SmallDiscEnd end{static_cast<std::uint16_t>(Join(Low(_place.row), Low(_place.x)) >> 2), _place.sprite, Join(_place.clip, _place.rows),
-                   _place.clip, static_cast<std::uint8_t>((Low(_place.x) & 3) << 1)};
+  std::uint16_t at = static_cast<std::uint16_t>(Join(Low(_place.row), Low(_place.x)) >> 2);
+  std::uint16_t sprite = _place.sprite;
+  std::uint8_t clip = _place.clip;
+  // The sprite's shift into its first byte, 2 bits a pixel.
+  const auto shift = static_cast<std::uint8_t>((Low(_place.x) & 3) << 1);
   const std::uint8_t fill = _state.Get(DS.discFillByte);
   for (std::uint8_t rows = _place.rows; rows != 0; --rows)
   {
-    end.bits = static_cast<std::uint16_t>(Join(_state.Byte(end.sprite), 0) >> end.shift);
-    end.sprite = Offset(end.sprite, 1);
-    const bool rightOnly = (end.clip & 1) != 0;
-    end.clip = RotateRight(end.clip, 1);
+    const auto bits = static_cast<std::uint16_t>(Join(_state.Byte(sprite), 0) >> shift);
+    sprite = Offset(sprite, 1);
+    const bool rightOnly = (clip & 1) != 0;
+    clip = RotateRight(clip, 1);
     if (rightOnly)
     {
-      end.clip = RotateRight(end.clip, 1);
-      Plot(_state, end.next, static_cast<std::uint8_t>(~Low(end.bits)), static_cast<std::uint8_t>(Low(end.bits) & fill));
-      SetLow(end.bits, static_cast<std::uint8_t>(Low(end.bits) & fill));
+      clip = RotateRight(clip, 1);
+      Plot(_state, at, static_cast<std::uint8_t>(~Low(bits)), static_cast<std::uint8_t>(Low(bits) & fill));
     }
     else
     {
-      const bool leftOnly = (end.clip & 1) != 0;
-      end.clip = RotateRight(end.clip, 1);
+      const bool leftOnly = (clip & 1) != 0;
+      clip = RotateRight(clip, 1);
       if (leftOnly)
       {
-        Plot(_state, end.next, static_cast<std::uint8_t>(~High(end.bits)), static_cast<std::uint8_t>(High(end.bits) & fill));
-        SetHigh(end.bits, static_cast<std::uint8_t>(High(end.bits) & fill));
+        Plot(_state, at, static_cast<std::uint8_t>(~High(bits)), static_cast<std::uint8_t>(High(bits) & fill));
       }
       else
       {
         // Both bytes, as a word, the sprite's left byte at the lower address: AND WORD [DI] with the bits' complement,
         // then OR WORD [DI] with the bits in the fill.
-        const std::uint16_t word = SwapBytes(end.bits);
-        end.bits = static_cast<std::uint16_t>(word & Join(fill, fill));
-        const auto kept = static_cast<std::uint16_t>(_state.Word(end.next) & ~word);
-        _state.SetWord(end.next, kept);
-        _state.SetWord(end.next, static_cast<std::uint16_t>(kept | end.bits));
+        const std::uint16_t word = SwapBytes(bits);
+        const auto kept = static_cast<std::uint16_t>(_state.Word(at) & ~word);
+        _state.SetWord(at, kept);
+        _state.SetWord(at, static_cast<std::uint16_t>(kept | (word & Join(fill, fill))));
       }
     }
-    end.next = static_cast<std::uint16_t>(end.next + ROW_BYTES);
+    at = static_cast<std::uint16_t>(at + ROW_BYTES);
   }
-  return end;
 }
 
 // ---- Triangles ----
@@ -1888,87 +1853,56 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   return false;
 }
 
-void DrawDisc(Guest& _guest)
+void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = static_cast<std::uint16_t>(_guest.Get(DS.drawColor) & 3);
-  regs.di = DS.colorFillBytes.At(regs.ax);
-  SetLow(regs.ax, _guest.Byte(regs.di));
-  _guest.Set(DS.discFillByte, Low(regs.ax));
-  regs.ax = regs.ds;
-  regs.es = regs.ax;
-  if (regs.bx < SMALL_DISC_RADIUS)
+  _state.Set(DS.discFillByte, _state.Byte(DS.colorFillBytes.At(_state.Get(DS.drawColor) & 3u)));
+  if (_radius < SMALL_DISC_RADIUS)
   {
-    // The registers as the original leaves them, which DrawSunOrPlanet's and DrawDistantStation's contracts compare: the
-    // place as far as it got when the sprite is off the buffer, else where its row loop stopped, with CX = 0 from LOOP.
-    const SmallDiscPlace place = PlaceSmallDisc(Low(regs.bx), Signed(regs.dx), Signed(regs.cx));
-    regs.ax = Join(place.clip, place.rows);
-    regs.bx = place.sprite;
-    regs.cx = place.row;
-    regs.dx = place.x;
+    const SmallDiscPlace place = PlaceSmallDisc(Low(_radius), Signed(_centerX), Signed(_centerRow));
     if (place.onBuffer)
     {
-      const SmallDiscEnd end = DrawSmallDisc(_guest.State(), place);
-      regs.ax = end.bits;
-      regs.bx = end.sprite;
-      regs.cx = 0;
-      regs.dx = Join(end.clip, end.shift);
-      regs.di = end.next;
+      DrawSmallDisc(_state, place);
     }
     return;
   }
-  regs.bx = static_cast<std::uint16_t>(regs.bx >> 1);
-  _guest.Set(DS.discRadiusRows, Low(regs.bx));
-  _guest.Set(DS.discRowsLeft, Low(regs.bx));
-  _guest.Set(DS.discCenterX, regs.dx);
-  // The step through circleProfile a row, 20000h/rows as 8.8; the fraction's low byte keeps the
-  // quotient's high byte.
-  regs.dx = 2;
-  regs.ax = 0;
-  if (regs.bx == 2)
-  {
-    regs.ax = 0xFFFF;
-  }
-  else
-  {
-    DivideWordOnRegisters(_guest, regs.bx);
-  }
-  regs.ax = SwapBytes(regs.ax);
-  _guest.Set(DS.discProfileStepFraction, regs.ax);
-  SetHigh(regs.ax, 0);
-  _guest.Set(DS.discProfileStepWhole, regs.ax);
-  regs.bp = 0;
-  regs.si = DS.circleProfile.offset;
-  regs.cx = static_cast<std::uint16_t>(regs.cx << 1);
-  regs.bx = regs.cx;
-  // CX walks down from the centre row and BX up, both as 2*row; the centre row is drawn once.
-  if (const std::optional<DiscRow> row = DrawDiscUpperRow(_guest.State(), regs.si, regs.bx, Flag(regs, FLAG_DIRECTION)))
-  {
-    DiscRowOut(regs, *row);
-  }
+  const auto rows = static_cast<std::uint16_t>(_radius >> 1);
+  _state.Set(DS.discRadiusRows, Low(rows));
+  _state.Set(DS.discRowsLeft, Low(rows));
+  _state.Set(DS.discCenterX, _centerX);
+  // The step through circleProfile a row, 20000h/rows as 8.8 (FFFFh for 2 rows, which would overflow), by XCHG AH,AL: the
+  // fraction's low byte keeps the quotient's high byte, and the whole part is that byte alone.
+  constexpr std::uint32_t PROFILE_BYTES_8_8 = 0x20000;
+  const std::uint16_t perRow = rows == 2 ? std::uint16_t{0xFFFF} : DivideWord(_state, PROFILE_BYTES_8_8, rows, rows).quotient;
+  const std::uint16_t step = SwapBytes(perRow);
+  _state.Set(DS.discProfileStepFraction, step);
+  _state.Set(DS.discProfileStepWhole, Low(step));
+  // CX walks down from the centre row and BX up, both as 2*row; the centre row is drawn once. BP holds the fraction and SI the
+  // profile byte.
+  std::uint16_t fraction = 0;
+  std::uint16_t profile = DS.circleProfile.offset;
+  auto lowerRow = static_cast<std::uint16_t>(_centerRow << 1);
+  std::uint16_t upperRow = lowerRow;
+  DrawDiscUpperRow(_state, profile, upperRow, _backward);
   for (;;)
   {
-    const std::uint32_t fraction = std::uint32_t{regs.bp} + _guest.Get(DS.discProfileStepFraction);
-    regs.bp = static_cast<std::uint16_t>(fraction);
-    regs.si = static_cast<std::uint16_t>(regs.si + _guest.Get(DS.discProfileStepWhole) + (fraction >> 16));
-    regs.bx = static_cast<std::uint16_t>(regs.bx - 2);
-    regs.cx = static_cast<std::uint16_t>(regs.cx + 2);
-    const auto rowsLeft = static_cast<std::uint8_t>(_guest.Get(DS.discRowsLeft) - 1);
-    _guest.Set(DS.discRowsLeft, rowsLeft);
+    const std::uint32_t sum = std::uint32_t{fraction} + _state.Get(DS.discProfileStepFraction);
+    fraction = static_cast<std::uint16_t>(sum);
+    profile = static_cast<std::uint16_t>(profile + _state.Get(DS.discProfileStepWhole) + (sum >> 16));
+    upperRow = static_cast<std::uint16_t>(upperRow - 2);
+    lowerRow = static_cast<std::uint16_t>(lowerRow + 2);
+    const auto rowsLeft = static_cast<std::uint8_t>(_state.Get(DS.discRowsLeft) - 1);
+    _state.Set(DS.discRowsLeft, rowsLeft);
     if (rowsLeft == 0)
     {
       return;
     }
-    if (High(regs.cx) != 0)
+    if (High(lowerRow) != 0)
     {
-      if (const std::optional<DiscRow> row = DrawDiscUpperRow(_guest.State(), regs.si, regs.bx, Flag(regs, FLAG_DIRECTION)))
-      {
-        DiscRowOut(regs, *row);
-      }
+      DrawDiscUpperRow(_state, profile, upperRow, _backward);
     }
     else
     {
-      DiscRowOut(regs, DrawDiscRowPair(_guest.State(), regs.si, regs.cx, regs.bx, Flag(regs, FLAG_DIRECTION)));
+      DrawDiscRowPair(_state, profile, lowerRow, upperRow, _backward);
     }
   }
 }
@@ -2317,11 +2251,11 @@ void SetTextMode(Hardware& _hardware)
   _hardware.SetModeControl(VIDEO_ON_BLINK_OFF);
 }
 
-void DrawTitlePlanet(Guest& _guest)
+void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward)
 {
-  _guest.Set(DS.sunFringeMask, 1);
-  DrawDisc(_guest);
-  _guest.Set(DS.sunFringeMask, 0);
+  _state.Set(DS.sunFringeMask, 1);
+  DrawDisc(_state, _radius, _centerX, _centerRow, _backward);
+  _state.Set(DS.sunFringeMask, 0);
 }
 
 namespace
@@ -2359,6 +2293,10 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | 
 constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract SAVES_SCREENSHOT{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI, 0};
+// DrawTitlePlanet's, widened from every register to DrawDisc's (ADR-012 item 6): its one caller, the title screen's loop (CS:7DFF),
+// loads DI, BL, AX, SI and BX before it reads them, and DrawScreenString (CS:31EC) takes SI, DI, BX and ES, so of what DrawDisc
+// leaves only ES = DS is read.
+constexpr Machine::NativeContract DRAWS_TITLE_PLANET = CLOBBERS_GENERAL;
 
 } // namespace
 
@@ -2400,6 +2338,15 @@ void DrawLineOut(Guest& _guest, bool _filled)
     regs.es = regs.ds;
     _guest.SetFlag(FLAG_DIRECTION, false);
   }
+}
+
+void DrawDiscEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  DrawDisc(_guest.State(), regs.bx, regs.dx, regs.cx, Flag(regs, FLAG_DIRECTION));
+  // MOV AX,DS / MOV ES,AX, before anything is drawn: the contract compares ES, and the chart and title screens write through it.
+  regs.es = regs.ds;
+  _guest.Clobber(CLOBBERS_GENERAL);
 }
 
 void FillSpanEntry(Guest& _guest)
@@ -2551,6 +2498,15 @@ void SetTextModeEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_DX);
 }
 
+void DrawTitlePlanetEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  DrawTitlePlanet(_guest.State(), regs.bx, regs.dx, regs.cx, Flag(regs, FLAG_DIRECTION));
+  // DrawDisc's ES = DS, which the title screen's caller (CS:7E37) draws its text through.
+  regs.es = regs.ds;
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
 namespace
 {
 
@@ -2571,7 +2527,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x1686, "ClipLineToLowEdge", &ClipLineToLowEdge, CLIPS_LINE},
   NativeEntry{0x16C1, "ClipLineToHighEdge", &ClipLineToHighEdge, CLIPS_LINE},
   NativeEntry{0x16D1, "DrawLine", &DrawLineEntry, DRAWS_LINE},
-  NativeEntry{0x1826, "DrawDisc", &DrawDisc, CLOBBERS_GENERAL},
+  NativeEntry{0x1826, "DrawDisc", &DrawDiscEntry, CLOBBERS_GENERAL},
   NativeEntry{0x1A07, "FillSpan", &FillSpanEntry, PRESERVES_ALL},
   NativeEntry{0x1AC1, "DrawCircle", &DrawCircle, CLOBBERS_GENERAL},
   NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpanEntry, FILLS_TRIANGLE_SPAN},
@@ -2584,7 +2540,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7C25, "DrawChartFrame", &DrawChartFrameEntry, DRAWS_CHART_FRAME},
   NativeEntry{0x7CFE, "SetGraphicsMode", &SetGraphicsModeEntry, CLOBBERS_AX_BX_DX},
   NativeEntry{0x7D11, "SetTextMode", &SetTextModeEntry, CLOBBERS_AX_DX},
-  NativeEntry{0x7D4E, "DrawTitlePlanet", &DrawTitlePlanet, PRESERVES_ALL},
+  NativeEntry{0x7D4E, "DrawTitlePlanet", &DrawTitlePlanetEntry, DRAWS_TITLE_PLANET},
 };
 
 } // namespace

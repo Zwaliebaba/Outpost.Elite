@@ -6,6 +6,7 @@
 #include "Combat.h"
 #include "DataOverlay.h"
 #include "Maths.h"
+#include "Video.h"
 
 #include <initializer_list>
 #include <optional>
@@ -17,9 +18,18 @@ namespace Elite
 namespace
 {
 
+// "Clobbers all": every register but DS, which no routine of the reference's changes for its caller.
+constexpr std::uint16_t ALL_BUT_DS = Machine::REGISTER_AX | Machine::REGISTER_BX | Machine::REGISTER_CX | Machine::REGISTER_DX |
+                                     Machine::REGISTER_SI | Machine::REGISTER_DI | Machine::REGISTER_BP | Machine::REGISTER_ES;
+
+// DrawSunOrPlanet's and DrawDistantStation's, widened from every register to every one but DS (ADR-012 item 6): their one caller,
+// TransformAndDrawObjects' second pass (CS:3DFB, CS:3E85), pops DI and goes back to its search (CS:3D95), which loads CX, DI,
+// BP, AH and DX before it reads them, and AL at CS:3DA5; nothing there reads ES.
+constexpr Machine::NativeContract DRAWS_SUN_OR_PLANET{ALL_BUT_DS, 0};
+constexpr Machine::NativeContract DRAWS_DISTANT_STATION{ALL_BUT_DS, 0};
+
 // The routines of other subsystems these call, by entry.
 constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
-constexpr std::uint16_t DRAW_DISC = 0x1826;
 constexpr std::uint16_t FILL_TRIANGLE = 0x1BFB;
 constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
 constexpr std::uint16_t KILL_PLAYER = 0x3115;
@@ -28,7 +38,6 @@ constexpr std::uint16_t IS_PLANET = 0x3F37;
 constexpr std::uint16_t IS_STATION = 0x3F40;
 constexpr std::uint16_t UPDATE_COMPASS = 0x418F;
 constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
-constexpr std::uint16_t DRAW_DISTANT_STATION = 0x45C6;
 constexpr std::uint16_t REMOVE_OBJECT = 0x4F98;
 
 // The instruction after each divide, where DivideOverflowInterrupt looks for its opcode. ProjectVertices'
@@ -45,10 +54,6 @@ constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
 constexpr std::uint16_t SLOT_POSITION_X = 0x04; // the low words of the 24-bit position
 constexpr std::uint16_t SLOT_POSITION_Y = 0x06;
 constexpr std::uint16_t SLOT_POSITION_Z = 0x08;
-constexpr std::uint16_t SLOT_COLOR = 0x0B;
-constexpr std::uint16_t SLOT_COMPASS_X = 0x20;
-constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
-constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
 constexpr std::uint16_t SLOT_FRAMES_AWAY = 0x34;
 constexpr std::uint16_t SLOT_DEPTH = 0x3D;
 constexpr std::uint16_t SLOT_SIZE = 0x3E;
@@ -67,7 +72,7 @@ constexpr std::uint8_t STATE_BLIP_SHOWN = 0x02;
 constexpr std::uint8_t FLASH_OFF_FRAMES = 0x14;
 constexpr std::uint8_t FLASH_ON_FRAMES = 0x19;
 
-// DH of a dividend ShiftIntoDividend makes: CWD's sign, or what XOR DH,DH leaves.
+// DH of a dividend ScaledDividend makes: CWD's sign.
 constexpr std::uint8_t HIGH_BYTE_ONES = 0xFF;
 constexpr std::uint8_t HIGH_BYTE_ZERO = 0x00;
 
@@ -110,7 +115,6 @@ constexpr std::uint8_t SCOOP_FUEL = 6;
 constexpr std::uint16_t SCOOP_MESSAGE_FRAMES = 5;
 
 // DrawDistantStation: a station's disc, by its depth byte +25h.
-constexpr std::uint16_t SLOT_STATION_DEPTH = 0x25;
 constexpr std::uint8_t STATION_COLOR = 3;
 constexpr std::uint8_t NEAR_STATION_DEPTH = 0x14;
 constexpr std::uint16_t NEAR_STATION_RADIUS = 0x0E;
@@ -236,7 +240,9 @@ void RenderBlueprint(Guest& _guest)
   regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
   _guest.Set(DS.projectedVertexCount, regs.cx);
   regs.si = Offset(regs.si, 1);
-  ProjectVertices(_guest);
+  ProjectVertices(_guest.State(), High(regs.bx));
+  // Its LOOP leaves CX = 0, of which only CL is loaded before CX is stored.
+  regs.cx = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
   regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
   _guest.Set(DS.fixedEdgeCount, regs.cx);
@@ -255,39 +261,29 @@ void RenderBlueprint(Guest& _guest)
   DrawVisibleFaces(_guest);
 }
 
-// mov dl,ah / mov ah,al / xor al,al, DH being _high: DX:AX = AX * 256, what ProjectVertices,
-// DrawSunOrPlanet and ProjectToScreen divide. After CWD, DH is FFh for the one magnitude still negative,
-// 8000h.
-void ShiftIntoDividend(Machine::Registers& _regs, std::uint8_t _high) noexcept
+// CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = _magnitude * 256, what ProjectVertices and DrawSunOrPlanetDisc divide. DH is
+// FFh for the one magnitude NEG leaves negative, 8000h, which overflows the divide.
+[[nodiscard]] std::uint32_t ScaledDividend(std::uint16_t _magnitude) noexcept
 {
-  _regs.dx = WithHigh(High(_regs.ax), _high);
-  _regs.ax = static_cast<std::uint16_t>(Low(_regs.ax) << 8);
+  return (std::uint32_t{Negative(_magnitude) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO} << 24) | (std::uint32_t{_magnitude} << 8);
 }
 
-// One coordinate of a vertex: 256|_value| / z, z at [SI+4], plus one when the quotient is below twice
-// the remainder, with _value's sign put back. BL holds the sign as the original keeps it.
-void ProjectVertexCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t _returnOffset)
+// One coordinate of a vertex (CS:2356, CS:237E): 256|_value| over the z at DS:_z, by DIV [SI+4], plus one when the quotient is
+// below twice the remainder (SHL DX,1 / CMP AX,DX / ADC AX,0), with _value's sign put back. A divide that overflows saves BX,
+// _trapHigh over the sign BL holds, 1 for a negative _value.
+[[nodiscard]] std::uint16_t ProjectVertexCoordinate(GameState& _state, std::uint16_t _value, std::uint16_t _z, std::uint16_t _returnOffset,
+                                                    std::uint8_t _trapHigh)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _value;
-  regs.bx = WithLow(regs.bx, 0);
-  if (Negative(regs.ax))
+  const bool negative = Negative(_value);
+  const std::uint16_t magnitude = negative ? Negate(_value) : _value;
+  const WordQuotient divided = DivideUnsigned(_state, ScaledDividend(magnitude), _state.Word(_z), _returnOffset,
+                                              Join(_trapHigh, negative ? std::uint8_t{1} : std::uint8_t{0}));
+  std::uint16_t coordinate = divided.quotient;
+  if (coordinate < static_cast<std::uint16_t>(divided.remainder << 1))
   {
-    regs.bx = WithLow(regs.bx, 1);
-    regs.ax = Negate(regs.ax);
+    coordinate = Offset(coordinate, 1);
   }
-  ShiftIntoDividend(regs, Negative(regs.ax) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO);
-  DivideUnsignedOnRegisters(_guest, _guest.Word(Offset(regs.si, VERTEX_Z)), _returnOffset);
-  regs.dx = static_cast<std::uint16_t>(regs.dx << 1);
-  if (regs.ax < regs.dx)
-  {
-    regs.ax = Offset(regs.ax, 1);
-  }
-  regs.bx = WithLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - 1));
-  if (Low(regs.bx) == 0)
-  {
-    regs.ax = Negate(regs.ax);
-  }
+  return negative ? Negate(coordinate) : coordinate;
 }
 
 // The bytes LoadTriangle takes, one a vertex.
@@ -497,6 +493,13 @@ void ClassifyViewOut(Guest& _guest, Vector _view, ViewTest _test)
                 static_cast<std::int16_t>(_slot.Get(SlotWord::CompassZ))};
 }
 
+// An object's view position, as MOV AX,[DI+10h] / MOV BX,[DI+12h] / MOV CX,[DI+14h] load it.
+[[nodiscard]] Vector ViewPosition(ObjectSlot _slot) noexcept
+{
+  return Vector{static_cast<std::int16_t>(_slot.Get(SlotWord::ViewX)), static_cast<std::int16_t>(_slot.Get(SlotWord::ViewY)),
+                static_cast<std::int16_t>(_slot.Get(SlotWord::ViewZ))};
+}
+
 // ClassifyViewPosition on the view position in AX, BX and CX of the slot at DI, with the registers its code leaves.
 void ClassifyViewPositionOnRegisters(Guest& _guest)
 {
@@ -632,33 +635,28 @@ void ClassifyObject(Guest& _guest)
   ClassifyStationPositionEntry(_guest);
 }
 
-// The station in slot DI, when it is far enough away to draw as a disc: true if drawn so. One at depth 1
-// nearer than 1B58h has its compass position doubled into its view position instead.
-[[nodiscard]] bool DrawStationIfDistant(Guest& _guest)
+// The station in _slot (CS:3DEE), when it is far enough away to draw as a disc: true if it is, and DrawDistantStation drew it.
+// One at depth 1 nearer than 1B58h has its compass position doubled into its view position instead.
+[[nodiscard]] bool DrawStationIfDistant(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t depth = _guest.Byte(Offset(regs.di, SLOT_DEPTH));
+  const std::uint8_t depth = _slot.Get(SlotByte::Depth);
   if (depth == 0)
   {
     return false;
   }
   if (depth == 1)
   {
-    regs.ax = _guest.Word(Offset(regs.di, SLOT_COMPASS_Z));
-    if (regs.ax < DISTANT_STATION_Z)
+    const std::uint16_t z = _slot.Get(SlotWord::CompassZ);
+    if (z < DISTANT_STATION_Z)
     {
-      regs.ax = static_cast<std::uint16_t>(regs.ax << 1);
-      _guest.SetWord(Offset(regs.di, SLOT_VIEW_Z), regs.ax);
-      regs.ax = static_cast<std::uint16_t>(_guest.Word(Offset(regs.di, SLOT_COMPASS_X)) << 1);
-      _guest.SetWord(Offset(regs.di, SLOT_VIEW_X), regs.ax);
-      regs.ax = static_cast<std::uint16_t>(_guest.Word(Offset(regs.di, SLOT_COMPASS_Y)) << 1);
-      _guest.SetWord(Offset(regs.di, SLOT_VIEW_Y), regs.ax);
+      _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(z << 1));
+      _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(_slot.Get(SlotWord::CompassX) << 1));
+      _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(_slot.Get(SlotWord::CompassY) << 1));
       return false;
     }
   }
-  const std::uint16_t slot = regs.di;
-  _guest.Call(DRAW_DISTANT_STATION);
-  regs.di = slot;
+  // PUSH DI / POP DI round it keep the slot.
+  DrawDistantStation(_state, _slot, _backward);
   return true;
 }
 
@@ -681,21 +679,13 @@ void ClassifyObject(Guest& _guest)
   return false;
 }
 
-// DrawObjectAsDot (CS:3E8C): slot DI's view position as a disc of radius 2 in colour 3.
-void DrawObjectAsDot(Guest& _guest)
+// DrawObjectAsDot (CS:3E8C): _slot's view position projected (ProjectToScreen), as a disc of radius 2 in colour 3. PUSH DI /
+// POP DI round it keep the slot.
+void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_VIEW_X));
-  regs.bx = _guest.Word(Offset(regs.di, SLOT_VIEW_Y));
-  regs.cx = _guest.Word(Offset(regs.di, SLOT_VIEW_Z));
-  ProjectToScreen(_guest);
-  regs.cx = regs.bx;
-  regs.dx = regs.ax;
-  _guest.Set(DS.drawColor, DOT_COLOR);
-  regs.bx = DOT_RADIUS;
-  _guest.Call(DRAW_DISC);
-  regs.di = slot;
+  const ScreenPoint at = ProjectToScreen(_state, ViewPosition(_slot));
+  _state.Set(DS.drawColor, DOT_COLOR);
+  DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
 }
 
 // The not yet drawn visible object in slot DI: by its kind, its distance and its level of detail.
@@ -711,18 +701,19 @@ void DrawObject(Guest& _guest)
     return;
   }
   _guest.Call(IS_STATION);
-  if (Flag(_guest, Machine::FLAG_ZERO) && DrawStationIfDistant(_guest))
+  const ObjectSlot object(_guest.State(), regs.di);
+  if (Flag(_guest, Machine::FLAG_ZERO) && DrawStationIfDistant(_guest.State(), object, _guest.Flag(Machine::FLAG_DIRECTION)))
   {
     return;
   }
-  if (FlashedOff(ObjectSlot(_guest.State(), regs.di)))
+  if (FlashedOff(object))
   {
     return;
   }
   regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.di, SLOT_DETAIL)));
   if (Low(regs.ax) < _guest.Byte(Offset(regs.di, SLOT_SIZE)))
   {
-    DrawObjectAsDot(_guest);
+    DrawObjectAsDot(_guest.State(), object, _guest.Flag(Machine::FLAG_DIRECTION));
     return;
   }
   regs.bx = Offset(static_cast<std::uint16_t>(_guest.Byte(regs.di) & SLOT_TYPE_BITS), DS.blueprintTable.offset);
@@ -778,75 +769,44 @@ void DrawObject(Guest& _guest)
   return true;
 }
 
-// One coordinate of the sun's or planet's center: 256|_value| / z, z at slot DI's +14h, rounded down,
-// with _value's sign put back. BP holds the sign as the original keeps it.
-void ProjectDiscCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t _returnOffset)
+// One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
+// down, with _value's sign put back. A divide that overflows saves BX, _radius.
+[[nodiscard]] std::uint16_t ProjectDiscCoordinate(GameState& _state, ObjectSlot _slot, std::uint16_t _value, std::uint16_t _returnOffset,
+                                                  std::uint16_t _radius)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bp = 0;
-  regs.ax = _value;
-  if (Negative(regs.ax))
-  {
-    regs.bp = 1;
-    regs.ax = Negate(regs.ax);
-  }
-  ShiftIntoDividend(regs, Negative(regs.ax) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO);
-  DivideUnsignedOnRegisters(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_Z)), _returnOffset);
-  regs.bp = static_cast<std::uint16_t>(regs.bp - 1);
-  if (regs.bp == 0)
-  {
-    regs.ax = Negate(regs.ax);
-  }
+  const bool negative = Negative(_value);
+  const std::uint16_t magnitude = negative ? Negate(_value) : _value;
+  const std::uint16_t coordinate =
+    DivideUnsigned(_state, ScaledDividend(magnitude), _slot.Get(SlotWord::ViewZ), _returnOffset, _radius).quotient;
+  return negative ? Negate(coordinate) : coordinate;
 }
 
-// What DiscWithin finds, and the last edge it computed, center + radius or center - radius, where the original leaves it in AX.
-struct DiscFit
-{
-  bool within;
-  std::uint16_t edge;
-};
-
-// _center + _radius must not overflow or be negative, and _center - _radius must not overflow or pass _limit.
-[[nodiscard]] DiscFit DiscWithin(std::uint16_t _center, std::uint16_t _radius, std::uint16_t _limit) noexcept
+// _center + _radius must not overflow or be negative, and _center - _radius must not overflow or pass _limit: ADD, JO, CMP 0, JL,
+// then SUB twice, JO, CMP _limit, JG.
+[[nodiscard]] bool DiscWithin(std::uint16_t _center, std::uint16_t _radius, std::uint16_t _limit) noexcept
 {
   const auto upperEdge = static_cast<std::uint16_t>(_center + _radius);
   if (AddOverflows(_center, _radius) || Negative(upperEdge))
   {
-    return DiscFit{false, upperEdge};
+    return false;
   }
   const auto once = static_cast<std::uint16_t>(upperEdge - _radius);
   const auto lowerEdge = static_cast<std::uint16_t>(once - _radius);
-  return DiscFit{!SubtractOverflows(once, _radius) && static_cast<std::int16_t>(lowerEdge) <= static_cast<std::int16_t>(_limit), lowerEdge};
+  return !SubtractOverflows(once, _radius) && static_cast<std::int16_t>(lowerEdge) <= static_cast<std::int16_t>(_limit);
 }
 
-// DrawSunOrPlanetDisc (CS:402C): radius AX at slot DI's projected center, in its colour (+0Bh), drawn only
-// when the disc's whole box is on the 256x128 view.
-void DrawSunOrPlanetDisc(Guest& _guest)
+// DrawSunOrPlanetDisc (CS:402C): a disc of radius _radius at _slot's view position projected, in its colour (+0Bh), drawn only
+// when the disc's whole box is on the 256x128 view: DrawDisc with twice the radius.
+void DrawSunOrPlanetDisc(GameState& _state, ObjectSlot _slot, std::uint16_t _radius, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = regs.ax;
-  ProjectDiscCoordinate(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_Y)), DISC_Y_DIVIDE_RETURN);
-  regs.ax = Offset(regs.ax, SCREEN_CENTER_Y);
-  regs.cx = regs.ax;
-  ProjectDiscCoordinate(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_X)), DISC_X_DIVIDE_RETURN);
-  regs.ax = Offset(regs.ax, SCREEN_CENTER_X);
-  regs.dx = regs.ax;
-  const DiscFit across = DiscWithin(regs.dx, regs.bx, SCREEN_RIGHT);
-  regs.ax = across.edge;
-  if (!across.within)
+  const auto row = Offset(ProjectDiscCoordinate(_state, _slot, _slot.Get(SlotWord::ViewY), DISC_Y_DIVIDE_RETURN, _radius), SCREEN_CENTER_Y);
+  const auto x = Offset(ProjectDiscCoordinate(_state, _slot, _slot.Get(SlotWord::ViewX), DISC_X_DIVIDE_RETURN, _radius), SCREEN_CENTER_X);
+  if (!DiscWithin(x, _radius, SCREEN_RIGHT) || !DiscWithin(row, _radius, SCREEN_BOTTOM))
   {
     return;
   }
-  const DiscFit down = DiscWithin(regs.cx, regs.bx, SCREEN_BOTTOM);
-  regs.ax = down.edge;
-  if (!down.within)
-  {
-    return;
-  }
-  regs.bx = static_cast<std::uint16_t>(regs.bx << 1);
-  regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.di, SLOT_COLOR)));
-  _guest.Set(DS.drawColor, Low(regs.ax));
-  _guest.Call(DRAW_DISC);
+  _state.Set(DS.drawColor, _slot.Get(SlotByte::Color));
+  DrawDisc(_state, static_cast<std::uint16_t>(_radius << 1), x, row, _backward);
 }
 
 // Once supernovaFrames has counted down to 1, the sun's heat is supernovaHeat, growing by a quarter (at
@@ -942,18 +902,10 @@ void DrawSunOrPlanetDisc(Guest& _guest)
   return true;
 }
 
-// What SizePlanet finds.
-struct PlanetSize
-{
-  InverseDistanceScale scale;          // ScaleByInverseDistance's result, which the original leaves in AX and BX
-  std::uint8_t altitude;               // over BL
-  std::optional<std::uint16_t> radius; // in front of the view, the disc's radius
-};
-
 // SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
 // altitude, twice 255 less that radius held to 127. In front of the view, a radius of FDh or more kills the player, with
-// StartPlayerDeathSound's STI, and one past a byte draws as FFh.
-PlanetSize SizePlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
+// StartPlayerDeathSound's STI, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
+std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
 {
   _state.Set(DS.sunFringeMask, FRINGE_NONE);
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
@@ -965,10 +917,9 @@ PlanetSize SizePlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
   }
   altitude = static_cast<std::uint8_t>(altitude << 1);
   _state.Set(DS.altitude, altitude);
-  PlanetSize size{scale, altitude, std::nullopt};
   if ((_slot.Get(SlotByte::ViewZHigh) & 0x80) != 0)
   {
-    return size;
+    return std::nullopt;
   }
   std::uint16_t radius = scale.scaled;
   if (radius >= FATAL_RADIUS)
@@ -983,55 +934,35 @@ PlanetSize SizePlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
       radius = RADIUS_LIMIT;
     }
   }
-  size.radius = radius;
-  return size;
-}
-
-// SizePlanet for slot DI, and what it leaves for DrawSunOrPlanetDisc and DrawSunOrPlanet's callers: AX the radius, or
-// ScaleByInverseDistance's result behind the view, and BX the divisor's high byte over the altitude. False when the planet is
-// behind the view and not drawn.
-[[nodiscard]] bool SizePlanetOnRegisters(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const PlanetSize size = SizePlanet(_guest.State(), _guest.Devices(), ObjectSlot(_guest.State(), regs.di));
-  regs.ax = size.radius.value_or(size.scale.scaled);
-  regs.bx = Join(High(size.scale.divisor), size.altitude);
-  return size.radius.has_value();
+  return radius;
 }
 
 } // namespace
 
-void ProjectVertices(Guest& _guest)
+void ProjectVertices(GameState& _state, std::uint8_t _trapHigh)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = _guest.Get(DS.projectedVertexCount);
-  if (regs.cx == 0)
+  // MOV CX,[projectedVertexCount] / AND CX,CX / JE, then LOOP: a count of the whole word, 0 none. SI walks the vertices and DI the
+  // points they become, in place; PUSH SI / POP SI keep the caller's.
+  const std::uint16_t count = _state.Get(DS.projectedVertexCount);
+  std::uint16_t vertex = DS.vertexBuffer.offset;
+  std::uint16_t point = vertex;
+  for (std::uint16_t left = count; left != 0; --left)
   {
-    return;
-  }
-  const std::uint16_t caller = regs.si;
-  regs.si = DS.vertexBuffer.offset;
-  regs.di = regs.si;
-  do
-  {
-    regs.ax = _guest.Get(DS.nearPlaneZ);
-    if (static_cast<std::int16_t>(_guest.Word(Offset(regs.si, VERTEX_Z))) < static_cast<std::int16_t>(regs.ax))
+    const auto z = Offset(vertex, VERTEX_Z);
+    if (static_cast<std::int16_t>(_state.Word(z)) < static_cast<std::int16_t>(_state.Get(DS.nearPlaneZ)))
     {
-      _guest.SetWord(regs.di, NEAR_VERTEX_X);
+      _state.SetWord(point, NEAR_VERTEX_X);
     }
     else
     {
-      ProjectVertexCoordinate(_guest, _guest.Word(regs.si), VERTEX_X_DIVIDE_RETURN);
-      regs.ax = Offset(regs.ax, SCREEN_CENTER_X);
-      _guest.SetWord(regs.di, regs.ax);
-      ProjectVertexCoordinate(_guest, _guest.Word(Offset(regs.si, 2)), VERTEX_Y_DIVIDE_RETURN);
-      regs.ax = Offset(regs.ax, SCREEN_CENTER_Y);
-      _guest.SetWord(Offset(regs.di, 2), regs.ax);
+      const std::uint16_t x = ProjectVertexCoordinate(_state, _state.Word(vertex), z, VERTEX_X_DIVIDE_RETURN, _trapHigh);
+      _state.SetWord(point, Offset(x, SCREEN_CENTER_X));
+      const std::uint16_t y = ProjectVertexCoordinate(_state, _state.Word(Offset(vertex, 2)), z, VERTEX_Y_DIVIDE_RETURN, _trapHigh);
+      _state.SetWord(Offset(point, 2), Offset(y, SCREEN_CENTER_Y));
     }
-    regs.di = Offset(regs.di, POINT_BYTES);
-    regs.si = Offset(regs.si, VERTEX_BYTES);
-  } while (Loop(regs.cx));
-  regs.si = caller;
+    point = Offset(point, POINT_BYTES);
+    vertex = Offset(vertex, VERTEX_BYTES);
+  }
 }
 
 Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection)
@@ -1399,46 +1330,50 @@ Vector TransformToView(GameState& _state, Vector _position)
 
 void DrawSunOrPlanet(Guest& _guest)
 {
+  Machine::Registers& regs = _guest.Regs();
   _guest.Call(IS_PLANET);
-  const bool drawn = Flag(_guest, Machine::FLAG_ZERO) ? SizePlanetOnRegisters(_guest) : SizeSun(_guest);
-  if (drawn)
+  const ObjectSlot slot(_guest.State(), regs.di);
+  if (Flag(_guest, Machine::FLAG_ZERO))
   {
-    DrawSunOrPlanetDisc(_guest);
+    if (const std::optional<std::uint16_t> radius = SizePlanet(_guest.State(), _guest.Devices(), slot))
+    {
+      DrawSunOrPlanetDisc(_guest.State(), slot, *radius, _guest.Flag(Machine::FLAG_DIRECTION));
+    }
   }
+  else if (SizeSun(_guest))
+  {
+    // SizeSun leaves the radius in AX, and DI where DetonateEnergyBomb leaves it when a supernova's heat kills: the disc is then
+    // that slot's, as the original draws it.
+    DrawSunOrPlanetDisc(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.ax, _guest.Flag(Machine::FLAG_DIRECTION));
+  }
+  _guest.Clobber(DRAWS_SUN_OR_PLANET);
 }
 
-void DrawDistantStation(Guest& _guest)
+void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_COMPASS_X));
-  regs.bx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Y));
-  regs.cx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Z));
-  ProjectToScreen(_guest);
-  regs.dx = regs.ax;
-  regs.cx = regs.bx;
-  _guest.Set(DS.drawColor, STATION_COLOR);
-  SetLow(regs.ax, _guest.Byte(Offset(regs.di, SLOT_STATION_DEPTH)));
-  if (Low(regs.ax) < NEAR_STATION_DEPTH)
+  const ScreenPoint at = ProjectToScreen(_state, CompassPosition(_slot));
+  const auto x = static_cast<std::uint16_t>(at.x);
+  const auto row = static_cast<std::uint16_t>(at.y);
+  _state.Set(DS.drawColor, STATION_COLOR);
+  const std::uint8_t depth = _slot.Get(SlotByte::StationDepth);
+  if (depth < NEAR_STATION_DEPTH)
   {
-    regs.bx = NEAR_STATION_RADIUS;
-    _guest.Call(DRAW_DISC);
+    DrawDisc(_state, NEAR_STATION_RADIUS, x, row, _backward);
     return;
   }
-  // r = (21h - depth) / 2, as bytes: none when 25h - depth, taken as signed, is 4 or less, or r is 0.
-  SetLow(regs.ax, Negate(static_cast<std::uint8_t>(Low(regs.ax) - STATION_DEPTH_BASE)));
-  const auto beyond = static_cast<std::int8_t>(Low(regs.ax));
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) - STATION_DEPTH_SMALLEST));
-  if (beyond <= static_cast<std::int8_t>(STATION_DEPTH_SMALLEST))
+  // r = (21h - depth) / 2, as bytes: SUB AL,25h / NEG AL / SUB AL,4 / JLE, none when 25h - depth, taken as signed, is 4 or less;
+  // SHR AL,1 / JE, none when r is 0. The radius is 2r.
+  const std::uint8_t beyond = Negate(static_cast<std::uint8_t>(depth - STATION_DEPTH_BASE));
+  if (static_cast<std::int8_t>(beyond) <= static_cast<std::int8_t>(STATION_DEPTH_SMALLEST))
   {
     return;
   }
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) >> 1));
-  if (Low(regs.ax) == 0)
+  const auto rows = static_cast<std::uint8_t>(static_cast<std::uint8_t>(beyond - STATION_DEPTH_SMALLEST) >> 1);
+  if (rows == 0)
   {
     return;
   }
-  regs.bx = static_cast<std::uint16_t>(Low(regs.ax) << 1);
-  _guest.Call(DRAW_DISC);
+  DrawDisc(_state, static_cast<std::uint16_t>(rows << 1), x, row, _backward);
 }
 
 SinCos LoadPlayerAngles(GameState& _state)
@@ -1448,37 +1383,20 @@ SinCos LoadPlayerAngles(GameState& _state)
   return SetSinCos(_state, 2, _state.Get(DS.playerRollAngle));
 }
 
-void ProjectToScreen(Guest& _guest)
+ScreenPoint ProjectToScreen(GameState& _state, Vector _view)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bp = 0;
-  if (Negative(regs.ax))
-  {
-    regs.ax = Negate(regs.ax);
-    regs.bp = 2;
-  }
-  if (Negative(regs.bx))
-  {
-    regs.bx = Negate(regs.bx);
-    regs.bp = Offset(regs.bp, 1);
-  }
-  ShiftIntoDividend(regs, HIGH_BYTE_ZERO);
-  DivideUnsignedOnRegisters(_guest, regs.cx, SCREEN_X_DIVIDE_RETURN);
-  std::swap(regs.ax, regs.bx);
-  ShiftIntoDividend(regs, HIGH_BYTE_ZERO);
-  DivideUnsignedOnRegisters(_guest, regs.cx, SCREEN_Y_DIVIDE_RETURN);
-  if ((regs.bp & 1) != 0)
-  {
-    regs.ax = Negate(regs.ax);
-  }
-  if ((regs.bp & 2) != 0)
-  {
-    regs.bx = Negate(regs.bx);
-  }
-  regs.bp = 0;
-  std::swap(regs.ax, regs.bx);
-  regs.ax = Offset(regs.ax, SCREEN_CENTER_X);
-  regs.bx = Offset(regs.bx, SCREEN_CENTER_Y);
+  // AND / JNS / NEG: the magnitudes, BP bit 1 for a negative x and bit 0 for a negative y.
+  const bool negativeX = _view.x < 0;
+  const bool negativeY = _view.y < 0;
+  const std::uint16_t x = negativeX ? Negate(static_cast<std::uint16_t>(_view.x)) : static_cast<std::uint16_t>(_view.x);
+  const std::uint16_t y = negativeY ? Negate(static_cast<std::uint16_t>(_view.y)) : static_cast<std::uint16_t>(_view.y);
+  const auto z = static_cast<std::uint16_t>(_view.z);
+  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL, then DIV CX: x first, with BX = |y| for the trap; XCHG BX,AX, then y, with BX
+  // the first quotient.
+  const std::uint16_t across = DivideUnsigned(_state, std::uint32_t{x} << 8, z, SCREEN_X_DIVIDE_RETURN, y).quotient;
+  const std::uint16_t down = DivideUnsigned(_state, std::uint32_t{y} << 8, z, SCREEN_Y_DIVIDE_RETURN, across).quotient;
+  return ScreenPoint{static_cast<std::int16_t>(Offset(negativeX ? Negate(across) : across, SCREEN_CENTER_X)),
+                     static_cast<std::int16_t>(Offset(negativeY ? Negate(down) : down, SCREEN_CENTER_Y))};
 }
 
 namespace
@@ -1494,10 +1412,6 @@ using Machine::REGISTER_DI;
 using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
-
-// "Clobbers all": every register but DS, which no routine of the reference's changes for its caller.
-constexpr std::uint16_t ALL_BUT_DS =
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES;
 
 constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 // TransformShip's: DX, TransformToViewWithBlip's leftover, is not compared. Its one caller, ClassifyObject in
@@ -1516,10 +1430,19 @@ constexpr Machine::NativeContract CLOBBERS_AX_DI{REGISTER_AX | REGISTER_DI, 0};
 // TriangleWindingSign changes only AX, BX, CX, DX and DI. DrawVisibleFaces reads SI after it, and RenderBlueprintBody's contract
 // compares the AX, BX, DX, BP and ES it leaves after a hidden last face (ADR-012).
 constexpr Machine::NativeContract WINDING_SIGN{REGISTER_CX | REGISTER_DI, FLAG_SIGN};
+constexpr Machine::NativeContract PROJECTS_VERTICES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0};
+// ProjectToScreen's: the second divide's remainder in DX, and BP = 0 after its sign bits are shifted out.
+constexpr Machine::NativeContract PROJECTS_TO_SCREEN{REGISTER_DX | REGISTER_BP, 0};
 
 } // namespace
 
 // ── The entries of the routines de-assembled (ADR-012) ──
+
+void ProjectVerticesEntry(Guest& _guest)
+{
+  ProjectVertices(_guest.State(), High(_guest.Regs().bx));
+  _guest.Clobber(PROJECTS_VERTICES);
+}
 
 void ReflectVertexAboutCenterEntry(Guest& _guest)
 {
@@ -1652,6 +1575,21 @@ void TransformToViewEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_DX);
 }
 
+void DrawDistantStationEntry(Guest& _guest)
+{
+  DrawDistantStation(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(DRAWS_DISTANT_STATION);
+}
+
+void ProjectToScreenEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ScreenPoint at = ProjectToScreen(_guest.State(), PositionIn(regs));
+  regs.ax = static_cast<std::uint16_t>(at.x);
+  regs.bx = static_cast<std::uint16_t>(at.y);
+  _guest.Clobber(PROJECTS_TO_SCREEN);
+}
+
 void TriangleWindingSignEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1674,8 +1612,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x2340, "ProjectVertices", &ProjectVertices,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
+  NativeEntry{0x2340, "ProjectVertices", &ProjectVerticesEntry, PROJECTS_VERTICES},
   NativeEntry{0x3740, "ReflectVertexAboutCenter", &ReflectVertexAboutCenterEntry, CLOBBERS_AX},
   NativeEntry{0x3768, "OffsetVertexByCenter", &OffsetVertexByCenterEntry, PRESERVES_ALL},
   NativeEntry{0x377A, "BuildBoxCornerVertices", &BuildBoxCornerVerticesEntry, BUILDS_BOX},
@@ -1694,10 +1631,10 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjects, Machine::NativeContract{ALL_BUT_DS, 0}},
   NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlipEntry, CLOBBERS_DX},
   NativeEntry{0x3EE3, "TransformToView", &TransformToViewEntry, CLOBBERS_DX},
-  NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanet, PRESERVES_ALL},
-  NativeEntry{0x45C6, "DrawDistantStation", &DrawDistantStation, PRESERVES_ALL},
+  NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanet, DRAWS_SUN_OR_PLANET},
+  NativeEntry{0x45C6, "DrawDistantStation", &DrawDistantStationEntry, DRAWS_DISTANT_STATION},
   NativeEntry{0x8A16, "LoadPlayerAngles", &LoadPlayerAnglesEntry, PRESERVES_ALL},
-  NativeEntry{0x8D2E, "ProjectToScreen", &ProjectToScreen, Machine::NativeContract{REGISTER_DX | REGISTER_BP, 0}},
+  NativeEntry{0x8D2E, "ProjectToScreen", &ProjectToScreenEntry, PROJECTS_TO_SCREEN},
 };
 
 } // namespace
