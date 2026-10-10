@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with level 0 of the call graph (item 10).
 
 ## Context
 
@@ -72,6 +72,45 @@
   - there are two cycles, each within one subsystem: five routines of Galaxy's text expansion, and two of SaveLoad's disc prompt.
 - **Indirect calls are not in that count.** Seven sites call through a table or a parameter: the behaviour handlers, the screens, the blueprint handlers and the timer's samples. Their dispatchers sit high in the graph and get native tables when they are converted.
 - **So the order is level by level.** A routine is de-assembled once everything it calls is. Within a level, the subsystems are independent, and a cycle is converted as one unit.
+- **A routine is ready when its callees are converted, entries included.** A caller of an entry can call the routine behind it instead. So readiness counts an entry as converted, and the leaves' callers become the next level's work.
+- **Routines that need a device wait for D17's third step.** That means port I/O, a call to DOS, the BIOS or the mouse driver, a wait, or the stack. A `GameState` has no ports, and the devices become native there.
+
+**10. Level 0, measured 2026-10-10.** The 144 leaves that need no device were converted by four workers in parallel, one per group of subsystems.
+
+| | Count |
+|---|---|
+| Routines converted | 144: Flight and Video 34; Galaxy, Text, Market and Docked 38; Ships, Scene, Combat and Ai 34; the eight others 38 |
+| Leaves left for D17's third step, because they need a device | 32 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 13 |
+| Contracts widened | 0 |
+| Entries, each handing `Clobber` its contract | 110, of which Maths has 20 |
+| Lines touching a register in `GameLogic/*.cpp` | 5,525 before, 5,167 after |
+| Routines ready for the next level | 81 |
+| Register functions left | 467, on 19 levels |
+
+The 13 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `DrawScreenChar`, `DrawViewChar` | AX, the last glyph row drawn, and `DrawViewChar`'s BP, the paper |
+| `FormatDecimal5` | AX, the units |
+| `PrintTextModeString` | AX, the text attribute |
+| `TerminateSelectedSystemName` | BX, the name's length |
+| `XorDashboardPixel` | AX, BX and ES = B800h |
+| `DrawMissileLockIndicator` | CX = 0 after it draws. `DrawMissileIcons` hands CH on to the next bar, and a poisoned CX corrupted the dashboard's digest. |
+| `InvalidateDashboard` | AX, CX and DI |
+| `ReflectVertexAboutCenter`, `OffsetVertexByCenter` | the draw centre's z |
+| `RunVertexProgram` | CX = 0. `RenderBlueprintBody` loads only CL and stores all of CX as the vertex count, and a poisoned CX stopped the run. |
+| `TriangleWindingSign` | everything but CX and DI: the product in DX:AX, BX, and SI, BP and ES untouched |
+| `ClampTurnStep` | CX, the turn rate |
+
+**Write order.** Nine routines now make the writes the original makes where the Phase 3 port had collapsed them; ADR-010's comparison of final memory could not tell the difference. Each now matches the listing:
+- `SpeedUp`, `SlowDown`, `HandleAntiEcmKey` and `UseMaskingDevice`: the subtraction, then the floor written over it;
+- `IntegrateRate`: the rate zeroed when a key reverses it;
+- `Plot` and `DrawSmallViewChar`: the AND, then the OR;
+- `TwistSystemSeeds` and `NextMarketRandom`: the seeds in the order of the original's exchanges.
+
+`DrawSmallDisc` still collapses its AND and OR, and is converted with the next level.
 
 ## What this forecloses
 
