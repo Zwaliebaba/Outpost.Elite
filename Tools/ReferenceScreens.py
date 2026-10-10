@@ -16,6 +16,7 @@ small script of steps, the format GameLogic/Replay.h defines (steps separated by
   digest NAME [HEX]  ignored here: ReferenceRunner prints a state digest, and one script serves both
   file NAME SOURCE   copy SOURCE, a file beside the replay (Replays/ for --steps), onto the mounted drive
                      as NAME, upper case, at that moment: how a replay starts from a prepared commander
+  end N              as wait: the program ends within it, and DOSBox-X shows the DOS prompt it left for
 
 A replay (ADR-008) is timed in paced time and DOSBox-X runs in wall time, so a replay played here is
 an approximation of the run it records: good for comparing static screens, not for flight. The drive
@@ -164,11 +165,11 @@ def main() -> int:
   text = args.replay.read_text(encoding="utf-8") if args.replay else args.steps
   lines = (line.split("#", 1)[0] for line in text.splitlines())
   steps = [part.split() for line in lines for part in line.split(";") if part.strip()]
-  arguments = {"wait": (2,), "key": (2,), "down": (2,), "up": (2,), "shot": (2,), "digest": (2, 3), "file": (3,)}
+  arguments = {"wait": (2,), "key": (2,), "down": (2,), "up": (2,), "shot": (2,), "digest": (2, 3), "file": (3,), "end": (2,)}
   for step in steps:
     bad = f"bad step {' '.join(step)!r}"
     if len(step) not in arguments.get(step[0], ()):
-      sys.exit(f"{bad}; steps are wait, key, down, up, shot, digest and file (GameLogic/Replay.h)")
+      sys.exit(f"{bad}; steps are wait, key, down, up, shot, digest, file and end (GameLogic/Replay.h)")
     if step[0] == "file" and not is_bare_file_name(step[2]):
       sys.exit(f"{bad}; a file step copies a file beside the replay, named without a directory")
   sources = args.replay.resolve().parent if args.replay else ROOT / "Replays"
@@ -192,7 +193,7 @@ def main() -> int:
                                 env=env, cwd=scratch, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       window = find_window(env, 15.0)
       for verb, argument, *rest in steps:
-        if verb == "wait":
+        if verb in ("wait", "end"):
           time.sleep(float(argument))
         elif verb in ("key", "down", "up"):
           action = {"key": "key", "down": "keydown", "up": "keyup"}[verb]

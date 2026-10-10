@@ -6,6 +6,7 @@
 #include "Pc.h"
 #include "StateDigest.h"
 
+#include <algorithm>
 #include <array>
 #include <format>
 #include <fstream>
@@ -139,7 +140,8 @@ std::vector<std::string_view> Words(std::string_view _text)
   return words;
 }
 
-bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _steps, std::string& _error)
+// _ended: an end step has been read, so only digest and shot steps may follow (ExpectedStop).
+bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _steps, bool& _ended, std::string& _error)
 {
   const std::vector<std::string_view> words = Words(_text);
   const auto failure = [&](std::string_view _why)
@@ -158,12 +160,12 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
   Step step;
   step.line = _line;
   step.name = std::string(words[1]);
-  if (verb == "wait")
+  if (verb == "wait" || verb == "end")
   {
     const std::optional<std::uint64_t> milliseconds = ParseSeconds(words[1]);
     if (!milliseconds)
-      return failure("wait takes seconds, with at most three decimals");
-    step.kind = StepKind::Wait;
+      return failure(std::string(verb) + " takes seconds, with at most three decimals");
+    step.kind = verb == "wait" ? StepKind::Wait : StepKind::End;
     step.waitMilliseconds = *milliseconds;
   }
   else if (verb == "key" || verb == "down" || verb == "up")
@@ -198,7 +200,10 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
     step.source = std::string(words[2]);
   }
   else
-    return failure("steps are wait, key, down, up, shot, digest and file");
+    return failure("steps are wait, key, down, up, shot, digest, file and end");
+  if (_ended && step.kind != StepKind::Digest && step.kind != StepKind::Shot)
+    return failure("only digest and shot may follow end, the last step that runs the machine");
+  _ended = _ended || step.kind == StepKind::End;
   _steps.push_back(std::move(step));
   return true;
 }
@@ -264,6 +269,7 @@ void ReplayRecorder::WaitUntil(std::uint64_t _milliseconds)
 
 bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& _error)
 {
+  bool ended = std::any_of(_steps.begin(), _steps.end(), [](const Step& _step) { return _step.kind == StepKind::End; });
   std::size_t line = 1;
   while (!_text.empty())
   {
@@ -277,12 +283,17 @@ bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& 
       const std::size_t separator = text.find(';');
       const std::string_view step = Trim(text.substr(0, separator));
       text = separator == std::string_view::npos ? std::string_view{} : text.substr(separator + 1);
-      if (!step.empty() && !ParseStep(step, line, _steps, _error))
+      if (!step.empty() && !ParseStep(step, line, _steps, ended, _error))
         return false;
     }
     ++line;
   }
   return true;
+}
+
+Machine::StopReason ExpectedStop(const Step& _step) noexcept
+{
+  return _step.kind == StepKind::End ? Machine::StopReason::Terminated : Machine::StopReason::Reached;
 }
 
 ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program) noexcept
@@ -307,6 +318,7 @@ Machine::StopReason ReplayPlayer::Play(const Step& _step, std::string& _digest)
   switch (_step.kind)
   {
   case StepKind::Wait:
+  case StepKind::End:
     m_elapsedMilliseconds += _step.waitMilliseconds;
     return m_pc.RunUntil(ReplayCycle(m_start, m_elapsedMilliseconds));
   case StepKind::Key:

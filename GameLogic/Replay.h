@@ -30,13 +30,14 @@ enum class StepKind : std::uint8_t
   Up,     ///< release a held key
   Shot,   ///< write the screen as a PNG (the caller's business)
   Digest, ///< the SHA-256 of the game's state (GameStateDigest), checked when an expected value is given
-  File    ///< copy a file from beside the replay into DOS's directory, as a commander the game can then load
+  File,   ///< copy a file from beside the replay into DOS's directory, as a commander the game can then load
+  End     ///< let time pass, in which the program must end: a replay that leaves for DOS
 };
 
 struct Step
 {
   StepKind kind = StepKind::Wait;
-  std::uint64_t waitMilliseconds = 0; ///< Wait
+  std::uint64_t waitMilliseconds = 0; ///< Wait and End
   std::uint8_t scanCode = 0;          ///< Key, Down and Up: the XT make code
   std::string name;                   ///< Key, Down and Up: as written; Shot and Digest: the label; File: the DOS name, canonical
   std::string expectedDigest;         ///< Digest: lowercase hex, or empty for none
@@ -59,10 +60,19 @@ struct Step
 ///                        1980-01-01 00:00:00, as one copied there before the run would be. This is how a replay
 ///                        starts from a prepared commander, which the disc menu then loads as the game's own save.
 ///                        SOURCE is a bare file name, so a replay reaches nothing but the files beside it.
+///   end S                S seconds, as wait, by the end of which the program must have ended (int 20h, as
+///                        Machine::StopReason::Terminated): how a replay that leaves for DOS ends. It is the
+///                        last step that runs the machine: only digest and shot steps, which look at what the
+///                        program left, may follow it. No other step may end the program (ExpectedStop).
 ///
 /// Appends the steps to _steps and returns true, or returns false with _error naming the first step it
 /// could not read. (Not std::expected: clang 18 with libstdc++ 13 cannot compile it, ADR-004.)
 [[nodiscard]] bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& _error);
+
+/// How _step must leave the run for its replay to go on (ReplayPlayer::Play): StopReason::Terminated for an end
+/// step, whose program must end within it, and StopReason::Reached for every other step, during which the program
+/// must not stop. So only a replay's end step may end the program, and an end step that does not end it fails.
+[[nodiscard]] Machine::StopReason ExpectedStop(const Step& _step) noexcept;
 
 /// The XT (scan code set 1) make code of an X keysym name, for the keys the reference reads.
 [[nodiscard]] std::optional<std::uint8_t> ScanCodeOf(std::string_view _keyName) noexcept;
@@ -120,12 +130,13 @@ public:
   /// machine's DOS was given.
   ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program, Machine::FileStore& _files, std::filesystem::path _sources);
 
-  /// Plays one step: a wait runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle), a
-  /// key queues its codes on the keyboard, a digest sets _digest to GameStateDigest, a file step copies its
+  /// Plays one step: a wait or an end runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle),
+  /// a key queues its codes on the keyboard, a digest sets _digest to GameStateDigest, a file step copies its
   /// file into the store. A shot does nothing here; writing pictures is the caller's. Returns why the run
-  /// stopped, StopReason::Reached if it did not. Throws std::runtime_error for a file step that cannot be
-  /// done: no store, a source that cannot be read, or a store that refuses it. That is a fault in how the
-  /// replay is set up, not anything the game did.
+  /// stopped, StopReason::Reached if it did not; ExpectedStop says which the step must return. A digest after
+  /// an end step reads the machine as the ended program left it. Throws std::runtime_error for a file step that
+  /// cannot be done: no store, a source that cannot be read, or a store that refuses it. That is a fault in how
+  /// the replay is set up, not anything the game did.
   [[nodiscard]] Machine::StopReason Play(const Step& _step, std::string& _digest);
 
   /// Milliseconds since the replay began.

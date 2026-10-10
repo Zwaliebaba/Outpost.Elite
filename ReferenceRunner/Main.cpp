@@ -56,7 +56,8 @@
 //
 // Exit status: 0 the steps ran, 1 the program stopped them (a refused call, its end, a deadlock, a spin
 // or unported code), a digest did not match, or a native routine did not match the original, 2 usage or file
-// errors.
+// errors. Only an end step may end the program, and it must (Elite::ExpectedStop): a replay that leaves for DOS
+// ends with one, and its digests after the end read what the program left.
 
 namespace
 {
@@ -332,15 +333,23 @@ int Run(int _argc, char** _argv)
     pc->Processor().SetInstructionObserver(trace.get());
   }
 
+  // reason: why the last step that ran the machine returned; asExpected: every step so far left the run as it must
+  // (Elite::ExpectedStop), which for an end step is with the program ended.
   Machine::StopReason reason = Machine::StopReason::Reached;
+  bool asExpected = true;
   const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
   Elite::ReplayPlayer player(*pc, program, files, sources);
   std::vector<std::string> digests(steps.size());
   std::size_t mismatches = 0;
-  for (std::size_t index = 0; index < steps.size() && reason == Machine::StopReason::Reached; ++index)
+  for (std::size_t index = 0; index < steps.size() && asExpected; ++index)
   {
     const Elite::Step& step = steps[index];
-    reason = player.Play(step, digests[index]);
+    const Machine::StopReason stop = player.Play(step, digests[index]);
+    asExpected = stop == Elite::ExpectedStop(step);
+    if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
+      reason = stop;
+    if (!asExpected && stop == Machine::StopReason::Reached)
+      std::fprintf(stderr, "ReferenceRunner: line %zu: the program has not ended by the end of its end step\n", step.line);
     if (step.kind == Elite::StepKind::Shot)
     {
       const std::filesystem::path path = options.out / (step.name + ".png");
@@ -360,11 +369,12 @@ int Run(int _argc, char** _argv)
       Print(std::format("digest\t{}\t{}{}\n", step.name, digests[index], !checked ? "" : matches ? "\tmatches" : "\tDOES NOT MATCH"));
     }
   }
-  if (trace && !trace->Finished() && reason == Machine::StopReason::Reached)
+  if (trace && !trace->Finished() && asExpected && reason == Machine::StopReason::Reached)
   {
     const Machine::Cycles limit = pc->Clock() + Machine::MicrosecondsToCycles(TRACE_LIMIT_MILLISECONDS * 1000);
     while (!trace->Finished() && reason == Machine::StopReason::Reached && pc->Clock() < limit)
       reason = pc->RunUntil(pc->Clock() + 1);
+    asExpected = reason == Machine::StopReason::Reached;
   }
   pc->Processor().SetInstructionObserver(nullptr);
 
@@ -380,7 +390,7 @@ int Run(int _argc, char** _argv)
                                                               [](std::uint8_t _byte) { return _byte != 0; }));
     Print(std::format("coverage\t{}\t{} instruction starts\n", options.coverage.string(), count));
   }
-  if (options.update && reason == Machine::StopReason::Reached)
+  if (options.update && asExpected)
   {
     std::ofstream out(options.replay, std::ios::binary | std::ios::trunc);
     out << WithDigests(replayText, steps, digests);
@@ -407,7 +417,7 @@ int Run(int _argc, char** _argv)
     std::fprintf(stderr, "ReferenceRunner: native code did not match the original\n");
     return 1;
   }
-  return reason == Machine::StopReason::Reached ? 0 : 1;
+  return asExpected ? 0 : 1;
 }
 
 } // namespace
