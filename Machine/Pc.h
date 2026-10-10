@@ -22,6 +22,7 @@
 #include <span>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace Machine
@@ -278,6 +279,19 @@ public:
   /// routine hooked as one that waits may call it.
   void LoopTurn();
 
+  /// Paced time's charge for work the 8088 took time over where the program sets no pace of its own
+  /// (ADR-013): an interpreted program that reaches _linear in paced time pays _cycles before the
+  /// instruction there runs, the clock passing as it does in a wait, so that the interrupts falling due
+  /// meanwhile are taken there. Clocked, the instructions pay their own way and nothing is charged.
+  /// Native code that stands in for that instruction pays the same through Spend.
+  void SetPacingCost(std::uint32_t _linear, Cycles _cycles);
+
+  /// For native code that waits: _cycles pass as they pass in a wait, a step at a time to each device
+  /// event, the run ending there if that is its end and the interrupts that fall due taken. What an
+  /// interpreted run pays at a pacing point (SetPacingCost). Only a routine hooked as one that waits
+  /// may call it.
+  void Spend(Cycles _cycles);
+
   /// For native code: does what INT _vector does at CS:IP. The BIOS, DOS and mouse services take the
   /// call if they serve that vector; otherwise the handler the vector table names runs until its IRET.
   /// Like CallNear, a stop on the way abandons the native code.
@@ -324,6 +338,7 @@ private:
   [[nodiscard]] bool EnterBesideNative() noexcept;
   void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original = nullptr);
   void StepPaced();
+  [[nodiscard]] bool PaceAt(std::uint32_t _linear);
   void NoteBackwardJump();
   [[nodiscard]] StopReason Stopped() const noexcept;
 
@@ -332,6 +347,12 @@ private:
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;
   Turn m_lastTurn{};
+
+  // The pacing points (SetPacingCost), and the one an interpreted run is paying at, until when.
+  static constexpr std::uint32_t NOT_PACING = ~std::uint32_t{0};
+  std::vector<std::pair<std::uint32_t, Cycles>> m_pacingCosts;
+  std::uint32_t m_pacingAt = NOT_PACING;
+  Cycles m_pacingUntil = 0;
 
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;

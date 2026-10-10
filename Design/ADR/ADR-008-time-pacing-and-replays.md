@@ -1,6 +1,6 @@
 # ADR-008 — Time, pacing and the replay digests
 
-**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)).
+**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC.
 
 ## Context
 
@@ -56,9 +56,9 @@ Only three loops read 3DAh (0x04C1, 0x05D0, 0x4602), all of this form; the first
 **3. This is D6, made exact.**
 
 - **A flight frame takes exactly `minimumFrameMs`.** The spin in `PresentSpaceView` waits that long, and nothing else takes time.
-- **A chart frame takes one vertical retrace.**
+- **A chart frame takes one vertical retrace.** ADR-013 (D18) amends this: a chart frame first pays what its redraw cost the IBM PC, so it takes the retraces it took there.
 - **The docked screens' cursor delays take their 100 timer ticks.**
-- **There are no 1987 slowdowns,** because the work between waits takes no time, as D6 ruled. The port's scheduler in Phase 4 runs the same way, so Phase 4 no longer moves the digests for this reason.
+- **There are no 1987 slowdowns,** because the work between waits takes no time, as D6 ruled. The charts are the one exception (ADR-013). The port's scheduler in Phase 4 runs the same way, so Phase 4 no longer moves the digests for this reason.
 
 **4. A replay** is a script of steps (`GameLogic/Replay.h`): `wait`, `key`, `down`, `up`, `shot` and `digest`.
 
@@ -118,6 +118,6 @@ The fight was played by a scratch program that steered by the targets' positions
 ## What this forecloses
 
 - Clocked time in replays, in the corpus or in the game. It stays for comparisons with DOSBox-X.
-- A model of the 1987 slowdowns, as D6 ruled.
+- A model of the 1987 slowdowns, as D6 ruled. ADR-013's two pacing points are constants, not a model, and need a ruling each.
 - Digests over registers, the code segment or the stack.
 - Re-recording a digest to get CI green. A digest moves only by a ruling recorded here.

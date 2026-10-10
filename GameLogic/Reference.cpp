@@ -2,6 +2,7 @@
 
 #include "Reference.h"
 
+#include "Pacing.h"
 #include "Pc.h"
 #include "Sha256.h"
 
@@ -30,6 +31,7 @@ ReferenceFailure LoadReference(Machine::Pc& _pc, std::span<const std::uint8_t> _
   {
     return ReferenceFailure::DidNotLoad;
   }
+  InstallPacing(_pc, _program);
   return ReferenceFailure::None;
 }
 

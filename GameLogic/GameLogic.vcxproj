@@ -93,6 +93,7 @@
     <ClInclude Include="NativeEntry.h" />
     <ClInclude Include="NativeRoutines.h" />
     <ClInclude Include="ObjectSlot.h" />
+    <ClInclude Include="Pacing.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="Replay.h" />
@@ -119,6 +120,7 @@
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="NativeRoutines.cpp" />
+    <ClCompile Include="Pacing.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

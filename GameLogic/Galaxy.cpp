@@ -704,6 +704,7 @@ void ShowGalacticChart(Guest& _guest)
   do
   {
     DrawGalacticChart(_guest);
+    _guest.Spend(GALACTIC_CHART_PACING); // the IBM PC's redraw (D18)
     _guest.Call(PRESENT_CHART_FRAME);
     MoveChartCursor(_guest);
   } while (!ReadChartKey(_guest, GALACTIC_CHART_KEYS));
@@ -757,6 +758,7 @@ void ShowShortRangeChart(Guest& _guest)
   do
   {
     DrawShortRangeChart(_guest);
+    _guest.Spend(SHORT_RANGE_CHART_PACING); // the IBM PC's redraw (D18)
     _guest.Call(PRESENT_CHART_FRAME);
     MoveChartCursor(_guest);
   } while (!ReadChartKey(_guest, SHORT_RANGE_CHART_KEYS));
