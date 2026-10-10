@@ -183,7 +183,7 @@ msbuild <Solution>.slnx /p:Configuration=Release /p:Platform=x64 /m /v:minimal /
 
 **A project does not put its own directory on the include path.** `cl.exe` already searches the directory of the including file first for a quoted include, so `#include "FileSys.h"` from a `.cpp` in the same folder resolves without help. Only the directories of *other* projects are listed, as `$(SolutionDir)<Project>`.
 
-**Run the tests**, through `vstest.console.exe`, over every suite the build produced.
+**Run the tests**, through `vstest.console.exe`, over every suite the build produced. `python Build\RunTests.py` does it as CI does, in parallel shards.
 
 **vstest reports "no tests found" as a pass.** An empty suite is therefore worse than no suite: it is a green check mark over a library nobody exercised. Every test project ships a placeholder `SuiteSmoke` for exactly this reason; delete it when the first real test lands, never before.
 
