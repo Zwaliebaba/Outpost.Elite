@@ -31,4 +31,44 @@ void DrawFrameSides(Guest& _guest);
 /// DrawFrameRow (CS:7CF8): AX in 38 cells from ES:DI.
 void DrawFrameRow(Guest& _guest);
 
+/// WaitForScreenExitKey (CS:60B4), the tail that ShowSystemDataScreen, ShowMarketPricesScreen,
+/// ShowCommanderStatusScreen and ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the
+/// screen's own in DL, then SelectSystemAtCursor. Waits. Out: AH=the key; what SelectSystemAtCursor
+/// clobbers but AX.
+void WaitForScreenExitKey(Guest& _guest);
+
+/// AwardArchangelTitle (CS:49E4): 'ARCHANGEL' over the rank in commanderRankText. AL, CX, SI and DI clobbered.
+void AwardArchangelTitle(Guest& _guest);
+
+/// ShowSellCargoScreen (CS:5A30), F2: the products with their sell prices and the units held, then
+/// RunCargoTradeMenu, which waits. Out: AH=the Esc or F-key that closed it; clobbers all but DS.
+void ShowSellCargoScreen(Guest& _guest);
+
+/// ShowBuyCargoScreen (CS:5AE9), F3: the products with their buy prices and the quantities on sale, drawn
+/// from the market's random state the first time after an arrival, then RunCargoTradeMenu, which waits.
+/// Out: AH=the Esc or F-key that closed it; clobbers all but DS.
+void ShowBuyCargoScreen(Guest& _guest);
+
+/// ShowCommanderStatusScreen (CS:5EA9), F9, docked or in flight: docked, a mission's briefing or debriefing
+/// first; then the commander, systems, fuel, cash, legal status, rating and equipment, and it waits for the
+/// key that closes it (WaitForScreenExitKey). Out: AH=that key; clobbers all but DS.
+void ShowCommanderStatusScreen(Guest& _guest);
+
+/// ShowInventoryScreen (CS:6020), F10: fuel, cash and every product held, and it waits for the key that
+/// closes it. Out: AH=that key; clobbers all but DS.
+void ShowInventoryScreen(Guest& _guest);
+
+/// ShowMissionBriefing (CS:6DF2): the EMERGENCY screen of missionNumber, which waits for a key (Y or N for
+/// the supernova's refugees). missionStage=1. Clobbers all but DS.
+void ShowMissionBriefing(Guest& _guest);
+
+/// ShowMissionDebriefing (CS:6EB7): returns at once while the mission is not done; otherwise the TASK
+/// COMPLETE screen, which waits for a key, and the reward. Clobbers all but DS.
+void ShowMissionDebriefing(Guest& _guest);
+
+/// RunTitleAndDocked (CS:7D81): unless titleShown, the title until a key, the credits and a new game; then
+/// the docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a
+/// disk request, until F1. Clobbers all but DS.
+void RunTitleAndDocked(Guest& _guest);
+
 } // namespace Elite

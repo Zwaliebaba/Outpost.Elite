@@ -64,6 +64,9 @@
     <Filter Include="Sound">
       <UniqueIdentifier>{CCF4BC43-61A6-515A-B282-7FBF8E93F1F8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Docked">
+      <UniqueIdentifier>{5C7DC198-E3EA-5855-912E-EBC3CAE831AC}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -88,6 +91,9 @@
     </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedTests.cpp">
+      <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="DockingTests.cpp">
       <Filter>Docking</Filter>

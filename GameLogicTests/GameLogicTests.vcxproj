@@ -92,6 +92,7 @@
     <ClCompile Include="AiTests.cpp" />
     <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
+    <ClCompile Include="DockedTests.cpp" />
     <ClCompile Include="DockingTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
     <ClCompile Include="FlightTests.cpp" />
