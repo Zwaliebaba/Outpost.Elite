@@ -74,7 +74,7 @@
 
 **7. Files.**
 
-- **The reference is not embedded.** It is read from beside the executable or, failing that, from the repository the executable was built in, and checked against its hash (ADR-001, ADR-007).
+- **The reference is not embedded.** It is read from beside the executable or, failing that, from the repository the executable was built in, and checked against its hash (ADR-001, ADR-007). *Superseded by [ADR-019](ADR-019-the-reference-as-generated-tables.md) (D3): the shell embeds the generated image and reads no file to start.*
 - **Commanders.** DOS's current directory, and so where commanders are saved and loaded, is `Saved Games\Outpost.Elite\Commanders`.
 
 **8. Every session is recorded as a replay.**
