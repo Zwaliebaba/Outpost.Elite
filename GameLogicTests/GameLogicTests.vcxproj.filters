@@ -16,6 +16,9 @@
     <Filter Include="Rigs">
       <UniqueIdentifier>{DF447284-EDA8-587E-83FB-9FC68DF62CE6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{0C4EA93F-6C12-5283-BD50-39A6C84D4FD2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -43,6 +46,9 @@
     </ClCompile>
     <ClCompile Include="StateDigestTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoTests.cpp">
+      <Filter>Video</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

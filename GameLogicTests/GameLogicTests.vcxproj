@@ -95,6 +95,7 @@
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
+    <ClCompile Include="VideoTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GameLogic\GameLogic.vcxproj">
