@@ -5,6 +5,9 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
+#include "SaveLoad.h"
+#include "StartUp.h"
+#include "Timer.h"
 
 #include <optional>
 #include <utility>
@@ -102,17 +105,8 @@ constexpr std::uint16_t SPACE_VIEW_LINE_PAIRS = 0x3F;
 constexpr std::uint16_t CHART_SCREEN_OFFSET = 0x0648; // x=32, line 40
 constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
 
-// What SaveScreenshot calls, through the hooks. Reprogramming the PIT raises IRQ 0 when the timer's output is low, and
-// the original's CPU takes it as soon as interrupts are on again, with whichever handler is installed then: a call
-// through a hook takes it at the next entry (Pc::CallNear), as near to that as native code gets, where a C++ call
-// would leave it to the game's own handler after SaveScreenshot.
-constexpr std::uint16_t INSTALL_TIMER_INTERRUPT = 0x00C6;
-constexpr std::uint16_t INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0105;
-constexpr std::uint16_t RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0148;
-constexpr std::uint16_t RESTORE_TIMER_INTERRUPT = 0x016B;
-constexpr std::uint16_t WRITE_SCREENSHOT_FILE = 0x03FD;
-constexpr std::uint16_t SHOW_DISK_ERROR = 0x0470;
-// It puts CriticalErrorInterrupt on int 24h, at 0000:0090, while it writes.
+// SaveScreenshot puts CriticalErrorInterrupt on int 24h, at 0000:0090, while it writes.
+constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0;
 constexpr std::uint16_t CRITICAL_ERROR_VECTOR_OFFSET = 0x0090;
 constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
@@ -483,7 +477,7 @@ void MoveEndpointToEdge(Guest& _guest)
   const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(regs.ax)} * Signed(regs.dx));
   regs.ax = static_cast<std::uint16_t>(product);
   regs.dx = static_cast<std::uint16_t>(product >> 16);
-  DivideSignedWord(_guest, regs.cx);
+  DivideSignedWordOnRegisters(_guest, regs.cx);
   regs.ax = static_cast<std::uint16_t>(regs.ax + regs.bx);
   regs.cx = 0;
   regs.dx = regs.si;
@@ -838,7 +832,7 @@ void EdgeSlope(Guest& _guest)
   SetHigh(regs.ax, 0);
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
-  DivideWord(_guest, regs.cx);
+  DivideWordOnRegisters(_guest, regs.cx);
 }
 
 // FillFlatBottomTriangle (CS:1C62): A on top, B and C on the bottom row.
@@ -909,7 +903,7 @@ void FillFlatTopTriangle(Guest& _guest)
   }
   SetLow(regs.ax, 0);
   regs.dx = 0;
-  DivideWord(_guest, regs.cx);
+  DivideWordOnRegisters(_guest, regs.cx);
   regs.di = regs.ax;
   regs.ax = Join(_guest.Get(DS.triangleEdgeStartX2), 0);
   regs.bx = Join(_guest.Get(DS.triangleEdgeStartX), 0);
@@ -999,7 +993,7 @@ void FillGeneralTriangle(Guest& _guest)
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
   SetLow(regs.cx, _guest.Get(DS.triangleUpperRows));
-  DivideWord(_guest, regs.cx);
+  DivideWordOnRegisters(_guest, regs.cx);
   regs.di = regs.ax;
   regs.ax = Join(_guest.Get(DS.triangleEdgeStartX), 0);
   regs.bx = regs.ax;
@@ -1176,10 +1170,10 @@ void ClippedSlope(Guest& _guest, std::uint16_t _rows, DataField<std::uint16_t> _
 {
   Machine::Registers& regs = _guest.Regs();
   regs.dx = 0;
-  DivideWord(_guest, _rows);
+  DivideWordOnRegisters(_guest, _rows);
   _guest.Set(_whole, regs.ax);
   regs.ax = 0;
-  DivideWord(_guest, _rows);
+  DivideWordOnRegisters(_guest, _rows);
   _guest.Set(_fraction, regs.ax);
 }
 
@@ -1576,31 +1570,32 @@ void CopyLinePairsOnRegisters(Guest& _guest, std::uint16_t _loop)
 
 } // namespace
 
-void SaveScreenshot(Guest& _guest)
+void SaveScreenshot(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS);
-  _guest.Call(RESTORE_TIMER_INTERRUPT);
-  _guest.Set(DS.diskError, 0);
-  regs.bx = 0;
-  regs.es = regs.bx;
-  _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET));
-  _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT));
-  regs.bx = CRITICAL_ERROR_INTERRUPT;
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, regs.bx);
-  regs.bx = regs.cs;
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, regs.bx);
-  _guest.Call(WRITE_SCREENSHOT_FILE);
-  if (_guest.Get(DS.diskError) != 0)
+  RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+  (void)RestoreTimerInterrupt(_state, _hardware);
+  // The IRQ 0 its PIT reprogramming raises when the timer's output was low, taken by the BIOS's handler, back on int 8. The
+  // original's CPU takes it after RestoreTimerInterrupt's STI, before the clock is read; here it is taken once it returns, where
+  // the register code's call of WriteScreenshotFile through its hook took it.
+  _hardware.TakeDueInterrupts();
+  _state.Set(DS.diskError, 0);
+  // Int 24h's vector, pushed round the write and popped back after it.
+  const std::uint16_t errorOffset = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET);
+  const std::uint16_t errorSegment = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, CRITICAL_ERROR_INTERRUPT);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, _state.CodeSegment());
+  WriteScreenshotFile(_state, _hardware);
+  if (_state.Get(DS.diskError) != 0)
   {
-    _guest.Call(SHOW_DISK_ERROR);
+    ShowDiskError(_state);
   }
-  regs.ax = 0;
-  regs.es = regs.ax;
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, _guest.Pop());
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, _guest.Pop());
-  _guest.Call(INSTALL_TIMER_INTERRUPT);
-  _guest.Call(INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, errorSegment);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, errorOffset);
+  // InstallTimerInterrupt leaves ES = 0, the interrupt table, which InstallDivideAndKeyboardInterrupts takes.
+  InstallTimerInterrupt(_state, _hardware);
+  // Its PIT reprogramming likewise, the IRQ 0 taken by the game's handler after its RET, as the original's CPU takes it.
+  _hardware.TakeDueInterrupts();
+  InstallDivideAndKeyboardInterrupts(_state, _hardware, VECTOR_TABLE_SEGMENT);
 }
 
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
@@ -1960,7 +1955,7 @@ void DrawDisc(Guest& _guest)
   }
   else
   {
-    DivideWord(_guest, regs.bx);
+    DivideWordOnRegisters(_guest, regs.bx);
   }
   regs.ax = SwapBytes(regs.ax);
   _guest.Set(DS.discProfileStepFraction, regs.ax);
@@ -2489,6 +2484,14 @@ void ClearTextScreenEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_CX_DI);
 }
 
+void SaveScreenshotEntry(Guest& _guest)
+{
+  SaveScreenshot(_guest.State(), _guest.Devices());
+  // InstallDivideAndKeyboardInterrupts leaves ES on the CGA's memory.
+  _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(SAVES_SCREENSHOT);
+}
+
 void WriteScreenshotFileEntry(Guest& _guest)
 {
   WriteScreenshotFile(_guest.State(), _guest.Devices());
@@ -2543,7 +2546,7 @@ namespace
 constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshot, SAVES_SCREENSHOT},
+  NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshotEntry, SAVES_SCREENSHOT},
   NativeEntry{0x03FD, "WriteScreenshotFile", &WriteScreenshotFileEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},

@@ -773,7 +773,7 @@ void PrintCommanderCatalogue(Guest& _guest)
   do
   {
     regs.ax = SignExtend(High(regs.dx));
-    DivideByte(_guest, Low(regs.dx));
+    DivideByteOnRegisters(_guest, Low(regs.dx));
     SetHigh(regs.bx, High(regs.ax));
     regs.ax = SignExtend(Low(regs.ax));
     regs.di = regs.ax;

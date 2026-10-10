@@ -5,7 +5,9 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Flight.h"
+#include "Input.h"
 #include "Ships.h"
+#include "Timer.h"
 
 #include <utility>
 
@@ -15,20 +17,15 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
-constexpr std::uint16_t TOGGLE_INPUT_CURSOR = 0x7727;
-constexpr std::uint16_t REDRAW_INPUT_LINE = 0x773A;
-constexpr std::uint16_t WAIT_FOR_TIMER_TICK = 0x7772;
-
 // Where ReadTextLine's loop jumps back to: the blink restarted, a key read, the blink counted, the line
-// redrawn.
+// redrawn (Hardware::LoopTurn).
 constexpr std::uint16_t INPUT_RESTART_BLINK = 0x76A3;
 constexpr std::uint16_t INPUT_READ_KEY = 0x76AF;
 constexpr std::uint16_t INPUT_COUNT_BLINK = 0x76B7;
 constexpr std::uint16_t INPUT_REDRAW = 0x76FF;
 constexpr std::uint16_t CURSOR_BLINK_TICKS = 300;
 constexpr std::uint8_t FIRST_UNMAPPED_SCAN = 0x54; // scanCodeToAscii's length
+constexpr std::uint8_t NO_CHARACTER = 0xFF;        // in scanCodeToAscii: a key that types nothing
 constexpr std::uint8_t ENTER_KEY = 0x0D;
 constexpr std::uint8_t BACKSPACE_KEY = 0x00;
 constexpr std::uint8_t CURSOR_HIDDEN = ' ';
@@ -141,19 +138,36 @@ void CopyNameInto(GameState& _state, std::uint16_t _from, std::uint16_t _to, std
   }
 }
 
-// ReadTextLine's redraw (0x76FF): the line and the cursor printed, then back to counting the blink.
-void RedrawTypedLine(Guest& _guest)
+// The line ReadTextLine reads: the buffer it types into, which the original holds in SI, and where RedrawInputLine echoes it,
+// in ES:DI. None of them changes from one turn of its loop to the next.
+struct TypedLine
 {
-  _guest.Call(REDRAW_INPUT_LINE);
-  _guest.JumpBack(INPUT_COUNT_BLINK);
+  std::uint16_t buffer;
+  std::uint16_t segment;
+  std::uint16_t cell;
+};
+
+// ReadTextLine's turns carry the length typed, in BX: the one value its registers hold at a backward jump that the next turn
+// reads and that changes. AL, which GetKey shifts each code it takes into, reaches no write, no branch and no turn that does
+// not change memory: every turn writes cursorBlinkTicks or takes a code from keyBuffer.
+void TypedLineTurn(Hardware& _hardware, std::uint16_t _loop, std::uint16_t _length)
+{
+  _hardware.LoopTurn(_loop, {_length});
+}
+
+// ReadTextLine's redraw (0x76FF): the line typed and the cursor printed, then the JMP back to counting the blink.
+void RedrawTypedLine(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
+{
+  (void)RedrawInputLine(_state, _line.buffer, _length, _line.segment, _line.cell);
+  TypedLineTurn(_hardware, INPUT_COUNT_BLINK, _length);
 }
 
 // ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
-void RestartInputBlink(Guest& _guest)
+void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
 {
-  _guest.Set(DS.cursorBlinkTicks, CURSOR_BLINK_TICKS);
-  _guest.Call(TOGGLE_INPUT_CURSOR);
-  RedrawTypedLine(_guest);
+  _state.Set(DS.cursorBlinkTicks, CURSOR_BLINK_TICKS);
+  ToggleInputCursor(_state);
+  RedrawTypedLine(_state, _hardware, _line, _length);
 }
 
 // MessageLine's second half (0x35B9): the message at messagePointer, unless it is already shown, on the message line,
@@ -524,89 +538,84 @@ PrintedLines PrintTextLines(GameState& _state, std::uint16_t _text, std::uint16_
   return printed;
 }
 
-void ReadTextLine(Guest& _guest)
+std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::uint16_t _buffer, std::uint8_t _most, std::uint16_t _segment,
+                           std::uint16_t _cell)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(RESET_KEYBOARD);
-  _guest.Set(DS.textPaperPattern, 0);
-  _guest.Set(DS.inputCharsLeft, Low(regs.cx));
-  regs.bx = 0;
-  RestartInputBlink(_guest);
+  const TypedLine line{_buffer, _segment, _cell};
+  ResetKeyboard(_state, _hardware);
+  _state.Set(DS.textPaperPattern, 0);
+  _state.Set(DS.inputCharsLeft, _most);
+  std::uint16_t length = 0;
+  RestartInputBlink(_state, _hardware, line, length);
   for (;;)
   {
-    const auto blink = static_cast<std::uint16_t>(_guest.Get(DS.cursorBlinkTicks) - 1);
-    _guest.Set(DS.cursorBlinkTicks, blink);
+    const auto blink = static_cast<std::uint16_t>(_state.Get(DS.cursorBlinkTicks) - 1);
+    _state.Set(DS.cursorBlinkTicks, blink);
     if (blink == 0)
     {
-      _guest.JumpBack(INPUT_RESTART_BLINK);
-      RestartInputBlink(_guest);
+      TypedLineTurn(_hardware, INPUT_RESTART_BLINK, length);
+      RestartInputBlink(_state, _hardware, line, length);
       continue;
     }
-    _guest.JumpBack(INPUT_READ_KEY);
-    _guest.Call(WAIT_FOR_TIMER_TICK);
-    _guest.Call(GET_KEY);
-    if (_guest.Flag(Machine::FLAG_ZERO))
+    TypedLineTurn(_hardware, INPUT_READ_KEY, length);
+    WaitForTimerTick(_state, _hardware);
+    const KeyPress key = GetKey(_state, _hardware);
+    if (key.scanCode == 0)
     {
       continue;
     }
-    if (High(regs.ax) >= FIRST_UNMAPPED_SCAN)
+    if (key.scanCode >= FIRST_UNMAPPED_SCAN)
     {
-      _guest.JumpBack(INPUT_COUNT_BLINK);
+      TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
-    // The key's character: inc dl / je skips FFh, a key with none, and leaves DL zero.
-    regs.cx = DS.scanCodeToAscii.At(High(regs.ax));
-    SetLow(regs.dx, static_cast<std::uint8_t>(_guest.Byte(regs.cx) + 1));
-    if (Low(regs.dx) == 0)
+    std::uint8_t character = _state.Byte(DS.scanCodeToAscii.At(key.scanCode));
+    if (character == NO_CHARACTER)
     {
-      _guest.JumpBack(INPUT_COUNT_BLINK);
+      TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
-    SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) - 1));
-    const std::uint8_t character = Low(regs.dx);
     if (character == ENTER_KEY)
     {
-      if (_guest.Byte(DS.inputCursorText.offset) != CURSOR_HIDDEN)
+      if (_state.Byte(DS.inputCursorText.offset) != CURSOR_HIDDEN)
       {
-        _guest.Call(TOGGLE_INPUT_CURSOR);
-        _guest.Call(REDRAW_INPUT_LINE);
+        ToggleInputCursor(_state);
+        (void)RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
-      return;
+      return length;
     }
     if (character == BACKSPACE_KEY)
     {
-      if (regs.bx != 0)
+      if (length != 0)
       {
-        --regs.bx;
-        _guest.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(_guest.Get(DS.inputCharsLeft) + 1));
-        _guest.Call(REDRAW_INPUT_LINE);
+        --length;
+        _state.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(_state.Get(DS.inputCharsLeft) + 1));
+        (void)RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
-      _guest.JumpBack(INPUT_COUNT_BLINK);
+      TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
     if (character >= 'A' && character <= 'Z')
     {
-      // Lower case, unless GetKey's AL says Shift was held: shr al,1 into the carry.
-      SetLow(regs.dx, static_cast<std::uint8_t>(character | LOWER_CASE_BIT));
-      const bool shift = (Low(regs.ax) & 1) != 0;
-      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) >> 1));
-      if (shift)
+      // OR DL,20h, and AND DL,DFh after it when GetKey says Shift was held: lower case unless Shift is held.
+      character = static_cast<std::uint8_t>(character | LOWER_CASE_BIT);
+      if (key.shift)
       {
-        SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) & UPPER_CASE_MASK));
+        character = static_cast<std::uint8_t>(character & UPPER_CASE_MASK);
       }
     }
-    _guest.SetByte(Offset(regs.bx, regs.si), Low(regs.dx));
-    ++regs.bx;
-    const auto left = static_cast<std::uint8_t>(_guest.Get(DS.inputCharsLeft) - 1);
-    _guest.Set(DS.inputCharsLeft, left);
+    _state.SetByte(Offset(length, _buffer), character);
+    ++length;
+    const auto left = static_cast<std::uint8_t>(_state.Get(DS.inputCharsLeft) - 1);
+    _state.Set(DS.inputCharsLeft, left);
     if ((left & 0x80) != 0)
     {
       // No room: the character is taken back.
-      --regs.bx;
-      _guest.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(left + 1));
-      _guest.JumpBack(INPUT_REDRAW);
+      --length;
+      _state.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(left + 1));
+      TypedLineTurn(_hardware, INPUT_REDRAW, length);
     }
-    RedrawTypedLine(_guest);
+    RedrawTypedLine(_state, _hardware, line, length);
   }
 }
 
@@ -890,6 +899,18 @@ void PrintTextLinesEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void ReadTextLineEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.bx = ReadTextLine(_guest.State(), _guest.Devices(), regs.si, Low(regs.cx), regs.es, regs.di);
+  // RedrawInputLine, which it always calls, leaves ES on the text page in the text layout.
+  if (_guest.Get(DS.screenLayout) == TEXT_LAYOUT)
+  {
+    regs.es = Guest::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(CLOBBERS_AX_CX_DX);
+}
+
 void ToggleInputCursorEntry(Guest& _guest)
 {
   ToggleInputCursor(_guest.State());
@@ -961,7 +982,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x69B3, "FormatTenths", &FormatTenthsEntry, PRESERVES_ALL},
   NativeEntry{0x6DDE, "PrintTextLines", &PrintTextLinesEntry, PRESERVES_ALL},
   // ReadTextLine waits for keys as a rule.
-  NativeEntry{0x7694, "ReadTextLine", &ReadTextLine, CLOBBERS_AX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
+  NativeEntry{0x7694, "ReadTextLine", &ReadTextLineEntry, CLOBBERS_AX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7727, "ToggleInputCursor", &ToggleInputCursorEntry, PRESERVES_ALL},
   NativeEntry{0x773A, "RedrawInputLine", &RedrawInputLineEntry, PRESERVES_ALL},
   NativeEntry{0x7750, "PrintStringForLayout", &PrintStringForLayoutEntry, PRESERVES_ALL},

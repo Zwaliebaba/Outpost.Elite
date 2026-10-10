@@ -280,7 +280,7 @@ void ProjectVertexCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t 
     regs.ax = Negate(regs.ax);
   }
   ShiftIntoDividend(regs, Negative(regs.ax) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, _guest.Word(Offset(regs.si, VERTEX_Z)), _returnOffset);
+  DivideUnsignedOnRegisters(_guest, _guest.Word(Offset(regs.si, VERTEX_Z)), _returnOffset);
   regs.dx = static_cast<std::uint16_t>(regs.dx << 1);
   if (regs.ax < regs.dx)
   {
@@ -787,7 +787,7 @@ void ProjectDiscCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t _r
     regs.ax = Negate(regs.ax);
   }
   ShiftIntoDividend(regs, Negative(regs.ax) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_Z)), _returnOffset);
+  DivideUnsignedOnRegisters(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_Z)), _returnOffset);
   regs.bp = static_cast<std::uint16_t>(regs.bp - 1);
   if (regs.bp == 0)
   {
@@ -1466,10 +1466,10 @@ void ProjectToScreen(Guest& _guest)
     regs.bp = Offset(regs.bp, 1);
   }
   ShiftIntoDividend(regs, HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, regs.cx, SCREEN_X_DIVIDE_RETURN);
+  DivideUnsignedOnRegisters(_guest, regs.cx, SCREEN_X_DIVIDE_RETURN);
   std::swap(regs.ax, regs.bx);
   ShiftIntoDividend(regs, HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, regs.cx, SCREEN_Y_DIVIDE_RETURN);
+  DivideUnsignedOnRegisters(_guest, regs.cx, SCREEN_Y_DIVIDE_RETURN);
   if ((regs.bp & 1) != 0)
   {
     regs.ax = Negate(regs.ax);

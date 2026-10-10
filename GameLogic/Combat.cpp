@@ -227,7 +227,7 @@ bool DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the magnitude * 256, with DH its sign.
   regs.dx = Join(High(SignWord(magnitude)), High(magnitude));
   regs.ax = Join(Low(magnitude), 0);
-  DivideWord(_guest, _guest.Word(At(regs.di, SLOT_VIEW_Z)));
+  DivideWordOnRegisters(_guest, _guest.Word(At(regs.di, SLOT_VIEW_Z)));
   return regs.ax < regs.bx;
 }
 
@@ -373,11 +373,11 @@ void DropCargo(Guest& _guest)
     }
     regs.ax = 0xFF;
     SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
-    DivideByte(_guest, Low(regs.bx));
+    DivideByteOnRegisters(_guest, Low(regs.bx));
     SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.ax) + 1));
     NextRandomEntry(_guest);
     SetHigh(regs.ax, 0);
-    DivideByte(_guest, Low(regs.bx));
+    DivideByteOnRegisters(_guest, Low(regs.bx));
     if (Low(regs.ax) == 0)
     {
       return;
@@ -749,7 +749,7 @@ void FindShipInCrosshairs(Guest& _guest)
         regs.bx = static_cast<std::uint16_t>(regs.bx & (TYPE_MASK << 1));
         regs.ax = Swap(_guest.Word(At(DS.shipTargetRadius.offset, regs.bx)));
         regs.dx = 0;
-        DivideWord(_guest, _guest.Word(At(regs.di, SLOT_VIEW_Z)));
+        DivideWordOnRegisters(_guest, _guest.Word(At(regs.di, SLOT_VIEW_Z)));
         regs.bx = static_cast<std::uint16_t>(regs.ax + 2);
         if (ScaledWithinRadius(_guest, SLOT_VIEW_X) && ScaledWithinRadius(_guest, SLOT_VIEW_Y) &&
             _guest.Word(At(regs.di, SLOT_VIEW_Z)) < regs.bp)

@@ -820,7 +820,7 @@ void TryScoopObject(Guest& _guest)
       NextRandomEntry(_guest);
       regs.ax = Low(regs.ax);
       SetLow(regs.bx, RANDOM_PRODUCT_DIVISOR);
-      DivideByte(_guest, RANDOM_PRODUCT_DIVISOR);
+      DivideByteOnRegisters(_guest, RANDOM_PRODUCT_DIVISOR);
       if (Low(regs.ax) == PRODUCT_SLAVES)
       {
         SetLow(regs.ax, PRODUCT_FURS);
@@ -1140,7 +1140,7 @@ void PayForEquipmentItem(Guest& _guest)
     regs.dx = _guest.Get(DS.data823F);
     regs.ax = static_cast<std::uint16_t>(missing * Low(regs.dx));
     regs.dx = WithLow(regs.dx, FUEL_UNITS_PER_TENTH);
-    DivideByte(_guest, FUEL_UNITS_PER_TENTH);
+    DivideByteOnRegisters(_guest, FUEL_UNITS_PER_TENTH);
     if (Low(regs.ax) == 0)
     {
       regs.ax = WithLow(regs.ax, 1);

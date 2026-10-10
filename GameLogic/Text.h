@@ -1,6 +1,7 @@
 // GameLogic/Text.h
 #pragma once
 
+#include "Hardware.h"
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
 
@@ -10,17 +11,12 @@
 namespace Elite
 {
 
-// The reference's text routines, ported (plan §5 Phase 3, ADR-010): printing text and numbers. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv. The routines de-assembled so far (ADR-012)
-// take values and give values back, and their entries, at the end, keep the register contracts.
+// The reference's text routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): printing text and numbers, and
+// reading a line typed. The routines take values and give values back, and their entries, at the end, keep the register
+// contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> TextEntries() noexcept;
-
-/// ReadTextLine (CS:7694): a line typed into the buffer at SI, at most CL characters, echoed at DI with a blinking
-/// cursor; Enter ends it, Backspace deletes, letters are lower case unless Shift is held. Waits for keys. Out: BX the
-/// length; AX, CX, DX clobbered.
-void ReadTextLine(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -159,6 +155,13 @@ void FormatTenths(GameState& _state, std::uint16_t _tenths);
 /// one before, from B800:_cell; 65,536 for 0, as LOOP counts.
 PrintedLines PrintTextLines(GameState& _state, std::uint16_t _text, std::uint16_t _cell, std::uint16_t _lines);
 
+/// ReadTextLine (CS:7694): a line typed into the buffer at DS:_buffer, at most _most characters, after ResetKeyboard and with
+/// textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a cursor that blinks every 300 timer ticks.
+/// Enter ends it, Backspace deletes, a key with no character does nothing, and letters are lower case unless Shift is held.
+/// Returns its length; the buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
+[[nodiscard]] std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::uint16_t _buffer, std::uint8_t _most,
+                                         std::uint16_t _segment, std::uint16_t _cell);
+
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);
 
@@ -197,6 +200,9 @@ void SwapTextAttributeNibblesEntry(Guest& _guest);
 void PrintCountedTextLinesEntry(Guest& _guest);
 void FormatTenthsEntry(Guest& _guest);
 void PrintTextLinesEntry(Guest& _guest);
+/// In: SI the buffer, CL the most characters, ES:DI the place. Out: BX the length, and ES = B800h in the text layout; AX, CX
+/// and DX clobbered.
+void ReadTextLineEntry(Guest& _guest);
 void ToggleInputCursorEntry(Guest& _guest);
 void RedrawInputLineEntry(Guest& _guest); ///< In: SI the buffer, BX the length, ES:DI the place. Out: AX, and ES in the text layout.
 void PrintStringForLayoutEntry(Guest& _guest);

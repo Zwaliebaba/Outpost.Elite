@@ -11,31 +11,12 @@
 namespace Elite
 {
 
-// The reference's input routines, ported (plan §5 Phase 3, ADR-010): the keyboard, the joystick and the mouse. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// The reference's input routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the keyboard, the joystick and
+// the mouse. The routines take values and give values back, on the GameState and the devices (ADR-014), and their entries keep
+// the register contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> InputEntries() noexcept;
-
-/// WaitForKeyPress (CS:6DEC): GetKey until a key comes, the loop's turns ended where the original's are. Out: AH = its scan code.
-/// Waits as a rule.
-void WaitForKeyPress(Guest& _guest);
-
-/// ReadSteering (CS:7536): AL=roll and AH=pitch input from the selected device, +-23. BX clobbered (and CX and DX by
-/// the joystick and the mouse). Waits sometimes, in ReadJoystickAxes.
-void ReadSteering(Guest& _guest);
-
-/// GetKey (CS:7616): the next key from keyBuffer: ZF=0, AH=scan code, AL=AL<<1 | Shift; or ZF=1, AH=0 when there is
-/// none. Interrupts on.
-void GetKey(Guest& _guest);
-
-/// ReadJoystickSteering (CS:77C1): AL = roll and AH = pitch from the joystick: the Amstrad's keys ramped, or the IBM stick about its
-/// centre, within -23..23; AX = 0 when the IBM stick does not answer. BX, CX and DX clobbered. Waits sometimes, in
-/// ReadJoystickAxes.
-void ReadJoystickSteering(Guest& _guest);
-
-/// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held.
-void PollScreenDumpKey(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
@@ -51,6 +32,15 @@ struct Steering
 {
   std::uint8_t roll;
   std::uint8_t pitch;
+};
+
+/// What GetKey takes from keyBuffer.
+struct KeyPress
+{
+  bool taken;            ///< keyBuffer held a code, and GetKey took it
+  std::uint8_t scanCode; ///< the code's scan code, 01h-7Fh; 0 when it took none, which its callers read as no key
+  bool shift;            ///< Shift was held when the key went down
+  bool screenshot;       ///< Alt and PrtSc were held, and it saved a screenshot
 };
 
 /// What ReadJoystickAxes counts: the polls of each of the IBM stick's axes before its one-shot drops.
@@ -96,6 +86,29 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 /// the roll ramp and the pitch ramp negated.
 [[nodiscard]] Steering ReadKeyboardSteering(GameState& _state);
 
+/// WaitForKeyPress (CS:6DEC): GetKey until it gives a key, which it returns, with screenshot set if any of its calls saved one.
+/// Waits as a rule, a turn of its loop for each time GetKey finds none (ADR-015).
+[[nodiscard]] KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware);
+
+/// ReadSteering (CS:7536): the roll and the pitch from the selected device, within -23..23: the keyboard's (ReadKeyboardSteering)
+/// or the Amstrad stick's integrated into keyboardRollRate and keyboardPitchRate, the IBM stick's (ReadJoystickSteering), or the
+/// mouse's (ReadMouseSteering). _trigger is the byte the IBM stick's read writes to the game port, which the port does not read:
+/// AL as ReadSteering's caller left it. Waits sometimes, in ReadJoystickAxes.
+[[nodiscard]] Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
+
+/// GetKey (CS:7616): the next code from keyBuffer, taken with interrupts off; then interrupts on, and SaveScreenshot while Alt and
+/// PrtSc are held.
+[[nodiscard]] KeyPress GetKey(GameState& _state, Hardware& _hardware);
+
+/// ReadJoystickSteering (CS:77C1): the roll and the pitch from the joystick: the Amstrad's keys ramped, or the IBM stick's
+/// counts about joystickCenterX and joystickCenterY, each (count - centre) * 128 / centre by a divide that can trap, at most 127,
+/// over 8 less a dead zone of 4, the pitch negated, within -23..23; 0 and 0 when the IBM stick does not answer. _trigger as for
+/// ReadSteering. Waits sometimes, in ReadJoystickAxes.
+[[nodiscard]] Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
+
+/// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held. Returns whether it saved one.
+bool PollScreenDumpKey(GameState& _state, Hardware& _hardware);
+
 /// ApplyReverseControls (CS:8EA5): the reversing options on _steering: reverseYControl negates the pitch, and
 /// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH: its entry calls this.
 [[nodiscard]] Steering ApplyReverseControls(const GameState& _state, Steering _steering);
@@ -113,5 +126,11 @@ void ResetMouseIfSelectedEntry(Guest& _guest);     ///< AX and BX clobbered.
 void ReadKeyboardSteeringEntry(Guest& _guest);     ///< Out: AL=roll, AH=pitch; BX clobbered.
 void ApplyReverseControlsEntry(Guest& _guest);     ///< In/out: AL=roll, AH=pitch.
 void ApplyReverseControlsToDxEntry(Guest& _guest); ///< In/out: DL=roll, DH=pitch.
+void WaitForKeyPressEntry(Guest& _guest);          ///< Out: AH=scan code, AL=AL<<1 | Shift, as GetKey leaves them.
+void ReadSteeringEntry(Guest& _guest);             ///< In: AL, to fire the stick. Out: AL=roll, AH=pitch; BX, CX and DX clobbered.
+/// Out: ZF=0, AH=scan code and AL=AL<<1 | Shift; or ZF=1 and AH=0 when there is none. IF=1, and ES=B800h after a screenshot.
+void GetKeyEntry(Guest& _guest);
+void ReadJoystickSteeringEntry(Guest& _guest); ///< In: AL, to fire the stick. Out: AL=roll, AH=pitch; BX, CX and DX clobbered.
+void PollScreenDumpKeyEntry(Guest& _guest);    ///< Out: ES=B800h after a screenshot.
 
 } // namespace Elite

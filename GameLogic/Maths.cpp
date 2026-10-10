@@ -82,15 +82,9 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
   _state.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, _ds);
 }
 
-// DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: the
-// offset it resumes at, and AX as it leaves AX = _ax.
-struct TrapOutcome
-{
-  std::uint16_t resume;
-  std::uint16_t ax;
-};
-
-[[nodiscard]] TrapOutcome SaturateDivide(const GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax)
+// DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: the offset it resumes
+// at, and AX as it leaves AX = _ax.
+[[nodiscard]] DivideTrap SaturateDivide(const GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax)
 {
   std::uint16_t resume = _offset;
   if ((_state.FarWord(_segment, _offset) & DIVIDE_OPCODE_MASK) == DIVIDE_OPCODE)
@@ -99,18 +93,20 @@ struct TrapOutcome
   }
   // Two bytes back: the opcode of a register divide, but the ModRM byte of a memory one.
   const std::uint8_t opcode = _state.FarByte(_segment, static_cast<std::uint16_t>(resume - REGISTER_DIVIDE_BYTES));
-  return TrapOutcome{resume, (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE)};
+  return DivideTrap{resume, (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE)};
 }
 
-// DivideOverflowInterrupt from its saves to its IRET, for a divide whose return address is
-// _segment:_offset. Returns the offset it resumes at.
-std::uint16_t TrapDivideOverflow(Guest& _guest, std::uint16_t _segment, std::uint16_t _offset)
+// The dividend of a word divide: DX:AX.
+[[nodiscard]] std::uint32_t WordDividend(const Machine::Registers& _regs) noexcept
 {
-  Machine::Registers& regs = _guest.Regs();
-  SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
-  const TrapOutcome outcome = SaturateDivide(_guest.State(), _segment, _offset, regs.ax);
-  regs.ax = outcome.ax;
-  return outcome.resume;
+  return (std::uint32_t{_regs.dx} << 16) | _regs.ax;
+}
+
+// The game's memory with the data segment the registers hold, for the divide trap's register forms: the trap saves the DS
+// the divide ran with, which code still on the registers holds there.
+[[nodiscard]] GameState StateOnRegisters(Guest& _guest) noexcept
+{
+  return GameState(_guest.Host().Ram(), _guest.CodeSegment(), _guest.Regs().ds);
 }
 
 [[nodiscard]] std::uint16_t Word(std::int16_t _value) noexcept
@@ -131,73 +127,98 @@ std::uint16_t TrapDivideOverflow(Guest& _guest, std::uint16_t _segment, std::uin
 
 } // namespace
 
-void DivideOverflowInterrupt(Guest& _guest)
-{
-  // The return address IRET takes: IP, then CS.
-  _guest.SetStackWord(0, TrapDivideOverflow(_guest, _guest.StackWord(2), _guest.StackWord(0)));
-}
-
-void DivideUnsigned(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset)
+void DivideUnsignedOnRegisters(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset)
 {
   Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  if (_divisor == 0 || dividend / _divisor > 0xFFFF)
+  GameState state = StateOnRegisters(_guest);
+  const WordQuotient divided = DivideUnsigned(state, WordDividend(regs), _divisor, _returnOffset, regs.bx);
+  regs.ax = divided.quotient;
+  regs.dx = divided.remainder;
+}
+
+void DivideByteOnRegisters(Guest& _guest, std::uint8_t _divisor)
+{
+  Machine::Registers& regs = _guest.Regs();
+  GameState state = StateOnRegisters(_guest);
+  const ByteQuotient divided = DivideByte(state, regs.ax, _divisor, regs.bx);
+  regs.ax = Join(divided.remainder, divided.quotient);
+}
+
+void DivideWordOnRegisters(Guest& _guest, std::uint16_t _divisor)
+{
+  Machine::Registers& regs = _guest.Regs();
+  GameState state = StateOnRegisters(_guest);
+  const WordQuotient divided = DivideWord(state, WordDividend(regs), _divisor, regs.bx);
+  regs.ax = divided.quotient;
+  regs.dx = divided.remainder;
+}
+
+void DivideSignedWordOnRegisters(Guest& _guest, std::uint16_t _divisor)
+{
+  Machine::Registers& regs = _guest.Regs();
+  GameState state = StateOnRegisters(_guest);
+  const WordQuotient divided = DivideSignedWord(state, WordDividend(regs), _divisor, regs.bx);
+  regs.ax = divided.quotient;
+  regs.dx = divided.remainder;
+}
+
+// ── The routines ──
+
+DivideTrap DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax, std::uint16_t _bx)
+{
+  SaveDivideRegisters(_state, _bx, _state.DataSegment());
+  return SaturateDivide(_state, _segment, _offset, _ax);
+}
+
+WordQuotient DivideUnsigned(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _returnOffset,
+                            std::uint16_t _bx)
+{
+  if (_divisor == 0 || _dividend / _divisor > 0xFFFF)
   {
-    TrapDivideOverflow(_guest, _guest.CodeSegment(), _returnOffset);
-    return;
+    const DivideTrap trap =
+      DivideOverflowInterrupt(_state, _state.CodeSegment(), _returnOffset, static_cast<std::uint16_t>(_dividend), _bx);
+    return WordQuotient{trap.ax, static_cast<std::uint16_t>(_dividend >> 16)};
   }
-  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
-  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
+  return WordQuotient{static_cast<std::uint16_t>(_dividend / _divisor), static_cast<std::uint16_t>(_dividend % _divisor)};
 }
 
-void DivideByte(Guest& _guest, std::uint8_t _divisor)
+ByteQuotient DivideByte(GameState& _state, std::uint16_t _dividend, std::uint8_t _divisor, std::uint16_t _bx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (High(regs.ax) >= _divisor)
+  if (High(_dividend) >= _divisor)
   {
-    SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
-    SetLow(regs.ax, DIVIDE_OVERFLOW_BYTE);
-    return;
+    SaveDivideRegisters(_state, _bx, _state.DataSegment());
+    return ByteQuotient{DIVIDE_OVERFLOW_BYTE, High(_dividend)};
   }
-  const std::uint16_t dividend = regs.ax;
-  regs.ax = Join(static_cast<std::uint8_t>(dividend % _divisor), static_cast<std::uint8_t>(dividend / _divisor));
+  return ByteQuotient{static_cast<std::uint8_t>(_dividend / _divisor), static_cast<std::uint8_t>(_dividend % _divisor)};
 }
 
-void DivideWord(Guest& _guest, std::uint16_t _divisor)
+WordQuotient DivideWord(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _bx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (regs.dx >= _divisor)
+  const auto high = static_cast<std::uint16_t>(_dividend >> 16);
+  if (high >= _divisor)
   {
-    SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
-    regs.ax = DIVIDE_OVERFLOW_WORD;
-    return;
+    SaveDivideRegisters(_state, _bx, _state.DataSegment());
+    return WordQuotient{DIVIDE_OVERFLOW_WORD, high};
   }
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
-  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
+  return WordQuotient{static_cast<std::uint16_t>(_dividend / _divisor), static_cast<std::uint16_t>(_dividend % _divisor)};
 }
 
-void DivideSignedWord(Guest& _guest, std::uint16_t _divisor)
+WordQuotient DivideSignedWord(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _bx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  const bool dividendNegative = (dividend & 0x80000000u) != 0;
+  const bool dividendNegative = (_dividend & 0x80000000u) != 0;
   const bool divisorNegative = SignWord(_divisor) != 0;
-  const std::uint32_t dividendMagnitude = dividendNegative ? 0u - dividend : dividend;
+  const std::uint32_t dividendMagnitude = dividendNegative ? 0u - _dividend : _dividend;
   const std::uint32_t divisorMagnitude = divisorNegative ? 0x10000u - _divisor : _divisor;
   const std::uint32_t quotient = (dividendMagnitude >> 16) >= divisorMagnitude ? 0x8000u : dividendMagnitude / divisorMagnitude;
   if ((quotient & 0x8000u) != 0)
   {
-    SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
-    regs.ax = DIVIDE_OVERFLOW_WORD;
-    return;
+    SaveDivideRegisters(_state, _bx, _state.DataSegment());
+    return WordQuotient{DIVIDE_OVERFLOW_WORD, static_cast<std::uint16_t>(_dividend >> 16)};
   }
   const std::uint32_t remainder = dividendMagnitude % divisorMagnitude;
-  regs.ax = static_cast<std::uint16_t>(dividendNegative != divisorNegative ? 0u - quotient : quotient);
-  regs.dx = static_cast<std::uint16_t>(dividendNegative ? 0u - remainder : remainder);
+  return WordQuotient{static_cast<std::uint16_t>(dividendNegative != divisorNegative ? 0u - quotient : quotient),
+                      static_cast<std::uint16_t>(dividendNegative ? 0u - remainder : remainder)};
 }
-
-// ── The routines ──
 
 std::uint16_t NextRandom(GameState& _state)
 {
@@ -515,6 +536,17 @@ void VectorOut(Machine::Registers& _regs, Vector _vector) noexcept
 
 } // namespace
 
+void DivideOverflowInterruptEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The return address IRET takes, IP then CS; the trap saves the DS the divide ran with.
+  GameState state = StateOnRegisters(_guest);
+  const DivideTrap trap = DivideOverflowInterrupt(state, _guest.StackWord(2), _guest.StackWord(0), regs.ax, regs.bx);
+  _guest.SetStackWord(0, trap.resume);
+  regs.ax = trap.ax;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void NextRandomEntry(Guest& _guest)
 {
   _guest.Regs().ax = NextRandom(_guest.State());
@@ -702,7 +734,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x025E, "DivideOverflowInterrupt", &DivideOverflowInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{0x025E, "DivideOverflowInterrupt", &DivideOverflowInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x061C, "NextRandom", &NextRandomEntry, PRESERVES_ALL},
   NativeEntry{0x23DB, "RotateBySinCos", &RotateBySinCosEntry, CLOBBERS_DX_BP},
   NativeEntry{0x2421, "SetSinCos0", [](Guest& _guest) { SetSinCosEntry(_guest, 0x41A0); }, PRESERVES_ALL},
