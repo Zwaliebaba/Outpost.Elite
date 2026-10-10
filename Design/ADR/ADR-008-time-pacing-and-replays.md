@@ -67,6 +67,7 @@ Only three loops read 3DAh (0x04C1, 0x05D0, 0x4602), all of this form; the first
   - the PSP at 0813h;
   - DOS's clock at 00:00 on 1 January 1980;
   - DOS's files in an empty directory.
+- **Time in a replay is whole milliseconds from its start, converted to cycles once** (`Elite::ReplayCycle`). A recorder that samples time at any rate and a player that sums the recorded waits therefore land on the same cycle (`ReplayTests.WaitsAddUpExactly`).
 - **Inputs are keys,** made and broken at moments of paced time. `key` makes and breaks at once, which is what a menu reads through the key buffer. `down` and `up` hold a key across frames, which is what flight reads through the key-down table.
 - **What it reproduces.** A replay reproduces the run it records bit for bit, on every build. Two runs, and builds by g++ 13 and clang++ 18, give the same digests (measured 2026-10-10).
 - **The same steps drive DOSBox-X.** `Tools/ReferenceScreens.py` reads them, in wall time, as an approximation of the run.

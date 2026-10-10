@@ -267,12 +267,13 @@ int Run(int _argc, char** _argv)
   }
 
   Machine::StopReason reason = Machine::StopReason::Reached;
+  Elite::ReplayPlayer player(*pc, program);
   std::vector<std::string> digests(steps.size());
   std::size_t mismatches = 0;
   for (std::size_t index = 0; index < steps.size() && reason == Machine::StopReason::Reached; ++index)
   {
     const Elite::Step& step = steps[index];
-    reason = Elite::PlayStep(*pc, program, step, digests[index]);
+    reason = player.Play(step, digests[index]);
     if (step.kind == Elite::StepKind::Shot)
     {
       const std::filesystem::path path = options.out / (step.name + ".png");

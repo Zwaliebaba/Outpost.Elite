@@ -58,11 +58,12 @@ public:
 
       ReferenceRig rig("Corpus");
       Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
+      Elite::ReplayPlayer player(rig.Host(), rig.Program());
       std::size_t checked = 0;
       for (const Elite::Step& step : steps)
       {
         std::string digest;
-        const Machine::StopReason reason = Elite::PlayStep(rig.Host(), rig.Program(), step, digest);
+        const Machine::StopReason reason = player.Play(step, digest);
         const std::wstring where = name + L" line " + std::to_wstring(step.line);
         if (reason != Machine::StopReason::Reached)
           Assert::Fail((where + L": the run stopped").c_str());

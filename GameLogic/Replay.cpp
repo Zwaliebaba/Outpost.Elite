@@ -206,24 +206,32 @@ bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& 
   return true;
 }
 
-Machine::StopReason PlayStep(Machine::Pc& _pc, const Machine::LoadedProgram& _program, const Step& _step, std::string& _digest)
+ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program) noexcept
+  : m_pc(_pc),
+    m_program(_program),
+    m_start(_pc.Clock())
+{
+}
+
+Machine::StopReason ReplayPlayer::Play(const Step& _step, std::string& _digest)
 {
   switch (_step.kind)
   {
   case StepKind::Wait:
-    return _pc.RunUntil(_pc.Clock() + Machine::MicrosecondsToCycles(_step.waitMilliseconds * 1000));
+    m_elapsedMilliseconds += _step.waitMilliseconds;
+    return m_pc.RunUntil(ReplayCycle(m_start, m_elapsedMilliseconds));
   case StepKind::Key:
-    _pc.KeyboardController().Inject(_step.scanCode);
-    _pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_pc.KeyboardController().Inject(_step.scanCode);
+    m_pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Down:
-    _pc.KeyboardController().Inject(_step.scanCode);
+    m_pc.KeyboardController().Inject(_step.scanCode);
     break;
   case StepKind::Up:
-    _pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Digest:
-    _digest = GameStateDigest(_pc, _program);
+    _digest = GameStateDigest(m_pc, m_program);
     break;
   case StepKind::Shot:
     break;

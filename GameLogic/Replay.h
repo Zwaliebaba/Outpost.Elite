@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "Timing.h"
+
 namespace Machine
 {
 class Pc;
@@ -56,10 +58,36 @@ struct Step
 /// The XT (scan code set 1) make code of an X keysym name, for the keys the reference reads.
 [[nodiscard]] std::optional<std::uint8_t> ScanCodeOf(std::string_view _keyName) noexcept;
 
-/// Plays one step on a machine running the reference: a wait runs it on (Machine::Pc::RunUntil), a key
-/// queues its codes on the keyboard, a digest sets _digest to GameStateDigest. A shot does nothing here;
-/// writing pictures is the caller's. Returns why the run stopped, StopReason::Reached if it did not.
-[[nodiscard]] Machine::StopReason PlayStep(Machine::Pc& _pc, const Machine::LoadedProgram& _program, const Step& _step,
-                                           std::string& _digest);
+/// The moment a replay has reached, _milliseconds after it began at machine cycle _start. Time in a replay
+/// is counted in whole milliseconds from its start and converted once, so a recorder that samples time at
+/// any rate and a player that sums the recorded waits land on the same cycle.
+[[nodiscard]] constexpr Machine::Cycles ReplayCycle(Machine::Cycles _start, std::uint64_t _milliseconds) noexcept
+{
+  return _start + Machine::MicrosecondsToCycles(_milliseconds * 1000);
+}
+
+/// Plays steps on a machine running the reference, from the moment it is made.
+class ReplayPlayer
+{
+public:
+  ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program) noexcept;
+
+  /// Plays one step: a wait runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle), a
+  /// key queues its codes on the keyboard, a digest sets _digest to GameStateDigest. A shot does nothing
+  /// here; writing pictures is the caller's. Returns why the run stopped, StopReason::Reached if it did not.
+  [[nodiscard]] Machine::StopReason Play(const Step& _step, std::string& _digest);
+
+  /// Milliseconds since the replay began.
+  [[nodiscard]] std::uint64_t ElapsedMilliseconds() const noexcept
+  {
+    return m_elapsedMilliseconds;
+  }
+
+private:
+  Machine::Pc& m_pc;
+  const Machine::LoadedProgram& m_program;
+  Machine::Cycles m_start = 0;
+  std::uint64_t m_elapsedMilliseconds = 0;
+};
 
 } // namespace Elite

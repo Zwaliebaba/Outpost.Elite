@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "ReferenceRig.h"
 #include "Replay.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -46,6 +47,33 @@ public:
     Assert::AreEqual(std::size_t{4}, steps[2].line);
     Assert::AreEqual(std::size_t{5}, steps[3].line);
     Assert::AreEqual("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", steps[3].expectedDigest.c_str());
+  }
+
+  // Time in a replay is whole milliseconds from its start, converted once (ReplayCycle): a thousand waits
+  // of a millisecond end on the same cycle as one wait of a second, which is what lets a recorder that
+  // samples time as it likes and a player that sums the waits agree to the cycle.
+  TEST_METHOD(WaitsAddUpExactly)
+  {
+    std::vector<Elite::Step> one;
+    std::vector<Elite::Step> many;
+    std::string error;
+    Assert::IsTrue(Elite::ParseSteps("wait 1", one, error), L"parses");
+    for (int index = 0; index < 1000; ++index)
+      Assert::IsTrue(Elite::ParseSteps("wait 0.001", many, error), L"parses");
+    Machine::Cycles ends[2] = {};
+    for (int run = 0; run < 2; ++run)
+    {
+      ReferenceRig rig("Waits");
+      Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
+      Elite::ReplayPlayer player(rig.Host(), rig.Program());
+      std::string digest;
+      for (const Elite::Step& step : run == 0 ? one : many)
+        Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"runs");
+      Assert::AreEqual(std::uint64_t{1'000}, player.ElapsedMilliseconds());
+      ends[run] = rig.Host().Clock();
+    }
+    Assert::AreEqual(ends[0], ends[1]);
+    Assert::AreEqual(Elite::ReplayCycle(0, 1'000), ends[0]);
   }
 
   TEST_METHOD(MistakesAreNamed)
