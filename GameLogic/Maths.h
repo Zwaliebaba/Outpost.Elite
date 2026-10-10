@@ -86,6 +86,10 @@ void VectorWithinBox(Guest& _guest);
 /// out: AX, BX, CX = x, y, z; DX is left as the last RotateBySinCos leaves it.
 void RotatePitchYawRoll(Guest& _guest);
 
+/// RotateRollYawPitch (CS:3EC7): (x, y) by rotationSinCos[2], (x, z) by [1], (y, z) by [0], RotatePitchYawRoll's
+/// inverse with the angles negated. In and out: AX, BX, CX = x, y, z; DX as the last RotateBySinCos leaves it.
+void RotateRollYawPitch(Guest& _guest);
+
 /// RotateBySinCos7210 (CS:3F02): (y, z) by rotationSinCos[7], then (x, y) by [2], (x, z) by [1] and
 /// (y, z) by [0]. In and out: AX, BX, CX = x, y, z; DX as the last RotateBySinCos leaves it.
 void RotateBySinCos7210(Guest& _guest);

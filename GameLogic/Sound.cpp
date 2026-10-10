@@ -24,6 +24,7 @@ constexpr std::uint16_t NOISE_SOURCE_OFFSET = 0x07D0;
 constexpr std::uint16_t NOISE_SOURCE_MASK = 0x3FF;
 
 constexpr std::uint8_t BEEP_TICKS = 70;
+constexpr std::uint8_t LOW_BEEP_TICKS = 70;
 constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 
 // BeginSweep (CS:7ADD), the tail every sweep starter shares; STI at its end.
@@ -88,6 +89,11 @@ void StartBeep(Guest& _guest)
   _guest.Set(DS.beepTicks, BEEP_TICKS);
 }
 
+void StartLowBeep(Guest& _guest)
+{
+  _guest.Set(DS.lowBeepTicks, LOW_BEEP_TICKS);
+}
+
 void StopSoundEffects(Guest& _guest)
 {
   _guest.Set(DS.toneSweepActive, 0);
@@ -133,6 +139,16 @@ void StartExplosionSound(Guest& _guest)
   StartNoiseSweep(_guest, 50, 8);
 }
 
+void StartPlayerDeathSound(Guest& _guest)
+{
+  StartNoiseSweep(_guest, 60, 7);
+}
+
+void StopContinuousNoise(Guest& _guest)
+{
+  _guest.Set(DS.continuousNoise, 0);
+}
+
 void StartLaserSound(Guest& _guest)
 {
   if (_guest.Get(DS.noiseSweepActive) == 1)
@@ -170,11 +186,14 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7423, "StopAllSound", &StopAllSound, CLOBBERS_AX},
   NativeEntry{0x7436, "SilenceSpeakerTimer", &SilenceSpeakerTimer, CLOBBERS_AX},
   NativeEntry{0x7A57, "StartBeep", &StartBeep, PRESERVES_ALL},
+  NativeEntry{0x7A5D, "StartLowBeep", &StartLowBeep, PRESERVES_ALL},
   NativeEntry{0x7A63, "StopSoundEffects", &StopSoundEffects, ENABLES_INTERRUPTS},
   NativeEntry{0x7A93, "EmitNoiseSample", &EmitNoiseSample, PRESERVES_ALL},
   NativeEntry{0x7AB8, "ToggleSpeaker", &ToggleSpeaker, PRESERVES_ALL},
   NativeEntry{0x7AC3, "StartImpactSound", &StartImpactSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7AFC, "StartExplosionSound", &StartExplosionSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
+  NativeEntry{0x7B09, "StartPlayerDeathSound", &StartPlayerDeathSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
+  NativeEntry{0x7B6B, "StopContinuousNoise", &StopContinuousNoise, PRESERVES_ALL},
   NativeEntry{0x7B71, "StartLaserSound", &StartLaserSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7B96, "StartPlayerHitSound", &StartPlayerHitSound, ENABLES_INTERRUPTS},
 };

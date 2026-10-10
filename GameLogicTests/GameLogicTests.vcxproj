@@ -106,6 +106,7 @@
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SceneTests.cpp" />
     <ClCompile Include="ShipsTests.cpp" />
+    <ClCompile Include="SoundTests.cpp" />
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />

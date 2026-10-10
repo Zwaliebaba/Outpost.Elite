@@ -28,6 +28,9 @@ void SilenceSpeakerTimer(Guest& _guest);
 /// StartBeep (CS:7A57): beepTicks = 70.
 void StartBeep(Guest& _guest);
 
+/// StartLowBeep (CS:7A5D): lowBeepTicks = 70.
+void StartLowBeep(Guest& _guest);
+
 /// StopSoundEffects (CS:7A63): every effect's trigger cleared under CLI; IF set on return.
 void StopSoundEffects(Guest& _guest);
 
@@ -42,6 +45,12 @@ void StartImpactSound(Guest& _guest);
 
 /// StartExplosionSound (CS:7AFC): a noise sweep, step 50 shrinking by 8. AL clobbered; IF set on return.
 void StartExplosionSound(Guest& _guest);
+
+/// StartPlayerDeathSound (CS:7B09): a noise sweep, step 60 shrinking by 7. AL clobbered; IF set on return.
+void StartPlayerDeathSound(Guest& _guest);
+
+/// StopContinuousNoise (CS:7B6B): continuousNoise = 0.
+void StopContinuousNoise(Guest& _guest);
 
 /// StartLaserSound (CS:7B71): unless a noise sweep runs, a tone sweep, step 20 shrinking by 2. AL
 /// clobbered; IF set on return when it starts one.

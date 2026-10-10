@@ -23,6 +23,19 @@ constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t TRANSFORM_TO_VIEW_WITH_BLIP = 0x3ED7;
 constexpr std::uint16_t TRANSFORM_TO_VIEW = 0x3EE3;
 constexpr std::uint16_t DRAW_SUN_OR_PLANET = 0x3F4F;
+constexpr std::uint16_t OFFSET_VERTEX_BY_CENTER = 0x3768;
+constexpr std::uint16_t BUILD_BOX_CORNER_VERTICES = 0x377A;
+constexpr std::uint16_t BUILD_DODO_VERTICES = 0x38BF;
+constexpr std::uint16_t SCALE_DODO_RADII = 0x3A13;
+constexpr std::uint16_t RENDER_BLUEPRINT_BODY = 0x3CF2;
+constexpr std::uint16_t DRAW_DISTANT_STATION = 0x45C6;
+constexpr std::uint16_t LOAD_PLAYER_ANGLES = 0x8A16;
+constexpr std::uint16_t CALL_RETURN_OFFSET = 0xFFFF;
+
+// A blueprint's handler takes SI past its handler word and half-width byte; the Dodo's leaves SI there, the box
+// handler two bytes on, where the rest of the blueprint starts.
+constexpr std::uint16_t BLUEPRINT_HANDLER_PART = 3;
+constexpr std::uint16_t BOX_HANDLER_PART = 5;
 
 constexpr std::uint16_t SLOT_BYTES = 0x40;
 // At the title screen the turning ship is in slot 2, the station's, and every other slot is empty.
@@ -79,6 +92,23 @@ void PlaceSlot(ComparisonRig& _rig, std::size_t _index, std::int16_t _x, std::in
     PutWord(_rig, At(Slot(_index), static_cast<std::uint16_t>(4 + axis * 2)), value);
     PutWord(_rig, At(Slot(_index), static_cast<std::uint16_t>(0x10 + axis * 2)), value);
   }
+}
+
+// RenderBlueprintBody as a blueprint handler's RET enters it, both ways, from the blueprint's body at _body: the
+// word under the return address is the slot RunBlueprintHandler pushed, here the call's own return offset, and
+// under that the address it returns to.
+void CallRenderBlueprintBody(ComparisonRig& _rig, std::uint16_t _body)
+{
+  Machine::Pc& pc = _rig.Host();
+  Machine::Registers& regs = pc.Processor().Regs();
+  const Machine::Registers saved = regs;
+  regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+  pc.Ram().Write16(regs.ss, regs.sp, CALL_RETURN_OFFSET);
+  regs.ds = Elite::DataSegment(_rig.Program());
+  regs.es = regs.ds;
+  regs.si = _body;
+  pc.CallNear(RENDER_BLUEPRINT_BODY);
+  regs = saved;
 }
 
 // The original ran each of _offsets while the routine at _entry was compared with it.
@@ -331,6 +361,96 @@ public:
                    {0x3F5E, 0x3F62, 0x3F64, 0x3F68, 0x3F6D, 0x3F6F, 0x3F72, 0x3F75, 0x3F78, 0x3F7A, 0x3F7C, 0x3F7E, 0x3F80, 0x3F84, 0x3F86,
                     0x3F89, 0x3F8C, 0x3F8E, 0x3F91, 0x3F93, 0x3FB1, 0x3FB6, 0x3FB9, 0x3FBB, 0x3FC0, 0x3FC5, 0x3FCA, 0x3FCC, 0x3FD1, 0x3FD3,
                     0x3FD8, 0x3FDB, 0x3FDF, 0x3FE5, 0x3FE8, 0x3FEA, 0x3FED, 0x3FEF, 0x4020, 0x4021, 0x4024, 0x4025, 0x4027});
+  }
+
+  // The Dodo's and the Coriolis station's handlers in each view, from two orientations and two centres, each
+  // followed by what it returns into, RenderBlueprintBody; and their pieces called directly.
+  TEST_METHOD(BlueprintHandlersAgreeInEveryView)
+  {
+    ComparisonRig rig("BlueprintHandlers");
+    const std::uint16_t dodo = Elite::DS.blueprints.offset;
+    const std::uint16_t coriolis = Elite::DS.coriolisBlueprint.offset;
+    const std::uint8_t halfWidth = rig.Host().Ram().Read8(Elite::DataSegment(rig.Program()), At(coriolis, 2));
+    const std::array<std::array<std::uint16_t, 4>, 2> angles = {{{0x0123, 0x0456, 0x0789, 0x07F0}, {0x0700, 0x0010, 0x0333, 0x0004}}};
+    const std::array<std::array<std::uint16_t, 3>, 2> centers = {{{0, 0, 0x400}, {0x0100, 0xFF80, 0x0300}}};
+    std::uint64_t calls = 0;
+    for (const std::uint16_t view : {std::uint16_t{0}, std::uint16_t{0x200}, std::uint16_t{0x400}, std::uint16_t{0x600}})
+    {
+      for (std::size_t pose = 0; pose < angles.size(); ++pose)
+      {
+        PutWord(rig, Elite::DS.viewAngle.offset, view);
+        PutWord(rig, Elite::DS.drawPitchAngle.offset, angles[pose][0]);
+        PutWord(rig, Elite::DS.drawYawAngle.offset, angles[pose][1]);
+        PutWord(rig, Elite::DS.drawRollAngle.offset, angles[pose][2]);
+        PutWord(rig, Elite::DS.playerPitchAngle.offset, angles[pose][3]);
+        PutWord(rig, Elite::DS.drawCenterX.offset, centers[pose][0]);
+        PutWord(rig, Elite::DS.drawCenterY.offset, centers[pose][1]);
+        PutWord(rig, Elite::DS.drawCenterZ.offset, centers[pose][2]);
+        rig.Call(
+          BUILD_DODO_VERTICES,
+          {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = At(dodo, BLUEPRINT_HANDLER_PART), .di = 0x6666, .bp = 0x7777});
+        CallRenderBlueprintBody(rig, At(dodo, BLUEPRINT_HANDLER_PART));
+        PutWord(rig, Elite::DS.boxHalfWidth.offset, halfWidth);
+        rig.Call(
+          BUILD_BOX_CORNER_VERTICES,
+          {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = At(coriolis, BLUEPRINT_HANDLER_PART), .di = 0x6666, .bp = 0x7777});
+        CallRenderBlueprintBody(rig, At(coriolis, BOX_HANDLER_PART));
+        ++calls;
+      }
+    }
+    PutWord(rig, Elite::DS.viewAngle.offset, 0);
+    for (const std::uint8_t value : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{0x40}, std::uint8_t{0x7F}, std::uint8_t{0x80},
+                                     std::uint8_t{0xC3}, std::uint8_t{0xFF}})
+    {
+      rig.Call(SCALE_DODO_RADII, {.ax = static_cast<std::uint16_t>(0xA500 | value), .cx = 0x3333, .dx = 0x4444});
+    }
+    rig.Call(OFFSET_VERTEX_BY_CENTER, {.ax = 0x1111, .si = Elite::DS.vertexBuffer.At(5)});
+    rig.AssertAllAgreed(BUILD_DODO_VERTICES, calls);
+    rig.AssertAllAgreed(BUILD_BOX_CORNER_VERTICES, calls);
+    rig.AssertAllAgreed(RENDER_BLUEPRINT_BODY, calls * 2);
+    rig.AssertAllAgreed(SCALE_DODO_RADII, 7);
+    rig.AssertAllAgreed(OFFSET_VERTEX_BY_CENTER, 1);
+  }
+
+  // A station far enough to be a disc, at every kind of depth byte: below 14h, the radius' steps from 14h, none
+  // at 20h and 21h, and past A5h, where 25h less the depth is positive again; and once nearly edge-on, through
+  // the divide trap.
+  TEST_METHOD(DrawDistantStationAgreesAtEveryDepth)
+  {
+    ComparisonRig rig("DrawDistantStation");
+    CopySlot(rig, TITLE_SHIP, SPARE);
+    std::uint64_t calls = 0;
+    const std::array<std::array<std::uint16_t, 3>, 2> positions = {{{0x0040, 0xFFE0, 0x0800}, {0x7000, 0x0010, 0x0020}}};
+    for (const std::array<std::uint16_t, 3>& position : positions)
+    {
+      for (std::uint16_t axis = 0; axis < 3; ++axis)
+      {
+        PutWord(rig, At(Slot(SPARE), static_cast<std::uint16_t>(0x20 + axis * 2)), position[axis]);
+      }
+      for (const std::uint8_t depth : {std::uint8_t{0x00}, std::uint8_t{0x13}, std::uint8_t{0x14}, std::uint8_t{0x1F}, std::uint8_t{0x20},
+                                       std::uint8_t{0x21}, std::uint8_t{0x60}, std::uint8_t{0xA5}, std::uint8_t{0xA6}, std::uint8_t{0xFF}})
+      {
+        PutByte(rig, At(Slot(SPARE), 0x25), depth);
+        rig.Call(DRAW_DISTANT_STATION,
+                 {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = 0x5555, .di = Slot(SPARE), .bp = 0x7777});
+        ++calls;
+      }
+    }
+    rig.AssertAllAgreed(DRAW_DISTANT_STATION, calls);
+  }
+
+  // The docking computer's angles, from two orientations.
+  TEST_METHOD(LoadPlayerAnglesAgrees)
+  {
+    ComparisonRig rig("LoadPlayerAngles");
+    for (const std::uint16_t angle : {std::uint16_t{0x0123}, std::uint16_t{0x07FF}})
+    {
+      PutWord(rig, Elite::DS.playerPitchAngle.offset, angle);
+      PutWord(rig, Elite::DS.playerYawAngle.offset, static_cast<std::uint16_t>(angle + 0x200));
+      PutWord(rig, Elite::DS.playerRollAngle.offset, static_cast<std::uint16_t>(angle + 0x555));
+      rig.Call(LOAD_PLAYER_ANGLES, {.ax = 0x1111, .bx = 0x2222});
+    }
+    rig.AssertAllAgreed(LOAD_PLAYER_ANGLES, 2);
   }
 };
 

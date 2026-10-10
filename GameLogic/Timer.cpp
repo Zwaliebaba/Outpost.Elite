@@ -58,6 +58,9 @@ constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 constexpr std::uint16_t DECODED_ANSWER = 0xA5B7; // a length byte and the decoded answer, past dockingKeyReleased
 constexpr std::uint8_t ANSWER_KEY = 0x61;
 
+// Where WaitForTimerTick's loop jumps back to: the compare.
+constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
+
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
 std::uint8_t Decrement(Guest& _guest, DataField<std::uint8_t> _field)
 {
@@ -366,6 +369,14 @@ void ChainToBiosTimer(Guest& _guest)
   _guest.SetFarWord(0, TIMER_VECTOR_SEGMENT, segment);
 }
 
+// The original's jump back to CS:_target, in a routine that waits: the end of a loop's turn, with IP where the
+// jump lands, so that paced time sees the turn as it sees the original's (Guest::LoopTurn).
+void JumpBack(Guest& _guest, std::uint16_t _target)
+{
+  _guest.Regs().ip = _target;
+  _guest.LoopTurn();
+}
+
 } // namespace
 
 void InstallTimerInterrupt(Guest& _guest)
@@ -485,6 +496,18 @@ void TimerTick(Guest& _guest)
   TickSoundEffects(_guest);
 }
 
+void WaitForTimerTick(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Push(regs.ax);
+  regs.ax = _guest.Get(DS.timerTicks);
+  while (regs.ax == _guest.Get(DS.timerTicks))
+  {
+    JumpBack(_guest, TIMER_TICK_COMPARE);
+  }
+  regs.ax = _guest.Pop();
+}
+
 namespace
 {
 
@@ -501,6 +524,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterrupt, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x7150, "TimerTick", &TimerTick, CLOBBERS_AX},
+  // WaitForTimerTick waits for the next tick as a rule.
+  NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTick, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
 };
 
 } // namespace

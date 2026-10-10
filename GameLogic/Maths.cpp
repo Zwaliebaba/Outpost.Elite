@@ -419,6 +419,18 @@ void RotatePitchYawRoll(Guest& _guest)
   regs.cx = _guest.Get(DS.rotateScratch);
 }
 
+void RotateRollYawPitch(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(2));
+  std::swap(regs.cx, regs.bx);
+  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(1));
+  std::swap(regs.cx, regs.ax);
+  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(0));
+  std::swap(regs.cx, regs.ax);
+  std::swap(regs.cx, regs.bx);
+}
+
 void RotateBySinCos7210(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -629,6 +641,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2F65, "ObjectWithinBox", &ObjectWithinBox, BOX_TEST},
   NativeEntry{0x2F6E, "VectorWithinBox", &VectorWithinBox, BOX_TEST},
   NativeEntry{0x3EAC, "RotatePitchYawRoll", &RotatePitchYawRoll, PRESERVES_ALL},
+  NativeEntry{0x3EC7, "RotateRollYawPitch", &RotateRollYawPitch, PRESERVES_ALL},
   NativeEntry{0x3F02, "RotateBySinCos7210", &RotateBySinCos7210, PRESERVES_ALL},
   NativeEntry{0x40A4, "ScaleByInverseDistance", &ScaleByInverseDistance, CLOBBERS_CX_DX},
   NativeEntry{0x4326, "ShiftRight24", &ShiftRight24, PRESERVES_ALL},

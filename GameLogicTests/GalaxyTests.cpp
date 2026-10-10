@@ -3,6 +3,7 @@
 #include "ComparisonRig.h"
 #include "DataOverlay.h"
 #include "Guest.h"
+#include "TwinRig.h"
 
 #include <array>
 #include <initializer_list>
@@ -43,6 +44,17 @@ constexpr std::uint16_t SHOW_SYSTEM_DESCRIPTION = 0x6FC0;
 constexpr std::uint16_t EXPAND_DESCRIPTION_TEXT = 0x700F;
 constexpr std::uint16_t NEXT_DESCRIPTION_RANDOM = 0x7115;
 constexpr std::uint16_t COPY_SELECTED_NAME_LOWER = 0x7124;
+constexpr std::uint16_t SHOW_NEAREST_SYSTEM_DISTANCE = 0x1341;
+constexpr std::uint16_t INSERT_SYSTEM_NAME = 0x707A;
+constexpr std::uint16_t INSERT_SYSTEM_ADJECTIVE = 0x708D;
+constexpr std::uint16_t INSERT_RANDOM_NAME = 0x70C1;
+constexpr std::uint16_t BACKSPACE_DESCRIPTION = 0x7107;
+constexpr std::uint16_t START_CAPITALIZING = 0x7109;
+constexpr std::uint16_t STOP_CAPITALIZING = 0x710F;
+constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
+
+// From the title screen: the commander loaded, docked at Lave, on the status screen.
+constexpr std::string_view DOCKED = "key space; wait 4";
 
 // Scratch in the space view buffer, which nothing reads between frames of the title.
 constexpr std::uint16_t CODED_TEXT = 0x1000;
@@ -81,6 +93,9 @@ struct SystemName
 };
 
 constexpr std::array<std::uint8_t, 3> CHART_MODES = {0, 1, 2};
+
+// Leesti, near Lave in the first galaxy: of tech level 10.
+constexpr Position LEESTI = {13, 186};
 
 [[nodiscard]] Elite::Guest GuestOf(ComparisonRig& _rig)
 {
@@ -130,6 +145,31 @@ void SetText(Elite::Guest& _guest, std::uint16_t _offset, std::string_view _text
     _guest.SetByte(_offset, static_cast<std::uint8_t>(character));
     ++_offset;
   }
+}
+
+// Calls the routine at _entry as a chart does, with ES on the CGA's memory rather than the data segment, both ways.
+void CallOnScreen(ComparisonRig& _rig, std::uint16_t _entry, const Inputs& _inputs)
+{
+  Machine::Registers& regs = _rig.Host().Processor().Regs();
+  const Machine::Registers saved = regs;
+  regs.ax = _inputs.ax;
+  regs.bx = _inputs.bx;
+  regs.cx = _inputs.cx;
+  regs.dx = _inputs.dx;
+  regs.si = _inputs.si;
+  regs.di = _inputs.di;
+  regs.bp = _inputs.bp;
+  regs.ds = Elite::DataSegment(_rig.Program());
+  regs.es = VIDEO_SEGMENT;
+  _rig.Host().CallNear(_entry);
+  regs = saved;
+}
+
+// _value into the data segment's _field, on both twins.
+void PokeBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
+{
+  _rig.Both([_field, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+            { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
 }
 
 // selectedSystemName and its length, as GenerateSystemName leaves them.
@@ -535,6 +575,119 @@ public:
       rig.Call(FORMAT_SELECTED_SYSTEM_DISTANCE, {.ax = 0x1111, .bx = 0x2222, .si = 0x5555});
     }
     rig.AssertAllAgreed(FORMAT_SELECTED_SYSTEM_DISTANCE, DISTANCES.size());
+  }
+
+  // D on a chart, called directly: the nearest system to cursors across both charts, in two galaxies.
+  TEST_METHOD(NearestSystemDistanceAgreesOnBothCharts)
+  {
+    ComparisonRig rig("ShowNearestSystemDistance");
+    Elite::Guest guest = GuestOf(rig);
+    constexpr std::array<Position, 4> CURSORS = {{{0, 0}, {0x50, 0x40}, {0xFF, 0x7F}, {0x14, 0x56}}};
+    std::uint64_t calls = 0;
+    for (const std::uint8_t galaxy : {std::uint8_t{0}, std::uint8_t{3}})
+    {
+      guest.Set(DS.galaxyNumber, galaxy);
+      for (std::uint8_t chart = 0; chart < 2; ++chart)
+      {
+        guest.Set(DS.chartIsShortRange, chart);
+        for (const Position& cursor : CURSORS)
+        {
+          guest.Set(DS.chartCursorX, cursor.x);
+          guest.Set(DS.chartCursorY, cursor.y);
+          CallOnScreen(rig, SHOW_NEAREST_SYSTEM_DISTANCE,
+                       {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = 0x5555, .di = 0x6666, .bp = 0x7777});
+          ++calls;
+        }
+      }
+    }
+    rig.AssertAllAgreed(SHOW_NEAREST_SYSTEM_DISTANCE, calls);
+  }
+
+  // The control codes' handlers called at their entries, as ExpandDescriptionText jumps to them: names ending in
+  // each vowel and in none for the adjective, and random names from several seeds.
+  TEST_METHOD(ControlCodeHandlersAgreeAtTheirEntries)
+  {
+    ComparisonRig rig("TextControlCodes");
+    Elite::Guest guest = GuestOf(rig);
+    constexpr std::array<SystemName, 6> NAMES = {{{"LAVE"}, {"DISO"}, {"USLERI"}, {"ESBIZA"}, {"RIEDQUAT"}, {"ONUU"}}};
+    Words words;
+    std::uint64_t calls = 0;
+    for (const SystemName& name : NAMES)
+    {
+      SetSelectedName(guest, name);
+      guest.Set(DS.descriptionSeed0, words.Next());
+      guest.Set(DS.descriptionSeed1, words.Next());
+      const Inputs inputs{.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = CODED_TEXT, .di = EXPANDED_TEXT, .bp = 0x7777};
+      for (const std::uint16_t handler : {INSERT_SYSTEM_NAME, INSERT_SYSTEM_ADJECTIVE, INSERT_RANDOM_NAME})
+      {
+        rig.Call(handler, inputs);
+      }
+      rig.Call(BACKSPACE_DESCRIPTION, inputs);
+      rig.Call(START_CAPITALIZING, inputs);
+      rig.Call(STOP_CAPITALIZING, inputs);
+      ++calls;
+    }
+    for (const std::uint16_t handler :
+         {INSERT_SYSTEM_NAME, INSERT_SYSTEM_ADJECTIVE, INSERT_RANDOM_NAME, BACKSPACE_DESCRIPTION, START_CAPITALIZING, STOP_CAPITALIZING})
+    {
+      rig.AssertAllAgreed(handler, calls);
+    }
+  }
+
+  // The galactic chart's every key from the dock: the cursor held against the top-left corner and the bottom,
+  // keypad 5 and fire recentring it, D, F with a name that is found, one that is not and none, keys it ignores,
+  // and Esc.
+  TEST_METHOD(GalacticChartAgreesOnEveryKey)
+  {
+    TwinRig rig("TwinGalacticChart");
+    rig.Play(DOCKED);
+    PokeBoth(rig, DS.galacticCursorX, 3);
+    PokeBoth(rig, DS.galacticCursorY, 2);
+    rig.Play("key F5; wait 0.3\n"
+             "down Left; down Up; wait 0.2; up Left; up Up; wait 0.1\n"
+             "key KP_Begin; wait 0.1\n"
+             "key d; wait 0.1\n"
+             "key a; wait 0.1; key F5; wait 0.1; key Delete; wait 0.1\n"
+             "down space; wait 0.1; up space; wait 0.1\n"
+             "key f; wait 0.1; key l; key a; key v; key e; key Return; wait 0.1\n"
+             "key f; wait 0.1; key z; key z; key Return; wait 0.1\n"
+             "key f; wait 0.1; key Return; wait 0.1");
+    PokeBoth(rig, DS.chartCursorY, 0x7C);
+    rig.Play("down Down; wait 0.2; up Down; wait 0.1\nkey Escape; wait 0.3\ndigest closed");
+  }
+
+  // The short-range chart's keys: the cursor held against each edge, D, keypad 5, F with a system on the chart
+  // and one off it, and F6, its own key, ignored.
+  TEST_METHOD(ShortRangeChartAgreesOnEveryKey)
+  {
+    TwinRig rig("TwinShortRangeChart");
+    rig.Play(DOCKED);
+    PokeBoth(rig, DS.shortRangeCursorX, 0xFC);
+    PokeBoth(rig, DS.shortRangeCursorY, 0x7C);
+    rig.Play("key F6; wait 0.3\n"
+             "down Right; down Down; wait 0.2; up Right; up Down; wait 0.1");
+    PokeBoth(rig, DS.chartCursorX, 3);
+    PokeBoth(rig, DS.chartCursorY, 2);
+    rig.Play("down Left; down Up; wait 0.2; up Left; up Up; wait 0.1\n"
+             "key d; wait 0.1; key KP_Begin; wait 0.1; key F6; wait 0.1\n"
+             "key f; wait 0.1; key t; key i; key b; key e; key d; key i; key e; key d; key Return; wait 0.1\n"
+             "key f; wait 0.1; key r; key i; key e; key d; key q; key u; key a; key t; key Return; wait 0.1\n"
+             "key Escape; wait 0.3\ndigest closed");
+  }
+
+  // The data screen of Leesti, of tech level 10, two digits: the status screen selects the system at the galactic
+  // chart's cursor as F7 leaves it. Then its own key and a letter ignored, and Esc.
+  TEST_METHOD(SystemDataScreenAgreesForTwoDigitTechLevels)
+  {
+    TwinRig rig("TwinSystemData");
+    rig.Play(DOCKED);
+    PokeBoth(rig, DS.chartIsShortRange, 0);
+    PokeBoth(rig, DS.chartCursorX, LEESTI.x);
+    PokeBoth(rig, DS.chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
+    rig.Play("key F7; wait 0.5\ndigest data");
+    rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+             { Assert::AreEqual(std::uint8_t{'1'}, _pc.Ram().Read8(Elite::DataSegment(_program), DS.data7D48.offset), L"two digits"); });
+    rig.Play("key F7; wait 0.1; key a; wait 0.1; key Escape; wait 0.3\ndigest closed");
   }
 };
 
