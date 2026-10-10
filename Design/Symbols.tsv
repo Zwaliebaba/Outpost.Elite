@@ -576,7 +576,7 @@ DS:228B	text	diskErrorText	11		save-load	'DISC ERROR'
 DS:2416	data	protectionDescriptor	2		protection	pointer to the protection's strings and question table
 DS:2422	data	protectionAnswerListPointer	2		protection	field +0x0A of the protection descriptor (DS:2418), 0xA5D0; read at 0x73AF. The one word below DS:4D70 that differs from ELITEL.EXE (0xA200), because what it points at moved
 DS:2424	text	protectionTitle			protection	"Program Protection"
-DS:25C9	data	protectionInput			protection	int 21h AH=0Ah buffer: capacity, count, then the typed word
+DS:25C9	data	protectionInput	24		protection	int 21h AH=0Ah buffer: capacity, count, then the typed word
 DS:25CA	data	data25CA	1			
 DS:25E1	data	protectionQuestion	1		protection	question number while one is pending; 0xFF when none
 DS:25E2	data	protectionTriesLeft	1		protection	3 in the file
@@ -769,7 +769,7 @@ DS:6650	data	kraitBlueprint	185		3d	type 27; 17 projected vertices, 21 face edge
 DS:6709	data	viperBlueprint	195		3d	type 28; 15 projected vertices, 20 face edges of which faces draw 6, 7 faces from DS:6771 (count byte) with 14 triangle and 6 edge items
 DS:67CC	data	pythonBlueprint	253		3d	type 29; 11 projected vertices, 26 face edges of which faces draw 0, 17 faces from DS:683C (count byte) with 18 triangle and 0 edge items
 DS:68C9	table	blueprintTable	30	pointer	3d	blueprint per ship type, indexed by byte0 & 0x3E (add bx,0x68C9 at 0x3E54); 0x4D70 for type 0, then 1-29 in order. The 30 entries end at DS:6904, then zero padding to the paragraph at DS:6910
-DS:6930	data	shipSlots			ships	36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
+DS:6930	data	shipSlots	2304		ships	36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
 DS:6970	data	planetSlot	64		ships	slot 1: type 0x1F set up by SetUpLocalSpace; compass target when far
 DS:69B0	data	stationSlot	64		ships	slot 2: Coriolis or Dodo (SetUpLocalSpace, by DS:75BA < 9); also holds the compass dot (+0x26..+0x28) and target position (+0x20..+0x24)
 DS:69F0	data	firstShipSlot			ships	slot 3; ship scans run objectSlotCount-3 slots from here
