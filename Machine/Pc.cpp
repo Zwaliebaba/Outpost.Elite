@@ -32,6 +32,11 @@ struct ProgramStopped
 {
 };
 
+// Thrown through what the native thread is running when the machine is destroyed under it.
+struct NativeAbandoned
+{
+};
+
 // Runs _fn when the scope ends, however it ends.
 template <typename Fn> class OnExit
 {
@@ -74,6 +79,22 @@ Pc::Pc(FileStore& _files, const Desc& _desc)
   m_services.PowerOn();
 }
 
+Pc::~Pc()
+{
+  if (!m_nativeThread.joinable())
+  {
+    return;
+  }
+  if (m_nativeActive)
+  {
+    m_abandon = true;
+    HandToNative();
+  }
+  m_shutdown = true;
+  m_toNative.release();
+  m_nativeThread.join();
+}
+
 LoadError Pc::Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _desc, LoadedProgram& _program)
 {
   const LoadError error = ExeLoader::Load(m_memory, _file, _desc, _program);
@@ -99,6 +120,14 @@ void Pc::SetSpinLimit(std::uint64_t _steps) noexcept
 
 void Pc::Step()
 {
+  if (m_nativeActive && !m_onNativeThread)
+  {
+    const Cycles limit = m_runLimit;
+    m_runLimit = std::min(limit, m_clock + 1);
+    ResumeNative();
+    m_runLimit = limit;
+    return;
+  }
   if (m_timeMode == TimeMode::Paced)
   {
     StepPaced();
@@ -171,7 +200,14 @@ StopReason Pc::RunUntil(Cycles _cycle)
   m_runLimit = _cycle;
   while (m_clock < _cycle)
   {
-    Step();
+    if (m_nativeActive)
+    {
+      ResumeNative();
+    }
+    else
+    {
+      Step();
+    }
     if (const StopReason reason = Stopped(); reason != StopReason::Reached)
     {
       m_runLimit = NO_EVENT;
@@ -183,9 +219,9 @@ StopReason Pc::RunUntil(Cycles _cycle)
 }
 
 void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-              NativeReturn _exit)
+              NativeReturn _exit, bool _waits)
 {
-  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract, _exit);
+  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract, _exit, _waits);
   m_cpu.SetHookMap(&m_native.Map());
   if (!m_comparison)
   {
@@ -264,22 +300,134 @@ void Pc::RunHook()
   {
     throw std::logic_error("Pc: the CPU stopped at an entry no native routine is registered for");
   }
-  ++hook->calls;
+  if (hook->waits && !m_onNativeThread)
+  {
+    StartNative(*hook);
+    return;
+  }
+  Dispatch(*hook);
+}
+
+void Pc::Dispatch(NativeCode::Hook& _hook)
+{
+  ++_hook.calls;
   try
   {
     if (m_native.Verifying() && !m_comparison->active)
     {
-      Compare(*hook);
+      Compare(_hook);
     }
     else
     {
-      hook->routine(*this);
+      _hook.routine(*this);
     }
   }
   catch (const ProgramStopped&)
   {
     // The program stopped inside a call the native code made; RunUntil reports why.
     return;
+  }
+}
+
+void Pc::StartNative(NativeCode::Hook& _hook)
+{
+  if (!m_nativeThread.joinable())
+  {
+    m_nativeThread = std::thread([this] { NativeMain(); });
+  }
+  m_nativeHook = &_hook;
+  m_nativeActive = true;
+  ResumeNative();
+}
+
+void Pc::ResumeNative()
+{
+  HandToNative();
+  if (m_nativeError)
+  {
+    std::rethrow_exception(std::exchange(m_nativeError, nullptr));
+  }
+}
+
+void Pc::HandToNative() noexcept
+{
+  m_onNativeThread = true;
+  m_toNative.release();
+  m_toHost.acquire();
+  m_onNativeThread = false;
+}
+
+void Pc::NativeMain()
+{
+  for (;;)
+  {
+    m_toNative.acquire();
+    if (m_shutdown)
+    {
+      return;
+    }
+    try
+    {
+      Dispatch(*m_nativeHook);
+    }
+    catch (const NativeAbandoned&)
+    {
+      m_abandon = false; // unwound, as the destructor asked
+    }
+    catch (...)
+    {
+      m_nativeError = std::current_exception();
+    }
+    m_nativeActive = false;
+    m_toHost.release();
+  }
+}
+
+void Pc::ReachedRunLimit()
+{
+  if (!m_onNativeThread)
+  {
+    // Native code cannot stop at the end of a run off the native thread (ADR-010 item 8).
+    m_native.AddOverrun();
+    m_runLimit = NO_EVENT;
+    return;
+  }
+  m_toHost.release();
+  m_toNative.acquire();
+  if (m_abandon)
+  {
+    throw NativeAbandoned{};
+  }
+}
+
+void Pc::Wait()
+{
+  Idle(m_runLimit);
+  if (m_clock >= m_runLimit)
+  {
+    ReachedRunLimit();
+  }
+  TakeDueInterrupts();
+}
+
+void Pc::TakeDueInterrupts()
+{
+  Registers& regs = m_cpu.Regs();
+  while (m_cpu.InterruptDue())
+  {
+    // Park CS:IP where nothing executes, let the CPU take the interrupt there, and run the handler
+    // until its IRET comes back to it.
+    const std::uint16_t segment = regs.cs;
+    const std::uint16_t offset = regs.ip;
+    const std::uint16_t stackPointer = regs.sp;
+    regs.ip = CALL_RETURN_OFFSET;
+    Step();
+    if (Stopped() != StopReason::Reached)
+    {
+      throw ProgramStopped{};
+    }
+    RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer, nullptr);
+    regs.ip = offset;
   }
 }
 
@@ -303,9 +451,7 @@ void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_
     }
     if (m_clock >= m_runLimit)
     {
-      // Native code cannot yet stop at the end of a run and carry on at the next (ADR-010).
-      m_native.AddOverrun();
-      m_runLimit = NO_EVENT;
+      ReachedRunLimit();
     }
   }
 }

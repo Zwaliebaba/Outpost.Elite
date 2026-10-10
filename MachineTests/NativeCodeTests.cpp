@@ -55,6 +55,28 @@ const std::initializer_list<std::uint8_t> COUNT_UP = {0xA1, 0x40, 0x00, // mov a
                                                       0xBA, 0x05, 0x00, // mov dx,5
                                                       0xC3};            // ret
 
+// An original routine that waits for the BIOS tick count to change, with interrupts on.
+const std::initializer_list<std::uint8_t> WAIT_FOR_TICK = {0xFB,                         // sti
+                                                           0xB8, 0x40, 0x00,             // mov ax,40h
+                                                           0x8E, 0xC0,                   // mov es,ax
+                                                           0x26, 0x8B, 0x1E, 0x6C, 0x00, // mov bx,es:[6Ch]
+                                                           0x26, 0x3B, 0x1E, 0x6C, 0x00, // wait: cmp bx,es:[6Ch]
+                                                           0x74, 0xF9,                   // je wait
+                                                           0xC3};                        // ret
+
+// Its native counterpart, which waits through Pc::Wait.
+void WaitForTick(Machine::Pc& _pc)
+{
+  Machine::Registers& regs = _pc.Processor().Regs();
+  regs.flags = static_cast<std::uint16_t>(regs.flags | Machine::FLAG_INTERRUPT);
+  regs.ax = 0x40;
+  regs.es = regs.ax;
+  regs.bx = _pc.Ram().Read16(regs.es, 0x6C);
+  while (_pc.Ram().Read16(regs.es, 0x6C) == regs.bx)
+    _pc.Wait();
+  _pc.ReturnNear();
+}
+
 // A native counterpart of COUNT_UP that adds _step and leaves _dx in DX.
 Machine::NativeRoutine CountUp(std::uint16_t _step, std::uint16_t _dx)
 {
@@ -84,9 +106,9 @@ public:
     return m_rig.Host();
   }
 
-  void Hook(Machine::NativeRoutine _routine, const Machine::NativeContract& _contract = {})
+  void Hook(Machine::NativeRoutine _routine, const Machine::NativeContract& _contract = {}, bool _waits = false)
   {
-    m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _contract);
+    m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _contract, Machine::NativeReturn::Near, _waits);
   }
 
   // Points the vector table's entry for VECTOR at the handler.
@@ -287,6 +309,45 @@ public:
     Assert::IsTrue(found != hooks.end());
     Assert::AreEqual(std::uint64_t{1}, found->second.verified);
     Assert::AreEqual(0x5555u, std::uint32_t{rig.Host().Processor().Regs().bx});
+  }
+
+  // ADR-010 item 8: a native routine that waits stops where a run ends and carries on in the next, on
+  // the same cycles as the original: the first timer tick, at cycle 262,144, ends its wait.
+  TEST_METHOD(WaitingRoutineStopsAtTheEndOfARunAndCarriesOn)
+  {
+    NativeRig original("NativeWaitOriginal", WAIT_FOR_TICK);
+    original.Run();
+    Assert::AreEqual(std::uint64_t{262'144}, original.Host().Clock());
+
+    NativeRig rig("NativeWaits", WAIT_FOR_TICK);
+    rig.Hook(&WaitForTick, {}, true);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
+    Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
+    rig.Run();
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+    Assert::AreEqual(std::uint64_t{0}, rig.Host().Native().Overruns());
+  }
+
+  // A machine destroyed while a native routine waits unwinds it, and does not hang.
+  TEST_METHOD(MachineDestroyedMidWaitUnwindsTheNativeThread)
+  {
+    NativeRig rig("NativeAbandoned", WAIT_FOR_TICK);
+    rig.Hook(&WaitForTick, {}, true);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
+  }
+
+  // Compared, a routine that waits cannot be undone: it counts as unverifiable and the original's
+  // outcome stands.
+  TEST_METHOD(ComparedWaitingRoutineIsUnverifiable)
+  {
+    NativeRig rig("NativeWaitCompared", WAIT_FOR_TICK);
+    rig.Hook(&WaitForTick, {}, true);
+    rig.Host().Native().SetVerifying(true);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
+    rig.Run();
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().unverifiable);
   }
 
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)

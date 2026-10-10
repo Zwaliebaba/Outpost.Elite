@@ -16,9 +16,12 @@
 #include "Timing.h"
 
 #include <cstdint>
+#include <exception>
 #include <memory>
+#include <semaphore>
 #include <span>
 #include <string>
+#include <thread>
 
 namespace Machine
 {
@@ -86,6 +89,7 @@ public:
   Pc(FileStore& _files, const Desc& _desc);
   Pc(const Pc&) = delete;
   Pc& operator=(const Pc&) = delete;
+  ~Pc();
 
   /// Loads a program as DOS's EXEC does (ExeLoader) and starts the CPU at its entry, in the registers
   /// MS-DOS gives a program. Nothing changes if the load fails.
@@ -110,7 +114,8 @@ public:
     return m_spinLimit;
   }
 
-  /// One CPU step, then the timer and the keyboard catch up with the clock.
+  /// One CPU step, then the timer and the keyboard catch up with the clock. While a native routine
+  /// that waits is in progress, it runs to its next wait instead (ADR-010 item 8).
   void Step();
 
   /// Steps until the clock reaches _cycle, or until the program can go no further.
@@ -200,8 +205,14 @@ public:
   /// there: at the start of any step, after the CPU has taken an interrupt that was due. Native code
   /// takes no time, which is what paced time expects of work (ADR-008). Throws std::logic_error if a
   /// routine is there already.
+  ///
+  /// A routine that can wait (_waits) runs on a thread of its own, the native thread, and with it
+  /// everything it calls. When the clock reaches the end of a run there, in Wait or in original code
+  /// it calls, the native thread hands the machine back and RunUntil returns; the next RunUntil
+  /// carries on where it stopped. Only one thread runs at a time, so a run is still a function of its
+  /// inputs (ADR-010 item 8). Any other native routine runs as a plain call.
   void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-            NativeReturn _exit = NativeReturn::Near);
+            NativeReturn _exit = NativeReturn::Near, bool _waits = false);
 
   /// The native routines, whether they are being compared with the original, and what that found.
   [[nodiscard]] NativeCode& Native() noexcept
@@ -229,6 +240,12 @@ public:
 
   /// For native code: returns from an interrupt handler as IRET does.
   void ReturnInterrupt() noexcept;
+
+  /// For native code that stands in for a waiting loop: one turn of it that found nothing to do. The
+  /// clock moves to the next device event (Idle), the run ends there if that is its end, and then any
+  /// interrupt now due is taken, as the CPU takes it at the loop's next instruction. Only a routine
+  /// hooked as one that waits may call it.
+  void Wait();
 
   /// For native code: does what INT _vector does at CS:IP. The BIOS, DOS and mouse services take the
   /// call if they serve that vector; otherwise the handler the vector table names runs until its IRET.
@@ -262,6 +279,13 @@ private:
 
   void MapPorts(std::uint16_t _first, std::uint16_t _last, PortBus& _device);
   void RunHook();
+  void Dispatch(NativeCode::Hook& _hook);
+  void StartNative(NativeCode::Hook& _hook);
+  void ResumeNative();
+  void HandToNative() noexcept;
+  void NativeMain();
+  void ReachedRunLimit();
+  void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
   void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, NativeCode::Hook* _covering);
   void StepPaced();
@@ -289,6 +313,19 @@ private:
   Cpu m_cpu;
   NativeCode m_native;
   std::unique_ptr<Comparison> m_comparison;
+
+  // The native thread (ADR-010 item 8), made for the first routine that waits. The host thread and
+  // it take turns, handing over through the two semaphores; these flags are read only by the one
+  // holding the machine.
+  std::thread m_nativeThread;
+  std::binary_semaphore m_toNative{0};
+  std::binary_semaphore m_toHost{0};
+  NativeCode::Hook* m_nativeHook = nullptr;
+  std::exception_ptr m_nativeError;
+  bool m_nativeActive = false;   // a waiting routine is in progress on the native thread
+  bool m_onNativeThread = false; // the native thread holds the machine
+  bool m_abandon = false;        // the native thread is to unwind what it is running
+  bool m_shutdown = false;       // the native thread is to end
 };
 
 } // namespace Machine

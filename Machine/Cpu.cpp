@@ -133,6 +133,11 @@ void Cpu::SetHookMap(const std::vector<std::uint8_t>* _map) noexcept
   m_hookMap = _map;
 }
 
+bool Cpu::InterruptDue() const
+{
+  return m_interrupts != nullptr && !m_interruptShadow && Flag(FLAG_INTERRUPT) && m_interrupts->InterruptPending();
+}
+
 void Cpu::Reset() noexcept
 {
   m_regs = Registers{};

@@ -69,6 +69,7 @@ public:
     NativeRoutine routine;
     NativeContract contract;
     NativeReturn exit = NativeReturn::Near;
+    bool waits = false; ///< the routine can wait, so it runs on the native thread (Pc::Hook)
     std::uint16_t segment = 0;
     std::uint16_t offset = 0;
     std::uint64_t calls = 0;        ///< times execution reached the entry
@@ -95,7 +96,7 @@ public:
 
   /// Adds _routine at _segment:_offset. Throws std::logic_error if there is one there already.
   void Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-           NativeReturn _exit);
+           NativeReturn _exit, bool _waits);
 
   /// A non-zero byte at the linear address of every entry: what the CPU stops at. Empty until the
   /// first routine is added.
@@ -144,8 +145,9 @@ public:
     return m_mismatches;
   }
 
-  /// Calls from native code into the original that waited past the end of a run, which native code
-  /// cannot yet stop at (ADR-010): the run went on to the end of the call.
+  /// Times native code that does not run on the native thread waited past the end of a run, which it
+  /// cannot stop at (ADR-010 item 8): the run went on to the end of the call. A routine that can wait
+  /// must be hooked as one that does.
   [[nodiscard]] std::uint64_t Overruns() const noexcept
   {
     return m_overruns;
