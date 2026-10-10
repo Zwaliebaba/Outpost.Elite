@@ -21,8 +21,20 @@ void UpdateStardust(Guest& _guest);
 /// AX clobbered, BL = 12.
 void ComputeStardustShift(Guest& _guest);
 
+/// GetPreviousDustScreenPosition (CS:08A1): the particle at SI's position last frame. Out: CF clear and
+/// CL, CH = its draw buffer position, or CF set when it was off screen. AX, BX clobbered.
+void GetPreviousDustScreenPosition(Guest& _guest);
+
 /// ComputeDustStripMask (CS:08B9): BP = 2^n - 1 just covering |DX|/2. AX comes back 0.
 void ComputeDustStripMask(Guest& _guest);
+
+/// ShiftStardustSideways (CS:08CB): adds DX to x of every on-screen particle, respawning those that
+/// leave on the entering edge.
+void ShiftStardustSideways(Guest& _guest);
+
+/// RespawnDustAtSideEdge (CS:08F2): a new particle at SI on the edge DX moves away from, in the strip BP
+/// covers. Out: AX = x, BX = y.
+void RespawnDustAtSideEdge(Guest& _guest);
 
 /// RollStardust (CS:0927): rotates every particle by rotationSinCos[7].
 void RollStardust(Guest& _guest);
@@ -40,6 +52,9 @@ void RespawnDustAnywhere(Guest& _guest);
 
 /// IsDustOnScreen (CS:09D6): CF set when AH is in -0x20..0x1F and BH in -0x10..0x0F.
 void IsDustOnScreen(Guest& _guest);
+
+/// IsDustNearCenter (CS:09EE): CF set when AH is in -6..6 and BH in -3..3.
+void IsDustNearCenter(Guest& _guest);
 
 /// ScaleDustStep (CS:0A06): CL = stardustShift, BP = AX >> CL and DX = BX >> CL, arithmetic.
 void ScaleDustStep(Guest& _guest);
@@ -59,9 +74,16 @@ void DustToScreen(Guest& _guest);
 /// ResetStardust (CS:0A43): scatters all 30 particles at random.
 void ResetStardust(Guest& _guest);
 
+/// SaveStardustPositions (CS:0A88): copies stardust over stardustPrevious, for the jump drive's streaks.
+/// AX comes back DS.
+void SaveStardustPositions(Guest& _guest);
+
 /// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight. Out: AH = the F1-F4 scan code or 0; BX and CX
 /// come back as the scan leaves them.
 void HandleFlightFunctionKeys(Guest& _guest);
+
+/// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen, with a beep.
+void RestoreFlightScreen(Guest& _guest);
 
 /// InvalidateDashboard (CS:2540): fills the 22 dashboard cache bytes with 0x80. Out: ES = DS.
 void InvalidateDashboard(Guest& _guest);
@@ -110,8 +132,20 @@ void InSafeZone(Guest& _guest);
 /// UpdateSafeZone (CS:2E69): safeZoneFlags from the station's distance. DI comes back stationSlot.
 void UpdateSafeZone(Guest& _guest);
 
+/// ComputeDeathDebrisVector (CS:2F8B): (0, 40, 0) turned by the view, the roll off the front view, the
+/// yaw and the pitch. Out: AX, BX, CX.
+void ComputeDeathDebrisVector(Guest& _guest);
+
 /// UpdateWarnings (CS:36B6): re-posts the current warning, or tries the four warning checks.
 void UpdateWarnings(Guest& _guest);
+
+/// CheckMissileWarning (CS:36FD), CheckAltitudeWarning (CS:370E), CheckTemperatureWarning (CS:371A) and
+/// CheckEnergyWarning (CS:3726): that warning check, then the next ones round while CX lasts, until one
+/// posts its warning.
+void CheckMissileWarning(Guest& _guest);
+void CheckAltitudeWarning(Guest& _guest);
+void CheckTemperatureWarning(Guest& _guest);
+void CheckEnergyWarning(Guest& _guest);
 
 /// UpdateScannerBlip (CS:40EC): moves slot DI's scanner blip to camera-frame AX, BX, CX.
 void UpdateScannerBlip(Guest& _guest);
@@ -139,12 +173,23 @@ void EraseCompassAndBlips(Guest& _guest);
 /// UpdateFuelLeak (CS:499F): runs a fuel leak, and sets the border colour.
 void UpdateFuelLeak(Guest& _guest);
 
+/// RunFlight (CS:7E9B): the station tunnel, then a frame at a time until the player docks or is 40
+/// frames dead; when the escape pod arrives TickEscapePod returns past it. Waits.
+void RunFlight(Guest& _guest);
+
 /// TickEscapePod (CS:7F69): counts the escape pod down; when it arrives, pops the return address
 /// into AX so that the caller's caller is returned to.
 void TickEscapePod(Guest& _guest);
 
 /// ProcessFlightKeys (CS:7FA8): the flight controls other than steering.
 void ProcessFlightKeys(Guest& _guest);
+
+/// DrainEnergy (CS:839F): playerEnergy less the signed AL; below 0 it is 0 and the player dead. AX
+/// comes back AL sign-extended.
+void DrainEnergy(Guest& _guest);
+
+/// EngageJumpDrive (CS:8430): J: the jump drive engaged at full speed unless mass-locked.
+void EngageJumpDrive(Guest& _guest);
 
 /// UpdatePlayerMotion (CS:8472): speed, roll and pitch for this frame, then the world moves.
 void UpdatePlayerMotion(Guest& _guest);
@@ -154,5 +199,9 @@ void UpdatePlayerVelocity(Guest& _guest);
 
 /// MoveObjectsByVelocity (CS:85EC): moves every slot by the player's velocity.
 void MoveObjectsByVelocity(Guest& _guest);
+
+/// RunPauseScreen (CS:8D6A): the pause menu, until space resumes; its keys toggle the options and set
+/// the frame time, and A drops two return addresses to leave RunFlight for the title. Waits.
+void RunPauseScreen(Guest& _guest);
 
 } // namespace Elite

@@ -19,39 +19,56 @@ using Machine::FLAG_DIRECTION;
 using Machine::FLAG_ZERO;
 using Machine::Registers;
 
-// The original routines these call, which are not ported here.
+// The routines these call through their entries: the original's, or a native routine hooked there.
+constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
+constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
+constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
+constexpr std::uint16_t NEXT_RANDOM = 0x061C;
 constexpr std::uint16_t GET_VIEW_LASER = 0x066C;
-constexpr std::uint16_t GET_PREVIOUS_DUST_SCREEN_POSITION = 0x08A1;
-constexpr std::uint16_t SHIFT_STARDUST_SIDEWAYS = 0x08CB;
-constexpr std::uint16_t IS_DUST_NEAR_CENTER = 0x09EE;
-constexpr std::uint16_t SAVE_STARDUST_POSITIONS = 0x0A88;
+constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
+constexpr std::uint16_t RESET_STARDUST = 0x0A43;
+constexpr std::uint16_t HANDLE_FLIGHT_FUNCTION_KEYS = 0x0BB3;
 constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
 constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
 constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t RESTORE_FLIGHT_SCREEN = 0x15CF;
 constexpr std::uint16_t PLOT_PIXEL = 0x15E0;
 constexpr std::uint16_t DRAW_LINE = 0x16D1;
+constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
+constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
+constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
 constexpr std::uint16_t TAKE_DAMAGE = 0x2C9B;
 constexpr std::uint16_t CHECK_DOCKING_ALIGNMENT = 0x2D0F;
+constexpr std::uint16_t PLAY_STATION_TUNNEL = 0x2D5B;
 constexpr std::uint16_t VECTOR_LENGTH = 0x2E96;
 constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
 constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
 constexpr std::uint16_t OBJECT_WITHIN_BOX = 0x2F65;
 constexpr std::uint16_t VECTOR_WITHIN_BOX = 0x2F6E;
+constexpr std::uint16_t SPAWN_PLAYER_WRECKAGE = 0x2FE3;
+constexpr std::uint16_t DRAW_VIEW_CHAR = 0x3130;
+constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_CHAR = 0x31F9;
+constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
+constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
 constexpr std::uint16_t SHOW_SHIP_IDENTITY = 0x364D;
 constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
+constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t ROTATE_PITCH_YAW_ROLL = 0x3EAC;
 constexpr std::uint16_t TRANSFORM_TO_VIEW = 0x3EE3;
 constexpr std::uint16_t ROTATE_BY_SIN_COS_7210 = 0x3F02;
 constexpr std::uint16_t IS_SUN_OR_PLANET = 0x3F2A;
 constexpr std::uint16_t IS_STATION = 0x3F40;
+constexpr std::uint16_t IS_MASS_LOCKED = 0x4144;
 constexpr std::uint16_t GET_POSITION_SCALE_SHIFT = 0x4333;
 constexpr std::uint16_t SCALE_POSITION_DOWN = 0x439E;
+constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
 constexpr std::uint16_t IS_OBJECT_NEAR_KEEP_BLIP = 0x460E;
 constexpr std::uint16_t RESET_HYPERSPACE_RINGS = 0x48AB;
+constexpr std::uint16_t UPDATE_FUEL_LEAK = 0x499F;
 constexpr std::uint16_t LATCH_HYPERSPACE_TARGET = 0x49F6;
+constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
 constexpr std::uint16_t REMOVE_OBJECT = 0x4F98;
 constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
 constexpr std::uint16_t LAUNCH_PLAYER_MISSILE = 0x5242;
@@ -60,31 +77,38 @@ constexpr std::uint16_t SHOW_SYSTEM_DATA_SCREEN = 0x5CDE;
 constexpr std::uint16_t SHOW_MARKET_PRICES_SCREEN = 0x5E2C;
 constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
 constexpr std::uint16_t SHOW_INVENTORY_SCREEN = 0x6020;
+constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
+constexpr std::uint16_t SILENCE_SPEAKER_TIMER = 0x7436;
 constexpr std::uint16_t READ_FIRE_BUTTON = 0x74E0;
 constexpr std::uint16_t READ_STEERING = 0x7536;
+constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
 constexpr std::uint16_t START_BEEP = 0x7A57;
 constexpr std::uint16_t START_LOW_BEEP = 0x7A5D;
+constexpr std::uint16_t STOP_SOUND_EFFECTS = 0x7A63;
 constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
+constexpr std::uint16_t STOP_CONTINUOUS_NOISE = 0x7B6B;
 constexpr std::uint16_t SHOW_COCKPIT_SCREEN = 0x7BC0;
-constexpr std::uint16_t TOGGLE_DOCKING_COMPUTER = 0x83B2;
+constexpr std::uint16_t POLL_SCREEN_DUMP_KEY = 0x7F3D;
+constexpr std::uint16_t RESET_MOUSE_IF_SELECTED = 0x7F5D;
+constexpr std::uint16_t TICK_ESCAPE_POD = 0x7F69;
+constexpr std::uint16_t TICK_HYPERSPACE_COUNTDOWN = 0x7F79;
+constexpr std::uint16_t PROCESS_FLIGHT_KEYS = 0x7FA8;
 constexpr std::uint16_t DRAIN_ENERGY = 0x839F;
+constexpr std::uint16_t TOGGLE_DOCKING_COMPUTER = 0x83B2;
 constexpr std::uint16_t ENGAGE_JUMP_DRIVE = 0x8430;
+constexpr std::uint16_t UPDATE_PLAYER_MOTION = 0x8472;
 constexpr std::uint16_t RUN_DOCKING_COMPUTER = 0x8622;
+constexpr std::uint16_t FIND_SHIP_IN_CROSSHAIRS = 0x8A46;
+constexpr std::uint16_t RESOLVE_LASER_FIRE = 0x8AC2;
 constexpr std::uint16_t CHECK_MISSILE_TARGET_DESTROYED = 0x8B8B;
 constexpr std::uint16_t CREDIT_KILL = 0x8BC6;
 constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
+constexpr std::uint16_t APPLY_ENEMY_LASER_HIT = 0x8C8E;
 constexpr std::uint16_t RUN_PAUSE_SCREEN = 0x8D6A;
-constexpr std::uint16_t USE_MASKING_DEVICE = 0x8ECF;
 constexpr std::uint16_t APPLY_REVERSE_CONTROLS = 0x8EA5;
 constexpr std::uint16_t APPLY_REVERSE_CONTROLS_TO_DX = 0x8EBA;
-constexpr std::uint16_t FIND_SHIP_IN_CROSSHAIRS = 0x8A46;
-
-// Where two of these routines wait for a key with GetKey. From there the original runs the rest of the
-// routine, to its return. Both are hooked as routines that sometimes wait, so they run on the native
-// thread, where such a wait ends a run as any other does (ADR-010 item 8).
-constexpr std::uint16_t FLIGHT_SCREEN_KEY_WAIT = 0x0BF3;
-constexpr std::uint16_t FROZEN_KEY_WAIT = 0x8153;
+constexpr std::uint16_t USE_MASKING_DEVICE = 0x8ECF;
 
 // The stardust: 30 particles of 6 bytes, x and y words, a lifetime byte and a spare; stardustPrevious
 // follows at +0xB4 with the same layout, its lifetime copy at +0xB8 and its new-particle flag at +0xB9.
@@ -95,6 +119,7 @@ constexpr std::uint16_t PREVIOUS_X = 0xB4;
 constexpr std::uint16_t PREVIOUS_Y = 0xB6;
 constexpr std::uint16_t PREVIOUS_LIFETIME = 0xB8;
 constexpr std::uint16_t PREVIOUS_NEW = 0xB9;
+constexpr std::uint16_t STARDUST_BYTES = STARDUST_COUNT * PARTICLE_BYTES;
 
 // viewAngle for each view, in 2048ths of a turn; the front view is 0.
 constexpr std::uint16_t LEFT_VIEW = 0x200;
@@ -133,10 +158,31 @@ constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
 constexpr std::uint8_t SCAN_F5 = 0x3F;
 constexpr std::uint8_t SCAN_F6 = 0x40;
-constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F8 = 0x42;
 constexpr std::uint8_t SCAN_F9 = 0x43;
 constexpr std::uint8_t SCAN_F10 = 0x44;
+
+// The pause screen: its keys, and the option letters it shows in reverse video when they are on, a flag
+// byte and a letter each from keyboardRecenter.
+constexpr std::uint8_t SCAN_A = 0x1E;
+constexpr std::uint8_t SCAN_B = 0x30;
+constexpr std::uint8_t SCAN_D = 0x20;
+constexpr std::uint8_t SCAN_R = 0x13;
+constexpr std::uint8_t SCAN_S = 0x1F;
+constexpr std::uint8_t SCAN_Y = 0x15;
+constexpr std::uint8_t SCAN_SPACE = 0x39;
+constexpr std::uint8_t SCAN_PAST_F10 = 0x45;
+constexpr std::uint16_t PAUSE_MENU_LINES = 8;
+constexpr std::uint16_t PAUSE_OPTIONS = 5;
+constexpr std::uint16_t PAUSE_FIRST_OPTION = 0x0C08; // in spaceViewBuffer
+constexpr std::uint16_t PAUSE_OPTION_STEP = 0x200;
+constexpr std::uint16_t ALL_COLORS = 0xFFFF;
+constexpr std::uint16_t TITLE_TEXT_POSITION = 0x65; // on the message line, in CGA memory
+constexpr std::uint8_t DIGIT_ZERO = 0x30;
+constexpr std::uint8_t DIGIT_ONE = 0x31;
+constexpr std::uint8_t DIGIT_NINE = 0x39;
+constexpr std::uint8_t CLOSING_BRACKET = 0x29;
+constexpr std::uint8_t SPACE = 0x20;
 
 [[nodiscard]] std::uint16_t Plus(std::uint16_t _word, int _value) noexcept
 {
@@ -227,7 +273,7 @@ void DrawDust(Guest& _guest)
   {
     return;
   }
-  _guest.Call(GET_PREVIOUS_DUST_SCREEN_POSITION);
+  GetPreviousDustScreenPosition(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     _guest.Call(DRAW_LINE);
@@ -328,7 +374,7 @@ void UpdateRearStardust(Guest& _guest)
       for (;;)
       {
         StoreDustPosition(_guest);
-        _guest.Call(IS_DUST_NEAR_CENTER);
+        IsDustNearCenter(_guest);
         if (!_guest.Flag(FLAG_CARRY))
         {
           const std::uint16_t lifetime = Plus(regs.si, PARTICLE_LIFETIME);
@@ -393,7 +439,7 @@ void UpdateSideStardust(Guest& _guest, bool _left)
     SetHigh(regs.dx, Low(regs.dx));
     SetLow(regs.dx, 0);
     regs.dx = Sar(regs.dx, 3);
-    _guest.Call(SHIFT_STARDUST_SIDEWAYS);
+    ShiftStardustSideways(_guest);
   }
   regs.ax = _guest.Get(DS.rollRate);
   _guest.Call(APPLY_REVERSE_CONTROLS);
@@ -634,6 +680,27 @@ void SetWarning(Guest& _guest)
   }
 }
 
+// The four checks round-robin from _first, each falling on to the next with LOOP while CX lasts, until
+// one posts its warning.
+void RunWarningChecks(Guest& _guest, std::uint16_t _first)
+{
+  Registers& regs = _guest.Regs();
+  std::uint16_t check = _first;
+  for (;;)
+  {
+    if (WarningApplies(_guest, check))
+    {
+      SetWarning(_guest);
+      return;
+    }
+    if (--regs.cx == 0)
+    {
+      return;
+    }
+    check = static_cast<std::uint16_t>((check + 1) & 3);
+  }
+}
+
 // ---- The scanner and the compass ------------------------------------------------------------------
 
 // 0x41FF-0x4217: AX = 8 * AX / CX, at most 7, where CX is at least AX.
@@ -667,6 +734,154 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
+// One turn of a loop that can wait, at a backward jump of the original to _target: paced time looks at
+// the registers there, IP among them, as it does at the original's jump.
+void JumpBack(Guest& _guest, std::uint16_t _target)
+{
+  _guest.Regs().ip = _target;
+  _guest.LoopTurn();
+}
+
+// GetKey until a key comes: the waits at 0x0BF3 (HandleFlightFunctionKeys), 0x8153 (ProcessFlightKeys'
+// Ctrl+Esc) and 0x8DC7 (RunPauseScreen), each a CALL at _call and a JE back to it. Out: AH = the key.
+void WaitForKey(Guest& _guest, std::uint16_t _call)
+{
+  for (;;)
+  {
+    _guest.Call(GET_KEY);
+    if (!_guest.Flag(FLAG_ZERO))
+    {
+      return;
+    }
+    JumpBack(_guest, _call);
+  }
+}
+
+// PauseShowOptions (0x8D8F): the five option letters, in reverse video when on.
+void ShowPauseOptions(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.di = PAUSE_FIRST_OPTION;
+  regs.cx = PAUSE_OPTIONS;
+  regs.si = DS.keyboardRecenter.offset;
+  for (;;)
+  {
+    const std::uint16_t options = regs.cx;
+    const std::uint16_t position = regs.di;
+    const std::uint16_t option = regs.si;
+    _guest.Set(DS.textPaperPattern, 0);
+    regs.bx = ALL_COLORS;
+    if (_guest.Byte(regs.si) == 1)
+    {
+      // xchg [textPaperPattern], bx
+      regs.bx = _guest.Get(DS.textPaperPattern);
+      _guest.Set(DS.textPaperPattern, ALL_COLORS);
+    }
+    SetLow(regs.ax, _guest.Byte(Plus(regs.si, 1)));
+    _guest.Call(DRAW_VIEW_CHAR);
+    regs.si = Plus(option, 2);
+    regs.di = Plus(position, PAUSE_OPTION_STEP);
+    regs.cx = options;
+    if (--regs.cx == 0)
+    {
+      return;
+    }
+    JumpBack(_guest, 0x8D98);
+  }
+}
+
+// 0x8DD4-0x8E1E: R, D, Y, B and S toggle their option, with a beep. False for any other key.
+[[nodiscard]] bool TogglePauseOption(Guest& _guest, std::uint8_t _key)
+{
+  constexpr std::array<std::uint8_t, PAUSE_OPTIONS> KEYS = {SCAN_R, SCAN_D, SCAN_Y, SCAN_B, SCAN_S};
+  for (std::uint16_t index = 0; index < PAUSE_OPTIONS; ++index)
+  {
+    if (KEYS[index] == _key)
+    {
+      const auto option = static_cast<std::uint16_t>(DS.keyboardRecenter.offset + index * 2);
+      _guest.SetByte(option, static_cast<std::uint8_t>(_guest.Byte(option) ^ 1));
+      _guest.Call(START_BEEP);
+      return true;
+    }
+  }
+  return false;
+}
+
+// The pause screen from PauseShowOptions (0x8D8F): the options, then its keys. True when RunPauseScreen
+// returns, false when an F key changed the frame rate and the menu is drawn again.
+[[nodiscard]] bool RunPauseOptions(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  for (;;)
+  {
+    ShowPauseOptions(_guest);
+    regs.ax = Guest::VIDEO_SEGMENT;
+    regs.es = regs.ax;
+    _guest.Call(PRESENT_SPACE_VIEW);
+    for (;;)
+    {
+      WaitForKey(_guest, 0x8DC7);
+      const std::uint8_t key = High(regs.ax);
+      if (key == SCAN_SPACE)
+      {
+        // Resume, with the space that did it not fired.
+        _guest.Call(START_BEEP);
+        _guest.Call(RESET_KEYBOARD);
+        _guest.Call(CLEAR_DRAW_BUFFER);
+        _guest.Set(DS.gamePaused, 0);
+        _guest.Set(DS.textPaperPattern, 0);
+        _guest.Set(DS.keyDownSpace, 0);
+        return true;
+      }
+      if (TogglePauseOption(_guest, key))
+      {
+        break;
+      }
+      if (key == SCAN_A)
+      {
+        // Abort to the title: its own return address and ProcessFlightKeys' are dropped, so the RET
+        // leaves RunFlight for GameLoop.
+        _guest.Call(RESET_KEYBOARD);
+        _guest.Call(CLEAR_MESSAGE_LINE);
+        _guest.Call(CLEAR_DRAW_BUFFER);
+        _guest.Call(STOP_SOUND_EFFECTS);
+        _guest.Set(DS.gamePaused, 0);
+        _guest.Set(DS.textPaperPattern, 0);
+        _guest.Set(DS.titleShown, 0);
+        regs.ax = _guest.Pop();
+        regs.ax = _guest.Pop();
+        return true;
+      }
+      if (key < SCAN_F1 || key >= SCAN_PAST_F10)
+      {
+        JumpBack(_guest, 0x8DC7);
+        continue;
+      }
+      // F1-F10: the minimum frame time, and its key in the menu, 1-9 or 10 with a closing bracket.
+      SetHigh(regs.ax, static_cast<std::uint8_t>(key - SCAN_F1));
+      regs.bx = High(regs.ax);
+      SetLow(regs.ax, _guest.Byte(Plus(DS.frameTimeChoices.offset, regs.bx)));
+      _guest.Set(DS.minimumFrameMs, Low(regs.ax));
+      SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + DIGIT_ONE));
+      if (Low(regs.bx) == DIGIT_NINE + 1)
+      {
+        _guest.SetByte(DS.frameRateKeyLabel.offset, DIGIT_ONE);
+        _guest.Set(DS.dataAC00, DIGIT_ZERO);
+        _guest.Set(DS.dataAC01, CLOSING_BRACKET);
+      }
+      else
+      {
+        _guest.SetByte(DS.frameRateKeyLabel.offset, Low(regs.bx));
+        _guest.Set(DS.dataAC00, CLOSING_BRACKET);
+        _guest.Set(DS.dataAC01, SPACE);
+      }
+      JumpBack(_guest, 0x8D6D);
+      return false;
+    }
+    JumpBack(_guest, 0x8D8F); // PauseShowOptions
+  }
+}
+
 // FlightScreenDispatch (0x0BDE): leaving the function keys, the cockpit back if a screen was shown.
 void LeaveFlightScreens(Guest& _guest)
 {
@@ -681,89 +896,91 @@ void LeaveFlightScreens(Guest& _guest)
   _guest.Set(DS.inFlight, 1);
 }
 
+// push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
+void EraseForFlightScreen(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  _guest.Set(DS.flightScreenShown, 1);
+  const std::uint16_t key = regs.ax;
+  _guest.Call(ERASE_COMPASS_AND_BLIPS);
+  regs.ax = key;
+}
+
 // FlightScreenDispatch (0x0BF8): the screen for the key in AH, then the key that screen returns, until
-// F1-F4.
+// F1-F4. Every jump back in it is a turn of a loop that can wait.
 void DispatchFlightScreens(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   for (;;)
   {
-    std::uint8_t key = High(regs.ax);
+    const std::uint8_t key = High(regs.ax);
     if (key >= SCAN_F1 && key <= SCAN_F4)
     {
+      JumpBack(_guest, 0x0BDE);
       LeaveFlightScreens(_guest);
       return;
     }
     if (_guest.Get(DS.witchspaceCountdown) == 0)
     {
-      _guest.Set(DS.flightScreenShown, 1);
-      const std::uint16_t saved = regs.ax;
-      EraseCompassAndBlips(_guest);
-      regs.ax = saved;
-      if (key == SCAN_F5)
+      EraseForFlightScreen(_guest);
+      constexpr std::array<std::uint16_t, 4> SCREENS = {SHOW_GALACTIC_CHART, SHOW_SHORT_RANGE_CHART, SHOW_SYSTEM_DATA_SCREEN,
+                                                        SHOW_MARKET_PRICES_SCREEN};
+      if (key >= SCAN_F5 && key <= SCAN_F8)
       {
-        _guest.Call(SHOW_GALACTIC_CHART);
+        _guest.Call(SCREENS[static_cast<std::size_t>(key - SCAN_F5)]);
+        JumpBack(_guest, 0x0BF8); // FlightScreenDispatch
         continue;
       }
-      if (key == SCAN_F6)
-      {
-        _guest.Call(SHOW_SHORT_RANGE_CHART);
-        continue;
-      }
-      if (key == SCAN_F7)
-      {
-        _guest.Call(SHOW_SYSTEM_DATA_SCREEN);
-        continue;
-      }
-      if (key == SCAN_F8)
-      {
-        _guest.Call(SHOW_MARKET_PRICES_SCREEN);
-        continue;
-      }
-    }
-    else if (key == SCAN_F6 && _guest.Get(DS.witchspaceCountdown) == 1)
-    {
-      // In witch space the short-range chart still shows, once the countdown is down to 1.
-      _guest.Set(DS.flightScreenShown, 1);
-      EraseCompassAndBlips(_guest);
-      _guest.Call(SHOW_SHORT_RANGE_CHART);
-      continue;
-    }
-    else if (key >= SCAN_F9)
-    {
-      _guest.Set(DS.flightScreenShown, 1);
-      const std::uint16_t saved = regs.ax;
-      EraseCompassAndBlips(_guest);
-      regs.ax = saved;
     }
     else
     {
-      // The charts and the market need the navigation computer, which witch space jams.
-      if (_guest.Get(DS.flightScreenShown) != 1)
+      // In witch space the short-range chart still shows once the countdown is down to 1, and F9 and
+      // F10 show; the charts and the market need the navigation computer, which witch space jams.
+      if (key == SCAN_F6)
       {
-        _guest.Call(START_BEEP);
+        if (_guest.Get(DS.witchspaceCountdown) == 1)
+        {
+          _guest.Set(DS.flightScreenShown, 1);
+          _guest.Call(ERASE_COMPASS_AND_BLIPS);
+          _guest.Call(SHOW_SHORT_RANGE_CHART);
+          JumpBack(_guest, 0x0BF8);
+          continue;
+        }
+        JumpBack(_guest, 0x0C6D);
       }
-      SetMessage(_guest, DS.navCompErrorMessage, 0x19);
-      SetHigh(regs.ax, 0);
-      LeaveFlightScreens(_guest);
-      return;
+      if (key < SCAN_F9)
+      {
+        if (_guest.Get(DS.flightScreenShown) != 1)
+        {
+          _guest.Call(START_BEEP);
+        }
+        SetMessage(_guest, DS.navCompErrorMessage, 0x19);
+        SetHigh(regs.ax, 0);
+        JumpBack(_guest, 0x0BDE);
+        LeaveFlightScreens(_guest);
+        return;
+      }
+      EraseForFlightScreen(_guest);
+      JumpBack(_guest, 0x0C45);
     }
-    key = High(regs.ax);
+    // 0x0C45: F9 and F10; any other key the screens return is waited past.
     if (key == SCAN_F9)
     {
       _guest.Call(RESET_KEYBOARD);
       _guest.Set(DS.inFlight, 1);
       _guest.Call(SHOW_COMMANDER_STATUS_SCREEN);
       _guest.Set(DS.inFlight, 0);
+      JumpBack(_guest, 0x0BF8);
       continue;
     }
     if (key == SCAN_F10)
     {
       _guest.Call(SHOW_INVENTORY_SCREEN);
+      JumpBack(_guest, 0x0BF8);
       continue;
     }
-    _guest.Call(FLIGHT_SCREEN_KEY_WAIT);
-    return;
+    JumpBack(_guest, 0x0BF3);
+    WaitForKey(_guest, 0x0BF3);
   }
 }
 
@@ -783,13 +1000,27 @@ void ChangeView(Guest& _guest)
   }
   _guest.Set(DS.viewAngle, view);
   _guest.Call(START_BEEP);
-  ResetStardust(_guest);
+  _guest.Call(RESET_STARDUST);
 }
 
-// 0x8076-0x80FF: H. True when the countdown started, which ends ProcessFlightKeys.
+// mov ax, _text; jmp back to 0x80A3, which posts it for 25 frames.
+void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
+{
+  _guest.Regs().ax = _text.offset;
+  JumpBack(_guest, 0x80A3);
+  SetMessage(_guest, _text, 0x19);
+}
+
+// 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown
+// started, which ends ProcessFlightKeys.
 [[nodiscard]] bool PressHyperspace(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
+  if (_guest.Get(DS.dockingComputerOn) == 1 || _guest.Get(DS.hyperspaceCountdown) != 0)
+  {
+    JumpBack(_guest, 0x8065); // past H
+    return false;
+  }
   SetLow(regs.ax,
          (_guest.Get(DS.invadedStationDestroyed) ^ 1) & _guest.Get(DS.thargoidInvasionActive) & _guest.Get(DS.jumpedSinceBriefing));
   if (Low(regs.ax) != 0)
@@ -811,7 +1042,7 @@ void ChangeView(Guest& _guest)
     }
     if (regs.ax >= 0x47)
     {
-      SetMessage(_guest, DS.outOfRangeMessage, 0x19);
+      PostHyperspaceRefusal(_guest, DS.outOfRangeMessage);
       return false;
     }
     // The fuel in tenths of a light year against the distance, and the cost.
@@ -823,7 +1054,7 @@ void ChangeView(Guest& _guest)
     DivideByte(_guest, High(regs.bx));
     if (Low(regs.ax) < Low(regs.bx))
     {
-      SetMessage(_guest, DS.notEnoughFuelMessage, 0x19);
+      PostHyperspaceRefusal(_guest, DS.notEnoughFuelMessage);
       return false;
     }
     regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
@@ -888,7 +1119,7 @@ void HandleMissileKeys(Guest& _guest)
   }
   if (_guest.Get(DS.keyDownM) == 1 && _guest.Get(DS.missileState) == 2 && _guest.Get(DS.missileJammed) != 1)
   {
-    NextRandom(_guest);
+    _guest.Call(NEXT_RANDOM);
     if (regs.ax < 0x1F4)
     {
       _guest.Set(DS.missileJammed, 1);
@@ -1164,7 +1395,7 @@ void UpdateStardust(Guest& _guest)
   Registers& regs = _guest.Regs();
   if (_guest.Get(DS.jumpDriveEngaged) != 0)
   {
-    _guest.Call(SAVE_STARDUST_POSITIONS);
+    SaveStardustPositions(_guest);
   }
   SetLow(regs.ax, _guest.Get(DS.stardustColor));
   _guest.Set(DS.drawColor, Low(regs.ax));
@@ -1199,6 +1430,23 @@ void ComputeStardustShift(Guest& _guest)
   _guest.Set(DS.stardustShift, Low(regs.ax));
 }
 
+void GetPreviousDustScreenPosition(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.ax = _guest.Word(Plus(regs.si, PREVIOUS_X));
+  regs.bx = _guest.Word(Plus(regs.si, PREVIOUS_Y));
+  IsDustOnScreen(_guest);
+  if (!_guest.Flag(FLAG_CARRY))
+  {
+    _guest.SetFlag(FLAG_CARRY, true);
+    return;
+  }
+  DustToScreen(_guest);
+  SetLow(regs.cx, Low(regs.ax));
+  SetHigh(regs.cx, Low(regs.bx));
+  _guest.SetFlag(FLAG_CARRY, false);
+}
+
 void ComputeDustStripMask(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -1214,6 +1462,49 @@ void ComputeDustStripMask(Guest& _guest)
     regs.bp = static_cast<std::uint16_t>((regs.bp << 1) | 1);
   }
   regs.ax = 0; // inc ax, or inc ax and dec ax, on the way out
+}
+
+void ShiftStardustSideways(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  ComputeDustStripMask(_guest);
+  regs.cx = STARDUST_COUNT;
+  regs.si = DS.stardust.offset;
+  do
+  {
+    LoadDustPosition(_guest);
+    IsDustOnScreen(_guest);
+    if (_guest.Flag(FLAG_CARRY))
+    {
+      regs.ax = Plus(regs.ax, regs.dx);
+      IsDustOnScreen(_guest);
+      if (!_guest.Flag(FLAG_CARRY))
+      {
+        RespawnDustAtSideEdge(_guest);
+        StorePreviousDustPosition(_guest);
+      }
+      StoreDustPosition(_guest);
+    }
+    regs.si = Plus(regs.si, PARTICLE_BYTES);
+  } while (--regs.cx != 0);
+}
+
+void RespawnDustAtSideEdge(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  NextRandom(_guest);
+  regs.bx = regs.ax;
+  SetLow(regs.ax, RandomLifetime(regs.ax));
+  MarkDustRespawned(_guest, Low(regs.ax));
+  regs.bx = Sar(regs.bx, 3);
+  if (High(regs.bx) == 0x10)
+  {
+    SetHigh(regs.bx, 0x0F);
+  }
+  NextRandom(_guest);
+  regs.ax = static_cast<std::uint16_t>(regs.ax & regs.bp);
+  // Moving right the particle enters at the left edge, moving left at the right.
+  regs.ax = Negative(regs.dx) ? static_cast<std::uint16_t>(0x1F00 - regs.ax) : Plus(regs.ax, 0xE000);
 }
 
 void RollStardust(Guest& _guest)
@@ -1291,6 +1582,14 @@ void IsDustOnScreen(Guest& _guest)
   const auto x = static_cast<std::int8_t>(High(regs.ax));
   const auto y = static_cast<std::int8_t>(High(regs.bx));
   _guest.SetFlag(FLAG_CARRY, x >= -0x20 && x <= 0x1F && y >= -0x10 && y <= 0x0F);
+}
+
+void IsDustNearCenter(Guest& _guest)
+{
+  const Registers& regs = _guest.Regs();
+  const auto x = static_cast<std::int8_t>(High(regs.ax));
+  const auto y = static_cast<std::int8_t>(High(regs.bx));
+  _guest.SetFlag(FLAG_CARRY, x >= -6 && x <= 6 && y >= -3 && y <= 3);
 }
 
 void ScaleDustStep(Guest& _guest)
@@ -1377,13 +1676,32 @@ void ResetStardust(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
+void SaveStardustPositions(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::uint16_t es = regs.es;
+  regs.ax = regs.ds;
+  regs.es = regs.ax;
+  regs.si = DS.stardust.offset;
+  regs.di = DS.stardustPrevious.offset;
+  // rep movsb
+  const int step = (regs.flags & FLAG_DIRECTION) != 0 ? -1 : 1;
+  for (regs.cx = STARDUST_BYTES; regs.cx != 0; --regs.cx)
+  {
+    _guest.SetFarByte(regs.es, regs.di, _guest.FarByte(regs.ds, regs.si));
+    regs.si = Plus(regs.si, step);
+    regs.di = Plus(regs.di, step);
+  }
+  regs.es = es;
+}
+
 void HandleFlightFunctionKeys(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   _guest.Set(DS.inFlight, 0);
   regs.cx = 10;
   regs.bx = SCAN_F1;
-  do
+  for (;;)
   {
     if (_guest.Byte(Plus(DS.keyDown.offset, regs.bx)) == 1)
     {
@@ -1396,9 +1714,22 @@ void HandleFlightFunctionKeys(Guest& _guest)
       return;
     }
     ++regs.bx;
-  } while (--regs.cx != 0);
+    if (--regs.cx == 0)
+    {
+      break;
+    }
+    JumpBack(_guest, 0x0BBE);
+  }
   SetHigh(regs.ax, 0);
   _guest.Set(DS.inFlight, 1);
+}
+
+void RestoreFlightScreen(Guest& _guest)
+{
+  _guest.Call(SHOW_COCKPIT_SCREEN);
+  InvalidateDashboard(_guest);
+  _guest.Call(START_BEEP);
+  _guest.Set(DS.messageShown, 0);
 }
 
 void InvalidateDashboard(Guest& _guest)
@@ -1854,6 +2185,41 @@ void UpdateSafeZone(Guest& _guest)
   _guest.Set(DS.safeZoneFlags, Low(regs.ax));
 }
 
+void ComputeDeathDebrisVector(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.ax = Negate(_guest.Get(DS.viewAngle));
+  SetSinCosPair(_guest, 8);
+  regs.ax = Negate(Plus(_guest.Get(DS.playerPitchAngle), 0x400));
+  SetSinCosPair(_guest, 6);
+  regs.ax = Plus(_guest.Get(DS.playerYawAngle), 0x400);
+  SetSinCosPair(_guest, 7);
+  // (0, 40, 0), turned by the view and, off the front view, by the roll, then by yaw and pitch.
+  regs.ax = 0;
+  regs.bx = 0x28;
+  regs.cx = 0;
+  if (_guest.Get(DS.viewAngle) != 0)
+  {
+    RotateByPair(_guest, 8);
+    const std::uint16_t x = regs.ax;
+    const std::uint16_t y = regs.bx;
+    const std::uint16_t z = regs.cx;
+    regs.ax = Negate(_guest.Get(DS.playerRollAngle));
+    SetSinCosPair(_guest, 8);
+    // push ax, bx, cx; pop bx, cx, ax: y and z change places.
+    regs.bx = z;
+    regs.cx = y;
+    regs.ax = x;
+    RotateByPair(_guest, 8);
+    std::swap(regs.cx, regs.bx);
+  }
+  RotateByPair(_guest, 7);
+  std::swap(regs.cx, regs.ax);
+  RotateByPair(_guest, 6);
+  std::swap(regs.cx, regs.ax);
+  std::swap(regs.cx, regs.bx);
+}
+
 void UpdateWarnings(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -1871,25 +2237,31 @@ void UpdateWarnings(Guest& _guest)
     _guest.Set(DS.warningFrames, static_cast<std::uint8_t>(_guest.Get(DS.warningFrames) - 1));
     return;
   }
-  // The four checks round-robin from the one after the last warning (jmp [bx+warningChecks]), each
-  // falling on to the next with loop.
+  // The four checks from the one after the last warning (jmp [bx+warningChecks]).
   regs.cx = 4;
   SetLow(regs.bx, _guest.Get(DS.warningIndex) + 1);
   regs.bx = static_cast<std::uint16_t>((regs.bx & 3) << 1);
-  auto check = static_cast<std::uint16_t>(regs.bx >> 1);
-  for (;;)
-  {
-    if (WarningApplies(_guest, check))
-    {
-      SetWarning(_guest);
-      return;
-    }
-    if (--regs.cx == 0)
-    {
-      return;
-    }
-    check = static_cast<std::uint16_t>((check + 1) & 3);
-  }
+  RunWarningChecks(_guest, static_cast<std::uint16_t>(regs.bx >> 1));
+}
+
+void CheckMissileWarning(Guest& _guest)
+{
+  RunWarningChecks(_guest, 0);
+}
+
+void CheckAltitudeWarning(Guest& _guest)
+{
+  RunWarningChecks(_guest, 1);
+}
+
+void CheckTemperatureWarning(Guest& _guest)
+{
+  RunWarningChecks(_guest, 2);
+}
+
+void CheckEnergyWarning(Guest& _guest)
+{
+  RunWarningChecks(_guest, 3);
 }
 
 void UpdateScannerBlip(Guest& _guest)
@@ -2216,6 +2588,74 @@ void UpdateFuelLeak(Guest& _guest)
   _guest.Out8(regs.dx, Low(regs.ax));
 }
 
+void RunFlight(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  _guest.Call(RESET_MOUSE_IF_SELECTED);
+  _guest.Call(SET_UP_LOCAL_SPACE);
+  _guest.Call(PLAY_STATION_TUNNEL);
+  for (;;)
+  {
+    // FlightFrameLoop (0x7EA4): one frame.
+    _guest.Call(UPDATE_DASHBOARD);
+    _guest.Call(TRANSFORM_AND_DRAW_OBJECTS);
+    _guest.Call(APPLY_ENEMY_LASER_HIT);
+    _guest.Call(RESOLVE_LASER_FIRE);
+    _guest.Call(UPDATE_STARDUST);
+    _guest.Call(UPDATE_FUEL_LEAK);
+    _guest.Call(UPDATE_MESSAGE_LINE);
+    _guest.Call(POLL_SCREEN_DUMP_KEY);
+    _guest.Call(FINISH_SPACE_VIEW_FRAME);
+    _guest.Call(UPDATE_OBJECTS_AND_SPAWN);
+    _guest.Call(UPDATE_PLAYER_MOTION);
+    _guest.Call(CHECK_COLLISIONS);
+    if (_guest.Get(DS.playerDocked) == 1)
+    {
+      _guest.Call(PLAY_STATION_TUNNEL);
+      _guest.Call(RESET_KEYBOARD);
+      _guest.Call(STOP_SOUND_EFFECTS);
+      _guest.Call(STOP_ALL_SOUND);
+      return;
+    }
+    _guest.Call(PROCESS_FLIGHT_KEYS);
+    _guest.Call(TICK_HYPERSPACE_COUNTDOWN);
+    // When the escape pod arrives this returns past RunFlight, to its caller.
+    _guest.Call(TICK_ESCAPE_POD);
+    if (_guest.Get(DS.playerDead) != 1 || _guest.Get(DS.cheatEnabled) == 1)
+    {
+      JumpBack(_guest, 0x7EA4); // FlightFrameLoop
+      continue;
+    }
+    // Dead: GAME OVER for 40 frames, then the title's ELITE on the message line, and back.
+    _guest.Set(DS.hyperspaceCountdown, 0);
+    if (_guest.Get(DS.gameOverFrames) == 0)
+    {
+      _guest.Call(SPAWN_PLAYER_WRECKAGE);
+      _guest.Set(DS.gameOverFrames, 0x28);
+      SetMessage(_guest, DS.gameOverMessage, 0x28);
+      _guest.Call(STOP_CONTINUOUS_NOISE);
+      JumpBack(_guest, 0x7EA4);
+      continue;
+    }
+    _guest.Set(DS.gameOverFrames, static_cast<std::uint8_t>(_guest.Get(DS.gameOverFrames) - 1));
+    if (_guest.Get(DS.gameOverFrames) != 0)
+    {
+      JumpBack(_guest, 0x7EA4);
+      continue;
+    }
+    _guest.Call(RESET_KEYBOARD);
+    regs.ax = Guest::VIDEO_SEGMENT;
+    regs.es = regs.ax;
+    _guest.Call(CLEAR_MESSAGE_LINE);
+    _guest.Set(DS.textPaperPattern, 0);
+    regs.bx = ALL_COLORS;
+    regs.si = DS.eliteTitleText.offset;
+    regs.di = TITLE_TEXT_POSITION;
+    _guest.Call(DRAW_SCREEN_STRING);
+    return;
+  }
+}
+
 void TickEscapePod(Guest& _guest)
 {
   if (_guest.Get(DS.escapePodFrames) == 0)
@@ -2233,11 +2673,16 @@ void TickEscapePod(Guest& _guest)
 void ProcessFlightKeys(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.gameOverFrames) != 0 || _guest.Get(DS.escapePodFrames) != 0)
+  if (_guest.Get(DS.gameOverFrames) != 0)
   {
     return;
   }
-  HandleFlightFunctionKeys(_guest);
+  if (_guest.Get(DS.escapePodFrames) != 0)
+  {
+    JumpBack(_guest, 0x7FAF); // to the RET above
+    return;
+  }
+  _guest.Call(HANDLE_FLIGHT_FUNCTION_KEYS);
   if (High(regs.ax) != 0 && _guest.Get(DS.viewLocked) != 1)
   {
     ChangeView(_guest);
@@ -2249,8 +2694,7 @@ void ProcessFlightKeys(Guest& _guest)
     SetMessage(_guest, DS.galacticDriveReadyMessage, 0x28);
     _guest.Set(DS.galacticDriveReadyFrames, 0x28);
   }
-  if (_guest.Get(DS.keyDownH) == 1 && _guest.Get(DS.dockingComputerOn) != 1 && _guest.Get(DS.hyperspaceCountdown) == 0 &&
-      PressHyperspace(_guest))
+  if (_guest.Get(DS.keyDownH) == 1 && PressHyperspace(_guest))
   {
     return;
   }
@@ -2277,14 +2721,16 @@ void ProcessFlightKeys(Guest& _guest)
     _guest.Set(DS.gamePaused, 1);
     if (_guest.Get(DS.keyDownCtrl) == 1)
     {
-      // Ctrl+Esc freezes the game until a key: a wait, which the original runs to its return.
+      // Ctrl+Esc freezes the game until a key, without the menu.
       _guest.Call(RESET_KEYBOARD);
-      _guest.Call(FROZEN_KEY_WAIT);
-      return;
+      WaitForKey(_guest, 0x8153);
     }
-    SetMessage(_guest, DS.gamePausedMessage, 1);
-    _guest.Call(UPDATE_MESSAGE_LINE);
-    _guest.Call(RUN_PAUSE_SCREEN);
+    else
+    {
+      SetMessage(_guest, DS.gamePausedMessage, 1);
+      _guest.Call(UPDATE_MESSAGE_LINE);
+      _guest.Call(RUN_PAUSE_SCREEN);
+    }
     _guest.Set(DS.gamePaused, 0);
   }
   HandleMissileKeys(_guest);
@@ -2313,6 +2759,42 @@ void ProcessFlightKeys(Guest& _guest)
     _guest.Call(USE_MASKING_DEVICE);
   }
   HandleAntiEcmKey(_guest);
+}
+
+void DrainEnergy(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.ax = SignExtend(Low(regs.ax));
+  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
+  _guest.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - regs.ax));
+  if (energy < regs.ax)
+  {
+    _guest.Set(DS.playerEnergy, 0);
+    _guest.Set(DS.playerDead, 1);
+  }
+}
+
+void EngageJumpDrive(Guest& _guest)
+{
+  if (_guest.Get(DS.dockingComputerOn) != 1)
+  {
+    if (_guest.Get(DS.playerSpeed) != 0x30)
+    {
+      _guest.Set(DS.jumpDriveEngaged, 0);
+      SetMessage(_guest, DS.jumpDriveVelocityLockedMessage, 5);
+      return;
+    }
+    _guest.Call(IS_MASS_LOCKED);
+    if (!_guest.Flag(FLAG_CARRY))
+    {
+      _guest.Set(DS.jumpDriveEngaged, 1);
+      _guest.Set(DS.velocityDirty, 1);
+      SetMessage(_guest, DS.jumpDriveEngagedMessage, 5);
+      return;
+    }
+  }
+  _guest.Set(DS.jumpDriveEngaged, 0);
+  SetMessage(_guest, DS.jumpDriveMassLockedMessage, 5);
 }
 
 void UpdatePlayerMotion(Guest& _guest)
@@ -2440,6 +2922,40 @@ void MoveObjectsByVelocity(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
+void RunPauseScreen(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  _guest.Call(SILENCE_SPEAKER_TIMER);
+  for (;;)
+  {
+    // 0x8D6D: the menu's eight lines.
+    _guest.Call(CLEAR_DRAW_BUFFER);
+    _guest.Set(DS.textPaperPattern, 0);
+    regs.cx = PAUSE_MENU_LINES;
+    regs.si = DS.pauseMenuText.offset;
+    for (;;)
+    {
+      const std::uint16_t lines = regs.cx;
+      regs.di = _guest.Word(regs.si);
+      regs.si = Plus(regs.si, 2);
+      regs.bx = ALL_COLORS;
+      _guest.Call(DRAW_VIEW_STRING);
+      ++regs.si;
+      regs.cx = lines;
+      if (--regs.cx == 0)
+      {
+        break;
+      }
+      JumpBack(_guest, 0x8D7C);
+    }
+    _guest.Call(RESET_KEYBOARD);
+    if (RunPauseOptions(_guest))
+    {
+      return;
+    }
+  }
+}
+
 namespace
 {
 
@@ -2453,6 +2969,9 @@ using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
 
+using Machine::NativeReturn;
+using Machine::NativeWait;
+
 constexpr Machine::NativeContract Clobbers(std::uint16_t _registers) noexcept
 {
   return Machine::NativeContract{_registers, 0};
@@ -2460,25 +2979,35 @@ constexpr Machine::NativeContract Clobbers(std::uint16_t _registers) noexcept
 
 constexpr Machine::NativeContract CARRY_OUT{0, FLAG_CARRY};
 
+// HandleFlightFunctionKeys and ProcessFlightKeys work once a frame and return; they wait for a key only
+// on the paths the F5-F10 screens, the pause and the Ctrl+Esc freeze take, so they wait sometimes.
+// RunFlight and RunPauseScreen wait as a rule.
 constexpr std::array ENTRIES = {
   NativeEntry{0x068F, "UpdateStardust", &UpdateStardust,
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP)},
   NativeEntry{0x0887, "ComputeStardustShift", &ComputeStardustShift, Clobbers(REGISTER_AX)},
+  NativeEntry{0x08A1, "GetPreviousDustScreenPosition", &GetPreviousDustScreenPosition,
+              Machine::NativeContract{REGISTER_AX | REGISTER_BX, FLAG_CARRY}},
   NativeEntry{0x08B9, "ComputeDustStripMask", &ComputeDustStripMask, Clobbers(REGISTER_AX)},
+  NativeEntry{0x08CB, "ShiftStardustSideways", &ShiftStardustSideways,
+              Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
+  NativeEntry{0x08F2, "RespawnDustAtSideEdge", &RespawnDustAtSideEdge, PRESERVES_ALL},
   NativeEntry{0x0927, "RollStardust", &RollStardust, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},
   NativeEntry{0x0940, "ShiftStardustVertically", &ShiftStardustVertically,
               Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
   NativeEntry{0x0969, "RespawnDustAtVerticalEdge", &RespawnDustAtVerticalEdge, PRESERVES_ALL},
   NativeEntry{0x09A3, "RespawnDustAnywhere", &RespawnDustAnywhere, PRESERVES_ALL},
   NativeEntry{0x09D6, "IsDustOnScreen", &IsDustOnScreen, CARRY_OUT},
+  NativeEntry{0x09EE, "IsDustNearCenter", &IsDustNearCenter, CARRY_OUT},
   NativeEntry{0x0A06, "ScaleDustStep", &ScaleDustStep, PRESERVES_ALL},
   NativeEntry{0x0A13, "LoadDustPosition", &LoadDustPosition, PRESERVES_ALL},
   NativeEntry{0x0A19, "StoreDustPosition", &StoreDustPosition, PRESERVES_ALL},
   NativeEntry{0x0A1F, "StorePreviousDustPosition", &StorePreviousDustPosition, PRESERVES_ALL},
   NativeEntry{0x0A28, "DustToScreen", &DustToScreen, PRESERVES_ALL},
   NativeEntry{0x0A43, "ResetStardust", &ResetStardust, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
-  NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL, Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Sometimes},
+  NativeEntry{0x0A88, "SaveStardustPositions", &SaveStardustPositions, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI)},
+  NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Sometimes},
+  NativeEntry{0x15CF, "RestoreFlightScreen", &RestoreFlightScreen, PRESERVES_ALL},
   NativeEntry{0x2540, "InvalidateDashboard", &InvalidateDashboard, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DI)},
   NativeEntry{0x254F, "UpdateDashboard", &UpdateDashboard, Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_ES))},
   NativeEntry{0x2645, "DrawFiveLineBar", &DrawFiveLineBar, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI)},
@@ -2496,7 +3025,12 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisions, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2E63, "InSafeZone", &InSafeZone, CARRY_OUT},
   NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZone, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX)},
+  NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVector, Clobbers(REGISTER_DX | REGISTER_DI | REGISTER_BP)},
   NativeEntry{0x36B6, "UpdateWarnings", &UpdateWarnings, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX)},
+  NativeEntry{0x36FD, "CheckMissileWarning", &CheckMissileWarning, PRESERVES_ALL},
+  NativeEntry{0x370E, "CheckAltitudeWarning", &CheckAltitudeWarning, PRESERVES_ALL},
+  NativeEntry{0x371A, "CheckTemperatureWarning", &CheckTemperatureWarning, PRESERVES_ALL},
+  NativeEntry{0x3726, "CheckEnergyWarning", &CheckEnergyWarning, PRESERVES_ALL},
   NativeEntry{0x40EC, "UpdateScannerBlip", &UpdateScannerBlip, PRESERVES_ALL},
   NativeEntry{0x418F, "UpdateCompass", &UpdateCompass, PRESERVES_ALL},
   NativeEntry{0x42A4, "XorCompassDot", &XorCompassDot, Clobbers(REGISTER_AX | REGISTER_BX)},
@@ -2505,12 +3039,15 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixel, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DI | REGISTER_ES)},
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlips, Clobbers(REGISTER_ALL)},
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeak, Clobbers(REGISTER_AX | REGISTER_DX)},
+  NativeEntry{0x7E9B, "RunFlight", &RunFlight, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePod, PRESERVES_ALL},
-  NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
-              Machine::NativeWait::Sometimes},
+  NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Sometimes},
+  NativeEntry{0x839F, "DrainEnergy", &DrainEnergy, PRESERVES_ALL},
+  NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDrive, PRESERVES_ALL},
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL)},
   NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocity, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX)},
   NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocity, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},
+  NativeEntry{0x8D6A, "RunPauseScreen", &RunPauseScreen, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
 };
 
 } // namespace
