@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "ComparisonRig.h"
+#include "DataOverlay.h"
 
 #include <initializer_list>
 
@@ -18,6 +19,7 @@ constexpr std::uint16_t FILL_SPAN = 0x1A07;
 constexpr std::uint16_t FILL_TRIANGLE = 0x1BFB;
 constexpr std::uint16_t FILL_CLIPPED_TRIANGLE = 0x1E6E;
 constexpr std::uint16_t DRAW_CHART_FRAME = 0x7C25;
+constexpr std::uint16_t DRAW_LASER_SIGHTS = 0x0630;
 
 // DivideOverflowInterrupt saves BX here, in the code segment, when a divide traps.
 constexpr std::uint16_t DIVIDE_SAVED_BX = 0x02A1;
@@ -35,6 +37,11 @@ constexpr std::uint16_t SCREEN_LAYOUT = 0xA7D0;
 void SetDataByte(ComparisonRig& _rig, std::uint16_t _offset, std::uint8_t _value)
 {
   _rig.Host().Ram().Write8(Elite::DataSegment(_rig.Program()), _offset, _value);
+}
+
+void SetDataWord(ComparisonRig& _rig, std::uint16_t _offset, std::uint16_t _value)
+{
+  _rig.Host().Ram().Write16(Elite::DataSegment(_rig.Program()), _offset, _value);
 }
 
 // The original ran every one of _offsets while a call of the routine at _entry was being compared:
@@ -169,6 +176,26 @@ public:
     rig.Call(DRAW_CHART_FRAME, {});
     rig.AssertAllAgreed(DRAW_CHART_FRAME, 1);
     AssertExecuted(rig, DRAW_CHART_FRAME, {0x7C38});
+  }
+
+  // FinishSpaceViewFrame waits, so it is never compared, and it now draws the sights by value: DrawLaserSights is compared here
+  // instead. Each of the four lasers on the front view's mount, then the rear view, whose mount has none, which draws nothing.
+  TEST_METHOD(LaserSightsAgreeForEveryLaser)
+  {
+    ComparisonRig rig("DrawLaserSights");
+    SetDataWord(rig, Elite::DS.viewAngle.offset, 0);
+    SetDataByte(rig, Elite::DS.laserMountsFitted.offset, 1);
+    constexpr std::uint8_t LASER_TYPES = 4;
+    for (std::uint8_t type = 0; type < LASER_TYPES; ++type)
+    {
+      SetDataByte(rig, Elite::DS.laserMountTypes.offset, type);
+      rig.Call(DRAW_LASER_SIGHTS, {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .si = 0x5555, .di = 0x6666});
+    }
+    SetDataWord(rig, Elite::DS.viewAngle.offset, 0x400);
+    rig.Call(DRAW_LASER_SIGHTS, {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .si = 0x5555, .di = 0x6666});
+    SetDataWord(rig, Elite::DS.viewAngle.offset, 0);
+    rig.AssertAllAgreed(DRAW_LASER_SIGHTS, LASER_TYPES + 1);
+    AssertExecuted(rig, DRAW_LASER_SIGHTS, {0x0633, 0x0635, 0x0669, 0x066B});
   }
 };
 

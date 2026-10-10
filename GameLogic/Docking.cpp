@@ -326,7 +326,7 @@ std::uint16_t PitchToTarget(GameState& _state, bool _approach, std::uint16_t _to
   Registers& regs = _guest.Regs();
   regs.ax = _coordinate;
   regs.dx = SignWord(regs.ax);
-  DivideSignedWord(_guest, regs.bx);
+  DivideSignedWordOnRegisters(_guest, regs.bx);
   return regs.ax;
 }
 
@@ -348,7 +348,7 @@ void FlyToApproachPoint(Guest& _guest)
     SlowDown(_guest.State());
   }
   regs.dx = 0;
-  DivideWord(_guest, _guest.Get(DS.playerSpeed));
+  DivideWordOnRegisters(_guest, _guest.Get(DS.playerSpeed));
   if (regs.ax == 1)
   {
     _guest.Set(DS.playerSpeed, 0);

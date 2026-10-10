@@ -597,7 +597,7 @@ void ScaleBarValue(Guest& _guest)
   SetLow(regs.bx, 12);
   MultiplyByte(regs, 12);
   SetLow(regs.bx, 63);
-  DivideByte(_guest, 63);
+  DivideByteOnRegisters(_guest, 63);
 }
 
 // mov al, [_value]; cmp al, [_shown]; je; (mov [_shown], al); mov di, _line; call DrawThreeLineBar.
@@ -785,7 +785,7 @@ void ScaleCompassAxis(Guest& _guest)
     const std::uint32_t dividend = ((std::uint32_t{regs.dx} << 16) | regs.ax) << 3;
     regs.dx = static_cast<std::uint16_t>(dividend >> 16);
     regs.ax = static_cast<std::uint16_t>(dividend);
-    DivideWord(_guest, regs.cx);
+    DivideWordOnRegisters(_guest, regs.cx);
   }
   if (regs.ax >= 8)
   {
@@ -1122,7 +1122,7 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
     SetLow(regs.ax, _guest.Get(DS.fuel));
     MultiplyByte(regs, High(regs.bx));
     SetHigh(regs.bx, 0x24);
-    DivideByte(_guest, High(regs.bx));
+    DivideByteOnRegisters(_guest, High(regs.bx));
     if (Low(regs.ax) < Low(regs.bx))
     {
       regs.ax = DS.notEnoughFuelMessage.offset;
@@ -1132,7 +1132,7 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
     regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
     MultiplyByte(regs, High(regs.bx));
     SetHigh(regs.bx, 0x0A);
-    DivideByte(_guest, High(regs.bx));
+    DivideByteOnRegisters(_guest, High(regs.bx));
     if (Low(regs.ax) == 0)
     {
       SetLow(regs.ax, 1);
@@ -1454,7 +1454,7 @@ void ComputeStardustShift(Guest& _guest)
   Registers& regs = _guest.Regs();
   regs.ax = static_cast<std::uint16_t>(0x34 - _guest.Get(DS.playerSpeed));
   SetLow(regs.bx, 12);
-  DivideByte(_guest, 12);
+  DivideByteOnRegisters(_guest, 12);
   SetLow(regs.ax, Low(regs.ax) + 4);
   if (_guest.Get(DS.jumpDriveEngaged) != 0)
   {
@@ -1964,7 +1964,7 @@ void UpdateEnergyAndLaserHeat(Guest& _guest)
   NextRandomEntry(_guest);
   SetHigh(regs.ax, 0);
   SetLow(regs.bx, 0x14);
-  DivideByte(_guest, 0x14);
+  DivideByteOnRegisters(_guest, 0x14);
   regs.bx = Low(regs.ax);
   const std::uint16_t equipment = Plus(DS.missileCount.offset, regs.bx);
   if (_guest.Byte(equipment) == 0)
@@ -2272,13 +2272,13 @@ void UpdateCompass(Guest& _guest)
     SetLow(regs.bx, _guest.Byte(Plus(DS.sqrtTable.offset, regs.bx)));
     SetLow(regs.ax, Low(regs.dx));
     regs.ax = static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 3);
-    DivideByte(_guest, Low(regs.bx));
+    DivideByteOnRegisters(_guest, Low(regs.bx));
     SetLow(regs.ax, Low(regs.ax) & 7);
     SetLow(regs.dx, Low(regs.ax));
     // AH still holds the remainder, so this divide can overflow, and the trap's 7Fh comes out as 7.
     SetLow(regs.ax, High(regs.dx));
     regs.ax = static_cast<std::uint16_t>(regs.ax << 3);
-    DivideByte(_guest, Low(regs.bx));
+    DivideByteOnRegisters(_guest, Low(regs.bx));
     SetLow(regs.ax, Low(regs.ax) & 7);
     SetHigh(regs.dx, Low(regs.ax));
   }

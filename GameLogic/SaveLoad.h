@@ -16,10 +16,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SaveLoadEntries() noexcept;
 
-/// PerformDiskRequest (CS:02FF): AL=1 loads commanderFileName into commanderBlock, 2 saves it, 3 deletes it, anything
-/// else lists the *.cdr files into commanderFileList. diskError=1 on a failure. AX, BX, CX, DX, SI and DI clobbered.
-void PerformDiskRequest(Guest& _guest);
-
 /// ShowDiscControlScreen (CS:660B): the Disc/Control menu, or, back from Start's disk work, what it came to. It
 /// waits for keys. A function key returns, with AH its scan code; a disk operation (or leaving for DOS) drops this
 /// call's return address and RunTitleAndDocked's, through LeaveGameLoopForDisk, so that its RET returns from GameLoop
@@ -41,6 +37,12 @@ void PrintCommanderCatalogue(Guest& _guest);
 /// Returns 0, the answer that tells DOS to ignore the error.
 [[nodiscard]] std::uint8_t CriticalErrorInterrupt(GameState& _state);
 
+/// PerformDiskRequest (CS:02FF): DOS's disk transfer area set to diskTransferArea, then _request 1 loads commanderFileName
+/// into commanderBlock, 2 saves it, 3 deletes it, and anything else lists the *.cdr files with no attribute beyond
+/// _attributes' hidden, system and directory bits into commanderFileList. diskError=1 on a failure, but for DOS's having
+/// no more files.
+void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes);
+
 /// ShowDiskError (CS:0470): diskError cleared and diskErrorText shown: its characters over the text page's when
 /// screenLayout says the text page shows, and drawn in colour 3 on the graphics screen otherwise.
 void ShowDiskError(GameState& _state);
@@ -52,6 +54,9 @@ void SaveStartupCommander(GameState& _state, bool _backward);
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void CriticalErrorInterruptEntry(Guest& _guest); ///< Out: AL=0, AH the data segment's high byte.
+
+void PerformDiskRequestEntry(Guest& _guest); ///< In: AL=the request, CX=the attributes a listing searches with. AX, BX, CX, DX,
+                                             ///< SI and DI clobbered.
 
 void ShowDiskErrorEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
 

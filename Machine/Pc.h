@@ -308,6 +308,11 @@ public:
   /// Like CallNear, a stop on the way abandons the native code.
   void CallInterrupt(std::uint8_t _vector);
 
+  /// For native code that has let interrupts in: the interrupts now due are taken, each handler run to its IRET, as the CPU
+  /// takes them at the next instruction once interrupts are on. A port write can raise one at once while they are off: the
+  /// PIT's IRQ 0, when a control word sets its output high. Like CallNear, a stop on the way abandons the native code.
+  void TakeDueInterrupts();
+
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does
   /// between two waits, far fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
@@ -347,7 +352,6 @@ private:
   void HandToNative() noexcept;
   void NativeMain();
   void ReachedRunLimit();
-  void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
   void RunNative(NativeCode::Hook& _hook);
   [[nodiscard]] bool EnterBesideNative() noexcept;

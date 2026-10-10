@@ -14,36 +14,29 @@ namespace Elite
 
 // The reference's arithmetic, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the routines
 // take values and give values back, and their entries, below, keep the register contracts the hooks and
-// the callers not yet de-assembled use. The divides that go through the game's trap stay on the
-// registers for now: they model DIV for code that still holds its operands there.
+// the callers not yet de-assembled use. The divides that go through the game's trap are value routines
+// too; their register adapters model DIV for code that still holds its operands in registers.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MathsEntries() noexcept;
 
-/// DivideOverflowInterrupt (CS:025E), the int 0 handler: saves BX and DS at CS:02A1/02A3 and leaves
-/// AL = 7Fh or AX = 7FFFh, the remainder untouched, as bit 0 of the opcode two bytes before the return
-/// address says. An 80286 pushes the divide's own address, so it steps the return address over a
-/// DIV or IDIV it finds there, assuming a register operand.
-void DivideOverflowInterrupt(Guest& _guest);
+// ── The divides' register adapters, for code not yet de-assembled ──
+//
+// Each reads the dividend from AX (and DX), and the BX and DS the trap saves, from the registers; calls
+// its value routine below; and writes the quotient and the remainder back, as DIV or the trap leaves them.
 
-/// DIV r/m16 by _divisor, in native code: DX:AX / _divisor to AX, the remainder to DX, or, when the
-/// quotient does not fit, what DivideOverflowInterrupt does for the divide whose next instruction is at
-/// CS:_returnOffset. That instruction must not itself be a divide.
-void DivideUnsigned(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset);
+/// DIV r/m16 by _divisor on DX:AX, for the divide whose next instruction is at CS:_returnOffset
+/// (DivideUnsigned).
+void DivideUnsignedOnRegisters(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset);
 
-/// DIV r/m8 by _divisor, in native code: AX / _divisor to AL and the remainder to AH, or, when the
-/// quotient does not fit, what DivideOverflowInterrupt does for a byte divide: AL = 7Fh, AH as it was.
-/// The handler reads every byte divide in the program as one.
-void DivideByte(Guest& _guest, std::uint8_t _divisor);
+/// DIV r/m8 by _divisor on AX (DivideByte).
+void DivideByteOnRegisters(Guest& _guest, std::uint8_t _divisor);
 
-/// DIV r/m16 by _divisor: DX:AX / _divisor to AX and the remainder to DX, or AX = 7FFFh and DX as it
-/// was. The handler reads every word divide in the program as one but ProjectVertices' two, at
-/// CS:2369 and CS:2392, which DivideUnsigned serves.
-void DivideWord(Guest& _guest, std::uint16_t _divisor);
+/// DIV r/m16 by _divisor on DX:AX (DivideWord).
+void DivideWordOnRegisters(Guest& _guest, std::uint16_t _divisor);
 
-/// IDIV r/m16 by _divisor, as the 8088 does it: the magnitudes divided, and the trap as DivideWord's
-/// when the quotient's magnitude reaches the sign bit, so that -32768 traps too.
-void DivideSignedWord(Guest& _guest, std::uint16_t _divisor);
+/// IDIV r/m16 by _divisor on DX:AX (DivideSignedWord).
+void DivideSignedWordOnRegisters(Guest& _guest, std::uint16_t _divisor);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -101,6 +94,51 @@ struct PositionScale
   std::uint8_t shift;      ///< what brings the largest coordinate below 10000h and then below 24B8h
   std::uint16_t magnitude; ///< that coordinate's magnitude, so shifted
 };
+
+/// What DivideOverflowInterrupt leaves for the divide that trapped.
+struct DivideTrap
+{
+  std::uint16_t resume; ///< the offset its IRET returns to
+  std::uint16_t ax;     ///< AL = 7Fh over the AX the divide left, or AX = 7FFFh
+};
+
+/// What a byte divide leaves: AL and AH.
+struct ByteQuotient
+{
+  std::uint8_t quotient;  ///< 7Fh when the divide traps
+  std::uint8_t remainder; ///< the dividend's high byte, as it was, when the divide traps
+};
+
+/// What a word divide leaves: AX and DX.
+struct WordQuotient
+{
+  std::uint16_t quotient;  ///< what DivideOverflowInterrupt leaves in AX when the divide traps
+  std::uint16_t remainder; ///< the dividend's high word, as it was, when the divide traps
+};
+
+/// DivideOverflowInterrupt (CS:025E), the int 0 handler, for the divide whose return address is _segment:_offset, with AX
+/// = _ax and BX = _bx there: BX and the data segment saved at CS:02A1/02A3, then AL = 7Fh or AX = 7FFFh, the remainder
+/// untouched, as bit 0 of the opcode two bytes before the return address says. An 80286 pushes the divide's own address,
+/// so it steps the return address over a DIV or IDIV it finds there, assuming a register operand.
+[[nodiscard]] DivideTrap DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax,
+                                                 std::uint16_t _bx);
+
+/// DIV r/m16: _dividend / _divisor, or, when the quotient does not fit, what DivideOverflowInterrupt does for the divide
+/// whose next instruction is at CS:_returnOffset, with BX = _bx. That instruction must not itself be a divide.
+[[nodiscard]] WordQuotient DivideUnsigned(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _returnOffset,
+                                          std::uint16_t _bx);
+
+/// DIV r/m8: _dividend / _divisor, or, when the quotient does not fit, what DivideOverflowInterrupt does for a byte
+/// divide with BX = _bx: AL = 7Fh, AH as it was. The handler reads every byte divide in the program as one.
+[[nodiscard]] ByteQuotient DivideByte(GameState& _state, std::uint16_t _dividend, std::uint8_t _divisor, std::uint16_t _bx);
+
+/// DIV r/m16: _dividend / _divisor, or AX = 7FFFh and DX as it was, the trap's saves made with BX = _bx. The handler reads
+/// every word divide in the program as one but ProjectVertices' two, at CS:2369 and CS:2392, which DivideUnsigned serves.
+[[nodiscard]] WordQuotient DivideWord(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _bx);
+
+/// IDIV r/m16, as the 8088 does it: the magnitudes divided, and the trap as DivideWord's when the quotient's magnitude
+/// reaches the sign bit, so that -32768 traps too.
+[[nodiscard]] WordQuotient DivideSignedWord(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _bx);
 
 /// NextRandom (CS:061C): the lagged-Fibonacci step on randomState0-2, and the number it makes.
 [[nodiscard]] std::uint16_t NextRandom(GameState& _state);
@@ -180,6 +218,7 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 // unless a caller reads what the original leaves in one: then the entry leaves that, and the contract
 // compares it (VectorWithinBoxEntry, and BP of the two angle entries).
 
+void DivideOverflowInterruptEntry(Guest& _guest); ///< The return address on the stack, IP then CS; DS the divide's.
 void NextRandomEntry(Guest& _guest);
 void SetSinCosEntry(Guest& _guest, std::uint16_t _pairOffset); ///< BX = _pairOffset, an entry of rotationSinCos
 void RotateBySinCosEntry(Guest& _guest);

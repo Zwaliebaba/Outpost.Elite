@@ -17,10 +17,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> EquipmentEntries() noexcept;
 
-/// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a slot, the player turned away at speed 20 and moved 12 frames, the
-/// escape pod and the cargo hold gone. Clobbers all.
-void LaunchEscapePod(Guest& _guest);
-
 /// TryScoopObject (CS:4401): freeCargoTonnes, and the object at DI scooped into the hold if its view position AX, BX, CX
 /// is in the scoop's box, with its message. Preserves AX, BX and CX.
 void TryScoopObject(Guest& _guest);
@@ -66,6 +62,10 @@ void MoveMenuCursorDownOnRegisters(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
+/// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
+/// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.
+void LaunchEscapePod(GameState& _state);
+
 /// SelectLaserType (CS:633B): selectedLaserType 0-3 for the laser at menuSelectedRow, counted up a type at a time as
 /// the original does. Returns whether the row is a laser's.
 [[nodiscard]] bool SelectLaserType(GameState& _state);
@@ -109,6 +109,7 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void LaunchEscapePodEntry(Guest& _guest);         ///< Clobbers all but DS.
 void SelectLaserTypeEntry(Guest& _guest);         ///< Out: ZF=1 if the row is a laser's.
 void DrawLaserMountMenuEntry(Guest& _guest);      ///< Out: SI=1E5h.
 void RedrawEquipHelpTextEntry(Guest& _guest);     ///< Out: AX=1F00h, CX=0.

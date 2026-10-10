@@ -1,6 +1,6 @@
 # ADR-014 — The devices behind a typed boundary
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8) and with level 4's (item 9).
+**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), and with taking interrupts where a hook call took them (item 10).
 
 ## Context
 
@@ -100,6 +100,13 @@ More operations come as the routines that need them convert: the keyboard, the g
 - **Who wrote them.** Two workers added DOS's file services and the CGA's status separately. They were merged into one set when level 4 was integrated.
 - **The vector swap.** `RunBiosTimerTick` reaches the BIOS's handler by pointing int 8 at it for the call and back after it. That is the port's mechanism for a far jump with the interrupt's frame in place, not a write the original makes. The vector is not digested.
 - **What it replaced.** Every DOS file call in native code now goes through `Hardware`. SaveLoad's `CallDos` is gone, and the disc menu's register code puts back the AX, CF and CX that DOS leaves.
+
+**10. Interrupts where a hook call took them, 2026-10-10** (ADR-012 item 15). A native routine's hook call ends with the `Pc` taking the interrupts that are due (ADR-010 item 10). A de-assembled routine that calls the same callee as a value passes no such point. So an interrupt the callee lets in would be taken later: at the next loop turn or hook call, or after the routine returns.
+- **`Hardware::TakeDueInterrupts`** takes them where the hook call did. It is `Pc::TakeDueInterrupts`, now public for it.
+- **Where it goes.** A value call that replaces a hook call takes it after the callee wherever an interrupt can be due there: after the callee enables interrupts, ends one, or reprograms the PIT, which raises IRQ 0 at once.
+- **Its first user.** `SaveScreenshot` calls it after `RestoreTimerInterrupt` and after `InstallTimerInterrupt`. Without it, the game's own handler took the IRQ 0 that the BIOS's had taken, and the two screenshot twins diverged.
+- **It keeps the native code's point, not the original's.** The original takes the interrupt at the instruction where it falls due, inside `RestoreTimerInterrupt` before it reads the BIOS clock. ADR-010 item 10 records that difference.
+- **In the end state** it runs the scheduler's due ticks.
 
 ## What this forecloses
 

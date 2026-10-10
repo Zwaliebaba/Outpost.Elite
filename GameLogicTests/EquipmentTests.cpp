@@ -19,6 +19,7 @@ using Elite::DS;
 
 constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
 constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
+constexpr std::uint16_t REDRAW_EQUIP_HELP_TEXT = 0x653F;
 constexpr std::uint16_t PAY_FOR_EQUIPMENT_ITEM = 0x65A3;
 constexpr std::uint16_t SCREEN_PRICES = 0x823B; // four bytes a row, the price first
 constexpr std::uint8_t FUEL_ROW = 1;
@@ -275,6 +276,21 @@ public:
     rig.Play("wait 0.3");
     SetByte(rig, DS.keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest removed");
+  }
+
+  // RedrawEquipHelpText, which only the mount choosers call once Space fits or removes a laser: they wait, so no replay
+  // compares it. The help's lines in their attribute from the menu's attribute and from the mount box's highlight.
+  TEST_METHOD(RedrawEquipHelpTextAgreesFromEitherAttribute)
+  {
+    ComparisonRig rig("RedrawEquipHelpText");
+    Machine::Memory& ram = rig.Host().Ram();
+    const std::uint16_t data = Elite::DataSegment(rig.Program());
+    for (const std::uint8_t attribute : std::initializer_list<std::uint8_t>{0x1E, 0x70})
+    {
+      ram.Write8(data, DS.textAttribute.offset, attribute);
+      rig.Call(REDRAW_EQUIP_HELP_TEXT, {});
+    }
+    rig.AssertAllAgreed(REDRAW_EQUIP_HELP_TEXT, 2);
   }
 };
 

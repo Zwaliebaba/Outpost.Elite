@@ -3,8 +3,12 @@
 #include "Video.h"
 
 #include "Arithmetic.h"
+#include "Combat.h"
 #include "DataOverlay.h"
 #include "Maths.h"
+#include "SaveLoad.h"
+#include "StartUp.h"
+#include "Timer.h"
 
 #include <optional>
 #include <utility>
@@ -30,10 +34,25 @@ constexpr std::uint16_t TEXT_CELLS = 1000;      // 40x25
 constexpr std::uint8_t SPACE = 0x20;
 // The cockpit image's segment, relative to the load segment (DS:B160, cockpitImage).
 constexpr std::uint16_t COCKPIT_PARAGRAPH = 0x140A;
+// Where the copy leaves SI: past both banks of the image.
+constexpr std::uint16_t COCKPIT_IMAGE_BYTES = 2 * CGA_BANK_WORDS * 2;
 
 // screenLayout: 0 the cockpit, 1 the chart frame; bit 1 set while in text mode.
 constexpr std::uint8_t CHART_LAYOUT = 1;
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;
+
+// DrawChartFrame's box. The horizontals at y=9, 39, 168 and 199 from x=32, as offsets in B800h, each 32 words of colour 3.
+constexpr std::array<std::uint16_t, 4> CHART_FRAME_LINES = {0x2148, 0x25F8, 0x1A48, 0x3EF8};
+constexpr std::uint16_t CHART_FRAME_LINE_WORDS = 0x20;
+constexpr std::uint16_t CHART_FRAME_COLOR_WORD = 0xFFFF;
+// The verticals, 192 lines from line 9: the byte that holds x=31 there, and the one 41h on that holds x=288. A line's step to the
+// next is to the even bank's next line, then to the odd bank's, in turn.
+constexpr std::uint16_t CHART_FRAME_LEFT_START = 0x2147;
+constexpr std::uint16_t CHART_FRAME_RIGHT_BYTES = 0x41;
+constexpr std::uint16_t CHART_FRAME_TO_EVEN_LINE = 0xE050;
+constexpr std::uint16_t CHART_FRAME_VERTICAL_LINES = 0xC0;
+constexpr std::uint8_t CHART_FRAME_LEFT_BYTE = 0x03;  // MOV AX,03C0h: AH, x=31 in colour 3
+constexpr std::uint8_t CHART_FRAME_RIGHT_BYTE = 0xC0; // AL, x=288
 
 constexpr std::uint8_t GRAPHICS_MODE = 4;         // BIOS mode 4: 320x200 in four colours
 constexpr std::uint8_t GRAPHICS_PALETTE = 0;      // green, red and brown
@@ -75,15 +94,13 @@ constexpr std::uint16_t NO_ROW = 0x8000;
 constexpr std::uint8_t ODD_ROW_BIT = 0x40;
 
 // The frame routines wait on the CGA's status port, whose bit 3 is the vertical retrace.
-constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
 constexpr std::uint8_t STATUS_VERTICAL_RETRACE = 0x08;
-// What they call, through the hooks.
-constexpr std::uint16_t DRAW_LASER_SIGHTS = 0x0630;
+// What SetGraphicsMode leaves in BX and DX: MOV BX,100h for int 10h AH=0Bh, which keeps it, and MOV DX,3D9h, the colour select
+// register's port.
+constexpr std::uint16_t SELECT_PALETTE_BX = 0x0100;
+constexpr std::uint16_t COLOR_SELECT_PORT = 0x03D9;
+// Where their loops jump back to: PresentSpaceView's wait for the frame's time is to its start.
 constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
-constexpr std::uint16_t COPY_CHART_BUFFER_TO_SCREEN = 0x05CC;
-constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
-constexpr std::uint16_t WAIT_RETRACE_THEN_DELAY = 0x45FF;
-// Where their loops jump back to.
 constexpr std::uint16_t SPACE_VIEW_COPY_LOOP = 0x05BC;
 constexpr std::uint16_t CHART_RETRACE_LOOP = 0x05D0;
 constexpr std::uint16_t CHART_DELAY_LOOP = 0x05D8;
@@ -102,17 +119,8 @@ constexpr std::uint16_t SPACE_VIEW_LINE_PAIRS = 0x3F;
 constexpr std::uint16_t CHART_SCREEN_OFFSET = 0x0648; // x=32, line 40
 constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
 
-// What SaveScreenshot calls, through the hooks. Reprogramming the PIT raises IRQ 0 when the timer's output is low, and
-// the original's CPU takes it as soon as interrupts are on again, with whichever handler is installed then: a call
-// through a hook takes it at the next entry (Pc::CallNear), as near to that as native code gets, where a C++ call
-// would leave it to the game's own handler after SaveScreenshot.
-constexpr std::uint16_t INSTALL_TIMER_INTERRUPT = 0x00C6;
-constexpr std::uint16_t INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0105;
-constexpr std::uint16_t RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0148;
-constexpr std::uint16_t RESTORE_TIMER_INTERRUPT = 0x016B;
-constexpr std::uint16_t WRITE_SCREENSHOT_FILE = 0x03FD;
-constexpr std::uint16_t SHOW_DISK_ERROR = 0x0470;
-// It puts CriticalErrorInterrupt on int 24h, at 0000:0090, while it writes.
+// SaveScreenshot puts CriticalErrorInterrupt on int 24h, at 0000:0090, while it writes.
+constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0;
 constexpr std::uint16_t CRITICAL_ERROR_VECTOR_OFFSET = 0x0090;
 constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
@@ -197,11 +205,6 @@ void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uin
 [[nodiscard]] std::uint16_t StringStep(bool _backward, std::uint16_t _bytes) noexcept
 {
   return _backward ? Negate(_bytes) : _bytes;
-}
-
-[[nodiscard]] std::uint16_t StringStep(const Machine::Registers& _regs, std::uint16_t _bytes) noexcept
-{
-  return StringStep(Flag(_regs, FLAG_DIRECTION), _bytes);
 }
 
 // STOSB: _value at _segment:_offset. Returns the offset _step on, what DI becomes.
@@ -483,7 +486,7 @@ void MoveEndpointToEdge(Guest& _guest)
   const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(regs.ax)} * Signed(regs.dx));
   regs.ax = static_cast<std::uint16_t>(product);
   regs.dx = static_cast<std::uint16_t>(product >> 16);
-  DivideSignedWord(_guest, regs.cx);
+  DivideSignedWordOnRegisters(_guest, regs.cx);
   regs.ax = static_cast<std::uint16_t>(regs.ax + regs.bx);
   regs.cx = 0;
   regs.dx = regs.si;
@@ -838,7 +841,7 @@ void EdgeSlope(Guest& _guest)
   SetHigh(regs.ax, 0);
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
-  DivideWord(_guest, regs.cx);
+  DivideWordOnRegisters(_guest, regs.cx);
 }
 
 // FillFlatBottomTriangle (CS:1C62): A on top, B and C on the bottom row.
@@ -909,7 +912,7 @@ void FillFlatTopTriangle(Guest& _guest)
   }
   SetLow(regs.ax, 0);
   regs.dx = 0;
-  DivideWord(_guest, regs.cx);
+  DivideWordOnRegisters(_guest, regs.cx);
   regs.di = regs.ax;
   regs.ax = Join(_guest.Get(DS.triangleEdgeStartX2), 0);
   regs.bx = Join(_guest.Get(DS.triangleEdgeStartX), 0);
@@ -999,7 +1002,7 @@ void FillGeneralTriangle(Guest& _guest)
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
   SetLow(regs.cx, _guest.Get(DS.triangleUpperRows));
-  DivideWord(_guest, regs.cx);
+  DivideWordOnRegisters(_guest, regs.cx);
   regs.di = regs.ax;
   regs.ax = Join(_guest.Get(DS.triangleEdgeStartX), 0);
   regs.bx = regs.ax;
@@ -1176,10 +1179,10 @@ void ClippedSlope(Guest& _guest, std::uint16_t _rows, DataField<std::uint16_t> _
 {
   Machine::Registers& regs = _guest.Regs();
   regs.dx = 0;
-  DivideWord(_guest, _rows);
+  DivideWordOnRegisters(_guest, _rows);
   _guest.Set(_whole, regs.ax);
   regs.ax = 0;
-  DivideWord(_guest, _rows);
+  DivideWordOnRegisters(_guest, _rows);
   _guest.Set(_fraction, regs.ax);
 }
 
@@ -1553,54 +1556,49 @@ StringOffsets CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_
   }
 }
 
-// The registers CopyLinePairs' original takes for a 64-byte buffer line onto the screen: 32 words, then the odd bank,
-// then back to the next even line.
-void SetLinePairSteps(Machine::Registers& _regs) noexcept
-{
-  _regs.bp = BUFFER_LINE_WORDS;
-  _regs.ax = TO_ODD_LINE;
-  _regs.dx = TO_NEXT_EVEN_LINE;
-}
+// ---- Screens ----
 
-// CopyLinePairs from the registers the original holds, BX line pairs from DS:SI to ES:DI = B800h, and what it leaves
-// them: SI and DI where it ends, BX and CX 0.
-void CopyLinePairsOnRegisters(Guest& _guest, std::uint16_t _loop)
+// TEST [screenLayout],2 (CS:7BC7, CS:7C2C), for a screen that is not the one wanted: from text, mode 4 through the BIOS
+// (SetGraphicsMode); from graphics, both banks cleared in the direction the routine finds (ClearCgaScreen).
+ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uint8_t _layout, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const StringOffsets end = CopyLinePairs(_guest.State(), _guest.Devices(), _loop, regs.si, regs.di, regs.bx, Flag(regs, FLAG_DIRECTION));
-  regs.si = end.source;
-  regs.di = end.destination;
-  regs.bx = 0;
-  regs.cx = 0;
+  if ((_layout & TEXT_LAYOUT_BIT) != 0)
+  {
+    SetGraphicsMode(_hardware);
+    return ScreenChange::ModeSet;
+  }
+  ClearCgaScreen(_state, _backward);
+  return ScreenChange::Cleared;
 }
 
 } // namespace
 
-void SaveScreenshot(Guest& _guest)
+void SaveScreenshot(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS);
-  _guest.Call(RESTORE_TIMER_INTERRUPT);
-  _guest.Set(DS.diskError, 0);
-  regs.bx = 0;
-  regs.es = regs.bx;
-  _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET));
-  _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT));
-  regs.bx = CRITICAL_ERROR_INTERRUPT;
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, regs.bx);
-  regs.bx = regs.cs;
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, regs.bx);
-  _guest.Call(WRITE_SCREENSHOT_FILE);
-  if (_guest.Get(DS.diskError) != 0)
+  RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+  (void)RestoreTimerInterrupt(_state, _hardware);
+  // The IRQ 0 its PIT reprogramming raises when the timer's output was low, taken by the BIOS's handler, back on int 8. The
+  // original's CPU takes it after RestoreTimerInterrupt's STI, before the clock is read; here it is taken once it returns, where
+  // the register code's call of WriteScreenshotFile through its hook took it.
+  _hardware.TakeDueInterrupts();
+  _state.Set(DS.diskError, 0);
+  // Int 24h's vector, pushed round the write and popped back after it.
+  const std::uint16_t errorOffset = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET);
+  const std::uint16_t errorSegment = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, CRITICAL_ERROR_INTERRUPT);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, _state.CodeSegment());
+  WriteScreenshotFile(_state, _hardware);
+  if (_state.Get(DS.diskError) != 0)
   {
-    _guest.Call(SHOW_DISK_ERROR);
+    ShowDiskError(_state);
   }
-  regs.ax = 0;
-  regs.es = regs.ax;
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, _guest.Pop());
-  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, _guest.Pop());
-  _guest.Call(INSTALL_TIMER_INTERRUPT);
-  _guest.Call(INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, errorSegment);
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, errorOffset);
+  // InstallTimerInterrupt leaves ES = 0, the interrupt table, which InstallDivideAndKeyboardInterrupts takes.
+  InstallTimerInterrupt(_state, _hardware);
+  // Its PIT reprogramming likewise, the IRQ 0 taken by the game's handler after its RET, as the original's CPU takes it.
+  _hardware.TakeDueInterrupts();
+  InstallDivideAndKeyboardInterrupts(_state, _hardware, VECTOR_TABLE_SEGMENT);
 }
 
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
@@ -1643,74 +1641,47 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   }
 }
 
-void FinishSpaceViewFrame(Guest& _guest)
+void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.Call(DRAW_LASER_SIGHTS);
-  SetLow(regs.ax, 0);
-  _guest.SetFlag(FLAG_DIRECTION, false);
-  _guest.Call(PRESENT_SPACE_VIEW);
-  _guest.Call(CLEAR_DRAW_BUFFER);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
+  // MOV AX,B800h / MOV ES,AX, the sights, then XOR AL,AL / CLD: the copy and the clear run forwards.
+  DrawLaserSights(_state);
+  PresentSpaceView(_state, _hardware, false);
+  ClearDrawBuffer(_state, false);
 }
 
-void PresentChartFrame(Guest& _guest)
+void PresentChartFrame(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // MOV AX,B800h: AL, the bands CopyChartBufferToScreen skips, is 0 whatever the caller passed.
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.SetFlag(FLAG_DIRECTION, false);
-  _guest.Call(COPY_CHART_BUFFER_TO_SCREEN);
-  _guest.Call(CLEAR_DRAW_BUFFER);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
+  // MOV AX,B800h / MOV ES,AX / CLD: AL, the bands CopyChartBufferToScreen skips, is 0 whatever the caller passed, and both
+  // copy forwards.
+  CopyChartBufferToScreen(_state, _hardware, 0, false);
+  ClearDrawBuffer(_state, false);
 }
 
-void PresentSpaceView(Guest& _guest)
+void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // The timer interrupt counts msSinceFrame up while this idles.
-  for (;;)
+  // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start, while the timer interrupt counts msSinceFrame up.
+  // Each turn loads AL before it reads it, so the loop carries nothing.
+  while (_state.Get(DS.msSinceFrame) < _state.Get(DS.minimumFrameMs))
   {
-    SetLow(regs.ax, _guest.Get(DS.msSinceFrame));
-    if (Low(regs.ax) >= _guest.Get(DS.minimumFrameMs))
-    {
-      break;
-    }
-    _guest.JumpBack(PRESENT_SPACE_VIEW);
+    _hardware.LoopTurn(PRESENT_SPACE_VIEW, {});
   }
-  _guest.Set(DS.msSinceFrame, 0);
-  _guest.Call(WAIT_RETRACE_THEN_DELAY);
-  regs.si = DS.spaceViewBuffer.offset;
-  regs.di = SPACE_VIEW_SCREEN_OFFSET;
-  SetLinePairSteps(regs);
-  regs.bx = SPACE_VIEW_LINE_PAIRS;
-  CopyLinePairsOnRegisters(_guest, SPACE_VIEW_COPY_LOOP);
+  _state.Set(DS.msSinceFrame, 0);
+  WaitRetraceThenDelay(_hardware);
+  (void)CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, DS.spaceViewBuffer.offset, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS,
+                      _backward);
 }
 
-void CopyChartBufferToScreen(Guest& _guest)
+void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = CGA_STATUS_PORT;
-  _guest.Push(regs.ax);
-  WaitForRetrace(_guest.Devices(), CHART_RETRACE_LOOP);
-  SpinDelay(_guest.Devices(), CHART_DELAY_TURNS, CHART_DELAY_LOOP);
-  regs.ax = _guest.Pop();
-  // AL bands of 8 lines skipped: 64 - 4*AL line pairs from DS:AL*512.
-  SetLow(regs.bx, Low(regs.ax));
-  SetHigh(regs.ax, Low(regs.bx));
-  SetLow(regs.bx, Negate(static_cast<std::uint8_t>(static_cast<std::uint8_t>(Low(regs.bx) << 2) - CHART_LINE_PAIRS)));
-  SetHigh(regs.bx, 0);
-  SetLow(regs.ax, 0);
-  SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) << 1));
-  regs.si = regs.ax;
-  regs.di = CHART_SCREEN_OFFSET;
-  SetLinePairSteps(regs);
-  CopyLinePairsOnRegisters(_guest, CHART_COPY_LOOP);
+  // MOV DX,3DAh / PUSH AX, the retrace's loop at 05D0 and the delay's at 05D8, then POP AX: the bands are a value, not a word on
+  // the stack.
+  WaitForRetrace(_hardware, CHART_RETRACE_LOOP);
+  SpinDelay(_hardware, CHART_DELAY_TURNS, CHART_DELAY_LOOP);
+  // _bandsSkipped bands of 8 lines: SHL BL,1 twice / SUB BL,40h / NEG BL, so 64 - 4 * the bands line pairs as a byte, from
+  // DS:the bands * 512, as SHL AH,1 leaves the bands doubled in AH.
+  const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
+  const std::uint16_t source = Join(static_cast<std::uint8_t>(_bandsSkipped << 1), 0);
+  (void)CopyLinePairs(_state, _hardware, CHART_COPY_LOOP, source, CHART_SCREEN_OFFSET, linePairs, _backward);
 }
 
 void ClearDrawBuffer(GameState& _state, bool _backward)
@@ -1960,7 +1931,7 @@ void DrawDisc(Guest& _guest)
   }
   else
   {
-    DivideWord(_guest, regs.bx);
+    DivideWordOnRegisters(_guest, regs.bx);
   }
   regs.ax = SwapBytes(regs.ax);
   _guest.Set(DS.discProfileStepFraction, regs.ax);
@@ -2265,48 +2236,28 @@ void FillClippedTriangle(Guest& _guest)
   }
 }
 
-void WaitRetraceThenDelay(Guest& _guest)
+void WaitRetraceThenDelay(Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = CGA_STATUS_PORT;
-  WaitForRetrace(_guest.Devices(), SPACE_VIEW_RETRACE_LOOP);
-  SpinDelay(_guest.Devices(), SPACE_VIEW_DELAY_TURNS, SPACE_VIEW_DELAY_LOOP);
-  // The delay counts AX down to 0.
-  regs.ax = 0;
+  // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0.
+  WaitForRetrace(_hardware, SPACE_VIEW_RETRACE_LOOP);
+  SpinDelay(_hardware, SPACE_VIEW_DELAY_TURNS, SPACE_VIEW_DELAY_LOOP);
 }
 
-void ShowCockpitScreen(Guest& _guest)
+ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  const std::uint8_t layout = _guest.Get(DS.screenLayout);
+  const std::uint8_t layout = _state.Get(DS.screenLayout);
   if (layout == 0)
   {
-    return;
+    return ScreenChange::None;
   }
-  if ((layout & TEXT_LAYOUT_BIT) != 0)
-  {
-    SetGraphicsModeEntry(_guest);
-  }
-  else
-  {
-    ClearCgaScreenEntry(_guest);
-  }
-  _guest.Set(DS.screenLayout, 0);
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  regs.ax = static_cast<std::uint16_t>(_guest.CodeSegment() + COCKPIT_PARAGRAPH);
-  regs.si = 0;
-  regs.di = 0;
-  regs.cx = CGA_BANK_WORDS;
-  _guest.SetFlag(FLAG_DIRECTION, false);
-  StringOffsets moved = RepeatMoveWords(_guest.State(), regs.ax, regs.si, regs.es, regs.di, regs.cx, StringStep(regs, 2));
-  regs.si = moved.source;
-  regs.di = CGA_ODD_BANK;
-  regs.cx = CGA_BANK_WORDS;
-  moved = RepeatMoveWords(_guest.State(), regs.ax, regs.si, regs.es, regs.di, regs.cx, StringStep(regs, 2));
-  regs.si = moved.source;
-  regs.di = moved.destination;
-  regs.cx = 0;
+  const ScreenChange change = MakeGraphicsScreen(_state, _hardware, layout, _backward);
+  _state.Set(DS.screenLayout, 0);
+  // PUSH DS / MOV DS,<cockpitImage's segment>, then from its start both banks, after CLD: the even lines' 8000 bytes and the odd
+  // lines' after them.
+  const auto cockpit = static_cast<std::uint16_t>(_state.CodeSegment() + COCKPIT_PARAGRAPH);
+  const StringOffsets even = RepeatMoveWords(_state, cockpit, 0, GameState::VIDEO_SEGMENT, 0, CGA_BANK_WORDS, StringStep(false, 2));
+  (void)RepeatMoveWords(_state, cockpit, even.source, GameState::VIDEO_SEGMENT, CGA_ODD_BANK, CGA_BANK_WORDS, StringStep(false, 2));
+  return change;
 }
 
 void ClearCgaScreen(GameState& _state, bool _backward)
@@ -2321,54 +2272,35 @@ void ClearTextScreen(GameState& _state, bool _backward)
                          StringStep(_backward, 2));
 }
 
-void DrawChartFrame(Guest& _guest)
+ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  const std::uint8_t layout = _guest.Get(DS.screenLayout);
+  const std::uint8_t layout = _state.Get(DS.screenLayout);
   if (layout == CHART_LAYOUT)
   {
-    return;
+    return ScreenChange::None;
   }
-  if ((layout & TEXT_LAYOUT_BIT) != 0)
+  const ScreenChange change = MakeGraphicsScreen(_state, _hardware, layout, _backward);
+  _state.Set(DS.screenLayout, CHART_LAYOUT);
+  // The horizontals at y=9, 39, 168 and 199, x 32-287: 32 words of colour 3 each into ES = B800h, by REP STOSW in the direction
+  // the routine finds (MOV CX,20h, then MOV CL,20h over the 0 the last left).
+  for (const std::uint16_t line : CHART_FRAME_LINES)
   {
-    SetGraphicsModeEntry(_guest);
+    (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD,
+                           StringStep(_backward, 2));
   }
-  else
+  // PUSH DS / MOV DS,ES, then the verticals at x=31 and x=288 from line 9, a line a turn, alternating banks: the step to the next
+  // line and the one after it swap each turn (XCHG BP,DX), and LOOP counts the lines.
+  std::uint16_t at = CHART_FRAME_LEFT_START;
+  std::uint16_t step = CHART_FRAME_TO_EVEN_LINE;
+  std::uint16_t nextStep = CGA_ODD_BANK;
+  for (std::uint16_t lines = CHART_FRAME_VERTICAL_LINES; lines != 0; --lines)
   {
-    ClearCgaScreenEntry(_guest);
+    _state.SetVideoByte(at, CHART_FRAME_LEFT_BYTE);
+    _state.SetVideoByte(static_cast<std::uint16_t>(at + CHART_FRAME_RIGHT_BYTES), CHART_FRAME_RIGHT_BYTE);
+    at = static_cast<std::uint16_t>(at + step);
+    std::swap(step, nextStep);
   }
-  _guest.Set(DS.screenLayout, CHART_LAYOUT);
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  // The horizontals at y=9, 39, 168 and 199, x 32-287: 32 words of colour 3 each.
-  constexpr std::uint16_t LINE_WORDS = 0x20;
-  constexpr std::array<std::uint16_t, 3> LATER_LINES = {0x25F8, 0x1A48, 0x3EF8};
-  regs.ax = 0xFFFF;
-  regs.di = 0x2148;
-  regs.cx = LINE_WORDS;
-  regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-  regs.cx = 0;
-  for (const std::uint16_t line : LATER_LINES)
-  {
-    regs.di = line;
-    SetLow(regs.cx, LINE_WORDS);
-    regs.di = RepeatStoreWords(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, StringStep(regs, 2));
-    regs.cx = 0;
-  }
-  // The verticals at x=31 and x=288, lines 10-201, alternating banks: DX and BP swap each line.
-  regs.si = 0x2147;
-  regs.bx = 0x41;
-  regs.cx = 0xC0;
-  regs.bp = CGA_ODD_BANK;
-  regs.dx = 0xE050;
-  regs.ax = 0x03C0;
-  do
-  {
-    _guest.SetVideoByte(regs.si, High(regs.ax));
-    _guest.SetVideoByte(static_cast<std::uint16_t>(regs.bx + regs.si), Low(regs.ax));
-    regs.si = static_cast<std::uint16_t>(regs.si + regs.dx);
-    std::swap(regs.bp, regs.dx);
-  } while (--regs.cx != 0);
+  return change;
 }
 
 void SetGraphicsMode(Hardware& _hardware)
@@ -2401,7 +2333,6 @@ using Machine::REGISTER_BX;
 using Machine::REGISTER_CX;
 using Machine::REGISTER_DI;
 using Machine::REGISTER_DX;
-using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
 
 constexpr std::uint16_t GENERAL_REGISTERS = REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP;
@@ -2416,9 +2347,14 @@ constexpr Machine::NativeContract DRAWS_LINE{REGISTER_AX | REGISTER_BX | REGISTE
 // FillTriangleSpan's: AX and BP as the original leaves them, which RenderBlueprintBody's contract compares
 // (FillTriangleSpanEntry).
 constexpr Machine::NativeContract FILLS_TRIANGLE_SPAN{REGISTER_DI, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI_ES{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
-constexpr Machine::NativeContract CLOBBERS_GENERAL_AND_ES{GENERAL_REGISTERS | REGISTER_ES, 0};
+// FinishSpaceViewFrame's: DX as the original leaves it (FinishSpaceViewFrameEntry).
+constexpr Machine::NativeContract FINISHES_SPACE_VIEW_FRAME{
+  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
+// ShowCockpitScreen's: SI and ES as the original leaves them (ShowCockpitScreenEntry).
+constexpr Machine::NativeContract SHOWS_COCKPIT{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
+// DrawChartFrame's: ES as the original leaves it (DrawChartFrameEntry).
+constexpr Machine::NativeContract DRAWS_CHART_FRAME{GENERAL_REGISTERS, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
@@ -2489,10 +2425,90 @@ void ClearTextScreenEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_CX_DI);
 }
 
+void SaveScreenshotEntry(Guest& _guest)
+{
+  SaveScreenshot(_guest.State(), _guest.Devices());
+  // InstallDivideAndKeyboardInterrupts leaves ES on the CGA's memory.
+  _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(SAVES_SCREENSHOT);
+}
+
 void WriteScreenshotFileEntry(Guest& _guest)
 {
   WriteScreenshotFile(_guest.State(), _guest.Devices());
   _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
+}
+
+void FinishSpaceViewFrameEntry(Guest& _guest)
+{
+  FinishSpaceViewFrame(_guest.State(), _guest.Devices());
+  // CLD, and MOV AX,B800h / MOV ES,AX after ClearDrawBuffer's ES = DS. DX is what PresentSpaceView leaves, MOV DX,1FF0h, the copy's
+  // step back to the next even line, which the contract compares: a caller reads it.
+  Machine::Registers& regs = _guest.Regs();
+  _guest.SetFlag(FLAG_DIRECTION, false);
+  regs.es = GameState::VIDEO_SEGMENT;
+  regs.dx = TO_NEXT_EVEN_LINE;
+  _guest.Clobber(FINISHES_SPACE_VIEW_FRAME);
+}
+
+void PresentChartFrameEntry(Guest& _guest)
+{
+  PresentChartFrame(_guest.State(), _guest.Devices());
+  // CLD, and MOV AX,B800h / MOV ES,AX after ClearDrawBuffer's ES = DS.
+  _guest.SetFlag(FLAG_DIRECTION, false);
+  _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
+void PresentSpaceViewEntry(Guest& _guest)
+{
+  PresentSpaceView(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
+void CopyChartBufferToScreenEntry(Guest& _guest)
+{
+  CopyChartBufferToScreen(_guest.State(), _guest.Devices(), Low(_guest.Regs().ax), _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_GENERAL);
+}
+
+void WaitRetraceThenDelayEntry(Guest& _guest)
+{
+  WaitRetraceThenDelay(_guest.Devices());
+  _guest.Clobber(CLOBBERS_AX_DX);
+}
+
+void ShowCockpitScreenEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ScreenChange change = ShowCockpitScreen(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION));
+  if (change == ScreenChange::None)
+  {
+    _guest.Clobber(SHOWS_COCKPIT);
+    return;
+  }
+  if (change == ScreenChange::ModeSet)
+  {
+    // The contract compares BX and DX, which SetGraphicsMode leaves as its own MOVs set them.
+    regs.bx = SELECT_PALETTE_BX;
+    regs.dx = COLOR_SELECT_PORT;
+  }
+  // CLD before the copy, and what the copy leaves in SI and ES, which the contract compares: RestoreFlightScreen, whose contract
+  // compares SI, ends with them, and the screens drawn after it write through ES.
+  _guest.SetFlag(FLAG_DIRECTION, false);
+  regs.si = COCKPIT_IMAGE_BYTES;
+  regs.es = GameState::VIDEO_SEGMENT;
+  _guest.Clobber(SHOWS_COCKPIT);
+}
+
+void DrawChartFrameEntry(Guest& _guest)
+{
+  if (DrawChartFrame(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION)) != ScreenChange::None)
+  {
+    // MOV ES,AX with AX = B800h, which the contract compares: the chart screens draw their titles through it next.
+    _guest.Regs().es = GameState::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(DRAWS_CHART_FRAME);
 }
 
 void FillTriangleSpanEntry(Guest& _guest)
@@ -2543,12 +2559,12 @@ namespace
 constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshot, SAVES_SCREENSHOT},
+  NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshotEntry, SAVES_SCREENSHOT},
   NativeEntry{0x03FD, "WriteScreenshotFile", &WriteScreenshotFileEntry, CLOBBERS_AX_BX_CX_DX},
-  NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceView, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x05CC, "CopyChartBufferToScreen", &CopyChartBufferToScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrameEntry, FINISHES_SPACE_VIEW_FRAME, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrameEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceViewEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x05CC, "CopyChartBufferToScreen", &CopyChartBufferToScreenEntry, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x060D, "ClearDrawBuffer", &ClearDrawBufferEntry, PRESERVES_ALL},
   NativeEntry{0x15E0, "PlotPixel", &PlotPixelEntry, CLOBBERS_BX_CX},
   NativeEntry{0x1603, "DrawClippedLine", &DrawClippedLine, CLOBBERS_GENERAL},
@@ -2561,11 +2577,11 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpanEntry, FILLS_TRIANGLE_SPAN},
   NativeEntry{0x1BFB, "FillTriangle", &FillTriangle, CLOBBERS_GENERAL},
   NativeEntry{0x1E6E, "FillClippedTriangle", &FillClippedTriangle, CLOBBERS_GENERAL},
-  NativeEntry{0x45FF, "WaitRetraceThenDelay", &WaitRetraceThenDelay, CLOBBERS_AX_DX, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x7BC0, "ShowCockpitScreen", &ShowCockpitScreen, CLOBBERS_AX_CX_SI_DI_ES},
+  NativeEntry{0x45FF, "WaitRetraceThenDelay", &WaitRetraceThenDelayEntry, CLOBBERS_AX_DX, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x7BC0, "ShowCockpitScreen", &ShowCockpitScreenEntry, SHOWS_COCKPIT},
   NativeEntry{0x7BFB, "ClearCgaScreen", &ClearCgaScreenEntry, CLOBBERS_AX_CX_DI},
   NativeEntry{0x7C12, "ClearTextScreen", &ClearTextScreenEntry, CLOBBERS_AX_CX_DI},
-  NativeEntry{0x7C25, "DrawChartFrame", &DrawChartFrame, CLOBBERS_GENERAL_AND_ES},
+  NativeEntry{0x7C25, "DrawChartFrame", &DrawChartFrameEntry, DRAWS_CHART_FRAME},
   NativeEntry{0x7CFE, "SetGraphicsMode", &SetGraphicsModeEntry, CLOBBERS_AX_BX_DX},
   NativeEntry{0x7D11, "SetTextMode", &SetTextModeEntry, CLOBBERS_AX_DX},
   NativeEntry{0x7D4E, "DrawTitlePlanet", &DrawTitlePlanet, PRESERVES_ALL},

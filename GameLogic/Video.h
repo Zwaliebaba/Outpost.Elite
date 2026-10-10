@@ -18,29 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
 
-/// SaveScreenshot (CS:01B7): with the game's divide, keyboard and timer handlers taken out and
-/// CriticalErrorInterrupt on int 24h, WriteScreenshotFile, then ShowDiskError if it failed. Out: ES=B800h; AX,
-/// BX, CX, DX, SI, DI clobbered.
-void SaveScreenshot(Guest& _guest);
-
-/// FinishSpaceViewFrame (CS:0570): DrawLaserSights, PresentSpaceView and ClearDrawBuffer, through their hooks.
-/// It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
-void FinishSpaceViewFrame(Guest& _guest);
-
-/// PresentChartFrame (CS:0587): CopyChartBufferToScreen, with AL=0 whatever the caller passed, then
-/// ClearDrawBuffer. It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
-void PresentChartFrame(Guest& _guest);
-
-/// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it,
-/// WaitRetraceThenDelay, then copies spaceViewBuffer to the screen. In: ES=B800h, DF=0. AX, BX, CX, DX, SI, DI,
-/// BP clobbered.
-void PresentSpaceView(Guest& _guest);
-
-/// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64-4*AL line pairs of
-/// the drawing buffer to the chart's place on the screen. In: ES=B800h, DF=0. AX, BX, CX, DX, SI, DI, BP
-/// clobbered.
-void CopyChartBufferToScreen(Guest& _guest);
-
 /// DrawClippedLine (CS:1603): the line from (DX, BX) to (CX, AX), signed words, clipped to the 256x128
 /// buffer, through DrawLine. Everything but DS clobbered.
 void DrawClippedLine(Guest& _guest);
@@ -71,17 +48,6 @@ void FillTriangle(Guest& _guest);
 /// = A's x and the rows doubled.
 void FillClippedTriangle(Guest& _guest);
 
-/// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace, then spins 2000 turns. AX, DX clobbered.
-void WaitRetraceThenDelay(Guest& _guest);
-
-/// ShowCockpitScreen (CS:7BC0): unless the cockpit shows already, graphics mode or a clear screen and
-/// the cockpit image copied in. AX, CX, SI, DI, ES clobbered, and BX and DX when it sets the mode.
-void ShowCockpitScreen(Guest& _guest);
-
-/// DrawChartFrame (CS:7C25): unless the chart frame shows already, graphics mode or a clear screen and
-/// the frame's box lines. AX, BX, CX, DX, SI, DI, BP, ES clobbered.
-void DrawChartFrame(Guest& _guest);
-
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then 0. The registers come back as DrawDisc
 /// leaves them.
 void DrawTitlePlanet(Guest& _guest);
@@ -92,9 +58,29 @@ void DrawTitlePlanet(Guest& _guest);
 // original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
 // entry finds: _backward.
 
+/// SaveScreenshot (CS:01B7): with the game's divide, keyboard and timer handlers taken out and CriticalErrorInterrupt on
+/// int 24h, WriteScreenshotFile, then ShowDiskError if it failed; then int 24h as it was, and the game's handlers put back.
+void SaveScreenshot(GameState& _state, Hardware& _hardware);
+
 /// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both graphics
 /// banks) written from B800:0000 through DOS, with its disk transfer area at diskTransferArea; diskError = 1 on a failure.
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
+
+/// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
+void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
+
+/// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
+/// ClearDrawBuffer, both forwards. It waits.
+void PresentChartFrame(GameState& _state, Hardware& _hardware);
+
+/// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then copies
+/// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _hardware.
+void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward);
+
+/// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
+/// a byte, of the drawing buffer from DS:_bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
+/// through _hardware.
+void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward);
 
 /// ClearDrawBuffer (CS:060D): the drawing buffer, DS:0000-1FFF, zeroed a word at a time as REP STOSW does.
 void ClearDrawBuffer(GameState& _state, bool _backward);
@@ -117,11 +103,32 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
 /// them by STOSB and REP STOSW into ES = DS.
 void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward);
 
+/// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
+/// 8088's speed made. Its loops turn through _hardware.
+void WaitRetraceThenDelay(Hardware& _hardware);
+
+/// How ShowCockpitScreen and DrawChartFrame made the screen ready for what they draw.
+enum class ScreenChange : std::uint8_t
+{
+  None,    ///< their screen showed already, and they drew nothing
+  Cleared, ///< a graphics screen, cleared (ClearCgaScreen)
+  ModeSet, ///< a text screen, put into graphics mode (SetGraphicsMode)
+};
+
+/// ShowCockpitScreen (CS:7BC0): unless the cockpit shows already (screenLayout 0), graphics mode from text or a clear screen from
+/// graphics, screenLayout 0, and cockpitImage copied into both banks of the screen with the direction flag clear.
+ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _backward);
+
 /// ClearCgaScreen (CS:7BFB): both banks of CGA memory, B800:0000-1F3F and B800:2000-3F3F, zeroed a word at a time.
 void ClearCgaScreen(GameState& _state, bool _backward);
 
 /// ClearTextScreen (CS:7C12): the 40x25 text page filled with spaces in textAttribute, a cell at a time.
 void ClearTextScreen(GameState& _state, bool _backward);
+
+/// DrawChartFrame (CS:7C25): unless the chart frame shows already (screenLayout 1), graphics mode from text or a clear screen from
+/// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines by REP STOSW in the direction it finds, then
+/// the two verticals a byte at a time.
+ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// SetGraphicsMode (CS:7CFE): BIOS mode 4, palette 0, and the colour select register bright on black.
 void SetGraphicsMode(Hardware& _hardware);
@@ -135,10 +142,18 @@ void SetTextMode(Hardware& _hardware);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
 // there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
 // leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES,
-// FillTriangleSpanEntry's AX and BP).
+// FillTriangleSpanEntry's AX and BP, FinishSpaceViewFrameEntry's DX, ShowCockpitScreenEntry's SI and ES, DrawChartFrameEntry's
+// ES).
 
+void SaveScreenshotEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, DX, SI, DI clobbered.
 /// AX, BX, CX, DX clobbered.
 void WriteScreenshotFileEntry(Guest& _guest);
+/// Out: ES = B800h, DF clear, DX = 1FF0h as PresentSpaceView leaves it. AX, BX, CX, SI, DI, BP clobbered.
+void FinishSpaceViewFrameEntry(Guest& _guest);
+void PresentChartFrameEntry(Guest& _guest); ///< Out: ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
+void PresentSpaceViewEntry(Guest& _guest);  ///< ES = B800h. AX, BX, CX, DX, SI, DI, BP clobbered.
+/// AL = the bands to skip, ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
+void CopyChartBufferToScreenEntry(Guest& _guest);
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
 void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
 void DrawLineEntry(Guest& _guest);        ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
@@ -152,6 +167,11 @@ void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobb
 /// DL = left x, DH = right x, SI = the row, BL = the fill, ES = DS. Out: DL = DH when the span crosses a byte, else DX the
 /// right end's mask word; AX the right end's AND and OR, BP its mask's index; DI clobbered.
 void FillTriangleSpanEntry(Guest& _guest);
+void WaitRetraceThenDelayEntry(Guest& _guest); ///< AX, DX clobbered.
+/// Out, once it draws: DF clear, SI past the image and ES = B800h; and BX = 0100h and DX = 03D9h, as SetGraphicsMode leaves them,
+/// once it sets the mode. AX, CX, DI clobbered.
+void ShowCockpitScreenEntry(Guest& _guest);
+void DrawChartFrameEntry(Guest& _guest);  ///< Out: ES = B800h once it draws. Every other register but DS clobbered.
 void SetGraphicsModeEntry(Guest& _guest); ///< AX, BX, DX clobbered.
 void SetTextModeEntry(Guest& _guest);     ///< AX, DX clobbered.
 

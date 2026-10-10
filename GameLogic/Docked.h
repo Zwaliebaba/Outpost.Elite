@@ -17,10 +17,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockedEntries() noexcept;
 
-/// DrawDockedFrame (CS:7C88): a docked screen's text page, border and frame, from the descriptor at SI. Out: SI=the
-/// title text, ES=B800.
-void DrawDockedFrame(Guest& _guest);
-
 /// WaitForScreenExitKey (CS:60B4), the tail that ShowSystemDataScreen, ShowMarketPricesScreen,
 /// ShowCommanderStatusScreen and ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the
 /// screen's own in DL, then SelectSystemAtCursor. Waits. Out: AH=the key; what SelectSystemAtCursor
@@ -74,6 +70,13 @@ PrintedText PrintCreditsOnMessageLine(GameState& _state);
 /// FormatFuelLightYears (CS:6923): fuel as "n.n" light years into the fuel text at DS:83E9.
 void FormatFuelLightYears(GameState& _state);
 
+/// DrawDockedFrame (CS:7C88): a docked screen's text page from the descriptor at DS:_descriptor, the screen's attribute,
+/// the frame's, then the title: the text mode set unless screenLayout says the text page shows, textAttribute the screen's
+/// attribute without its blink bit and the border its background, the page cleared, the frame's rows at lines 0, 2 and 24
+/// and its sides in the frame's attribute, and its six corners and tees from frameCorners. _backward is the direction flag,
+/// which the clear and the rows' REP STOSW go by. Returns where the title is.
+std::uint16_t DrawDockedFrame(GameState& _state, Hardware& _hardware, std::uint16_t _descriptor, bool _backward);
+
 /// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page at
 /// _segment from _cell, 65,536 for 0, as LOOP counts. Returns the cell a row below the last.
 std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
@@ -90,6 +93,7 @@ std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint1
 void AwardArchangelTitleEntry(Guest& _guest);
 void PrintCreditsOnMessageLineEntry(Guest& _guest); ///< In: ES=B800, which it sets again.
 void FormatFuelLightYearsEntry(Guest& _guest);      ///< Out: SI=DS:83E9, the fuel text; AX, BX and DI clobbered.
+void DrawDockedFrameEntry(Guest& _guest);           ///< In: SI=the descriptor. Out: SI=the title, ES=B800h.
 void DrawFrameSidesEntry(Guest& _guest);
 void DrawFrameRowEntry(Guest& _guest);
 

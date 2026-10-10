@@ -1,6 +1,6 @@
 # ADR-015 — Waiting loops de-assembled: turn signatures
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Pc::LoopTurn` taking a turn signature, `Hardware::LoopTurn`, and `WaitForTimerTick` de-assembled onto it.
+**Status:** accepted 2026-10-10, with the change that implements it: `Pc::LoopTurn` taking a turn signature, `Hardware::LoopTurn`, and `WaitForTimerTick` de-assembled onto it. Amended the same day: a value that changes only with memory or a port may be left out of a signature (item 2).
 
 ## Context
 
@@ -21,7 +21,7 @@
 - **What the next turn reads before writing it:** a count, a cursor, the value it compares with. A delay loop that counts CX down without touching memory carries CX. Without it, every turn would look idle.
 - **What the turn read from a device and still holds there:** a port, or a service's result. Reads can differ without the clock moving: paced time reports a retrace to the first status read only (ADR-008 item 2).
 
-A value that cannot change from turn to turn may be left out. A carried value must be one the original has in a register there, nothing else.
+A value that cannot change from turn to turn may be left out. So may a value that changes only on turns that also change memory or write a port. On a turn that changes neither, the value is unchanged, so leaving it out cannot change either case of item 3. `WaitForKeyPress` and `ReadTextLine` leave out AL, which changes only when a code is taken from `keyBuffer`, and taking one changes its count. A carried value must be one the original has in a register there, nothing else.
 
 **3. Why the native loop idles where the original does.** Take a turn that changed no byte and no port.
 - **When the original idles,** its registers are equal. The signature is a selection of those registers, so it is equal too, and the native loop idles.

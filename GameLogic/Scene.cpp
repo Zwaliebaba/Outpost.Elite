@@ -26,7 +26,6 @@ constexpr std::uint16_t KILL_PLAYER = 0x3115;
 constexpr std::uint16_t IS_SUN_OR_PLANET = 0x3F2A;
 constexpr std::uint16_t IS_PLANET = 0x3F37;
 constexpr std::uint16_t IS_STATION = 0x3F40;
-constexpr std::uint16_t UPDATE_SCANNER_BLIP = 0x40EC;
 constexpr std::uint16_t UPDATE_COMPASS = 0x418F;
 constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
 constexpr std::uint16_t DRAW_DISTANT_STATION = 0x45C6;
@@ -46,13 +45,11 @@ constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
 constexpr std::uint16_t SLOT_POSITION_X = 0x04; // the low words of the 24-bit position
 constexpr std::uint16_t SLOT_POSITION_Y = 0x06;
 constexpr std::uint16_t SLOT_POSITION_Z = 0x08;
-constexpr std::uint16_t SLOT_SCALE_SHIFT = 0x0A; // byte; for a ship, the word is its pitch angle
 constexpr std::uint16_t SLOT_COLOR = 0x0B;
 constexpr std::uint16_t SLOT_COMPASS_X = 0x20;
 constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
 constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
 constexpr std::uint16_t SLOT_FRAMES_AWAY = 0x34;
-constexpr std::uint16_t SLOT_CAMERA_Z_HIGH = 0x3C;
 constexpr std::uint16_t SLOT_DEPTH = 0x3D;
 constexpr std::uint16_t SLOT_SIZE = 0x3E;
 
@@ -280,7 +277,7 @@ void ProjectVertexCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t 
     regs.ax = Negate(regs.ax);
   }
   ShiftIntoDividend(regs, Negative(regs.ax) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, _guest.Word(Offset(regs.si, VERTEX_Z)), _returnOffset);
+  DivideUnsignedOnRegisters(_guest, _guest.Word(Offset(regs.si, VERTEX_Z)), _returnOffset);
   regs.dx = static_cast<std::uint16_t>(regs.dx << 1);
   if (regs.ax < regs.dx)
   {
@@ -427,15 +424,6 @@ void DrawFaceItems(Guest& _guest)
   }
 }
 
-// How far ClassifyViewPosition got with a view position.
-enum class ViewTest : std::uint8_t
-{
-  TooNear, // z negative or below nearClipZ: nothing stored
-  WideX,   // stored, but twice |x| is beyond z
-  WideY,   // twice |y| is beyond z
-  Visible, // and byte 0 bit 7 set
-};
-
 // shl of the magnitude: what ClassifyViewPosition compares with z.
 [[nodiscard]] std::uint16_t DoubledMagnitude(std::uint16_t _value) noexcept
 {
@@ -472,27 +460,54 @@ enum class ViewTest : std::uint8_t
   return ViewTest::Visible;
 }
 
-// ClassifyViewPosition on the view position in AX, BX and CX of the slot at DI, with the registers its code leaves: twice |x|
-// in AX once z passes, twice |y| in BX once x does, and CF clear only when the object is visible.
-void ClassifyViewPositionOnRegisters(Guest& _guest)
+// A position as the transforms hold it, in AX, BX and CX.
+[[nodiscard]] Vector PositionIn(const Machine::Registers& _regs) noexcept
+{
+  return Vector{static_cast<std::int16_t>(_regs.ax), static_cast<std::int16_t>(_regs.bx), static_cast<std::int16_t>(_regs.cx)};
+}
+
+void PositionOut(Machine::Registers& _regs, Vector _position) noexcept
+{
+  _regs.ax = static_cast<std::uint16_t>(_position.x);
+  _regs.bx = static_cast<std::uint16_t>(_position.y);
+  _regs.cx = static_cast<std::uint16_t>(_position.z);
+}
+
+// What ClassifyViewPosition's code leaves of the view position _view it took in AX, BX and CX: twice |x| in AX once z passes,
+// twice |y| in BX once x does, and CF clear only when the object is visible.
+void ClassifyViewOut(Guest& _guest, Vector _view, ViewTest _test)
 {
   Machine::Registers& regs = _guest.Regs();
-  const ViewTest test = ClassifyViewPosition(
-    _guest.State(), ObjectSlot(_guest.State(), regs.di),
-    Vector{static_cast<std::int16_t>(regs.ax), static_cast<std::int16_t>(regs.bx), static_cast<std::int16_t>(regs.cx)});
-  if (test != ViewTest::TooNear)
+  PositionOut(regs, _view);
+  if (_test != ViewTest::TooNear)
   {
     regs.ax = DoubledMagnitude(regs.ax);
   }
-  if (test == ViewTest::WideY || test == ViewTest::Visible)
+  if (_test == ViewTest::WideY || _test == ViewTest::Visible)
   {
     regs.bx = DoubledMagnitude(regs.bx);
   }
-  _guest.SetFlag(Machine::FLAG_CARRY, test != ViewTest::Visible);
+  _guest.SetFlag(Machine::FLAG_CARRY, _test != ViewTest::Visible);
+}
+
+// A station's compass position, as MOV AX,[DI+20h] / MOV BX,[DI+22h] / MOV CX,[DI+24h] load it.
+[[nodiscard]] Vector CompassPosition(ObjectSlot _slot) noexcept
+{
+  return Vector{static_cast<std::int16_t>(_slot.Get(SlotWord::CompassX)), static_cast<std::int16_t>(_slot.Get(SlotWord::CompassY)),
+                static_cast<std::int16_t>(_slot.Get(SlotWord::CompassZ))};
+}
+
+// ClassifyViewPosition on the view position in AX, BX and CX of the slot at DI, with the registers its code leaves.
+void ClassifyViewPositionOnRegisters(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  const Vector view = PositionIn(regs);
+  ClassifyViewOut(_guest, view, ClassifyViewPosition(_guest.State(), ObjectSlot(_guest.State(), regs.di), view));
 }
 
 // RotateToViewDirection (CS:3EE6), the shared tail of the two TransformToView entries: _view with (x, z) rotated by -viewAngle
-// through rotation pair 8, which it sets, when the view is not the front one.
+// through rotation pair 8, which it sets, when the view is not the front one. PUSH BX, AX and CX round SetSinCos8 keep the
+// position, which comes back in the registers it went in.
 [[nodiscard]] Vector RotateToViewDirection(GameState& _state, Vector _view)
 {
   const std::uint16_t viewAngle = _state.Get(DS.viewAngle);
@@ -503,17 +518,6 @@ void ClassifyViewPositionOnRegisters(Guest& _guest)
   (void)SetSinCos(_state, 8, Negate(viewAngle));
   const Pair xz = RotateByStoredSinCos(_state, 8, Pair{_view.x, _view.z});
   return Vector{xz.first, _view.y, xz.second};
-}
-
-// RotateToViewDirection on the view position in AX, BX and CX, where the TransformToView entries hold it, and back.
-void RotateToViewDirectionOnRegisters(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const Vector view = RotateToViewDirection(
-    _guest.State(), Vector{static_cast<std::int16_t>(regs.ax), static_cast<std::int16_t>(regs.bx), static_cast<std::int16_t>(regs.cx)});
-  regs.ax = static_cast<std::uint16_t>(view.x);
-  regs.bx = static_cast<std::uint16_t>(view.y);
-  regs.cx = static_cast<std::uint16_t>(view.z);
 }
 
 // mul of a word by itself: DX:AX.
@@ -606,7 +610,7 @@ void ClassifyObject(Guest& _guest)
   _guest.Call(IS_SUN_OR_PLANET);
   if (Flag(_guest, Machine::FLAG_ZERO))
   {
-    TransformSunOrPlanet(_guest);
+    TransformSunOrPlanetEntry(_guest);
     return;
   }
   _guest.Call(IS_STATION);
@@ -625,7 +629,7 @@ void ClassifyObject(Guest& _guest)
   {
     return;
   }
-  ClassifyStationPosition(_guest);
+  ClassifyStationPositionEntry(_guest);
 }
 
 // The station in slot DI, when it is far enough away to draw as a disc: true if drawn so. One at depth 1
@@ -787,7 +791,7 @@ void ProjectDiscCoordinate(Guest& _guest, std::uint16_t _value, std::uint16_t _r
     regs.ax = Negate(regs.ax);
   }
   ShiftIntoDividend(regs, Negative(regs.ax) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_Z)), _returnOffset);
+  DivideUnsignedOnRegisters(_guest, _guest.Word(Offset(regs.di, SLOT_VIEW_Z)), _returnOffset);
   regs.bp = static_cast<std::uint16_t>(regs.bp - 1);
   if (regs.bp == 0)
   {
@@ -1298,30 +1302,24 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
   return check;
 }
 
-void TransformSunOrPlanet(Guest& _guest)
+ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  GetPositionScaleShiftEntry(_guest);
-  _guest.SetByte(Offset(regs.di, SLOT_SCALE_SHIFT), Low(regs.cx));
-  _guest.SetByte(Offset(regs.di, SLOT_DEPTH), Low(regs.cx));
-  regs.dx = WithHigh(regs.dx, Low(regs.cx));
-  ScalePositionDownEntry(_guest);
-  const std::uint16_t slot = regs.di;
-  TransformToViewWithBlip(_guest);
-  regs.di = slot;
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_X), regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_Y), regs.bx);
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_Z), regs.cx);
-  OrByte(_guest, regs.di, SLOT_VISIBLE);
+  // MOV [DI+0Ah],CL / MOV [DI+3Dh],CL / MOV DH,CL: the shift, as the disc's scale and its depth, and for ScalePositionDown.
+  const std::uint8_t shift = GetPositionScaleShift(_slot).shift;
+  _slot.Set(SlotByte::DiscScale, shift);
+  _slot.Set(SlotByte::Depth, shift);
+  // PUSH DI / POP DI round TransformToViewWithBlip keep the slot.
+  const ViewWithBlip transformed = TransformToViewWithBlip(_state, _slot, ScalePositionDown(_slot, shift));
+  _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(transformed.view.x));
+  _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(transformed.view.y));
+  _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(transformed.view.z));
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_VISIBLE));
+  return transformed;
 }
 
-void ClassifyStationPosition(Guest& _guest)
+ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_COMPASS_X));
-  regs.bx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Y));
-  regs.cx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Z));
-  ClassifyViewPositionOnRegisters(_guest);
+  return ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
 void TransformShip(Guest& _guest)
@@ -1331,7 +1329,7 @@ void TransformShip(Guest& _guest)
   regs.bx = _guest.Word(Offset(regs.di, SLOT_POSITION_Y));
   regs.cx = _guest.Word(Offset(regs.di, SLOT_POSITION_Z));
   const std::uint16_t slot = regs.di;
-  TransformToViewWithBlip(_guest);
+  TransformToViewWithBlipEntry(_guest);
   if (_guest.Get(DS.fuelScoopsFitted) == 1 && _guest.Get(DS.gameOverFrames) == 0)
   {
     _guest.Call(TRY_SCOOP_OBJECT);
@@ -1385,19 +1383,18 @@ void TransformAndDrawObjects(Guest& _guest)
   }
 }
 
-void TransformToViewWithBlip(Guest& _guest)
+ViewWithBlip TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position)
 {
-  Machine::Registers& regs = _guest.Regs();
-  RotatePitchYawRollEntry(_guest);
-  _guest.SetByte(Offset(regs.di, SLOT_CAMERA_Z_HIGH), High(regs.cx));
-  _guest.Call(UPDATE_SCANNER_BLIP);
-  RotateToViewDirectionOnRegisters(_guest);
+  const Vector camera = RotatePitchYawRoll(_state, _position);
+  // MOV [DI+3Ch],CH.
+  _slot.Set(SlotByte::CameraZHigh, High(static_cast<std::uint16_t>(camera.z)));
+  const std::optional<DashboardPixel> blip = UpdateScannerBlip(_state, _slot, camera);
+  return ViewWithBlip{RotateToViewDirection(_state, camera), blip};
 }
 
-void TransformToView(Guest& _guest)
+Vector TransformToView(GameState& _state, Vector _position)
 {
-  RotatePitchYawRollEntry(_guest);
-  RotateToViewDirectionOnRegisters(_guest);
+  return RotateToViewDirection(_state, RotatePitchYawRoll(_state, _position));
 }
 
 void DrawSunOrPlanet(Guest& _guest)
@@ -1466,10 +1463,10 @@ void ProjectToScreen(Guest& _guest)
     regs.bp = Offset(regs.bp, 1);
   }
   ShiftIntoDividend(regs, HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, regs.cx, SCREEN_X_DIVIDE_RETURN);
+  DivideUnsignedOnRegisters(_guest, regs.cx, SCREEN_X_DIVIDE_RETURN);
   std::swap(regs.ax, regs.bx);
   ShiftIntoDividend(regs, HIGH_BYTE_ZERO);
-  DivideUnsigned(_guest, regs.cx, SCREEN_Y_DIVIDE_RETURN);
+  DivideUnsignedOnRegisters(_guest, regs.cx, SCREEN_Y_DIVIDE_RETURN);
   if ((regs.bp & 1) != 0)
   {
     regs.ax = Negate(regs.ax);
@@ -1503,6 +1500,12 @@ constexpr std::uint16_t ALL_BUT_DS =
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES;
 
 constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
+// TransformShip's: DX, TransformToViewWithBlip's leftover, is not compared. Its one caller, ClassifyObject in
+// TransformAndDrawObjects (CS:3D87), goes back to the first pass, which reads DX nowhere before MOV DX,0FFFFh (CS:3DA2).
+constexpr Machine::NativeContract TRANSFORMS_SHIP{REGISTER_DX, FLAG_CARRY};
+// TransformSunOrPlanet's: DX, TransformToViewWithBlip's leftover, and BP, ScalePositionDown's, are not compared. Its one caller,
+// ClassifyObject at CS:3D8C, goes back to the first pass, which reads neither before XOR BP,BP and MOV DX,0FFFFh (CS:3D9E).
+constexpr Machine::NativeContract TRANSFORMS_SUN_OR_PLANET{REGISTER_DX | REGISTER_BP, 0};
 
 // The rotations' leftover in DX, which no caller reads (ADR-012).
 constexpr Machine::NativeContract CLOBBERS_DX{REGISTER_DX, 0};
@@ -1607,6 +1610,48 @@ void CheckShipInRangeEntry(Guest& _guest)
   _guest.Clobber(RETURNS_CARRY);
 }
 
+void ClassifyStationPositionEntry(Guest& _guest)
+{
+  const ObjectSlot slot(_guest.State(), _guest.Regs().di);
+  const ViewTest test = ClassifyStationPosition(_guest.State(), slot);
+  // The contract compares AX, BX and CX: the compass position it loaded, as ClassifyViewPosition's code leaves it.
+  ClassifyViewOut(_guest, CompassPosition(slot), test);
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void TransformSunOrPlanetEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ViewWithBlip transformed = TransformSunOrPlanet(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+  // The view position stays in AX, BX and CX after it is stored, and ES is the video segment once UpdateScannerBlip draws a blip.
+  PositionOut(regs, transformed.view);
+  if (transformed.blip)
+  {
+    regs.es = GameState::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(TRANSFORMS_SUN_OR_PLANET);
+}
+
+void TransformToViewWithBlipEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ViewWithBlip transformed = TransformToViewWithBlip(_guest.State(), ObjectSlot(_guest.State(), regs.di), PositionIn(regs));
+  PositionOut(regs, transformed.view);
+  // UpdateScannerBlip leaves ES the video segment once it draws a blip, and the contract compares ES.
+  if (transformed.blip)
+  {
+    regs.es = GameState::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(CLOBBERS_DX);
+}
+
+void TransformToViewEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  PositionOut(regs, TransformToView(_guest.State(), PositionIn(regs)));
+  _guest.Clobber(CLOBBERS_DX);
+}
+
 void TriangleWindingSignEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1641,14 +1686,14 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3AB3, "DrawVisibleFaces", &DrawVisibleFaces,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0}},
   NativeEntry{0x3BEA, "CheckShipInRange", &CheckShipInRangeEntry, RETURNS_CARRY},
-  NativeEntry{0x3C52, "TransformSunOrPlanet", &TransformSunOrPlanet, PRESERVES_ALL},
-  NativeEntry{0x3C72, "ClassifyStationPosition", &ClassifyStationPosition, RETURNS_CARRY},
-  NativeEntry{0x3C7E, "TransformShip", &TransformShip, RETURNS_CARRY},
+  NativeEntry{0x3C52, "TransformSunOrPlanet", &TransformSunOrPlanetEntry, TRANSFORMS_SUN_OR_PLANET},
+  NativeEntry{0x3C72, "ClassifyStationPosition", &ClassifyStationPositionEntry, RETURNS_CARRY},
+  NativeEntry{0x3C7E, "TransformShip", &TransformShip, TRANSFORMS_SHIP},
   NativeEntry{0x3CDD, "RunBlueprintHandler", &RunBlueprintHandler, Machine::NativeContract{ALL_BUT_DS & ~REGISTER_DI, 0}},
   NativeEntry{0x3CF2, "RenderBlueprintBody", &RenderBlueprintBody, PRESERVES_ALL},
   NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjects, Machine::NativeContract{ALL_BUT_DS, 0}},
-  NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlip, CLOBBERS_DX},
-  NativeEntry{0x3EE3, "TransformToView", &TransformToView, CLOBBERS_DX},
+  NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlipEntry, CLOBBERS_DX},
+  NativeEntry{0x3EE3, "TransformToView", &TransformToViewEntry, CLOBBERS_DX},
   NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanet, PRESERVES_ALL},
   NativeEntry{0x45C6, "DrawDistantStation", &DrawDistantStation, PRESERVES_ALL},
   NativeEntry{0x8A16, "LoadPlayerAngles", &LoadPlayerAnglesEntry, PRESERVES_ALL},

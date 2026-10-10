@@ -23,8 +23,10 @@ constexpr std::uint16_t CLEAR_DOCKED_MESSAGE_LINE = 0x6553;
 constexpr std::uint16_t PRINT_TEXT_LINES = 0x6DDE;
 constexpr std::uint16_t TOGGLE_MENU_ROW_HIGHLIGHT = 0x6328;
 constexpr std::uint16_t TOGGLE_INPUT_CURSOR = 0x7727;
+constexpr std::uint16_t REDRAW_INPUT_LINE = 0x773A;
 constexpr std::uint16_t PRINT_STRING_FOR_LAYOUT = 0x7750;
 constexpr std::uint8_t GRAPHICS_LAYOUT = 0;
+constexpr std::uint8_t TEXT_LAYOUT = 2;
 constexpr std::uint16_t SLOT_BYTES = 0x40;
 constexpr std::uint16_t SPARE_SLOT = 4;
 constexpr std::uint16_t LINES = 0x1000; // the space-view buffer, which nothing reads between frames of the title
@@ -83,6 +85,34 @@ public:
     rig.Call(PRINT_STRING_FOR_LAYOUT, {.bx = 0xFFFF, .si = DS.frontViewText.offset, .di = 0x0100});
     rig.AssertAllAgreed(TOGGLE_INPUT_CURSOR, 1);
     rig.AssertAllAgreed(PRINT_STRING_FOR_LAYOUT, 1);
+  }
+
+  // The cursor flipped and a line of three characters redrawn after it, in the text layout and in a graphics one. ReadTextLine
+  // calls ToggleInputCursor and RedrawInputLine as value routines since level 5 of the de-assembly (ADR-012 item 12), so only
+  // calls like these compare them with the original.
+  TEST_METHOD(InputLineRedrawAgreesInBothLayouts)
+  {
+    ComparisonRig rig("InputLineRedraw");
+    Machine::Memory& ram = rig.Host().Ram();
+    const std::uint16_t data = Elite::DataSegment(rig.Program());
+    constexpr std::string_view TYPED{"ELI"};
+    std::uint16_t at = LINES;
+    for (const char character : TYPED)
+    {
+      ram.Write8(data, at, static_cast<std::uint8_t>(character));
+      ++at;
+    }
+    const std::initializer_list<std::uint8_t> layouts = {TEXT_LAYOUT, GRAPHICS_LAYOUT};
+    for (const std::uint8_t layout : layouts)
+    {
+      ram.Write8(data, DS.screenLayout.offset, layout);
+      rig.Call(TOGGLE_INPUT_CURSOR, {});
+      rig.Call(REDRAW_INPUT_LINE, {.ax = 0x1234, .bx = static_cast<std::uint16_t>(TYPED.size()), .si = LINES, .di = 0x0100});
+      rig.Call(PRINT_STRING_FOR_LAYOUT, {.bx = 0xFFFF, .si = DS.frontViewText.offset, .di = 0x0200});
+    }
+    rig.AssertAllAgreed(TOGGLE_INPUT_CURSOR, layouts.size());
+    rig.AssertAllAgreed(REDRAW_INPUT_LINE, layouts.size());
+    rig.AssertAllAgreed(PRINT_STRING_FOR_LAYOUT, layouts.size());
   }
 
   // The class and type names of every class, class 3 for debris and for the rest, the Hermit and the police.

@@ -413,4 +413,11 @@ DosAnswer Hardware::FindNextFile()
   return Answer(CallService(m_pc, DOS_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, DOS_FIND_NEXT); }));
 }
 
+// ── Maths, Input, Text and SaveScreenshot (level 5, group A) ──
+
+void Hardware::TakeDueInterrupts()
+{
+  m_pc.TakeDueInterrupts();
+}
+
 } // namespace Elite

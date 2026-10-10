@@ -1,6 +1,6 @@
 # ADR-008 — Time, pacing and the replay digests
 
-**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8).
+**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8). Amended a third time the same day with the owner's ruling on the corpus's gaps (D20, item 8).
 
 ## Context
 
@@ -157,7 +157,15 @@ With the first six, the corpus meets every ship type the game spawns. Under D18 
 - Screenshots, which `SaveLoadTests` constructs, and leaving for DOS, which ends a run as `Terminated`, which the corpus does not accept.
 - `InitEscapePod` and `InitKraitHunter`, which nothing calls.
 
-The routines these leave unreached are compared by constructed tests (ADR-010 item 5), but the corpus is the only guard after D7; whether these gaps must close before the interpreter is deleted is decided then, with this list.
+The routines these leave unreached are compared by constructed tests (ADR-010 item 5), but the corpus is the only guard after D7.
+
+**How the gaps close before D7: the owner's ruling of 2026-10-10 (D20).**
+- **By replay**, what play reaches:
+  - missions 1 and 3 with their briefings, the masking device and the anti-ECM, from prepared commanders;
+  - scooping and the mining laser splitting a rock, flown by the steering program;
+  - leaving for DOS, with a replay now allowed to end in `Terminated`.
+- **By known answers**, recorded from the interpreter before it goes: flight by mouse or joystick, screenshots, a Shuttle the station launches and an invasion's Thargoids.
+- **`InitEscapePod` and `InitKraitHunter`** are deleted at D7 (D22): nothing calls them, so nothing guards them.
 
 **Found in the original on the way.** `PlaceAtSpawnPoint` turns the spawn point by `rotationSinCos` pairs 6 and 7, which nothing sets before the first `ComputeVelocity`; until then a ship spawns on the player. So the Mask's escorts ram the commander on the first launch after boot, and the first Thargoid in witch space dies ramming the ship. Escorts copy their leader's type (`PlaceEscortNear`), which is why the Constrictor and the Cougar appear only as replacement ships.
 
