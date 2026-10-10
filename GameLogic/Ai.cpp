@@ -22,7 +22,6 @@ using Machine::FLAG_ZERO;
 
 // Routines outside these files, run through the original.
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
-constexpr std::uint16_t OBJECT_WITHIN_BOX = 0x2F65;
 constexpr std::uint16_t CONVERT_VECTOR_TO_ANGLES = 0x4F08;
 
 constexpr std::uint8_t FLAG_HOSTILE = 0x01;
@@ -135,28 +134,59 @@ void SetState(Guest& _guest, std::uint8_t _state) noexcept
   return _guest.Byte(At(_guest.Regs().di, SLOT_STATE));
 }
 
-// ObjectWithinBox with DX = _halfSize: CF, whether the slot at DI is within it on every axis.
-[[nodiscard]] bool WithinBox(Guest& _guest, std::uint16_t _halfSize)
-{
-  _guest.Regs().dx = _halfSize;
-  _guest.Call(OBJECT_WITHIN_BOX);
-  return _guest.Flag(FLAG_CARRY);
-}
-
-// ObjectWithinBox with DH = the slot's range byte, DL as it is.
-[[nodiscard]] bool WithinRange(Guest& _guest)
+// WithinBox, MOV DX,_halfSize / CALL ObjectWithinBox: whether the slot at DI is within the box on every axis. Its value is
+// ObjectWithinBox's, so only its register code is left, which keeps the DX it loads. Nothing reads the magnitudes
+// ObjectWithinBox leaves in AX, BX and CX, nor its flags, here or after WithinRange: poisoned, every comparison and digest
+// still agrees.
+[[nodiscard]] bool WithinBoxOnRegisters(Guest& _guest, std::uint16_t _halfSize)
 {
   Machine::Registers& regs = _guest.Regs();
-  SetHigh(regs.dx, _guest.Byte(At(regs.di, SLOT_RANGE)));
-  _guest.Call(OBJECT_WITHIN_BOX);
-  return _guest.Flag(FLAG_CARRY);
+  regs.dx = _halfSize;
+  return ObjectWithinBox(ObjectSlot(_guest.State(), regs.di), _halfSize);
 }
 
-// ConvertVectorToAngles on AX, BX, CX, then TurnTowardAngles.
-void TurnToVector(Guest& _guest)
+// WithinRange: whether _slot is within the box whose half size has its range byte for the high byte and _low, what DL holds
+// there, for the low.
+[[nodiscard]] bool WithinRange(const ObjectSlot& _slot, std::uint8_t _low)
 {
-  _guest.Call(CONVERT_VECTOR_TO_ANGLES);
-  TurnTowardAnglesEntry(_guest);
+  return ObjectWithinBox(_slot, Join(_slot.Get(SlotByte::Range), _low));
+}
+
+// MOV DH,[DI+1Ch] / CALL ObjectWithinBox: WithinRange for the slot at DI, DL as it is. The register code keeps the DH it loads.
+[[nodiscard]] bool WithinRangeOnRegisters(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  SetHigh(regs.dx, slot.Get(SlotByte::Range));
+  return WithinRange(slot, Low(regs.dx));
+}
+
+// What TurnTowardAngles leaves in the registers, which its entry and TurnToVector's register code reproduce: AX and BX the
+// errors' magnitudes, which TryFireLaserAtPlayer takes as its aim errors; CX the yaw's turn rate, negated when it is the
+// step, and BP the pitch error's magnitude, which UpdateMissileAi's contract compares.
+void TurnOut(Machine::Registers& _regs, const ObjectSlot& _slot, Turn _turn) noexcept
+{
+  _regs.ax = _turn.pitch.errorMagnitude;
+  _regs.bx = _turn.yaw.errorMagnitude;
+  const std::uint16_t rate = _slot.Get(SlotByte::TurnRate);
+  _regs.cx = _turn.yaw.errorMagnitude < rate ? rate : static_cast<std::uint16_t>(_turn.yaw.step);
+  _regs.bp = _turn.pitch.errorMagnitude;
+}
+
+// TurnToVector: _slot turned toward the angles of _vector, ConvertVectorToAngles' then TurnTowardAngles'.
+Turn TurnToVector(GameState& _state, ObjectSlot _slot, Vector _vector)
+{
+  return TurnTowardAngles(_slot, ConvertVectorToAngles(_state, _vector));
+}
+
+// TurnToVector on AX, BX, CX and the slot at DI, with the registers TurnTowardAngles leaves (TurnOut). Nothing reads the DX
+// it leaves, which its two entries' contracts gave to them, nor its flags.
+void TurnToVectorOnRegisters(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const Vector vector{static_cast<std::int16_t>(regs.ax), static_cast<std::int16_t>(regs.bx), static_cast<std::int16_t>(regs.cx)};
+  TurnOut(regs, slot, TurnToVector(_guest.State(), slot, vector));
 }
 
 // What SpawnOddsMet draws: a random word, and the odds it is held against.
@@ -383,7 +413,7 @@ void LaunchAtOffender(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   IsObjectNear(_guest);
-  if (!_guest.Flag(FLAG_CARRY) || WithinBox(_guest, STATION_GUARD_BOX))
+  if (!_guest.Flag(FLAG_CARRY) || WithinBoxOnRegisters(_guest, STATION_GUARD_BOX))
   {
     return;
   }
@@ -408,11 +438,11 @@ void LaunchAtOffender(Guest& _guest)
   NextRandomEntry(_guest);
   if (regs.ax >= POLICE_FROM)
   {
-    InitPoliceViper(_guest);
+    InitPoliceViperEntry(_guest);
   }
   else if (regs.ax >= SHUTTLE_FROM)
   {
-    InitShuttle(_guest);
+    InitShuttleEntry(_guest);
   }
   else
   {
@@ -503,10 +533,10 @@ void CheckMissilesAtStation(Guest& _guest)
 void WolfTurnAway(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  if (WithinRange(_guest))
+  if (WithinRangeOnRegisters(_guest))
   {
     GetObjectPositionEntry(_guest);
-    TurnToVector(_guest);
+    TurnToVectorOnRegisters(_guest);
     ComputeVelocityEntry(_guest);
     TryLaunchThargon(_guest);
     MoveObject(_guest);
@@ -560,7 +590,7 @@ void WolfTurnAway(Guest& _guest)
 void HunterEvade(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  if (!WithinRange(_guest))
+  if (!WithinRangeOnRegisters(_guest))
   {
     SetState(_guest, STATE_IDLE);
     MoveObject(_guest);
@@ -604,7 +634,7 @@ void HunterIdle(Guest& _guest)
   if ((flags & FLAG_BLIP_DRAWN) == 0)
   {
     GetVectorToPlayerEntry(_guest);
-    TurnToVector(_guest);
+    TurnToVectorOnRegisters(_guest);
     ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     return;
@@ -668,14 +698,14 @@ void TraderAttack(Guest& _guest)
     MoveObject(_guest);
     return;
   }
-  if (WithinBox(_guest, TRADER_BREAK_OFF_BOX))
+  if (WithinBoxOnRegisters(_guest, TRADER_BREAK_OFF_BOX))
   {
     SetState(_guest, TRADER_BREAKING_OFF);
     MoveObject(_guest);
     return;
   }
   GetVectorToPlayerEntry(_guest);
-  TurnToVector(_guest);
+  TurnToVectorOnRegisters(_guest);
   TryFireLaserAtPlayer(_guest);
   IsPoliceViperEntry(_guest);
   if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) != 0)
@@ -734,7 +764,7 @@ void TraderFlee(Guest& _guest)
 void TraderBreakOff(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  if (!WithinRange(_guest))
+  if (!WithinRangeOnRegisters(_guest))
   {
     SetState(_guest, TRADER_ATTACKING);
     MoveObject(_guest);
@@ -751,7 +781,7 @@ void TraderBreakOff(Guest& _guest)
     }
   }
   GetObjectPositionEntry(_guest);
-  TurnToVector(_guest);
+  TurnToVectorOnRegisters(_guest);
   ComputeVelocityEntry(_guest);
   MoveObject(_guest);
 }
@@ -1024,14 +1054,14 @@ void UpdateWolfAi(Guest& _guest)
   }
   if (State(_guest) == STATE_ATTACK_RUN)
   {
-    if (WithinBox(_guest, BREAK_OFF_BOX))
+    if (WithinBoxOnRegisters(_guest, BREAK_OFF_BOX))
     {
       SetState(_guest, STATE_TURN_AWAY);
       MoveObject(_guest);
       return;
     }
     GetVectorToPlayerEntry(_guest);
-    TurnToVector(_guest);
+    TurnToVectorOnRegisters(_guest);
     TryFireLaserAtPlayer(_guest);
     regs.bx = WOLF_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
@@ -1066,14 +1096,14 @@ void UpdateHunterAi(Guest& _guest)
   }
   if (State(_guest) == STATE_ATTACK)
   {
-    if (WithinBox(_guest, BREAK_OFF_BOX))
+    if (WithinBoxOnRegisters(_guest, BREAK_OFF_BOX))
     {
       SetState(_guest, STATE_TURN_AWAY);
       MoveObject(_guest);
       return;
     }
     GetVectorToPlayerEntry(_guest);
-    TurnToVector(_guest);
+    TurnToVectorOnRegisters(_guest);
     TryFireLaserAtPlayer(_guest);
     regs.bx = HUNTER_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
@@ -1093,7 +1123,7 @@ void UpdateHunterAi(Guest& _guest)
       MoveObject(_guest);
       return;
     }
-    TurnToVector(_guest);
+    TurnToVectorOnRegisters(_guest);
     ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     return;
@@ -1104,14 +1134,14 @@ void UpdateHunterAi(Guest& _guest)
     return;
   }
   // Closing on the player while farther than 5000 on some axis.
-  if (WithinBox(_guest, CLOSING_BOX))
+  if (WithinBoxOnRegisters(_guest, CLOSING_BOX))
   {
     SetState(_guest, STATE_IDLE);
     MoveObject(_guest);
     return;
   }
   GetVectorToPlayerEntry(_guest);
-  TurnToVector(_guest);
+  TurnToVectorOnRegisters(_guest);
   TryFireLaserAtPlayer(_guest);
   regs.bx = CLOSING_MISSILE_ODDS;
   TryLaunchMissileAtPlayer(_guest);
@@ -1119,20 +1149,14 @@ void UpdateHunterAi(Guest& _guest)
   MoveObject(_guest);
 }
 
-void CheckSafeZoneHoldFire(Guest& _guest)
+HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
 {
-  if (_guest.Get(DS.thargoidInvasionActive) == 1)
+  if (_state.Get(DS.thargoidInvasionActive) == 1 || IsPoliceViper(_slot))
   {
-    _guest.SetFlag(FLAG_CARRY, false);
-    return;
+    return HoldFire{false, std::nullopt};
   }
-  IsPoliceViperEntry(_guest);
-  if (_guest.Flag(FLAG_ZERO))
-  {
-    _guest.SetFlag(FLAG_CARRY, false);
-    return;
-  }
-  _guest.Call(IN_SAFE_ZONE);
+  const SafeZone zone = InSafeZone(_state);
+  return HoldFire{zone.inside, zone};
 }
 
 namespace
@@ -1157,6 +1181,8 @@ constexpr Machine::NativeContract ESCORT_PLACED{REGISTER_AX | REGISTER_CX | REGI
 // TurnTowardAngles: the CX and BP it leaves are compared (TurnTowardAnglesEntry).
 constexpr Machine::NativeContract TURNED{REGISTER_DX, 0};
 constexpr Machine::NativeContract OBJECT_VECTOR{REGISTER_DX | REGISTER_BP, FLAG_CARRY};
+// CheckSafeZoneHoldFire: every register compared, AL as InSafeZone leaves it (CheckSafeZoneHoldFireEntry).
+constexpr Machine::NativeContract HOLD_FIRE{0, FLAG_CARRY};
 
 } // namespace
 
@@ -1188,14 +1214,9 @@ void TurnTowardAnglesEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   const ObjectSlot slot(_guest.State(), regs.di);
-  const Turn turn = TurnTowardAngles(slot, Angles{regs.ax, regs.bx});
-  regs.ax = turn.pitch.errorMagnitude;
-  regs.bx = turn.yaw.errorMagnitude;
   // The original leaves the yaw's ClampTurnStep in CX, the turn rate, negated when it is the step, and the pitch's error in BP;
   // UpdateMissileAi's contract compares both after it.
-  const std::uint16_t rate = slot.Get(SlotByte::TurnRate);
-  regs.cx = turn.yaw.errorMagnitude < rate ? rate : static_cast<std::uint16_t>(turn.yaw.step);
-  regs.bp = turn.pitch.errorMagnitude;
+  TurnOut(regs, slot, TurnTowardAngles(slot, Angles{regs.ax, regs.bx}));
   _guest.Clobber(TURNED);
 }
 
@@ -1236,6 +1257,19 @@ void GetVectorToObjectEntry(Guest& _guest)
   _guest.Clobber(OBJECT_VECTOR);
 }
 
+void CheckSafeZoneHoldFireEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const HoldFire hold = CheckSafeZoneHoldFire(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+  // The contract compares AX: once it asks InSafeZone, the original leaves AL what that leaves, the rest of safeZoneFlags.
+  if (hold.zone.has_value())
+  {
+    SetLow(regs.ax, hold.zone->rest);
+  }
+  _guest.SetFlag(FLAG_CARRY, hold.hold);
+  _guest.Clobber(HOLD_FIRE);
+}
+
 namespace
 {
 
@@ -1255,7 +1289,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAi, CLOBBERS_MOST},
   NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAi, CLOBBERS_MOST},
   NativeEntry{0x58DE, "UpdateHunterAi", &UpdateHunterAi, CLOBBERS_MOST},
-  NativeEntry{0x5A10, "CheckSafeZoneHoldFire", &CheckSafeZoneHoldFire, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x5A10, "CheckSafeZoneHoldFire", &CheckSafeZoneHoldFireEntry, HOLD_FIRE},
 };
 
 } // namespace

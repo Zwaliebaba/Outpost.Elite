@@ -4,6 +4,8 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Maths.h"
+#include "Sound.h"
 
 #include <algorithm>
 
@@ -35,7 +37,6 @@ constexpr std::uint16_t PLAY_HYPERSPACE_TUNNEL = 0x4906;
 constexpr std::uint16_t ENTER_WITCH_SPACE = 0x4917;
 constexpr std::uint16_t UPDATE_MISSION_SCHEDULE = 0x4953;
 constexpr std::uint16_t COMPUTE_ANGLES_TO_OBJECT = 0x4ECF;
-constexpr std::uint16_t START_BEEP = 0x7A57;
 constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
 
 // IsMassLocked: the ships that do not lock the jump drive, by type, and the slot flag of a ship on the
@@ -100,19 +101,13 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
   return _jumps == FIRST_MISSION_JUMPS ? FIRST_MISSION : _jumps == SECOND_MISSION_JUMPS ? SECOND_MISSION : THIRD_MISSION;
 }
 
-// NextRandom made an offset of 200h-3FFh in AX, negated when the number's top bit is set (mov dh,ah;
-// shl dh,1 leaves that bit in CF).
-void RandomArrivalOffset(Guest& _guest)
+// NextRandom made an offset of 200h-3FFh, negated when the number's top bit is set (CS:2B69, CS:2B7C: mov dh,ah; shl dh,1
+// leaves that bit in CF). Nothing reads the DH it leaves: ArriveInSystem's CWD (CS:2B8E) loads DX next.
+[[nodiscard]] std::uint16_t RandomArrivalOffset(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(NEXT_RANDOM);
-  const std::uint8_t top = High(regs.ax);
-  SetHigh(regs.dx, static_cast<std::uint8_t>(top << 1));
-  regs.ax = static_cast<std::uint16_t>((regs.ax & ARRIVAL_OFFSET_MASK) + ARRIVAL_OFFSET_LEAST);
-  if ((top & 0x80) != 0)
-  {
-    regs.ax = static_cast<std::uint16_t>(0u - regs.ax);
-  }
+  const std::uint16_t random = NextRandom(_state);
+  const auto offset = static_cast<std::uint16_t>((random & ARRIVAL_OFFSET_MASK) + ARRIVAL_OFFSET_LEAST);
+  return (random & 0x8000) != 0 ? Negate(offset) : offset;
 }
 
 // GalacticJump (0x485B): the next galaxy, the ninth now and then after the eighth, and the system
@@ -199,9 +194,9 @@ void ArriveInSystem(Guest& _guest)
   }
   _guest.Call(NEXT_RANDOM);
   regs.cx = regs.ax;
-  RandomArrivalOffset(_guest);
+  regs.ax = RandomArrivalOffset(_guest.State());
   regs.bx = regs.ax;
-  RandomArrivalOffset(_guest);
+  regs.ax = RandomArrivalOffset(_guest.State());
   // xchg cx,ax; cwd; xchg cx,ax: DL is the first number's sign, which carries into the z offset's top.
   regs.dx = (regs.cx & 0x8000) != 0 ? static_cast<std::uint16_t>(0xFFFF) : static_cast<std::uint16_t>(0);
   SetHigh(regs.dx, ARRIVAL_SLOTS);
@@ -524,18 +519,16 @@ void TickHyperspaceCountdown(Guest& _guest)
   }
 }
 
-void ShowHyperspaceCountdown(Guest& _guest)
+void ShowHyperspaceCountdown(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(START_BEEP);
-  const std::uint8_t countdown = _guest.Get(DS.hyperspaceCountdown);
+  StartBeep(_state);
+  const std::uint8_t countdown = _state.Get(DS.hyperspaceCountdown);
   // Two characters: "10", or a space and the digit.
-  regs.ax = countdown == COUNTDOWN_TEN ? MakeWord('1', '0') : MakeWord(' ', static_cast<std::uint8_t>(countdown + '0'));
-  _guest.Set(DS.hyperspaceCountdownDigits, regs.ax);
-  regs.ax = DS.hyperspaceCountdownMessage.offset;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, COUNTDOWN_MESSAGE_FRAMES);
-  _guest.Set(DS.messageShown, 0);
+  _state.Set(DS.hyperspaceCountdownDigits,
+             countdown == COUNTDOWN_TEN ? MakeWord('1', '0') : MakeWord(' ', static_cast<std::uint8_t>(countdown + '0')));
+  _state.Set(DS.messagePointer, DS.hyperspaceCountdownMessage.offset);
+  _state.Set(DS.messageFrames, COUNTDOWN_MESSAGE_FRAMES);
+  _state.Set(DS.messageShown, 0);
 }
 
 // ── The entries of the de-assembled routines ──
@@ -554,6 +547,7 @@ using Machine::REGISTER_DI;
 using Machine::REGISTER_DX;
 using Machine::REGISTER_SI;
 
+constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_CX_SI_DI{REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
@@ -593,6 +587,12 @@ void LatchHyperspaceTargetEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_CX_SI_DI);
 }
 
+void ShowHyperspaceCountdownEntry(Guest& _guest)
+{
+  ShowHyperspaceCountdown(_guest.State());
+  _guest.Clobber(CLOBBERS_AX);
+}
+
 namespace
 {
 
@@ -618,7 +618,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x49F6, "LatchHyperspaceTarget", &LatchHyperspaceTargetEntry, CLOBBERS_CX_SI_DI},
   NativeEntry{0x7F79, "TickHyperspaceCountdown", &TickHyperspaceCountdown, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
               NativeWait::Always},
-  NativeEntry{0x8C62, "ShowHyperspaceCountdown", &ShowHyperspaceCountdown, Machine::NativeContract{REGISTER_AX, 0}},
+  NativeEntry{0x8C62, "ShowHyperspaceCountdown", &ShowHyperspaceCountdownEntry, CLOBBERS_AX},
 };
 
 } // namespace

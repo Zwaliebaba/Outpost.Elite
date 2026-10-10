@@ -81,24 +81,6 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 /// EraseScannerBlip, and CF clear. AL is the last high byte looked at (0 for FFh).
 void IsObjectNear(Guest& _guest);
 
-/// InitPoliceViper (CS:4C76): the slot at DI made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
-void InitPoliceViper(Guest& _guest);
-
-/// InitAbandonedCobra (CS:4CA6): the slot at DI made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
-void InitAbandonedCobra(Guest& _guest);
-
-/// InitEscapePod (CS:4CB3): the slot at DI made an escape pod (entry 1), class 3.
-void InitEscapePod(Guest& _guest);
-
-/// InitShuttle (CS:4CC0): the slot at DI made a shuttle (entry 7), class 3.
-void InitShuttle(Guest& _guest);
-
-/// InitKraitHunter (CS:4CCD): the slot at DI made a Krait (entry 17), class 6.
-void InitKraitHunter(Guest& _guest);
-
-/// InitThargon (CS:4CDA): the slot at DI made a Thargon (entry 28), class 5.
-void InitThargon(Guest& _guest);
-
 /// SpawnRandomDrifter (CS:4CE7): one of the eight drifters from entry 1 in the free slot at DI, class 3, turn rate 1Eh.
 void SpawnRandomDrifter(Guest& _guest);
 
@@ -126,9 +108,6 @@ void MoveObject(Guest& _guest);
 
 /// RemoveObject (CS:4F98): clears the active bit of the slot at DI and erases its blip.
 void RemoveObject(Guest& _guest);
-
-/// FacePlayer (CS:513E): the heading of the slot at DI turned to the player.
-void FacePlayer(Guest& _guest);
 
 /// ReclaimShipSlot (CS:51FD): SI = the first ship slot whose blip is not drawn; when every one has a blip, one of slots 4-19 at
 /// random, removed (DI = SI).
@@ -176,8 +155,26 @@ void ClearObjectSlot(GameState& _state, std::uint16_t _slot);
 /// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone: whether each 24-bit coordinate of _slot fits a signed word.
 [[nodiscard]] bool IsObjectNearKeepBlip(const ObjectSlot& _slot);
 
+/// InitPoliceViper (CS:4C76): _slot made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
+void InitPoliceViper(GameState& _state, ObjectSlot _slot);
+
 /// InitCargoBarrel (CS:4C99): _slot made a barrel (spawnTemplates entry 3), class 3.
 void InitCargoBarrel(GameState& _state, ObjectSlot _slot);
+
+/// InitAbandonedCobra (CS:4CA6): _slot made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
+void InitAbandonedCobra(GameState& _state, ObjectSlot _slot);
+
+/// InitEscapePod (CS:4CB3): _slot made an escape pod (entry 1), class 3.
+void InitEscapePod(GameState& _state, ObjectSlot _slot);
+
+/// InitShuttle (CS:4CC0): _slot made a shuttle (entry 7), class 3.
+void InitShuttle(GameState& _state, ObjectSlot _slot);
+
+/// InitKraitHunter (CS:4CCD): _slot made a Krait (entry 17), class 6.
+void InitKraitHunter(GameState& _state, ObjectSlot _slot);
+
+/// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
+void InitThargon(GameState& _state, ObjectSlot _slot);
 
 /// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of the table at _table: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
@@ -200,6 +197,10 @@ void RandomizeOrientation(GameState& _state, ObjectSlot _slot);
 /// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
 /// give it, in words; the slot keeps their low bytes.
 Vector ComputeVelocity(GameState& _state, ObjectSlot _slot);
+
+/// FacePlayer (CS:513E): _slot's heading turned to the player: ConvertVectorToAngles of GetVectorToPlayer, as its pitch, then
+/// its yaw. Returns them.
+Angles FacePlayer(GameState& _state, ObjectSlot _slot);
 
 /// FindFreeShipSlot (CS:51E0): the first inactive ship slot, from firstShipSlot.
 [[nodiscard]] SlotSearch FindFreeShipSlot(GameState& _state);
@@ -237,13 +238,20 @@ void IsSunOrPlanetEntry(Guest& _guest);          ///< DI = the slot. Out: AL = t
 void IsPlanetEntry(Guest& _guest);               ///< DI = the slot. Out: AL = the type; ZF set for the planet.
 void IsStationEntry(Guest& _guest);              ///< DI = the slot. Out: AL = the type; ZF set for a station, CF for the Dodo.
 void IsObjectNearKeepBlipEntry(Guest& _guest);   ///< DI = the slot. Out: CF set when near; AX clobbered.
+void InitPoliceViperEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
 void InitCargoBarrelEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
+void InitAbandonedCobraEntry(Guest& _guest);     ///< DI = the slot. AX, BX clobbered.
+void InitEscapePodEntry(Guest& _guest);          ///< DI = the slot. AX, BX clobbered.
+void InitShuttleEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
+void InitKraitHunterEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
+void InitThargonEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
 void InitObjectFromTemplateEntry(Guest& _guest); ///< BX = the table, AL = the record, DI = the slot. AX, BX clobbered.
 void PlaceAtSpawnPointEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX clobbered.
 void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
 void GetVectorToPlayerEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
 void RandomizeOrientationEntry(Guest& _guest);   ///< DI = the slot. AX clobbered.
 void ComputeVelocityEntry(Guest& _guest);        ///< DI = the slot. Out: BX = the z word; AX, DX clobbered.
+void FacePlayerEntry(Guest& _guest);             ///< DI = the slot. Out: BP = the pitch; AX, BX, CX, DX clobbered.
 void FindFreeShipSlotEntry(Guest& _guest);       ///< Out: CF set and SI = the slot when one is free, else SI past the slots.
 void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
 void FindDebrisSlotEntry(Guest& _guest);         ///< Out: SI = the slot.

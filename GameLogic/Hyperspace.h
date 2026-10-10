@@ -38,9 +38,6 @@ void PlayHyperspaceTunnel(Guest& _guest);
 /// step every ten frames, which jumps when it runs out. Waits then. Clobbers all.
 void TickHyperspaceCountdown(Guest& _guest);
 
-/// ShowHyperspaceCountdown (CS:8C62): a beep, and the countdown on the message line.
-void ShowHyperspaceCountdown(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
 /// ResetHyperspaceRings (CS:48AB): hyperspaceRings from hyperspaceRingStart, fifteen words copied up through the
@@ -58,11 +55,16 @@ bool UpdateMissionSchedule(GameState& _state);
 /// of its record, 65536 for a count of 0.
 void LatchHyperspaceTarget(GameState& _state);
 
+/// ShowHyperspaceCountdown (CS:8C62): a beep (StartBeep), and the countdown on the message line for ten frames: its two
+/// digits, "10" or a space and the digit, written into hyperspaceCountdownMessage.
+void ShowHyperspaceCountdown(GameState& _state);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
-void ResetHyperspaceRingsEntry(Guest& _guest);  ///< Out: ES=B800h; AX, CX, SI and DI clobbered.
-void EnterWitchSpaceEntry(Guest& _guest);       ///< AX and BX clobbered.
-void UpdateMissionScheduleEntry(Guest& _guest); ///< Out: AL the mission picked, once the jump counts.
-void LatchHyperspaceTargetEntry(Guest& _guest); ///< Out: AL the last byte copied; CX, SI and DI clobbered.
+void ResetHyperspaceRingsEntry(Guest& _guest);    ///< Out: ES=B800h; AX, CX, SI and DI clobbered.
+void EnterWitchSpaceEntry(Guest& _guest);         ///< AX and BX clobbered.
+void UpdateMissionScheduleEntry(Guest& _guest);   ///< Out: AL the mission picked, once the jump counts.
+void LatchHyperspaceTargetEntry(Guest& _guest);   ///< Out: AL the last byte copied; CX, SI and DI clobbered.
+void ShowHyperspaceCountdownEntry(Guest& _guest); ///< AX clobbered.
 
 } // namespace Elite
