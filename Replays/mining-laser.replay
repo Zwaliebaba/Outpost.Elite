@@ -1,0 +1,64 @@
+# Mines an asteroid with the mining laser and scoops what it splits into. It starts from mining-laser.cdr
+# (Tools/PrepareCommanders.py): the reference's own save with fuel scoops and a mining laser for the pulse laser, as the
+# equipment screen fits them, and its random state 13 draws on, which puts an asteroid ahead of the launch. I, held
+# while the asteroid is in the sights, identifies it (ShowShipIdentity: CLASS: Debris TYPE: Astroid) and locks a missile
+# on it; the mining laser, fired once it is within 1,200 units, splits it into splinters (SpawnFragments, with the
+# slower scatter and the longer life a mined asteroid gives them), and three are scooped, each Metal Alloys
+# (TryScoopObject). Asteroids are rare at Lave without the jump drive: a search of 3,000 draw counts found one in the
+# first seconds of space only at 13. The flight was played by a scratch program that steered at the asteroid by its
+# position each frame, slowed and fired within range, then steered each splinter under the nose at low speed; what it
+# pressed is recorded here like any other replay.
+file JAMESON.CDR mining-laser.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 6e9d143c3d5c50dee596f8826b8a31616e031ec2675a9b09ecb2061b15a42238
+key F1; wait 1                     # launch: an asteroid ahead
+# The flight, as recorded: a step for each change of the keys, and the frames between.
+down period; down Up; wait 0.200
+down i; up period; down comma; down Right; up Up; wait 0.050
+up i; wait 0.100
+up comma; wait 0.200
+down Up; wait 0.200
+down Left; up Right; wait 0.050
+up Up; down Down; wait 0.100
+digest identified ee2ee5bf3e99dfd367a4f045592e87a5f2bd51f31cdc327075a070c7b23f8563
+wait 0.150
+up Down; wait 0.050
+down Up; wait 0.100
+up Left; down Right; wait 0.150
+up Up; down Down; wait 0.200
+up Down; wait 0.300
+down Up; wait 0.150
+up Right; wait 0.050
+down Left; up Up; down Down; wait 0.200
+up Down; wait 0.050
+down Up; wait 0.150
+up Up; wait 0.250
+down Up; wait 0.150
+up Up; down Down; wait 0.100
+up Down; wait 0.200
+down Up; wait 0.100
+up Up; wait 0.300
+up Left; wait 3.000
+down comma; down space; wait 0.150
+up comma; down Left; up space; wait 0.050
+up Left; down Down
+digest mined 370a1af4bf4dd5ebd0172ba5fe30c59b1193df48b540b0d321ec3be09b7e3d77
+wait 0.200
+down Right; wait 0.100
+down Up; up Down; wait 0.050
+down comma; wait 0.050
+down period; up comma; up Right; wait 0.050
+up period; wait 0.050
+up Up; wait 0.050
+down Down; wait 0.150
+down Right; wait 0.150
+up Right; wait 0.050
+down Right; wait 0.250
+down period; down Left; up Right; up Down; wait 0.050
+up period; up Left; down Right; wait 0.100
+up Right
+wait 0.100
+digest scooped 972bbd9302134d678d516cc10528f152d036e977c0f5a39d66c26c71665fc11e

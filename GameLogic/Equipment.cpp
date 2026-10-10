@@ -10,6 +10,7 @@
 #include "Maths.h"
 #include "Ships.h"
 #include "Text.h"
+#include "Timer.h"
 
 namespace Elite
 {
@@ -21,31 +22,7 @@ using Machine::FLAG_CARRY;
 using Machine::FLAG_ZERO;
 using Machine::Registers;
 
-// The routines these call by their entries: whatever is hooked there runs, so each work routine that a routine that
-// waits calls is compared on its own (ADR-010 item 8).
-constexpr std::uint16_t FORMAT_DECIMAL5 = 0x3407;
-constexpr std::uint16_t BLANK_LEADING_ZEROS = 0x3432;
-constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
-constexpr std::uint16_t RUN_EQUIP_SHIP_MENU = 0x6111;
-constexpr std::uint16_t SELECT_LASER_TYPE = 0x633B;
-constexpr std::uint16_t DRAW_LASER_MOUNT_MENU = 0x6367;
-constexpr std::uint16_t CHOOSE_MOUNT_TO_FIT_LASER = 0x63B2;
-constexpr std::uint16_t CHOOSE_MOUNT_TO_REMOVE_LASER = 0x646F;
-constexpr std::uint16_t CLEAR_DOCKED_MESSAGE_LINE = 0x6553;
-constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
-constexpr std::uint16_t PAY_FOR_EQUIPMENT_ITEM = 0x65A3;
-constexpr std::uint16_t ADD_CREDITS = 0x65EE;
-constexpr std::uint16_t PRINT_COUNTED_TEXT_LINES = 0x65FA;
-constexpr std::uint16_t CLEAR_EQUIPMENT_SELL_PRICE = 0x6946;
-constexpr std::uint16_t SHOW_EQUIPMENT_SELL_PRICE = 0x6972;
-constexpr std::uint16_t COMPUTE_RESALE_PRICE = 0x6995;
-constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
-constexpr std::uint16_t READ_STEERING = 0x7536;
-constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t WAIT_FOR_TIMER_TICK = 0x7772;
-constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
-
-// Where the original's backward jumps land, for the turns of its loops (JumpBack).
+// Where the original's backward jumps land, for the turns of its loops (Hardware::LoopTurn).
 constexpr std::uint16_t EQUIPMENT_LIST_ROW = 0x5C1E;
 constexpr std::uint16_t EQUIP_STEER = 0x612F;
 constexpr std::uint16_t EQUIP_CURSOR_UP = 0x613A;
@@ -117,6 +94,7 @@ constexpr std::uint16_t WRONG_LASER_TYPE_TEXT = 0x8E1A;
 
 constexpr std::uint16_t SCREEN_PRICES = 0x823B;   // four bytes a row: the price, then the resale price, in tenths
 constexpr std::uint8_t TENTHS_DIGITS_BLANKED = 3; // the leading zeros FormatTenths blanks
+constexpr std::uint8_t RESALE_DIGITS_BLANKED = 3; // and those the equipment screen blanks in a resale price
 
 // The equipment menu's rows, from 1. Row r's fitted count is the byte at FITTED_BEFORE_FUEL + r: fuel's is row 1.
 constexpr std::uint8_t FUEL_ROW = 1;
@@ -207,6 +185,38 @@ void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t
   }
 }
 
+// What TryScoopObject's box test (4414-443F) finds: y from 30 to 229, then x and z within 149 either side.
+struct ScoopBoxTest
+{
+  bool inside;
+  std::optional<std::uint16_t> lastMeasure; ///< what it measured last, which the original leaves in DX: none when y is negative
+};
+
+[[nodiscard]] ScoopBoxTest TestScoopBox(const Vector& _view) noexcept
+{
+  const auto y = static_cast<std::uint16_t>(_view.y);
+  if ((y & 0x8000) != 0)
+  {
+    return ScoopBoxTest{false, std::nullopt};
+  }
+  const auto above = static_cast<std::uint16_t>(y - SCOOP_LOWEST);
+  if (y < SCOOP_LOWEST)
+  {
+    return ScoopBoxTest{false, above};
+  }
+  if (above >= SCOOP_HEIGHT)
+  {
+    return ScoopBoxTest{false, static_cast<std::uint16_t>(above - SCOOP_HEIGHT)};
+  }
+  const std::uint16_t across = Magnitude(static_cast<std::uint16_t>(_view.x));
+  if (across >= SCOOP_HALF_WIDTH)
+  {
+    return ScoopBoxTest{false, across};
+  }
+  const std::uint16_t deep = Magnitude(static_cast<std::uint16_t>(_view.z));
+  return ScoopBoxTest{deep < SCOOP_HALF_WIDTH, deep};
+}
+
 // PrintEquipmentSellColumn (0x6949): the text at DS:_text in the resale column of menuSelectedRow's row, in the resale
 // price's attribute, and the menu's attribute put back.
 PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
@@ -241,247 +251,182 @@ void SellColumnOut(Registers& _regs, PrintedText _printed) noexcept
   return static_cast<std::uint16_t>(Join(_rows, 0) >> 2);
 }
 
-// What StartMenu and the cursor's moves leave in the registers: SI on the row, PrintCreditsOnMessageLine's DI and ES,
-// and AX as the last ToggleMenuRowHighlight leaves it, AL the attribute it toggled the row to and AH the one the
-// credits were printed in, its nibbles swapped.
-void MenuCursorOut(Registers& _regs, const GameState& _state, MenuCursor _cursor)
+// 61CF and 628A: B and S push CX, SI and textAttribute for 6214 to pop after the message, and set the message's attribute.
+// Returns the attribute, which the original pushes in AL.
+[[nodiscard]] std::uint8_t OpenEquipMessage(GameState& _state)
 {
-  const std::uint8_t attribute = _state.Get(DS.textAttribute);
-  _regs.si = _cursor.row;
-  _regs.di = _cursor.credits.nextCell;
-  _regs.es = Guest::VIDEO_SEGMENT;
-  _regs.ax = Join(static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4)), attribute);
+  const std::uint8_t saved = _state.Get(DS.textAttribute);
+  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  return saved;
 }
 
-// 61CF and 628A: B and S save CX, SI and textAttribute, for 6214 to put back after the message.
-void OpenEquipMessage(Guest& _guest)
+// 6214: the message at DS:_text on the message line, and textAttribute put back to _saved, which the original pops into AL
+// before its jump back to the steering.
+void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _saved)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Push(regs.cx);
-  _guest.Push(regs.si);
-  regs.ax = WithLow(regs.ax, _guest.Get(DS.textAttribute));
-  _guest.Push(regs.ax);
-  _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  PrintTextModeString(_state, _text, MESSAGE_OFFSET);
+  _state.Set(DS.textAttribute, _saved);
 }
 
-// 6214: the message at SI on the message line, and what OpenEquipMessage saved put back.
-void ShowEquipMessage(Guest& _guest)
+// The jump back to 6214 that ends each of B's and S's paths, with the message it shows.
+[[nodiscard]] std::uint16_t ToEquipMessage(Hardware& _hardware, std::uint16_t _text)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = MESSAGE_OFFSET;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.ax = _guest.Pop();
-  _guest.Set(DS.textAttribute, Low(regs.ax));
-  regs.si = _guest.Pop();
-  regs.cx = _guest.Pop();
+  _hardware.LoopTurn(EQUIP_MESSAGE, {});
+  return _text;
 }
 
 // 6241, reached by a jump back: NOT ENOUGH CREDITS!, and the jump back to 6214.
-void ReportNotEnoughCredits(Guest& _guest)
+[[nodiscard]] std::uint16_t ReportNotEnoughCredits(Hardware& _hardware)
 {
-  _guest.JumpBack(EQUIP_NOT_ENOUGH_CREDITS);
-  _guest.Regs().si = NOT_ENOUGH_CREDITS_TEXT;
-  _guest.JumpBack(EQUIP_MESSAGE);
+  _hardware.LoopTurn(EQUIP_NOT_ENOUGH_CREDITS, {});
+  return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
 }
 
-// 6228: an item or a laser paid for and counted, its resale price shown, and a laser's mount chosen. BX is the
-// row's fitted count.
-void BuyFittedItem(Guest& _guest)
+// 6228: an item or a laser paid for and counted at DS:_fitted, which the original holds in BX and pushes round the payment,
+// its resale price shown, and a laser's mount chosen. Returns the message.
+[[nodiscard]] std::uint16_t BuyFittedItem(GameState& _state, Hardware& _hardware, std::uint16_t _fitted)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Push(regs.bx);
-  _guest.Call(PAY_FOR_EQUIPMENT_ITEM);
-  regs.bx = _guest.Pop();
-  if (_guest.Flag(FLAG_CARRY))
+  if (!PayForEquipmentItem(_state, _fitted).paid)
   {
-    regs.si = NOT_ENOUGH_CREDITS_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
   }
-  IncrementByte(_guest.State(), regs.bx);
-  _guest.Call(SHOW_EQUIPMENT_SELL_PRICE);
-  _guest.Call(SELECT_LASER_TYPE);
-  if (_guest.Flag(FLAG_ZERO))
+  IncrementByte(_state, _fitted);
+  ShowEquipmentSellPrice(_state);
+  if (SelectLaserType(_state))
   {
-    _guest.Call(CHOOSE_MOUNT_TO_FIT_LASER);
+    ChooseMountToFitLaser(_state, _hardware);
   }
-  regs.si = ITEM_PURCHASED_TEXT;
-  _guest.JumpBack(EQUIP_MESSAGE);
+  return ToEquipMessage(_hardware, ITEM_PURCHASED_TEXT);
 }
 
-// 6246: B on fuel (a full tank, never in mission 1) or a missile (up to four). BL is the row.
-void BuyFuelOrMissile(Guest& _guest)
+// 6246: B on fuel (a full tank, never in mission 1) or a missile (up to four), _row 1 or 2. The original holds the row less 1
+// in BX, which PayForEquipmentItem's divide trap saves with the row in BL. Returns the message.
+[[nodiscard]] std::uint16_t BuyFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - 1));
-  if (Low(regs.bx) != 0)
+  const auto bx = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_row - 1));
+  if (bx != 0)
   {
-    regs.si = FOUR_MISSILES_ONLY_TEXT;
-    if (_guest.Get(DS.missileCount) == MISSILE_LIMIT)
+    if (_state.Get(DS.missileCount) == MISSILE_LIMIT)
     {
-      _guest.JumpBack(EQUIP_MESSAGE);
-      return;
+      return ToEquipMessage(_hardware, FOUR_MISSILES_ONLY_TEXT);
     }
-    _guest.Call(PAY_FOR_EQUIPMENT_ITEM);
-    if (_guest.Flag(FLAG_CARRY))
+    if (!PayForEquipmentItem(_state, bx).paid)
     {
-      ReportNotEnoughCredits(_guest);
-      return;
+      return ReportNotEnoughCredits(_hardware);
     }
-    _guest.Set(DS.missileCount, static_cast<std::uint8_t>(_guest.Get(DS.missileCount) + 1));
-    _guest.Call(SHOW_EQUIPMENT_SELL_PRICE);
-    regs.si = MISSILE_PURCHASED_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    _state.Set(DS.missileCount, static_cast<std::uint8_t>(_state.Get(DS.missileCount) + 1));
+    ShowEquipmentSellPrice(_state);
+    return ToEquipMessage(_hardware, MISSILE_PURCHASED_TEXT);
   }
-  if (_guest.Get(DS.missionNumber) == NO_FUEL_MISSION)
+  if (_state.Get(DS.missionNumber) == NO_FUEL_MISSION)
   {
-    regs.si = NO_FUEL_AVAILABLE_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, NO_FUEL_AVAILABLE_TEXT);
   }
-  regs.si = FUEL_FULL_TEXT;
-  if (_guest.Get(DS.fuel) >= FUEL_NEARLY_FULL)
+  if (_state.Get(DS.fuel) >= FUEL_NEARLY_FULL)
   {
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, FUEL_FULL_TEXT);
   }
-  _guest.Call(PAY_FOR_EQUIPMENT_ITEM);
-  if (_guest.Flag(FLAG_CARRY))
+  if (!PayForEquipmentItem(_state, bx).paid)
   {
-    ReportNotEnoughCredits(_guest);
-    return;
+    return ReportNotEnoughCredits(_hardware);
   }
-  regs.si = FUEL_PURCHASED_TEXT;
-  _guest.Set(DS.fuel, FUEL_FULL);
-  _guest.JumpBack(EQUIP_MESSAGE);
+  _state.Set(DS.fuel, FUEL_FULL);
+  return ToEquipMessage(_hardware, FUEL_PURCHASED_TEXT);
 }
 
-// 61CF: B on the equipment menu. Leaves SI at the message for 6214, after the jumps back the original takes on the way.
-void BuyEquipment(Guest& _guest)
+// 61DA: B on the equipment menu, once OpenEquipMessage has saved the attribute. Returns the message for ShowEquipMessage, after
+// the jumps back the original takes on the way.
+[[nodiscard]] std::uint16_t BuyEquipment(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  OpenEquipMessage(_guest);
-  regs.bx = _guest.Get(DS.menuSelectedRow);
-  if (Low(regs.bx) < FIRST_FITTED_ROW)
+  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  if (row < FIRST_FITTED_ROW)
   {
-    BuyFuelOrMissile(_guest);
-    return;
+    return BuyFuelOrMissile(_state, _hardware, row);
   }
-  regs.bx = static_cast<std::uint16_t>(regs.bx + FITTED_BEFORE_FUEL);
-  if (_guest.Byte(regs.bx) != 0)
+  const auto fitted = static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL);
+  if (_state.Byte(fitted) != 0)
   {
-    _guest.Call(SELECT_LASER_TYPE);
-    if (!_guest.Flag(FLAG_ZERO))
+    if (!SelectLaserType(_state))
     {
-      regs.si = ALREADY_FITTED_TEXT;
-      return;
+      return ALREADY_FITTED_TEXT;
     }
   }
   else
   {
-    _guest.Call(SELECT_LASER_TYPE);
-    if (!_guest.Flag(FLAG_ZERO))
+    if (!SelectLaserType(_state))
     {
-      BuyFittedItem(_guest);
-      return;
+      return BuyFittedItem(_state, _hardware, fitted);
     }
-    _guest.JumpBack(EQUIP_LASER_CHECKS);
+    _hardware.LoopTurn(EQUIP_LASER_CHECKS, {});
   }
   // A laser: a free mount, and a mining laser only with fuel scoops.
-  regs.si = FOUR_LASERS_TEXT;
-  if (_guest.Get(DS.laserMountsFitted) == ALL_MOUNTS)
+  if (_state.Get(DS.laserMountsFitted) == ALL_MOUNTS)
   {
-    return;
+    return FOUR_LASERS_TEXT;
   }
-  if (_guest.Get(DS.menuSelectedRow) == MINING_LASER_ROW && _guest.Get(DS.fuelScoopsFitted) != 1)
+  if (_state.Get(DS.menuSelectedRow) == MINING_LASER_ROW && _state.Get(DS.fuelScoopsFitted) != 1)
   {
-    regs.si = SCOOP_NEEDED_TEXT;
-    return;
+    return SCOOP_NEEDED_TEXT;
   }
-  BuyFittedItem(_guest);
+  return BuyFittedItem(_state, _hardware, fitted);
 }
 
-// 62FD: S on fuel (never) or a missile, for the missile's resale price. BL is the row.
-void SellFuelOrMissile(Guest& _guest)
+// 62FD: S on fuel (never) or a missile, for the missile's resale price, _row 1 or 2. Returns the message.
+[[nodiscard]] std::uint16_t SellFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
 {
-  Registers& regs = _guest.Regs();
-  SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - 1));
-  if (Low(regs.bx) == 0)
+  if (_row == FUEL_ROW)
   {
-    regs.si = FUEL_SALE_ILLEGAL_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, FUEL_SALE_ILLEGAL_TEXT);
   }
-  regs.si = NO_MISSILE_TO_SELL_TEXT;
-  if (_guest.Get(DS.missileCount) == 0)
+  if (_state.Get(DS.missileCount) == 0)
   {
-    _guest.JumpBack(EQUIP_SOLD_MESSAGE);
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    _hardware.LoopTurn(EQUIP_SOLD_MESSAGE, {});
+    return ToEquipMessage(_hardware, NO_MISSILE_TO_SELL_TEXT);
   }
-  const auto left = static_cast<std::uint8_t>(_guest.Get(DS.missileCount) - 1);
-  _guest.Set(DS.missileCount, left);
+  const auto left = static_cast<std::uint8_t>(_state.Get(DS.missileCount) - 1);
+  _state.Set(DS.missileCount, left);
   if (left == 0)
   {
-    _guest.Call(CLEAR_EQUIPMENT_SELL_PRICE);
+    ClearEquipmentSellPrice(_state);
   }
-  regs.ax = _guest.Get(DS.data8245);
-  regs.bx = 0;
-  _guest.Call(ADD_CREDITS);
-  regs.si = MISSILE_SOLD_TEXT;
-  _guest.JumpBack(EQUIP_MESSAGE);
+  AddCredits(_state, _state.Get(DS.data8245));
+  return ToEquipMessage(_hardware, MISSILE_SOLD_TEXT);
 }
 
-// 628A: S on the equipment menu, for the resale price. Leaves SI at the message for 6214, after the jumps back the
-// original takes on the way.
-void SellEquipment(Guest& _guest)
+// 6295: S on the equipment menu, once OpenEquipMessage has saved the attribute, for the resale price. Returns the message for
+// ShowEquipMessage, after the jumps back the original takes on the way.
+[[nodiscard]] std::uint16_t SellEquipment(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  OpenEquipMessage(_guest);
-  regs.bx = _guest.Get(DS.menuSelectedRow);
-  const std::uint8_t row = Low(regs.bx);
+  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
   if (row < FIRST_FITTED_ROW)
   {
-    SellFuelOrMissile(_guest);
-    return;
+    return SellFuelOrMissile(_state, _hardware, row);
   }
-  if (row == CARGO_BAY_ROW && _guest.Get(DS.cargoUsedTonnes) >= CARGO_BAY_SALE_TONNES)
+  if (row == CARGO_BAY_ROW && _state.Get(DS.cargoUsedTonnes) >= CARGO_BAY_SALE_TONNES)
   {
-    regs.si = TOO_MUCH_CARGO_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, TOO_MUCH_CARGO_TEXT);
   }
-  regs.bx = static_cast<std::uint16_t>(regs.bx + FITTED_BEFORE_FUEL);
-  if (_guest.Byte(regs.bx) == 0)
+  const auto fitted = static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL);
+  if (_state.Byte(fitted) == 0)
   {
-    regs.si = NO_ITEM_TO_SELL_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, NO_ITEM_TO_SELL_TEXT);
   }
-  if (_guest.Get(DS.menuSelectedRow) == FUEL_SCOOPS_ROW && _guest.Get(DS.miningLaserCount) != 0)
+  if (_state.Get(DS.menuSelectedRow) == FUEL_SCOOPS_ROW && _state.Get(DS.miningLaserCount) != 0)
   {
-    regs.si = SELL_MINING_LASER_TEXT;
-    _guest.JumpBack(EQUIP_MESSAGE);
-    return;
+    return ToEquipMessage(_hardware, SELL_MINING_LASER_TEXT);
   }
-  const auto left = static_cast<std::uint8_t>(_guest.Byte(regs.bx) - 1);
-  _guest.SetByte(regs.bx, left);
+  const auto left = static_cast<std::uint8_t>(_state.Byte(fitted) - 1);
+  _state.SetByte(fitted, left);
   if (left == 0)
   {
-    _guest.Call(CLEAR_EQUIPMENT_SELL_PRICE);
+    ClearEquipmentSellPrice(_state);
   }
-  regs.bx = static_cast<std::uint16_t>(PriceSlot(_guest.Get(DS.menuSelectedRow)) + 2);
-  regs.ax = _guest.Word(regs.bx);
-  regs.bx = 0;
-  _guest.Call(ADD_CREDITS);
-  _guest.Call(SELECT_LASER_TYPE);
-  if (_guest.Flag(FLAG_ZERO))
+  AddCredits(_state, _state.Word(Offset(PriceSlot(_state.Get(DS.menuSelectedRow)), 2)));
+  if (SelectLaserType(_state))
   {
-    _guest.Call(CHOOSE_MOUNT_TO_REMOVE_LASER);
+    ChooseMountToRemoveLaser(_state, _hardware);
   }
-  regs.si = ITEM_SOLD_TEXT;
-  _guest.JumpBack(EQUIP_MESSAGE);
+  return ToEquipMessage(_hardware, ITEM_SOLD_TEXT);
 }
 
 // 63C3 and 6490: the mount box at _box painted in textAttribute, then the one left of it, from FORE round to LEFT,
@@ -520,29 +465,6 @@ std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
   return box;
 }
 
-// What the last PaintLaserMountBox leaves in the registers: SI on _box, AL the attribute it painted, and DL and CX
-// counted down to 0.
-void MountBoxOut(Registers& _regs, const GameState& _state, std::uint16_t _box)
-{
-  _regs.si = _box;
-  SetLow(_regs.ax, _state.Get(DS.textAttribute));
-  SetLow(_regs.dx, 0);
-  _regs.cx = 0;
-}
-
-// The mount box moved from the one at SI, and the registers as the original leaves them.
-void MoveMountBoxLeftOnRegisters(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  MountBoxOut(regs, _guest.State(), MoveMountBoxLeft(_guest.State(), regs.si));
-}
-
-void MoveMountBoxRightOnRegisters(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  MountBoxOut(regs, _guest.State(), MoveMountBoxRight(_guest.State(), regs.si));
-}
-
 // 6438 and 6505: the mount message at DS:_text on the message line, in the menu's attribute. _jumpedTo, when not 0, is
 // where the original jumps back to on the way: 6509, from 653D, the tail the two messages share (ADR-015). The PUSH SI /
 // POP SI round it keep the box, which the routine never touches.
@@ -556,45 +478,22 @@ PrintedText PrintMountMessage(GameState& _state, Hardware& _hardware, std::uint1
   return PrintTextModeString(_state, _text, MESSAGE_OFFSET);
 }
 
-// What PrintMountMessage leaves in the registers: SI kept, and PrintTextModeString's DI, ES and AX, the attribute it
-// printed in with the NUL in AL.
-void MountMessageOut(Registers& _regs, PrintedText _printed) noexcept
+// SHR CH,CL with CL the selected mount + 1 and CH laserMountsFitted: whether the mount's bit, which it shifts out into the
+// carry, is set.
+[[nodiscard]] bool IsMountFitted(const GameState& _state)
 {
-  _regs.di = _printed.nextCell;
-  _regs.es = Guest::VIDEO_SEGMENT;
-  _regs.ax = Join(MENU_ATTRIBUTE, 0);
+  return ((_state.Get(DS.laserMountsFitted) >> _state.Get(DS.selectedLaserMount)) & 1) != 0;
 }
-
-// What SHR CH,CL leaves, with CL the selected mount + 1 and CH laserMountsFitted.
-struct MountBit
-{
-  bool fitted;              ///< the mount's bit of laserMountsFitted, which the shift leaves in the carry
-  std::uint8_t shiftCount;  ///< CL: the selected mount + 1
-  std::uint8_t mountsAbove; ///< CH: laserMountsFitted shifted past the mount's bit
-};
-
-[[nodiscard]] MountBit ShiftOutMountBit(const GameState& _state)
-{
-  const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
-  const std::uint8_t fitted = _state.Get(DS.laserMountsFitted);
-  return MountBit{((fitted >> mount) & 1) != 0, static_cast<std::uint8_t>(mount + 1), static_cast<std::uint8_t>(fitted >> (mount + 1u))};
-}
-
-// What Space did on a mount chooser's mount (642A and 64F7).
-struct MountSpace
-{
-  bool done;           ///< the laser is fitted or removed, and the help text redrawn over the mount menu
-  PrintedText message; ///< when it is not, where the message saying why stopped
-  PrintedLines help;   ///< when it is, where RedrawEquipHelpText stopped
-};
 
 // 642A: Space in ChooseMountToFitLaser. A free mount gets the bought laser: its bit of laserMountsFitted set, and its two bits
-// of laserMountTypes cleared and then set to the type.
-MountSpace FitLaserOnMount(GameState& _state, Hardware& _hardware)
+// of laserMountTypes cleared and then set to the type, and the help text redrawn over the mount menu. Returns whether it did;
+// otherwise it says the mount is occupied.
+bool FitLaserOnMount(GameState& _state, Hardware& _hardware)
 {
-  if (ShiftOutMountBit(_state).fitted)
+  if (IsMountFitted(_state))
   {
-    return MountSpace{false, PrintMountMessage(_state, _hardware, MOUNT_OCCUPIED_TEXT, 0), {}};
+    PrintMountMessage(_state, _hardware, MOUNT_OCCUPIED_TEXT, 0);
+    return false;
   }
   const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
   _state.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_state.Get(DS.laserMountsFitted) | (1u << mount)));
@@ -602,131 +501,91 @@ MountSpace FitLaserOnMount(GameState& _state, Hardware& _hardware)
   const auto bits = static_cast<std::uint16_t>(Join(_state.Get(DS.selectedLaserType), MOUNT_TYPE_BITS) << (mount * 2u));
   _state.Set(DS.laserMountTypes, static_cast<std::uint8_t>(_state.Get(DS.laserMountTypes) & ~Low(bits)));
   _state.Set(DS.laserMountTypes, static_cast<std::uint8_t>(_state.Get(DS.laserMountTypes) | High(bits)));
-  return MountSpace{true, {}, RedrawEquipHelpText(_state)};
+  RedrawEquipHelpText(_state);
+  return true;
 }
 
-// 64F7: Space in ChooseMountToRemoveLaser. A mount holding the sold laser's type is freed: its bit of laserMountsFitted
-// cleared. "Wrong laser type!" jumps back into the message code the other message runs on into (653D to 6509).
-MountSpace RemoveLaserFromMount(GameState& _state, Hardware& _hardware)
+// 64F7: Space in ChooseMountToRemoveLaser. A mount holding the sold laser's type is freed: its bit of laserMountsFitted cleared,
+// and the help text redrawn. Returns whether it was; otherwise it says why. "Wrong laser type!" jumps back into the message code
+// the other message runs on into (653D to 6509).
+bool RemoveLaserFromMount(GameState& _state, Hardware& _hardware)
 {
-  if (!ShiftOutMountBit(_state).fitted)
+  if (!IsMountFitted(_state))
   {
-    return MountSpace{false, PrintMountMessage(_state, _hardware, NO_LASER_ON_MOUNT_TEXT, 0), {}};
+    PrintMountMessage(_state, _hardware, NO_LASER_ON_MOUNT_TEXT, 0);
+    return false;
   }
   const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
   if (((_state.Get(DS.laserMountTypes) >> (mount * 2u)) & MOUNT_TYPE_BITS) != _state.Get(DS.selectedLaserType))
   {
-    return MountSpace{false, PrintMountMessage(_state, _hardware, WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE), {}};
+    PrintMountMessage(_state, _hardware, WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE);
+    return false;
   }
   _state.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_state.Get(DS.laserMountsFitted) & ~(1u << mount)));
-  return MountSpace{true, {}, RedrawEquipHelpText(_state)};
-}
-
-// What Space leaves in the registers for the chooser's loop: when the laser is fitted or removed, RedrawEquipHelpText's
-// print, AX the help's attribute with the NUL in AL, and its LOOP's CX = 0; otherwise _count, CX as the shifts leave it, and
-// the message's DI, ES and AX, SI kept.
-void MountSpaceOut(Registers& _regs, const MountSpace& _space, std::uint16_t _count)
-{
-  if (_space.done)
-  {
-    _regs.si = _space.help.end;
-    _regs.di = _space.help.nextLine;
-    _regs.es = Guest::VIDEO_SEGMENT;
-    _regs.ax = Join(HELP_ATTRIBUTE, 0);
-    _regs.cx = 0;
-    return;
-  }
-  _regs.cx = _count;
-  MountMessageOut(_regs, _space.message);
-}
-
-// FitLaserOnMount, and the registers as the original leaves them: CL the selected mount + 1 and CH what SHR CH,CL left.
-bool FitLaserOnMountOnRegisters(Guest& _guest)
-{
-  const MountBit bit = ShiftOutMountBit(_guest.State());
-  const MountSpace space = FitLaserOnMount(_guest.State(), _guest.Devices());
-  MountSpaceOut(_guest.Regs(), space, Join(bit.mountsAbove, bit.shiftCount));
-  return space.done;
-}
-
-// RemoveLaserFromMount, and the registers as the original leaves them: CL as FitLaserOnMountOnRegisters leaves it, or, once
-// the mount is found fitted with the wrong laser, its two bits' shift.
-bool RemoveLaserFromMountOnRegisters(Guest& _guest)
-{
-  const MountBit bit = ShiftOutMountBit(_guest.State());
-  const MountSpace space = RemoveLaserFromMount(_guest.State(), _guest.Devices());
-  const std::uint8_t count = bit.fitted ? static_cast<std::uint8_t>((bit.shiftCount - 1) << 1) : bit.shiftCount;
-  MountSpaceOut(_guest.Regs(), space, Join(bit.mountsAbove, count));
-  return space.done;
+  RedrawEquipHelpText(_state);
+  return true;
 }
 
 // The two mount choosers are one loop at two addresses: where each backward jump lands, and what Space does.
 struct MountChooser
 {
-  std::uint16_t steer;    // CALL ReadSteering, where every other key goes back to
-  std::uint16_t left;     // the box moved left
-  std::uint16_t right;    // the box moved right
-  std::uint16_t tickLoop; // the poll's LOOP
-  bool (*space)(Guest&);  // true once the laser is fitted or removed
+  std::uint16_t steer;                  // CALL ReadSteering, where every other key goes back to
+  std::uint16_t left;                   // the box moved left
+  std::uint16_t right;                  // the box moved right
+  std::uint16_t tickLoop;               // the poll's LOOP
+  bool (*space)(GameState&, Hardware&); // Space's work on the selected mount: true once it is done
 };
 
-constexpr MountChooser FIT_CHOOSER{0x63B5, 0x63C3, 0x63E1, 0x6405, &FitLaserOnMountOnRegisters};
-constexpr MountChooser REMOVE_CHOOSER{0x6482, 0x6490, 0x64AE, 0x64D2, &RemoveLaserFromMountOnRegisters};
+constexpr MountChooser FIT_CHOOSER{0x63B5, 0x63C3, 0x63E1, 0x6405, &FitLaserOnMount};
+constexpr MountChooser REMOVE_CHOOSER{0x6482, 0x6490, 0x64AE, 0x64D2, &RemoveLaserFromMount};
 
-// 63B5-6448 and 6482-6515: the box moved by the steering or the arrow keys until Space does its work.
-void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
+// 63B5-6448 and 6482-6515: the box moved by the steering's roll or the arrow keys until Space does its work, from the box and AL
+// in _start. Each turn to the steering carries the box (SI) and AL, which ReadSteering fires the stick with and GetKey shifts each
+// key's Shift into; each turn to a box's move carries the box.
+void RunMountChooser(GameState& _state, Hardware& _hardware, const MountChooser& _chooser, MenuLoop _start)
 {
-  Registers& regs = _guest.Regs();
+  MenuLoop loop = _start;
   for (;;)
   {
-    _guest.Call(READ_STEERING);
-    const std::uint8_t roll = Low(regs.ax);
+    const std::uint8_t roll = ReadSteering(_state, _hardware, loop.al).roll;
+    loop.al = roll;
     if (roll != 0)
     {
-      _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
-      if ((roll & 0x80) != 0)
-      {
-        MoveMountBoxLeftOnRegisters(_guest);
-      }
-      else
-      {
-        MoveMountBoxRightOnRegisters(_guest);
-      }
+      _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+      loop.row = (roll & 0x80) != 0 ? MoveMountBoxLeft(_state, loop.row) : MoveMountBoxRight(_state, loop.row);
+      loop.al = MOUNT_HIGHLIGHT_ATTRIBUTE; // the second PaintLaserMountBox's AL
     }
     for (;;)
     {
-      if (!PollMenuKey(_guest, _chooser.tickLoop))
+      const KeyPress key = PollMenuKey(_state, _hardware, _chooser.tickLoop);
+      loop.al = AlAfterKey(loop.al, key);
+      const std::uint8_t code = key.scanCode;
+      if (code == 0)
       {
-        _guest.JumpBack(_chooser.steer);
+        _hardware.LoopTurn(_chooser.steer, {loop.row, loop.al});
         break;
       }
-      _guest.Push(regs.ax);
-      _guest.Call(CLEAR_DOCKED_MESSAGE_LINE);
-      regs.ax = _guest.Pop();
-      const std::uint8_t key = High(regs.ax);
-      if (key == SCAN_SPACE)
+      // PUSH AX and POP AX round it.
+      ClearDockedMessageLine(_state, GameState::VIDEO_SEGMENT);
+      if (code == SCAN_SPACE)
       {
-        if (_chooser.space(_guest))
+        if (_chooser.space(_state, _hardware))
         {
           return;
         }
-        _guest.JumpBack(_chooser.steer);
+        loop.al = 0; // the message's NUL
+        _hardware.LoopTurn(_chooser.steer, {loop.row, loop.al});
         break;
       }
-      _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
-      if (key == SCAN_LEFT)
+      _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+      if (code == SCAN_LEFT || code == SCAN_RIGHT)
       {
-        _guest.JumpBack(_chooser.left);
-        MoveMountBoxLeftOnRegisters(_guest);
+        _hardware.LoopTurn(code == SCAN_LEFT ? _chooser.left : _chooser.right, {loop.row});
+        loop.row = code == SCAN_LEFT ? MoveMountBoxLeft(_state, loop.row) : MoveMountBoxRight(_state, loop.row);
+        loop.al = MOUNT_HIGHLIGHT_ATTRIBUTE;
         continue;
       }
-      if (key == SCAN_RIGHT)
-      {
-        _guest.JumpBack(_chooser.right);
-        MoveMountBoxRightOnRegisters(_guest);
-        continue;
-      }
-      _guest.JumpBack(_chooser.steer);
+      _hardware.LoopTurn(_chooser.steer, {loop.row, loop.al});
       break;
     }
   }
@@ -760,53 +619,27 @@ void LaunchEscapePod(GameState& _state)
   }
 }
 
-void TryScoopObject(Guest& _guest)
+Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
 {
-  Registers& regs = _guest.Regs();
-  std::uint8_t space = _guest.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
-  space = static_cast<std::uint8_t>(space - _guest.Get(DS.cargoUsedTonnes));
-  SetLow(regs.dx, space);
-  _guest.Set(DS.freeCargoTonnes, space);
-  // The box: y from 30 to 229, x and z within 149 either side.
-  if ((regs.bx & 0x8000) != 0)
+  std::uint8_t space = _state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
+  space = static_cast<std::uint8_t>(space - _state.Get(DS.cargoUsedTonnes));
+  _state.Set(DS.freeCargoTonnes, space);
+  if (!TestScoopBox(_view).inside)
   {
-    return;
-  }
-  const auto above = static_cast<std::uint16_t>(regs.bx - SCOOP_LOWEST);
-  regs.dx = above;
-  if (regs.bx < SCOOP_LOWEST)
-  {
-    return;
-  }
-  regs.dx = static_cast<std::uint16_t>(above - SCOOP_HEIGHT);
-  if (above >= SCOOP_HEIGHT)
-  {
-    return;
-  }
-  regs.dx = Magnitude(regs.ax);
-  if (regs.dx >= SCOOP_HALF_WIDTH)
-  {
-    return;
-  }
-  regs.dx = Magnitude(regs.cx);
-  if (regs.dx >= SCOOP_HALF_WIDTH)
-  {
-    return;
+    return Scoop{false, {}};
   }
 
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  const auto type = static_cast<std::uint8_t>((_guest.Byte(regs.di) >> 1) & TYPE_MASK);
-  const std::uint8_t flags = _guest.Byte(static_cast<std::uint16_t>(regs.di + SLOT_FLAGS));
-  const bool full = _guest.Get(DS.freeCargoTonnes) == 0;
+  const auto type = static_cast<std::uint8_t>((_slot.Get(SlotByte::Type) >> 1) & TYPE_MASK);
+  const std::uint8_t flags = _slot.Get(SlotByte::Flags);
+  const bool full = _state.Get(DS.freeCargoTonnes) == 0;
+  Scoop scoop{true, {}};
   std::uint16_t message = DS.scoopRetrievalInactiveText.offset;
   if (type == TYPE_CARGO_BARREL)
   {
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
-      RemoveObjectEntry(_guest);
-      _guest.Set(DS.maskingDeviceRecovered, 1);
+      scoop.removedBlip = RemoveObject(_state, _slot);
+      _state.Set(DS.maskingDeviceRecovered, 1);
       message = DS.maskingDeviceText.offset;
     }
     else if (full)
@@ -815,58 +648,38 @@ void TryScoopObject(Guest& _guest)
     }
     else
     {
-      // A random product 0-10, furs for slaves, into the hold, and its name for the message.
-      RemoveObjectEntry(_guest);
-      NextRandomEntry(_guest);
-      regs.ax = Low(regs.ax);
-      SetLow(regs.bx, RANDOM_PRODUCT_DIVISOR);
-      DivideByteOnRegisters(_guest, RANDOM_PRODUCT_DIVISOR);
-      if (Low(regs.ax) == PRODUCT_SLAVES)
+      // A random product 0-10, furs for slaves, into the hold, and its name for the message. The divide cannot overflow; the
+      // BX its trap would save is y's high byte over the divisor.
+      scoop.removedBlip = RemoveObject(_state, _slot);
+      const std::uint8_t random = Low(NextRandom(_state));
+      const auto y = static_cast<std::uint16_t>(_view.y);
+      std::uint8_t product = DivideByte(_state, random, RANDOM_PRODUCT_DIVISOR, Join(High(y), RANDOM_PRODUCT_DIVISOR)).quotient;
+      if (product == PRODUCT_SLAVES)
       {
-        SetLow(regs.ax, PRODUCT_FURS);
+        product = PRODUCT_FURS;
       }
-      regs.ax = Low(regs.ax);
-      regs.bx = static_cast<std::uint16_t>(regs.ax << 1);
-      IncrementByte(_guest.State(), static_cast<std::uint16_t>(regs.bx + DS.cargoHold.offset));
-      _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
-      regs.bx = static_cast<std::uint16_t>(regs.ax * PRODUCT_NAME_BYTES + DS.productNames.offset);
-      const std::uint16_t slot = regs.di;
-      regs.di = DS.scoopedCargoText.offset;
-      for (regs.cx = SCOOPED_NAME_BYTES; regs.cx != 0; --regs.cx)
+      IncrementByte(_state, DS.cargoHold.At(product));
+      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
+      const auto name = static_cast<std::uint16_t>(product * PRODUCT_NAME_BYTES + DS.productNames.offset);
+      for (std::uint16_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
-        SetLow(regs.ax, _guest.Byte(regs.bx));
-        ++regs.bx;
-        _guest.SetByte(regs.di, Low(regs.ax));
-        ++regs.di;
+        _state.SetByte(Offset(DS.scoopedCargoText.offset, letter), _state.Byte(Offset(name, letter)));
       }
-      regs.di = slot;
       message = DS.scoopedCargoText.offset;
     }
   }
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
   {
-    // Gems, gold and platinum always; minerals or alloys too if there is room.
-    RemoveObjectEntry(_guest);
-    NextRandomEntry(_guest);
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & 7));
-    AddPrecious(_guest.State(), DS.cargoGemStonesGrams, Low(regs.ax));
-    SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) & 3));
-    AddPrecious(_guest.State(), DS.cargoGoldKg, Low(regs.ax));
-    NextRandomEntry(_guest);
-    SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & 3) + 1));
-    AddPrecious(_guest.State(), DS.cargoPlatinumKg, High(regs.ax));
-    if (_guest.Get(DS.freeCargoTonnes) != 0)
+    // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' AL, as the original adds it.
+    scoop.removedBlip = RemoveObject(_state, _slot);
+    const std::uint8_t gems = Low(NextRandom(_state)) & 7;
+    AddPrecious(_state, DS.cargoGemStonesGrams, gems);
+    AddPrecious(_state, DS.cargoGoldKg, gems);
+    AddPrecious(_state, DS.cargoPlatinumKg, static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
+    if (_state.Get(DS.freeCargoTonnes) != 0)
     {
-      NextRandomEntry(_guest);
-      if (Low(regs.ax) >= MINERALS_FROM)
-      {
-        IncrementByte(_guest.State(), DS.cargoMineralsTonnes.offset);
-      }
-      else
-      {
-        IncrementByte(_guest.State(), DS.cargoAlloysTonnes.offset);
-      }
-      _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
+      IncrementByte(_state, Low(NextRandom(_state)) >= MINERALS_FROM ? DS.cargoMineralsTonnes.offset : DS.cargoAlloysTonnes.offset);
+      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
     }
     message = DS.preciousMetalsText.offset;
   }
@@ -878,115 +691,76 @@ void TryScoopObject(Guest& _guest)
     }
     else
     {
-      RemoveObjectEntry(_guest);
+      scoop.removedBlip = RemoveObject(_state, _slot);
       const DataField<std::uint8_t> held = type == TYPE_SPLINTER     ? DS.cargoAlloysTonnes
                                            : type == TYPE_ESCAPE_POD ? DS.cargoSlavesTonnes
                                                                      : DS.cargoAlienItemsTonnes;
-      IncrementByte(_guest.State(), held.offset);
-      _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + 1));
+      IncrementByte(_state, held.offset);
+      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
       message = type == TYPE_SPLINTER     ? DS.metalAlloysText.offset
                 : type == TYPE_ESCAPE_POD ? DS.escapePodRetrievedText.offset
                                           : DS.alienItemsText.offset;
     }
   }
-  regs.ax = message;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
+  _state.Set(DS.messagePointer, message);
+  _state.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
+  return scoop;
 }
 
-void ShowEquipShipScreen(Guest& _guest)
+ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  regs.si = DS.equipShipFrame.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_OFFSET;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = DS.equipHelpText.offset;
-  regs.di = HELP_TEXT_OFFSET;
-  _guest.Call(PRINT_COUNTED_TEXT_LINES);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.equipShipFrame.offset, _backward), TITLE_OFFSET);
+  PrintCountedTextLines(_state, DS.equipHelpText.offset, HELP_TEXT_OFFSET);
 
-  // equipmentList: a count, then for each item its tech level, name, government and economy factors and base price.
-  // The list is sorted by tech level, so the first item beyond currentTechLevel+1 ends it.
-  regs.si = DS.equipmentList.offset;
-  regs.cx = _guest.Byte(regs.si);
-  ++regs.si;
-  SetLow(regs.dx, static_cast<std::uint8_t>(_guest.Get(DS.currentTechLevel) + 2));
-  _guest.Set(DS.menuRowCount, 0);
-  regs.di = FIRST_ITEM_OFFSET;
-  while (_guest.Byte(regs.si) < Low(regs.dx))
+  // equipmentList: a count, then for each item its tech level, name, government and economy factors and base price. The list is
+  // sorted by tech level, so the first item beyond currentTechLevel+1 ends it. Each turn carries the count, the item and the row's
+  // place.
+  std::uint16_t item = DS.equipmentList.offset;
+  std::uint16_t left = _state.Byte(item);
+  item = Offset(item, 1);
+  const auto techLimit = static_cast<std::uint8_t>(_state.Get(DS.currentTechLevel) + 2);
+  _state.Set(DS.menuRowCount, 0);
+  std::uint16_t cell = FIRST_ITEM_OFFSET;
+  while (_state.Byte(item) < techLimit)
   {
-    _guest.Push(regs.cx);
-    _guest.Push(regs.di);
-    const auto row = static_cast<std::uint8_t>(_guest.Get(DS.menuRowCount) + 1);
-    _guest.Set(DS.menuRowCount, row);
-    ++regs.si;
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    ++regs.si;
-    regs.ax = SignedProduct(_guest.Byte(regs.si), _guest.Get(DS.currentGovernment));
-    ++regs.si;
-    regs.bx = regs.ax;
-    regs.ax = SignedProduct(_guest.Byte(regs.si), _guest.Get(DS.currentEconomy));
-    ++regs.si;
-    regs.ax = static_cast<std::uint16_t>(regs.ax + regs.bx + _guest.Word(regs.si));
-    regs.bx = static_cast<std::uint16_t>(row * 4);
-    _guest.SetWord(PriceSlot(row), regs.ax);
-    _guest.SetWord(static_cast<std::uint16_t>(PriceSlot(row) + 2), 0);
+    const auto row = static_cast<std::uint8_t>(_state.Get(DS.menuRowCount) + 1);
+    _state.Set(DS.menuRowCount, row);
+    // The price: the government's and the economy's factors, each by IMUL, and the base price.
+    std::uint16_t factor = Offset(PrintTextModeString(_state, Offset(item, 1), cell).end, 1);
+    const std::uint16_t government = SignedProduct(_state.Byte(factor), _state.Get(DS.currentGovernment));
+    factor = Offset(factor, 1);
+    const std::uint16_t economy = SignedProduct(_state.Byte(factor), _state.Get(DS.currentEconomy));
+    factor = Offset(factor, 1);
+    const auto price = static_cast<std::uint16_t>(economy + government + _state.Word(factor));
+    _state.SetWord(PriceSlot(row), price);
+    _state.SetWord(Offset(PriceSlot(row), 2), 0);
     // A resale price only for an item fitted, and never for fuel.
-    std::uint16_t resale = 0;
-    if (row != FUEL_ROW)
+    const bool resold = row != FUEL_ROW && _state.Byte(static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL)) != 0;
+    _state.Set(DS.resalePriceInput, resold ? price : std::uint16_t{0});
+    FormatTenths(_state, price);
+    PrintTextModeString(_state, DS.priceText.offset, Offset(cell, PRICE_COLUMN));
+    const std::uint16_t resale = ComputeResalePrice(_state);
+    std::uint16_t resaleText = NO_RESALE_TEXT;
+    if (resale != 0)
     {
-      regs.bx = static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL);
-      if (_guest.Byte(regs.bx) != 0)
-      {
-        resale = regs.ax;
-      }
-    }
-    _guest.Set(DS.resalePriceInput, resale);
-    _guest.Call(FORMAT_TENTHS);
-    regs.di = _guest.Pop();
-    _guest.Push(regs.si);
-    _guest.Push(regs.di);
-    regs.si = DS.priceText.offset;
-    regs.di = static_cast<std::uint16_t>(regs.di + PRICE_COLUMN);
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    _guest.Call(COMPUTE_RESALE_PRICE);
-    if (_guest.Flag(FLAG_ZERO))
-    {
-      regs.si = NO_RESALE_TEXT;
-    }
-    else
-    {
-      regs.bx = static_cast<std::uint16_t>(PriceSlot(_guest.Get(DS.menuRowCount)) + 2);
-      _guest.SetWord(regs.bx, regs.ax);
-      regs.di = DS.priceText.offset;
-      _guest.Call(FORMAT_DECIMAL5);
-      regs.di = DS.priceText.offset;
-      regs.cx = 3;
-      _guest.Call(BLANK_LEADING_ZEROS);
+      _state.SetWord(Offset(PriceSlot(_state.Get(DS.menuRowCount)), 2), resale);
+      FormatDecimal5(_state, resale, DS.priceText.offset);
+      BlankLeadingZeros(_state, DS.priceText.offset, RESALE_DIGITS_BLANKED);
       // Tenths: the last digit moved right one for the point.
-      SetLow(regs.ax, _guest.Get(DS.data8040));
-      _guest.Set(DS.data8041, Low(regs.ax));
-      _guest.Set(DS.data8040, '.');
-      regs.si = DS.priceText.offset;
+      _state.Set(DS.data8041, _state.Get(DS.data8040));
+      _state.Set(DS.data8040, '.');
+      resaleText = DS.priceText.offset;
     }
-    regs.di = _guest.Pop();
-    _guest.Push(regs.di);
-    regs.di = static_cast<std::uint16_t>(regs.di + RESALE_COLUMN);
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    regs.di = static_cast<std::uint16_t>(_guest.Pop() + ROW_BYTES);
-    regs.si = static_cast<std::uint16_t>(_guest.Pop() + 2);
-    regs.cx = static_cast<std::uint16_t>(_guest.Pop() - 1);
-    if (regs.cx == 0)
+    PrintTextModeString(_state, resaleText, Offset(cell, RESALE_COLUMN));
+    cell = Offset(cell, ROW_BYTES);
+    item = Offset(factor, 2);
+    if (--left == 0)
     {
       break;
     }
-    _guest.JumpBack(EQUIPMENT_LIST_ROW);
+    _hardware.LoopTurn(EQUIPMENT_LIST_ROW, {left, item, cell});
   }
-  regs.si = EQUIP_MENU_FIRST_ROW;
-  _guest.Call(RUN_EQUIP_SHIP_MENU);
+  return RunEquipShipMenu(_state, _hardware, EQUIP_MENU_FIRST_ROW);
 }
 
 bool SelectLaserType(GameState& _state)
@@ -1006,58 +780,51 @@ bool SelectLaserType(GameState& _state)
   }
 }
 
-void RunEquipShipMenu(Guest& _guest)
+ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.Set(DS.menuFirstRowAttr, regs.si);
-  StartMenuOnRegisters(_guest);
+  _state.Set(DS.menuFirstRowAttr, _firstRow);
+  // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
+  MenuLoop loop{StartMenu(_state).row, 0};
+  loop.al = _state.Get(DS.textAttribute);
   for (;;)
   {
-    SteerMenuCursor(_guest);
+    // 612F: the steering; then the keys, each turn to the steering carrying the cursor and AL, each to a cursor's move the
+    // cursor.
+    loop = SteerMenuCursor(_state, _hardware, loop);
     for (;;)
     {
-      if (!PollMenuKey(_guest, EQUIP_TICK_LOOP))
+      const KeyPress key = PollMenuKey(_state, _hardware, EQUIP_TICK_LOOP);
+      loop.al = AlAfterKey(loop.al, key);
+      const std::uint8_t code = key.scanCode;
+      if (code == 0)
       {
-        _guest.JumpBack(EQUIP_STEER);
+        _hardware.LoopTurn(EQUIP_STEER, {loop.row, loop.al});
         break;
       }
-      _guest.Push(regs.ax);
-      _guest.Call(PRINT_CREDITS_ON_MESSAGE_LINE);
-      regs.ax = _guest.Pop();
-      const std::uint8_t key = High(regs.ax);
-      if (key == SCAN_B || key == SCAN_S)
+      // PUSH AX and POP AX round it.
+      PrintCreditsOnMessageLine(_state);
+      if (code == SCAN_B || code == SCAN_S)
       {
-        if (key == SCAN_B)
-        {
-          BuyEquipment(_guest);
-        }
-        else
-        {
-          SellEquipment(_guest);
-        }
-        ShowEquipMessage(_guest);
-        _guest.JumpBack(EQUIP_STEER);
+        // B buys and S sells the row's item, and its message; then AL is the attribute OpenEquipMessage saved, popped back.
+        const std::uint8_t saved = OpenEquipMessage(_state);
+        ShowEquipMessage(_state, code == SCAN_B ? BuyEquipment(_state, _hardware) : SellEquipment(_state, _hardware), saved);
+        loop.al = saved;
+        _hardware.LoopTurn(EQUIP_STEER, {loop.row, loop.al});
         break;
       }
-      if (key == SCAN_UP)
+      if (code == SCAN_UP || code == SCAN_DOWN)
       {
-        _guest.JumpBack(EQUIP_CURSOR_UP);
-        MoveMenuCursorUpOnRegisters(_guest);
+        _hardware.LoopTurn(code == SCAN_UP ? EQUIP_CURSOR_UP : EQUIP_CURSOR_DOWN, {loop.row});
+        loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
+        loop.al = _state.Get(DS.textAttribute);
         continue;
       }
-      if (key == SCAN_DOWN)
+      // The screen's own F4 does nothing here.
+      if (code != SCAN_F4 && IsScreenKey(code))
       {
-        _guest.JumpBack(EQUIP_CURSOR_DOWN);
-        MoveMenuCursorDownOnRegisters(_guest);
-        continue;
+        return ScreenKey{code, loop.al};
       }
-      if (key != SCAN_F4 && IsScreenKey(key))
-      {
-        return;
-      }
-      _guest.JumpBack(EQUIP_STEER);
+      _hardware.LoopTurn(EQUIP_STEER, {loop.row, loop.al});
       break;
     }
   }
@@ -1086,23 +853,20 @@ PrintedText DrawLaserMountMenu(GameState& _state)
   return printed;
 }
 
-void ChooseMountToFitLaser(Guest& _guest)
+void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware)
 {
-  _guest.Call(DRAW_LASER_MOUNT_MENU);
-  RunMountChooser(_guest, FIT_CHOOSER);
+  DrawLaserMountMenu(_state);
+  // DrawLaserMountMenu leaves SI on FORE's box, and AL the highlight its last PaintLaserMountBox painted.
+  RunMountChooser(_state, _hardware, FIT_CHOOSER, MenuLoop{FIRST_MOUNT_BOX, MOUNT_HIGHLIGHT_ATTRIBUTE});
 }
 
-void ChooseMountToRemoveLaser(Guest& _guest)
+void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(DRAW_LASER_MOUNT_MENU);
-  _guest.Push(regs.si);
-  regs.si = SELL_LASER_TEXT;
-  regs.di = SELL_LASER_OFFSET;
-  _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = _guest.Pop();
-  RunMountChooser(_guest, REMOVE_CHOOSER);
+  DrawLaserMountMenu(_state);
+  _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+  PrintTextModeString(_state, SELL_LASER_TEXT, SELL_LASER_OFFSET);
+  // SI, pushed and popped round the print, on FORE's box; AL the print's NUL.
+  RunMountChooser(_state, _hardware, REMOVE_CHOOSER, MenuLoop{FIRST_MOUNT_BOX, 0});
 }
 
 PrintedLines RedrawEquipHelpText(GameState& _state)
@@ -1128,32 +892,28 @@ void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
   }
 }
 
-void PayForEquipmentItem(Guest& _guest)
+EquipmentPayment PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t row = _guest.Get(DS.menuSelectedRow);
-  regs.bx = WithLow(regs.bx, row);
+  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  std::uint16_t tenths = 0;
   if (row == FUEL_ROW)
   {
-    // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1.
-    const auto missing = static_cast<std::uint8_t>(~_guest.Get(DS.fuel));
-    regs.dx = _guest.Get(DS.data823F);
-    regs.ax = static_cast<std::uint16_t>(missing * Low(regs.dx));
-    regs.dx = WithLow(regs.dx, FUEL_UNITS_PER_TENTH);
-    DivideByteOnRegisters(_guest, FUEL_UNITS_PER_TENTH);
-    if (Low(regs.ax) == 0)
+    // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1, by a DIV that can overflow into the game's trap,
+    // which saves BX with the row in BL.
+    const auto missing = static_cast<std::uint8_t>(~_state.Get(DS.fuel));
+    const auto product = static_cast<std::uint16_t>(missing * Low(_state.Get(DS.data823F)));
+    std::uint8_t units = DivideByte(_state, product, FUEL_UNITS_PER_TENTH, WithLow(_bx, row)).quotient;
+    if (units == 0)
     {
-      regs.ax = WithLow(regs.ax, 1);
+      units = 1;
     }
-    regs.ax = Low(regs.ax);
+    tenths = units;
   }
   else
   {
-    regs.bx = PriceSlot(row);
-    regs.ax = _guest.Word(regs.bx);
+    tenths = _state.Word(PriceSlot(row));
   }
-  regs.bx = 0;
-  SubtractCreditsEntry(_guest);
+  return EquipmentPayment{SubtractCredits(_state, tenths), tenths};
 }
 
 PrintedText ClearEquipmentSellPrice(GameState& _state)
@@ -1184,31 +944,6 @@ MenuCursor StartMenu(GameState& _state)
   return MenuCursor{row, credits};
 }
 
-void StartMenuOnRegisters(Guest& _guest)
-{
-  MenuCursorOut(_guest.Regs(), _guest.State(), StartMenu(_guest.State()));
-}
-
-void SteerMenuCursor(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  _guest.Call(READ_STEERING);
-  const std::uint8_t pitch = Negate(High(regs.ax));
-  SetHigh(regs.ax, pitch);
-  if (pitch == 0)
-  {
-    return;
-  }
-  if ((pitch & 0x80) != 0)
-  {
-    MoveMenuCursorUpOnRegisters(_guest);
-  }
-  else
-  {
-    MoveMenuCursorDownOnRegisters(_guest);
-  }
-}
-
 MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
 {
   const PrintedText credits = PrintCreditsOnMessageLine(_state);
@@ -1230,18 +965,6 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
   return MenuCursor{row, credits};
 }
 
-void MoveMenuCursorUpOnRegisters(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  const bool wraps = _guest.Get(DS.menuSelectedRow) == 1;
-  MenuCursorOut(regs, _guest.State(), MoveMenuCursorUp(_guest.State(), regs.si));
-  if (wraps)
-  {
-    // AH from the SHRs that measure the way to the last row: menuRowCount*256/16.
-    SetHigh(regs.ax, High(static_cast<std::uint16_t>(MenuRowsQuarter(_guest.Get(DS.menuRowCount)) >> 2)));
-  }
-}
-
 MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
 {
   const PrintedText credits = PrintCreditsOnMessageLine(_state);
@@ -1259,32 +982,36 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
   return MenuCursor{row, credits};
 }
 
-void MoveMenuCursorDownOnRegisters(Guest& _guest)
-{
-  MenuCursorOut(_guest.Regs(), _guest.State(), MoveMenuCursorDown(_guest.State(), _guest.Regs().si));
-}
-
-bool PollMenuKey(Guest& _guest, std::uint16_t _tickLoop)
-{
-  Registers& regs = _guest.Regs();
-  regs.cx = TICKS_PER_POLL;
-  for (;;)
-  {
-    _guest.Call(WAIT_FOR_TIMER_TICK);
-    --regs.cx;
-    if (regs.cx == 0)
-    {
-      break;
-    }
-    _guest.JumpBack(_tickLoop);
-  }
-  _guest.Call(GET_KEY);
-  return !_guest.Flag(FLAG_ZERO);
-}
-
 bool IsScreenKey(std::uint8_t _key) noexcept
 {
   return _key == SCAN_ESCAPE || (_key >= SCAN_F1 && _key < SCAN_PAST_F10);
+}
+
+MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop)
+{
+  const Steering steering = ReadSteering(_state, _hardware, _loop.al);
+  // NEG AH: the pitch negated, and up when that is negative.
+  const std::uint8_t pitch = Negate(steering.pitch);
+  if (pitch == 0)
+  {
+    return MenuLoop{_loop.row, steering.roll};
+  }
+  const MenuCursor cursor = (pitch & 0x80) != 0 ? MoveMenuCursorUp(_state, _loop.row) : MoveMenuCursorDown(_state, _loop.row);
+  return MenuLoop{cursor.row, _state.Get(DS.textAttribute)};
+}
+
+KeyPress PollMenuKey(GameState& _state, Hardware& _hardware, std::uint16_t _tickLoop)
+{
+  for (std::uint16_t ticks = TICKS_PER_POLL;;)
+  {
+    WaitForTimerTick(_state, _hardware);
+    if (--ticks == 0)
+    {
+      break;
+    }
+    _hardware.LoopTurn(_tickLoop, {ticks});
+  }
+  return GetKey(_state, _hardware);
 }
 
 // ── The entries of the de-assembled routines ──
@@ -1297,10 +1024,12 @@ using Machine::NativeReturn;
 using Machine::NativeWait;
 using Machine::REGISTER_ALL;
 
-constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
 // Symbols.tsv's "clobbers all", but for DS, which the original keeps and its caller goes on with.
 constexpr NativeContract CLOBBERS_ALL_BUT_DS{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
 constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
+// The menus' and the equipment screen's: all but AX, the closing key in AH, and DS.
+constexpr NativeContract SHOWS_SCREEN{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_AX & ~Machine::REGISTER_DS), 0};
 
 } // namespace
 
@@ -1308,6 +1037,49 @@ void LaunchEscapePodEntry(Guest& _guest)
 {
   LaunchEscapePod(_guest.State());
   _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
+void TryScoopObjectEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::uint16_t x = regs.ax;
+  const std::uint16_t y = regs.bx;
+  const std::uint16_t z = regs.cx;
+  const Vector view{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)};
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const Scoop scoop = TryScoopObject(_guest.State(), slot, view);
+  // The contract keeps every register, so the entry leaves what the original does: DX with the free tonnes in DL, then what the
+  // box's test measured last, and once RemoveObject erases a blip, EraseScannerBlip's DX and ES. AX, BX and CX are pushed and
+  // popped round the scoop.
+  regs.dx = TestScoopBox(view).lastMeasure.value_or(WithLow(regs.dx, _guest.Get(DS.freeCargoTonnes)));
+  if (scoop.removedBlip)
+  {
+    EraseScannerBlipOut(_guest, slot, scoop.removedBlip);
+    regs.ax = x;
+    regs.bx = y;
+    regs.cx = z;
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void PayForEquipmentItemEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const EquipmentPayment payment = PayForEquipmentItem(_guest.State(), regs.bx);
+  // AX the price and BX 0, as SubtractCredits takes them, and for fuel DX the price word with the divisor in DL; SI where
+  // FormatCredits leaves it once they are paid.
+  if (_guest.Get(DS.menuSelectedRow) == FUEL_ROW)
+  {
+    regs.dx = WithLow(_guest.Get(DS.data823F), FUEL_UNITS_PER_TENTH);
+  }
+  regs.ax = payment.tenths;
+  regs.bx = 0;
+  if (payment.paid)
+  {
+    regs.si = DS.creditBalanceText.offset;
+  }
+  _guest.SetFlag(FLAG_CARRY, !payment.paid);
+  _guest.Clobber(RETURNS_CARRY);
 }
 
 void SelectLaserTypeEntry(Guest& _guest)
@@ -1384,21 +1156,49 @@ void ShowEquipmentSellPriceEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void ShowEquipShipScreenEntry(Guest& _guest)
+{
+  const ScreenKey key = ShowEquipShipScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Regs().ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
+
+void RunEquipShipMenuEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const ScreenKey key = RunEquipShipMenu(_guest.State(), _guest.Devices(), regs.si);
+  regs.ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
+
+void ChooseMountToFitLaserEntry(Guest& _guest)
+{
+  ChooseMountToFitLaser(_guest.State(), _guest.Devices());
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
+void ChooseMountToRemoveLaserEntry(Guest& _guest)
+{
+  ChooseMountToRemoveLaser(_guest.State(), _guest.Devices());
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
 namespace
 {
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x2F0F, "LaunchEscapePod", &LaunchEscapePodEntry, CLOBBERS_ALL_BUT_DS},
-  NativeEntry{0x4401, "TryScoopObject", &TryScoopObject, PRESERVES_ALL},
-  NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x4401, "TryScoopObject", &TryScoopObjectEntry, PRESERVES_ALL},
+  NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreenEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenuEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x633B, "SelectLaserType", &SelectLaserTypeEntry, RETURNS_ZERO},
   NativeEntry{0x6367, "DrawLaserMountMenu", &DrawLaserMountMenuEntry, PRESERVES_ALL},
-  NativeEntry{0x63B2, "ChooseMountToFitLaser", &ChooseMountToFitLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x646F, "ChooseMountToRemoveLaser", &ChooseMountToRemoveLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x63B2, "ChooseMountToFitLaser", &ChooseMountToFitLaserEntry, CLOBBERS_ALL_BUT_DS, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x646F, "ChooseMountToRemoveLaser", &ChooseMountToRemoveLaserEntry, CLOBBERS_ALL_BUT_DS, NativeReturn::Near, 0,
+              NativeWait::Always},
   NativeEntry{0x653F, "RedrawEquipHelpText", &RedrawEquipHelpTextEntry, PRESERVES_ALL},
   NativeEntry{0x6564, "PaintLaserMountBox", &PaintLaserMountBoxEntry, PRESERVES_ALL},
-  NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItem, NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItemEntry, RETURNS_CARRY},
   NativeEntry{0x6946, "ClearEquipmentSellPrice", &ClearEquipmentSellPriceEntry, PRESERVES_ALL},
   NativeEntry{0x6972, "ShowEquipmentSellPrice", &ShowEquipmentSellPriceEntry, PRESERVES_ALL},
 };

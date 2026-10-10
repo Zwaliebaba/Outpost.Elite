@@ -159,6 +159,81 @@ public:
     fails("file PILOT.CDR ../Replays/a.cdr", "without a directory");
     fails("file PILOT.CDR ..", "without a directory");
     fails("file PILOT.CDR C:a.cdr", "without a directory");
+    fails("end", "a step is a verb and one argument");
+    fails("end 0.0001", "end takes seconds, with at most three decimals");
+    fails("end 1; key y", "only digest and shot may follow end");
+    fails("end 1\nwait 1", "line 2");
+    fails("end 1; end 1", "only digest and shot may follow end");
+  }
+
+  // An end step (Replay.h) is the last that runs the machine, and the only one in which the program may end, as it must
+  // there: only digests and shots, which look at what the program left, may follow it, in the same text or a later one.
+  TEST_METHOD(AnEndStepIsTheLastThatRunsTheMachine)
+  {
+    std::vector<Elite::Step> steps;
+    std::string error;
+    Assert::IsTrue(Elite::ParseSteps("key y; end 1.5; digest dos; shot dos", steps, error), L"parses");
+    Assert::AreEqual(std::size_t{4}, steps.size());
+    Assert::IsTrue(steps[1].kind == Elite::StepKind::End);
+    Assert::AreEqual(std::uint64_t{1'500}, steps[1].waitMilliseconds);
+    Assert::IsTrue(Elite::ExpectedStop(steps[1]) == Machine::StopReason::Terminated, L"the program must end in an end step");
+    for (const std::size_t other : {std::size_t{0}, std::size_t{2}, std::size_t{3}})
+      Assert::IsTrue(Elite::ExpectedStop(steps[other]) == Machine::StopReason::Reached, L"and in no other");
+    Assert::IsTrue(Elite::ParseSteps("digest again", steps, error), L"a digest may follow, in a later text too");
+    Assert::IsFalse(Elite::ParseSteps("wait 1", steps, error), L"a wait may not");
+    Assert::IsTrue(error.find("only digest and shot may follow end") != std::string::npos, L"says why");
+  }
+
+  // Leaving for DOS: E on the disc menu asks, Y answers, and the program ends (int 20h) in the next step that runs the
+  // machine. In an end step that is what must happen, and digests after it read what the program left; in a wait it stops
+  // the run, as only an end step may; and an end step in which the program does not end, here because nothing answers
+  // the question, fails as surely (ExpectedStop).
+  TEST_METHOD(OnlyAnEndStepMayEndTheProgram)
+  {
+    // Any key, the disc menu, and E: "Are you sure (Y/N)?".
+    constexpr std::string_view TO_THE_QUESTION = "wait 0.5; key space; wait 3.5; key Escape; wait 0.3; key e; wait 0.3";
+    struct Ending
+    {
+      std::string_view steps;
+      Machine::StopReason stop; // what its step that runs the machine returns
+      bool accepted;            // whether that is what the step must return
+    };
+    const Ending endings[] = {{"key y; end 1; digest dos; digest again", Machine::StopReason::Terminated, true},
+                              {"key y; wait 1", Machine::StopReason::Terminated, false},
+                              {"end 1", Machine::StopReason::Reached, false}};
+    for (const Ending& ending : endings)
+    {
+      ReferenceRig rig("EndStep");
+      Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
+      std::vector<Elite::Step> steps;
+      std::string error;
+      Assert::IsTrue(Elite::ParseSteps(TO_THE_QUESTION, steps, error), L"parses");
+      Elite::ReplayPlayer player(rig.Host(), rig.Program());
+      std::string digest;
+      for (const Elite::Step& step : steps)
+        Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"the menus run");
+      steps.clear();
+      Assert::IsTrue(Elite::ParseSteps(ending.steps, steps, error), L"parses");
+      std::vector<std::string> digests;
+      for (const Elite::Step& step : steps)
+      {
+        const Machine::StopReason stop = player.Play(step, digest);
+        if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
+        {
+          Assert::IsTrue(stop == ending.stop, L"Y ends the program, and nothing else does");
+          Assert::AreEqual(ending.accepted, stop == Elite::ExpectedStop(step), L"only an end step may end it, and it must");
+        }
+        else
+          Assert::IsTrue(stop == Machine::StopReason::Reached, L"a key or a digest stops nothing");
+        if (step.kind == Elite::StepKind::Digest)
+          digests.push_back(digest);
+      }
+      if (!digests.empty())
+      {
+        Assert::AreEqual(std::size_t{64}, digests[0].size(), L"a digest after the end reads what the program left");
+        Assert::IsTrue(digests[0] == digests[1], L"which nothing changes");
+      }
+    }
   }
 
   // A file step (Replay.h) puts a copy of a file beside the replay into DOS's directory, as a file copied there

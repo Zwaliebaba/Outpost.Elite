@@ -1,0 +1,71 @@
+# Scoops a cargo canister. It starts from scooping-a-canister.cdr (Tools/PrepareCommanders.py): the commander
+# mining-laser.replay starts from, with fuel scoops and a mining laser, but with the random state 277,169 draws on,
+# which spawns a barrel 9,000 units ahead in the first second of space. Steered to pass under the nose, at full speed
+# until 2,000 units off and then slower, it is scooped (TryScoopObject): a random product, alloys this time, into the
+# hold. The draw count was found by a search of 1,000 counts for the soonest barrel scooped; the flight was played by
+# the scratch program mining-laser.replay's was, and what it pressed is recorded here.
+file JAMESON.CDR scooping-a-canister.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 1d6404221f8f12c45b39da15fdf6929ca95808cf455617a742458aafee0df125
+key F1; wait 1                     # launch
+# The flight, as recorded: a step for each change of the keys, and the frames between.
+down period; down Up; wait 0.350
+up period; wait 0.250
+down Left; up Up; down Down; wait 0.050
+up Left; wait 0.200
+down Left; wait 0.050
+digest barrel c9f646a794e4bbb134ecda6d5185fdebd8f7f0caa48b2c5177c2e2c3d02ef26e
+wait 0.100
+up Left; down Up; up Down; wait 0.300
+down j; down Left; wait 0.050
+up j; up Up; down Down; wait 0.300
+up Down; wait 0.100
+down Up; wait 0.150
+up Left; down Right; wait 0.100
+down j; up Up; wait 0.050
+up j; wait 0.550
+down Up; wait 0.100
+up Right; wait 0.050
+down Left; up Up; down Down; wait 0.100
+down Up; up Down; wait 0.100
+up Up; wait 0.050
+down Down; wait 0.050
+up Down; wait 0.150
+up Left; wait 0.100
+down Right; wait 0.100
+down Down; wait 0.100
+up Right; down Up; up Down; wait 0.150
+up Up; down Down; wait 0.150
+down Up; up Down; wait 0.150
+down Left; up Up; down Down; wait 0.150
+down Up; up Down; wait 0.050
+up Left; wait 0.050
+up Up; wait 1.350
+down Down; wait 0.100
+up Down; wait 0.600
+down comma; wait 0.250
+down Down; wait 0.100
+up Down; wait 0.100
+up comma; wait 0.250
+down Down; wait 0.100
+up Down; wait 0.150
+down Down; wait 0.100
+up Down; wait 0.200
+down Down; wait 0.100
+up Down; wait 0.050
+down Down; wait 0.100
+up Down; wait 0.050
+down Down; wait 0.150
+down comma; up Down; wait 0.050
+up comma; wait 0.150
+down Down; wait 0.150
+up Down; wait 0.050
+down Down; wait 0.050
+down Left; wait 0.200
+up Left; down Up; up Down; wait 0.050
+up Up
+wait 0.100
+digest scooped a9dc9c224c432db0595dbc4889538a070ab2e4fec9d152507b014b100ecd5a73

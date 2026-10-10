@@ -1,0 +1,52 @@
+# The first mission, the supernova, from the jump that gives it to the debriefing. It starts from supernova-mission.cdr
+# (Tools/PrepareCommanders.py): the reference's own save at Lave with 31 jumps counted outside the first galaxy, one
+# short of the mission (UpdateMissionSchedule gives it on the 32nd), a galactic hyperdrive, an escape capsule, 10,000
+# credits, and its random state 52 draws on, so that the jump lands at Laribebi, whose tech level sells a galactic
+# hyperdrive (a search of 200 draw counts found it). The galactic jump is the 32nd counted: the mission is given, and
+# the fuel leak it arms empties the tank. The escape capsule takes the commander to Laribebi's station, where the status
+# screen briefs him (ShowMissionBriefing): Y takes the refugees, which empties the hold. With no fuel for sale in the
+# mission, he buys another capsule and a galactic hyperdrive and jumps on to galaxy 3, the jump the debriefing waits
+# for. The capsule takes him to the station there, but a capsule is no docking, so the status screen does not debrief
+# him; he launches and docks by hand, with the keys launch-and-dock.replay docks with at Lave (a launch sets every
+# station up alike), and the status screen debriefs him (ShowMissionDebriefing): 1,000 credits for the full hold of
+# refugees.
+file JAMESON.CDR supernova-mission.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded f18bb4c0c9bc0406f3c0b6fcc3945b10bc5dbd3fad45afde0a0cb385b79768e2
+key F1; wait 0.5                   # launch
+down g; wait 1; up g               # the galactic drive armed for 40 frames
+down h; wait 0.1; up h             # and the countdown started
+wait 8                             # galaxy 2: the 32nd jump counted, and the first mission given
+digest mission-given 65781a475377b0ee00be601c64e029fabd7b7cd7e12154dc95e8c722a4205858
+down c; wait 0.1; up c             # the escape capsule, with the fuel leaking
+wait 5                             # the capsule docks, and the status screen briefs: EMERGENCY
+digest briefing 7e608922bf253d0a492223a67cafd8597eca99cdc82750ca9ced10c436bf9d35
+key y; wait 1                      # Y: the refugees aboard, the hold emptied for them
+digest refugees 1f78b481d01d1d38eb1ee5f363e82fec3f4a32398929be77b42dc69561d67b97
+key space; wait 1                  # the status screen
+key F4; wait 0.8                   # Equip Ship, its cursor on Fuel, which the mission does not sell
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key b; wait 0.3                    # an escape capsule
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key b; wait 0.3                    # a galactic hyperdrive
+digest bought f4ae2ddd938fb63c2dc74461a914a7404d98a04936920024f097ebc8d242828d
+key F1; wait 0.5                   # launch
+down g; wait 1; up g               # galactic jump again, which needs no fuel
+down h; wait 0.1; up h
+wait 8                             # galaxy 3: the jump the debriefing waits for
+digest galaxy-3 5213c9b2aa358e79e1cbbf0315847bb2119cee61f319f5ac825bd185f021178a
+down c; wait 0.1; up c             # the escape capsule to the station: the status screen, no debriefing
+wait 5
+digest capsule-docked 1857e600fb84a9414683088a34642eaab3c08560fea2004d29c47f0cd3e971fa
+key F1; wait 6                     # launch: the tunnel, then space
+down Down; wait 1.17; up Down      # pitch through 180 degrees, aimed a little low, at the slot
+wait 0.5
+down Right; wait 0.65; up Right    # roll to the station's spin
+wait 10                            # straight in: the tunnel, then the status screen debriefs: TASK COMPLETE
+digest debriefing b8136dd9b4d47d6ba0dd2aa6b5fec2ff3ce72374fab423372a101a08f20b2cef
+key space; wait 1                  # the status screen: 1,000 credits more
+digest rewarded ab3094c19f1e14f6c0d48d8ca5de14f38f3f20917128b5ebfbfe84cc027af204

@@ -19,8 +19,19 @@ using Elite::DS;
 
 constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
 constexpr std::uint16_t TRY_SCOOP_OBJECT = 0x4401;
+constexpr std::uint16_t SELECT_LASER_TYPE = 0x633B;
+constexpr std::uint16_t DRAW_LASER_MOUNT_MENU = 0x6367;
 constexpr std::uint16_t REDRAW_EQUIP_HELP_TEXT = 0x653F;
+constexpr std::uint16_t PAINT_LASER_MOUNT_BOX = 0x6564;
+constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
 constexpr std::uint16_t PAY_FOR_EQUIPMENT_ITEM = 0x65A3;
+constexpr std::uint16_t CLEAR_EQUIPMENT_SELL_PRICE = 0x6946;
+constexpr std::uint16_t SHOW_EQUIPMENT_SELL_PRICE = 0x6972;
+constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
+constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
+constexpr std::uint16_t EQUIP_MENU_FIRST_ROW = 0x325; // the first item's row, its first attribute byte
+constexpr std::uint16_t LAST_MOUNT_BOX = 0x21B;       // the mount menu's LEFT box
+constexpr std::uint8_t EQUIPMENT_ROWS = 14;
 constexpr std::uint16_t SCREEN_PRICES = 0x823B; // four bytes a row, the price first
 constexpr std::uint8_t FUEL_ROW = 1;
 constexpr std::uint8_t MISSILE_ROW = 2;
@@ -276,6 +287,65 @@ public:
     rig.Play("wait 0.3");
     SetByte(rig, DS.keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest removed");
+  }
+
+  // The equipment menu's work, which it calls as value routines since level 5 of the de-assembly (ADR-012 item 12), so that
+  // only calls like these compare it: SelectLaserType on every row, each row's resale price shown from prices whose cut halves
+  // and from none, and cleared, FormatTenths across its digits, the credits on the message line, the mount menu with every
+  // mount free, fitted and of each type, and a mount box painted.
+  TEST_METHOD(EquipmentMenuWorkAgreesOnEveryRow)
+  {
+    ComparisonRig rig("EquipmentMenuWork");
+    Machine::Memory& ram = rig.Host().Ram();
+    const std::uint16_t data = Elite::DataSegment(rig.Program());
+    ram.Write16(data, DS.menuFirstRowAttr.offset, EQUIP_MENU_FIRST_ROW);
+    const std::initializer_list<std::uint16_t> prices = {0, 1, 20, 0x0C80, 0x7530, 0xFFFF};
+    std::uint64_t rows = 0;
+    std::uint64_t shown = 0;
+    for (std::uint8_t row = 1; row <= EQUIPMENT_ROWS; ++row)
+    {
+      ram.Write8(data, DS.menuSelectedRow.offset, row);
+      rig.Call(SELECT_LASER_TYPE, {});
+      for (const std::uint16_t price : prices)
+      {
+        ram.Write16(data, static_cast<std::uint16_t>(SCREEN_PRICES + row * 4), price);
+        rig.Call(SHOW_EQUIPMENT_SELL_PRICE, {});
+        ++shown;
+      }
+      rig.Call(CLEAR_EQUIPMENT_SELL_PRICE, {});
+      ++rows;
+    }
+    rig.AssertAllAgreed(SELECT_LASER_TYPE, rows);
+    rig.AssertAllAgreed(SHOW_EQUIPMENT_SELL_PRICE, shown);
+    rig.AssertAllAgreed(CLEAR_EQUIPMENT_SELL_PRICE, rows);
+
+    for (const std::uint16_t tenths : prices)
+    {
+      rig.Call(FORMAT_TENTHS, {.ax = tenths});
+    }
+    rig.AssertAllAgreed(FORMAT_TENTHS, prices.size());
+    rig.Call(PRINT_CREDITS_ON_MESSAGE_LINE, {});
+    rig.AssertAllAgreed(PRINT_CREDITS_ON_MESSAGE_LINE, 1);
+
+    // Each mount's bit of laserMountsFitted and its two bits of laserMountTypes.
+    const std::initializer_list<std::uint16_t> mounts = {0x0000, 0x000F, 0x1B05, 0xE40A, 0x390F};
+    for (const std::uint16_t fitting : mounts)
+    {
+      ram.Write8(data, DS.laserMountsFitted.offset, static_cast<std::uint8_t>(fitting));
+      ram.Write8(data, DS.laserMountTypes.offset, static_cast<std::uint8_t>(fitting >> 8));
+      rig.Call(DRAW_LASER_MOUNT_MENU, {});
+    }
+    rig.AssertAllAgreed(DRAW_LASER_MOUNT_MENU, mounts.size());
+
+    // PaintLaserMountBox takes ES on the text page, which a constructed call does not set.
+    Machine::Registers& regs = rig.Host().Processor().Regs();
+    const Machine::Registers saved = regs;
+    regs.ds = data;
+    regs.es = VIDEO_SEGMENT;
+    regs.si = LAST_MOUNT_BOX;
+    rig.Host().CallNear(PAINT_LASER_MOUNT_BOX);
+    regs = saved;
+    rig.AssertAllAgreed(PAINT_LASER_MOUNT_BOX, 1);
   }
 
   // RedrawEquipHelpText, which only the mount choosers call once Space fits or removes a laser: they wait, so no replay

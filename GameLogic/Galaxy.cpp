@@ -5,6 +5,7 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Input.h"
 
 #include <initializer_list>
 
@@ -21,33 +22,23 @@ constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
 constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t DRAW_DISC = 0x1826;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
-constexpr std::uint16_t FORMAT_DECIMAL_5 = 0x3407;
 constexpr std::uint16_t DRAW_SMALL_VIEW_STRING = 0x3527;
-constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t READ_FIRE_BUTTON = 0x74E0;
-constexpr std::uint16_t READ_STEERING = 0x7536;
 constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t READ_TEXT_LINE = 0x7694;
 constexpr std::uint16_t DRAW_CHART_FRAME = 0x7C25;
-constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
 
 // This subsystem's routines, which the routines that wait call through their entries.
 constexpr std::uint16_t GET_SHORT_RANGE_OFFSET = 0x1076;
 constexpr std::uint16_t TWIST_SYSTEM_SEEDS = 0x10C0;
 constexpr std::uint16_t LOAD_GALAXY_SEEDS = 0x10D6;
-constexpr std::uint16_t MOVE_CURSOR_TO_SYSTEM = 0x1146;
 constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
 constexpr std::uint16_t SHOW_NEAREST_SYSTEM_DISTANCE = 0x1341;
 constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t ADVANCE_TO_NEXT_SYSTEM = 0x13B4;
-constexpr std::uint16_t GENERATE_SYSTEM_NAME = 0x13C1;
 constexpr std::uint16_t FIND_SYSTEM_BY_NAME = 0x140D;
 constexpr std::uint16_t DRAW_CHART_ITEMS = 0x14C5;
 constexpr std::uint16_t PLACE_CHART_LABELS = 0x1505;
 constexpr std::uint16_t CLEAR_CHART_TEXT_LINES = 0x15BC;
-constexpr std::uint16_t TERMINATE_SELECTED_SYSTEM_NAME = 0x60EB;
-constexpr std::uint16_t FORMAT_SELECTED_SYSTEM_DISTANCE = 0x60F7;
-constexpr std::uint16_t SHOW_SYSTEM_DESCRIPTION = 0x6FC0;
 
 // Where the loops of the routines that wait jump back to.
 constexpr std::uint16_t GALACTIC_CHART_FRAME = 0x0CF9;
@@ -84,6 +75,7 @@ constexpr std::uint16_t START_CAPITALIZING = 0x7109;
 constexpr std::uint16_t STOP_CAPITALIZING = 0x710F;
 
 constexpr std::uint8_t SPACE = 0x20;
+constexpr std::uint8_t TEXT_LAYOUT = 2; // screenLayout of the docked text screens
 constexpr std::uint8_t DECIMAL_POINT = 0x2E;
 
 // The short-range chart: half its width and height in galaxy units, and its centre in chart pixels.
@@ -379,37 +371,47 @@ void DrawChartCursor(Guest& _guest)
   _guest.Call(PLOT_PIXEL);
 }
 
-// The steering moves a chart's cursor (CS:0DB4, CS:0FDA): AL across, clamped to the chart, and AH negated
-// down, clamped to its 128 rows.
-void MoveChartCursor(Guest& _guest)
+// The steering moves a chart's cursor (CS:0DB4, CS:0FDA): the roll across, clamped to the chart, and the pitch negated down,
+// clamped to its 128 rows. _trigger is the AL the chart's loop leaves, which ReadSteering fires the stick with. Returns the
+// cursor, which the original leaves in AX.
+ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(READ_STEERING);
-  SetHigh(regs.ax, Negate(High(regs.ax)));
-  const std::uint8_t across = Low(regs.ax);
-  const unsigned x = unsigned{across} + unsigned{_guest.Get(DS.chartCursorX)};
+  const Steering steering = ReadSteering(_state, _hardware, _trigger);
+  const std::uint8_t across = steering.roll;
+  const unsigned x = unsigned{across} + unsigned{_state.Get(DS.chartCursorX)};
+  ChartPoint cursor{};
   if ((across & 0x80) == 0)
   {
-    SetLow(regs.ax, x > 0xFF ? std::uint8_t{0xFF} : static_cast<std::uint8_t>(x));
+    cursor.x = x > 0xFF ? std::uint8_t{0xFF} : static_cast<std::uint8_t>(x);
   }
   else
   {
     // Adding a negative byte carries unless it goes below 0.
-    SetLow(regs.ax, x > 0xFF ? static_cast<std::uint8_t>(x) : std::uint8_t{0});
+    cursor.x = x > 0xFF ? static_cast<std::uint8_t>(x) : std::uint8_t{0};
   }
-  _guest.Set(DS.chartCursorX, Low(regs.ax));
-  const std::uint8_t down = High(regs.ax);
-  const unsigned y = unsigned{down} + unsigned{_guest.Get(DS.chartCursorY)};
+  _state.Set(DS.chartCursorX, cursor.x);
+  const std::uint8_t down = Negate(steering.pitch);
+  const unsigned y = unsigned{down} + unsigned{_state.Get(DS.chartCursorY)};
   if ((down & 0x80) == 0)
   {
     const auto row = static_cast<std::uint8_t>(y);
-    SetHigh(regs.ax, row < CHART_ROWS ? row : CURSOR_LOWEST_ROW);
+    cursor.row = row < CHART_ROWS ? row : CURSOR_LOWEST_ROW;
   }
   else
   {
-    SetHigh(regs.ax, y > 0xFF ? static_cast<std::uint8_t>(y) : std::uint8_t{0});
+    cursor.row = y > 0xFF ? static_cast<std::uint8_t>(y) : std::uint8_t{0};
   }
-  _guest.Set(DS.chartCursorY, High(regs.ax));
+  _state.Set(DS.chartCursorY, cursor.row);
+  return cursor;
+}
+
+// MoveChartCursor on the chart loop's registers: AL in, the cursor out in AX. ReadSteering's BX, CX and DX, which no caller
+// reads, are not reproduced.
+void MoveChartCursorOnRegisters(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ChartPoint cursor = MoveChartCursor(_guest.State(), _guest.Devices(), Low(regs.ax));
+  regs.ax = Join(cursor.row, cursor.x);
 }
 
 // What tells the two charts' key handling apart.
@@ -698,37 +700,10 @@ NotOnMapMessage ShowNotOnMap(GameState& _state, std::uint16_t _segment)
   return message;
 }
 
-// ShowNotOnMap at ES, and the registers as the original leaves them: DrawScreenString's SI, DI and AX for the
-// suffix, and BX its ink.
-void ShowNotOnMapOnRegisters(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const NotOnMapMessage message = ShowNotOnMap(_guest.State(), regs.es);
-  regs.ax = DrawnScreenStringAx(_guest.State(), DS.findErrorPrefix.offset, message.prefix, INK_3, regs.ax);
-  regs.ax = DrawnScreenStringAx(_guest.State(), DS.findInputEcho.offset, message.name, INK_2, regs.ax);
-  regs.ax = DrawnScreenStringAx(_guest.State(), DS.findErrorSuffix.offset, message.suffix, INK_3, regs.ax);
-  regs.si = message.suffix.end;
-  regs.di = message.suffix.nextCell;
-  regs.bx = INK_3;
-}
-
 // PrintTextModeString, at B800:_cell, of the text whose pointer is _bytes into the table at DS:_table.
 PrintedText PrintNamed(GameState& _state, std::uint16_t _table, std::uint16_t _bytes, std::uint16_t _cell)
 {
   return PrintTextModeString(_state, _state.Word(Offset(_table, _bytes)), _cell);
-}
-
-// PrintNamed from DI, and the registers as the original leaves them: BX the pointer's place, and PrintTextModeString's
-// SI, DI, ES and AX.
-void PrintNamedOnRegisters(Guest& _guest, std::uint16_t _table, std::uint16_t _bytes)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const PrintedText printed = PrintNamed(_guest.State(), _table, _bytes, regs.di);
-  regs.bx = Offset(_table, _bytes);
-  regs.si = printed.end;
-  regs.di = printed.nextCell;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = Join(_guest.Get(DS.textAttribute), 0);
 }
 
 // What SelectSystemAtCursor and ShowNearestSystemDistance begin with: FindNearestSystem, ComputeDistanceToSystem, and the
@@ -772,7 +747,7 @@ void ShowGalacticChart(Guest& _guest)
     DrawGalacticChart(_guest);
     _guest.Spend(GALACTIC_CHART_PACING); // the IBM PC's redraw (D18)
     _guest.Call(PRESENT_CHART_FRAME);
-    MoveChartCursor(_guest);
+    MoveChartCursorOnRegisters(_guest);
   } while (!ReadChartKey(_guest, GALACTIC_CHART_KEYS));
 }
 
@@ -834,7 +809,7 @@ void ShowShortRangeChart(Guest& _guest)
     DrawShortRangeChart(_guest);
     _guest.Spend(SHORT_RANGE_CHART_PACING); // the IBM PC's redraw (D18)
     _guest.Call(PRESENT_CHART_FRAME);
-    MoveChartCursor(_guest);
+    MoveChartCursorOnRegisters(_guest);
   } while (!ReadChartKey(_guest, SHORT_RANGE_CHART_KEYS));
 }
 
@@ -1080,118 +1055,73 @@ std::uint8_t GenerateSystemName(GameState& _state)
   return length;
 }
 
-void FindSystemByName(Guest& _guest)
+void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _segment, std::uint16_t _countIfNone, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(LOAD_GALAXY_SEEDS);
-  regs.si = DS.findPrompt.offset;
-  regs.di = CHART_TEXT_LINE_1;
-  regs.bx = INK_1;
-  _guest.Call(DRAW_SCREEN_STRING);
-  regs.si = DS.blankChartLine.offset;
-  regs.di = CHART_TEXT_LINE_2;
-  _guest.Call(DRAW_SCREEN_STRING);
-  regs.si = DS.findInput.offset;
-  regs.ax = 0;
+  LoadGalaxySeeds(_state);
+  DrawScreenString(_state, DS.findPrompt.offset, INK_1, _segment, CHART_TEXT_LINE_1);
+  DrawScreenString(_state, DS.blankChartLine.offset, INK_1, _segment, CHART_TEXT_LINE_2);
   for (std::uint16_t word = 0; word < SYSTEM_NAME_BYTES; word = static_cast<std::uint16_t>(word + 2))
   {
-    _guest.SetWord(Offset(regs.si, word), regs.ax);
+    _state.SetWord(Offset(DS.findInput.offset, word), 0);
   }
-  regs.di = CHART_TEXT_LINE_2;
-  SetLow(regs.cx, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES));
-  _guest.Call(READ_TEXT_LINE);
-  if (_guest.Byte(DS.findInput.offset) == 0)
+  (void)ReadTextLine(_state, _hardware, DS.findInput.offset, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES), _segment, CHART_TEXT_LINE_2);
+  if (_state.Byte(DS.findInput.offset) == 0)
   {
-    // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry.
-    _guest.JumpBack(SHOW_NEAREST_SYSTEM_DISTANCE);
-    _guest.Call(SHOW_NEAREST_SYSTEM_DISTANCE);
+    // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry, with ES as ReadTextLine leaves it.
+    _hardware.LoopTurn(SHOW_NEAREST_SYSTEM_DISTANCE, {});
+    const bool textLayout = _state.Get(DS.screenLayout) == TEXT_LAYOUT;
+    ShowNearestSystemDistance(_state, _countIfNone, textLayout ? GameState::VIDEO_SEGMENT : _segment);
     return;
   }
 
-  // The name echoed for the error message and upper-cased in place, a space after it; CX its length,
-  // counting the space when there is room for it.
-  regs.si = DS.findInput.offset;
-  regs.di = DS.findInputEcho.offset;
-  regs.cx = 0;
+  // The name echoed for the error message and upper-cased in place, a space after it; the count to compare its length,
+  // counting the space when there is room for it. Each turn of the loop carries the two places and the length.
+  std::uint16_t typed = DS.findInput.offset;
+  std::uint16_t echo = DS.findInputEcho.offset;
+  std::uint16_t length = 0;
   for (;;)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    _guest.SetByte(regs.di, Low(regs.ax));
-    if (Low(regs.ax) == 0)
+    const std::uint8_t character = _state.Byte(typed);
+    _state.SetByte(echo, character);
+    if (character == 0)
     {
       break;
     }
-    SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
-    _guest.SetByte(regs.si, static_cast<std::uint8_t>(_guest.Byte(regs.si) & UPPER_CASE_MASK));
-    ++regs.si;
-    ++regs.di;
-    _guest.JumpBack(FIND_UPPER_CASE);
+    ++length;
+    _state.SetByte(typed, static_cast<std::uint8_t>(_state.Byte(typed) & UPPER_CASE_MASK));
+    typed = Offset(typed, 1);
+    echo = Offset(echo, 1);
+    _hardware.LoopTurn(FIND_UPPER_CASE, {typed, echo, length});
   }
-  _guest.SetByte(regs.si, SPACE);
-  if (regs.cx != SYSTEM_NAME_BYTES)
-  {
-    ++regs.cx;
-  }
+  _state.SetByte(typed, SPACE);
+  const auto count = static_cast<std::uint16_t>(length == SYSTEM_NAME_BYTES ? length : length + 1);
 
-  // Each system's name in turn, compared with it.
-  regs.ax = regs.ds;
-  regs.es = regs.ax;
-  regs.ax = 0;
-  for (;;)
+  // Each system's name in turn, compared with it by REPE CMPSB in the data segment. Each turn carries the system and the count.
+  for (std::uint8_t system = 0;;)
   {
-    _guest.Push(regs.ax);
-    _guest.Push(regs.cx);
-    _guest.Call(GENERATE_SYSTEM_NAME);
-    regs.cx = _guest.Pop();
-    _guest.Push(regs.cx);
-    regs.si = DS.selectedSystemName.offset;
-    regs.di = DS.findInput.offset;
-    // REPE CMPSB, as many bytes as CX says.
-    bool found = _guest.Flag(Machine::FLAG_ZERO);
-    if (regs.cx != 0)
+    GenerateSystemName(_state);
+    if (CompareBytes(_state, DS.selectedSystemName.offset, _state.DataSegment(), DS.findInput.offset, count, _backward).equal)
     {
-      const bool backwards = _guest.Flag(Machine::FLAG_DIRECTION);
-      const ByteComparison comparison = CompareBytes(_guest.State(), regs.si, regs.es, regs.di, regs.cx, backwards);
-      const auto moved = static_cast<std::uint16_t>(backwards ? 0u - comparison.compared : comparison.compared);
-      regs.si = Offset(regs.si, moved);
-      regs.di = Offset(regs.di, moved);
-      regs.cx = static_cast<std::uint16_t>(regs.cx - comparison.compared);
-      _guest.SetFlag(Machine::FLAG_ZERO, comparison.equal);
-      _guest.SetFlag(Machine::FLAG_CARRY, comparison.below);
-      found = comparison.equal;
-    }
-    regs.cx = _guest.Pop();
-    regs.ax = _guest.Pop();
-    if (found)
-    {
-      SetLow(regs.cx, Low(regs.ax));
-      _guest.Push(regs.cx);
-      _guest.Call(LOAD_GALAXY_SEEDS);
-      regs.cx = _guest.Pop();
-      regs.ax = Guest::VIDEO_SEGMENT;
-      regs.es = regs.ax;
-      _guest.Call(LOAD_SYSTEM_SEEDS);
-      _guest.Call(GET_SHORT_RANGE_OFFSET);
-      if (!_guest.Flag(Machine::FLAG_CARRY))
+      LoadGalaxySeeds(_state);
+      LoadSystemSeeds(_state, system);
+      if (!GetShortRangeOffset(_state).onChart)
       {
-        _guest.JumpBack(FIND_NOT_ON_MAP);
-        ShowNotOnMapOnRegisters(_guest);
+        _hardware.LoopTurn(FIND_NOT_ON_MAP, {});
+        ShowNotOnMap(_state, GameState::VIDEO_SEGMENT);
         return;
       }
-      _guest.Call(MOVE_CURSOR_TO_SYSTEM);
-      _guest.Call(SHOW_NEAREST_SYSTEM_DISTANCE);
+      MoveCursorToSystem(_state);
+      ShowNearestSystemDistance(_state, _countIfNone, GameState::VIDEO_SEGMENT);
       return;
     }
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-    if (Low(regs.ax) == 0)
+    ++system;
+    if (system == 0)
     {
       break;
     }
-    _guest.JumpBack(FIND_NEXT_SYSTEM);
+    _hardware.LoopTurn(FIND_NEXT_SYSTEM, {system, count});
   }
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  ShowNotOnMapOnRegisters(_guest);
+  ShowNotOnMap(_state, GameState::VIDEO_SEGMENT);
 }
 
 void DrawChartItems(Guest& _guest)
@@ -1326,105 +1256,74 @@ PrintedText ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint
   return DrawScreenString(_state, DS.blankChartLine.offset, _ink, _segment, CHART_TEXT_LINE_2);
 }
 
-void ShowSystemDataScreen(Guest& _guest)
+ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.systemDataFrame.offset;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = DATA_TITLE;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Call(TERMINATE_SELECTED_SYSTEM_NAME);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = DISTANCE_LABEL;
-  regs.di = DISTANCE_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Call(FORMAT_SELECTED_SYSTEM_DISTANCE);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = LIGHT_YEARS_LABEL;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = ECONOMY_LABEL;
-  regs.di = ECONOMY_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  PrintNamedOnRegisters(_guest, DS.economyNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedEconomy) << 1));
-  regs.si = GOVERNMENT_LABEL;
-  regs.di = GOVERNMENT_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  PrintNamedOnRegisters(_guest, DS.governmentNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedGovernment) << 1));
-  regs.si = TECH_LEVEL_LABEL;
-  regs.di = TECH_LEVEL_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  const PrintedText title =
+    PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.systemDataFrame.offset, _backward), DATA_TITLE);
+  TerminateSelectedSystemName(_state);
+  PrintTextModeString(_state, DS.selectedSystemName.offset, title.nextCell);
+  PrintedText printed = PrintTextModeString(_state, DISTANCE_LABEL, DISTANCE_ROW);
+  printed = PrintTextModeString(_state, FormatSelectedSystemDistance(_state), printed.nextCell);
+  PrintTextModeString(_state, LIGHT_YEARS_LABEL, printed.nextCell);
+  printed = PrintTextModeString(_state, ECONOMY_LABEL, ECONOMY_ROW);
+  PrintNamed(_state, DS.economyNames.offset, static_cast<std::uint16_t>(_state.Get(DS.selectedEconomy) << 1), printed.nextCell);
+  printed = PrintTextModeString(_state, GOVERNMENT_LABEL, GOVERNMENT_ROW);
+  PrintNamed(_state, DS.governmentNames.offset, static_cast<std::uint16_t>(_state.Get(DS.selectedGovernment) << 1), printed.nextCell);
+  printed = PrintTextModeString(_state, TECH_LEVEL_LABEL, TECH_LEVEL_ROW);
 
   // The tech level, one to sixteen, in the two characters at data7D48, a column left when it is one digit.
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.selectedTechLevel) + 1));
-  regs.di = static_cast<std::uint16_t>(regs.di - 2);
-  _guest.Set(DS.data7D48, SPACE);
-  if (Low(regs.ax) >= TECH_LEVEL_TENS)
+  auto level = static_cast<std::uint8_t>(_state.Get(DS.selectedTechLevel) + 1);
+  auto cell = static_cast<std::uint16_t>(printed.nextCell - 2);
+  _state.Set(DS.data7D48, SPACE);
+  if (level >= TECH_LEVEL_TENS)
   {
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) - TECH_LEVEL_TENS));
-    _guest.Set(DS.data7D48, '1');
-    regs.di = static_cast<std::uint16_t>(regs.di + 2);
+    level = static_cast<std::uint8_t>(level - TECH_LEVEL_TENS);
+    _state.Set(DS.data7D48, '1');
+    cell = Offset(cell, 2);
   }
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + '0'));
-  _guest.Set(DS.data7D49, Low(regs.ax));
-  regs.si = DS.data7D48.offset;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  _state.Set(DS.data7D49, static_cast<std::uint8_t>(level + '0'));
+  PrintTextModeString(_state, DS.data7D48.offset, cell);
 
   // The population in tenths of a billion, its last two digits about a point.
-  regs.ax = _guest.Get(DS.selectedPopulationTenthsBillion);
-  regs.di = POPULATION_DIGITS;
-  _guest.Call(FORMAT_DECIMAL_5);
-  regs.si = POPULATION_LABEL;
-  regs.di = POPULATION_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = POPULATION_SHOWN;
-  SetLow(regs.ax, _guest.Byte(Offset(regs.si, 1)));
-  _guest.SetByte(regs.si, Low(regs.ax));
-  _guest.SetByte(Offset(regs.si, 1), DECIMAL_POINT);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  FormatDecimal5(_state, _state.Get(DS.selectedPopulationTenthsBillion), POPULATION_DIGITS);
+  printed = PrintTextModeString(_state, POPULATION_LABEL, POPULATION_ROW);
+  _state.SetByte(POPULATION_SHOWN, _state.Byte(Offset(POPULATION_SHOWN, 1)));
+  _state.SetByte(Offset(POPULATION_SHOWN, 1), DECIMAL_POINT);
+  PrintTextModeString(_state, POPULATION_SHOWN, printed.nextCell);
 
-  regs.si = SPECIES_OPEN;
-  regs.di = SPECIES_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  const std::uint8_t size = _guest.Get(DS.selectedSpeciesAdjective1);
+  printed = PrintTextModeString(_state, SPECIES_OPEN, SPECIES_ROW);
+  const std::uint8_t size = _state.Get(DS.selectedSpeciesAdjective1);
   if (size == NO_SPECIES)
   {
-    SetLow(regs.ax, 0);
-    regs.si = HUMAN_COLONIALS;
-    _guest.Call(PRINT_TEXT_MODE_STRING);
+    PrintTextModeString(_state, HUMAN_COLONIALS, printed.nextCell);
   }
   else
   {
-    // shl al,1 on each byte, then xor ah,ah.
-    PrintNamedOnRegisters(_guest, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1));
-    PrintNamedOnRegisters(_guest, DS.speciesColorNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective2) << 1));
-    PrintNamedOnRegisters(_guest, DS.speciesTraitNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective3) << 1));
-    PrintNamedOnRegisters(_guest, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesType) << 1));
+    // SHL AL,1 on each byte, then XOR AH,AH.
+    printed = PrintNamed(_state, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1), printed.nextCell);
+    printed = PrintNamed(_state, DS.speciesColorNames.offset, static_cast<std::uint8_t>(_state.Get(DS.selectedSpeciesAdjective2) << 1),
+                         printed.nextCell);
+    printed = PrintNamed(_state, DS.speciesTraitNames.offset, static_cast<std::uint8_t>(_state.Get(DS.selectedSpeciesAdjective3) << 1),
+                         printed.nextCell);
+    PrintNamed(_state, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_state.Get(DS.selectedSpeciesType) << 1), printed.nextCell);
   }
 
   // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
-  regs.ax = _guest.Get(DS.selectedProductivityMillionCredits);
-  regs.di = DS.data7EA3.offset;
-  _guest.Call(FORMAT_DECIMAL_5);
-  regs.si = PRODUCTIVITY_LABEL;
-  regs.di = PRODUCTIVITY_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = DS.data7EA3.offset;
-  if (_guest.Get(DS.data7EA3) == '0')
+  FormatDecimal5(_state, _state.Get(DS.selectedProductivityMillionCredits), DS.data7EA3.offset);
+  printed = PrintTextModeString(_state, PRODUCTIVITY_LABEL, PRODUCTIVITY_ROW);
+  cell = printed.nextCell;
+  if (_state.Get(DS.data7EA3) == '0')
   {
-    _guest.Set(DS.data7EA3, SPACE);
-    regs.di = static_cast<std::uint16_t>(regs.di - 2);
+    _state.Set(DS.data7EA3, SPACE);
+    cell = static_cast<std::uint16_t>(cell - 2);
   }
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.ax = _guest.Get(DS.selectedRadiusKm);
-  regs.di = DS.data7EBB.offset;
-  _guest.Call(FORMAT_DECIMAL_5);
-  _guest.Set(DS.data7EBB, SPACE);
-  regs.si = RADIUS_LABEL;
-  regs.di = RADIUS_ROW;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Call(SHOW_SYSTEM_DESCRIPTION);
-  SetLow(regs.dx, SCAN_F7);
-  WaitForScreenExitKey(_guest);
+  PrintTextModeString(_state, DS.data7EA3.offset, cell);
+  FormatDecimal5(_state, _state.Get(DS.selectedRadiusKm), DS.data7EBB.offset);
+  _state.Set(DS.data7EBB, SPACE);
+  PrintTextModeString(_state, RADIUS_LABEL, RADIUS_ROW);
+  ShowSystemDescription(_state, _backward);
+  // ShowSystemDescription's last print leaves AL 0.
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F7, 0, _countIfNone);
 }
 
 std::uint8_t TerminateSelectedSystemName(GameState& _state)
@@ -1652,6 +1551,10 @@ constexpr NativeContract EXPANDS_TEXT{REGISTER_AX | REGISTER_BX | REGISTER_CX, 0
 constexpr NativeContract FINDS_NEAREST{static_cast<std::uint16_t>(GENERAL & ~REGISTER_DI), 0};
 // SelectSystemAtCursor's and ShowNearestSystemDistance's: all but the segment registers.
 constexpr NativeContract SELECTS_SYSTEM{GENERAL, 0};
+// FindSystemByName's: all but DS.
+constexpr NativeContract FINDS_BY_NAME{static_cast<std::uint16_t>(GENERAL | REGISTER_ES), 0};
+// ShowSystemDataScreen's: all but AX, the closing key in AH, and DS.
+constexpr NativeContract SHOWS_SCREEN{static_cast<std::uint16_t>((GENERAL | REGISTER_ES) & ~REGISTER_AX), 0};
 // ShowSystemDescription's: all but DS, which the original leaves alone and ShowSystemDataScreen goes on with.
 constexpr NativeContract SHOWS_DESCRIPTION{static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS), 0};
 
@@ -1746,6 +1649,23 @@ void ShowNearestSystemDistanceEntry(Guest& _guest)
   const Machine::Registers& regs = _guest.Regs();
   ShowNearestSystemDistance(_guest.State(), regs.bp, regs.es);
   _guest.Clobber(SELECTS_SYSTEM);
+}
+
+void FindSystemByNameEntry(Guest& _guest)
+{
+  // ES, the segment the chart is drawn in; BP, the count FindNearestSystem makes the index from when no system is on the chart.
+  const Machine::Registers& regs = _guest.Regs();
+  FindSystemByName(_guest.State(), _guest.Devices(), regs.es, regs.bp, _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(FINDS_BY_NAME);
+}
+
+void ShowSystemDataScreenEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // BP, the count SelectSystemAtCursor makes the index from when no system is on the chart.
+  const ScreenKey key = ShowSystemDataScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), regs.bp);
+  regs.ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
 }
 
 void LoadSystemSeedsEntry(Guest& _guest)
@@ -1948,15 +1868,14 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeedsEntry, PRESERVES_ALL},
   NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystemEntry, PRESERVES_ALL},
   NativeEntry{0x13C1, "GenerateSystemName", &GenerateSystemNameEntry, CLOBBERS_BX_CX_SI},
-  NativeEntry{0x140D, "FindSystemByName", &FindSystemByName, Machine::NativeContract{GENERAL | REGISTER_ES, 0}, NativeReturn::Near, 0,
-              NativeWait::Always},
+  NativeEntry{0x140D, "FindSystemByName", &FindSystemByNameEntry, FINDS_BY_NAME, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x14C5, "DrawChartItems", &DrawChartItems, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x1505, "PlaceChartLabels", &PlaceChartLabelsEntry, PLACES_LABELS},
   NativeEntry{0x1552, "AddChartLabel", &AddChartLabelEntry, CLOBBERS_BX_DI},
   NativeEntry{0x157D, "NudgeChartLabel", &NudgeChartLabelEntry, RETURNS_CARRY},
   NativeEntry{0x15A9, "ChartItemOverlaps", &ChartItemOverlapsEntry, RETURNS_CARRY},
   NativeEntry{0x15BC, "ClearChartTextLines", &ClearChartTextLinesEntry, CLEARS_TEXT_LINES},
-  NativeEntry{0x5CDE, "ShowSystemDataScreen", &ShowSystemDataScreen, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x5CDE, "ShowSystemDataScreen", &ShowSystemDataScreenEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x60EB, "TerminateSelectedSystemName", &TerminateSelectedSystemNameEntry, PRESERVES_ALL},
   NativeEntry{0x60F7, "FormatSelectedSystemDistance", &FormatSelectedSystemDistanceEntry, CLOBBERS_AX_BX},
   NativeEntry{0x6FC0, "ShowSystemDescription", &ShowSystemDescriptionEntry, SHOWS_DESCRIPTION},

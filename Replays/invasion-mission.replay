@@ -1,0 +1,47 @@
+# The third mission, the Thargoid invasion, from the jump that gives it to the debriefing. It starts from
+# invasion-mission.cdr (Tools/PrepareCommanders.py): the reference's own save at Lave with 127 jumps counted outside the
+# first galaxy, one short of the mission (UpdateMissionSchedule gives it on the 128th), a galactic hyperdrive, an escape
+# capsule, a military laser aft and 10,000 credits. The galactic jump to Esbete is the 128th counted, and the mission is
+# given. The escape capsule takes the commander to Esbete's station, where the status screen briefs him
+# (ShowMissionBriefing): the invasion is on, and the station may no longer be docked with. He buys another capsule and
+# launches, and the aft military laser, in the rear view, destroys the station, at half damage while the invasion is on,
+# which ends the invasion. The capsule takes him to the station again, but a capsule is no docking, so the status screen
+# does not debrief him; he launches from a new station and docks by hand, with the keys launch-and-dock.replay docks
+# with at Lave (a launch sets every station up alike), and the status screen debriefs him (ShowMissionDebriefing): the
+# title Archangel (AwardArchangelTitle) and the anti-ECM emulator. The invasion's Thargoids spawn only in a system
+# jumped to after the briefing, and this replay does not meet them.
+file JAMESON.CDR invasion-mission.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded aa2aacb4bcd85e2d0682c6dae33113db619480067543c1cd311341ae4706d368
+key F1; wait 0.5                   # launch
+down g; wait 1; up g               # the galactic drive armed for 40 frames
+down h; wait 0.1; up h             # and the countdown started
+wait 8                             # galaxy 2: the 128th jump counted, and the third mission given
+digest mission-given 33abe512d63da42ab5fdf1ea88ff4c3c18541c219d2aacc9d6b0014fcdb0fd98
+down c; wait 0.1; up c             # the escape capsule
+wait 5                             # the capsule docks, and the status screen briefs: EMERGENCY
+digest briefing efabdd395f370ab8f8ba7602602f516fe8e1d307d367202fde95a52beaa5ffb2
+key space; wait 1                  # the status screen
+key F4; wait 0.8                   # Equip Ship, its cursor on Fuel
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key b; wait 0.3                    # an escape capsule
+digest bought 8efda0dc42b4e4da5d09d187305a73308b2bdaeb0b9023f204782f9d4817bc62
+key F1; wait 1                     # launch, the station behind
+down F2; wait 0.1; up F2           # the rear view, the station in the sights
+down space; wait 4.2; up space     # the aft military laser destroys it
+digest station-destroyed 98d473372f8b30f9bb19ba77e6acf2e7a552ca1cda91664402ecfa486a2f36a9
+down c; wait 0.1; up c             # the escape capsule to the station: the status screen, no debriefing
+wait 5
+digest capsule-docked 0f60dca8b8da575d67647df5ab0c2c0a45caa8d5c0b201101993c4b1b8e7a40b
+key F1; wait 6                     # launch: the tunnel, then space
+down Down; wait 1.17; up Down      # pitch through 180 degrees, aimed a little low, at the slot
+wait 0.5
+down Right; wait 0.65; up Right    # roll to the station's spin
+wait 10                            # straight in: the tunnel, then the status screen debriefs: TASK COMPLETE
+digest debriefing ce6623642cebecc0f9ef8b54344433bca40c7bd9f4f2615788aed3933c1a0a9d
+key space; wait 1                  # the status screen of ARCHANGEL JAMESON
+digest archangel 21ad66dc742045aa8f0592b989af338c169a0f7ea9edac7dd62d8c3d8f3a7e96

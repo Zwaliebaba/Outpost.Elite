@@ -1,0 +1,104 @@
+# Scoops an escape pod, and meets a boulder the scoops cannot take. It starts from scooping-an-escape-pod.cdr
+# (Tools/PrepareCommanders.py): the commander mining-laser.replay starts from, with fuel scoops and a mining laser, but
+# with the random state 154,538 draws on, which spawns an escape pod 10,000 units ahead in the first second of space.
+# Steered to pass under the nose, as scooping-a-canister.replay's barrel is, it is scooped (TryScoopObject): Escape Pod
+# Retrieved...Slaves!, a tonne of slaves into the hold. A boulder spawns next; steered under the nose too, it shows
+# SCOOP RETRIEVAL INACTIVE, then rams the ship and is destroyed, for a bounty of 0.1 credits. The draw count was found
+# by a search of 1,000 counts for the soonest escape pod scooped; the flight was played by the scratch program
+# mining-laser.replay's was, and what it pressed is recorded here.
+file JAMESON.CDR scooping-an-escape-pod.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 3dac45093ed08f77f4a3a95b2a73b2475048a855771814f5c2c9e57d3c103153
+key F1; wait 1                     # launch
+# The flight, as recorded: a step for each change of the keys, and the frames between.
+down period; down Up; wait 0.350
+up period; wait 0.600
+down Right; up Up; down Down; wait 0.050
+digest escape-pod c8a6372c649acfe501302c50eb16be64f2e551100d377c165b654f1b2ee95889
+wait 0.200
+up Down; wait 0.650
+down Up; wait 0.150
+down Left; up Right; wait 0.050
+down j; wait 0.050
+up Up; down Down; wait 0.050
+up j; wait 0.150
+down j; up Down; wait 0.200
+up j; wait 0.250
+down Up; wait 0.100
+up Left; wait 0.050
+down Right; wait 0.050
+up Up; down Down; wait 0.200
+up Down; wait 0.050
+down Up; wait 0.100
+up Right; wait 0.050
+down Left; up Up; down Down; wait 0.100
+up Down; wait 0.200
+up Left; wait 3.500
+down comma; wait 0.450
+up comma; wait 0.400
+down Down; wait 0.100
+up Down; wait 0.600
+down Down; wait 0.150
+up Down; wait 0.400
+down Right; wait 0.150
+down comma; wait 0.100
+up comma; up Right; wait 0.700
+down Right; down Up; wait 0.150
+down period; down Left; up Right; up Up; wait 0.050
+digest slaves 892ea613fba733c28e45bfb11a47ef946e2e0f7282a1e073b40bc8b00521e350
+wait 0.450
+up period; down Up; wait 0.100
+up Left; wait 0.200
+down Right; wait 0.150
+up Up; wait 0.100
+down j; wait 0.400
+down comma; up j; down Left; up Right; down Up; wait 0.500
+up comma; wait 0.050
+up Left; wait 0.200
+down Right; wait 0.200
+down period; up Right; wait 0.200
+down Right; wait 0.300
+up period; up Up; wait 0.100
+down Down; wait 0.150
+up Down; wait 0.700
+down Up; wait 0.200
+down Left; up Right; wait 0.100
+up Up; wait 0.100
+down Down; wait 0.150
+up Down; wait 0.700
+down Up; wait 0.150
+up Left; wait 0.050
+down Right; wait 0.050
+up Up; down Down; wait 0.250
+up Down; wait 0.050
+down Up; wait 0.100
+down Left; up Right; wait 0.150
+up Up; down Down; wait 0.250
+up Down; wait 0.050
+down Up; wait 0.050
+up Left; wait 0.050
+down Right; wait 0.150
+up Up; down Down; wait 0.150
+down comma; wait 0.100
+down Up; up Down; wait 0.100
+up Right; wait 0.100
+down Left; up Up; wait 0.050
+down Down; wait 0.100
+up comma; wait 0.050
+up Down; wait 0.050
+up Left; wait 0.550
+down comma; wait 0.050
+up comma; down Right; down Down; wait 0.150
+up Down; wait 0.050
+down Down; wait 0.050
+up Right; wait 0.100
+down Right; down Up; up Down; wait 0.050
+digest retrieval-inactive aeffbc94335ed4832eda065a83c01e1ca617797550175d39f3b9bef893444e99
+wait 0.050
+down period; down Left; up Right; wait 0.300
+up Left; wait 0.150
+up Up; up period
+digest rammed 0f8fcabf276d77589e0e738b2101e7145bde6e1c0f4905ce7544eb5086496531

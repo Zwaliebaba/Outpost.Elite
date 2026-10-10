@@ -1,0 +1,32 @@
+# The two mission rewards in use: the anti-ECM emulator and the masking device. It starts from archangel.cdr
+# (Tools/PrepareCommanders.py): armed.cdr (the fighter with an energy bomb and a pulse laser aft) after the three
+# missions, with the masking device the second mission's debriefing fits, and the anti-ECM emulator and the title
+# Archangel the third's gives. As attack-the-station.replay does, it locks a missile on Lave's station in the rear view
+# and fires it; but with L held the station starts no ECM (UpdateStationAi), and the missile, which the station's ECM
+# removes in that replay, reaches the station and explodes there. The aft laser then angers the station, which
+# launches a police Viper; N, held from its first frames for 1.5 s, runs the masking device (UseMaskingDevice): the
+# background blue, 12 units of energy a frame, and every ship's anger and attack state cleared, so the Viper neither
+# fires its laser nor launches the missile that, unmasked, it launches 0.85 s after it appears; and after it the Viper
+# does not attack. The moments were found by probing.
+file JAMESON.CDR archangel.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 569279c01c3551b91482a8abcdbfbe000c3c1a817d77ae53c0daf30a5e8ec2e2
+key F1; wait 1                     # launch
+down F2; wait 0.1; up F2; wait 0.3 # the rear view, the station in its sights
+down i; wait 0.1; up i; wait 0.3   # Missile Locked-on Target
+down l                             # the anti-ECM emulator, a unit of energy a frame
+down m; wait 0.1; up m; wait 0.1   # Missile Launched
+digest missile-launched b9936c1af9dec77517d7da08f1ecb93cdaf05795f245da4f7f89b08b928c33f5
+wait 0.9                           # no ECM: the missile reaches the station and explodes
+up l
+digest anti-ecm 874edc46762fa2ac1211b623b3a80f7471b3aa8a2e6db3a4192ff2eb75990eda
+down space; wait 0.5; up space     # the aft laser on the station: a police Viper launches
+wait 0.15
+down n; wait 0.75                  # the masking device: the background blue, the Viper holds its fire
+digest masked 92c8b23a27f4081668167d591db8adb533664f25a9b12fa37b5a91652b5b4f56
+wait 0.75; up n
+wait 2                             # unmasked, and the Viper does not attack
+digest after-masking 1be80f3435597785fb20ebff508a3f733c3d5716ca3f9dea1079cc488e6168ae

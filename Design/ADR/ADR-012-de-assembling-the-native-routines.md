@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 and 16).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 17).
 
 ## Context
 
@@ -360,6 +360,50 @@ The 7 contracts poisoning narrowed:
 **One assumption, commented in the code.** `GalacticJump` hands `SelectSystemAtCursor` the BP that `FindNearestSystem` leaves, 100h less the system's index. That holds because the galactic chart always yields a system.
 
 **The suites.** `GameLogicTests` passes 180 of 180 with poisoning on, under g++ and clang++, without warnings, with level 5's first slices in the same tree. The coverage check is clean, and no digest moved.
+
+**17. Level 5's docked menus and disc, measured 2026-10-10.** With the input chain converted (item 15), one worker converted 46 routines in Docked, Equipment, Market, Galaxy and SaveLoad, among them all four menu units of item 14.
+
+| | Count |
+|---|---|
+| Routines converted | 46 |
+| Contracts narrowed | 11 |
+| Contracts widened | 1 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 3,129 before, 2,397 after |
+| Register functions left | 131: 112 routines and 19 register adapters |
+| Routines ready | 25 |
+
+- **What converted.**
+  - The equipment menu unit, with the mount choosers and the purchases.
+  - The cargo menu unit.
+  - The trade screens' unit.
+  - The status, inventory, market-prices and system-data screens, and the mission briefing and debriefing.
+  - The chart's name search and its cursor.
+  - The scoop.
+  - The disc menu's unit: `ShowDiscControlScreen` with `RunDiscControlKeys`, `ChooseJoystick`, `ShowDiskResult` and `PromptCommanderFileName`, which jumps back into its loop. A bad name is a turn of that loop, no longer a deeper call (ADR-010 item 10).
+  - Seventeen register adapters went with their last callers.
+- **AL across the menus.** The menus' loops hold AL as the original does, through `GetKey`'s shifts (`AlAfterKey`), and hand it to `ReadSteering` as its trigger byte (item 15).
+- **A turn the register code never reported.** The disc menu's E and N keys jump back to `ShowControlDevice` (CS:66CB), and that jump is now a `LoopTurn`.
+
+The 11 contracts narrowed:
+
+| Routines | What they now keep, and why |
+|---|---|
+| `RunCargoTradeMenu`, `RunEquipShipMenu`, `ShowEquipShipScreen`, `ShowMarketPricesScreen`, `ShowSellCargoScreen`, `ShowBuyCargoScreen`, `ShowCommanderStatusScreen`, `ShowInventoryScreen`, `ShowDiscControlScreen` | AX: the key that closed the screen, in AH, which `DispatchDockedKeys` reads. With AX poisoned at the trade, inventory and status screens' exits, their constructed test's digests differed. The register code had never applied these contracts, because it never called `Clobber`. All but `ShowDiscControlScreen` also keep DS. That rests on reading the code, not on poisoning: no routine changes DS, and item 15's `LaunchEscapePod` is the evidence that its callers rely on that. |
+| `ChooseMountToFitLaser`, `ChooseMountToRemoveLaser` | DS, as `LaunchEscapePod` keeps it (item 15) |
+
+**Widened:** `ShowSystemDataScreen` was said to preserve every register, which the register code never applied. It now leaves all but AX and DS, as the other screens do. All 183 tests and the corpus pass with the rest poisoned at its exit, and its one caller, `DispatchDockedKeys`, reads only AH.
+
+**Left, and what each waits on.**
+- **The charts:** `ShowGalacticChart`, `ShowShortRangeChart` and what they draw, with `ReadChartKey`, the tail of their loop. They wait on the renderer's `DrawChartFrame`, `PresentChartFrame`, `DrawClippedLine` and `DrawDisc`.
+- **`DispatchDockedKeys`** reaches the charts through its screen table.
+- **`RunTitle`, `ShowCredits`, `GameLoop` and `Start`** wait on the renderer and the flight loop.
+
+**Coverage.** Seven routines lost their compared callers. Three constructed tests now compare them:
+- `DockedTests.FuelTextAndArchangelTitleAgree`;
+- `DockedTests.DockedFrameAgreesForEveryScreen`;
+- `EquipmentTests.EquipmentMenuWorkAgreesOnEveryRow`.
+
+**The suites.** `GameLogicTests` passes 183 of 183 with poisoning on, under g++ and clang++, without warnings, with item 16's slice in the same tree. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 
