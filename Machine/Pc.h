@@ -83,6 +83,9 @@ public:
   /// MS-DOS gives a program. Nothing changes if the load fails.
   [[nodiscard]] LoadError Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _desc, LoadedProgram& _program);
 
+  /// The same for a program given as a description rather than a file (Executable).
+  [[nodiscard]] LoadError Load(const Executable& _executable, const ExeLoader::Desc& _desc, LoadedProgram& _program);
+
   /// The number of steps the program may run without waiting before RunUntil stops with
   /// StopReason::Spinning. A loop that waits for time without ever completing an idle turn would
   /// otherwise run for ever with the clock standing still.

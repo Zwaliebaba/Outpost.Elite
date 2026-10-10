@@ -96,7 +96,14 @@ Pc::~Pc()
 
 LoadError Pc::Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _desc, LoadedProgram& _program)
 {
-  const LoadError error = ExeLoader::Load(m_memory, _file, _desc, _program);
+  Executable executable;
+  const LoadError error = ExeLoader::Parse(_file, executable);
+  return error != LoadError::None ? error : Load(executable, _desc, _program);
+}
+
+LoadError Pc::Load(const Executable& _executable, const ExeLoader::Desc& _desc, LoadedProgram& _program)
+{
+  const LoadError error = ExeLoader::Load(m_memory, _executable, _desc, _program);
   if (error != LoadError::None)
     return error;
   m_processor.Regs() = _program.registers;
