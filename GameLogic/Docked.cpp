@@ -61,11 +61,7 @@ constexpr std::uint16_t SHOW_SYSTEM_DATA_SCREEN = 0x5CDE;
 constexpr std::uint16_t SHOW_MARKET_PRICES_SCREEN = 0x5E2C;
 constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
 constexpr std::uint16_t SHOW_INVENTORY_SCREEN = 0x6020;
-constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t SHOW_DISC_CONTROL_SCREEN = 0x660B;
-constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
-constexpr std::uint16_t NEXT_MARKET_RANDOM = 0x6A85;
-constexpr std::uint16_t RUN_CARGO_TRADE_MENU = 0x6B1E;
 constexpr std::uint16_t START_MUSIC = 0x7401;
 constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
 constexpr std::uint16_t GET_KEY = 0x7616;
@@ -74,7 +70,7 @@ constexpr std::uint16_t SHOW_COCKPIT_SCREEN = 0x7BC0;
 constexpr std::uint16_t DRAW_TITLE_PLANET = 0x7D4E;
 constexpr std::uint16_t SHOW_CREDITS = 0x8F02;
 
-// Where the original jumps back (Guest::LoopTurn).
+// Where the original jumps back: Guest::JumpBack for the register code, Hardware::LoopTurn for the routines de-assembled.
 constexpr std::uint16_t DOCKED_KEY_DISPATCH = 0x0B40;
 constexpr std::uint16_t DOCKED_KEY_TEST = 0x0B45; // after a screen, the key it returned
 constexpr std::uint16_t DOCKED_STATUS_ENTRY = 0x0B96;
@@ -132,6 +128,9 @@ constexpr std::uint16_t PRODUCT_NAME_END = 0x0C;    // a product name's 12 chara
 constexpr std::uint16_t UNIT_AFTER_NAME = 0x0D;     // and then its unit
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::uint16_t TRADE_ROWS = 0x11;
+constexpr std::uint16_t TRADE_PRICES_BYTES = 4; // a product's buy price, then its sell price, in screenPrices
+constexpr std::uint16_t BUY_PRICE = 0;
+constexpr std::uint16_t SELL_PRICE = 2;
 constexpr std::uint16_t INVENTORY_ROWS = 0x12; // the 17 products and the refugees
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
 constexpr std::uint8_t QUANTITY_RANDOM_MASK = 0x1F;
@@ -273,18 +272,6 @@ FormattedQuantity FormatQuantity(GameState& _state, std::uint16_t _quantity, std
   return FormattedQuantity{units, BlankLeadingZeros(_state, _text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED))};
 }
 
-// FormatQuantity of AX, and the registers as the original leaves them: FormatDecimal5's AX, the units with their digit
-// in AL, BlankLeadingZeros' DI and CX, and SI on the text.
-void FormatQuantityOnRegisters(Guest& _guest, std::uint16_t _text)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const FormattedQuantity formatted = FormatQuantity(_guest.State(), regs.ax, _text);
-  regs.ax = WithLow(formatted.units, static_cast<std::uint8_t>(Low(formatted.units) + '0'));
-  regs.di = formatted.blanked.firstKept;
-  regs.cx = formatted.blanked.triesLeft;
-  regs.si = _text;
-}
-
 // What both trade screens start with: the frame from the descriptor at DS:_frame and its title, the two lines of help from
 // DS:_help, the header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product held.
 // _backward is the direction flag, which DrawDockedFrame goes by.
@@ -300,53 +287,38 @@ void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, std::uint16_t
   _state.Set(DS.cargoRowPointer, DS.cargoHold.offset);
 }
 
-// DrawTradeScreenHeader, and the registers the first row starts from: SI on the first product's name, DI on its row, BX on
-// its prices, and CX the count of rows.
-void DrawTradeScreenHeaderOnRegisters(Guest& _guest, std::uint16_t _frame, std::uint16_t _help)
+// A trade screen's row: what the original holds in CX, SI, DI and BX, and pushes at the start of each row: the rows left, the
+// product's name, the row's place on the text page, and the product's prices in screenPrices.
+struct TradeRow
 {
-  Machine::Registers& regs = _guest.Regs();
-  DrawTradeScreenHeader(_guest.State(), _guest.Devices(), _frame, _help, _guest.Flag(Machine::FLAG_DIRECTION));
-  regs.si = DS.productNames.offset;
-  regs.di = LINE_6;
-  regs.bx = DS.screenPrices.offset;
-  regs.cx = TRADE_ROWS;
+  std::uint16_t left;
+  std::uint16_t name;
+  std::uint16_t cell;
+  std::uint16_t prices;
+};
+
+constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, DS.productNames.offset, LINE_6, DS.screenPrices.offset};
+
+// A trade row's product name and price (PrintNameAndPrice): the price word _price bytes into the row's prices, four cells after
+// the name. Returns where the price's print stops.
+PrintedText PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t _price)
+{
+  const PrintedText named = PrintTextModeString(_state, _row.name, _row.cell);
+  FormatTenths(_state, _state.Word(Offset(_row.prices, _price)));
+  return PrintTextModeString(_state, DS.priceText.offset, Offset(named.nextCell, 4));
 }
 
-// A trade row's product name and price: the price word at BX+_price. Pushed: the row's CX, SI, DI and BX.
-void PrintNameAndPrice(Guest& _guest, std::uint16_t _price)
+// After a row's quantity, printed up to _cell (PrintUnit): the unit after the row's product name.
+void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.bx = _guest.Pop();
-  regs.ax = _guest.Word(Offset(regs.bx, _price));
-  _guest.Push(regs.bx);
-  _guest.Push(regs.di);
-  _guest.Call(FORMAT_TENTHS);
-  regs.si = DS.priceText.offset;
-  regs.di = Offset(_guest.Pop(), 4);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  PrintTextModeString(_state, Offset(_row.name, UNIT_AFTER_NAME), _cell);
 }
 
-// After a row's quantity: the next price, then the unit after the name.
-void PrintUnit(Guest& _guest)
+// The end of a trade row (EndTradeRow): the next prices, then the next row's place and product, and the count.
+[[nodiscard]] TradeRow EndTradeRow(const TradeRow& _row) noexcept
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = Offset(_guest.Pop(), 4);
-  regs.ax = _guest.Pop();
-  regs.si = _guest.Pop();
-  _guest.Push(regs.si);
-  _guest.Push(regs.ax);
-  regs.si = Offset(regs.si, UNIT_AFTER_NAME);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-}
-
-// The end of a trade row: the next row's text place and product, and the count.
-void EndTradeRow(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = Offset(_guest.Pop(), TEXT_ROW_BYTES);
-  regs.si = Offset(_guest.Pop(), PRODUCT_NAME_BYTES);
-  regs.cx = _guest.Pop();
+  return TradeRow{static_cast<std::uint16_t>(_row.left - 1), Offset(_row.name, PRODUCT_NAME_BYTES), Offset(_row.cell, TEXT_ROW_BYTES),
+                  Offset(_row.prices, TRADE_PRICES_BYTES)};
 }
 
 // The title: the planet and the turning ship, F9 and F10 step its type, any other key ends it with the
@@ -600,120 +572,96 @@ void AwardArchangelTitle(GameState& _state)
   }
 }
 
-void ShowSellCargoScreen(Guest& _guest)
+ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  DrawTradeScreenHeaderOnRegisters(_guest, DS.sellCargoFrame.offset, SELL_CARGO_HELP_TEXT);
+  DrawTradeScreenHeader(_state, _hardware, DS.sellCargoFrame.offset, SELL_CARGO_HELP_TEXT, _backward);
+  TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
-    for (const std::uint16_t value : {regs.cx, regs.si, regs.di, regs.bx})
+    const PrintedText price = PrintNameAndPrice(_state, row, SELL_PRICE);
+    // The units held, from cargoRowPointer, which moves on to the next product's.
+    const std::uint16_t entry = _state.Get(DS.cargoRowPointer);
+    const std::uint8_t held = _state.Byte(entry);
+    _state.Set(DS.cargoRowPointer, Offset(entry, 2));
+    if (held != 0)
     {
-      _guest.Push(value);
-    }
-    PrintNameAndPrice(_guest, 2); // the sell price
-    regs.bx = _guest.Get(DS.cargoRowPointer);
-    SetLow(regs.ax, _guest.Byte(regs.bx)); // the units held
-    regs.bx = Offset(regs.bx, 2);
-    _guest.Set(DS.cargoRowPointer, regs.bx);
-    regs.si = NO_QUANTITY_TEXT;
-    regs.ax = Low(regs.ax);
-    if (regs.ax != 0)
-    {
-      _guest.Push(regs.di);
-      FormatQuantityOnRegisters(_guest, DS.quantityText.offset);
-      regs.di = Offset(_guest.Pop(), 2);
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      PrintUnit(_guest);
+      FormatQuantity(_state, held, DS.quantityText.offset);
+      const PrintedText quantity = PrintTextModeString(_state, DS.quantityText.offset, Offset(price.nextCell, 2));
+      PrintUnit(_state, row, quantity.nextCell);
     }
     else
     {
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      regs.bx = Offset(_guest.Pop(), 4);
+      PrintTextModeString(_state, NO_QUANTITY_TEXT, price.nextCell);
     }
-    EndTradeRow(_guest);
-    if (--regs.cx == 0)
+    row = EndTradeRow(row);
+    if (row.left == 0)
     {
       break;
     }
-    _guest.JumpBack(SELL_CARGO_ROW);
+    _hardware.LoopTurn(SELL_CARGO_ROW, {row.left, row.name, row.cell, row.prices});
   }
-  _guest.Set(DS.tradeScreenIsBuy, 0);
-  _guest.Call(RUN_CARGO_TRADE_MENU);
+  _state.Set(DS.tradeScreenIsBuy, 0);
+  return RunCargoTradeMenu(_state, _hardware);
 }
 
-void ShowBuyCargoScreen(Guest& _guest)
+ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Get(DS.randomState0);
-  _guest.SetWord(DS.marketRandomState.offset, regs.ax);
-  regs.ax = _guest.Get(DS.randomState1);
-  _guest.Set(DS.data8C20, regs.ax);
-  regs.ax = _guest.Get(DS.randomState2);
-  _guest.Set(DS.data8C22, regs.ax);
-  DrawTradeScreenHeaderOnRegisters(_guest, DS.buyCargoFrame.offset, BUY_CARGO_HELP_TEXT);
+  _state.SetWord(DS.marketRandomState.offset, _state.Get(DS.randomState0));
+  _state.Set(DS.data8C20, _state.Get(DS.randomState1));
+  _state.Set(DS.data8C22, _state.Get(DS.randomState2));
+  DrawTradeScreenHeader(_state, _hardware, DS.buyCargoFrame.offset, BUY_CARGO_HELP_TEXT, _backward);
+  TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
-    for (const std::uint16_t value : {regs.cx, regs.si, regs.di, regs.bx})
+    const PrintedText price = PrintNameAndPrice(_state, row, BUY_PRICE);
+    std::optional<std::uint8_t> onSale;
+    if (_state.Get(DS.marketQuantitiesSet) == 0)
     {
-      _guest.Push(value);
-    }
-    PrintNameAndPrice(_guest, 0); // the buy price
-    regs.si = NO_QUANTITY_TEXT;
-    bool onSale = true;
-    if (_guest.Get(DS.marketQuantitiesSet) == 0)
-    {
-      // The quantity on sale, the first time after an arrival: ((r & 31) - 7) xor (r >> 8 & 3).
-      _guest.Call(NEXT_MARKET_RANDOM);
-      const auto random = static_cast<std::uint8_t>(Low(regs.ax) & QUANTITY_RANDOM_MASK);
-      SetLow(regs.ax, static_cast<std::uint8_t>(random - QUANTITY_RANDOM_BIAS));
-      onSale = random >= QUANTITY_RANDOM_BIAS;
-      if (onSale)
+      // The quantity on sale, the first time after an arrival: ((r & 31) - 7) xor (r >> 8 & 3), none when that borrows.
+      const std::uint16_t random = NextMarketRandom(_state);
+      const auto drawn = static_cast<std::uint8_t>(Low(random) & QUANTITY_RANDOM_MASK);
+      if (drawn >= QUANTITY_RANDOM_BIAS)
       {
-        SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) & QUANTITY_RANDOM_HIGH_MASK));
-        regs.ax = static_cast<std::uint8_t>(Low(regs.ax) ^ High(regs.ax));
+        onSale = static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
       }
     }
     else
     {
-      regs.bx = _guest.Get(DS.cargoRowPointer);
-      regs.ax = _guest.Byte(Offset(regs.bx, 1));
-      onSale = regs.ax != 0;
+      const std::uint8_t drawn = _state.Byte(Offset(_state.Get(DS.cargoRowPointer), 1));
+      if (drawn != 0)
+      {
+        onSale = drawn;
+      }
     }
+    // The quantity into the market's byte of the product's cargoHold entry, and cargoRowPointer on to the next product's.
     if (onSale)
     {
-      _guest.Push(regs.ax);
-      _guest.Push(regs.di);
-      FormatQuantityOnRegisters(_guest, DS.quantityText.offset);
-      regs.di = Offset(_guest.Pop(), 2);
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      regs.bx = _guest.Get(DS.cargoRowPointer);
-      regs.ax = _guest.Pop();
-      _guest.SetByte(Offset(regs.bx, 1), Low(regs.ax));
-      regs.bx = Offset(regs.bx, 2);
-      _guest.Set(DS.cargoRowPointer, regs.bx);
-      PrintUnit(_guest);
+      FormatQuantity(_state, *onSale, DS.quantityText.offset);
+      const PrintedText quantity = PrintTextModeString(_state, DS.quantityText.offset, Offset(price.nextCell, 2));
+      const std::uint16_t entry = _state.Get(DS.cargoRowPointer);
+      _state.SetByte(Offset(entry, 1), *onSale);
+      _state.Set(DS.cargoRowPointer, Offset(entry, 2));
+      PrintUnit(_state, row, quantity.nextCell);
     }
     else
     {
-      regs.si = NO_QUANTITY_TEXT;
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      regs.bx = _guest.Get(DS.cargoRowPointer);
-      _guest.SetByte(Offset(regs.bx, 1), 0);
-      regs.bx = Offset(regs.bx, 2);
-      _guest.Set(DS.cargoRowPointer, regs.bx);
-      regs.bx = Offset(_guest.Pop(), 4);
-      _guest.JumpBack(BUY_CARGO_ROW_END);
+      PrintTextModeString(_state, NO_QUANTITY_TEXT, price.nextCell);
+      const std::uint16_t entry = _state.Get(DS.cargoRowPointer);
+      _state.SetByte(Offset(entry, 1), 0);
+      _state.Set(DS.cargoRowPointer, Offset(entry, 2));
+      // The jump back into the row's end, with CX the count and BX the next prices.
+      _hardware.LoopTurn(BUY_CARGO_ROW_END, {row.left, Offset(row.prices, TRADE_PRICES_BYTES)});
     }
-    EndTradeRow(_guest);
-    if (--regs.cx == 0)
+    row = EndTradeRow(row);
+    if (row.left == 0)
     {
       break;
     }
-    _guest.JumpBack(BUY_CARGO_ROW);
+    _hardware.LoopTurn(BUY_CARGO_ROW, {row.left, row.name, row.cell, row.prices});
   }
-  _guest.Set(DS.tradeScreenIsBuy, 1);
-  _guest.Set(DS.marketQuantitiesSet, 1);
-  _guest.Call(RUN_CARGO_TRADE_MENU);
+  _state.Set(DS.tradeScreenIsBuy, 1);
+  _state.Set(DS.marketQuantitiesSet, 1);
+  return RunCargoTradeMenu(_state, _hardware);
 }
 
 ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
@@ -1038,6 +986,20 @@ constexpr Machine::NativeContract SHOWS_SCREEN{
 
 } // namespace
 
+void ShowSellCargoScreenEntry(Guest& _guest)
+{
+  const ScreenKey key = ShowSellCargoScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Regs().ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
+
+void ShowBuyCargoScreenEntry(Guest& _guest)
+{
+  const ScreenKey key = ShowBuyCargoScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Regs().ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
+
 void ShowCommanderStatusScreenEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1138,8 +1100,8 @@ constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x49E4, "AwardArchangelTitle", &AwardArchangelTitleEntry, CLOBBERS_AX_CX_SI_DI},
-  NativeEntry{0x5A30, "ShowSellCargoScreen", &ShowSellCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x5AE9, "ShowBuyCargoScreen", &ShowBuyCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
+  NativeEntry{0x5A30, "ShowSellCargoScreen", &ShowSellCargoScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
+  NativeEntry{0x5AE9, "ShowBuyCargoScreen", &ShowBuyCargoScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
   NativeEntry{0x5EA9, "ShowCommanderStatusScreen", &ShowCommanderStatusScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
   NativeEntry{0x6020, "ShowInventoryScreen", &ShowInventoryScreenEntry, SHOWS_SCREEN, NEAR, 0, ALWAYS},
   NativeEntry{0x658F, "PrintCreditsOnMessageLine", &PrintCreditsOnMessageLineEntry, PRESERVES_ALL},

@@ -18,15 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockedEntries() noexcept;
 
-/// ShowSellCargoScreen (CS:5A30), F2: the products with their sell prices and the units held, then
-/// RunCargoTradeMenu, which waits. Out: AH=the Esc or F-key that closed it; clobbers all but DS.
-void ShowSellCargoScreen(Guest& _guest);
-
-/// ShowBuyCargoScreen (CS:5AE9), F3: the products with their buy prices and the quantities on sale, drawn
-/// from the market's random state the first time after an arrival, then RunCargoTradeMenu, which waits.
-/// Out: AH=the Esc or F-key that closed it; clobbers all but DS.
-void ShowBuyCargoScreen(Guest& _guest);
-
 /// RunTitleAndDocked (CS:7D81): unless titleShown, the title until a key, the credits and a new game; then
 /// the docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a
 /// disk request, until F1. Clobbers all but DS.
@@ -56,6 +47,15 @@ void AwardArchangelTitle(GameState& _state);
 /// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor
 /// with _countIfNone. _al is what the screen left in AL. Waits for keys as a rule (ADR-015).
 ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone);
+
+/// ShowSellCargoScreen (CS:5A30), F2, with PrintNameAndPrice, PrintUnit and EndTradeRow as one unit (ADR-012 item 14): the
+/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. _backward
+/// is the direction flag, which DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
+ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _backward);
+
+/// ShowBuyCargoScreen (CS:5AE9), F3, as ShowSellCargoScreen: the products with their buy prices and the quantities on sale,
+/// drawn from the market's random state the first time after an arrival, then RunCargoTradeMenu.
+ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// ShowCommanderStatusScreen (CS:5EA9), F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
@@ -107,6 +107,8 @@ void FormatFuelLightYearsEntry(Guest& _guest);      ///< Out: SI=DS:83E9, the fu
 void DrawDockedFrameEntry(Guest& _guest);           ///< In: SI=the descriptor. Out: SI=the title, ES=B800h.
 void DrawFrameSidesEntry(Guest& _guest);
 void DrawFrameRowEntry(Guest& _guest);
+void ShowSellCargoScreenEntry(Guest& _guest);       ///< Out: AX the key; all but DS clobbered.
+void ShowBuyCargoScreenEntry(Guest& _guest);        ///< Out: AX the key; all but DS clobbered.
 void ShowCommanderStatusScreenEntry(Guest& _guest); ///< In: BP, as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
 void ShowInventoryScreenEntry(Guest& _guest);       ///< As ShowCommanderStatusScreenEntry.
 void ShowMissionBriefingEntry(Guest& _guest);       ///< Clobbers all but DS.

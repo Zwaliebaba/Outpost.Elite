@@ -18,10 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MarketEntries() noexcept;
 
-/// RunCargoTradeMenu (CS:6B1E): the cargo menu: the cursor, and B or S with a typed quantity on the buy or sell
-/// screen (tradeScreenIsBuy). Waits. Out: AH=Esc or the F-key that ended it.
-void RunCargoTradeMenu(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
@@ -36,6 +32,12 @@ struct Quantity
   std::uint16_t end;     ///< one past the last character it read
   std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
 };
+
+/// RunCargoTradeMenu (CS:6B1E): the cargo menu, with OpenCargoMessage, ShowCargoMessage, SellCargo, BuyCargo, RefuseBuy and
+/// ReadQuantity as one unit (ADR-012 item 14): the cursor moved by the steering and the arrow keys, and B or S with a quantity
+/// typed on the buy or sell screen (tradeScreenIsBuy), each with its message. Returns Esc or the F-key that ends it, other than
+/// the screen's own. Waits for keys as a rule (ADR-015).
+ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware);
 
 /// ShowMarketPricesScreen (CS:5E2C): the F8 screen, the system's name cut at its first space and every commodity's buy and
 /// sell price, then the wait for the key that closes it (WaitForScreenExitKey, with _countIfNone). _backward is the direction
@@ -79,6 +81,7 @@ std::uint8_t AddContrabandPenalty(GameState& _state);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
+void RunCargoTradeMenuEntry(Guest& _guest);      ///< Out: AX the key; all but DS clobbered.
 void ShowMarketPricesScreenEntry(Guest& _guest); ///< In: BP as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
 void SubtractCreditsEntry(Guest& _guest);        ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
 void SpendCreditsEntry(Guest& _guest);           ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.

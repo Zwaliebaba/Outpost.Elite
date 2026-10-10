@@ -16,6 +16,8 @@ namespace
 
 constexpr std::uint16_t AWARD_ARCHANGEL_TITLE = 0x49E4;
 constexpr std::uint16_t FORMAT_FUEL_LIGHT_YEARS = 0x6923;
+constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
+constexpr std::uint8_t TEXT_LAYOUT = 2; // screenLayout while the text page shows
 
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
@@ -135,6 +137,25 @@ public:
     rig.AssertAllAgreed(FORMAT_FUEL_LIGHT_YEARS, fuels.size());
     rig.Call(AWARD_ARCHANGEL_TITLE, {});
     rig.AssertAllAgreed(AWARD_ARCHANGEL_TITLE, 1);
+  }
+
+  // The docked screens' frame from each kind of descriptor, with the text page already showing, so that no BIOS call keeps the
+  // comparison from undoing it: every docked screen draws it as a value routine since level 5 of the de-assembly (ADR-012 item
+  // 12).
+  TEST_METHOD(DockedFrameAgreesForEveryScreen)
+  {
+    ComparisonRig rig("DockedFrame");
+    Machine::Memory& ram = rig.Host().Ram();
+    const std::uint16_t data = Elite::DataSegment(rig.Program());
+    const std::initializer_list<std::uint16_t> frames = {Elite::DS.commanderTitle.offset, Elite::DS.inventoryFrame.offset,
+                                                         Elite::DS.emergencyFrame.offset, Elite::DS.discControlFrame.offset,
+                                                         Elite::DS.equipShipFrame.offset};
+    for (const std::uint16_t frame : frames)
+    {
+      ram.Write8(data, Elite::DS.screenLayout.offset, TEXT_LAYOUT);
+      rig.Call(DRAW_DOCKED_FRAME, {.si = frame});
+    }
+    rig.AssertAllAgreed(DRAW_DOCKED_FRAME, frames.size());
   }
 };
 

@@ -4,7 +4,8 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
-#include "Maths.h"
+#include "Docked.h"
+#include "Input.h"
 #include "Text.h"
 
 namespace Elite
@@ -24,18 +25,7 @@ constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
 
 // ---- The disc menu ----
 
-// What the disc menu calls, through the hooks.
-constexpr std::uint16_t IS_MOUSE_DRIVER_INSTALLED = 0x02D4;
-constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
-constexpr std::uint16_t PRINT_COUNTED_TEXT_LINES = 0x65FA;
-constexpr std::uint16_t PROMPT_COMMANDER_FILE_NAME = 0x6862;
-constexpr std::uint16_t PRINT_COMMANDER_CATALOGUE = 0x68CE;
-constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t READ_TEXT_LINE = 0x7694;
-constexpr std::uint16_t READ_JOYSTICK_AXES = 0x777E;
-constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
-
-// Where its loops jump back to.
+// Where its loops jump back to (Hardware::LoopTurn).
 constexpr std::uint16_t RETRY_KEY_LOOP = 0x6625;
 constexpr std::uint16_t DISC_CONTROL_KEY_LOOP = 0x665E;
 constexpr std::uint16_t EXIT_KEY_LOOP = 0x66C3;
@@ -256,34 +246,32 @@ PrintedText PrintAt(GameState& _state, std::uint16_t _text, std::uint16_t _posit
   return PrintTextModeString(_state, _text, _position);
 }
 
-// What PrintTextModeString leaves in the registers after a print that stopped at _printed: SI on the text's NUL, DI past the
-// last cell, ES = B800h, and AX the attribute it printed in with the NUL in AL.
-void PrintedOut(Guest& _guest, PrintedText _printed)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = _printed.end;
-  regs.di = _printed.nextCell;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = Join(_guest.Get(DS.textAttribute), 0);
-}
-
-// PrintAt, and the registers as the original leaves them.
-void PrintAtOnRegisters(Guest& _guest, std::uint16_t _text, std::uint16_t _position)
-{
-  PrintedOut(_guest, PrintAt(_guest.State(), _text, _position));
-}
-
-// CALL GetKey / JZ back: the wait for a key at CS:_loop. Out: AH the key's scan code.
-void WaitForKey(Guest& _guest, std::uint16_t _loop)
+// CALL GetKey / JZ back: GetKey until a key comes, each empty turn ending at the jump back to CS:_loop (ADR-015). The turns carry
+// nothing, as WaitForKeyPress's do. Returns the key.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
 {
   for (;;)
   {
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(Machine::FLAG_ZERO))
+    const KeyPress key = GetKey(_state, _hardware);
+    if (key.scanCode != 0)
     {
-      return;
+      return key;
     }
-    _guest.JumpBack(_loop);
+    _hardware.LoopTurn(_loop, {});
+  }
+}
+
+// WaitForKey at CS:_loop until one of _first and _second comes, every other key going back there too. Returns it.
+std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop, std::uint8_t _first, std::uint8_t _second)
+{
+  for (;;)
+  {
+    const std::uint8_t scan = WaitForKey(_state, _hardware, _loop).scanCode;
+    if (scan == _first || scan == _second)
+    {
+      return scan;
+    }
+    _hardware.LoopTurn(_loop, {});
   }
 }
 
@@ -295,25 +283,17 @@ PrintedText BlankHelpRows(GameState& _state)
 }
 
 // LeaveGameLoopForDisk (CS:7E90): diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
-// work came to when it runs again.
-void LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
+// work came to when it runs again. The two POP AX between its writes, which drop the return address of the call it is in and the
+// one under it, so that its RET takes GameLoop's back to Start, are the entries' (DiscMenuExitOut): they read the stack and write
+// no memory, so the writes keep the original's order.
+DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
 {
   _state.Set(DS.diskOperation, _operation);
   _state.Set(DS.resumeAtDiskMenu, 1);
+  return DiscMenuExit{true, 0, 0};
 }
 
-// LeaveGameLoopForDisk as the disc menu's register code reaches it, by a jump with AL the operation, and the two POP AX between
-// its writes, which drop the return address of the call it is in and the one under it, so that its RET takes GameLoop's back to
-// Start, which does the disk work. The pops read the stack and write no memory, so the writes keep the original's order.
-void LeaveGameLoopForDiskOnRegisters(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  LeaveGameLoopForDisk(_guest.State(), Low(regs.ax));
-  regs.ax = _guest.Pop();
-  regs.ax = _guest.Pop();
-}
-
-// Where ShowControlDevice reads the input device's name from, in inputDeviceNames: what it leaves in BX.
+// Where ShowControlDevice reads the input device's name from, in inputDeviceNames.
 [[nodiscard]] std::uint16_t InputDeviceName(const GameState& _state)
 {
   return static_cast<std::uint16_t>((_state.Get(DS.inputDevice) << 1) + DS.inputDeviceNames.offset);
@@ -326,13 +306,6 @@ PrintedText ShowControlDevice(GameState& _state)
   const PrintedText label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
   PrintAt(_state, _state.Word(InputDeviceName(_state)), label.nextCell);
   return BlankHelpRows(_state);
-}
-
-// ShowControlDevice, and the registers as the original leaves them: BX where it read the name from, and the last print's.
-void ShowControlDeviceOnRegisters(Guest& _guest)
-{
-  PrintedOut(_guest, ShowControlDevice(_guest.State()));
-  _guest.Regs().bx = InputDeviceName(_guest.State());
 }
 
 // The joystick could not be read (CS:67C4), or the Amstrad's never moved: the error, and the help's two lines, or only its
@@ -349,224 +322,204 @@ PrintedText ShowNoJoystick(GameState& _state)
   return PrintAt(_state, Offset(help.end, 1), SECOND_HELP_POSITION);
 }
 
-// J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and
-// the menu goes on at ShowControlDevice; false when it could not be read.
-[[nodiscard]] bool ChooseJoystick(Guest& _guest)
+// J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and the menu goes on at
+// ShowControlDevice; false when it could not be read.
+[[nodiscard]] bool ChooseJoystick(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  PrintAtOnRegisters(_guest, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
-  regs.di = STATUS_POSITION;
-  regs.si = JOYSTICK_TITLE_TEXT;
-  bool amstrad = false;
-  for (;;)
-  {
-    WaitForKey(_guest, JOYSTICK_KEY_LOOP);
-    if (High(regs.ax) == SCAN_I)
-    {
-      break;
-    }
-    if (High(regs.ax) == SCAN_A)
-    {
-      amstrad = true;
-      break;
-    }
-    _guest.JumpBack(JOYSTICK_KEY_LOOP);
-  }
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  PrintAt(_state, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
+  // I or A, then the title over the question: the original sets SI and DI for it before the wait.
+  const bool amstrad = WaitForEitherKey(_state, _hardware, JOYSTICK_KEY_LOOP, SCAN_I, SCAN_A) == SCAN_A;
+  PrintAt(_state, JOYSTICK_TITLE_TEXT, STATUS_POSITION);
   if (amstrad)
   {
-    _guest.Set(DS.joystickIsAmstrad, 1);
-    PrintAtOnRegisters(_guest, MOVE_JOYSTICK_TEXT, HELP_POSITION);
-    _guest.Set(DS.amstradJoystickMoved, 0);
+    // The Amstrad's: a key from it, one of 77h-7Ch, until a key from the keyboard, below 54h, ends the wait.
+    _state.Set(DS.joystickIsAmstrad, 1);
+    PrintAt(_state, MOVE_JOYSTICK_TEXT, HELP_POSITION);
+    _state.Set(DS.amstradJoystickMoved, 0);
     for (;;)
     {
-      WaitForKey(_guest, AMSTRAD_KEY_LOOP);
-      const std::uint8_t scan = High(regs.ax);
+      const std::uint8_t scan = WaitForKey(_state, _hardware, AMSTRAD_KEY_LOOP).scanCode;
       if (scan < SCAN_PAST_KEYBOARD)
       {
         break;
       }
       if (scan >= SCAN_AMSTRAD_JOYSTICK && scan < SCAN_PAST_AMSTRAD_JOYSTICK)
       {
-        _guest.Set(DS.amstradJoystickMoved, 1);
+        _state.Set(DS.amstradJoystickMoved, 1);
       }
-      _guest.JumpBack(AMSTRAD_KEY_LOOP);
+      _hardware.LoopTurn(AMSTRAD_KEY_LOOP, {});
     }
-    return _guest.Get(DS.amstradJoystickMoved) == 1;
+    return _state.Get(DS.amstradJoystickMoved) == 1;
   }
-  _guest.Set(DS.joystickIsAmstrad, 0);
-  PrintAtOnRegisters(_guest, CENTER_JOYSTICK_TEXT, HELP_POSITION);
-  WaitForKey(_guest, CENTER_KEY_LOOP);
-  _guest.Call(READ_JOYSTICK_AXES);
-  _guest.Set(DS.joystickCenterX, regs.bx);
-  _guest.Set(DS.joystickCenterY, regs.cx);
-  if (_guest.Flag(Machine::FLAG_CARRY))
+  // The IBM's: its centre read once a key says the stick is let go. ReadJoystickAxes fires the stick with AL as GetKey leaves
+  // it, from the print's NUL.
+  _state.Set(DS.joystickIsAmstrad, 0);
+  PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
+  const KeyPress key = WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
+  const StickAxes center = ReadJoystickAxes(_state, _hardware, AlAfterKey(0, key));
+  _state.Set(DS.joystickCenterX, center.x);
+  _state.Set(DS.joystickCenterY, center.y);
+  if (center.timedOut)
   {
     return false;
   }
-  _guest.JumpBack(SELECT_JOYSTICK);
+  _hardware.LoopTurn(SELECT_JOYSTICK, {});
   return true;
 }
 
-// The disc menu's keys: DiscControlKeyLoop (CS:665E), or ShowControlDevice before it when _showDevice, and
-// everything they run until the menu is left. A function key returns from the call it is in, with AH its scan
-// code; a disk operation, or E then Y, leaves through LeaveGameLoopForDisk. ShowDiscControlScreen runs on into
-// it, and PromptCommanderFileName jumps into it after a bad name, its own return address dropped.
-void RunDiscControlKeys(Guest& _guest, bool _showDevice)
+// RejectFileName (CS:68AD), after a bad name: "FILENAME ERROR", and the jump back to the menu's keys.
+void RejectFileName(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
+  PrintAt(_state, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
+  _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+}
+
+// The disc menu's keys: DiscControlKeyLoop (CS:665E), with AL _al there, or ShowControlDevice before it when _showDevice; and
+// everything they run until the menu is left. Each turn back to the keys carries nothing, as WaitForKey's turns do.
+DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice, std::uint8_t _al)
+{
+  std::uint8_t al = _al;
   bool showDevice = _showDevice;
   for (;;)
   {
     if (showDevice)
     {
-      ShowControlDeviceOnRegisters(_guest);
-      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
+      ShowControlDevice(_state);
+      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+      al = 0; // the print's NUL
       showDevice = false;
     }
-    WaitForKey(_guest, DISC_CONTROL_KEY_LOOP);
-    _guest.Push(regs.ax);
-    PrintedOut(_guest, BlankHelpRows(_guest.State()));
-    regs.ax = _guest.Pop();
-    const std::uint8_t scan = High(regs.ax);
+    const KeyPress key = WaitForKey(_state, _hardware, DISC_CONTROL_KEY_LOOP);
+    al = AlAfterKey(al, key);
+    // PUSH AX and POP AX round it.
+    BlankHelpRows(_state);
+    const std::uint8_t scan = key.scanCode;
     if (scan == SCAN_E)
     {
-      PrintAtOnRegisters(_guest, EXIT_QUESTION_TEXT, STATUS_POSITION);
-      for (;;)
+      PrintAt(_state, EXIT_QUESTION_TEXT, STATUS_POSITION);
+      if (WaitForEitherKey(_state, _hardware, EXIT_KEY_LOOP, SCAN_N, SCAN_Y) == SCAN_N)
       {
-        WaitForKey(_guest, EXIT_KEY_LOOP);
-        if (High(regs.ax) == SCAN_N || High(regs.ax) == SCAN_Y)
-        {
-          break;
-        }
-        _guest.JumpBack(EXIT_KEY_LOOP);
-      }
-      if (High(regs.ax) == SCAN_N)
-      {
+        _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});
         showDevice = true;
         continue;
       }
-      SetLow(regs.ax, EXIT_TO_DOS);
-      LeaveGameLoopForDiskOnRegisters(_guest);
-      return;
+      return LeaveGameLoopForDisk(_state, EXIT_TO_DOS);
     }
     if (scan == SCAN_L || scan == SCAN_S || scan == SCAN_D)
     {
-      // A bad name does not come back here.
-      _guest.Call(PROMPT_COMMANDER_FILE_NAME);
-      SetLow(regs.ax, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
-      LeaveGameLoopForDiskOnRegisters(_guest);
-      return;
+      if (!PromptCommanderFileName(_state, _hardware))
+      {
+        // The prompt's return address dropped, and the menu's keys read on in its place.
+        RejectFileName(_state, _hardware);
+        al = 0;
+        continue;
+      }
+      return LeaveGameLoopForDisk(_state, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
     }
     if (scan == SCAN_C)
     {
-      SetLow(regs.ax, CATALOGUE_COMMANDERS);
-      LeaveGameLoopForDiskOnRegisters(_guest);
-      return;
+      return LeaveGameLoopForDisk(_state, CATALOGUE_COMMANDERS);
     }
     if (scan == SCAN_K)
     {
-      _guest.Set(DS.inputDevice, KEYBOARD_DEVICE);
+      _state.Set(DS.inputDevice, KEYBOARD_DEVICE);
       showDevice = true;
       continue;
     }
     if (scan == SCAN_M)
     {
-      _guest.Call(IS_MOUSE_DRIVER_INSTALLED);
-      if (!_guest.Flag(Machine::FLAG_ZERO))
+      if (IsMouseDriverInstalled(_state).installed)
       {
-        _guest.Set(DS.inputDevice, MOUSE_DEVICE);
-        _guest.JumpBack(SHOW_CONTROL_DEVICE);
+        _state.Set(DS.inputDevice, MOUSE_DEVICE);
+        _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});
         showDevice = true;
         continue;
       }
-      PrintAtOnRegisters(_guest, NO_MOUSE_TEXT, STATUS_POSITION);
-      PrintAtOnRegisters(_guest, MOUSE_HELP_TEXT, HELP_POSITION);
-      ++regs.si;
-      regs.di = SECOND_HELP_POSITION;
-      _guest.Call(PRINT_TEXT_MODE_STRING);
-      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
+      PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
+      const PrintedText help = PrintAt(_state, MOUSE_HELP_TEXT, HELP_POSITION);
+      PrintAt(_state, Offset(help.end, 1), SECOND_HELP_POSITION); // INC SI: the second line
+      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+      al = 0;
       continue;
     }
     if (scan == SCAN_J)
     {
-      if (ChooseJoystick(_guest))
+      if (ChooseJoystick(_state, _hardware))
       {
-        _guest.Set(DS.inputDevice, JOYSTICK_DEVICE);
-        _guest.JumpBack(SHOW_CONTROL_DEVICE);
+        _state.Set(DS.inputDevice, JOYSTICK_DEVICE);
+        _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});
         showDevice = true;
         continue;
       }
-      PrintedOut(_guest, ShowNoJoystick(_guest.State()));
-      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
+      ShowNoJoystick(_state);
+      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+      al = 0;
       continue;
     }
     if (scan == SCAN_V)
     {
-      PrintAtOnRegisters(_guest, DS.versionString.offset, HELP_POSITION);
-      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
+      PrintAt(_state, DS.versionString.offset, HELP_POSITION);
+      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+      al = 0;
       continue;
     }
     if (scan < SCAN_F1 || scan >= SCAN_PAST_F10)
     {
-      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
+      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       continue;
     }
-    _guest.Set(DS.resumeAtDiskMenu, 0);
-    return;
+    _state.Set(DS.resumeAtDiskMenu, 0);
+    return DiscMenuExit{false, scan, al};
   }
 }
 
-// What the disk operation Start did came to (CS:67E7): LOADED:, SAVED:, DELETED: and the name, or CATALOGUED
-// and the catalogue; a loaded name becomes the default.
-void ShowDiskResult(Guest& _guest)
+// What the disk operation Start did came to (CS:67E7): LOADED:, SAVED:, DELETED: and the name, or CATALOGUED and the catalogue;
+// a loaded name becomes the default. Returns AL as it leaves it: its last print's NUL, or once a name is copied, its last byte.
+std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  PrintAtOnRegisters(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
-  regs.bx = Join(0, static_cast<std::uint8_t>(_guest.Get(DS.diskOperation) - 1));
-  regs.bx = static_cast<std::uint16_t>((regs.bx << 1) + DS.diskOperationNames.offset);
-  regs.si = _guest.Word(regs.bx);
-  regs.di = STATUS_POSITION;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  if (_guest.Get(DS.diskOperation) == CATALOGUE_COMMANDERS)
+  PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
+  // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames.
+  const auto name =
+    static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Get(DS.diskOperation) - 1) << 1) + DS.diskOperationNames.offset);
+  const PrintedText result = PrintAt(_state, _state.Word(name), STATUS_POSITION);
+  if (_state.Get(DS.diskOperation) == CATALOGUE_COMMANDERS)
   {
-    regs.si = CATALOGUE_OK_TEXT;
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    _guest.Call(PRINT_COMMANDER_CATALOGUE);
-    return;
+    PrintAt(_state, CATALOGUE_OK_TEXT, result.nextCell);
+    PrintCommanderCatalogue(_state);
+    return 0;
   }
-  // The name without its extension.
-  regs.si = DS.commanderFileName.offset;
+  // The name without its extension: a NUL over its '.', which each turn of the search, carrying SI, looks for.
+  std::uint16_t letter = DS.commanderFileName.offset;
   for (;;)
   {
-    ++regs.si;
-    if (_guest.Byte(regs.si) == '.')
+    letter = Offset(letter, 1);
+    if (_state.Byte(letter) == '.')
     {
       break;
     }
-    _guest.JumpBack(FIND_NAME_EXTENSION);
+    _hardware.LoopTurn(FIND_NAME_EXTENSION, {letter});
   }
-  _guest.SetByte(regs.si, 0);
-  regs.si = DS.commanderFileName.offset;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  if (_guest.Get(DS.diskOperation) != LOAD_COMMANDER)
+  _state.SetByte(letter, 0);
+  PrintAt(_state, DS.commanderFileName.offset, result.nextCell);
+  if (_state.Get(DS.diskOperation) != LOAD_COMMANDER)
   {
-    return;
+    return 0;
   }
-  regs.si = DS.commanderFileName.offset;
-  regs.di = DS.defaultCommanderName.offset;
-  regs.cx = MOST_NAME_CHARACTERS;
-  for (;;)
+  // Its eight bytes copied to defaultCommanderName, the LOOP's turns carrying both places and the count.
+  std::uint16_t from = DS.commanderFileName.offset;
+  std::uint16_t to = DS.defaultCommanderName.offset;
+  std::uint8_t copied = 0;
+  for (std::uint16_t left = MOST_NAME_CHARACTERS;;)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.si;
-    ++regs.di;
-    if (--regs.cx == 0)
+    copied = _state.Byte(from);
+    _state.SetByte(to, copied);
+    from = Offset(from, 1);
+    to = Offset(to, 1);
+    if (--left == 0)
     {
-      return;
+      return copied;
     }
-    _guest.JumpBack(COPY_LOADED_NAME);
+    _hardware.LoopTurn(COPY_LOADED_NAME, {from, to, left});
   }
 }
 
@@ -574,6 +527,22 @@ void ShowDiskResult(Guest& _guest)
 [[nodiscard]] constexpr bool IsNameCharacter(std::uint8_t _character) noexcept
 {
   return (_character >= '0' && _character <= '9') || (_character >= 'A' && _character <= 'Z');
+}
+
+// What the disc menu leaves when it is done, as its entries hand it back: AX the F-key it returns with, and AL as its GetKey left
+// it; or, once it leaves for the disk, the second of the two return addresses LeaveGameLoopForDisk pops; and ES on the text page,
+// from its prints.
+void DiscMenuExitOut(Guest& _guest, const DiscMenuExit& _exit)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.es = Guest::VIDEO_SEGMENT;
+  if (_exit.leaves)
+  {
+    regs.ax = _guest.Pop();
+    regs.ax = _guest.Pop();
+    return;
+  }
+  regs.ax = Join(_exit.scanCode, _exit.al);
 }
 
 } // namespace
@@ -638,113 +607,75 @@ void ShowDiskError(GameState& _state)
   }
 }
 
-void ShowDiscControlScreen(Guest& _guest)
+DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.resumeAtDiskMenu) == 0)
+  if (_state.Get(DS.resumeAtDiskMenu) == 0)
   {
-    regs.si = DS.discControlFrame.offset;
-    _guest.Call(DRAW_DOCKED_FRAME);
-    regs.di = TITLE_POSITION;
-    _guest.Call(PRINT_TEXT_MODE_STRING);
-    regs.si = DS.discMenuText.offset;
-    regs.di = MENU_POSITION;
-    _guest.Call(PRINT_COUNTED_TEXT_LINES);
-    RunDiscControlKeys(_guest, true);
-    return;
+    PrintAt(_state, DrawDockedFrame(_state, _hardware, DS.discControlFrame.offset, _backward), TITLE_POSITION);
+    PrintCountedTextLines(_state, DS.discMenuText.offset, MENU_POSITION);
+    return RunDiscControlKeys(_state, _hardware, true, 0);
   }
   // Back from Start's disk work.
-  if (_guest.Get(DS.diskError) == 0)
+  if (_state.Get(DS.diskError) == 0)
   {
-    ShowDiskResult(_guest);
-    _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
-    RunDiscControlKeys(_guest, false);
-    return;
+    const std::uint8_t al = ShowDiskResult(_state, _hardware);
+    _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+    return RunDiscControlKeys(_state, _hardware, false, al);
   }
-  PrintAtOnRegisters(_guest, RETRY_TEXT, STATUS_POSITION);
-  for (;;)
+  PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
+  if (WaitForEitherKey(_state, _hardware, RETRY_KEY_LOOP, SCAN_N, SCAN_Y) == SCAN_N)
   {
-    WaitForKey(_guest, RETRY_KEY_LOOP);
-    if (High(regs.ax) == SCAN_N)
-    {
-      RunDiscControlKeys(_guest, true);
-      return;
-    }
-    if (High(regs.ax) == SCAN_Y)
-    {
-      break;
-    }
-    _guest.JumpBack(RETRY_KEY_LOOP);
+    return RunDiscControlKeys(_state, _hardware, true, 0);
   }
-  PrintAtOnRegisters(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
-  SetLow(regs.ax, _guest.Get(DS.diskOperation));
-  LeaveGameLoopForDiskOnRegisters(_guest);
+  PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
+  return LeaveGameLoopForDisk(_state, _state.Get(DS.diskOperation));
 }
 
-void PromptCommanderFileName(Guest& _guest)
+bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  PrintAtOnRegisters(_guest, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
-  regs.si = DS.commanderFileName.offset;
-  regs.di = NAME_POSITION;
-  regs.cx = MOST_NAME_CHARACTERS;
-  _guest.Call(READ_TEXT_LINE);
-  // A letter, then letters and digits, folded to upper case.
-  regs.si = DS.commanderFileName.offset;
-  SetLow(regs.ax, _guest.Byte(regs.si));
-  bool named = false;
-  if (Low(regs.ax) != 0)
+  PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
+  (void)ReadTextLine(_state, _hardware, DS.commanderFileName.offset, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
+  // A letter, then letters and digits, folded to upper case, each turn of the check carrying its place.
+  std::uint16_t letter = DS.commanderFileName.offset;
+  auto character = static_cast<std::uint8_t>(_state.Byte(letter) & LOWER_CASE_BIT_CLEAR);
+  if (_state.Byte(letter) == 0 || character < 'A' || character > 'Z')
   {
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & LOWER_CASE_BIT_CLEAR));
-    if (Low(regs.ax) >= 'A' && Low(regs.ax) <= 'Z')
-    {
-      _guest.SetByte(regs.si, Low(regs.ax));
-      for (;;)
-      {
-        ++regs.si;
-        SetLow(regs.ax, _guest.Byte(regs.si));
-        if (Low(regs.ax) == 0)
-        {
-          named = true;
-          break;
-        }
-        if (Low(regs.ax) >= 'a' && Low(regs.ax) <= 'z')
-        {
-          SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & LOWER_CASE_BIT_CLEAR));
-        }
-        if (!IsNameCharacter(Low(regs.ax)))
-        {
-          break;
-        }
-        _guest.SetByte(regs.si, Low(regs.ax));
-        _guest.JumpBack(NEXT_NAME_CHARACTER);
-      }
-    }
+    return false;
   }
-  if (!named)
-  {
-    // RejectFileName (CS:68AD): this call's return address dropped, and the menu's keys read on in its place.
-    regs.ax = _guest.Pop();
-    PrintAtOnRegisters(_guest, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
-    _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
-    RunDiscControlKeys(_guest, false);
-    return;
-  }
-  regs.di = COMMANDER_EXTENSION;
-  regs.cx = EXTENSION_BYTES;
+  _state.SetByte(letter, character);
   for (;;)
   {
-    SetLow(regs.ax, _guest.Byte(regs.di));
-    ++regs.di;
-    _guest.SetByte(regs.si, Low(regs.ax));
-    ++regs.si;
-    if (--regs.cx == 0)
+    letter = Offset(letter, 1);
+    character = _state.Byte(letter);
+    if (character == 0)
     {
       break;
     }
-    _guest.JumpBack(APPEND_EXTENSION);
+    if (character >= 'a' && character <= 'z')
+    {
+      character = static_cast<std::uint8_t>(character & LOWER_CASE_BIT_CLEAR);
+    }
+    if (!IsNameCharacter(character))
+    {
+      return false;
+    }
+    _state.SetByte(letter, character);
+    _hardware.LoopTurn(NEXT_NAME_CHARACTER, {letter});
   }
-  _guest.SetFlag(Machine::FLAG_CARRY, false);
+  // ".CDR" and its NUL after the name, the LOOP's turns carrying both places and the count.
+  std::uint16_t extension = COMMANDER_EXTENSION;
+  for (std::uint16_t left = EXTENSION_BYTES;;)
+  {
+    const std::uint8_t byte = _state.Byte(extension);
+    extension = Offset(extension, 1);
+    _state.SetByte(letter, byte);
+    letter = Offset(letter, 1);
+    if (--left == 0)
+    {
+      return true;
+    }
+    _hardware.LoopTurn(APPEND_EXTENSION, {extension, letter, left});
+  }
 }
 
 void PrintCommanderCatalogue(GameState& _state)
@@ -786,6 +717,8 @@ constexpr Machine::NativeContract CLOBBERS_GENERAL{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 constexpr Machine::NativeContract PROMPTS_FOR_NAME{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, Machine::FLAG_CARRY};
+// The disc menu's: the general registers but AX, the key it returns with in AH.
+constexpr Machine::NativeContract DISC_MENU{REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 
 // The disc menu and its file name prompt wait for keys as a rule: they run on the native thread, and the digests
 // accept them (ADR-010 items 5 and 8).
@@ -817,6 +750,28 @@ void ShowDiskErrorEntry(Guest& _guest)
   _guest.Clobber(SHOWS_DISK_ERROR);
 }
 
+void ShowDiscControlScreenEntry(Guest& _guest)
+{
+  DiscMenuExitOut(_guest, ShowDiscControlScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)));
+  _guest.Clobber(DISC_MENU);
+}
+
+void PromptCommanderFileNameEntry(Guest& _guest)
+{
+  if (PromptCommanderFileName(_guest.State(), _guest.Devices()))
+  {
+    _guest.SetFlag(Machine::FLAG_CARRY, false);
+    _guest.Clobber(PROMPTS_FOR_NAME);
+    return;
+  }
+  // A bad name: RejectFileName drops this call's return address, and the disc menu's keys read on in its place, to leave as
+  // ShowDiscControlScreen does.
+  _guest.Regs().ax = _guest.Pop();
+  RejectFileName(_guest.State(), _guest.Devices());
+  DiscMenuExitOut(_guest, RunDiscControlKeys(_guest.State(), _guest.Devices(), false, 0));
+  _guest.Clobber(DISC_MENU);
+}
+
 void PrintCommanderCatalogueEntry(Guest& _guest)
 {
   PrintCommanderCatalogue(_guest.State());
@@ -839,8 +794,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequestEntry, DISK_REQUEST},
   NativeEntry{0x0470, "ShowDiskError", &ShowDiskErrorEntry, SHOWS_DISK_ERROR},
   NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},
-  NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
-  NativeEntry{0x6862, "PromptCommanderFileName", &PromptCommanderFileName, PROMPTS_FOR_NAME, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreenEntry, DISC_MENU, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x6862, "PromptCommanderFileName", &PromptCommanderFileNameEntry, PROMPTS_FOR_NAME, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x68CE, "PrintCommanderCatalogue", &PrintCommanderCatalogueEntry, CLOBBERS_GENERAL},
 };
 

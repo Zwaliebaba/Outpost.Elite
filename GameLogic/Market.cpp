@@ -18,18 +18,7 @@ using Machine::FLAG_CARRY;
 using Machine::FLAG_ZERO;
 using Machine::Registers;
 
-// The routines these call by their entries: whatever is hooked there runs, so each work routine that a routine that
-// waits calls is compared on its own (ADR-010 item 8).
-constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
-constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
-constexpr std::uint16_t SPEND_CREDITS = 0x65EC;
-constexpr std::uint16_t ADD_CREDITS = 0x65EE;
-constexpr std::uint16_t PARSE_QUANTITY = 0x6A99;
-constexpr std::uint16_t PRINT_CARGO_QUANTITY = 0x6AD9;
-constexpr std::uint16_t ADD_CONTRABAND_PENALTY = 0x6DC1;
-constexpr std::uint16_t READ_TEXT_LINE = 0x7694;
-
-// Where the original's backward jumps land, for the turns of its loops (JumpBack).
+// Where the original's backward jumps land, for the turns of its loops (Hardware::LoopTurn).
 constexpr std::uint16_t SYSTEM_NAME_SCAN = 0x5E39;
 constexpr std::uint16_t PRICE_ROW = 0x5E69;
 constexpr std::uint16_t CARGO_STEER = 0x6B43;
@@ -113,258 +102,176 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
   return static_cast<std::uint16_t>((std::uint32_t{_value} * _factor) >> 8);
 }
 
-// MUL r/m16: DX:AX = AX * _factor.
-void MultiplyWord(Machine::Registers& _regs, std::uint16_t _factor) noexcept
-{
-  const std::uint32_t product = std::uint32_t{_regs.ax} * _factor;
-  _regs.dx = static_cast<std::uint16_t>(product >> 16);
-  _regs.ax = static_cast<std::uint16_t>(product);
-}
-
 // The row's cargoHold entry: the amount held, then the amount the market has. MOV BL,[menuSelectedRow] / XOR BH,BH /
 // DEC BX / SHL BX,1 / ADD BX,cargoHold.
-[[nodiscard]] std::uint16_t HoldEntry(Guest& _guest) noexcept
+[[nodiscard]] std::uint16_t HoldEntry(const GameState& _state) noexcept
 {
-  return static_cast<std::uint16_t>((_guest.Get(DS.menuSelectedRow) - 1) * 2 + DS.cargoHold.offset);
+  return static_cast<std::uint16_t>((_state.Get(DS.menuSelectedRow) - 1) * 2 + DS.cargoHold.offset);
 }
 
-// 6BE8: the message at SI on the message line in 4Eh, textAttribute and SI put back, and the jump back to the
-// steering.
-void ShowCargoMessage(Guest& _guest)
+// 6C05 and 6CB3: SI and textAttribute pushed for ShowCargoMessage, and the message's attribute set. Returns the attribute, which
+// the original pushes in AL.
+[[nodiscard]] std::uint8_t OpenCargoMessage(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = MESSAGE_OFFSET;
-  _guest.Set(DS.textAttribute, CARGO_MESSAGE_ATTRIBUTE);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.ax = _guest.Pop();
-  _guest.Set(DS.textAttribute, Low(regs.ax));
-  regs.si = _guest.Pop();
-  _guest.JumpBack(CARGO_STEER);
+  const std::uint8_t saved = _state.Get(DS.textAttribute);
+  _state.Set(DS.textAttribute, CARGO_MESSAGE_ATTRIBUTE);
+  return saved;
 }
 
-// 6C05 and 6CB3: SI and textAttribute saved for ShowCargoMessage, and the message attribute set.
-void OpenCargoMessage(Guest& _guest)
+// 6BE8: the message at DS:_text on the message line in 4Eh, and textAttribute put back to _saved, which the original pops into
+// AL before its jump back to the steering.
+void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _saved)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Push(regs.si);
-  SetLow(regs.ax, _guest.Get(DS.textAttribute));
-  _guest.Push(regs.ax);
-  _guest.Set(DS.textAttribute, CARGO_MESSAGE_ATTRIBUTE);
+  _state.Set(DS.textAttribute, CARGO_MESSAGE_ATTRIBUTE);
+  PrintTextModeString(_state, _text, MESSAGE_OFFSET);
+  _state.Set(DS.textAttribute, _saved);
 }
 
 // 6C25 and 6D10: "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
-void ReadQuantity(Guest& _guest)
+[[nodiscard]] Quantity ReadQuantity(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  regs.si = QUANTITY_PROMPT_TEXT;
-  regs.di = MESSAGE_OFFSET;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = DS.quantityText.offset;
-  regs.di = QUANTITY_INPUT_OFFSET;
-  regs.cx = QUANTITY_DIGITS;
-  _guest.Call(READ_TEXT_LINE);
-  regs.di = DS.quantityText.offset;
-  _guest.Call(PARSE_QUANTITY);
+  PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
+  (void)ReadTextLine(_state, _hardware, DS.quantityText.offset, QUANTITY_DIGITS, GameState::VIDEO_SEGMENT, QUANTITY_INPUT_OFFSET);
+  return ParseQuantity(_state, DS.quantityText.offset);
 }
 
-// 6BFB: S on the cargo menu, on the sell screen only: a typed quantity from the hold to the market, for the sell price.
-void SellCargo(Guest& _guest)
+// The jump back to 6BE8 that ends each of the trade's paths, with the message it shows.
+[[nodiscard]] std::uint16_t ToCargoMessage(Hardware& _hardware, std::uint16_t _text)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.tradeScreenIsBuy) == 1)
+  _hardware.LoopTurn(CARGO_MESSAGE, {});
+  return _text;
+}
+
+// 6C0F: S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
+// the sell price. Returns the message for ShowCargoMessage, after the jumps back the original takes to it.
+[[nodiscard]] std::uint16_t SellCargo(GameState& _state, Hardware& _hardware)
+{
+  if (_state.Byte(HoldEntry(_state)) == 0)
   {
-    _guest.JumpBack(CARGO_STEER);
-    return;
+    return ToCargoMessage(_hardware, NOTHING_TO_SELL_TEXT);
   }
-  OpenCargoMessage(_guest);
-  regs.bx = HoldEntry(_guest);
-  SetLow(regs.ax, _guest.Byte(regs.bx));
-  regs.si = NOTHING_TO_SELL_TEXT;
-  if (Low(regs.ax) == 0)
+  const Quantity quantity = ReadQuantity(_state, _hardware);
+  if (!quantity.valid)
   {
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    return ToCargoMessage(_hardware, QUANTITY_ERROR_TEXT);
   }
-  ReadQuantity(_guest);
-  if (_guest.Flag(FLAG_CARRY) || regs.ax == 0)
+  if (quantity.value == 0)
   {
-    regs.si = _guest.Flag(FLAG_CARRY) ? QUANTITY_ERROR_TEXT : NOTHING_SOLD_TEXT;
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    return ToCargoMessage(_hardware, NOTHING_SOLD_TEXT);
   }
-  regs.bx = HoldEntry(_guest);
-  const std::uint8_t quantity = Low(regs.ax);
-  if (_guest.Byte(regs.bx) < quantity)
+  const std::uint16_t held = HoldEntry(_state);
+  const std::uint8_t amount = Low(quantity.value);
+  if (_state.Byte(held) < amount)
   {
-    _guest.JumpBack(NOT_ENOUGH_TO_SELL);
-    regs.si = NOT_ENOUGH_TO_SELL_TEXT;
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    _hardware.LoopTurn(NOT_ENOUGH_TO_SELL, {});
+    return ToCargoMessage(_hardware, NOT_ENOUGH_TO_SELL_TEXT);
   }
-  _guest.Push(regs.ax);
-  _guest.SetByte(regs.bx, static_cast<std::uint8_t>(_guest.Byte(regs.bx) - quantity));
+  _state.SetByte(held, static_cast<std::uint8_t>(_state.Byte(held) - amount));
   // The market's amount goes up, and is put at FFh if that carries.
-  const auto available = static_cast<std::uint16_t>(_guest.Byte(static_cast<std::uint16_t>(regs.bx + 1)) + quantity);
-  _guest.SetByte(static_cast<std::uint16_t>(regs.bx + 1), static_cast<std::uint8_t>(available));
+  const auto available = static_cast<std::uint16_t>(_state.Byte(Offset(held, 1)) + amount);
+  _state.SetByte(Offset(held, 1), static_cast<std::uint8_t>(available));
   if (available > 0xFF)
   {
-    _guest.SetByte(static_cast<std::uint16_t>(regs.bx + 1), 0xFF);
+    _state.SetByte(Offset(held, 1), 0xFF);
   }
-  const std::uint8_t row = _guest.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
   if (row == ALIEN_ITEMS_ROW || row < FIRST_PRECIOUS_ROW)
   {
-    _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) - quantity));
+    _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) - amount));
   }
-  SetLow(regs.ax, _guest.Byte(regs.bx));
-  _guest.Call(PRINT_CARGO_QUANTITY);
-  regs.ax = _guest.Pop();
-  _guest.Call(ADD_CONTRABAND_PENALTY);
-  // The quantity times the sell price, the word after the row's buy price.
-  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.menuSelectedRow) * 2 - 1) * 2 + DS.screenPrices.offset);
-  MultiplyWord(regs, _guest.Word(regs.bx));
-  regs.bx = regs.dx;
-  _guest.Call(ADD_CREDITS);
-  regs.si = SOLD_TEXT;
-  _guest.JumpBack(CARGO_MESSAGE);
-  ShowCargoMessage(_guest);
+  PrintCargoQuantity(_state, _state.Byte(held));
+  AddContrabandPenalty(_state);
+  // The quantity times the sell price, the word after the row's buy price, by MUL into DX:AX.
+  const auto price = static_cast<std::uint16_t>((_state.Get(DS.menuSelectedRow) * 2 - 1) * 2 + DS.screenPrices.offset);
+  AddCredits(_state, std::uint32_t{quantity.value} * _state.Word(price));
+  return ToCargoMessage(_hardware, SOLD_TEXT);
 }
 
-// 6D37, reached by a jump back: the refusal at SI, by way of the jump back to 6BE8.
-void RefuseBuy(Guest& _guest)
+// 6D37, reached by a jump back: a refusal, by way of the jump back to 6BE8.
+[[nodiscard]] std::uint16_t RefuseBuy(Hardware& _hardware, std::uint16_t _text)
 {
-  _guest.JumpBack(BUY_REFUSED);
-  _guest.JumpBack(CARGO_MESSAGE);
-  ShowCargoMessage(_guest);
+  _hardware.LoopTurn(BUY_REFUSED, {});
+  return ToCargoMessage(_hardware, _text);
 }
 
-// 6CA9: B on the cargo menu, on the buy screen only: a typed quantity from the market into the hold, if there is room
-// and the cash, for the buy price.
-void BuyCargo(Guest& _guest)
+// 6CBD: B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
+// there is room and the cash, for the buy price. Returns the message for ShowCargoMessage, after the jumps back the original
+// takes to it.
+[[nodiscard]] std::uint16_t BuyCargo(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.tradeScreenIsBuy) != 1)
+  if (_state.Byte(Offset(HoldEntry(_state), 1)) == 0)
   {
-    _guest.JumpBack(CARGO_STEER);
-    return;
+    _hardware.LoopTurn(CARGO_MESSAGE_JUMP, {});
+    return ToCargoMessage(_hardware, NOTHING_TO_BUY_TEXT);
   }
-  OpenCargoMessage(_guest);
-  regs.bx = HoldEntry(_guest);
-  SetLow(regs.ax, _guest.Byte(static_cast<std::uint16_t>(regs.bx + 1)));
-  regs.si = NOTHING_TO_BUY_TEXT;
-  if (Low(regs.ax) == 0)
+  const std::uint8_t bay = _state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
+  if (_state.Get(DS.menuSelectedRow) == ALIEN_ITEMS_ROW)
   {
-    _guest.JumpBack(CARGO_MESSAGE_JUMP);
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    return ToCargoMessage(_hardware, CANNOT_BUY_TEXT);
   }
-  regs.si = CARGO_BAY_FULL_TEXT;
-  SetLow(regs.ax, _guest.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES);
-  if (_guest.Get(DS.menuSelectedRow) == ALIEN_ITEMS_ROW)
+  if (_state.Get(DS.menuSelectedRow) >= FIRST_PRECIOUS_ROW)
   {
-    regs.si = CANNOT_BUY_TEXT;
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
-  }
-  if (_guest.Get(DS.menuSelectedRow) >= FIRST_PRECIOUS_ROW)
-  {
-    regs.bx = HoldEntry(_guest);
-    if (_guest.Byte(regs.bx) == PRECIOUS_MOST)
+    if (_state.Byte(HoldEntry(_state)) == PRECIOUS_MOST)
     {
-      regs.si = FULL_TO_CAPACITY_TEXT;
-      _guest.JumpBack(CARGO_MESSAGE);
-      ShowCargoMessage(_guest);
-      return;
+      return ToCargoMessage(_hardware, FULL_TO_CAPACITY_TEXT);
     }
   }
-  else if (_guest.Get(DS.cargoUsedTonnes) == Low(regs.ax))
+  else if (_state.Get(DS.cargoUsedTonnes) == bay)
   {
-    _guest.JumpBack(CARGO_MESSAGE_JUMP);
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    _hardware.LoopTurn(CARGO_MESSAGE_JUMP, {});
+    return ToCargoMessage(_hardware, CARGO_BAY_FULL_TEXT);
   }
-  ReadQuantity(_guest);
-  regs.si = QUANTITY_ERROR_TEXT;
-  if (_guest.Flag(FLAG_CARRY))
+  const Quantity quantity = ReadQuantity(_state, _hardware);
+  if (!quantity.valid)
   {
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    return ToCargoMessage(_hardware, QUANTITY_ERROR_TEXT);
   }
-  if (regs.ax == 0)
+  if (quantity.value == 0)
   {
-    regs.si = NOTHING_BOUGHT_TEXT;
-    _guest.JumpBack(CARGO_MESSAGE);
-    ShowCargoMessage(_guest);
-    return;
+    return ToCargoMessage(_hardware, NOTHING_BOUGHT_TEXT);
   }
-  regs.bx = HoldEntry(_guest);
-  regs.si = NOT_ENOUGH_TO_BUY_TEXT;
-  const std::uint8_t quantity = Low(regs.ax);
-  if (_guest.Byte(static_cast<std::uint16_t>(regs.bx + 1)) < quantity)
+  const std::uint16_t held = HoldEntry(_state);
+  const std::uint8_t amount = Low(quantity.value);
+  if (_state.Byte(Offset(held, 1)) < amount)
   {
-    RefuseBuy(_guest);
-    return;
+    return RefuseBuy(_hardware, NOT_ENOUGH_TO_BUY_TEXT);
   }
-  SetLow(regs.cx, _guest.Byte(regs.bx));
-  if (_guest.Get(DS.menuSelectedRow) >= FIRST_PRECIOUS_ROW)
+  if (_state.Get(DS.menuSelectedRow) >= FIRST_PRECIOUS_ROW)
   {
-    // Up to 250 of each, kept apart from the tonnes.
-    const auto held = static_cast<std::uint16_t>(Low(regs.cx) + quantity);
-    SetLow(regs.cx, static_cast<std::uint8_t>(held));
-    regs.si = CANNOT_CARRY_TEXT;
-    if (held > 0xFF || Low(regs.cx) > PRECIOUS_MOST)
+    // Up to 250 of each, kept apart from the tonnes: ADD CL,AL, which may carry.
+    const auto after = static_cast<std::uint16_t>(_state.Byte(held) + amount);
+    if (after > PRECIOUS_MOST) // a carry, or more than 250
     {
-      RefuseBuy(_guest);
-      return;
+      return RefuseBuy(_hardware, CANNOT_CARRY_TEXT);
     }
   }
   else
   {
     // The tonnes after it must fit the hold, in 8 bits as the original adds them.
-    SetLow(regs.cx, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + quantity));
-    SetHigh(regs.cx, static_cast<std::uint8_t>((_guest.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES) + 1));
-    regs.si = CANNOT_CARRY_TEXT;
-    if (Low(regs.cx) >= High(regs.cx))
+    const auto tonnes = static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + amount);
+    const auto limit = static_cast<std::uint8_t>((_state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES) + 1);
+    if (tonnes >= limit)
     {
-      _guest.JumpBack(BUY_MESSAGE_JUMP);
-      _guest.JumpBack(CARGO_MESSAGE);
-      ShowCargoMessage(_guest);
-      return;
+      _hardware.LoopTurn(BUY_MESSAGE_JUMP, {});
+      return ToCargoMessage(_hardware, CANNOT_CARRY_TEXT);
     }
-    _guest.JumpBack(BUY_PAYMENT);
+    _hardware.LoopTurn(BUY_PAYMENT, {});
   }
-  _guest.Push(regs.ax);
-  _guest.Push(regs.bx);
-  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.menuSelectedRow) - 1) * 4 + DS.screenPrices.offset);
-  MultiplyWord(regs, _guest.Word(regs.bx));
-  regs.bx = regs.dx;
-  _guest.Call(SPEND_CREDITS);
-  regs.bx = _guest.Pop();
-  regs.ax = _guest.Pop();
-  regs.si = NOT_ENOUGH_CREDITS_TEXT;
-  if (_guest.Flag(FLAG_CARRY))
+  // The quantity times the buy price, by MUL into DX:AX, the original pushing the quantity and the entry round SpendCredits.
+  const auto price = static_cast<std::uint16_t>((_state.Get(DS.menuSelectedRow) - 1) * 4 + DS.screenPrices.offset);
+  if (!SpendCredits(_state, std::uint32_t{quantity.value} * _state.Word(price)))
   {
-    RefuseBuy(_guest);
-    return;
+    return RefuseBuy(_hardware, NOT_ENOUGH_CREDITS_TEXT);
   }
-  _guest.SetByte(regs.bx, static_cast<std::uint8_t>(_guest.Byte(regs.bx) + quantity));
-  if (_guest.Get(DS.menuSelectedRow) < FIRST_PRECIOUS_ROW)
+  _state.SetByte(held, static_cast<std::uint8_t>(_state.Byte(held) + amount));
+  if (_state.Get(DS.menuSelectedRow) < FIRST_PRECIOUS_ROW)
   {
-    _guest.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_guest.Get(DS.cargoUsedTonnes) + quantity));
+    _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + amount));
   }
-  const auto left = static_cast<std::uint8_t>(_guest.Byte(static_cast<std::uint16_t>(regs.bx + 1)) - quantity);
-  _guest.SetByte(static_cast<std::uint16_t>(regs.bx + 1), left);
-  SetLow(regs.ax, left);
-  _guest.Call(PRINT_CARGO_QUANTITY);
-  regs.si = BOUGHT_TEXT;
-  _guest.JumpBack(CARGO_MESSAGE);
-  ShowCargoMessage(_guest);
+  const auto left = static_cast<std::uint8_t>(_state.Byte(Offset(held, 1)) - amount);
+  _state.SetByte(Offset(held, 1), left);
+  PrintCargoQuantity(_state, left);
+  return ToCargoMessage(_hardware, BOUGHT_TEXT);
 }
 
 } // namespace
@@ -579,57 +486,58 @@ PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   return printed;
 }
 
-void RunCargoTradeMenu(Guest& _guest)
+ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.Set(DS.menuFirstRowAttr, CARGO_MENU_FIRST_ROW);
-  _guest.Set(DS.menuRowCount, static_cast<std::uint8_t>(COMMODITY_COUNT));
-  StartMenuOnRegisters(_guest);
+  _state.Set(DS.menuFirstRowAttr, CARGO_MENU_FIRST_ROW);
+  _state.Set(DS.menuRowCount, static_cast<std::uint8_t>(COMMODITY_COUNT));
+  // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
+  MenuLoop loop{StartMenu(_state).row, 0};
+  loop.al = _state.Get(DS.textAttribute);
   for (;;)
   {
-    SteerMenuCursor(_guest);
+    // 6B43: the steering; then the keys, each turn to the steering carrying the cursor and AL, each to a cursor's move the
+    // cursor.
+    loop = SteerMenuCursor(_state, _hardware, loop);
     for (;;)
     {
-      if (!PollMenuKey(_guest, CARGO_TICK_LOOP))
+      const KeyPress key = PollMenuKey(_state, _hardware, CARGO_TICK_LOOP);
+      loop.al = AlAfterKey(loop.al, key);
+      const std::uint8_t code = key.scanCode;
+      if (code == 0)
       {
-        _guest.JumpBack(CARGO_STEER);
+        _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
         break;
       }
-      _guest.Push(regs.ax);
-      _guest.Call(PRINT_CREDITS_ON_MESSAGE_LINE);
-      regs.ax = _guest.Pop();
-      const std::uint8_t key = High(regs.ax);
-      if (key == SCAN_B)
+      // PUSH AX and POP AX round it.
+      PrintCreditsOnMessageLine(_state);
+      if (code == SCAN_B || code == SCAN_S)
       {
-        BuyCargo(_guest);
+        // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message, after which AL is
+        // the attribute it pops back. On the other screen the key does nothing.
+        const bool buy = code == SCAN_B;
+        if ((_state.Get(DS.tradeScreenIsBuy) == 1) == buy)
+        {
+          const std::uint8_t saved = OpenCargoMessage(_state);
+          ShowCargoMessage(_state, buy ? BuyCargo(_state, _hardware) : SellCargo(_state, _hardware), saved);
+          loop.al = saved;
+        }
+        _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
         break;
       }
-      if (key == SCAN_S)
+      if (code == SCAN_UP || code == SCAN_DOWN)
       {
-        SellCargo(_guest);
-        break;
-      }
-      if (key == SCAN_UP)
-      {
-        _guest.JumpBack(CARGO_CURSOR_UP);
-        MoveMenuCursorUpOnRegisters(_guest);
-        continue;
-      }
-      if (key == SCAN_DOWN)
-      {
-        _guest.JumpBack(CARGO_CURSOR_DOWN);
-        MoveMenuCursorDownOnRegisters(_guest);
+        _hardware.LoopTurn(code == SCAN_UP ? CARGO_CURSOR_UP : CARGO_CURSOR_DOWN, {loop.row});
+        loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
+        loop.al = _state.Get(DS.textAttribute);
         continue;
       }
       // The screen's own key, F2 to sell or F3 to buy, does nothing here.
-      SetLow(regs.dx, static_cast<std::uint8_t>(SCAN_F2 + _guest.Get(DS.tradeScreenIsBuy)));
-      if (key != Low(regs.dx) && IsScreenKey(key))
+      const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Get(DS.tradeScreenIsBuy));
+      if (code != own && IsScreenKey(code))
       {
-        return;
+        return ScreenKey{code, loop.al};
       }
-      _guest.JumpBack(CARGO_STEER);
+      _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
       break;
     }
   }
@@ -660,15 +568,21 @@ using Machine::REGISTER_ALL;
 using Machine::REGISTER_BP;
 using Machine::REGISTER_DS;
 
-constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
 // ComputeMarketPrices': the original leaves DS alone, and code that runs after it uncompared reads DS (ADR-012).
 constexpr NativeContract CLOBBERS_ALL_BUT_DS_BP{static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS & ~REGISTER_BP), 0};
 constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
-// ShowMarketPricesScreen's: all but AX, the closing key in AH, and DS.
+// The menu's and ShowMarketPricesScreen's: all but AX, the closing key in AH, and DS.
 constexpr NativeContract SHOWS_SCREEN{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_AX & ~REGISTER_DS), 0};
 
 } // namespace
+
+void RunCargoTradeMenuEntry(Guest& _guest)
+{
+  const ScreenKey key = RunCargoTradeMenu(_guest.State(), _guest.Devices());
+  _guest.Regs().ax = Join(key.scanCode, key.al);
+  _guest.Clobber(SHOWS_SCREEN);
+}
 
 void ShowMarketPricesScreenEntry(Guest& _guest)
 {
@@ -784,7 +698,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x6A85, "NextMarketRandom", &NextMarketRandomEntry, PRESERVES_ALL},
   NativeEntry{0x6A99, "ParseQuantity", &ParseQuantityEntry, RETURNS_CARRY},
   NativeEntry{0x6AD9, "PrintCargoQuantity", &PrintCargoQuantityEntry, PRESERVES_ALL},
-  NativeEntry{0x6B1E, "RunCargoTradeMenu", &RunCargoTradeMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x6B1E, "RunCargoTradeMenu", &RunCargoTradeMenuEntry, SHOWS_SCREEN, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x6DC1, "AddContrabandPenalty", &AddContrabandPenaltyEntry, PRESERVES_ALL},
 };
 
