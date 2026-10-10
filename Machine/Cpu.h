@@ -86,6 +86,18 @@ public:
   /// it costs a branch per step.
   void SetInstructionObserver(InstructionObserver* _observer) noexcept;
 
+  /// Where native code stands in for the program (ADR-010): a map of the address space with a non-zero
+  /// byte at the linear address of every hooked entry, or null (the default) for none. A step that
+  /// reaches a hooked entry stops there, after taking any interrupt that is due, without executing
+  /// anything, and AtHook() says so: the caller then runs the native code. The map must outlive its use.
+  void SetHookMap(const std::vector<std::uint8_t>* _map) noexcept;
+
+  /// Whether the last Step() stopped at a hooked entry instead of executing.
+  [[nodiscard]] bool AtHook() const noexcept
+  {
+    return m_atHook;
+  }
+
   /// The 8088's reset state: CS:IP = FFFF:0000, flags clear, everything else zero.
   void Reset() noexcept;
 
@@ -203,6 +215,7 @@ private:
   InterruptSource* m_interrupts = nullptr;
   std::vector<std::uint8_t>* m_executionMap = nullptr;
   InstructionObserver* m_observer = nullptr;
+  const std::vector<std::uint8_t>* m_hookMap = nullptr;
   std::uint64_t m_instructionCount = 0;
   std::uint64_t m_hardwareInterrupts = 0;
   std::uint32_t m_cycles = 0;
@@ -213,6 +226,7 @@ private:
 
   bool m_halted = false;
   bool m_interruptShadow = false;
+  bool m_atHook = false;
 };
 
 } // namespace Machine

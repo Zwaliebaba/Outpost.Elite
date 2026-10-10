@@ -94,6 +94,7 @@ bool PcServices::ServiceInterrupt(Cpu& _cpu, std::uint8_t _vector)
     m_fault = call;
     m_fault->kind = *fault;
   }
+  ++m_calls;
   return true;
 }
 

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Maths">
+      <UniqueIdentifier>{4CDA8523-BE40-5EB6-BB9F-9C0E029B2085}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Build">
       <UniqueIdentifier>{A38D8D19-E84C-5174-93B5-6D72C91EA9D8}</UniqueIdentifier>
     </Filter>
@@ -22,6 +25,9 @@
   <ItemGroup>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="MathsTests.cpp">
+      <Filter>Maths</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>

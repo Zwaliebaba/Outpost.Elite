@@ -1,6 +1,6 @@
 # ADR-003 — Verification
 
-**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8. **Amended 2026-10-09:** item 1's boot trace and static screens, after the first DOSBox-X traces and the CGA showed that neither could be compared the way this ADR first said. **Amended 2026-10-10:** item 2's replays are recorded in paced time and digested as ADR-008 says.
+**Status:** accepted 2026-10-09, from [Reverse-Engineering-Plan.md §6](../Reverse-Engineering-Plan.md#6-verification) and the owner's ruling D7 in its §8. **Amended 2026-10-09:** item 1's boot trace and static screens, after the first DOSBox-X traces and the CGA showed that neither could be compared the way this ADR first said. **Amended 2026-10-10:** item 2's replays are recorded in paced time and digested as ADR-008 says. **Amended 2026-10-10 again:** item 3's test runs inline, on every call a replay makes, as ADR-010 says: the original runs on the live state and is undone, in place of a captured state restored.
 
 ## Context
 

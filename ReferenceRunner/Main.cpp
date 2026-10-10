@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "DirectoryFileStore.h"
+#include "NativeRoutines.h"
 #include "Pc.h"
 #include "PngWriter.h"
 #include "Reference.h"
@@ -26,7 +27,8 @@
 // replay (ADR-008):
 //
 //   ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT | --replay FILE [--update]] [--paced]
-//                   [--trace FILE] [--trace-until OFFSET] [--coverage FILE]
+//                   [--trace FILE] [--trace-until OFFSET] [--coverage FILE] [--native | --compare]
+//                   [--native-report FILE]
 //
 // It checks that FILE (default ELITES.EXE) is the binary ADR-001 names, loads it, applies the D5 byte
 // in memory, and follows the steps (Replay.h), from --steps or from a replay file: shots go to
@@ -39,15 +41,22 @@
 //
 // --trace writes the boot trace, every instruction from the entry until the first one at OFFSET in the
 // program's code segment (default 0x7616, GetKey). --coverage writes the offsets in that segment of every
-// instruction start the run executed, one per line in hex. Exit status: 0 the steps ran, 1 the program
-// stopped them (a refused call, its end, a deadlock or a spin) or a digest did not match, 2 usage or
-// file errors.
+// instruction start the run executed, one per line in hex.
+//
+// --native runs the routines ported so far in place of the original's (ADR-010); --compare does too,
+// and compares each call with the original as it is made. Either prints each native routine's calls
+// and what comparing found, and every mismatch; --native-report writes the same per routine as a table,
+// with the offsets the original executed while it was compared, for Tools/RoutineCoverage.py.
+//
+// Exit status: 0 the steps ran, 1 the program stopped them (a refused call, its end, a deadlock or a
+// spin), a digest did not match, or a native routine did not match the original, 2 usage or file
+// errors.
 
 namespace
 {
 
 constexpr char USAGE[] = "usage: ReferenceRunner [--exe FILE] [--out DIR] [--steps TEXT | --replay FILE [--update]] [--paced] "
-                         "[--trace FILE] [--trace-until OFFSET] [--coverage FILE]\n";
+                         "[--trace FILE] [--trace-until OFFSET] [--coverage FILE] [--native | --compare] [--native-report FILE]\n";
 
 // A trace with no steps to run runs until it ends, or for at most this long.
 constexpr std::uint64_t TRACE_LIMIT_MILLISECONDS = 60'000;
@@ -63,6 +72,9 @@ struct Options
   std::filesystem::path trace;
   std::uint16_t traceUntil = Elite::GET_KEY_OFFSET;
   std::filesystem::path coverage;
+  bool native = false;
+  bool compare = false;
+  std::filesystem::path nativeReport;
 };
 
 void Print(const std::string& _text)
@@ -85,6 +97,12 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
       _options.update = true;
       continue;
     }
+    if (argument == "--native" || argument == "--compare")
+    {
+      _options.native = true;
+      _options.compare = _options.compare || argument == "--compare";
+      continue;
+    }
     if (index + 1 >= _argc)
       return false;
     const std::string_view value = _argv[++index];
@@ -100,6 +118,8 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
       _options.trace = value;
     else if (argument == "--coverage")
       _options.coverage = value;
+    else if (argument == "--native-report")
+      _options.nativeReport = value;
     else if (argument == "--trace-until")
     {
       const std::string_view digits = value.starts_with("0x") ? value.substr(2) : value;
@@ -116,7 +136,39 @@ bool ParseOptions(int _argc, char** _argv, Options& _options)
       return false;
     _options.paced = true;
   }
+  if (!_options.nativeReport.empty() && !_options.native)
+    return false;
   return !_options.update || !_options.replay.empty();
+}
+
+// Each native routine's books, every mismatch, and the report file if one was asked for. Returns the
+// number of calls that did not match the original, and of overruns.
+std::uint64_t ReportNativeCode(const Machine::Pc& _pc, const Options& _options)
+{
+  std::ofstream report;
+  if (!_options.nativeReport.empty())
+  {
+    report.open(_options.nativeReport, std::ios::trunc);
+    report << "entry\troutine\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
+  }
+  for (const auto& [linear, hook] : _pc.Native().Hooks())
+  {
+    Print(std::format("native\t{:04X}\t{}\t{} calls\t{} verified\t{} unverifiable\t{} mismatches\n", hook.offset, hook.name, hook.calls,
+                      hook.verified, hook.unverifiable, hook.mismatches));
+    if (report.is_open())
+    {
+      std::string executed;
+      for (const std::uint16_t offset : hook.executed)
+        executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);
+      report << std::format("{:04X}\t{}\t{}\t{}\t{}\t{}\t{}\n", hook.offset, hook.name, hook.calls, hook.verified, hook.unverifiable,
+                            hook.mismatches, executed);
+    }
+  }
+  for (const Machine::NativeCode::Mismatch& mismatch : _pc.Native().Mismatches())
+    Print(std::format("mismatch\t{}\tcall {}\tcycle {}\t{}\n", mismatch.routine, mismatch.call, mismatch.clock, mismatch.difference));
+  if (_pc.Native().Overruns() > 0)
+    Print(std::format("overruns\t{}\n", _pc.Native().Overruns()));
+  return _pc.Native().Mismatches().size() + _pc.Native().Overruns();
 }
 
 std::optional<std::string> ReadText(const std::filesystem::path& _path)
@@ -251,6 +303,11 @@ int Run(int _argc, char** _argv)
   }
   if (options.paced)
     pc->SetTimeMode(Machine::TimeMode::Paced);
+  if (options.native)
+  {
+    Elite::InstallNativeRoutines(*pc, program);
+    pc->Native().SetVerifying(options.compare);
+  }
 
   std::vector<std::uint8_t> executed;
   pc->Processor().SetExecutionMap(&executed);
@@ -330,6 +387,7 @@ int Run(int _argc, char** _argv)
     }
     Print(std::format("updated\t{}\n", options.replay.string()));
   }
+  const std::uint64_t nativeFailures = options.native ? ReportNativeCode(*pc, options) : 0;
   for (const auto& [port, counts] : pc->Ports().Unmapped())
     Print(std::format("unmapped\tport {:04X}h\t{} reads\t{} writes\n", port, counts.reads, counts.writes));
   Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc->Processor().InstructionCount(), pc->Clock(),
@@ -338,6 +396,11 @@ int Run(int _argc, char** _argv)
   if (mismatches > 0)
   {
     std::fprintf(stderr, "ReferenceRunner: %zu digest(s) did not match\n", mismatches);
+    return 1;
+  }
+  if (nativeFailures > 0)
+  {
+    std::fprintf(stderr, "ReferenceRunner: native code did not match the original, or ran past a run's end\n");
     return 1;
   }
   return reason == Machine::StopReason::Reached ? 0 : 1;

@@ -155,6 +155,12 @@ jobs:
         shell: pwsh
         run: python Build\CheckProjectFiles.py
 
+      # GameLogic/DataOverlay.h is generated from Design/Symbols.tsv and never edited (ADR-010): a
+      # symbol renamed or resized without regenerating it fails here, not in a native routine.
+      - name: Check the data overlay
+        shell: pwsh
+        run: python Tools\GenerateOverlay.py --check
+
       # /warnaserror covers MSBuild's own warnings; /WX for the compiler is set in the projects.
       - name: Build
         if: steps.solution.outputs.path != ''

@@ -85,6 +85,12 @@ public:
     return m_dos;
   }
 
+  /// The calls the services have taken since power-on: BIOS, DOS and mouse alike.
+  [[nodiscard]] std::uint64_t CallCount() const noexcept
+  {
+    return m_calls;
+  }
+
 private:
   Memory& m_memory;
   Desc m_desc;
@@ -92,6 +98,7 @@ private:
   Dos m_dos;
   Mouse m_mouse;
   std::optional<ServiceFault> m_fault;
+  std::uint64_t m_calls = 0;
 };
 
 } // namespace Machine

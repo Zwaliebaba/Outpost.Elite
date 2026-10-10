@@ -4,6 +4,7 @@
 
 #include "AudioStream.h"
 #include "DirectoryFileStore.h"
+#include "NativeRoutines.h"
 #include "Pc.h"
 #include "Presenter.h"
 #include "Reference.h"
@@ -156,6 +157,7 @@ int Application::Run(HINSTANCE _instance)
     return 1;
   }
   pc->SetTimeMode(Machine::TimeMode::Paced);
+  Elite::InstallNativeRoutines(*pc, program); // the port so far, in place of the original (ADR-010)
 
   const std::string session = SessionName();
   Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReferenceRunner --replay; see ADR-008.", session));

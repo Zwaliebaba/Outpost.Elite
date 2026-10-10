@@ -27,4 +27,13 @@ void Memory::Clear() noexcept
   std::fill(m_bytes.begin(), m_bytes.end(), std::uint8_t{0});
 }
 
+void Memory::Undo(const WriteJournal& _journal) noexcept
+{
+  const std::span<const WriteJournal::Entry> entries = _journal.Entries();
+  for (auto entry = entries.rbegin(); entry != entries.rend(); ++entry)
+  {
+    m_bytes[entry->linear] = entry->before;
+  }
+}
+
 } // namespace Machine

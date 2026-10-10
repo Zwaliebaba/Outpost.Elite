@@ -74,12 +74,19 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="DataField.h" />
+    <ClInclude Include="DataOverlay.h" />
+    <ClInclude Include="Guest.h" />
+    <ClInclude Include="Maths.h" />
+    <ClInclude Include="NativeRoutines.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="StateDigest.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Maths.cpp" />
+    <ClCompile Include="NativeRoutines.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

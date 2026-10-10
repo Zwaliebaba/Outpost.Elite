@@ -111,6 +111,9 @@
     <ClInclude Include="Memory.h">
       <Filter>Memory</Filter>
     </ClInclude>
+    <ClInclude Include="NativeCode.h">
+      <Filter>Pc</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
@@ -163,6 +166,9 @@
     </ClCompile>
     <ClCompile Include="Memory.cpp">
       <Filter>Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeCode.cpp">
+      <Filter>Pc</Filter>
     </ClCompile>
     <ClCompile Include="Mouse.cpp">
       <Filter>Services</Filter>
