@@ -1,6 +1,6 @@
 # ADR-014 — The devices behind a typed boundary
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8).
+**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8) and with level 4's (item 9).
 
 ## Context
 
@@ -80,6 +80,26 @@ More operations come as the routines that need them convert: the keyboard, the g
 - **STI and CLI.** Every STI and CLI in native code now goes through `Hardware`, as item 4 says: Sound's entries, `ResetKeyboard`, `RestoreTimerInterrupt`, the start-up and exit routines, and the joystick's.
 - **Left, and why.** The joystick routines count instruction cycles and wait. `GetKey` and `WaitForKeyPress` wait. `PollScreenDumpKey` calls `SaveScreenshot`, which is not converted. `Start` and `CopyProtection` use the stack and call routines that wait.
 - **Measured.** No digest moved, the coverage check is clean, and no contract changed. The leftovers the converted routines no longer produce are poisoned, and no caller reads them.
+
+**9. The devices level 4 needed, 2026-10-10** (ADR-012 item 14).
+
+| Operation | What it is |
+|---|---|
+| `CgaStatus` | IN AL,3DAh |
+| `SetColorSelect`, `SetModeControl` | OUT 3D9h and OUT 3D8h |
+| `SetCursorAddressHigh` | OUT 3D4h,0Eh, then OUT 3D5h |
+| `SelectPalette` | int 10h AH=0Bh, BH=1 |
+| `FireGamePort`, `GamePortOneShots` | OUT 201h, and IN 201h for the one-shots |
+| `CountInstructionCycles` | the 8088's cycles for the game port's one-shots, which a stick read counts in polls (ADR-008 item 1) |
+| `ReadBiosClock`, `SetBiosClock` | int 1Ah AH=0 and AH=1 |
+| `RunBiosTimerTick` | the BIOS's int 8 handler, run as the game's handler chains to it |
+| `ReadDosLine`, `SetDiskTransferArea` | int 21h AX=0C0Ah and AH=1Ah |
+| `CreateFile`, `OpenFile`, `ReadFile`, `WriteFile`, `CloseFile`, `DeleteFile`, `FindFirstFile`, `FindNextFile` | int 21h 3Ch, 3Dh, 3Fh, 40h, 3Eh, 41h, 4Eh and 4Fh, each a `DosAnswer`: CF and AX |
+| `ReadFileAttributes`, `SetFileAttributes` | int 21h AX=4300h and 4301h |
+
+- **Who wrote them.** Two workers added DOS's file services and the CGA's status separately. They were merged into one set when level 4 was integrated.
+- **The vector swap.** `RunBiosTimerTick` reaches the BIOS's handler by pointing int 8 at it for the call and back after it. That is the port's mechanism for a far jump with the interrupt's frame in place, not a write the original makes. The vector is not digested.
+- **What it replaced.** Every DOS file call in native code now goes through `Hardware`. SaveLoad's `CallDos` is gone, and the disc menu's register code puts back the AX, CF and CX that DOS leaves.
 
 ## What this forecloses
 
