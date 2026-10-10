@@ -6,6 +6,7 @@
 #include "Replay.h"
 
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <sstream>
 
@@ -22,6 +23,12 @@ std::wstring Widen(std::string_view _text)
   return std::wstring(_text.begin(), _text.end());
 }
 
+// CS:IP, as the listing writes an address.
+std::wstring Address(const Machine::Registers& _registers)
+{
+  return Widen(std::format("{:04X}:{:04X}", _registers.cs, _registers.ip));
+}
+
 std::string ReadText(const std::filesystem::path& _path)
 {
   std::ifstream stream(_path, std::ios::binary);
@@ -34,8 +41,8 @@ std::string ReadText(const std::filesystem::path& _path)
 enum class Running : std::uint8_t
 {
   Original, // interpreted throughout
-  Native,   // with every ported routine in place of the original's (ADR-010)
-  Compared  // likewise, each call compared with the original as it is made
+  Native,   // with every ported routine in place of the original's (ADR-010), on a Dispatcher: nothing is interpreted (ADR-011)
+  Compared  // with every ported routine, each call compared with the original as it is made
 };
 
 // Every Replays/*.replay, played as _running says. Every digest it names must come out as recorded;
@@ -64,7 +71,7 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
     // What the interpreted run executes, which the native runs' digests are compared with. Made before
     // the machine that marks it, so that it outlives it.
     std::vector<std::uint8_t> executed;
-    ReferenceRig rig("Corpus");
+    ReferenceRig rig("Corpus", Elite::START_MOMENT, _running == Running::Native ? &Machine::MakeDispatcher : &Machine::MakeCpu);
     Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
     if (_running == Running::Original)
     {
@@ -82,6 +89,8 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       std::string digest;
       const Machine::StopReason reason = player.Play(step, digest);
       const std::wstring where = name + L" line " + std::to_wstring(step.line);
+      if (reason == Machine::StopReason::Unported)
+        Assert::Fail((where + L": reached code no native routine stands in for, at " + Address(rig.Host().Processor().Regs())).c_str());
       if (reason == Machine::StopReason::Overran)
         Assert::Fail(
           (where + L": native " + Widen(rig.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits").c_str());
@@ -116,7 +125,8 @@ public:
     PlayEveryReplay(Running::Original, [](const std::wstring&, Machine::Pc&) {});
   }
 
-  // Phase 3 (ADR-010): with the ported routines in place of the original's, every digest is unchanged.
+  // Phase 3 (ADR-010): with the ported routines in place of the original's, every digest is unchanged; and on
+  // a Dispatcher (ADR-011), which interprets nothing, so no instruction of the original can have run.
   TEST_METHOD(NativeCodeKeepsEveryDigest)
   {
     PlayEveryReplay(Running::Native,

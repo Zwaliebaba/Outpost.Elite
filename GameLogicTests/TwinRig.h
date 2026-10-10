@@ -8,6 +8,7 @@
 #include "StateDigest.h"
 
 #include <filesystem>
+#include <format>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,7 +19,7 @@ namespace GameLogicTests
 /// How a TwinRig runs its two machines.
 struct TwinOptions
 {
-  bool compared = true;                                     ///< the native twin's calls of work routines are compared (ADR-010 item 4)
+  bool compared = true; ///< the native twin's calls of work routines are compared (ADR-010 item 4); if not, it runs on a Dispatcher
   Machine::Dos::DateTime startMoment = Elite::START_MOMENT; ///< DOS's clock at power-on
   bool fromPowerOn = false; ///< the twins start at power-on, recording from there, rather than at the title screen
 };
@@ -29,7 +30,9 @@ struct TwinOptions
 /// steps. A routine that waits cannot be compared call by call, so this is how a test drives one
 /// through a state no replay reaches: every digest of the native twin must be the interpreted one's,
 /// and so must the state both end in. An uncompared native twin runs the native code of a routine
-/// that waits only sometimes, or that calls DOS, where a compared one keeps the original's outcome.
+/// that waits only sometimes, or that calls DOS, where a compared one keeps the original's outcome; and it
+/// runs on a Dispatcher (ADR-011), which interprets nothing, so it also shows the run reaches no code that
+/// no native routine stands in for.
 /// When the rig is done, what the interpreted twin ran is saved as _name's offsets, and the native
 /// twin's comparisons as _name's native report, for Tools/RoutineCoverage.py.
 class TwinRig
@@ -38,7 +41,7 @@ public:
   explicit TwinRig(std::string_view _name, const TwinOptions& _options = {})
     : m_name(_name),
       m_original(m_name + "-Original", _options.startMoment),
-      m_native(m_name + "-Native", _options.startMoment),
+      m_native(m_name + "-Native", _options.startMoment, _options.compared ? &Machine::MakeCpu : &Machine::MakeDispatcher),
       m_originalPlayer(m_original.Host(), m_original.Program()),
       m_nativePlayer(m_native.Host(), m_native.Program())
   {
@@ -90,6 +93,13 @@ public:
       const std::wstring where = Widen(m_name) + L" line " + std::to_wstring(step.line);
       Assert::IsTrue(m_originalPlayer.Play(step, original) == expected, (where + L": the interpreted run stopped otherwise").c_str());
       const Machine::StopReason stopped = m_nativePlayer.Play(step, native);
+      if (stopped == Machine::StopReason::Unported)
+      {
+        const Machine::Registers& at = m_native.Host().Processor().Regs();
+        Assert::Fail((where + L": the native twin reached code no native routine stands in for, at " +
+                      Widen(std::format("{:04X}:{:04X}", at.cs, at.ip)))
+                       .c_str());
+      }
       if (stopped == Machine::StopReason::Overran)
       {
         Assert::Fail(

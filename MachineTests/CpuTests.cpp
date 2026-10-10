@@ -37,14 +37,14 @@ public:
 class RecordingHost final : public Machine::HostServices
 {
 public:
-  [[nodiscard]] bool ServiceInterrupt(Machine::Cpu& _cpu, std::uint8_t _vector) override
+  [[nodiscard]] bool ServiceInterrupt(Machine::Registers& _regs, std::uint8_t _vector) override
   {
     m_vectors.push_back(_vector);
     if (_vector != 0x21)
     {
       return false;
     }
-    _cpu.Regs().ax = 0x4C00;
+    _regs.ax = 0x4C00;
     return true;
   }
 

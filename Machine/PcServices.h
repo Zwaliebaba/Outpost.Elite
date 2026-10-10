@@ -27,7 +27,7 @@ class PortBus;
 /// own int 0, 8, 9 and 24h handlers, and those run as written. A routed call the services refuse is serviced as
 /// nothing at all, and its ServiceFault is kept for the integrator; only the first is kept until ClearFault.
 ///
-/// Use: construct, PowerOn(), load the program with ExeLoader, StartProgram() with its PSP, attach to the Cpu with
+/// Use: construct, PowerOn(), load the program with ExeLoader, StartProgram() with its PSP, attach to the processor with
 /// SetHostServices, and after every step check Fault() and Terminated(). After int 20h the CPU sits halted in the ROM.
 class PcServices final : public HostServices
 {
@@ -49,7 +49,7 @@ public:
   /// Tells DOS which program runs (Dos::StartProgram), and clears any fault.
   void StartProgram(std::uint16_t _pspSegment);
 
-  [[nodiscard]] bool ServiceInterrupt(Cpu& _cpu, std::uint8_t _vector) override;
+  [[nodiscard]] bool ServiceInterrupt(Registers& _regs, std::uint8_t _vector) override;
 
   /// The first call refused since construction or ClearFault, if any.
   [[nodiscard]] const std::optional<ServiceFault>& Fault() const noexcept

@@ -1,9 +1,11 @@
-// Machine/Cpu.h
+// Interpreter/Cpu.h
 #pragma once
 
+#include "Processor.h"
 #include "Registers.h"
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace Machine
@@ -66,78 +68,88 @@ class PortBus;
 /// queue, wait states, DRAM refresh or bus contention, so a real 8088 is usually somewhat slower.
 /// MUL, IMUL, DIV, IDIV and AAM take data-dependent time on the real part and are given Intel's
 /// minimum. Deterministic: no wall clock, no randomness.
-class Cpu
+/// A Processor (ADR-011): what a Pc runs on to execute the program, and what CpuConformance checks.
+class Cpu final : public Processor
 {
 public:
   Cpu(Memory& _memory, PortBus& _ports) noexcept;
 
   /// The hook consulted on INT n, INT 3 and INTO. Null (the default) means every interrupt vectors.
-  void SetHostServices(HostServices* _host) noexcept;
+  void SetHostServices(HostServices* _host) noexcept override;
 
   /// What the INTR line is wired to. Null (the default) means no hardware interrupt ever arrives.
-  void SetInterruptSource(InterruptSource* _source) noexcept;
+  void SetInterruptSource(InterruptSource* _source) noexcept override;
 
   /// Where to mark the instructions executed, or null to stop. A map holding fewer than
   /// Memory::SIZE_BYTES entries is grown to that size with zeros, which is why this is not noexcept.
   /// Marks are only ever set; clearing the map is the caller's business.
-  void SetExecutionMap(std::vector<std::uint8_t>* _map);
+  void SetExecutionMap(std::vector<std::uint8_t>* _map) override;
 
   /// Told about every instruction as it starts (InstructionObserver), or null to stop. Without one
   /// it costs a branch per step.
-  void SetInstructionObserver(InstructionObserver* _observer) noexcept;
+  void SetInstructionObserver(InstructionObserver* _observer) noexcept override;
 
   /// Where native code stands in for the program (ADR-010): a map of the address space with a non-zero
   /// byte at the linear address of every hooked entry, or null (the default) for none. A step that
   /// reaches a hooked entry stops there, after taking any interrupt that is due, without executing
   /// anything, and AtHook() says so: the caller then runs the native code. The map must outlive its use.
-  void SetHookMap(const std::vector<std::uint8_t>* _map) noexcept;
+  void SetHookMap(const std::vector<std::uint8_t>* _map) noexcept override;
 
   /// Whether the next Step() takes a hardware interrupt before anything else: IF is set, no shadow is
   /// in force, and the interrupt source has a request.
-  [[nodiscard]] bool InterruptDue() const;
+  [[nodiscard]] bool InterruptDue() const override;
 
   /// Whether the last Step() stopped at a hooked entry instead of executing.
-  [[nodiscard]] bool AtHook() const noexcept
+  [[nodiscard]] bool AtHook() const noexcept override
   {
     return m_atHook;
   }
 
+  /// Never: an interpreter runs whatever it reaches.
+  [[nodiscard]] bool AtUnportedCode() const noexcept override
+  {
+    return false;
+  }
+
   /// The 8088's reset state: CS:IP = FFFF:0000, flags clear, everything else zero.
-  void Reset() noexcept;
+  void Reset() noexcept override;
 
   /// Executes one instruction and returns its approximate 8088 clock count. A pending hardware
   /// interrupt is taken first when it can be, and its entry cycles are included. A halted CPU with
   /// nothing to take returns HALT_IDLE_CYCLES without executing anything.
-  std::uint32_t Step();
+  std::uint32_t Step() override;
 
-  [[nodiscard]] Registers& Regs() noexcept
+  [[nodiscard]] Registers& Regs() noexcept override
   {
     return m_regs;
   }
 
-  [[nodiscard]] const Registers& Regs() const noexcept
+  [[nodiscard]] const Registers& Regs() const noexcept override
   {
     return m_regs;
   }
 
-  [[nodiscard]] bool Halted() const noexcept
+  [[nodiscard]] bool Halted() const noexcept override
   {
     return m_halted;
   }
 
   /// Instructions executed since construction or Reset().
-  [[nodiscard]] std::uint64_t InstructionCount() const noexcept
+  [[nodiscard]] std::uint64_t InstructionCount() const noexcept override
   {
     return m_instructionCount;
   }
 
   /// Hardware interrupts taken since construction or Reset().
-  [[nodiscard]] std::uint64_t HardwareInterruptCount() const noexcept
+  [[nodiscard]] std::uint64_t HardwareInterruptCount() const noexcept override
   {
     return m_hardwareInterrupts;
   }
 
-  static constexpr std::uint32_t HALT_IDLE_CYCLES = 4;
+  [[nodiscard]] bool Interprets() const noexcept override
+  {
+    return true;
+  }
 
 private:
   // A decoded ModRM operand. For a register operand only `rm` matters; for memory, the segment
@@ -232,5 +244,8 @@ private:
   bool m_interruptShadow = false;
   bool m_atHook = false;
 };
+
+/// A Cpu, for a Pc that interprets the program (Pc::ProcessorFactory).
+[[nodiscard]] std::unique_ptr<Processor> MakeCpu(Memory& _memory, PortBus& _ports);
 
 } // namespace Machine

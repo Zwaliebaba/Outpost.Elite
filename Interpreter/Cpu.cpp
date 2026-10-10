@@ -45,7 +45,6 @@ constexpr std::uint32_t WORD_TRANSFER_CYCLES = 4;
 constexpr std::uint32_t PREFIX_CYCLES = 2;
 // Interrupt entry: Intel's 8086 figures plus five word transfers (three pushes, two vector reads).
 constexpr std::uint32_t INTERRUPT_ENTRY_CYCLES = 51 + 5 * WORD_TRANSFER_CYCLES;
-constexpr std::uint32_t HARDWARE_INTERRUPT_CYCLES = 61 + 5 * WORD_TRANSFER_CYCLES;
 constexpr std::uint32_t SINGLE_STEP_CYCLES = 50 + 5 * WORD_TRANSFER_CYCLES;
 
 constexpr std::uint16_t ToWord(std::uint32_t _value) noexcept
@@ -463,7 +462,7 @@ void Cpu::EnterInterrupt(std::uint8_t _vector) noexcept
 
 void Cpu::SoftwareInterrupt(std::uint8_t _vector)
 {
-  if (m_host != nullptr && m_host->ServiceInterrupt(*this, _vector))
+  if (m_host != nullptr && m_host->ServiceInterrupt(m_regs, _vector))
   {
     return;
   }
@@ -1902,6 +1901,11 @@ void Cpu::ExecuteDivide(const Operand& _operand, bool _word, bool _signed)
   {
     m_regs.ax = ToWord(((remainder & 0xFFu) << 8) | (quotient & 0xFFu));
   }
+}
+
+std::unique_ptr<Processor> MakeCpu(Memory& _memory, PortBus& _ports)
+{
+  return std::make_unique<Cpu>(_memory, _ports);
 }
 
 } // namespace Machine

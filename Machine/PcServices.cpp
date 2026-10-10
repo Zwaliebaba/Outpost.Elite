@@ -2,9 +2,9 @@
 
 #include "PcServices.h"
 
-#include "Cpu.h"
 #include "Firmware.h"
 #include "Memory.h"
+#include "Registers.h"
 
 namespace Machine
 {
@@ -52,9 +52,9 @@ void PcServices::StartProgram(std::uint16_t _pspSegment)
   m_fault.reset();
 }
 
-bool PcServices::ServiceInterrupt(Cpu& _cpu, std::uint8_t _vector)
+bool PcServices::ServiceInterrupt(Registers& _regs, std::uint8_t _vector)
 {
-  Registers& regs = _cpu.Regs();
+  Registers& regs = _regs;
   const ServiceFault call{FaultKind::UnknownFunction,
                           _vector,
                           static_cast<std::uint8_t>(regs.ax >> 8),
