@@ -37,7 +37,7 @@ constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / cen
 constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
 constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
 
-// ReadJoystickAxes's backward jumps: the X count's, the wait for both bits, and the Y count's.
+// ReadJoystickAxes's backward jumps: the X count's, the wait for both bits, and the Y count's (Hardware::LoopTurn).
 constexpr std::uint16_t X_COUNT_TURN = 0x778F;
 constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
 constexpr std::uint16_t Y_COUNT_TURN = 0x779D;
@@ -291,20 +291,9 @@ void StickAxis(Guest& _guest, DataField<std::uint16_t> _center)
 
 } // namespace
 
-void KeyboardInterrupt(Guest& _guest)
+void KeyboardInterrupt(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t ax = regs.ax;
-  const std::uint16_t ds = regs.ds;
-  const std::uint16_t es = regs.es;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = _guest.DataSegment();
-  regs.ds = _guest.DataSegment();
-  // What ReadScanCode leaves in AX goes no further: AX is popped below.
-  ReadScanCode(_guest.State(), _guest.Devices());
-  regs.es = es;
-  regs.ds = ds;
-  regs.ax = ax;
+  ReadScanCode(_state, _hardware);
 }
 
 MouseDriver IsMouseDriverInstalled(const GameState& _state)
@@ -458,109 +447,104 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
   return (Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons) & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
-void ReadJoystickAxes(Guest& _guest)
+StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
 {
-  Machine::Registers& regs = _guest.Regs();
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
-  // by the instructions executed, so each of the original's is counted (CountCycles) before the port access after it, and each of
-  // its backward jumps ends a turn (JumpBack): the wait for both bits idles as the original's does.
-  _guest.Devices().DisableInterrupts();
-  regs.bx = AXIS_COUNT_START;
-  regs.cx = regs.bx;
-  regs.dx = GAME_PORT;
-  _guest.CountCycles(BEFORE_FIRING_CYCLES);
-  _guest.Out8(GAME_PORT, Low(regs.ax));
-  _guest.CountCycles(OUT_CYCLES);
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & BOTH_AXES));
-  _guest.CountCycles(IN_CYCLES + AND_CYCLES + CMP_CYCLES);
-  // A time-out leaves interrupts off, as the original does.
+  // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
+  // At each of its backward jumps the original holds in BX or CX the count the next turn goes on with, and in AL the bits it
+  // read; the wait for both bits, which reads no other register before it writes it but DX, the port, idles as the original's
+  // does.
+  _hardware.DisableInterrupts();
+  std::uint16_t x = AXIS_COUNT_START;
+  std::uint16_t y = x;
+  _hardware.CountInstructionCycles(BEFORE_FIRING_CYCLES);
+  _hardware.FireGamePort(_trigger);
+  _hardware.CountInstructionCycles(OUT_CYCLES);
+  std::uint8_t bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
+  _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES + CMP_CYCLES);
+  // A time-out leaves interrupts off, and the counts as they stand.
   const auto timeOut = [&]()
   {
-    _guest.CountCycles(TAKEN_CYCLES + TIME_OUT_CYCLES);
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
+    _hardware.CountInstructionCycles(TAKEN_CYCLES + TIME_OUT_CYCLES);
+    return StickAxes{true, x, y};
   };
-  if (Low(regs.ax) != BOTH_AXES)
+  if (bits != BOTH_AXES)
   {
-    timeOut();
-    return;
+    return timeOut();
   }
-  _guest.CountCycles(NOT_TAKEN_CYCLES);
+  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   for (;;)
   {
-    regs.bx = static_cast<std::uint16_t>(regs.bx + 1);
-    _guest.CountCycles(INC_CYCLES);
-    if (regs.bx == 0)
+    x = static_cast<std::uint16_t>(x + 1);
+    _hardware.CountInstructionCycles(INC_CYCLES);
+    if (x == 0)
     {
-      timeOut();
-      return;
+      return timeOut();
     }
-    _guest.CountCycles(NOT_TAKEN_CYCLES);
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & X_AXIS));
-    _guest.CountCycles(IN_CYCLES + AND_CYCLES);
-    if (Low(regs.ax) == 0)
+    _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
+    bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & X_AXIS);
+    _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES);
+    if (bits == 0)
     {
       break;
     }
-    _guest.CountCycles(TAKEN_CYCLES);
-    _guest.JumpBack(X_COUNT_TURN);
+    _hardware.CountInstructionCycles(TAKEN_CYCLES);
+    _hardware.LoopTurn(X_COUNT_TURN, {x, bits});
   }
-  _guest.CountCycles(NOT_TAKEN_CYCLES);
+  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   // Both bits down before the one-shots fire again: a wait when X's drops first.
   for (;;)
   {
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & BOTH_AXES));
-    _guest.CountCycles(IN_CYCLES + AND_CYCLES);
-    if (Low(regs.ax) == 0)
+    bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
+    _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES);
+    if (bits == 0)
     {
       break;
     }
-    _guest.CountCycles(TAKEN_CYCLES);
-    _guest.JumpBack(BOTH_DOWN_TURN);
+    _hardware.CountInstructionCycles(TAKEN_CYCLES);
+    _hardware.LoopTurn(BOTH_DOWN_TURN, {bits});
   }
-  _guest.CountCycles(NOT_TAKEN_CYCLES);
-  _guest.Out8(GAME_PORT, Low(regs.ax));
-  _guest.CountCycles(OUT_CYCLES);
+  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
+  _hardware.FireGamePort(bits);
+  _hardware.CountInstructionCycles(OUT_CYCLES);
   for (;;)
   {
-    regs.cx = static_cast<std::uint16_t>(regs.cx + 1);
-    _guest.CountCycles(INC_CYCLES);
-    if (regs.cx == 0)
+    y = static_cast<std::uint16_t>(y + 1);
+    _hardware.CountInstructionCycles(INC_CYCLES);
+    if (y == 0)
     {
-      timeOut();
-      return;
+      return timeOut();
     }
-    _guest.CountCycles(NOT_TAKEN_CYCLES);
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & Y_AXIS));
-    _guest.CountCycles(IN_CYCLES + AND_CYCLES);
-    if (Low(regs.ax) == 0)
+    _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
+    bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & Y_AXIS);
+    _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES);
+    if (bits == 0)
     {
       break;
     }
-    _guest.CountCycles(TAKEN_CYCLES);
-    _guest.JumpBack(Y_COUNT_TURN);
+    _hardware.CountInstructionCycles(TAKEN_CYCLES);
+    _hardware.LoopTurn(Y_COUNT_TURN, {y, bits});
   }
-  _guest.CountCycles(NOT_TAKEN_CYCLES);
-  _guest.Devices().EnableInterrupts();
-  regs.cx = static_cast<std::uint16_t>(regs.cx - AXIS_COUNT_START);
-  regs.bx = static_cast<std::uint16_t>(regs.bx - AXIS_COUNT_START);
-  regs.dx = GAME_PORT;
-  _guest.CountCycles(BEFORE_LAST_READ_CYCLES);
-  SetLow(regs.ax, _guest.In8(GAME_PORT));
-  _guest.Set(DS.joystickPortByte, Low(regs.ax));
+  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
+  _hardware.EnableInterrupts();
+  y = static_cast<std::uint16_t>(y - AXIS_COUNT_START);
+  x = static_cast<std::uint16_t>(x - AXIS_COUNT_START);
+  _hardware.CountInstructionCycles(BEFORE_LAST_READ_CYCLES);
+  const std::uint8_t port = _hardware.GamePortButtons();
+  _state.Set(DS.joystickPortByte, port);
   // Bit 4, the stick's first button, low while pressed.
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & STICK_BUTTON_B));
-  _guest.CountCycles(IN_CYCLES + STORE_CYCLES + AND_CYCLES);
-  if (Low(regs.ax) == 0)
+  _hardware.CountInstructionCycles(IN_CYCLES + STORE_CYCLES + AND_CYCLES);
+  if ((port & STICK_BUTTON_B) == 0)
   {
-    _guest.Set(DS.fireLatch, 1);
-    _guest.CountCycles(NOT_TAKEN_CYCLES + LATCH_CYCLES);
+    _state.Set(DS.fireLatch, 1);
+    _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES + LATCH_CYCLES);
   }
   else
   {
-    _guest.CountCycles(TAKEN_CYCLES);
+    _hardware.CountInstructionCycles(TAKEN_CYCLES);
   }
-  _guest.CountCycles(RET_CYCLES);
-  _guest.SetFlag(Machine::FLAG_CARRY, false);
+  _hardware.CountInstructionCycles(RET_CYCLES);
+  return StickAxes{false, x, y};
 }
 
 void ReadJoystickSteering(Guest& _guest)
@@ -572,7 +556,7 @@ void ReadJoystickSteering(Guest& _guest)
     regs.ax = Join(stick.pitch, stick.roll);
     return;
   }
-  ReadJoystickAxes(_guest);
+  ReadJoystickAxesEntry(_guest);
   if (_guest.Flag(Machine::FLAG_CARRY))
   {
     regs.ax = 0;
@@ -684,6 +668,8 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_BX{REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract FIRE_BUTTON{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
+// The stick's read leaves interrupts off on a time-out, which its callers live with: compared too.
+constexpr Machine::NativeContract STICK_AXES{REGISTER_AX, FLAG_CARRY | FLAG_INTERRUPT};
 
 // The steering bytes of a register, roll in the low byte and pitch in the high, and back.
 [[nodiscard]] Steering SteeringIn(std::uint16_t _register) noexcept
@@ -757,17 +743,34 @@ void ResetMouseIfSelectedEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX);
 }
 
+void KeyboardInterruptEntry(Guest& _guest)
+{
+  // AX, DS and ES pushed round MOV ES,B800h / MOV DS,data and the call, and popped: every register is kept.
+  KeyboardInterrupt(_guest.State(), _guest.Devices());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ReadJoystickAxesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const StickAxes axes = ReadJoystickAxes(_guest.State(), _guest.Devices(), Low(regs.ax));
+  regs.bx = axes.x;
+  regs.cx = axes.y;
+  regs.dx = GAME_PORT;
+  _guest.SetFlag(FLAG_CARRY, axes.timedOut);
+  _guest.Clobber(STICK_AXES);
+}
+
 namespace
 {
 
 constexpr Machine::NativeContract KEY{0, FLAG_ZERO | FLAG_INTERRUPT};
 // The stick's routines leave interrupts off on a time-out, which their callers live with: compared too. They wait when the stick's
 // X one-shot drops before its Y one-shot (ReadJoystickAxes's loop at 7797), and so does ReadSteering through them.
-constexpr Machine::NativeContract STICK_AXES{REGISTER_AX, FLAG_CARRY | FLAG_INTERRUPT};
 constexpr Machine::NativeContract STICK_STEERING{REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_INTERRUPT};
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x02D4, "IsMouseDriverInstalled", &IsMouseDriverInstalledEntry, RETURNS_ZERO},
   // It waits as a rule: the mission briefings call it for the key that ends them.
   NativeEntry{0x6DEC, "WaitForKeyPress", &WaitForKeyPress, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
@@ -776,7 +779,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7536, "ReadSteering", &ReadSteering, CLOBBERS_BX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
   NativeEntry{0x7616, "GetKey", &GetKey, KEY},
   NativeEntry{0x7668, "ResetKeyboard", &ResetKeyboardEntry, PRESERVES_ALL},
-  NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxes, STICK_AXES, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
+  NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxesEntry, STICK_AXES, Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Sometimes},
   NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteering, STICK_STEERING, Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
   NativeEntry{0x78EF, "ReadKeyboardSteering", &ReadKeyboardSteeringEntry, CLOBBERS_BX},

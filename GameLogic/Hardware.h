@@ -1,6 +1,8 @@
 // GameLogic/Hardware.h
 #pragma once
 
+#include "Timing.h"
+
 #include <cstdint>
 #include <initializer_list>
 #include <optional>
@@ -34,6 +36,29 @@ struct MouseMotion
 {
   std::uint16_t acrossMickeys; ///< CX, right positive
   std::uint16_t downMickeys;   ///< DX, down positive
+};
+
+// ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
+
+/// What the BIOS's clock gives for int 1Ah AH=0.
+struct BiosClock
+{
+  std::uint32_t ticks;     ///< CX:DX: the timer's ticks since midnight, about 18.2 a second
+  std::uint8_t rolledOver; ///< AL: non-zero when midnight has passed since the clock was last read
+};
+
+/// What a DOS file service (int 21h) answers: CF, and AX.
+struct DosAnswer
+{
+  bool failed;         ///< CF: the service failed
+  std::uint16_t value; ///< AX: the error if it failed; otherwise a handle, a count of bytes, or AX as it went in
+};
+
+/// What DOS answers to int 21h AX=4300h: a DosAnswer, and the file's attributes in CX.
+struct DosFileAttributes
+{
+  DosAnswer answer;
+  std::uint16_t attributes; ///< CX: the attributes when the service did not fail, and CX as it went in when it did
 };
 
 /// The IBM PC's devices as the game drives them (ADR-014): what a de-assembled routine does to the speaker, the timer, the
@@ -111,6 +136,71 @@ public:
   /// Int 16h AH=0: the key at the head of the BIOS's buffer, taken out of it: the scan code in the high byte and the
   /// character in the low.
   std::uint16_t ReadBiosKey();
+
+  // ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
+
+  /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
+  [[nodiscard]] std::uint8_t CgaStatus();
+
+  /// OUT 201h,_value: fires the game port's one-shots, each high until its stick's resistance times it out. The port does
+  /// not read the byte written.
+  void FireGamePort(std::uint8_t _value);
+
+  /// IN AL,201h: the game port, its one-shots in bits 0 to 3, each high while it runs, and the buttons in bits 4 to 7.
+  [[nodiscard]] std::uint8_t GamePortOneShots();
+
+  /// The 8088's cycles over instructions that native code stands in for, counted for the devices the instructions executed
+  /// time (Pc::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
+  void CountInstructionCycles(Machine::Cycles _cycles) noexcept;
+
+  /// Int 1Ah AH=0: the BIOS's clock, its rollover flag cleared.
+  [[nodiscard]] BiosClock ReadBiosClock();
+
+  /// Int 1Ah AH=1, CX:DX=_ticks: the BIOS's clock set.
+  void SetBiosClock(std::uint32_t _ticks);
+
+  /// The BIOS's handler for the timer's tick at _segment:_offset, run to its IRET as the game's own handler chains to it, by a
+  /// far jump with the interrupt's frame in place. Pc::CallInterrupt reaches a handler through the vector table, so for the
+  /// call int 8's vector at 0000:0020 names the BIOS's handler, and after it what it named before.
+  void RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset);
+
+  /// Int 21h AX=0C0Ah: DOS empties its keyboard buffer and reads a line typed at the keyboard into the buffer at
+  /// _segment:_offset, whose first byte is its size and whose second gets the count of characters read.
+  void ReadDosLine(std::uint16_t _segment, std::uint16_t _offset);
+
+  /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find, at _segment:_offset.
+  void SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset);
+
+  /// Int 21h AX=4300h: the attributes of the file named at _segment:_name.
+  [[nodiscard]] DosFileAttributes ReadFileAttributes(std::uint16_t _segment, std::uint16_t _name);
+
+  /// Int 21h AX=4301h, CX=_attributes: the attributes of the file named at _segment:_name set.
+  DosAnswer SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
+
+  /// Int 21h AH=3Ch, CX=_attributes: the file named at _segment:_name created, or emptied; AX its handle.
+  [[nodiscard]] DosAnswer CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
+
+  /// Int 21h AH=3Dh, AL=_access: the file named at _segment:_name opened, 0 to read, 1 to write, 2 both; AX its handle.
+  [[nodiscard]] DosAnswer OpenFile(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access);
+
+  /// Int 21h AH=3Fh: up to _bytes from the file _handle into _segment:_buffer; AX the count read.
+  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
+
+  /// Int 21h AH=40h: _bytes from _segment:_buffer written to the file _handle; AX the count written.
+  [[nodiscard]] DosAnswer WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
+
+  /// Int 21h AH=3Eh: the file _handle closed.
+  DosAnswer CloseFile(std::uint16_t _handle);
+
+  /// Int 21h AH=41h: the file named at _segment:_name deleted.
+  DosAnswer DeleteFile(std::uint16_t _segment, std::uint16_t _name);
+
+  /// Int 21h AH=4Eh, CX=_attributes: the first file matching the pattern at _segment:_pattern, with no attribute beyond
+  /// _attributes' hidden, system and directory bits, into the disk transfer area.
+  [[nodiscard]] DosAnswer FindFirstFile(std::uint16_t _segment, std::uint16_t _pattern, std::uint16_t _attributes);
+
+  /// Int 21h AH=4Fh: the next file of the search the disk transfer area holds, into it.
+  [[nodiscard]] DosAnswer FindNextFile();
 
 private:
   Machine::Pc& m_pc;

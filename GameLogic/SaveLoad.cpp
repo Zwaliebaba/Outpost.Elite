@@ -13,18 +13,8 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t DOS_VECTOR = 0x21;
-constexpr std::uint8_t DOS_SET_TRANSFER_AREA = 0x1A;
-constexpr std::uint8_t DOS_CREATE = 0x3C;
-constexpr std::uint8_t DOS_OPEN = 0x3D;
-constexpr std::uint8_t DOS_CLOSE = 0x3E;
-constexpr std::uint8_t DOS_READ = 0x3F;
-constexpr std::uint8_t DOS_WRITE = 0x40;
-constexpr std::uint8_t DOS_DELETE = 0x41;
-constexpr std::uint8_t DOS_ATTRIBUTES = 0x43; // AL=0 get, 1 set
-constexpr std::uint8_t DOS_FIND_FIRST = 0x4E;
-constexpr std::uint8_t DOS_FIND_NEXT = 0x4F;
 constexpr std::uint16_t DOS_NO_MORE_FILES = 0x12;
+constexpr std::uint8_t IGNORE_ERROR = 0; // what a critical-error handler answers DOS in AL
 
 constexpr std::uint16_t FOUND_ATTRIBUTE = 0x15; // in the transfer area, after find-first or find-next
 constexpr std::uint16_t FOUND_NAME = 0x1E;
@@ -129,13 +119,14 @@ constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
 constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
 constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 
-// INT 21h with AH=_function; true when DOS reports an error (CF).
-[[nodiscard]] bool CallDos(Guest& _guest, std::uint8_t _function)
+// What a DOS file service leaves in the registers, AX and CF, as the register code that calls it has them after its INT 21h.
+// True when the service failed.
+bool LeaveDosAnswer(Machine::Registers& _regs, DosAnswer _answer) noexcept
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = WithHigh(regs.ax, _function);
-  _guest.Interrupt(DOS_VECTOR);
-  return (regs.flags & Machine::FLAG_CARRY) != 0;
+  _regs.ax = _answer.value;
+  const auto carry = static_cast<std::uint16_t>(_regs.flags & ~Machine::FLAG_CARRY);
+  _regs.flags = _answer.failed ? static_cast<std::uint16_t>(carry | Machine::FLAG_CARRY) : carry;
+  return _answer.failed;
 }
 
 // The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
@@ -153,7 +144,7 @@ void CloseAndFail(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   const std::uint16_t error = regs.ax;
   regs.bx = _guest.Get(DS.fileHandle);
-  static_cast<void>(CallDos(_guest, DOS_CLOSE));
+  static_cast<void>(LeaveDosAnswer(regs, _guest.Devices().CloseFile(regs.bx)));
   regs.ax = error;
   Fail(_guest.State(), regs.ax);
 }
@@ -162,9 +153,13 @@ void CloseAndFail(Guest& _guest)
 void LoadCommanderFile(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  Hardware& dos = _guest.Devices();
+  const std::uint16_t data = _guest.DataSegment();
   regs.dx = DS.commanderFileName.offset;
   regs.ax = WithLow(regs.ax, 0);
-  if (CallDos(_guest, DOS_ATTRIBUTES))
+  const DosFileAttributes attributes = dos.ReadFileAttributes(data, regs.dx);
+  regs.cx = attributes.attributes;
+  if (LeaveDosAnswer(regs, attributes.answer))
   {
     Fail(_guest.State(), regs.ax);
     return;
@@ -176,7 +171,7 @@ void LoadCommanderFile(Guest& _guest)
   }
   regs.dx = DS.commanderFileName.offset;
   regs.ax = WithLow(regs.ax, 0);
-  if (CallDos(_guest, DOS_OPEN))
+  if (LeaveDosAnswer(regs, dos.OpenFile(data, regs.dx, Low(regs.ax))))
   {
     Fail(_guest.State(), regs.ax);
     return;
@@ -185,13 +180,13 @@ void LoadCommanderFile(Guest& _guest)
   regs.bx = _guest.Get(DS.fileHandle);
   regs.cx = _guest.Get(DS.commanderFileBytes);
   regs.dx = DS.commanderBlock.offset;
-  if (CallDos(_guest, DOS_READ))
+  if (LeaveDosAnswer(regs, dos.ReadFile(regs.bx, data, regs.dx, regs.cx)))
   {
     CloseAndFail(_guest);
     return;
   }
   regs.bx = _guest.Get(DS.fileHandle);
-  if (CallDos(_guest, DOS_CLOSE))
+  if (LeaveDosAnswer(regs, dos.CloseFile(regs.bx)))
   {
     Fail(_guest.State(), regs.ax);
   }
@@ -201,9 +196,11 @@ void LoadCommanderFile(Guest& _guest)
 void SaveCommanderFile(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  Hardware& dos = _guest.Devices();
+  const std::uint16_t data = _guest.DataSegment();
   regs.dx = DS.commanderFileName.offset;
   regs.cx = 0;
-  if (CallDos(_guest, DOS_CREATE))
+  if (LeaveDosAnswer(regs, dos.CreateFile(data, regs.dx, regs.cx)))
   {
     Fail(_guest.State(), regs.ax);
     return;
@@ -212,13 +209,13 @@ void SaveCommanderFile(Guest& _guest)
   regs.bx = _guest.Get(DS.fileHandle);
   regs.cx = _guest.Get(DS.commanderFileBytes);
   regs.dx = DS.commanderBlock.offset;
-  if (CallDos(_guest, DOS_WRITE))
+  if (LeaveDosAnswer(regs, dos.WriteFile(regs.bx, data, regs.dx, regs.cx)))
   {
     CloseAndFail(_guest);
     return;
   }
   regs.bx = _guest.Get(DS.fileHandle);
-  if (CallDos(_guest, DOS_CLOSE))
+  if (LeaveDosAnswer(regs, dos.CloseFile(regs.bx)))
   {
     Fail(_guest.State(), regs.ax);
     return;
@@ -226,7 +223,7 @@ void SaveCommanderFile(Guest& _guest)
   regs.dx = DS.commanderFileName.offset;
   regs.cx = 0;
   regs.ax = WithLow(regs.ax, 1);
-  if (CallDos(_guest, DOS_ATTRIBUTES))
+  if (LeaveDosAnswer(regs, dos.SetFileAttributes(data, regs.dx, regs.cx)))
   {
     Fail(_guest.State(), regs.ax);
   }
@@ -237,10 +234,11 @@ void SaveCommanderFile(Guest& _guest)
 void ListCommanderFiles(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  Hardware& dos = _guest.Devices();
   _guest.Set(DS.commanderFileCount, 0);
   _guest.Set(DS.commanderFileListNext, DS.commanderFileList.offset);
   regs.dx = DS.commanderFilePattern.offset;
-  if (CallDos(_guest, DOS_FIND_FIRST))
+  if (LeaveDosAnswer(regs, dos.FindFirstFile(_guest.DataSegment(), regs.dx, regs.cx)))
   {
     Fail(_guest.State(), regs.ax);
     return;
@@ -273,7 +271,7 @@ void ListCommanderFiles(Guest& _guest)
         return;
       }
     }
-    if (CallDos(_guest, DOS_FIND_NEXT))
+    if (LeaveDosAnswer(regs, dos.FindNextFile()))
     {
       Fail(_guest.State(), regs.ax);
       return;
@@ -284,10 +282,11 @@ void ListCommanderFiles(Guest& _guest)
 // DeleteCommanderFile (0x03F2).
 void DeleteCommanderFile(Guest& _guest)
 {
-  _guest.Regs().dx = DS.commanderFileName.offset;
-  if (CallDos(_guest, DOS_DELETE))
+  Machine::Registers& regs = _guest.Regs();
+  regs.dx = DS.commanderFileName.offset;
+  if (LeaveDosAnswer(regs, _guest.Devices().DeleteFile(_guest.DataSegment(), regs.dx)))
   {
-    Fail(_guest.State(), _guest.Regs().ax);
+    Fail(_guest.State(), regs.ax);
   }
 }
 
@@ -332,15 +331,23 @@ void BlankHelpRows(Guest& _guest)
   PrintAtOnRegisters(_guest, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
 }
 
-// LeaveGameLoopForDisk (CS:7E90): diskOperation=AL, and the return address of the call it is in dropped with
-// the one under it, so that the RET takes GameLoop's back to Start, which does the disk work.
-void LeaveGameLoopForDisk(Guest& _guest)
+// LeaveGameLoopForDisk (CS:7E90): diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
+// work came to when it runs again.
+void LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
+{
+  _state.Set(DS.diskOperation, _operation);
+  _state.Set(DS.resumeAtDiskMenu, 1);
+}
+
+// LeaveGameLoopForDisk as the disc menu's register code reaches it, by a jump with AL the operation, and the two POP AX between
+// its writes, which drop the return address of the call it is in and the one under it, so that its RET takes GameLoop's back to
+// Start, which does the disk work. The pops read the stack and write no memory, so the writes keep the original's order.
+void LeaveGameLoopForDiskOnRegisters(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.diskOperation, Low(regs.ax));
+  LeaveGameLoopForDisk(_guest.State(), Low(regs.ax));
   regs.ax = _guest.Pop();
   regs.ax = _guest.Pop();
-  _guest.Set(DS.resumeAtDiskMenu, 1);
 }
 
 // ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked.
@@ -467,7 +474,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
         continue;
       }
       SetLow(regs.ax, EXIT_TO_DOS);
-      LeaveGameLoopForDisk(_guest);
+      LeaveGameLoopForDiskOnRegisters(_guest);
       return;
     }
     if (scan == SCAN_L || scan == SCAN_S || scan == SCAN_D)
@@ -475,13 +482,13 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
       // A bad name does not come back here.
       _guest.Call(PROMPT_COMMANDER_FILE_NAME);
       SetLow(regs.ax, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
-      LeaveGameLoopForDisk(_guest);
+      LeaveGameLoopForDiskOnRegisters(_guest);
       return;
     }
     if (scan == SCAN_C)
     {
       SetLow(regs.ax, CATALOGUE_COMMANDERS);
-      LeaveGameLoopForDisk(_guest);
+      LeaveGameLoopForDiskOnRegisters(_guest);
       return;
     }
     if (scan == SCAN_K)
@@ -601,9 +608,10 @@ void ShowDiskResult(Guest& _guest)
 void PerformDiskRequest(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
+  // PUSH AX / POP AX round the transfer area: what DOS leaves in AH goes no further.
   const std::uint16_t request = regs.ax;
   regs.dx = DS.diskTransferArea.offset;
-  static_cast<void>(CallDos(_guest, DOS_SET_TRANSFER_AREA));
+  _guest.Devices().SetDiskTransferArea(_guest.DataSegment(), regs.dx);
   regs.ax = request;
   // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
   for (std::uint8_t step = 1; step <= 3; ++step)
@@ -643,15 +651,10 @@ void SaveStartupCommander(GameState& _state, bool _backward)
   }
 }
 
-void CriticalErrorInterrupt(Guest& _guest)
+std::uint8_t CriticalErrorInterrupt(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Push(regs.ds);
-  regs.ax = _guest.DataSegment();
-  regs.ds = regs.ax;
-  _guest.Set(DS.diskError, 1);
-  SetLow(regs.ax, 0); // ignore the error
-  regs.ds = _guest.Pop();
+  _state.Set(DS.diskError, 1);
+  return IGNORE_ERROR;
 }
 
 void ShowDiskError(GameState& _state)
@@ -713,7 +716,7 @@ void ShowDiscControlScreen(Guest& _guest)
   }
   PrintAtOnRegisters(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
   SetLow(regs.ax, _guest.Get(DS.diskOperation));
-  LeaveGameLoopForDisk(_guest);
+  LeaveGameLoopForDiskOnRegisters(_guest);
 }
 
 void PromptCommanderFileName(Guest& _guest)
@@ -857,6 +860,14 @@ constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
 // ── The entries of the de-assembled routines ──
 
+void CriticalErrorInterruptEntry(Guest& _guest)
+{
+  // DS pushed, MOV AX,data / MOV DS,AX, and XOR AL,AL after the write, then DS popped: AH is left the data segment's high
+  // byte.
+  _guest.Regs().ax = Join(High(_guest.DataSegment()), CriticalErrorInterrupt(_guest.State()));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void ShowDiskErrorEntry(Guest& _guest)
 {
   ShowDiskError(_guest.State());
@@ -874,7 +885,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequest, DISK_REQUEST},
   NativeEntry{0x0470, "ShowDiskError", &ShowDiskErrorEntry, SHOWS_DISK_ERROR},
   NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},

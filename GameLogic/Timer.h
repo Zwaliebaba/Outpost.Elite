@@ -16,10 +16,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> TimerEntries() noexcept;
 
-/// RestoreTimerInterrupt (CS:016B): int 8, port 61h and the PIT as they were, and the BIOS clock kept within a day.
-/// Out: ES=0, or the int 33h segment on the Amstrad; AX, BX, CX and DX clobbered.
-void RestoreTimerInterrupt(Guest& _guest);
-
 /// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt.
 void TimerInterrupt(Guest& _guest);
 
@@ -28,6 +24,11 @@ void TimerInterrupt(Guest& _guest);
 /// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared,
 /// TimerInterrupt on int 8, and interrupts enabled.
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware);
+
+/// RestoreTimerInterrupt (CS:016B): with interrupts off, int 8 put back in the interrupt table, segment then offset, port 61h
+/// as InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it (on the Amstrad, as its mouse driver does); then
+/// interrupts on, and the BIOS clock set back by a day when it is past one. Returns the clock as int 1Ah gave it.
+BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
 
 /// WaitForTimerTick (CS:7772): until timerTicks changes, at most one tick. Waits as a rule (ADR-015).
 void WaitForTimerTick(GameState& _state, Hardware& _hardware);
@@ -41,5 +42,8 @@ void TimerTick(GameState& _state, Hardware& _hardware, bool _backward);
 void InstallTimerInterruptEntry(Guest& _guest); ///< Out: ES=0; AX clobbered.
 void TimerTickEntry(Guest& _guest);             ///< AX clobbered.
 void WaitForTimerTickEntry(Guest& _guest);      ///< Preserves every register.
+
+/// Out: ES=0, or the int 33h segment on the Amstrad; CX the high word of the clock less a day. AX, BX and DX clobbered.
+void RestoreTimerInterruptEntry(Guest& _guest);
 
 } // namespace Elite

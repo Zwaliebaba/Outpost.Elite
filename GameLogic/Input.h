@@ -17,9 +17,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> InputEntries() noexcept;
 
-/// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode with DS and ES set, and AX, DS and ES kept.
-void KeyboardInterrupt(Guest& _guest);
-
 /// WaitForKeyPress (CS:6DEC): GetKey until a key comes, the loop's turns ended where the original's are. Out: AH = its scan code.
 /// Waits as a rule.
 void WaitForKeyPress(Guest& _guest);
@@ -31,11 +28,6 @@ void ReadSteering(Guest& _guest);
 /// GetKey (CS:7616): the next key from keyBuffer: ZF=0, AH=scan code, AL=AL<<1 | Shift; or ZF=1, AH=0 when there is
 /// none. Interrupts on.
 void GetKey(Guest& _guest);
-
-/// ReadJoystickAxes (CS:777E): the IBM stick's two axes as counted polls: CF clear, BX = X and CX = Y; CF set when the stick does
-/// not answer or a count times out, with interrupts then left off. DX = 201h, AX clobbered; fireLatch set while button 1 is down.
-/// Waits when X's one-shot drops before Y's, for Y's.
-void ReadJoystickAxes(Guest& _guest);
 
 /// ReadJoystickSteering (CS:77C1): AL = roll and AH = pitch from the joystick: the Amstrad's keys ramped, or the IBM stick about its
 /// centre, within -23..23; AX = 0 when the IBM stick does not answer. BX, CX and DX clobbered. Waits sometimes, in
@@ -60,6 +52,23 @@ struct Steering
   std::uint8_t roll;
   std::uint8_t pitch;
 };
+
+/// What ReadJoystickAxes counts: the polls of each of the IBM stick's axes before its one-shot drops.
+struct StickAxes
+{
+  bool timedOut;   ///< the stick did not answer or a count wrapped; interrupts are then left off
+  std::uint16_t x; ///< X's polls; on a time-out, the count as it stands, from 60000 (BX)
+  std::uint16_t y; ///< Y's polls, likewise (CX)
+};
+
+/// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode.
+void KeyboardInterrupt(GameState& _state, Hardware& _hardware);
+
+/// ReadJoystickAxes (CS:777E): the IBM stick's two axes as counted polls, with interrupts off from the first firing of the one-shots
+/// (OUT 201h, of _trigger, which the port does not read) to the last poll; then the port's byte into joystickPortByte, and
+/// fireLatch set while button 1 is down. Counts the 8088's cycles for its instructions, by which the port times its one-shots, and
+/// waits when X's one-shot drops before Y's, for Y's.
+[[nodiscard]] StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
 
 /// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it.
 [[nodiscard]] MouseDriver IsMouseDriverInstalled(const GameState& _state);
@@ -93,6 +102,8 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void KeyboardInterruptEntry(Guest& _guest);        ///< Preserves every register.
+void ReadJoystickAxesEntry(Guest& _guest);         ///< In: AL, to fire. Out: CF=1 on a time-out; BX=X, CX=Y, DX=201h; AX clobbered.
 void IsMouseDriverInstalledEntry(Guest& _guest);   ///< Out: ZF=0 if installed; ES the vector's segment.
 void ResetKeyboardEntry(Guest& _guest);            ///< Out: IF=1.
 void ReadScanCodeEntry(Guest& _guest);             ///< AX clobbered.

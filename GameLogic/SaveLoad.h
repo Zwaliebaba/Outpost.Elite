@@ -4,6 +4,7 @@
 #include "GameState.h"
 #include "NativeEntry.h"
 
+#include <cstdint>
 #include <span>
 
 namespace Elite
@@ -14,10 +15,6 @@ namespace Elite
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SaveLoadEntries() noexcept;
-
-/// CriticalErrorInterrupt (CS:02F0), the int 24h handler while SaveScreenshot writes: diskError=1, and AL=0, which
-/// tells DOS to ignore the error; AH is left the data segment's high byte.
-void CriticalErrorInterrupt(Guest& _guest);
 
 /// PerformDiskRequest (CS:02FF): AL=1 loads commanderFileName into commanderBlock, 2 saves it, 3 deletes it, anything
 /// else lists the *.cdr files into commanderFileList. diskError=1 on a failure. AX, BX, CX, DX, SI and DI clobbered.
@@ -40,6 +37,10 @@ void PrintCommanderCatalogue(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
+/// CriticalErrorInterrupt (CS:02F0), the int 24h handler while PerformDiskRequest or SaveScreenshot works: diskError=1.
+/// Returns 0, the answer that tells DOS to ignore the error.
+[[nodiscard]] std::uint8_t CriticalErrorInterrupt(GameState& _state);
+
 /// ShowDiskError (CS:0470): diskError cleared and diskErrorText shown: its characters over the text page's when
 /// screenLayout says the text page shows, and drawn in colour 3 on the graphics screen otherwise.
 void ShowDiskError(GameState& _state);
@@ -49,6 +50,8 @@ void ShowDiskError(GameState& _state);
 void SaveStartupCommander(GameState& _state, bool _backward);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void CriticalErrorInterruptEntry(Guest& _guest); ///< Out: AL=0, AH the data segment's high byte.
 
 void ShowDiskErrorEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
 
