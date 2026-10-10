@@ -220,6 +220,13 @@ public:
     m_pc.CallNear(_offset);
   }
 
+  /// What the original's instructions here would have taken, in 8088 cycles, for a device timed by the
+  /// instructions executed (Pc::CountInstructionCycles): the game port, which a stick read counts.
+  void CountCycles(Machine::Cycles _cycles) noexcept
+  {
+    m_pc.CountInstructionCycles(_cycles);
+  }
+
   /// One turn of a waiting loop that found nothing to do (Pc::Wait): the clock moves to the next device
   /// event, the run ends there if that is its end, and an interrupt now due is taken. Only a routine
   /// hooked as one that waits may call it (NativeEntry::wait).

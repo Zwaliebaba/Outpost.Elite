@@ -140,6 +140,14 @@ public:
     return m_instructionCycles;
   }
 
+  /// For native code that stands in for instructions a device times by the instructions executed: adds
+  /// the cycles the 8088 takes over them to InstructionCycles(), as the CPU would have. The game port
+  /// times its one-shots so, and the game reads a stick by counting turns of a polling loop.
+  void CountInstructionCycles(Cycles _cycles) noexcept
+  {
+    m_instructionCycles += _cycles;
+  }
+
   [[nodiscard]] Cpu& Processor() noexcept
   {
     return m_cpu;
@@ -234,7 +242,10 @@ public:
   /// the end of a run stops the run there: StopReason::Overran. If the code returns past the native
   /// routine that called it, dropping return addresses as RunPauseScreen's abort does, the routine is
   /// unwound by an exception that its hook catches, and its own caller carries on from where the
-  /// program is, or is unwound in turn.
+  /// program is, or is unwound in turn. A host may call while a native routine waits at the end of a run
+  /// (a test does): the call runs beside it, to its return, and the waiting routine carries on in the
+  /// next run; a routine that waits on the way runs as a plain call, and stops the run as Overran if it
+  /// does wait.
   void CallNear(std::uint16_t _offset);
 
   /// For native code: returns from a near call as RET _popBytes does.
@@ -304,6 +315,7 @@ private:
   void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
   void RunNative(NativeCode::Hook& _hook);
+  [[nodiscard]] bool EnterBesideNative() noexcept;
   void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original = nullptr);
   void StepPaced();
   void NoteBackwardJump();
@@ -348,6 +360,9 @@ private:
   // that a host makes from outside any of them ends as calls do.
   std::uint32_t m_hostRoutines = 0;
   std::uint32_t m_nativeRoutines = 0;
+  // A host's call is running beside a native routine that waits: the CPU steps here, and a routine
+  // that waits runs as a plain call, stopping the run as Overran if it does wait.
+  bool m_besideNative = false;
 };
 
 } // namespace Machine

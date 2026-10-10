@@ -537,6 +537,22 @@ public:
     Assert::IsTrue(outerResumed, L"the routine it returned to carries on");
   }
 
+  // A host that calls into the program while a native routine waits at the end of a run, as a test does,
+  // runs the call beside it to its return; the waiting routine then carries on in the next run.
+  TEST_METHOD(HostCallRunsBesideAWaitingRoutine)
+  {
+    NativeRig rig("NativeBeside", WAIT_FOR_TICK);
+    rig.Hook(&WaitForTickByTurns, {}, Machine::NativeWait::Always);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
+    Machine::Registers& regs = rig.Host().Processor().Regs();
+    const Machine::Registers saved = regs;
+    rig.Host().CallNear(HELPER);
+    Assert::AreEqual(0x7777u, std::uint32_t{regs.bx}, L"the call ran");
+    regs = saved;
+    rig.Run();
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock(), L"the wait carried on");
+  }
+
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
   {
     NativeRig rig("NativeTwice", COUNT_UP);

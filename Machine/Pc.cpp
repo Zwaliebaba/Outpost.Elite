@@ -127,7 +127,7 @@ void Pc::SetSpinLimit(std::uint64_t _steps) noexcept
 
 void Pc::Step()
 {
-  if (m_nativeActive && !m_onNativeThread)
+  if (m_nativeActive && !m_onNativeThread && !m_besideNative)
   {
     const Cycles limit = m_runLimit;
     m_runLimit = std::min(limit, m_clock + 1);
@@ -243,6 +243,13 @@ void Pc::CallNear(std::uint16_t _offset)
   m_memory.Write16(regs.ss, regs.sp, CALL_RETURN_OFFSET);
   const auto returned = static_cast<std::uint16_t>(regs.sp + 2);
   regs.ip = _offset;
+  const bool beside = EnterBesideNative();
+  const OnExit leave(
+    [this, beside]() noexcept
+    {
+      if (beside)
+        m_besideNative = false;
+    });
   RunToReturn(regs.cs, CALL_RETURN_OFFSET, returned);
   if (regs.sp > returned && (m_onNativeThread ? m_nativeRoutines : m_hostRoutines) > 0)
   {
@@ -317,7 +324,26 @@ void Pc::CallInterrupt(std::uint8_t _vector)
   const std::uint32_t entry = static_cast<std::uint32_t>(_vector) * 4;
   regs.ip = m_memory.Read16(entry);
   regs.cs = m_memory.Read16(entry + 2);
+  const bool beside = EnterBesideNative();
+  const OnExit leave(
+    [this, beside]() noexcept
+    {
+      if (beside)
+        m_besideNative = false;
+    });
   RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer);
+}
+
+bool Pc::EnterBesideNative() noexcept
+{
+  // A call a host makes, from outside any native routine, while one waits suspended on the native
+  // thread: it runs here, beside the waiting routine, which stays where it is.
+  if (m_onNativeThread || m_hostRoutines > 0 || !m_nativeActive || m_besideNative)
+  {
+    return false;
+  }
+  m_besideNative = true;
+  return true;
 }
 
 void Pc::RunHook()
@@ -328,7 +354,7 @@ void Pc::RunHook()
   {
     throw std::logic_error("Pc: the CPU stopped at an entry no native routine is registered for");
   }
-  if (hook->wait != NativeWait::Never && !m_onNativeThread)
+  if (hook->wait != NativeWait::Never && !m_onNativeThread && !m_besideNative)
   {
     StartNative(*hook);
     return;
