@@ -1,6 +1,6 @@
 # ADR-014 — The devices behind a typed boundary
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), and with taking interrupts where a hook call took them (item 10).
+**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8), with level 4's (item 9), and with taking interrupts where they fall due (item 10).
 
 ## Context
 
@@ -101,15 +101,31 @@ More operations come as the routines that need them convert: the keyboard, the g
 - **The vector swap.** `RunBiosTimerTick` reaches the BIOS's handler by pointing int 8 at it for the call and back after it. That is the port's mechanism for a far jump with the interrupt's frame in place, not a write the original makes. The vector is not digested.
 - **What it replaced.** Every DOS file call in native code now goes through `Hardware`. SaveLoad's `CallDos` is gone, and the disc menu's register code puts back the AX, CF and CX that DOS leaves.
 
-**10. Interrupts where a hook call took them, 2026-10-10** (ADR-012 item 15). A native routine's hook call ends with the `Pc` taking the interrupts that are due (ADR-010 item 10). A de-assembled routine that calls the same callee as a value passes no such point. So an interrupt the callee lets in would be taken later: at the next loop turn or hook call, or after the routine returns.
-- **`Hardware::TakeDueInterrupts`** takes them where the hook call did. It is `Pc::TakeDueInterrupts`, now public for it.
-- **Where it goes.** A value call that replaces a hook call takes it after the callee wherever an interrupt can be due there: after the callee enables interrupts, ends one, or reprograms the PIT, which raises IRQ 0 at once.
-- **Its users.**
-  - `SaveScreenshot` calls it after `RestoreTimerInterrupt` and after `InstallTimerInterrupt`. Without it, the game's own handler took the IRQ 0 that the BIOS's had taken, and the two screenshot twins diverged.
-  - `GetKey` calls it at its end, where its hook call returned, so every caller that calls it as a value takes them there. Its STI can let one in: `ReadSteering` leaves interrupts off when the IBM stick does not answer, and its read counts time in which one can fall due (ADR-012 item 19).
-- **It keeps the native code's point, not the original's.** The original takes the interrupt at the instruction where it falls due, inside `RestoreTimerInterrupt` before it reads the BIOS clock. ADR-010 item 10 records that difference.
-- **In the end state** it runs the scheduler's due ticks.
-- **`Hardware::Spend`** charges a pacing point's cost (ADR-013 item 3), as `Guest::Spend` does for register code. The charts' frame loop calls it.
+**10. Interrupts are taken where they fall due, 2026-10-10** (ADR-012 items 15 and 21).
+
+**The problem.** A native routine's hook call ends with the `Pc` taking the interrupts that are due (ADR-010 item 10). So an interrupt that falls due while interrupts are off is taken at the next hook return or loop turn, not at the STI that lets it in. Each de-assembled routine that calls a callee as a value has one hook return fewer. The interrupt then arrives later still.
+
+**The first answer, 2026-10-10, superseded the same day.** A per-site `Hardware::TakeDueInterrupts` was placed where a hook call used to take them. Its users were:
+- `SaveScreenshot`, after `RestoreTimerInterrupt` and after `InstallTimerInterrupt`. Without it, the game's own handler took the IRQ 0 that the BIOS's had taken, and the two screenshot twins diverged.
+- `GetKey`, at its end.
+- `ProcessFlightKeys`, after `ReadSteering`.
+
+By level 5's last slices, value code turned interrupts on in some 25 places, and only these three took what was due. The rule had become a judgment made per site, and it was being applied unevenly.
+
+**The decision.** `Hardware` takes due interrupts where the CPU does:
+- **`EnableInterrupts`** (STI) takes the interrupts due as soon as they are on. The original takes them after the instruction that follows STI.
+- **`SetTickDivisor`**: a control word to the PIT can raise IRQ 0 at once, and with interrupts on it is taken there.
+- **`EndOfInterrupt`**: with interrupts on, an interrupt the controller held back is taken there.
+
+Each runs `Pc::TakeDueInterrupts`, which is public for it. The three per-site calls and `Hardware::TakeDueInterrupts` are gone.
+
+**What it changes.** The native code now takes these interrupts where the original does, one instruction early at most. The difference ADR-010 item 10 records for `RestoreTimerInterrupt`'s clock read is closed with it: the IRQ 0 its PIT reprogramming raises is taken at its STI, before the clock is read, as in the original.
+
+**Measured.** `GameLogicTests` passes 188 of 188 with poisoning on, under g++ and clang++, with the per-site calls removed. The coverage check is clean, and no digest moved.
+
+**In the end state** these three operations run the scheduler's due ticks.
+
+**`Hardware::Spend`** charges a pacing point's cost (ADR-013 item 3), as `Guest::Spend` does for register code. The charts' frame loop calls it.
 
 ## What this forecloses
 
