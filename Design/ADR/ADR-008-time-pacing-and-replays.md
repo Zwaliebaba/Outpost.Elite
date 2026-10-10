@@ -1,6 +1,6 @@
 # ADR-008 — Time, pacing and the replay digests
 
-**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8). Amended a third time the same day with the owner's ruling on the corpus's gaps (D20, item 8).
+**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8). Amended a third time the same day with the owner's ruling on the corpus's gaps (D20, item 8), and a fourth with the `end` step and the replays that close them (items 4 and 8).
 
 ## Context
 
@@ -60,7 +60,7 @@ Only three loops read 3DAh (0x04C1, 0x05D0, 0x4602), all of this form; the first
 - **The docked screens' cursor delays take their 100 timer ticks.**
 - **There are no 1987 slowdowns,** because the work between waits takes no time, as D6 ruled. The charts are the one exception (ADR-013). The port's scheduler in Phase 4 runs the same way, so Phase 4 no longer moves the digests for this reason.
 
-**4. A replay** is a script of steps (`GameLogic/Replay.h`): `wait`, `key`, `down`, `up`, `shot`, `digest` and `file`.
+**4. A replay** is a script of steps (`GameLogic/Replay.h`): `wait`, `key`, `down`, `up`, `shot`, `digest`, `file` and `end`.
 
 - **It always runs in paced time.** It starts from these fixed conditions:
   - the reference loaded with the D5 byte (`Elite::LoadReference`);
@@ -166,6 +166,35 @@ The routines these leave unreached are compared by constructed tests (ADR-010 it
   - leaving for DOS, with a replay now allowed to end in `Terminated`.
 - **By known answers**, recorded from the interpreter before it goes: flight by mouse or joystick, screenshots, a Shuttle the station launches and an invasion's Thargoids.
 - **`InitEscapePod` and `InitKraitHunter`** are deleted at D7 (D22): nothing calls them, so nothing guards them.
+
+**The D20 replays, measured 2026-10-10.** Seven replays close the gaps play reaches, each from a prepared commander, with every digest recorded from the interpreted original. Each agrees with the native code on every call.
+
+| Replay | Game time | What it reaches |
+|---|---|---|
+| `supernova-mission` | 58.9 s | mission 1 from its trigger to the debriefing's 1,000 credits: the fuel leak, the briefing, the refugees, a galactic jump, and a docking by hand |
+| `invasion-mission` | 52.7 s | mission 3 from its trigger to the debriefing: the briefing, the station destroyed by an aft military laser, which ends the invasion, the title Archangel and the anti-ECM |
+| `masking-device-and-anti-ecm` | 12.2 s | the anti-ECM letting a missile reach the station, and the masking device keeping a police Viper from firing |
+| `mining-laser` | 14.3 s | `ShowShipIdentity` on an asteroid, the mining laser splitting it, and its splinters scooped |
+| `scooping-a-canister` | 14.9 s | a cargo canister scooped |
+| `scooping-an-escape-pod` | 25.1 s | an escape pod scooped as slaves, and a boulder the scoops refuse |
+| `leave-for-dos` | 5.6 s | quitting to DOS, with a digest after the program has ended |
+
+- **The `end` step.** `end S` runs the machine as `wait S` does. It is the only step in which the program may end, and the program must have ended by its end. Only `digest` and `shot` may follow it. A wait in which the program ends fails, and so does an `end` after which it still runs. The step declares the quit, so the test can tell a replay that quits from one that stopped by mistake. A digest after the end reads memory and the CGA as the end of the program leaves them.
+- **The commanders,** under the rule above:
+  - `supernova-mission.cdr` and `invasion-mission.cdr` sit one jump before missions 1 and 3. `UpdateMissionSchedule` gives each at its count of jumps (CS:4980–4992).
+  - `archangel.cdr` has mission 2's two rewards and the title, as the debriefing and `AwardArchangelTitle` write them.
+  - The three scooping commanders have fuel scoops, and a mining laser in place of the fore pulse laser.
+  - Each random state was found by searching draw counts for a run that meets its target near the launch.
+- **What the corpus is now.** 26 replays, 690.9 s of game time and 134 digests. Interpreted, they execute 11,861 of the original's instruction starts, against 11,421 for the 19 before. Nine routines the corpus never called now run, among them `ShowShipIdentity`, `TryScoopObject`, `UseMaskingDevice`, `ShowMissionBriefing` and `ShowMissionDebriefing`. `CorpusTests` takes about 20 s interpreted, 3 s native and 21 s compared (g++ Release, a shared machine).
+- **Left to known answers, with the list above.** These paths are within play, but none came within a short run. They take the D20 ruling's second branch:
+  - the invasion's Thargoids, which spawn only after a jump that follows the briefing, in that system's safe zone;
+  - the paths of `TryScoopObject` the replays miss: the masking device's barrel, a full hold, splinters that carry minerals, and Thargons;
+  - `ShowShipIdentity`'s labels other than Debris;
+  - mission 1 declined, and its 1,400-credit reward.
+- **Found in the original on the way.**
+  - An escape capsule's arrival does not set `playerDocked`. So the status screen briefs after one but never debriefs, and both mission replays dock for real before their debriefings.
+  - The fuel leak's counters are in the commander block.
+  - A launch sets every station up alike, so `launch-and-dock`'s keys dock at any of them.
 
 **Found in the original on the way.** `PlaceAtSpawnPoint` turns the spawn point by `rotationSinCos` pairs 6 and 7, which nothing sets before the first `ComputeVelocity`; until then a ship spawns on the player. So the Mask's escorts ram the commander on the first launch after boot, and the first Thargoid in witch space dies ramming the ship. Escorts copy their leader's type (`PlaceEscortNear`), which is why the Constrictor and the Cougar appear only as replacement ships.
 
