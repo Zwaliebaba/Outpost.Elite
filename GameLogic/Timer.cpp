@@ -13,7 +13,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t IS_MOUSE_DRIVER_INSTALLED = 0x02D4;
 constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 
 // The BIOS's int 8 vector, which InstallTimerInterrupt keeps in the code segment (savedTimerVector).
@@ -23,7 +22,6 @@ constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0x0000;
 constexpr std::uint16_t TIMER_VECTOR_OFFSET = 0x0020; // 0000:0020, int 8
 constexpr std::uint16_t TIMER_VECTOR_SEGMENT = 0x0022;
 
-constexpr std::uint8_t END_OF_INTERRUPT = 0x20;
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
 constexpr std::uint8_t PIT_CHANNEL0_RATE = 0x34;        // channel 0, both bytes, mode 2: the Amstrad's mouse
 constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
@@ -387,38 +385,24 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   return clock;
 }
 
-void TimerInterrupt(Guest& _guest)
+void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t ax = regs.ax;
-  const std::uint16_t ds = regs.ds;
-  const std::uint16_t es = regs.es;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = _guest.DataSegment();
-  regs.ds = _guest.DataSegment();
-  TimerTick(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // What TimerTick leaves in AX goes no further: AL is loaded here and AX popped below.
-  regs.ax = WithLow(regs.ax, END_OF_INTERRUPT);
-  _guest.Devices().EndOfInterrupt();
-  bool chain = false;
-  if (_guest.Get(DS.amstradPresent) == 1)
+  // PUSH AX / PUSH DS / PUSH ES, and their POPs before the IRET or the chain: what it loads into them, the data segment, B800h
+  // and the end of the interrupt's 20h, goes no further.
+  TimerTick(_state, _hardware, _backward);
+  _hardware.EndOfInterrupt();
+  if (_state.Get(DS.amstradPresent) != 1)
   {
-    // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
-    _guest.Call(IS_MOUSE_DRIVER_INSTALLED);
-    const bool mouse = (regs.flags & Machine::FLAG_ZERO) == 0;
-    if (Decrement(_guest.State(), DS.biosTimerChainCountdown) == 0)
-    {
-      _guest.Set(DS.biosTimerChainCountdown, mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS);
-      chain = true;
-    }
+    return;
   }
-  regs.es = es;
-  regs.ds = ds;
-  regs.ax = ax;
-  if (chain)
+  // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
+  const bool mouse = IsMouseDriverInstalled(_state).installed;
+  if (Decrement(_state, DS.biosTimerChainCountdown) != 0)
   {
-    ChainToBiosTimer(_guest.State(), _guest.Devices());
+    return;
   }
+  _state.Set(DS.biosTimerChainCountdown, mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS);
+  ChainToBiosTimer(_state, _hardware);
 }
 
 void TimerTick(GameState& _state, Hardware& _hardware, bool _backward)
@@ -467,6 +451,12 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | 
 
 } // namespace
 
+void TimerInterruptEntry(Guest& _guest)
+{
+  TimerInterrupt(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void InstallTimerInterruptEntry(Guest& _guest)
 {
   InstallTimerInterrupt(_guest.State(), _guest.Devices());
@@ -506,7 +496,7 @@ namespace
 constexpr std::array ENTRIES = {
   NativeEntry{0x00C6, "InstallTimerInterrupt", &InstallTimerInterruptEntry, CLOBBERS_AX},
   NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterruptEntry, CLOBBERS_AX_BX_DX},
-  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x7150, "TimerTick", &TimerTickEntry, CLOBBERS_AX},
   // WaitForTimerTick waits for the next tick as a rule.
   NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTickEntry, PRESERVES_ALL, Machine::NativeReturn::Near, 0,

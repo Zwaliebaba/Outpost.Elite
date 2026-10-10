@@ -27,8 +27,6 @@ using Machine::FLAG_ZERO;
 // Routines outside this file, run through the original.
 constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
-constexpr std::uint16_t COMPUTE_DEATH_DEBRIS_VECTOR = 0x2F8B;
-constexpr std::uint16_t ROTATE_ROLL_YAW_PITCH = 0x3EC7;
 constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
 constexpr std::uint16_t START_EXPLOSION_SOUND = 0x7AFC;
 constexpr std::uint16_t START_LASER_SOUND = 0x7B71;

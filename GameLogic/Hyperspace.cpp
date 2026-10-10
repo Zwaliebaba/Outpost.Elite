@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Flight.h"
+#include "Galaxy.h"
 #include "Maths.h"
 #include "Ships.h"
 #include "Sound.h"
@@ -23,8 +24,6 @@ using Machine::Registers;
 // The routines these call through their entries: the original's, or a native routine hooked there.
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t NEXT_RANDOM = 0x061C;
-constexpr std::uint16_t FIND_NEAREST_SYSTEM = 0x1292;
-constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
 constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t DRAW_CIRCLE = 0x1AC1;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
@@ -108,37 +107,33 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
   return (random & 0x8000) != 0 ? Negate(offset) : offset;
 }
 
-// GalacticJump (0x485B): the next galaxy, the ninth now and then after the eighth, and the system
-// nearest a random point of its chart selected.
-void GalacticJump(Guest& _guest)
+// GalacticJump (0x485B), which CompleteHyperspaceJump jumps to and which jumps back to 0x4733: the next galaxy, the ninth now
+// and then after the eighth, and the system nearest a random point of its galactic chart selected (FindNearestSystem, then
+// SelectSystemAtCursor). _countIfNone is BP, what FindNearestSystem makes the index from when no system is on the chart.
+void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.galaxyNumber) == NINTH_GALAXY)
+  if (_state.Get(DS.galaxyNumber) == NINTH_GALAXY)
   {
-    _guest.Set(DS.galaxyNumber, 0);
+    _state.Set(DS.galaxyNumber, 0);
   }
   else
   {
-    _guest.Set(DS.galaxyNumber, static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) + 1));
-    if (_guest.Get(DS.galaxyNumber) == NINTH_GALAXY)
+    _state.Set(DS.galaxyNumber, static_cast<std::uint8_t>(_state.Get(DS.galaxyNumber) + 1));
+    if (_state.Get(DS.galaxyNumber) == NINTH_GALAXY && NextRandom(_state) >= NINTH_GALAXY_ODDS)
     {
-      _guest.Call(NEXT_RANDOM);
-      if (regs.ax >= NINTH_GALAXY_ODDS)
-      {
-        _guest.Set(DS.galaxyNumber, 0);
-      }
+      _state.Set(DS.galaxyNumber, 0);
     }
   }
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) + GALAXY_DIGIT_ONE));
-  _guest.SetByte(DS.arrivalGalaxyDigit.offset, Low(regs.ax));
-  _guest.Call(NEXT_RANDOM);
-  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) & 0x3F) + 0x60));
-  _guest.Set(DS.chartCursorX, Low(regs.ax));
-  SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & 0x1F) + 0x30));
-  _guest.Set(DS.chartCursorY, High(regs.ax));
-  _guest.Set(DS.chartIsShortRange, 0);
-  _guest.Call(FIND_NEAREST_SYSTEM);
-  _guest.Call(SELECT_SYSTEM_AT_CURSOR);
+  _state.SetByte(DS.arrivalGalaxyDigit.offset, static_cast<std::uint8_t>(_state.Get(DS.galaxyNumber) + GALAXY_DIGIT_ONE));
+  // AND AL,3Fh / ADD AL,60h, and AND AH,1Fh / ADD AH,30h: a random point about the middle of the chart.
+  const std::uint16_t random = NextRandom(_state);
+  _state.Set(DS.chartCursorX, static_cast<std::uint8_t>((Low(random) & 0x3F) + 0x60));
+  _state.Set(DS.chartCursorY, static_cast<std::uint8_t>((High(random) & 0x1F) + 0x30));
+  _state.Set(DS.chartIsShortRange, 0);
+  // The galactic chart holds every system, and none is far enough from that point for its distance to carry, so the search
+  // always finds one, and leaves BP its loop's count there, 100h less its index, for SelectSystemAtCursor's own search.
+  const std::uint8_t index = FindNearestSystem(_state, _countIfNone);
+  SelectSystemAtCursor(_state, Negate(index));
 }
 
 // The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, which the
@@ -274,7 +269,9 @@ void CompleteHyperspaceJump(Guest& _guest)
   _guest.Set(DS.messageFrames, ENGAGED_MESSAGE_FRAMES);
   if (_guest.Get(DS.galacticJumpPending) == 1)
   {
-    GalacticJump(_guest);
+    // What SelectSystemAtCursor leaves in the registers, which its contract clobbers, is not reproduced: poisoned, every
+    // comparison and digest still agrees.
+    GalacticJump(_guest.State(), regs.bp);
     _guest.JumpBack(0x4733);
   }
   else
@@ -551,34 +548,37 @@ constexpr Machine::NativeContract MASS_LOCK{0, FLAG_CARRY};
 
 } // namespace
 
-void IsMassLockedEntry(Guest& _guest)
+void MassLockOut(Guest& _guest, const MassLock& _lock)
 {
   Registers& regs = _guest.Regs();
-  const MassLock lock = IsMassLocked(_guest.State());
-  // What the original leaves, which the contract compares, as EngageJumpDrive's does after it: AL as InSafeZone leaves it; then
-  // what each IsObjectNear leaves, with DI on its slot; then DI and CX where the look at the ships stopped, and AL the last
-  // slot's type byte, SHR AL,1, and AND AL,1Fh once it is active.
-  SetLow(regs.ax, lock.zone.rest);
-  if (lock.sun)
+  SetLow(regs.ax, _lock.zone.rest);
+  if (_lock.sun)
   {
     regs.di = DS.shipSlots.offset;
-    IsObjectNearOut(_guest, ObjectSlot(_guest.State(), regs.di), *lock.sun);
+    IsObjectNearOut(_guest, ObjectSlot(_guest.State(), regs.di), *_lock.sun);
   }
-  if (lock.planet)
+  if (_lock.planet)
   {
     regs.di = Offset(DS.shipSlots.offset, ObjectSlot::BYTES);
-    IsObjectNearOut(_guest, ObjectSlot(_guest.State(), regs.di), *lock.planet);
+    IsObjectNearOut(_guest, ObjectSlot(_guest.State(), regs.di), *_lock.planet);
   }
-  if (lock.ships)
+  if (_lock.ships)
   {
-    regs.di = lock.ships->slot;
-    regs.cx = lock.ships->slotsLeft;
-    if (lock.ships->lastLooked)
+    regs.di = _lock.ships->slot;
+    regs.cx = _lock.ships->slotsLeft;
+    if (_lock.ships->lastLooked)
     {
-      const std::uint8_t type = _guest.Byte(*lock.ships->lastLooked);
+      const std::uint8_t type = _guest.Byte(*_lock.ships->lastLooked);
       SetLow(regs.ax, static_cast<std::uint8_t>((type & ObjectSlot::ACTIVE) != 0 ? (type >> 1) & SHIP_TYPE_MASK : type >> 1));
     }
   }
+}
+
+void IsMassLockedEntry(Guest& _guest)
+{
+  // What the original leaves, which the contract compares, as EngageJumpDrive's does after it.
+  const MassLock lock = IsMassLocked(_guest.State());
+  MassLockOut(_guest, lock);
   _guest.SetFlag(FLAG_CARRY, lock.locked);
   _guest.Clobber(MASS_LOCK);
 }

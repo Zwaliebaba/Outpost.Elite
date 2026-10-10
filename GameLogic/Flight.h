@@ -69,9 +69,6 @@ void RunFlight(Guest& _guest);
 /// ProcessFlightKeys (CS:7FA8): the flight controls other than steering.
 void ProcessFlightKeys(Guest& _guest);
 
-/// EngageJumpDrive (CS:8430): J: the jump drive engaged at full speed unless mass-locked.
-void EngageJumpDrive(Guest& _guest);
-
 /// UpdatePlayerMotion (CS:8472): speed, roll and pitch for this frame, then the world moves.
 void UpdatePlayerMotion(Guest& _guest);
 
@@ -280,6 +277,14 @@ bool TickEscapePod(GameState& _state);
 /// DrainEnergy (CS:839F): playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
 void DrainEnergy(GameState& _state, std::int8_t _amount);
 
+/// What EngageJumpDrive did: in Hyperspace.h, beside the MassLock it holds, which this header cannot include (Hyperspace.h
+/// includes Ships.h, which includes this).
+struct JumpDriveRequest;
+
+/// EngageJumpDrive (CS:8430): J: the jump drive engaged (jumpDriveEngaged, velocityDirty) at full speed, 48, unless the docking
+/// computer is on or IsMassLocked says it is mass-locked; otherwise disengaged. Its message is posted for 5 frames.
+JumpDriveRequest EngageJumpDrive(GameState& _state);
+
 /// UpdatePlayerVelocity (CS:8599): when velocityDirty, the velocity from playerSpeed along the pitch and the yaw, through
 /// rotationSinCos[6] and [7], which it sets. While jumpDriveEngaged it is 32 times the speed, for one frame.
 void UpdatePlayerVelocity(GameState& _state);
@@ -335,6 +340,7 @@ void XorScannerBlipEntry(Guest& _guest);    ///< AH, BH, CH = the scanner bytes.
 void XorDashboardPixelEntry(Guest& _guest);
 void EraseCompassAndBlipsEntry(Guest& _guest); ///< Out: ES = B800h once it erases anything.
 void DrainEnergyEntry(Guest& _guest);
+void EngageJumpDriveEntry(Guest& _guest); ///< Out: AX the message, and every register IsMassLocked leaves once it is asked.
 void UpdatePlayerVelocityEntry(Guest& _guest);
 void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, SI past the last slot.
 void UpdateSafeZoneEntry(Guest& _guest);        ///< Out: DI = stationSlot. AX, BX, CX, DX clobbered.
