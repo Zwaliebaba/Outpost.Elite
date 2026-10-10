@@ -1,6 +1,6 @@
 # ADR-014 — The devices behind a typed boundary
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)).
+**Status:** accepted 2026-10-10, with the change that implements it: `Elite::Hardware`, with the timer's tick and the speaker's routines de-assembled onto it. It records how D17's third step makes the devices native ([Reverse-Engineering-Plan.md §5, Phase 4](../Reverse-Engineering-Plan.md#phase-4--detach)). Amended the same day with Input's and StartUp's devices (item 8).
 
 ## Context
 
@@ -62,6 +62,24 @@ More operations come as the routines that need them convert: the keyboard, the g
 - The coverage check is clean.
 - clang++ builds without warnings.
 - No digest moved.
+
+**8. Input's and StartUp's devices, 2026-10-10.**
+
+| Operation | What it is |
+|---|---|
+| `KeyboardData` | IN AL,60h |
+| `AcknowledgeKeyboard` | the XT's pulse on bit 7 of port 61h: IN, then OUT with the bit set and OUT with it clear |
+| `GamePortButtons` | IN AL,201h |
+| `ResetMouse`, `ReadMousePresses`, `ReadMouseMotion` | int 33h functions 0, 5 and 0Bh |
+| `SetVideoMode` | int 10h AH=0 |
+| `PrintDosString` | int 21h AH=9 |
+| `PeekBiosKey`, `ReadBiosKey` | int 16h AH=1 and AH=0 |
+
+- **A service is a typed result.** The operation sets the registers the service reads, calls it, returns what it gives as a small aggregate, and puts the processor's registers back, so it has no register effect of its own. An entry whose contract compares what the service left rebuilds it from the result. With no mouse driver, int 33h is the ROM's IRET, and the result is the registers as they were sent; the header says so, and the tests rely on it.
+- **Converted.** `ReadScanCode`, `ReadFireButton`, `ReadMouseSteering` and `ResetMouseIfSelected` are value routines. `KeyboardInterrupt`, `ReadSteering` and `ExitToDos` keep their register code but drive the devices through `Hardware`. `ExitToDos` still sets the registers its `JumpBack` compares, as ADR-010 item 8 requires.
+- **STI and CLI.** Every STI and CLI in native code now goes through `Hardware`, as item 4 says: Sound's entries, `ResetKeyboard`, `RestoreTimerInterrupt`, the start-up and exit routines, and the joystick's.
+- **Left, and why.** The joystick routines count instruction cycles and wait. `GetKey` and `WaitForKeyPress` wait. `PollScreenDumpKey` calls `SaveScreenshot`, which is not converted. `Start` and `CopyProtection` use the stack and call routines that wait.
+- **Measured.** No digest moved, the coverage check is clean, and no contract changed. The leftovers the converted routines no longer produce are poisoned, and no caller reads them.
 
 ## What this forecloses
 
