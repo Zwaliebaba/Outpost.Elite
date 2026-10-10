@@ -186,7 +186,7 @@ def generate(_rows: list[dict[str, str]], _members: list["Member"]) -> str:
   ]
   paths = {member.name: member.path for member in walk(_members) if member.row is not None}
   for row in _rows:
-    out.append(f"static_assert(DS.{row['name']}.offset == offsetof(GameData, {paths[row['name']]}));")
+    out.append(f"static_assert(DS.{row['name']}.offset == GAME_DATA_OFFSET({paths[row['name']]}));")
   out += [
     "",
     "} // namespace Elite",
@@ -361,6 +361,15 @@ def generate_game_data(_members: list[Member]) -> str:
     "#include <cstddef>",
     "#include <cstdint>",
     "",
+    "// A member's offset in GameData, as a constant expression wherever this header is read. Clang reading the MSVC headers,",
+    "// as clang-tidy does, gets vcruntime.h's offsetof, a reinterpret_cast that is not one, so under Clang it is the builtin",
+    "// that offsetof is everywhere else.",
+    "#if defined(__clang__)",
+    "#   define GAME_DATA_OFFSET(member) __builtin_offsetof(::Elite::GameData, member)",
+    "#else",
+    "#   define GAME_DATA_OFFSET(member) offsetof(::Elite::GameData, member)",
+    "#endif",
+    "",
     "namespace Elite",
     "{",
     "",
@@ -384,7 +393,7 @@ def generate_game_data(_members: list[Member]) -> str:
     "// Every member at its offset in the data segment, every struct at its size, and the segment's 64 KiB.",
   ]
   for path, offset in offset_paths(_members):
-    out.append(f"static_assert(offsetof(GameData, {path}) == 0x{offset:04X});")
+    out.append(f"static_assert(GAME_DATA_OFFSET({path}) == 0x{offset:04X});")
   for name, size in struct_types(_members, "GameData"):
     out.append(f"static_assert(sizeof({name}) == {size});")
   out += [
