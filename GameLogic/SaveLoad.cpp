@@ -15,7 +15,6 @@ namespace
 {
 
 constexpr std::uint16_t DOS_NO_MORE_FILES = 0x12;
-constexpr std::uint8_t IGNORE_ERROR = 0;   // what a critical-error handler answers DOS in AL
 constexpr std::uint8_t READ_ACCESS = 0;    // a file opened to read
 constexpr std::uint16_t NO_ATTRIBUTES = 0; // a commander's file is neither read-only, hidden nor system
 
@@ -566,12 +565,6 @@ void SaveStartupCommander(GameState& _state, bool _backward)
   }
 }
 
-std::uint8_t CriticalErrorInterrupt(GameState& _state)
-{
-  _state.Set(DS.diskError, 1);
-  return IGNORE_ERROR;
-}
-
 void ShowDiskError(GameState& _state)
 {
   _state.Set(DS.diskError, 0);
@@ -679,30 +672,6 @@ void PrintCommanderCatalogue(GameState& _state)
     const auto cell = static_cast<std::uint16_t>(CATALOGUE_POSITION + column * CATALOGUE_COLUMN_BYTES + row * TEXT_ROW_BYTES);
     name = Offset(PrintAt(_state, name, cell).end, 1);
   }
-}
-
-// ── The entry of the critical-error handler ──
-
-void CriticalErrorInterruptEntry(Guest& _guest)
-{
-  // DS pushed, MOV AX,data / MOV DS,AX, and XOR AL,AL after the write, then DS popped: AH is left the data segment's high
-  // byte.
-  _guest.Regs().ax = Join(High(_guest.DataSegment()), CriticalErrorInterrupt(_guest.State()));
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-};
-
-} // namespace
-
-std::span<const NativeEntry> SaveLoadEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

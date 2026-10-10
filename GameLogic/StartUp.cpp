@@ -19,6 +19,8 @@ namespace Elite
 namespace
 {
 
+// The game's int 0 handler, the divide trap. Nothing raises int 0 here: no divide runs on the CPU, and each divide calls
+// DivideOverflowInterrupt itself when its quotient overflows. So no native routine stands at the vector's address.
 constexpr std::uint16_t DIVIDE_OVERFLOW_INTERRUPT = 0x025E;
 constexpr std::uint16_t KEYBOARD_INTERRUPT = 0x0201;
 
@@ -46,7 +48,8 @@ constexpr std::uint8_t FULL_SHIELD = 0xFF;
 constexpr std::uint8_t NEW_GAME_CABIN_TEMPERATURE = 0x0C;
 constexpr std::uint8_t NEW_GAME_ALTITUDE = 0xFF;
 
-// The game's int 24h handler, which Start puts in the interrupt table round a disk request.
+// The game's int 24h handler, which Start puts in the interrupt table round a disk request. Nothing raises int 24h here: DOS
+// answers a failed call with CF set and an error. So no native routine stands at the vector's address.
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
 
 // Where the original jumps back (Hardware::LoopTurn).

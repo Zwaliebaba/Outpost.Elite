@@ -2,22 +2,17 @@
 #pragma once
 
 #include "GameState.h"
-#include "NativeEntry.h"
 #include "ObjectSlot.h"
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
 
 // The reference's arithmetic, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the maths leaves, the divides that go through
 // the game's trap, and the trap. Each takes values and gives values back, on the GameState and, where it drives a device, the devices
-// (ADR-014). The divide trap also has its entry, at the end, which int 0 reaches (ADR-010).
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> MathsEntries() noexcept;
+// (ADR-014).
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -191,9 +186,5 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 /// ConvertVectorToAngles (CS:4F08): the two angles, negated, of the direction _vector / 4, by ArcTangent2
 /// and rotationSinCos[8], which it sets.
 [[nodiscard]] Angles ConvertVectorToAngles(GameState& _state, Vector _vector);
-
-// ── The entry of the divide trap ──
-
-void DivideOverflowInterruptEntry(Guest& _guest); ///< The return address on the stack, IP then CS; DS the divide's.
 
 } // namespace Elite

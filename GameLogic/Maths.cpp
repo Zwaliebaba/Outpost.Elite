@@ -96,13 +96,6 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
   return DivideTrap{resume, (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE)};
 }
 
-// The game's memory with the data segment the registers hold, for the divide trap's entry: the trap saves the DS the divide
-// ran with, which the code it interrupted holds there.
-[[nodiscard]] GameState StateOnRegisters(Guest& _guest) noexcept
-{
-  return GameState(_guest.Host().Ram(), _guest.CodeSegment(), _guest.Regs().ds);
-}
-
 [[nodiscard]] std::uint16_t Word(std::int16_t _value) noexcept
 {
   return static_cast<std::uint16_t>(_value);
@@ -452,33 +445,6 @@ Angles ConvertVectorToAngles(GameState& _state, Vector _vector)
   (void)SetSinCos(_state, 8, first);
   const Pair yz = RotateByStoredSinCos(_state, 8, Pair{y, z});
   return Angles{Negate(first), Negate(ArcTangent2(_state, x, yz.second))};
-}
-
-// ── The entry of the divide trap ──
-
-void DivideOverflowInterruptEntry(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  // The return address IRET takes, IP then CS; the trap saves the DS the divide ran with.
-  GameState state = StateOnRegisters(_guest);
-  const DivideTrap trap = DivideOverflowInterrupt(state, _guest.StackWord(2), _guest.StackWord(0), regs.ax, regs.bx);
-  _guest.SetStackWord(0, trap.resume);
-  regs.ax = trap.ax;
-  _guest.Clobber(PRESERVES_ALL);
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{0x025E, "DivideOverflowInterrupt", &DivideOverflowInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-};
-
-} // namespace
-
-std::span<const NativeEntry> MathsEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

@@ -2,20 +2,15 @@
 #pragma once
 
 #include "GameState.h"
-#include "NativeEntry.h"
+#include "Hardware.h"
 
 #include <cstdint>
-#include <span>
 
 namespace Elite
 {
 
 // The reference's save-load routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): saving and loading commanders. Each
-// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014). The critical-error handler
-// also has its entry, at the end, which int 24h reaches (ADR-010).
-
-/// The entries of this subsystem ported so far, for InstallNativeRoutines.
-[[nodiscard]] std::span<const NativeEntry> SaveLoadEntries() noexcept;
+// takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
@@ -40,10 +35,6 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
 /// and reading the menu's keys on in its place (RejectFileName). Waits for keys as a rule (ADR-015).
 [[nodiscard]] bool PromptCommanderFileName(GameState& _state, Hardware& _hardware);
 
-/// CriticalErrorInterrupt (CS:02F0), the int 24h handler while PerformDiskRequest or SaveScreenshot works: diskError=1.
-/// Returns 0, the answer that tells DOS to ignore the error.
-[[nodiscard]] std::uint8_t CriticalErrorInterrupt(GameState& _state);
-
 /// PerformDiskRequest (CS:02FF): DOS's disk transfer area set to diskTransferArea, then _request 1 loads commanderFileName
 /// into commanderBlock, 2 saves it, 3 deletes it, and anything else lists the *.cdr files with no attribute beyond
 /// _attributes' hidden, system and directory bits into commanderFileList. diskError=1 on a failure, but for DOS's having
@@ -61,9 +52,5 @@ void PrintCommanderCatalogue(GameState& _state);
 /// SaveStartupCommander (CS:4660): commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time,
 /// going up, or down from each start when _backward (REP MOVSB with the direction flag set).
 void SaveStartupCommander(GameState& _state, bool _backward);
-
-// ── The entry of the critical-error handler ──
-
-void CriticalErrorInterruptEntry(Guest& _guest); ///< Out: AL=0, AH the data segment's high byte.
 
 } // namespace Elite

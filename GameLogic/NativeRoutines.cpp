@@ -3,8 +3,6 @@
 #include "NativeRoutines.h"
 
 #include "Input.h"
-#include "Maths.h"
-#include "SaveLoad.h"
 #include "StartUp.h"
 #include "Timer.h"
 #include "Reference.h"
@@ -17,9 +15,9 @@ namespace
 
 using EntryList = std::span<const NativeEntry> (*)() noexcept;
 
-// The lists of the subsystems with an entry the program reaches: the program's own, and the interrupt handlers the vector table
-// names.
-constexpr std::array<EntryList, 5> SUBSYSTEMS = {&InputEntries, &MathsEntries, &SaveLoadEntries, &StartUpEntries, &TimerEntries};
+// The lists of the subsystems with an entry the program reaches: the program's own, and the timer's and the keyboard's interrupt
+// handlers, which the vector table names (int 8 and int 9).
+constexpr std::array<EntryList, 3> SUBSYSTEMS = {&InputEntries, &StartUpEntries, &TimerEntries};
 
 } // namespace
 
