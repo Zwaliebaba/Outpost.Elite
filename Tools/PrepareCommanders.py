@@ -30,7 +30,9 @@ Each prepared commander then changes only fields that Symbols.tsv names, to valu
 gives them: equipment as the equipment screen fits and removes it, cash with its text as FormatCredits
 writes it, kills, an arrival at the selected system as CompleteHyperspaceJump (CS:4707) and
 UpdateMissionSchedule make it, the second mission as UpdateMissionSchedule gives it and ShowMissionBriefing
-briefs it, and the random state as NextRandom leaves it some number of draws later. That is what makes one
+briefs it, the jumps the missions count as UpdateMissionSchedule counts them, the masking device, the
+anti-ECM emulator and the title Archangel as ShowMissionDebriefing (CS:6EB7) gives them, and the random
+state as NextRandom leaves it some number of draws later. That is what makes one
 faithful: it is a state the game reaches by play, which could have been saved and loaded, and not one it
 could never be in; and the game loads it, as it loads its own saves, by copying the bytes back.
 
@@ -65,6 +67,13 @@ MASK_MISSION_JUMPS = 0x40
 MISSION_BRIEFED = 1
 MASK_MISSION_SHIPS = 5
 MASK_SYSTEM_JUMPS = 2
+# UpdateMissionSchedule counts a jump (INC [missionJumpCount] at CS:497C) on each arrival outside the first galaxy,
+# and gives the first mission at 20h, the second at 40h and the third at 80h (CS:4980-4992).
+FIRST_MISSION_JUMPS = 0x20
+THIRD_MISSION_JUMPS = 0x80
+# The third mission's debriefing (ShowMissionDebriefing, CS:6F89-6FB9): AwardArchangelTitle (CS:49E4) copies the 9 bytes
+# of archangelTitle over commanderRankText, then MOV BYTE [antiEcmEmulatorFitted],1 (CS:6F9B).
+ARCHANGEL = b"ARCHANGEL"
 # laserMountTypes: two bits per mount, fore lowest.
 MOUNTS = {"fore": 0, "aft": 1, "right": 2, "left": 3}
 LASERS = {"pulse": ("pulseLaserCount", 0), "beam": ("beamLaserCount", 1), "mining": ("miningLaserCount", 2),
@@ -192,6 +201,29 @@ class Commander:
     self.set("supernovaFrames", 0)
     self.set("jumpedSinceBriefing", 1)
 
+  def count_mission_jumps(self, _jumps: int) -> None:
+    """missionJumpCount as UpdateMissionSchedule leaves it after _jumps counted jumps. It counts only arrivals outside
+    the first galaxy (galaxyNumber 0), so a commander in the first galaxy with them made them elsewhere and came back by
+    galactic jumps, whose arrivals in the first galaxy are not counted. The missions the counts gave are taken as
+    debriefed: ShowMissionDebriefing clears every mission field it and the briefings set, and they are clear here."""
+    if not 0 <= _jumps <= 0xFF:
+      sys.exit("missionJumpCount is a byte")
+    self.set("missionJumpCount", _jumps)
+
+  def debrief_mask_mission_recovered(self) -> None:
+    """The second mission debriefed after the masking device was scooped from the mask ship's barrel: MOV BYTE
+    [maskingDeviceFitted],1 (CS:6F7C), and every mission field it cleared (CS:6F58-6F76) left clear."""
+    self.fit("maskingDeviceFitted")
+
+  def debrief_invasion(self) -> None:
+    """The third mission debriefed (CS:6F89-6FB9): the title Archangel over the rank, as AwardArchangelTitle copies it,
+    and the anti-ECM emulator fitted with a byte of 1; the mission fields it clears left clear."""
+    offset, size = self.field("commanderRankText")
+    if size != len(ARCHANGEL):
+      sys.exit("commanderRankText is not the 9 bytes AwardArchangelTitle copies")
+    self.data[offset:offset + size] = ARCHANGEL
+    self.fit("antiEcmEmulatorFitted")
+
   def brief_mask_mission(self) -> None:
     """The second mission given and briefed. UpdateMissionSchedule gives it on the 64th jump counted, which only
     jumps outside the first galaxy are, so this is a commander who made them there and came back; the briefing
@@ -239,6 +271,51 @@ def mask_mission(_commander: Commander) -> None:
   _commander.arrive_at_selected_system()
 
 
+def mission_jumps_before(_jumps: int, _draws: int):
+  """At Lave, one counted jump short of a mission (UpdateMissionSchedule): with a galactic hyperdrive, so that the
+  jump to the second galaxy is the one counted; an escape capsule, the quick way to the station for the briefing;
+  10,000 credits, for what the replay buys; and the random state _draws draws on, found by a search over counts for
+  the run its replay needs (see the replay)."""
+
+  def prepare(_commander: Commander) -> None:
+    _commander.fit("galacticHyperdriveFitted", "escapePodFitted")
+    _commander.credits(100000)
+    _commander.count_mission_jumps(_jumps - 1)
+    _commander.draw_random_numbers(_draws)
+
+  return prepare
+
+
+def invasion_mission(_commander: Commander) -> None:
+  """One counted jump short of the third mission, as mission_jumps_before makes it with the random state unchanged,
+  and a military laser aft, as the equipment screen fits it, for the station the invasion takes."""
+  mission_jumps_before(THIRD_MISSION_JUMPS, 0)(_commander)
+  _commander.fit_laser("military", "aft")
+
+
+def archangel(_commander: Commander) -> None:
+  """armed, after all three missions: the masking device recovered in the second, the anti-ECM emulator and the title
+  Archangel for the third, and the 80h jumps that gave it counted."""
+  armed(_commander)
+  _commander.count_mission_jumps(THIRD_MISSION_JUMPS)
+  _commander.debrief_mask_mission_recovered()
+  _commander.debrief_invasion()
+
+
+def miner_after(_draws: int):
+  """At Lave, with fuel scoops and a mining laser for the pulse laser, as the equipment screen fits them (a mining
+  laser needs the scoops), and the random state _draws draws on, found by a search over counts for the rock, the barrel
+  or the escape pod its replay meets near the launch (see the replays)."""
+
+  def prepare(_commander: Commander) -> None:
+    _commander.fit("fuelScoopsFitted")
+    _commander.remove_laser("fore")
+    _commander.fit_laser("mining", "fore")
+    _commander.draw_random_numbers(_draws)
+
+  return prepare
+
+
 def fighter_after(_draws: int):
   """The fighter, saved later: its random state _draws draws on. Each count was found by a search over counts for
   a run of its replay that meets the ship types the replay is there to meet (see the replay)."""
@@ -277,6 +354,16 @@ COMMANDERS = [
   ("mask-mission.cdr", "the fighter, briefed for the second mission at Lave and docked at Leesti a jump later, "
    "where the mask ship and its escorts spawn", mask_mission),
   ("mask-mission-fight.cdr", "mask-mission.cdr, 3,680,037 random draws on", mask_mission_after(3680037)),
+  ("supernova-mission.cdr", "at Lave, a counted jump short of the first mission, with a galactic hyperdrive, an escape "
+   "capsule and 10,000 credits; 52 random draws on", mission_jumps_before(FIRST_MISSION_JUMPS, 52)),
+  ("invasion-mission.cdr", "at Lave, a counted jump short of the third mission, with a galactic hyperdrive, an escape "
+   "capsule, a military laser aft and 10,000 credits", invasion_mission),
+  ("archangel.cdr", "armed.cdr after the three missions: the masking device, the anti-ECM emulator and the title "
+   "Archangel", archangel),
+  ("mining-laser.cdr", "at Lave, with fuel scoops and a mining laser for the pulse laser; 13 random draws on",
+   miner_after(13)),
+  ("scooping-a-canister.cdr", "as mining-laser.cdr, but 277,169 random draws on", miner_after(277169)),
+  ("scooping-an-escape-pod.cdr", "as mining-laser.cdr, but 154,538 random draws on", miner_after(154538)),
 ]
 
 
