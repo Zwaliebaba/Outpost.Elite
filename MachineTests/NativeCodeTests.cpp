@@ -120,7 +120,6 @@ public:
     : m_rig(_name)
   {
     m_program = m_rig.Load(Program());
-    m_rig.Host().SetTimeMode(Machine::TimeMode::Paced);
     m_rig.Host().Hook(m_program.loadSegment, MAIN, "Main", &Main);
     m_rig.Host().Hook(m_program.loadSegment, FINISH, "Finish", &Finish);
   }

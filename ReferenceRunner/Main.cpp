@@ -182,7 +182,6 @@ int Run(int _argc, char** _argv)
   case Elite::ReferenceFailure::None:
     break;
   }
-  pc->SetTimeMode(Machine::TimeMode::Paced);
   Elite::InstallNativeRoutines(*pc, program);
 
   // reason: why the last step that ran the machine returned; asExpected: every step so far left the run as it must

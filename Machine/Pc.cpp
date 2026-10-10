@@ -74,6 +74,8 @@ Pc::Pc(FileStore& _files, const Desc& _desc)
   m_services.PowerOn();
   // The ROM's hardware interrupt handlers are code too, and nothing else would run them (ADR-011).
   HookNativeFirmware(*this);
+  // Paced time's CGA (ADR-008): each vertical retrace is reported only to the first status read that sees it.
+  m_cga.SetRetraceSeenOnce(true);
 }
 
 Pc::~Pc()
@@ -102,14 +104,6 @@ LoadError Pc::Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _
   return LoadError::None;
 }
 
-void Pc::SetTimeMode(TimeMode _mode) noexcept
-{
-  m_timeMode = _mode;
-  m_cga.SetRetraceSeenOnce(_mode == TimeMode::Paced);
-  m_stepsSinceIdle = 0;
-  m_lastTurn.valid = false;
-}
-
 void Pc::SetSpinLimit(std::uint64_t _steps) noexcept
 {
   m_spinLimit = _steps;
@@ -125,26 +119,8 @@ void Pc::Step()
     m_runLimit = limit;
     return;
   }
-  if (m_timeMode == TimeMode::Paced)
-  {
-    StepPaced();
-    return;
-  }
-  const std::uint32_t cycles = m_processor.Step();
-  m_clock += cycles;
-  m_instructionCycles += cycles;
-  m_pit.Advance();
-  m_keyboard.Advance();
-  if (m_processor.AtHook())
-  {
-    RunHook();
-  }
-}
-
-// Paced, a step takes no time: what the Dispatcher runs, an interrupt's entry and the ROM's IRETs, counts only on the
-// instruction clock, and the clock itself moves only in a wait.
-void Pc::StepPaced()
-{
+  // A step takes no time: what the Dispatcher runs, an interrupt's entry and the ROM's IRETs, counts only on the instruction
+  // clock, and the clock itself moves only in a wait.
   m_instructionCycles += m_processor.Step();
   ++m_stepsSinceIdle;
   if (m_processor.AtHook())
@@ -506,7 +482,7 @@ StopReason Pc::Stopped() const noexcept
     return StopReason::Terminated;
   if (m_processor.AtUnportedCode())
     return StopReason::Unported;
-  if (m_timeMode == TimeMode::Paced && m_stepsSinceIdle >= m_spinLimit)
+  if (m_stepsSinceIdle >= m_spinLimit)
     return StopReason::Spinning;
   if (m_overran)
     return StopReason::Overran;

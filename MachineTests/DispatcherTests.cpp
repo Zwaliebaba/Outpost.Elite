@@ -107,7 +107,6 @@ struct HandlerRun
 {
   PcRig rig("RomHandler");
   Machine::Pc& pc = rig.Host();
-  pc.SetTimeMode(Machine::TimeMode::Paced);
   Machine::Registers& regs = pc.Processor().Regs();
   regs.ss = STACK_SEGMENT;
   regs.sp = STACK_POINTER;
