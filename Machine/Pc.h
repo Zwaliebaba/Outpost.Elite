@@ -249,6 +249,15 @@ public:
   /// hooked as one that waits may call it.
   void Wait();
 
+  /// For native code that stands in for a loop: the turn ends where the original's backward jump is.
+  /// Paced time looks at it as it looks at the original's (ADR-008): a turn that changed no register,
+  /// no byte and no port since the last idles to the next device event. Then the run ends there if
+  /// that is its end, and any interrupt now due is taken. Native code that calls it wherever the
+  /// original jumps back, with the registers the original has there, waits on exactly the turns the
+  /// original would. A loop that never idles stops the run as Spinning, as the original's would. Only a
+  /// routine hooked as one that waits may call it.
+  void LoopTurn();
+
   /// For native code: does what INT _vector does at CS:IP. The BIOS, DOS and mouse services take the
   /// call if they serve that vector; otherwise the handler the vector table names runs until its IRET.
   /// Like CallNear, a stop on the way abandons the native code.
@@ -261,7 +270,7 @@ public:
 private:
   // The state at a taken backward jump, kept to tell whether the next turn of the loop changed
   // anything.
-  struct LoopTurn
+  struct Turn
   {
     Registers registers{};
     std::uint64_t memoryChanges = 0;
@@ -300,7 +309,7 @@ private:
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;
-  LoopTurn m_lastTurn{};
+  Turn m_lastTurn{};
 
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;

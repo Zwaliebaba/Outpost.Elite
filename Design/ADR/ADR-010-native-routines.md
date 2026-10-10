@@ -156,7 +156,8 @@ The compared run made 1,272,389 calls of ported entries:
 
   A routine that can wait runs on the native thread, and so does everything it calls. It waits in one of two ways:
   - in original code it calls;
-  - through `Pc::Wait`, one idle turn of a waiting loop. That turn is `Idle`, then the end of the run if that is where the clock now is, then any interrupt now due, taken as the CPU takes it at the loop's next instruction.
+  - through `Pc::Wait`, one idle turn of a waiting loop. That turn is `Idle`, then the end of the run if that is where the clock now is, then any interrupt now due, taken as the CPU takes it at the loop's next instruction;
+  - through `Pc::LoopTurn`, called wherever the original jumps back, with the registers the original has there. Paced time looks at that turn as it looks at the original's jump: it idles when the turn changed no register, byte or port since the last. The native loop therefore waits on exactly the turns the original does, and the digests do not move. A loop that never idles stops the run as `Spinning`, as the original's would.
 - **How a run ends inside one.** When the clock reaches the end of a run there, in `Wait` or in original code it calls, the native thread hands the machine back and `RunUntil` returns. The next `RunUntil` carries on where it stopped.
 - **Why it stays deterministic.** The host thread and the native thread take turns through two semaphores, so only one runs at a time and a run is still a function of its inputs (ADR-008). `MachineTests` is clean under ThreadSanitizer.
 - **Teardown.** A machine destroyed while a routine waits unwinds the native thread by an exception.

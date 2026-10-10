@@ -77,6 +77,20 @@ void WaitForTick(Machine::Pc& _pc)
   _pc.ReturnNear();
 }
 
+// Its native counterpart ported turn by turn: Pc::LoopTurn where the original's JE jumps back, so paced
+// time sees the same turns it sees in the original.
+void WaitForTickByTurns(Machine::Pc& _pc)
+{
+  Machine::Registers& regs = _pc.Processor().Regs();
+  regs.flags = static_cast<std::uint16_t>(regs.flags | Machine::FLAG_INTERRUPT);
+  regs.ax = 0x40;
+  regs.es = regs.ax;
+  regs.bx = _pc.Ram().Read16(regs.es, 0x6C);
+  while (_pc.Ram().Read16(regs.es, 0x6C) == regs.bx)
+    _pc.LoopTurn();
+  _pc.ReturnNear();
+}
+
 // A native counterpart of COUNT_UP that adds _step and leaves _dx in DX.
 Machine::NativeRoutine CountUp(std::uint16_t _step, std::uint16_t _dx)
 {
@@ -426,6 +440,37 @@ public:
     compared.Host().Native().SetVerifying(true);
     Assert::IsTrue(compared.Host().RunUntil(100'000) == Machine::StopReason::Overran);
     Assert::IsTrue(compared.Host().Native().Overran() == "Routine", L"names the routine");
+  }
+
+  // A wait ported turn by turn idles on the turns the original's does: the run ends inside it, and the
+  // first timer tick ends it on the original's cycle.
+  TEST_METHOD(LoopTurnWaitsWhereTheOriginalDoes)
+  {
+    NativeRig rig("NativeLoopTurn", WAIT_FOR_TICK);
+    rig.Hook(&WaitForTickByTurns, {}, Machine::NativeWait::Always);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
+    Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
+    rig.Run();
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+  }
+
+  // A loop whose turns never repeat never idles, and stops the run as the original's would.
+  TEST_METHOD(LoopTurnThatNeverRepeatsSpins)
+  {
+    NativeRig rig("NativeLoopTurnSpins", WAIT_FOR_TICK);
+    rig.Hook(
+      [](Machine::Pc& _pc)
+      {
+        Machine::Registers& regs = _pc.Processor().Regs();
+        for (;;)
+        {
+          ++regs.ax;
+          _pc.LoopTurn();
+        }
+      },
+      {}, Machine::NativeWait::Always);
+    rig.Host().SetSpinLimit(1000);
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
   }
 
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)

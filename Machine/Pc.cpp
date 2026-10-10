@@ -172,7 +172,7 @@ void Pc::StepPaced()
 
 void Pc::NoteBackwardJump()
 {
-  const LoopTurn turn{m_cpu.Regs(), m_memory.ChangeCount(), m_ports.WriteCount(), true};
+  const Turn turn{m_cpu.Regs(), m_memory.ChangeCount(), m_ports.WriteCount(), true};
   const bool idle = m_lastTurn.valid && turn.registers == m_lastTurn.registers && turn.memoryChanges == m_lastTurn.memoryChanges &&
                     turn.portWrites == m_lastTurn.portWrites;
   m_lastTurn = turn;
@@ -425,6 +425,21 @@ void Pc::Wait()
   TakeDueInterrupts();
 }
 
+void Pc::LoopTurn()
+{
+  ++m_stepsSinceIdle;
+  NoteBackwardJump();
+  if (m_clock >= m_runLimit)
+  {
+    ReachedRunLimit();
+  }
+  TakeDueInterrupts();
+  if (Stopped() != StopReason::Reached)
+  {
+    throw ProgramStopped{};
+  }
+}
+
 void Pc::TakeDueInterrupts()
 {
   Registers& regs = m_cpu.Regs();
@@ -523,7 +538,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
   }
   const Registers original = regs;
   const std::uint64_t changes = m_memory.ChangeCount();
-  const LoopTurn turn = m_lastTurn;
+  const Turn turn = m_lastTurn;
   const std::span<const WriteJournal::Entry> written = work.originalWrites.Entries();
   work.originalAfter.resize(written.size());
   for (std::size_t index = 0; index < written.size(); ++index)
