@@ -64,9 +64,11 @@ public:
     const auto& hooks = m_rig.Host().Native().Hooks();
     const auto found = hooks.find(Machine::Memory::Linear(m_rig.Program().loadSegment, _entry));
     Assert::IsTrue(found != hooks.end(), L"the routine is ported");
-    for (const Machine::NativeCode::Mismatch& mismatch : m_rig.Host().Native().Mismatches())
+    const std::vector<Machine::NativeCode::Mismatch>& mismatches = m_rig.Host().Native().Mismatches();
+    if (!mismatches.empty())
     {
-      const std::string text = mismatch.routine + " call " + std::to_string(mismatch.call) + ": " + mismatch.difference;
+      const Machine::NativeCode::Mismatch& first = mismatches.front();
+      const std::string text = first.routine + " call " + std::to_string(first.call) + ": " + first.difference;
       Assert::Fail(std::wstring(text.begin(), text.end()).c_str());
     }
     Assert::AreEqual(_calls, found->second.calls);
