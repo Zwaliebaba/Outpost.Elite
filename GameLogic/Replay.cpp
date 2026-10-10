@@ -2,11 +2,15 @@
 
 #include "Replay.h"
 
+#include "FileStore.h"
 #include "Pc.h"
 #include "StateDigest.h"
 
 #include <array>
 #include <format>
+#include <fstream>
+#include <memory>
+#include <stdexcept>
 #include <utility>
 
 namespace Elite
@@ -109,6 +113,19 @@ bool IsDigestHex(std::string_view _text) noexcept
   return true;
 }
 
+// A file name with no directory or drive in it: what a file step may copy, so that a replay reaches only
+// the files beside it.
+bool IsBareFileName(std::string_view _name) noexcept
+{
+  return !_name.empty() && _name != "." && _name != ".." && _name.find_first_of("/\\:") == std::string_view::npos;
+}
+
+// A file step that cannot be done: the replay's set-up is at fault, not the game.
+[[noreturn]] void FailFileStep(const Step& _step, std::string_view _why)
+{
+  throw std::runtime_error(std::format("line {}: file {} {}: {}", _step.line, _step.name, _step.source, _why));
+}
+
 // The words of one step: at most three are ever needed.
 std::vector<std::string_view> Words(std::string_view _text)
 {
@@ -132,7 +149,10 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
   };
   const std::string_view verb = words.front();
   const bool isDigest = verb == "digest";
-  if (words.size() < 2 || words.size() > (isDigest ? 3u : 2u))
+  const bool isFile = verb == "file";
+  if (isFile && words.size() != 3)
+    return failure("file takes a DOS name and the file beside the replay to copy");
+  if (!isFile && (words.size() < 2 || words.size() > (isDigest ? 3u : 2u)))
     return failure(isDigest ? "digest takes a label and an optional value" : "a step is a verb and one argument");
 
   Step step;
@@ -166,8 +186,19 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
       step.expectedDigest = std::string(words[2]);
     }
   }
+  else if (isFile)
+  {
+    std::string canonical;
+    if (Machine::FileStore::CanonicalName(words[1], canonical) != Machine::DosError::None)
+      return failure("a file's copy is named with a DOS 8.3 name");
+    if (!IsBareFileName(words[2]))
+      return failure("file copies a file beside the replay, named without a directory");
+    step.kind = StepKind::File;
+    step.name = std::move(canonical);
+    step.source = std::string(words[2]);
+  }
   else
-    return failure("steps are wait, key, down, up, shot and digest");
+    return failure("steps are wait, key, down, up, shot, digest and file");
   _steps.push_back(std::move(step));
   return true;
 }
@@ -261,6 +292,16 @@ ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
 {
 }
 
+ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program, Machine::FileStore& _files,
+                           std::filesystem::path _sources)
+  : m_pc(_pc),
+    m_program(_program),
+    m_files(&_files),
+    m_sources(std::move(_sources)),
+    m_start(_pc.Clock())
+{
+}
+
 Machine::StopReason ReplayPlayer::Play(const Step& _step, std::string& _digest)
 {
   switch (_step.kind)
@@ -281,10 +322,42 @@ Machine::StopReason ReplayPlayer::Play(const Step& _step, std::string& _digest)
   case StepKind::Digest:
     _digest = GameStateDigest(m_pc, m_program);
     break;
+  case StepKind::File:
+    CopyFile(_step);
+    break;
   case StepKind::Shot:
     break;
   }
   return Machine::StopReason::Reached;
+}
+
+void ReplayPlayer::CopyFile(const Step& _step)
+{
+  if (m_files == nullptr)
+    FailFileStep(_step, "this player was given no DOS directory to copy into");
+  const std::filesystem::path path = m_sources / _step.source;
+  std::error_code error;
+  const std::uintmax_t sizeBytes = std::filesystem::file_size(path, error);
+  std::ifstream stream(path, std::ios::binary);
+  if (error || !stream)
+    FailFileStep(_step, std::format("cannot read {}", path.string()));
+  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(sizeBytes));
+  stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  if (!stream)
+    FailFileStep(_step, std::format("cannot read {}", path.string()));
+
+  // Created, then its attributes cleared, as SaveCommanderFile leaves the game's own saves: the loader refuses
+  // a file with any attribute set. The stamp is the store's default, DOS's earliest moment.
+  const Machine::FileStamp stamp;
+  std::unique_ptr<Machine::OpenFile> file;
+  if (m_files->Create(_step.name, 0, stamp, file) != Machine::DosError::None)
+    FailFileStep(_step, "the DOS directory refuses to create it");
+  std::uint32_t written = 0;
+  if (file->Write(bytes, stamp, written) != Machine::DosError::None || written != bytes.size())
+    FailFileStep(_step, "the DOS directory refuses to write it");
+  file.reset();
+  if (m_files->SetAttribute(_step.name, 0) != Machine::DosError::None)
+    FailFileStep(_step, "the DOS directory refuses to clear its attributes");
 }
 
 } // namespace Elite

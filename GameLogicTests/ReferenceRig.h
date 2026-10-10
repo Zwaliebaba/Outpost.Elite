@@ -90,6 +90,12 @@ public:
     return m_directory.Path();
   }
 
+  /// The store DOS keeps its files in, over Files(): what a replay's file steps copy into.
+  [[nodiscard]] Machine::DirectoryFileStore& Store() noexcept
+  {
+    return m_files;
+  }
+
 private:
   [[nodiscard]] static Machine::Pc::Desc Desc(const Machine::Dos::DateTime& _startMoment) noexcept
   {

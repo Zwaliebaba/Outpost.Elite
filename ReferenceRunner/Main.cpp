@@ -35,7 +35,8 @@
 //
 // It checks that FILE (default ELITES.EXE) is the binary ADR-001 names, loads it, applies the D5 byte
 // in memory, and follows the steps (Replay.h), from --steps or from a replay file: shots go to
-// DIR/NAME.png, digests to standard output. DOS's files live in DIR/files.
+// DIR/NAME.png, digests to standard output. DOS's files live in DIR/files. A file step copies from the
+// replay file's own directory, or from Replays/ in the repository for --steps.
 //
 // Time is clocked, as on the real machine, unless --paced is given; a replay is always paced. A digest
 // with an expected value that does not match fails the run. --update writes each digest's value into the
@@ -322,7 +323,8 @@ int Run(int _argc, char** _argv)
   }
 
   Machine::StopReason reason = Machine::StopReason::Reached;
-  Elite::ReplayPlayer player(*pc, program);
+  const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
+  Elite::ReplayPlayer player(*pc, program, files, sources);
   std::vector<std::string> digests(steps.size());
   std::size_t mismatches = 0;
   for (std::size_t index = 0; index < steps.size() && reason == Machine::StopReason::Reached; ++index)

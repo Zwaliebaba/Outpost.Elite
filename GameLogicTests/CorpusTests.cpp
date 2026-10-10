@@ -83,7 +83,7 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       rig.Host().Native().SetVerifying(_running == Running::Compared);
       rig.Host().Native().SetPoisoning(true); // what a routine's contract leaves to it, no caller reads (ADR-012)
     }
-    Elite::ReplayPlayer player(rig.Host(), rig.Program());
+    Elite::ReplayPlayer player(rig.Host(), rig.Program(), rig.Store(), directory); // file steps copy from Replays/
     std::size_t checked = 0;
     for (const Elite::Step& step : steps)
     {
