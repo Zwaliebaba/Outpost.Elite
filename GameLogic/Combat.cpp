@@ -21,13 +21,12 @@ namespace
 {
 
 using Machine::FLAG_CARRY;
+using Machine::FLAG_DIRECTION;
 using Machine::FLAG_ZERO;
 
 // Routines outside this file, run through the original.
 constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
-constexpr std::uint16_t COMPUTE_DEATH_DEBRIS_VECTOR = 0x2F8B;
-constexpr std::uint16_t ROTATE_ROLL_YAW_PITCH = 0x3EC7;
 constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
 constexpr std::uint16_t START_EXPLOSION_SOUND = 0x7AFC;
 constexpr std::uint16_t START_LASER_SOUND = 0x7B71;
@@ -140,6 +139,19 @@ constexpr std::uint8_t SHIELD_HIT = 0x0F;
   return static_cast<std::uint16_t>(_slot + _field);
 }
 
+// The 24-bit position, by axis: the low words and the high bytes; and the velocity, signed bytes.
+constexpr std::array<SlotWord, 3> POSITION_LOW = {SlotWord::X, SlotWord::Y, SlotWord::Z};
+constexpr std::array<SlotByte, 3> POSITION_HIGH = {SlotByte::XHigh, SlotByte::YHigh, SlotByte::ZHigh};
+constexpr std::array<SlotByte, 3> VELOCITY = {SlotByte::VelocityX, SlotByte::VelocityY, SlotByte::VelocityZ};
+
+// MOV [DI+4+2*axis],AX / CWD / MOV [DI+1+axis],DL: _value as the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot, the low word,
+// then its sign as the high byte.
+void SetCoordinate(ObjectSlot _slot, std::size_t _axis, std::uint16_t _value)
+{
+  _slot.Set(POSITION_LOW[_axis], _value);
+  _slot.Set(POSITION_HIGH[_axis], Low(SignWord(_value)));
+}
+
 // SAR r/m8,1.
 [[nodiscard]] std::uint8_t HalveSigned(std::uint8_t _value) noexcept
 {
@@ -159,11 +171,6 @@ void AddWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value) noexcep
 void OrByte(Guest& _guest, std::uint16_t _offset, std::uint8_t _bits) noexcept
 {
   _guest.SetByte(_offset, static_cast<std::uint8_t>(_guest.Byte(_offset) | _bits));
-}
-
-void AddByte(Guest& _guest, std::uint16_t _offset, std::uint8_t _value) noexcept
-{
-  _guest.SetByte(_offset, static_cast<std::uint8_t>(_guest.Byte(_offset) + _value));
 }
 
 // ADD byte,_value / JAE / MOV byte,0FFh: an add that stops at FFh.
@@ -272,84 +279,63 @@ PaidBounty PayBounty(GameState& _state, const ObjectSlot& _slot, std::uint16_t _
   return PaidBounty{killed, true};
 }
 
-// The fragments of an exploding object: from 4FEE, CX of them, each a Splinter in a debris slot.
-void SpawnFragments(Guest& _guest)
+// The fragments of an exploding object: from 4FEE, _count of them, each a Splinter in a debris slot copied from _object
+// (CopyObject, backwards when _backward), its velocity halved and scattered by a random -15..16 on each axis (halved again
+// for an asteroid the mining laser hit), and run for a frame, or for eleven when the station explodes. PUSH CX and POP CX keep
+// the count round each.
+void SpawnFragments(GameState& _state, const ObjectSlot& _object, std::uint16_t _count, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  for (;;)
+  for (std::uint16_t fragments = _count; fragments != 0; --fragments)
   {
-    const std::uint16_t fragments = regs.cx;
-    FindDebrisSlotEntry(_guest);
-    std::swap(regs.si, regs.di);
-    CopyObjectEntry(_guest);
-    const std::uint16_t debris = regs.di;
-    _guest.SetByte(At(debris, SLOT_STATE), 0);
-    NextRandomEntry(_guest);
-    _guest.SetWord(At(debris, SLOT_SPIN_ROLL), regs.ax);
-    regs.bx = regs.ax;
-    const bool mining = _guest.Get(DS.miningLaserOnAsteroid) == 1;
-    // The x and y velocity halved, plus a random -15..16 (halved again for a mined asteroid).
-    regs.ax = static_cast<std::uint16_t>(regs.ax & FRAGMENT_SCATTER_MASK);
-    auto scatterX = static_cast<std::uint8_t>(Low(regs.ax) - FRAGMENT_SCATTER_CENTER);
-    auto scatterY = static_cast<std::uint8_t>(High(regs.ax) - FRAGMENT_SCATTER_CENTER);
-    _guest.SetByte(At(debris, SLOT_VELOCITY), HalveSigned(_guest.Byte(At(debris, SLOT_VELOCITY))));
-    _guest.SetByte(At(debris, SLOT_VELOCITY + 1), HalveSigned(_guest.Byte(At(debris, SLOT_VELOCITY + 1))));
-    if (mining)
+    ObjectSlot debris(_state, FindDebrisSlot(_state));
+    CopyObject(_state, _object.Offset(), debris.Offset(), _backward);
+    debris.Set(SlotByte::State, 0);
+    const std::uint16_t spin = NextRandom(_state);
+    debris.Set(SlotWord::Spin, spin);
+    // AND AX,1F1Fh / SUB AH,0Fh / SUB AL,0Fh: x and y; then BX shifted right three times / AND BL,1Fh / SUB BL,0Fh: z.
+    const auto scatter = static_cast<std::uint16_t>(spin & FRAGMENT_SCATTER_MASK);
+    auto scatterX = static_cast<std::uint8_t>(Low(scatter) - FRAGMENT_SCATTER_CENTER);
+    auto scatterY = static_cast<std::uint8_t>(High(scatter) - FRAGMENT_SCATTER_CENTER);
+    debris.Set(SlotByte::VelocityX, HalveSigned(debris.Get(SlotByte::VelocityX)));
+    debris.Set(SlotByte::VelocityY, HalveSigned(debris.Get(SlotByte::VelocityY)));
+    if (_state.Get(DS.miningLaserOnAsteroid) == 1)
     {
       scatterX = HalveSigned(scatterX);
       scatterY = HalveSigned(scatterY);
     }
-    regs.ax = Join(scatterY, scatterX);
-    AddByte(_guest, At(debris, SLOT_VELOCITY), scatterX);
-    AddByte(_guest, At(debris, SLOT_VELOCITY + 1), scatterY);
-    regs.bx = static_cast<std::uint16_t>(regs.bx >> 3);
-    auto scatterZ = static_cast<std::uint8_t>((Low(regs.bx) & 0x1F) - FRAGMENT_SCATTER_CENTER);
-    _guest.SetByte(At(debris, SLOT_VELOCITY + 2), HalveSigned(_guest.Byte(At(debris, SLOT_VELOCITY + 2))));
-    if (mining)
+    debris.Set(SlotByte::VelocityX, static_cast<std::uint8_t>(debris.Get(SlotByte::VelocityX) + scatterX));
+    debris.Set(SlotByte::VelocityY, static_cast<std::uint8_t>(debris.Get(SlotByte::VelocityY) + scatterY));
+    auto scatterZ = static_cast<std::uint8_t>((Low(static_cast<std::uint16_t>(spin >> 3)) & 0x1F) - FRAGMENT_SCATTER_CENTER);
+    debris.Set(SlotByte::VelocityZ, HalveSigned(debris.Get(SlotByte::VelocityZ)));
+    if (_state.Get(DS.miningLaserOnAsteroid) == 1)
     {
       scatterZ = HalveSigned(scatterZ);
     }
-    SetLow(regs.bx, scatterZ);
-    AddByte(_guest, At(debris, SLOT_VELOCITY + 2), scatterZ);
-    _guest.SetByte(At(debris, SLOT_FLAGS), FLAG_RESTING);
-    if (mining)
+    debris.Set(SlotByte::VelocityZ, static_cast<std::uint8_t>(debris.Get(SlotByte::VelocityZ) + scatterZ));
+    debris.Set(SlotByte::Flags, FLAG_RESTING);
+    if (_state.Get(DS.miningLaserOnAsteroid) == 1 && NextRandom(_state) < MINERALS_ODDS)
     {
-      NextRandomEntry(_guest);
-      if (regs.ax < MINERALS_ODDS)
-      {
-        OrByte(_guest, At(debris, SLOT_FLAGS), FLAG_MINERALS);
-      }
+      debris.Set(SlotByte::Flags, static_cast<std::uint8_t>(debris.Get(SlotByte::Flags) | FLAG_MINERALS));
     }
-    _guest.SetByte(At(debris, SLOT_ENERGY), 0);
-    _guest.SetWord(At(debris, SLOT_CARGO), 0);
-    _guest.SetByte(At(debris, SLOT_AGE), 0);
-    _guest.SetByte(At(debris, SLOT_CLASS), DEBRIS_CLASS);
-    NextRandomEntry(_guest);
-    auto lifetime = static_cast<std::uint8_t>(Low(regs.ax) & FRAGMENT_LIFETIME_MASK);
-    if (mining)
+    debris.Set(SlotByte::Energy, 0);
+    debris.Set(SlotWord::Cargo, 0);
+    debris.Set(SlotByte::Age, 0);
+    debris.Set(SlotByte::Class, DEBRIS_CLASS);
+    auto lifetime = static_cast<std::uint8_t>(Low(NextRandom(_state)) & FRAGMENT_LIFETIME_MASK);
+    if (_state.Get(DS.miningLaserOnAsteroid) == 1)
     {
       lifetime = static_cast<std::uint8_t>(lifetime + MINED_FRAGMENT_LIFETIME);
     }
-    lifetime = static_cast<std::uint8_t>(lifetime + FRAGMENT_LIFETIME);
-    _guest.SetByte(At(debris, SLOT_LIFETIME), lifetime);
-    SetLow(regs.ax, SPLINTER_ACTIVE);
-    _guest.SetByte(debris, SPLINTER_ACTIVE);
-    UpdateDebrisAi(_guest);
-    if (_guest.Get(DS.explodingStation) == 1)
+    debris.Set(SlotByte::Lifetime, static_cast<std::uint8_t>(lifetime + FRAGMENT_LIFETIME));
+    debris.Set(SlotByte::Type, SPLINTER_ACTIVE);
+    (void)UpdateDebrisAi(_state, debris);
+    if (_state.Get(DS.explodingStation) == 1)
     {
-      // A station's fragments are flung ten frames further at once.
-      for (regs.cx = STATION_FRAGMENT_STEPS; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+      // A station's fragments are flung ten frames further at once: LOOP from CX = 10, PUSH CX and POP CX round each.
+      for (std::uint16_t steps = STATION_FRAGMENT_STEPS; steps != 0; --steps)
       {
-        const std::uint16_t steps = regs.cx;
-        UpdateDebrisAi(_guest);
-        regs.cx = steps;
+        (void)UpdateDebrisAi(_state, debris);
       }
-    }
-    regs.di = regs.si;
-    regs.cx = static_cast<std::uint16_t>(fragments - 1);
-    if (regs.cx == 0)
-    {
-      return;
     }
   }
 }
@@ -418,7 +404,7 @@ void DestroyTarget(Guest& _guest)
   CreditKillEntry(_guest);
   CheckMissileTargetDestroyedEntry(_guest);
   ExplodeObject(_guest);
-  DrawLaserBeams(_guest);
+  DrawLaserBeamsEntry(_guest);
   _guest.Set(DS.miningLaserOnAsteroid, 0);
   _guest.Set(DS.laserFiring, 0);
 }
@@ -549,51 +535,53 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
   return static_cast<std::uint8_t>((shift >= 8 ? 0 : types >> shift) & 3);
 }
 
-void DrawLaserBeams(Guest& _guest)
+bool DrawLaserBeams(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>(regs.ax & BEAM_SCATTER_MASK);
-  regs.ax = Join(static_cast<std::uint8_t>(High(regs.ax) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(regs.ax) + BEAM_TARGET_X));
-  regs.dx = regs.ax;
-  const std::uint8_t type = _guest.Get(DS.firingLaserType);
+  // AND AX,303h / ADD AL,7Eh / ADD AH,3Eh: the point the beams end at, its x in the low byte and its row in the high, as DX
+  // holds it.
+  const auto scatter = static_cast<std::uint16_t>(NextRandom(_state) & BEAM_SCATTER_MASK);
+  const std::uint16_t target =
+    Join(static_cast<std::uint8_t>(High(scatter) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(scatter) + BEAM_TARGET_X));
+  bool filled = false;
+  const auto beam = [&_state, &filled, target](std::uint8_t _x) { filled = DrawBeam(_state, _x, target) || filled; };
+  const std::uint8_t type = _state.Get(DS.firingLaserType);
   if ((type & 1) != 0)
   {
     if ((type & 2) != 0)
     {
       // Type 3: all four, the inner pair in the toggled colour, the outer in the other.
-      SetLow(regs.ax, _guest.Get(DS.laserBeamColorToggle));
-      _guest.Set(DS.drawColor, Low(regs.ax));
-      _guest.Set(DS.laserBeamColorToggle, static_cast<std::uint8_t>(_guest.Get(DS.laserBeamColorToggle) ^ BEAM_TOGGLE));
-      DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_LEFT, regs.dx));
-      DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_RIGHT, regs.dx));
-      _guest.Set(DS.drawColor, static_cast<std::uint8_t>(_guest.Get(DS.drawColor) ^ BEAM_TOGGLE));
+      _state.Set(DS.drawColor, _state.Get(DS.laserBeamColorToggle));
+      _state.Set(DS.laserBeamColorToggle, static_cast<std::uint8_t>(_state.Get(DS.laserBeamColorToggle) ^ BEAM_TOGGLE));
+      beam(BEAM_INNER_LEFT);
+      beam(BEAM_INNER_RIGHT);
+      _state.Set(DS.drawColor, static_cast<std::uint8_t>(_state.Get(DS.drawColor) ^ BEAM_TOGGLE));
     }
     else
     {
       // Type 1: the outer pair.
-      SetLow(regs.ax, NextBeamColor(_guest.Get(DS.laserBeamColor), true));
-      _guest.Set(DS.laserBeamColor, Low(regs.ax));
-      _guest.Set(DS.drawColor, Low(regs.ax));
+      const std::uint8_t color = NextBeamColor(_state.Get(DS.laserBeamColor), true);
+      _state.Set(DS.laserBeamColor, color);
+      _state.Set(DS.drawColor, color);
     }
-    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_LEFT, regs.dx));
-    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_RIGHT, regs.dx));
-    return;
+    beam(BEAM_OUTER_LEFT);
+    beam(BEAM_OUTER_RIGHT);
+    return filled;
   }
   // Types 0 and 2: one side a shot, alternately.
-  SetLow(regs.ax, NextBeamColor(_guest.Get(DS.laserBeamColor), (type & 2) != 0));
-  _guest.Set(DS.laserBeamColor, Low(regs.ax));
-  _guest.Set(DS.drawColor, Low(regs.ax));
-  const auto side = static_cast<std::uint8_t>(_guest.Get(DS.laserBeamSide) ^ 1);
-  _guest.Set(DS.laserBeamSide, side);
+  const std::uint8_t color = NextBeamColor(_state.Get(DS.laserBeamColor), (type & 2) != 0);
+  _state.Set(DS.laserBeamColor, color);
+  _state.Set(DS.drawColor, color);
+  const auto side = static_cast<std::uint8_t>(_state.Get(DS.laserBeamSide) ^ 1);
+  _state.Set(DS.laserBeamSide, side);
   if (side != 0)
   {
-    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_LEFT, regs.dx));
-    DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_LEFT, regs.dx));
-    return;
+    beam(BEAM_OUTER_LEFT);
+    beam(BEAM_INNER_LEFT);
+    return filled;
   }
-  DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_OUTER_RIGHT, regs.dx));
-  DrawLineOut(_guest, DrawBeam(_guest.State(), BEAM_INNER_RIGHT, regs.dx));
+  beam(BEAM_OUTER_RIGHT);
+  beam(BEAM_INNER_RIGHT);
+  return filled;
 }
 
 void ExplodeObject(Guest& _guest)
@@ -617,7 +605,11 @@ void ExplodeObject(Guest& _guest)
   regs.cx = _guest.Byte(At(regs.di, SLOT_FRAGMENTS));
   if (regs.cx != 0)
   {
-    SpawnFragments(_guest);
+    SpawnFragments(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.cx, _guest.Flag(FLAG_DIRECTION));
+    // MOV DI,SI then the count's DEC to 0: SI and DI the object, CX = 0. The AX, BX, DX and ES the fragments' last
+    // UpdateDebrisAi leaves are not reproduced: poisoned, every comparison and digest still agrees.
+    regs.si = regs.di;
+    regs.cx = 0;
   }
   DropCargo(_guest);
 }
@@ -678,54 +670,39 @@ void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pi
   }
 }
 
-void TryLaunchMissileAtPlayer(Guest& _guest)
+void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _odds, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.killCount) < MISSILE_KILLS_NEEDED || (_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) == 0)
+  if (_state.Get(DS.killCount) < MISSILE_KILLS_NEEDED || (_slot.Get(SlotByte::Flags) & FLAG_HOSTILE) == 0)
   {
     return;
   }
-  CheckSafeZoneHoldFireEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY) || _guest.Byte(At(regs.di, SLOT_MISSILES)) == 0)
+  if (CheckSafeZoneHoldFire(_state, _slot).hold || _slot.Get(SlotByte::Missiles) == 0 || FiringBlocked(_state) != 0)
   {
     return;
   }
-  SetLow(regs.ax, FiringBlocked(_guest.State()));
-  if (Low(regs.ax) != 0)
+  if (NextRandom(_state) >= _odds)
   {
     return;
   }
-  NextRandomEntry(_guest);
-  if (regs.ax >= regs.bx)
+  if (LaunchShipFromObject(_state, _slot, MISSILE_LAUNCH, _backward))
   {
-    return;
-  }
-  SetLow(regs.dx, MISSILE_LAUNCH);
-  LaunchShipFromObject(_guest);
-  if (_guest.Flag(FLAG_CARRY))
-  {
-    _guest.SetByte(At(regs.di, SLOT_MISSILES), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_MISSILES)) - 1));
+    _slot.Set(SlotByte::Missiles, static_cast<std::uint8_t>(_slot.Get(SlotByte::Missiles) - 1));
   }
 }
 
-void TryLaunchThargon(Guest& _guest)
+void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  IsThargoidTypeEntry(_guest);
-  if (!_guest.Flag(FLAG_ZERO) || _guest.Byte(At(regs.di, SLOT_THARGONS)) == 0)
+  if (!IsThargoidType(_slot) || _slot.Get(SlotByte::Thargons) == 0)
   {
     return;
   }
-  NextRandomEntry(_guest);
-  if (regs.ax >= THARGON_ODDS)
+  if (NextRandom(_state) >= THARGON_ODDS)
   {
     return;
   }
-  SetLow(regs.dx, THARGON_LAUNCH);
-  LaunchShipFromObject(_guest);
-  if (_guest.Flag(FLAG_CARRY))
+  if (LaunchShipFromObject(_state, _slot, THARGON_LAUNCH, _backward))
   {
-    _guest.SetByte(At(regs.di, SLOT_THARGONS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_THARGONS)) - 1));
+    _slot.Set(SlotByte::Thargons, static_cast<std::uint8_t>(_slot.Get(SlotByte::Thargons) - 1));
   }
 }
 
@@ -783,7 +760,7 @@ void ResolveLaserFire(Guest& _guest)
   {
     return;
   }
-  DrawLaserBeams(_guest);
+  DrawLaserBeamsEntry(_guest);
   _guest.Call(START_LASER_SOUND);
   _guest.Set(DS.miningLaserOnAsteroid, 0);
   _guest.Set(DS.laserFiring, 0);
@@ -972,82 +949,65 @@ void DetonateEnergyBomb(Guest& _guest)
   } while (regs.cx != 0);
 }
 
-void SpawnPlayerWreckage(Guest& _guest)
+void SpawnPlayerWreckage(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(COMPUTE_DEATH_DEBRIS_VECTOR);
-  _guest.Set(DS.wreckDriftX, regs.ax);
-  _guest.Set(DS.wreckDriftY, regs.bx);
-  _guest.Set(DS.wreckDriftZ, regs.cx);
-  _guest.Set(DS.playerVelocityX, 0);
-  _guest.Set(DS.playerVelocityY, 0);
-  _guest.Set(DS.playerVelocityZ, 0);
-  _guest.Set(DS.playerSpeed, WRECK_SPEED);
-  _guest.Set(DS.velocityDirty, 1);
-  _guest.Set(DS.viewLocked, 1);
-  regs.cx = WRECK_SPLINTERS;
-  do
+  const Vector drift = ComputeDeathDebrisVector(_state);
+  _state.Set(DS.wreckDriftX, static_cast<std::uint16_t>(drift.x));
+  _state.Set(DS.wreckDriftY, static_cast<std::uint16_t>(drift.y));
+  _state.Set(DS.wreckDriftZ, static_cast<std::uint16_t>(drift.z));
+  _state.Set(DS.playerVelocityX, 0);
+  _state.Set(DS.playerVelocityY, 0);
+  _state.Set(DS.playerVelocityZ, 0);
+  _state.Set(DS.playerSpeed, WRECK_SPEED);
+  _state.Set(DS.velocityDirty, 1);
+  _state.Set(DS.viewLocked, 1);
+  // Six splinters: LOOP from CX = 6, PUSH CX and POP CX round each.
+  for (std::uint16_t splinters = WRECK_SPLINTERS; splinters != 0; --splinters)
   {
-    const std::uint16_t splinters = regs.cx;
-    FindDebrisSlotEntry(_guest);
-    ClearObjectSlotEntry(_guest);
-    _guest.SetByte(At(regs.di, SLOT_STATE), 0);
-    NextRandomEntry(_guest);
-    _guest.SetWord(At(regs.di, SLOT_SPIN_ROLL), regs.ax);
-    regs.bx = regs.ax;
+    const std::uint16_t slot = FindDebrisSlot(_state);
+    ClearObjectSlot(_state, slot);
+    ObjectSlot splinter(_state, slot);
+    splinter.Set(SlotByte::State, 0);
+    const std::uint16_t random = NextRandom(_state);
+    splinter.Set(SlotWord::Spin, random);
     // Each velocity byte from its own bits of the random word: x from BL, y from BH, z from BL shifted right twice.
-    regs.ax = WreckScatter(Low(regs.bx), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _guest.Get(DS.wreckDriftX));
-    _guest.SetByte(At(regs.di, SLOT_VELOCITY), Low(regs.ax));
-    regs.ax = WreckScatter(High(regs.bx), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _guest.Get(DS.wreckDriftY));
-    _guest.SetByte(At(regs.di, SLOT_VELOCITY + 1), Low(regs.ax));
-    regs.ax = WreckScatter(static_cast<std::uint8_t>(Low(regs.bx) >> 2), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER,
-                           _guest.Get(DS.wreckDriftZ));
-    _guest.SetByte(At(regs.di, SLOT_VELOCITY + 2), Low(regs.ax));
-    _guest.SetByte(At(regs.di, SLOT_CLASS), DEBRIS_CLASS);
-    _guest.SetByte(At(regs.di, SLOT_LIFETIME), WRECK_LIFETIME);
-    SetLow(regs.ax, SPLINTER_ACTIVE);
-    _guest.SetByte(regs.di, SPLINTER_ACTIVE);
-    UpdateDebrisAi(_guest);
-    regs.cx = static_cast<std::uint16_t>(splinters - 1);
-  } while (regs.cx != 0);
-  if (_guest.Get(DS.cargoUsedTonnes) == 0)
+    splinter.Set(SlotByte::VelocityX,
+                 Low(WreckScatter(Low(random), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _state.Get(DS.wreckDriftX))));
+    splinter.Set(SlotByte::VelocityY,
+                 Low(WreckScatter(High(random), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _state.Get(DS.wreckDriftY))));
+    splinter.Set(SlotByte::VelocityZ, Low(WreckScatter(static_cast<std::uint8_t>(Low(random) >> 2), SPLINTER_SCATTER_MASK,
+                                                       SPLINTER_SCATTER_CENTER, _state.Get(DS.wreckDriftZ))));
+    splinter.Set(SlotByte::Class, DEBRIS_CLASS);
+    splinter.Set(SlotByte::Lifetime, WRECK_LIFETIME);
+    splinter.Set(SlotByte::Type, SPLINTER_ACTIVE);
+    (void)UpdateDebrisAi(_state, splinter);
+  }
+  if (_state.Get(DS.cargoUsedTonnes) == 0)
   {
     return;
   }
   // The cargo's barrel: four drifts ahead, drifting at a quarter of the drift and a little, turned to face along it.
-  FindFreeShipSlotEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  const SlotSearch free = FindFreeShipSlot(_state);
+  const std::uint16_t slot = free.found ? free.slot : ReclaimShipSlot(_state).slot;
+  ClearObjectSlot(_state, slot);
+  ObjectSlot barrel(_state, slot);
+  const std::array<DataField<std::uint16_t>, 3> wreckDrift = {DS.wreckDriftX, DS.wreckDriftY, DS.wreckDriftZ};
+  for (std::size_t axis = 0; axis < wreckDrift.size(); ++axis)
   {
-    ReclaimShipSlotEntry(_guest);
+    const std::uint16_t axisDrift = _state.Get(wreckDrift[axis]);
+    const std::uint16_t velocity = Sar(WreckScatter(Low(NextRandom(_state)), BARREL_SCATTER_MASK, BARREL_SCATTER_CENTER, axisDrift), 2);
+    barrel.Set(VELOCITY[axis], Low(velocity));
+    SetCoordinate(barrel, axis, static_cast<std::uint16_t>(axisDrift << 2));
   }
-  ClearObjectSlotEntry(_guest);
-  const std::array<DataField<std::uint16_t>, 3> drift = {DS.wreckDriftX, DS.wreckDriftY, DS.wreckDriftZ};
-  for (int axis = 0; axis < 3; ++axis)
-  {
-    const std::uint16_t axisDrift = _guest.Get(drift[static_cast<std::size_t>(axis)]);
-    NextRandomEntry(_guest);
-    regs.ax = Sar(WreckScatter(Low(regs.ax), BARREL_SCATTER_MASK, BARREL_SCATTER_CENTER, axisDrift), 2);
-    _guest.SetByte(At(regs.di, SLOT_VELOCITY + axis), Low(regs.ax));
-    regs.ax = static_cast<std::uint16_t>(axisDrift << 2);
-    regs.dx = SignWord(regs.ax);
-    _guest.SetWord(At(regs.di, SLOT_X + 2 * axis), regs.ax);
-    _guest.SetByte(At(regs.di, SLOT_X_HIGH + axis), Low(regs.dx));
-  }
-  InitCargoBarrelEntry(_guest);
-  GetObjectPositionEntry(_guest);
-  ConvertVectorToAnglesEntry(_guest);
-  _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
-  _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
-  // The same random -31..32 added to x and to y.
-  NextRandomEntry(_guest);
-  regs.bx = regs.ax;
-  regs.ax = static_cast<std::uint16_t>((regs.ax & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
-  regs.dx = SignWord(regs.ax);
-  AddToCoordinate(ObjectSlot(_guest.State(), regs.di), 0, static_cast<std::int16_t>(regs.ax));
-  regs.bx = static_cast<std::uint16_t>((regs.bx & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
-  regs.ax = regs.bx;
-  regs.dx = SignWord(regs.ax);
-  AddToCoordinate(ObjectSlot(_guest.State(), regs.di), 1, static_cast<std::int16_t>(regs.ax));
+  InitCargoBarrel(_state, barrel);
+  const Angles heading = ConvertVectorToAngles(_state, GetObjectPosition(barrel));
+  barrel.Set(SlotWord::Pitch, heading.first);
+  barrel.Set(SlotWord::Yaw, heading.second);
+  // The same random -31..32 added to x and to y: AND AX,3Fh / SUB AX,1Fh / CWD, then ADD and ADC; then BX likewise.
+  const std::uint16_t random = NextRandom(_state);
+  const auto offset = static_cast<std::int16_t>((random & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
+  AddToCoordinate(barrel, 0, offset);
+  AddToCoordinate(barrel, 1, offset);
 }
 
 std::optional<std::uint8_t> KillPlayer(GameState& _state)
@@ -1083,110 +1043,92 @@ bool RemoveAllMissiles(GameState& _state)
   return erased;
 }
 
-void LaunchPlayerMissile(Guest& _guest)
+void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  FindFreeShipSlotEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  // A free slot, or one ReclaimShipSlot takes; one it evicts is left in DI too, so XCHG SI,DI copies that slot onto itself.
+  std::uint16_t source = _source;
+  std::uint16_t slot = 0;
+  if (const SlotSearch free = FindFreeShipSlot(_state); free.found)
   {
-    ReclaimShipSlotEntry(_guest);
+    slot = free.slot;
   }
-  // A copy of the 64 bytes at the caller's DI, made a missile.
-  std::swap(regs.si, regs.di);
-  CopyObjectEntry(_guest);
-  SetLow(regs.dx, MISSILE_LAUNCH);
-  InitMissileEntry(_guest);
+  else
+  {
+    const ReclaimedSlot reclaimed = ReclaimShipSlot(_state);
+    slot = reclaimed.slot;
+    if (reclaimed.evicted)
+    {
+      source = reclaimed.slot;
+    }
+  }
+  CopyObject(_state, source, slot, _backward);
+  ObjectSlot missile(_state, slot);
+  InitMissile(_state, missile);
   // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
-  regs.ax = Negate(_guest.Get(DS.playerPitchAngle));
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(0));
-  regs.ax = Negate(_guest.Get(DS.playerYawAngle));
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(1));
-  regs.ax = Negate(_guest.Get(DS.playerRollAngle));
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(2));
-  regs.ax = 0;
-  regs.bx = MISSILE_LAUNCH_DISTANCE;
-  regs.cx = 0;
-  _guest.Call(ROTATE_ROLL_YAW_PITCH);
-  const std::array<std::uint16_t, 3> position = {regs.ax, regs.bx, regs.cx};
-  for (int axis = 0; axis < 3; ++axis)
-  {
-    regs.ax = position[static_cast<std::size_t>(axis)];
-    _guest.SetWord(At(regs.di, SLOT_X + 2 * axis), regs.ax);
-    regs.dx = SignWord(regs.ax);
-    _guest.SetByte(At(regs.di, SLOT_X_HIGH + axis), Low(regs.dx));
-  }
+  (void)SetSinCos(_state, 0, Negate(_state.Get(DS.playerPitchAngle)));
+  (void)SetSinCos(_state, 1, Negate(_state.Get(DS.playerYawAngle)));
+  (void)SetSinCos(_state, 2, Negate(_state.Get(DS.playerRollAngle)));
+  const Vector position = RotateRollYawPitch(_state, Vector{0, static_cast<std::int16_t>(MISSILE_LAUNCH_DISTANCE), 0});
+  SetCoordinate(missile, 0, static_cast<std::uint16_t>(position.x));
+  SetCoordinate(missile, 1, static_cast<std::uint16_t>(position.y));
+  SetCoordinate(missile, 2, static_cast<std::uint16_t>(position.z));
   // Locked on missileTarget, and aimed at where it is.
-  regs.si = _guest.Get(DS.missileTarget);
-  _guest.SetWord(At(regs.di, SLOT_TARGET), regs.si);
-  regs.ax = _guest.Word(At(regs.si, SLOT_X));
-  regs.bx = _guest.Word(At(regs.si, SLOT_Y));
-  regs.cx = _guest.Word(At(regs.si, SLOT_Z));
-  ConvertVectorToAnglesEntry(_guest);
-  _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
-  _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
-  ComputeVelocityEntry(_guest);
-  MoveObjectEntry(_guest);
-  MoveObjectEntry(_guest);
+  const std::uint16_t target = _state.Get(DS.missileTarget);
+  missile.Set(SlotWord::Target, target);
+  const Angles heading = ConvertVectorToAngles(_state, GetObjectPosition(ObjectSlot(_state, target)));
+  missile.Set(SlotWord::Pitch, heading.first);
+  missile.Set(SlotWord::Yaw, heading.second);
+  (void)ComputeVelocity(_state, missile);
+  (void)MoveObject(_state, missile);
+  (void)MoveObject(_state, missile);
 }
 
-void LaunchShipFromObject(Guest& _guest)
+std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const ObjectSlot& _launcher, std::uint8_t _kind, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  FindFreeShipSlotEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  const SlotSearch free = FindFreeShipSlot(_state);
+  if (!free.found)
   {
-    return;
+    return std::nullopt;
   }
-  // A copy of the launcher in the free slot, made what DL names, and moved clear of it.
-  const std::uint16_t launcher = regs.di;
-  std::swap(regs.si, regs.di);
-  switch (Low(regs.dx))
+  if (_kind != MISSILE_LAUNCH && _kind != ESCAPE_POD_LAUNCH && _kind != THARGON_LAUNCH && _kind != KRAIT_LAUNCH)
+  {
+    return std::nullopt;
+  }
+  // A copy of the launcher in the free slot, made what _kind names, and moved clear of it.
+  CopyObject(_state, _launcher.Offset(), free.slot, _backward);
+  ObjectSlot ship(_state, free.slot);
+  switch (_kind)
   {
   case MISSILE_LAUNCH:
-    CopyObjectEntry(_guest);
-    InitMissileEntry(_guest);
-    MoveObjectEntry(_guest);
-    MoveObjectEntry(_guest);
-    MoveObjectEntry(_guest);
-    _guest.SetWord(At(regs.di, SLOT_TARGET), 0); // at the player
+    InitMissile(_state, ship);
+    (void)MoveObject(_state, ship);
+    (void)MoveObject(_state, ship);
+    (void)MoveObject(_state, ship);
+    ship.Set(SlotWord::Target, 0); // at the player
     break;
   case ESCAPE_POD_LAUNCH:
-    CopyObjectEntry(_guest);
-    InitEscapePodEntry(_guest);
-    RandomizeOrientationEntry(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
-    MoveObjectEntry(_guest);
-    MoveObjectEntry(_guest);
+    InitEscapePod(_state, ship);
+    RandomizeOrientation(_state, ship);
+    (void)ComputeVelocity(_state, ship);
+    (void)MoveObject(_state, ship);
+    (void)MoveObject(_state, ship);
+    (void)MoveObject(_state, ship);
     break;
   case THARGON_LAUNCH:
-    CopyObjectEntry(_guest);
-    InitThargonEntry(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
-    MoveObjectEntry(_guest);
-    regs.si = launcher;
-    _guest.SetWord(At(regs.di, SLOT_OWNER), regs.si);
+    InitThargon(_state, ship);
+    (void)ComputeVelocity(_state, ship);
+    (void)MoveObject(_state, ship);
+    (void)MoveObject(_state, ship);
+    ship.Set(SlotWord::Owner, _launcher.Offset());
     break;
-  case KRAIT_LAUNCH:
-    CopyObjectEntry(_guest);
-    InitKraitHunterEntry(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
-    MoveObjectEntry(_guest);
-    // POP DI takes the launcher this path pushed, and RET the one pushed before it: the launch returns to CS:launcher, which
-    // is not code. Only the split at 56B1, which never runs, passes DL=5.
-    regs.di = launcher;
-    _guest.SetFlag(FLAG_CARRY, true);
-    _guest.Push(launcher);
-    return;
   default:
-    regs.di = launcher;
-    _guest.SetFlag(FLAG_CARRY, false);
-    return;
+    InitKraitHunter(_state, ship);
+    (void)ComputeVelocity(_state, ship);
+    (void)MoveObject(_state, ship);
+    (void)MoveObject(_state, ship);
+    break;
   }
-  regs.di = launcher;
-  _guest.SetFlag(FLAG_CARRY, true);
+  return free.slot;
 }
 
 void UpdateMissileAi(Guest& _guest)
@@ -1328,8 +1270,65 @@ constexpr Machine::NativeContract FIRES_LASER{REGISTER_AX | REGISTER_BX | REGIST
 constexpr Machine::NativeContract TAKES_DAMAGE{0, 0};
 // RemoveAllMissiles': UpdateStationAi's contract compares the DI and ES it leaves (RemoveAllMissilesEntry).
 constexpr Machine::NativeContract REMOVES_MISSILES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+constexpr Machine::NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
+// LaunchPlayerMissile's and SpawnPlayerWreckage's: all but DS, which the original leaves alone and the flight loop goes on with.
+constexpr Machine::NativeContract CLOBBERS_ALL_BUT_DS{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
+constexpr Machine::NativeContract LAUNCHES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_BP | REGISTER_ES,
+                                           0};
+constexpr Machine::NativeContract LAUNCHES_SHIP{LAUNCHES.clobbers, FLAG_CARRY};
+constexpr Machine::NativeContract LASER_BEAMS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0};
 
 } // namespace
+
+void DrawLaserBeamsEntry(Guest& _guest)
+{
+  // DrawLine's ES = DS and CLD, once a beam was a horizontal line: the contract compares ES.
+  DrawLineOut(_guest, DrawLaserBeams(_guest.State()));
+  _guest.Clobber(LASER_BEAMS);
+}
+
+void SpawnPlayerWreckageEntry(Guest& _guest)
+{
+  SpawnPlayerWreckage(_guest.State());
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
+void LaunchPlayerMissileEntry(Guest& _guest)
+{
+  // The 64 bytes at DI, copied as REP MOVSW copies them, backwards when DF is set.
+  LaunchPlayerMissile(_guest.State(), _guest.Regs().di, _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
+void LaunchShipFromObjectEntry(Guest& _guest)
+{
+  const std::uint16_t launcher = _guest.Regs().di;
+  const std::uint8_t kind = Low(_guest.Regs().dx);
+  const std::optional<std::uint16_t> launched =
+    LaunchShipFromObject(_guest.State(), ObjectSlot(_guest.State(), launcher), kind, _guest.Flag(FLAG_DIRECTION));
+  // PUSH DI and POP DI keep the launcher in DI, which the contract compares.
+  _guest.SetFlag(FLAG_CARRY, launched.has_value());
+  if (launched && kind == KRAIT_LAUNCH)
+  {
+    // POP DI takes the launcher this path pushed, and RET the one pushed before it: the launch returns to CS:launcher, which
+    // is not code. Only the split at 56B1, which never runs, passes DL=5.
+    _guest.Push(launcher);
+  }
+  _guest.Clobber(LAUNCHES_SHIP);
+}
+
+void TryLaunchMissileAtPlayerEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  TryLaunchMissileAtPlayer(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.bx, _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(LAUNCHES);
+}
+
+void TryLaunchThargonEntry(Guest& _guest)
+{
+  TryLaunchThargon(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), _guest.Flag(FLAG_DIRECTION));
+  _guest.Clobber(LAUNCHES);
+}
 
 void DrawLaserSightsEntry(Guest& _guest)
 {
@@ -1431,17 +1430,22 @@ void KillPlayerEntry(Guest& _guest)
   _guest.Clobber(KILLS_PLAYER);
 }
 
-void RemoveAllMissilesEntry(Guest& _guest)
+void RemoveAllMissilesOut(Guest& _guest, bool _erased)
 {
+  // DI past the slots it looked at, by the count it loaded, which nothing it does changes, and ES on the video memory once
+  // RemoveObject's EraseScannerBlip has erased a blip.
   Machine::Registers& regs = _guest.Regs();
-  // DI past the slots it looked at, the count it loaded, and ES on the video memory once RemoveObject's EraseScannerBlip has
-  // erased a blip: UpdateStationAi's contract compares both after it.
-  const std::uint8_t slots = _guest.Get(DS.objectSlotCount);
-  if (RemoveAllMissiles(_guest.State()))
+  if (_erased)
   {
     regs.es = GameState::VIDEO_SEGMENT;
   }
-  regs.di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(slots) * ObjectSlot::BYTES);
+  regs.di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.objectSlotCount)) * ObjectSlot::BYTES);
+}
+
+void RemoveAllMissilesEntry(Guest& _guest)
+{
+  // UpdateStationAi's contract compares the DI and ES it leaves after it.
+  RemoveAllMissilesOut(_guest, RemoveAllMissiles(_guest.State()));
   _guest.Clobber(REMOVES_MISSILES);
 }
 
@@ -1502,28 +1506,23 @@ void UseMaskingDeviceEntry(Guest& _guest)
 namespace
 {
 
-constexpr Machine::NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
-constexpr Machine::NativeContract LAUNCHES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_BP | REGISTER_ES,
-                                           0};
-
 constexpr std::array ENTRIES = {
   NativeEntry{0x0630, "DrawLaserSights", &DrawLaserSightsEntry, LASER_SIGHTS},
   NativeEntry{0x066C, "GetViewLaser", &GetViewLaserEntry, VIEW_LASER},
-  NativeEntry{0x0A9A, "DrawLaserBeams", &DrawLaserBeams,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
+  NativeEntry{0x0A9A, "DrawLaserBeams", &DrawLaserBeamsEntry, LASER_BEAMS},
   NativeEntry{0x2C9B, "TakeDamage", &TakeDamageEntry, TAKES_DAMAGE},
   NativeEntry{0x2ED6, "DetonateEnergyBomb", &DetonateEnergyBomb, CLOBBERS_ALL},
-  NativeEntry{0x2FE3, "SpawnPlayerWreckage", &SpawnPlayerWreckage, CLOBBERS_ALL},
+  NativeEntry{0x2FE3, "SpawnPlayerWreckage", &SpawnPlayerWreckageEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x3115, "KillPlayer", &KillPlayerEntry, KILLS_PLAYER},
   NativeEntry{0x4C8C, "InitMissile", &InitMissileEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4F9F, "RemoveAllMissiles", &RemoveAllMissilesEntry, REMOVES_MISSILES},
   NativeEntry{0x4FC1, "ExplodeObject", &ExplodeObject, CLOBBERS_ALL},
   NativeEntry{0x50FE, "TallyMaskMissionKill", &TallyMaskMissionKillEntry, PRESERVES_ALL},
   NativeEntry{0x518B, "TryFireLaserAtPlayer", &TryFireLaserAtPlayerEntry, FIRES_LASER},
-  NativeEntry{0x5242, "LaunchPlayerMissile", &LaunchPlayerMissile, CLOBBERS_ALL},
-  NativeEntry{0x534E, "LaunchShipFromObject", &LaunchShipFromObject, Machine::NativeContract{LAUNCHES.clobbers, FLAG_CARRY}},
-  NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayer, LAUNCHES},
-  NativeEntry{0x5471, "TryLaunchThargon", &TryLaunchThargon, LAUNCHES},
+  NativeEntry{0x5242, "LaunchPlayerMissile", &LaunchPlayerMissileEntry, CLOBBERS_ALL_BUT_DS},
+  NativeEntry{0x534E, "LaunchShipFromObject", &LaunchShipFromObjectEntry, LAUNCHES_SHIP},
+  NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayerEntry, LAUNCHES},
+  NativeEntry{0x5471, "TryLaunchThargon", &TryLaunchThargonEntry, LAUNCHES},
   NativeEntry{0x54F2, "UpdateMissileAi", &UpdateMissileAi, PRESERVES_ALL},
   NativeEntry{0x8A46, "FindShipInCrosshairs", &FindShipInCrosshairs,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_SI, FLAG_CARRY}},

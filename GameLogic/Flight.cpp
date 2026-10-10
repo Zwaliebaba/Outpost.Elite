@@ -5,6 +5,8 @@
 #include "Arithmetic.h"
 #include "Combat.h"
 #include "DataOverlay.h"
+#include "Docking.h"
+#include "Hyperspace.h"
 #include "Input.h"
 #include "Maths.h"
 #include "ObjectSlot.h"
@@ -39,13 +41,9 @@ constexpr std::uint16_t RESTORE_FLIGHT_SCREEN = 0x15CF;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
 constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
-constexpr std::uint16_t TAKE_DAMAGE = 0x2C9B;
-constexpr std::uint16_t CHECK_DOCKING_ALIGNMENT = 0x2D0F;
 constexpr std::uint16_t PLAY_STATION_TUNNEL = 0x2D5B;
 constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
 constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
-constexpr std::uint16_t OBJECT_WITHIN_BOX = 0x2F65;
-constexpr std::uint16_t VECTOR_WITHIN_BOX = 0x2F6E;
 constexpr std::uint16_t SPAWN_PLAYER_WRECKAGE = 0x2FE3;
 constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_CHAR = 0x31F9;
@@ -57,7 +55,6 @@ constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t ROTATE_PITCH_YAW_ROLL = 0x3EAC;
 constexpr std::uint16_t TRANSFORM_TO_VIEW = 0x3EE3;
 constexpr std::uint16_t IS_STATION = 0x3F40;
-constexpr std::uint16_t IS_MASS_LOCKED = 0x4144;
 constexpr std::uint16_t GET_POSITION_SCALE_SHIFT = 0x4333;
 constexpr std::uint16_t SCALE_POSITION_DOWN = 0x439E;
 constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
@@ -66,7 +63,6 @@ constexpr std::uint16_t RESET_HYPERSPACE_RINGS = 0x48AB;
 constexpr std::uint16_t UPDATE_FUEL_LEAK = 0x499F;
 constexpr std::uint16_t LATCH_HYPERSPACE_TARGET = 0x49F6;
 constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
-constexpr std::uint16_t REMOVE_OBJECT = 0x4F98;
 constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
 constexpr std::uint16_t LAUNCH_PLAYER_MISSILE = 0x5242;
 constexpr std::uint16_t CLEAR_ALL_OBJECTS = 0x52B2;
@@ -82,7 +78,6 @@ constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
 constexpr std::uint16_t START_BEEP = 0x7A57;
 constexpr std::uint16_t START_LOW_BEEP = 0x7A5D;
 constexpr std::uint16_t STOP_SOUND_EFFECTS = 0x7A63;
-constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
 constexpr std::uint16_t STOP_CONTINUOUS_NOISE = 0x7B6B;
 constexpr std::uint16_t SHOW_COCKPIT_SCREEN = 0x7BC0;
 constexpr std::uint16_t POLL_SCREEN_DUMP_KEY = 0x7F3D;
@@ -97,8 +92,6 @@ constexpr std::uint16_t UPDATE_PLAYER_MOTION = 0x8472;
 constexpr std::uint16_t RUN_DOCKING_COMPUTER = 0x8622;
 constexpr std::uint16_t FIND_SHIP_IN_CROSSHAIRS = 0x8A46;
 constexpr std::uint16_t RESOLVE_LASER_FIRE = 0x8AC2;
-constexpr std::uint16_t CHECK_MISSILE_TARGET_DESTROYED = 0x8B8B;
-constexpr std::uint16_t CREDIT_KILL = 0x8BC6;
 constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
 constexpr std::uint16_t APPLY_ENEMY_LASER_HIT = 0x8C8E;
 constexpr std::uint16_t RUN_PAUSE_SCREEN = 0x8D6A;
@@ -117,13 +110,16 @@ constexpr std::uint16_t PREVIOUS_LIFETIME = 0xB8;
 constexpr std::uint16_t PREVIOUS_NEW = 0xB9;
 constexpr std::uint16_t STARDUST_BYTES = STARDUST_COUNT * PARTICLE_BYTES;
 
+// EngageJumpDrive: the speed the jump drive needs, and its messages' frames.
+constexpr std::uint16_t FULL_SPEED = 0x30;
+constexpr std::uint16_t JUMP_DRIVE_MESSAGE_FRAMES = 5;
+
 // viewAngle for each view, in 2048ths of a turn; the front view is 0.
 constexpr std::uint16_t LEFT_VIEW = 0x200;
 constexpr std::uint16_t REAR_VIEW = 0x400;
 constexpr std::uint16_t RIGHT_VIEW = 0x600;
 
 // An object slot's fields beyond those Ships.h names (SLOT_BYTES, SLOT_X, SLOT_Y, SLOT_Z, SLOT_FLAGS, SLOT_CLASS).
-constexpr std::uint16_t SLOT_COLLIDED = 0x0C;
 constexpr std::uint16_t SLOT_COMPASS_X = 0x20; // the station's direction for the compass, where Ships.h has SLOT_VIEW_X at 10h
 constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
 constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
@@ -468,67 +464,55 @@ void UpdateRearStardust(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-// 0x084D: the side views only draw; ShiftStardustSideways has moved the dust.
-void DrawSideStardust(Guest& _guest)
+// 0x084D: the side views only draw; ShiftStardustSideways has moved the dust. Each particle on screen is drawn (DrawDust),
+// PUSH CX and PUSH SI keeping the count and the particle round it. Returns whether a DrawLine filled bytes with REP STOSB.
+bool DrawSideStardust(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.cx = STARDUST_COUNT;
-  regs.si = DS.stardust.offset;
-  do
+  bool filled = false;
+  std::uint16_t particle = DS.stardust.offset;
+  for (std::uint16_t count = STARDUST_COUNT; count != 0; --count)
   {
-    const std::uint16_t count = regs.cx;
-    const std::uint16_t particle = regs.si;
-    LoadDustPositionEntry(_guest);
-    IsDustOnScreenEntry(_guest);
-    if (_guest.Flag(FLAG_CARRY))
+    const DustPosition position = LoadDustPosition(_state, particle);
+    if (IsDustOnScreen(position))
     {
-      DrawDustOnRegisters(_guest);
+      filled = DrawDust(_state, particle, position) || filled;
     }
-    regs.si = Plus(particle, PARTICLE_BYTES);
-    regs.cx = count;
-  } while (--regs.cx != 0);
+    particle = Plus(particle, PARTICLE_BYTES);
+  }
+  return filled;
 }
 
-// UpdateLeftStardust (0x07C5) and UpdateRightStardust (0x0809): pitch rolls the dust and speed moves it
-// sideways; _left mirrors both.
-void UpdateSideStardust(Guest& _guest, bool _left)
+// UpdateLeftStardust (0x07C5) and UpdateRightStardust (0x0809), which UpdateStardust jumps to: pitch rolls the dust and speed
+// moves it sideways, _left mirroring both, and then they draw it (DrawSideStardust). Returns whether a DrawLine filled bytes
+// with REP STOSB.
+bool UpdateSideStardust(GameState& _state, bool _left)
 {
-  Registers& regs = _guest.Regs();
-  regs.dx = _guest.Get(DS.rollRate);
-  _guest.Call(APPLY_REVERSE_CONTROLS_TO_DX);
-  SetHigh(regs.dx, Low(regs.dx));
-  if (High(regs.dx) != 0)
+  // MOV DX,rollRate / ApplyReverseControlsToDx / MOV DH,DL: the reversed roll byte, as DX = roll:00, negated for the right view
+  // and halved, shifts the dust vertically.
+  const std::uint16_t rollRate = _state.Get(DS.rollRate);
+  const std::uint8_t roll = ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll;
+  if (roll != 0)
   {
-    SetLow(regs.dx, 0);
-    regs.dx = Sar(_left ? regs.dx : Negate(regs.dx), 1);
-    ShiftStardustVerticallyEntry(_guest);
+    const std::uint16_t step = Join(roll, 0);
+    ShiftStardustVertically(_state, Signed(Sar(_left ? step : Negate(step), 1)));
   }
-  regs.dx = _guest.Get(DS.playerSpeed);
-  if (regs.dx != 0)
+  // The speed, negated for the left view, as DX = its low byte:00, shifted right three times, moves it sideways.
+  if (const std::uint16_t speed = _state.Get(DS.playerSpeed); speed != 0)
   {
-    if (_left)
-    {
-      regs.dx = Negate(regs.dx);
-    }
-    SetHigh(regs.dx, Low(regs.dx));
-    SetLow(regs.dx, 0);
-    regs.dx = Sar(regs.dx, 3);
-    ShiftStardustSidewaysEntry(_guest);
+    const std::uint16_t step = Join(Low(_left ? Negate(speed) : speed), 0);
+    ShiftStardustSideways(_state, Signed(Sar(step, 3)));
   }
-  regs.ax = _guest.Get(DS.rollRate);
-  _guest.Call(APPLY_REVERSE_CONTROLS);
-  SetLow(regs.ax, High(regs.ax));
-  regs.ax = static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 1);
-  if (regs.ax != 0)
+  // MOV AX,rollRate / ApplyReverseControls / MOV AL,AH / CBW / SHL AX,1: the reversed pitch byte, doubled and negated for the
+  // left view, rolls it.
+  const std::uint16_t pitchRate = _state.Get(DS.rollRate);
+  const auto angle =
+    static_cast<std::uint16_t>(SignExtend(ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch) << 1);
+  if (angle != 0)
   {
-    if (_left)
-    {
-      regs.ax = Negate(regs.ax);
-    }
-    SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-    RollStardustEntry(_guest);
+    (void)SetSinCos(_state, 7, _left ? Negate(angle) : angle);
+    RollStardust(_state);
   }
-  DrawSideStardust(_guest);
+  return DrawSideStardust(_state);
 }
 
 // ---- The dashboard --------------------------------------------------------------------------------
@@ -627,95 +611,79 @@ void RedrawThreeLineBar(Guest& _guest, DataField<std::uint8_t> _value, DataField
 
 // ---- Collisions -----------------------------------------------------------------------------------
 
-// 0x2BD9-0x2C8D: the slot at DI, whose byte 0 is in BL, against the player.
-void CheckCollision(Guest& _guest)
+// The station's x and y, with z 0, within _halfSize: inside the docking slot.
+[[nodiscard]] bool InsideDockingSlot(const ObjectSlot& _station, std::uint16_t _halfSize)
 {
-  Registers& regs = _guest.Regs();
-  const std::uint16_t collided = Plus(regs.di, SLOT_COLLIDED);
-  regs.bx = static_cast<std::uint16_t>(regs.bx & 0x3E);
-  regs.dx = _guest.Word(Plus(DS.collisionRanges.offset, regs.bx));
-  _guest.Call(OBJECT_WITHIN_BOX);
-  if (!_guest.Flag(FLAG_CARRY))
+  return VectorWithinBox(Vector{Signed(_station.Get(SlotWord::X)), Signed(_station.Get(SlotWord::Y)), 0}, _halfSize);
+}
+
+// 0x2BD9-0x2C8D: _slot, an active one, against the player. Outside its type's collisionRanges box, a station's collided bit
+// is cleared. Inside, a ship costs 450 and is removed. The station docks the player when it is drawn, the player is aligned
+// within 100 (CheckDockingAlignment), inside a box of 90 about its x and y, not invaded and not hostile; nearly aligned, within
+// 250, it scrapes for 30 inside a box of 110 and crashes for 400 outside it; otherwise, or when it has collided already, it
+// costs 1500 and is removed. Each hit is credited (CreditKill), unlocks a missile on it (CheckMissileTargetDestroyed), takes
+// the damage (TakeDamage) and starts the impact sound, whose STI the hit's every path ends with, as KillPlayer's does when it
+// kills.
+void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
+{
+  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
+  const std::uint16_t range = _state.Word(Plus(DS.collisionRanges.offset, _slot.Get(SlotByte::Type) & 0x3E));
+  const auto clearCollided = [&_slot] { _slot.Set(SlotByte::Collided, static_cast<std::uint8_t>(_slot.Get(SlotByte::Collided) & 0xFE)); };
+  if (!ObjectWithinBox(_slot, range))
   {
-    _guest.Call(IS_STATION);
-    if (_guest.Flag(FLAG_ZERO))
+    if (IsStation(_slot).station)
     {
-      _guest.SetByte(collided, static_cast<std::uint8_t>(_guest.Byte(collided) & 0xFE));
+      clearCollided();
     }
     return;
   }
   std::uint16_t damage = 0x5DC;
-  _guest.Call(IS_STATION);
-  if (!_guest.Flag(FLAG_ZERO))
+  if (!IsStation(_slot).station)
   {
     damage = 0x1C2;
   }
-  else if ((_guest.Byte(collided) & 1) == 0)
+  else if ((_slot.Get(SlotByte::Collided) & 1) == 0)
   {
-    _guest.SetByte(collided, static_cast<std::uint8_t>(_guest.Byte(collided) | 1));
-    if ((_guest.Byte(regs.di) & 0x80) != 0)
+    _slot.Set(SlotByte::Collided, static_cast<std::uint8_t>(_slot.Get(SlotByte::Collided) | 1));
+    if ((_slot.Get(SlotByte::Type) & 0x80) != 0)
     {
-      regs.bx = 0x64;
-      _guest.Call(CHECK_DOCKING_ALIGNMENT);
-      if (_guest.Flag(FLAG_CARRY))
+      if (CheckDockingAlignment(_state, _slot, 0x64))
       {
         // Aligned: docked, if inside the slot and the station is not the Thargoids'.
-        if (_guest.Get(DS.thargoidInvasionActive) != 1)
+        if (_state.Get(DS.thargoidInvasionActive) != 1 && InsideDockingSlot(_slot, 0x5A) && (_slot.Get(SlotByte::Flags) & 1) == 0)
         {
-          regs.ax = _guest.Word(Plus(regs.di, SLOT_X));
-          regs.bx = _guest.Word(Plus(regs.di, SLOT_Y));
-          regs.cx = 0;
-          regs.dx = 0x5A;
-          _guest.Call(VECTOR_WITHIN_BOX);
-          if (_guest.Flag(FLAG_CARRY) && (_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 1) == 0)
-          {
-            _guest.Set(DS.playerDocked, 1);
-            _guest.Set(DS.dockingComputerOn, 0);
-            _guest.Set(DS.rollRate, 0);
-            _guest.Set(DS.viewLocked, 0);
-            return;
-          }
+          _state.Set(DS.playerDocked, 1);
+          _state.Set(DS.dockingComputerOn, 0);
+          _state.Set(DS.rollRate, 0);
+          _state.Set(DS.viewLocked, 0);
+          return;
         }
       }
-      else
+      else if (CheckDockingAlignment(_state, _slot, 0xFA))
       {
-        regs.bx = 0xFA;
-        _guest.Call(CHECK_DOCKING_ALIGNMENT);
-        if (_guest.Flag(FLAG_CARRY))
+        // Nearly aligned: a scrape if inside the slot, a crash if not.
+        damage = 0x190;
+        if (InsideDockingSlot(_slot, 0x6E))
         {
-          // Nearly aligned: a scrape if inside the slot, a crash if not.
-          regs.ax = _guest.Word(Plus(regs.di, SLOT_X));
-          regs.bx = _guest.Word(Plus(regs.di, SLOT_Y));
-          regs.cx = 0;
-          regs.dx = 0x6E;
-          _guest.Call(VECTOR_WITHIN_BOX);
-          damage = 0x190;
-          if (_guest.Flag(FLAG_CARRY))
-          {
-            _guest.SetByte(collided, static_cast<std::uint8_t>(_guest.Byte(collided) & 0xFE));
-            damage = 0x1E;
-          }
+          clearCollided();
+          damage = 0x1E;
         }
       }
     }
   }
-  regs.ax = damage;
-  _guest.Call(CREDIT_KILL);
-  _guest.Call(CHECK_MISSILE_TARGET_DESTROYED);
-  regs.ax = damage;
-  bool remove = true;
-  if (damage != 0x5DC)
+  // PUSH AX / POP AX keep the damage round the kill's credit.
+  (void)CreditKill(_state, _slot);
+  (void)CheckMissileTargetDestroyed(_state, _slot.Offset());
+  if (damage == 0x5DC || !IsStation(_slot).station)
   {
-    _guest.Call(IS_STATION);
-    remove = !_guest.Flag(FLAG_ZERO);
+    (void)RemoveObject(_state, _slot);
   }
-  if (remove)
+  if (TakeDamage(_state, damage))
   {
-    _guest.Call(REMOVE_OBJECT);
+    _hardware.EnableInterrupts();
   }
-  regs.ax = damage;
-  _guest.Call(TAKE_DAMAGE);
-  _guest.Call(START_IMPACT_SOUND);
+  (void)StartImpactSound(_state);
+  _hardware.EnableInterrupts();
 }
 
 // ---- The warnings ---------------------------------------------------------------------------------
@@ -1435,10 +1403,13 @@ void UpdateStardust(Guest& _guest)
   switch (_guest.Get(DS.viewAngle))
   {
   case RIGHT_VIEW:
-    UpdateSideStardust(_guest, false);
-    break;
   case LEFT_VIEW:
-    UpdateSideStardust(_guest, true);
+    // What the side views leave that the contract compares: DrawLine's ES = DS and CLD once a streak filled bytes. SI past the
+    // particles and CX = 0 as the drawing's loop leaves them; the AX, BX, DX, DI and BP its last particle leaves are not
+    // reproduced: poisoned, every comparison and digest still agrees.
+    DrawLineOut(_guest, UpdateSideStardust(_guest.State(), _guest.Get(DS.viewAngle) == LEFT_VIEW));
+    regs.si = Plus(DS.stardust.offset, STARDUST_BYTES);
+    regs.cx = 0;
     break;
   case REAR_VIEW:
     UpdateRearStardust(_guest);
@@ -2063,22 +2034,19 @@ void SetUpLocalSpace(Guest& _guest)
   PlaceSunPlanetAndStation(_guest.State());
 }
 
-void CheckCollisions(Guest& _guest)
+void CheckCollisions(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.shipSlots.offset;
-  regs.cx = _guest.Get(DS.objectSlotCount);
-  do
+  // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
   {
-    const std::uint16_t count = regs.cx;
-    SetLow(regs.bx, _guest.Byte(regs.di));
-    if ((Low(regs.bx) & 1) != 0)
+    const ObjectSlot object(_state, slot);
+    if ((object.Get(SlotByte::Type) & ObjectSlot::ACTIVE) != 0)
     {
-      CheckCollision(_guest);
+      CheckCollision(_state, _hardware, object);
     }
-    regs.di = Plus(regs.di, SLOT_BYTES);
-    regs.cx = count;
-  } while (--regs.cx != 0);
+    slot = Plus(slot, SLOT_BYTES);
+  }
 }
 
 SafeZone InSafeZone(const GameState& _state)
@@ -2639,31 +2607,32 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
   }
 }
 
-void EngageJumpDrive(Guest& _guest)
+JumpDriveRequest EngageJumpDrive(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.dockingComputerOn) != 1)
+  // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
+  const auto post = [&_state](DataAt _message) -> std::uint16_t
   {
-    if (_guest.Get(DS.playerSpeed) != 0x30)
+    SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES);
+    return _message.offset;
+  };
+  std::optional<MassLock> lock;
+  if (_state.Get(DS.dockingComputerOn) != 1)
+  {
+    if (_state.Get(DS.playerSpeed) != FULL_SPEED)
     {
-      _guest.Set(DS.jumpDriveEngaged, 0);
-      regs.ax = DS.jumpDriveVelocityLockedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 5);
-      return;
+      _state.Set(DS.jumpDriveEngaged, 0);
+      return JumpDriveRequest{post(DS.jumpDriveVelocityLockedMessage), lock};
     }
-    _guest.Call(IS_MASS_LOCKED);
-    if (!_guest.Flag(FLAG_CARRY))
+    lock = IsMassLocked(_state);
+    if (!lock->locked)
     {
-      _guest.Set(DS.jumpDriveEngaged, 1);
-      _guest.Set(DS.velocityDirty, 1);
-      regs.ax = DS.jumpDriveEngagedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 5);
-      return;
+      _state.Set(DS.jumpDriveEngaged, 1);
+      _state.Set(DS.velocityDirty, 1);
+      return JumpDriveRequest{post(DS.jumpDriveEngagedMessage), lock};
     }
   }
-  _guest.Set(DS.jumpDriveEngaged, 0);
-  regs.ax = DS.jumpDriveMassLockedMessage.offset;
-  SetMessage(_guest.State(), regs.ax, 5);
+  _state.Set(DS.jumpDriveEngaged, 0);
+  return JumpDriveRequest{post(DS.jumpDriveMassLockedMessage), lock};
 }
 
 void UpdatePlayerMotion(Guest& _guest)
@@ -2847,6 +2816,9 @@ constexpr Machine::NativeContract Clobbers(std::uint16_t _registers) noexcept
 
 constexpr Machine::NativeContract CARRY_OUT{0, FLAG_CARRY};
 constexpr Machine::NativeContract CLOBBERS_AX = Clobbers(REGISTER_AX);
+// CheckCollisions': all but DS, which the original leaves alone and the flight loop goes on with, and DI, past the slots, from
+// which LaunchPlayerMissile copies (CheckCollisionsEntry).
+constexpr Machine::NativeContract COLLISIONS_CHECKED = Clobbers(REGISTER_ALL & ~REGISTER_DS & ~REGISTER_DI);
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI = Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI);
 // DrawMissileLockIndicator's: CX as the original leaves it, which DrawThreeLineBar's second run reads in CH
 // through UpdateDashboard (ADR-012 item 6).
@@ -3259,6 +3231,27 @@ void UpdatePlayerVelocityEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX_DX);
 }
 
+void CheckCollisionsEntry(Guest& _guest)
+{
+  // DI past the slots it looked at, by the count it loaded, which nothing it does changes: LaunchPlayerMissile, through
+  // ProcessFlightKeys, copies the 64 bytes there.
+  CheckCollisions(_guest.State(), _guest.Devices());
+  _guest.Regs().di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.objectSlotCount)) * ObjectSlot::BYTES);
+  _guest.Clobber(COLLISIONS_CHECKED);
+}
+
+void EngageJumpDriveEntry(Guest& _guest)
+{
+  const JumpDriveRequest request = EngageJumpDrive(_guest.State());
+  // The contract compares every register: what IsMassLocked leaves, once it was asked, then AX the message.
+  if (request.lock)
+  {
+    MassLockOut(_guest, *request.lock);
+  }
+  _guest.Regs().ax = request.message;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void MoveObjectsByVelocityEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -3336,7 +3329,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x290C, "DrawConditionLight", &DrawConditionLightEntry, CLOBBERS_AX_BX_CX_SI_DI},
   NativeEntry{0x2959, "UpdateConditionColor", &UpdateConditionColorEntry, PRESERVES_ALL},
   NativeEntry{0x29D0, "SetUpLocalSpace", &SetUpLocalSpace, Clobbers(REGISTER_ALL)},
-  NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisions, Clobbers(REGISTER_ALL)},
+  NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisionsEntry, COLLISIONS_CHECKED},
   NativeEntry{0x2E63, "InSafeZone", &InSafeZoneEntry, CARRY_OUT},
   NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZoneEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVectorEntry, CLOBBERS_DX_DI_BP},
@@ -3357,7 +3350,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePodEntry, PRESERVES_ALL},
   NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x839F, "DrainEnergy", &DrainEnergyEntry, PRESERVES_ALL},
-  NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDrive, PRESERVES_ALL},
+  NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDriveEntry, PRESERVES_ALL},
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
   NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocityEntry, CLOBBERS_AX_BX_DX},

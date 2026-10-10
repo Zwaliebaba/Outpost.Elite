@@ -16,10 +16,12 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> TimerEntries() noexcept;
 
-/// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt.
-void TimerInterrupt(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012), on the GameState and the devices (ADR-014) ──
+
+/// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt; on the Amstrad, every
+/// 18th tick, or every 55th with its mouse driver's rate, the BIOS's handler too (biosTimerChainCountdown). _backward is the
+/// direction flag the interrupted code left.
+void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared,
 /// TimerInterrupt on int 8, and interrupts enabled.
@@ -39,6 +41,7 @@ void TimerTick(GameState& _state, Hardware& _hardware, bool _backward);
 
 // ── Their entries ──
 
+void TimerInterruptEntry(Guest& _guest);        ///< Preserves every register; the hook's IRET takes the flags.
 void InstallTimerInterruptEntry(Guest& _guest); ///< Out: ES=0; AX clobbered.
 void TimerTickEntry(Guest& _guest);             ///< AX clobbered.
 void WaitForTimerTickEntry(Guest& _guest);      ///< Preserves every register.

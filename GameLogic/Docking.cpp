@@ -417,48 +417,36 @@ ClosingIn CloseIn(GameState& _state)
   return IsStation(station).dodo ? Negate(spin) : spin;
 }
 
-// LoadStationSpin with the registers its code leaves: DI the station's slot, and AX the spin. Nothing reads the flags
-// IsStation leaves.
-void LoadStationSpinOnRegisters(Guest& _guest, std::uint16_t _turn)
+// State 9 (CS:8976): inside, matching the station's spin: MoveObjectsByVelocity, then to state 10 once the roll is within 11
+// of the spin (AngleWithinTolerance), or to 11 once it is within 11 of it turned half round. Returns the spin, which the
+// original leaves in AX.
+std::uint16_t MatchSpin(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.stationSlot.offset;
-  regs.ax = LoadStationSpin(_guest.State(), _turn);
+  MoveObjectsByVelocity(_state);
+  const std::uint16_t spin = LoadStationSpin(_state, 0);
+  const std::uint16_t roll = _state.Get(DS.playerRollAngle);
+  if (AngleWithinTolerance(spin, roll, SPIN_TOLERANCE).within)
+  {
+    _state.Set(DS.dockingComputerState, ROLL_WITH_SPIN);
+  }
+  else if (AngleWithinTolerance(spin, Offset(roll, HALF_TURN), SPIN_TOLERANCE).within)
+  {
+    // ADD CX,400h on the roll the first test left sign-extended in CX, which the second masks off again.
+    _state.Set(DS.dockingComputerState, ROLL_WITH_SPIN_TURNED);
+  }
+  return spin;
 }
 
-// States 9-11: inside, matching the station's spin: to state 10 or 11 once the roll is within 11 of it
-// or of it turned half round, rolling by half the difference in those states.
-void MatchSpin(Guest& _guest)
+// States 10 and 11 (CS:89AF, CS:89E0): MoveObjectsByVelocity, then the roll steered by half its difference from the station's
+// spin plus _turn, negated as a byte: NEG AL / XOR AH,AH. Returns the steering, which the original leaves in AX.
+std::uint16_t RollWithSpin(GameState& _state, std::uint16_t _turn)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-  LoadStationSpinOnRegisters(_guest, 0);
-  regs.bx = SPIN_TOLERANCE;
-  regs.cx = _guest.Get(DS.playerRollAngle);
-  AngleWithinToleranceEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY))
-  {
-    _guest.Set(DS.dockingComputerState, ROLL_WITH_SPIN);
-    return;
-  }
-  regs.cx = Offset(regs.cx, HALF_TURN);
-  AngleWithinToleranceEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY))
-  {
-    _guest.Set(DS.dockingComputerState, ROLL_WITH_SPIN_TURNED);
-  }
-}
-
-void RollWithSpin(Guest& _guest, std::uint16_t _turn)
-{
-  Registers& regs = _guest.Regs();
-  _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-  LoadStationSpinOnRegisters(_guest, _turn);
-  regs.ax &= ANGLE_MASK;
-  regs.bx = static_cast<std::uint16_t>(_guest.Get(DS.playerRollAngle) & ANGLE_MASK);
-  regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
-  regs.ax = Negate(Low(Sar(regs.ax, 1)));
-  Steer(_guest.State(), regs.ax);
+  MoveObjectsByVelocity(_state);
+  const auto spin = static_cast<std::uint16_t>(LoadStationSpin(_state, _turn) & ANGLE_MASK);
+  const auto roll = static_cast<std::uint16_t>(_state.Get(DS.playerRollAngle) & ANGLE_MASK);
+  const std::uint16_t steering = Negate(Low(Sar(static_cast<std::uint16_t>(spin - roll), 1)));
+  Steer(_state, steering);
+  return steering;
 }
 
 } // namespace
@@ -690,6 +678,14 @@ void RunDockingComputer(Guest& _guest)
     regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES);
     regs.di = DS.stationSlot.offset;
   };
+  // States 9 to 11, likewise: AX the spin or the steering, SI past the last slot as MoveObjectsByVelocity leaves it, and DI the
+  // station's slot. Their BX, CX and DX are not reproduced either: poisoned, every comparison and digest still agrees.
+  const auto matchedSpin = [&](std::uint16_t _result)
+  {
+    regs.ax = _result;
+    regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES);
+    regs.di = DS.stationSlot.offset;
+  };
   _guest.Set(DS.dockingComputerSteering, 0);
   _guest.Set(DS.rollRate, 0);
   switch (_guest.Get(DS.dockingComputerState))
@@ -729,13 +725,13 @@ void RunDockingComputer(Guest& _guest)
     closeIn();
     return;
   case MATCH_SPIN:
-    MatchSpin(_guest);
+    matchedSpin(MatchSpin(_guest.State()));
     return;
   case ROLL_WITH_SPIN:
-    RollWithSpin(_guest, 0);
+    matchedSpin(RollWithSpin(_guest.State(), 0));
     return;
   case ROLL_WITH_SPIN_TURNED:
-    RollWithSpin(_guest, HALF_TURN);
+    matchedSpin(RollWithSpin(_guest.State(), HALF_TURN));
     return;
   default:
     return;

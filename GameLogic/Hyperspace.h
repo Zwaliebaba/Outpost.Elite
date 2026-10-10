@@ -57,6 +57,13 @@ struct MassLock
   std::optional<ShipScan> ships;  ///< once both are far
 };
 
+/// What EngageJumpDrive (Flight.h) did.
+struct JumpDriveRequest
+{
+  std::uint16_t message;        ///< the message it posted
+  std::optional<MassLock> lock; ///< what IsMassLocked found, once it was asked
+};
+
 /// IsMassLocked (CS:4144): whether the jump drive is mass-locked: in the station's safe zone, near the sun or the planet
 /// (IsObjectNear, which erases the blip of one that is far), or with an active ship from firstShipSlot that is not an
 /// asteroid, boulder, barrel or splinter and has its blip drawn. With objectSlotCount 3 or less, or above 127, it looks at no
@@ -83,6 +90,11 @@ void LatchHyperspaceTarget(GameState& _state);
 void ShowHyperspaceCountdown(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+/// The registers IsMassLocked's original leaves once it found _lock: AL as InSafeZone leaves it; then what each IsObjectNear
+/// leaves (IsObjectNearOut), with DI on its slot; then DI and CX where the look at the ships stopped, and AL the last slot's type
+/// byte, SHR AL,1, and AND AL,1Fh once it is active. For its entry, and for EngageJumpDrive's, whose contract compares them.
+void MassLockOut(Guest& _guest, const MassLock& _lock);
 
 void IsMassLockedEntry(Guest& _guest);            ///< Out: CF set when locked; every register as the original leaves it.
 void ResetHyperspaceRingsEntry(Guest& _guest);    ///< Out: ES=B800h; AX, CX, SI and DI clobbered.

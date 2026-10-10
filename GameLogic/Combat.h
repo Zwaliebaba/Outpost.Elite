@@ -20,32 +20,11 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> CombatEntries() noexcept;
 
-/// DrawLaserBeams (CS:0A9A): the player's beams, from the bottom of the view to near its centre, in firingLaserType's pattern.
-void DrawLaserBeams(Guest& _guest);
-
 /// DetonateEnergyBomb (CS:2ED6): every active ship with a blip exploded, its cargo emptied first; a crime in the safe zone.
 void DetonateEnergyBomb(Guest& _guest);
 
-/// SpawnPlayerWreckage (CS:2FE3): the player's death: the view stopped, six splinters drifting along the nose, and a barrel of
-/// the cargo if there is any.
-void SpawnPlayerWreckage(Guest& _guest);
-
 /// ExplodeObject (CS:4FC1): the object at DI removed, and when it was drawn, its fragments and its cargo barrels spawned.
 void ExplodeObject(Guest& _guest);
-
-/// LaunchPlayerMissile (CS:5242): the 64 bytes at DI copied into a slot, free or reclaimed, and made a missile 100 along the
-/// player's nose, locked on missileTarget.
-void LaunchPlayerMissile(Guest& _guest);
-
-/// LaunchShipFromObject (CS:534E): CF set when a copy of the object at DI went into a free slot as what DL names: 14h a missile at
-/// the player, 15h an escape pod, 7 a Thargon, 5 a Krait (which returns to CS:DI). DI kept.
-void LaunchShipFromObject(Guest& _guest);
-
-/// TryLaunchMissileAtPlayer (CS:543A): the ship at DI launches a missile when it may, with odds BX out of 65536.
-void TryLaunchMissileAtPlayer(Guest& _guest);
-
-/// TryLaunchThargon (CS:5471): a Thargoid at DI launches a Thargon, at odds of 300 in 65536.
-void TryLaunchThargon(Guest& _guest);
 
 /// UpdateMissileAi (CS:54F2): class 2: the missile at DI flies at its target, or the player, and explodes on it.
 void UpdateMissileAi(Guest& _guest);
@@ -89,11 +68,25 @@ void DrawLaserSights(GameState& _state);
 /// time; its type, the 2-bit field mount-1 of laserMountTypes.
 [[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
 
+/// DrawLaserBeams (CS:0A9A): the player's beams, DrawLine from the bottom row of the view to a random point within 3 pixels of
+/// (7Eh, 3Eh), in firingLaserType's pattern: with bit 0 clear, one side's pair a shot, the sides alternating by laserBeamSide
+/// and the colour counting down past 0 for type 0 and up for type 2; type 1 both outer beams, the colour counting up; type 3 all
+/// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Returns whether a beam was a horizontal
+/// line, which DrawLine fills by REP STOSB.
+bool DrawLaserBeams(GameState& _state);
+
 /// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
 /// it holds; below, the low byte goes against the shield, written back, and 0 over it on a borrow. An energy that goes below 0
 /// kills the player (KillPlayer) and is then 0. Nothing while the escape pod flies. Returns the step length the death sound
 /// starts at, when it kills.
 std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage);
+
+/// SpawnPlayerWreckage (CS:2FE3): the player's death: the drift, 40 along the nose (ComputeDeathDebrisVector), kept in
+/// wreckDrift; the player stopped at speed 8 with the view locked; six splinters in debris slots drifting with it and a
+/// random -15..16 on each axis, each run for a frame (UpdateDebrisAi); and with cargo aboard, a barrel in a ship slot, free or
+/// reclaimed, four drifts ahead, drifting at a quarter of the drift and a little, turned along it and moved a random -31..32 on
+/// x and y.
+void SpawnPlayerWreckage(GameState& _state);
 
 /// KillPlayer (CS:3115): unless the escape pod flies, playerDead and StartPlayerDeathSound. Returns the step length that sound
 /// starts at, when it starts.
@@ -116,6 +109,26 @@ void TallyMaskMissionKill(GameState& _state, const ObjectSlot& _slot);
 /// high byte below 70 too, hit squarely.
 void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
 
+/// LaunchPlayerMissile (CS:5242): the 64 bytes at _source copied (CopyObject, backwards when _backward) into a ship slot, free
+/// or reclaimed, and made a missile (InitMissile) 100 along the player's nose, locked on missileTarget, aimed at where that is,
+/// its velocity set and moved twice. A slot ReclaimShipSlot evicts is copied onto itself, as the original's XCHG SI,DI leaves it.
+void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward);
+
+/// LaunchShipFromObject (CS:534E): a copy of _launcher (CopyObject, backwards when _backward) in a free ship slot, made what
+/// _kind names and moved clear of it: 14h a missile at the player, moved three times; 15h an escape pod, its heading random,
+/// moved three times; 7 a Thargon whose mother is _launcher, and 5 a Krait, each moved twice. Returns the slot, or nothing
+/// when no slot is free or _kind is none of these.
+std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const ObjectSlot& _launcher, std::uint8_t _kind, bool _backward);
+
+/// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject, the copy backwards when
+/// _backward) when it may: once the player has three kills, while it is hostile, does not hold its fire (CheckSafeZoneHoldFire),
+/// has missiles and nothing blocks firing, at odds of _odds in 65536; one launched is one missile fewer.
+void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _odds, bool _backward);
+
+/// TryLaunchThargon (CS:5471): a Thargoid at _slot with Thargons left launches one (LaunchShipFromObject, the copy backwards
+/// when _backward), at odds of 300 in 65536; one launched is one Thargon fewer.
+void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward);
+
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 /// Returns whether it was.
 bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
@@ -137,14 +150,25 @@ void UseMaskingDevice(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
-void DrawLaserSightsEntry(Guest& _guest);             ///< AX, BX, CX, SI, DI clobbered.
-void GetViewLaserEntry(Guest& _guest);                ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
-void TakeDamageEntry(Guest& _guest);                  ///< AX = the damage. Out: AX and BX as the original leaves them; IF=1 when it kills.
-void KillPlayerEntry(Guest& _guest);                  ///< Out: AL the sound's step length and IF=1, when it starts.
-void InitMissileEntry(Guest& _guest);                 ///< DI = the slot. AX, BX clobbered.
-void RemoveAllMissilesEntry(Guest& _guest);           ///< Out: DI past the slots, ES = B800h once a blip is erased; AX-DX clobbered.
-void TallyMaskMissionKillEntry(Guest& _guest);        ///< DI = the slot. Out: AL = its type while the mission runs.
-void TryFireLaserAtPlayerEntry(Guest& _guest);        ///< DI = the slot, AX, BX = the aim errors. AX, BX, CX, DX clobbered.
+/// The registers RemoveAllMissiles' original leaves, _erased saying whether it erased a scanner blip: DI past the slots it looked
+/// at, and ES = B800h once it erased one. For its entry, and for UpdateStationAi's register code, whose contract compares them.
+void RemoveAllMissilesOut(Guest& _guest, bool _erased);
+
+void DrawLaserSightsEntry(Guest& _guest);      ///< AX, BX, CX, SI, DI clobbered.
+void GetViewLaserEntry(Guest& _guest);         ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
+void DrawLaserBeamsEntry(Guest& _guest);       ///< Out: ES = DS once a beam was horizontal; AX-DX, BP, DI clobbered.
+void TakeDamageEntry(Guest& _guest);           ///< AX = the damage. Out: AX and BX as the original leaves them; IF=1 when it kills.
+void SpawnPlayerWreckageEntry(Guest& _guest);  ///< Clobbers all but DS.
+void KillPlayerEntry(Guest& _guest);           ///< Out: AL the sound's step length and IF=1, when it starts.
+void InitMissileEntry(Guest& _guest);          ///< DI = the slot. AX, BX clobbered.
+void RemoveAllMissilesEntry(Guest& _guest);    ///< Out: DI past the slots, ES = B800h once a blip is erased; AX-DX clobbered.
+void TallyMaskMissionKillEntry(Guest& _guest); ///< DI = the slot. Out: AL = its type while the mission runs.
+void TryFireLaserAtPlayerEntry(Guest& _guest); ///< DI = the slot, AX, BX = the aim errors. AX, BX, CX, DX clobbered.
+void LaunchPlayerMissileEntry(Guest& _guest);  ///< DI = the 64 bytes to copy. Clobbers all but DS.
+/// DI = the launcher, DL = what to launch. Out: CF set when launched, DI kept; a Krait returns to CS:DI. AX-DX, SI, BP, ES clobbered.
+void LaunchShipFromObjectEntry(Guest& _guest);
+void TryLaunchMissileAtPlayerEntry(Guest& _guest);    ///< DI = the slot, BX = the odds. Out: DI kept; AX-DX, SI, BP, ES clobbered.
+void TryLaunchThargonEntry(Guest& _guest);            ///< DI = the slot. Out: DI kept; AX-DX, SI, BP, ES clobbered.
 void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
 void CreditKillEntry(Guest& _guest);                  ///< DI = the slot. Out: AX, BX, CX and SI as the original leaves them.
 void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.

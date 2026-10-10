@@ -55,9 +55,6 @@ void UpdateEnergyAndLaserHeat(Guest& _guest);
 /// reset.
 void SetUpLocalSpace(Guest& _guest);
 
-/// CheckCollisions (CS:2BC5): the player against every object slot: damage, or docking.
-void CheckCollisions(Guest& _guest);
-
 /// UpdateCompass (CS:418F): moves the compass dot to the planet or the station. Every register comes
 /// back as the original leaves it; DI = stationSlot.
 void UpdateCompass(Guest& _guest);
@@ -68,9 +65,6 @@ void RunFlight(Guest& _guest);
 
 /// ProcessFlightKeys (CS:7FA8): the flight controls other than steering.
 void ProcessFlightKeys(Guest& _guest);
-
-/// EngageJumpDrive (CS:8430): J: the jump drive engaged at full speed unless mass-locked.
-void EngageJumpDrive(Guest& _guest);
 
 /// UpdatePlayerMotion (CS:8472): speed, roll and pitch for this frame, then the world moves.
 void UpdatePlayerMotion(Guest& _guest);
@@ -231,6 +225,10 @@ void UpdateSafeZone(GameState& _state);
 /// and the pitch, through rotationSinCos[8], [7] and [6], which it sets.
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
+/// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's
+/// collisionRanges box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each.
+void CheckCollisions(GameState& _state, Hardware& _hardware);
+
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
 void UpdateWarnings(GameState& _state);
@@ -280,6 +278,14 @@ bool TickEscapePod(GameState& _state);
 /// DrainEnergy (CS:839F): playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
 void DrainEnergy(GameState& _state, std::int8_t _amount);
 
+/// What EngageJumpDrive did: in Hyperspace.h, beside the MassLock it holds, which this header cannot include (Hyperspace.h
+/// includes Ships.h, which includes this).
+struct JumpDriveRequest;
+
+/// EngageJumpDrive (CS:8430): J: the jump drive engaged (jumpDriveEngaged, velocityDirty) at full speed, 48, unless the docking
+/// computer is on or IsMassLocked says it is mass-locked; otherwise disengaged. Its message is posted for 5 frames.
+JumpDriveRequest EngageJumpDrive(GameState& _state);
+
 /// UpdatePlayerVelocity (CS:8599): when velocityDirty, the velocity from playerSpeed along the pitch and the yaw, through
 /// rotationSinCos[6] and [7], which it sets. While jumpDriveEngaged it is 32 times the speed, for one frame.
 void UpdatePlayerVelocity(GameState& _state);
@@ -323,6 +329,7 @@ void DrawConditionLightEntry(Guest& _guest);
 void UpdateConditionColorEntry(Guest& _guest);
 void InSafeZoneEntry(Guest& _guest);
 void ComputeDeathDebrisVectorEntry(Guest& _guest); ///< Out: AX, BX, CX.
+void CheckCollisionsEntry(Guest& _guest);          ///< Out: DI past the slots. Clobbers all but DS.
 void UpdateWarningsEntry(Guest& _guest);
 void CheckMissileWarningEntry(Guest& _guest); ///< CX = the checks. Out: AL = the check, CX as LOOP leaves it; BX, AX once one posts.
 void CheckAltitudeWarningEntry(Guest& _guest);
@@ -335,6 +342,7 @@ void XorScannerBlipEntry(Guest& _guest);    ///< AH, BH, CH = the scanner bytes.
 void XorDashboardPixelEntry(Guest& _guest);
 void EraseCompassAndBlipsEntry(Guest& _guest); ///< Out: ES = B800h once it erases anything.
 void DrainEnergyEntry(Guest& _guest);
+void EngageJumpDriveEntry(Guest& _guest); ///< Out: AX the message, and every register IsMassLocked leaves once it is asked.
 void UpdatePlayerVelocityEntry(Guest& _guest);
 void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, SI past the last slot.
 void UpdateSafeZoneEntry(Guest& _guest);        ///< Out: DI = stationSlot. AX, BX, CX, DX clobbered.
