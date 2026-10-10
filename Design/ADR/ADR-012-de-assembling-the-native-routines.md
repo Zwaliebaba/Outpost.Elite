@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 and 1 of the call graph (items 10 and 11).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 2 of the call graph (items 10 to 12).
 
 ## Context
 
@@ -154,6 +154,42 @@ The 15 contracts poisoning narrowed:
 - **Write order.** `DrawSmallDisc` now writes its AND and then its OR (CS:19D4 and CS:19E0), as the listing does. Every other routine kept the original's writes, in order and at their width, checked against the listing.
 
 **The suites.** `GameLogicTests` passes 173 of 173 with poisoning on, under g++ and clang++. The corpus keeps all 40 digests in all three of its runs.
+
+**12. Level 2, measured 2026-10-10.** Three workers converted 65 routines. 36 were ready by item 11's count. 28 more had been counted as needing a device only because they call converted routines by address, through `Guest::Call`; such a call becomes a call of the value routine, so they were ready too. The last was `RunTextControlCode`, which shares a cycle with four of Galaxy's ready routines (item 9) and was converted with them as one unit.
+
+| | Count |
+|---|---|
+| Routines converted | 65, none skipped: Flight and Video 18; Text, Galaxy, Market, Docked, Equipment, SaveLoad and Sound 29; Ships, Scene, Ai, Docking and Hyperspace 18 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 5 |
+| Contracts widened | 0 |
+| Entries added | 40 |
+| Lines touching a register in `GameLogic/*.cpp` | 4,712 before, 4,445 after |
+| Routines ready for the next level | 17, and 43 more that need a device or the stack |
+| Register functions left | 338 on 19 levels: 319 routines and 19 register adapters |
+
+Measured as in item 11, with a routine that calls converted routines only by address now counted as ready.
+
+The 5 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `EraseScannerBlip` | everything: it now preserves all registers. `IsObjectNear` hands its BX, CX and DX on to `EngageJumpDrive`, `CheckShipInRange` and `IsMassLocked`, and `RemoveObject` stored a poisoned byte at DS:84D2. |
+| `DrawLine` | ES = DS, which `DrawLaserBeams`, `UpdateStardust` and `DrawClippedLine` go on with |
+| `FacePlayer` | BP, the pitch, which `UpdateStationAi` reads through `SpawnRandomTrader` and `FacePlayerWithRandomRoll` |
+| `StartPlayerDeathSound` | AX: AL = 3Ch and AH as it came in, which `DrawSunOrPlanet` and `UpdateMissileAi` go on with after `KillPlayer` |
+| `StartExplosionSound` | AX: AL = 32h and AH as it came in, which `UpdateMissileAi` reads after `ExplodeObject` |
+
+**Leftovers dropped on evidence.** Where register code no longer reproduces a leftover, a worker poisoned it for a trial run and kept the change only when every test passed: `ApplyPitch`'s AX to DX after `UpdatePlayerMotion` (774 calls); the Within adapters' AX, BX, CX and flags; DX after `TurnToVector`; `RunDockingComputer`'s BX, CX and DX in five of its states; AX and BX after `RotateVerticesToView`; DX after `RandomArrivalOffset`. A sensitivity run that also poisoned registers those paths do read failed the corpus and the docking tests, so the paths are exercised.
+
+**The description text's control codes.** `RunTextControlCode` jumps through `textControlCodes`, and its `Push` and `Pop` only save SI and the way back to CS:7051, so the stack carries no data and the cycle converts. It is now a table of the six handlers' value routines.
+- **Codes 7 to 31** make the original run `descriptionPhraseLists` as code, and the value routine runs nothing. No game state reaches them: the 39 phrase lists hold only codes 1 to 6 and 80h to A6h, and the longest description over all 2,048 systems is 144 bytes against a 256-byte buffer, so no expansion overwrites the table. That was measured with a scratch model of the expansion, outside the repository.
+- **The inserting handlers' registers** are reproduced for a name made of letters, which every name from `systemNameDigrams` is. Their memory writes are exact for any name.
+
+**`UpdateMessageLine`** leaves AX from the 0 that `ClearMessageLine` leaves where the original's starts from B800h, for an empty message only. The game shows none.
+
+**A routine called only as a value is no longer compared on its own.** `ToggleMenuRowHighlight` was reached through its hook from the equipment and cargo menus; their cursor routines now call its value routine, and the menus that call them wait, so only the digests compared it and the coverage check failed. `TextTests.MenuRowHighlightAgreesOnAndOff` now calls it directly. The same will happen to more routines as their callers convert, and each needs a constructed call or a converted caller that is compared.
+
+**The suites.** `GameLogicTests` passes 174 of 174 with poisoning on, under g++ and clang++, and the coverage check is clean. The corpus keeps all 40 digests in all three of its runs.
 
 ## What this forecloses
 

@@ -21,6 +21,7 @@ constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t SHOW_SHIP_IDENTITY = 0x364D;
 constexpr std::uint16_t CLEAR_DOCKED_MESSAGE_LINE = 0x6553;
 constexpr std::uint16_t PRINT_TEXT_LINES = 0x6DDE;
+constexpr std::uint16_t TOGGLE_MENU_ROW_HIGHLIGHT = 0x6328;
 constexpr std::uint16_t TOGGLE_INPUT_CURSOR = 0x7727;
 constexpr std::uint16_t PRINT_STRING_FOR_LAYOUT = 0x7750;
 constexpr std::uint8_t GRAPHICS_LAYOUT = 0;
@@ -28,6 +29,8 @@ constexpr std::uint16_t SLOT_BYTES = 0x40;
 constexpr std::uint16_t SPARE_SLOT = 4;
 constexpr std::uint16_t LINES = 0x1000; // the space-view buffer, which nothing reads between frames of the title
 constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
+constexpr std::uint16_t EQUIP_MENU_FIRST_ROW = 0x0325; // the equipment menu's first row, at its first attribute byte
+constexpr std::uint16_t TEXT_ROW_BYTES = 0xA0;
 
 // A ship's type and class, as ShowShipIdentity takes them in AL and AH.
 struct Identity
@@ -125,6 +128,26 @@ public:
     rig.Call(PRINT_TEXT_LINES, {.ax = 0x1111, .cx = 1, .si = LINES, .di = 0x0140});
     rig.AssertAllAgreed(CLEAR_DOCKED_MESSAGE_LINE, 1);
     rig.AssertAllAgreed(PRINT_TEXT_LINES, 2);
+  }
+
+  // A menu row highlighted, the highlight taken off again, and the next row highlighted, as a menu's cursor moves.
+  // The menus call it as a value routine since level 2 of the de-assembly (ADR-012 item 12), so only a call like
+  // this one compares it with the original.
+  TEST_METHOD(MenuRowHighlightAgreesOnAndOff)
+  {
+    ComparisonRig rig("MenuRowHighlight");
+    Machine::Registers& regs = rig.Host().Processor().Regs();
+    const Machine::Registers saved = regs;
+    for (const std::uint16_t row :
+         {EQUIP_MENU_FIRST_ROW, EQUIP_MENU_FIRST_ROW, static_cast<std::uint16_t>(EQUIP_MENU_FIRST_ROW + TEXT_ROW_BYTES)})
+    {
+      regs.ds = Elite::DataSegment(rig.Program());
+      regs.es = VIDEO_SEGMENT;
+      regs.si = row;
+      rig.Host().CallNear(TOGGLE_MENU_ROW_HIGHLIGHT);
+      regs = saved;
+    }
+    rig.AssertAllAgreed(TOGGLE_MENU_ROW_HIGHLIGHT, 3);
   }
 
   // A line typed on the galactic chart's F: a capital with Shift, one character more than fits, every one
