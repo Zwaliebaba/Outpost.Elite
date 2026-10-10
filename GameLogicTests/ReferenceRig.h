@@ -1,9 +1,9 @@
 // GameLogicTests/ReferenceRig.h
 #pragma once
 
-#include "Cpu.h"
 #include "DirectoryFileStore.h"
 #include "Dispatcher.h"
+#include "NativeRoutines.h"
 #include "Pc.h"
 #include "Reference.h"
 
@@ -52,21 +52,26 @@ private:
   std::filesystem::path m_path;
 };
 
-/// The reference loaded on a PC in paced time (ADR-008), as replays run it: the PSP where DOSBox-X puts
-/// it, the clock starting at midnight on 1 January 1980 unless _startMoment says otherwise, DOS's files
-/// in a scratch directory, and the program interpreted unless _makeProcessor makes a Dispatcher (ADR-011).
+/// The reference loaded on a PC in paced time (ADR-008), as replays run it and the game does: the PSP where DOSBox-X
+/// puts it, the clock starting at midnight on 1 January 1980 unless _startMoment says otherwise, DOS's files in a
+/// scratch directory, and the native routines in place of the program's code on a Dispatcher, which interprets
+/// nothing (ADR-011).
 class ReferenceRig
 {
 public:
   explicit ReferenceRig(std::string_view _name, const Machine::Dos::DateTime& _startMoment = Elite::START_MOMENT,
-                        Machine::ProcessorFactory _makeProcessor = &Machine::MakeCpu, bool _mousePresent = false)
+                        bool _mousePresent = false)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent), _makeProcessor))
+      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent), &Machine::MakeDispatcher))
   {
     m_pc->SetTimeMode(Machine::TimeMode::Paced);
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
     m_loaded = Elite::LoadReference(*m_pc, file, Elite::PSP_SEGMENT, m_program) == Elite::ReferenceFailure::None;
+    if (m_loaded)
+    {
+      Elite::InstallNativeRoutines(*m_pc, m_program);
+    }
   }
 
   [[nodiscard]] bool Loaded() const noexcept

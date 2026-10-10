@@ -1,9 +1,9 @@
 # GameLogicTests/KnownAnswers.txt
 #
-# The twins' known answers (D20, ADR-008 item 8). A twin (GameLogicTests/TwinRig.h) plays a scenario on the interpreted
-# original and on the native code, and compares the game-state digest of the two at every digest step and at the end of
-# every Play. Each of those digests is recorded here from the original, so that the native code still has something to
-# meet once D7 has deleted the interpreter.
+# The twins' known answers (D20, ADR-008 item 8, ADR-016). A twin (GameLogicTests/TwinRig.h) plays a scenario no replay
+# reaches on the native code, and takes the game-state digest at every digest step and at the end of every Play. Each of
+# those digests was recorded here from the interpreted original, playing the same scenario, before D7 deleted the
+# interpreter. With the replay corpus, they are what the native code is held to.
 #
 # Format: one answer per line, three fields separated by single spaces:
 #
@@ -15,20 +15,15 @@
 #            "wait 3" when it is made, so its answer 1 is the state that leaves.
 #   DIGEST   Elite::GameStateDigest, the SHA-256 of the game's state (ADR-008 item 5), in lowercase hex
 #
-# Lines are sorted by twin and ordinal. Blank lines and lines that start with '#' are ignored; the recorder keeps the
-# ones before the first answer, this header, and writes every answer after them, so a comment among the answers is lost.
+# Lines are sorted by twin and ordinal. Blank lines and lines that start with '#' are ignored.
 #
-# Checking: a TwinRig asserts that each digest of the original is the answer recorded for it, then that the native one
-# is the original's. A NativeTwin, the form every twin takes after D7, asserts that each native digest is the answer. A
-# missing answer fails the twin, naming it and the ordinal.
+# Checking: a TwinRig asserts that each digest it gives is the answer recorded for it. A missing answer fails the twin,
+# naming it and the ordinal.
 #
-# Recording: run the tests with OUTPOST_ELITE_RECORD_KNOWN_ANSWERS=1 in one process (the test binary or vstest.console.exe
-# directly, not Build/RunTests.py's parallel shards, which would write this file at once). Each twin then records the
-# original's digests instead of checking them, still asserts that the native ones agree, and, if it passes, replaces its
-# answers here when it is done; a twin that fails leaves its answers as they were. It is never set in CI, where it fails
-# the twins. Like a replay's digests (ADR-008 item 7), an answer changes only by a ruling recorded with its cause, and
-# recording is how a new twin's answers are added, never how a failing twin is made to pass.
-
+# Changing: there is no original left to record from. Like a replay's digests (ADR-008 item 7), an answer changes only by a
+# ruling recorded with its cause, never to make a failing twin pass, and never by recording the native code's digests. A
+# twin that is deleted takes its lines with it (ADR-016 item 7).
+#
 TwinAbort 1 dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
 TwinAbort 2 1655004dfab1398dc71ada1edba78962e238f9fa448945d4113189bec5108288
 TwinAbort 3 1655004dfab1398dc71ada1edba78962e238f9fa448945d4113189bec5108288
@@ -109,36 +104,6 @@ TwinDiscMenu 27 48abbf84ecdd0d3d1051a2aeb84c5c2d809017c58c0b03c70059ecb749ebcdec
 TwinDiscMenu 28 27478a4341ce56df3f0c3cb4776c72d64ff3148fcbf939d453a3b0616a5b628b
 TwinDiscMenu 29 ad9b6e3da3e896473dacaf739fe3118559f525bffed4768a9246bae935439660
 TwinDiscMenu 30 ad9b6e3da3e896473dacaf739fe3118559f525bffed4768a9246bae935439660
-TwinDiscMenuUncompared 1 dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
-TwinDiscMenuUncompared 2 90a67880d093e53f01aa83f0f1828b201512867d06b31cca34f037a149f44734
-TwinDiscMenuUncompared 3 90a67880d093e53f01aa83f0f1828b201512867d06b31cca34f037a149f44734
-TwinDiscMenuUncompared 4 f3f2e402f8a0e07eed935b7dd32ab0f22da9031320fe7e1dabcb9a19febafab2
-TwinDiscMenuUncompared 5 f3f2e402f8a0e07eed935b7dd32ab0f22da9031320fe7e1dabcb9a19febafab2
-TwinDiscMenuUncompared 6 a84b9815956fd5be6d0f45636fdacb2cacdae3503acf5ed420bdd7704e9d4f26
-TwinDiscMenuUncompared 7 5e0b0549b785ea25f583f97ba17f990232b59703a8db7c6ca46017b5812d569c
-TwinDiscMenuUncompared 8 4971d772980611d6a9e9d823ceff7732c63248f1e32f7bec8280f43de20c155b
-TwinDiscMenuUncompared 9 4971d772980611d6a9e9d823ceff7732c63248f1e32f7bec8280f43de20c155b
-TwinDiscMenuUncompared 10 c10308ff4e2857704d2a6a047f63cc11f36d05b2b0ff0c12150384a2a15c1774
-TwinDiscMenuUncompared 11 e44df0249312a33c3eecba90f5d05a3a8f39644f4b78b55971b66b14ef41e2fe
-TwinDiscMenuUncompared 12 fe28bc500716db6fc8796df1cc102ba01e8c1fe192fbce17c29408317d762c3b
-TwinDiscMenuUncompared 13 14aed31b085e65984793451127dc3221b17a0eb9754561741014191d98f1b061
-TwinDiscMenuUncompared 14 8848af4bace39ebd2ab076cf9c6ebc2199d6621c73a3d3d0e0886ea0233845e8
-TwinDiscMenuUncompared 15 7f6778dcb0e4414e8b76e97edc41bd33a3a64e756e99dd506cd27eef77d6c1e9
-TwinDiscMenuUncompared 16 5cbce43aecc15bf10e48cc72556b8ff92d276d1bcd4d7d99c0627d917b0fd62f
-TwinDiscMenuUncompared 17 5cbce43aecc15bf10e48cc72556b8ff92d276d1bcd4d7d99c0627d917b0fd62f
-TwinDiscMenuUncompared 18 fea86374a8ada7234aadd5e60d0bc4bd86b67b599e83dbf56efceed7203fe267
-TwinDiscMenuUncompared 19 bf4a450632f5c33fdf3375d4b12d3d6f7a9f984b7c8ed7ace610ff40ef8306e4
-TwinDiscMenuUncompared 20 01975ec18487ef2507d83b000bf12c95ad4c194f5eaa9c09a9fb1d57cc72ee94
-TwinDiscMenuUncompared 21 34946e1747ff23ea44a464802226ba3444ec0c2c90b811c03ee8f0ee9fd8fb7a
-TwinDiscMenuUncompared 22 34946e1747ff23ea44a464802226ba3444ec0c2c90b811c03ee8f0ee9fd8fb7a
-TwinDiscMenuUncompared 23 6907012e09b6e713c7373dc99406ef00429fa8001d00281811dd9bd1e75c0006
-TwinDiscMenuUncompared 24 6907012e09b6e713c7373dc99406ef00429fa8001d00281811dd9bd1e75c0006
-TwinDiscMenuUncompared 25 b8d118f5714c96f5a025eebc11650b84ff1c34c617790fbd76b02e8bf35cb73b
-TwinDiscMenuUncompared 26 b8d118f5714c96f5a025eebc11650b84ff1c34c617790fbd76b02e8bf35cb73b
-TwinDiscMenuUncompared 27 48abbf84ecdd0d3d1051a2aeb84c5c2d809017c58c0b03c70059ecb749ebcdec
-TwinDiscMenuUncompared 28 27478a4341ce56df3f0c3cb4776c72d64ff3148fcbf939d453a3b0616a5b628b
-TwinDiscMenuUncompared 29 ad9b6e3da3e896473dacaf739fe3118559f525bffed4768a9246bae935439660
-TwinDiscMenuUncompared 30 ad9b6e3da3e896473dacaf739fe3118559f525bffed4768a9246bae935439660
 TwinDockedCargo 1 dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
 TwinDockedCargo 2 7e04650ad467c247289e650c0bbd342be728cbdf50c0a6cb91e7dd4f86139477
 TwinDockedCargo 3 24ce4a03e12f01621e1fa952ff1950bc844201af86dbe200209c5ac69608d762
@@ -340,18 +305,6 @@ TwinStationShuttle 3 1fa713f39453f4b461629609c0491fb3f32bb95856118cc5e8b29445dc0
 TwinStationShuttle 4 1fa713f39453f4b461629609c0491fb3f32bb95856118cc5e8b29445dc0936c1
 TwinStationShuttle 5 410c4e72ffbf1ed75fcf92feadd9b176d346e9eaab3041055e7a7a1f49dcfd8f
 TwinStationShuttle 6 410c4e72ffbf1ed75fcf92feadd9b176d346e9eaab3041055e7a7a1f49dcfd8f
-TwinStickCompared 1 dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
-TwinStickCompared 2 792adf1cdbd7874f6ad97b723312a5fbf12086b5637952458669794127a42548
-TwinStickCompared 3 9125c0175a2265053e3d4f0b21de01f50f2225bb27ef99affa01a0150a28e6aa
-TwinStickCompared 4 9125c0175a2265053e3d4f0b21de01f50f2225bb27ef99affa01a0150a28e6aa
-TwinStickCompared 5 97963cc23f7fb8310414164c0e01c490baa414378ed2af27ba68e54b4e44f4a3
-TwinStickCompared 6 97963cc23f7fb8310414164c0e01c490baa414378ed2af27ba68e54b4e44f4a3
-TwinStickCompared 7 9f9eb8f67c9474fd6feac3f186807a09aa8db8fde8d2469c2f9cfe4ad3c5cf7f
-TwinStickCompared 8 9f9eb8f67c9474fd6feac3f186807a09aa8db8fde8d2469c2f9cfe4ad3c5cf7f
-TwinStickCompared 9 c0c0bffbfab9d6d95c5be79fec4e023e68e6b2fb32d0699c84e6030808d7e8ea
-TwinStickCompared 10 c0c0bffbfab9d6d95c5be79fec4e023e68e6b2fb32d0699c84e6030808d7e8ea
-TwinStickCompared 11 fbd046f611a463461b5e384972233f21e145bb6bbc0bbd273087daa122f21c28
-TwinStickCompared 12 fbd046f611a463461b5e384972233f21e145bb6bbc0bbd273087daa122f21c28
 TwinStickFlight 1 dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
 TwinStickFlight 2 300dd1bc8118db3d8c23bdbe76cf25034e41fc23873254d736d19753ac217246
 TwinStickFlight 3 300dd1bc8118db3d8c23bdbe76cf25034e41fc23873254d736d19753ac217246

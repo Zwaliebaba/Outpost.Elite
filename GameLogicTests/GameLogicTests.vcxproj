@@ -57,7 +57,7 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(SolutionDir)Interpreter;$(SolutionDir)Machine;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(SolutionDir)Machine;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -83,38 +83,29 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="ComparisonRig.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="ReferenceRig.h" />
     <ClInclude Include="TwinRig.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AiTests.cpp" />
-    <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
-    <ClCompile Include="DockingTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
     <ClCompile Include="FlightTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
-    <ClCompile Include="MathsTests.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
-    <ClCompile Include="SceneTests.cpp" />
-    <ClCompile Include="ShipsTests.cpp" />
-    <ClCompile Include="SoundTests.cpp" />
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
-    <ClCompile Include="TimerTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
-    <ClCompile Include="VideoTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="KnownAnswers.txt" />
@@ -122,9 +113,6 @@
   <ItemGroup>
     <ProjectReference Include="..\GameLogic\GameLogic.vcxproj">
       <Project>{092FB942-D1C6-56A9-BD38-795B1F453D7F}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Interpreter\Interpreter.vcxproj">
-      <Project>{244C2795-4774-56BE-A9D6-5A3714695E85}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Machine\Machine.vcxproj">
       <Project>{20D2E016-F4F9-5FE2-9C7D-A4DB0F992259}</Project>
