@@ -18,10 +18,6 @@ namespace
 
 using Machine::FLAG_CARRY;
 using Machine::FLAG_DIRECTION;
-using Machine::FLAG_ZERO;
-
-// Routines outside these files, run through the original.
-constexpr std::uint16_t CONVERT_VECTOR_TO_ANGLES = 0x4F08;
 
 constexpr std::uint8_t FLAG_HOSTILE = 0x01;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
@@ -123,41 +119,11 @@ void AddWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value) noexcep
   _guest.SetWord(_offset, static_cast<std::uint16_t>(_guest.Word(_offset) + _value));
 }
 
-void SetState(Guest& _guest, std::uint8_t _state) noexcept
-{
-  _guest.SetByte(At(_guest.Regs().di, SLOT_STATE), _state);
-}
-
-[[nodiscard]] std::uint8_t State(Guest& _guest) noexcept
-{
-  return _guest.Byte(At(_guest.Regs().di, SLOT_STATE));
-}
-
-// WithinBox, MOV DX,_halfSize / CALL ObjectWithinBox: whether the slot at DI is within the box on every axis. Its value is
-// ObjectWithinBox's, so only its register code is left, which keeps the DX it loads. Nothing reads the magnitudes
-// ObjectWithinBox leaves in AX, BX and CX, nor its flags, here or after WithinRange: poisoned, every comparison and digest
-// still agrees.
-[[nodiscard]] bool WithinBoxOnRegisters(Guest& _guest, std::uint16_t _halfSize)
-{
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = _halfSize;
-  return ObjectWithinBox(ObjectSlot(_guest.State(), regs.di), _halfSize);
-}
-
 // WithinRange: whether _slot is within the box whose half size has its range byte for the high byte and _low, what DL holds
 // there, for the low.
 [[nodiscard]] bool WithinRange(const ObjectSlot& _slot, std::uint8_t _low)
 {
   return ObjectWithinBox(_slot, Join(_slot.Get(SlotByte::Range), _low));
-}
-
-// MOV DH,[DI+1Ch] / CALL ObjectWithinBox: WithinRange for the slot at DI, DL as it is. The register code keeps the DH it loads.
-[[nodiscard]] bool WithinRangeOnRegisters(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot slot(_guest.State(), regs.di);
-  SetHigh(regs.dx, slot.Get(SlotByte::Range));
-  return WithinRange(slot, Low(regs.dx));
 }
 
 // What TurnTowardAngles leaves in the registers, which its entry and TurnToVector's register code reproduce: AX and BX the
@@ -176,16 +142,6 @@ void TurnOut(Machine::Registers& _regs, const ObjectSlot& _slot, Turn _turn) noe
 Turn TurnToVector(GameState& _state, ObjectSlot _slot, Vector _vector)
 {
   return TurnTowardAngles(_slot, ConvertVectorToAngles(_state, _vector));
-}
-
-// TurnToVector on AX, BX, CX and the slot at DI, with the registers TurnTowardAngles leaves (TurnOut). Nothing reads the DX
-// it leaves, which its two entries' contracts gave to them, nor its flags.
-void TurnToVectorOnRegisters(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot slot(_guest.State(), regs.di);
-  const Vector vector{static_cast<std::int16_t>(regs.ax), static_cast<std::int16_t>(regs.bx), static_cast<std::int16_t>(regs.cx)};
-  TurnOut(regs, slot, TurnToVector(_guest.State(), slot, vector));
 }
 
 // What SpawnOddsMet draws: a random word, and the odds it is held against.
@@ -490,52 +446,47 @@ StationEcm CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
   return StationEcm{true, erased};
 }
 
-// UpdateWolfAi's state 3 (586D): turning away until beyond its range, then a pass is counted off.
-void WolfTurnAway(Guest& _guest)
+// UpdateWolfAi's state 3 (586D): turning away, a Thargoid launching Thargons, until beyond its range, whose box takes _rangeLow,
+// what DL holds there, for its low byte; then a pass is counted off. After the last it rests, calmed (aggression 9) and no
+// longer hostile, and a Thargon drifts (state 0Ah); so does one whose mother is gone or is no Thargoid with a blip. Returns what
+// MoveObject did.
+MovedObject WolfTurnAway(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (WithinRangeOnRegisters(_guest))
+  if (WithinRange(_slot, _rangeLow))
   {
-    GetObjectPositionEntry(_guest);
-    TurnToVectorOnRegisters(_guest);
-    ComputeVelocityEntry(_guest);
-    TryLaunchThargonEntry(_guest);
-    MoveObjectEntry(_guest);
-    return;
+    (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
+    (void)ComputeVelocity(_state, _slot);
+    TryLaunchThargon(_state, _slot, _backward);
+    return MoveObject(_state, _slot);
   }
-  const std::uint16_t passes = At(regs.di, SLOT_PASSES);
-  _guest.SetByte(passes, static_cast<std::uint8_t>(_guest.Byte(passes) - 1));
-  bool rest = _guest.Byte(passes) == 0;
-  if (!rest)
+  const auto passes = static_cast<std::uint8_t>(_slot.Get(SlotByte::Passes) - 1);
+  _slot.Set(SlotByte::Passes, passes);
+  bool rest = passes == 0;
+  if (!rest && IsThargonType(_slot))
   {
     // A Thargon goes back to its run only while its mother is a Thargoid with a blip.
-    IsThargonTypeEntry(_guest);
-    if (_guest.Flag(FLAG_ZERO))
+    const std::uint16_t mother = _slot.Get(SlotWord::Owner);
+    if (mother != 0)
     {
-      regs.si = _guest.Word(At(regs.di, SLOT_OWNER));
-      if (regs.si != 0)
-      {
-        SetLow(regs.ax, static_cast<std::uint8_t>((_guest.Byte(regs.si) >> 1) & TYPE_MASK));
-        rest = Low(regs.ax) != TYPE_THARGOID || (_guest.Byte(At(regs.si, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) == 0;
-      }
+      const ObjectSlot owner(_state, mother);
+      rest = ((owner.Get(SlotByte::Type) >> 1) & TYPE_MASK) != TYPE_THARGOID || (owner.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0;
     }
   }
   if (rest)
   {
-    _guest.SetByte(At(regs.di, SLOT_AGGRESSION), RESTING_AGGRESSION);
-    _guest.SetByte(At(regs.di, SLOT_FLAGS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_FLAGS)) & ~FLAG_HOSTILE));
-    SetState(_guest, STATE_ATTACK);
-    IsThargonTypeEntry(_guest);
-    if (_guest.Flag(FLAG_ZERO))
+    _slot.Set(SlotByte::Aggression, RESTING_AGGRESSION);
+    _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) & ~FLAG_HOSTILE));
+    _slot.Set(SlotByte::State, STATE_ATTACK);
+    if (IsThargonType(_slot))
     {
-      SetState(_guest, THARGON_ADRIFT);
+      _slot.Set(SlotByte::State, THARGON_ADRIFT);
     }
   }
   else
   {
-    SetState(_guest, STATE_ATTACK_RUN);
+    _slot.Set(SlotByte::State, STATE_ATTACK_RUN);
   }
-  MoveObjectEntry(_guest);
+  return MoveObject(_state, _slot);
 }
 
 // MOV AH,1 / ROR AL,1 / NEG AX when the bit rotated out was set: a jink of +-(256 + AL/2, with AL's low bit on top).
@@ -547,44 +498,44 @@ void WolfTurnAway(Guest& _guest)
   return odd ? Negate(jink) : jink;
 }
 
-// UpdateHunterAi's state 3 (5987): evading with random jinks until beyond its range.
-void HunterEvade(Guest& _guest)
+// The evasive jinks of HunterEvade and TraderFlee: with no frames left, a new jink of the pitch and of the yaw and 10 frames;
+// then a frame counted off, and at the last the jinks reversed and 10 frames again. Returns the angles turned half round from
+// the player's direction, plus the jinks: where the ship turns to.
+[[nodiscard]] Angles JinkAway(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (!WithinRangeOnRegisters(_guest))
+  if (_slot.Get(SlotByte::JinkFrames) == 0)
   {
-    SetState(_guest, STATE_IDLE);
-    MoveObjectEntry(_guest);
-    return;
+    _slot.Set(SlotWord::JinkPitch, Jink(NextRandom(_state)));
+    _slot.Set(SlotWord::JinkYaw, Jink(NextRandom(_state)));
+    _slot.Set(SlotByte::JinkFrames, JINK_FRAMES);
   }
-  const std::uint16_t frames = At(regs.di, SLOT_JINK_FRAMES);
-  if (_guest.Byte(frames) == 0)
+  const auto frames = static_cast<std::uint8_t>(_slot.Get(SlotByte::JinkFrames) - 1);
+  _slot.Set(SlotByte::JinkFrames, frames);
+  if (frames == 0)
   {
-    NextRandomEntry(_guest);
-    regs.ax = Jink(regs.ax);
-    _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), regs.ax);
-    NextRandomEntry(_guest);
-    regs.ax = Jink(regs.ax);
-    _guest.SetWord(At(regs.di, SLOT_JINK_YAW), regs.ax);
-    _guest.SetByte(frames, JINK_FRAMES);
+    _slot.Set(SlotByte::JinkFrames, JINK_FRAMES);
+    _slot.Set(SlotWord::JinkPitch, Negate(_slot.Get(SlotWord::JinkPitch)));
+    _slot.Set(SlotWord::JinkYaw, Negate(_slot.Get(SlotWord::JinkYaw)));
   }
-  _guest.SetByte(frames, static_cast<std::uint8_t>(_guest.Byte(frames) - 1));
-  if (_guest.Byte(frames) == 0)
+  // ConvertVectorToAngles of GetVectorToPlayer, then ADD AX,400h / ADD AX,[DI+36h] / ADD BX,[DI+38h].
+  const Angles toPlayer = ConvertVectorToAngles(_state, GetVectorToPlayer(_slot));
+  return Angles{Offset(Offset(toPlayer.first, HALF_TURN), _slot.Get(SlotWord::JinkPitch)),
+                Offset(toPlayer.second, _slot.Get(SlotWord::JinkYaw))};
+}
+
+// UpdateHunterAi's state 3 (5987): evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range,
+// whose box takes _rangeLow, what DL holds there, for its low byte. Returns what MoveObject did.
+MovedObject HunterEvade(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
+{
+  if (!WithinRange(_slot, _rangeLow))
   {
-    _guest.SetByte(frames, JINK_FRAMES);
-    _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), Negate(_guest.Word(At(regs.di, SLOT_JINK_PITCH))));
-    _guest.SetWord(At(regs.di, SLOT_JINK_YAW), Negate(_guest.Word(At(regs.di, SLOT_JINK_YAW))));
+    _slot.Set(SlotByte::State, STATE_IDLE);
+    return MoveObject(_state, _slot);
   }
-  // Away from the player: the heading to it turned half round, plus the jink.
-  GetVectorToPlayerEntry(_guest);
-  _guest.Call(CONVERT_VECTOR_TO_ANGLES);
-  regs.ax = static_cast<std::uint16_t>(regs.ax + HALF_TURN + _guest.Word(At(regs.di, SLOT_JINK_PITCH)));
-  regs.bx = static_cast<std::uint16_t>(regs.bx + _guest.Word(At(regs.di, SLOT_JINK_YAW)));
-  TurnTowardAnglesEntry(_guest);
-  regs.bx = HUNTER_MISSILE_ODDS;
-  TryLaunchMissileAtPlayerEntry(_guest);
-  ComputeVelocityEntry(_guest);
-  MoveObjectEntry(_guest);
+  (void)TurnTowardAngles(_slot, JinkAway(_state, _slot));
+  TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS, _backward);
+  (void)ComputeVelocity(_state, _slot);
+  return MoveObject(_state, _slot);
 }
 
 // UpdateHunterAi's state 0 (58E4): flying at the player until it turns hostile, then picking how to hunt: with two or more
@@ -638,77 +589,46 @@ MovedObject TraderDecide(GameState& _state, ObjectSlot _slot)
   return MoveObject(_state, _slot);
 }
 
-// UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until close or,
-// for any but the police, weak.
-void TraderAttack(Guest& _guest)
+// UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until within
+// 320h on every axis, or, for any but the police, until its energy is below 8. Returns what MoveObject did.
+MovedObject TraderAttack(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  IsPoliceViperEntry(_guest);
-  if (!_guest.Flag(FLAG_ZERO) && _guest.Byte(At(regs.di, SLOT_ENERGY)) < TRADER_FLEE_ENERGY)
+  if (!IsPoliceViper(_slot) && _slot.Get(SlotByte::Energy) < TRADER_FLEE_ENERGY)
   {
-    SetState(_guest, TRADER_FLEEING);
-    MoveObjectEntry(_guest);
-    return;
+    _slot.Set(SlotByte::State, TRADER_FLEEING);
+    return MoveObject(_state, _slot);
   }
-  if (WithinBoxOnRegisters(_guest, TRADER_BREAK_OFF_BOX))
+  if (ObjectWithinBox(_slot, TRADER_BREAK_OFF_BOX))
   {
-    SetState(_guest, TRADER_BREAKING_OFF);
-    MoveObjectEntry(_guest);
-    return;
+    _slot.Set(SlotByte::State, TRADER_BREAKING_OFF);
+    return MoveObject(_state, _slot);
   }
-  GetVectorToPlayerEntry(_guest);
-  TurnToVectorOnRegisters(_guest);
-  TryFireLaserAtPlayerEntry(_guest);
-  IsPoliceViperEntry(_guest);
-  if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) != 0)
+  const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
+  TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
+  const std::uint8_t status = _state.Get(DS.legalStatus);
+  if (IsPoliceViper(_slot) && status != 0)
   {
-    regs.bx = _guest.Get(DS.legalStatus) >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS;
-    TryLaunchMissileAtPlayerEntry(_guest);
+    TryLaunchMissileAtPlayer(_state, _slot, status >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS, _backward);
   }
-  ComputeVelocityEntry(_guest);
-  MoveObjectEntry(_guest);
+  (void)ComputeVelocity(_state, _slot);
+  return MoveObject(_state, _slot);
 }
 
 // UpdateTraderOrPoliceAi's state 3 (5750): fleeing from the player with random jinks, a missile when nearly dead, and now and
-// then an ECM.
-void TraderFlee(Guest& _guest)
+// then an ECM. Returns what MoveObject did.
+MovedObject TraderFlee(GameState& _state, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Byte(At(regs.di, SLOT_ENERGY)) < DESPERATE_ENERGY)
+  if (_slot.Get(SlotByte::Energy) < DESPERATE_ENERGY)
   {
-    regs.bx = DESPERATE_MISSILE_ODDS;
-    TryLaunchMissileAtPlayerEntry(_guest);
+    TryLaunchMissileAtPlayer(_state, _slot, DESPERATE_MISSILE_ODDS, _backward);
   }
-  const std::uint16_t frames = At(regs.di, SLOT_JINK_FRAMES);
-  if (_guest.Byte(frames) == 0)
+  (void)TurnTowardAngles(_slot, JinkAway(_state, _slot));
+  (void)ComputeVelocity(_state, _slot);
+  if (NextRandom(_state) < TRADER_ECM_ODDS)
   {
-    NextRandomEntry(_guest);
-    regs.ax = Jink(regs.ax);
-    _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), regs.ax);
-    NextRandomEntry(_guest);
-    regs.ax = Jink(regs.ax);
-    _guest.SetWord(At(regs.di, SLOT_JINK_YAW), regs.ax);
-    _guest.SetByte(frames, JINK_FRAMES);
+    _state.Set(DS.npcEcmFrames, TRADER_ECM_FRAMES);
   }
-  _guest.SetByte(frames, static_cast<std::uint8_t>(_guest.Byte(frames) - 1));
-  if (_guest.Byte(frames) == 0)
-  {
-    _guest.SetByte(frames, JINK_FRAMES);
-    _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), Negate(_guest.Word(At(regs.di, SLOT_JINK_PITCH))));
-    _guest.SetWord(At(regs.di, SLOT_JINK_YAW), Negate(_guest.Word(At(regs.di, SLOT_JINK_YAW))));
-  }
-  GetVectorToPlayerEntry(_guest);
-  _guest.Call(CONVERT_VECTOR_TO_ANGLES);
-  regs.ax = static_cast<std::uint16_t>(regs.ax + HALF_TURN + _guest.Word(At(regs.di, SLOT_JINK_PITCH)));
-  regs.bx = static_cast<std::uint16_t>(regs.bx + _guest.Word(At(regs.di, SLOT_JINK_YAW)));
-  TurnTowardAnglesEntry(_guest);
-  ComputeVelocityEntry(_guest);
-  NextRandomEntry(_guest);
-  if (regs.ax < TRADER_ECM_ODDS)
-  {
-    _guest.Set(DS.npcEcmFrames, TRADER_ECM_FRAMES);
-  }
-  MoveObjectEntry(_guest);
+  return MoveObject(_state, _slot);
 }
 
 // UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
@@ -944,186 +864,142 @@ DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
   return DriftingObject{moved, tumble};
 }
 
-void UpdateTraderOrPoliceAi(Guest& _guest)
+MovedObject UpdateTraderOrPoliceAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  IsDebrisTypeEntry(_guest);
-  if (_guest.Flag(FLAG_ZERO))
+  if (IsDebrisType(_slot))
   {
     // A rock only spins. The split at 56B1 (LaunchShipFromObject with DL=5) never runs: 56A5 jumps past it when bit 0 of +1Eh is
     // clear, and 56AB when it is set.
-    AddWord(_guest, At(regs.di, SLOT_ROLL), ROCK_SPIN);
-    MoveObjectEntry(_guest);
-    return;
+    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), ROCK_SPIN));
+    return MoveObject(_state, _slot);
   }
-  const std::uint8_t state = State(_guest);
-  if (state == STATE_IDLE)
+  switch (_slot.Get(SlotByte::State))
   {
-    SetState(_guest, TRADER_DECIDING);
-    MoveObjectEntry(_guest);
-    return;
+  case STATE_IDLE:
+    _slot.Set(SlotByte::State, TRADER_DECIDING);
+    return MoveObject(_state, _slot);
+  case TRADER_DECIDING:
+    return TraderDecide(_state, _slot);
+  case TRADER_ATTACKING:
+    return TraderAttack(_state, _slot, _backward);
+  case TRADER_FLEEING:
+    return TraderFlee(_state, _slot, _backward);
+  default:
+    return TraderBreakOff(_state, _slot, _rangeLow);
   }
-  // The states de-assembled leave what MoveObject leaves (MoveObjectOut): AX, and DX, whose DL the next slot's handler can take
-  // for its range's box (WithinRange). The rest but DI is not reproduced: the contract compares none of it, and poisoned, every
-  // comparison and digest still agrees.
-  const ObjectSlot slot(_guest.State(), regs.di);
-  if (state == TRADER_DECIDING)
-  {
-    MoveObjectOut(_guest, slot, TraderDecide(_guest.State(), slot));
-    return;
-  }
-  if (state == TRADER_ATTACKING)
-  {
-    TraderAttack(_guest);
-    return;
-  }
-  if (state == TRADER_FLEEING)
-  {
-    TraderFlee(_guest);
-    return;
-  }
-  MoveObjectOut(_guest, slot, TraderBreakOff(_guest.State(), slot, Low(regs.dx)));
 }
 
-void UpdateWolfAi(Guest& _guest)
+MovedObject UpdateWolfAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  IsThargoidTypeEntry(_guest);
-  bool spins = _guest.Flag(FLAG_ZERO);
+  // A Thargoid sets off its ECM at odds of 100 in 65536; a Thargoid or a Thargon spins.
+  bool spins = IsThargoidType(_slot);
   if (spins)
   {
-    NextRandomEntry(_guest);
-    if (regs.ax < THARGOID_ECM_ODDS)
+    if (NextRandom(_state) < THARGOID_ECM_ODDS)
     {
-      _guest.Set(DS.npcEcmFrames, THARGOID_ECM_FRAMES);
+      _state.Set(DS.npcEcmFrames, THARGOID_ECM_FRAMES);
     }
   }
   else
   {
-    IsThargonTypeEntry(_guest);
-    spins = _guest.Flag(FLAG_ZERO);
+    spins = IsThargonType(_slot);
   }
   if (spins)
   {
-    AddWord(_guest, At(regs.di, SLOT_ROLL), WOLF_SPIN);
+    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), WOLF_SPIN));
   }
-
-  if (State(_guest) == STATE_IDLE)
+  switch (_slot.Get(SlotByte::State))
   {
-    SetState(_guest, STATE_ATTACK);
-    MoveObjectEntry(_guest);
-    return;
-  }
-  if (State(_guest) == STATE_ATTACK)
-  {
-    // Resting: a new set of 2-5 passes once it is not hostile, or calm no more.
-    if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) == 0 || _guest.Byte(At(regs.di, SLOT_AGGRESSION)) >= CALM)
+  case STATE_IDLE:
+    _slot.Set(SlotByte::State, STATE_ATTACK);
+    return MoveObject(_state, _slot);
+  case STATE_ATTACK:
+    // Resting: a new set of 2-5 passes once it is not hostile, or calm no more: AND AH,3 / ADD AH,2.
+    if ((_slot.Get(SlotByte::Flags) & FLAG_HOSTILE) == 0 || _slot.Get(SlotByte::Aggression) >= CALM)
     {
-      NextRandomEntry(_guest);
-      SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & PASS_COUNT_MASK) + FEWEST_PASSES));
-      _guest.SetByte(At(regs.di, SLOT_PASSES), High(regs.ax));
-      SetState(_guest, STATE_ATTACK_RUN);
+      _slot.Set(SlotByte::Passes, static_cast<std::uint8_t>((High(NextRandom(_state)) & PASS_COUNT_MASK) + FEWEST_PASSES));
+      _slot.Set(SlotByte::State, STATE_ATTACK_RUN);
     }
-    MoveObjectEntry(_guest);
-    return;
-  }
-  if (State(_guest) == STATE_ATTACK_RUN)
+    return MoveObject(_state, _slot);
+  case STATE_ATTACK_RUN:
   {
-    if (WithinBoxOnRegisters(_guest, BREAK_OFF_BOX))
+    if (ObjectWithinBox(_slot, BREAK_OFF_BOX))
     {
-      SetState(_guest, STATE_TURN_AWAY);
-      MoveObjectEntry(_guest);
-      return;
+      _slot.Set(SlotByte::State, STATE_TURN_AWAY);
+      return MoveObject(_state, _slot);
     }
-    GetVectorToPlayerEntry(_guest);
-    TurnToVectorOnRegisters(_guest);
-    TryFireLaserAtPlayerEntry(_guest);
-    regs.bx = WOLF_MISSILE_ODDS;
-    TryLaunchMissileAtPlayerEntry(_guest);
-    TryLaunchThargonEntry(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
-    AddWord(_guest, At(regs.di, SLOT_ROLL), ATTACK_RUN_SPIN);
-    return;
+    const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
+    TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
+    TryLaunchMissileAtPlayer(_state, _slot, WOLF_MISSILE_ODDS, _backward);
+    TryLaunchThargon(_state, _slot, _backward);
+    (void)ComputeVelocity(_state, _slot);
+    const MovedObject moved = MoveObject(_state, _slot);
+    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), ATTACK_RUN_SPIN));
+    return moved;
   }
-  if (State(_guest) == STATE_TURN_AWAY)
-  {
-    WolfTurnAway(_guest);
-    return;
+  case STATE_TURN_AWAY:
+    return WolfTurnAway(_state, _slot, _rangeLow, _backward);
+  default:
+    // A Thargon adrift slows down to 10.
+    if (_slot.Get(SlotByte::Speed) >= SLOWEST_ADRIFT)
+    {
+      _slot.Set(SlotByte::Speed, static_cast<std::uint8_t>(_slot.Get(SlotByte::Speed) - ADRIFT_SLOWING));
+      (void)ComputeVelocity(_state, _slot);
+    }
+    return MoveObject(_state, _slot);
   }
-  // A Thargon adrift slows down to 10.
-  const std::uint16_t speed = At(regs.di, SLOT_SPEED);
-  if (_guest.Byte(speed) >= SLOWEST_ADRIFT)
-  {
-    _guest.SetByte(speed, static_cast<std::uint8_t>(_guest.Byte(speed) - ADRIFT_SLOWING));
-    ComputeVelocityEntry(_guest);
-  }
-  MoveObjectEntry(_guest);
 }
 
-void UpdateHunterAi(Guest& _guest)
+MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (State(_guest) == STATE_IDLE)
+  switch (_slot.Get(SlotByte::State))
   {
-    // What MoveObject leaves (MoveObjectOut), as UpdateTraderOrPoliceAi's states de-assembled leave it.
-    const ObjectSlot slot(_guest.State(), regs.di);
-    MoveObjectOut(_guest, slot, HunterIdle(_guest.State(), slot));
-    return;
-  }
-  if (State(_guest) == STATE_ATTACK)
+  case STATE_IDLE:
+    return HunterIdle(_state, _slot);
+  case STATE_ATTACK:
   {
-    if (WithinBoxOnRegisters(_guest, BREAK_OFF_BOX))
+    if (ObjectWithinBox(_slot, BREAK_OFF_BOX))
     {
-      SetState(_guest, STATE_TURN_AWAY);
-      MoveObjectEntry(_guest);
-      return;
+      _slot.Set(SlotByte::State, STATE_TURN_AWAY);
+      return MoveObject(_state, _slot);
     }
-    GetVectorToPlayerEntry(_guest);
-    TurnToVectorOnRegisters(_guest);
-    TryFireLaserAtPlayerEntry(_guest);
-    regs.bx = HUNTER_MISSILE_ODDS;
-    TryLaunchMissileAtPlayerEntry(_guest);
-    ComputeVelocityEntry(_guest);
-    AddWord(_guest, At(regs.di, SLOT_ROLL), HUNTER_SPIN);
-    MoveObjectEntry(_guest);
-    return;
+    const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
+    TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
+    TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS, _backward);
+    (void)ComputeVelocity(_state, _slot);
+    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), HUNTER_SPIN));
+    return MoveObject(_state, _slot);
   }
-  if (State(_guest) == STATE_FORMATION)
+  case STATE_FORMATION:
   {
-    regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
-    regs.dx = FORMATION_BOX;
-    GetVectorToObjectEntry(_guest);
-    if (_guest.Flag(FLAG_CARRY))
+    // In formation with its pack mate, until within 7D0h of it on every axis (GetVectorToObject).
+    const VectorToObject toMate = GetVectorToObject(_slot, ObjectSlot(_state, _slot.Get(SlotWord::Target)), FORMATION_BOX);
+    if (toMate.within)
     {
-      SetState(_guest, STATE_CLOSING);
-      MoveObjectEntry(_guest);
-      return;
+      _slot.Set(SlotByte::State, STATE_CLOSING);
+      return MoveObject(_state, _slot);
     }
-    TurnToVectorOnRegisters(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
-    return;
+    (void)TurnToVector(_state, _slot, toMate.vector);
+    (void)ComputeVelocity(_state, _slot);
+    return MoveObject(_state, _slot);
   }
-  if (State(_guest) == STATE_TURN_AWAY)
+  case STATE_TURN_AWAY:
+    return HunterEvade(_state, _slot, _rangeLow, _backward);
+  default:
   {
-    HunterEvade(_guest);
-    return;
+    // Closing on the player while farther than 5000 on some axis.
+    if (ObjectWithinBox(_slot, CLOSING_BOX))
+    {
+      _slot.Set(SlotByte::State, STATE_IDLE);
+      return MoveObject(_state, _slot);
+    }
+    const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
+    TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
+    TryLaunchMissileAtPlayer(_state, _slot, CLOSING_MISSILE_ODDS, _backward);
+    (void)ComputeVelocity(_state, _slot);
+    return MoveObject(_state, _slot);
   }
-  // Closing on the player while farther than 5000 on some axis.
-  if (WithinBoxOnRegisters(_guest, CLOSING_BOX))
-  {
-    SetState(_guest, STATE_IDLE);
-    MoveObjectEntry(_guest);
-    return;
   }
-  GetVectorToPlayerEntry(_guest);
-  TurnToVectorOnRegisters(_guest);
-  TryFireLaserAtPlayerEntry(_guest);
-  regs.bx = CLOSING_MISSILE_ODDS;
-  TryLaunchMissileAtPlayerEntry(_guest);
-  ComputeVelocityEntry(_guest);
-  MoveObjectEntry(_guest);
 }
 
 HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
@@ -1148,9 +1024,9 @@ using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
 
-// "Clobbers most registers": all but DI, the slot, and DS.
-constexpr Machine::NativeContract CLOBBERS_MOST{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_BP | REGISTER_ES, 0};
+// "Clobbers most registers": all but DI, the slot, and DS; and DX, as MoveObject leaves it, whose DL the next slot's handler can
+// take for its range's box (WithinRange; MovingHandlerEntry).
+constexpr Machine::NativeContract CLOBBERS_MOST{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP | REGISTER_ES, 0};
 
 constexpr Machine::NativeContract CLOBBERS_CX_SI{REGISTER_CX | REGISTER_SI, 0};
 constexpr Machine::NativeContract MASK_SHIP_SEARCH{REGISTER_CX, FLAG_CARRY};
@@ -1234,6 +1110,36 @@ void GetVectorToObjectEntry(Guest& _guest)
   _guest.Clobber(OBJECT_VECTOR);
 }
 
+namespace
+{
+
+// The entry of a behaviour handler whose every path ends with MoveObject: what that leaves (MoveObjectOut), and the contract's
+// marks on the rest.
+template <MovedObject (*Handler)(GameState&, ObjectSlot, std::uint8_t, bool)> void MovingHandlerEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  MoveObjectOut(_guest, slot, Handler(_guest.State(), slot, Low(regs.dx), _guest.Flag(FLAG_DIRECTION)));
+  _guest.Clobber(CLOBBERS_MOST);
+}
+
+} // namespace
+
+void UpdateTraderOrPoliceAiEntry(Guest& _guest)
+{
+  MovingHandlerEntry<&UpdateTraderOrPoliceAi>(_guest);
+}
+
+void UpdateWolfAiEntry(Guest& _guest)
+{
+  MovingHandlerEntry<&UpdateWolfAi>(_guest);
+}
+
+void UpdateHunterAiEntry(Guest& _guest)
+{
+  MovingHandlerEntry<&UpdateHunterAi>(_guest);
+}
+
 void UpdateDriftingObjectAiEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1280,9 +1186,9 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAi,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
   NativeEntry{0x5681, "UpdateDriftingObjectAi", &UpdateDriftingObjectAiEntry, PRESERVES_ALL},
-  NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAi, CLOBBERS_MOST},
-  NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAi, CLOBBERS_MOST},
-  NativeEntry{0x58DE, "UpdateHunterAi", &UpdateHunterAi, CLOBBERS_MOST},
+  NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAiEntry, CLOBBERS_MOST},
+  NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAiEntry, CLOBBERS_MOST},
+  NativeEntry{0x58DE, "UpdateHunterAi", &UpdateHunterAiEntry, CLOBBERS_MOST},
   NativeEntry{0x5A10, "CheckSafeZoneHoldFire", &CheckSafeZoneHoldFireEntry, HOLD_FIRE},
 };
 
