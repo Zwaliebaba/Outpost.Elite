@@ -1,0 +1,12 @@
+# Leaves for DOS, as a player does: Esc for the disc menu, E for Exit to DOS, and Y when it asks if you are sure.
+# Start then wipes the program's code (WipeProgram), puts the screen back in 80-column text, prints its parting
+# message, "Thank you for playing ELITE - Have a nice DOS!", empties the BIOS's key buffer and ends (int 20h), 0.2 s
+# after Y. That happens in the end step (GameLogic/Replay.h): the last step of a replay that runs the machine, and
+# the only one in which the program may end, as it must. The digest after it reads what the program left: its data
+# and the text screen.
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key e; wait 0.3                    # Exit to DOS: Are you sure (Y/N)?
+digest asked f5830f87d98cbd888479d85412e406f9d189671423a5bb4905ca54125118535d
+key y; end 1                       # Y: the program ends
+digest at-dos 43331b53f70e753022c44b1a10d9e8bc86e39dc19a9bc00cebd80256d0a387f5
