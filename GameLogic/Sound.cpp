@@ -27,15 +27,15 @@ constexpr std::uint8_t BEEP_TICKS = 70;
 constexpr std::uint8_t LOW_BEEP_TICKS = 70;
 constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 
-// BeginSweep (CS:7ADD), the tail every sweep starter shares; STI at its end.
-void BeginSweep(Guest& _guest)
+// BeginSweep (CS:7ADD), the tail every sweep starter shares, but its STI. Returns the step length it starts the step
+// counter at, which the original leaves in AL.
+[[nodiscard]] std::uint8_t BeginSweep(GameState& _state)
 {
-  _guest.Set(DS.sweepTickCounter, 1);
-  const std::uint8_t stepLength = _guest.Get(DS.sweepStepLength);
-  SetLow(_guest.Regs().ax, stepLength);
-  _guest.Set(DS.sweepStepCounter, stepLength);
-  _guest.Set(DS.twoToneStage, 0);
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _state.Set(DS.sweepTickCounter, 1);
+  const std::uint8_t stepLength = _state.Get(DS.sweepStepLength);
+  _state.Set(DS.sweepStepCounter, stepLength);
+  _state.Set(DS.twoToneStage, 0);
+  return stepLength;
 }
 
 // StartImpactSound and StartExplosionSound: the step length and its shrink, then BeginNoiseSweep
@@ -47,7 +47,8 @@ void StartNoiseSweep(Guest& _guest, std::uint8_t _stepLength, std::uint8_t _step
   _guest.Set(DS.noiseSweepActive, 1);
   _guest.Set(DS.toneSweepActive, 0);
   _guest.Set(DS.sweepPeriodTicks, 1);
-  BeginSweep(_guest);
+  SetLow(_guest.Regs().ax, BeginSweep(_guest.State()));
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
 }
 
 } // namespace
@@ -68,7 +69,7 @@ void StartMusic(Guest& _guest)
 
 void StopAllSound(Guest& _guest)
 {
-  StopSoundEffects(_guest);
+  StopSoundEffectsEntry(_guest);
   _guest.Set(DS.musicPlaying, 0);
   const auto port = static_cast<std::uint8_t>(_guest.Get(DS.speakerPortImage) & ~SPEAKER_GATE_AND_DATA);
   _guest.Set(DS.speakerPortImage, port);
@@ -84,28 +85,27 @@ void SilenceSpeakerTimer(Guest& _guest)
   SetLow(_guest.Regs().ax, 0);
 }
 
-void StartBeep(Guest& _guest)
+void StartBeep(GameState& _state)
 {
-  _guest.Set(DS.beepTicks, BEEP_TICKS);
+  _state.Set(DS.beepTicks, BEEP_TICKS);
 }
 
-void StartLowBeep(Guest& _guest)
+void StartLowBeep(GameState& _state)
 {
-  _guest.Set(DS.lowBeepTicks, LOW_BEEP_TICKS);
+  _state.Set(DS.lowBeepTicks, LOW_BEEP_TICKS);
 }
 
-void StopSoundEffects(Guest& _guest)
+void StopSoundEffects(GameState& _state)
 {
-  _guest.Set(DS.toneSweepActive, 0);
-  _guest.Set(DS.noiseSweepActive, 0);
-  _guest.Set(DS.twoToneStage, 0);
-  _guest.Set(DS.slowNoiseCount, 0);
-  _guest.Set(DS.humEnabled, 0);
-  _guest.Set(DS.continuousNoise, 0);
-  _guest.Set(DS.sirenEnabled, 0);
-  _guest.Set(DS.beepTicks, 0);
-  _guest.Set(DS.lowBeepTicks, 0);
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _state.Set(DS.toneSweepActive, 0);
+  _state.Set(DS.noiseSweepActive, 0);
+  _state.Set(DS.twoToneStage, 0);
+  _state.Set(DS.slowNoiseCount, 0);
+  _state.Set(DS.humEnabled, 0);
+  _state.Set(DS.continuousNoise, 0);
+  _state.Set(DS.sirenEnabled, 0);
+  _state.Set(DS.beepTicks, 0);
+  _state.Set(DS.lowBeepTicks, 0);
 }
 
 void EmitNoiseSample(Guest& _guest)
@@ -144,9 +144,9 @@ void StartPlayerDeathSound(Guest& _guest)
   StartNoiseSweep(_guest, 60, 7);
 }
 
-void StopContinuousNoise(Guest& _guest)
+void StopContinuousNoise(GameState& _state)
 {
-  _guest.Set(DS.continuousNoise, 0);
+  _state.Set(DS.continuousNoise, 0);
 }
 
 void StartLaserSound(Guest& _guest)
@@ -160,16 +160,18 @@ void StartLaserSound(Guest& _guest)
   _guest.Set(DS.sweepStepLength, 20);
   _guest.Set(DS.sweepStepShrink, 2);
   _guest.Set(DS.sweepPeriodTicks, 2);
-  BeginSweep(_guest);
-}
-
-void StartPlayerHitSound(Guest& _guest)
-{
-  _guest.Set(DS.toneSweepActive, 0);
-  _guest.Set(DS.twoToneStage, 0);
-  _guest.Set(DS.noiseBurstTicks, NOISE_BURST_TICKS);
+  SetLow(_guest.Regs().ax, BeginSweep(_guest.State()));
   _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
 }
+
+void StartPlayerHitSound(GameState& _state)
+{
+  _state.Set(DS.toneSweepActive, 0);
+  _state.Set(DS.twoToneStage, 0);
+  _state.Set(DS.noiseBurstTicks, NOISE_BURST_TICKS);
+}
+
+// ── The entries of the de-assembled routines ──
 
 namespace
 {
@@ -181,21 +183,60 @@ constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract ENABLES_INTERRUPTS{0, FLAG_INTERRUPT};
 constexpr Machine::NativeContract CLOBBERS_AX_ENABLES_INTERRUPTS{REGISTER_AX, FLAG_INTERRUPT};
 
+} // namespace
+
+void StartBeepEntry(Guest& _guest)
+{
+  StartBeep(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StartLowBeepEntry(Guest& _guest)
+{
+  StartLowBeep(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StopSoundEffectsEntry(Guest& _guest)
+{
+  // CLI round the writes, which nothing interrupts in native code, then STI.
+  StopSoundEffects(_guest.State());
+  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Clobber(ENABLES_INTERRUPTS);
+}
+
+void StopContinuousNoiseEntry(Guest& _guest)
+{
+  StopContinuousNoise(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void StartPlayerHitSoundEntry(Guest& _guest)
+{
+  // CLI round the writes, which nothing interrupts in native code, then STI.
+  StartPlayerHitSound(_guest.State());
+  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Clobber(ENABLES_INTERRUPTS);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
   NativeEntry{0x7401, "StartMusic", &StartMusic, CLOBBERS_AX},
   NativeEntry{0x7423, "StopAllSound", &StopAllSound, CLOBBERS_AX},
   NativeEntry{0x7436, "SilenceSpeakerTimer", &SilenceSpeakerTimer, CLOBBERS_AX},
-  NativeEntry{0x7A57, "StartBeep", &StartBeep, PRESERVES_ALL},
-  NativeEntry{0x7A5D, "StartLowBeep", &StartLowBeep, PRESERVES_ALL},
-  NativeEntry{0x7A63, "StopSoundEffects", &StopSoundEffects, ENABLES_INTERRUPTS},
+  NativeEntry{0x7A57, "StartBeep", &StartBeepEntry, PRESERVES_ALL},
+  NativeEntry{0x7A5D, "StartLowBeep", &StartLowBeepEntry, PRESERVES_ALL},
+  NativeEntry{0x7A63, "StopSoundEffects", &StopSoundEffectsEntry, ENABLES_INTERRUPTS},
   NativeEntry{0x7A93, "EmitNoiseSample", &EmitNoiseSample, PRESERVES_ALL},
   NativeEntry{0x7AB8, "ToggleSpeaker", &ToggleSpeaker, PRESERVES_ALL},
   NativeEntry{0x7AC3, "StartImpactSound", &StartImpactSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7AFC, "StartExplosionSound", &StartExplosionSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7B09, "StartPlayerDeathSound", &StartPlayerDeathSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
-  NativeEntry{0x7B6B, "StopContinuousNoise", &StopContinuousNoise, PRESERVES_ALL},
+  NativeEntry{0x7B6B, "StopContinuousNoise", &StopContinuousNoiseEntry, PRESERVES_ALL},
   NativeEntry{0x7B71, "StartLaserSound", &StartLaserSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
-  NativeEntry{0x7B96, "StartPlayerHitSound", &StartPlayerHitSound, ENABLES_INTERRUPTS},
+  NativeEntry{0x7B96, "StartPlayerHitSound", &StartPlayerHitSoundEntry, ENABLES_INTERRUPTS},
 };
 
 } // namespace

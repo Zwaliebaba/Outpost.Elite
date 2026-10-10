@@ -1,6 +1,7 @@
 // GameLogic/SaveLoad.h
 #pragma once
 
+#include "GameState.h"
 #include "NativeEntry.h"
 
 #include <span>
@@ -26,9 +27,6 @@ void PerformDiskRequest(Guest& _guest);
 /// screen. Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
 void ShowDiskError(Guest& _guest);
 
-/// SaveStartupCommander (CS:4660): commanderBlock copied to startupCommander. AX, CX, SI, DI and ES clobbered.
-void SaveStartupCommander(Guest& _guest);
-
 /// ShowDiscControlScreen (CS:660B): the Disc/Control menu, or, back from Start's disk work, what it came to. It
 /// waits for keys. A function key returns, with AH its scan code; a disk operation (or leaving for DOS) drops this
 /// call's return address and RunTitleAndDocked's, through LeaveGameLoopForDisk, so that its RET returns from GameLoop
@@ -43,5 +41,15 @@ void PromptCommanderFileName(Guest& _guest);
 /// PrintCommanderCatalogue (CS:68CE): ten text rows blanked, and commanderFileList printed in columns of ten. Every
 /// general register clobbered.
 void PrintCommanderCatalogue(Guest& _guest);
+
+// ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// SaveStartupCommander (CS:4660): commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time,
+/// going up, or down from each start when _backward (REP MOVSB with the direction flag set).
+void SaveStartupCommander(GameState& _state, bool _backward);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void SaveStartupCommanderEntry(Guest& _guest); ///< AX, CX, SI, DI and ES clobbered.
 
 } // namespace Elite

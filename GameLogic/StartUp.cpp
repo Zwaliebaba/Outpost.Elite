@@ -25,6 +25,7 @@ constexpr std::uint16_t KEYBOARD_VECTOR_OFFSET = 0x0024;
 constexpr std::uint16_t KEYBOARD_VECTOR_SEGMENT = 0x0026;
 
 constexpr std::uint16_t COMMAND_TAIL = 0x80; // in the PSP: its length, then the text
+constexpr std::uint16_t COMMAND_TAIL_TEXT = 0x81;
 constexpr std::uint8_t CHEAT_KEY = 0xAA;
 constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
@@ -93,17 +94,19 @@ constexpr std::uint16_t CREDITS_LINE_STEP = 0x200;
 constexpr std::uint16_t WHITE_MASK = 0xFFFF;
 constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 
-// REP MOVSB from DS:SI to ES:DI, forwards or, with DF set, backwards.
-void MoveBytes(Guest& _guest)
+// REP MOVSB: _count bytes from _sourceSegment:_source to _destinationSegment:_destination, forwards or, with DF set
+// (_backward), backwards. Returns how far each offset moved, which the original leaves added to SI and DI.
+std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _source, std::uint16_t _destinationSegment,
+                        std::uint16_t _destination, std::uint16_t _count, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto step = static_cast<std::uint16_t>((regs.flags & Machine::FLAG_DIRECTION) != 0 ? 0xFFFF : 1);
-  for (; regs.cx != 0; --regs.cx)
+  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
+  std::uint16_t moved = 0;
+  for (std::uint16_t left = _count; left != 0; --left)
   {
-    _guest.SetFarByte(regs.es, regs.di, _guest.FarByte(regs.ds, regs.si));
-    regs.si = static_cast<std::uint16_t>(regs.si + step);
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetFarByte(_destinationSegment, Offset(_destination, moved), _state.FarByte(_sourceSegment, Offset(_source, moved)));
+    moved = Offset(moved, step);
   }
+  return moved;
 }
 
 // INT 21h AH=09h: the $-terminated text at DS:_text.
@@ -156,48 +159,36 @@ void InstallDivideAndKeyboardInterrupts(Guest& _guest)
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = Guest::VIDEO_SEGMENT;
   _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
-  ResetKeyboard(_guest);
+  ResetKeyboardEntry(_guest);
 }
 
-void RestoreDivideAndKeyboardInterrupts(Guest& _guest)
+void RestoreDivideAndKeyboardInterrupts(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = 0;
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
-  _guest.SetFarWord(regs.es, KEYBOARD_VECTOR_SEGMENT, _guest.Get(DS.data2271));
-  _guest.SetFarWord(regs.es, KEYBOARD_VECTOR_OFFSET, _guest.Word(DS.savedKeyboardVector.offset));
-  _guest.SetFarWord(regs.es, DIVIDE_VECTOR_SEGMENT, _guest.Get(DS.data226D));
-  regs.ax = _guest.Word(DS.savedDivideVector.offset);
-  _guest.SetFarWord(regs.es, DIVIDE_VECTOR_OFFSET, regs.ax);
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  // The interrupt table at 0000:0000, written under CLI.
+  _state.SetFarWord(0, KEYBOARD_VECTOR_SEGMENT, _state.Get(DS.data2271));
+  _state.SetFarWord(0, KEYBOARD_VECTOR_OFFSET, _state.Word(DS.savedKeyboardVector.offset));
+  _state.SetFarWord(0, DIVIDE_VECTOR_SEGMENT, _state.Get(DS.data226D));
+  _state.SetFarWord(0, DIVIDE_VECTOR_OFFSET, _state.Word(DS.savedDivideVector.offset));
 }
 
-void CheckCheatArgument(Guest& _guest)
+void CheckCheatArgument(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.cheatEnabled, 0);
-  regs.ax = _guest.Get(DS.pspSegment);
-  const std::uint16_t psp = regs.ax;
-  regs.bx = COMMAND_TAIL;
-  if (_guest.FarByte(psp, regs.bx) != CHEAT_ARGUMENT_BYTES)
+  _state.Set(DS.cheatEnabled, 0);
+  // The command tail in the PSP: its length, then the text, which cheatArgumentKey holds XORed with AAh.
+  const std::uint16_t psp = _state.Get(DS.pspSegment);
+  if (_state.FarByte(psp, COMMAND_TAIL) != CHEAT_ARGUMENT_BYTES)
   {
     return;
   }
-  ++regs.bx;
-  regs.si = DS.cheatArgumentKey.offset;
-  regs.cx = CHEAT_ARGUMENT_BYTES;
-  do
+  for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
   {
-    regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(_guest.Byte(regs.si) ^ CHEAT_KEY));
-    if (_guest.FarByte(psp, regs.bx) != Low(regs.ax))
+    const auto expected = static_cast<std::uint8_t>(_state.Byte(Offset(DS.cheatArgumentKey.offset, at)) ^ CHEAT_KEY);
+    if (_state.FarByte(psp, Offset(COMMAND_TAIL_TEXT, at)) != expected)
     {
       return;
     }
-    ++regs.bx;
-    ++regs.si;
-    --regs.cx;
-  } while (regs.cx != 0);
-  _guest.Set(DS.cheatEnabled, 1);
+  }
+  _state.Set(DS.cheatEnabled, 1);
 }
 
 void CopyProtection(Guest& _guest)
@@ -265,7 +256,10 @@ void StartNewGame(Guest& _guest)
   regs.di = DS.commanderBlock.offset;
   regs.si = DS.startupCommander.offset;
   regs.cx = _guest.Get(DS.commanderFileBytes);
-  MoveBytes(_guest);
+  const std::uint16_t moved = MoveBytes(_guest.State(), regs.ds, regs.si, regs.es, regs.di, regs.cx, _guest.Flag(Machine::FLAG_DIRECTION));
+  regs.si = Offset(regs.si, moved);
+  regs.di = Offset(regs.di, moved);
+  regs.cx = 0;
   _guest.Set(DS.witchspaceCountdown, 0);
   _guest.Set(DS.playerEnergy, NEW_GAME_ENERGY);
   _guest.Set(DS.foreShield, FULL_SHIELD);
@@ -391,20 +385,16 @@ void Start(Guest& _guest)
   }
 }
 
-void WipeProgram(Guest& _guest)
+void WipeProgram(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
-  regs.di = WIPE_FIRST;
-  regs.cx = static_cast<std::uint16_t>(WIPE_END - regs.di);
-  regs.ax = _guest.CodeSegment();
-  regs.es = regs.ax;
-  // REP STOSB of AL, the code segment's low byte, forwards or, with DF set, backwards.
-  const auto step = static_cast<std::uint16_t>((regs.flags & Machine::FLAG_DIRECTION) != 0 ? 0xFFFF : 1);
-  for (; regs.cx != 0; --regs.cx)
+  // REP STOSB of AL, the code segment's low byte, CX = 8F31h - 0564h times from DI = 0564h.
+  const std::uint8_t fill = Low(_state.CodeSegment());
+  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
+  std::uint16_t at = WIPE_FIRST;
+  for (auto left = static_cast<std::uint16_t>(WIPE_END - WIPE_FIRST); left != 0; --left)
   {
-    _guest.SetFarByte(regs.es, regs.di, Low(regs.ax));
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetCodeByte(at, fill);
+    at = Offset(at, step);
   }
 }
 
@@ -461,6 +451,8 @@ void ShowCredits(Guest& _guest)
   }
 }
 
+// ── The entries of the de-assembled routines ──
+
 namespace
 {
 
@@ -486,13 +478,40 @@ constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{REGISTER_ALL, 0};
 
 constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
 
+} // namespace
+
+void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest)
+{
+  // CLI round the writes, which nothing interrupts in native code, then STI.
+  RestoreDivideAndKeyboardInterrupts(_guest.State());
+  _guest.Regs().es = 0;
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _guest.Clobber(CLOBBERS_AX);
+}
+
+void CheckCheatArgumentEntry(Guest& _guest)
+{
+  CheckCheatArgument(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX_CX_SI);
+}
+
+void WipeProgramEntry(Guest& _guest)
+{
+  WipeProgram(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
+  _guest.Clobber(CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF);
+}
+
+namespace
+{
+
 constexpr std::array ENTRIES = {
   NativeEntry{0x0000, "Start", &Start, CLOBBERS_EVERY_REGISTER, Machine::NativeReturn::Far, 0, ALWAYS},
   NativeEntry{0x0105, "InstallDivideAndKeyboardInterrupts", &InstallDivideAndKeyboardInterrupts, CLOBBERS_AX},
-  NativeEntry{0x0148, "RestoreDivideAndKeyboardInterrupts", &RestoreDivideAndKeyboardInterrupts, CLOBBERS_AX},
-  NativeEntry{0x02A5, "CheckCheatArgument", &CheckCheatArgument, CLOBBERS_AX_BX_CX_SI},
+  NativeEntry{0x0148, "RestoreDivideAndKeyboardInterrupts", &RestoreDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
+  NativeEntry{0x02A5, "CheckCheatArgument", &CheckCheatArgumentEntry, CLOBBERS_AX_BX_CX_SI},
   NativeEntry{0x04A3, "CopyProtection", &CopyProtection, CLOBBERS_ALL},
-  NativeEntry{0x0554, "WipeProgram", &WipeProgram, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
+  NativeEntry{0x0554, "WipeProgram", &WipeProgramEntry, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
   NativeEntry{0x4671, "StartNewGame", &StartNewGame, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x7D30, "GameLoop", &GameLoop, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},
   NativeEntry{0x8F02, "ShowCredits", &ShowCredits, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},

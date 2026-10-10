@@ -1,6 +1,7 @@
 // GameLogic/StartUp.h
 #pragma once
 
+#include "GameState.h"
 #include "NativeEntry.h"
 
 #include <span>
@@ -21,10 +22,6 @@ namespace Elite
 /// to PSP:0000 it pushed first. Waits in GameLoop.
 void Start(Guest& _guest);
 
-/// WipeProgram (CS:0554): CS:0564-8F30 filled with AL, the code segment's low byte, under CLI. Out: IF=0;
-/// AX=ES=CS, CX=0 and DI=8F31 (forwards).
-void WipeProgram(Guest& _guest);
-
 /// GameLoop (CS:7D30): RunTitleAndDocked, then RunFlight, and the title again after a death; for ever.
 /// Left only by LeaveGameLoopForDisk, which returns past it into Start.
 void GameLoop(Guest& _guest);
@@ -37,13 +34,6 @@ void ShowCredits(Guest& _guest);
 /// rewritten, then ResetKeyboard. In: ES=0. Out: ES=B800; AX clobbered.
 void InstallDivideAndKeyboardInterrupts(Guest& _guest);
 
-/// RestoreDivideAndKeyboardInterrupts (CS:0148): int 9 and int 0 put back. Out: ES=0; AX clobbered.
-void RestoreDivideAndKeyboardInterrupts(Guest& _guest);
-
-/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail is exactly ' cheat'. AX, BX, CX and SI
-/// clobbered.
-void CheckCheatArgument(Guest& _guest);
-
 /// CopyProtection (CS:04A3): returns at once while protectionShown is set; otherwise asks a question from the manual.
 /// Clobbers all.
 void CopyProtection(Guest& _guest);
@@ -51,5 +41,24 @@ void CopyProtection(Guest& _guest);
 /// StartNewGame (CS:4671): the start-up commander copied back, and the per-game state reset. Out: ES=DS; AX, CX, SI
 /// and DI clobbered.
 void StartNewGame(Guest& _guest);
+
+// ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// RestoreDivideAndKeyboardInterrupts (CS:0148): int 9 and int 0 put back in the interrupt table, segment then
+/// offset, from what InstallDivideAndKeyboardInterrupts saved.
+void RestoreDivideAndKeyboardInterrupts(GameState& _state);
+
+/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail is exactly ' cheat', 0 otherwise.
+void CheckCheatArgument(GameState& _state);
+
+/// WipeProgram (CS:0554): CS:0564-8F30 filled with the code segment's low byte, a byte at a time, going up from
+/// 0564h, or down from it when _backward (REP STOSB with the direction flag set).
+void WipeProgram(GameState& _state, bool _backward);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< Out: ES=0, IF=1; AX clobbered.
+void CheckCheatArgumentEntry(Guest& _guest);                 ///< AX, BX, CX and SI clobbered.
+void WipeProgramEntry(Guest& _guest);                        ///< Out: IF=0; AX, CX, DI and ES clobbered.
 
 } // namespace Elite

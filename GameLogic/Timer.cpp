@@ -62,10 +62,10 @@ constexpr std::uint8_t ANSWER_KEY = 0x61;
 constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
 
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
-std::uint8_t Decrement(Guest& _guest, DataField<std::uint8_t> _field)
+std::uint8_t Decrement(GameState& _state, DataField<std::uint8_t> _field)
 {
-  const auto value = static_cast<std::uint8_t>(_guest.Get(_field) - 1);
-  _guest.Set(_field, value);
+  const auto value = static_cast<std::uint8_t>(_state.Get(_field) - 1);
+  _state.Set(_field, value);
   return value;
 }
 
@@ -89,50 +89,46 @@ void ToggleSpeakerData(Guest& _guest)
 }
 
 // CheckProtectionAnswer (0x739A): decodes the expected answer to the pending question into DS:A5B7 and compares the
-// typed one with it.
-void CheckProtectionAnswer(Guest& _guest)
+// typed one with it, by REPE CMPSB, backwards when _backward (the direction flag set).
+void CheckProtectionAnswer(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint8_t typed = _guest.Get(DS.data25CA);
+  const std::uint8_t typed = _state.Get(DS.data25CA);
   if (typed == 0)
   {
     return;
   }
-  const std::uint16_t descriptor = _guest.Get(DS.protectionDescriptor);
-  std::uint16_t answer = _guest.Word(static_cast<std::uint16_t>(descriptor + 0x0A));
-  const std::uint8_t question = _guest.Get(DS.protectionQuestion);
+  const std::uint16_t descriptor = _state.Get(DS.protectionDescriptor);
+  std::uint16_t answer = _state.Word(static_cast<std::uint16_t>(descriptor + 0x0A));
+  const std::uint8_t question = _state.Get(DS.protectionQuestion);
   // The answers are length-prefixed, one after another: skip to the question's.
   for (auto left = static_cast<std::uint8_t>(question - 1); left != 0; --left)
   {
-    answer = static_cast<std::uint16_t>(answer + static_cast<std::uint8_t>(_guest.Byte(answer) + 1));
+    answer = static_cast<std::uint16_t>(answer + static_cast<std::uint8_t>(_state.Byte(answer) + 1));
   }
-  regs.ax = static_cast<std::uint16_t>(question << 8);
-  const std::uint8_t length = _guest.Byte(answer);
+  const std::uint8_t length = _state.Byte(answer);
   if (length != typed)
   {
     return;
   }
   ++answer;
   std::uint16_t decoded = DECODED_ANSWER;
-  _guest.SetByte(decoded++, length);
+  _state.SetByte(decoded++, length);
   std::uint8_t key = 1;
   for (std::uint8_t left = length; left != 0; --left)
   {
-    const auto plain = static_cast<std::uint8_t>(_guest.Byte(answer++) ^ question ^ key ^ ANSWER_KEY);
-    regs.ax = WithLow(regs.ax, plain);
+    const auto plain = static_cast<std::uint8_t>(_state.Byte(answer++) ^ question ^ key ^ ANSWER_KEY);
     ++key;
-    _guest.SetByte(decoded++, plain);
+    _state.SetByte(decoded++, plain);
   }
-  // REPE CMPSB of the decoded answer (DS:SI) with the typed one (ES:DI, ES=DS), in DF's direction.
-  const bool backward = (regs.flags & Machine::FLAG_DIRECTION) != 0;
+  // REPE CMPSB of the decoded answer (DS:SI) with the typed one (ES:DI, ES=DS).
   std::uint16_t expected = DECODED_ANSWER + 1;
-  std::uint16_t given = static_cast<std::uint16_t>(DS.protectionInput.offset + 2);
+  auto given = static_cast<std::uint16_t>(DS.protectionInput.offset + 2);
   bool equal = false;
-  for (std::uint8_t left = _guest.Byte(DECODED_ANSWER); left != 0; --left)
+  for (std::uint8_t left = _state.Byte(DECODED_ANSWER); left != 0; --left)
   {
-    equal = _guest.Byte(expected) == _guest.Byte(given);
-    expected = static_cast<std::uint16_t>(backward ? expected - 1 : expected + 1);
-    given = static_cast<std::uint16_t>(backward ? given - 1 : given + 1);
+    equal = _state.Byte(expected) == _state.Byte(given);
+    expected = static_cast<std::uint16_t>(_backward ? expected - 1 : expected + 1);
+    given = static_cast<std::uint16_t>(_backward ? given - 1 : given + 1);
     if (!equal)
     {
       break;
@@ -140,7 +136,7 @@ void CheckProtectionAnswer(Guest& _guest)
   }
   if (equal)
   {
-    _guest.Set(DS.protectionAnswerCorrect, 1);
+    _state.Set(DS.protectionAnswerCorrect, 1);
   }
 }
 
@@ -224,14 +220,14 @@ void TickMusic(Guest& _guest)
 void TickSweep(Guest& _guest, std::uint16_t _sample, DataField<std::uint8_t> _active)
 {
   Machine::Registers& regs = _guest.Regs();
-  if (Decrement(_guest, DS.sweepTickCounter) != 0)
+  if (Decrement(_guest.State(), DS.sweepTickCounter) != 0)
   {
     return;
   }
   regs.ax = WithLow(regs.ax, _guest.Get(DS.sweepPeriodTicks));
   _guest.Set(DS.sweepTickCounter, Low(regs.ax));
   _guest.Call(_sample);
-  if (Decrement(_guest, DS.sweepStepCounter) != 0)
+  if (Decrement(_guest.State(), DS.sweepStepCounter) != 0)
   {
     return;
   }
@@ -255,10 +251,10 @@ void TickSiren(Guest& _guest)
   {
     return;
   }
-  const std::uint8_t countdown = Decrement(_guest, DS.sirenCountdown);
+  const std::uint8_t countdown = Decrement(_guest.State(), DS.sirenCountdown);
   if (countdown == 0)
   {
-    const std::uint8_t stage = Decrement(_guest, DS.sirenStage);
+    const std::uint8_t stage = Decrement(_guest.State(), DS.sirenStage);
     _guest.Set(DS.sirenCountdown, SIREN_TICKS);
     if (stage == 0)
     {
@@ -281,7 +277,7 @@ void TickTwoTone(Guest& _guest)
   _guest.Set(DS.twoToneTicks, ticks);
   if (ticks == 0)
   {
-    Decrement(_guest, DS.twoToneStage);
+    Decrement(_guest.State(), DS.twoToneStage);
     _guest.Set(DS.twoToneTicks, TWO_TONE_TICKS);
     return;
   }
@@ -296,11 +292,11 @@ void TickSoundEffects(Guest& _guest)
 {
   if (_guest.Get(DS.beepTicks) != 0)
   {
-    SetSpeakerData(_guest, static_cast<std::uint8_t>((Decrement(_guest, DS.beepTicks) << 1) & SPEAKER_DATA));
+    SetSpeakerData(_guest, static_cast<std::uint8_t>((Decrement(_guest.State(), DS.beepTicks) << 1) & SPEAKER_DATA));
   }
   if (_guest.Get(DS.lowBeepTicks) != 0)
   {
-    SetSpeakerData(_guest, static_cast<std::uint8_t>(Decrement(_guest, DS.lowBeepTicks) & SPEAKER_DATA));
+    SetSpeakerData(_guest, static_cast<std::uint8_t>(Decrement(_guest.State(), DS.lowBeepTicks) & SPEAKER_DATA));
   }
   if (_guest.Get(DS.sirenEnabled) == 1)
   {
@@ -314,7 +310,7 @@ void TickSoundEffects(Guest& _guest)
   }
   if (_guest.Get(DS.noiseBurstTicks) != 0)
   {
-    Decrement(_guest, DS.noiseBurstTicks);
+    Decrement(_guest.State(), DS.noiseBurstTicks);
     _guest.Call(EMIT_NOISE_SAMPLE);
     return;
   }
@@ -330,18 +326,18 @@ void TickSoundEffects(Guest& _guest)
   }
   if (_guest.Get(DS.slowNoiseCount) != 0)
   {
-    if (Decrement(_guest, DS.slowNoiseDivider) != 0)
+    if (Decrement(_guest.State(), DS.slowNoiseDivider) != 0)
     {
       return;
     }
     _guest.Set(DS.slowNoiseDivider, SLOW_NOISE_TICKS);
-    Decrement(_guest, DS.slowNoiseCount);
+    Decrement(_guest.State(), DS.slowNoiseCount);
     _guest.Call(EMIT_NOISE_SAMPLE);
     return;
   }
   if (_guest.Get(DS.humEnabled) == 1)
   {
-    if (Decrement(_guest, DS.humCountdownTicks) != 0)
+    if (Decrement(_guest.State(), DS.humCountdownTicks) != 0)
     {
       return;
     }
@@ -451,7 +447,7 @@ void TimerInterrupt(Guest& _guest)
     // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
     _guest.Call(IS_MOUSE_DRIVER_INSTALLED);
     const bool mouse = (regs.flags & Machine::FLAG_ZERO) == 0;
-    if (Decrement(_guest, DS.biosTimerChainCountdown) == 0)
+    if (Decrement(_guest.State(), DS.biosTimerChainCountdown) == 0)
     {
       _guest.Set(DS.biosTimerChainCountdown, mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS);
       chain = true;
@@ -473,7 +469,9 @@ void TimerTick(Guest& _guest)
   _guest.Set(DS.msSinceFrame, static_cast<std::uint8_t>(_guest.Get(DS.msSinceFrame) + 1));
   if (_guest.Get(DS.protectionQuestion) != NO_QUESTION)
   {
-    CheckProtectionAnswer(_guest);
+    // What the original leaves in AX here, the question and the last byte it decoded, goes no further: TimerTick
+    // clobbers AX, and TimerInterrupt, its only caller, loads AL and pops AX.
+    CheckProtectionAnswer(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
     return;
   }
   if (_guest.Get(DS.soundEnabled) == 0 || _guest.Get(DS.gamePaused) == 1)

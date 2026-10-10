@@ -1,8 +1,10 @@
 // GameLogic/Input.h
 #pragma once
 
+#include "GameState.h"
 #include "NativeEntry.h"
 
+#include <cstdint>
 #include <span>
 
 namespace Elite
@@ -16,9 +18,6 @@ namespace Elite
 
 /// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode with DS and ES set.
 void KeyboardInterrupt(Guest& _guest);
-
-/// IsMouseDriverInstalled (CS:02D4): ZF clear when the int 33h vector is set and does not point at an IRET; ES = its segment.
-void IsMouseDriverInstalled(Guest& _guest);
 
 /// WaitForKeyPress (CS:6DEC): GetKey until a key comes, the loop's turns ended where the original's are. Out: AH = its scan code.
 /// Waits as a rule.
@@ -39,9 +38,6 @@ void ReadSteering(Guest& _guest);
 /// GetKey (CS:7616): the next key from keyBuffer: ZF=0, AH=scan code, AL=AL<<1 | Shift; or ZF=1, AH=0 when there is
 /// none. Interrupts on.
 void GetKey(Guest& _guest);
-
-/// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero.
-void ResetKeyboard(Guest& _guest);
 
 /// ReadJoystickAxes (CS:777E): the IBM stick's two axes as counted polls: CF clear, BX = X and CX = Y; CF set when the stick does
 /// not answer or a count times out, with interrupts then left off. DX = 201h, AX clobbered; fireLatch set while button 1 is down.
@@ -67,10 +63,37 @@ void PollScreenDumpKey(Guest& _guest);
 /// ResetMouseIfSelected (CS:7F5D): int 33h AX=0 when the mouse is the input device. AX and BX clobbered.
 void ResetMouseIfSelected(Guest& _guest);
 
-/// ApplyReverseControls (CS:8EA5): the reversing options on AL=roll and AH=pitch.
-void ApplyReverseControls(Guest& _guest);
+// ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
-/// ApplyReverseControlsToDx (CS:8EBA): the reversing options on DL=roll and DH=pitch.
-void ApplyReverseControlsToDx(Guest& _guest);
+/// What IsMouseDriverInstalled finds at the int 33h vector.
+struct MouseDriver
+{
+  bool installed;        ///< the vector is set and does not point at an IRET
+  std::uint16_t segment; ///< the vector's segment, which the original leaves in ES
+};
+
+/// A roll and a pitch, signed bytes, as the steering routines give them.
+struct Steering
+{
+  std::uint8_t roll;
+  std::uint8_t pitch;
+};
+
+/// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it.
+[[nodiscard]] MouseDriver IsMouseDriverInstalled(const GameState& _state);
+
+/// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero.
+void ResetKeyboard(GameState& _state);
+
+/// ApplyReverseControls (CS:8EA5): the reversing options on _steering: reverseYControl negates the pitch, and
+/// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH: its entry calls this.
+[[nodiscard]] Steering ApplyReverseControls(const GameState& _state, Steering _steering);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void IsMouseDriverInstalledEntry(Guest& _guest);   ///< Out: ZF=0 if installed; ES the vector's segment.
+void ResetKeyboardEntry(Guest& _guest);            ///< Out: IF=1.
+void ApplyReverseControlsEntry(Guest& _guest);     ///< In/out: AL=roll, AH=pitch.
+void ApplyReverseControlsToDxEntry(Guest& _guest); ///< In/out: DL=roll, DH=pitch.
 
 } // namespace Elite
