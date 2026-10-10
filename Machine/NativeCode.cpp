@@ -41,16 +41,18 @@ void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string 
                      const NativeContract& _contract)
 {
   const std::uint32_t linear = Memory::Linear(_segment, _offset);
-  Hook hook;
+  // Made in place, never moved: a Hook's books are containers whose moves may allocate.
+  const auto [found, added] = m_hooks.try_emplace(linear);
+  if (!added)
+  {
+    throw std::logic_error("NativeCode: two native routines at one entry");
+  }
+  Hook& hook = found->second;
   hook.name = std::move(_name);
   hook.routine = std::move(_routine);
   hook.contract = _contract;
   hook.segment = _segment;
   hook.offset = _offset;
-  if (!m_hooks.try_emplace(linear, std::move(hook)).second)
-  {
-    throw std::logic_error("NativeCode: two native routines at one entry");
-  }
   m_map.resize(Memory::SIZE_BYTES, 0);
   m_map[linear] = 1;
 }
