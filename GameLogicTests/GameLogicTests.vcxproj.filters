@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Native">
+      <UniqueIdentifier>{262361E2-C492-5968-8372-873FD1FD79B3}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Maths">
       <UniqueIdentifier>{4CDA8523-BE40-5EB6-BB9F-9C0E029B2085}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Scene">
+      <UniqueIdentifier>{9A0E1B24-5E84-5CB3-9BDD-3E1066249ABA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Galaxy">
+      <UniqueIdentifier>{B77FFEC9-7450-50BB-8F03-717940D096D3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Hyperspace">
+      <UniqueIdentifier>{2465F5AE-D8CE-5D39-BBAB-ECD299DDDF0D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Market">
+      <UniqueIdentifier>{0F1A4831-1711-5CF5-9821-5AC2A3EC686E}</UniqueIdentifier>
     </Filter>
     <Filter Include="Build">
       <UniqueIdentifier>{A38D8D19-E84C-5174-93B5-6D72C91EA9D8}</UniqueIdentifier>
@@ -13,8 +28,44 @@
     <Filter Include="Rigs">
       <UniqueIdentifier>{DF447284-EDA8-587E-83FB-9FC68DF62CE6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{0C4EA93F-6C12-5283-BD50-39A6C84D4FD2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Docking">
+      <UniqueIdentifier>{027C1AA0-6DB8-59C9-A360-44B3B51C78D7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Equipment">
+      <UniqueIdentifier>{678F3192-9712-5927-AD32-64A4E6413C09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{F492B550-0A02-59D8-AE88-A18C3F4B347B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="StartUp">
+      <UniqueIdentifier>{C1408AF3-FF90-53E3-8BC0-CBD3C71A0EB6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Text">
+      <UniqueIdentifier>{BD8E5B46-DE28-51D3-90F9-DACF2F377D36}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Timer">
+      <UniqueIdentifier>{52F90B14-86F6-5D05-AE86-2E76796DD87E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ai">
+      <UniqueIdentifier>{6B9ABE2E-9006-5C03-9E05-5121D202DE00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Combat">
+      <UniqueIdentifier>{C9F74B3F-0A59-5222-98C8-75DE20830A8A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ships">
+      <UniqueIdentifier>{ACD5DF42-5567-5C37-979B-79BDBF0ECA03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Flight">
+      <UniqueIdentifier>{B4D92709-259D-5C8F-BBFF-8CBB010A7723}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ComparisonRig.h">
+      <Filter>Native</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
@@ -23,8 +74,35 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AiTests.cpp">
+      <Filter>Ai</Filter>
+    </ClCompile>
+    <ClCompile Include="CombatTests.cpp">
+      <Filter>Combat</Filter>
+    </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="DockingTests.cpp">
+      <Filter>Docking</Filter>
+    </ClCompile>
+    <ClCompile Include="EquipmentTests.cpp">
+      <Filter>Equipment</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightTests.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
+    <ClCompile Include="GalaxyTests.cpp">
+      <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="HyperspaceTests.cpp">
+      <Filter>Hyperspace</Filter>
+    </ClCompile>
+    <ClCompile Include="InputTests.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketTests.cpp">
+      <Filter>Market</Filter>
     </ClCompile>
     <ClCompile Include="MathsTests.cpp">
       <Filter>Maths</Filter>
@@ -35,8 +113,26 @@
     <ClCompile Include="ReplayTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="SceneTests.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipsTests.cpp">
+      <Filter>Ships</Filter>
+    </ClCompile>
+    <ClCompile Include="StartUpTests.cpp">
+      <Filter>StartUp</Filter>
+    </ClCompile>
     <ClCompile Include="StateDigestTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="TextTests.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="TimerTests.cpp">
+      <Filter>Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoTests.cpp">
+      <Filter>Video</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

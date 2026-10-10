@@ -92,6 +92,10 @@ public:
   /// anything, and AtHook() says so: the caller then runs the native code. The map must outlive its use.
   void SetHookMap(const std::vector<std::uint8_t>* _map) noexcept;
 
+  /// Whether the next Step() takes a hardware interrupt before anything else: IF is set, no shadow is
+  /// in force, and the interrupt source has a request.
+  [[nodiscard]] bool InterruptDue() const;
+
   /// Whether the last Step() stopped at a hooked entry instead of executing.
   [[nodiscard]] bool AtHook() const noexcept
   {

@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "ComparisonRig.h"
 #include "NativeRoutines.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
@@ -74,6 +75,9 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       std::string digest;
       const Machine::StopReason reason = player.Play(step, digest);
       const std::wstring where = name + L" line " + std::to_wstring(step.line);
+      if (reason == Machine::StopReason::Overran)
+        Assert::Fail(
+          (where + L": native " + Widen(rig.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits").c_str());
       if (reason != Machine::StopReason::Reached)
         Assert::Fail((where + L": the run stopped").c_str());
       if (step.kind != Elite::StepKind::Digest)
@@ -85,6 +89,8 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       ++checked;
     }
     Assert::IsTrue(checked > 0, (name + L": checks no digest").c_str());
+    if (_running == Running::Compared)
+      SaveNativeReport("Corpus-" + path.stem().string(), rig.Host().Native());
     _check(name, rig.Host());
   }
 }
@@ -111,7 +117,6 @@ public:
                       for (const auto& [linear, hook] : _pc.Native().Hooks())
                         calls += hook.calls;
                       Assert::IsTrue(calls > 0, (_name + L": no native routine ran").c_str());
-                      Assert::AreEqual(std::uint64_t{0}, _pc.Native().Overruns(), (_name + L": native code ran past a run's end").c_str());
                     });
   }
 
@@ -130,7 +135,6 @@ public:
           Assert::Fail(
             (_name + L": " + Widen(first.routine) + L" call " + std::to_wstring(first.call) + L": " + Widen(first.difference)).c_str());
         }
-        Assert::AreEqual(std::uint64_t{0}, _pc.Native().Overruns(), (_name + L": native code ran past a run's end").c_str());
       });
   }
 };

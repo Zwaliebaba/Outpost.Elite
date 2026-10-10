@@ -107,6 +107,8 @@ std::wstring Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
     return L"The game halted with interrupts off.";
   case Machine::StopReason::Spinning:
     return std::format(L"The game ran {} steps without waiting, at {:04X}:{:04X}.", _pc.SpinLimit(), registers.cs, registers.ip);
+  case Machine::StopReason::Overran:
+    return L"A native routine waited where it cannot: " + std::wstring(_pc.Native().Overran().begin(), _pc.Native().Overran().end()) + L".";
   case Machine::StopReason::Terminated:
   case Machine::StopReason::Reached:
     break;

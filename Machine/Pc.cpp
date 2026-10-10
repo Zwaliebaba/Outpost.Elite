@@ -32,6 +32,11 @@ struct ProgramStopped
 {
 };
 
+// Thrown through what the native thread is running when the machine is destroyed under it.
+struct NativeAbandoned
+{
+};
+
 // Runs _fn when the scope ends, however it ends.
 template <typename Fn> class OnExit
 {
@@ -74,6 +79,22 @@ Pc::Pc(FileStore& _files, const Desc& _desc)
   m_services.PowerOn();
 }
 
+Pc::~Pc()
+{
+  if (!m_nativeThread.joinable())
+  {
+    return;
+  }
+  if (m_nativeActive)
+  {
+    m_abandon = true;
+    HandToNative();
+  }
+  m_shutdown = true;
+  m_toNative.release();
+  m_nativeThread.join();
+}
+
 LoadError Pc::Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _desc, LoadedProgram& _program)
 {
   const LoadError error = ExeLoader::Load(m_memory, _file, _desc, _program);
@@ -99,6 +120,14 @@ void Pc::SetSpinLimit(std::uint64_t _steps) noexcept
 
 void Pc::Step()
 {
+  if (m_nativeActive && !m_onNativeThread)
+  {
+    const Cycles limit = m_runLimit;
+    m_runLimit = std::min(limit, m_clock + 1);
+    ResumeNative();
+    m_runLimit = limit;
+    return;
+  }
   if (m_timeMode == TimeMode::Paced)
   {
     StepPaced();
@@ -171,7 +200,14 @@ StopReason Pc::RunUntil(Cycles _cycle)
   m_runLimit = _cycle;
   while (m_clock < _cycle)
   {
-    Step();
+    if (m_nativeActive)
+    {
+      ResumeNative();
+    }
+    else
+    {
+      Step();
+    }
     if (const StopReason reason = Stopped(); reason != StopReason::Reached)
     {
       m_runLimit = NO_EVENT;
@@ -182,9 +218,10 @@ StopReason Pc::RunUntil(Cycles _cycle)
   return StopReason::Reached;
 }
 
-void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract)
+void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
+              NativeReturn _exit, NativeWait _wait)
 {
-  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract);
+  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract, _exit, _wait);
   m_cpu.SetHookMap(&m_native.Map());
   if (!m_comparison)
   {
@@ -199,7 +236,7 @@ void Pc::CallNear(std::uint16_t _offset)
   m_memory.Write16(regs.ss, regs.sp, CALL_RETURN_OFFSET);
   const auto returned = static_cast<std::uint16_t>(regs.sp + 2);
   regs.ip = _offset;
-  RunToReturn(regs.cs, CALL_RETURN_OFFSET, returned, nullptr);
+  RunToReturn(regs.cs, CALL_RETURN_OFFSET, returned);
 }
 
 void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
@@ -207,6 +244,52 @@ void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
   Registers& regs = m_cpu.Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
   regs.sp = static_cast<std::uint16_t>(regs.sp + 2 + _popBytes);
+}
+
+void Pc::ReturnFar(std::uint16_t _popBytes) noexcept
+{
+  Registers& regs = m_cpu.Regs();
+  regs.ip = m_memory.Read16(regs.ss, regs.sp);
+  regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+  regs.sp = static_cast<std::uint16_t>(regs.sp + 4 + _popBytes);
+}
+
+void Pc::ReturnInterrupt() noexcept
+{
+  Registers& regs = m_cpu.Regs();
+  regs.ip = m_memory.Read16(regs.ss, regs.sp);
+  regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+  const std::uint16_t flags = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 4));
+  regs.flags = static_cast<std::uint16_t>((flags & FLAGS_WRITABLE) | FLAGS_FIXED_ONES);
+  regs.sp = static_cast<std::uint16_t>(regs.sp + 6);
+}
+
+void Pc::CallInterrupt(std::uint8_t _vector)
+{
+  if (m_services.ServiceInterrupt(m_cpu, _vector))
+  {
+    if (Stopped() != StopReason::Reached)
+    {
+      throw ProgramStopped{};
+    }
+    return;
+  }
+  Registers& regs = m_cpu.Regs();
+  const std::uint16_t segment = regs.cs;
+  const std::uint16_t stackPointer = regs.sp;
+  const auto push = [&](std::uint16_t _value)
+  {
+    regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+    m_memory.Write16(regs.ss, regs.sp, _value);
+  };
+  push(regs.flags);
+  push(regs.cs);
+  push(CALL_RETURN_OFFSET);
+  regs.flags = static_cast<std::uint16_t>(regs.flags & ~(FLAG_INTERRUPT | FLAG_TRAP));
+  const std::uint32_t entry = static_cast<std::uint32_t>(_vector) * 4;
+  regs.ip = m_memory.Read16(entry);
+  regs.cs = m_memory.Read16(entry + 2);
+  RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer);
 }
 
 void Pc::RunHook()
@@ -217,38 +300,169 @@ void Pc::RunHook()
   {
     throw std::logic_error("Pc: the CPU stopped at an entry no native routine is registered for");
   }
-  ++hook->calls;
+  if (hook->wait != NativeWait::Never && !m_onNativeThread)
+  {
+    StartNative(*hook);
+    return;
+  }
+  Dispatch(*hook);
+}
+
+void Pc::Dispatch(NativeCode::Hook& _hook)
+{
+  ++_hook.calls;
+  // A call that waited looped inside, where no turn of the caller's loop is seen; a turn seen before
+  // it says nothing about the next one after it.
+  const Cycles clock = m_clock;
+  const OnExit forget(
+    [this, clock]() noexcept
+    {
+      if (m_clock != clock)
+        m_lastTurn.valid = false;
+    });
   try
   {
-    if (m_native.Verifying() && !m_comparison->active)
+    // A routine that waits as a rule is never compared: its original could not be undone, and might
+    // never return. The routines it calls through their hooks are, each one a comparison of its own.
+    if (m_native.Verifying() && !m_comparison->active && _hook.wait != NativeWait::Always)
     {
-      Compare(*hook);
+      Compare(_hook);
     }
     else
     {
-      hook->routine(*this);
+      _hook.routine(*this);
     }
   }
   catch (const ProgramStopped&)
   {
     // The program stopped inside a call the native code made; RunUntil reports why.
+    if (m_overran)
+    {
+      m_native.SetOverran(_hook.name);
+    }
     return;
   }
 }
 
-void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, NativeCode::Hook* _covering)
+void Pc::StartNative(NativeCode::Hook& _hook)
+{
+  if (!m_nativeThread.joinable())
+  {
+    m_nativeThread = std::thread([this] { NativeMain(); });
+  }
+  m_nativeHook = &_hook;
+  m_nativeActive = true;
+  ResumeNative();
+}
+
+void Pc::ResumeNative()
+{
+  HandToNative();
+  if (m_nativeError)
+  {
+    std::rethrow_exception(std::exchange(m_nativeError, nullptr));
+  }
+}
+
+void Pc::HandToNative() noexcept
+{
+  m_onNativeThread = true;
+  m_toNative.release();
+  m_toHost.acquire();
+  m_onNativeThread = false;
+}
+
+void Pc::NativeMain()
+{
+  for (;;)
+  {
+    m_toNative.acquire();
+    if (m_shutdown)
+    {
+      return;
+    }
+    try
+    {
+      Dispatch(*m_nativeHook);
+    }
+    catch (const NativeAbandoned&)
+    {
+      m_abandon = false; // unwound, as the destructor asked
+    }
+    catch (...)
+    {
+      m_nativeError = std::current_exception();
+    }
+    m_nativeActive = false;
+    m_toHost.release();
+  }
+}
+
+void Pc::ReachedRunLimit()
+{
+  if (!m_onNativeThread)
+  {
+    // Native code cannot stop at the end of a run off the native thread, and what would end its wait
+    // may only come between runs (ADR-010 item 8).
+    m_overran = true;
+    throw ProgramStopped{};
+  }
+  m_toHost.release();
+  m_toNative.acquire();
+  if (m_abandon)
+  {
+    throw NativeAbandoned{};
+  }
+}
+
+void Pc::Wait()
+{
+  Idle(m_runLimit);
+  if (m_clock >= m_runLimit)
+  {
+    ReachedRunLimit();
+  }
+  TakeDueInterrupts();
+}
+
+void Pc::TakeDueInterrupts()
+{
+  Registers& regs = m_cpu.Regs();
+  while (m_cpu.InterruptDue())
+  {
+    // Park CS:IP where nothing executes, let the CPU take the interrupt there, and run the handler
+    // until its IRET comes back to it.
+    const std::uint16_t segment = regs.cs;
+    const std::uint16_t offset = regs.ip;
+    const std::uint16_t stackPointer = regs.sp;
+    regs.ip = CALL_RETURN_OFFSET;
+    Step();
+    if (Stopped() != StopReason::Reached)
+    {
+      throw ProgramStopped{};
+    }
+    RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer);
+    regs.ip = offset;
+  }
+}
+
+// Runs until the code returns to _segment:_offset with SP back at _stackPointer. The original run in a
+// comparison (_original) also records what it executes, and ends as soon as SP is above _stackPointer:
+// a routine that discards its own return address returns past its caller (TickEscapePod), and its run
+// is over there.
+void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original)
 {
   const Registers& regs = m_cpu.Regs();
-  while (regs.cs != _segment || regs.ip != _offset || regs.sp < _stackPointer)
+  while ((regs.cs != _segment || regs.ip != _offset || regs.sp < _stackPointer) && (_original == nullptr || regs.sp <= _stackPointer))
   {
     const std::uint16_t segment = regs.cs;
     const std::uint16_t offset = regs.ip;
     const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
-    const bool covered = _covering != nullptr && segment == _covering->segment;
+    const bool covered = _original != nullptr && segment == _original->segment;
     Step();
     if (covered && m_cpu.HardwareInterruptCount() == interrupts)
     {
-      _covering->executed.insert(offset);
+      _original->executed.insert(offset);
     }
     if (Stopped() != StopReason::Reached)
     {
@@ -256,9 +470,7 @@ void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_
     }
     if (m_clock >= m_runLimit)
     {
-      // Native code cannot yet stop at the end of a run and carry on at the next (ADR-010).
-      m_native.AddOverrun();
-      m_runLimit = NO_EVENT;
+      ReachedRunLimit();
     }
   }
 }
@@ -268,7 +480,11 @@ void Pc::Compare(NativeCode::Hook& _hook)
   Comparison& work = *m_comparison;
   Registers& regs = m_cpu.Regs();
   const Registers entry = regs;
+  // Where the original's run ends: the return address its caller, or the interrupt, pushed.
   const std::uint16_t returnOffset = m_memory.Read16(regs.ss, regs.sp);
+  const std::uint16_t returnSegment =
+    _hook.exit == NativeReturn::Near ? regs.cs : m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+  const std::uint16_t frameBytes = _hook.exit == NativeReturn::Near ? 2 : _hook.exit == NativeReturn::Far ? 4 : 6;
   const Cycles clock = m_clock;
   const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
   const std::uint64_t services = m_services.CallCount();
@@ -277,6 +493,8 @@ void Pc::Compare(NativeCode::Hook& _hook)
   // through it. Every byte it changes and every port access it makes is recorded.
   work.originalWrites.Clear();
   work.originalPorts.clear();
+  work.segment = _hook.segment;
+  work.executed.clear();
   {
     work.active = true;
     m_cpu.SetHookMap(nullptr);
@@ -290,15 +508,19 @@ void Pc::Compare(NativeCode::Hook& _hook)
         m_cpu.SetHookMap(&m_native.Map());
         work.active = false;
       });
-    RunToReturn(entry.cs, returnOffset, static_cast<std::uint16_t>(entry.sp + 2), &_hook);
+    RunToReturn(returnSegment, returnOffset, static_cast<std::uint16_t>(entry.sp + frameBytes), &work);
   }
   if (m_clock != clock || m_cpu.HardwareInterruptCount() != interrupts || m_services.CallCount() != services ||
       work.originalWrites.Overflowed())
   {
-    ++_hook.unverifiable; // what it did cannot be undone, so its outcome stands
+    ++_hook.unverifiable; // what it did cannot be undone, so its outcome stands, and covers nothing
     return;
   }
+  // From here the call is compared, so what the original ran counts towards its coverage.
+  _hook.executed.insert(work.executed.begin(), work.executed.end());
   const Registers original = regs;
+  const std::uint64_t changes = m_memory.ChangeCount();
+  const LoopTurn turn = m_lastTurn;
   const std::span<const WriteJournal::Entry> written = work.originalWrites.Entries();
   work.originalAfter.resize(written.size());
   for (std::size_t index = 0; index < written.size(); ++index)
@@ -346,6 +568,18 @@ void Pc::Compare(NativeCode::Hook& _hook)
   {
     add("the native routine changed more bytes than a journal holds");
   }
+  // The run carries on from the original's outcome, whatever the comparison found: its memory, dead
+  // stack included, its registers, and what paced time saw of it. A compared run is then the
+  // interpreted run, observed, and one mismatch does not hide the next.
+  m_memory.Undo(work.nativeWrites);
+  const std::span<std::uint8_t> bytes = m_memory.Bytes();
+  for (std::size_t index = 0; index < written.size(); ++index)
+  {
+    bytes[written[index].linear] = work.originalAfter[index];
+  }
+  m_memory.SetChangeCount(changes);
+  m_lastTurn = turn;
+  regs = original;
   if (difference.empty())
   {
     ++_hook.verified;
@@ -353,14 +587,6 @@ void Pc::Compare(NativeCode::Hook& _hook)
   }
   ++_hook.mismatches;
   m_native.AddMismatch(NativeCode::Mismatch{_hook.name, _hook.calls, clock, std::move(difference)});
-  // Carry on from the original's outcome, so that one mismatch does not hide the next.
-  m_memory.Undo(work.nativeWrites);
-  const std::span<std::uint8_t> bytes = m_memory.Bytes();
-  for (std::size_t index = 0; index < written.size(); ++index)
-  {
-    bytes[written[index].linear] = work.originalAfter[index];
-  }
-  regs = original;
 }
 
 void Pc::MapPorts(std::uint16_t _first, std::uint16_t _last, PortBus& _device)
@@ -379,6 +605,8 @@ StopReason Pc::Stopped() const noexcept
     return StopReason::Deadlocked;
   if (m_timeMode == TimeMode::Paced && m_stepsSinceIdle >= m_spinLimit)
     return StopReason::Spinning;
+  if (m_overran)
+    return StopReason::Overran;
   return StopReason::Reached;
 }
 

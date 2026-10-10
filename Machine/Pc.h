@@ -16,9 +16,13 @@
 #include "Timing.h"
 
 #include <cstdint>
+#include <exception>
 #include <memory>
+#include <semaphore>
+#include <set>
 #include <span>
 #include <string>
+#include <thread>
 
 namespace Machine
 {
@@ -32,7 +36,8 @@ enum class StopReason : std::uint8_t
   Fault,      ///< The services refused a call; PcServices::Fault says which.
   Terminated, ///< The program ended through int 20h.
   Deadlocked, ///< The CPU halted with interrupts off, and nothing can wake it.
-  Spinning    ///< Paced time only: the program ran SpinLimit() steps without waiting once.
+  Spinning,   ///< Paced time only: the program ran SpinLimit() steps without waiting once.
+  Overran     ///< Native code off the native thread waited past the end of the run (NativeCode::Overran).
 };
 
 /// How the machine's clock advances (ADR-008).
@@ -86,6 +91,7 @@ public:
   Pc(FileStore& _files, const Desc& _desc);
   Pc(const Pc&) = delete;
   Pc& operator=(const Pc&) = delete;
+  ~Pc();
 
   /// Loads a program as DOS's EXEC does (ExeLoader) and starts the CPU at its entry, in the registers
   /// MS-DOS gives a program. Nothing changes if the load fails.
@@ -110,7 +116,8 @@ public:
     return m_spinLimit;
   }
 
-  /// One CPU step, then the timer and the keyboard catch up with the clock.
+  /// One CPU step, then the timer and the keyboard catch up with the clock. While a native routine
+  /// that waits is in progress, it runs to its next wait instead (ADR-010 item 8).
   void Step();
 
   /// Steps until the clock reaches _cycle, or until the program can go no further.
@@ -200,7 +207,14 @@ public:
   /// there: at the start of any step, after the CPU has taken an interrupt that was due. Native code
   /// takes no time, which is what paced time expects of work (ADR-008). Throws std::logic_error if a
   /// routine is there already.
-  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract);
+  ///
+  /// A routine that can wait (_wait not Never) runs on a thread of its own, the native thread, and with
+  /// it everything it calls. When the clock reaches the end of a run there, in Wait or in original
+  /// code it calls, the native thread hands the machine back and RunUntil returns; the next RunUntil
+  /// carries on where it stopped. Only one thread runs at a time, so a run is still a function of its
+  /// inputs (ADR-010 item 8). Any other native routine runs as a plain call.
+  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
+            NativeReturn _exit = NativeReturn::Near, NativeWait _wait = NativeWait::Never);
 
   /// The native routines, whether they are being compared with the original, and what that found.
   [[nodiscard]] NativeCode& Native() noexcept
@@ -216,12 +230,29 @@ public:
   /// For native code: calls the program's code at CS:_offset as a near CALL from CS:IP would, and runs it
   /// until it returns. Hooked entries it reaches run natively. If the program stops on the way (a
   /// fault, the end of the program), the native code is abandoned by an exception that the step which
-  /// started it catches, and RunUntil reports the stop. A call that waits past the end of a run goes
-  /// on to its return, and counts as an overrun (NativeCode::Overruns).
+  /// started it catches, and RunUntil reports the stop. Off the native thread, a call that waits past
+  /// the end of a run stops the run there: StopReason::Overran.
   void CallNear(std::uint16_t _offset);
 
   /// For native code: returns from a near call as RET _popBytes does.
   void ReturnNear(std::uint16_t _popBytes = 0) noexcept;
+
+  /// For native code: returns from a far call as RETF _popBytes does.
+  void ReturnFar(std::uint16_t _popBytes = 0) noexcept;
+
+  /// For native code: returns from an interrupt handler as IRET does.
+  void ReturnInterrupt() noexcept;
+
+  /// For native code that stands in for a waiting loop: one turn of it that found nothing to do. The
+  /// clock moves to the next device event (Idle), the run ends there if that is its end, and then any
+  /// interrupt now due is taken, as the CPU takes it at the loop's next instruction. Only a routine
+  /// hooked as one that waits may call it.
+  void Wait();
+
+  /// For native code: does what INT _vector does at CS:IP. The BIOS, DOS and mouse services take the
+  /// call if they serve that vector; otherwise the handler the vector table names runs until its IRET.
+  /// Like CallNear, a stop on the way abandons the native code.
+  void CallInterrupt(std::uint8_t _vector);
 
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does
   /// between two waits, far fewer than a host would run before someone notices.
@@ -245,13 +276,22 @@ private:
     WriteJournal nativeWrites{NativeCode::JOURNAL_CAPACITY};
     std::vector<std::uint8_t> originalAfter;
     std::vector<PortRouter::Access> originalPorts;
+    std::uint16_t segment = 0;        // the compared entry's code segment
+    std::set<std::uint16_t> executed; // offsets in it the original ran
     bool active = false;
   };
 
   void MapPorts(std::uint16_t _first, std::uint16_t _last, PortBus& _device);
   void RunHook();
+  void Dispatch(NativeCode::Hook& _hook);
+  void StartNative(NativeCode::Hook& _hook);
+  void ResumeNative();
+  void HandToNative() noexcept;
+  void NativeMain();
+  void ReachedRunLimit();
+  void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
-  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, NativeCode::Hook* _covering);
+  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original = nullptr);
   void StepPaced();
   void NoteBackwardJump();
   [[nodiscard]] StopReason Stopped() const noexcept;
@@ -277,6 +317,20 @@ private:
   Cpu m_cpu;
   NativeCode m_native;
   std::unique_ptr<Comparison> m_comparison;
+
+  // The native thread (ADR-010 item 8), made for the first routine that waits. The host thread and
+  // it take turns, handing over through the two semaphores; these flags are read only by the one
+  // holding the machine.
+  std::thread m_nativeThread;
+  std::binary_semaphore m_toNative{0};
+  std::binary_semaphore m_toHost{0};
+  NativeCode::Hook* m_nativeHook = nullptr;
+  std::exception_ptr m_nativeError;
+  bool m_nativeActive = false;   // a waiting routine is in progress on the native thread
+  bool m_onNativeThread = false; // the native thread holds the machine
+  bool m_abandon = false;        // the native thread is to unwind what it is running
+  bool m_shutdown = false;       // the native thread is to end
+  bool m_overran = false;        // native code off the native thread waited past the end of a run
 };
 
 } // namespace Machine

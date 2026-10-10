@@ -1,0 +1,55 @@
+// GameLogic/Input.h
+#pragma once
+
+#include "NativeEntry.h"
+
+#include <span>
+
+namespace Elite
+{
+
+// The reference's input routines, ported (plan §5 Phase 3, ADR-010): the keyboard, the joystick and the mouse. Each body is declared
+// here once it is ported, on the registers of its contract in Symbols.tsv.
+
+/// The entries of this subsystem ported so far, for InstallNativeRoutines.
+[[nodiscard]] std::span<const NativeEntry> InputEntries() noexcept;
+
+/// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode with DS and ES set.
+void KeyboardInterrupt(Guest& _guest);
+
+/// ReadScanCode (CS:7443): one scan code from the keyboard into keyDown and keyBuffer, then the end of the interrupt.
+/// AX clobbered.
+void ReadScanCode(Guest& _guest);
+
+/// ReadFireButton (CS:74E0): CF=1 while fire is pressed on the selected device. AL clobbered (and BX, CX and DX by
+/// the mouse, DX by the IBM stick).
+void ReadFireButton(Guest& _guest);
+
+/// ReadSteering (CS:7536): AL=roll and AH=pitch input from the selected device, +-23. BX clobbered (and CX and DX by
+/// the joystick and the mouse).
+void ReadSteering(Guest& _guest);
+
+/// GetKey (CS:7616): the next key from keyBuffer: ZF=0, AH=scan code, AL=AL<<1 | Shift; or ZF=1, AH=0 when there is
+/// none. Interrupts on.
+void GetKey(Guest& _guest);
+
+/// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero.
+void ResetKeyboard(Guest& _guest);
+
+/// ReadKeyboardSteering (CS:78EF): AL=roll ramp and AH=pitch ramp (negated) from the cursor and QAOP keys. BL
+/// clobbered.
+void ReadKeyboardSteering(Guest& _guest);
+
+/// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held.
+void PollScreenDumpKey(Guest& _guest);
+
+/// ResetMouseIfSelected (CS:7F5D): int 33h AX=0 when the mouse is the input device. AX and BX clobbered.
+void ResetMouseIfSelected(Guest& _guest);
+
+/// ApplyReverseControls (CS:8EA5): the reversing options on AL=roll and AH=pitch.
+void ApplyReverseControls(Guest& _guest);
+
+/// ApplyReverseControlsToDx (CS:8EBA): the reversing options on DL=roll and DH=pitch.
+void ApplyReverseControlsToDx(Guest& _guest);
+
+} // namespace Elite

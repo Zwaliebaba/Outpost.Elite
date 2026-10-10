@@ -97,6 +97,8 @@ It leaves four things out:
 | `hyperspace-and-fight.replay` | selects Riedquat, jumps there, and fights the pirates that come; one is destroyed |
 | `save-and-load.replay` | saves the commander through DOS, spends money, loads the save and gets it back |
 
+**Added since.** `flight-screens.replay` (ADR-010 item 8, 29.4 s and 9 digests) launches and, in flight, shows every screen the function keys show, pauses and resumes, and freezes with Ctrl+Esc and thaws: the waits inside a routine that otherwise works once a frame.
+
 Some of these were found by probing, but every one is checked by state, not by eye:
 
 - **Docking** sets `playerDocked`.
