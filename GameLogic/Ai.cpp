@@ -24,8 +24,15 @@ constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint8_t FLAG_DEVICE = 0x20;
 
 constexpr std::uint16_t CLASS_COUNTS_CLEARED = 9; // activeObjectCount and the eight behaviorClassCounts
-constexpr std::uint8_t DEBRIS_CLASS = 7;          // not counted as active
+// The behaviour classes, behaviorHandlers' indexes.
+constexpr std::uint8_t INERT_CLASS = 0;
+constexpr std::uint8_t STATION_CLASS = 1;
+constexpr std::uint8_t MISSILE_CLASS = 2;
+constexpr std::uint8_t DRIFTING_CLASS = 3;
+constexpr std::uint8_t TRADER_CLASS = 4;
+constexpr std::uint8_t WOLF_CLASS = 5;
 constexpr std::uint8_t HUNTER_CLASS = 6;
+constexpr std::uint8_t DEBRIS_CLASS = 7; // not counted as active
 constexpr std::uint8_t MOST_ACTIVE_FOR_SPAWNING = 10;
 constexpr std::uint16_t WOLF_ODDS_LIMIT = 0x1C2; // outside anarchies, a wolf needs a random word below this too
 constexpr std::uint8_t MOST_INVADERS = 8;
@@ -112,11 +119,6 @@ constexpr std::uint8_t STATE_CLOSING = 4;
 [[nodiscard]] std::uint16_t At(std::uint16_t _slot, int _field) noexcept
 {
   return static_cast<std::uint16_t>(_slot + _field);
-}
-
-void AddWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value) noexcept
-{
-  _guest.SetWord(_offset, static_cast<std::uint16_t>(_guest.Word(_offset) + _value));
 }
 
 // WithinRange: whether _slot is within the box whose half size has its range byte for the high byte and _low, what DL holds
@@ -328,7 +330,7 @@ void SpawnInvasionWave(GameState& _state)
 struct OffenderLaunch
 {
   NearTest near;                          // what IsObjectNear found of the station
-  bool launched;                          // a copy of the station went into a free slot
+  std::optional<Velocity> launched;       // when a copy of the station went into a free slot, what ComputeVelocity gave it
   std::optional<RandomRollFacing> trader; // when the copy was made a trader, what FacePlayerWithRandomRoll gave it
 };
 
@@ -337,7 +339,7 @@ struct OffenderLaunch
 // and its velocity set. PUSH DI and POP DI keep the station.
 OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _backward)
 {
-  OffenderLaunch launch{IsObjectNear(_state, _station), false, std::nullopt};
+  OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt, std::nullopt};
   if (!launch.near.nearby || ObjectWithinBox(_station, STATION_GUARD_BOX))
   {
     return launch;
@@ -353,7 +355,6 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
     return launch;
   }
   CopyObject(_state, _station.Offset(), free.slot, _backward);
-  launch.launched = true;
   ObjectSlot ship(_state, free.slot);
   const std::uint16_t pick = NextRandom(_state);
   if (pick >= POLICE_FROM)
@@ -374,7 +375,7 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
   ship.Set(SlotByte::ZHigh, static_cast<std::uint8_t>(ship.Get(SlotByte::ZHigh) + (z >> 16)));
   ship.Set(SlotWord::Yaw, Offset(ship.Get(SlotWord::Yaw), LAUNCH_TURN));
   ship.Set(SlotWord::Roll, Negate(ship.Get(SlotWord::Roll)));
-  (void)ComputeVelocity(_state, ship);
+  launch.launched = ComputeVelocity(_state, ship);
   return launch;
 }
 
@@ -392,8 +393,8 @@ void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8
 // What CheckMissilesAtStation did with the station's ECM.
 struct StationEcm
 {
-  bool removed; // the ECM ran, and RemoveAllMissiles with it
-  bool erased;  // that erased a scanner blip
+  bool removed;                         // the ECM ran, and RemoveAllMissiles with it
+  std::optional<DashboardPixel> erased; // the last pixel of the last scanner blip that erased, if it erased one
 };
 
 // CheckMissilesAtStation (5611): a missile aimed at the station at _station, or at a police Viper in the safe zone, is a crime,
@@ -426,22 +427,22 @@ StationEcm CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
     }
     if (!crime)
     {
-      return StationEcm{false, false};
+      return StationEcm{false, std::nullopt};
     }
     AddSaturating(_state, DS.legalStatus, *crime);
     if (_state.Get(DS.antiEcmActive) == 1)
     {
-      return StationEcm{false, false};
+      return StationEcm{false, std::nullopt};
     }
     _state.Set(DS.npcEcmFrames, STATION_ECM_FRAMES);
   }
   if (_state.Get(DS.thargoidInvasionActive) == 1)
   {
     _state.Set(DS.npcEcmFrames, 0);
-    return StationEcm{false, false};
+    return StationEcm{false, std::nullopt};
   }
   _state.Set(DS.ecmFired, 1);
-  const bool erased = RemoveAllMissiles(_state).has_value();
+  const std::optional<DashboardPixel> erased = RemoveAllMissiles(_state);
   _state.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_state.Get(DS.npcEcmFrames) - 1));
   return StationEcm{true, erased};
 }
@@ -650,75 +651,93 @@ MovedObject TraderBreakOff(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
   return MoveObject(_state, _slot);
 }
 
+// CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot, which may take DL of _dx, the DX the last handler
+// or the caller left, for its range's box (VectorWithinBox after MOV DH,[DI+1Ch] at 57BC, 5873 and 5987), and the direction flag
+// a launch's copy runs by, _backward. BX holds the class doubled, which UpdateMissileAi's explosion would save in the divide
+// trap. Returns what the handler leaves in DX. The table's eight words, which nothing writes, name these eight handlers; a class
+// of 8 or more, which no template gives, would run data as code, and runs nothing.
+std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, ObjectSlot _slot, std::uint8_t _behavior, bool _backward,
+                                 std::uint16_t _dx)
+{
+  switch (_behavior)
+  {
+  case INERT_CLASS:
+    return _dx;
+  case STATION_CLASS:
+    return UpdateStationAi(_state, _slot, _backward, _dx).dx;
+  case MISSILE_CLASS:
+    return UpdateMissileAi(_state, _hardware, _slot, _backward, static_cast<std::uint16_t>(_behavior << 1), _dx).dx;
+  case DRIFTING_CLASS:
+    return UpdateDriftingObjectAi(_state, _slot).moved.dx;
+  case TRADER_CLASS:
+    return UpdateTraderOrPoliceAi(_state, _slot, Low(_dx), _backward).dx;
+  case WOLF_CLASS:
+    return UpdateWolfAi(_state, _slot, Low(_dx), _backward).dx;
+  case HUNTER_CLASS:
+    return UpdateHunterAi(_state, _slot, Low(_dx), _backward).dx;
+  case DEBRIS_CLASS:
+  {
+    // A fragment that has run out of lifetime is only cleared, and leaves DX alone.
+    const std::optional<MovedObject> moved = UpdateDebrisAi(_state, _slot);
+    return moved ? moved->dx : _dx;
+  }
+  default:
+    return _dx;
+  }
+}
+
 } // namespace
 
-void UpdateObjectsAndSpawn(Guest& _guest)
+void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _dx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = regs.ds;
-  // REP STOSB of AL = 0 over activeObjectCount and behaviorClassCounts.
-  regs.di = DS.activeObjectCount.offset;
-  SetLow(regs.ax, 0);
-  const std::uint16_t step = _guest.Flag(FLAG_DIRECTION) ? std::uint16_t{0xFFFF} : std::uint16_t{1};
-  for (regs.cx = CLASS_COUNTS_CLEARED; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+  // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight
+  // behaviorClassCounts cleared, backwards when the direction flag is set.
+  std::uint16_t count = DS.activeObjectCount.offset;
+  for (std::uint16_t bytes = CLASS_COUNTS_CLEARED; bytes != 0; --bytes)
   {
-    _guest.SetFarByte(regs.es, regs.di, 0);
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetByte(count, 0);
+    count = _backward ? static_cast<std::uint16_t>(count - 1) : At(count, 1);
   }
-  // Every slot: an active one is counted and its class's handler run (CALL [BX+behaviorHandlers]), CX and DI pushed round it.
-  regs.di = DS.shipSlots.offset;
-  regs.cx = _guest.Get(DS.shipSlotCount);
-  do
+  // Every slot of shipSlotCount, by LOOP: an active one counted, but for debris, and in its class's count, and its class's handler
+  // run, CX and DI pushed round it. DX goes on from one handler to the next.
+  std::uint16_t dx = _dx;
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t slots = LoopCount(_state.Get(DS.shipSlotCount)); slots != 0; --slots)
   {
-    const std::uint16_t remaining = regs.cx;
-    const std::uint16_t slot = regs.di;
-    if ((_guest.Byte(slot) & SLOT_ACTIVE) != 0)
+    const ObjectSlot object(_state, slot);
+    if ((object.Get(SlotByte::Type) & SLOT_ACTIVE) != 0)
     {
-      const std::uint8_t behavior = _guest.Byte(At(slot, SLOT_CLASS));
+      const std::uint8_t behavior = object.Get(SlotByte::Class);
       if (behavior != DEBRIS_CLASS)
       {
-        _guest.Set(DS.activeObjectCount, static_cast<std::uint8_t>(_guest.Get(DS.activeObjectCount) + 1));
+        _state.Set(DS.activeObjectCount, static_cast<std::uint8_t>(_state.Get(DS.activeObjectCount) + 1));
       }
-      regs.bx = behavior;
-      const std::uint16_t count = At(DS.behaviorClassCounts.offset, regs.bx);
-      _guest.SetByte(count, static_cast<std::uint8_t>(_guest.Byte(count) + 1));
-      regs.bx = static_cast<std::uint16_t>(regs.bx << 1);
-      _guest.Call(_guest.Word(At(DS.behaviorHandlers.offset, regs.bx)));
+      const std::uint16_t classCount = At(DS.behaviorClassCounts.offset, behavior);
+      _state.SetByte(classCount, static_cast<std::uint8_t>(_state.Byte(classCount) + 1));
+      dx = RunBehaviorHandler(_state, _hardware, object, behavior, _backward, dx);
     }
-    regs.di = At(slot, SLOT_BYTES);
-    regs.cx = static_cast<std::uint16_t>(remaining - 1);
-  } while (regs.cx != 0);
+    slot = At(slot, SLOT_BYTES);
+  }
 
-  _guest.Set(DS.maskingBackgroundColor, 0);
-  if (_guest.Get(DS.activeObjectCount) >= MOST_ACTIVE_FOR_SPAWNING)
+  _state.Set(DS.maskingBackgroundColor, 0);
+  if (_state.Get(DS.activeObjectCount) >= MOST_ACTIVE_FOR_SPAWNING || _state.Get(DS.objectSlotCount) < _state.Get(DS.activeObjectCount))
   {
     return;
   }
-  SetLow(regs.ax, _guest.Get(DS.objectSlotCount));
-  if (Low(regs.ax) < _guest.Get(DS.activeObjectCount))
+  if (_state.Get(DS.maskMissionShipsLeft) != 0)
   {
+    if (_state.Get(DS.maskSystemJumps) == 1)
+    {
+      SpawnMaskMissionShips(_state);
+      return;
+    }
+  }
+  else if ((_state.Get(DS.thargoidInvasionActive) & _state.Get(DS.jumpedSinceBriefing)) != 0 && _state.Get(DS.invadedStationDestroyed) != 1)
+  {
+    SpawnInvasionWave(_state);
     return;
   }
-  // What the spawning leaves in the registers is not reproduced: the contract compares none of them, and poisoned, every
-  // comparison and digest still agrees.
-  if (_guest.Get(DS.maskMissionShipsLeft) != 0)
-  {
-    if (_guest.Get(DS.maskSystemJumps) == 1)
-    {
-      SpawnMaskMissionShips(_guest.State());
-      return;
-    }
-  }
-  else
-  {
-    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.thargoidInvasionActive) & _guest.Get(DS.jumpedSinceBriefing)));
-    if (Low(regs.ax) != 0 && _guest.Get(DS.invadedStationDestroyed) != 1)
-    {
-      SpawnInvasionWave(_guest.State());
-      return;
-    }
-  }
-  SpawnByGovernment(_guest.State());
+  SpawnByGovernment(_state);
 }
 
 std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds)
@@ -809,41 +828,43 @@ VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _obj
 
 void SkipInertObjectAi(Guest& /*_guest*/) {}
 
-void UpdateStationAi(Guest& _guest)
+StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const ObjectSlot station(_guest.State(), regs.di);
-  AddWord(_guest, At(regs.di, SLOT_ROLL), STATION_SPIN);
-  if (_guest.Get(DS.spawnGovernment) >= 1 && (_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) != 0)
+  _station.Set(SlotWord::Roll, Offset(_station.Get(SlotWord::Roll), STATION_SPIN));
+  StationTurn turn{std::nullopt, false, std::nullopt, false, false, _dx};
+  if (_state.Get(DS.spawnGovernment) >= 1 && (_station.Get(SlotByte::Flags) & FLAG_HOSTILE) != 0)
   {
-    // What the look for an offender leaves of what the contract compares, and of DX, which the next slot's handler can read
-    // (WithinRange's DL): what IsObjectNear leaves, ES = B800h and DX the pixel once it erased the station's blip; DX = 1C2h,
-    // the guarded box, once it is near; CopyObject's ES = DS once it launched; and the pitch FacePlayerWithRandomRoll leaves in
-    // BP once that was a trader. ComputeVelocity's DX after a launch is not reproduced, nor the AX, BX, CX and SI it leaves:
-    // poisoned, every comparison and digest still agrees.
-    const OffenderLaunch launch = LaunchAtOffender(_guest.State(), station, _guest.Flag(FLAG_DIRECTION));
-    IsObjectNearOut(_guest, station, launch.near);
+    // DX: the last pixel of the blip IsObjectNear erased, or MOV DX,1C2h, the guarded box, once it is near; then what
+    // ComputeVelocity leaves once it launched.
+    const OffenderLaunch launch = LaunchAtOffender(_state, _station, _backward);
+    turn.near = launch.near;
+    if (launch.near.erasedBlip)
+    {
+      turn.dx = PixelPlace(*launch.near.erasedBlip);
+    }
     if (launch.near.nearby)
     {
-      regs.dx = STATION_GUARD_BOX;
+      turn.dx = STATION_GUARD_BOX;
     }
     if (launch.launched)
     {
-      regs.es = regs.ds;
+      turn.launched = true;
+      turn.dx = launch.launched->dx;
     }
     if (launch.trader)
     {
-      regs.bp = launch.trader->heading.first;
+      turn.traderPitch = launch.trader->heading.first;
     }
   }
-  // DI past the slots and ES as RemoveAllMissiles leaves them, which the contract compares, once the ECM ran. The AX, BX, CX and
-  // SI its look at the missiles leaves, which the contract does not compare, and the DX RemoveAllMissiles leaves, are not
-  // reproduced: poisoned, every comparison and digest still agrees.
-  const StationEcm ecm = CheckMissilesAtStation(_guest.State(), station);
-  if (ecm.removed)
+  // DX: the last pixel of the last blip RemoveAllMissiles erased, once the ECM ran.
+  const StationEcm ecm = CheckMissilesAtStation(_state, _station);
+  turn.missilesRemoved = ecm.removed;
+  if (ecm.erased)
   {
-    RemoveAllMissilesOut(_guest, ecm.erased);
+    turn.blipErased = true;
+    turn.dx = PixelPlace(*ecm.erased);
   }
+  return turn;
 }
 
 DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
@@ -1036,6 +1057,10 @@ constexpr Machine::NativeContract TURNED{REGISTER_DX, 0};
 constexpr Machine::NativeContract OBJECT_VECTOR{REGISTER_DX | REGISTER_BP, FLAG_CARRY};
 // CheckSafeZoneHoldFire: every register compared, AL as InSafeZone leaves it (CheckSafeZoneHoldFireEntry).
 constexpr Machine::NativeContract HOLD_FIRE{0, FLAG_CARRY};
+// UpdateStationAi's: DI, BP and ES as the original leaves them, and DX, of which the next slot's handler can take DL
+// (UpdateStationAiEntry).
+constexpr Machine::NativeContract STATION_TURN{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
+constexpr Machine::NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
 
 } // namespace
 
@@ -1157,6 +1182,40 @@ void UpdateDriftingObjectAiEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void UpdateObjectsAndSpawnEntry(Guest& _guest)
+{
+  // The DX the caller left goes on to the first handler that measures its range's box, as the original's does.
+  UpdateObjectsAndSpawn(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION), _guest.Regs().dx);
+  _guest.Clobber(CLOBBERS_ALL);
+}
+
+void UpdateStationAiEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot station(_guest.State(), regs.di);
+  const StationTurn turn = UpdateStationAi(_guest.State(), station, _guest.Flag(FLAG_DIRECTION), regs.dx);
+  // What the contract compares: what IsObjectNear leaves; CopyObject's ES = DS once it launched; the pitch FacePlayerWithRandomRoll
+  // leaves in BP once that was a trader; DI past the slots and ES as RemoveAllMissiles leaves them once the ECM ran; and DX.
+  if (turn.near)
+  {
+    IsObjectNearOut(_guest, station, *turn.near);
+  }
+  if (turn.launched)
+  {
+    regs.es = regs.ds;
+  }
+  if (turn.traderPitch)
+  {
+    regs.bp = *turn.traderPitch;
+  }
+  if (turn.missilesRemoved)
+  {
+    RemoveAllMissilesOut(_guest, turn.blipErased);
+  }
+  regs.dx = turn.dx;
+  _guest.Clobber(STATION_TURN);
+}
+
 void CheckSafeZoneHoldFireEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1174,7 +1233,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x4A10, "UpdateObjectsAndSpawn", &UpdateObjectsAndSpawn, Machine::NativeContract{REGISTER_ALL, 0}},
+  NativeEntry{0x4A10, "UpdateObjectsAndSpawn", &UpdateObjectsAndSpawnEntry, CLOBBERS_ALL},
   NativeEntry{0x4C0E, "ScaleSpawnOdds", &ScaleSpawnOddsEntry, PRESERVES_ALL},
   NativeEntry{0x4C20, "IsMaskShipPresent", &IsMaskShipPresentEntry, MASK_SHIP_SEARCH},
   NativeEntry{0x4C38, "PlaceEscortNear", &PlaceEscortNearEntry, ESCORT_PLACED},
@@ -1183,8 +1242,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x548F, "CountOtherHuntersOnScanner", &CountOtherHuntersOnScannerEntry, CLOBBERS_CX_SI},
   NativeEntry{0x54B4, "GetVectorToObject", &GetVectorToObjectEntry, OBJECT_VECTOR},
   NativeEntry{0x5594, "SkipInertObjectAi", &SkipInertObjectAi, PRESERVES_ALL},
-  NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAi,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
+  NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAiEntry, STATION_TURN},
   NativeEntry{0x5681, "UpdateDriftingObjectAi", &UpdateDriftingObjectAiEntry, PRESERVES_ALL},
   NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAiEntry, CLOBBERS_MOST},
   NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAiEntry, CLOBBERS_MOST},

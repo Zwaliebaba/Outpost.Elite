@@ -22,16 +22,37 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> AiEntries() noexcept;
 
-/// UpdateObjectsAndSpawn (CS:4A10): every active slot counted and run by its class's handler, then new ships spawned.
-void UpdateObjectsAndSpawn(Guest& _guest);
-
 /// SkipInertObjectAi (CS:5594): class 0's handler, which does nothing.
 void SkipInertObjectAi(Guest& _guest);
 
-/// UpdateStationAi (CS:5595): class 1: the station spins, launches police or traders at an offender, and answers missiles.
-void UpdateStationAi(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
+
+/// What UpdateStationAi did, for its entry, and what it leaves in DX.
+struct StationTurn
+{
+  std::optional<NearTest> near;             ///< what IsObjectNear found of the station, when it looked for an offender
+  bool launched;                            ///< it launched a copy of itself
+  std::optional<std::uint16_t> traderPitch; ///< when that copy was made a trader, the pitch FacePlayerWithRandomRoll gave it
+  bool missilesRemoved;                     ///< its ECM ran, and RemoveAllMissiles with it
+  bool blipErased;                          ///< that erased a scanner blip
+  /// DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's box: the DX it was
+  /// called with, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it
+  /// erased.
+  std::uint16_t dx;
+};
+
+/// UpdateObjectsAndSpawn (CS:4A10): once a frame, activeObjectCount and the class counts cleared (REP STOSB, backwards when
+/// _backward, the direction flag, is set), then every active slot of shipSlotCount counted, debris apart, and run by its class's
+/// handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount, the mask
+/// mission's ships, an invasion's Thargoids, or the government's spawns. _dx is the DX it is called with, which goes on from
+/// handler to handler: each takes it and leaves its own, and the movers take DL for their range's box.
+void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _dx);
+
+/// UpdateStationAi (CS:5595): class 1: the station at _station spins; while it is hostile and the government is no anarchy, it
+/// looks for an offender out of the box it guards and launches police, shuttles or traders at one (copies of itself, backwards
+/// when _backward); then it answers missiles aimed at it, or at the police in the safe zone, with its ECM. _dx is the DX it is
+/// called with.
+StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx);
 
 /// ClampTurnStep's step and the error it was taken from.
 struct TurnStep
@@ -143,5 +164,8 @@ void UpdateHunterAiEntry(Guest& _guest); ///< As UpdateTraderOrPoliceAiEntry.
 void UpdateDriftingObjectAiEntry(Guest& _guest);
 /// DI = the slot. Out: CF set when it must hold its fire; AL what InSafeZone leaves there, when it is asked.
 void CheckSafeZoneHoldFireEntry(Guest& _guest);
+void UpdateObjectsAndSpawnEntry(Guest& _guest); ///< DX goes on to the handlers. Clobbers all.
+/// DI = the station. Out: DI, BP, ES and DX as the original leaves them (StationTurn); AX, BX, CX, SI clobbered.
+void UpdateStationAiEntry(Guest& _guest);
 
 } // namespace Elite
