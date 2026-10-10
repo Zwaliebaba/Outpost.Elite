@@ -223,7 +223,7 @@ The compared runs made 1,274,741 calls of ported entries, with no mismatch:
   - Platform fibers do not exist where the Linux tools run.
   - A state machine for each routine is the Phase 4 scheduler, built too early.
 
-**9. Each subsystem has its own file.**
+**9. Each subsystem has its own file.** *Since ADR-017 item 6, only `Start`, the timer's handler and the keyboard's handler keep an entry.*
 
 - **Lists and registration.** The 19 subsystems of Symbols.tsv each have a source file in `GameLogic` with a list of `NativeEntry`, and `InstallNativeRoutines` walks every list. A port therefore touches only its own subsystem's file.
 - **Returns.** An entry says how the original returns: `RET n`, `RETF n`, or `IRET` for an interrupt handler's entry, which is hooked like any other because the CPU takes a due interrupt before it stops at a hook.
