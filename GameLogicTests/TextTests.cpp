@@ -67,58 +67,50 @@ constexpr int MOST_DRAWS = 1000;
 std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, std::uint16_t _ahead)
 {
   std::uint16_t placed = 0;
-  _rig.Both(
-    [&placed, _spawner, _record, _ahead](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      for (int draws = 0;; ++draws)
-      {
-        // NextRandom's next result is the sum of the first two words of the state.
-        const auto next = static_cast<std::uint16_t>(state.Get(DS.randomState0) + state.Get(DS.randomState1));
-        if (PickedRecord(_spawner, next) == _record)
-          break;
-        Assert::IsTrue(draws < MOST_DRAWS, L"the spawner's record comes up");
-        (void)Elite::NextRandom(state);
-      }
-      const Elite::SlotSearch free = Elite::FindFreeShipSlot(state);
-      Assert::IsTrue(free.found, L"a free ship slot");
-      Elite::ObjectSlot ship(state, free.slot);
-      switch (_spawner)
-      {
-      case Spawner::Drifter:
-        Elite::SpawnRandomDrifter(state, ship);
-        break;
-      case Spawner::Trader:
-        (void)Elite::SpawnRandomTrader(state, ship);
-        break;
-      case Spawner::Hunter:
-        Elite::SpawnRandomHunter(state, ship);
-        break;
-      case Spawner::Wolf:
-        Elite::SpawnRandomWolf(state, ship);
-        break;
-      }
-      ship.Set(Elite::SlotWord::X, 0);
-      ship.Set(Elite::SlotWord::Y, 0);
-      ship.Set(Elite::SlotWord::Z, _ahead);
-      ship.Set(Elite::SlotWord::XYHigh, 0);
-      ship.Set(Elite::SlotByte::ZHigh, 0);
-      (void)Elite::FacePlayer(state, ship);
-      (void)Elite::ComputeVelocity(state, ship);
-      placed = free.slot;
-    });
+  Elite::GameState& state = _rig.State();
+  for (int draws = 0;; ++draws)
+  {
+    // NextRandom's next result is the sum of the first two words of the state.
+    const auto next = static_cast<std::uint16_t>(state.Get(DS.randomState0) + state.Get(DS.randomState1));
+    if (PickedRecord(_spawner, next) == _record)
+      break;
+    Assert::IsTrue(draws < MOST_DRAWS, L"the spawner's record comes up");
+    (void)Elite::NextRandom(state);
+  }
+  const Elite::SlotSearch free = Elite::FindFreeShipSlot(state);
+  Assert::IsTrue(free.found, L"a free ship slot");
+  Elite::ObjectSlot ship(state, free.slot);
+  switch (_spawner)
+  {
+  case Spawner::Drifter:
+    Elite::SpawnRandomDrifter(state, ship);
+    break;
+  case Spawner::Trader:
+    (void)Elite::SpawnRandomTrader(state, ship);
+    break;
+  case Spawner::Hunter:
+    Elite::SpawnRandomHunter(state, ship);
+    break;
+  case Spawner::Wolf:
+    Elite::SpawnRandomWolf(state, ship);
+    break;
+  }
+  ship.Set(Elite::SlotWord::X, 0);
+  ship.Set(Elite::SlotWord::Y, 0);
+  ship.Set(Elite::SlotWord::Z, _ahead);
+  ship.Set(Elite::SlotWord::XYHigh, 0);
+  ship.Set(Elite::SlotByte::ZHigh, 0);
+  (void)Elite::FacePlayer(state, ship);
+  (void)Elite::ComputeVelocity(state, ship);
+  placed = free.slot;
   return placed;
 }
 
 // The ship at _slot gone from the twin, as RemoveObject takes one out of play: its active bit cleared and its blip erased.
 void RemoveShip(TwinRig& _rig, std::uint16_t _slot)
 {
-  _rig.Both(
-    [_slot](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      (void)Elite::RemoveObject(state, Elite::ObjectSlot(state, _slot));
-    });
+  Elite::GameState& state = _rig.State();
+  (void)Elite::RemoveObject(state, Elite::ObjectSlot(state, _slot));
 }
 
 // A missile launched at the player by the ship at _launcher in the twin, as TryLaunchMissileAtPlayer launches one
@@ -126,15 +118,10 @@ void RemoveShip(TwinRig& _rig, std::uint16_t _slot)
 std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
 {
   std::uint16_t launched = 0;
-  _rig.Both(
-    [&launched, _launcher](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      const std::optional<std::uint16_t> slot =
-        Elite::LaunchShipFromObject(state, Elite::ObjectSlot(state, _launcher), MISSILE_LAUNCH, false);
-      Assert::IsTrue(slot.has_value(), L"a free slot for the missile");
-      launched = slot.value_or(0);
-    });
+  Elite::GameState& state = _rig.State();
+  const std::optional<std::uint16_t> slot = Elite::LaunchShipFromObject(state, Elite::ObjectSlot(state, _launcher), MISSILE_LAUNCH, false);
+  Assert::IsTrue(slot.has_value(), L"a free slot for the missile");
+  launched = slot.value_or(0);
   return launched;
 }
 

@@ -76,7 +76,7 @@ public:
     {
       ReferenceRig rig("Waits");
       Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
-      Elite::ReplayPlayer player(rig.Host(), rig.Program());
+      Elite::ReplayPlayer player(rig.Host(), rig.State());
       std::string digest;
       for (const Elite::Step& step : run == 0 ? one : many)
         Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"runs");
@@ -121,14 +121,14 @@ public:
       live.Host().KeyboardController().Inject(static_cast<std::uint8_t>(press.scanCode | (press.down ? 0 : 0x80)));
     }
     Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, END_MILLISECONDS)) == Machine::StopReason::Reached, L"runs");
-    const std::string expected = Elite::GameStateDigest(live.Host(), live.Program());
+    const std::string expected = Elite::GameStateDigest(live.State(), live.Host().Video());
     recorder.Digest(END_MILLISECONDS, "end", expected);
 
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps(recorder.Text(), steps, error), L"the recording parses");
     ReferenceRig replay("RecordReplay");
-    Elite::ReplayPlayer player(replay.Host(), replay.Program());
+    Elite::ReplayPlayer player(replay.Host(), replay.State());
     std::string digest;
     for (const Elite::Step& step : steps)
       Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"plays");
@@ -208,7 +208,7 @@ public:
       std::vector<Elite::Step> steps;
       std::string error;
       Assert::IsTrue(Elite::ParseSteps(TO_THE_QUESTION, steps, error), L"parses");
-      Elite::ReplayPlayer player(rig.Host(), rig.Program());
+      Elite::ReplayPlayer player(rig.Host(), rig.State());
       std::string digest;
       for (const Elite::Step& step : steps)
         Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"the menus run");
@@ -254,7 +254,7 @@ public:
 
     ReferenceRig rig("FileStep");
     Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
-    Elite::ReplayPlayer player(rig.Host(), rig.Program(), rig.Store(), sources.Path());
+    Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), sources.Path());
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps("file pilot.cdr first.cdr", steps, error), L"parses");
@@ -303,12 +303,12 @@ public:
       return message;
     };
 
-    Elite::ReplayPlayer copiesNothing(rig.Host(), rig.Program());
+    Elite::ReplayPlayer copiesNothing(rig.Host(), rig.State());
     const std::string noDirectory = refusal(copiesNothing);
     Assert::IsTrue(noDirectory.find("line 2: file PILOT.CDR missing.cdr") != std::string::npos, L"names the step");
     Assert::IsTrue(noDirectory.find("no DOS directory") != std::string::npos, L"says why");
 
-    Elite::ReplayPlayer player(rig.Host(), rig.Program(), rig.Store(), sources.Path());
+    Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), sources.Path());
     const std::string noSource = refusal(player);
     Assert::IsTrue(noSource.find("cannot read") != std::string::npos, L"a source that is not there");
     Assert::IsTrue(rig.Store().List().empty(), L"and nothing was created");

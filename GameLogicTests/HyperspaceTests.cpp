@@ -42,27 +42,23 @@ void Launch(TwinRig& _rig)
 // through the tunnel to the arrival.
 void PlayJump(TwinRig& _rig, const Jump& _jump)
 {
-  _rig.Both(
-    [&](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      state.Set(DS.hyperspaceTargetIndex, state.Get(DS.selectedSystemIndex));
-      for (std::uint16_t index = 0; index < state.Get(DS.systemRecordBytes); ++index)
-      {
-        state.SetByte(static_cast<std::uint16_t>(DS.hyperspaceTargetRecord.offset + index),
-                      state.Byte(static_cast<std::uint16_t>(DS.selectedSystemName.offset + index)));
-      }
-      state.Set(DS.galacticJumpPending, _jump.galactic);
-      state.Set(DS.galaxyNumber, _jump.galaxy);
-      state.Set(DS.randomState0, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0]);
-      state.Set(DS.randomState1, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1]);
-      state.Set(DS.randomState2, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2]);
-      state.Set(DS.forceMisjump, _jump.forceMisjump);
-      state.Set(DS.missionNumber, _jump.mission);
-      state.Set(DS.missionStage, _jump.missionStage);
-      state.Set(DS.hyperspaceCountdown, 1);
-      state.Set(DS.hyperspaceCountdownFrames, 1);
-    });
+  Elite::GameState& state = _rig.State();
+  state.Set(DS.hyperspaceTargetIndex, state.Get(DS.selectedSystemIndex));
+  for (std::uint16_t index = 0; index < state.Get(DS.systemRecordBytes); ++index)
+  {
+    state.SetByte(static_cast<std::uint16_t>(DS.hyperspaceTargetRecord.offset + index),
+                  state.Byte(static_cast<std::uint16_t>(DS.selectedSystemName.offset + index)));
+  }
+  state.Set(DS.galacticJumpPending, _jump.galactic);
+  state.Set(DS.galaxyNumber, _jump.galaxy);
+  state.Set(DS.randomState0, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0]);
+  state.Set(DS.randomState1, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1]);
+  state.Set(DS.randomState2, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2]);
+  state.Set(DS.forceMisjump, _jump.forceMisjump);
+  state.Set(DS.missionNumber, _jump.mission);
+  state.Set(DS.missionStage, _jump.missionStage);
+  state.Set(DS.hyperspaceCountdown, 1);
+  state.Set(DS.hyperspaceCountdownFrames, 1);
   _rig.Play("wait 3.5\ndigest arrived");
 }
 

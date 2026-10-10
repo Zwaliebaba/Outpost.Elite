@@ -4,7 +4,7 @@
 
 #include "AudioStream.h"
 #include "DirectoryFileStore.h"
-#include "NativeRoutines.h"
+#include "Game.h"
 #include "Pc.h"
 #include "Presenter.h"
 #include "Reference.h"
@@ -150,16 +150,16 @@ int Application::Run(HINSTANCE _instance)
   Machine::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
   Machine::Pc::Desc desc;
   desc.startMoment = Elite::START_MOMENT; // fixed, so the session's replay plays back exactly (ADR-008)
-  // Every routine is native, so nothing is interpreted: the Pc's Dispatcher runs them (ADR-011).
-  const auto pc = std::make_unique<Machine::Pc>(files, desc);
-  Machine::LoadedProgram program;
-  if (Elite::LoadReference(*pc, reference, Elite::PSP_SEGMENT, program) != Elite::ReferenceFailure::None)
+  // Every routine is native, in place of the original (ADR-010), so nothing is interpreted: the Pc's Dispatcher runs them
+  // (ADR-011), over the memory the GameState owns (D19).
+  const auto game = std::make_unique<Elite::Game>(files, desc);
+  if (game->Load(reference, Elite::PSP_SEGMENT) != Elite::ReferenceFailure::None)
   {
     const std::filesystem::path shown = referencePath.empty() ? std::filesystem::path(Elite::REFERENCE_FILE_NAME) : referencePath;
     Fail(std::format(L"{} was not found, or is not the reference binary (ADR-001, ADR-007).", shown.wstring()));
     return 1;
   }
-  Elite::InstallNativeRoutines(*pc, program); // in place of the original (ADR-010)
+  Machine::Pc* const pc = &game->Host();
 
   const std::string session = SessionName();
   Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReferenceRunner --replay; see ADR-008.", session));
@@ -208,7 +208,7 @@ int Application::Run(HINSTANCE _instance)
     while (reason == Machine::StopReason::Reached && nextDigest <= target)
     {
       reason = pc->RunUntil(Elite::ReplayCycle(start, nextDigest));
-      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::GameStateDigest(*pc, program));
+      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::GameStateDigest(game->State(), pc->Video()));
       nextDigest += DIGEST_INTERVAL_MILLISECONDS;
     }
     if (reason == Machine::StopReason::Reached)
@@ -243,7 +243,7 @@ int Application::Run(HINSTANCE _instance)
   if (!replays.empty() && elapsedMilliseconds > DIGEST_INTERVAL_MILLISECONDS)
   {
     // The last digest is where the session ended, so the replay plays to the end, or to the same stop.
-    recorder.Digest(elapsedMilliseconds, "end", Elite::GameStateDigest(*pc, program));
+    recorder.Digest(elapsedMilliseconds, "end", Elite::GameStateDigest(game->State(), pc->Video()));
     std::ofstream out(replays / (session + ".replay"), std::ios::binary | std::ios::trunc);
     out << recorder.Text();
   }

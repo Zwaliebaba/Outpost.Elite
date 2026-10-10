@@ -2,7 +2,7 @@
 #pragma once
 
 #include "DirectoryFileStore.h"
-#include "NativeRoutines.h"
+#include "Game.h"
 #include "Pc.h"
 #include "Reference.h"
 
@@ -54,7 +54,7 @@ private:
 /// The reference loaded on a PC in paced time (ADR-008), as replays run it and the game does: the PSP where DOSBox-X
 /// puts it, the clock starting at midnight on 1 January 1980 unless _startMoment says otherwise, DOS's files in a
 /// scratch directory, and the native routines in place of the program's code on a Dispatcher, which interprets
-/// nothing (ADR-011).
+/// nothing (ADR-011). A Game holds the PC and the GameState that owns the game's memory (D19).
 class ReferenceRig
 {
 public:
@@ -62,14 +62,10 @@ public:
                         bool _mousePresent = false)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent)))
+      m_game(std::make_unique<Elite::Game>(m_files, Desc(_startMoment, _mousePresent)))
   {
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
-    m_loaded = Elite::LoadReference(*m_pc, file, Elite::PSP_SEGMENT, m_program) == Elite::ReferenceFailure::None;
-    if (m_loaded)
-    {
-      Elite::InstallNativeRoutines(*m_pc, m_program);
-    }
+    m_loaded = m_game->Load(file, Elite::PSP_SEGMENT) == Elite::ReferenceFailure::None;
   }
 
   [[nodiscard]] bool Loaded() const noexcept
@@ -79,12 +75,18 @@ public:
 
   [[nodiscard]] Machine::Pc& Host() noexcept
   {
-    return *m_pc;
+    return m_game->Host();
+  }
+
+  /// The game's memory, which the PC maps.
+  [[nodiscard]] Elite::GameState& State() noexcept
+  {
+    return m_game->State();
   }
 
   [[nodiscard]] const Machine::LoadedProgram& Program() const noexcept
   {
-    return m_program;
+    return m_game->Program();
   }
 
   /// Where DOS's files are.
@@ -110,8 +112,7 @@ private:
 
   ScratchDirectory m_directory;
   Machine::DirectoryFileStore m_files;
-  std::unique_ptr<Machine::Pc> m_pc;
-  Machine::LoadedProgram m_program;
+  std::unique_ptr<Elite::Game> m_game;
   bool m_loaded = false;
 };
 

@@ -44,13 +44,9 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 // Tools/PrepareCommanders.py steps a commander's.
 void DrawRandomNumbers(TwinRig& _rig, std::uint32_t _draws)
 {
-  _rig.Both(
-    [_draws](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      for (std::uint32_t draw = 0; draw < _draws; ++draw)
-        (void)Elite::NextRandom(state);
-    });
+  Elite::GameState& state = _rig.State();
+  for (std::uint32_t draw = 0; draw < _draws; ++draw)
+    (void)Elite::NextRandom(state);
 }
 
 // The byte _field as the twin holds it.
@@ -80,24 +76,19 @@ struct ShipCount
 [[nodiscard]] ShipCount CountShips(TwinRig& _rig, std::uint8_t _type)
 {
   ShipCount count{0, 0};
-  _rig.Both(
-    [&count, _type](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      count = ShipCount{0, 0};
-      Elite::GameState state(_pc.Ram(), _program.loadSegment, Elite::DataSegment(_program));
-      const Elite::ObjectSlot station(state, DS.stationSlot.offset);
-      for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Get(DS.objectSlotCount); ++index)
-      {
-        const Elite::ObjectSlot ship(state, static_cast<std::uint16_t>(DS.shipSlots.offset + index * Elite::SLOT_BYTES));
-        const std::uint8_t type = ship.Get(Elite::SlotByte::Type);
-        if ((type & Elite::SLOT_ACTIVE) == 0 || ((type >> 1) & Elite::TYPE_MASK) != _type)
-          continue;
-        ++count.all;
-        if (WithinReach(ship.PositionX(), station.PositionX()) && WithinReach(ship.PositionY(), station.PositionY()) &&
-            WithinReach(ship.PositionZ(), station.PositionZ()))
-          ++count.fromStation;
-      }
-    });
+  Elite::GameState& state = _rig.State();
+  const Elite::ObjectSlot station(state, DS.stationSlot.offset);
+  for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Get(DS.objectSlotCount); ++index)
+  {
+    const Elite::ObjectSlot ship(state, static_cast<std::uint16_t>(DS.shipSlots.offset + index * Elite::SLOT_BYTES));
+    const std::uint8_t type = ship.Get(Elite::SlotByte::Type);
+    if ((type & Elite::SLOT_ACTIVE) == 0 || ((type >> 1) & Elite::TYPE_MASK) != _type)
+      continue;
+    ++count.all;
+    if (WithinReach(ship.PositionX(), station.PositionX()) && WithinReach(ship.PositionY(), station.PositionY()) &&
+        WithinReach(ship.PositionZ(), station.PositionZ()))
+      ++count.fromStation;
+  }
   return count;
 }
 
