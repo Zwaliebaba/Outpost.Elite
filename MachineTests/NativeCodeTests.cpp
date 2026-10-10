@@ -240,6 +240,22 @@ public:
     Assert::AreEqual(std::uint64_t{1}, kept.Books().mismatches);
   }
 
+  // Poisoning (ADR-012) marks exactly the registers named, each with its own value, and only while it is on.
+  TEST_METHOD(PoisoningMarksTheNamedRegistersWhileOn)
+  {
+    NativeRig rig("NativePoison", COUNT_UP);
+    Machine::NativeCode& native = rig.Host().Native();
+    Machine::Registers regs;
+    native.Poison(regs, Machine::REGISTER_DX | Machine::REGISTER_BP);
+    Assert::AreEqual(0u, std::uint32_t{regs.dx}, L"off: nothing is marked");
+
+    native.SetPoisoning(true);
+    native.Poison(regs, Machine::REGISTER_DX | Machine::REGISTER_BP);
+    Assert::AreEqual(0xA5A4u, std::uint32_t{regs.dx});
+    Assert::AreEqual(0xA5A7u, std::uint32_t{regs.bp});
+    Assert::AreEqual(0u, std::uint32_t{regs.ax}, L"AX is not named");
+  }
+
   // The native run sees the port reads the original made, and its writes are compared rather than
   // made a second time.
   TEST_METHOD(PortAccessesAreReplayed)

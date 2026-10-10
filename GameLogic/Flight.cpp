@@ -221,12 +221,12 @@ void SetMessage(Guest& _guest, DataAt _text, std::uint16_t _frames)
 // SetSinCos0-8 and RotateBySinCos0-8: the pairs of rotationSinCos, by number.
 void SetSinCosPair(Guest& _guest, std::size_t _pair)
 {
-  SetSinCos(_guest, DS.rotationSinCos.At(_pair));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(_pair));
 }
 
 void RotateByPair(Guest& _guest, std::size_t _pair)
 {
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(_pair));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(_pair));
 }
 
 // ---- Stardust -------------------------------------------------------------------------------------
@@ -1232,7 +1232,7 @@ void ApplyPitch(Guest& _guest)
   const std::uint16_t forwardZ = regs.cx;
   regs.ax = regs.bx;
   regs.bx = regs.cx;
-  ArcTangent2(_guest);
+  ArcTangent2Entry(_guest);
   regs.ax = Negate(regs.ax);
   _guest.Set(DS.pitchAngleScratch, regs.ax);
   regs.ax = Negate(regs.ax);
@@ -1241,7 +1241,7 @@ void ApplyPitch(Guest& _guest)
   regs.ax = forwardY;
   RotateByPair(_guest, 6);
   regs.ax = forwardX;
-  ArcTangent2(_guest);
+  ArcTangent2Entry(_guest);
   regs.ax = Negate(regs.ax);
   _guest.Set(DS.yawAngleScratch, regs.ax);
 
@@ -1265,7 +1265,7 @@ void ApplyPitch(Guest& _guest)
   regs.ax = upX;
   RotateByPair(_guest, 7);
   regs.bx = upY;
-  ArcTangent2(_guest);
+  ArcTangent2Entry(_guest);
   _guest.Set(DS.playerRollAngle, regs.ax);
   regs.ax = Negate(_guest.Get(DS.yawAngleScratch));
   _guest.Set(DS.playerYawAngle, regs.ax);
@@ -1284,15 +1284,15 @@ void PlaceSunPlanetAndStation(Guest& _guest)
   // The sun, at random far behind: x and y within 2 of 0, z 10 to 12 behind, in 24-bit coordinates.
   regs.di = DS.shipSlots.offset;
   setByte(0, 0x3D);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>((regs.ax & 0x3FF) - 0x200);
   setByte(5, Low(regs.ax));
   setByte(1, High(regs.ax));
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>((regs.ax & 0x3FF) - 0x200);
   setByte(7, Low(regs.ax));
   setByte(2, High(regs.ax));
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>((regs.ax & 0x3FF) - 0xC00);
   setByte(3, High(regs.ax));
   setByte(9, Low(regs.ax));
@@ -1346,7 +1346,7 @@ void PlaceSunPlanetAndStation(Guest& _guest)
   setByte(3, Low(regs.dx));
   setByte(SLOT_FLAGS, 4);
   setByte(SLOT_CLASS, 1);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetHigh(regs.ax, (High(regs.ax) & 7) + 0x0A);
   setByte(0x1F, High(regs.ax));
   setByte(0x3F, 0xFF);
@@ -1484,7 +1484,7 @@ void ShiftStardustSideways(Guest& _guest)
 void RespawnDustAtSideEdge(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.bx = regs.ax;
   SetLow(regs.ax, RandomLifetime(regs.ax));
   MarkDustRespawned(_guest, Low(regs.ax));
@@ -1493,7 +1493,7 @@ void RespawnDustAtSideEdge(Guest& _guest)
   {
     SetHigh(regs.bx, 0x0F);
   }
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>(regs.ax & regs.bp);
   // Moving right the particle enters at the left edge, moving left at the right.
   regs.ax = Negative(regs.dx) ? static_cast<std::uint16_t>(0x1F00 - regs.ax) : Plus(regs.ax, 0xE000);
@@ -1542,11 +1542,11 @@ void ShiftStardustVertically(Guest& _guest)
 void RespawnDustAtVerticalEdge(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetLow(regs.bx, RandomLifetime(regs.ax));
   MarkDustRespawned(_guest, Low(regs.bx));
   const std::uint16_t x = RandomDustX(regs.ax);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>(regs.ax & regs.bp);
   regs.bx = Negative(regs.dx) ? static_cast<std::uint16_t>(0x0F00 - regs.ax) : Plus(0xF000, regs.ax);
   regs.ax = x;
@@ -1555,10 +1555,10 @@ void RespawnDustAtVerticalEdge(Guest& _guest)
 void RespawnDustAnywhere(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetLow(regs.ax, RandomLifetime(regs.ax));
   MarkDustRespawned(_guest, Low(regs.ax));
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.bx = regs.ax;
   regs.ax = RandomDustX(regs.ax);
   regs.bx = Sar(Join(Low(regs.bx), High(regs.bx)), 3);
@@ -1644,7 +1644,7 @@ void ResetStardust(Guest& _guest)
   {
     for (;;)
     {
-      NextRandom(_guest);
+      NextRandomEntry(_guest);
       regs.ax = Sar(regs.ax, 1);
       const auto high = static_cast<std::int8_t>(High(regs.ax));
       if (high >= -0x23 && high <= 0x23)
@@ -1661,7 +1661,7 @@ void ResetStardust(Guest& _guest)
     _guest.SetWord(regs.di, regs.ax);
     randomCoordinate();
     _guest.SetWord(Plus(regs.di, 2), regs.ax);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     SetLow(regs.ax, RandomLifetime(regs.ax));
     _guest.SetByte(Plus(regs.di, PARTICLE_LIFETIME), Low(regs.ax));
     regs.di = Plus(regs.di, PARTICLE_BYTES);
@@ -2005,12 +2005,12 @@ void UpdateEnergyAndLaserHeat(Guest& _guest)
     return;
   }
   // Below one bank, 50 in 65536 a frame, one of the 13 equipment bytes from missileCount is lost.
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   if (regs.ax >= 0x32)
   {
     return;
   }
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetHigh(regs.ax, 0);
   SetLow(regs.bx, 0x14);
   DivideByte(_guest, 0x14);

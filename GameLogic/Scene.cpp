@@ -165,11 +165,11 @@ void SetDrawAngles(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = Negate(_guest.Get(DS.drawRollAngle));
-  SetSinCos(_guest, DS.rotationSinCos.At(3));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(3));
   regs.ax = _guest.Get(DS.drawYawAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(4));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(4));
   regs.ax = static_cast<std::uint16_t>(_guest.Get(DS.drawPitchAngle) + _guest.Get(DS.playerPitchAngle));
-  SetSinCos(_guest, DS.rotationSinCos.At(5));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(5));
 }
 
 [[nodiscard]] bool Negative(std::uint16_t _value) noexcept
@@ -224,7 +224,7 @@ void RotateVertices(Guest& _guest, std::uint16_t _first, std::uint16_t _count, s
   {
     regs.ax = _guest.Word(Offset(regs.si, _a));
     regs.bx = _guest.Word(Offset(regs.si, _b));
-    RotateByStoredSinCos(_guest, _pair);
+    RotateByStoredSinCosEntry(_guest, _pair);
     _guest.SetWord(Offset(regs.si, _a), regs.ax);
     _guest.SetWord(Offset(regs.si, _b), regs.bx);
     regs.si = Offset(regs.si, VERTEX_BYTES);
@@ -241,7 +241,7 @@ void RotateVerticesToView(Guest& _guest, std::uint16_t _first, std::uint16_t _co
     return;
   }
   regs.ax = Negate(regs.ax);
-  SetSinCos(_guest, DS.rotationSinCos.At(8));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(8));
   RotateVertices(_guest, _first, _count, 0, VERTEX_Z, DS.rotationSinCos.At(8));
 }
 
@@ -456,10 +456,10 @@ void RotateToViewDirection(Guest& _guest)
   const std::uint16_t y = regs.bx;
   const std::uint16_t z = regs.cx;
   regs.ax = Negate(viewAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(8));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(8));
   regs.bx = z;
   regs.ax = x;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(8));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(8));
   regs.cx = regs.bx;
   regs.bx = y;
 }
@@ -811,7 +811,7 @@ void DrawSunOrPlanetDisc(Guest& _guest)
   {
     regs.dx = SUN_SCALE;
     regs.ax = 0;
-    ScaleByInverseDistance(_guest);
+    ScaleByInverseDistanceEntry(_guest);
   }
   _guest.Set(DS.cabinTemperature, Low(regs.ax));
   if ((_guest.Byte(Offset(regs.di, SLOT_VIEW_Z_HIGH)) & 0x80) != 0)
@@ -864,7 +864,7 @@ void DrawSunOrPlanetDisc(Guest& _guest)
   _guest.Set(DS.sunFringeMask, FRINGE_NONE);
   regs.dx = PLANET_SCALE;
   regs.ax = 0;
-  ScaleByInverseDistance(_guest);
+  ScaleByInverseDistanceEntry(_guest);
   auto altitude = static_cast<std::uint8_t>(~Low(regs.ax));
   if (altitude > ALTITUDE_LIMIT)
   {
@@ -972,7 +972,7 @@ void BuildBoxCornerVertices(Guest& _guest)
   _guest.SetWord(Offset(regs.si, VERTEX_BYTES + VERTEX_Z), regs.cx);
   _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES + VERTEX_Z), regs.cx);
   // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(3));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(3));
   _guest.SetWord(regs.si, regs.ax);
   _guest.SetWord(Offset(regs.si, 2), regs.bx);
   regs.ax = Negate(regs.ax);
@@ -981,7 +981,7 @@ void BuildBoxCornerVertices(Guest& _guest)
   _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES + 2), regs.bx);
   regs.bx = Negate(height);
   regs.ax = _guest.Get(DS.boxHalfWidth);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(3));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(3));
   _guest.SetWord(Offset(regs.si, VERTEX_BYTES), regs.ax);
   _guest.SetWord(Offset(regs.si, VERTEX_BYTES + 2), regs.bx);
   RotateVertices(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, VERTEX_Z, DS.rotationSinCos.At(4));
@@ -1237,11 +1237,11 @@ void CheckShipInRange(Guest& _guest)
 void TransformSunOrPlanet(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  GetPositionScaleShift(_guest);
+  GetPositionScaleShiftEntry(_guest);
   _guest.SetByte(Offset(regs.di, SLOT_SCALE_SHIFT), Low(regs.cx));
   _guest.SetByte(Offset(regs.di, SLOT_DEPTH), Low(regs.cx));
   regs.dx = WithHigh(regs.dx, Low(regs.cx));
-  ScalePositionDown(_guest);
+  ScalePositionDownEntry(_guest);
   const std::uint16_t slot = regs.di;
   TransformToViewWithBlip(_guest);
   regs.di = slot;
@@ -1302,11 +1302,11 @@ void TransformAndDrawObjects(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = _guest.Get(DS.playerPitchAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(0));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(0));
   regs.ax = _guest.Get(DS.playerYawAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(1));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(1));
   regs.ax = _guest.Get(DS.playerRollAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(2));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(2));
   regs.di = DS.shipSlots.offset;
   regs.cx = _guest.Get(DS.shipSlotCount);
   do
@@ -1324,7 +1324,7 @@ void TransformAndDrawObjects(Guest& _guest)
 void TransformToViewWithBlip(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  RotatePitchYawRoll(_guest);
+  RotatePitchYawRollEntry(_guest);
   _guest.SetByte(Offset(regs.di, SLOT_CAMERA_Z_HIGH), High(regs.cx));
   _guest.Call(UPDATE_SCANNER_BLIP);
   RotateToViewDirection(_guest);
@@ -1332,7 +1332,7 @@ void TransformToViewWithBlip(Guest& _guest)
 
 void TransformToView(Guest& _guest)
 {
-  RotatePitchYawRoll(_guest);
+  RotatePitchYawRollEntry(_guest);
   RotateToViewDirection(_guest);
 }
 
@@ -1384,11 +1384,11 @@ void LoadPlayerAngles(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = _guest.Get(DS.playerPitchAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(0));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(0));
   regs.ax = _guest.Get(DS.playerYawAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(1));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(1));
   regs.ax = _guest.Get(DS.playerRollAngle);
-  SetSinCos(_guest, DS.rotationSinCos.At(2));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(2));
 }
 
 void ProjectToScreen(Guest& _guest)
@@ -1444,6 +1444,9 @@ constexpr std::uint16_t ALL_BUT_DS =
 
 constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 
+// The rotations' leftover in DX, which no caller reads (ADR-012).
+constexpr Machine::NativeContract CLOBBERS_DX{REGISTER_DX, 0};
+
 constexpr std::array ENTRIES = {
   NativeEntry{0x2340, "ProjectVertices", &ProjectVertices,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
@@ -1451,7 +1454,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3768, "OffsetVertexByCenter", &OffsetVertexByCenter, Machine::NativeContract{REGISTER_AX, 0}},
   NativeEntry{0x377A, "BuildBoxCornerVertices", &BuildBoxCornerVertices,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
-  NativeEntry{0x38BF, "BuildDodoVertices", &BuildDodoVertices, PRESERVES_ALL},
+  NativeEntry{0x38BF, "BuildDodoVertices", &BuildDodoVertices, CLOBBERS_DX},
   NativeEntry{0x3A13, "ScaleDodoRadii", &ScaleDodoRadii, Machine::NativeContract{REGISTER_AX, 0}},
   NativeEntry{0x3A40, "RunVertexProgram", &RunVertexProgram, Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0}},
   NativeEntry{0x3A9B, "TriangleWindingSign", &TriangleWindingSign, Machine::NativeContract{ALL_BUT_DS, FLAG_SIGN}},
@@ -1464,8 +1467,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3CDD, "RunBlueprintHandler", &RunBlueprintHandler, Machine::NativeContract{ALL_BUT_DS & ~REGISTER_DI, 0}},
   NativeEntry{0x3CF2, "RenderBlueprintBody", &RenderBlueprintBody, PRESERVES_ALL},
   NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjects, Machine::NativeContract{ALL_BUT_DS, 0}},
-  NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlip, PRESERVES_ALL},
-  NativeEntry{0x3EE3, "TransformToView", &TransformToView, PRESERVES_ALL},
+  NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlip, CLOBBERS_DX},
+  NativeEntry{0x3EE3, "TransformToView", &TransformToView, CLOBBERS_DX},
   NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanet, PRESERVES_ALL},
   NativeEntry{0x45C6, "DrawDistantStation", &DrawDistantStation, PRESERVES_ALL},
   NativeEntry{0x8A16, "LoadPlayerAngles", &LoadPlayerAngles, PRESERVES_ALL},

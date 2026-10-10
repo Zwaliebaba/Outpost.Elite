@@ -732,7 +732,7 @@ void TryScoopObject(Guest& _guest)
     {
       // A random product 0-10, furs for slaves, into the hold, and its name for the message.
       RemoveObject(_guest);
-      NextRandom(_guest);
+      NextRandomEntry(_guest);
       regs.ax = Low(regs.ax);
       SetLow(regs.bx, RANDOM_PRODUCT_DIVISOR);
       DivideByte(_guest, RANDOM_PRODUCT_DIVISOR);
@@ -762,17 +762,17 @@ void TryScoopObject(Guest& _guest)
   {
     // Gems, gold and platinum always; minerals or alloys too if there is room.
     RemoveObject(_guest);
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & 7));
     AddPrecious(_guest, DS.cargoGemStonesGrams, Low(regs.ax));
     SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) & 3));
     AddPrecious(_guest, DS.cargoGoldKg, Low(regs.ax));
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & 3) + 1));
     AddPrecious(_guest, DS.cargoPlatinumKg, High(regs.ax));
     if (_guest.Get(DS.freeCargoTonnes) != 0)
     {
-      NextRandom(_guest);
+      NextRandomEntry(_guest);
       if (Low(regs.ax) >= MINERALS_FROM)
       {
         IncrementByte(_guest, DS.cargoMineralsTonnes.offset);

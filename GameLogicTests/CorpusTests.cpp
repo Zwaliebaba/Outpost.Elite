@@ -81,6 +81,7 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
     {
       Elite::InstallNativeRoutines(rig.Host(), rig.Program());
       rig.Host().Native().SetVerifying(_running == Running::Compared);
+      rig.Host().Native().SetPoisoning(true); // what a routine's contract leaves to it, no caller reads (ADR-012)
     }
     Elite::ReplayPlayer player(rig.Host(), rig.Program());
     std::size_t checked = 0;

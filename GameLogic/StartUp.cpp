@@ -217,10 +217,10 @@ void CopyProtection(Guest& _guest)
   regs.dx = CGA_STATUS_PORT;
   do
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(regs.dx) & CGA_VERTICAL_RETRACE));
   } while (Low(regs.ax) == 0);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   const auto index = static_cast<std::uint8_t>(Low(regs.ax) & QUESTION_MASK);
   regs.bx = static_cast<std::uint16_t>(static_cast<std::uint8_t>(index * 3) * 2);
   const auto question = static_cast<std::uint8_t>(index + 1);

@@ -207,10 +207,10 @@ void AimRoll(Guest& _guest, bool _approach, std::uint8_t _next)
   Registers& regs = _guest.Regs();
   _guest.Call(LOAD_PLAYER_ANGLES);
   LoadStationPosition(_guest, _approach);
-  RotatePitchYawRoll(_guest);
+  RotatePitchYawRollEntry(_guest);
   regs.ax = Sar(regs.ax, 2);
   regs.bx = Sar(regs.bx, 2);
-  ArcTangent2(_guest);
+  ArcTangent2Entry(_guest);
   std::uint16_t magnitude = regs.ax;
   if ((magnitude & ANGLE_SIGN) != 0)
   {
@@ -232,7 +232,7 @@ void RollToTarget(Guest& _guest, std::uint8_t _next)
   regs.ax = _guest.Get(DS.playerRollAngle);
   regs.cx = _guest.Get(DS.dockingTargetAngle);
   regs.bx = ROLL_TOLERANCE;
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (_guest.Flag(FLAG_CARRY))
   {
     _guest.Set(DS.playerRollAngle, regs.cx);
@@ -257,13 +257,13 @@ void PitchToTarget(Guest& _guest, bool _approach, std::uint16_t _tolerance, std:
     _guest.Call(LOAD_PLAYER_ANGLES);
   }
   LoadStationPosition(_guest, _approach);
-  RotatePitchYawRoll(_guest);
+  RotatePitchYawRollEntry(_guest);
   regs.ax = Sar(regs.bx, 2);
   regs.bx = Sar(regs.cx, 2);
-  ArcTangent2(_guest);
+  ArcTangent2Entry(_guest);
   regs.bx = _tolerance;
   regs.cx = 0;
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (!_guest.Flag(FLAG_CARRY))
   {
     SetLow(regs.ax, (regs.ax & ANGLE_SIGN) != 0 ? Negate(_step) : _step);
@@ -302,7 +302,7 @@ void FlyToApproachPoint(Guest& _guest)
   _guest.Set(DS.dockingComputerSteering, 0);
   _guest.Set(DS.rollRate, 0);
   LoadStationPosition(_guest, true);
-  VectorLength(_guest);
+  VectorLengthEntry(_guest);
   if (regs.ax >= SLOW_DOWN_DISTANCE)
   {
     SpeedUp(_guest);
@@ -387,14 +387,14 @@ void MatchSpin(Guest& _guest)
   LoadStationSpin(_guest, 0);
   regs.bx = SPIN_TOLERANCE;
   regs.cx = _guest.Get(DS.playerRollAngle);
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (_guest.Flag(FLAG_CARRY))
   {
     _guest.Set(DS.dockingComputerState, ROLL_WITH_SPIN);
     return;
   }
   regs.cx = Offset(regs.cx, HALF_TURN);
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (_guest.Flag(FLAG_CARRY))
   {
     _guest.Set(DS.dockingComputerState, ROLL_WITH_SPIN_TURNED);
@@ -437,7 +437,7 @@ void CheckDockingAlignment(Guest& _guest)
   // Pitch near 0 wants yaw near a half turn, and pitch near a half turn wants yaw near 0.
   regs.ax = _guest.Get(DS.playerPitchAngle);
   regs.cx = 0;
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (_guest.Flag(Machine::FLAG_CARRY))
   {
     regs.cx = HALF_TURN;
@@ -445,7 +445,7 @@ void CheckDockingAlignment(Guest& _guest)
   else
   {
     regs.cx = HALF_TURN;
-    AngleWithinTolerance(_guest);
+    AngleWithinToleranceEntry(_guest);
     if (!_guest.Flag(Machine::FLAG_CARRY))
     {
       return;
@@ -453,7 +453,7 @@ void CheckDockingAlignment(Guest& _guest)
     regs.cx = 0;
   }
   regs.ax = _guest.Get(DS.playerYawAngle);
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (!_guest.Flag(Machine::FLAG_CARRY))
   {
     return;
@@ -468,13 +468,13 @@ void CheckDockingAlignment(Guest& _guest)
     regs.cx = static_cast<std::uint16_t>(0u - regs.cx);
   }
   regs.cx &= ANGLE_MASK;
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
   if (_guest.Flag(Machine::FLAG_CARRY))
   {
     return;
   }
   regs.cx = static_cast<std::uint16_t>((regs.cx + HALF_TURN) & ANGLE_MASK);
-  AngleWithinTolerance(_guest);
+  AngleWithinToleranceEntry(_guest);
 }
 
 void MaskOutsideTunnel(Guest& _guest)
@@ -723,6 +723,8 @@ constexpr Machine::NativeContract CLOBBERS_ALL{
 constexpr Machine::NativeContract CLOBBERS_ALL_BUT_ES{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 constexpr Machine::NativeContract ALIGNMENT{REGISTER_AX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
+// ArcTangent2's leftovers, which no caller reads (ADR-012).
+constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 
 // PlayStationTunnel waits as a rule: for frames, and docking for the timer too.
 constexpr std::array ENTRIES = {
@@ -731,7 +733,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnel, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnel, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputer, PRESERVES_ALL},
-  NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputer, PRESERVES_ALL},
+  NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputer, CLOBBERS_BX_CX_DX},
   NativeEntry{0x8BAA, "CancelDockingComputer", &CancelDockingComputer, PRESERVES_ALL},
 };
 

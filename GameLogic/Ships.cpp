@@ -241,7 +241,7 @@ void InitThargon(Guest& _guest)
 void SpawnRandomDrifter(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   // ROR AX,1 / XOR AL,AH / AND AL,7.
   const auto rotated = static_cast<std::uint16_t>((regs.ax >> 1) | (regs.ax << 15));
   regs.ax = Join(High(rotated), static_cast<std::uint8_t>((Low(rotated) ^ High(rotated)) & DRIFTER_CHOICE_MASK));
@@ -255,7 +255,7 @@ void SpawnRandomDrifter(Guest& _guest)
 void SpawnRandomTrader(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   // XOR AH,AH / DIV BL: the quotient picks the record, and the remainder stays in AH.
   const std::uint8_t random = Low(regs.ax);
   regs.ax = Join(static_cast<std::uint8_t>(random % TRADER_CHOICE_DIVISOR), static_cast<std::uint8_t>(random / TRADER_CHOICE_DIVISOR));
@@ -269,7 +269,7 @@ void SpawnRandomTrader(Guest& _guest)
     return;
   }
   // A Viper is police one time in two; then a word write of the legal status, which zeroes the bounty above it.
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>(regs.ax & POLICE_OWNER);
   _guest.SetWord(At(regs.di, SLOT_OWNER), regs.ax);
   if (regs.ax == 0)
@@ -287,7 +287,7 @@ void SpawnMaskMissionShip(Guest& _guest)
   SetLow(regs.ax, type);
   if (!_guest.Flag(FLAG_CARRY))
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     type = (High(regs.ax) & 0x80) != 0 ? MISSION_TYPE_IF_NEGATIVE : MISSION_TYPE_IF_POSITIVE;
     SetLow(regs.ax, type);
   }
@@ -299,7 +299,7 @@ void SpawnMaskMissionShip(Guest& _guest)
   regs.ax = WithLow(kept, static_cast<std::uint8_t>((type << 1) | SLOT_ACTIVE));
   _guest.SetByte(regs.di, Low(regs.ax));
   _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & MISSION_AGGRESSION_MASK));
   _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
   _guest.SetByte(At(regs.di, SLOT_ENERGY), MISSION_ENERGY);
@@ -315,7 +315,7 @@ void SpawnInvasionThargoid(Guest& _guest)
   regs.bx = DS.spawnTemplates.At(THARGOID_TEMPLATE);
   SpawnFromRecord(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & MISSION_AGGRESSION_MASK));
   _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
   _guest.SetByte(At(regs.di, SLOT_ENERGY), INVADER_ENERGY);
@@ -329,7 +329,7 @@ void RandomizeOrientation(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   for (const std::uint16_t field : {SLOT_PITCH, SLOT_YAW, SLOT_ROLL})
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     _guest.SetWord(At(regs.di, field), regs.ax);
   }
 }
@@ -349,7 +349,7 @@ void ReclaimShipSlot(Guest& _guest)
     regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
   } while (regs.cx != 0);
   // Every one has a blip: one of slots 4-19 at random (AND AH,0Fh / XOR AL,AL / SHR AX,1 twice), removed first.
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = static_cast<std::uint16_t>((High(regs.ax) & 0x0F) << 6);
   regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * SLOT_BYTES + regs.ax);
   const std::uint16_t slot = regs.si;
@@ -411,7 +411,7 @@ void InitCargoBarrel(Guest& _guest)
 void SpawnRandomHunter(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   // XOR AH,AH / DIV BL: the quotient picks the record, and the remainder stays in AH.
   const std::uint8_t random = Low(regs.ax);
   regs.ax = static_cast<std::uint16_t>(((random % HUNTER_CHOICE_DIVISOR) << 8) | (random / HUNTER_CHOICE_DIVISOR));
@@ -420,7 +420,7 @@ void SpawnRandomHunter(Guest& _guest)
   PlaceAtSpawnPoint(_guest);
   FacePlayerWithRandomRoll(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), HUNTER_CLASS);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & HUNTER_AGGRESSION_MASK));
   _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
   ComputeVelocity(_guest);
@@ -432,7 +432,7 @@ void SpawnRandomWolf(Guest& _guest)
   SetLow(regs.ax, WITCH_SPACE_WOLF);
   if (_guest.Get(DS.witchspaceCountdown) == 0)
   {
-    NextRandom(_guest);
+    NextRandomEntry(_guest);
     const std::uint8_t random = Low(regs.ax);
     regs.ax = static_cast<std::uint16_t>(((random % WOLF_CHOICE_DIVISOR) << 8) | (random / WOLF_CHOICE_DIVISOR));
   }
@@ -441,7 +441,7 @@ void SpawnRandomWolf(Guest& _guest)
   PlaceAtSpawnPoint(_guest);
   FacePlayerWithRandomRoll(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   auto aggression = static_cast<std::uint8_t>(Low(regs.ax) & WOLF_AGGRESSION_MASK);
   if (_guest.Get(DS.spawnGovernment) == 0)
   {
@@ -455,7 +455,7 @@ void SpawnRandomWolf(Guest& _guest)
   {
     return;
   }
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   const auto thargons = static_cast<std::uint8_t>((((Low(regs.ax) ^ High(regs.ax)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS);
   SetLow(regs.ax, thargons);
   _guest.SetByte(At(regs.di, SLOT_THARGONS), thargons);
@@ -487,14 +487,14 @@ void InitObjectFromTemplate(Guest& _guest)
 void PlaceAtSpawnPoint(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = Scatter(regs.ax);
   regs.bx = SPAWN_DISTANCE;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(7));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(7));
   regs.cx = regs.ax;
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   regs.ax = Scatter(regs.ax);
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(6));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(6));
   // Each word with its sign extension (CWD) as the high byte: y, then x from CX, then z from BX.
   const std::uint16_t slot = regs.di;
   const std::array<std::uint16_t, 3> coordinates = {regs.ax, regs.cx, regs.bx};
@@ -511,7 +511,7 @@ void PlaceAtSpawnPoint(Guest& _guest)
 void FacePlayerWithRandomRoll(Guest& _guest)
 {
   FacePlayer(_guest);
-  NextRandom(_guest);
+  NextRandomEntry(_guest);
   Machine::Registers& regs = _guest.Regs();
   _guest.SetWord(At(regs.di, SLOT_ROLL), regs.ax);
 }
@@ -538,15 +538,15 @@ void ComputeVelocity(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   const std::uint16_t slot = regs.di;
   regs.ax = _guest.Word(At(slot, SLOT_PITCH));
-  SetSinCos(_guest, DS.rotationSinCos.At(7));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(7));
   regs.ax = _guest.Word(At(slot, SLOT_YAW));
-  SetSinCos(_guest, DS.rotationSinCos.At(6));
+  SetSinCosEntry(_guest, DS.rotationSinCos.At(6));
   regs.bx = SignExtend(_guest.Byte(At(slot, SLOT_SPEED)));
   regs.ax = 0;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(6));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(6));
   _guest.SetByte(At(slot, SLOT_VELOCITY), Low(regs.ax));
   regs.ax = 0;
-  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(7));
+  RotateByStoredSinCosEntry(_guest, DS.rotationSinCos.At(7));
   _guest.SetByte(At(slot, SLOT_VELOCITY + 1), Low(regs.ax));
   _guest.SetByte(At(slot, SLOT_VELOCITY + 2), Low(regs.bx));
 }

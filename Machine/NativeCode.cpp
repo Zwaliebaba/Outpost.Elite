@@ -13,6 +13,8 @@ namespace Machine
 namespace
 {
 
+constexpr std::uint16_t POISON_FIRST = 0xA5A1;
+
 struct NamedRegister
 {
   std::string_view name;
@@ -78,6 +80,24 @@ NativeCode::Hook* NativeCode::At(std::uint32_t _linear) noexcept
 {
   const auto found = m_hooks.find(_linear);
   return found == m_hooks.end() ? nullptr : &found->second;
+}
+
+void NativeCode::Poison(Registers& _registers, std::uint16_t _registersToPoison) const noexcept
+{
+  if (!m_poisoning)
+  {
+    return;
+  }
+  // A marked value per register, A5h in the high byte: nothing the game computes is likely to land on it.
+  std::uint16_t mark = POISON_FIRST;
+  for (const NamedRegister& named : NAMED_REGISTERS)
+  {
+    if (named.bit != 0 && (_registersToPoison & named.bit) != 0)
+    {
+      _registers.*named.field = mark;
+    }
+    mark = static_cast<std::uint16_t>(mark + 1);
+  }
 }
 
 void NativeCode::AddMismatch(Mismatch _mismatch)
