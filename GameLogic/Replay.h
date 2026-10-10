@@ -58,6 +58,10 @@ struct Step
 /// The XT (scan code set 1) make code of an X keysym name, for the keys the reference reads.
 [[nodiscard]] std::optional<std::uint8_t> ScanCodeOf(std::string_view _keyName) noexcept;
 
+/// The X keysym name a replay uses for an XT make code, or nothing for a code an XT keyboard does not
+/// send. Where two names share a code (Return and KP_Enter), the first in the table.
+[[nodiscard]] std::optional<std::string_view> KeyNameOf(std::uint8_t _scanCode) noexcept;
+
 /// The moment a replay has reached, _milliseconds after it began at machine cycle _start. Time in a replay
 /// is counted in whole milliseconds from its start and converted once, so a recorder that samples time at
 /// any rate and a player that sums the recorded waits land on the same cycle.
@@ -65,6 +69,36 @@ struct Step
 {
   return _start + Machine::MicrosecondsToCycles(_milliseconds * 1000);
 }
+
+/// Writes a session as a replay (ADR-008): keys pressed and released, and digests, each at a moment
+/// counted in whole milliseconds from the session's start, so that the replay plays back to the cycle
+/// (ReplayCycle).
+class ReplayRecorder
+{
+public:
+  /// _header is written first, each line as a comment.
+  explicit ReplayRecorder(std::string_view _header);
+
+  /// A key pressed (_down) or released at _milliseconds. Moments must not go backwards. Returns false,
+  /// and records nothing, for a code KeyNameOf does not name: the caller must not send it to the game
+  /// either, or the replay would not be the session.
+  bool Key(std::uint64_t _milliseconds, std::uint8_t _scanCode, bool _down);
+
+  /// A digest labelled _name, with the value it must reproduce, at _milliseconds.
+  void Digest(std::uint64_t _milliseconds, std::string_view _name, std::string_view _value);
+
+  /// The replay so far.
+  [[nodiscard]] const std::string& Text() const noexcept
+  {
+    return m_text;
+  }
+
+private:
+  void WaitUntil(std::uint64_t _milliseconds);
+
+  std::string m_text;
+  std::uint64_t m_lastMilliseconds = 0;
+};
 
 /// Plays steps on a machine running the reference, from the moment it is made.
 class ReplayPlayer

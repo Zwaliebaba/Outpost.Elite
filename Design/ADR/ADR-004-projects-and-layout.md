@@ -1,6 +1,6 @@
 # ADR-004 — Projects and layout
 
-**Status:** accepted 2026-10-09, when the first projects were created (AGENTS.md §2). The layout follows the starting point in [Reverse-Engineering-Plan.md §5, Phase 2](../Reverse-Engineering-Plan.md#phase-2--the-host). The owner can reopen it. **Amended 2026-10-09:** a fourth project, `ReferenceRunner`, joins the three (item 2), and item 5's claim about `<expected>` is corrected. **Amended 2026-10-10:** `GameLogic` and `GameLogicTests` are created, with the replays (ADR-008), ahead of the port they will hold (items 2 and 3).
+**Status:** accepted 2026-10-09, when the first projects were created (AGENTS.md §2). The layout follows the starting point in [Reverse-Engineering-Plan.md §5, Phase 2](../Reverse-Engineering-Plan.md#phase-2--the-host). The owner can reopen it. **Amended 2026-10-09:** a fourth project, `ReferenceRunner`, joins the three (item 2), and item 5's claim about `<expected>` is corrected. **Amended 2026-10-10:** `GameLogic` and `GameLogicTests` are created, with the replays (ADR-008), ahead of the port they will hold (items 2 and 3). **Amended 2026-10-10 again:** `Engine` and `Outpost` are created as item 3 named them, with the Windows shell (ADR-009), and join item 2's table.
 
 ## Context
 
@@ -22,7 +22,7 @@ AGENTS.md §2 fixes the rest of the shape:
 
 1. **One solution at the root, `Outpost.Elite.slnx`**, x64 only, built through the solution (AGENTS.md §3).
 
-2. **Six projects now** (`ReferenceRunner` was added with the PC host, and `GameLogic` and `GameLogicTests` with the replays):
+2. **Eight projects now** (`ReferenceRunner` was added with the PC host, `GameLogic` and `GameLogicTests` with the replays, and `Engine` and `Outpost` with the shell):
 
    | Project | Kind | Namespace | Holds |
    |---|---|---|---|
@@ -32,15 +32,10 @@ AGENTS.md §2 fixes the rest of the shape:
    | `ReferenceRunner` | console executable | `ReferenceRunner` | Runs the reference headless on the PC host and records what ADR-003 compares: screenshots, state digests, the boot trace and code coverage (ADR-006). Plays and records replays (ADR-008). Standard C++, so it runs where the binary is studied as well as on Windows. CI builds it. |
    | `GameLogic` | static library | `Elite` | The port. Until the first routine is replaced, what the game needs to know about the reference: its hash and the D5 byte, how to load it, the replay format and the game-state digest (ADR-008). |
    | `GameLogicTests` | native unit tests | `GameLogicTests` | Tests of `GameLogic`, including the replay corpus (ADR-008 item 6). It references `Machine` as well as `GameLogic`, because `GameLogic`'s headers are about the machine the reference runs on. |
+   | `Engine` | static library | `Engine` | The Win32 window and its keyboard, the D3D12 presenter, the XAudio2 stream, and `Win32.h`, the one header that owns the Windows macros (ADR-009). It knows neither the game nor the machine (R9). |
+   | `Outpost` | Windows executable | `Outpost` | The game: it joins the others, runs the reference in paced time, and records each session as a replay (ADR-009). |
 
-3. **Two projects later, named now so that the edges are known:**
-
-   | Project | Kind | Namespace | Holds |
-   |---|---|---|---|
-   | `Engine` | static library | `Engine` | The Win32 window, the D3D12 presenter, XAudio2 and input. It knows neither the game nor the machine (R9). |
-   | `Outpost` | executable | `Outpost` | The game: it puts the others together. |
-
-   The edges run Outpost → Engine, Outpost → GameLogic, Outpost → Machine, ReferenceRunner → GameLogic, and GameLogic → Machine. The last one exists only through Phase 3, while native routines read and write the original's memory, and it goes in Phase 4 together with `Machine` (D7). Each test project depends on its library and nothing else.
+3. **The edges.** `Engine` and `Outpost` were named here before they existed, so that the edges were known. They were created as named. The edges run Outpost → Engine, Outpost → GameLogic, Outpost → Machine, ReferenceRunner → GameLogic, and GameLogic → Machine. The last one exists only through Phase 3, while native routines read and write the original's memory, and it goes in Phase 4 together with `Machine` (D7). Each test project depends on its library and nothing else.
 
 4. **`Machine` (and later `GameLogic`) is standard C++ and includes no Windows header.** It compiles with MSVC in the solution and with GCC 13 or Clang 18 outside it. The Linux build is a development tool under `Tools/`: it compiles the library's sources and a driver, never a second build system for the product, and it only proves that the code runs. MSVC with `/W4 /WX` is still the build that gates (AGENTS.md §3). `Engine` and `Outpost` are Windows-only.
 

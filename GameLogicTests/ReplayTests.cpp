@@ -2,6 +2,7 @@
 
 #include "ReferenceRig.h"
 #include "Replay.h"
+#include "StateDigest.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -74,6 +75,56 @@ public:
     }
     Assert::AreEqual(ends[0], ends[1]);
     Assert::AreEqual(Elite::ReplayCycle(0, 1'000), ends[0]);
+  }
+
+  // What the shell does (ADR-008): it runs the machine to whatever millisecond the wall clock says, sends
+  // keys there and records them. The recording, played back, reaches the same state.
+  TEST_METHOD(ARecordedSessionPlaysBack)
+  {
+    struct Press
+    {
+      std::uint64_t milliseconds;
+      std::uint8_t scanCode;
+      bool down;
+    };
+    // Any key to start; F1 to launch; a pitch held across frames; F2 for the rear view.
+    const Press presses[] = {{3'017, 0x39, true},  {3'101, 0x39, false},  {7'333, 0x3B, true},  {7'401, 0x3B, false},
+                             {12'000, 0x50, true}, {12'777, 0x50, false}, {13'005, 0x3C, true}, {13'090, 0x3C, false}};
+    constexpr std::uint64_t END_MILLISECONDS = 15'500;
+
+    ReferenceRig live("RecordLive");
+    Assert::IsTrue(live.Loaded(), L"ELITES.EXE at the repository root");
+    Elite::ReplayRecorder recorder("a test session");
+    const Machine::Cycles start = live.Host().Clock();
+    std::uint64_t now = 0;
+    for (const Press& press : presses)
+    {
+      // The wall clock moves in uneven steps between the presses.
+      for (std::uint64_t step = 13; now + step < press.milliseconds; step += 7)
+      {
+        now += step;
+        Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, now)) == Machine::StopReason::Reached, L"runs");
+      }
+      now = press.milliseconds;
+      Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, now)) == Machine::StopReason::Reached, L"runs");
+      Assert::IsTrue(recorder.Key(now, press.scanCode, press.down), L"an XT key");
+      live.Host().KeyboardController().Inject(static_cast<std::uint8_t>(press.scanCode | (press.down ? 0 : 0x80)));
+    }
+    Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, END_MILLISECONDS)) == Machine::StopReason::Reached, L"runs");
+    const std::string expected = Elite::GameStateDigest(live.Host(), live.Program());
+    recorder.Digest(END_MILLISECONDS, "end", expected);
+
+    std::vector<Elite::Step> steps;
+    std::string error;
+    Assert::IsTrue(Elite::ParseSteps(recorder.Text(), steps, error), L"the recording parses");
+    ReferenceRig replay("RecordReplay");
+    Elite::ReplayPlayer player(replay.Host(), replay.Program());
+    std::string digest;
+    for (const Elite::Step& step : steps)
+      Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"plays");
+    Assert::AreEqual(expected.c_str(), digest.c_str());
+    Assert::AreEqual(live.Host().Clock(), replay.Host().Clock());
+    Assert::IsFalse(recorder.Key(END_MILLISECONDS, 0x60, true), L"a code no XT key sends is refused");
   }
 
   TEST_METHOD(MistakesAreNamed)

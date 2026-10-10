@@ -6,6 +6,7 @@
 #include "StateDigest.h"
 
 #include <array>
+#include <format>
 #include <utility>
 
 namespace Elite
@@ -181,6 +182,53 @@ std::optional<std::uint8_t> ScanCodeOf(std::string_view _keyName) noexcept
       return key.scanCode;
   }
   return std::nullopt;
+}
+
+std::optional<std::string_view> KeyNameOf(std::uint8_t _scanCode) noexcept
+{
+  for (const KeyName& key : KEY_NAMES)
+  {
+    if (key.scanCode == _scanCode)
+      return key.name;
+  }
+  return std::nullopt;
+}
+
+ReplayRecorder::ReplayRecorder(std::string_view _header)
+{
+  while (!_header.empty())
+  {
+    const std::size_t end = _header.find('\n');
+    m_text += "# ";
+    m_text += _header.substr(0, end);
+    m_text += '\n';
+    _header = end == std::string_view::npos ? std::string_view{} : _header.substr(end + 1);
+  }
+}
+
+bool ReplayRecorder::Key(std::uint64_t _milliseconds, std::uint8_t _scanCode, bool _down)
+{
+  const std::optional<std::string_view> name = KeyNameOf(_scanCode);
+  if (!name)
+    return false;
+  WaitUntil(_milliseconds);
+  m_text += std::format("{} {}\n", _down ? "down" : "up", *name);
+  return true;
+}
+
+void ReplayRecorder::Digest(std::uint64_t _milliseconds, std::string_view _name, std::string_view _value)
+{
+  WaitUntil(_milliseconds);
+  m_text += std::format("digest {} {}\n", _name, _value);
+}
+
+void ReplayRecorder::WaitUntil(std::uint64_t _milliseconds)
+{
+  if (_milliseconds <= m_lastMilliseconds)
+    return;
+  const std::uint64_t wait = _milliseconds - m_lastMilliseconds;
+  m_text += std::format("wait {}.{:03}\n", wait / 1000, wait % 1000);
+  m_lastMilliseconds = _milliseconds;
 }
 
 bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& _error)
