@@ -178,25 +178,16 @@ jobs:
       # One suite per *Tests.vcxproj in the tree, and every one of them must have produced a DLL:
       # vstest reports "no tests found" as a pass, so a suite that did not build is not a suite
       # that passed. No suites at all is a state this repository is still legitimately in.
+      #
+      # Build\RunTests.py runs them as four vstest processes at once, one per shard of test classes;
+      # one shard takes every class the others do not name, so nothing is left out, and a shard that
+      # runs no test fails. One after another they took 10 to 15 minutes, nearly all of it
+      # GameLogicTests' comparisons in Debug, on one of the runner's two vCPUs (a private
+      # repository's windows-latest has two; a public one's has four).
       - name: Run the tests
         if: steps.solution.outputs.path != ''
         shell: pwsh
-        run: |
-          $projects = @(Get-ChildItem -Path . -Recurse -Filter '*Tests.vcxproj' -File)
-          if ($projects.Count -eq 0) {
-            Write-Output "::notice::No *Tests.vcxproj in the tree yet. Nothing to run."
-            exit 0
-          }
-          $suites = foreach ($project in $projects) {
-            $dll = "x64\$env:CONFIGURATION\$($project.BaseName).dll"
-            if (-not (Test-Path $dll)) { throw "$dll was not built. A suite that does not exist is not a suite that passed." }
-            $dll
-          }
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vstest = & $vswhere -latest -products * -find '**\vstest.console.exe' | Select-Object -First 1
-          if (-not $vstest) { throw "vstest.console.exe not found." }
-          & $vstest $suites /Platform:x64 /Logger:trx /ResultsDirectory:TestResults
-          if ($LASTEXITCODE -ne 0) { throw "vstest reported failures." }
+        run: python Build\RunTests.py --configuration $env:CONFIGURATION
 
       # Phase 3's acceptance (ADR-010 item 5): every instruction of every ported routine, and of what it
       # calls or runs into, ran in a compared call that agreed -- in a corpus replay or a constructed
