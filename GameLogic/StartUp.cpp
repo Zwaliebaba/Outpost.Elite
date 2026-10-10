@@ -115,14 +115,6 @@ void PrintDosString(Guest& _guest, std::uint16_t _text)
   _guest.Interrupt(DOS_VECTOR);
 }
 
-// The original's backward jump to CS:_target, where one turn of a loop ends (ADR-008): paced time looks
-// at it there (Guest::LoopTurn), with IP where the original's jump leaves it.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // ExitToDos (CS:00AD): the BIOS's text mode, the farewell, and the BIOS's key buffer emptied. The RETF
 // that follows, to PSP:0000 where Start pushed it, is the entry's own return.
 void ExitToDos(Guest& _guest)
@@ -141,7 +133,7 @@ void ExitToDos(Guest& _guest)
     }
     SetHigh(regs.ax, BIOS_READ_KEY);
     _guest.Interrupt(BIOS_KEYBOARD_VECTOR);
-    JumpBack(_guest, EXIT_KEY_DRAIN);
+    _guest.JumpBack(EXIT_KEY_DRAIN);
   }
 }
 
@@ -395,7 +387,7 @@ void Start(Guest& _guest)
     regs.es = 0;
     _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, _guest.Pop());
     _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, _guest.Pop());
-    JumpBack(_guest, RESTART_PLAY);
+    _guest.JumpBack(RESTART_PLAY);
   }
 }
 
@@ -429,7 +421,7 @@ void GameLoop(Guest& _guest)
     {
       _guest.Set(DS.titleShown, 0);
     }
-    JumpBack(_guest, GAME_LOOP);
+    _guest.JumpBack(GAME_LOOP);
   }
 }
 
@@ -454,7 +446,7 @@ void ShowCredits(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, CREDITS_LINE);
+    _guest.JumpBack(CREDITS_LINE);
   }
   _guest.Call(FINISH_SPACE_VIEW_FRAME);
   regs.cx = CREDITS_TIMER_TICKS;
@@ -465,7 +457,7 @@ void ShowCredits(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, CREDITS_WAIT);
+    _guest.JumpBack(CREDITS_WAIT);
   }
 }
 

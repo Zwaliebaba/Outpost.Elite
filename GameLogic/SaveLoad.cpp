@@ -292,14 +292,6 @@ void DeleteCommanderFile(Guest& _guest)
 
 // ---- The disc menu ----
 
-// The end of a loop's turn where the original jumps back to CS:_target (Pc::LoopTurn), with IP as the original
-// has it there.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // MOV SI,_text / MOV DI,_position / CALL PrintTextModeString.
 void PrintAt(Guest& _guest, std::uint16_t _text, std::uint16_t _position)
 {
@@ -319,7 +311,7 @@ void WaitForKey(Guest& _guest, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -388,7 +380,7 @@ void ShowNoJoystick(Guest& _guest)
       amstrad = true;
       break;
     }
-    JumpBack(_guest, JOYSTICK_KEY_LOOP);
+    _guest.JumpBack(JOYSTICK_KEY_LOOP);
   }
   _guest.Call(PRINT_TEXT_MODE_STRING);
   if (amstrad)
@@ -408,7 +400,7 @@ void ShowNoJoystick(Guest& _guest)
       {
         _guest.Set(DS.amstradJoystickMoved, 1);
       }
-      JumpBack(_guest, AMSTRAD_KEY_LOOP);
+      _guest.JumpBack(AMSTRAD_KEY_LOOP);
     }
     return _guest.Get(DS.amstradJoystickMoved) == 1;
   }
@@ -422,7 +414,7 @@ void ShowNoJoystick(Guest& _guest)
   {
     return false;
   }
-  JumpBack(_guest, SELECT_JOYSTICK);
+  _guest.JumpBack(SELECT_JOYSTICK);
   return true;
 }
 
@@ -439,7 +431,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
     if (showDevice)
     {
       ShowControlDevice(_guest);
-      JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       showDevice = false;
     }
     WaitForKey(_guest, DISC_CONTROL_KEY_LOOP);
@@ -457,7 +449,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
         {
           break;
         }
-        JumpBack(_guest, EXIT_KEY_LOOP);
+        _guest.JumpBack(EXIT_KEY_LOOP);
       }
       if (High(regs.ax) == SCAN_N)
       {
@@ -494,7 +486,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
       if (!_guest.Flag(Machine::FLAG_ZERO))
       {
         _guest.Set(DS.inputDevice, MOUSE_DEVICE);
-        JumpBack(_guest, SHOW_CONTROL_DEVICE);
+        _guest.JumpBack(SHOW_CONTROL_DEVICE);
         showDevice = true;
         continue;
       }
@@ -503,7 +495,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
       ++regs.si;
       regs.di = SECOND_HELP_POSITION;
       _guest.Call(PRINT_TEXT_MODE_STRING);
-      JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       continue;
     }
     if (scan == SCAN_J)
@@ -511,23 +503,23 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
       if (ChooseJoystick(_guest))
       {
         _guest.Set(DS.inputDevice, JOYSTICK_DEVICE);
-        JumpBack(_guest, SHOW_CONTROL_DEVICE);
+        _guest.JumpBack(SHOW_CONTROL_DEVICE);
         showDevice = true;
         continue;
       }
       ShowNoJoystick(_guest);
-      JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       continue;
     }
     if (scan == SCAN_V)
     {
       PrintAt(_guest, DS.versionString.offset, HELP_POSITION);
-      JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       continue;
     }
     if (scan < SCAN_F1 || scan >= SCAN_PAST_F10)
     {
-      JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+      _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       continue;
     }
     _guest.Set(DS.resumeAtDiskMenu, 0);
@@ -562,7 +554,7 @@ void ShowDiskResult(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, FIND_NAME_EXTENSION);
+    _guest.JumpBack(FIND_NAME_EXTENSION);
   }
   _guest.SetByte(regs.si, 0);
   regs.si = DS.commanderFileName.offset;
@@ -584,7 +576,7 @@ void ShowDiskResult(Guest& _guest)
     {
       return;
     }
-    JumpBack(_guest, COPY_LOADED_NAME);
+    _guest.JumpBack(COPY_LOADED_NAME);
   }
 }
 
@@ -702,7 +694,7 @@ void ShowDiscControlScreen(Guest& _guest)
   if (_guest.Get(DS.diskError) == 0)
   {
     ShowDiskResult(_guest);
-    JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+    _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
     RunDiscControlKeys(_guest, false);
     return;
   }
@@ -719,7 +711,7 @@ void ShowDiscControlScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, RETRY_KEY_LOOP);
+    _guest.JumpBack(RETRY_KEY_LOOP);
   }
   PrintAt(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
   SetLow(regs.ax, _guest.Get(DS.diskOperation));
@@ -762,7 +754,7 @@ void PromptCommanderFileName(Guest& _guest)
           break;
         }
         _guest.SetByte(regs.si, Low(regs.ax));
-        JumpBack(_guest, NEXT_NAME_CHARACTER);
+        _guest.JumpBack(NEXT_NAME_CHARACTER);
       }
     }
   }
@@ -771,7 +763,7 @@ void PromptCommanderFileName(Guest& _guest)
     // RejectFileName (CS:68AD): this call's return address dropped, and the menu's keys read on in its place.
     regs.ax = _guest.Pop();
     PrintAt(_guest, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
-    JumpBack(_guest, DISC_CONTROL_KEY_LOOP);
+    _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
     RunDiscControlKeys(_guest, false);
     return;
   }
@@ -787,7 +779,7 @@ void PromptCommanderFileName(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, APPEND_EXTENSION);
+    _guest.JumpBack(APPEND_EXTENSION);
   }
   _guest.SetFlag(Machine::FLAG_CARRY, false);
 }

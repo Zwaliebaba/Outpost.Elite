@@ -114,19 +114,11 @@ void StoreWords(Guest& _guest, std::uint16_t _value)
   }
 }
 
-// The original's jump back to CS:_target, in a routine that waits: the end of a loop's turn, with IP where
-// the jump lands, so that paced time sees the turn as it sees the original's (Guest::LoopTurn).
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // ReadTextLine's redraw (0x76FF): the line and the cursor printed, then back to counting the blink.
 void RedrawTypedLine(Guest& _guest)
 {
   _guest.Call(REDRAW_INPUT_LINE);
-  JumpBack(_guest, INPUT_COUNT_BLINK);
+  _guest.JumpBack(INPUT_COUNT_BLINK);
 }
 
 // ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
@@ -572,11 +564,11 @@ void ReadTextLine(Guest& _guest)
     _guest.Set(DS.cursorBlinkTicks, blink);
     if (blink == 0)
     {
-      JumpBack(_guest, INPUT_RESTART_BLINK);
+      _guest.JumpBack(INPUT_RESTART_BLINK);
       RestartInputBlink(_guest);
       continue;
     }
-    JumpBack(_guest, INPUT_READ_KEY);
+    _guest.JumpBack(INPUT_READ_KEY);
     _guest.Call(WAIT_FOR_TIMER_TICK);
     _guest.Call(GET_KEY);
     if (_guest.Flag(Machine::FLAG_ZERO))
@@ -585,7 +577,7 @@ void ReadTextLine(Guest& _guest)
     }
     if (High(regs.ax) >= FIRST_UNMAPPED_SCAN)
     {
-      JumpBack(_guest, INPUT_COUNT_BLINK);
+      _guest.JumpBack(INPUT_COUNT_BLINK);
       continue;
     }
     // The key's character: inc dl / je skips FFh, a key with none, and leaves DL zero.
@@ -593,7 +585,7 @@ void ReadTextLine(Guest& _guest)
     SetLow(regs.dx, static_cast<std::uint8_t>(_guest.Byte(regs.cx) + 1));
     if (Low(regs.dx) == 0)
     {
-      JumpBack(_guest, INPUT_COUNT_BLINK);
+      _guest.JumpBack(INPUT_COUNT_BLINK);
       continue;
     }
     SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) - 1));
@@ -615,7 +607,7 @@ void ReadTextLine(Guest& _guest)
         _guest.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(_guest.Get(DS.inputCharsLeft) + 1));
         _guest.Call(REDRAW_INPUT_LINE);
       }
-      JumpBack(_guest, INPUT_COUNT_BLINK);
+      _guest.JumpBack(INPUT_COUNT_BLINK);
       continue;
     }
     if (character >= 'A' && character <= 'Z')
@@ -638,7 +630,7 @@ void ReadTextLine(Guest& _guest)
       // No room: the character is taken back.
       --regs.bx;
       _guest.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(left + 1));
-      JumpBack(_guest, INPUT_REDRAW);
+      _guest.JumpBack(INPUT_REDRAW);
     }
     RedrawTypedLine(_guest);
   }

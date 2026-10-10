@@ -62,9 +62,6 @@ void ShowEquipmentSellPrice(Guest& _guest);
 // What the menus that wait share (RunEquipShipMenu, RunCargoTradeMenu and the two mount choosers): the same code at
 // each one's own addresses. Only a routine hooked as one that waits may call them (Guest::LoopTurn).
 
-/// The original's backward jump to CS:_target: the end of a loop's turn (Guest::LoopTurn), with IP where it lands.
-void JumpBack(Guest& _guest, std::uint16_t _target);
-
 /// The menus' start: the credits on the message line, row 1 selected and highlighted from menuFirstRowAttr.
 void StartMenu(Guest& _guest);
 

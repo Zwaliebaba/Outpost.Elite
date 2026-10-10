@@ -266,7 +266,7 @@ public:
     agrees.Run();
     Assert::AreEqual(std::uint64_t{1}, agrees.Books().verified);
     Assert::AreEqual(1u, std::uint32_t{agrees.Host().Ports().In8(SPEAKER_PORT) & 1u}, L"the gate is on");
-    Assert::IsTrue(agrees.Host().Ports().WriteCount() - writes >= 2, L"both runs' writes count for paced time");
+    Assert::AreEqual(std::uint64_t{1}, agrees.Host().Ports().WriteCount() - writes, L"paced time counts the original's write, once");
 
     NativeRig differs("NativePortsDiffer", gateOn);
     differs.Hook(gate(0x02));

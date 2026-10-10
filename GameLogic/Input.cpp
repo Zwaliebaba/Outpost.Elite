@@ -82,14 +82,6 @@ constexpr std::int8_t MOST_RATE = 23;             // either way
 constexpr std::uint8_t MOST_NEGATIVE_RATE = 0xE9; // -23
 constexpr std::uint8_t RATE_DECAY_STEPS = 3;
 
-// The end of a waiting loop's turn at the original's backward jump to CS:_target, with IP there as paced time sees it there:
-// two jumps back to different places are then two turns, as they are in the original.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // SHR AL,1 of a button byte: CF is the button, AL the rest.
 void ShiftOutButton(Guest& _guest, std::uint8_t _buttons)
 {
@@ -322,7 +314,7 @@ void WaitForKeyPress(Guest& _guest)
     {
       return;
     }
-    JumpBack(_guest, WAIT_FOR_KEY_PRESS);
+    _guest.JumpBack(WAIT_FOR_KEY_PRESS);
   }
 }
 
@@ -525,7 +517,7 @@ void ReadJoystickAxes(Guest& _guest)
       break;
     }
     _guest.CountCycles(TAKEN_CYCLES);
-    JumpBack(_guest, X_COUNT_TURN);
+    _guest.JumpBack(X_COUNT_TURN);
   }
   _guest.CountCycles(NOT_TAKEN_CYCLES);
   // Both bits down before the one-shots fire again: a wait when X's drops first.
@@ -538,7 +530,7 @@ void ReadJoystickAxes(Guest& _guest)
       break;
     }
     _guest.CountCycles(TAKEN_CYCLES);
-    JumpBack(_guest, BOTH_DOWN_TURN);
+    _guest.JumpBack(BOTH_DOWN_TURN);
   }
   _guest.CountCycles(NOT_TAKEN_CYCLES);
   _guest.Out8(GAME_PORT, Low(regs.ax));
@@ -560,7 +552,7 @@ void ReadJoystickAxes(Guest& _guest)
       break;
     }
     _guest.CountCycles(TAKEN_CYCLES);
-    JumpBack(_guest, Y_COUNT_TURN);
+    _guest.JumpBack(Y_COUNT_TURN);
   }
   _guest.CountCycles(NOT_TAKEN_CYCLES);
   _guest.SetFlag(Machine::FLAG_INTERRUPT, true);

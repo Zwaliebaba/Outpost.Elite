@@ -119,14 +119,6 @@ void Store(Guest& _guest, std::uint16_t _bytes, bool _backward)
   }
 }
 
-// One turn of a loop that can wait, at a backward jump of the original to _target: paced time looks at
-// the registers there, IP among them, as it does at the original's jump.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // CX of tunnelRectangles from SI, each by DrawTunnelRectangle in the tunnel's colour, the LOOP back to _loop. Out:
 // SI past them.
 void DrawTunnelRectangles(Guest& _guest, std::uint16_t _loop)
@@ -144,7 +136,7 @@ void DrawTunnelRectangles(Guest& _guest, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -160,7 +152,7 @@ void WaitTimerTicks(Guest& _guest, std::uint16_t _ticks, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -566,7 +558,7 @@ void PlayStationTunnel(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, 0x2D7A);
+    _guest.JumpBack(0x2D7A);
   }
 
   // The last ten draw ten rectangles less one each frame, from one further along each time.
@@ -599,7 +591,7 @@ void PlayStationTunnel(Guest& _guest)
     {
       return;
     }
-    JumpBack(_guest, 0x2DC9);
+    _guest.JumpBack(0x2DC9);
   }
 }
 

@@ -1385,14 +1385,6 @@ void FillClippedGeneral(Guest& _guest)
 
 // ---- Frames ----
 
-// The end of a loop's turn where the original jumps back to CS:_target (Pc::LoopTurn), with IP as the original
-// has it there.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace, the loop at CS:_loop. A read
 // that sees a retrace uses it up (Cga::SetRetraceSeenOnce), so these are the original's reads, one a turn.
 void WaitForRetrace(Guest& _guest, std::uint16_t _loop)
@@ -1405,7 +1397,7 @@ void WaitForRetrace(Guest& _guest, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -1422,7 +1414,7 @@ void SpinDelay(Guest& _guest, std::uint16_t _turns, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -1444,7 +1436,7 @@ void CopyLinePairs(Guest& _guest, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -1586,7 +1578,7 @@ void PresentSpaceView(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, PRESENT_SPACE_VIEW);
+    _guest.JumpBack(PRESENT_SPACE_VIEW);
   }
   _guest.Set(DS.msSinceFrame, 0);
   _guest.Call(WAIT_RETRACE_THEN_DELAY);

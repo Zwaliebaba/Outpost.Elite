@@ -254,9 +254,9 @@ void ShowEquipMessage(Guest& _guest)
 // 6241, reached by a jump back: NOT ENOUGH CREDITS!, and the jump back to 6214.
 void ReportNotEnoughCredits(Guest& _guest)
 {
-  JumpBack(_guest, EQUIP_NOT_ENOUGH_CREDITS);
+  _guest.JumpBack(EQUIP_NOT_ENOUGH_CREDITS);
   _guest.Regs().si = NOT_ENOUGH_CREDITS_TEXT;
-  JumpBack(_guest, EQUIP_MESSAGE);
+  _guest.JumpBack(EQUIP_MESSAGE);
 }
 
 // 6228: an item or a laser paid for and counted, its resale price shown, and a laser's mount chosen. BX is the
@@ -270,7 +270,7 @@ void BuyFittedItem(Guest& _guest)
   if (_guest.Flag(FLAG_CARRY))
   {
     regs.si = NOT_ENOUGH_CREDITS_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   IncrementByte(_guest, regs.bx);
@@ -281,7 +281,7 @@ void BuyFittedItem(Guest& _guest)
     _guest.Call(CHOOSE_MOUNT_TO_FIT_LASER);
   }
   regs.si = ITEM_PURCHASED_TEXT;
-  JumpBack(_guest, EQUIP_MESSAGE);
+  _guest.JumpBack(EQUIP_MESSAGE);
 }
 
 // 6246: B on fuel (a full tank, never in mission 1) or a missile (up to four). BL is the row.
@@ -294,7 +294,7 @@ void BuyFuelOrMissile(Guest& _guest)
     regs.si = FOUR_MISSILES_ONLY_TEXT;
     if (_guest.Get(DS.missileCount) == MISSILE_LIMIT)
     {
-      JumpBack(_guest, EQUIP_MESSAGE);
+      _guest.JumpBack(EQUIP_MESSAGE);
       return;
     }
     _guest.Call(PAY_FOR_EQUIPMENT_ITEM);
@@ -306,19 +306,19 @@ void BuyFuelOrMissile(Guest& _guest)
     _guest.Set(DS.missileCount, static_cast<std::uint8_t>(_guest.Get(DS.missileCount) + 1));
     _guest.Call(SHOW_EQUIPMENT_SELL_PRICE);
     regs.si = MISSILE_PURCHASED_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   if (_guest.Get(DS.missionNumber) == NO_FUEL_MISSION)
   {
     regs.si = NO_FUEL_AVAILABLE_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   regs.si = FUEL_FULL_TEXT;
   if (_guest.Get(DS.fuel) >= FUEL_NEARLY_FULL)
   {
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   _guest.Call(PAY_FOR_EQUIPMENT_ITEM);
@@ -329,7 +329,7 @@ void BuyFuelOrMissile(Guest& _guest)
   }
   regs.si = FUEL_PURCHASED_TEXT;
   _guest.Set(DS.fuel, FUEL_FULL);
-  JumpBack(_guest, EQUIP_MESSAGE);
+  _guest.JumpBack(EQUIP_MESSAGE);
 }
 
 // 61CF: B on the equipment menu. Leaves SI at the message for 6214, after the jumps back the original takes on the way.
@@ -361,7 +361,7 @@ void BuyEquipment(Guest& _guest)
       BuyFittedItem(_guest);
       return;
     }
-    JumpBack(_guest, EQUIP_LASER_CHECKS);
+    _guest.JumpBack(EQUIP_LASER_CHECKS);
   }
   // A laser: a free mount, and a mining laser only with fuel scoops.
   regs.si = FOUR_LASERS_TEXT;
@@ -385,14 +385,14 @@ void SellFuelOrMissile(Guest& _guest)
   if (Low(regs.bx) == 0)
   {
     regs.si = FUEL_SALE_ILLEGAL_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   regs.si = NO_MISSILE_TO_SELL_TEXT;
   if (_guest.Get(DS.missileCount) == 0)
   {
-    JumpBack(_guest, EQUIP_SOLD_MESSAGE);
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_SOLD_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   const auto left = static_cast<std::uint8_t>(_guest.Get(DS.missileCount) - 1);
@@ -405,7 +405,7 @@ void SellFuelOrMissile(Guest& _guest)
   regs.bx = 0;
   _guest.Call(ADD_CREDITS);
   regs.si = MISSILE_SOLD_TEXT;
-  JumpBack(_guest, EQUIP_MESSAGE);
+  _guest.JumpBack(EQUIP_MESSAGE);
 }
 
 // 628A: S on the equipment menu, for the resale price. Leaves SI at the message for 6214, after the jumps back the
@@ -424,20 +424,20 @@ void SellEquipment(Guest& _guest)
   if (row == CARGO_BAY_ROW && _guest.Get(DS.cargoUsedTonnes) >= CARGO_BAY_SALE_TONNES)
   {
     regs.si = TOO_MUCH_CARGO_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   regs.bx = static_cast<std::uint16_t>(regs.bx + FITTED_BEFORE_FUEL);
   if (_guest.Byte(regs.bx) == 0)
   {
     regs.si = NO_ITEM_TO_SELL_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   if (_guest.Get(DS.menuSelectedRow) == FUEL_SCOOPS_ROW && _guest.Get(DS.miningLaserCount) != 0)
   {
     regs.si = SELL_MINING_LASER_TEXT;
-    JumpBack(_guest, EQUIP_MESSAGE);
+    _guest.JumpBack(EQUIP_MESSAGE);
     return;
   }
   const auto left = static_cast<std::uint8_t>(_guest.Byte(regs.bx) - 1);
@@ -456,7 +456,7 @@ void SellEquipment(Guest& _guest)
     _guest.Call(CHOOSE_MOUNT_TO_REMOVE_LASER);
   }
   regs.si = ITEM_SOLD_TEXT;
-  JumpBack(_guest, EQUIP_MESSAGE);
+  _guest.JumpBack(EQUIP_MESSAGE);
 }
 
 // 63C3 and 6490: the mount box moved left, from FORE round to LEFT.
@@ -501,7 +501,7 @@ void PrintMountMessage(Guest& _guest, std::uint16_t _text, std::uint16_t _jumped
   regs.si = _text;
   if (_jumpedTo != 0)
   {
-    JumpBack(_guest, _jumpedTo);
+    _guest.JumpBack(_jumpedTo);
   }
   regs.di = MESSAGE_OFFSET;
   _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
@@ -603,7 +603,7 @@ void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
     {
       if (!PollMenuKey(_guest, _chooser.tickLoop))
       {
-        JumpBack(_guest, _chooser.steer);
+        _guest.JumpBack(_chooser.steer);
         break;
       }
       _guest.Push(regs.ax);
@@ -616,23 +616,23 @@ void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
         {
           return;
         }
-        JumpBack(_guest, _chooser.steer);
+        _guest.JumpBack(_chooser.steer);
         break;
       }
       _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
       if (key == SCAN_LEFT)
       {
-        JumpBack(_guest, _chooser.left);
+        _guest.JumpBack(_chooser.left);
         MoveMountBoxLeft(_guest);
         continue;
       }
       if (key == SCAN_RIGHT)
       {
-        JumpBack(_guest, _chooser.right);
+        _guest.JumpBack(_chooser.right);
         MoveMountBoxRight(_guest);
         continue;
       }
-      JumpBack(_guest, _chooser.steer);
+      _guest.JumpBack(_chooser.steer);
       break;
     }
   }
@@ -898,7 +898,7 @@ void ShowEquipShipScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, EQUIPMENT_LIST_ROW);
+    _guest.JumpBack(EQUIPMENT_LIST_ROW);
   }
   regs.si = EQUIP_MENU_FIRST_ROW;
   _guest.Call(RUN_EQUIP_SHIP_MENU);
@@ -936,7 +936,7 @@ void RunEquipShipMenu(Guest& _guest)
     {
       if (!PollMenuKey(_guest, EQUIP_TICK_LOOP))
       {
-        JumpBack(_guest, EQUIP_STEER);
+        _guest.JumpBack(EQUIP_STEER);
         break;
       }
       _guest.Push(regs.ax);
@@ -954,18 +954,18 @@ void RunEquipShipMenu(Guest& _guest)
           SellEquipment(_guest);
         }
         ShowEquipMessage(_guest);
-        JumpBack(_guest, EQUIP_STEER);
+        _guest.JumpBack(EQUIP_STEER);
         break;
       }
       if (key == SCAN_UP)
       {
-        JumpBack(_guest, EQUIP_CURSOR_UP);
+        _guest.JumpBack(EQUIP_CURSOR_UP);
         MoveMenuCursorUp(_guest);
         continue;
       }
       if (key == SCAN_DOWN)
       {
-        JumpBack(_guest, EQUIP_CURSOR_DOWN);
+        _guest.JumpBack(EQUIP_CURSOR_DOWN);
         MoveMenuCursorDown(_guest);
         continue;
       }
@@ -973,7 +973,7 @@ void RunEquipShipMenu(Guest& _guest)
       {
         return;
       }
-      JumpBack(_guest, EQUIP_STEER);
+      _guest.JumpBack(EQUIP_STEER);
       break;
     }
   }
@@ -1104,12 +1104,6 @@ void ShowEquipmentSellPrice(Guest& _guest)
   PrintEquipmentSellColumn(_guest);
 }
 
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 void StartMenu(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -1192,7 +1186,7 @@ bool PollMenuKey(Guest& _guest, std::uint16_t _tickLoop)
     {
       break;
     }
-    JumpBack(_guest, _tickLoop);
+    _guest.JumpBack(_tickLoop);
   }
   _guest.Call(GET_KEY);
   return !_guest.Flag(FLAG_ZERO);

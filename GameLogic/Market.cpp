@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Docked.h"
 #include "Market.h"
 
 #include "Arithmetic.h"
@@ -19,7 +20,6 @@ using Machine::Registers;
 
 // The routines these call by their entries: whatever is hooked there runs, so each work routine that a routine that
 // waits calls is compared on its own (ADR-010 item 8).
-constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
 constexpr std::uint16_t FORMAT_CREDITS = 0x3543;
 constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
@@ -30,14 +30,12 @@ constexpr std::uint16_t COMPUTE_MARKET_PRICES = 0x69CE;
 constexpr std::uint16_t PARSE_QUANTITY = 0x6A99;
 constexpr std::uint16_t PRINT_CARGO_QUANTITY = 0x6AD9;
 constexpr std::uint16_t ADD_CONTRABAND_PENALTY = 0x6DC1;
-constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t READ_TEXT_LINE = 0x7694;
 constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
 
 // Where the original's backward jumps land, for the turns of its loops (JumpBack).
 constexpr std::uint16_t SYSTEM_NAME_SCAN = 0x5E39;
 constexpr std::uint16_t PRICE_ROW = 0x5E69;
-constexpr std::uint16_t WAIT_FOR_SCREEN_EXIT_KEY = 0x60B4;
 constexpr std::uint16_t CARGO_STEER = 0x6B43;
 constexpr std::uint16_t CARGO_CURSOR_UP = 0x6B4E;
 constexpr std::uint16_t CARGO_CURSOR_DOWN = 0x6B7D;
@@ -135,29 +133,6 @@ void MultiplyWord(Machine::Registers& _regs, std::uint16_t _factor) noexcept
   return static_cast<std::uint16_t>((_guest.Get(DS.menuSelectedRow) - 1) * 2 + DS.cargoHold.offset);
 }
 
-// WaitForScreenExitKey (CS:60B4), the docked screens' shared tail: GetKey until Esc or an F-key other than the
-// screen's own in DL, then SelectSystemAtCursor. Out: AX as GetKey gave it.
-void WaitForScreenExitKey(Guest& _guest)
-{
-  Registers& regs = _guest.Regs();
-  for (;;)
-  {
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(FLAG_ZERO))
-    {
-      const std::uint8_t key = High(regs.ax);
-      if (key != Low(regs.dx) && IsScreenKey(key))
-      {
-        break;
-      }
-    }
-    JumpBack(_guest, WAIT_FOR_SCREEN_EXIT_KEY);
-  }
-  _guest.Push(regs.ax);
-  _guest.Call(SELECT_SYSTEM_AT_CURSOR);
-  regs.ax = _guest.Pop();
-}
-
 // 6BE8: the message at SI on the message line in 4Eh, textAttribute and SI put back, and the jump back to the
 // steering.
 void ShowCargoMessage(Guest& _guest)
@@ -169,7 +144,7 @@ void ShowCargoMessage(Guest& _guest)
   regs.ax = _guest.Pop();
   _guest.Set(DS.textAttribute, Low(regs.ax));
   regs.si = _guest.Pop();
-  JumpBack(_guest, CARGO_STEER);
+  _guest.JumpBack(CARGO_STEER);
 }
 
 // 6C05 and 6CB3: SI and textAttribute saved for ShowCargoMessage, and the message attribute set.
@@ -203,7 +178,7 @@ void SellCargo(Guest& _guest)
   Registers& regs = _guest.Regs();
   if (_guest.Get(DS.tradeScreenIsBuy) == 1)
   {
-    JumpBack(_guest, CARGO_STEER);
+    _guest.JumpBack(CARGO_STEER);
     return;
   }
   OpenCargoMessage(_guest);
@@ -212,7 +187,7 @@ void SellCargo(Guest& _guest)
   regs.si = NOTHING_TO_SELL_TEXT;
   if (Low(regs.ax) == 0)
   {
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -220,7 +195,7 @@ void SellCargo(Guest& _guest)
   if (_guest.Flag(FLAG_CARRY) || regs.ax == 0)
   {
     regs.si = _guest.Flag(FLAG_CARRY) ? QUANTITY_ERROR_TEXT : NOTHING_SOLD_TEXT;
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -228,9 +203,9 @@ void SellCargo(Guest& _guest)
   const std::uint8_t quantity = Low(regs.ax);
   if (_guest.Byte(regs.bx) < quantity)
   {
-    JumpBack(_guest, NOT_ENOUGH_TO_SELL);
+    _guest.JumpBack(NOT_ENOUGH_TO_SELL);
     regs.si = NOT_ENOUGH_TO_SELL_TEXT;
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -258,15 +233,15 @@ void SellCargo(Guest& _guest)
   regs.bx = regs.dx;
   _guest.Call(ADD_CREDITS);
   regs.si = SOLD_TEXT;
-  JumpBack(_guest, CARGO_MESSAGE);
+  _guest.JumpBack(CARGO_MESSAGE);
   ShowCargoMessage(_guest);
 }
 
 // 6D37, reached by a jump back: the refusal at SI, by way of the jump back to 6BE8.
 void RefuseBuy(Guest& _guest)
 {
-  JumpBack(_guest, BUY_REFUSED);
-  JumpBack(_guest, CARGO_MESSAGE);
+  _guest.JumpBack(BUY_REFUSED);
+  _guest.JumpBack(CARGO_MESSAGE);
   ShowCargoMessage(_guest);
 }
 
@@ -277,7 +252,7 @@ void BuyCargo(Guest& _guest)
   Registers& regs = _guest.Regs();
   if (_guest.Get(DS.tradeScreenIsBuy) != 1)
   {
-    JumpBack(_guest, CARGO_STEER);
+    _guest.JumpBack(CARGO_STEER);
     return;
   }
   OpenCargoMessage(_guest);
@@ -286,8 +261,8 @@ void BuyCargo(Guest& _guest)
   regs.si = NOTHING_TO_BUY_TEXT;
   if (Low(regs.ax) == 0)
   {
-    JumpBack(_guest, CARGO_MESSAGE_JUMP);
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE_JUMP);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -296,7 +271,7 @@ void BuyCargo(Guest& _guest)
   if (_guest.Get(DS.menuSelectedRow) == ALIEN_ITEMS_ROW)
   {
     regs.si = CANNOT_BUY_TEXT;
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -306,15 +281,15 @@ void BuyCargo(Guest& _guest)
     if (_guest.Byte(regs.bx) == PRECIOUS_MOST)
     {
       regs.si = FULL_TO_CAPACITY_TEXT;
-      JumpBack(_guest, CARGO_MESSAGE);
+      _guest.JumpBack(CARGO_MESSAGE);
       ShowCargoMessage(_guest);
       return;
     }
   }
   else if (_guest.Get(DS.cargoUsedTonnes) == Low(regs.ax))
   {
-    JumpBack(_guest, CARGO_MESSAGE_JUMP);
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE_JUMP);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -322,14 +297,14 @@ void BuyCargo(Guest& _guest)
   regs.si = QUANTITY_ERROR_TEXT;
   if (_guest.Flag(FLAG_CARRY))
   {
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
   if (regs.ax == 0)
   {
     regs.si = NOTHING_BOUGHT_TEXT;
-    JumpBack(_guest, CARGO_MESSAGE);
+    _guest.JumpBack(CARGO_MESSAGE);
     ShowCargoMessage(_guest);
     return;
   }
@@ -362,12 +337,12 @@ void BuyCargo(Guest& _guest)
     regs.si = CANNOT_CARRY_TEXT;
     if (Low(regs.cx) >= High(regs.cx))
     {
-      JumpBack(_guest, BUY_MESSAGE_JUMP);
-      JumpBack(_guest, CARGO_MESSAGE);
+      _guest.JumpBack(BUY_MESSAGE_JUMP);
+      _guest.JumpBack(CARGO_MESSAGE);
       ShowCargoMessage(_guest);
       return;
     }
-    JumpBack(_guest, BUY_PAYMENT);
+    _guest.JumpBack(BUY_PAYMENT);
   }
   _guest.Push(regs.ax);
   _guest.Push(regs.bx);
@@ -393,7 +368,7 @@ void BuyCargo(Guest& _guest)
   SetLow(regs.ax, left);
   _guest.Call(PRINT_CARGO_QUANTITY);
   regs.si = BOUGHT_TEXT;
-  JumpBack(_guest, CARGO_MESSAGE);
+  _guest.JumpBack(CARGO_MESSAGE);
   ShowCargoMessage(_guest);
 }
 
@@ -421,7 +396,7 @@ void ShowMarketPricesScreen(Guest& _guest)
       _guest.SetByte(regs.si, 0);
       break;
     }
-    JumpBack(_guest, SYSTEM_NAME_SCAN);
+    _guest.JumpBack(SYSTEM_NAME_SCAN);
   }
   regs.si = DS.currentSystemName.offset;
   _guest.Call(PRINT_TEXT_MODE_STRING);
@@ -468,7 +443,7 @@ void ShowMarketPricesScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, PRICE_ROW);
+    _guest.JumpBack(PRICE_ROW);
   }
   SetLow(regs.dx, SCAN_F8);
   WaitForScreenExitKey(_guest);
@@ -680,7 +655,7 @@ void RunCargoTradeMenu(Guest& _guest)
     {
       if (!PollMenuKey(_guest, CARGO_TICK_LOOP))
       {
-        JumpBack(_guest, CARGO_STEER);
+        _guest.JumpBack(CARGO_STEER);
         break;
       }
       _guest.Push(regs.ax);
@@ -699,13 +674,13 @@ void RunCargoTradeMenu(Guest& _guest)
       }
       if (key == SCAN_UP)
       {
-        JumpBack(_guest, CARGO_CURSOR_UP);
+        _guest.JumpBack(CARGO_CURSOR_UP);
         MoveMenuCursorUp(_guest);
         continue;
       }
       if (key == SCAN_DOWN)
       {
-        JumpBack(_guest, CARGO_CURSOR_DOWN);
+        _guest.JumpBack(CARGO_CURSOR_DOWN);
         MoveMenuCursorDown(_guest);
         continue;
       }
@@ -715,7 +690,7 @@ void RunCargoTradeMenu(Guest& _guest)
       {
         return;
       }
-      JumpBack(_guest, CARGO_STEER);
+      _guest.JumpBack(CARGO_STEER);
       break;
     }
   }

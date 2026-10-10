@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Docked.h"
 #include "Galaxy.h"
 
 #include "Arithmetic.h"
@@ -63,7 +64,6 @@ constexpr std::uint16_t SHORT_RANGE_KEY_IGNORED = 0x1030;
 constexpr std::uint16_t FIND_UPPER_CASE = 0x144F;
 constexpr std::uint16_t FIND_NEXT_SYSTEM = 0x146F;
 constexpr std::uint16_t FIND_NOT_ON_MAP = 0x148B;
-constexpr std::uint16_t WAIT_FOR_SCREEN_EXIT_KEY = 0x60B4;
 
 // Scan codes the charts and the data screen read.
 constexpr std::uint8_t SCAN_ESCAPE = 0x01;
@@ -282,14 +282,6 @@ void RunTextControlCode(Guest& _guest, std::uint16_t _handler)
   regs.si = text;
 }
 
-// The original's jump back to CS:_target, in a routine that waits: the end of a loop's turn, with IP where
-// the jump lands, so that paced time sees the turn as it sees the original's (Guest::LoopTurn).
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (DX, BX) across and down, as two clipped
 // lines, with CX = DX and AX = BX on entry.
 void DrawCross(Guest& _guest, std::uint16_t _arm)
@@ -408,14 +400,14 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
   _guest.Call(GET_KEY);
   if (_guest.Flag(Machine::FLAG_ZERO))
   {
-    JumpBack(_guest, _chart.frame);
+    _guest.JumpBack(_chart.frame);
     return false;
   }
   const std::uint8_t key = High(regs.ax);
   if (key == SCAN_D || key == SCAN_F)
   {
     _guest.Call(key == SCAN_D ? SHOW_NEAREST_SYSTEM_DISTANCE : FIND_SYSTEM_BY_NAME);
-    JumpBack(_guest, _chart.frame);
+    _guest.JumpBack(_chart.frame);
     return false;
   }
   bool recenter = key == SCAN_KEYPAD_5;
@@ -433,8 +425,8 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
   const bool closes = key == SCAN_ESCAPE || (key >= SCAN_F1 && key <= SCAN_F10 && key != _chart.ownKey);
   if (!closes)
   {
-    JumpBack(_guest, _chart.ignored);
-    JumpBack(_guest, _chart.frame);
+    _guest.JumpBack(_chart.ignored);
+    _guest.JumpBack(_chart.frame);
     return false;
   }
   _guest.Push(regs.ax);
@@ -485,7 +477,7 @@ void DrawGalacticChart(Guest& _guest)
     {
       return;
     }
-    JumpBack(_guest, GALACTIC_SYSTEM_DOT);
+    _guest.JumpBack(GALACTIC_SYSTEM_DOT);
   }
 }
 
@@ -564,7 +556,7 @@ void AddShortRangeSystem(Guest& _guest)
     {
       SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) + 1));
       SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
-      JumpBack(_guest, SHORT_RANGE_LABEL_BELOW_TOP);
+      _guest.JumpBack(SHORT_RANGE_LABEL_BELOW_TOP);
     }
   }
   SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) + LABEL_BELOW));
@@ -572,7 +564,7 @@ void AddShortRangeSystem(Guest& _guest)
   {
     SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - 1));
     SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) - 1));
-    JumpBack(_guest, SHORT_RANGE_LABEL_ABOVE_BOTTOM);
+    _guest.JumpBack(SHORT_RANGE_LABEL_ABOVE_BOTTOM);
   }
   _guest.SetWord(Offset(regs.di, 2), regs.bx);
   regs.di = Offset(regs.di, 4);
@@ -587,7 +579,7 @@ void AddShortRangeSystem(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, SHORT_RANGE_LABEL_NAME);
+    _guest.JumpBack(SHORT_RANGE_LABEL_NAME);
   }
   _guest.SetByte(regs.di, High(regs.cx));
   ++regs.di;
@@ -643,29 +635,6 @@ void PrintNamed(Guest& _guest, std::uint16_t _table, std::uint16_t _bytes)
   regs.bx = Offset(_table, regs.ax);
   regs.si = _guest.Word(regs.bx);
   _guest.Call(PRINT_TEXT_MODE_STRING);
-}
-
-// WaitForScreenExitKey (CS:60B4), the docked screens' shared tail: GetKey until Esc or an F key other than
-// the screen's own in DL, then SelectSystemAtCursor. Out: AX the key.
-void WaitForScreenExitKey(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  for (;;)
-  {
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(Machine::FLAG_ZERO))
-    {
-      const std::uint8_t key = High(regs.ax);
-      if (key != Low(regs.dx) && (key == SCAN_ESCAPE || (key >= SCAN_F1 && key <= SCAN_F10)))
-      {
-        break;
-      }
-    }
-    JumpBack(_guest, WAIT_FOR_SCREEN_EXIT_KEY);
-  }
-  _guest.Push(regs.ax);
-  _guest.Call(SELECT_SYSTEM_AT_CURSOR);
-  regs.ax = _guest.Pop();
 }
 
 } // namespace
@@ -736,7 +705,7 @@ void ShowShortRangeChart(Guest& _guest)
     else
     {
       _guest.Call(ADVANCE_TO_NEXT_SYSTEM);
-      JumpBack(_guest, SHORT_RANGE_SYSTEM_DONE);
+      _guest.JumpBack(SHORT_RANGE_SYSTEM_DONE);
     }
     regs.ax = _guest.Pop();
     SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
@@ -744,7 +713,7 @@ void ShowShortRangeChart(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, SHORT_RANGE_NEXT_SYSTEM);
+    _guest.JumpBack(SHORT_RANGE_NEXT_SYSTEM);
   }
   _guest.Call(PLACE_CHART_LABELS);
   do
@@ -1079,7 +1048,7 @@ void FindSystemByName(Guest& _guest)
   if (_guest.Byte(DS.findInput.offset) == 0)
   {
     // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry.
-    JumpBack(_guest, SHOW_NEAREST_SYSTEM_DISTANCE);
+    _guest.JumpBack(SHOW_NEAREST_SYSTEM_DISTANCE);
     _guest.Call(SHOW_NEAREST_SYSTEM_DISTANCE);
     return;
   }
@@ -1101,7 +1070,7 @@ void FindSystemByName(Guest& _guest)
     _guest.SetByte(regs.si, static_cast<std::uint8_t>(_guest.Byte(regs.si) & UPPER_CASE_MASK));
     ++regs.si;
     ++regs.di;
-    JumpBack(_guest, FIND_UPPER_CASE);
+    _guest.JumpBack(FIND_UPPER_CASE);
   }
   _guest.SetByte(regs.si, SPACE);
   if (regs.cx != SYSTEM_NAME_BYTES)
@@ -1137,7 +1106,7 @@ void FindSystemByName(Guest& _guest)
       _guest.Call(GET_SHORT_RANGE_OFFSET);
       if (!_guest.Flag(Machine::FLAG_CARRY))
       {
-        JumpBack(_guest, FIND_NOT_ON_MAP);
+        _guest.JumpBack(FIND_NOT_ON_MAP);
         ShowNotOnMap(_guest);
         return;
       }
@@ -1150,7 +1119,7 @@ void FindSystemByName(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, FIND_NEXT_SYSTEM);
+    _guest.JumpBack(FIND_NEXT_SYSTEM);
   }
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = regs.ax;

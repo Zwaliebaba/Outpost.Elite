@@ -111,14 +111,6 @@ void RandomArrivalOffset(Guest& _guest)
   }
 }
 
-// One turn of a loop that can wait, at a backward jump of the original to _target: paced time looks at
-// the registers there, IP among them, as it does at the original's jump.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // GalacticJump (0x485B): the next galaxy, the ninth now and then after the eighth, and the system
 // nearest a random point of its chart selected.
 void GalacticJump(Guest& _guest)
@@ -290,7 +282,7 @@ void CompleteHyperspaceJump(Guest& _guest)
   if (_guest.Get(DS.galacticJumpPending) == 1)
   {
     GalacticJump(_guest);
-    JumpBack(_guest, 0x4733);
+    _guest.JumpBack(0x4733);
   }
   else
   {
@@ -317,7 +309,7 @@ void CompleteHyperspaceJump(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, 0x474C);
+    _guest.JumpBack(0x474C);
   }
   _guest.Set(DS.marketQuantitiesSet, 0);
   SetLow(regs.cx, _guest.Get(galactic ? DS.selectedSystemIndex : DS.hyperspaceTargetIndex));
@@ -332,7 +324,7 @@ void CompleteHyperspaceJump(Guest& _guest)
   }
   if (!misjump && _guest.Get(DS.forceMisjump) == 1)
   {
-    JumpBack(_guest, 0x4781); // MisJump
+    _guest.JumpBack(0x4781); // MisJump
     misjump = true;
   }
   if (misjump)
@@ -444,7 +436,7 @@ void PlayHyperspaceTunnel(Guest& _guest)
     {
       return;
     }
-    JumpBack(_guest, 0x4909);
+    _guest.JumpBack(0x4909);
   }
 }
 

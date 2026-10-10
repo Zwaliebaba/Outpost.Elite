@@ -244,6 +244,15 @@ public:
     m_pc.LoopTurn();
   }
 
+  /// LoopTurn at a backward jump the original takes to CS:_target: IP is set to the target first, as the
+  /// jump leaves it, because paced time compares IP with the rest of the registers, and two jumps that
+  /// land in different places are different turns.
+  void JumpBack(std::uint16_t _target)
+  {
+    Regs().ip = _target;
+    m_pc.LoopTurn();
+  }
+
 private:
   Machine::Pc& m_pc;
   std::uint16_t m_codeSegment;

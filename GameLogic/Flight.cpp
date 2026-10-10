@@ -734,14 +734,6 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
-// One turn of a loop that can wait, at a backward jump of the original to _target: paced time looks at
-// the registers there, IP among them, as it does at the original's jump.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // GetKey until a key comes: the waits at 0x0BF3 (HandleFlightFunctionKeys), 0x8153 (ProcessFlightKeys'
 // Ctrl+Esc) and 0x8DC7 (RunPauseScreen), each a CALL at _call and a JE back to it. Out: AH = the key.
 void WaitForKey(Guest& _guest, std::uint16_t _call)
@@ -753,7 +745,7 @@ void WaitForKey(Guest& _guest, std::uint16_t _call)
     {
       return;
     }
-    JumpBack(_guest, _call);
+    _guest.JumpBack(_call);
   }
 }
 
@@ -786,7 +778,7 @@ void ShowPauseOptions(Guest& _guest)
     {
       return;
     }
-    JumpBack(_guest, 0x8D98);
+    _guest.JumpBack(0x8D98);
   }
 }
 
@@ -854,7 +846,7 @@ void ShowPauseOptions(Guest& _guest)
       }
       if (key < SCAN_F1 || key >= SCAN_PAST_F10)
       {
-        JumpBack(_guest, 0x8DC7);
+        _guest.JumpBack(0x8DC7);
         continue;
       }
       // F1-F10: the minimum frame time, and its key in the menu, 1-9 or 10 with a closing bracket.
@@ -875,10 +867,10 @@ void ShowPauseOptions(Guest& _guest)
         _guest.Set(DS.dataAC00, CLOSING_BRACKET);
         _guest.Set(DS.dataAC01, SPACE);
       }
-      JumpBack(_guest, 0x8D6D);
+      _guest.JumpBack(0x8D6D);
       return false;
     }
-    JumpBack(_guest, 0x8D8F); // PauseShowOptions
+    _guest.JumpBack(0x8D8F); // PauseShowOptions
   }
 }
 
@@ -916,7 +908,7 @@ void DispatchFlightScreens(Guest& _guest)
     const std::uint8_t key = High(regs.ax);
     if (key >= SCAN_F1 && key <= SCAN_F4)
     {
-      JumpBack(_guest, 0x0BDE);
+      _guest.JumpBack(0x0BDE);
       LeaveFlightScreens(_guest);
       return;
     }
@@ -928,7 +920,7 @@ void DispatchFlightScreens(Guest& _guest)
       if (key >= SCAN_F5 && key <= SCAN_F8)
       {
         _guest.Call(SCREENS[static_cast<std::size_t>(key - SCAN_F5)]);
-        JumpBack(_guest, 0x0BF8); // FlightScreenDispatch
+        _guest.JumpBack(0x0BF8); // FlightScreenDispatch
         continue;
       }
     }
@@ -943,10 +935,10 @@ void DispatchFlightScreens(Guest& _guest)
           _guest.Set(DS.flightScreenShown, 1);
           _guest.Call(ERASE_COMPASS_AND_BLIPS);
           _guest.Call(SHOW_SHORT_RANGE_CHART);
-          JumpBack(_guest, 0x0BF8);
+          _guest.JumpBack(0x0BF8);
           continue;
         }
-        JumpBack(_guest, 0x0C6D);
+        _guest.JumpBack(0x0C6D);
       }
       if (key < SCAN_F9)
       {
@@ -956,12 +948,12 @@ void DispatchFlightScreens(Guest& _guest)
         }
         SetMessage(_guest, DS.navCompErrorMessage, 0x19);
         SetHigh(regs.ax, 0);
-        JumpBack(_guest, 0x0BDE);
+        _guest.JumpBack(0x0BDE);
         LeaveFlightScreens(_guest);
         return;
       }
       EraseForFlightScreen(_guest);
-      JumpBack(_guest, 0x0C45);
+      _guest.JumpBack(0x0C45);
     }
     // 0x0C45: F9 and F10; any other key the screens return is waited past.
     if (key == SCAN_F9)
@@ -970,16 +962,16 @@ void DispatchFlightScreens(Guest& _guest)
       _guest.Set(DS.inFlight, 1);
       _guest.Call(SHOW_COMMANDER_STATUS_SCREEN);
       _guest.Set(DS.inFlight, 0);
-      JumpBack(_guest, 0x0BF8);
+      _guest.JumpBack(0x0BF8);
       continue;
     }
     if (key == SCAN_F10)
     {
       _guest.Call(SHOW_INVENTORY_SCREEN);
-      JumpBack(_guest, 0x0BF8);
+      _guest.JumpBack(0x0BF8);
       continue;
     }
-    JumpBack(_guest, 0x0BF3);
+    _guest.JumpBack(0x0BF3);
     WaitForKey(_guest, 0x0BF3);
   }
 }
@@ -1007,7 +999,7 @@ void ChangeView(Guest& _guest)
 void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
 {
   _guest.Regs().ax = _text.offset;
-  JumpBack(_guest, 0x80A3);
+  _guest.JumpBack(0x80A3);
   SetMessage(_guest, _text, 0x19);
 }
 
@@ -1018,7 +1010,7 @@ void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
   Registers& regs = _guest.Regs();
   if (_guest.Get(DS.dockingComputerOn) == 1 || _guest.Get(DS.hyperspaceCountdown) != 0)
   {
-    JumpBack(_guest, 0x8065); // past H
+    _guest.JumpBack(0x8065); // past H
     return false;
   }
   SetLow(regs.ax,
@@ -1718,7 +1710,7 @@ void HandleFlightFunctionKeys(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, 0x0BBE);
+    _guest.JumpBack(0x0BBE);
   }
   SetHigh(regs.ax, 0);
   _guest.Set(DS.inFlight, 1);
@@ -2623,7 +2615,7 @@ void RunFlight(Guest& _guest)
     _guest.Call(TICK_ESCAPE_POD);
     if (_guest.Get(DS.playerDead) != 1 || _guest.Get(DS.cheatEnabled) == 1)
     {
-      JumpBack(_guest, 0x7EA4); // FlightFrameLoop
+      _guest.JumpBack(0x7EA4); // FlightFrameLoop
       continue;
     }
     // Dead: GAME OVER for 40 frames, then the title's ELITE on the message line, and back.
@@ -2634,13 +2626,13 @@ void RunFlight(Guest& _guest)
       _guest.Set(DS.gameOverFrames, 0x28);
       SetMessage(_guest, DS.gameOverMessage, 0x28);
       _guest.Call(STOP_CONTINUOUS_NOISE);
-      JumpBack(_guest, 0x7EA4);
+      _guest.JumpBack(0x7EA4);
       continue;
     }
     _guest.Set(DS.gameOverFrames, static_cast<std::uint8_t>(_guest.Get(DS.gameOverFrames) - 1));
     if (_guest.Get(DS.gameOverFrames) != 0)
     {
-      JumpBack(_guest, 0x7EA4);
+      _guest.JumpBack(0x7EA4);
       continue;
     }
     _guest.Call(RESET_KEYBOARD);
@@ -2679,7 +2671,7 @@ void ProcessFlightKeys(Guest& _guest)
   }
   if (_guest.Get(DS.escapePodFrames) != 0)
   {
-    JumpBack(_guest, 0x7FAF); // to the RET above
+    _guest.JumpBack(0x7FAF); // to the RET above
     return;
   }
   _guest.Call(HANDLE_FLIGHT_FUNCTION_KEYS);
@@ -2946,7 +2938,7 @@ void RunPauseScreen(Guest& _guest)
       {
         break;
       }
-      JumpBack(_guest, 0x8D7C);
+      _guest.JumpBack(0x8D7C);
     }
     _guest.Call(RESET_KEYBOARD);
     if (RunPauseOptions(_guest))
@@ -3044,7 +3036,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x839F, "DrainEnergy", &DrainEnergy, PRESERVES_ALL},
   NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDrive, PRESERVES_ALL},
-  NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL)},
+  NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Sometimes},
   NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocity, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX)},
   NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocity, Clobbers(REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},
   NativeEntry{0x8D6A, "RunPauseScreen", &RunPauseScreen, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},

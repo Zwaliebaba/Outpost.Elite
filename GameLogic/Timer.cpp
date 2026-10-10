@@ -369,14 +369,6 @@ void ChainToBiosTimer(Guest& _guest)
   _guest.SetFarWord(0, TIMER_VECTOR_SEGMENT, segment);
 }
 
-// The original's jump back to CS:_target, in a routine that waits: the end of a loop's turn, with IP where the
-// jump lands, so that paced time sees the turn as it sees the original's (Guest::LoopTurn).
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 } // namespace
 
 void InstallTimerInterrupt(Guest& _guest)
@@ -503,7 +495,7 @@ void WaitForTimerTick(Guest& _guest)
   regs.ax = _guest.Get(DS.timerTicks);
   while (regs.ax == _guest.Get(DS.timerTicks))
   {
-    JumpBack(_guest, TIMER_TICK_COMPARE);
+    _guest.JumpBack(TIMER_TICK_COMPARE);
   }
   regs.ax = _guest.Pop();
 }

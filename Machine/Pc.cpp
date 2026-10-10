@@ -557,6 +557,11 @@ void Pc::Compare(NativeCode::Hook& _hook)
   const Cycles clock = m_clock;
   const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
   const std::uint64_t services = m_services.CallCount();
+  // What paced time sees before the call: each run starts from it.
+  const Turn turnBefore = m_lastTurn;
+  const std::uint64_t changesBefore = m_memory.ChangeCount();
+  const std::uint64_t writesBefore = m_ports.WriteCount();
+  const Cycles instructionCyclesBefore = m_instructionCycles;
 
   // The original, all of it: no hook runs inside it, so the native routines it reaches are compared
   // through it. Every byte it changes and every port access it makes is recorded.
@@ -592,6 +597,8 @@ void Pc::Compare(NativeCode::Hook& _hook)
   }
   const Registers original = regs;
   const std::uint64_t changes = m_memory.ChangeCount();
+  const std::uint64_t writes = m_ports.WriteCount();
+  const Cycles instructionCycles = m_instructionCycles;
   const Turn turn = m_lastTurn;
   const std::span<const WriteJournal::Entry> written = work.originalWrites.Entries();
   work.originalAfter.resize(written.size());
@@ -602,6 +609,10 @@ void Pc::Compare(NativeCode::Hook& _hook)
 
   // Undone, and the native routine run from the same state over the same port accesses.
   m_memory.Undo(work.originalWrites);
+  m_memory.SetChangeCount(changesBefore);
+  m_ports.SetWriteCount(writesBefore);
+  m_instructionCycles = instructionCyclesBefore;
+  m_lastTurn = turnBefore;
   regs = entry;
   work.nativeWrites.Clear();
   {
@@ -650,6 +661,8 @@ void Pc::Compare(NativeCode::Hook& _hook)
     bytes[written[index].linear] = work.originalAfter[index];
   }
   m_memory.SetChangeCount(changes);
+  m_ports.SetWriteCount(writes);
+  m_instructionCycles = instructionCycles;
   m_lastTurn = turn;
   regs = original;
   if (difference.empty())

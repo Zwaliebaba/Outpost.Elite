@@ -219,14 +219,6 @@ constexpr std::uint16_t TITLE_YAW_STEP = 0x14;
 constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
-// The original's backward jump to CS:_target, where one turn of a loop ends (ADR-008): paced time looks
-// at it there (Guest::LoopTurn), with IP where the original's jump leaves it.
-void JumpBack(Guest& _guest, std::uint16_t _target)
-{
-  _guest.Regs().ip = _target;
-  _guest.LoopTurn();
-}
-
 // ADD WORD PTR [_offset],_value.
 void AddToWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value)
 {
@@ -243,7 +235,7 @@ void WaitForKey(Guest& _guest, std::uint16_t _loop)
     {
       return;
     }
-    JumpBack(_guest, _loop);
+    _guest.JumpBack(_loop);
   }
 }
 
@@ -406,7 +398,7 @@ void RunTitle(Guest& _guest)
         break;
       }
     }
-    JumpBack(_guest, TITLE_FRAME_LOOP);
+    _guest.JumpBack(TITLE_FRAME_LOOP);
   }
   _guest.Call(STOP_ALL_SOUND);
   _guest.Call(SHOW_CREDITS);
@@ -445,7 +437,7 @@ void DispatchDockedKeys(Guest& _guest, std::uint16_t _screen)
       _guest.Call(RESET_KEYBOARD);
     }
     _guest.Call(screen);
-    JumpBack(_guest, DOCKED_KEY_TEST);
+    _guest.JumpBack(DOCKED_KEY_TEST);
     for (;;)
     {
       const std::uint8_t key = High(regs.ax);
@@ -465,7 +457,7 @@ void DispatchDockedKeys(Guest& _guest, std::uint16_t _screen)
         screen = SHOW_DISC_CONTROL_SCREEN;
         break;
       }
-      JumpBack(_guest, DOCKED_KEY_DISPATCH);
+      _guest.JumpBack(DOCKED_KEY_DISPATCH);
       WaitForKey(_guest, DOCKED_KEY_DISPATCH);
     }
   }
@@ -583,7 +575,7 @@ void WaitForScreenExitKey(Guest& _guest)
         break;
       }
     }
-    JumpBack(_guest, WAIT_FOR_SCREEN_EXIT_KEY);
+    _guest.JumpBack(WAIT_FOR_SCREEN_EXIT_KEY);
   }
   _guest.Push(regs.ax);
   _guest.Call(SELECT_SYSTEM_AT_CURSOR);
@@ -640,7 +632,7 @@ void ShowSellCargoScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, SELL_CARGO_ROW);
+    _guest.JumpBack(SELL_CARGO_ROW);
   }
   _guest.Set(DS.tradeScreenIsBuy, 0);
   _guest.Call(RUN_CARGO_TRADE_MENU);
@@ -707,14 +699,14 @@ void ShowBuyCargoScreen(Guest& _guest)
       regs.bx = Offset(regs.bx, 2);
       _guest.Set(DS.cargoRowPointer, regs.bx);
       regs.bx = Offset(_guest.Pop(), 4);
-      JumpBack(_guest, BUY_CARGO_ROW_END);
+      _guest.JumpBack(BUY_CARGO_ROW_END);
     }
     EndTradeRow(_guest);
     if (--regs.cx == 0)
     {
       break;
     }
-    JumpBack(_guest, BUY_CARGO_ROW);
+    _guest.JumpBack(BUY_CARGO_ROW);
   }
   _guest.Set(DS.tradeScreenIsBuy, 1);
   _guest.Set(DS.marketQuantitiesSet, 1);
@@ -767,7 +759,7 @@ void ShowCommanderStatusScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, STATUS_CASH_SPACE);
+    _guest.JumpBack(STATUS_CASH_SPACE);
   }
   _guest.Call(PRINT_TEXT_MODE_STRING);
   regs.si = LEGAL_STATUS_LABEL_TEXT;
@@ -793,7 +785,7 @@ void ShowCommanderStatusScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, STATUS_RATING);
+    _guest.JumpBack(STATUS_RATING);
   }
   regs.bx = DS.ratingNames.At(regs.bx);
   regs.si = _guest.Word(regs.bx);
@@ -856,7 +848,7 @@ void ShowCommanderStatusScreen(Guest& _guest)
           {
             break;
           }
-          JumpBack(_guest, STATUS_LASER_MOUNT);
+          _guest.JumpBack(STATUS_LASER_MOUNT);
         }
         regs.di = static_cast<std::uint16_t>(regs.di - 2);
         regs.si = MOUNTS_CLOSE_TEXT;
@@ -872,7 +864,7 @@ void ShowCommanderStatusScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, STATUS_EQUIPMENT_ROW);
+    _guest.JumpBack(STATUS_EQUIPMENT_ROW);
   }
   SetLow(regs.dx, SCAN_F9);
   WaitForScreenExitKey(_guest);
@@ -905,7 +897,7 @@ void ShowInventoryScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, INVENTORY_CASH_SPACE);
+    _guest.JumpBack(INVENTORY_CASH_SPACE);
   }
   _guest.Call(PRINT_TEXT_MODE_STRING);
 
@@ -924,7 +916,7 @@ void ShowInventoryScreen(Guest& _guest)
     if (Low(regs.ax) == 0)
     {
       regs.di = _guest.Pop();
-      JumpBack(_guest, INVENTORY_ROW_END);
+      _guest.JumpBack(INVENTORY_ROW_END);
     }
     else
     {
@@ -950,7 +942,7 @@ void ShowInventoryScreen(Guest& _guest)
     {
       break;
     }
-    JumpBack(_guest, INVENTORY_ROW);
+    _guest.JumpBack(INVENTORY_ROW);
   }
   SetLow(regs.dx, SCAN_F10);
   WaitForScreenExitKey(_guest);
@@ -979,7 +971,7 @@ void ShowMissionBriefing(Guest& _guest)
       {
         break;
       }
-      JumpBack(_guest, SUPERNOVA_ANSWER);
+      _guest.JumpBack(SUPERNOVA_ANSWER);
     }
     if (High(regs.ax) == SCAN_N)
     {
@@ -998,7 +990,7 @@ void ShowMissionBriefing(Guest& _guest)
         {
           break;
         }
-        JumpBack(_guest, EVACUATE_CARGO);
+        _guest.JumpBack(EVACUATE_CARGO);
       }
       _guest.Set(DS.cargoUsedTonnes, REFUGEE_TONNES);
       if (_guest.Get(DS.largeCargoBayFitted) == 1)
@@ -1081,7 +1073,7 @@ void ShowMissionDebriefing(Guest& _guest)
       _guest.Set(DS.maskingDeviceFitted, 1);
       regs.cx = MASK_RECOVERED_LINES;
       regs.si = MASK_RECOVERED_TEXT;
-      JumpBack(_guest, MASK_DEBRIEFING_TEXT);
+      _guest.JumpBack(MASK_DEBRIEFING_TEXT);
     }
     else if (_guest.Get(DS.fledMaskShip) == 1)
     {
@@ -1127,11 +1119,11 @@ void RunTitleAndDocked(Guest& _guest)
   // Into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
   if (_guest.Get(DS.resumeAtDiskMenu) == 1)
   {
-    JumpBack(_guest, DOCKED_DISK_MENU_ENTRY);
+    _guest.JumpBack(DOCKED_DISK_MENU_ENTRY);
     DispatchDockedKeys(_guest, SHOW_DISC_CONTROL_SCREEN);
     return;
   }
-  JumpBack(_guest, DOCKED_STATUS_ENTRY);
+  _guest.JumpBack(DOCKED_STATUS_ENTRY);
   DispatchDockedKeys(_guest, SHOW_COMMANDER_STATUS_SCREEN);
 }
 
