@@ -74,21 +74,6 @@ std::filesystem::path UserFolder(const wchar_t* _leaf)
   return error ? std::filesystem::path{} : folder;
 }
 
-// The reference next to the executable, or else in the repository the executable was built from.
-std::filesystem::path FindReference()
-{
-  std::wstring module(MAX_PATH, L'\0');
-  const DWORD length = GetModuleFileNameW(nullptr, module.data(), static_cast<DWORD>(module.size()));
-  module.resize(length);
-  std::filesystem::path beside = std::filesystem::path(module).parent_path() / Elite::REFERENCE_FILE_NAME;
-  std::error_code error;
-  if (std::filesystem::is_regular_file(beside, error))
-  {
-    return beside;
-  }
-  return Elite::FindInRepository(Elite::REFERENCE_FILE_NAME);
-}
-
 std::string SessionName()
 {
   SYSTEMTIME now{};
@@ -143,8 +128,6 @@ int Application::Run(HINSTANCE _instance)
   Engine::AudioStream audio;
   (void)audio.Create(SAMPLE_RATE); // without a sound device the game runs silent
 
-  const std::filesystem::path referencePath = FindReference();
-  const std::vector<std::uint8_t> reference = Elite::ReadWholeFile(referencePath);
   const std::filesystem::path commanders = UserFolder(L"Commanders");
   const std::filesystem::path replays = UserFolder(L"Replays");
   Machine::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
@@ -153,10 +136,9 @@ int Application::Run(HINSTANCE _instance)
   // Every routine is native, in place of the original (ADR-010), so nothing is interpreted: the Pc's Dispatcher runs them
   // (ADR-011), over the memory the GameState owns (D19).
   const auto game = std::make_unique<Elite::Game>(files, desc);
-  if (game->Load(reference, Elite::PSP_SEGMENT) != Elite::ReferenceFailure::None)
+  if (!game->Load(Elite::PSP_SEGMENT))
   {
-    const std::filesystem::path shown = referencePath.empty() ? std::filesystem::path(Elite::REFERENCE_FILE_NAME) : referencePath;
-    Fail(std::format(L"{} was not found, or is not the reference binary (ADR-001, ADR-007).", shown.wstring()));
+    Fail(L"The game would not load.");
     return 1;
   }
   Machine::Pc* const pc = &game->Host();

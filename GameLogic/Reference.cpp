@@ -3,7 +3,7 @@
 #include "Reference.h"
 
 #include "Pc.h"
-#include "Sha256.h"
+#include "ReferenceImage.h"
 
 #include <fstream>
 #include <iterator>
@@ -13,24 +13,12 @@
 namespace Elite
 {
 
-ReferenceFailure LoadReference(Machine::Pc& _pc, std::span<const std::uint8_t> _file, std::uint16_t _pspSegment,
-                               Machine::LoadedProgram& _program)
+bool LoadReference(Machine::Pc& _pc, std::uint16_t _pspSegment, Machine::LoadedProgram& _program)
 {
-  if (Machine::Sha256::ToHex(Machine::Sha256::Of(_file)) != REFERENCE_SHA256)
-  {
-    return ReferenceFailure::NotTheReference;
-  }
   Machine::ExeLoader::Desc load;
   load.pspSegment = _pspSegment;
-  if (_pc.Load(_file, load, _program) != Machine::LoadError::None)
-  {
-    return ReferenceFailure::DidNotLoad;
-  }
-  if (!Machine::ExeLoader::PatchByte(_pc.Ram(), _program, DATA_SEGMENT_PARAGRAPH, D5_OFFSET, 0x00, 0x01))
-  {
-    return ReferenceFailure::DidNotLoad;
-  }
-  return ReferenceFailure::None;
+  return _pc.Load(ReferenceExecutable(), load, _program) == Machine::LoadError::None &&
+         Machine::ExeLoader::PatchByte(_pc.Ram(), _program, DATA_SEGMENT_PARAGRAPH, D5_OFFSET, 0x00, 0x01);
 }
 
 std::filesystem::path FindInRepository(const std::filesystem::path& _name)

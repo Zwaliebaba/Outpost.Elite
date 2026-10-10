@@ -51,10 +51,11 @@ private:
   std::filesystem::path m_path;
 };
 
-/// The reference loaded on a PC in paced time (ADR-008), as replays run it and the game does: the PSP where DOSBox-X
-/// puts it, the clock starting at midnight on 1 January 1980 unless _startMoment says otherwise, DOS's files in a
-/// scratch directory, and the native routines in place of the program's code on a Dispatcher, which interprets
-/// nothing (ADR-011). A Game holds the PC and the GameState that owns the game's memory (D19).
+/// The reference loaded on a PC in paced time (ADR-008), as replays run it and the game does: from its generated image
+/// (D3), the PSP where DOSBox-X puts it, the clock starting at midnight on 1 January 1980 unless _startMoment says
+/// otherwise, DOS's files in a scratch directory, and the native routines in place of the program's code on a
+/// Dispatcher, which interprets nothing (ADR-011). A Game holds the PC and the GameState that owns the game's memory
+/// (D19). A load that fails fails the test that made the rig.
 class ReferenceRig
 {
 public:
@@ -64,13 +65,8 @@ public:
       m_files(m_directory.Path()),
       m_game(std::make_unique<Elite::Game>(m_files, Desc(_startMoment, _mousePresent)))
   {
-    const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
-    m_loaded = m_game->Load(file, Elite::PSP_SEGMENT) == Elite::ReferenceFailure::None;
-  }
-
-  [[nodiscard]] bool Loaded() const noexcept
-  {
-    return m_loaded;
+    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
+    Assert::IsTrue(m_game->Load(Elite::PSP_SEGMENT), L"the reference loads from its generated image");
   }
 
   [[nodiscard]] Machine::Pc& Host() noexcept
@@ -113,7 +109,6 @@ private:
   ScratchDirectory m_directory;
   Machine::DirectoryFileStore m_files;
   std::unique_ptr<Elite::Game> m_game;
-  bool m_loaded = false;
 };
 
 } // namespace GameLogicTests

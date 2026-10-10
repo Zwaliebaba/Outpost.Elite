@@ -18,7 +18,6 @@ public:
   TEST_METHOD(CoversTheGameAndNotItsScratch)
   {
     ReferenceRig rig("Digest");
-    Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
     Machine::Pc& pc = rig.Host();
     const std::uint16_t data = Elite::DataSegment(rig.Program());
     const std::string before = Elite::GameStateDigest(rig.State(), pc.Video());
@@ -46,7 +45,6 @@ public:
   TEST_METHOD(TheGameStateHoldsWhatThePcMaps)
   {
     ReferenceRig rig("GameState");
-    Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
     Machine::Pc& pc = rig.Host();
     Elite::GameState& state = rig.State();
     Assert::AreEqual(std::uint32_t{rig.Program().loadSegment}, std::uint32_t{state.CodeSegment()});

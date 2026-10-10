@@ -13,6 +13,9 @@
     <Filter Include="Build">
       <UniqueIdentifier>{A38D8D19-E84C-5174-93B5-6D72C91EA9D8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Reference">
+      <UniqueIdentifier>{98BAB53F-CAFD-5D25-B0C4-62546FD2EEA2}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Replay">
       <UniqueIdentifier>{4FA17651-43F5-57B9-8147-888A2272841C}</UniqueIdentifier>
     </Filter>
@@ -85,6 +88,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="ReferenceImageTests.cpp">
+      <Filter>Reference</Filter>
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp">
       <Filter>Replay</Filter>
