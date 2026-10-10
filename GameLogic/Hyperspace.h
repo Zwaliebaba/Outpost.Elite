@@ -21,7 +21,6 @@ struct ShipScan
 {
   std::uint16_t slot;      ///< the ship that locks the jump drive, or past the last slot looked at: what the original leaves in DI
   std::uint16_t slotsLeft; ///< the count LOOP had there, CX
-  std::optional<std::uint16_t> lastLooked; ///< the last slot it looked at, whose type byte the original leaves in AL
 };
 
 /// What IsMassLocked found, and what it looked at on the way, which the original leaves in the registers.
@@ -37,7 +36,6 @@ struct MassLock
 /// What EngageJumpDrive (Flight.h) did.
 struct JumpDriveRequest
 {
-  std::uint16_t message;        ///< the message it posted
   std::optional<MassLock> lock; ///< what IsMassLocked found, once it was asked
 };
 

@@ -158,7 +158,7 @@ void TypedLineTurn(Hardware& _hardware, std::uint16_t _loop, std::uint16_t _leng
 // ReadTextLine's redraw (0x76FF): the line typed and the cursor printed, then the JMP back to counting the blink.
 void RedrawTypedLine(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
 {
-  (void)RedrawInputLine(_state, _line.buffer, _length, _line.segment, _line.cell);
+  RedrawInputLine(_state, _line.buffer, _length, _line.segment, _line.cell);
   TypedLineTurn(_hardware, INPUT_COUNT_BLINK, _length);
 }
 
@@ -552,7 +552,7 @@ std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::uint16_t
       if (_state.Byte(DS.inputCursorText.offset) != CURSOR_HIDDEN)
       {
         ToggleInputCursor(_state);
-        (void)RedrawInputLine(_state, _buffer, length, _segment, _cell);
+        RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
       return length;
     }
@@ -562,7 +562,7 @@ std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::uint16_t
       {
         --length;
         _state.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(_state.Get(DS.inputCharsLeft) + 1));
-        (void)RedrawInputLine(_state, _buffer, length, _segment, _cell);
+        RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
@@ -598,12 +598,11 @@ void ToggleInputCursor(GameState& _state)
   _state.SetByte(cursor, static_cast<std::uint8_t>(_state.Byte(cursor) ^ toggle));
 }
 
-RedrawnInputLine RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment,
-                                 std::uint16_t _cell)
+void RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment, std::uint16_t _cell)
 {
   _state.SetByte(Offset(_length, _buffer), 0);
   const PrintedText line = PrintStringForLayout(_state, _buffer, MESSAGE_INK, _segment, _cell);
-  return RedrawnInputLine{line, PrintStringForLayout(_state, DS.inputCursorText.offset, MESSAGE_INK, _segment, line.nextCell)};
+  (void)PrintStringForLayout(_state, DS.inputCursorText.offset, MESSAGE_INK, _segment, line.nextCell);
 }
 
 PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)

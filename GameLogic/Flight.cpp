@@ -41,7 +41,6 @@ constexpr std::uint16_t FLIGHT_FRAME_LOOP = 0x7EA4;
 //   PlayStationTunnel's BX assumes (Docking.cpp). One state escapes that: the station shot while the docking computer has stopped
 //   (CancelDockingComputer), then , pressed, which takes the speed from 0 to FCh, as UpdatePlayerMotion's floor at 4 lets through.
 //   There the trap saves the drawing's BH, which this does not reproduce.
-// - ProcessFlightKeys' AL reaches nothing ProcessFlightKeys does: HandleFlightFunctionKeys only hands it back (FlightScreens::al).
 // - ProcessFlightKeys' ES is DS, as UpdateObjectsAndSpawn's PUSH DS / POP ES leaves it, or B800h, once a blip was XORed after it
 //   (XorDashboardPixel). Only a chart drawn while its frame shows already reads it (ChartSegment), and in flight the cockpit always
 //   shows when ProcessFlightKeys runs: SetUpLocalSpace shows it, and so does every leaving of the function keys' screens
@@ -55,7 +54,6 @@ constexpr std::uint16_t FLIGHT_FRAME_LOOP = 0x7EA4;
 //   enough for its distance not to carry (at worst 19962, in galaxy 8, measured over every cursor with a scratch model of the search
 //   outside the repository); on the short-range chart, the current system at its centre is.
 constexpr std::uint16_t STARDUST_BX = 0;
-constexpr std::uint8_t FLIGHT_KEYS_AL = 0;
 // ClearMessageLine counts its eight rows down in BP (MOV BP,8 / DEC BP), and leaves it 0: after GAME OVER, and after the pause
 // screen's A, which clears the message line.
 constexpr std::uint16_t CLEARED_MESSAGE_LINE_BP = 0;
@@ -552,17 +550,6 @@ void RedrawThreeLineBar(GameState& _state, DataField<std::uint8_t> _value, DataF
   DrawThreeLineBar(_state, _line, value, 0);
 }
 
-// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
-void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  const unsigned sum = _state.Get(_field) + unsigned{_value};
-  _state.Set(_field, static_cast<std::uint8_t>(sum));
-  if (sum > 0xFF)
-  {
-    _state.Set(_field, 0xFF);
-  }
-}
-
 // SUB byte,_value / JAE / MOV byte,0 on _field: the difference written, and 0 over it on a borrow.
 void SubtractFloored(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
 {
@@ -661,15 +648,12 @@ void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
 
 // ---- The warnings ---------------------------------------------------------------------------------
 
-// SetWarning (0x36E7): posts warning _warning for 20 frames. Returns its text, warningTexts[_warning], which the
-// original leaves in AX.
-std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
+// SetWarning (0x36E7): posts warning _warning, its text warningTexts[_warning], for 20 frames.
+void SetWarning(GameState& _state, std::uint8_t _warning)
 {
   _state.Set(DS.warningFrames, 0x14);
   _state.Set(DS.warningIndex, _warning);
-  const std::uint16_t text = _state.Word(DS.warningTexts.At(_warning));
-  _state.Set(DS.warningMessage, text);
-  return text;
+  _state.Set(DS.warningMessage, _state.Word(DS.warningTexts.At(_warning)));
 }
 
 // CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning (0x36FD,
@@ -695,7 +679,7 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
 
 // The four checks round-robin from _first, each falling on to the next with LOOP while _checks lasts, until one posts its
 // warning.
-[[nodiscard]] WarningChecks RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
+void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
 {
   std::uint16_t check = _first;
   std::uint16_t checks = _checks;
@@ -703,12 +687,12 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
   {
     if (WarningApplies(_state, check))
     {
-      const auto warning = static_cast<std::uint8_t>(check);
-      return WarningChecks{warning, checks, SetWarning(_state, warning)};
+      SetWarning(_state, static_cast<std::uint8_t>(check));
+      return;
     }
     if (--checks == 0)
     {
-      return WarningChecks{static_cast<std::uint8_t>(check), checks, std::nullopt};
+      return;
     }
     check = static_cast<std::uint16_t>((check + 1) & 3);
   }
@@ -964,25 +948,26 @@ bool EraseForFlightScreen(GameState& _state)
 }
 
 // FlightScreenDispatch (0x0BF8): the screen for _key, then the screen for the key that screen returns, until F1-F4 or the
-// navigation computer's error leaves (0x0BDE). _al, _countIfNone, _segment and _backward are AL, BP, ES and the direction flag as
-// the dispatch finds them, which the screens and their waits read and leave. Every jump back in it is a turn of a loop that can
-// wait: those to the tests at 0x0BF8 carry the key and BP, which the next screen reads, and the others, into shared code or to the
-// wait, carry nothing.
-FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint8_t _al, std::uint16_t _countIfNone,
+// navigation computer's error leaves (0x0BDE). _countIfNone, _segment and _backward are BP, ES and the direction flag as the
+// dispatch finds them, which the screens and their waits read and leave. Every jump back in it is a turn of a loop that can wait:
+// those to the tests at 0x0BF8 carry the key, the AL the last screen left, and BP, which the next screen reads, and the others,
+// into shared code or to the wait, carry nothing.
+FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint16_t _countIfNone,
                                     std::uint16_t _segment, bool _backward)
 {
-  FlightScreens screens{0, _al, std::nullopt, std::nullopt, _countIfNone, _backward};
+  FlightScreens screens{0, std::nullopt, _backward};
   std::uint8_t key = _key;
+  std::uint16_t countLeft = _countIfNone;
   std::uint16_t segment = _segment;
   // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen). Of what
   // EraseCompassAndBlips leaves, the screens read BP, the compass dot's in-front byte CBW'd once it erases the dot, and the charts
   // ES, the video segment once it erases anything.
-  const auto erase = [&_state, &screens, &segment]
+  const auto erase = [&_state, &countLeft, &segment]
   {
     const ObjectSlot station(_state, DS.stationSlot.offset);
     if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
     {
-      screens.countLeft = SignExtend(station.Get(SlotByte::BlipZ));
+      countLeft = SignExtend(station.Get(SlotByte::BlipZ));
     }
     if (EraseForFlightScreen(_state))
     {
@@ -992,14 +977,13 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
   // A screen shown, and the key that closed it, with AL as it leaves it: every screen leaves ES on B800h, the charts clear the
   // direction flag (PresentChartFrame), and the screens that select the system at the cursor as they close leave BP its count.
   // Then JMP FlightScreenDispatch.
-  const auto shown = [&_hardware, &screens, &key, &segment](const ScreenKey& _closed, bool _chart)
+  const auto shown = [&_hardware, &screens, &key, &countLeft, &segment](const ScreenKey& _closed, bool _chart)
   {
     key = _closed.scanCode;
-    screens.al = _closed.al;
-    screens.countLeft = _closed.countLeft.value_or(screens.countLeft);
+    countLeft = _closed.countLeft.value_or(countLeft);
     segment = GameState::VIDEO_SEGMENT;
     screens.backward = screens.backward && !_chart;
-    _hardware.LoopTurn(FLIGHT_SCREEN_DISPATCH, {Join(key, screens.al), screens.countLeft});
+    _hardware.LoopTurn(FLIGHT_SCREEN_DISPATCH, {Join(key, _closed.al), countLeft});
   };
   // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens), whose CLD, once it draws, clears the
   // direction flag.
@@ -1035,12 +1019,12 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       }
       if (key == SCAN_F7)
       {
-        shown(ShowSystemDataScreen(_state, _hardware, screens.backward, screens.countLeft), false);
+        shown(ShowSystemDataScreen(_state, _hardware, screens.backward, countLeft), false);
         continue;
       }
       if (key == SCAN_F8)
       {
-        shown(ShowMarketPricesScreen(_state, _hardware, screens.backward, screens.countLeft), false);
+        shown(ShowMarketPricesScreen(_state, _hardware, screens.backward, countLeft), false);
         continue;
       }
     }
@@ -1064,9 +1048,8 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
         {
           StartBeep(_state);
         }
-        // MOV AX,navCompErrorMessage, posted, then XOR AH,AH: no view, and AL the message's low byte.
+        // MOV AX,navCompErrorMessage, posted, then XOR AH,AH: no view.
         SetMessage(_state, DS.navCompErrorMessage.offset, 0x19);
-        screens.al = Low(DS.navCompErrorMessage.offset);
         return leave();
       }
       erase();
@@ -1077,21 +1060,20 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
     {
       ResetKeyboard(_state, _hardware);
       _state.Set(DS.inFlight, 1);
-      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, screens.backward, screens.countLeft);
+      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, screens.backward, countLeft);
       _state.Set(DS.inFlight, 0);
       shown(closed, false);
       continue;
     }
     if (key == SCAN_F10)
     {
-      shown(ShowInventoryScreen(_state, _hardware, screens.backward, screens.countLeft), false);
+      shown(ShowInventoryScreen(_state, _hardware, screens.backward, countLeft), false);
       continue;
     }
     // JMP 0BF3h, and GetKey until a key comes: a screenshot taken there leaves ES on the video segment (SaveScreenshot).
     _hardware.LoopTurn(FLIGHT_SCREEN_KEY_WAIT, {});
     const KeyPress next = WaitForKey(_state, _hardware, FLIGHT_SCREEN_KEY_WAIT);
     key = next.scanCode;
-    screens.al = AlAfterKey(screens.al, next);
     if (next.screenshot)
     {
       segment = GameState::VIDEO_SEGMENT;
@@ -1682,8 +1664,8 @@ void SaveStardustPositions(GameState& _state)
   }
 }
 
-FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _countIfNone,
-                                       std::uint16_t _segment, bool _backward)
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, std::uint16_t _segment,
+                                       bool _backward)
 {
   _state.Set(DS.inFlight, 0);
   // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10: each turn back to 0x0BBE carries both.
@@ -1695,9 +1677,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
       _state.Set(DS.flightScreenShown, 0);
-      FlightScreens screens = DispatchFlightScreens(_state, _hardware, Low(scan), _al, _countIfNone, _segment, _backward);
-      screens.key = Low(scan);
-      return screens;
+      return DispatchFlightScreens(_state, _hardware, Low(scan), _countIfNone, _segment, _backward);
     }
     ++scan;
     if (--keys == 0)
@@ -1707,7 +1687,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
     _hardware.LoopTurn(FUNCTION_KEY_LOOP, {keys, scan});
   }
   _state.Set(DS.inFlight, 1);
-  return FlightScreens{0, _al, std::nullopt, std::nullopt, _countIfNone, _backward};
+  return FlightScreens{0, std::nullopt, _backward};
 }
 
 ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _backward)
@@ -2070,8 +2050,7 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 
 SafeZone InSafeZone(const GameState& _state)
 {
-  const std::uint8_t flags = _state.Get(DS.safeZoneFlags);
-  return SafeZone{(flags & 1) != 0, static_cast<std::uint8_t>(flags >> 1)};
+  return SafeZone{(_state.Get(DS.safeZoneFlags) & 1) != 0};
 }
 
 void UpdateSafeZone(GameState& _state)
@@ -2137,14 +2116,14 @@ void UpdateWarnings(GameState& _state)
     return;
   }
   // The four checks from the one after the last warning (JMP [BX+warningChecks]).
-  (void)RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Get(DS.warningIndex) + 1) & 3), WARNING_CHECKS);
+  RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Get(DS.warningIndex) + 1) & 3), WARNING_CHECKS);
 }
 
-std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera)
+void UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera)
 {
   if (_slot.Offset() >= DS.debrisSlots.offset || IsStation(_slot).station || IsSunOrPlanet(_slot))
   {
-    return std::nullopt;
+    return;
   }
   _slot.Set(SlotByte::Scanned, 1);
   // The scanner's y and z are 1.25 times the camera's. The blip is the high bytes, each XCHGed with the old blip's.
@@ -2159,16 +2138,15 @@ std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _s
   {
     (void)XorScannerBlip(_state, oldX, oldY, oldZ);
   }
-  const DashboardPixel last = XorScannerBlip(_state, _slot.Get(SlotByte::BlipX), _slot.Get(SlotByte::BlipY), _slot.Get(SlotByte::BlipZ));
+  (void)XorScannerBlip(_state, _slot.Get(SlotByte::BlipX), _slot.Get(SlotByte::BlipY), _slot.Get(SlotByte::BlipZ));
   _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
-  return last;
 }
 
-std::optional<CompassUpdate> UpdateCompass(GameState& _state)
+bool UpdateCompass(GameState& _state)
 {
   if (_state.Get(DS.titleShown) == 0)
   {
-    return std::nullopt;
+    return false;
   }
   // The target: the station when the planet is near, else the planet. Its scale shift goes to its depth byte.
   std::uint16_t target = DS.planetSlot.offset;
@@ -2236,28 +2214,29 @@ std::optional<CompassUpdate> UpdateCompass(GameState& _state)
   station.Set(SlotByte::BlipZ, inFront ? COMPASS_IN_FRONT : std::uint8_t{0});
   if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
   {
-    (void)XorCompassDot(_state, Low(oldDot), High(oldDot), wasInFront != 0);
+    XorCompassDot(_state, Low(oldDot), High(oldDot), wasInFront != 0);
   }
   const std::uint8_t nowInFront = station.Get(SlotByte::BlipZ);
   const std::uint16_t dot = station.Get(SlotWord::CompassDot);
   station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
-  return CompassUpdate{XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0), range, nowInFront};
+  XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0);
+  return true;
 }
 
-DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront)
+void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront)
 {
   if (_inFront)
   {
     (void)XorDashboardPixel(_state, _x, _y);
   }
-  DashboardPixel pixel{_x, _y, 0};
+  std::uint8_t x = _x;
+  std::uint8_t y = _y;
   for (const DotStep step : COMPASS_RING)
   {
-    pixel.x = static_cast<std::uint8_t>(pixel.x + step.x);
-    pixel.y = static_cast<std::uint8_t>(pixel.y + step.y);
-    pixel.mask = XorDashboardPixel(_state, pixel.x, pixel.y);
+    x = static_cast<std::uint8_t>(x + step.x);
+    y = static_cast<std::uint8_t>(y + step.y);
+    (void)XorDashboardPixel(_state, x, y);
   }
-  return pixel;
 }
 
 std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
@@ -2330,7 +2309,7 @@ bool EraseCompassAndBlips(GameState& _state)
     const std::uint8_t x = station.Get(SlotByte::BlipX);
     const std::uint8_t y = station.Get(SlotByte::BlipY);
     station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) & ~FLAG_BLIP_DRAWN));
-    (void)XorCompassDot(_state, x, y, inFront);
+    XorCompassDot(_state, x, y, inFront);
     erased = true;
   }
   // MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3, and LOOP: 65,536 slots for a count of 3.
@@ -2426,7 +2405,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
       // The tunnel's last frame's CLD and BP of 20h, which the docked status screen goes on with.
       return FlightExit{FlightEnd::Docked, PRESENT_SPACE_VIEW_BP, false};
     }
-    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, FLIGHT_KEYS_AL, slotsEnd, countLeft, _state.DataSegment(), backward);
+    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd, countLeft, _state.DataSegment(), backward);
     backward = keys.backward;
     if (keys.aborted)
     {
@@ -2482,7 +2461,7 @@ bool TickEscapePod(GameState& _state)
   return _state.Get(DS.escapePodFrames) == 0;
 }
 
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _di, std::uint16_t _countIfNone,
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint16_t _di, std::uint16_t _countIfNone,
                                  std::uint16_t _segment, bool _backward)
 {
   if (_state.Get(DS.gameOverFrames) != 0)
@@ -2495,7 +2474,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
     _hardware.LoopTurn(PROCESS_FLIGHT_KEYS_RETURN, {});
     return FlightKeysExit{false, _backward};
   }
-  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware, _al, _countIfNone, _segment, _backward);
+  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware, _countIfNone, _segment, _backward);
   const bool backward = screens.backward;
   // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
   // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
@@ -2601,29 +2580,28 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 JumpDriveRequest EngageJumpDrive(GameState& _state)
 {
   // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
-  const auto post = [&_state](DataAt _message) -> std::uint16_t
-  {
-    SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES);
-    return _message.offset;
-  };
+  const auto post = [&_state](DataAt _message) { SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
   if (_state.Get(DS.dockingComputerOn) != 1)
   {
     if (_state.Get(DS.playerSpeed) != FULL_SPEED)
     {
       _state.Set(DS.jumpDriveEngaged, 0);
-      return JumpDriveRequest{post(DS.jumpDriveVelocityLockedMessage), lock};
+      post(DS.jumpDriveVelocityLockedMessage);
+      return JumpDriveRequest{lock};
     }
     lock = IsMassLocked(_state);
     if (!lock->locked)
     {
       _state.Set(DS.jumpDriveEngaged, 1);
       _state.Set(DS.velocityDirty, 1);
-      return JumpDriveRequest{post(DS.jumpDriveEngagedMessage), lock};
+      post(DS.jumpDriveEngagedMessage);
+      return JumpDriveRequest{lock};
     }
   }
   _state.Set(DS.jumpDriveEngaged, 0);
-  return JumpDriveRequest{post(DS.jumpDriveMassLockedMessage), lock};
+  post(DS.jumpDriveMassLockedMessage);
+  return JumpDriveRequest{lock};
 }
 
 void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
@@ -2641,7 +2619,7 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
   Steering steering{};
   if (_state.Get(DS.dockingComputerOn) != 0)
   {
-    (void)RunDockingComputer(_state);
+    RunDockingComputer(_state);
     const std::uint16_t steered = _state.Get(DS.dockingComputerSteering);
     steering = Steering{Low(steered), High(steered)};
   }

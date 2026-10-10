@@ -19,20 +19,6 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
-/// What UpdateStationAi did, and what it leaves in DX.
-struct StationTurn
-{
-  std::optional<NearTest> near;             ///< what IsObjectNear found of the station, when it looked for an offender
-  bool launched;                            ///< it launched a copy of itself
-  std::optional<std::uint16_t> traderPitch; ///< when that copy was made a trader, the pitch FacePlayerWithRandomRoll gave it
-  bool missilesRemoved;                     ///< its ECM ran, and RemoveAllMissiles with it
-  bool blipErased;                          ///< that erased a scanner blip
-  /// DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's box: the DX it was
-  /// called with, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it
-  /// erased.
-  std::uint16_t dx;
-};
-
 /// UpdateObjectsAndSpawn (CS:4A10): once a frame, activeObjectCount and the class counts cleared (REP STOSB, backwards when
 /// _backward, the direction flag, is set), then every active slot of shipSlotCount counted, debris apart, and run by its class's
 /// handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount, the mask
@@ -43,8 +29,9 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
 /// UpdateStationAi (CS:5595): class 1: the station at _station spins; while it is hostile and the government is no anarchy, it
 /// looks for an offender out of the box it guards and launches police, shuttles or traders at one (copies of itself, backwards
 /// when _backward); then it answers missiles aimed at it, or at the police in the safe zone, with its ECM. _dx is the DX it is
-/// called with.
-StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx);
+/// called with. Returns DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's
+/// box: _dx, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it erased.
+std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx);
 
 /// ClampTurnStep's step and the error it was taken from.
 struct TurnStep
@@ -74,20 +61,6 @@ struct HunterCount
   std::optional<std::uint16_t> last; ///< the last slot counted, if any
 };
 
-/// What CheckSafeZoneHoldFire finds.
-struct HoldFire
-{
-  bool hold;                    ///< the ship must not fire
-  std::optional<SafeZone> zone; ///< what InSafeZone read, when it was asked: neither in an invasion nor for a police Viper
-};
-
-/// What UpdateDriftingObjectAi did with a slot.
-struct DriftingObject
-{
-  MovedObject moved;          ///< what MoveObject did
-  std::optional<Pair> tumble; ///< for a rock, what it added to the pitch, then to the roll
-};
-
 /// ScaleSpawnOdds (CS:4C0E): _odds multiplied by 32 (shifted left 5) while jumpDriveEngaged is 1.
 [[nodiscard]] std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds);
 
@@ -115,8 +88,9 @@ Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted);
 [[nodiscard]] VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize);
 
 /// UpdateDriftingObjectAi (CS:5681): class 3: _slot moved (MoveObject), and a rock (IsDebrisType) tumbled: 37h added to its
-/// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear.
-DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot);
+/// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear. Returns what MoveObject
+/// did.
+MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot);
 
 /// UpdateTraderOrPoliceAi (CS:569C): class 4: traders and the police at _slot: deciding, attacking, fleeing with jinks, breaking
 /// off; rocks only spin. _rangeLow is DL, the low byte of the box a ship breaking off measures its range by; _backward the
@@ -133,6 +107,6 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
 
 /// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
 /// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.
-[[nodiscard]] HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
+[[nodiscard]] bool CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
 
 } // namespace Elite

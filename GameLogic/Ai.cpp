@@ -314,9 +314,8 @@ void SpawnInvasionWave(GameState& _state)
 // What the station's look for an offender found.
 struct OffenderLaunch
 {
-  NearTest near;                          // what IsObjectNear found of the station
-  std::optional<Velocity> launched;       // when a copy of the station went into a free slot, what ComputeVelocity gave it
-  std::optional<RandomRollFacing> trader; // when the copy was made a trader, what FacePlayerWithRandomRoll gave it
+  NearTest near;                    // what IsObjectNear found of the station
+  std::optional<Velocity> launched; // when a copy of the station went into a free slot, what ComputeVelocity gave it
 };
 
 // From 55A9: the station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it
@@ -324,7 +323,7 @@ struct OffenderLaunch
 // and its velocity set. PUSH DI and POP DI keep the station.
 OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _backward)
 {
-  OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt, std::nullopt};
+  OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt};
   if (!launch.near.nearby || ObjectWithinBox(_station, STATION_GUARD_BOX))
   {
     return launch;
@@ -352,7 +351,7 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
   }
   else
   {
-    launch.trader = SpawnRandomTrader(_state, ship);
+    SpawnRandomTrader(_state, ship);
   }
   // ADD [DI+8],0F0h / ADC [DI+3],0: out along z, turned round, its roll reversed.
   const std::uint32_t z = std::uint32_t{ship.Get(SlotWord::Z)} + LAUNCH_DISTANCE;
@@ -364,28 +363,11 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
   return launch;
 }
 
-// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
-void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  const unsigned sum = _state.Get(_field) + unsigned{_value};
-  _state.Set(_field, static_cast<std::uint8_t>(sum));
-  if (sum > 0xFF)
-  {
-    _state.Set(_field, 0xFF);
-  }
-}
-
-// What CheckMissilesAtStation did with the station's ECM.
-struct StationEcm
-{
-  bool removed;                         // the ECM ran, and RemoveAllMissiles with it
-  std::optional<DashboardPixel> erased; // the last pixel of the last scanner blip that erased, if it erased one
-};
-
 // CheckMissilesAtStation (5611): a missile aimed at the station at _station, or at a police Viper in the safe zone, is a crime,
 // added to legalStatus up to FFh (the sum written, then FFh over it on a carry, 5650 and 5656), and starts the station's ECM
-// unless the player's anti-ECM is on; while npcEcmFrames runs, the ECM removes every missile, and an invasion stops it.
-StationEcm CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
+// unless the player's anti-ECM is on; while npcEcmFrames runs, the ECM removes every missile, and an invasion stops it. Returns
+// the last pixel of the last scanner blip the ECM erased, if it erased one.
+std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
 {
   if (_state.Get(DS.npcEcmFrames) == 0)
   {
@@ -412,24 +394,24 @@ StationEcm CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
     }
     if (!crime)
     {
-      return StationEcm{false, std::nullopt};
+      return std::nullopt;
     }
     AddSaturating(_state, DS.legalStatus, *crime);
     if (_state.Get(DS.antiEcmActive) == 1)
     {
-      return StationEcm{false, std::nullopt};
+      return std::nullopt;
     }
     _state.Set(DS.npcEcmFrames, STATION_ECM_FRAMES);
   }
   if (_state.Get(DS.thargoidInvasionActive) == 1)
   {
     _state.Set(DS.npcEcmFrames, 0);
-    return StationEcm{false, std::nullopt};
+    return std::nullopt;
   }
   _state.Set(DS.ecmFired, 1);
   const std::optional<DashboardPixel> erased = RemoveAllMissiles(_state);
   _state.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_state.Get(DS.npcEcmFrames) - 1));
-  return StationEcm{true, erased};
+  return erased;
 }
 
 // UpdateWolfAi's state 3 (586D): turning away, a Thargoid launching Thargons, until beyond its range, whose box takes _rangeLow,
@@ -649,11 +631,11 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, ObjectS
   case INERT_CLASS:
     return _dx;
   case STATION_CLASS:
-    return UpdateStationAi(_state, _slot, _backward, _dx).dx;
+    return UpdateStationAi(_state, _slot, _backward, _dx);
   case MISSILE_CLASS:
     return UpdateMissileAi(_state, _hardware, _slot, _backward, static_cast<std::uint16_t>(_behavior << 1), _dx).dx;
   case DRIFTING_CLASS:
-    return UpdateDriftingObjectAi(_state, _slot).moved.dx;
+    return UpdateDriftingObjectAi(_state, _slot).dx;
   case TRADER_CLASS:
     return UpdateTraderOrPoliceAi(_state, _slot, Low(_dx), _backward).dx;
   case WOLF_CLASS:
@@ -811,51 +793,42 @@ VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _obj
   return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
-StationTurn UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
+std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
 {
   _station.Set(SlotWord::Roll, Offset(_station.Get(SlotWord::Roll), STATION_SPIN));
-  StationTurn turn{std::nullopt, false, std::nullopt, false, false, _dx};
+  std::uint16_t dx = _dx;
   if (_state.Get(DS.spawnGovernment) >= 1 && (_station.Get(SlotByte::Flags) & FLAG_HOSTILE) != 0)
   {
     // DX: the last pixel of the blip IsObjectNear erased, or MOV DX,1C2h, the guarded box, once it is near; then what
     // ComputeVelocity leaves once it launched.
     const OffenderLaunch launch = LaunchAtOffender(_state, _station, _backward);
-    turn.near = launch.near;
     if (launch.near.erasedBlip)
     {
-      turn.dx = PixelPlace(*launch.near.erasedBlip);
+      dx = PixelPlace(*launch.near.erasedBlip);
     }
     if (launch.near.nearby)
     {
-      turn.dx = STATION_GUARD_BOX;
+      dx = STATION_GUARD_BOX;
     }
     if (launch.launched)
     {
-      turn.launched = true;
-      turn.dx = launch.launched->dx;
-    }
-    if (launch.trader)
-    {
-      turn.traderPitch = launch.trader->heading.first;
+      dx = launch.launched->dx;
     }
   }
   // DX: the last pixel of the last blip RemoveAllMissiles erased, once the ECM ran.
-  const StationEcm ecm = CheckMissilesAtStation(_state, _station);
-  turn.missilesRemoved = ecm.removed;
-  if (ecm.erased)
+  if (const std::optional<DashboardPixel> erased = CheckMissilesAtStation(_state, _station))
   {
-    turn.blipErased = true;
-    turn.dx = PixelPlace(*ecm.erased);
+    dx = PixelPlace(*erased);
   }
-  return turn;
+  return dx;
 }
 
-DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
+MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
 {
   const MovedObject moved = MoveObject(_state, _slot);
   if (!IsDebrisType(_slot))
   {
-    return DriftingObject{moved, std::nullopt};
+    return moved;
   }
   // MOV AX,37h / MOV BX,0FFDFh, exchanged unless bit 1 of the type byte is set: AX to the pitch, then BX to the roll.
   Pair tumble{static_cast<std::int16_t>(ROCK_TUMBLE_A), static_cast<std::int16_t>(ROCK_TUMBLE_B)};
@@ -865,7 +838,7 @@ DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
   }
   _slot.Set(SlotWord::Pitch, Offset(_slot.Get(SlotWord::Pitch), static_cast<std::uint16_t>(tumble.first)));
   _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), static_cast<std::uint16_t>(tumble.second)));
-  return DriftingObject{moved, tumble};
+  return moved;
 }
 
 MovedObject UpdateTraderOrPoliceAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
@@ -1006,14 +979,13 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
   }
 }
 
-HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
+bool CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
 {
   if (_state.Get(DS.thargoidInvasionActive) == 1 || IsPoliceViper(_slot))
   {
-    return HoldFire{false, std::nullopt};
+    return false;
   }
-  const SafeZone zone = InSafeZone(_state);
-  return HoldFire{zone.inside, zone};
+  return InSafeZone(_state).inside;
 }
 
 } // namespace Elite

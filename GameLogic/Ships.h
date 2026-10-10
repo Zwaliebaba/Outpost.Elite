@@ -93,18 +93,10 @@ struct NearTest
   std::uint8_t lastHigh;                    ///< the last high byte the test looked at, INC'd and DEC'd back: what the original leaves in AL
 };
 
-/// What FacePlayerWithRandomRoll gives a slot.
-struct RandomRollFacing
-{
-  Angles heading;     ///< FacePlayer's pitch and yaw
-  std::uint16_t roll; ///< the random word NextRandom drew for the roll
-};
-
 /// What IsStation finds of a slot.
 struct StationTest
 {
-  std::uint8_t type; ///< bits 1-5 of the type byte
-  bool station;      ///< a Dodo (type 0) or a Coriolis (type 1)
+  bool station; ///< a Dodo (type 0) or a Coriolis (type 1)
   bool dodo;
 };
 
@@ -151,7 +143,7 @@ NearTest IsObjectNear(GameState& _state, ObjectSlot _slot);
 /// IsPlanet (CS:3F37): whether _slot is the planet (type 1Fh).
 [[nodiscard]] bool IsPlanet(const ObjectSlot& _slot);
 
-/// IsStation (CS:3F40): _slot's type, and whether it is a station's.
+/// IsStation (CS:3F40): whether _slot is a station, and whether a Dodo.
 [[nodiscard]] StationTest IsStation(const ObjectSlot& _slot);
 
 /// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone: whether each 24-bit coordinate of _slot fits a signed word.
@@ -179,9 +171,8 @@ void SpawnRandomDrifter(GameState& _state, ObjectSlot _slot);
 
 /// SpawnRandomTrader (CS:4D08): _slot, a free one, made one of the six traders from spawnTemplates' entry 9 by a random byte /
 /// 43, placed and turned as SpawnRandomDrifter does, of class 4, and its velocity set. A Viper gets a random bit for +3Ah,
-/// police when 1, and then a word write of legalStatus at +30h, which zeroes the bounty above it. Returns what
-/// FacePlayerWithRandomRoll gave it.
-RandomRollFacing SpawnRandomTrader(GameState& _state, ObjectSlot _slot);
+/// police when 1, and then a word write of legalStatus at +30h, which zeroes the bounty above it.
+void SpawnRandomTrader(GameState& _state, ObjectSlot _slot);
 
 /// SpawnMaskMissionShip (CS:4DAE): _slot, a free one, from the Asp's record, placed and turned as SpawnRandomDrifter does: the
 /// Asp when _maskShip, otherwise type 12h or 13h by the sign of a random word; class 5, a random aggression below 80h, energy
@@ -212,7 +203,7 @@ void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _
 void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot);
 
 /// FacePlayerWithRandomRoll (CS:4EC5): FacePlayer, then a random word for _slot's roll.
-RandomRollFacing FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot);
+void FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot);
 
 /// GetObjectPosition (CS:4EF4): the low words of _slot's position.
 [[nodiscard]] Vector GetObjectPosition(const ObjectSlot& _slot);
@@ -233,8 +224,8 @@ MovedObject MoveObject(GameState& _state, ObjectSlot _slot);
 std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot);
 
 /// FacePlayer (CS:513E): _slot's heading turned to the player: ConvertVectorToAngles of GetVectorToPlayer, as its pitch, then
-/// its yaw. Returns them.
-Angles FacePlayer(GameState& _state, ObjectSlot _slot);
+/// its yaw.
+void FacePlayer(GameState& _state, ObjectSlot _slot);
 
 /// FindFreeShipSlot (CS:51E0): the first inactive ship slot, from firstShipSlot.
 [[nodiscard]] SlotSearch FindFreeShipSlot(GameState& _state);

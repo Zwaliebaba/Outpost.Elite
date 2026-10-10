@@ -41,18 +41,15 @@ struct VertexProgramEnd
 struct ShipRange
 {
   bool within;
-  std::uint8_t axes;                       ///< the magnitudes it took, 1-3
   std::array<std::uint16_t, 3> magnitudes; ///< |x|, |y|, |z|
-  std::uint8_t squares;                    ///< the squares it summed, 0, 2 or 3: none until every axis is within maxAxisDistance
-  std::uint16_t squaredHigh;               ///< the sum of their high words
+  std::uint16_t squaredHigh;               ///< the sum of the high words of their squares
 };
 
 /// What CheckShipInRange finds of a ship.
 struct ShipRangeCheck
 {
-  NearTest near;                            ///< IsObjectNear's test
-  ShipRange range;                          ///< once the ship is near, how far the test went
-  std::optional<DashboardPixel> erasedBlip; ///< out of range, the last pixel of the blip the EraseScannerBlip after it erased
+  NearTest near;   ///< IsObjectNear's test
+  ShipRange range; ///< once the ship is near, how far the test went
 
   /// Whether the ship is in range: near, and within both bounds.
   [[nodiscard]] bool InRange() const noexcept
@@ -75,22 +72,6 @@ struct FacesEnd
 {
   std::uint16_t next;
   bool backward;
-};
-
-/// What TransformToViewWithBlip gives: the position in the view, and the last pixel of the scanner blip UpdateScannerBlip drew on
-/// the way, when it drew one.
-struct ViewWithBlip
-{
-  Vector view;
-  std::optional<DashboardPixel> blip;
-};
-
-/// What TransformShip finds of a ship.
-struct TransformedShip
-{
-  Vector view;      ///< its position in the view
-  ViewTest test;    ///< how far ClassifyViewPosition got with it
-  bool blipTouched; ///< UpdateScannerBlip drew its blip, or the scoop's RemoveObject erased it: both leave ES on the video segment
 };
 
 /// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
@@ -141,11 +122,11 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot);
 
 /// TransformSunOrPlanet (CS:3C52): _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
 /// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.
-ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
+void TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
 
 /// TransformShip (CS:3C7E): _slot's position, the low words, turned to the view (TransformToViewWithBlip); offered to the hold
 /// (TryScoopObject) while fuel scoops are fitted and the game is not over; _slot's depth (+3Dh) cleared; then ClassifyViewPosition.
-TransformedShip TransformShip(GameState& _state, ObjectSlot _slot);
+void TransformShip(GameState& _state, ObjectSlot _slot);
 
 /// RunBlueprintHandler (CS:3CDD): boxHalfWidth from the blueprint at _blueprint, the handler it names run (BuildBoxCornerVertices
 /// or BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
@@ -159,7 +140,8 @@ ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot);
 
 /// TransformToViewWithBlip (CS:3ED7): _position turned to the camera's frame (RotatePitchYawRoll), the high byte of its z into
 /// _slot's +3Ch, _slot's scanner blip moved there (UpdateScannerBlip), then the frame turned to the view (TransformToView's tail).
-ViewWithBlip TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position);
+/// Returns the position in the view.
+Vector TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position);
 
 /// TransformToView (CS:3EE3): _position turned to the camera's frame (RotatePitchYawRoll), then, off the front view, (x, z) turned
 /// by -viewAngle through rotationSinCos[8], which it sets.

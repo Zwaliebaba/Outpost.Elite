@@ -41,7 +41,7 @@ The native devices of D17's third step move to Phase 5. Until then the emulated 
   - `shipSlots` comes out as 64 bytes, but holds the 36 slots of 64 bytes from `planetSlot` to `debrisSlots`;
   - `protectionInput` comes out as 1 byte, but is the whole input buffer, to DS:25E0.
 
-  Both are therefore flat in `GameData`, with their children as siblings at the right offsets. Native code uses only their `.offset`. Giving them sizes in `Symbols.tsv` would nest them, with no other change.
+  Both are therefore flat in `GameData`, with their children as siblings at the right offsets. Native code uses only their `.offset`. Giving them sizes in `Symbols.tsv` would nest them, with no other change. *D24's clean-up gave them their sizes from the listing: `shipSlots` 2,304 bytes (36 slots of 64, the count `SetUpLocalSpace` writes and `ClearAllObjects` clears), `protectionInput` 24 bytes (DS:25C9-25E0). Both nest now. That makes 148 gaps of 12,975 bytes, 24 nested structs and 842 assertions; no native code changed. The sun's slot (DS:6930) and the buffer's capacity byte (DS:25C9) stay unnamed gaps, as the first bytes of all 29 containers are: the symbol table holds one row per address, so a container and the row that starts it cannot both be named. Changing that is a table-format decision, not made.*
 
 **2. The `GameState` owns three regions.**
 - **What they are:**

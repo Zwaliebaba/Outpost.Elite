@@ -73,7 +73,7 @@ public:
     Assert::AreEqual(std::uint32_t{fuel}, std::uint32_t{own[data + Elite::DS.fuel.offset]}, L"from the GameState's storage");
     (void)state.Word(Elite::DS.fuel.offset);
     (void)state.CodeWord(0);
-    (void)state.VideoWord(0);
+    (void)state.VideoByte(0);
     Assert::AreEqual(changes + 1, pc.Ram().ChangeCount(), L"a read counts nothing");
 
     pc.Ram().Write8(Elite::GameState::VIDEO_SEGMENT, 0x10, static_cast<std::uint8_t>(state.VideoByte(0x10) ^ 0xFF));

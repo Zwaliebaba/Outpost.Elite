@@ -154,12 +154,12 @@ void InitFromRecord(GameState& _state, ObjectSlot _slot, std::size_t _record, st
 }
 
 // The start every spawned ship shares: _slot from record _index of the table at _table, placed at the spawn point and turned to
-// the player. Returns what FacePlayerWithRandomRoll gave it.
-RandomRollFacing SpawnFromRecord(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
+// the player.
+void SpawnFromRecord(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
 {
   InitObjectFromTemplate(_state, _slot, _table, _index);
   PlaceAtSpawnPoint(_state, _slot);
-  return FacePlayerWithRandomRoll(_state, _slot);
+  FacePlayerWithRandomRoll(_state, _slot);
 }
 
 } // namespace
@@ -210,22 +210,22 @@ void SpawnRandomDrifter(GameState& _state, ObjectSlot _slot)
   const std::uint16_t random = NextRandom(_state);
   const auto rotated = static_cast<std::uint16_t>((random >> 1) | (random << 15));
   const auto record = static_cast<std::uint8_t>((Low(rotated) ^ High(rotated)) & DRIFTER_CHOICE_MASK);
-  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(ESCAPE_POD_TEMPLATE), record);
+  SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(ESCAPE_POD_TEMPLATE), record);
   _slot.Set(SlotByte::Class, DRIFTER_CLASS);
   _slot.Set(SlotByte::TurnRate, DRIFTER_TURN_RATE);
   (void)ComputeVelocity(_state, _slot);
 }
 
-RandomRollFacing SpawnRandomTrader(GameState& _state, ObjectSlot _slot)
+void SpawnRandomTrader(GameState& _state, ObjectSlot _slot)
 {
   // XOR AH,AH / MOV BL,2Bh / DIV BL: the quotient of a random byte picks the record.
   const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / TRADER_CHOICE_DIVISOR);
-  const RandomRollFacing facing = SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(COBRA_TEMPLATE), record);
+  SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(COBRA_TEMPLATE), record);
   _slot.Set(SlotByte::Class, TRADER_CLASS);
   (void)ComputeVelocity(_state, _slot);
   if (!IsViperType(_slot))
   {
-    return facing;
+    return;
   }
   // A Viper is police one time in two: AND AX,1 written as a word. Then MOV AL,legalStatus over the 0 of AH, written as a word,
   // which zeroes the bounty above the aggression.
@@ -235,7 +235,6 @@ RandomRollFacing SpawnRandomTrader(GameState& _state, ObjectSlot _slot)
   {
     _slot.Set(SlotWord::Aggression, _state.Get(DS.legalStatus));
   }
-  return facing;
 }
 
 void SpawnMaskMissionShip(GameState& _state, ObjectSlot _slot, bool _maskShip)
@@ -246,7 +245,7 @@ void SpawnMaskMissionShip(GameState& _state, ObjectSlot _slot, bool _maskShip)
   {
     type = (NextRandom(_state) & 0x8000) != 0 ? MISSION_TYPE_IF_NEGATIVE : MISSION_TYPE_IF_POSITIVE;
   }
-  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(ASP_TEMPLATE), 0);
+  SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(ASP_TEMPLATE), 0);
   // SHL AL,1 / INC AL: the type, active.
   _slot.Set(SlotByte::Type, static_cast<std::uint8_t>((type << 1) | ObjectSlot::ACTIVE));
   _slot.Set(SlotByte::Class, WOLF_CLASS);
@@ -259,7 +258,7 @@ void SpawnMaskMissionShip(GameState& _state, ObjectSlot _slot, bool _maskShip)
 
 void SpawnInvasionThargoid(GameState& _state, ObjectSlot _slot)
 {
-  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(THARGOID_TEMPLATE), 0);
+  SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(THARGOID_TEMPLATE), 0);
   _slot.Set(SlotByte::Class, WOLF_CLASS);
   _slot.Set(SlotByte::Aggression, static_cast<std::uint8_t>(Low(NextRandom(_state)) & MISSION_AGGRESSION_MASK));
   _slot.Set(SlotByte::Energy, INVADER_ENERGY);
@@ -311,7 +310,7 @@ bool IsPlanet(const ObjectSlot& _slot)
 StationTest IsStation(const ObjectSlot& _slot)
 {
   const std::uint8_t type = TypeOf(_slot);
-  return StationTest{type, type == TYPE_DODO || type == TYPE_CORIOLIS, type == TYPE_DODO};
+  return StationTest{type == TYPE_DODO || type == TYPE_CORIOLIS, type == TYPE_DODO};
 }
 
 bool IsObjectNearKeepBlip(const ObjectSlot& _slot)
@@ -328,7 +327,7 @@ void SpawnRandomHunter(GameState& _state, ObjectSlot _slot)
 {
   // XOR AH,AH / MOV BL,25h / DIV BL: the quotient of a random byte picks the record.
   const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / HUNTER_CHOICE_DIVISOR);
-  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(HUNTER_TEMPLATES), record);
+  SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(HUNTER_TEMPLATES), record);
   _slot.Set(SlotByte::Class, HUNTER_CLASS);
   _slot.Set(SlotByte::Aggression, static_cast<std::uint8_t>(Low(NextRandom(_state)) & HUNTER_AGGRESSION_MASK));
   (void)ComputeVelocity(_state, _slot);
@@ -342,7 +341,7 @@ void SpawnRandomWolf(GameState& _state, ObjectSlot _slot)
   {
     record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / WOLF_CHOICE_DIVISOR);
   }
-  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(WOLF_TEMPLATES), record);
+  SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(WOLF_TEMPLATES), record);
   _slot.Set(SlotByte::Class, WOLF_CLASS);
   auto aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & WOLF_AGGRESSION_MASK);
   if (_state.Get(DS.spawnGovernment) == 0)
@@ -388,12 +387,10 @@ void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot)
   SetCoordinate(_slot, 2, second.second);
 }
 
-RandomRollFacing FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot)
+void FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot)
 {
-  const Angles heading = FacePlayer(_state, _slot);
-  const std::uint16_t roll = NextRandom(_state);
-  _slot.Set(SlotWord::Roll, roll);
-  return RandomRollFacing{heading, roll};
+  FacePlayer(_state, _slot);
+  _slot.Set(SlotWord::Roll, NextRandom(_state));
 }
 
 Vector GetObjectPosition(const ObjectSlot& _slot)
@@ -455,12 +452,11 @@ std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot)
   return EraseScannerBlip(_state, _slot);
 }
 
-Angles FacePlayer(GameState& _state, ObjectSlot _slot)
+void FacePlayer(GameState& _state, ObjectSlot _slot)
 {
   const Angles heading = ConvertVectorToAngles(_state, GetVectorToPlayer(_slot));
   _slot.Set(SlotWord::Pitch, heading.first);
   _slot.Set(SlotWord::Yaw, heading.second);
-  return heading;
 }
 
 SlotSearch FindFreeShipSlot(GameState& _state)

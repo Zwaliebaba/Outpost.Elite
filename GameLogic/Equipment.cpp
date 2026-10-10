@@ -180,36 +180,17 @@ void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t
   }
 }
 
-// What TryScoopObject's box test (4414-443F) finds: y from 30 to 229, then x and z within 149 either side.
-struct ScoopBoxTest
-{
-  bool inside;
-  std::optional<std::uint16_t> lastMeasure; ///< what it measured last, which the original leaves in DX: none when y is negative
-};
-
-[[nodiscard]] ScoopBoxTest TestScoopBox(const Vector& _view) noexcept
+// TryScoopObject's box test (4414-443F): whether _view is in the scoop's box: y from 30 to 229, then x and z within 149 either
+// side.
+[[nodiscard]] bool TestScoopBox(const Vector& _view) noexcept
 {
   const auto y = static_cast<std::uint16_t>(_view.y);
-  if ((y & 0x8000) != 0)
+  if ((y & 0x8000) != 0 || y < SCOOP_LOWEST || static_cast<std::uint16_t>(y - SCOOP_LOWEST) >= SCOOP_HEIGHT)
   {
-    return ScoopBoxTest{false, std::nullopt};
+    return false;
   }
-  const auto above = static_cast<std::uint16_t>(y - SCOOP_LOWEST);
-  if (y < SCOOP_LOWEST)
-  {
-    return ScoopBoxTest{false, above};
-  }
-  if (above >= SCOOP_HEIGHT)
-  {
-    return ScoopBoxTest{false, static_cast<std::uint16_t>(above - SCOOP_HEIGHT)};
-  }
-  const std::uint16_t across = Magnitude(static_cast<std::uint16_t>(_view.x));
-  if (across >= SCOOP_HALF_WIDTH)
-  {
-    return ScoopBoxTest{false, across};
-  }
-  const std::uint16_t deep = Magnitude(static_cast<std::uint16_t>(_view.z));
-  return ScoopBoxTest{deep < SCOOP_HALF_WIDTH, deep};
+  return Magnitude(static_cast<std::uint16_t>(_view.x)) < SCOOP_HALF_WIDTH &&
+         Magnitude(static_cast<std::uint16_t>(_view.z)) < SCOOP_HALF_WIDTH;
 }
 
 // PrintEquipmentSellColumn (0x6949): the text at DS:_text in the resale column of menuSelectedRow's row, in the resale
@@ -272,7 +253,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 // its resale price shown, and a laser's mount chosen. Returns the message.
 [[nodiscard]] std::uint16_t BuyFittedItem(GameState& _state, Hardware& _hardware, std::uint16_t _fitted)
 {
-  if (!PayForEquipmentItem(_state, _fitted).paid)
+  if (!PayForEquipmentItem(_state, _fitted))
   {
     return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
   }
@@ -296,7 +277,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
     {
       return ToEquipMessage(_hardware, FOUR_MISSILES_ONLY_TEXT);
     }
-    if (!PayForEquipmentItem(_state, bx).paid)
+    if (!PayForEquipmentItem(_state, bx))
     {
       return ReportNotEnoughCredits(_hardware);
     }
@@ -312,7 +293,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return ToEquipMessage(_hardware, FUEL_FULL_TEXT);
   }
-  if (!PayForEquipmentItem(_state, bx).paid)
+  if (!PayForEquipmentItem(_state, bx))
   {
     return ReportNotEnoughCredits(_hardware);
   }
@@ -610,7 +591,7 @@ Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
   std::uint8_t space = _state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
   space = static_cast<std::uint8_t>(space - _state.Get(DS.cargoUsedTonnes));
   _state.Set(DS.freeCargoTonnes, space);
-  if (!TestScoopBox(_view).inside)
+  if (!TestScoopBox(_view))
   {
     return Scoop{false, {}};
   }
@@ -878,7 +859,7 @@ void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
   }
 }
 
-EquipmentPayment PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
+bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
 {
   const std::uint8_t row = _state.Get(DS.menuSelectedRow);
   std::uint16_t tenths = 0;
@@ -899,7 +880,7 @@ EquipmentPayment PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
   {
     tenths = _state.Word(PriceSlot(row));
   }
-  return EquipmentPayment{SubtractCredits(_state, tenths), tenths};
+  return SubtractCredits(_state, tenths);
 }
 
 PrintedText ClearEquipmentSellPrice(GameState& _state)

@@ -79,7 +79,7 @@ struct DataOverlay
   /// Program Protection
   DataAt protectionTitle{0x2424};
   /// int 21h AH=0Ah buffer: capacity, count, then the typed word
-  DataAt protectionInput{0x25C9};
+  DataBlock<24> protectionInput{0x25C9};
   DataField<std::uint8_t> data25CA{0x25CA};
   /// question number while one is pending; 0xFF when none
   DataField<std::uint8_t> protectionQuestion{0x25E1};
@@ -459,7 +459,7 @@ struct DataOverlay
   /// pointer; blueprint per ship type, indexed by byte0 & 0x3E (add bx,0x68C9 at 0x3E54); 0x4D70 for type 0, then 1-29 in order. The 3...
   DataTable<2, 30> blueprintTable{0x68C9};
   /// 36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisS...
-  DataAt shipSlots{0x6930};
+  DataBlock<2304> shipSlots{0x6930};
   /// slot 1: type 0x1F set up by SetUpLocalSpace; compass target when far
   DataBlock<64> planetSlot{0x6970};
   /// slot 2: Coriolis or Dodo (SetUpLocalSpace, by DS:75BA < 9); also holds the compass dot (+0x26..+0x28) and target position (+0x20....
@@ -1327,7 +1327,7 @@ static_assert(DS.protectionDescriptor.offset == GAME_DATA_OFFSET(protectionDescr
 static_assert(DS.protectionAnswerListPointer.offset == GAME_DATA_OFFSET(protectionAnswerListPointer));
 static_assert(DS.protectionTitle.offset == GAME_DATA_OFFSET(protectionTitle));
 static_assert(DS.protectionInput.offset == GAME_DATA_OFFSET(protectionInput));
-static_assert(DS.data25CA.offset == GAME_DATA_OFFSET(data25CA));
+static_assert(DS.data25CA.offset == GAME_DATA_OFFSET(protectionInput.data25CA));
 static_assert(DS.protectionQuestion.offset == GAME_DATA_OFFSET(protectionQuestion));
 static_assert(DS.protectionTriesLeft.offset == GAME_DATA_OFFSET(protectionTriesLeft));
 static_assert(DS.protectionAnswerCorrect.offset == GAME_DATA_OFFSET(protectionAnswerCorrect));
@@ -1520,10 +1520,10 @@ static_assert(DS.viperBlueprint.offset == GAME_DATA_OFFSET(blueprints.viperBluep
 static_assert(DS.pythonBlueprint.offset == GAME_DATA_OFFSET(blueprints.pythonBlueprint));
 static_assert(DS.blueprintTable.offset == GAME_DATA_OFFSET(blueprintTable));
 static_assert(DS.shipSlots.offset == GAME_DATA_OFFSET(shipSlots));
-static_assert(DS.planetSlot.offset == GAME_DATA_OFFSET(planetSlot));
-static_assert(DS.stationSlot.offset == GAME_DATA_OFFSET(stationSlot));
-static_assert(DS.firstShipSlot.offset == GAME_DATA_OFFSET(firstShipSlot));
-static_assert(DS.debrisSlots.offset == GAME_DATA_OFFSET(debrisSlots));
+static_assert(DS.planetSlot.offset == GAME_DATA_OFFSET(shipSlots.planetSlot));
+static_assert(DS.stationSlot.offset == GAME_DATA_OFFSET(shipSlots.stationSlot));
+static_assert(DS.firstShipSlot.offset == GAME_DATA_OFFSET(shipSlots.firstShipSlot));
+static_assert(DS.debrisSlots.offset == GAME_DATA_OFFSET(shipSlots.debrisSlots));
 static_assert(DS.vertexBuffer.offset == GAME_DATA_OFFSET(vertexBuffer));
 static_assert(DS.boxCornerVertices.offset == GAME_DATA_OFFSET(vertexBuffer.boxCornerVertices));
 static_assert(DS.faceTestScratch.offset == GAME_DATA_OFFSET(faceTestScratch));

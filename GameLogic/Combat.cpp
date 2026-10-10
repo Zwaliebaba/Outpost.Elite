@@ -144,17 +144,6 @@ void SetCoordinate(ObjectSlot _slot, std::size_t _axis, std::uint16_t _value)
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> 1);
 }
 
-// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
-void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  const unsigned sum = _state.Get(_field) + unsigned{_value};
-  _state.Set(_field, static_cast<std::uint8_t>(sum));
-  if (sum > 0xFF)
-  {
-    _state.Set(_field, 0xFF);
-  }
-}
-
 // gameOverFrames | escapePodFrames | maskingBackgroundColor, which the original ORs into AL: none of them may run when a ship
 // fires, so it may not unless this is 0.
 [[nodiscard]] std::uint8_t FiringBlocked(const GameState& _state) noexcept
@@ -225,29 +214,21 @@ void AddSaturating(ObjectSlot _slot, SlotByte _field, std::uint8_t _value)
   }
 }
 
-// What PayBounty found after paying: what Routine8C51 found of the slot, when a mis-jump's countdown runs, and whether the
-// countdown reached 1 and the Nav-Comp's repair was announced.
-struct PaidBounty
-{
-  std::optional<ThargoidTest> killed;
-  bool repaired;
-};
-
 // 8BE5: _tenths shown (ShowBountyMessage) and added to the credits (AddCredits); then, while a mis-jump's countdown runs, the
 // kill of a Thargon or a Thargoid counts it down by 5 or 35, the SUB written before the 1 written over a borrow or a 0, and
 // at 1 the Nav-Comp's repair is announced.
-PaidBounty PayBounty(GameState& _state, const ObjectSlot& _slot, std::uint16_t _tenths)
+void PayBounty(GameState& _state, const ObjectSlot& _slot, std::uint16_t _tenths)
 {
   ShowBountyMessage(_state, _tenths);
   AddCredits(_state, _tenths);
   if (_state.Get(DS.witchspaceCountdown) == 0)
   {
-    return PaidBounty{std::nullopt, false};
+    return;
   }
   const ThargoidTest killed = Routine8C51(_slot);
   if (!killed.thargoidOrThargon)
   {
-    return PaidBounty{killed, false};
+    return;
   }
   const std::uint8_t repair = killed.thargoid ? THARGOID_REPAIR : THARGON_REPAIR;
   const std::uint8_t countdown = _state.Get(DS.witchspaceCountdown);
@@ -259,11 +240,10 @@ PaidBounty PayBounty(GameState& _state, const ObjectSlot& _slot, std::uint16_t _
   }
   if (_state.Get(DS.witchspaceCountdown) != 1)
   {
-    return PaidBounty{killed, false};
+    return;
   }
   _state.Set(DS.messagePointer, DS.navCompRepairedMessage.offset);
   _state.Set(DS.messageFrames, REPAIR_MESSAGE_FRAMES);
-  return PaidBounty{killed, true};
 }
 
 // What the fragments' loop leaves of BX, DX and ES.
@@ -669,7 +649,7 @@ void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pi
   {
     return;
   }
-  if (CheckSafeZoneHoldFire(_state, _slot).hold || FiringBlocked(_state) != 0)
+  if (CheckSafeZoneHoldFire(_state, _slot) || FiringBlocked(_state) != 0)
   {
     return;
   }
@@ -704,7 +684,7 @@ void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t
   {
     return;
   }
-  if (CheckSafeZoneHoldFire(_state, _slot).hold || _slot.Get(SlotByte::Missiles) == 0 || FiringBlocked(_state) != 0)
+  if (CheckSafeZoneHoldFire(_state, _slot) || _slot.Get(SlotByte::Missiles) == 0 || FiringBlocked(_state) != 0)
   {
     return;
   }
@@ -807,7 +787,7 @@ bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot)
 KillCredit CreditKill(GameState& _state, ObjectSlot _slot)
 {
   const std::uint8_t bounty = _slot.Get(SlotByte::Bounty);
-  KillCredit credit{bounty, std::nullopt, std::nullopt, false, std::nullopt, std::nullopt};
+  KillCredit credit{std::nullopt, std::nullopt, std::nullopt};
   if (bounty == 0)
   {
     return credit;
@@ -838,9 +818,7 @@ KillCredit CreditKill(GameState& _state, ObjectSlot _slot)
     tenths = THARGOID_BOUNTY;
   }
   credit.paidTenths = tenths;
-  const PaidBounty paid = PayBounty(_state, _slot, tenths);
-  credit.killed = paid.killed;
-  credit.repaired = paid.repaired;
+  PayBounty(_state, _slot, tenths);
   return credit;
 }
 
@@ -1232,7 +1210,7 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, ObjectSlot
 ThargoidTest Routine8C51(const ObjectSlot& _slot)
 {
   const std::uint8_t type = TypeOf(_slot);
-  return ThargoidTest{type, type == TYPE_THARGON || type == TYPE_THARGOID, type == TYPE_THARGOID};
+  return ThargoidTest{type == TYPE_THARGON || type == TYPE_THARGOID, type == TYPE_THARGOID};
 }
 
 void UseMaskingDevice(GameState& _state)

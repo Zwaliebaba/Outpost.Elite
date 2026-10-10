@@ -20,7 +20,6 @@ namespace Elite
 /// What Routine8C51 finds of a slot.
 struct ThargoidTest
 {
-  std::uint8_t type;      ///< bits 1-5 of the type byte
   bool thargoidOrThargon; ///< a Thargon (7) or a Thargoid (16h)
   bool thargoid;
 };
@@ -66,10 +65,7 @@ struct MissileFlight
 /// What CreditKill did with a kill.
 struct KillCredit
 {
-  std::uint8_t bounty;                     ///< the slot's bounty byte: 0 pays nothing, and FFh pays only for a Thargoid
   std::optional<std::uint16_t> paidTenths; ///< what it paid, in tenths of a credit, when it paid
-  std::optional<ThargoidTest> killed;      ///< once it paid while a mis-jump's countdown runs: what Routine8C51 found of the slot
-  bool repaired;                           ///< the countdown reached 1, and the Nav-Comp's repair was announced
   std::optional<SafeZone> zone;            ///< for a kill that paid nothing: what InSafeZone read
   std::optional<std::uint8_t> crime;       ///< what that kill added to legalStatus, when it was a crime
 };
@@ -190,7 +186,7 @@ bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
 /// announced.
 KillCredit CreditKill(GameState& _state, ObjectSlot _slot);
 
-/// Routine8C51 (CS:8C51): _slot's type, and whether it is a Thargon's or a Thargoid's.
+/// Routine8C51 (CS:8C51): whether _slot is a Thargon or a Thargoid, and whether a Thargoid.
 [[nodiscard]] ThargoidTest Routine8C51(const ObjectSlot& _slot);
 
 /// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player (playerHitPending): StartPlayerHitSound and its STI; when the attacker

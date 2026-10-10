@@ -33,7 +33,6 @@ template <std::size_t EntryBytes, std::size_t Entries> struct DataTable
 {
   std::uint16_t offset;
 
-  static constexpr std::size_t ENTRY_BYTES = EntryBytes;
   static constexpr std::size_t ENTRY_COUNT = Entries;
 
   /// The offset of entry _entry.

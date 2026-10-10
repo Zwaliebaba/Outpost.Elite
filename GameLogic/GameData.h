@@ -117,10 +117,15 @@ struct GameData
   std::uint16_t protectionAnswerListPointer;
   /// Program Protection
   std::uint8_t protectionTitle[421];
+  /// protectionInput's fields, DS:25C9-25E0.
+  struct ProtectionInput
+  {
+    std::uint8_t gap25C9[1];
+    std::uint8_t data25CA;
+    std::uint8_t gap25CB[22];
+  };
   /// int 21h AH=0Ah buffer: capacity, count, then the typed word
-  std::uint8_t protectionInput;
-  std::uint8_t data25CA;
-  std::uint8_t gap25CB[22];
+  ProtectionInput protectionInput;
   /// question number while one is pending; 0xFF when none
   std::uint8_t protectionQuestion;
   /// 3 in the file
@@ -565,16 +570,21 @@ struct GameData
   /// pointer; blueprint per ship type, indexed by byte0 & 0x3E (add bx,0x68C9 at 0x3E54); 0x4D70 for type 0, then 1-29 in order. The 30...
   std::uint16_t blueprintTable[30];
   std::uint8_t gap6905[43];
+  /// shipSlots's fields, DS:6930-722F.
+  struct ShipSlots
+  {
+    std::uint8_t gap6930[64];
+    /// slot 1: type 0x1F set up by SetUpLocalSpace; compass target when far
+    std::uint8_t planetSlot[64];
+    /// slot 2: Coriolis or Dodo (SetUpLocalSpace, by DS:75BA < 9); also holds the compass dot (+0x26..+0x28) and target position (+0x20....
+    std::uint8_t stationSlot[64];
+    /// slot 3; ship scans run objectSlotCount-3 slots from here
+    std::uint8_t firstShipSlot[1088];
+    /// slots 20-35, debrisSlotCount of them; FindDebrisSlot reuses the oldest (+0x2F); never get scanner blips
+    std::uint8_t debrisSlots[1024];
+  };
   /// 36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
-  std::uint8_t shipSlots[64];
-  /// slot 1: type 0x1F set up by SetUpLocalSpace; compass target when far
-  std::uint8_t planetSlot[64];
-  /// slot 2: Coriolis or Dodo (SetUpLocalSpace, by DS:75BA < 9); also holds the compass dot (+0x26..+0x28) and target position (+0x20..+...
-  std::uint8_t stationSlot[64];
-  /// slot 3; ship scans run objectSlotCount-3 slots from here
-  std::uint8_t firstShipSlot[1088];
-  /// slots 20-35, debrisSlotCount of them; FindDebrisSlot reuses the oldest (+0x2F); never get scanner blips
-  std::uint8_t debrisSlots[1024];
+  ShipSlots shipSlots;
   /// vertexBuffer's fields, DS:7230-732B.
   struct VertexBuffer
   {
@@ -1623,8 +1633,9 @@ static_assert(GAME_DATA_OFFSET(gap2418) == 0x2418);
 static_assert(GAME_DATA_OFFSET(protectionAnswerListPointer) == 0x2422);
 static_assert(GAME_DATA_OFFSET(protectionTitle) == 0x2424);
 static_assert(GAME_DATA_OFFSET(protectionInput) == 0x25C9);
-static_assert(GAME_DATA_OFFSET(data25CA) == 0x25CA);
-static_assert(GAME_DATA_OFFSET(gap25CB) == 0x25CB);
+static_assert(GAME_DATA_OFFSET(protectionInput.gap25C9) == 0x25C9);
+static_assert(GAME_DATA_OFFSET(protectionInput.data25CA) == 0x25CA);
+static_assert(GAME_DATA_OFFSET(protectionInput.gap25CB) == 0x25CB);
 static_assert(GAME_DATA_OFFSET(protectionQuestion) == 0x25E1);
 static_assert(GAME_DATA_OFFSET(protectionTriesLeft) == 0x25E2);
 static_assert(GAME_DATA_OFFSET(protectionAnswerCorrect) == 0x25E3);
@@ -1844,10 +1855,11 @@ static_assert(GAME_DATA_OFFSET(blueprints.pythonBlueprint) == 0x67CC);
 static_assert(GAME_DATA_OFFSET(blueprintTable) == 0x68C9);
 static_assert(GAME_DATA_OFFSET(gap6905) == 0x6905);
 static_assert(GAME_DATA_OFFSET(shipSlots) == 0x6930);
-static_assert(GAME_DATA_OFFSET(planetSlot) == 0x6970);
-static_assert(GAME_DATA_OFFSET(stationSlot) == 0x69B0);
-static_assert(GAME_DATA_OFFSET(firstShipSlot) == 0x69F0);
-static_assert(GAME_DATA_OFFSET(debrisSlots) == 0x6E30);
+static_assert(GAME_DATA_OFFSET(shipSlots.gap6930) == 0x6930);
+static_assert(GAME_DATA_OFFSET(shipSlots.planetSlot) == 0x6970);
+static_assert(GAME_DATA_OFFSET(shipSlots.stationSlot) == 0x69B0);
+static_assert(GAME_DATA_OFFSET(shipSlots.firstShipSlot) == 0x69F0);
+static_assert(GAME_DATA_OFFSET(shipSlots.debrisSlots) == 0x6E30);
 static_assert(GAME_DATA_OFFSET(vertexBuffer) == 0x7230);
 static_assert(GAME_DATA_OFFSET(vertexBuffer.gap7230) == 0x7230);
 static_assert(GAME_DATA_OFFSET(vertexBuffer.boxCornerVertices) == 0x72FC);
@@ -2394,6 +2406,7 @@ static_assert(sizeof(GameData::SavedDivideVector) == 4);
 static_assert(sizeof(GameData::SavedKeyboardVector) == 4);
 static_assert(sizeof(GameData::ScreenshotTextFileName) == 11);
 static_assert(sizeof(GameData::ScreenshotGraphicsFileName) == 11);
+static_assert(sizeof(GameData::ProtectionInput) == 24);
 static_assert(sizeof(GameData::SystemSeed0Bytes) == 2);
 static_assert(sizeof(GameData::SystemSeed1Bytes) == 2);
 static_assert(sizeof(GameData::SystemSeed2Bytes) == 2);
@@ -2401,6 +2414,7 @@ static_assert(sizeof(GameData::DistanceDigits) == 5);
 static_assert(sizeof(GameData::CirclePoints) == 128);
 static_assert(sizeof(GameData::MessageFramesBytes) == 2);
 static_assert(sizeof(GameData::Blueprints) == 7001);
+static_assert(sizeof(GameData::ShipSlots) == 2304);
 static_assert(sizeof(GameData::VertexBuffer) == 252);
 static_assert(sizeof(GameData::ArrivalGalaxyText) == 26);
 static_assert(sizeof(GameData::CommanderBlock) == 208);

@@ -215,11 +215,11 @@ public:
     return m_native;
   }
 
-  /// For native code: returns from a near call as RET _popBytes does.
-  void ReturnNear(std::uint16_t _popBytes = 0) noexcept;
+  /// For native code: returns from a near call as RET does.
+  void ReturnNear() noexcept;
 
-  /// For native code: returns from a far call as RETF _popBytes does.
-  void ReturnFar(std::uint16_t _popBytes = 0) noexcept;
+  /// For native code: returns from a far call as RETF does.
+  void ReturnFar() noexcept;
 
   /// For native code: returns from an interrupt handler as IRET does.
   void ReturnInterrupt() noexcept;

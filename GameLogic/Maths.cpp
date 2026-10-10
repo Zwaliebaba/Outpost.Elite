@@ -82,9 +82,9 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
   _state.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, _ds);
 }
 
-// DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: the offset it resumes
-// at, and AX as it leaves AX = _ax.
-[[nodiscard]] DivideTrap SaturateDivide(const GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax)
+// DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: AX as it leaves AX = _ax, by
+// the opcode before the offset it resumes at.
+[[nodiscard]] std::uint16_t SaturateDivide(const GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax)
 {
   std::uint16_t resume = _offset;
   if ((_state.FarWord(_segment, _offset) & DIVIDE_OPCODE_MASK) == DIVIDE_OPCODE)
@@ -93,7 +93,7 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
   }
   // Two bytes back: the opcode of a register divide, but the ModRM byte of a memory one.
   const std::uint8_t opcode = _state.FarByte(_segment, static_cast<std::uint16_t>(resume - REGISTER_DIVIDE_BYTES));
-  return DivideTrap{resume, (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE)};
+  return (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE);
 }
 
 [[nodiscard]] std::uint16_t Word(std::int16_t _value) noexcept
@@ -110,7 +110,8 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
 
 // ── The routines ──
 
-DivideTrap DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax, std::uint16_t _bx)
+std::uint16_t DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax,
+                                      std::uint16_t _bx)
 {
   SaveDivideRegisters(_state, _bx, _state.DataSegment());
   return SaturateDivide(_state, _segment, _offset, _ax);
@@ -121,9 +122,9 @@ WordQuotient DivideUnsigned(GameState& _state, std::uint32_t _dividend, std::uin
 {
   if (_divisor == 0 || _dividend / _divisor > 0xFFFF)
   {
-    const DivideTrap trap =
+    const std::uint16_t ax =
       DivideOverflowInterrupt(_state, _state.CodeSegment(), _returnOffset, static_cast<std::uint16_t>(_dividend), _bx);
-    return WordQuotient{trap.ax, static_cast<std::uint16_t>(_dividend >> 16)};
+    return WordQuotient{ax, static_cast<std::uint16_t>(_dividend >> 16)};
   }
   return WordQuotient{static_cast<std::uint16_t>(_dividend / _divisor), static_cast<std::uint16_t>(_dividend % _divisor)};
 }
@@ -272,14 +273,14 @@ std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::
   return static_cast<std::uint16_t>(middle >> 1);
 }
 
-AngleTolerance AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance)
+bool AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance)
 {
   std::uint16_t difference = SignExtendAngle(static_cast<std::uint16_t>(SignExtendAngle(_a) - SignExtendAngle(_b)));
   if ((difference & 0x8000) != 0)
   {
     difference = Negate(difference);
   }
-  return AngleTolerance{difference < _tolerance, static_cast<std::uint16_t>(difference - _tolerance)};
+  return difference < _tolerance;
 }
 
 std::uint16_t VectorLength(Vector _vector)
@@ -352,7 +353,7 @@ Vector RotateBySinCos7210(GameState& _state, Vector _vector)
   return Vector{xz.first, rotatedYz.first, rotatedYz.second};
 }
 
-InverseDistanceScale ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value)
+std::uint16_t ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value)
 {
   const std::uint32_t sum = Square(_slot.Get(SlotWord::ViewX)) + Square(_slot.Get(SlotWord::ViewY)) + Square(_slot.Get(SlotWord::ViewZ));
   // One more than the root of the high word, counted in the divisor's high byte: a count of 256 wraps to 0.
@@ -377,13 +378,13 @@ InverseDistanceScale ScaleByInverseDistance(GameState& _state, const ObjectSlot&
   if (divisor == 0 || dividend / divisor > 0xFFFF)
   {
     SaveDivideRegisters(_state, divisor, _state.DataSegment());
-    scaled = SaturateDivide(_state, _state.CodeSegment(), SCALE_DIVIDE_RETURN, static_cast<std::uint16_t>(dividend)).ax;
+    scaled = SaturateDivide(_state, _state.CodeSegment(), SCALE_DIVIDE_RETURN, static_cast<std::uint16_t>(dividend));
   }
   else
   {
     scaled = static_cast<std::uint16_t>(dividend / divisor);
   }
-  return InverseDistanceScale{scaled > SCALE_LIMIT ? SCALE_LIMIT : scaled, divisor};
+  return scaled > SCALE_LIMIT ? SCALE_LIMIT : scaled;
 }
 
 std::uint32_t ShiftRight24(std::uint32_t _value, std::uint8_t _count)
