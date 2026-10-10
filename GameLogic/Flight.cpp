@@ -6,6 +6,8 @@
 #include "DataOverlay.h"
 #include "Maths.h"
 #include "ObjectSlot.h"
+#include "Ships.h"
+#include "Sound.h"
 
 #include <utility>
 
@@ -26,7 +28,6 @@ constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
 constexpr std::uint16_t NEXT_RANDOM = 0x061C;
 constexpr std::uint16_t GET_VIEW_LASER = 0x066C;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t RESET_STARDUST = 0x0A43;
 constexpr std::uint16_t HANDLE_FLIGHT_FUNCTION_KEYS = 0x0BB3;
 constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
 constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
@@ -57,8 +58,6 @@ constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t ROTATE_PITCH_YAW_ROLL = 0x3EAC;
 constexpr std::uint16_t TRANSFORM_TO_VIEW = 0x3EE3;
-constexpr std::uint16_t ROTATE_BY_SIN_COS_7210 = 0x3F02;
-constexpr std::uint16_t IS_SUN_OR_PLANET = 0x3F2A;
 constexpr std::uint16_t IS_STATION = 0x3F40;
 constexpr std::uint16_t IS_MASS_LOCKED = 0x4144;
 constexpr std::uint16_t GET_POSITION_SCALE_SHIFT = 0x4333;
@@ -126,22 +125,14 @@ constexpr std::uint16_t LEFT_VIEW = 0x200;
 constexpr std::uint16_t REAR_VIEW = 0x400;
 constexpr std::uint16_t RIGHT_VIEW = 0x600;
 
-// An object slot's fields.
-constexpr std::uint16_t SLOT_BYTES = 0x40;
-constexpr std::uint16_t SLOT_X = 4;
-constexpr std::uint16_t SLOT_Y = 6;
-constexpr std::uint16_t SLOT_Z = 8;
+// An object slot's fields beyond those Ships.h names (SLOT_BYTES, SLOT_X, SLOT_Y, SLOT_Z, SLOT_FLAGS, SLOT_CLASS).
 constexpr std::uint16_t SLOT_COLLIDED = 0x0C;
-constexpr std::uint16_t SLOT_FLAGS = 0x1E;
-constexpr std::uint16_t SLOT_VIEW_X = 0x20;
-constexpr std::uint16_t SLOT_VIEW_Y = 0x22;
-constexpr std::uint16_t SLOT_VIEW_Z = 0x24;
+constexpr std::uint16_t SLOT_COMPASS_X = 0x20; // the station's direction for the compass, where Ships.h has SLOT_VIEW_X at 10h
+constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
+constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
 constexpr std::uint16_t SLOT_BLIP = 0x26; // the scanner blip, or the compass dot: x, y, z bytes
-constexpr std::uint16_t SLOT_CLASS = 0x33;
-constexpr std::uint16_t SLOT_SCANNED = 0x34;
 constexpr std::uint16_t SLOT_SCALE_SHIFT = 0x3D;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
-constexpr std::uint16_t DEBRIS_SLOTS = 0x6E30;
 
 // What SetUpLocalSpace puts in the first three slots: the sun's and the planet's type bytes and flags, the planet's
 // z (its middle byte), and the station's heading, z, flags and energy.
@@ -211,6 +202,12 @@ constexpr std::uint8_t DIGIT_NINE = 0x39;
 constexpr std::uint8_t CLOSING_BRACKET = 0x29;
 constexpr std::uint8_t SPACE = 0x20;
 
+// The warnings: four checks, round from the one after the last warning.
+constexpr std::uint16_t WARNING_CHECKS = 4;
+
+// The player's wreckage drifts at 40 along y before the view and the angles turn it.
+constexpr std::int16_t DEATH_DEBRIS_SPEED = 0x28;
+
 [[nodiscard]] std::uint16_t Plus(std::uint16_t _word, int _value) noexcept
 {
   return static_cast<std::uint16_t>(_word + _value);
@@ -261,20 +258,8 @@ void SetMessage(GameState& _state, std::uint16_t _text, std::uint16_t _frames)
   _state.Set(DS.messageFrames, _frames);
 }
 
-// The register code's side of SetSinCos0-8 and RotateBySinCos0-8, which it calls by pair number as Maths' SetSinCos and
-// RotateByStoredSinCos: the pair a rotation turns is in AX and BX, and SetSinCos leaves the sine in AX and the cosine
-// in BX.
-[[nodiscard]] Pair PairIn(const Registers& _regs) noexcept
-{
-  return Pair{Signed(_regs.ax), Signed(_regs.bx)};
-}
-
-void PairOut(Registers& _regs, Pair _pair) noexcept
-{
-  _regs.ax = Word(_pair.first);
-  _regs.bx = Word(_pair.second);
-}
-
+// The register code's side of SetSinCos0-8, which it calls by pair number as Maths' SetSinCos: the sine left in AX and the
+// cosine in BX.
 void SinCosOut(Registers& _regs, SinCos _sinCos) noexcept
 {
   _regs.ax = Word(_sinCos.sine);
@@ -295,6 +280,14 @@ void MarkDustRespawned(GameState& _state, std::uint16_t _particle, std::uint8_t 
 [[nodiscard]] std::uint8_t RandomLifetime(std::uint16_t _random) noexcept
 {
   return static_cast<std::uint8_t>((Low(_random) & 0x1F) + 0x28);
+}
+
+// What ResetStardust leaves in the registers, from the last random number it drew: AX that number with the last lifetime in
+// AL, and DI past the particles.
+void ResetStardustOut(Registers& _regs, std::uint16_t _lifetimeRandom) noexcept
+{
+  _regs.ax = WithLow(_lifetimeRandom, RandomLifetime(_lifetimeRandom));
+  _regs.di = Plus(DS.stardust.offset, STARDUST_BYTES);
 }
 
 // sar 2, keeping AH off 20h (which a 16-bit value shifted twice cannot reach).
@@ -353,7 +346,7 @@ void UpdateFrontStardust(Guest& _guest)
   {
     SetLow(regs.dx, 0);
     regs.dx = Sar(Negate(regs.dx), 1);
-    ShiftStardustVertically(_guest);
+    ShiftStardustVerticallyEntry(_guest);
   }
   regs.ax = _guest.Get(DS.rollRate);
   _guest.Call(APPLY_REVERSE_CONTROLS);
@@ -361,7 +354,7 @@ void UpdateFrontStardust(Guest& _guest)
   if (regs.ax != 0)
   {
     SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-    RollStardust(_guest);
+    RollStardustEntry(_guest);
   }
   regs.cx = STARDUST_COUNT;
   regs.si = DS.stardust.offset;
@@ -408,7 +401,7 @@ void UpdateRearStardust(Guest& _guest)
   {
     SetLow(regs.dx, 0);
     regs.dx = Sar(regs.dx, 1);
-    ShiftStardustVertically(_guest);
+    ShiftStardustVerticallyEntry(_guest);
   }
   regs.ax = _guest.Get(DS.rollRate);
   _guest.Call(APPLY_REVERSE_CONTROLS);
@@ -416,7 +409,7 @@ void UpdateRearStardust(Guest& _guest)
   if (regs.ax != 0)
   {
     SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-    RollStardust(_guest);
+    RollStardustEntry(_guest);
   }
   regs.cx = STARDUST_COUNT;
   regs.si = DS.stardust.offset;
@@ -490,7 +483,7 @@ void UpdateSideStardust(Guest& _guest, bool _left)
   {
     SetLow(regs.dx, 0);
     regs.dx = Sar(_left ? regs.dx : Negate(regs.dx), 1);
-    ShiftStardustVertically(_guest);
+    ShiftStardustVerticallyEntry(_guest);
   }
   regs.dx = _guest.Get(DS.playerSpeed);
   if (regs.dx != 0)
@@ -502,7 +495,7 @@ void UpdateSideStardust(Guest& _guest, bool _left)
     SetHigh(regs.dx, Low(regs.dx));
     SetLow(regs.dx, 0);
     regs.dx = Sar(regs.dx, 3);
-    ShiftStardustSideways(_guest);
+    ShiftStardustSidewaysEntry(_guest);
   }
   regs.ax = _guest.Get(DS.rollRate);
   _guest.Call(APPLY_REVERSE_CONTROLS);
@@ -515,7 +508,7 @@ void UpdateSideStardust(Guest& _guest, bool _left)
       regs.ax = Negate(regs.ax);
     }
     SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-    RollStardust(_guest);
+    RollStardustEntry(_guest);
   }
   DrawSideStardust(_guest);
 }
@@ -741,15 +734,6 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
   }
 }
 
-// What RunWarningChecks finds: the check it stopped at, the count LOOP leaves, and the text of the warning that check
-// posted, if it posted one.
-struct WarningChecks
-{
-  std::uint8_t check;
-  std::uint16_t checksLeft;
-  std::optional<std::uint16_t> text;
-};
-
 // The four checks round-robin from _first, each falling on to the next with LOOP while _checks lasts, until one posts its
 // warning.
 [[nodiscard]] WarningChecks RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
@@ -768,19 +752,6 @@ struct WarningChecks
       return WarningChecks{static_cast<std::uint8_t>(check), checks, std::nullopt};
     }
     check = static_cast<std::uint16_t>((check + 1) & 3);
-  }
-}
-
-// The register code's side of RunWarningChecks: each check loads AL with its number and LOOP counts CX down, and
-// SetWarning leaves BX the warning's byte offset in warningTexts and AX its text.
-void WarningChecksOut(Registers& _regs, const WarningChecks& _checks) noexcept
-{
-  SetLow(_regs.ax, _checks.check);
-  _regs.cx = _checks.checksLeft;
-  if (_checks.text)
-  {
-    _regs.bx = static_cast<std::uint16_t>(_checks.check << 1);
-    _regs.ax = *_checks.text;
   }
 }
 
@@ -866,7 +837,7 @@ void ShowPauseOptions(Guest& _guest)
 }
 
 // 0x8DD4-0x8E1E: R, D, Y, B and S toggle their option, with a beep. False for any other key.
-[[nodiscard]] bool TogglePauseOption(Guest& _guest, std::uint8_t _key)
+[[nodiscard]] bool TogglePauseOption(GameState& _state, std::uint8_t _key)
 {
   constexpr std::array<std::uint8_t, PAUSE_OPTIONS> KEYS = {SCAN_R, SCAN_D, SCAN_Y, SCAN_B, SCAN_S};
   for (std::uint16_t index = 0; index < PAUSE_OPTIONS; ++index)
@@ -874,8 +845,8 @@ void ShowPauseOptions(Guest& _guest)
     if (KEYS[index] == _key)
     {
       const auto option = static_cast<std::uint16_t>(DS.keyboardRecenter.offset + index * 2);
-      _guest.SetByte(option, static_cast<std::uint8_t>(_guest.Byte(option) ^ 1));
-      _guest.Call(START_BEEP);
+      _state.SetByte(option, static_cast<std::uint8_t>(_state.Byte(option) ^ 1));
+      StartBeep(_state);
       return true;
     }
   }
@@ -908,7 +879,7 @@ void ShowPauseOptions(Guest& _guest)
         _guest.Set(DS.keyDownSpace, 0);
         return true;
       }
-      if (TogglePauseOption(_guest, key))
+      if (TogglePauseOption(_guest.State(), key))
       {
         break;
       }
@@ -1060,23 +1031,23 @@ void DispatchFlightScreens(Guest& _guest)
   }
 }
 
-// 0x7FC5-0x802B: F1-F4 pick the view.
-void ChangeView(Guest& _guest)
+// 0x7FC5-0x802B: F1-F4 pick the view: a view not shown already is set, with a beep, and the stardust scattered afresh.
+// Returns the last random number ResetStardust drew, when it ran.
+std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
 {
-  const std::uint8_t key = High(_guest.Regs().ax);
-  if (key < SCAN_F1 || key > SCAN_F4)
+  if (_key < SCAN_F1 || _key > SCAN_F4)
   {
-    return;
+    return std::nullopt;
   }
   constexpr std::array<std::uint16_t, 4> VIEWS = {0, REAR_VIEW, LEFT_VIEW, RIGHT_VIEW};
-  const std::uint16_t view = VIEWS[static_cast<std::size_t>(key - SCAN_F1)];
-  if (_guest.Get(DS.viewAngle) == view)
+  const std::uint16_t view = VIEWS[static_cast<std::size_t>(_key - SCAN_F1)];
+  if (_state.Get(DS.viewAngle) == view)
   {
-    return;
+    return std::nullopt;
   }
-  _guest.Set(DS.viewAngle, view);
-  _guest.Call(START_BEEP);
-  _guest.Call(RESET_STARDUST);
+  _state.Set(DS.viewAngle, view);
+  StartBeep(_state);
+  return ResetStardust(_state);
 }
 
 // mov ax, _text; jmp back to 0x80A3, which posts it for 25 frames.
@@ -1307,69 +1278,36 @@ void HandleAntiEcmKey(GameState& _state)
   }
 }
 
-// 0x84F2-0x8586: pitch rotates the camera frame, from which the three angles are derived again.
-void ApplyPitch(Guest& _guest)
+// The axes ApplyPitch turns are 10000 long: forward is +z, and up is -y.
+constexpr std::int16_t AXIS_LENGTH = 0x2710;
+
+// 0x84F2-0x8586: _pitch, -23 to 23, turns the camera frame by twice as much, and the three angles are derived from the
+// turned frame again.
+void ApplyPitch(GameState& _state, std::int8_t _pitch)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = Negate(static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 1));
-  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-  regs.ax = Negate(_guest.Get(DS.playerRollAngle));
-  SinCosOut(regs, SetSinCos(_guest.State(), 2, regs.ax));
-  regs.ax = Negate(_guest.Get(DS.playerYawAngle));
-  SinCosOut(regs, SetSinCos(_guest.State(), 1, regs.ax));
-  regs.ax = Negate(_guest.Get(DS.playerPitchAngle));
-  SinCosOut(regs, SetSinCos(_guest.State(), 0, regs.ax));
+  (void)SetSinCos(_state, 7, Negate(static_cast<std::uint16_t>(Word(_pitch) << 1)));
+  (void)SetSinCos(_state, 2, Negate(_state.Get(DS.playerRollAngle)));
+  (void)SetSinCos(_state, 1, Negate(_state.Get(DS.playerYawAngle)));
+  (void)SetSinCos(_state, 0, Negate(_state.Get(DS.playerPitchAngle)));
 
-  // The forward axis, rotated: pitch from its y and z, then yaw from its x and the rotated z.
-  regs.ax = 0;
-  regs.bx = 0;
-  regs.cx = 0x2710;
-  _guest.Call(ROTATE_BY_SIN_COS_7210);
-  const std::uint16_t forwardX = regs.ax;
-  const std::uint16_t forwardY = regs.bx;
-  const std::uint16_t forwardZ = regs.cx;
-  regs.ax = regs.bx;
-  regs.bx = regs.cx;
-  ArcTangent2Entry(_guest);
-  regs.ax = Negate(regs.ax);
-  _guest.Set(DS.pitchAngleScratch, regs.ax);
-  regs.ax = Negate(regs.ax);
-  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
-  regs.bx = forwardZ;
-  regs.ax = forwardY;
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
-  regs.ax = forwardX;
-  ArcTangent2Entry(_guest);
-  regs.ax = Negate(regs.ax);
-  _guest.Set(DS.yawAngleScratch, regs.ax);
+  // The forward axis, turned: the pitch from its y and z, then the yaw from its x and the z turned by the pitch.
+  const Vector forward = RotateBySinCos7210(_state, Vector{0, 0, AXIS_LENGTH});
+  const std::uint16_t pitch = ArcTangent2(_state, forward.y, forward.z);
+  _state.Set(DS.pitchAngleScratch, Negate(pitch));
+  (void)SetSinCos(_state, 6, pitch);
+  const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{forward.y, forward.z});
+  _state.Set(DS.yawAngleScratch, Negate(ArcTangent2(_state, forward.x, pitched.second)));
 
-  // The up axis, unrotated by pitch and yaw: roll from what is left.
-  regs.ax = Negate(Plus(_guest.Get(DS.pitchAngleScratch), 0x400));
-  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
-  regs.ax = 0;
-  regs.bx = 0xD8F0;
-  regs.cx = 0;
-  _guest.Call(ROTATE_BY_SIN_COS_7210);
-  const std::uint16_t upX = regs.ax;
-  regs.ax = regs.bx;
-  regs.bx = regs.cx;
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
-  const std::uint16_t upY = regs.ax;
-  const std::uint16_t upZ = regs.bx;
-  regs.ax = Plus(_guest.Get(DS.yawAngleScratch), 0x400);
-  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-  regs.bx = upZ;
-  regs.cx = upY;
-  regs.ax = upX;
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
-  regs.bx = upY;
-  ArcTangent2Entry(_guest);
-  _guest.Set(DS.playerRollAngle, regs.ax);
-  regs.ax = Negate(_guest.Get(DS.yawAngleScratch));
-  _guest.Set(DS.playerYawAngle, regs.ax);
-  regs.ax = Negate(_guest.Get(DS.pitchAngleScratch));
-  _guest.Set(DS.playerPitchAngle, regs.ax);
-  _guest.Set(DS.velocityDirty, 1);
+  // The up axis, turned back by the pitch and the yaw: the roll from what is left.
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Get(DS.pitchAngleScratch), 0x400)));
+  const Vector up = RotateBySinCos7210(_state, Vector{0, -AXIS_LENGTH, 0});
+  const Pair upPitched = RotateByStoredSinCos(_state, 6, Pair{up.y, up.z});
+  (void)SetSinCos(_state, 7, Plus(_state.Get(DS.yawAngleScratch), 0x400));
+  const Pair upYawed = RotateByStoredSinCos(_state, 7, Pair{up.x, upPitched.second});
+  _state.Set(DS.playerRollAngle, ArcTangent2(_state, upYawed.first, upPitched.first));
+  _state.Set(DS.playerYawAngle, Negate(_state.Get(DS.yawAngleScratch)));
+  _state.Set(DS.playerPitchAngle, Negate(_state.Get(DS.pitchAngleScratch)));
+  _state.Set(DS.velocityDirty, 1);
 }
 
 // 0x2A57-0x2B53: the sun in slot 0, the planet in slot 1 and the station in slot 2, each byte written as the original
@@ -1524,29 +1462,25 @@ std::uint16_t ComputeDustStripMask(std::int16_t _step)
   }
 }
 
-void ShiftStardustSideways(Guest& _guest)
+void ShiftStardustSideways(GameState& _state, std::int16_t _step)
 {
-  Registers& regs = _guest.Regs();
-  ComputeDustStripMaskEntry(_guest);
-  regs.cx = STARDUST_COUNT;
-  regs.si = DS.stardust.offset;
-  do
+  const std::uint16_t stripMask = ComputeDustStripMask(_step);
+  std::uint16_t particle = DS.stardust.offset;
+  for (std::uint16_t count = STARDUST_COUNT; count != 0; --count)
   {
-    LoadDustPositionEntry(_guest);
-    IsDustOnScreenEntry(_guest);
-    if (_guest.Flag(FLAG_CARRY))
+    DustPosition position = LoadDustPosition(_state, particle);
+    if (IsDustOnScreen(position))
     {
-      regs.ax = Plus(regs.ax, regs.dx);
-      IsDustOnScreenEntry(_guest);
-      if (!_guest.Flag(FLAG_CARRY))
+      position.x = Signed(Plus(Word(position.x), _step));
+      if (!IsDustOnScreen(position))
       {
-        RespawnDustAtSideEdgeEntry(_guest);
-        StorePreviousDustPositionEntry(_guest);
+        position = RespawnDustAtSideEdge(_state, particle, _step, stripMask);
+        StorePreviousDustPosition(_state, particle, position);
       }
-      StoreDustPositionEntry(_guest);
+      StoreDustPosition(_state, particle, position);
     }
-    regs.si = Plus(regs.si, PARTICLE_BYTES);
-  } while (--regs.cx != 0);
+    particle = Plus(particle, PARTICLE_BYTES);
+  }
 }
 
 DustPosition RespawnDustAtSideEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask)
@@ -1560,44 +1494,37 @@ DustPosition RespawnDustAtSideEdge(GameState& _state, std::uint16_t _particle, s
   return DustPosition{Signed(x), Signed(y)};
 }
 
-void RollStardust(Guest& _guest)
+void RollStardust(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.cx = STARDUST_COUNT;
-  regs.si = DS.stardust.offset;
-  do
+  std::uint16_t particle = DS.stardust.offset;
+  for (std::uint16_t count = STARDUST_COUNT; count != 0; --count)
   {
-    LoadDustPositionEntry(_guest);
-    PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
-    StoreDustPositionEntry(_guest);
-    regs.si = Plus(regs.si, PARTICLE_BYTES);
-  } while (--regs.cx != 0);
+    const DustPosition position = LoadDustPosition(_state, particle);
+    const Pair rolled = RotateByStoredSinCos(_state, 7, Pair{position.x, position.y});
+    StoreDustPosition(_state, particle, DustPosition{rolled.first, rolled.second});
+    particle = Plus(particle, PARTICLE_BYTES);
+  }
 }
 
-void ShiftStardustVertically(Guest& _guest)
+void ShiftStardustVertically(GameState& _state, std::int16_t _step)
 {
-  Registers& regs = _guest.Regs();
-  ComputeDustStripMaskEntry(_guest);
-  regs.si = DS.stardust.offset;
-  regs.cx = STARDUST_COUNT;
-  regs.ax = 0;
-  do
+  const std::uint16_t stripMask = ComputeDustStripMask(_step);
+  std::uint16_t particle = DS.stardust.offset;
+  for (std::uint16_t count = STARDUST_COUNT; count != 0; --count)
   {
-    LoadDustPositionEntry(_guest);
-    IsDustOnScreenEntry(_guest);
-    if (_guest.Flag(FLAG_CARRY))
+    DustPosition position = LoadDustPosition(_state, particle);
+    if (IsDustOnScreen(position))
     {
-      regs.bx = Plus(regs.bx, regs.dx);
-      IsDustOnScreenEntry(_guest);
-      if (!_guest.Flag(FLAG_CARRY))
+      position.y = Signed(Plus(Word(position.y), _step));
+      if (!IsDustOnScreen(position))
       {
-        RespawnDustAtVerticalEdgeEntry(_guest);
-        StorePreviousDustPositionEntry(_guest);
+        position = RespawnDustAtVerticalEdge(_state, particle, _step, stripMask);
+        StorePreviousDustPosition(_state, particle, position);
       }
-      StoreDustPositionEntry(_guest);
+      StoreDustPosition(_state, particle, position);
     }
-    regs.si = Plus(regs.si, PARTICLE_BYTES);
-  } while (--regs.cx != 0);
+    particle = Plus(particle, PARTICLE_BYTES);
+  }
 }
 
 DustPosition RespawnDustAtVerticalEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask)
@@ -2163,144 +2090,93 @@ void UpdateSafeZone(Guest& _guest)
   _guest.Set(DS.safeZoneFlags, Low(regs.ax));
 }
 
-void ComputeDeathDebrisVector(Guest& _guest)
+Vector ComputeDeathDebrisVector(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = Negate(_guest.Get(DS.viewAngle));
-  SinCosOut(regs, SetSinCos(_guest.State(), 8, regs.ax));
-  regs.ax = Negate(Plus(_guest.Get(DS.playerPitchAngle), 0x400));
-  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
-  regs.ax = Plus(_guest.Get(DS.playerYawAngle), 0x400);
-  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-  // (0, 40, 0), turned by the view and, off the front view, by the roll, then by yaw and pitch.
-  regs.ax = 0;
-  regs.bx = 0x28;
-  regs.cx = 0;
-  if (_guest.Get(DS.viewAngle) != 0)
+  (void)SetSinCos(_state, 8, Negate(_state.Get(DS.viewAngle)));
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Get(DS.playerPitchAngle), 0x400)));
+  (void)SetSinCos(_state, 7, Plus(_state.Get(DS.playerYawAngle), 0x400));
+  // (0, 40, 0), turned by the view and, off the front view, by the roll, which SetSinCos8 puts in the view's place.
+  std::int16_t x = 0;
+  std::int16_t y = DEATH_DEBRIS_SPEED;
+  std::int16_t z = 0;
+  if (_state.Get(DS.viewAngle) != 0)
   {
-    PairOut(regs, RotateByStoredSinCos(_guest.State(), 8, PairIn(regs)));
-    const std::uint16_t x = regs.ax;
-    const std::uint16_t y = regs.bx;
-    const std::uint16_t z = regs.cx;
-    regs.ax = Negate(_guest.Get(DS.playerRollAngle));
-    SinCosOut(regs, SetSinCos(_guest.State(), 8, regs.ax));
-    // push ax, bx, cx; pop bx, cx, ax: y and z change places.
-    regs.bx = z;
-    regs.cx = y;
-    regs.ax = x;
-    PairOut(regs, RotateByStoredSinCos(_guest.State(), 8, PairIn(regs)));
-    std::swap(regs.cx, regs.bx);
+    const Pair viewed = RotateByStoredSinCos(_state, 8, Pair{x, y});
+    (void)SetSinCos(_state, 8, Negate(_state.Get(DS.playerRollAngle)));
+    // PUSH AX, BX, CX round SetSinCos8, and POP BX, CX, AX: y and z change places.
+    const Pair rolled = RotateByStoredSinCos(_state, 8, Pair{viewed.first, z});
+    x = rolled.first;
+    y = viewed.second;
+    z = rolled.second;
   }
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
-  std::swap(regs.cx, regs.ax);
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
-  std::swap(regs.cx, regs.ax);
-  std::swap(regs.cx, regs.bx);
+  // Then the yaw turns (x, y) and the pitch (z, y), and the XCHGs leave x, the pitch's first and its second in AX, BX
+  // and CX.
+  const Pair yawed = RotateByStoredSinCos(_state, 7, Pair{x, y});
+  const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{z, yawed.second});
+  return Vector{yawed.first, pitched.first, pitched.second};
 }
 
-void UpdateWarnings(Guest& _guest)
+void UpdateWarnings(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.gameOverFrames) != 0)
+  if (_state.Get(DS.gameOverFrames) != 0)
   {
     return;
   }
-  SetLow(regs.ax, _guest.Get(DS.warningFrames));
-  if (Low(regs.ax) != 0)
+  const std::uint8_t frames = _state.Get(DS.warningFrames);
+  if (frames != 0)
   {
-    SetHigh(regs.ax, 0);
-    _guest.Set(DS.messageFrames, regs.ax);
-    regs.ax = _guest.Get(DS.warningMessage);
-    _guest.Set(DS.messagePointer, regs.ax);
-    _guest.Set(DS.warningFrames, static_cast<std::uint8_t>(_guest.Get(DS.warningFrames) - 1));
+    // XOR AH,AH / MOV [messageFrames],AX: the frames left, as a word.
+    _state.Set(DS.messageFrames, frames);
+    _state.Set(DS.messagePointer, _state.Get(DS.warningMessage));
+    _state.Set(DS.warningFrames, static_cast<std::uint8_t>(_state.Get(DS.warningFrames) - 1));
     return;
   }
-  // The four checks from the one after the last warning (jmp [bx+warningChecks]).
-  regs.cx = 4;
-  SetLow(regs.bx, _guest.Get(DS.warningIndex) + 1);
-  regs.bx = static_cast<std::uint16_t>((regs.bx & 3) << 1);
-  WarningChecksOut(regs, RunWarningChecks(_guest.State(), static_cast<std::uint16_t>(regs.bx >> 1), regs.cx));
+  // The four checks from the one after the last warning (JMP [BX+warningChecks]).
+  (void)RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Get(DS.warningIndex) + 1) & 3), WARNING_CHECKS);
 }
 
-void CheckMissileWarning(Guest& _guest)
+WarningChecks CheckMissileWarning(GameState& _state, std::uint16_t _checks)
 {
-  Registers& regs = _guest.Regs();
-  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 0, regs.cx));
+  return RunWarningChecks(_state, 0, _checks);
 }
 
-void CheckAltitudeWarning(Guest& _guest)
+WarningChecks CheckAltitudeWarning(GameState& _state, std::uint16_t _checks)
 {
-  Registers& regs = _guest.Regs();
-  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 1, regs.cx));
+  return RunWarningChecks(_state, 1, _checks);
 }
 
-void CheckTemperatureWarning(Guest& _guest)
+WarningChecks CheckTemperatureWarning(GameState& _state, std::uint16_t _checks)
 {
-  Registers& regs = _guest.Regs();
-  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 2, regs.cx));
+  return RunWarningChecks(_state, 2, _checks);
 }
 
-void CheckEnergyWarning(Guest& _guest)
+WarningChecks CheckEnergyWarning(GameState& _state, std::uint16_t _checks)
 {
-  Registers& regs = _guest.Regs();
-  WarningChecksOut(regs, RunWarningChecks(_guest.State(), 3, regs.cx));
+  return RunWarningChecks(_state, 3, _checks);
 }
 
-void UpdateScannerBlip(Guest& _guest)
+std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera)
 {
-  Registers& regs = _guest.Regs();
-  if (regs.di >= DEBRIS_SLOTS)
+  if (_slot.Offset() >= DS.debrisSlots.offset || IsStation(_slot).station || IsSunOrPlanet(_slot))
   {
-    return;
+    return std::nullopt;
   }
-  regs.dx = regs.ax;
-  _guest.Call(IS_STATION);
-  regs.ax = regs.dx;
-  if (_guest.Flag(FLAG_ZERO))
+  _slot.Set(SlotByte::Scanned, 1);
+  // The scanner's y and z are 1.25 times the camera's. The blip is the high bytes, each XCHGed with the old blip's.
+  const auto scaled = [](std::int16_t _coordinate) { return High(Plus(Word(_coordinate), Signed(Sar(Word(_coordinate), 2)))); };
+  const std::uint8_t oldX = _slot.Get(SlotByte::BlipX);
+  _slot.Set(SlotByte::BlipX, High(Word(_camera.x)));
+  const std::uint8_t oldY = _slot.Get(SlotByte::BlipY);
+  _slot.Set(SlotByte::BlipY, scaled(_camera.y));
+  const std::uint8_t oldZ = _slot.Get(SlotByte::BlipZ);
+  _slot.Set(SlotByte::BlipZ, scaled(_camera.z));
+  if ((_slot.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
   {
-    return;
+    (void)XorScannerBlip(_state, oldX, oldY, oldZ);
   }
-  _guest.Call(IS_SUN_OR_PLANET);
-  regs.ax = regs.dx;
-  if (_guest.Flag(FLAG_ZERO))
-  {
-    return;
-  }
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  const std::uint16_t slot = regs.di;
-  _guest.SetByte(Plus(regs.di, SLOT_SCANNED), 1);
-  // The scanner's y and z are 1.25 times the camera's.
-  regs.dx = Sar(regs.bx, 2);
-  regs.bx = Plus(regs.bx, regs.dx);
-  regs.dx = Sar(regs.cx, 2);
-  regs.cx = Plus(regs.cx, regs.dx);
-  const std::uint16_t blip = Plus(regs.di, SLOT_BLIP);
-  const std::uint8_t oldX = _guest.Byte(blip);
-  const std::uint8_t oldY = _guest.Byte(Plus(blip, 1));
-  const std::uint8_t oldZ = _guest.Byte(Plus(blip, 2));
-  _guest.SetByte(blip, High(regs.ax));
-  _guest.SetByte(Plus(blip, 1), High(regs.bx));
-  _guest.SetByte(Plus(blip, 2), High(regs.cx));
-  SetHigh(regs.ax, oldX);
-  SetHigh(regs.bx, oldY);
-  SetHigh(regs.cx, oldZ);
-  if ((_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
-  {
-    XorScannerBlipEntry(_guest);
-    regs.di = slot;
-  }
-  SetHigh(regs.ax, _guest.Byte(blip));
-  SetHigh(regs.bx, _guest.Byte(Plus(blip, 1)));
-  SetHigh(regs.cx, _guest.Byte(Plus(blip, 2)));
-  XorScannerBlipEntry(_guest);
-  regs.di = slot;
-  const std::uint16_t flags = Plus(regs.di, SLOT_FLAGS);
-  _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) | FLAG_BLIP_DRAWN));
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
+  const DashboardPixel last = XorScannerBlip(_state, _slot.Get(SlotByte::BlipX), _slot.Get(SlotByte::BlipY), _slot.Get(SlotByte::BlipZ));
+  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
+  return last;
 }
 
 void UpdateCompass(Guest& _guest)
@@ -2335,9 +2211,9 @@ void UpdateCompass(Guest& _guest)
   regs.bx = y;
   regs.ax = x;
   _guest.Call(TRANSFORM_TO_VIEW);
-  _guest.SetWord(Plus(regs.di, SLOT_VIEW_X), regs.ax);
-  _guest.SetWord(Plus(regs.di, SLOT_VIEW_Y), regs.bx);
-  _guest.SetWord(Plus(regs.di, SLOT_VIEW_Z), regs.cx);
+  _guest.SetWord(Plus(regs.di, SLOT_COMPASS_X), regs.ax);
+  _guest.SetWord(Plus(regs.di, SLOT_COMPASS_Y), regs.bx);
+  _guest.SetWord(Plus(regs.di, SLOT_COMPASS_Z), regs.cx);
   regs.cx = z;
   regs.bx = y;
   regs.ax = x;
@@ -2441,28 +2317,15 @@ DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y
   return pixel;
 }
 
-void EraseScannerBlip(Guest& _guest)
+std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot)
 {
-  Registers& regs = _guest.Regs();
-  const std::uint16_t saved = regs.ax;
-  _guest.Call(IS_STATION);
-  regs.ax = saved;
-  if (_guest.Flag(FLAG_ZERO))
+  if (IsStation(_slot).station || (_slot.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0)
   {
-    return;
+    return std::nullopt;
   }
-  const std::uint16_t flags = Plus(regs.di, SLOT_FLAGS);
-  if ((_guest.Byte(flags) & FLAG_BLIP_DRAWN) == 0)
-  {
-    return;
-  }
-  SetHigh(regs.ax, _guest.Byte(Plus(regs.di, SLOT_BLIP)));
-  SetHigh(regs.bx, _guest.Byte(Plus(regs.di, SLOT_BLIP + 1)));
-  SetHigh(regs.cx, _guest.Byte(Plus(regs.di, SLOT_BLIP + 2)));
-  const std::uint16_t slot = regs.di;
-  XorScannerBlipEntry(_guest);
-  regs.di = slot;
-  _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) & ~FLAG_BLIP_DRAWN));
+  const DashboardPixel last = XorScannerBlip(_state, _slot.Get(SlotByte::BlipX), _slot.Get(SlotByte::BlipY), _slot.Get(SlotByte::BlipZ));
+  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) & ~FLAG_BLIP_DRAWN));
+  return last;
 }
 
 DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z)
@@ -2527,7 +2390,7 @@ void EraseCompassAndBlips(Guest& _guest)
   {
     const std::uint16_t count = regs.cx;
     const std::uint16_t slot = regs.di;
-    EraseScannerBlip(_guest);
+    EraseScannerBlipEntry(_guest);
     regs.di = Plus(slot, SLOT_BYTES);
     regs.cx = count;
   } while (--regs.cx != 0);
@@ -2664,7 +2527,11 @@ void ProcessFlightKeys(Guest& _guest)
   _guest.Call(HANDLE_FLIGHT_FUNCTION_KEYS);
   if (High(regs.ax) != 0 && _guest.Get(DS.viewLocked) != 1)
   {
-    ChangeView(_guest);
+    // A new view leaves AX and DI as ResetStardust does.
+    if (const std::optional<std::uint16_t> lifetimeRandom = ChangeView(_guest.State(), High(regs.ax)))
+    {
+      ResetStardustOut(regs, *lifetimeRandom);
+    }
   }
   if (_guest.Get(DS.keyDownG) == 1 && _guest.Get(DS.galacticHyperdriveFitted) == 1 && _guest.Get(DS.galacticDriveReadyFrames) == 0 &&
       _guest.Get(DS.hyperspaceCountdown) == 0)
@@ -2849,43 +2716,42 @@ void UpdatePlayerMotion(Guest& _guest)
   if (Low(regs.bx) != 0)
   {
     SetLow(regs.ax, Low(regs.bx));
-    ApplyPitch(_guest);
+    // The original leaves AX, BX, CX and DX as its last arctangent and rotation do, and nothing reads them: poisoned here,
+    // every comparison and digest still agreed.
+    ApplyPitch(_guest.State(), static_cast<std::int8_t>(Low(regs.ax)));
   }
   if (_guest.Get(DS.dockingComputerOn) == 1)
   {
     return;
   }
-  UpdatePlayerVelocity(_guest);
+  UpdatePlayerVelocityEntry(_guest);
   MoveObjectsByVelocityEntry(_guest);
 }
 
-void UpdatePlayerVelocity(Guest& _guest)
+void UpdatePlayerVelocity(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.velocityDirty) != 1)
+  if (_state.Get(DS.velocityDirty) != 1)
   {
     return;
   }
-  _guest.Set(DS.velocityDirty, 0);
-  regs.ax = Negate(Plus(_guest.Get(DS.playerPitchAngle), 0x400));
-  SinCosOut(regs, SetSinCos(_guest.State(), 6, regs.ax));
-  regs.ax = Plus(_guest.Get(DS.playerYawAngle), 0x400);
-  SinCosOut(regs, SetSinCos(_guest.State(), 7, regs.ax));
-  regs.ax = 0;
-  regs.bx = _guest.Get(DS.playerSpeed);
-  if (_guest.Get(DS.jumpDriveEngaged) == 1)
+  // DEC: the 1 becomes 0.
+  _state.Set(DS.velocityDirty, 0);
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Get(DS.playerPitchAngle), 0x400)));
+  (void)SetSinCos(_state, 7, Plus(_state.Get(DS.playerYawAngle), 0x400));
+  std::uint16_t speed = _state.Get(DS.playerSpeed);
+  if (_state.Get(DS.jumpDriveEngaged) == 1)
   {
     // The jump drive: 32 times the speed, for this frame only.
-    _guest.Set(DS.velocityDirty, 1);
-    _guest.Set(DS.jumpDriveEngaged, 0);
-    regs.bx = static_cast<std::uint16_t>(regs.bx << 5);
+    _state.Set(DS.velocityDirty, 1);
+    _state.Set(DS.jumpDriveEngaged, 0);
+    speed = static_cast<std::uint16_t>(speed << 5);
   }
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 7, PairIn(regs)));
-  _guest.Set(DS.playerVelocityX, regs.ax);
-  regs.ax = 0;
-  PairOut(regs, RotateByStoredSinCos(_guest.State(), 6, PairIn(regs)));
-  _guest.Set(DS.playerVelocityY, regs.ax);
-  _guest.Set(DS.playerVelocityZ, regs.bx);
+  // (0, speed) turned by the yaw, then (0, what that leaves of the speed) by the pitch.
+  const Pair yawed = RotateByStoredSinCos(_state, 7, Pair{0, Signed(speed)});
+  _state.Set(DS.playerVelocityX, Word(yawed.first));
+  const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{0, yawed.second});
+  _state.Set(DS.playerVelocityY, Word(pitched.first));
+  _state.Set(DS.playerVelocityZ, Word(pitched.second));
 }
 
 void MoveObjectsByVelocity(GameState& _state)
@@ -2975,6 +2841,11 @@ constexpr Machine::NativeContract PREVIOUS_DUST_OUT{REGISTER_AX | REGISTER_BX, F
 constexpr Machine::NativeContract CLOBBERS_CX = Clobbers(REGISTER_CX);
 constexpr Machine::NativeContract CLOBBERS_AX_SI_DI = Clobbers(REGISTER_AX | REGISTER_SI | REGISTER_DI);
 constexpr Machine::NativeContract CLOBBERS_CX_DX = Clobbers(REGISTER_CX | REGISTER_DX);
+constexpr Machine::NativeContract CLOBBERS_AX_BX_DX = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX);
+constexpr Machine::NativeContract CLOBBERS_AX_BX_CX = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX);
+constexpr Machine::NativeContract CLOBBERS_DX_DI_BP = Clobbers(REGISTER_DX | REGISTER_DI | REGISTER_BP);
+constexpr Machine::NativeContract SHIFTS_STARDUST = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP);
+constexpr Machine::NativeContract ROLLS_STARDUST = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI);
 
 // A particle's position as the dust routines hold it: x in AX, y in BX.
 [[nodiscard]] DustPosition DustIn(const Registers& _regs) noexcept
@@ -2992,6 +2863,43 @@ void DustOut(Registers& _regs, DustPosition _position) noexcept
 [[nodiscard]] std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
 {
   return Join(_pixel.y, _pixel.x);
+}
+
+// What the last XorDashboardPixel of a scanner blip leaves: AX = DX the last pixel, BX its mask and ES the video segment;
+// and what the stick's loop leaves, CL = 0 and CH its step, up for a negative _y, the blip's y byte.
+void ScannerBlipOut(Registers& _regs, DashboardPixel _last, std::uint8_t _y) noexcept
+{
+  _regs.dx = PixelPlace(_last);
+  _regs.ax = _regs.dx;
+  _regs.bx = _last.mask;
+  _regs.cx = Join((Sar(_y, 2) & 0x80) != 0 ? std::uint8_t{0xFF} : std::uint8_t{0x01}, 0);
+  _regs.es = GameState::VIDEO_SEGMENT;
+}
+
+// A point as the register code holds it: x in AX, y in BX, z in CX.
+[[nodiscard]] Vector VectorIn(const Registers& _regs) noexcept
+{
+  return Vector{Signed(_regs.ax), Signed(_regs.bx), Signed(_regs.cx)};
+}
+
+void VectorOut(Registers& _regs, Vector _vector) noexcept
+{
+  _regs.ax = Word(_vector.x);
+  _regs.bx = Word(_vector.y);
+  _regs.cx = Word(_vector.z);
+}
+
+// The warning checks' registers: each check loads AL with its number and LOOP counts CX down, and SetWarning leaves BX the
+// warning's byte offset in warningTexts and AX its text.
+void WarningChecksOut(Registers& _regs, const WarningChecks& _checks) noexcept
+{
+  SetLow(_regs.ax, _checks.check);
+  _regs.cx = _checks.checksLeft;
+  if (_checks.text)
+  {
+    _regs.bx = static_cast<std::uint16_t>(_checks.check << 1);
+    _regs.ax = *_checks.text;
+  }
 }
 
 } // namespace
@@ -3015,11 +2923,29 @@ void ComputeDustStripMaskEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX);
 }
 
+void ShiftStardustSidewaysEntry(Guest& _guest)
+{
+  ShiftStardustSideways(_guest.State(), Signed(_guest.Regs().dx));
+  _guest.Clobber(SHIFTS_STARDUST);
+}
+
 void RespawnDustAtSideEdgeEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   DustOut(regs, RespawnDustAtSideEdge(_guest.State(), regs.si, Signed(regs.dx), regs.bp));
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void RollStardustEntry(Guest& _guest)
+{
+  RollStardust(_guest.State());
+  _guest.Clobber(ROLLS_STARDUST);
+}
+
+void ShiftStardustVerticallyEntry(Guest& _guest)
+{
+  ShiftStardustVertically(_guest.State(), Signed(_guest.Regs().dx));
+  _guest.Clobber(SHIFTS_STARDUST);
 }
 
 void RespawnDustAtVerticalEdgeEntry(Guest& _guest)
@@ -3090,12 +3016,9 @@ void DustToScreenEntry(Guest& _guest)
 
 void ResetStardustEntry(Guest& _guest)
 {
-  Registers& regs = _guest.Regs();
-  const std::uint16_t lifetimeRandom = ResetStardust(_guest.State());
   // The original leaves AX the last random with the last lifetime in AL, and DI past the particles, which
   // RunDockingComputer's contract compares.
-  regs.ax = WithLow(lifetimeRandom, RandomLifetime(lifetimeRandom));
-  regs.di = Plus(DS.stardust.offset, STARDUST_BYTES);
+  ResetStardustOut(_guest.Regs(), ResetStardust(_guest.State()));
   _guest.Clobber(CLOBBERS_CX);
 }
 
@@ -3173,6 +3096,64 @@ void InSafeZoneEntry(Guest& _guest)
   _guest.Clobber(CARRY_OUT);
 }
 
+void ComputeDeathDebrisVectorEntry(Guest& _guest)
+{
+  VectorOut(_guest.Regs(), ComputeDeathDebrisVector(_guest.State()));
+  _guest.Clobber(CLOBBERS_DX_DI_BP);
+}
+
+void UpdateWarningsEntry(Guest& _guest)
+{
+  UpdateWarnings(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX_CX);
+}
+
+void CheckMissileWarningEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, CheckMissileWarning(_guest.State(), regs.cx));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void CheckAltitudeWarningEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, CheckAltitudeWarning(_guest.State(), regs.cx));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void CheckTemperatureWarningEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, CheckTemperatureWarning(_guest.State(), regs.cx));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void CheckEnergyWarningEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  WarningChecksOut(regs, CheckEnergyWarning(_guest.State(), regs.cx));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void UpdateScannerBlipEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const std::optional<DashboardPixel> last = UpdateScannerBlip(_guest.State(), ObjectSlot(_guest.State(), regs.di), VectorIn(regs));
+  // PUSH and POP keep AX, BX, CX and DI, but not DX, which the contract compares: past the debris slots the original holds AX
+  // in it across the type tests, and a blip drawn leaves it the last pixel, with ES the video segment.
+  if (last)
+  {
+    regs.dx = PixelPlace(*last);
+    regs.es = GameState::VIDEO_SEGMENT;
+  }
+  else if (regs.di < DS.debrisSlots.offset)
+  {
+    regs.dx = regs.ax;
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void XorCompassDotEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -3186,20 +3167,30 @@ void XorCompassDotEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void EraseScannerBlipEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  // PUSH AX / POP AX keep AX round IsStation, and PUSH DI / POP DI keep DI. A blip erased leaves AX, BX, CX, DX and ES as the
+  // last XorScannerBlip does, and the contract compares them all: through IsObjectNear, EngageJumpDrive, CheckShipInRange and
+  // IsMassLocked compare BX, CX and DX, UpdateMissileAi, TryScoopObject and TransformShip compare DX, and ExplodeObject,
+  // through RemoveObject, stores what it finds there.
+  if (const std::optional<DashboardPixel> last = EraseScannerBlip(_guest.State(), slot))
+  {
+    ScannerBlipOut(regs, *last, slot.Get(SlotByte::BlipY));
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void XorScannerBlipEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  // The stick's step, which the original keeps in CH: up for a negative y.
-  const std::uint8_t step = (Sar(High(regs.bx), 2) & 0x80) != 0 ? 0xFF : 0x01;
-  const DashboardPixel last = XorScannerBlip(_guest.State(), High(regs.ax), High(regs.bx), High(regs.cx));
+  const std::uint8_t y = High(regs.bx);
+  const DashboardPixel last = XorScannerBlip(_guest.State(), High(regs.ax), y, High(regs.cx));
   // The last XorDashboardPixel leaves AX = DX, the last pixel, BX its mask and ES the video segment, and the stick's loop
-  // CL = 0: UpdateScannerBlip's contract compares DX and ES, and EngageJumpDrive's and CheckShipInRange's, through
+  // CX = its step and 0: UpdateScannerBlip's contract compares DX and ES, and EngageJumpDrive's and CheckShipInRange's, through
   // EraseScannerBlip, BX and CX as well.
-  regs.dx = PixelPlace(last);
-  regs.ax = regs.dx;
-  regs.bx = last.mask;
-  regs.cx = Join(step, 0);
-  regs.es = GameState::VIDEO_SEGMENT;
+  ScannerBlipOut(regs, last, y);
   _guest.Clobber(CLOBBERS_DI);
 }
 
@@ -3222,6 +3213,12 @@ void DrainEnergyEntry(Guest& _guest)
   regs.ax = SignExtend(Low(regs.ax));
   DrainEnergy(_guest.State(), static_cast<std::int8_t>(Low(regs.ax)));
   _guest.Clobber(PRESERVES_ALL);
+}
+
+void UpdatePlayerVelocityEntry(Guest& _guest)
+{
+  UpdatePlayerVelocity(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_BX_DX);
 }
 
 void MoveObjectsByVelocityEntry(Guest& _guest)
@@ -3248,12 +3245,10 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0887, "ComputeStardustShift", &ComputeStardustShift, Clobbers(REGISTER_AX)},
   NativeEntry{0x08A1, "GetPreviousDustScreenPosition", &GetPreviousDustScreenPositionEntry, PREVIOUS_DUST_OUT},
   NativeEntry{0x08B9, "ComputeDustStripMask", &ComputeDustStripMaskEntry, CLOBBERS_AX},
-  NativeEntry{0x08CB, "ShiftStardustSideways", &ShiftStardustSideways,
-              Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
+  NativeEntry{0x08CB, "ShiftStardustSideways", &ShiftStardustSidewaysEntry, SHIFTS_STARDUST},
   NativeEntry{0x08F2, "RespawnDustAtSideEdge", &RespawnDustAtSideEdgeEntry, PRESERVES_ALL},
-  NativeEntry{0x0927, "RollStardust", &RollStardust, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI)},
-  NativeEntry{0x0940, "ShiftStardustVertically", &ShiftStardustVertically,
-              Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP)},
+  NativeEntry{0x0927, "RollStardust", &RollStardustEntry, ROLLS_STARDUST},
+  NativeEntry{0x0940, "ShiftStardustVertically", &ShiftStardustVerticallyEntry, SHIFTS_STARDUST},
   NativeEntry{0x0969, "RespawnDustAtVerticalEdge", &RespawnDustAtVerticalEdgeEntry, PRESERVES_ALL},
   NativeEntry{0x09A3, "RespawnDustAnywhere", &RespawnDustAnywhereEntry, PRESERVES_ALL},
   NativeEntry{0x09D6, "IsDustOnScreen", &IsDustOnScreenEntry, CARRY_OUT},
@@ -3282,16 +3277,16 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisions, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2E63, "InSafeZone", &InSafeZoneEntry, CARRY_OUT},
   NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZone, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX)},
-  NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVector, Clobbers(REGISTER_DX | REGISTER_DI | REGISTER_BP)},
-  NativeEntry{0x36B6, "UpdateWarnings", &UpdateWarnings, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX)},
-  NativeEntry{0x36FD, "CheckMissileWarning", &CheckMissileWarning, PRESERVES_ALL},
-  NativeEntry{0x370E, "CheckAltitudeWarning", &CheckAltitudeWarning, PRESERVES_ALL},
-  NativeEntry{0x371A, "CheckTemperatureWarning", &CheckTemperatureWarning, PRESERVES_ALL},
-  NativeEntry{0x3726, "CheckEnergyWarning", &CheckEnergyWarning, PRESERVES_ALL},
-  NativeEntry{0x40EC, "UpdateScannerBlip", &UpdateScannerBlip, PRESERVES_ALL},
+  NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVectorEntry, CLOBBERS_DX_DI_BP},
+  NativeEntry{0x36B6, "UpdateWarnings", &UpdateWarningsEntry, CLOBBERS_AX_BX_CX},
+  NativeEntry{0x36FD, "CheckMissileWarning", &CheckMissileWarningEntry, PRESERVES_ALL},
+  NativeEntry{0x370E, "CheckAltitudeWarning", &CheckAltitudeWarningEntry, PRESERVES_ALL},
+  NativeEntry{0x371A, "CheckTemperatureWarning", &CheckTemperatureWarningEntry, PRESERVES_ALL},
+  NativeEntry{0x3726, "CheckEnergyWarning", &CheckEnergyWarningEntry, PRESERVES_ALL},
+  NativeEntry{0x40EC, "UpdateScannerBlip", &UpdateScannerBlipEntry, PRESERVES_ALL},
   NativeEntry{0x418F, "UpdateCompass", &UpdateCompass, PRESERVES_ALL},
   NativeEntry{0x42A4, "XorCompassDot", &XorCompassDotEntry, PRESERVES_ALL},
-  NativeEntry{0x42D6, "EraseScannerBlip", &EraseScannerBlip, Clobbers(REGISTER_BX | REGISTER_CX | REGISTER_DX)},
+  NativeEntry{0x42D6, "EraseScannerBlip", &EraseScannerBlipEntry, PRESERVES_ALL},
   NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlipEntry, CLOBBERS_DI},
   NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixelEntry, CLOBBERS_DI},
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlips, Clobbers(REGISTER_ALL)},
@@ -3303,7 +3298,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDrive, PRESERVES_ALL},
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotion, Clobbers(REGISTER_ALL), Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
-  NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocity, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX)},
+  NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocityEntry, CLOBBERS_AX_BX_DX},
   NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocityEntry, CLOBBERS_CX_DX},
   NativeEntry{0x8D6A, "RunPauseScreen", &RunPauseScreen, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
 };

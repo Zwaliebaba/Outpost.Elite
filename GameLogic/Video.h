@@ -57,10 +57,6 @@ void ClipLineToLowEdge(Guest& _guest);
 /// 0FFh from the clipped coordinates.
 void ClipLineToHighEdge(Guest& _guest);
 
-/// DrawLine (CS:16D1): Bresenham from (DL, DH) to (CL, CH) into the drawing buffer in
-/// colorFillBytes[drawColor]. AX, BX, CX, DX, DI, BP and ES clobbered.
-void DrawLine(Guest& _guest);
-
 /// DrawDisc (CS:1826): a filled disc of radius BX at (DX, CX), signed words, with a ragged edge while
 /// sunFringeMask is set. Everything but DS clobbered; ES=DS.
 void DrawDisc(Guest& _guest);
@@ -116,6 +112,11 @@ void ClearDrawBuffer(GameState& _state, bool _backward);
 /// PlotPixel (CS:15E0): the pixel at _x, _row of the drawing buffer set to colorFillBytes[drawColor].
 void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
 
+/// DrawLine (CS:16D1): Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor].
+/// Returns whether it filled whole bytes of a horizontal line with REP STOSB, for which the original sets ES to DS and clears
+/// the direction flag first.
+bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow);
+
 /// FillSpan (CS:1A07): row _doubledRow / 2 of the drawing buffer filled with discFillByte from x = _left to x = _right, the
 /// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
 /// Returns the offset of the span's last byte.
@@ -131,10 +132,11 @@ void ClearTextScreen(GameState& _state, bool _backward);
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
 // there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
-// leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI).
+// leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES).
 
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
 void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
+void DrawLineEntry(Guest& _guest);        ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
 void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
 void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
 void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.

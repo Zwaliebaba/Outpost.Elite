@@ -6,6 +6,7 @@
 #include "DataOverlay.h"
 #include "Maths.h"
 
+#include <optional>
 #include <utility>
 
 namespace Elite
@@ -439,7 +440,7 @@ void DrawHalvedRows(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   SetHigh(regs.dx, static_cast<std::uint8_t>(Low(regs.bx) >> 1));
   SetHigh(regs.cx, static_cast<std::uint8_t>(Low(regs.ax) >> 1));
-  DrawLine(_guest);
+  DrawLineEntry(_guest);
 }
 
 // The clip routines' result: CF and ZF, the flags their contract names.
@@ -573,49 +574,56 @@ struct DiscRowEdges
   return edges;
 }
 
-// CS:18EE: the row at BX (2*row, moving up) alone.
-void DrawDiscUpperRow(Guest& _guest)
+// What a disc's row routine finds of a row: its edges, and, when it drew, the offset of the last byte FillSpan wrote.
+struct DiscRow
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (High(regs.bx) != 0)
+  DiscRowEdges edges;
+  std::optional<std::uint16_t> lastByte;
+};
+
+// CS:18EE: the row _upperRow (2*row, moving up) alone, from the profile byte at DS:_profile, while it is on the buffer.
+[[nodiscard]] std::optional<DiscRow> DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _upperRow, bool _backward)
+{
+  if (High(_upperRow) != 0)
   {
-    return;
+    return std::nullopt;
   }
-  regs.ax = DiscHalfWidth(_guest.State(), regs.si);
-  const DiscRowEdges edges = DiscRowSpan(_guest.State(), regs.ax);
-  regs.dx = edges.left;
-  regs.ax = edges.right;
+  const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
   if (!edges.visible)
   {
-    return;
+    return DiscRow{edges, std::nullopt};
   }
-  SetHigh(regs.dx, Low(regs.ax));
-  std::swap(regs.cx, regs.bx);
-  FillSpanEntry(_guest);
-  std::swap(regs.cx, regs.bx);
+  return DiscRow{edges, FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward)};
 }
 
-// CS:187B: the rows at CX (moving down) and BX (moving up), one half-width for both.
-void DrawDiscRowPair(Guest& _guest)
+// CS:187B: the rows _lowerRow (moving down) and _upperRow (moving up), as 2*row, one half-width for both; the upper while it
+// is on the buffer.
+[[nodiscard]] DiscRow DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow,
+                                      bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = DiscHalfWidth(_guest.State(), regs.si);
-  const DiscRowEdges edges = DiscRowSpan(_guest.State(), regs.ax);
-  regs.dx = edges.left;
-  regs.ax = edges.right;
+  const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
   if (!edges.visible)
   {
-    return;
+    return DiscRow{edges, std::nullopt};
   }
-  SetHigh(regs.dx, Low(regs.ax));
-  FillSpanEntry(_guest);
-  if (High(regs.bx) != 0)
+  std::uint16_t lastByte = FillSpan(_state, Low(edges.left), Low(edges.right), Low(_lowerRow), _backward);
+  if (High(_upperRow) == 0)
   {
-    return;
+    lastByte = FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
   }
-  std::swap(regs.cx, regs.bx);
-  FillSpanEntry(_guest);
-  std::swap(regs.cx, regs.bx);
+  return DiscRow{edges, lastByte};
+}
+
+// What DrawDisc's row routines leave in the registers: AX the right edge and DX the left, with DH the right's low byte once
+// the row is on the buffer (MOV DH,AL), and DI the last byte FillSpan wrote.
+void DiscRowOut(Machine::Registers& _regs, const DiscRow& _row) noexcept
+{
+  _regs.ax = _row.edges.right;
+  _regs.dx = _row.edges.visible ? Join(Low(_row.edges.right), Low(_row.edges.left)) : _row.edges.left;
+  if (_row.lastByte)
+  {
+    _regs.di = *_row.lastByte;
+  }
 }
 
 // Where DrawSmallDisc (CS:194B) puts a disc of radius 0-4: a 4-row sprite from smallDiscSprites, clipped a byte at a
@@ -1863,72 +1871,62 @@ void ClipLineToHighEdge(Guest& _guest)
   SetClipResult(_guest.Regs(), false, High(regs.cx) == 0);
 }
 
-void DrawLine(Guest& _guest)
+bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::uint8_t dl = Low(regs.dx);
-  std::uint8_t dh = High(regs.dx);
-  std::uint8_t cl = Low(regs.cx);
-  std::uint8_t ch = High(regs.cx);
+  std::uint8_t x = _fromX;
+  std::uint8_t row = _fromRow;
+  std::uint8_t endX = _toX;
+  std::uint8_t endRow = _toRow;
   LineState line;
   // BL = |dx| and BH = |drow|, with the endpoints swapped so that the line runs right; BP the row step.
-  line.al = static_cast<std::uint8_t>(cl - dl);
-  if (cl < dl)
+  line.al = static_cast<std::uint8_t>(endX - x);
+  if (endX < x)
   {
     line.al = Negate8(line.al);
-    std::swap(dl, cl);
-    std::swap(dh, ch);
+    std::swap(x, endX);
+    std::swap(row, endRow);
   }
   line.bl = line.al;
   line.bp = ROW_BYTES;
-  line.al = static_cast<std::uint8_t>(ch - dh);
-  if (ch < dh)
+  line.al = static_cast<std::uint8_t>(endRow - row);
+  if (endRow < row)
   {
     line.al = Negate8(line.al);
     line.bp = Negate(line.bp);
   }
   line.bh = line.al;
-  line.di = static_cast<std::uint16_t>(Join(dh, dl) >> 2);
-  line.al = _guest.Byte(ColorFillByteOffset(_guest.Get(DS.drawColor)));
+  line.di = static_cast<std::uint16_t>(Join(row, x) >> 2);
+  line.al = _state.Byte(ColorFillByteOffset(_state.Get(DS.drawColor)));
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
-  const auto shift = static_cast<std::uint8_t>((dl & 3) << 1);
+  const auto shift = static_cast<std::uint8_t>((x & 3) << 1);
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, shift);
   line.dh = static_cast<std::uint8_t>(~pixel);
   line.al = static_cast<std::uint8_t>(line.al & pixel);
   line.dl = line.al;
-  line.al = _guest.Byte(line.di);
+  line.al = _state.Byte(line.di);
   line.cx = shift;
   if (line.bh == 0)
   {
-    if (DrawHorizontalLine(_guest.State(), line))
-    {
-      regs.es = regs.ds;
-      _guest.SetFlag(FLAG_DIRECTION, false);
-    }
+    return DrawHorizontalLine(_state, line);
   }
-  else if (line.bl == 0)
+  if (line.bl == 0)
   {
-    DrawVerticalLine(_guest.State(), line);
+    DrawVerticalLine(_state, line);
   }
   else if (line.bl < line.bh)
   {
-    DrawSteepLine(_guest.State(), line);
+    DrawSteepLine(_state, line);
   }
   else if (line.bl != line.bh)
   {
-    DrawShallowLine(_guest.State(), line);
+    DrawShallowLine(_state, line);
   }
   else
   {
-    DrawDiagonalLine(_guest.State(), line);
+    DrawDiagonalLine(_state, line);
   }
-  regs.ax = Join(line.ah, line.al);
-  regs.bx = Join(line.bh, line.bl);
-  regs.cx = line.cx;
-  regs.dx = Join(line.dh, line.dl);
-  regs.di = line.di;
-  regs.bp = line.bp;
+  return false;
 }
 
 void DrawDisc(Guest& _guest)
@@ -1985,7 +1983,10 @@ void DrawDisc(Guest& _guest)
   regs.cx = static_cast<std::uint16_t>(regs.cx << 1);
   regs.bx = regs.cx;
   // CX walks down from the centre row and BX up, both as 2*row; the centre row is drawn once.
-  DrawDiscUpperRow(_guest);
+  if (const std::optional<DiscRow> row = DrawDiscUpperRow(_guest.State(), regs.si, regs.bx, Flag(regs, FLAG_DIRECTION)))
+  {
+    DiscRowOut(regs, *row);
+  }
   for (;;)
   {
     const std::uint32_t fraction = std::uint32_t{regs.bp} + _guest.Get(DS.discProfileStepFraction);
@@ -2001,11 +2002,14 @@ void DrawDisc(Guest& _guest)
     }
     if (High(regs.cx) != 0)
     {
-      DrawDiscUpperRow(_guest);
+      if (const std::optional<DiscRow> row = DrawDiscUpperRow(_guest.State(), regs.si, regs.bx, Flag(regs, FLAG_DIRECTION)))
+      {
+        DiscRowOut(regs, *row);
+      }
     }
     else
     {
-      DrawDiscRowPair(_guest);
+      DiscRowOut(regs, DrawDiscRowPair(_guest.State(), regs.si, regs.cx, regs.bx, Flag(regs, FLAG_DIRECTION)));
     }
   }
 }
@@ -2456,8 +2460,9 @@ constexpr Machine::NativeContract CLOBBERS_BX_CX{REGISTER_BX | REGISTER_CX, 0};
 // "Clobbers all": DS is left alone, and ES comes back equal to it or as it was, so both are compared.
 constexpr Machine::NativeContract CLOBBERS_GENERAL{GENERAL_REGISTERS, 0};
 constexpr Machine::NativeContract CLIPS_LINE{REGISTER_SI, FLAG_CARRY | FLAG_ZERO};
-constexpr Machine::NativeContract DRAWS_LINE{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
+// DrawLine's: ES as the original leaves it, DS after a horizontal line's REP STOSB, which DrawClippedLine's, DrawLaserBeams'
+// and UpdateStardust's contracts compare.
+constexpr Machine::NativeContract DRAWS_LINE{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP, 0};
 constexpr Machine::NativeContract FILLS_TRIANGLE_SPAN{REGISTER_AX | REGISTER_DI | REGISTER_BP, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI_ES{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
@@ -2489,6 +2494,18 @@ void PlotPixelEntry(Guest& _guest)
   const Machine::Registers& regs = _guest.Regs();
   PlotPixel(_guest.State(), Low(regs.dx), High(regs.dx));
   _guest.Clobber(CLOBBERS_BX_CX);
+}
+
+void DrawLineEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (DrawLine(_guest.State(), Low(regs.dx), High(regs.dx), Low(regs.cx), High(regs.cx)))
+  {
+    // MOV BX,DS / MOV ES,BX / CLD, before the horizontal line's REP STOSB.
+    regs.es = regs.ds;
+    _guest.SetFlag(FLAG_DIRECTION, false);
+  }
+  _guest.Clobber(DRAWS_LINE);
 }
 
 void FillSpanEntry(Guest& _guest)
@@ -2533,7 +2550,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x1603, "DrawClippedLine", &DrawClippedLine, CLOBBERS_GENERAL},
   NativeEntry{0x1686, "ClipLineToLowEdge", &ClipLineToLowEdge, CLIPS_LINE},
   NativeEntry{0x16C1, "ClipLineToHighEdge", &ClipLineToHighEdge, CLIPS_LINE},
-  NativeEntry{0x16D1, "DrawLine", &DrawLine, DRAWS_LINE},
+  NativeEntry{0x16D1, "DrawLine", &DrawLineEntry, DRAWS_LINE},
   NativeEntry{0x1826, "DrawDisc", &DrawDisc, CLOBBERS_GENERAL},
   NativeEntry{0x1A07, "FillSpan", &FillSpanEntry, PRESERVES_ALL},
   NativeEntry{0x1AC1, "DrawCircle", &DrawCircle, CLOBBERS_GENERAL},

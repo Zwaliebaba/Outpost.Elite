@@ -673,7 +673,7 @@ void LaunchEscapePod(Guest& _guest)
   _guest.Set(DS.playerSpeed, ESCAPE_POD_SPEED);
   _guest.Set(DS.velocityDirty, 1);
   _guest.Set(DS.escapePodFitted, 0);
-  UpdatePlayerVelocity(_guest);
+  UpdatePlayerVelocityEntry(_guest);
   for (regs.cx = ESCAPE_POD_MOVES; regs.cx != 0; --regs.cx)
   {
     const std::uint16_t count = regs.cx;

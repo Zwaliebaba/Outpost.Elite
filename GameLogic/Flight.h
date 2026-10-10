@@ -2,7 +2,9 @@
 #pragma once
 
 #include "GameState.h"
+#include "Maths.h"
 #include "NativeEntry.h"
+#include "ObjectSlot.h"
 
 #include <cstdint>
 #include <optional>
@@ -24,17 +26,6 @@ void UpdateStardust(Guest& _guest);
 /// ComputeStardustShift (CS:0887): stardustShift from playerSpeed, one less while jumpDriveEngaged.
 /// AX clobbered, BL = 12.
 void ComputeStardustShift(Guest& _guest);
-
-/// ShiftStardustSideways (CS:08CB): adds DX to x of every on-screen particle, respawning those that
-/// leave on the entering edge.
-void ShiftStardustSideways(Guest& _guest);
-
-/// RollStardust (CS:0927): rotates every particle by rotationSinCos[7].
-void RollStardust(Guest& _guest);
-
-/// ShiftStardustVertically (CS:0940): adds DX to y of every on-screen particle, respawning those that
-/// leave on the entering edge.
-void ShiftStardustVertically(Guest& _guest);
 
 /// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight. Out: AH = the F1-F4 scan code or 0; BX and CX
 /// come back as the scan leaves them.
@@ -69,30 +60,9 @@ void CheckCollisions(Guest& _guest);
 /// UpdateSafeZone (CS:2E69): safeZoneFlags from the station's distance. DI comes back stationSlot.
 void UpdateSafeZone(Guest& _guest);
 
-/// ComputeDeathDebrisVector (CS:2F8B): (0, 40, 0) turned by the view, the roll off the front view, the
-/// yaw and the pitch. Out: AX, BX, CX.
-void ComputeDeathDebrisVector(Guest& _guest);
-
-/// UpdateWarnings (CS:36B6): re-posts the current warning, or tries the four warning checks.
-void UpdateWarnings(Guest& _guest);
-
-/// CheckMissileWarning (CS:36FD), CheckAltitudeWarning (CS:370E), CheckTemperatureWarning (CS:371A) and
-/// CheckEnergyWarning (CS:3726): that warning check, then the next ones round while CX lasts, until one
-/// posts its warning.
-void CheckMissileWarning(Guest& _guest);
-void CheckAltitudeWarning(Guest& _guest);
-void CheckTemperatureWarning(Guest& _guest);
-void CheckEnergyWarning(Guest& _guest);
-
-/// UpdateScannerBlip (CS:40EC): moves slot DI's scanner blip to camera-frame AX, BX, CX.
-void UpdateScannerBlip(Guest& _guest);
-
 /// UpdateCompass (CS:418F): moves the compass dot to the planet or the station. Every register comes
 /// back as the original leaves it; DI = stationSlot.
 void UpdateCompass(Guest& _guest);
-
-/// EraseScannerBlip (CS:42D6): erases slot DI's scanner blip, if it has one.
-void EraseScannerBlip(Guest& _guest);
 
 /// EraseCompassAndBlips (CS:4594): erases the compass dot and every scanner blip.
 void EraseCompassAndBlips(Guest& _guest);
@@ -116,9 +86,6 @@ void EngageJumpDrive(Guest& _guest);
 
 /// UpdatePlayerMotion (CS:8472): speed, roll and pitch for this frame, then the world moves.
 void UpdatePlayerMotion(Guest& _guest);
-
-/// UpdatePlayerVelocity (CS:8599): playerVelocity from playerSpeed and the angles, when velocityDirty.
-void UpdatePlayerVelocity(Guest& _guest);
 
 /// RunPauseScreen (CS:8D6A): the pause menu, until space resumes; its keys toggle the options and set
 /// the frame time, and A drops two return addresses to leave RunFlight for the title. Waits.
@@ -170,6 +137,15 @@ struct DashboardPixel
   std::uint8_t mask;
 };
 
+/// What the warning checks find: the check they stopped at, the count LOOP leaves, and the text of the warning that check
+/// posted, if it posted one.
+struct WarningChecks
+{
+  std::uint8_t check;
+  std::uint16_t checksLeft;
+  std::optional<std::uint16_t> text;
+};
+
 /// GetPreviousDustScreenPosition (CS:08A1): where the particle at DS:_particle was in the drawing buffer last frame,
 /// from its entry in stardustPrevious, when it was on screen then.
 [[nodiscard]] std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::uint16_t _particle);
@@ -177,10 +153,20 @@ struct DashboardPixel
 /// ComputeDustStripMask (CS:08B9): 2^n - 1 just covering |_step| / 2, the strip a respawned particle lands in.
 [[nodiscard]] std::uint16_t ComputeDustStripMask(std::int16_t _step);
 
+/// ShiftStardustSideways (CS:08CB): _step added to x of every particle on screen, a particle that leaves it born again on
+/// the edge it moves away from, in the strip ComputeDustStripMask gives for _step.
+void ShiftStardustSideways(GameState& _state, std::int16_t _step);
+
 /// RespawnDustAtSideEdge (CS:08F2): the particle at DS:_particle born again, its lifetime and its copy's at random
 /// and the copy marked new, at a random y on the edge a sideways _step moves away from, its x in the strip
 /// _stripMask covers. Returns where.
 [[nodiscard]] DustPosition RespawnDustAtSideEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask);
+
+/// RollStardust (CS:0927): every particle turned by rotationSinCos[7].
+void RollStardust(GameState& _state);
+
+/// ShiftStardustVertically (CS:0940): ShiftStardustSideways for y.
+void ShiftStardustVertically(GameState& _state, std::int16_t _step);
 
 /// RespawnDustAtVerticalEdge (CS:0969): RespawnDustAtSideEdge for a vertical _step: a random x, and y in the strip on
 /// the edge the step moves away from.
@@ -249,10 +235,35 @@ std::uint8_t UpdateConditionColor(GameState& _state);
 /// InSafeZone (CS:2E63): safeZoneFlags, read.
 [[nodiscard]] SafeZone InSafeZone(const GameState& _state);
 
+/// ComputeDeathDebrisVector (CS:2F8B): (0, 40, 0) turned by the view and, off the front view, by the roll, then by the yaw
+/// and the pitch, through rotationSinCos[8], [7] and [6], which it sets.
+[[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
+
+/// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
+/// four warning checks from the one after the last warning.
+void UpdateWarnings(GameState& _state);
+
+/// CheckMissileWarning (CS:36FD), CheckAltitudeWarning (CS:370E), CheckTemperatureWarning (CS:371A) and CheckEnergyWarning
+/// (CS:3726): that warning check, then the next ones round while _checks lasts as LOOP counts it, until one posts its
+/// warning. The missile check clears its alert.
+WarningChecks CheckMissileWarning(GameState& _state, std::uint16_t _checks);
+WarningChecks CheckAltitudeWarning(GameState& _state, std::uint16_t _checks);
+WarningChecks CheckTemperatureWarning(GameState& _state, std::uint16_t _checks);
+WarningChecks CheckEnergyWarning(GameState& _state, std::uint16_t _checks);
+
+/// UpdateScannerBlip (CS:40EC): unless _slot is debris, a station, the sun or the planet, its scanner blip moved to the
+/// camera-frame position _camera, y and z scaled by 1.25: the slot marked scanned, the old blip XORed out if one is drawn
+/// and the new one in. Returns the last pixel of the new blip, when it drew one.
+std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera);
+
 /// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
 /// neighbours, a ring, and the centre too while _inFront, solid. Returns the last pixel, one right of and one above
 /// the centre.
 DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
+
+/// EraseScannerBlip (CS:42D6): unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
+/// says so cleared. Returns the blip's last pixel, when it erased one.
+std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot);
 
 /// XorScannerBlip (CS:42F6): the scanner blip for the scanner bytes _x, _y and _z XORed into video memory: a stick from
 /// (3Dh + _x, 1Fh - _z / 4) of |_y / 4| pixels, up or down, and a pixel right of its end. Returns that last pixel.
@@ -265,6 +276,10 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
 /// DrainEnergy (CS:839F): playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
 void DrainEnergy(GameState& _state, std::int8_t _amount);
 
+/// UpdatePlayerVelocity (CS:8599): when velocityDirty, the velocity from playerSpeed along the pitch and the yaw, through
+/// rotationSinCos[6] and [7], which it sets. While jumpDriveEngaged it is 32 times the speed, for one frame.
+void UpdatePlayerVelocity(GameState& _state);
+
 /// MoveObjectsByVelocity (CS:85EC): the player's velocity, sign-extended, taken from the 24-bit position of each of
 /// shipSlotCount slots from shipSlots, and from its compass words: the player stays at the origin.
 void MoveObjectsByVelocity(GameState& _state);
@@ -276,11 +291,15 @@ void MoveObjectsByVelocity(GameState& _state);
 // the original leaves in one: then the entry leaves that, and the contract compares it (InvalidateDashboardEntry,
 // DrawMissileLockIndicatorEntry's, DrawSignedIndicatorEntry's and DrawMissileIconsEntry's CX, XorDashboardPixelEntry's
 // AX, BX and ES, ResetStardustEntry's AX and DI, XorCompassDotEntry's AX and BX, XorScannerBlipEntry's BX, CX, DX and
-// ES, and MoveObjectsByVelocityEntry's AX and SI).
+// ES, EraseScannerBlipEntry's AX, BX, CX, DX and ES, UpdateScannerBlipEntry's DX and ES, and MoveObjectsByVelocityEntry's
+// AX and SI).
 
 void GetPreviousDustScreenPositionEntry(Guest& _guest); ///< SI = the particle. Out: CF clear and CL, CH, or CF set.
 void ComputeDustStripMaskEntry(Guest& _guest);
-void RespawnDustAtSideEdgeEntry(Guest& _guest);     ///< SI = the particle, DX = the step, BP = the strip. Out: AX, BX.
+void ShiftStardustSidewaysEntry(Guest& _guest); ///< DX = the step.
+void RespawnDustAtSideEdgeEntry(Guest& _guest); ///< SI = the particle, DX = the step, BP = the strip. Out: AX, BX.
+void RollStardustEntry(Guest& _guest);
+void ShiftStardustVerticallyEntry(Guest& _guest);   ///< DX = the step.
 void RespawnDustAtVerticalEdgeEntry(Guest& _guest); ///< SI = the particle, DX = the step, BP = the strip. Out: AX, BX.
 void RespawnDustAnywhereEntry(Guest& _guest);       ///< SI = the particle. Out: AX, BX.
 void IsDustOnScreenEntry(Guest& _guest);
@@ -299,10 +318,19 @@ void DrawMissileLockIndicatorEntry(Guest& _guest);
 void DrawConditionLightEntry(Guest& _guest);
 void UpdateConditionColorEntry(Guest& _guest);
 void InSafeZoneEntry(Guest& _guest);
-void XorCompassDotEntry(Guest& _guest);  ///< DL, DH = the dot, BP = 0 behind. Out: AX = DX one right and one up, BX the mask.
-void XorScannerBlipEntry(Guest& _guest); ///< AH, BH, CH = the scanner bytes. Out: AX = DX the last pixel, BX its mask, CX.
+void ComputeDeathDebrisVectorEntry(Guest& _guest); ///< Out: AX, BX, CX.
+void UpdateWarningsEntry(Guest& _guest);
+void CheckMissileWarningEntry(Guest& _guest); ///< CX = the checks. Out: AL = the check, CX as LOOP leaves it; BX, AX once one posts.
+void CheckAltitudeWarningEntry(Guest& _guest);
+void CheckTemperatureWarningEntry(Guest& _guest);
+void CheckEnergyWarningEntry(Guest& _guest);
+void UpdateScannerBlipEntry(Guest& _guest); ///< DI = the slot, AX, BX, CX = the camera position. Out: DX, ES.
+void XorCompassDotEntry(Guest& _guest);     ///< DL, DH = the dot, BP = 0 behind. Out: AX = DX one right and one up, BX the mask.
+void EraseScannerBlipEntry(Guest& _guest);  ///< DI = the slot. Out, once it erases: AX = DX the last pixel, BX its mask, CX, ES.
+void XorScannerBlipEntry(Guest& _guest);    ///< AH, BH, CH = the scanner bytes. Out: AX = DX the last pixel, BX its mask, CX.
 void XorDashboardPixelEntry(Guest& _guest);
 void DrainEnergyEntry(Guest& _guest);
+void UpdatePlayerVelocityEntry(Guest& _guest);
 void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, SI past the last slot.
 
 } // namespace Elite
