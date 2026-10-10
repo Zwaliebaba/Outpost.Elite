@@ -35,7 +35,8 @@
 //
 // It checks that FILE (default ELITES.EXE) is the binary ADR-001 names, loads it, applies the D5 byte
 // in memory, and follows the steps (Replay.h), from --steps or from a replay file: shots go to
-// DIR/NAME.png, digests to standard output. DOS's files live in DIR/files. A file step copies from the
+// DIR/NAME.png, digests to standard output. DOS's files live in DIR/files, which must be empty when the run
+// starts, as a replay's conditions require (ADR-008); a run refuses one that is not. A file step copies from the
 // replay file's own directory, or from Replays/ in the repository for --steps.
 //
 // Time is clocked, as on the real machine, unless --paced is given; a replay is always paced. A digest
@@ -281,6 +282,15 @@ int Run(int _argc, char** _argv)
   if (created)
   {
     std::fprintf(stderr, "ReferenceRunner: cannot create %s\n", (options.out / "files").string().c_str());
+    return 2;
+  }
+  // A run starts with DOS's files in an empty directory (ADR-008 item 4). A file left by an earlier run would
+  // change what the disc menu catalogues, and --update would record that, so the run refuses rather than
+  // deleting what it did not write.
+  std::error_code listed;
+  if (!std::filesystem::is_empty(options.out / "files", listed) || listed)
+  {
+    std::fprintf(stderr, "ReferenceRunner: %s is not empty: empty it, or name another --out\n", (options.out / "files").string().c_str());
     return 2;
   }
   Machine::DirectoryFileStore files(options.out / "files");
