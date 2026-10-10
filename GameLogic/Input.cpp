@@ -156,23 +156,30 @@ void SaveScreenshotIfAsked(Guest& _guest)
   return static_cast<std::uint8_t>(value);
 }
 
-// ApplyKeyboardRates (0x7543): AL and AH, as keys, integrated into keyboardRollRate and keyboardPitchRate.
-void ApplyKeyboardRates(Guest& _guest)
+// ApplyKeyboardRates (0x7543): the keys _keys integrated into keyboardRollRate and keyboardPitchRate, written as one
+// word. Returns the rates.
+Steering ApplyKeyboardRates(GameState& _state, Steering _keys)
 {
-  Machine::Registers& regs = _guest.Regs();
-  GameState& state = _guest.State();
-  const auto integrate = [&](std::uint8_t _input, DataField<std::uint8_t> _rate)
+  const Steering rates{IntegrateRate(_state, _keys.roll, DS.keyboardRollRate), IntegrateRate(_state, _keys.pitch, DS.keyboardPitchRate)};
+  _state.SetWord(DS.keyboardRollRate.offset, Join(rates.pitch, rates.roll));
+  return rates;
+}
+
+// ApplyKeyboardRates on AL and AH, for ReadSteering's register code: AX the rates, and BL the key XOR its rate where the
+// original tests one for a reversal, the pitch's over the roll's. Neither test reads what the other axis writes.
+void ApplyKeyboardRatesToRegisters(Machine::Registers& _regs, GameState& _state)
+{
+  const Steering keys{Low(_regs.ax), High(_regs.ax)};
+  if (TestsReversal(_state, keys.roll, DS.keyboardRollRate))
   {
-    if (TestsReversal(state, _input, _rate))
-    {
-      SetLow(regs.bx, static_cast<std::uint8_t>(_input ^ state.Get(_rate)));
-    }
-    return IntegrateRate(state, _input, _rate);
-  };
-  const std::uint8_t roll = integrate(Low(regs.ax), DS.keyboardRollRate);
-  const std::uint8_t pitch = integrate(High(regs.ax), DS.keyboardPitchRate);
-  regs.ax = Join(pitch, roll);
-  _guest.SetWord(DS.keyboardRollRate.offset, regs.ax);
+    SetLow(_regs.bx, static_cast<std::uint8_t>(keys.roll ^ _state.Get(DS.keyboardRollRate)));
+  }
+  if (TestsReversal(_state, keys.pitch, DS.keyboardPitchRate))
+  {
+    SetLow(_regs.bx, static_cast<std::uint8_t>(keys.pitch ^ _state.Get(DS.keyboardPitchRate)));
+  }
+  const Steering rates = ApplyKeyboardRates(_state, keys);
+  _regs.ax = Join(rates.pitch, rates.roll);
 }
 
 // One axis of ReadKeyboardSteering: the ramp grows while the same key is held, inside +-23, and restarts on a change.
@@ -193,31 +200,31 @@ void RampAxis(GameState& _state, std::uint8_t _key, DataField<std::uint8_t> _las
   }
 }
 
-// ReadJoystickSteering's Amstrad stick (787D): its four key codes ramped as the keyboard's cursor keys are.
-void ReadAmstradStick(Guest& _guest)
+// ReadJoystickSteering's Amstrad stick (787D): its four key codes ramped as the keyboard's cursor keys are. Returns the
+// roll ramp and the pitch ramp negated.
+Steering ReadAmstradStick(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  if (_guest.Get(DS.keyDownAmstradUp) == 1)
+  if (_state.Get(DS.keyDownAmstradUp) == 1)
   {
     --pitch;
   }
-  if (_guest.Get(DS.keyDownAmstradDown) == 1)
+  if (_state.Get(DS.keyDownAmstradDown) == 1)
   {
     ++pitch;
   }
-  if (_guest.Get(DS.keyDownAmstradLeft) == 1)
+  if (_state.Get(DS.keyDownAmstradLeft) == 1)
   {
     --roll;
   }
-  if (_guest.Get(DS.keyDownAmstradRight) == 1)
+  if (_state.Get(DS.keyDownAmstradRight) == 1)
   {
     ++roll;
   }
-  RampAxis(_guest.State(), roll, DS.amstradStickLastRoll, DS.amstradStickRollRamp);
-  RampAxis(_guest.State(), pitch, DS.amstradStickLastPitch, DS.amstradStickPitchRamp);
-  regs.ax = Join(Negate(_guest.Get(DS.amstradStickPitchRamp)), _guest.Get(DS.amstradStickRollRamp));
+  RampAxis(_state, roll, DS.amstradStickLastRoll, DS.amstradStickRollRamp);
+  RampAxis(_state, pitch, DS.amstradStickLastPitch, DS.amstradStickPitchRamp);
+  return Steering{_state.Get(DS.amstradStickRollRamp), Negate(_state.Get(DS.amstradStickPitchRamp))};
 }
 
 // One axis of ReadJoystickSteering, on the count in AX: (count - centre) * 256 / centre by a DIV that can overflow into the
@@ -441,8 +448,8 @@ void ReadSteering(Guest& _guest)
   const std::uint8_t device = _guest.Get(DS.inputDevice);
   if (device == KEYBOARD_DEVICE)
   {
-    ReadKeyboardSteering(_guest);
-    ApplyKeyboardRates(_guest);
+    ReadKeyboardSteeringEntry(_guest);
+    ApplyKeyboardRatesToRegisters(_guest.Regs(), _guest.State());
     return;
   }
   if (device == JOYSTICK_DEVICE)
@@ -450,7 +457,7 @@ void ReadSteering(Guest& _guest)
     ReadJoystickSteering(_guest);
     if (_guest.Get(DS.joystickIsAmstrad) == 1)
     {
-      ApplyKeyboardRates(_guest);
+      ApplyKeyboardRatesToRegisters(_guest.Regs(), _guest.State());
     }
     return;
   }
@@ -602,7 +609,8 @@ void ReadJoystickSteering(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   if (_guest.Get(DS.joystickIsAmstrad) == 1)
   {
-    ReadAmstradStick(_guest);
+    const Steering stick = ReadAmstradStick(_guest.State());
+    regs.ax = Join(stick.pitch, stick.roll);
     return;
   }
   ReadJoystickAxes(_guest);
@@ -618,16 +626,12 @@ void ReadJoystickSteering(Guest& _guest)
   regs.ax = Join(ClampRate(Negate(Low(regs.ax))), ClampRate(Low(regs.cx)));
 }
 
-void ReadKeyboardSteering(Guest& _guest)
+Steering ReadKeyboardSteering(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  const auto held = [&](DataField<std::uint8_t> _first, DataField<std::uint8_t> _second)
-  {
-    regs.bx = WithLow(regs.bx, static_cast<std::uint8_t>(_guest.Get(_first) | _guest.Get(_second)));
-    return Low(regs.bx) != 0;
-  };
+  const auto held = [&_state](DataField<std::uint8_t> _first, DataField<std::uint8_t> _second)
+  { return (_state.Get(_first) | _state.Get(_second)) != 0; };
   if (held(DS.keyDownUp, DS.keyDownQ))
   {
     --pitch;
@@ -644,9 +648,9 @@ void ReadKeyboardSteering(Guest& _guest)
   {
     ++roll;
   }
-  RampAxis(_guest.State(), roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
-  RampAxis(_guest.State(), pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
-  regs.ax = Join(Negate(_guest.Get(DS.keyboardPitchRamp)), _guest.Get(DS.keyboardRollRamp));
+  RampAxis(_state, roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
+  RampAxis(_state, pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
+  return Steering{_state.Get(DS.keyboardRollRamp), Negate(_state.Get(DS.keyboardPitchRamp))};
 }
 
 void ReadMouseSteering(Guest& _guest)
@@ -723,6 +727,7 @@ using Machine::REGISTER_CX;
 using Machine::REGISTER_DX;
 
 constexpr Machine::NativeContract RETURNS_ZERO{0, FLAG_ZERO};
+constexpr Machine::NativeContract CLOBBERS_BX{REGISTER_BX, 0};
 
 // The steering bytes of a register, roll in the low byte and pitch in the high, and back.
 [[nodiscard]] Steering SteeringIn(std::uint16_t _register) noexcept
@@ -767,11 +772,17 @@ void ApplyReverseControlsToDxEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void ReadKeyboardSteeringEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = SteeringOut(ReadKeyboardSteering(_guest.State()));
+  _guest.Clobber(CLOBBERS_BX);
+}
+
 namespace
 {
 
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-constexpr Machine::NativeContract CLOBBERS_BX{REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract FIRE_BUTTON{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
@@ -794,7 +805,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxes, STICK_AXES, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
   NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteering, STICK_STEERING, Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
-  NativeEntry{0x78EF, "ReadKeyboardSteering", &ReadKeyboardSteering, CLOBBERS_BX},
+  NativeEntry{0x78EF, "ReadKeyboardSteering", &ReadKeyboardSteeringEntry, CLOBBERS_BX},
   NativeEntry{0x797E, "ReadMouseSteering", &ReadMouseSteering, CLOBBERS_BX_CX_DX},
   NativeEntry{0x7F3D, "PollScreenDumpKey", &PollScreenDumpKey, PRESERVES_ALL},
   NativeEntry{0x7F5D, "ResetMouseIfSelected", &ResetMouseIfSelected, CLOBBERS_AX_BX},

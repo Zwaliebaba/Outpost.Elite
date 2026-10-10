@@ -240,26 +240,30 @@ void AimRoll(Guest& _guest, bool _approach, std::uint8_t _next)
   _guest.Set(DS.dockingComputerState, _next);
 }
 
-// States 2 and 6: roll at 9 a frame towards dockingTargetAngle, and onto it once within 19.
-void RollToTarget(Guest& _guest, std::uint8_t _next)
+// An 11-bit angle sign-extended to 16 bits, as AngleWithinTolerance leaves its second.
+[[nodiscard]] std::uint16_t SignExtendAngle(std::uint16_t _angle) noexcept
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = _guest.Get(DS.playerRollAngle);
-  regs.cx = _guest.Get(DS.dockingTargetAngle);
-  regs.bx = ROLL_TOLERANCE;
-  AngleWithinToleranceEntry(_guest);
-  if (_guest.Flag(FLAG_CARRY))
+  const auto angle = static_cast<std::uint16_t>(_angle & ANGLE_MASK);
+  return (angle & ANGLE_SIGN) != 0 ? static_cast<std::uint16_t>(angle | ~ANGLE_MASK) : angle;
+}
+
+// States 2 and 6: roll at 9 a frame towards dockingTargetAngle, and onto it, sign-extended, once within 19; then on to
+// state _next. Returns what AngleWithinTolerance found.
+AngleTolerance RollToTarget(GameState& _state, std::uint8_t _next)
+{
+  const std::uint16_t target = _state.Get(DS.dockingTargetAngle);
+  const AngleTolerance found = AngleWithinTolerance(_state.Get(DS.playerRollAngle), target, ROLL_TOLERANCE);
+  if (found.within)
   {
-    _guest.Set(DS.playerRollAngle, regs.cx);
-    _guest.Set(DS.dockingComputerState, _next);
-    _guest.Set(DS.dockingComputerSteering, 0);
-    _guest.Set(DS.rollRate, 0);
-    return;
+    _state.Set(DS.playerRollAngle, SignExtendAngle(target));
+    _state.Set(DS.dockingComputerState, _next);
+    _state.Set(DS.dockingComputerSteering, 0);
+    _state.Set(DS.rollRate, 0);
+    return found;
   }
-  regs.ax = static_cast<std::uint16_t>(_guest.Get(DS.dockingTargetAngle) - _guest.Get(DS.playerRollAngle));
-  SetLow(regs.ax, (regs.ax & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP);
-  SetHigh(regs.ax, 0);
-  Steer(_guest.State(), regs.ax);
+  const auto turn = static_cast<std::uint16_t>(_state.Get(DS.dockingTargetAngle) - _state.Get(DS.playerRollAngle));
+  Steer(_state, Join(0, (turn & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP));
+  return found;
 }
 
 // States 3 and 7: pitch towards the target by _step a frame, or by half the angle once within
@@ -446,97 +450,66 @@ void DrawTunnelRectangle(Guest& _guest)
   } while (regs.cx != 0);
 }
 
-void CheckDockingAlignment(Guest& _guest)
+bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, std::uint16_t _tolerance)
 {
-  Machine::Registers& regs = _guest.Regs();
   // Pitch near 0 wants yaw near a half turn, and pitch near a half turn wants yaw near 0.
-  regs.ax = _guest.Get(DS.playerPitchAngle);
-  regs.cx = 0;
-  AngleWithinToleranceEntry(_guest);
-  if (_guest.Flag(Machine::FLAG_CARRY))
+  const std::uint16_t pitch = _state.Get(DS.playerPitchAngle);
+  std::uint16_t yaw = HALF_TURN;
+  if (!AngleWithinTolerance(pitch, 0, _tolerance).within)
   {
-    regs.cx = HALF_TURN;
-  }
-  else
-  {
-    regs.cx = HALF_TURN;
-    AngleWithinToleranceEntry(_guest);
-    if (!_guest.Flag(Machine::FLAG_CARRY))
+    if (!AngleWithinTolerance(pitch, HALF_TURN, _tolerance).within)
     {
-      return;
+      return false;
     }
-    regs.cx = 0;
+    yaw = 0;
   }
-  regs.ax = _guest.Get(DS.playerYawAngle);
-  AngleWithinToleranceEntry(_guest);
-  if (!_guest.Flag(Machine::FLAG_CARRY))
+  if (!AngleWithinTolerance(_state.Get(DS.playerYawAngle), yaw, _tolerance).within)
   {
-    return;
+    return false;
   }
 
   // Roll near the station's spin, negated for ship type 0, or half a turn from it.
-  regs.ax = _guest.Get(DS.playerRollAngle);
-  regs.cx = _guest.Word(static_cast<std::uint16_t>(regs.di + STATION_SPIN_ANGLE));
-  regs.dx = WithLow(regs.dx, static_cast<std::uint8_t>((_guest.Byte(regs.di) >> 1) & SHIP_TYPE_MASK));
-  if (Low(regs.dx) == 0)
+  const std::uint16_t roll = _state.Get(DS.playerRollAngle);
+  std::uint16_t spin = _station.Get(SlotWord::Roll);
+  if (((_station.Get(SlotByte::Type) >> 1) & SHIP_TYPE_MASK) == 0)
   {
-    regs.cx = static_cast<std::uint16_t>(0u - regs.cx);
+    spin = Negate(spin);
   }
-  regs.cx &= ANGLE_MASK;
-  AngleWithinToleranceEntry(_guest);
-  if (_guest.Flag(Machine::FLAG_CARRY))
+  spin &= ANGLE_MASK;
+  if (AngleWithinTolerance(roll, spin, _tolerance).within)
   {
-    return;
+    return true;
   }
-  regs.cx = static_cast<std::uint16_t>((regs.cx + HALF_TURN) & ANGLE_MASK);
-  AngleWithinToleranceEntry(_guest);
+  return AngleWithinTolerance(roll, static_cast<std::uint16_t>((spin + HALF_TURN) & ANGLE_MASK), _tolerance).within;
 }
 
-void MaskOutsideTunnel(Guest& _guest)
+void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwards)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // The margins: x/4 bytes either side, and the rows above and below the rectangle.
-  regs.dx = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_guest.Byte(regs.si) + VIEW_CENTER_X) >> 2);
-  const std::uint8_t top = _guest.Byte(static_cast<std::uint16_t>(regs.si + 1));
-  regs.bx = static_cast<std::uint8_t>(static_cast<std::uint8_t>(0u - top) << 1);
-  regs.bp = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
-  regs.es = regs.ds;
-  regs.ax = 0;
-  regs.di = 0;
-  regs.cx = regs.bp;
-  regs.di = Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 2, (regs.flags & Machine::FLAG_DIRECTION) != 0);
-  regs.cx = 0;
-  const std::uint16_t rows = regs.bx;
+  // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
+  // through ES = DS.
+  const std::uint16_t segment = _state.DataSegment();
+  const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_state.Byte(_rectangle) + VIEW_CENTER_X) >> 2);
+  const std::uint8_t top = _state.Byte(Offset(_rectangle, 1));
+  const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
+  const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
+  // The rows above, then the sides of each row of the rectangle, forwards or, as the direction flag says, down; DEC BX
+  // and JNE count the rows, 65,536 for 0.
+  std::uint16_t row = Store(_state, segment, 0, marginWords, 0, 2, _backwards);
+  std::uint16_t left = rows;
   do
   {
-    const std::uint16_t row = regs.di;
-    regs.cx = regs.dx;
-    Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 1, (regs.flags & Machine::FLAG_DIRECTION) != 0);
-    regs.cx = 0;
-    regs.di = static_cast<std::uint16_t>(row + VIEW_ROW_BYTES);
-    --regs.bx;
-  } while (regs.bx != 0);
-  regs.bx = rows;
+    Store(_state, segment, row, sideBytes, 0, 1, _backwards);
+    row = Offset(row, VIEW_ROW_BYTES);
+  } while (--left != 0);
 
-  // The same from the end of the buffer, backwards.
-  regs.di = VIEW_LAST_WORD;
-  _guest.SetFlag(Machine::FLAG_DIRECTION, true);
-  regs.cx = regs.bp;
-  regs.di = Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 2, true);
-  regs.cx = 0;
-  ++regs.di;
+  // The same from the end of the buffer, backwards (STD).
+  row = Offset(Store(_state, segment, VIEW_LAST_WORD, marginWords, 0, 2, true), 1);
+  left = rows;
   do
   {
-    const std::uint16_t row = regs.di;
-    regs.cx = regs.dx;
-    Store(_guest.State(), regs.es, regs.di, regs.cx, regs.ax, 1, true);
-    regs.cx = 0;
-    regs.di = static_cast<std::uint16_t>(row - VIEW_ROW_BYTES);
-    --regs.bx;
-  } while (regs.bx != 0);
-  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
+    Store(_state, segment, row, sideBytes, 0, 1, true);
+    row = static_cast<std::uint16_t>(row - VIEW_ROW_BYTES);
+  } while (--left != 0);
 }
 
 void PlayStationTunnel(Guest& _guest)
@@ -658,6 +631,19 @@ void ToggleDockingComputer(Guest& _guest)
 
 void RunDockingComputer(Guest& _guest)
 {
+  Registers& regs = _guest.Regs();
+  // States 2 and 6, with what the original leaves in the registers: AX the roll angle it compared or the step it
+  // steers by, BX the tolerance, CX the target as AngleWithinTolerance sign-extends it, and DX the excess.
+  const auto rollToTarget = [&](std::uint8_t _next)
+  {
+    const std::uint16_t roll = _guest.Get(DS.playerRollAngle);
+    const std::uint16_t target = _guest.Get(DS.dockingTargetAngle);
+    const AngleTolerance found = RollToTarget(_guest.State(), _next);
+    regs.ax = found.within ? roll : _guest.Get(DS.dockingComputerSteering);
+    regs.bx = ROLL_TOLERANCE;
+    regs.cx = SignExtendAngle(target);
+    regs.dx = found.excess;
+  };
   _guest.Set(DS.dockingComputerSteering, 0);
   _guest.Set(DS.rollRate, 0);
   switch (_guest.Get(DS.dockingComputerState))
@@ -676,7 +662,7 @@ void RunDockingComputer(Guest& _guest)
     AimRoll(_guest, true, ROLL_TO_APPROACH);
     return;
   case ROLL_TO_APPROACH:
-    RollToTarget(_guest, PITCH_TO_APPROACH);
+    rollToTarget(PITCH_TO_APPROACH);
     return;
   case PITCH_TO_APPROACH:
     PitchToTarget(_guest, true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH);
@@ -688,7 +674,7 @@ void RunDockingComputer(Guest& _guest)
     AimRoll(_guest, false, ROLL_TO_STATION);
     return;
   case ROLL_TO_STATION:
-    RollToTarget(_guest, PITCH_TO_STATION);
+    rollToTarget(PITCH_TO_STATION);
     return;
   case PITCH_TO_STATION:
     PitchToTarget(_guest, false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN);
@@ -739,18 +725,43 @@ using Machine::REGISTER_SI;
 
 constexpr Machine::NativeContract CLOBBERS_ALL{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
-constexpr Machine::NativeContract CLOBBERS_ALL_BUT_ES{
-  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
+// MaskOutsideTunnel's: the original reads the rectangle through SI and leaves it there, and PlayStationTunnel draws the
+// rectangles from it.
+constexpr Machine::NativeContract CLOBBERS_ALL_BUT_SI_ES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP,
+                                                         0};
 constexpr Machine::NativeContract ALIGNMENT{REGISTER_AX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
 // ArcTangent2's leftovers, which no caller reads (ADR-012).
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 
+} // namespace
+
+void CheckDockingAlignmentEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.SetFlag(FLAG_CARRY, CheckDockingAlignment(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.bx));
+  _guest.Clobber(ALIGNMENT);
+}
+
+void MaskOutsideTunnelEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  MaskOutsideTunnel(_guest.State(), regs.si, _guest.Flag(Machine::FLAG_DIRECTION));
+  // CLD, and ES back on the CGA's memory through AX.
+  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = Guest::VIDEO_SEGMENT;
+  _guest.Clobber(CLOBBERS_ALL_BUT_SI_ES);
+}
+
+namespace
+{
+
 // PlayStationTunnel waits as a rule: for frames, and docking for the timer too.
 constexpr std::array ENTRIES = {
   NativeEntry{0x1AA0, "DrawTunnelRectangle", &DrawTunnelRectangle, CLOBBERS_ALL},
-  NativeEntry{0x2D0F, "CheckDockingAlignment", &CheckDockingAlignment, ALIGNMENT},
+  NativeEntry{0x2D0F, "CheckDockingAlignment", &CheckDockingAlignmentEntry, ALIGNMENT},
   NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnel, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
-  NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnel, CLOBBERS_ALL_BUT_ES},
+  NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnelEntry, CLOBBERS_ALL_BUT_SI_ES},
   NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputer, PRESERVES_ALL},
   NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputer, CLOBBERS_BX_CX_DX},
   NativeEntry{0x8BAA, "CancelDockingComputer", &CancelDockingComputer, PRESERVES_ALL},

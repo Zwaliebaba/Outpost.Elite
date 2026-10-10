@@ -142,24 +142,20 @@ void ExitToDos(Guest& _guest)
 
 } // namespace
 
-void InstallDivideAndKeyboardInterrupts(Guest& _guest)
+void InstallDivideAndKeyboardInterrupts(GameState& _state, std::uint16_t _vectors)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetWord(DS.savedDivideVector.offset, _guest.FarWord(regs.es, DIVIDE_VECTOR_OFFSET));
-  _guest.Set(DS.data226D, _guest.FarWord(regs.es, DIVIDE_VECTOR_SEGMENT));
-  _guest.SetWord(DS.savedKeyboardVector.offset, _guest.FarWord(regs.es, KEYBOARD_VECTOR_OFFSET));
-  _guest.Set(DS.data2271, _guest.FarWord(regs.es, KEYBOARD_VECTOR_SEGMENT));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
-  _guest.SetFarWord(regs.es, DIVIDE_VECTOR_OFFSET, DIVIDE_OVERFLOW_INTERRUPT);
-  _guest.SetFarWord(regs.es, KEYBOARD_VECTOR_OFFSET, KEYBOARD_INTERRUPT);
-  const std::uint16_t code = _guest.CodeSegment();
-  _guest.SetFarWord(regs.es, DIVIDE_VECTOR_SEGMENT, code);
-  _guest.SetFarWord(regs.es, TIMER_VECTOR_SEGMENT, code);
-  _guest.SetFarWord(regs.es, KEYBOARD_VECTOR_SEGMENT, code);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
-  ResetKeyboardEntry(_guest);
+  _state.SetWord(DS.savedDivideVector.offset, _state.FarWord(_vectors, DIVIDE_VECTOR_OFFSET));
+  _state.Set(DS.data226D, _state.FarWord(_vectors, DIVIDE_VECTOR_SEGMENT));
+  _state.SetWord(DS.savedKeyboardVector.offset, _state.FarWord(_vectors, KEYBOARD_VECTOR_OFFSET));
+  _state.Set(DS.data2271, _state.FarWord(_vectors, KEYBOARD_VECTOR_SEGMENT));
+  // Under CLI in the original, which nothing interrupts in native code.
+  _state.SetFarWord(_vectors, DIVIDE_VECTOR_OFFSET, DIVIDE_OVERFLOW_INTERRUPT);
+  _state.SetFarWord(_vectors, KEYBOARD_VECTOR_OFFSET, KEYBOARD_INTERRUPT);
+  const std::uint16_t code = _state.CodeSegment();
+  _state.SetFarWord(_vectors, DIVIDE_VECTOR_SEGMENT, code);
+  _state.SetFarWord(_vectors, TIMER_VECTOR_SEGMENT, code);
+  _state.SetFarWord(_vectors, KEYBOARD_VECTOR_SEGMENT, code);
+  ResetKeyboard(_state);
 }
 
 void RestoreDivideAndKeyboardInterrupts(GameState& _state)
@@ -248,44 +244,37 @@ void CopyProtection(Guest& _guest)
   _guest.Set(DS.protectionQuestion, NO_QUESTION);
 }
 
-void StartNewGame(Guest& _guest)
+void StartNewGame(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = regs.ds;
-  regs.es = regs.ds;
-  regs.di = DS.commanderBlock.offset;
-  regs.si = DS.startupCommander.offset;
-  regs.cx = _guest.Get(DS.commanderFileBytes);
-  const std::uint16_t moved = MoveBytes(_guest.State(), regs.ds, regs.si, regs.es, regs.di, regs.cx, _guest.Flag(Machine::FLAG_DIRECTION));
-  regs.si = Offset(regs.si, moved);
-  regs.di = Offset(regs.di, moved);
-  regs.cx = 0;
-  _guest.Set(DS.witchspaceCountdown, 0);
-  _guest.Set(DS.playerEnergy, NEW_GAME_ENERGY);
-  _guest.Set(DS.foreShield, FULL_SHIELD);
-  _guest.Set(DS.aftShield, FULL_SHIELD);
-  _guest.Set(DS.cabinTemperature, NEW_GAME_CABIN_TEMPERATURE);
-  _guest.Set(DS.altitude, NEW_GAME_ALTITUDE);
-  _guest.Set(DS.playerDead, 0);
-  _guest.Set(DS.missionJumpCount, 0);
-  _guest.Set(DS.data7629, 0);
-  _guest.Set(DS.missionNumber, 0);
-  _guest.Set(DS.warningFrames, 0);
-  _guest.Set(DS.incomingMissileAlert, 0);
-  _guest.Set(DS.missionStage, 0);
-  _guest.Set(DS.fuelLeakDelayFrames, 0);
-  _guest.Set(DS.fuelLeakFrames, 0);
-  _guest.Set(DS.supernovaFrames, 0);
-  _guest.Set(DS.supernovaHeat, 0);
-  _guest.Set(DS.maskShipDestroyed, 0);
-  _guest.Set(DS.thargoidInvasionActive, 0);
-  _guest.Set(DS.maskMissionShipsLeft, 0);
-  _guest.Set(DS.invadedStationDestroyed, 0);
-  _guest.Set(DS.forceMisjump, 0);
-  _guest.Set(DS.messageFrames, 0);
-  _guest.Set(DS.missileState, 0);
-  _guest.Set(DS.fledMaskShip, 0);
-  _guest.Set(DS.maskSystemJumps, 0);
+  // REP MOVSB from DS to ES = DS.
+  const std::uint16_t data = _state.DataSegment();
+  MoveBytes(_state, data, DS.startupCommander.offset, data, DS.commanderBlock.offset, _state.Get(DS.commanderFileBytes), _backward);
+  _state.Set(DS.witchspaceCountdown, 0);
+  _state.Set(DS.playerEnergy, NEW_GAME_ENERGY);
+  _state.Set(DS.foreShield, FULL_SHIELD);
+  _state.Set(DS.aftShield, FULL_SHIELD);
+  _state.Set(DS.cabinTemperature, NEW_GAME_CABIN_TEMPERATURE);
+  _state.Set(DS.altitude, NEW_GAME_ALTITUDE);
+  _state.Set(DS.playerDead, 0);
+  _state.Set(DS.missionJumpCount, 0);
+  _state.Set(DS.data7629, 0);
+  _state.Set(DS.missionNumber, 0);
+  _state.Set(DS.warningFrames, 0);
+  _state.Set(DS.incomingMissileAlert, 0);
+  _state.Set(DS.missionStage, 0);
+  _state.Set(DS.fuelLeakDelayFrames, 0);
+  _state.Set(DS.fuelLeakFrames, 0);
+  _state.Set(DS.supernovaFrames, 0);
+  _state.Set(DS.supernovaHeat, 0);
+  _state.Set(DS.maskShipDestroyed, 0);
+  _state.Set(DS.thargoidInvasionActive, 0);
+  _state.Set(DS.maskMissionShipsLeft, 0);
+  _state.Set(DS.invadedStationDestroyed, 0);
+  _state.Set(DS.forceMisjump, 0);
+  _state.Set(DS.messageFrames, 0);
+  _state.Set(DS.missileState, 0);
+  _state.Set(DS.fledMaskShip, 0);
+  _state.Set(DS.maskSystemJumps, 0);
 }
 
 void Start(Guest& _guest)
@@ -480,6 +469,17 @@ constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
 
 } // namespace
 
+void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  InstallDivideAndKeyboardInterrupts(_guest.State(), regs.es);
+  // ES on the CGA's memory through AX, and the STIs, the original's own and ResetKeyboard's.
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = Guest::VIDEO_SEGMENT;
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _guest.Clobber(CLOBBERS_AX);
+}
+
 void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest)
 {
   // CLI round the writes, which nothing interrupts in native code, then STI.
@@ -502,17 +502,27 @@ void WipeProgramEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF);
 }
 
+void StartNewGameEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  StartNewGame(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+  // MOV AX,DS / MOV ES,AX for the copy.
+  regs.ax = regs.ds;
+  regs.es = regs.ds;
+  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
+}
+
 namespace
 {
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x0000, "Start", &Start, CLOBBERS_EVERY_REGISTER, Machine::NativeReturn::Far, 0, ALWAYS},
-  NativeEntry{0x0105, "InstallDivideAndKeyboardInterrupts", &InstallDivideAndKeyboardInterrupts, CLOBBERS_AX},
+  NativeEntry{0x0105, "InstallDivideAndKeyboardInterrupts", &InstallDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
   NativeEntry{0x0148, "RestoreDivideAndKeyboardInterrupts", &RestoreDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
   NativeEntry{0x02A5, "CheckCheatArgument", &CheckCheatArgumentEntry, CLOBBERS_AX_BX_CX_SI},
   NativeEntry{0x04A3, "CopyProtection", &CopyProtection, CLOBBERS_ALL},
   NativeEntry{0x0554, "WipeProgram", &WipeProgramEntry, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
-  NativeEntry{0x4671, "StartNewGame", &StartNewGame, CLOBBERS_AX_CX_SI_DI},
+  NativeEntry{0x4671, "StartNewGame", &StartNewGameEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x7D30, "GameLoop", &GameLoop, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},
   NativeEntry{0x8F02, "ShowCredits", &ShowCredits, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},
 };

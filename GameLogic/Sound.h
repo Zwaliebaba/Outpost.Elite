@@ -4,6 +4,8 @@
 #include "GameState.h"
 #include "NativeEntry.h"
 
+#include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -41,10 +43,6 @@ void StartExplosionSound(Guest& _guest);
 /// StartPlayerDeathSound (CS:7B09): a noise sweep, step 60 shrinking by 7. AL clobbered; IF set on return.
 void StartPlayerDeathSound(Guest& _guest);
 
-/// StartLaserSound (CS:7B71): unless a noise sweep runs, a tone sweep, step 20 shrinking by 2. AL
-/// clobbered; IF set on return when it starts one.
-void StartLaserSound(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
 /// StartBeep (CS:7A57): beepTicks = 70.
@@ -59,6 +57,10 @@ void StopSoundEffects(GameState& _state);
 /// StopContinuousNoise (CS:7B6B): continuousNoise = 0.
 void StopContinuousNoise(GameState& _state);
 
+/// StartLaserSound (CS:7B71): unless a noise sweep runs, a tone sweep, step 20 shrinking by 2. The original starts it
+/// under CLI. Returns the step length the step counter starts at, or nothing when a noise sweep runs.
+std::optional<std::uint8_t> StartLaserSound(GameState& _state);
+
 /// StartPlayerHitSound (CS:7B96): 100 ticks of noise, the tone sweep and the two-tone stopped. The original does it
 /// under CLI.
 void StartPlayerHitSound(GameState& _state);
@@ -69,6 +71,7 @@ void StartBeepEntry(Guest& _guest);           ///< Preserves every register.
 void StartLowBeepEntry(Guest& _guest);        ///< Preserves every register.
 void StopSoundEffectsEntry(Guest& _guest);    ///< Out: IF=1.
 void StopContinuousNoiseEntry(Guest& _guest); ///< Preserves every register.
+void StartLaserSoundEntry(Guest& _guest);     ///< AL clobbered; IF set on return when it starts a sweep.
 void StartPlayerHitSoundEntry(Guest& _guest); ///< Out: IF=1.
 
 } // namespace Elite

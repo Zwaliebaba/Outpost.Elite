@@ -655,7 +655,7 @@ void ShowDiskError(Guest& _guest)
     regs.si = DS.diskErrorText.offset;
     regs.di = GRAPHICS_ERROR_POSITION;
     regs.bx = 0xFFFF; // colour 3
-    DrawScreenString(_guest);
+    DrawScreenStringEntry(_guest);
     return;
   }
   // The characters alone, over the text page's attributes.

@@ -26,9 +26,6 @@ void ShowGalacticChart(Guest& _guest);
 /// runs its own. Waits for keys. Out: AX the closing key.
 void ShowShortRangeChart(Guest& _guest);
 
-/// IsSystemOnChart (CS:10AF): GetShortRangeOffset's CF, keeping AX, CX and DX.
-void IsSystemOnChart(Guest& _guest);
-
 /// SelectSystemAtCursor (CS:1199): the system nearest the cursor, its distance, its data and its name.
 void SelectSystemAtCursor(Guest& _guest);
 
@@ -42,13 +39,6 @@ void ShowNearestSystemDistance(Guest& _guest);
 
 /// LoadSystemSeeds (CS:139C): the seeds of system CL of the current galaxy. Out: CX = 0.
 void LoadSystemSeeds(Guest& _guest);
-
-/// AdvanceToNextSystem (CS:13B4): four TwistSystemSeeds.
-void AdvanceToNextSystem(Guest& _guest);
-
-/// GenerateSystemName (CS:13C1): selectedSystemName from systemSeed0-2, leaving the seeds on the next
-/// system. Out: DH = the name's length.
-void GenerateSystemName(Guest& _guest);
 
 /// FindSystemByName (CS:140D): reads a name under the chart (ReadTextLine) and, if a system of the galaxy has it
 /// and it is on the chart, moves the cursor there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing
@@ -85,10 +75,6 @@ void InsertSystemAdjective(Guest& _guest);
 
 /// InsertRandomName (CS:70C1): control code 3, a name made from descriptionSeed0-1 into DI.
 void InsertRandomName(Guest& _guest);
-
-/// CopySelectedNameLower (CS:7124): selectedSystemName into descriptionNameBuffer, all but its first
-/// letter lower-cased, then a space. Out: DI at the space.
-void CopySelectedNameLower(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -154,6 +140,9 @@ struct LabelNudge
 /// short-range chart its offsets from the current system.
 [[nodiscard]] ShortRangeOffset GetShortRangeOffset(const GameState& _state);
 
+/// IsSystemOnChart (CS:10AF): whether the system in systemSeeds is on the current chart, as GetShortRangeOffset finds.
+[[nodiscard]] bool IsSystemOnChart(const GameState& _state);
+
 /// TwistSystemSeeds (CS:10C0): systemSeed0-2 (a, b, c) become (b, c, a+b+c).
 void TwistSystemSeeds(GameState& _state);
 
@@ -170,6 +159,13 @@ void MoveCursorToSystem(GameState& _state);
 /// ComputeDistanceToSystem (CS:12F9): the distance from the current system to the one in systemSeeds, in
 /// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedDistanceTenthsLy.
 std::uint16_t ComputeDistanceToSystem(GameState& _state);
+
+/// AdvanceToNextSystem (CS:13B4): four TwistSystemSeeds, the seeds of the next system.
+void AdvanceToNextSystem(GameState& _state);
+
+/// GenerateSystemName (CS:13C1): selectedSystemName and its length from systemSeed0-2, leaving the seeds on the next
+/// system. Returns the length.
+std::uint8_t GenerateSystemName(GameState& _state);
 
 /// AddChartLabel (CS:1552): appends a label item, its x range _x and its rows _rows, for the name at
 /// chartLabelCursor, and moves chartLabelCursor past the name.
@@ -201,17 +197,24 @@ void StopCapitalizing(GameState& _state);
 /// NextDescriptionRandom (CS:7115): the Fibonacci step on descriptionSeed0-1, (a, b) to (b, a+b), and a+b.
 std::uint16_t NextDescriptionRandom(GameState& _state);
 
+/// CopySelectedNameLower (CS:7124): selectedSystemName, terminated, into descriptionNameBuffer, all but its first
+/// letter lower-cased, then a space and a NUL. Returns the offset of the space.
+std::uint16_t CopySelectedNameLower(GameState& _state);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
 void GetShortRangeOffsetEntry(Guest& _guest);
+void IsSystemOnChartEntry(Guest& _guest);
 void TwistSystemSeedsEntry(Guest& _guest);
 void LoadGalaxySeedsEntry(Guest& _guest);
 void GetCursorGalaxyPositionEntry(Guest& _guest);
 void MoveCursorToSystemEntry(Guest& _guest);
 void ComputeDistanceToSystemEntry(Guest& _guest);
+void AdvanceToNextSystemEntry(Guest& _guest);
+void GenerateSystemNameEntry(Guest& _guest);
 void AddChartLabelEntry(Guest& _guest);
 void NudgeChartLabelEntry(Guest& _guest);
 void ChartItemOverlapsEntry(Guest& _guest);
@@ -221,5 +224,6 @@ void BackspaceDescriptionEntry(Guest& _guest);
 void StartCapitalizingEntry(Guest& _guest);
 void StopCapitalizingEntry(Guest& _guest);
 void NextDescriptionRandomEntry(Guest& _guest);
+void CopySelectedNameLowerEntry(Guest& _guest);
 
 } // namespace Elite
