@@ -1426,7 +1426,7 @@ void KillPlayerEntry(Guest& _guest)
   if (const std::optional<std::uint8_t> stepLength = KillPlayer(_guest.State()))
   {
     SetLow(_guest.Regs().ax, *stepLength);
-    _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+    _guest.Devices().EnableInterrupts();
   }
   _guest.Clobber(KILLS_PLAYER);
 }
