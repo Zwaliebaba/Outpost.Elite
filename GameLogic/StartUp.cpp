@@ -86,8 +86,7 @@ constexpr std::uint16_t CREDITS_FIRST_LINE = 0x202;
 constexpr std::uint16_t CREDITS_LINES = 9;
 constexpr std::uint16_t CREDITS_LINE_STEP = 0x200;
 constexpr std::uint16_t WHITE_MASK = 0xFFFF;
-constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000;   // 3 s
-constexpr std::uint16_t PRESENT_SPACE_VIEW_BP = 0x20; // PresentSpaceView's MOV BP,20h: the words of a line it copies
+constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 
 // REP MOVSB: _count bytes from _sourceSegment:_source to _destinationSegment:_destination, forwards or, with DF set
 // (_backward), backwards. Returns how far each offset moved, which the original leaves added to SI and DI.

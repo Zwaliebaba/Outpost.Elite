@@ -77,16 +77,19 @@ void Hardware::SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor)
   m_pc.Ports().Out8(PIT_COMMAND_PORT, _mode);
   m_pc.Ports().Out8(PIT_CHANNEL_0_PORT, Low(_divisor));
   m_pc.Ports().Out8(PIT_CHANNEL_0_PORT, High(_divisor));
+  m_pc.TakeDueInterrupts();
 }
 
 void Hardware::EndOfInterrupt()
 {
   m_pc.Ports().Out8(PIC_COMMAND_PORT, END_OF_INTERRUPT);
+  m_pc.TakeDueInterrupts();
 }
 
-void Hardware::EnableInterrupts() noexcept
+void Hardware::EnableInterrupts()
 {
   m_pc.Processor().Regs().flags |= Machine::FLAG_INTERRUPT;
+  m_pc.TakeDueInterrupts();
 }
 
 void Hardware::LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried)
@@ -411,13 +414,6 @@ DosAnswer Hardware::FindFirstFile(std::uint16_t _segment, std::uint16_t _pattern
 DosAnswer Hardware::FindNextFile()
 {
   return Answer(CallService(m_pc, DOS_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, DOS_FIND_NEXT); }));
-}
-
-// ── Maths, Input, Text and SaveScreenshot (level 5, group A) ──
-
-void Hardware::TakeDueInterrupts()
-{
-  m_pc.TakeDueInterrupts();
 }
 
 // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──

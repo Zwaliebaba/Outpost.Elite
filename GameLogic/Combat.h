@@ -20,9 +20,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> CombatEntries() noexcept;
 
-/// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player: its beam, then the damage to a shield and the energy.
-void ApplyEnemyLaserHit(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
 /// What Routine8C51 finds of a slot.
@@ -201,6 +198,13 @@ KillCredit CreditKill(GameState& _state, ObjectSlot _slot);
 /// Routine8C51 (CS:8C51): _slot's type, and whether it is a Thargon's or a Thargoid's.
 [[nodiscard]] ThargoidTest Routine8C51(const ObjectSlot& _slot);
 
+/// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player (playerHitPending): StartPlayerHitSound and its STI; when the attacker
+/// at playerHitBy was drawn this frame, its beam in colour 3 from where it is on screen (ProjectToScreen) to a random point on an
+/// edge of the view (DrawClippedLine); then 15 off the fore shield, or the aft while the attacker is behind (playerHitByDepth
+/// bit 7), written back and 0 over it on a borrow, and what it could not take off playerEnergy likewise, where a borrow sets
+/// playerDead. Returns whether the beam was a horizontal line, which DrawLine fills by REP STOSB.
+bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware);
+
 /// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
 /// shipSlots, its state and hostility cleared and 2 off its aggression, at least 0.
 void UseMaskingDevice(GameState& _state);
@@ -237,6 +241,7 @@ void ExplodeObjectEntry(Guest& _guest);               ///< DI = the object. Clob
 void UpdateMissileAiEntry(Guest& _guest);
 /// Out: CF set and DI = the slot when one is in the crosshairs, else DI past the slots. AX, BX, CX, DX, SI, BP clobbered.
 void FindShipInCrosshairsEntry(Guest& _guest);
-void ResolveLaserFireEntry(Guest& _guest); ///< Out: DF clear once a beam was horizontal. Clobbers all.
+void ResolveLaserFireEntry(Guest& _guest);   ///< Out: DF clear once a beam was horizontal. Clobbers all.
+void ApplyEnemyLaserHitEntry(Guest& _guest); ///< Out: DF clear once the beam was horizontal; IF=1 after a hit. Clobbers all but DS.
 
 } // namespace Elite

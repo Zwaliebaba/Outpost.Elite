@@ -52,6 +52,10 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
 void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 
+/// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in BP: its MOV BP,20h, the words of a line it copies. The status
+/// screen shown after the credits, or after docking, hands it to SelectSystemAtCursor as the count when no system is on the chart.
+inline constexpr std::uint16_t PRESENT_SPACE_VIEW_BP = 0x20;
+
 /// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
 /// ClearDrawBuffer, both forwards. It waits.
 void PresentChartFrame(GameState& _state, Hardware& _hardware);

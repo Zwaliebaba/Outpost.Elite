@@ -28,14 +28,12 @@ constexpr std::uint16_t ALL_BUT_DS = Machine::REGISTER_AX | Machine::REGISTER_BX
 constexpr Machine::NativeContract DRAWS_SUN_OR_PLANET{ALL_BUT_DS, 0};
 constexpr Machine::NativeContract DRAWS_DISTANT_STATION{ALL_BUT_DS, 0};
 
-// The routines of other subsystems these call, by entry.
-constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
-constexpr std::uint16_t KILL_PLAYER = 0x3115;
-constexpr std::uint16_t IS_SUN_OR_PLANET = 0x3F2A;
-constexpr std::uint16_t IS_PLANET = 0x3F37;
-constexpr std::uint16_t IS_STATION = 0x3F40;
-constexpr std::uint16_t UPDATE_COMPASS = 0x418F;
-constexpr std::uint16_t REMOVE_OBJECT = 0x4F98;
+// TransformAndDrawObjects': every register but DS, as its callers' contracts already give it.
+constexpr Machine::NativeContract TRANSFORMS_AND_DRAWS_OBJECTS{ALL_BUT_DS, 0};
+
+// The ship slots DetonateEnergyBomb's LOOP looks at begin at firstShipSlot, after the sun, the planet and the station: its count is
+// objectSlotCount less these.
+constexpr std::uint8_t BOMB_FIRST_SLOT = 3;
 
 // The blueprint handlers, as a blueprint's first word names them, and the bytes before the rest of a blueprint: that word and the
 // half-width byte.
@@ -52,19 +50,13 @@ constexpr std::uint16_t DISC_X_DIVIDE_RETURN = 0x4064;
 constexpr std::uint16_t SCREEN_X_DIVIDE_RETURN = 0x8D4B;
 constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
 
-// An object slot's fields beyond those Ships.h names (SLOT_BYTES, SLOT_PITCH, SLOT_YAW, SLOT_ROLL, SLOT_VIEW_X, SLOT_VIEW_Y,
-// SLOT_VIEW_Z, SLOT_FLAGS, SLOT_DETAIL).
-constexpr std::uint16_t SLOT_FRAMES_AWAY = 0x34;
-constexpr std::uint16_t SLOT_DEPTH = 0x3D;
-constexpr std::uint16_t SLOT_SIZE = 0x3E;
-
 // Byte 0 of a slot, with Ships.h's SLOT_ACTIVE.
 constexpr std::uint8_t SLOT_TYPE_BITS = 0x3E;
 constexpr std::uint8_t SLOT_IN_RANGE = 0x40;
 constexpr std::uint8_t SLOT_VISIBLE = 0x80;
 constexpr std::uint8_t SLOT_KEEP_BITS = 0x3F;
 constexpr std::uint8_t SLOT_DRAWABLE = SLOT_VISIBLE | SLOT_ACTIVE;
-// Byte +1Eh, SLOT_FLAGS.
+// Byte +1Eh, the flags.
 constexpr std::uint8_t STATE_DRAWN = 0x80;
 constexpr std::uint8_t STATE_FLASH_OFF = 0x40;
 constexpr std::uint8_t STATE_FLASHING = 0x20;
@@ -174,16 +166,6 @@ void SetDrawAngles(GameState& _state)
 {
   _counter = static_cast<std::uint16_t>(_counter - 1);
   return _counter != 0;
-}
-
-[[nodiscard]] bool Flag(Guest& _guest, std::uint16_t _flag) noexcept
-{
-  return (_guest.Regs().flags & _flag) != 0;
-}
-
-void OrByte(Guest& _guest, std::uint16_t _offset, std::uint8_t _bits) noexcept
-{
-  _guest.SetByte(_offset, static_cast<std::uint8_t>(_guest.Byte(_offset) | _bits));
 }
 
 // The overflow flag of ADD and SUB on words.
@@ -564,51 +546,50 @@ void ShipRangeOut(Machine::Registers& _regs, const ShipRange& _range) noexcept
   }
 }
 
-// One slot of TransformAndDrawObjects' first pass, DI the slot.
-void ClassifyObject(Guest& _guest)
+// ClassifyObject (CS:3D41), one slot of TransformAndDrawObjects' first pass: _slot's drawn bit (+1Eh bit 7) cleared; an active
+// object's visible and in-range bits cleared, and one off the scanner counted a frame further, removed (RemoveObject) on the
+// 255th; then the sun or the planet transformed (TransformSunOrPlanet), a ship in range transformed (CheckShipInRange,
+// TransformShip), and the station classified at its compass position (ClassifyStationPosition) when UpdateCompass has made it the
+// compass's target and its depth is below 2. Returns the slot DI holds after it, from which the pass steps on: UpdateCompass,
+// once it runs, leaves DI at stationSlot; every other callee keeps it.
+[[nodiscard]] std::uint16_t ClassifyObject(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t state = Offset(regs.di, SLOT_FLAGS);
-  _guest.SetByte(state, static_cast<std::uint8_t>(_guest.Byte(state) & ~STATE_DRAWN));
-  if ((_guest.Byte(regs.di) & SLOT_ACTIVE) == 0)
+  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) & ~STATE_DRAWN));
+  if ((_slot.Get(SlotByte::Type) & SLOT_ACTIVE) == 0)
   {
-    return;
+    return _slot.Offset();
   }
-  _guest.SetByte(regs.di, static_cast<std::uint8_t>(_guest.Byte(regs.di) & SLOT_KEEP_BITS));
-  const std::uint16_t away = Offset(regs.di, SLOT_FRAMES_AWAY);
-  if (_guest.Byte(away) != 0 && (_guest.Byte(state) & STATE_BLIP_SHOWN) == 0)
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) & SLOT_KEEP_BITS));
+  if (_slot.Get(SlotByte::FramesAway) != 0 && (_slot.Get(SlotByte::Flags) & STATE_BLIP_SHOWN) == 0)
   {
     // Off the scanner: despawned on the 255th frame.
-    _guest.SetByte(away, static_cast<std::uint8_t>(_guest.Byte(away) + 1));
-    if (_guest.Byte(away) == 0)
+    _slot.Set(SlotByte::FramesAway, static_cast<std::uint8_t>(_slot.Get(SlotByte::FramesAway) + 1));
+    if (_slot.Get(SlotByte::FramesAway) == 0)
     {
-      _guest.Call(REMOVE_OBJECT);
-      return;
+      (void)RemoveObject(_state, _slot);
+      return _slot.Offset();
     }
   }
-  _guest.Call(IS_SUN_OR_PLANET);
-  if (Flag(_guest, Machine::FLAG_ZERO))
+  if (IsSunOrPlanet(_slot))
   {
-    TransformSunOrPlanetEntry(_guest);
-    return;
+    (void)TransformSunOrPlanet(_state, _slot);
+    return _slot.Offset();
   }
-  _guest.Call(IS_STATION);
-  if (!Flag(_guest, Machine::FLAG_ZERO))
+  if (!IsStation(_slot).station)
   {
-    CheckShipInRangeEntry(_guest);
-    if (!Flag(_guest, Machine::FLAG_CARRY))
+    if (CheckShipInRange(_state, _slot).InRange())
     {
-      TransformShipEntry(_guest);
+      (void)TransformShip(_state, _slot);
     }
-    return;
+    return _slot.Offset();
   }
-  // UpdateCompass leaves DI at the station's slot.
-  _guest.Call(UPDATE_COMPASS);
-  if (_guest.Get(DS.compassTargetIsStation) == 0 || _guest.Byte(Offset(regs.di, SLOT_DEPTH)) >= DISTANT_DEPTH)
+  const std::uint16_t station = UpdateCompass(_state) ? DS.stationSlot.offset : _slot.Offset();
+  const ObjectSlot target(_state, station);
+  if (_state.Get(DS.compassTargetIsStation) != 0 && target.Get(SlotByte::Depth) < DISTANT_DEPTH)
   {
-    return;
+    (void)ClassifyStationPosition(_state, target);
   }
-  ClassifyStationPositionEntry(_guest);
+  return station;
 }
 
 // The station in _slot (CS:3DEE), when it is far enough away to draw as a disc: true if it is, and DrawDistantStation drew it.
@@ -664,85 +645,76 @@ void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
   DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
 }
 
-// The not yet drawn visible object in slot DI: by its kind, its distance and its level of detail.
-void DrawObject(Guest& _guest)
+// DrawObject (CS:3DE1), the visible object in _slot, not yet drawn: the sun or the planet (DrawSunOrPlanet); a station far enough
+// off as a disc (DrawStationIfDistant); nothing in a flashing object's off frames; a dot (DrawObjectAsDot) when its size (+3Eh)
+// passes its level of detail (+3Fh); else its blueprint, from blueprintTable by its type (RunBlueprintHandler), at its angles and
+// view position. PUSH DI / POP DI round the sun's, the station's and the dot's keep the slot, and the search the draws jump back
+// to loads what it reads. Returns the direction flag as the drawing leaves it.
+[[nodiscard]] bool DrawObject(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(IS_SUN_OR_PLANET);
-  if (Flag(_guest, Machine::FLAG_ZERO))
+  if (IsSunOrPlanet(_slot))
   {
-    const std::uint16_t slot = regs.di;
-    DrawSunOrPlanet(_guest);
-    regs.di = slot;
-    return;
+    DrawSunOrPlanet(_state, _hardware, _slot, _backward);
+    return _backward;
   }
-  _guest.Call(IS_STATION);
-  const ObjectSlot object(_guest.State(), regs.di);
-  if (Flag(_guest, Machine::FLAG_ZERO) && DrawStationIfDistant(_guest.State(), object, _guest.Flag(Machine::FLAG_DIRECTION)))
+  if (IsStation(_slot).station && DrawStationIfDistant(_state, _slot, _backward))
   {
-    return;
+    return _backward;
   }
-  if (FlashedOff(object))
+  if (FlashedOff(_slot))
   {
-    return;
+    return _backward;
   }
-  regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.di, SLOT_DETAIL)));
-  if (Low(regs.ax) < _guest.Byte(Offset(regs.di, SLOT_SIZE)))
+  if (_slot.Get(SlotByte::Detail) < _slot.Get(SlotByte::Size))
   {
-    DrawObjectAsDot(_guest.State(), object, _guest.Flag(Machine::FLAG_DIRECTION));
-    return;
+    DrawObjectAsDot(_state, _slot, _backward);
+    return _backward;
   }
-  regs.bx = Offset(static_cast<std::uint16_t>(_guest.Byte(regs.di) & SLOT_TYPE_BITS), DS.blueprintTable.offset);
-  regs.si = _guest.Word(regs.bx);
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_PITCH));
-  _guest.Set(DS.drawPitchAngle, regs.ax);
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_YAW));
-  _guest.Set(DS.drawYawAngle, regs.ax);
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_ROLL));
-  _guest.Set(DS.drawRollAngle, regs.ax);
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_VIEW_X));
-  _guest.Set(DS.drawCenterX, regs.ax);
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_VIEW_Y));
-  _guest.Set(DS.drawCenterY, regs.ax);
-  regs.ax = _guest.Word(Offset(regs.di, SLOT_VIEW_Z));
-  _guest.Set(DS.drawCenterZ, regs.ax);
-  RunBlueprintHandlerEntry(_guest);
+  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable.
+  const std::uint16_t blueprint =
+    _state.Word(Offset(static_cast<std::uint16_t>(_slot.Get(SlotByte::Type) & SLOT_TYPE_BITS), DS.blueprintTable.offset));
+  _state.Set(DS.drawPitchAngle, _slot.Get(SlotWord::Pitch));
+  _state.Set(DS.drawYawAngle, _slot.Get(SlotWord::Yaw));
+  _state.Set(DS.drawRollAngle, _slot.Get(SlotWord::Roll));
+  _state.Set(DS.drawCenterX, _slot.Get(SlotWord::ViewX));
+  _state.Set(DS.drawCenterY, _slot.Get(SlotWord::ViewY));
+  _state.Set(DS.drawCenterZ, _slot.Get(SlotWord::ViewZ));
+  return RunBlueprintHandler(_state, blueprint, _backward);
 }
 
-// DrawFarthestObject (CS:3D95): marks and draws the visible object not yet drawn with the largest depth
-// class, then the largest z. False when none is left.
-[[nodiscard]] bool DrawFarthestObject(Guest& _guest)
+// DrawFarthestObject (CS:3D95), TransformAndDrawObjects' second pass, to which every draw jumps back: of shipSlotCount slots
+// (MOV CL / XOR CH,CH, then LOOP: 65,536 for 0), the visible object not yet drawn with the largest depth class (+3Dh), then
+// the largest view z, marked drawn (+1Eh bit 7) and drawn (DrawObject). Returns the direction flag as the drawing leaves it, or
+// none once no object is left.
+[[nodiscard]] std::optional<bool> DrawFarthestObject(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = _guest.Get(DS.shipSlotCount);
-  regs.di = DS.shipSlots.offset;
-  regs.bp = 0;
-  regs.ax = WithHigh(regs.ax, 0);
-  regs.dx = 0xFFFF;
-  do
+  // DX the slot found, FFFFh none; AH its depth and BP its z, from 0.
+  std::optional<std::uint16_t> farthest;
+  std::uint8_t farthestDepth = 0;
+  std::uint16_t farthestZ = 0;
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t count = LoopCount(_state.Get(DS.shipSlotCount)); count != 0; --count)
   {
-    regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(_guest.Byte(regs.di) & SLOT_DRAWABLE));
-    if (Low(regs.ax) == SLOT_DRAWABLE && (_guest.Byte(Offset(regs.di, SLOT_FLAGS)) & STATE_DRAWN) == 0)
+    const ObjectSlot object(_state, slot);
+    if ((object.Get(SlotByte::Type) & SLOT_DRAWABLE) == SLOT_DRAWABLE && (object.Get(SlotByte::Flags) & STATE_DRAWN) == 0)
     {
-      const std::uint8_t depth = _guest.Byte(Offset(regs.di, SLOT_DEPTH));
-      if (High(regs.ax) < depth || (High(regs.ax) == depth && regs.bp < _guest.Word(Offset(regs.di, SLOT_VIEW_Z))))
+      const std::uint8_t depth = object.Get(SlotByte::Depth);
+      if (farthestDepth < depth || (farthestDepth == depth && farthestZ < object.Get(SlotWord::ViewZ)))
       {
-        regs.ax = WithHigh(regs.ax, depth);
-        regs.bp = _guest.Word(Offset(regs.di, SLOT_VIEW_Z));
-        regs.dx = regs.di;
+        farthestDepth = depth;
+        farthestZ = object.Get(SlotWord::ViewZ);
+        farthest = slot;
       }
     }
-    regs.di = Offset(regs.di, SLOT_BYTES);
-  } while (Loop(regs.cx));
-  if (regs.dx == 0xFFFF)
-  {
-    regs.dx = 0;
-    return false;
+    slot = Offset(slot, SLOT_BYTES);
   }
-  regs.di = regs.dx;
-  OrByte(_guest, Offset(regs.di, SLOT_FLAGS), STATE_DRAWN);
-  DrawObject(_guest);
-  return true;
+  if (!farthest)
+  {
+    return std::nullopt;
+  }
+  ObjectSlot object(_state, *farthest);
+  object.Set(SlotByte::Flags, static_cast<std::uint8_t>(object.Get(SlotByte::Flags) | STATE_DRAWN));
+  return DrawObject(_state, _hardware, object, _backward);
 }
 
 // One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
@@ -785,97 +757,126 @@ void DrawSunOrPlanetDisc(GameState& _state, ObjectSlot _slot, std::uint16_t _rad
   DrawDisc(_state, static_cast<std::uint16_t>(_radius << 1), x, row, _backward);
 }
 
-// Once supernovaFrames has counted down to 1, the sun's heat is supernovaHeat, growing by a quarter (at
-// least 1) a frame and killing the player when it overflows. True when it stands for the sun's size, in AX.
-[[nodiscard]] bool SupernovaHeat(Guest& _guest)
+// What SupernovaHeat makes of the sun once supernovaFrames has counted down to 1.
+struct SupernovaGlow
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.supernovaFrames) == 0)
+  std::uint16_t heat; // AX, AH 0: the heat, which stands for the sun's radius
+  std::uint16_t slot; // DI after it: the sun's, or past the ship slots once an energy bomb went off and its LOOP looked at them
+};
+
+// SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat,
+// first the cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is
+// killed (KillPlayer, with StartPlayerDeathSound's STI) and an energy bomb goes off (DetonateEnergyBomb, its copies backwards when
+// _backward), and the heat is FFh. None while the countdown runs, or when it is 0. _slot is the sun's slot, DI.
+[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, std::uint16_t _slot, bool _backward)
+{
+  if (_state.Get(DS.supernovaFrames) == 0)
   {
-    return false;
+    return std::nullopt;
   }
-  _guest.Set(DS.supernovaFrames, static_cast<std::uint16_t>(_guest.Get(DS.supernovaFrames) - 1));
-  if (_guest.Get(DS.supernovaFrames) != 0)
+  _state.Set(DS.supernovaFrames, static_cast<std::uint16_t>(_state.Get(DS.supernovaFrames) - 1));
+  if (_state.Get(DS.supernovaFrames) != 0)
   {
-    return false;
+    return std::nullopt;
   }
-  _guest.Set(DS.supernovaFrames, 1);
-  if (_guest.Get(DS.supernovaHeat) == 0)
+  _state.Set(DS.supernovaFrames, 1);
+  if (_state.Get(DS.supernovaHeat) == 0)
   {
-    regs.ax = WithLow(regs.ax, _guest.Get(DS.cabinTemperature));
-    _guest.Set(DS.supernovaHeat, Low(regs.ax));
+    _state.Set(DS.supernovaHeat, _state.Get(DS.cabinTemperature));
   }
-  auto step = static_cast<std::uint8_t>(_guest.Get(DS.supernovaHeat) >> 2);
+  auto step = static_cast<std::uint8_t>(_state.Get(DS.supernovaHeat) >> 2);
   if (step == 0)
   {
     step = 1;
   }
-  const unsigned heat = unsigned{step} + _guest.Get(DS.supernovaHeat);
-  regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(heat));
-  if (heat > 0xFF)
+  const unsigned sum = unsigned{step} + _state.Get(DS.supernovaHeat);
+  SupernovaGlow glow{static_cast<std::uint8_t>(sum), _slot};
+  if (sum > 0xFF)
   {
-    _guest.Call(KILL_PLAYER);
-    _guest.Call(DETONATE_ENERGY_BOMB);
-    regs.ax = WithLow(regs.ax, 0xFF);
+    if (KillPlayer(_state))
+    {
+      _hardware.EnableInterrupts();
+    }
+    // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
+    // 65,536.
+    const auto ships = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - BOMB_FIRST_SLOT);
+    (void)DetonateEnergyBomb(_state, _hardware, _backward);
+    glow.slot = static_cast<std::uint16_t>(DS.firstShipSlot.offset + LoopCount(ships) * ObjectSlot::BYTES);
+    glow.heat = 0xFF;
   }
-  _guest.Set(DS.supernovaHeat, Low(regs.ax));
-  regs.ax = WithHigh(regs.ax, 0);
-  return true;
+  _state.Set(DS.supernovaHeat, Low(glow.heat));
+  return glow;
 }
 
-// The sun's size, cabin temperature, fringe, fuel scooping and heat death: false when it is behind the
-// view and not drawn.
-[[nodiscard]] bool SizeSun(Guest& _guest)
+// The sun's disc, as SizeSun leaves it for DrawSunOrPlanetDisc.
+struct SunDisc
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (!SupernovaHeat(_guest))
+  std::uint16_t radius; // AX
+  std::uint16_t slot;   // DI: the sun's, or where a supernova's energy bomb left it
+};
+
+// SizeSun (CS:3F57-3FF4): the sun's radius, SupernovaHeat's heat or else 100 scaled to _slot's distance (ScaleByInverseDistance),
+// into the cabin temperature. Behind the view, by bit 7 of the view z's high byte in the slot DI then holds, nothing more; in
+// front, sunFringeMask 1, 3 or 7 below radii 28h, B4h and C3h; from C3h, with fuel scoops fitted, 6 more fuel, written, then FFh
+// over it on a carry, with FUEL SCOOPS ACTIVE for 5 frames; from FDh, KillPlayer, whose StartPlayerDeathSound leaves its step length
+// in AL over the radius's low byte, as there is no PUSH AX round it here, and a radius past a byte held to FFh. Returns the disc
+// in front of the view.
+[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward)
+{
+  SunDisc disc{0, _slot.Offset()};
+  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _slot.Offset(), _backward))
   {
-    regs.dx = SUN_SCALE;
-    regs.ax = 0;
-    ScaleByInverseDistanceEntry(_guest);
+    disc = SunDisc{glow->heat, glow->slot};
   }
-  _guest.Set(DS.cabinTemperature, Low(regs.ax));
-  if ((ObjectSlot(_guest.State(), regs.di).Get(SlotByte::ViewZHigh) & 0x80) != 0)
+  else
   {
-    return false;
+    // MOV DX,64h / XOR AX,AX: DX:AX = 100 * 65536.
+    disc.radius = ScaleByInverseDistance(_state, _slot, std::uint32_t{SUN_SCALE} << 16).scaled;
   }
-  _guest.Set(DS.sunFringeMask, FRINGE_SMALL);
-  if (regs.ax < FRINGE_RADIUS_SMALL)
+  _state.Set(DS.cabinTemperature, Low(disc.radius));
+  if ((ObjectSlot(_state, disc.slot).Get(SlotByte::ViewZHigh) & 0x80) != 0)
   {
-    return true;
+    return std::nullopt;
   }
-  _guest.Set(DS.sunFringeMask, FRINGE_MEDIUM);
-  if (regs.ax < FRINGE_RADIUS_LARGE)
+  _state.Set(DS.sunFringeMask, FRINGE_SMALL);
+  if (disc.radius < FRINGE_RADIUS_SMALL)
   {
-    return true;
+    return disc;
   }
-  _guest.Set(DS.sunFringeMask, FRINGE_LARGE);
-  if (regs.ax < SCOOP_RADIUS)
+  _state.Set(DS.sunFringeMask, FRINGE_MEDIUM);
+  if (disc.radius < FRINGE_RADIUS_LARGE)
   {
-    return true;
+    return disc;
   }
-  if (_guest.Get(DS.fuelScoopsFitted) == 1)
+  _state.Set(DS.sunFringeMask, FRINGE_LARGE);
+  if (disc.radius < SCOOP_RADIUS)
   {
-    const unsigned fuel = unsigned{_guest.Get(DS.fuel)} + SCOOP_FUEL;
-    _guest.Set(DS.fuel, static_cast<std::uint8_t>(fuel));
+    return disc;
+  }
+  if (_state.Get(DS.fuelScoopsFitted) == 1)
+  {
+    const unsigned fuel = unsigned{_state.Get(DS.fuel)} + SCOOP_FUEL;
+    _state.Set(DS.fuel, static_cast<std::uint8_t>(fuel));
     if (fuel > 0xFF)
     {
-      _guest.Set(DS.fuel, 0xFF);
-      regs.bx = DS.fuelScoopsActiveText.offset;
-      _guest.Set(DS.messagePointer, regs.bx);
-      _guest.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
+      _state.Set(DS.fuel, 0xFF);
+      _state.Set(DS.messagePointer, DS.fuelScoopsActiveText.offset);
+      _state.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
     }
   }
-  if (regs.ax >= FATAL_RADIUS)
+  if (disc.radius >= FATAL_RADIUS)
   {
-    // KillPlayer may change AL, and the radius with it.
-    _guest.Call(KILL_PLAYER);
-    if (High(regs.ax) != 0)
+    if (const std::optional<std::uint8_t> stepLength = KillPlayer(_state))
     {
-      regs.ax = RADIUS_LIMIT;
+      SetLow(disc.radius, *stepLength);
+      _hardware.EnableInterrupts();
+    }
+    if (High(disc.radius) != 0)
+    {
+      disc.radius = RADIUS_LIMIT;
     }
   }
-  return true;
+  return disc;
 }
 
 // SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
@@ -1269,27 +1270,24 @@ bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _back
   return RenderBlueprint(_state, body, Vector{}, _backward);
 }
 
-void TransformAndDrawObjects(Guest& _guest)
+bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Get(DS.playerPitchAngle);
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(0));
-  regs.ax = _guest.Get(DS.playerYawAngle);
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(1));
-  regs.ax = _guest.Get(DS.playerRollAngle);
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(2));
-  regs.di = DS.shipSlots.offset;
-  regs.cx = _guest.Get(DS.shipSlotCount);
-  do
+  (void)SetSinCos(_state, 0, _state.Get(DS.playerPitchAngle));
+  (void)SetSinCos(_state, 1, _state.Get(DS.playerYawAngle));
+  (void)SetSinCos(_state, 2, _state.Get(DS.playerRollAngle));
+  // MOV CL,shipSlotCount / XOR CH,CH, then LOOP with PUSH CX / POP CX round each slot: a count of 0 classifies 65,536. DI steps on
+  // from where each slot's classification leaves it.
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint32_t count = LoopCount(_state.Get(DS.shipSlotCount)); count != 0; --count)
   {
-    const std::uint16_t slots = regs.cx;
-    ClassifyObject(_guest);
-    regs.di = Offset(regs.di, SLOT_BYTES);
-    regs.cx = slots;
-  } while (Loop(regs.cx));
-  while (DrawFarthestObject(_guest))
-  {
+    slot = Offset(ClassifyObject(_state, ObjectSlot(_state, slot)), SLOT_BYTES);
   }
+  bool backward = _backward;
+  while (const std::optional<bool> drawn = DrawFarthestObject(_state, _hardware, backward))
+  {
+    backward = *drawn;
+  }
+  return backward;
 }
 
 ViewWithBlip TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position)
@@ -1306,25 +1304,22 @@ Vector TransformToView(GameState& _state, Vector _position)
   return RotateToViewDirection(_state, RotatePitchYawRoll(_state, _position));
 }
 
-void DrawSunOrPlanet(Guest& _guest)
+void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(IS_PLANET);
-  const ObjectSlot slot(_guest.State(), regs.di);
-  if (Flag(_guest, Machine::FLAG_ZERO))
+  if (IsPlanet(_slot))
   {
-    if (const std::optional<std::uint16_t> radius = SizePlanet(_guest.State(), _guest.Devices(), slot))
+    if (const std::optional<std::uint16_t> radius = SizePlanet(_state, _hardware, _slot))
     {
-      DrawSunOrPlanetDisc(_guest.State(), slot, *radius, _guest.Flag(Machine::FLAG_DIRECTION));
+      DrawSunOrPlanetDisc(_state, _slot, *radius, _backward);
     }
+    return;
   }
-  else if (SizeSun(_guest))
+  // The disc is the slot's that SizeSun leaves DI on: the sun's, or, once a supernova's heat killed and its energy bomb's LOOP moved
+  // DI, that slot's, as the original draws it.
+  if (const std::optional<SunDisc> disc = SizeSun(_state, _hardware, _slot, _backward))
   {
-    // SizeSun leaves the radius in AX, and DI where DetonateEnergyBomb leaves it when a supernova's heat kills: the disc is then
-    // that slot's, as the original draws it.
-    DrawSunOrPlanetDisc(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.ax, _guest.Flag(Machine::FLAG_DIRECTION));
+    DrawSunOrPlanetDisc(_state, ObjectSlot(_state, disc->slot), disc->radius, _backward);
   }
-  _guest.Clobber(DRAWS_SUN_OR_PLANET);
 }
 
 void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward)
@@ -1602,6 +1597,19 @@ void RenderBlueprintBodyEntry(Guest& _guest)
   _guest.Clobber(RENDERS_BLUEPRINT);
 }
 
+void TransformAndDrawObjectsEntry(Guest& _guest)
+{
+  // The direction flag as the drawing leaves it: a face edge's DrawLine clears it, and the string instructions after go by it.
+  _guest.SetFlag(Machine::FLAG_DIRECTION, TransformAndDrawObjects(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)));
+  _guest.Clobber(TRANSFORMS_AND_DRAWS_OBJECTS);
+}
+
+void DrawSunOrPlanetEntry(Guest& _guest)
+{
+  DrawSunOrPlanet(_guest.State(), _guest.Devices(), ObjectSlot(_guest.State(), _guest.Regs().di), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(DRAWS_SUN_OR_PLANET);
+}
+
 void DrawDistantStationEntry(Guest& _guest)
 {
   DrawDistantStation(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), _guest.Flag(Machine::FLAG_DIRECTION));
@@ -1654,10 +1662,10 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3C7E, "TransformShip", &TransformShipEntry, TRANSFORMS_SHIP},
   NativeEntry{0x3CDD, "RunBlueprintHandler", &RunBlueprintHandlerEntry, RENDERS_BLUEPRINT},
   NativeEntry{0x3CF2, "RenderBlueprintBody", &RenderBlueprintBodyEntry, RENDERS_BLUEPRINT},
-  NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjects, Machine::NativeContract{ALL_BUT_DS, 0}},
+  NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjectsEntry, TRANSFORMS_AND_DRAWS_OBJECTS},
   NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlipEntry, CLOBBERS_DX},
   NativeEntry{0x3EE3, "TransformToView", &TransformToViewEntry, CLOBBERS_DX},
-  NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanet, DRAWS_SUN_OR_PLANET},
+  NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanetEntry, DRAWS_SUN_OR_PLANET},
   NativeEntry{0x45C6, "DrawDistantStation", &DrawDistantStationEntry, DRAWS_DISTANT_STATION},
   NativeEntry{0x8A16, "LoadPlayerAngles", &LoadPlayerAnglesEntry, PRESERVES_ALL},
   NativeEntry{0x8D2E, "ProjectToScreen", &ProjectToScreenEntry, PROJECTS_TO_SCREEN},

@@ -1432,10 +1432,6 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware)
 {
   RestoreDivideAndKeyboardInterrupts(_state, _hardware);
   (void)RestoreTimerInterrupt(_state, _hardware);
-  // The IRQ 0 its PIT reprogramming raises when the timer's output was low, taken by the BIOS's handler, back on int 8. The
-  // original's CPU takes it after RestoreTimerInterrupt's STI, before the clock is read; here it is taken once it returns, where
-  // the register code's call of WriteScreenshotFile through its hook took it.
-  _hardware.TakeDueInterrupts();
   _state.Set(DS.diskError, 0);
   // Int 24h's vector, pushed round the write and popped back after it.
   const std::uint16_t errorOffset = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET);
@@ -1451,8 +1447,6 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware)
   _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, errorOffset);
   // InstallTimerInterrupt leaves ES = 0, the interrupt table, which InstallDivideAndKeyboardInterrupts takes.
   InstallTimerInterrupt(_state, _hardware);
-  // Its PIT reprogramming likewise, the IRQ 0 taken by the game's handler after its RET, as the original's CPU takes it.
-  _hardware.TakeDueInterrupts();
   InstallDivideAndKeyboardInterrupts(_state, _hardware, VECTOR_TABLE_SEGMENT);
 }
 

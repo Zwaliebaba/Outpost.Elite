@@ -14,10 +14,23 @@ namespace GameLogicTests
 namespace
 {
 
+constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
+constexpr std::uint16_t START_NEW_GAME = 0x4671;
 constexpr std::uint16_t AWARD_ARCHANGEL_TITLE = 0x49E4;
 constexpr std::uint16_t FORMAT_FUEL_LIGHT_YEARS = 0x6923;
+constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
+constexpr std::uint16_t DRAW_TITLE_PLANET = 0x7D4E;
 constexpr std::uint8_t TEXT_LAYOUT = 2; // screenLayout while the text page shows
+
+// The title's frame (CS:7DF1): the planet, of radius 60 at (200, 50) in colour 2, and Press any key in 5555h's ink at 1C05h.
+constexpr std::uint16_t TITLE_PLANET_RADIUS = 0x3C;
+constexpr std::uint16_t TITLE_PLANET_X = 0xC8;
+constexpr std::uint16_t TITLE_PLANET_ROW = 0x32;
+constexpr std::uint8_t TITLE_PLANET_COLOR = 2;
+constexpr std::uint16_t PRESS_ANY_KEY_INK = 0x5555;
+constexpr std::uint16_t PRESS_ANY_KEY_PLACE = 0x1C05;
+constexpr std::uint8_t SCAN_F9 = 0x43;
 
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
@@ -156,6 +169,29 @@ public:
       rig.Call(DRAW_DOCKED_FRAME, {.si = frame});
     }
     rig.AssertAllAgreed(DRAW_DOCKED_FRAME, frames.size());
+  }
+
+  // What the title draws each frame, the planet and its Press any key line; F9, the first code in keyBuffer, whose read pointer
+  // steps on rather than wrapping; and the new game it starts. The title waits, and calls them as value routines since level 5 of
+  // the de-assembly (ADR-012 item 12), so only calls like these compare them with the original.
+  TEST_METHOD(TitleRoutinesAgree)
+  {
+    ComparisonRig rig("TitleRoutines");
+    Machine::Memory& ram = rig.Host().Ram();
+    const std::uint16_t data = Elite::DataSegment(rig.Program());
+    ram.Write8(data, Elite::DS.drawColor.offset, TITLE_PLANET_COLOR);
+    rig.Call(DRAW_TITLE_PLANET, {.bx = TITLE_PLANET_RADIUS, .cx = TITLE_PLANET_ROW, .dx = TITLE_PLANET_X});
+    rig.AssertAllAgreed(DRAW_TITLE_PLANET, 1);
+    ram.Write16(data, Elite::DS.textPaperPattern.offset, 0);
+    rig.Call(DRAW_VIEW_STRING, {.bx = PRESS_ANY_KEY_INK, .si = Elite::DS.pressAnyKeyText.offset, .di = PRESS_ANY_KEY_PLACE});
+    rig.AssertAllAgreed(DRAW_VIEW_STRING, 1);
+    ram.Write8(data, Elite::DS.keyBufferCount.offset, 1);
+    ram.Write16(data, Elite::DS.keyBufferRead.offset, Elite::DS.keyBuffer.offset);
+    ram.Write8(data, Elite::DS.keyBuffer.offset, SCAN_F9);
+    rig.Call(GET_KEY, {});
+    rig.AssertAllAgreed(GET_KEY, 1);
+    rig.Call(START_NEW_GAME, {});
+    rig.AssertAllAgreed(START_NEW_GAME, 1);
   }
 };
 

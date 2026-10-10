@@ -5,10 +5,13 @@
 #include "Arithmetic.h"
 #include "Combat.h"
 #include "DataOverlay.h"
+#include "Docked.h"
 #include "Docking.h"
+#include "Equipment.h"
 #include "Galaxy.h"
 #include "Hyperspace.h"
 #include "Input.h"
+#include "Market.h"
 #include "Maths.h"
 #include "ObjectSlot.h"
 #include "Scene.h"
@@ -26,42 +29,24 @@ namespace
 {
 
 using Machine::FLAG_CARRY;
-using Machine::FLAG_ZERO;
 using Machine::Registers;
 
 // The routines these call through their entries: the original's, or a native routine hooked there.
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
-constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t HANDLE_FLIGHT_FUNCTION_KEYS = 0x0BB3;
-constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
-constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
 constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
 constexpr std::uint16_t PLAY_STATION_TUNNEL = 0x2D5B;
-constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
-constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
 constexpr std::uint16_t SPAWN_PLAYER_WRECKAGE = 0x2FE3;
-constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
 constexpr std::uint16_t UPDATE_FUEL_LEAK = 0x499F;
 constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
-constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
-constexpr std::uint16_t SHOW_SYSTEM_DATA_SCREEN = 0x5CDE;
-constexpr std::uint16_t SHOW_MARKET_PRICES_SCREEN = 0x5E2C;
-constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
-constexpr std::uint16_t SHOW_INVENTORY_SCREEN = 0x6020;
 constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
-constexpr std::uint16_t SILENCE_SPEAKER_TIMER = 0x7436;
-constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
-constexpr std::uint16_t START_BEEP = 0x7A57;
 constexpr std::uint16_t STOP_SOUND_EFFECTS = 0x7A63;
 constexpr std::uint16_t STOP_CONTINUOUS_NOISE = 0x7B6B;
 constexpr std::uint16_t POLL_SCREEN_DUMP_KEY = 0x7F3D;
@@ -69,14 +54,9 @@ constexpr std::uint16_t RESET_MOUSE_IF_SELECTED = 0x7F5D;
 constexpr std::uint16_t TICK_ESCAPE_POD = 0x7F69;
 constexpr std::uint16_t TICK_HYPERSPACE_COUNTDOWN = 0x7F79;
 constexpr std::uint16_t PROCESS_FLIGHT_KEYS = 0x7FA8;
-constexpr std::uint16_t DRAIN_ENERGY = 0x839F;
-constexpr std::uint16_t TOGGLE_DOCKING_COMPUTER = 0x83B2;
-constexpr std::uint16_t ENGAGE_JUMP_DRIVE = 0x8430;
 constexpr std::uint16_t UPDATE_PLAYER_MOTION = 0x8472;
 constexpr std::uint16_t RESOLVE_LASER_FIRE = 0x8AC2;
 constexpr std::uint16_t APPLY_ENEMY_LASER_HIT = 0x8C8E;
-constexpr std::uint16_t RUN_PAUSE_SCREEN = 0x8D6A;
-constexpr std::uint16_t USE_MASKING_DEVICE = 0x8ECF;
 
 // The stardust: 30 particles of 6 bytes, x and y words, a lifetime byte and a spare; stardustPrevious
 // follows at +0xB4 with the same layout, its lifetime copy at +0xB8 and its new-particle flag at +0xB9.
@@ -181,6 +161,7 @@ constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
 constexpr std::uint8_t SCAN_F5 = 0x3F;
 constexpr std::uint8_t SCAN_F6 = 0x40;
+constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F8 = 0x42;
 constexpr std::uint8_t SCAN_F9 = 0x43;
 constexpr std::uint8_t SCAN_F10 = 0x44;
@@ -202,6 +183,27 @@ constexpr std::uint16_t PAUSE_OPTION_STEP = 0x200;
 constexpr std::uint16_t PAUSE_OPTIONS_LOOP = 0x8D98;
 constexpr std::uint16_t HYPERSPACE_REFUSAL_TAIL = 0x80A3; // posts the message in AX for 25 frames
 constexpr std::uint16_t PAST_HYPERSPACE_KEY = 0x8065;     // JMP 8101h, past H's handling
+
+// The backward jumps of the flight keys, which a de-assembled loop reports as its turns (ADR-015): the scan of keyDown for F1-F10;
+// the function keys' screens, from their leaving, their key wait, their tests, the F9 and F10 tests and the navigation computer's;
+// ProcessFlightKeys' RET while the escape pod flies, and the Ctrl+Esc freeze's wait; the pause screen's menu, its lines, its
+// options and its key wait.
+constexpr std::uint16_t FUNCTION_KEY_LOOP = 0x0BBE;
+constexpr std::uint16_t LEAVE_FLIGHT_SCREENS = 0x0BDE;
+constexpr std::uint16_t FLIGHT_SCREEN_KEY_WAIT = 0x0BF3;
+constexpr std::uint16_t FLIGHT_SCREEN_DISPATCH = 0x0BF8;
+constexpr std::uint16_t STATUS_OR_INVENTORY_KEY = 0x0C45;
+constexpr std::uint16_t NAVIGATION_KEYS = 0x0C6D;
+constexpr std::uint16_t PROCESS_FLIGHT_KEYS_RETURN = 0x7FAF;
+constexpr std::uint16_t FREEZE_KEY_WAIT = 0x8153;
+constexpr std::uint16_t PAUSE_MENU = 0x8D6D;
+constexpr std::uint16_t PAUSE_MENU_LOOP = 0x8D7C;
+constexpr std::uint16_t PAUSE_SHOW_OPTIONS = 0x8D8F;
+constexpr std::uint16_t PAUSE_KEY_WAIT = 0x8DC7;
+constexpr std::uint16_t FUNCTION_KEYS = 10; // F1-F10
+
+// E: the ECM's energy.
+constexpr std::int8_t ECM_ENERGY = 0x14;
 
 // H: a distance of 47h tenths of a light year or more is out of range; the fuel, times 10 over 24h, must reach the distance's
 // low byte, and the jump costs that times 24h over 10, at least 1.
@@ -752,18 +754,54 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
-// GetKey until a key comes: the waits at 0x0BF3 (HandleFlightFunctionKeys), 0x8153 (ProcessFlightKeys'
-// Ctrl+Esc) and 0x8DC7 (RunPauseScreen), each a CALL at _call and a JE back to it. Out: AH = the key.
-void WaitForKey(Guest& _guest, std::uint16_t _call)
+// What the routines before M's launch leave in DI, from which the launch copies the missile (LaunchPlayerMissile): InvalidateDashboard
+// past the cache it fills; ResetStardust past the particles; ClearDrawBuffer past the buffer its REP STOSW of 1000h words fills from
+// 0, upwards or, _backward, down; and IsMassLocked on the last slot it looked at, as MassLockOut leaves it: the sun's, the
+// planet's, then where its look at the ships stopped.
+constexpr auto DASHBOARD_CACHE_END = static_cast<std::uint16_t>(DS.missileCountShown.offset + DASHBOARD_CACHE_BYTES);
+constexpr auto STARDUST_END = static_cast<std::uint16_t>(DS.stardust.offset + STARDUST_BYTES);
+constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
+
+[[nodiscard]] std::uint16_t DrawBufferEnd(bool _backward) noexcept
 {
+  return _backward ? Negate(DRAW_BUFFER_BYTES) : DRAW_BUFFER_BYTES;
+}
+
+[[nodiscard]] std::uint16_t DiAfterMassLock(const MassLock& _lock, std::uint16_t _di) noexcept
+{
+  std::uint16_t di = _di;
+  if (_lock.sun)
+  {
+    di = DS.shipSlots.offset;
+  }
+  if (_lock.planet)
+  {
+    di = Plus(DS.shipSlots.offset, ObjectSlot::BYTES);
+  }
+  if (_lock.ships)
+  {
+    di = _lock.ships->slot;
+  }
+  return di;
+}
+
+// CALL GetKey / JE back to it, at _call, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015):
+// the waits at 0x0BF3 (FlightScreenDispatch), 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). The turns carry
+// nothing, as WaitForKeyPress's do: GetKey writes AH before it reads it, and reads AL only when it takes a code, which changes
+// keyBuffer's count. Returns the key, with screenshot set if any of its GetKeys saved one, which leaves ES on the video segment.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _call)
+{
+  bool screenshot = false;
   for (;;)
   {
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(FLAG_ZERO))
+    KeyPress key = GetKey(_state, _hardware);
+    screenshot = screenshot || key.screenshot;
+    if (key.scanCode != 0)
     {
-      return;
+      key.screenshot = screenshot;
+      return key;
     }
-    _guest.JumpBack(_call);
+    _hardware.LoopTurn(_call, {});
   }
 }
 
@@ -812,79 +850,104 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
   return false;
 }
 
-// The pause screen from PauseShowOptions (0x8D8F): the options, then its keys. True when RunPauseScreen
-// returns, false when an F key changed the frame rate and the menu is drawn again.
-[[nodiscard]] bool RunPauseOptions(Guest& _guest)
+// How the pause screen's keys end it.
+enum class PauseExit : std::uint8_t
 {
-  Registers& regs = _guest.Regs();
+  Resume,      // space: the flight goes on
+  Abort,       // A: the title, the original dropping its own return address and ProcessFlightKeys'
+  NewFrameRate // an F key set the frame time, and the menu is drawn again (JMP 8D6Dh)
+};
+
+// 0x8D6D-0x8D8C: the drawing buffer cleared and the menu's eight lines drawn into it, in every colour on a paper of 0. The loop at
+// 0x8D7C pushes and pops CX round each line, and each turn carries it and SI, the next line's place and text.
+void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
+{
+  ClearDrawBuffer(_state, _backward);
+  _state.Set(DS.textPaperPattern, 0);
+  std::uint16_t text = DS.pauseMenuText.offset;
+  for (std::uint16_t lines = PAUSE_MENU_LINES;;)
+  {
+    // MOV DI,[SI] / ADD SI,2: the line's place, then its text; INC SI past its NUL.
+    const std::uint16_t at = _state.Word(text);
+    text = Plus(DrawViewString(_state, Plus(text, 2), ALL_COLORS, at).end, 1);
+    if (--lines == 0)
+    {
+      return;
+    }
+    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, text});
+  }
+}
+
+// 0x8E52-0x8E88: F1-F10, the minimum frame time from frameTimeChoices, and its key in the menu's label, 1-9, or 10 with a closing
+// bracket.
+void SetFrameTime(GameState& _state, std::uint8_t _key)
+{
+  const auto choice = static_cast<std::uint8_t>(_key - SCAN_F1);
+  _state.Set(DS.minimumFrameMs, _state.Byte(Plus(DS.frameTimeChoices.offset, choice)));
+  const auto digit = static_cast<std::uint8_t>(choice + DIGIT_ONE);
+  if (digit == DIGIT_NINE + 1)
+  {
+    _state.SetByte(DS.frameRateKeyLabel.offset, DIGIT_ONE);
+    _state.Set(DS.dataAC00, DIGIT_ZERO);
+    _state.Set(DS.dataAC01, CLOSING_BRACKET);
+  }
+  else
+  {
+    _state.SetByte(DS.frameRateKeyLabel.offset, digit);
+    _state.Set(DS.dataAC00, CLOSING_BRACKET);
+    _state.Set(DS.dataAC01, SPACE);
+  }
+}
+
+// The pause screen from PauseShowOptions (0x8D8F): the options, presented (PresentSpaceView, after MOV AX,0B800h / MOV ES,AX),
+// then its keys, waited for at 0x8DC7, until one ends it. _backward is the direction flag, which nothing here changes. The jumps
+// back to PauseShowOptions and to the wait load or write every register they read, and carry nothing.
+PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward)
+{
   for (;;)
   {
-    // What the options' loop leaves in the registers, PresentSpaceView, next, writes before it reads.
-    ShowPauseOptions(_guest.State(), _guest.Devices());
-    regs.ax = Guest::VIDEO_SEGMENT;
-    regs.es = regs.ax;
-    _guest.Call(PRESENT_SPACE_VIEW);
+    ShowPauseOptions(_state, _hardware);
+    PresentSpaceView(_state, _hardware, _backward);
     for (;;)
     {
-      WaitForKey(_guest, 0x8DC7);
-      const std::uint8_t key = High(regs.ax);
+      const std::uint8_t key = WaitForKey(_state, _hardware, PAUSE_KEY_WAIT).scanCode;
       if (key == SCAN_SPACE)
       {
         // Resume, with the space that did it not fired.
-        _guest.Call(START_BEEP);
-        _guest.Call(RESET_KEYBOARD);
-        _guest.Call(CLEAR_DRAW_BUFFER);
-        _guest.Set(DS.gamePaused, 0);
-        _guest.Set(DS.textPaperPattern, 0);
-        _guest.Set(DS.keyDownSpace, 0);
-        return true;
+        StartBeep(_state);
+        ResetKeyboard(_state, _hardware);
+        ClearDrawBuffer(_state, _backward);
+        _state.Set(DS.gamePaused, 0);
+        _state.Set(DS.textPaperPattern, 0);
+        _state.Set(DS.keyDownSpace, 0);
+        return PauseExit::Resume;
       }
-      if (TogglePauseOption(_guest.State(), key))
+      if (TogglePauseOption(_state, key))
       {
         break;
       }
       if (key == SCAN_A)
       {
-        // Abort to the title: its own return address and ProcessFlightKeys' are dropped, so the RET
-        // leaves RunFlight for GameLoop.
-        _guest.Call(RESET_KEYBOARD);
-        _guest.Call(CLEAR_MESSAGE_LINE);
-        _guest.Call(CLEAR_DRAW_BUFFER);
-        _guest.Call(STOP_SOUND_EFFECTS);
-        _guest.Set(DS.gamePaused, 0);
-        _guest.Set(DS.textPaperPattern, 0);
-        _guest.Set(DS.titleShown, 0);
-        regs.ax = _guest.Pop();
-        regs.ax = _guest.Pop();
-        return true;
+        // Abort to the title: StopSoundEffects' CLI round its writes, which nothing interrupts in native code, then its STI.
+        ResetKeyboard(_state, _hardware);
+        ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backward);
+        ClearDrawBuffer(_state, _backward);
+        StopSoundEffects(_state);
+        _hardware.EnableInterrupts();
+        _state.Set(DS.gamePaused, 0);
+        _state.Set(DS.textPaperPattern, 0);
+        _state.Set(DS.titleShown, 0);
+        return PauseExit::Abort;
       }
       if (key < SCAN_F1 || key >= SCAN_PAST_F10)
       {
-        _guest.JumpBack(0x8DC7);
+        _hardware.LoopTurn(PAUSE_KEY_WAIT, {});
         continue;
       }
-      // F1-F10: the minimum frame time, and its key in the menu, 1-9 or 10 with a closing bracket.
-      SetHigh(regs.ax, static_cast<std::uint8_t>(key - SCAN_F1));
-      regs.bx = High(regs.ax);
-      SetLow(regs.ax, _guest.Byte(Plus(DS.frameTimeChoices.offset, regs.bx)));
-      _guest.Set(DS.minimumFrameMs, Low(regs.ax));
-      SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + DIGIT_ONE));
-      if (Low(regs.bx) == DIGIT_NINE + 1)
-      {
-        _guest.SetByte(DS.frameRateKeyLabel.offset, DIGIT_ONE);
-        _guest.Set(DS.dataAC00, DIGIT_ZERO);
-        _guest.Set(DS.dataAC01, CLOSING_BRACKET);
-      }
-      else
-      {
-        _guest.SetByte(DS.frameRateKeyLabel.offset, Low(regs.bx));
-        _guest.Set(DS.dataAC00, CLOSING_BRACKET);
-        _guest.Set(DS.dataAC01, SPACE);
-      }
-      _guest.JumpBack(0x8D6D);
-      return false;
+      SetFrameTime(_state, key);
+      return PauseExit::NewFrameRate;
     }
-    _guest.JumpBack(0x8D8F); // PauseShowOptions
+    _hardware.LoopTurn(PAUSE_SHOW_OPTIONS, {});
   }
 }
 
@@ -903,9 +966,6 @@ std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _har
   return change;
 }
 
-// What RestoreFlightScreen leaves in the registers once it has made _change (RestoreFlightScreenEntry).
-void RestoreFlightScreenOut(Guest& _guest, ScreenChange _change) noexcept;
-
 // 0x0C13 and 0x0C72: flightScreenShown set, then push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
 // Returns whether EraseCompassAndBlips erased anything.
 bool EraseForFlightScreen(GameState& _state)
@@ -914,103 +974,139 @@ bool EraseForFlightScreen(GameState& _state)
   return EraseCompassAndBlips(_state);
 }
 
-// FlightScreenDispatch (0x0BF8): the screen for the key in AH, then the key that screen returns, until
-// F1-F4. Every jump back in it is a turn of a loop that can wait.
-void DispatchFlightScreens(Guest& _guest)
+// FlightScreenDispatch (0x0BF8): the screen for _key, then the screen for the key that screen returns, until F1-F4 or the
+// navigation computer's error leaves (0x0BDE). _al, _countIfNone, _segment and _backward are AL, BP, ES and the direction flag as
+// the dispatch finds them, which the screens and their waits read and leave. Every jump back in it is a turn of a loop that can
+// wait: those to the tests at 0x0BF8 carry the key and BP, which the next screen reads, and the others, into shared code or to the
+// wait, carry nothing.
+FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint8_t _al, std::uint16_t _countIfNone,
+                                    std::uint16_t _segment, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  // EraseForFlightScreen, with the ES EraseCompassAndBlips leaves once it erases anything, which ShowShortRangeChart goes on
-  // with. Its PUSH and POP keep AX.
-  const auto eraseForFlightScreen = [&_guest, &regs]
+  FlightScreens screens{0, _al, std::nullopt, std::nullopt, _countIfNone, _backward};
+  std::uint8_t key = _key;
+  std::uint16_t segment = _segment;
+  // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen). Of what
+  // EraseCompassAndBlips leaves, the screens read BP, the compass dot's in-front byte CBW'd once it erases the dot, and the charts
+  // ES, the video segment once it erases anything.
+  const auto erase = [&_state, &screens, &segment]
   {
-    if (EraseForFlightScreen(_guest.State()))
+    const ObjectSlot station(_state, DS.stationSlot.offset);
+    if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
     {
-      regs.es = GameState::VIDEO_SEGMENT;
+      screens.countLeft = SignExtend(station.Get(SlotByte::BlipZ));
+    }
+    if (EraseForFlightScreen(_state))
+    {
+      segment = GameState::VIDEO_SEGMENT;
     }
   };
-  // LeaveFlightScreens, with what RestoreFlightScreen leaves in the registers but AX, which PUSH AX / POP AX keep round it and
-  // ResetKeyboard: HandleFlightFunctionKeys' contract compares every register.
-  const auto leaveFlightScreens = [&_guest, &regs]
+  // A screen shown, and the key that closed it, with AL as it leaves it: every screen leaves ES on B800h, the charts clear the
+  // direction flag (PresentChartFrame), and the screens that select the system at the cursor as they close leave BP its count.
+  // Then JMP FlightScreenDispatch.
+  const auto shown = [&_hardware, &screens, &key, &segment](const ScreenKey& _closed, bool _chart)
   {
-    const std::uint16_t key = regs.ax;
-    if (const std::optional<ScreenChange> change =
-          LeaveFlightScreens(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)))
+    key = _closed.scanCode;
+    screens.al = _closed.al;
+    screens.countLeft = _closed.countLeft.value_or(screens.countLeft);
+    segment = GameState::VIDEO_SEGMENT;
+    screens.backward = screens.backward && !_chart;
+    _hardware.LoopTurn(FLIGHT_SCREEN_DISPATCH, {Join(key, screens.al), screens.countLeft});
+  };
+  // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens), whose CLD, once it draws, clears the
+  // direction flag.
+  const auto leave = [&_state, &_hardware, &screens]
+  {
+    _hardware.LoopTurn(LEAVE_FLIGHT_SCREENS, {});
+    screens.restored = LeaveFlightScreens(_state, _hardware, screens.backward);
+    if (screens.restored && *screens.restored != ScreenChange::None)
     {
-      RestoreFlightScreenOut(_guest, *change);
-      regs.ax = key;
+      screens.backward = false;
     }
+    return screens;
   };
   for (;;)
   {
-    const std::uint8_t key = High(regs.ax);
     if (key >= SCAN_F1 && key <= SCAN_F4)
     {
-      _guest.JumpBack(0x0BDE);
-      leaveFlightScreens();
-      return;
+      screens.view = key;
+      return leave();
     }
-    if (_guest.Get(DS.witchspaceCountdown) == 0)
+    if (_state.Get(DS.witchspaceCountdown) == 0)
     {
-      eraseForFlightScreen();
-      constexpr std::array<std::uint16_t, 4> SCREENS = {SHOW_GALACTIC_CHART, SHOW_SHORT_RANGE_CHART, SHOW_SYSTEM_DATA_SCREEN,
-                                                        SHOW_MARKET_PRICES_SCREEN};
-      if (key >= SCAN_F5 && key <= SCAN_F8)
+      erase();
+      if (key == SCAN_F5)
       {
-        _guest.Call(SCREENS[static_cast<std::size_t>(key - SCAN_F5)]);
-        _guest.JumpBack(0x0BF8); // FlightScreenDispatch
+        shown(ShowGalacticChart(_state, _hardware, screens.backward, segment), true);
+        continue;
+      }
+      if (key == SCAN_F6)
+      {
+        shown(ShowShortRangeChart(_state, _hardware, screens.backward, segment), true);
+        continue;
+      }
+      if (key == SCAN_F7)
+      {
+        shown(ShowSystemDataScreen(_state, _hardware, screens.backward, screens.countLeft), false);
+        continue;
+      }
+      if (key == SCAN_F8)
+      {
+        shown(ShowMarketPricesScreen(_state, _hardware, screens.backward, screens.countLeft), false);
         continue;
       }
     }
     else
     {
-      // In witch space the short-range chart still shows once the countdown is down to 1, and F9 and
-      // F10 show; the charts and the market need the navigation computer, which witch space jams.
+      // In witch space the short-range chart still shows once the countdown is down to 1, and F9 and F10 show; the charts and the
+      // market need the navigation computer, which witch space jams.
       if (key == SCAN_F6)
       {
-        if (_guest.Get(DS.witchspaceCountdown) == 1)
+        if (_state.Get(DS.witchspaceCountdown) == 1)
         {
-          _guest.Set(DS.flightScreenShown, 1);
-          _guest.Call(ERASE_COMPASS_AND_BLIPS);
-          _guest.Call(SHOW_SHORT_RANGE_CHART);
-          _guest.JumpBack(0x0BF8);
+          erase();
+          shown(ShowShortRangeChart(_state, _hardware, screens.backward, segment), true);
           continue;
         }
-        _guest.JumpBack(0x0C6D);
+        _hardware.LoopTurn(NAVIGATION_KEYS, {});
       }
       if (key < SCAN_F9)
       {
-        if (_guest.Get(DS.flightScreenShown) != 1)
+        if (_state.Get(DS.flightScreenShown) != 1)
         {
-          _guest.Call(START_BEEP);
+          StartBeep(_state);
         }
-        regs.ax = DS.navCompErrorMessage.offset;
-        SetMessage(_guest.State(), regs.ax, 0x19);
-        SetHigh(regs.ax, 0);
-        _guest.JumpBack(0x0BDE);
-        leaveFlightScreens();
-        return;
+        // MOV AX,navCompErrorMessage, posted, then XOR AH,AH: no view, and AL the message's low byte.
+        SetMessage(_state, DS.navCompErrorMessage.offset, 0x19);
+        screens.al = Low(DS.navCompErrorMessage.offset);
+        return leave();
       }
-      eraseForFlightScreen();
-      _guest.JumpBack(0x0C45);
+      erase();
+      _hardware.LoopTurn(STATUS_OR_INVENTORY_KEY, {});
     }
     // 0x0C45: F9 and F10; any other key the screens return is waited past.
     if (key == SCAN_F9)
     {
-      _guest.Call(RESET_KEYBOARD);
-      _guest.Set(DS.inFlight, 1);
-      _guest.Call(SHOW_COMMANDER_STATUS_SCREEN);
-      _guest.Set(DS.inFlight, 0);
-      _guest.JumpBack(0x0BF8);
+      ResetKeyboard(_state, _hardware);
+      _state.Set(DS.inFlight, 1);
+      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, screens.backward, screens.countLeft);
+      _state.Set(DS.inFlight, 0);
+      shown(closed, false);
       continue;
     }
     if (key == SCAN_F10)
     {
-      _guest.Call(SHOW_INVENTORY_SCREEN);
-      _guest.JumpBack(0x0BF8);
+      shown(ShowInventoryScreen(_state, _hardware, screens.backward, screens.countLeft), false);
       continue;
     }
-    _guest.JumpBack(0x0BF3);
-    WaitForKey(_guest, 0x0BF3);
+    // JMP 0BF3h, and GetKey until a key comes: a screenshot taken there leaves ES on the video segment (SaveScreenshot).
+    _hardware.LoopTurn(FLIGHT_SCREEN_KEY_WAIT, {});
+    const KeyPress next = WaitForKey(_state, _hardware, FLIGHT_SCREEN_KEY_WAIT);
+    key = next.scanCode;
+    screens.al = AlAfterKey(screens.al, next);
+    if (next.screenshot)
+    {
+      segment = GameState::VIDEO_SEGMENT;
+    }
   }
 }
 
@@ -1597,33 +1693,32 @@ void SaveStardustPositions(GameState& _state)
   }
 }
 
-void HandleFlightFunctionKeys(Guest& _guest)
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _countIfNone,
+                                       std::uint16_t _segment, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.inFlight, 0);
-  regs.cx = 10;
-  regs.bx = SCAN_F1;
-  for (;;)
+  _state.Set(DS.inFlight, 0);
+  // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10: each turn back to 0x0BBE carries both.
+  std::uint16_t scan = SCAN_F1;
+  for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
-    if (_guest.Byte(Plus(DS.keyDown.offset, regs.bx)) == 1)
+    if (_state.Byte(Plus(DS.keyDown.offset, scan)) == 1)
     {
-      SetHigh(regs.ax, Low(regs.bx));
-      const std::uint16_t key = regs.ax;
-      _guest.Call(RESET_KEYBOARD);
-      regs.ax = key;
-      _guest.Set(DS.flightScreenShown, 0);
-      DispatchFlightScreens(_guest);
-      return;
+      // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
+      ResetKeyboard(_state, _hardware);
+      _state.Set(DS.flightScreenShown, 0);
+      FlightScreens screens = DispatchFlightScreens(_state, _hardware, Low(scan), _al, _countIfNone, _segment, _backward);
+      screens.key = Low(scan);
+      return screens;
     }
-    ++regs.bx;
-    if (--regs.cx == 0)
+    ++scan;
+    if (--keys == 0)
     {
       break;
     }
-    _guest.JumpBack(0x0BBE);
+    _hardware.LoopTurn(FUNCTION_KEY_LOOP, {keys, scan});
   }
-  SetHigh(regs.ax, 0);
-  _guest.Set(DS.inFlight, 1);
+  _state.Set(DS.inFlight, 1);
+  return FlightScreens{0, _al, std::nullopt, std::nullopt, _countIfNone, _backward};
 }
 
 ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _backward)
@@ -2392,104 +2487,107 @@ bool TickEscapePod(GameState& _state)
   return _state.Get(DS.escapePodFrames) == 0;
 }
 
-void ProcessFlightKeys(Guest& _guest)
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint8_t _al, std::uint16_t _di, std::uint16_t _countIfNone,
+                                 std::uint16_t _segment, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.gameOverFrames) != 0)
+  if (_state.Get(DS.gameOverFrames) != 0)
   {
-    return;
+    return FlightKeysExit{false, _backward};
   }
-  if (_guest.Get(DS.escapePodFrames) != 0)
+  if (_state.Get(DS.escapePodFrames) != 0)
   {
-    _guest.JumpBack(0x7FAF); // to the RET above
-    return;
+    // JNE back to the RET above: a backward jump into shared code, not a loop, so its turn carries nothing.
+    _hardware.LoopTurn(PROCESS_FLIGHT_KEYS_RETURN, {});
+    return FlightKeysExit{false, _backward};
   }
-  _guest.Call(HANDLE_FLIGHT_FUNCTION_KEYS);
-  if (High(regs.ax) != 0 && _guest.Get(DS.viewLocked) != 1)
+  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware, _al, _countIfNone, _segment, _backward);
+  const bool backward = screens.backward;
+  // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
+  // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
+  std::uint16_t di = screens.restored ? DASHBOARD_CACHE_END : _di;
+  if (screens.view != 0 && _state.Get(DS.viewLocked) != 1 && ChangeView(_state, screens.view))
   {
-    // A new view leaves AX and DI as ResetStardust does.
-    if (const std::optional<std::uint16_t> lifetimeRandom = ChangeView(_guest.State(), High(regs.ax)))
-    {
-      ResetStardustOut(regs, *lifetimeRandom);
-    }
+    di = STARDUST_END;
   }
-  if (_guest.Get(DS.keyDownG) == 1 && _guest.Get(DS.galacticHyperdriveFitted) == 1 && _guest.Get(DS.galacticDriveReadyFrames) == 0 &&
-      _guest.Get(DS.hyperspaceCountdown) == 0)
+  if (_state.Get(DS.keyDownG) == 1 && _state.Get(DS.galacticHyperdriveFitted) == 1 && _state.Get(DS.galacticDriveReadyFrames) == 0 &&
+      _state.Get(DS.hyperspaceCountdown) == 0)
   {
-    _guest.Call(START_BEEP);
-    regs.ax = DS.galacticDriveReadyMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 0x28);
-    _guest.Set(DS.galacticDriveReadyFrames, 0x28);
+    StartBeep(_state);
+    SetMessage(_state, DS.galacticDriveReadyMessage.offset, 0x28);
+    _state.Set(DS.galacticDriveReadyFrames, 0x28);
   }
-  if (_guest.Get(DS.keyDownH) == 1 && PressHyperspace(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)))
+  if (_state.Get(DS.keyDownH) == 1 && PressHyperspace(_state, _hardware, backward))
   {
-    return;
+    return FlightKeysExit{false, backward};
   }
   // D, released, toggles the docking computer: not in mission 3 until the invaded station is destroyed.
-  if ((_guest.Get(DS.missionNumber) != 3 || _guest.Get(DS.invadedStationDestroyed) == 1) && _guest.Get(DS.dockingKeyReleased) == 1 &&
-      _guest.Get(DS.dockingComputerFitted) == 1)
+  if ((_state.Get(DS.missionNumber) != 3 || _state.Get(DS.invadedStationDestroyed) == 1) && _state.Get(DS.dockingKeyReleased) == 1 &&
+      _state.Get(DS.dockingComputerFitted) == 1)
   {
-    if (_guest.Get(DS.hyperspaceCountdown) != 0)
+    if (_state.Get(DS.hyperspaceCountdown) != 0)
     {
-      _guest.Set(DS.dockingKeyReleased, 0);
+      _state.Set(DS.dockingKeyReleased, 0);
     }
     else
     {
-      _guest.Set(DS.jumpDriveEngaged, 0);
-      _guest.Call(TOGGLE_DOCKING_COMPUTER);
+      _state.Set(DS.jumpDriveEngaged, 0);
+      (void)ToggleDockingComputer(_state, _hardware);
     }
   }
-  if (_guest.Get(DS.keyDownJ) == 1)
+  if (_state.Get(DS.keyDownJ) == 1)
   {
-    _guest.Call(ENGAGE_JUMP_DRIVE);
+    if (const JumpDriveRequest request = EngageJumpDrive(_state); request.lock)
+    {
+      di = DiAfterMassLock(*request.lock, di);
+    }
   }
-  if (_guest.Get(DS.keyDownEsc) == 1)
+  if (_state.Get(DS.keyDownEsc) == 1)
   {
-    _guest.Set(DS.gamePaused, 1);
-    if (_guest.Get(DS.keyDownCtrl) == 1)
+    _state.Set(DS.gamePaused, 1);
+    if (_state.Get(DS.keyDownCtrl) == 1)
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
-      _guest.Call(RESET_KEYBOARD);
-      WaitForKey(_guest, 0x8153);
+      ResetKeyboard(_state, _hardware);
+      (void)WaitForKey(_state, _hardware, FREEZE_KEY_WAIT);
     }
     else
     {
-      regs.ax = DS.gamePausedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 1);
-      _guest.Call(UPDATE_MESSAGE_LINE);
-      _guest.Call(RUN_PAUSE_SCREEN);
+      SetMessage(_state, DS.gamePausedMessage.offset, 1);
+      (void)UpdateMessageLine(_state, backward);
+      if (RunPauseScreen(_state, _hardware, backward))
+      {
+        return FlightKeysExit{true, backward};
+      }
+      di = DrawBufferEnd(backward);
     }
-    _guest.Set(DS.gamePaused, 0);
+    _state.Set(DS.gamePaused, 0);
   }
-  // What these leave in the registers, the keys below write before they read. HandleMissileKeys takes the DI its launch copies
-  // from.
-  HandleMissileKeys(_guest.State(), regs.di, _guest.Flag(Machine::FLAG_DIRECTION));
-  HandleFireButton(_guest.State(), _guest.Devices());
-  if (_guest.Get(DS.keyDownE) == 1 && _guest.Get(DS.ecmFitted) == 1)
+  HandleMissileKeys(_state, di, backward);
+  HandleFireButton(_state, _hardware);
+  if (_state.Get(DS.keyDownE) == 1 && _state.Get(DS.ecmFitted) == 1)
   {
-    _guest.Set(DS.ecmFired, 1);
-    regs.ax = DS.ecmActiveMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 5);
-    _guest.Call(REMOVE_ALL_MISSILES);
-    SetLow(regs.ax, 0x14);
-    _guest.Call(DRAIN_ENERGY);
+    _state.Set(DS.ecmFired, 1);
+    SetMessage(_state, DS.ecmActiveMessage.offset, 5);
+    (void)RemoveAllMissiles(_state);
+    DrainEnergy(_state, ECM_ENERGY);
   }
-  if (_guest.Get(DS.keyDownB) == 1 && _guest.Get(DS.energyBombFitted) == 1)
+  if (_state.Get(DS.keyDownB) == 1 && _state.Get(DS.energyBombFitted) == 1)
   {
-    _guest.Set(DS.energyBombFitted, 0);
-    _guest.Call(DETONATE_ENERGY_BOMB);
+    _state.Set(DS.energyBombFitted, 0);
+    (void)DetonateEnergyBomb(_state, _hardware, backward);
   }
-  if (_guest.Get(DS.keyDownC) == 1 && _guest.Get(DS.escapePodFitted) == 1 && _guest.Get(DS.escapePodFrames) == 0)
+  if (_state.Get(DS.keyDownC) == 1 && _state.Get(DS.escapePodFitted) == 1 && _state.Get(DS.escapePodFrames) == 0)
   {
-    _guest.Call(START_BEEP);
-    _guest.Call(LAUNCH_ESCAPE_POD);
+    StartBeep(_state);
+    LaunchEscapePod(_state);
   }
-  HandleIdentifyKey(_guest.State());
-  if (_guest.Get(DS.keyDownN) == 1 && _guest.Get(DS.maskingDeviceFitted) == 1)
+  HandleIdentifyKey(_state);
+  if (_state.Get(DS.keyDownN) == 1 && _state.Get(DS.maskingDeviceFitted) == 1)
   {
-    _guest.Call(USE_MASKING_DEVICE);
+    UseMaskingDevice(_state);
   }
-  HandleAntiEcmKey(_guest.State());
+  HandleAntiEcmKey(_state);
+  return FlightKeysExit{false, backward};
 }
 
 void DrainEnergy(GameState& _state, std::int8_t _amount)
@@ -2575,10 +2673,8 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
       }
     }
     _state.Set(DS.playerSpeed, speed);
-    // ReadSteering fires the stick with AL, the speed's low byte; the interrupts that fall due while the stick's read holds them
-    // off are taken where its hook call took them.
+    // ReadSteering fires the stick with AL, the speed's low byte.
     const Steering read = ReadSteering(_state, _hardware, Low(speed));
-    _hardware.TakeDueInterrupts();
     _state.Set(DS.rollRate, Join(read.pitch, read.roll));
     steering = ApplyReverseControls(_state, read);
   }
@@ -2644,37 +2740,20 @@ void MoveObjectsByVelocity(GameState& _state)
   }
 }
 
-void RunPauseScreen(Guest& _guest)
+bool RunPauseScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(SILENCE_SPEAKER_TIMER);
+  SilenceSpeakerTimer(_hardware);
   for (;;)
   {
-    // 0x8D6D: the menu's eight lines.
-    _guest.Call(CLEAR_DRAW_BUFFER);
-    _guest.Set(DS.textPaperPattern, 0);
-    regs.cx = PAUSE_MENU_LINES;
-    regs.si = DS.pauseMenuText.offset;
-    for (;;)
+    DrawPauseMenu(_state, _hardware, _backward);
+    ResetKeyboard(_state, _hardware);
+    const PauseExit exit = RunPauseOptions(_state, _hardware, _backward);
+    if (exit != PauseExit::NewFrameRate)
     {
-      const std::uint16_t lines = regs.cx;
-      regs.di = _guest.Word(regs.si);
-      regs.si = Plus(regs.si, 2);
-      regs.bx = ALL_COLORS;
-      _guest.Call(DRAW_VIEW_STRING);
-      ++regs.si;
-      regs.cx = lines;
-      if (--regs.cx == 0)
-      {
-        break;
-      }
-      _guest.JumpBack(0x8D7C);
+      return exit == PauseExit::Abort;
     }
-    _guest.Call(RESET_KEYBOARD);
-    if (RunPauseOptions(_guest))
-    {
-      return;
-    }
+    // JMP 8D6Dh, the menu again: its turn loads or writes every register it reads, and carries nothing.
+    _hardware.LoopTurn(PAUSE_MENU, {});
   }
 }
 
@@ -2737,8 +2816,12 @@ constexpr Machine::NativeContract UPDATES_DASHBOARD = Clobbers(static_cast<std::
 constexpr Machine::NativeContract DRAWS_BAR = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI);
 constexpr Machine::NativeContract CLOBBERS_AX_BX = Clobbers(REGISTER_AX | REGISTER_BX);
 constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER = Clobbers(REGISTER_ALL);
-// SetUpLocalSpace's and UpdatePlayerMotion's: all but DS, which the original leaves alone and the flight loop goes on with.
+// SetUpLocalSpace's, UpdatePlayerMotion's and ProcessFlightKeys': all but DS, which the original leaves alone and the flight loop
+// goes on with.
 constexpr Machine::NativeContract CLOBBERS_ALL_BUT_DS = Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS));
+// HandleFlightFunctionKeys': BX, DX and SI, which the screens leave and no value routine computes; ProcessFlightKeys, its one caller,
+// writes each before it reads it (HandleFlightFunctionKeysEntry).
+constexpr Machine::NativeContract FUNCTION_KEY_SCREENS = Clobbers(REGISTER_BX | REGISTER_DX | REGISTER_SI);
 
 // MOV AX,DS / MOV ES,AX / MOV DI,missileCountShown / MOV CX,16h / MOV AL,80h / REP STOSB: what InvalidateDashboard leaves, ES =
 // DS, and AX, CX and DI, which RestoreFlightScreen's contract compares.
@@ -3295,6 +3378,54 @@ void TickEscapePodEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void HandleFlightFunctionKeysEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const FlightScreens screens =
+    HandleFlightFunctionKeys(_guest.State(), _guest.Devices(), Low(regs.ax), regs.bp, regs.es, _guest.Flag(Machine::FLAG_DIRECTION));
+  // What the original leaves: CX as the scan of keyDown leaves it, 0 past F10 or the LOOP's count at the key it found; once a
+  // screen was shown, what RestoreFlightScreen leaves (RestoreFlightScreenOut), AX but, which PUSH AX / POP AX keep round it; AH
+  // the view key or 0 and AL, BP and the direction flag as the screens leave them. BX, DX and SI, which the screens leave and no
+  // value routine computes, the contract leaves to it.
+  regs.cx = screens.key ? static_cast<std::uint16_t>(FUNCTION_KEYS - (*screens.key - SCAN_F1)) : std::uint16_t{0};
+  if (screens.restored)
+  {
+    RestoreFlightScreenOut(_guest, *screens.restored);
+  }
+  regs.ax = Join(screens.view, screens.al);
+  regs.bp = screens.countLeft;
+  _guest.SetFlag(Machine::FLAG_DIRECTION, screens.backward);
+  _guest.Clobber(FUNCTION_KEY_SCREENS);
+}
+
+void ProcessFlightKeysEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const FlightKeysExit exit =
+    ProcessFlightKeys(_guest.State(), _guest.Devices(), Low(regs.ax), regs.di, regs.bp, regs.es, _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.SetFlag(Machine::FLAG_DIRECTION, exit.backward);
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+  if (exit.aborted)
+  {
+    // The pause screen's A: its POP AX / POP AX drop its own return address, which a value call has none of, and then this
+    // routine's, so that the RET returns from RunFlight.
+    regs.ax = _guest.Pop();
+  }
+}
+
+void RunPauseScreenEntry(Guest& _guest)
+{
+  const bool aborted = RunPauseScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Clobber(CLOBBERS_EVERY_REGISTER);
+  if (aborted)
+  {
+    // A: POP AX / POP AX drop its own return address and its caller's, ProcessFlightKeys', so that the RET returns from RunFlight.
+    Registers& regs = _guest.Regs();
+    regs.ax = _guest.Pop();
+    regs.ax = _guest.Pop();
+  }
+}
+
 namespace
 {
 
@@ -3321,7 +3452,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0A28, "DustToScreen", &DustToScreenEntry, PRESERVES_ALL},
   NativeEntry{0x0A43, "ResetStardust", &ResetStardustEntry, CLOBBERS_CX},
   NativeEntry{0x0A88, "SaveStardustPositions", &SaveStardustPositionsEntry, CLOBBERS_AX_CX_SI_DI},
-  NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeys, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Sometimes},
+  NativeEntry{0x0BB3, "HandleFlightFunctionKeys", &HandleFlightFunctionKeysEntry, FUNCTION_KEY_SCREENS, NativeReturn::Near, 0,
+              NativeWait::Sometimes},
   NativeEntry{0x15CF, "RestoreFlightScreen", &RestoreFlightScreenEntry, PRESERVES_ALL},
   NativeEntry{0x2540, "InvalidateDashboard", &InvalidateDashboardEntry, PRESERVES_ALL},
   NativeEntry{0x254F, "UpdateDashboard", &UpdateDashboardEntry, UPDATES_DASHBOARD},
@@ -3354,14 +3486,14 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeakEntry, CLOBBERS_AX_DX},
   NativeEntry{0x7E9B, "RunFlight", &RunFlight, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePodEntry, PRESERVES_ALL},
-  NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Sometimes},
+  NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeysEntry, CLOBBERS_ALL_BUT_DS, NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x839F, "DrainEnergy", &DrainEnergyEntry, PRESERVES_ALL},
   NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDriveEntry, PRESERVES_ALL},
   NativeEntry{0x8472, "UpdatePlayerMotion", &UpdatePlayerMotionEntry, CLOBBERS_ALL_BUT_DS, Machine::NativeReturn::Near, 0,
               Machine::NativeWait::Sometimes},
   NativeEntry{0x8599, "UpdatePlayerVelocity", &UpdatePlayerVelocityEntry, CLOBBERS_AX_BX_DX},
   NativeEntry{0x85EC, "MoveObjectsByVelocity", &MoveObjectsByVelocityEntry, CLOBBERS_CX_DX},
-  NativeEntry{0x8D6A, "RunPauseScreen", &RunPauseScreen, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x8D6A, "RunPauseScreen", &RunPauseScreenEntry, CLOBBERS_EVERY_REGISTER, NativeReturn::Near, 0, NativeWait::Always},
 };
 
 } // namespace

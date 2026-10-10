@@ -9,7 +9,10 @@
 #include "Input.h"
 #include "Market.h"
 #include "SaveLoad.h"
+#include "Scene.h"
 #include "Ships.h"
+#include "Sound.h"
+#include "StartUp.h"
 #include "Text.h"
 #include "Video.h"
 
@@ -45,22 +48,7 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint16_t FRAME_CORNERS = 6;
 constexpr std::uint16_t FRAME_CORNER_BYTES = 3; // the cell's offset, then the character
 
-// The routines the docked screens call, each through its hook or the original (ADR-010 item 8).
-constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
-constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
-constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
-constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t START_NEW_GAME = 0x4671;
-constexpr std::uint16_t CLEAR_ALL_OBJECTS = 0x52B2;
-constexpr std::uint16_t START_MUSIC = 0x7401;
-constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
-constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t SHOW_COCKPIT_SCREEN = 0x7BC0;
-constexpr std::uint16_t DRAW_TITLE_PLANET = 0x7D4E;
-constexpr std::uint16_t SHOW_CREDITS = 0x8F02;
-
-// Where the original jumps back: Guest::JumpBack for the register code, Hardware::LoopTurn for the routines de-assembled.
+// Where the original jumps back (Hardware::LoopTurn, ADR-015).
 constexpr std::uint16_t DOCKED_KEY_DISPATCH = 0x0B40;
 constexpr std::uint16_t DOCKED_KEY_TEST = 0x0B45; // after a screen, the key it returned
 constexpr std::uint16_t DOCKED_STATUS_ENTRY = 0x0B96;
@@ -197,12 +185,6 @@ constexpr std::uint16_t TITLE_YAW_STEP = 0x14;
 constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
-// ADD WORD PTR [_offset],_value.
-void AddToWord(GameState& _state, std::uint16_t _offset, std::uint16_t _value)
-{
-  _state.SetWord(_offset, Offset(_state.Word(_offset), _value));
-}
-
 // CALL GetKey; JE _loop, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015). The turns
 // carry nothing, as WaitForKeyPress's do. Returns the key.
 KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
@@ -297,80 +279,73 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
                   Offset(_row.prices, TRADE_PRICES_BYTES)};
 }
 
-// The title: the planet and the turning ship, F9 and F10 step its type, any other key ends it with the
-// credits and a new game. TitleFrameLoop (CS:7DF1) is one frame.
-void RunTitle(Guest& _guest)
+// RunTitle (CS:7D8B), the title: the ship slots cleared (ClearAllObjects, by _backward, the direction flag), the music on, the
+// player's angles, the view and the lasers zeroed, the cockpit shown (screenLayout 2, which ShowCockpitScreen copies over with the
+// direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
+// titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
+// with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop (CS:7DF1) is one
+// frame; its turns carry nothing, as the frame loads every register it reads. Returns what it leaves in BP, PresentSpaceView's 20h
+// from the credits; the direction flag is clear, from their FinishSpaceViewFrame.
+std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(CLEAR_ALL_OBJECTS);
-  _guest.Call(START_MUSIC);
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  _guest.Set(DS.laserMountsFitted, 0);
-  _guest.Set(DS.playerPitchAngle, 0);
-  _guest.Set(DS.playerYawAngle, 0);
-  _guest.Set(DS.playerRollAngle, 0);
-  _guest.Set(DS.viewAngle, 0);
-  _guest.Set(DS.anyKeyLatch, 0);
-  _guest.Set(DS.screenLayout, TITLE_LAYOUT);
-  _guest.Call(SHOW_COCKPIT_SCREEN);
-  _guest.Call(CLEAR_MESSAGE_LINE);
-  _guest.Set(DS.textPaperPattern, 0);
-  regs.bx = WHITE_MASK;
-  regs.si = DS.eliteTitleText.offset;
-  regs.di = TITLE_TEXT_CELL;
-  _guest.Call(DRAW_SCREEN_STRING);
-  regs.di = DS.stationSlot.offset;
-  _guest.Set(DS.shipSlotCount, TITLE_SHIP_SLOTS);
-  regs.ax = 0;
-  _guest.SetWord(Offset(regs.di, SLOT_YAW), regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_ROLL), regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_X), regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_Y), regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_X_HIGH), regs.ax);
-  _guest.SetByte(Offset(regs.di, SLOT_X_HIGH + 2), Low(regs.ax));
+  ClearAllObjects(_state, _backward);
+  StartMusic(_state, _hardware);
+  _state.Set(DS.laserMountsFitted, 0);
+  _state.Set(DS.playerPitchAngle, 0);
+  _state.Set(DS.playerYawAngle, 0);
+  _state.Set(DS.playerRollAngle, 0);
+  _state.Set(DS.viewAngle, 0);
+  _state.Set(DS.anyKeyLatch, 0);
+  _state.Set(DS.screenLayout, TITLE_LAYOUT);
+  (void)ShowCockpitScreen(_state, _hardware, _backward);
+  bool backward = false;
+  ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
+  _state.Set(DS.textPaperPattern, 0);
+  (void)DrawScreenString(_state, DS.eliteTitleText.offset, WHITE_MASK, GameState::VIDEO_SEGMENT, TITLE_TEXT_CELL);
+  ObjectSlot ship(_state, DS.stationSlot.offset);
+  _state.Set(DS.shipSlotCount, TITLE_SHIP_SLOTS);
+  // XOR AX,AX, then the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
+  ship.Set(SlotWord::Yaw, 0);
+  ship.Set(SlotWord::Roll, 0);
+  ship.Set(SlotWord::X, 0);
+  ship.Set(SlotWord::Y, 0);
+  ship.Set(SlotWord::XYHigh, 0);
+  ship.Set(SlotByte::ZHigh, 0);
   for (;;)
   {
-    regs.bx = TITLE_PLANET_RADIUS;
-    regs.dx = TITLE_PLANET_X;
-    regs.cx = TITLE_PLANET_Y;
-    _guest.Set(DS.drawColor, TITLE_PLANET_COLOR);
-    _guest.Call(DRAW_TITLE_PLANET);
-    regs.di = DS.stationSlot.offset;
-    _guest.SetByte(Offset(regs.di, SLOT_FLAGS), TITLE_SHIP_FLAGS);
-    regs.bx = static_cast<std::uint8_t>(_guest.Get(DS.titleShipType) << 1);
-    regs.ax = _guest.Word(Offset(DS.titleShipDistances.offset, regs.bx));
-    SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
-    _guest.SetByte(regs.di, Low(regs.bx));
-    _guest.SetWord(Offset(regs.di, SLOT_Z), regs.ax); // at the type's own distance
-    AddToWord(_guest.State(), Offset(regs.di, SLOT_ROLL), TITLE_ROLL_STEP);
-    AddToWord(_guest.State(), Offset(regs.di, SLOT_YAW), TITLE_YAW_STEP);
-    AddToWord(_guest.State(), Offset(regs.di, SLOT_PITCH), TITLE_PITCH_STEP);
-    regs.si = DS.pressAnyKeyText.offset;
-    regs.di = PRESS_ANY_KEY_PLACE;
-    _guest.Set(DS.textPaperPattern, 0);
-    regs.bx = PRESS_ANY_KEY_MASK;
-    _guest.Call(DRAW_VIEW_STRING);
-    _guest.Call(TRANSFORM_AND_DRAW_OBJECTS);
-    _guest.Call(FINISH_SPACE_VIEW_FRAME);
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(Machine::FLAG_ZERO))
+    _state.Set(DS.drawColor, TITLE_PLANET_COLOR);
+    DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y, backward);
+    ship.Set(SlotByte::Flags, TITLE_SHIP_FLAGS);
+    // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
+    // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
+    const auto doubled = static_cast<std::uint8_t>(_state.Get(DS.titleShipType) << 1);
+    const std::uint16_t distance = _state.Word(Offset(DS.titleShipDistances.offset, doubled));
+    ship.Set(SlotByte::Type, static_cast<std::uint8_t>(doubled + 1));
+    ship.Set(SlotWord::Z, distance);
+    ship.Set(SlotWord::Roll, Offset(ship.Get(SlotWord::Roll), TITLE_ROLL_STEP));
+    ship.Set(SlotWord::Yaw, Offset(ship.Get(SlotWord::Yaw), TITLE_YAW_STEP));
+    ship.Set(SlotWord::Pitch, Offset(ship.Get(SlotWord::Pitch), TITLE_PITCH_STEP));
+    _state.Set(DS.textPaperPattern, 0);
+    (void)DrawViewString(_state, DS.pressAnyKeyText.offset, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
+    (void)TransformAndDrawObjects(_state, _hardware, backward);
+    FinishSpaceViewFrame(_state, _hardware);
+    backward = false;
+    if (const KeyPress key = GetKey(_state, _hardware); key.scanCode != 0)
     {
-      const std::uint8_t key = High(regs.ax);
-      if (key == SCAN_F9)
+      if (key.scanCode == SCAN_F9)
       {
-        _guest.Set(DS.titleShipType, static_cast<std::uint8_t>(_guest.Get(DS.titleShipType) - 1));
-        if (_guest.Get(DS.titleShipType) < TITLE_FIRST_SHIP_TYPE)
+        _state.Set(DS.titleShipType, static_cast<std::uint8_t>(_state.Get(DS.titleShipType) - 1));
+        if (_state.Get(DS.titleShipType) < TITLE_FIRST_SHIP_TYPE)
         {
-          _guest.Set(DS.titleShipType, TITLE_LAST_SHIP_TYPE);
+          _state.Set(DS.titleShipType, TITLE_LAST_SHIP_TYPE);
         }
       }
-      else if (key == SCAN_F10)
+      else if (key.scanCode == SCAN_F10)
       {
-        _guest.Set(DS.titleShipType, static_cast<std::uint8_t>(_guest.Get(DS.titleShipType) + 1));
-        if (_guest.Get(DS.titleShipType) == TITLE_LAST_SHIP_TYPE + 1)
+        _state.Set(DS.titleShipType, static_cast<std::uint8_t>(_state.Get(DS.titleShipType) + 1));
+        if (_state.Get(DS.titleShipType) == TITLE_LAST_SHIP_TYPE + 1)
         {
-          _guest.Set(DS.titleShipType, TITLE_FIRST_SHIP_TYPE);
+          _state.Set(DS.titleShipType, TITLE_FIRST_SHIP_TYPE);
         }
       }
       else
@@ -378,12 +353,14 @@ void RunTitle(Guest& _guest)
         break;
       }
     }
-    _guest.JumpBack(TITLE_FRAME_LOOP);
+    _hardware.LoopTurn(TITLE_FRAME_LOOP, {});
   }
-  _guest.Call(STOP_ALL_SOUND);
-  _guest.Call(SHOW_CREDITS);
-  _guest.Call(START_NEW_GAME);
-  _guest.Set(DS.titleShown, 1);
+  StopAllSound(_state, _hardware);
+  ShowCredits(_state, _hardware, backward);
+  StartNewGame(_state, backward);
+  _state.Set(DS.titleShown, 1);
+  // The credits' FinishSpaceViewFrame leaves BP, which StartNewGame keeps.
+  return PRESENT_SPACE_VIEW_BP;
 }
 
 // The screen each F-key shows in DockedKeyDispatch (CS:0B45), in the order it tests them, called as the dispatch calls it: with
@@ -419,15 +396,6 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
    false},
   {SCAN_F10, &ShowInventoryScreen, false},
 }};
-
-// How DockedKeyDispatch ends.
-struct DockedExit
-{
-  bool leaves;             // the disc menu left through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit)
-  ScreenKey key;           // otherwise F1, with AL as the screen and the waits for a key leave it
-  std::uint16_t countLeft; // BP, as the screens leave it
-  bool backward;           // the direction flag, as they leave it
-};
 
 // DockedKeyDispatch (CS:0B40), from the arm that shows the screen for _screenKey: F9's status screen (CS:0B96), or Esc's disc menu
 // (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
@@ -487,8 +455,8 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
 constexpr Machine::NativeContract DOCKED_SCREENS_LEAVE{
   Machine::REGISTER_BX | Machine::REGISTER_CX | Machine::REGISTER_DX | Machine::REGISTER_SI | Machine::REGISTER_DI, 0};
 
-// What DockedKeyDispatch leaves for RunTitleAndDocked's register code: ES = B800h, as every screen leaves it; BP and the direction
-// flag as the screens carry them; and AX the F1 that ends it or, once the disc menu leaves for the disk, the return address
+// What DockedKeyDispatch leaves for RunTitleAndDocked's entry: ES = B800h, as every screen leaves it; BP and the direction flag as
+// the screens carry them; and AX the F1 that ends it or, once the disc menu leaves for the disk, the return address
 // LeaveGameLoopForDisk's second POP AX takes, RunTitleAndDocked's own, so that its RET returns from GameLoop. The first POP takes
 // the disc menu's return address, which a value call has none of.
 void DockedExitOut(Guest& _guest, const DockedExit& _exit)
@@ -978,25 +946,24 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
   _state.Set(DS.missionStage, 0);
 }
 
-void RunTitleAndDocked(Guest& _guest)
+DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
-  if (_guest.Get(DS.titleShown) != 1)
+  std::uint16_t countIfNone = _countIfNone;
+  bool backward = _backward;
+  if (_state.Get(DS.titleShown) != 1)
   {
-    RunTitle(_guest);
+    countIfNone = RunTitle(_state, _hardware, _backward);
+    backward = false;
   }
-  // Into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
-  std::uint8_t screenKey = SCAN_F9;
-  if (_guest.Get(DS.resumeAtDiskMenu) == 1)
+  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96). The
+  // jumps back carry BP, which the status screen reads, as the dispatch's own turns do.
+  if (_state.Get(DS.resumeAtDiskMenu) == 1)
   {
-    _guest.JumpBack(DOCKED_DISK_MENU_ENTRY);
-    screenKey = SCAN_ESCAPE;
+    _hardware.LoopTurn(DOCKED_DISK_MENU_ENTRY, {countIfNone});
+    return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE, countIfNone, backward);
   }
-  else
-  {
-    _guest.JumpBack(DOCKED_STATUS_ENTRY);
-  }
-  DockedExitOut(_guest,
-                DispatchDockedKeys(_guest.State(), _guest.Devices(), screenKey, _guest.Regs().bp, _guest.Flag(Machine::FLAG_DIRECTION)));
+  _hardware.LoopTurn(DOCKED_STATUS_ENTRY, {countIfNone});
+  return DispatchDockedKeys(_state, _hardware, SCAN_F9, countIfNone, backward);
 }
 
 // ── Their entries ──
@@ -1121,6 +1088,12 @@ void DrawFrameSidesEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void RunTitleAndDockedEntry(Guest& _guest)
+{
+  // BP, the count the status screen hands SelectSystemAtCursor when no system is on the chart, as the flight left it.
+  DockedExitOut(_guest, RunTitleAndDocked(_guest.State(), _guest.Devices(), _guest.Regs().bp, _guest.Flag(Machine::FLAG_DIRECTION)));
+}
+
 void DrawFrameRowEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1149,7 +1122,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrameEntry, PRESERVES_ALL},
   NativeEntry{0x7CE9, "DrawFrameSides", &DrawFrameSidesEntry, PRESERVES_ALL},
   NativeEntry{0x7CF8, "DrawFrameRow", &DrawFrameRowEntry, PRESERVES_ALL},
-  NativeEntry{0x7D81, "RunTitleAndDocked", &RunTitleAndDocked, CLOBBERS_ALL, NEAR, 0, ALWAYS},
+  NativeEntry{0x7D81, "RunTitleAndDocked", &RunTitleAndDockedEntry, CLOBBERS_ALL, NEAR, 0, ALWAYS},
 };
 
 } // namespace

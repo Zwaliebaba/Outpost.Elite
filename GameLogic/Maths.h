@@ -15,28 +15,10 @@ namespace Elite
 // The reference's arithmetic, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the routines
 // take values and give values back, and their entries, below, keep the register contracts the hooks and
 // the callers not yet de-assembled use. The divides that go through the game's trap are value routines
-// too; their register adapters model DIV for code that still holds its operands in registers.
+// too.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MathsEntries() noexcept;
-
-// ── The divides' register adapters, for code not yet de-assembled ──
-//
-// Each reads the dividend from AX (and DX), and the BX and DS the trap saves, from the registers; calls
-// its value routine below; and writes the quotient and the remainder back, as DIV or the trap leaves them.
-
-/// DIV r/m16 by _divisor on DX:AX, for the divide whose next instruction is at CS:_returnOffset
-/// (DivideUnsigned).
-void DivideUnsignedOnRegisters(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset);
-
-/// DIV r/m8 by _divisor on AX (DivideByte).
-void DivideByteOnRegisters(Guest& _guest, std::uint8_t _divisor);
-
-/// DIV r/m16 by _divisor on DX:AX (DivideWord).
-void DivideWordOnRegisters(Guest& _guest, std::uint16_t _divisor);
-
-/// IDIV r/m16 by _divisor on DX:AX (DivideSignedWord).
-void DivideSignedWordOnRegisters(Guest& _guest, std::uint16_t _divisor);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //

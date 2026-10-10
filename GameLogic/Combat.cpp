@@ -8,6 +8,7 @@
 #include "Docking.h"
 #include "Market.h"
 #include "Maths.h"
+#include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
 #include "Text.h"
@@ -24,11 +25,6 @@ namespace
 using Machine::FLAG_CARRY;
 using Machine::FLAG_DIRECTION;
 using Machine::FLAG_ZERO;
-
-// Routines outside this file, run through the original.
-constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
-constexpr std::uint16_t START_PLAYER_HIT_SOUND = 0x7B96;
-constexpr std::uint16_t PROJECT_TO_SCREEN = 0x8D2E;
 
 // The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type.
 constexpr std::uint16_t VIEW_ROW_BYTES = 64;
@@ -127,6 +123,7 @@ constexpr std::uint16_t EDGE_LEFT_BELOW = 0x53FC;
 constexpr std::uint16_t EDGE_RIGHT_BELOW = 0xA7F8;
 constexpr std::uint16_t EDGE_TOP_BELOW = 0xD2F0;
 constexpr std::uint16_t EDGE_ROW_MASK = 0x7F;
+constexpr std::uint16_t EDGE_RIGHT_X = 0xFF;
 constexpr std::uint8_t ENEMY_BEAM_COLOR = 3;
 constexpr std::uint8_t SHIELD_HIT = 0x0F;
 
@@ -854,70 +851,70 @@ KillCredit CreditKill(GameState& _state, ObjectSlot _slot)
   return credit;
 }
 
-void ApplyEnemyLaserHit(Guest& _guest)
+bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
 {
-  if (_guest.Get(DS.playerHitPending) == 0)
+  if (_state.Get(DS.playerHitPending) == 0)
   {
-    return;
+    return false;
   }
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(START_PLAYER_HIT_SOUND);
-  regs.di = _guest.Get(DS.playerHitBy);
-  if ((_guest.Byte(regs.di) & SLOT_DRAWN) != 0)
+  // StartPlayerHitSound's CLI round its writes, which nothing interrupts in native code, then its STI.
+  StartPlayerHitSound(_state);
+  _hardware.EnableInterrupts();
+  bool filled = false;
+  const ObjectSlot attacker(_state, _state.Get(DS.playerHitBy));
+  if ((attacker.Get(SlotByte::Type) & SLOT_DRAWN) != 0)
   {
-    // A beam from the attacker on screen to a random point on an edge of the view.
-    regs.ax = _guest.Word(At(regs.di, SLOT_VIEW_X));
-    regs.bx = _guest.Word(At(regs.di, SLOT_VIEW_Y));
-    regs.cx = _guest.Word(At(regs.di, SLOT_VIEW_Z));
-    _guest.Call(PROJECT_TO_SCREEN);
-    regs.dx = regs.ax;
-    NextRandomEntry(_guest);
-    if (regs.ax < EDGE_LEFT_BELOW)
+    // A beam from the attacker on screen, ProjectToScreen's x moved to DX and its row left in BX, to a random point on an edge of
+    // the view, x in CX and the row in AX: the top edge, the bottom, the left or the right, by four ranges of the random word.
+    const Vector view{static_cast<std::int16_t>(attacker.Get(SlotWord::ViewX)), static_cast<std::int16_t>(attacker.Get(SlotWord::ViewY)),
+                      static_cast<std::int16_t>(attacker.Get(SlotWord::ViewZ))};
+    const ScreenPoint from = ProjectToScreen(_state, view);
+    const std::uint16_t random = NextRandom(_state);
+    std::uint16_t edgeX = 0;
+    std::uint16_t edgeRow = 0;
+    if (random < EDGE_LEFT_BELOW)
     {
-      regs.cx = Low(regs.ax);
-      regs.ax = 0;
+      edgeX = Low(random);
     }
-    else if (regs.ax < EDGE_RIGHT_BELOW)
+    else if (random < EDGE_RIGHT_BELOW)
     {
-      regs.cx = Low(regs.ax);
-      regs.ax = EDGE_ROW_MASK;
+      edgeX = Low(random);
+      edgeRow = EDGE_ROW_MASK;
     }
-    else if (regs.ax < EDGE_TOP_BELOW)
+    else if (random < EDGE_TOP_BELOW)
     {
-      regs.ax = static_cast<std::uint16_t>(regs.ax & EDGE_ROW_MASK);
-      regs.cx = 0;
+      edgeRow = static_cast<std::uint16_t>(random & EDGE_ROW_MASK);
     }
     else
     {
-      regs.ax = static_cast<std::uint16_t>(regs.ax & EDGE_ROW_MASK);
-      regs.cx = 0xFF;
+      edgeRow = static_cast<std::uint16_t>(random & EDGE_ROW_MASK);
+      edgeX = EDGE_RIGHT_X;
     }
-    _guest.Set(DS.drawColor, ENEMY_BEAM_COLOR);
-    _guest.Call(DRAW_CLIPPED_LINE);
+    _state.Set(DS.drawColor, ENEMY_BEAM_COLOR);
+    filled = DrawClippedLine(_state, static_cast<std::uint16_t>(from.x), static_cast<std::uint16_t>(from.y), edgeX, edgeRow);
   }
-  _guest.Set(DS.playerHitPending, 0);
-  // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it.
-  const bool aft = (_guest.Get(DS.playerHitByDepth) & 0x80) != 0;
-  SetLow(regs.ax, SHIELD_HIT);
-  const DataField<std::uint8_t> shield = aft ? DS.aftShield : DS.foreShield;
-  const std::uint8_t strength = _guest.Get(shield);
+  _state.Set(DS.playerHitPending, 0);
+  // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it. SUB [shield],0Fh; on a borrow, MOV AL,[shield] and 0
+  // written over it: what the shield could not take, NEG AL / CBW, comes off the energy, SUB and then 0 over it on a borrow.
+  const DataField<std::uint8_t> shield = (_state.Get(DS.playerHitByDepth) & 0x80) != 0 ? DS.aftShield : DS.foreShield;
+  const std::uint8_t strength = _state.Get(shield);
+  _state.Set(shield, static_cast<std::uint8_t>(strength - SHIELD_HIT));
   if (strength >= SHIELD_HIT)
   {
-    _guest.Set(shield, static_cast<std::uint8_t>(strength - SHIELD_HIT));
-    return;
+    return filled;
   }
-  // What the shield could not take comes off the energy: NEG AL / CBW on the shield's wrapped value.
-  _guest.Set(shield, 0);
-  SetLow(regs.ax, static_cast<std::uint8_t>(0u - static_cast<std::uint8_t>(strength - SHIELD_HIT)));
-  regs.ax = SignExtend(Low(regs.ax));
-  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
-  if (energy >= regs.ax)
+  const std::uint8_t wrapped = _state.Get(shield);
+  _state.Set(shield, 0);
+  const std::uint16_t excess = SignExtend(Negate(wrapped));
+  const std::uint16_t energy = _state.Get(DS.playerEnergy);
+  _state.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - excess));
+  if (energy >= excess)
   {
-    _guest.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - regs.ax));
-    return;
+    return filled;
   }
-  _guest.Set(DS.playerEnergy, 0);
-  _guest.Set(DS.playerDead, 1);
+  _state.Set(DS.playerEnergy, 0);
+  _state.Set(DS.playerDead, 1);
+  return filled;
 }
 
 std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
@@ -1313,7 +1310,8 @@ constexpr Machine::NativeContract TAKES_DAMAGE{0, 0};
 // RemoveAllMissiles': UpdateStationAi's contract compares the DI and ES it leaves (RemoveAllMissilesEntry).
 constexpr Machine::NativeContract REMOVES_MISSILES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
-// LaunchPlayerMissile's and SpawnPlayerWreckage's: all but DS, which the original leaves alone and the flight loop goes on with.
+// LaunchPlayerMissile's, SpawnPlayerWreckage's and ApplyEnemyLaserHit's: all but DS, which the original leaves alone and the flight
+// loop goes on with.
 constexpr Machine::NativeContract CLOBBERS_ALL_BUT_DS{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
 constexpr Machine::NativeContract LAUNCHES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_BP | REGISTER_ES,
                                            0};
@@ -1542,6 +1540,14 @@ void ResolveLaserFireEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_ALL_BUT_DS);
 }
 
+void ApplyEnemyLaserHitEntry(Guest& _guest)
+{
+  // DrawLine's ES = DS and CLD, once the beam was a horizontal line: the direction flag is no register the contract can leave to it,
+  // and ResolveLaserFire, next in the flight loop, copies by it.
+  DrawLineOut(_guest, ApplyEnemyLaserHit(_guest.State(), _guest.Devices()));
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
+
 void TryFireLaserAtPlayerEntry(Guest& _guest)
 {
   const Machine::Registers& regs = _guest.Regs();
@@ -1622,7 +1628,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x8B8B, "CheckMissileTargetDestroyed", &CheckMissileTargetDestroyedEntry, PRESERVES_ALL},
   NativeEntry{0x8BC6, "CreditKill", &CreditKillEntry, PRESERVES_ALL},
   NativeEntry{0x8C51, "Routine8C51", &Routine8C51Entry, THARGOID_TEST},
-  NativeEntry{0x8C8E, "ApplyEnemyLaserHit", &ApplyEnemyLaserHit, CLOBBERS_ALL},
+  NativeEntry{0x8C8E, "ApplyEnemyLaserHit", &ApplyEnemyLaserHitEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x8ECF, "UseMaskingDevice", &UseMaskingDeviceEntry, PRESERVES_ALL},
 };
 

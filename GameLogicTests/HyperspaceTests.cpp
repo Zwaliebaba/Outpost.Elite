@@ -238,14 +238,14 @@ public:
     Assert::IsTrue(rig.Host().Native().Mismatches().empty(), L"nothing compared, nothing differs");
   }
 
-  // Rings of every radius the tunnel draws, waiting, growing past the largest and never drawn; the
-  // reset, forwards and with the direction flag set.
+  // Rings of every radius the tunnel draws, waiting, growing by 1 below 8 (CS:48E1), growing past the
+  // largest and never drawn; the reset, forwards and with the direction flag set.
   TEST_METHOD(HyperspaceRingsAgreeAtEverySize)
   {
     ComparisonRig rig("DrawHyperspaceRings");
     Elite::Guest guest = GuestOf(rig);
     std::uint64_t frames = 0;
-    for (std::uint8_t first = 0x0E; first < HYPERSPACE_RING_LARGEST + 4; first = static_cast<std::uint8_t>(first + HYPERSPACE_RING_COUNT))
+    for (std::uint8_t first = 0x04; first < HYPERSPACE_RING_LARGEST + 4; first = static_cast<std::uint8_t>(first + HYPERSPACE_RING_COUNT))
     {
       for (std::uint16_t ring = 0; ring < HYPERSPACE_RING_COUNT; ++ring)
       {

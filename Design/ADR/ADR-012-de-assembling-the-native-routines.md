@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 20).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 21).
 
 ## Context
 
@@ -528,6 +528,62 @@ The 4 contracts widened:
 - **Widened:** `UpdateMissileAi` was said to preserve every register. It now leaves AX, BX, CX, SI, BP and ES. Its only caller pops DI and CX after each handler and loads BX for the next, and the next handler reads only DL and the direction flag.
 
 **The suites.** `GameLogicTests` passes 186 of 186 with poisoning on, under g++ and clang++, without warnings, with items 15 to 19 in the same tree. The coverage check is clean, and no digest moved.
+
+**21. Level 5's top: the object loop, the title and the flight keys, measured 2026-10-10.** Two workers converted 21 routines, one per chain. Three remain: `RunFlight`, `GameLoop` and `Start`.
+
+| | Count |
+|---|---|
+| Routines converted | 21: the object loop and the title 10, the flight loop below `RunFlight` 11 |
+| Contracts narrowed | 4 |
+| Contracts widened, with every test passing poisoned and the caller read | 1 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 1,140 before, 873 after |
+| Register functions left | 14: `RunFlight`, `GameLoop` and `Start`, and 11 helpers with which entries rebuild registers until D7 |
+
+**The object loop and the title.**
+- **Scene.** `ClassifyObject`, `SupernovaHeat`, `SizeSun`, `DrawSunOrPlanet`, `DrawObject`, `DrawFarthestObject` and `TransformAndDrawObjects`, which returns the direction flag its drawing leaves.
+- **The rest.** `RunTitle`, `RunTitleAndDocked` and `PlayStationTunnel`.
+- **Exits.** `RunTitleAndDocked`'s entry still pops its own return address when the disc menu leaves for the disk, so its RET leaves `GameLoop`'s loop.
+- **Divide adapters.** The four `…OnRegisters` divide adapters went, with no caller left.
+
+**The flight loop.**
+- **What converted.** `ApplyEnemyLaserHit`, the hyperspace tunnel, `CompleteHyperspaceJump`, `TickHyperspaceCountdown`, the flight screens' dispatch and `HandleFlightFunctionKeys`.
+- **The pause unit,** converted with `ProcessFlightKeys`, whose stack it shares. When the pause screen's A leaves, `ProcessFlightKeysEntry` pops its own return address so that its RET leaves `RunFlight`, as `TickEscapePod` already does.
+- **Every backward jump of these routines' own reports a loop turn.**
+
+**Values the original passes by accident, made explicit.**
+- **DI after a supernova.** A supernova's energy bomb leaves DI past the ship slots, and `SizeSun` passes it to the disc drawing.
+- **`RunTitle`'s BP,** 20h from `PresentSpaceView`, which the status screen reads as its count (item 19).
+- **DI for M's launch.** `ProcessFlightKeys` follows what changes it before the launch:
+  - `InvalidateDashboard`;
+  - `ResetStardust`;
+  - `IsMassLocked`;
+  - `ClearDrawBuffer`, which leaves 2000h, or E000h with the direction flag set.
+- **AL, BP, ES and the direction flag through the flight screens.** These include BP as the compass dot's z, sign-extended, once `EraseCompassAndBlips` erases it. The register code had not reproduced that.
+
+**Write order.**
+- `ApplyEnemyLaserHit` makes the shield's SUB and then 0 on a borrow (CS:8CF8 and CS:8D01, CS:8D08 and CS:8D11), and the energy's (CS:8D1C, CS:8D22).
+- `CompleteHyperspaceJump` makes `legalStatus`' SUB and then 0 (CS:4727, CS:472E).
+
+**Contracts.**
+- **Narrowed.**
+  - `TickHyperspaceCountdown` keeps DS. With DS poisoned, `attack-the-station`'s `missile` digest moved and eight tests failed.
+  - `PlayStationTunnel` keeps BP = 20h, which the status screen after docking reads as its count. This rests on reading the code: poisoning cannot reach that path.
+  - `ApplyEnemyLaserHit` and `ProcessFlightKeys` keep DS. This also rests on reading: no routine in them changes DS, and the flight loop goes on with it.
+- **Widened.** `HandleFlightFunctionKeys` was said to preserve every register. It now leaves BX, DX and SI, which the screens leave and no value routine computes. Its one caller, `ProcessFlightKeys` (CS:7FB7), reads only AH after it, and writes BL and BH before it uses them.
+
+**Two simplifications, each commented in the code.**
+- In the station tunnel, `UpdateStardust`'s BX is the one `TransformAndDrawObjects` leaves, which no value routine computes. It reaches only `ComputeStardustShift`'s divide trap, which needs a speed above 34h. The game never sets one above 30h, so 0 stands in for it. A run with it set to A5A2h passed every test.
+- The flight loop's key wait assumes, as `WaitForKeyPress` does, that `GetKey` never takes a code of 0 (item 15).
+
+**Interrupts.** STI, the end of an interrupt and the PIT's control word now take the interrupts due where the CPU does (ADR-014 item 10). This replaces the three per-site calls.
+
+**Coverage.** Six routines lost their compared callers. Two constructed tests compare them:
+- `DockingTests.MaskOutsideTunnelAgreesOnEveryRectangle`;
+- `DockedTests.TitleRoutinesAgree`.
+
+`HyperspaceTests.HyperspaceRingsAgreeAtEverySize` starts its rings at radius 4, so that it reaches CS:48E1.
+
+**The suites.** `GameLogicTests` passes 188 of 188 with poisoning on, under g++ and clang++, without warnings. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 

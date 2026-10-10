@@ -96,14 +96,8 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
   return DivideTrap{resume, (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE)};
 }
 
-// The dividend of a word divide: DX:AX.
-[[nodiscard]] std::uint32_t WordDividend(const Machine::Registers& _regs) noexcept
-{
-  return (std::uint32_t{_regs.dx} << 16) | _regs.ax;
-}
-
-// The game's memory with the data segment the registers hold, for the divide trap's register forms: the trap saves the DS
-// the divide ran with, which code still on the registers holds there.
+// The game's memory with the data segment the registers hold, for the divide trap's entry: the trap saves the DS the divide
+// ran with, which the code it interrupted holds there.
 [[nodiscard]] GameState StateOnRegisters(Guest& _guest) noexcept
 {
   return GameState(_guest.Host().Ram(), _guest.CodeSegment(), _guest.Regs().ds);
@@ -126,41 +120,6 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
 }
 
 } // namespace
-
-void DivideUnsignedOnRegisters(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset)
-{
-  Machine::Registers& regs = _guest.Regs();
-  GameState state = StateOnRegisters(_guest);
-  const WordQuotient divided = DivideUnsigned(state, WordDividend(regs), _divisor, _returnOffset, regs.bx);
-  regs.ax = divided.quotient;
-  regs.dx = divided.remainder;
-}
-
-void DivideByteOnRegisters(Guest& _guest, std::uint8_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  GameState state = StateOnRegisters(_guest);
-  const ByteQuotient divided = DivideByte(state, regs.ax, _divisor, regs.bx);
-  regs.ax = Join(divided.remainder, divided.quotient);
-}
-
-void DivideWordOnRegisters(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  GameState state = StateOnRegisters(_guest);
-  const WordQuotient divided = DivideWord(state, WordDividend(regs), _divisor, regs.bx);
-  regs.ax = divided.quotient;
-  regs.dx = divided.remainder;
-}
-
-void DivideSignedWordOnRegisters(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  GameState state = StateOnRegisters(_guest);
-  const WordQuotient divided = DivideSignedWord(state, WordDividend(regs), _divisor, regs.bx);
-  regs.ax = divided.quotient;
-  regs.dx = divided.remainder;
-}
 
 // ── The routines ──
 

@@ -19,11 +19,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockedEntries() noexcept;
 
-/// RunTitleAndDocked (CS:7D81): unless titleShown, the title until a key, the credits and a new game; then
-/// the docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a
-/// disk request, until F1. Clobbers all but DS.
-void RunTitleAndDocked(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
@@ -100,6 +95,21 @@ std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uin
 /// _backwards, down. Returns the cell after the last, as REP STOSW leaves it.
 std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards);
 
+/// How the docked screens end (DockedKeyDispatch, CS:0B40), and with them RunTitleAndDocked.
+struct DockedExit
+{
+  bool leaves;             ///< the disc menu left through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit)
+  ScreenKey key;           ///< otherwise F1, with AL as the screen and the waits for a key leave it
+  std::uint16_t countLeft; ///< BP, as the screens leave it
+  bool backward;           ///< the direction flag, as they leave it
+};
+
+/// RunTitleAndDocked (CS:7D81): unless titleShown, the title (RunTitle, CS:7D8B) until a key, the credits and a new game; then the
+/// docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a disk request, until F1 or the
+/// disc menu leaves for the disk. _countIfNone is BP and _backward the direction flag as GameLoop leaves them, which the screens
+/// carry from one to the next; after the title they are its 20h, PresentSpaceView's, and clear. Waits as a rule (ADR-015).
+DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
@@ -111,6 +121,9 @@ void FormatFuelLightYearsEntry(Guest& _guest);      ///< Out: SI=DS:83E9, the fu
 void DrawDockedFrameEntry(Guest& _guest);           ///< In: SI=the descriptor. Out: SI=the title, ES=B800h.
 void DrawFrameSidesEntry(Guest& _guest);
 void DrawFrameRowEntry(Guest& _guest);
+/// In: BP and DF, carried to the screens. Out: ES=B800h, BP and DF as the screens leave them, AX the F1 that ends it; or, once the
+/// disc menu leaves for the disk, its own return address popped, so that its RET returns from GameLoop. All but DS clobbered.
+void RunTitleAndDockedEntry(Guest& _guest);
 void ShowSellCargoScreenEntry(Guest& _guest);       ///< Out: AX the key; all but DS clobbered.
 void ShowBuyCargoScreenEntry(Guest& _guest);        ///< Out: AX the key; all but DS clobbered.
 void ShowCommanderStatusScreenEntry(Guest& _guest); ///< In: BP, as SelectSystemAtCursorEntry. Out: AX the key; all but DS clobbered.
