@@ -18,9 +18,8 @@ class Pc;
 /// Whether a native routine can wait, which says where it runs (ADR-010 item 8).
 enum class NativeWait : std::uint8_t
 {
-  Never,     ///< work: it runs where it is called
-  Sometimes, ///< it waits on some paths: it runs on the native thread
-  Always     ///< it waits as a rule, or never returns: it runs on the native thread
+  Never, ///< work: it runs where it is called
+  Always ///< it can wait, on every path or on some, or never returns: it runs on the native thread
 };
 
 /// A routine in C++ that stands in for the program's own code at an entry (ADR-010). It is entered as

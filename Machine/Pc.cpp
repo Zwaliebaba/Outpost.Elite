@@ -218,19 +218,19 @@ void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, 
   m_processor.SetHookMap(&m_native.Map());
 }
 
-void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
+void Pc::ReturnNear() noexcept
 {
   Registers& regs = m_processor.Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
-  regs.sp = static_cast<std::uint16_t>(regs.sp + 2 + _popBytes);
+  regs.sp = static_cast<std::uint16_t>(regs.sp + 2);
 }
 
-void Pc::ReturnFar(std::uint16_t _popBytes) noexcept
+void Pc::ReturnFar() noexcept
 {
   Registers& regs = m_processor.Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
   regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
-  regs.sp = static_cast<std::uint16_t>(regs.sp + 4 + _popBytes);
+  regs.sp = static_cast<std::uint16_t>(regs.sp + 4);
 }
 
 void Pc::ReturnInterrupt() noexcept

@@ -224,26 +224,14 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
   }
 
-  // A routine that waits only sometimes runs on the native thread, and a call that does not wait is over when it returns.
-  TEST_METHOD(RoutineThatSometimesWaitsRunsWhenItDoesNotWait)
+  // A routine hooked as one that waits runs on the native thread, and a call that does not wait is over when it returns.
+  TEST_METHOD(WaitingRoutineRunsWhenItDoesNotWait)
   {
-    NativeRig rig("NativeSometimesWork");
-    rig.Hook(CountUp(1, 5), Machine::NativeWait::Sometimes);
+    NativeRig rig("NativeWaitsNot");
+    rig.Hook(CountUp(1, 5), Machine::NativeWait::Always);
     rig.Run();
     Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()});
     Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
-  }
-
-  // When it does wait, it stops at the end of a run and carries on in the next, as a routine that always waits does.
-  TEST_METHOD(RoutineThatSometimesWaitsStopsAtTheEndOfARun)
-  {
-    NativeRig rig("NativeSometimesWaits");
-    rig.Hook(&WaitForTick, Machine::NativeWait::Sometimes);
-    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
-    Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
-    rig.Run();
-    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
-    Assert::IsTrue(rig.Host().Native().Overran().empty());
   }
 
   // A routine that waits but is not hooked as one runs where it is called, which cannot stop at the end of a run: the run

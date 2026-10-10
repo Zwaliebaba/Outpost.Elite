@@ -137,11 +137,6 @@ public:
     return _offset < m_video.size() ? m_video[_offset] : FarByte(VIDEO_SEGMENT, _offset);
   }
 
-  [[nodiscard]] std::uint16_t VideoWord(std::uint16_t _offset) const noexcept
-  {
-    return static_cast<std::uint16_t>(VideoByte(_offset) | (VideoByte(static_cast<std::uint16_t>(_offset + 1)) << 8));
-  }
-
   void SetVideoByte(std::uint16_t _offset, std::uint8_t _value) noexcept
   {
     SetFarByte(VIDEO_SEGMENT, _offset, _value);
