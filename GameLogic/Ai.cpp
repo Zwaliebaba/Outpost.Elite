@@ -364,17 +364,6 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
   return launch;
 }
 
-// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
-void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  const unsigned sum = _state.Get(_field) + unsigned{_value};
-  _state.Set(_field, static_cast<std::uint8_t>(sum));
-  if (sum > 0xFF)
-  {
-    _state.Set(_field, 0xFF);
-  }
-}
-
 // What CheckMissilesAtStation did with the station's ECM.
 struct StationEcm
 {

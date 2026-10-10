@@ -552,17 +552,6 @@ void RedrawThreeLineBar(GameState& _state, DataField<std::uint8_t> _value, DataF
   DrawThreeLineBar(_state, _line, value, 0);
 }
 
-// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
-void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  const unsigned sum = _state.Get(_field) + unsigned{_value};
-  _state.Set(_field, static_cast<std::uint8_t>(sum));
-  if (sum > 0xFF)
-  {
-    _state.Set(_field, 0xFF);
-  }
-}
-
 // SUB byte,_value / JAE / MOV byte,0 on _field: the difference written, and 0 over it on a borrow.
 void SubtractFloored(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
 {
