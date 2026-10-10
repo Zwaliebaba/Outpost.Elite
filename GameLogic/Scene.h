@@ -6,6 +6,7 @@
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
 #include "Ships.h"
+#include "Video.h"
 
 #include <array>
 #include <cstdint>
@@ -22,63 +23,22 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SceneEntries() noexcept;
 
-/// ProjectVertices (CS:2340): projects the first projectedVertexCount 6-byte vertices of vertexBuffer in
-/// place to 4-byte points, 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets
-/// x = 8000h and keeps a stale y. An overflowing divide is saturated by the trap, as AL = 7Fh. Keeps SI;
-/// AX, BX, CX, DX, DI clobbered.
-void ProjectVertices(Guest& _guest);
-
-/// DrawVisibleFaces (CS:3AB3): for each of CX faces at SI that faces the viewer, its edges
-/// (DrawClippedLine) and filled triangles (FillTriangle) in order. Out: SI past the list.
-void DrawVisibleFaces(Guest& _guest);
-
 /// TransformShip (CS:3C7E): slot DI's position to the view, scooping where it may, then
 /// ClassifyViewPosition. Out: CF clear when visible.
 void TransformShip(Guest& _guest);
-
-/// RunBlueprintHandler (CS:3CDD): sets boxHalfWidth from blueprint SI, runs the handler the blueprint
-/// names, then what follows it at RenderBlueprintBody (CS:3CF2): the vertex program, the projection and
-/// the faces. Out: DI = the slot; every other register clobbered.
-void RunBlueprintHandler(Guest& _guest);
-
-/// RenderBlueprintBody (CS:3CF2): what a blueprint handler returns into: RunBlueprintHandler's rendering of the
-/// blueprint at SI, then the slot it pushed popped into DI.
-void RenderBlueprintBody(Guest& _guest);
 
 /// TransformAndDrawObjects (CS:3D25): classifies and transforms every slot, then draws the visible ones
 /// from the farthest in. Clobbers every register.
 void TransformAndDrawObjects(Guest& _guest);
 
 /// DrawSunOrPlanet (CS:3F4F): the disc of the sun or planet in slot DI, with its altitude, cabin
-/// temperature, fuel scooping and death by heat.
+/// temperature, fuel scooping and death by heat. Every register but DS clobbered.
 void DrawSunOrPlanet(Guest& _guest);
-
-/// DrawDistantStation (CS:45C6): the station in slot DI as a disc in colour 3 at its projected compass position,
-/// radius 7 rows when its depth byte +25h is below 14h and smaller further off, or nothing.
-void DrawDistantStation(Guest& _guest);
-
-/// ProjectToScreen (CS:8D2E): AX = 80h + 256x/z, BX = 40h + 256y/z for x = AX, y = BX, z = CX, an
-/// overflowing divide saturated by the trap. DX, BP clobbered.
-void ProjectToScreen(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI.
-
-/// A vertex of vertexBuffer once ProjectVertices has projected it: its screen x and y.
-struct ScreenPoint
-{
-  std::int16_t x;
-  std::int16_t y;
-};
-
-/// Three projected vertices: a face's first three, which say which way it faces, or a filled triangle's corners.
-struct Triangle
-{
-  ScreenPoint first;
-  ScreenPoint second;
-  ScreenPoint third;
-};
+// A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI. A string
+// instruction's direction is the direction flag the routine finds: _backward.
 
 /// ScaleDodoRadii's two radii, in the ratio of a dodecahedron's two rings, about 1.62.
 struct DodoRadii
@@ -127,6 +87,13 @@ enum class ViewTest : std::uint8_t
   Visible, ///< and byte 0 bit 7 set
 };
 
+/// What DrawVisibleFaces leaves: the offset past the faces, and the direction flag, clear once an edge's DrawLine has filled.
+struct FacesEnd
+{
+  std::uint16_t next;
+  bool backward;
+};
+
 /// What TransformToViewWithBlip gives: the position in the view, and the last pixel of the scanner blip UpdateScannerBlip drew on
 /// the way, when it drew one.
 struct ViewWithBlip
@@ -134,6 +101,12 @@ struct ViewWithBlip
   Vector view;
   std::optional<DashboardPixel> blip;
 };
+
+/// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
+/// 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets x = 8000h and keeps a stale y. Each divide takes a
+/// memory operand, so the trap saturates only AL when it overflows; it saves BX, _trapHigh over the coordinate's sign, _trapHigh
+/// being the high byte of the BX its caller leaves.
+void ProjectVertices(GameState& _state, std::uint8_t _trapHigh);
 
 /// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
 /// then the vertex at _vertex += drawCenter. Returns drawCenter, each coordinate as it read it.
@@ -165,6 +138,11 @@ Vector BuildDodoVertices(GameState& _state);
 /// difference, or of the low words' when the high words agree: true when _triangle faces the viewer.
 [[nodiscard]] bool TriangleWindingSign(Triangle _triangle);
 
+/// DrawVisibleFaces (CS:3AB3): for each of _faces faces at _list that faces the viewer (TriangleWindingSign on its first three
+/// vertices), its items in order: an edge (DrawClippedLine) in its colour unless an end is off screen, or a triangle
+/// (FillTriangle) in its pattern unless a corner is. A face turned away is skipped.
+FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t _faces, bool _backward);
+
 /// CheckShipInRange (CS:3BEA): IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
 /// of their squares, summed, below maxDistanceSquaredHigh after the second and the third. In range, _slot's size (+3Eh) is that
 /// sum shifted right 6 and its in-range bit (byte 0 bit 6) is set; out of range, EraseScannerBlip.
@@ -173,6 +151,11 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot);
 /// TransformSunOrPlanet (CS:3C52): _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
 /// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.
 ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
+
+/// RunBlueprintHandler (CS:3CDD): boxHalfWidth from the blueprint at _blueprint, the handler it names run (BuildBoxCornerVertices
+/// or BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
+/// and the faces. Returns the direction flag as they leave it.
+bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _backward);
 
 /// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
 /// set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the position stored at +10h/+12h/+14h and as
@@ -187,11 +170,20 @@ ViewWithBlip TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector
 /// by -viewAngle through rotationSinCos[8], which it sets.
 Vector TransformToView(GameState& _state, Vector _position);
 
+/// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
+/// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
+void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward);
+
 /// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Returns the roll's sine and cosine.
 SinCos LoadPlayerAngles(GameState& _state);
 
+/// ProjectToScreen (CS:8D2E): _view on the screen, 80h + 256x/z and 40h + 256y/z, each divide saturated by the trap when it
+/// overflows.
+[[nodiscard]] ScreenPoint ProjectToScreen(GameState& _state, Vector _view);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void ProjectVerticesEntry(Guest& _guest);          ///< BH saved by the trap. SI, BP kept; AX, BX, CX, DX, DI clobbered.
 void ReflectVertexAboutCenterEntry(Guest& _guest); ///< SI = the vertex, DI = its reflection. Out: BX = drawCenterZ; AX clobbered.
 void OffsetVertexByCenterEntry(Guest& _guest);     ///< SI = the vertex. Out: AX = drawCenterZ.
 void BuildBoxCornerVerticesEntry(Guest& _guest);   ///< SI = blueprint+3. Out: SI = blueprint+5; AX, BX, CX, DX, BP, DI clobbered.
@@ -201,15 +193,24 @@ void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the
 /// p0 = (AX, DX), p1 = (BX, BP), p2 = (CX, DI). Out: SF; DX:AX = (y0-y1)(x2-x1), BX = the low word of (x0-x1)(y2-y1), less AX when the
 /// high words agree; CX, DI clobbered.
 void TriangleWindingSignEntry(Guest& _guest);
+/// SI = the faces, CX their count. Out: SI past them; DF clear once an edge's DrawLine fills. AX, BX, CX, DX, DI, BP, ES clobbered.
+void DrawVisibleFacesEntry(Guest& _guest);
 void CheckShipInRangeEntry(Guest& _guest); ///< DI = the slot. Out: CF clear in range; every register as the original leaves it.
 /// DI = the slot. Out: AX, BX, CX the view position; ES = B800h once UpdateScannerBlip draws a blip. DX, BP clobbered.
 void TransformSunOrPlanetEntry(Guest& _guest);
 /// DI = the slot. Out: CF clear when visible; AX, BX and CX the compass position, AX doubled |x| once z passes and BX doubled |y|
 /// once x does, as the original leaves them.
 void ClassifyStationPositionEntry(Guest& _guest);
+/// SI = the blueprint, DI = the slot. Out: DI kept; DF as the faces leave it. Every other register but DS clobbered.
+void RunBlueprintHandlerEntry(Guest& _guest);
+/// SI = the blueprint past its handler's bytes, BP, BX, DX the accumulator, and the slot under the return address. Out: DI = the
+/// slot, popped; DF as the faces leave it. Every other register but DS clobbered.
+void RenderBlueprintBodyEntry(Guest& _guest);
 /// DI = the slot, AX, BX, CX the position, in and out. Out: ES = B800h once UpdateScannerBlip draws a blip; DX clobbered.
 void TransformToViewWithBlipEntry(Guest& _guest);
-void TransformToViewEntry(Guest& _guest);  ///< AX, BX, CX the position, in and out. DX clobbered.
-void LoadPlayerAnglesEntry(Guest& _guest); ///< Out: AX, BX the roll's sine and cosine.
+void TransformToViewEntry(Guest& _guest);    ///< AX, BX, CX the position, in and out. DX clobbered.
+void DrawDistantStationEntry(Guest& _guest); ///< DI = the slot. Every register but DS clobbered.
+void LoadPlayerAnglesEntry(Guest& _guest);   ///< Out: AX, BX the roll's sine and cosine.
+void ProjectToScreenEntry(Guest& _guest);    ///< AX, BX, CX = x, y, z. Out: AX, BX the point. DX, BP clobbered.
 
 } // namespace Elite

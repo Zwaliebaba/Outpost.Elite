@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 17).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14) and level 5's slices (items 15 to 18).
 
 ## Context
 
@@ -404,6 +404,44 @@ The 11 contracts narrowed:
 - `EquipmentTests.EquipmentMenuWorkAgreesOnEveryRow`.
 
 **The suites.** `GameLogicTests` passes 183 of 183 with poisoning on, under g++ and clang++, without warnings, with item 16's slice in the same tree. The coverage check is clean, and no digest moved.
+
+**18. Level 5's renderer, measured 2026-10-10.** With the divides converted (item 15), one worker converted 42 routines in Video and Scene: the discs, the projections, the line clipper, `DrawCircle`, the triangle filler, the faces and the blueprint renderer. Video has no register code left.
+
+| | Count |
+|---|---|
+| Routines converted | 42 |
+| Contracts narrowed | 0 |
+| Contracts widened, each with every test passing poisoned and its callers read | 4 |
+| Lines matching `regs.` or `Regs()` in `GameLogic/*.cpp` | 2,397 before, 1,717 after |
+| Register functions left | 88: 70 routines and 18 register adapters |
+| Routines ready | 20 |
+
+- **The triangle filler, as one unit** (items 13 and 14). `FillTriangle` and `FillClippedTriangle` converted with every filler, walk and span routine under them.
+  - Each walk pushes its spans into a local container, top row first, and `DrawStackedSpansFromRow` takes them from the back, as the original pops the stack.
+  - The fillers' code patches are written as before, among them `FillClippedGeneral`'s word over the long edge's fraction when it patches the lower walk.
+- **The divides in the unit are plain divisions, and the reason is arithmetic.** `EdgeSlope` divides DX:AX = 0:(pixels × 256) by rows of at least 1, so its quotient is at most FF00h. `ClippedSlope`'s first divide has a high word of 0, and its second divides (remainder:0) by rows greater than the remainder. No quotient can overflow into the divide trap.
+- **The blueprint renderer.** `RunBlueprintHandler` and `RenderBlueprintBody` share the slot and a return address on the stack, so they converted together.
+  - The handler, called by address in the original, is a direct call of `BuildBoxCornerVertices` or `BuildDodoVertices`. Every blueprint names one of the two.
+  - The accumulator a handler leaves is not passed on, because all 30 vertex programs begin with a load.
+  - The direction flag that a face edge's `DrawLine` clears is carried into the triangles after it.
+- **The line clipper** works on the line's five registers as one value and returns the CF and ZF its contract names.
+- **`ProjectVertices`** takes its caller's BH, because the divide trap saves BX (item 15).
+
+The 4 contracts widened:
+
+| Routine | Now | Why nothing reads what it no longer compares |
+|---|---|---|
+| `DrawTitlePlanet` | the general registers | its caller at CS:7DFF loads DI, BX, AX and SI before it reads them, and `DrawScreenString` (CS:7E37) reads only SI, DI, BX and ES, which the entry leaves |
+| `DrawDistantStation`, `DrawSunOrPlanet` | every register but DS | their caller pops DI and jumps to CS:3D95, which loads CX, DI, BP, AH and DX, and AL at CS:3DA5, before it reads any |
+| `RenderBlueprintBody` | every register but DS and DI, as `RunBlueprintHandler` | its RET reaches CS:3E81, which jumps to CS:3D95 as above |
+
+**Two drafts the tests caught.**
+- `DrawSunOrPlanet` must draw with the DI that `SizeSun` leaves, because `DetonateEnergyBomb` moves DI when a supernova kills. A constructed test's sixth call caught a draft that kept the original slot.
+- `circleOctant` is read byte by byte, not as table entries.
+
+**Left.** `DrawSunOrPlanet`, `SizeSun` and `SupernovaHeat` wait on `DetonateEnergyBomb`. `ClassifyObject` waits on `UpdateCompass`. The object drawers above them wait on both.
+
+**The suites.** `GameLogicTests` passes 185 of 185 with poisoning on, under g++ and clang++, without warnings, with items 16 and 17 and the D20 replays in the same tree. The coverage check is clean, and no digest moved.
 
 ## What this forecloses
 
