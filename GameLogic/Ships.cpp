@@ -7,6 +7,7 @@
 #include "Maths.h"
 
 #include <bit>
+#include <initializer_list>
 
 namespace Elite
 {
@@ -28,26 +29,56 @@ constexpr std::uint16_t CONVERT_VECTOR_TO_ANGLES = 0x4F08;
 
 constexpr std::uint16_t FIRST_SHIP_SLOT = 3; // firstShipSlot's index: the sun, the planet and the station come first
 
-// spawnTemplates: the barrel's record, and the first of the hunters' and the wolves'.
+// spawnTemplates: the records the routines here start from.
+constexpr std::size_t ESCAPE_POD_TEMPLATE = 1; // the first of the eight drifters'
 constexpr std::size_t BARREL_TEMPLATE = 3;
+constexpr std::size_t SHUTTLE_TEMPLATE = 7;
+constexpr std::size_t COBRA_TEMPLATE = 9; // the first of the six traders'
+constexpr std::size_t VIPER_TEMPLATE = 14;
 constexpr std::size_t HUNTER_TEMPLATES = 15;
+constexpr std::size_t KRAIT_TEMPLATE = 17;
 constexpr std::size_t WOLF_TEMPLATES = 22;
+constexpr std::size_t ASP_TEMPLATE = 23;
+constexpr std::size_t THARGOID_TEMPLATE = 27;
+constexpr std::size_t THARGON_TEMPLATE = 28;
 constexpr std::uint16_t TEMPLATE_BYTES = 10;
 // Where InitObjectFromTemplate puts bytes 1-9 of a record.
 constexpr std::array<std::uint16_t, 9> TEMPLATE_FIELDS = {SLOT_SPEED,     SLOT_TURN_RATE, SLOT_BOUNTY, SLOT_MISSILES, SLOT_CARGO,
                                                           SLOT_FRAGMENTS, SLOT_ENERGY,    SLOT_DETAIL, SLOT_RANGE};
 
+constexpr std::uint8_t ABANDONED_CLASS = 0; // no behaviour
 constexpr std::uint8_t BARREL_CLASS = 3;
+constexpr std::uint8_t DRIFTER_CLASS = 3;
+constexpr std::uint8_t TRADER_CLASS = 4;
 constexpr std::uint8_t WOLF_CLASS = 5;
 constexpr std::uint8_t HUNTER_CLASS = 6;
 constexpr std::uint8_t HUNTER_CHOICE_DIVISOR = 37; // a random byte / 37: one of seven
 constexpr std::uint8_t WOLF_CHOICE_DIVISOR = 52;   // a random byte / 52: one of five
+constexpr std::uint8_t TRADER_CHOICE_DIVISOR = 43; // a random byte / 43: one of six
+constexpr std::uint8_t DRIFTER_CHOICE_MASK = 7;    // one of eight
 constexpr std::uint8_t WITCH_SPACE_WOLF = 5;       // the Thargoid's record among the wolves'
 constexpr std::uint8_t HUNTER_AGGRESSION_MASK = 0x1F;
 constexpr std::uint8_t WOLF_AGGRESSION_MASK = 0x3F;
 constexpr std::uint8_t ANARCHY_AGGRESSION = 0x20;
 constexpr std::uint8_t THARGON_COUNT_MASK = 3;
 constexpr std::uint8_t FEWEST_THARGONS = 2;
+
+constexpr std::uint8_t DRIFTER_TURN_RATE = 0x1E;
+constexpr std::uint16_t POLICE_OWNER = 1; // +3Ah of a police Viper
+constexpr std::uint8_t POLICE_AGGRESSION = 0x64;
+
+// The mask mission's ships: the Asp (the mask ship) or, by the sign of a random word, one of two others, all from the Asp's record.
+constexpr std::uint8_t MISSION_TYPE_IF_NEGATIVE = 0x12;
+constexpr std::uint8_t MISSION_TYPE_IF_POSITIVE = 0x13;
+constexpr std::uint8_t MISSION_AGGRESSION_MASK = 0x7F;
+constexpr std::uint8_t MISSION_ENERGY = 0x96;
+constexpr std::uint8_t MISSION_MISSILES = 6;
+constexpr std::uint8_t MISSION_BOUNTY = 0xC8;
+constexpr std::uint8_t INVADER_ENERGY = 0x32;
+constexpr std::uint8_t INVADER_THARGONS = 8;
+
+constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
+constexpr std::uint16_t FIRST_EVICTED_SLOT = 4; // ReclaimShipSlot evicts one of slots 4-19
 
 constexpr std::uint16_t SPAWN_DISTANCE = 10000;
 constexpr std::uint16_t SPAWN_SCATTER_MASK = 0x7FF; // halved and signed by its low bit: +-1023
@@ -133,7 +164,199 @@ void CompareType(Guest& _guest, std::span<const std::uint8_t> _types)
   return (masked & 1) != 0 ? Negate(halved) : halved;
 }
 
+// MOV BX,record / XOR AL,AL / CALL InitObjectFromTemplate / MOV [DI+33h],_class: the slot at DI from one fixed record.
+void InitFromRecord(Guest& _guest, std::size_t _record, std::uint8_t _class)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.bx = DS.spawnTemplates.At(_record);
+  SetLow(regs.ax, 0);
+  InitObjectFromTemplate(_guest);
+  _guest.SetByte(At(regs.di, SLOT_CLASS), _class);
+}
+
+// The start every spawned ship shares: record AL of the table at BX, placed at the spawn point and turned to the player.
+void SpawnFromRecord(Guest& _guest)
+{
+  InitObjectFromTemplate(_guest);
+  PlaceAtSpawnPoint(_guest);
+  FacePlayerWithRandomRoll(_guest);
+}
+
 } // namespace
+
+void AddToCoordinate(Guest& _guest, std::uint16_t _slot, int _axis, std::uint16_t _value)
+{
+  const std::uint16_t low = At(_slot, SLOT_X + 2 * _axis);
+  const std::uint32_t sum = std::uint32_t{_guest.Word(low)} + _value;
+  _guest.SetWord(low, static_cast<std::uint16_t>(sum));
+  const std::uint16_t high = At(_slot, SLOT_X_HIGH + _axis);
+  _guest.SetByte(high, static_cast<std::uint8_t>(_guest.Byte(high) + Low(SignWord(_value)) + (sum >> 16)));
+}
+
+void ClearObjectSlot(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = regs.si;
+  // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout.
+  for (regs.cx = SLOT_BYTES; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+  {
+    _guest.SetByte(regs.si, High(regs.cx));
+    regs.si = static_cast<std::uint16_t>(regs.si + 1);
+  }
+}
+
+void InitPoliceViper(Guest& _guest)
+{
+  InitFromRecord(_guest, VIPER_TEMPLATE, TRADER_CLASS);
+  const std::uint16_t slot = _guest.Regs().di;
+  _guest.SetWord(At(slot, SLOT_OWNER), POLICE_OWNER);
+  _guest.SetByte(At(slot, SLOT_AGGRESSION), POLICE_AGGRESSION);
+}
+
+void InitAbandonedCobra(Guest& _guest)
+{
+  InitFromRecord(_guest, COBRA_TEMPLATE, ABANDONED_CLASS);
+}
+
+void InitEscapePod(Guest& _guest)
+{
+  InitFromRecord(_guest, ESCAPE_POD_TEMPLATE, DRIFTER_CLASS);
+}
+
+void InitShuttle(Guest& _guest)
+{
+  InitFromRecord(_guest, SHUTTLE_TEMPLATE, DRIFTER_CLASS);
+}
+
+void InitKraitHunter(Guest& _guest)
+{
+  InitFromRecord(_guest, KRAIT_TEMPLATE, HUNTER_CLASS);
+}
+
+void InitThargon(Guest& _guest)
+{
+  InitFromRecord(_guest, THARGON_TEMPLATE, WOLF_CLASS);
+}
+
+void SpawnRandomDrifter(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  NextRandom(_guest);
+  // ROR AX,1 / XOR AL,AH / AND AL,7.
+  const auto rotated = static_cast<std::uint16_t>((regs.ax >> 1) | (regs.ax << 15));
+  regs.ax = Join(High(rotated), static_cast<std::uint8_t>((Low(rotated) ^ High(rotated)) & DRIFTER_CHOICE_MASK));
+  regs.bx = DS.spawnTemplates.At(ESCAPE_POD_TEMPLATE);
+  SpawnFromRecord(_guest);
+  _guest.SetByte(At(regs.di, SLOT_CLASS), DRIFTER_CLASS);
+  _guest.SetByte(At(regs.di, SLOT_TURN_RATE), DRIFTER_TURN_RATE);
+  ComputeVelocity(_guest);
+}
+
+void SpawnRandomTrader(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  NextRandom(_guest);
+  // XOR AH,AH / DIV BL: the quotient picks the record, and the remainder stays in AH.
+  const std::uint8_t random = Low(regs.ax);
+  regs.ax = Join(static_cast<std::uint8_t>(random % TRADER_CHOICE_DIVISOR), static_cast<std::uint8_t>(random / TRADER_CHOICE_DIVISOR));
+  regs.bx = DS.spawnTemplates.At(COBRA_TEMPLATE);
+  SpawnFromRecord(_guest);
+  _guest.SetByte(At(regs.di, SLOT_CLASS), TRADER_CLASS);
+  ComputeVelocity(_guest);
+  IsViperType(_guest);
+  if (!_guest.Flag(FLAG_ZERO))
+  {
+    return;
+  }
+  // A Viper is police one time in two; then a word write of the legal status, which zeroes the bounty above it.
+  NextRandom(_guest);
+  regs.ax = static_cast<std::uint16_t>(regs.ax & POLICE_OWNER);
+  _guest.SetWord(At(regs.di, SLOT_OWNER), regs.ax);
+  if (regs.ax == 0)
+  {
+    return;
+  }
+  SetLow(regs.ax, _guest.Get(DS.legalStatus));
+  _guest.SetWord(At(regs.di, SLOT_AGGRESSION), regs.ax);
+}
+
+void SpawnMaskMissionShip(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  std::uint8_t type = TYPE_ASP;
+  SetLow(regs.ax, type);
+  if (!_guest.Flag(FLAG_CARRY))
+  {
+    NextRandom(_guest);
+    type = (High(regs.ax) & 0x80) != 0 ? MISSION_TYPE_IF_NEGATIVE : MISSION_TYPE_IF_POSITIVE;
+    SetLow(regs.ax, type);
+  }
+  const std::uint16_t kept = regs.ax; // PUSH AX / POP AX round the record's set-up
+  SetLow(regs.ax, 0);
+  regs.bx = DS.spawnTemplates.At(ASP_TEMPLATE);
+  SpawnFromRecord(_guest);
+  // SHL AL,1 / INC AL: the type, active.
+  regs.ax = WithLow(kept, static_cast<std::uint8_t>((type << 1) | SLOT_ACTIVE));
+  _guest.SetByte(regs.di, Low(regs.ax));
+  _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
+  NextRandom(_guest);
+  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & MISSION_AGGRESSION_MASK));
+  _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
+  _guest.SetByte(At(regs.di, SLOT_ENERGY), MISSION_ENERGY);
+  _guest.SetByte(At(regs.di, SLOT_CARGO), 0);
+  _guest.SetByte(At(regs.di, SLOT_MISSILES), MISSION_MISSILES);
+  _guest.SetByte(At(regs.di, SLOT_BOUNTY), MISSION_BOUNTY);
+}
+
+void SpawnInvasionThargoid(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  SetLow(regs.ax, 0);
+  regs.bx = DS.spawnTemplates.At(THARGOID_TEMPLATE);
+  SpawnFromRecord(_guest);
+  _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
+  NextRandom(_guest);
+  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & MISSION_AGGRESSION_MASK));
+  _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
+  _guest.SetByte(At(regs.di, SLOT_ENERGY), INVADER_ENERGY);
+  _guest.SetByte(At(regs.di, SLOT_CARGO), 0);
+  _guest.SetByte(At(regs.di, SLOT_MISSILES), MISSION_MISSILES);
+  _guest.SetByte(At(regs.di, SLOT_THARGONS), INVADER_THARGONS);
+}
+
+void RandomizeOrientation(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  for (const std::uint16_t field : {SLOT_PITCH, SLOT_YAW, SLOT_ROLL})
+  {
+    NextRandom(_guest);
+    _guest.SetWord(At(regs.di, field), regs.ax);
+  }
+}
+
+void ReclaimShipSlot(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.si = DS.firstShipSlot.offset;
+  regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  do
+  {
+    if ((_guest.Byte(At(regs.si, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) == 0)
+    {
+      return;
+    }
+    regs.si = At(regs.si, SLOT_BYTES);
+    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
+  } while (regs.cx != 0);
+  // Every one has a blip: one of slots 4-19 at random (AND AH,0Fh / XOR AL,AL / SHR AX,1 twice), removed first.
+  NextRandom(_guest);
+  regs.ax = static_cast<std::uint16_t>((High(regs.ax) & 0x0F) << 6);
+  regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * SLOT_BYTES + regs.ax);
+  const std::uint16_t slot = regs.si;
+  regs.di = slot;
+  RemoveObject(_guest);
+  regs.si = slot;
+}
 
 void IsObjectNear(Guest& _guest)
 {
@@ -507,6 +730,7 @@ using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 
 constexpr Machine::NativeContract REMOVES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_ES, 0};
+constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
@@ -516,24 +740,37 @@ constexpr Machine::NativeContract TYPE_IN_AL{0, FLAG_ZERO};
 constexpr Machine::NativeContract TYPE_CLOBBERS_AL{REGISTER_AX, FLAG_ZERO};
 
 constexpr std::array ENTRIES = {
+  NativeEntry{0x2FD8, "ClearObjectSlot", &ClearObjectSlot, PRESERVES_ALL},
   NativeEntry{0x3B9A, "IsObjectNear", &IsObjectNear, NEAR_TEST},
   NativeEntry{0x3F2A, "IsSunOrPlanet", &IsSunOrPlanet, TYPE_IN_AL},
   NativeEntry{0x3F37, "IsPlanet", &IsPlanet, TYPE_IN_AL},
   NativeEntry{0x3F40, "IsStation", &IsStation, Machine::NativeContract{0, FLAG_ZERO | FLAG_CARRY}},
   NativeEntry{0x460E, "IsObjectNearKeepBlip", &IsObjectNearKeepBlip, Machine::NativeContract{REGISTER_AX, FLAG_CARRY}},
+  NativeEntry{0x4C76, "InitPoliceViper", &InitPoliceViper, CLOBBERS_AX_BX},
   NativeEntry{0x4C99, "InitCargoBarrel", &InitCargoBarrel, CLOBBERS_AX_BX},
+  NativeEntry{0x4CA6, "InitAbandonedCobra", &InitAbandonedCobra, CLOBBERS_AX_BX},
+  NativeEntry{0x4CB3, "InitEscapePod", &InitEscapePod, CLOBBERS_AX_BX},
+  NativeEntry{0x4CC0, "InitShuttle", &InitShuttle, CLOBBERS_AX_BX},
+  NativeEntry{0x4CCD, "InitKraitHunter", &InitKraitHunter, CLOBBERS_AX_BX},
+  NativeEntry{0x4CDA, "InitThargon", &InitThargon, CLOBBERS_AX_BX},
+  NativeEntry{0x4CE7, "SpawnRandomDrifter", &SpawnRandomDrifter, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x4D08, "SpawnRandomTrader", &SpawnRandomTrader, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4D3B, "SpawnRandomHunter", &SpawnRandomHunter, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4D60, "SpawnRandomWolf", &SpawnRandomWolf, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x4DAE, "SpawnMaskMissionShip", &SpawnMaskMissionShip, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x4DF0, "SpawnInvasionThargoid", &SpawnInvasionThargoid, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4E1B, "InitObjectFromTemplate", &InitObjectFromTemplate, CLOBBERS_AX_BX},
   NativeEntry{0x4E75, "PlaceAtSpawnPoint", &PlaceAtSpawnPoint, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x4EC5, "FacePlayerWithRandomRoll", &FacePlayerWithRandomRoll, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4EF4, "GetObjectPosition", &GetObjectPosition, PRESERVES_ALL},
   NativeEntry{0x4EFE, "GetVectorToPlayer", &GetVectorToPlayer, PRESERVES_ALL},
+  NativeEntry{0x4F35, "RandomizeOrientation", &RandomizeOrientation, CLOBBERS_AX},
   NativeEntry{0x4F48, "ComputeVelocity", &ComputeVelocity, CLOBBERS_AX_BX_DX},
   NativeEntry{0x4F6E, "MoveObject", &MoveObject, REMOVES},
   NativeEntry{0x4F98, "RemoveObject", &RemoveObject, REMOVES},
   NativeEntry{0x513E, "FacePlayer", &FacePlayer, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x51E0, "FindFreeShipSlot", &FindFreeShipSlot, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x51FD, "ReclaimShipSlot", &ReclaimShipSlot, REMOVES},
   NativeEntry{0x52B2, "ClearAllObjects", &ClearAllObjects, Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0}},
   NativeEntry{0x52EC, "FindDebrisSlot", &FindDebrisSlot, PRESERVES_ALL},
   NativeEntry{0x5320, "CopyObject", &CopyObject, PRESERVES_ALL},

@@ -73,6 +73,13 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> ShipsEntries() noexcept;
 
+/// ADD [slot+4+2*axis],_value / ADC [slot+1+axis],DL with DL from CWD: a signed word added to one 24-bit coordinate of the slot at
+/// _slot. Not an entry: the idiom several routines share.
+void AddToCoordinate(Guest& _guest, std::uint16_t _slot, int _axis, std::uint16_t _value);
+
+/// ClearObjectSlot (CS:2FD8): the 64 bytes at SI zeroed. Out: DI = the slot, SI = the slot + 40h, CX = 0.
+void ClearObjectSlot(Guest& _guest);
+
 /// IsObjectNear (CS:3B9A): CF set when each 24-bit coordinate of the slot at DI fits a signed word; otherwise
 /// EraseScannerBlip, and CF clear. AL is the last high byte looked at (0 for FFh).
 void IsObjectNear(Guest& _guest);
@@ -89,14 +96,45 @@ void IsStation(Guest& _guest);
 /// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone.
 void IsObjectNearKeepBlip(Guest& _guest);
 
+/// InitPoliceViper (CS:4C76): the slot at DI made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
+void InitPoliceViper(Guest& _guest);
+
 /// InitCargoBarrel (CS:4C99): the slot at DI made a barrel (spawnTemplates entry 2), class 3.
 void InitCargoBarrel(Guest& _guest);
+
+/// InitAbandonedCobra (CS:4CA6): the slot at DI made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
+void InitAbandonedCobra(Guest& _guest);
+
+/// InitEscapePod (CS:4CB3): the slot at DI made an escape pod (entry 1), class 3.
+void InitEscapePod(Guest& _guest);
+
+/// InitShuttle (CS:4CC0): the slot at DI made a shuttle (entry 7), class 3.
+void InitShuttle(Guest& _guest);
+
+/// InitKraitHunter (CS:4CCD): the slot at DI made a Krait (entry 17), class 6.
+void InitKraitHunter(Guest& _guest);
+
+/// InitThargon (CS:4CDA): the slot at DI made a Thargon (entry 28), class 5.
+void InitThargon(Guest& _guest);
+
+/// SpawnRandomDrifter (CS:4CE7): one of the eight drifters from entry 1 in the free slot at DI, class 3, turn rate 1Eh.
+void SpawnRandomDrifter(Guest& _guest);
+
+/// SpawnRandomTrader (CS:4D08): one of the six traders from entry 9 in the free slot at DI, class 4; a Viper is police half the time.
+void SpawnRandomTrader(Guest& _guest);
 
 /// SpawnRandomHunter (CS:4D3B): a random class-6 ship in the free slot at DI.
 void SpawnRandomHunter(Guest& _guest);
 
 /// SpawnRandomWolf (CS:4D60): a random class-5 ship in the free slot at DI, a Thargoid in witch space.
 void SpawnRandomWolf(Guest& _guest);
+
+/// SpawnMaskMissionShip (CS:4DAE): a mask-mission ship in the free slot at DI from the Asp's record: the Asp when CF is set,
+/// otherwise type 12h or 13h by a random sign.
+void SpawnMaskMissionShip(Guest& _guest);
+
+/// SpawnInvasionThargoid (CS:4DF0): an invasion's Thargoid in the free slot at DI, with 8 Thargons.
+void SpawnInvasionThargoid(Guest& _guest);
 
 /// InitObjectFromTemplate (CS:4E1B): the slot at DI from the 10-byte record AL of the table at BX. Out: BX the record, AL its last byte.
 void InitObjectFromTemplate(Guest& _guest);
@@ -113,6 +151,9 @@ void GetObjectPosition(Guest& _guest);
 /// GetVectorToPlayer (CS:4EFE): AX, BX, CX = the position of the slot at DI, negated.
 void GetVectorToPlayer(Guest& _guest);
 
+/// RandomizeOrientation (CS:4F35): the pitch, yaw and roll of the slot at DI, a random word each.
+void RandomizeOrientation(Guest& _guest);
+
 /// ComputeVelocity (CS:4F48): the velocity bytes of the slot at DI from its speed and heading, through rotation pairs 7 and 6.
 void ComputeVelocity(Guest& _guest);
 
@@ -127,6 +168,10 @@ void FacePlayer(Guest& _guest);
 
 /// FindFreeShipSlot (CS:51E0): CF set and SI = the first inactive ship slot; CF clear when none is.
 void FindFreeShipSlot(Guest& _guest);
+
+/// ReclaimShipSlot (CS:51FD): SI = the first ship slot whose blip is not drawn; when every one has a blip, one of slots 4-19 at
+/// random, removed (DI = SI).
+void ReclaimShipSlot(Guest& _guest);
 
 /// ClearAllObjects (CS:52B2): zeroes shipSlotCount slots. Out: ES = DS, AX = CX = 0, DI past the end.
 void ClearAllObjects(Guest& _guest);

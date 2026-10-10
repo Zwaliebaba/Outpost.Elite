@@ -4,6 +4,9 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Maths.h"
+
+#include <utility>
 
 namespace Elite
 {
@@ -12,8 +15,8 @@ namespace
 {
 
 constexpr std::uint16_t SAVE_SCREENSHOT = 0x01B7;
-constexpr std::uint16_t READ_JOYSTICK_STEERING = 0x77C1;
-constexpr std::uint16_t READ_MOUSE_STEERING = 0x797E;
+constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
+constexpr std::uint16_t GET_KEY = 0x7616;
 
 constexpr std::uint16_t KEYBOARD_DATA_PORT = 0x60;
 constexpr std::uint16_t KEYBOARD_CONTROL_PORT = 0x61;
@@ -23,7 +26,21 @@ constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80; // the XT's PB7 pulse
 constexpr std::uint8_t END_OF_INTERRUPT = 0x20;
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 5;
+constexpr std::uint16_t MOUSE_MOTION = 0x0B;
 constexpr std::uint16_t MOUSE_LEFT_BUTTON = 1;
+constexpr std::uint16_t MOUSE_VECTOR_OFFSET = MOUSE_VECTOR * 4; // in the interrupt table at 0000:0000
+constexpr std::uint8_t IRET_OPCODE = 0xCF;
+constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
+constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
+
+// ReadJoystickAxes counts its polls up from 60000, so that a count that wraps is a time-out after 5536.
+constexpr std::uint16_t AXIS_COUNT_START = 0xEA60;
+constexpr std::uint8_t X_AXIS = 0x01;
+constexpr std::uint8_t Y_AXIS = 0x02;
+constexpr std::uint8_t BOTH_AXES = X_AXIS | Y_AXIS;
+constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / centre saturates at 127
+constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
+constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
 
 constexpr std::uint8_t OVERRUN_CODE = 0xFF;
 constexpr std::uint8_t BREAK_BIT = 0x80;
@@ -43,6 +60,14 @@ constexpr std::uint8_t STICK_BUTTON_B = 0x10;
 constexpr std::int8_t MOST_RATE = 23;             // either way
 constexpr std::uint8_t MOST_NEGATIVE_RATE = 0xE9; // -23
 constexpr std::uint8_t RATE_DECAY_STEPS = 3;
+
+// The end of a waiting loop's turn at the original's backward jump to CS:_target, with IP there as paced time sees it there:
+// two jumps back to different places are then two turns, as they are in the original.
+void JumpBack(Guest& _guest, std::uint16_t _target)
+{
+  _guest.Regs().ip = _target;
+  _guest.LoopTurn();
+}
 
 // SHR AL,1 of a button byte: CF is the button, AL the rest.
 void ShiftOutButton(Guest& _guest, std::uint8_t _buttons)
@@ -139,6 +164,106 @@ void RampAxis(Guest& _guest, std::uint8_t _key, DataField<std::uint8_t> _lastKey
   }
 }
 
+// ReadJoystickSteering's Amstrad stick (787D): its four key codes ramped as the keyboard's cursor keys are.
+void ReadAmstradStick(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  std::uint8_t roll = 0;
+  std::uint8_t pitch = 0;
+  if (_guest.Get(DS.keyDownAmstradUp) == 1)
+  {
+    --pitch;
+  }
+  if (_guest.Get(DS.keyDownAmstradDown) == 1)
+  {
+    ++pitch;
+  }
+  if (_guest.Get(DS.keyDownAmstradLeft) == 1)
+  {
+    --roll;
+  }
+  if (_guest.Get(DS.keyDownAmstradRight) == 1)
+  {
+    ++roll;
+  }
+  RampAxis(_guest, roll, DS.amstradStickLastRoll, DS.amstradStickRollRamp);
+  RampAxis(_guest, pitch, DS.amstradStickLastPitch, DS.amstradStickPitchRamp);
+  regs.ax = Join(Negate(_guest.Get(DS.amstradStickPitchRamp)), _guest.Get(DS.amstradStickRollRamp));
+}
+
+// One axis of ReadJoystickSteering, on the count in AX: (count - centre) * 256 / centre by a DIV that can overflow into the
+// game's trap, halved and saturated at 127, over 8, less a dead zone of 4, with the sign put back. Out: AL; AH as the halving
+// left it, DX as the DIV did.
+void StickAxis(Guest& _guest, DataField<std::uint16_t> _center)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = static_cast<std::uint16_t>(regs.ax - _guest.Get(_center));
+  const bool negative = (regs.ax & 0x8000) != 0;
+  if (negative)
+  {
+    regs.ax = Negate(regs.ax);
+  }
+  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the difference * 256.
+  regs.dx = High(regs.ax);
+  regs.ax = Join(Low(regs.ax), 0);
+  DivideWord(_guest, _guest.Get(_center));
+  regs.ax = static_cast<std::uint16_t>(regs.ax >> 1);
+  if (regs.ax >= STICK_STEP_LIMIT)
+  {
+    SetLow(regs.ax, MOST_STICK_STEP);
+  }
+  const auto step = static_cast<std::uint8_t>(Low(regs.ax) >> 3);
+  const std::uint8_t value = step >= STICK_DEAD_ZONE ? static_cast<std::uint8_t>(step - STICK_DEAD_ZONE) : std::uint8_t{0};
+  SetLow(regs.ax, negative ? Negate(value) : value);
+}
+
+// ClampJoystickSteering (7A3C) on one byte: within -23..23.
+[[nodiscard]] std::uint8_t ClampRate(std::uint8_t _rate) noexcept
+{
+  const auto value = static_cast<std::int8_t>(_rate);
+  if (value < -MOST_RATE)
+  {
+    return MOST_NEGATIVE_RATE;
+  }
+  if (value > MOST_RATE)
+  {
+    return static_cast<std::uint8_t>(MOST_RATE);
+  }
+  return _rate;
+}
+
+// One axis of ReadMouseSteering: a motion counter over 8, saturated at 63 either way. AH is as the shift left it.
+[[nodiscard]] std::uint16_t MouseAxis(std::uint16_t _mickeys) noexcept
+{
+  const bool negative = (_mickeys & 0x8000) != 0;
+  auto value = static_cast<std::uint16_t>((negative ? Negate(_mickeys) : _mickeys) >> 3);
+  if (value >= MOUSE_STEP_LIMIT)
+  {
+    value = WithLow(value, MOST_MOUSE_STEP);
+  }
+  return negative ? WithLow(value, Negate(Low(value))) : value;
+}
+
+// One axis of ReadMouseSteering's rate: the step, halved, added to the rate the last frame left, within -23..23; then INC / SUB 2
+// / INC, which snaps -1 and 1 to 0.
+[[nodiscard]] std::uint8_t MouseRate(std::uint8_t _step, std::uint8_t _rate) noexcept
+{
+  auto value = static_cast<std::uint8_t>(Sar(_step, 1) + _rate);
+  if (static_cast<std::int8_t>(value) > MOST_RATE)
+  {
+    value = static_cast<std::uint8_t>(MOST_RATE);
+  }
+  if (static_cast<std::int8_t>(value) < -MOST_RATE)
+  {
+    value = MOST_NEGATIVE_RATE;
+  }
+  if (value == 1 || value == 0xFF)
+  {
+    value = 0;
+  }
+  return value;
+}
+
 } // namespace
 
 void KeyboardInterrupt(Guest& _guest)
@@ -154,6 +279,30 @@ void KeyboardInterrupt(Guest& _guest)
   regs.es = es;
   regs.ds = ds;
   regs.ax = ax;
+}
+
+void IsMouseDriverInstalled(Guest& _guest)
+{
+  // The int 33h vector: installed when it is set and does not point at an IRET.
+  const std::uint16_t offset = _guest.FarWord(0, MOUSE_VECTOR_OFFSET);
+  const std::uint16_t segment = _guest.FarWord(0, static_cast<std::uint16_t>(MOUSE_VECTOR_OFFSET + 2));
+  _guest.Regs().es = segment;
+  const bool installed = (offset | segment) != 0 && _guest.FarByte(segment, offset) != IRET_OPCODE;
+  _guest.SetFlag(Machine::FLAG_ZERO, !installed);
+}
+
+void WaitForKeyPress(Guest& _guest)
+{
+  // GetKey until a key comes: each empty turn ends at the original's JE back to the entry.
+  for (;;)
+  {
+    _guest.Call(GET_KEY);
+    if (!_guest.Flag(Machine::FLAG_ZERO))
+    {
+      return;
+    }
+    JumpBack(_guest, WAIT_FOR_KEY_PRESS);
+  }
 }
 
 void ReadScanCode(Guest& _guest)
@@ -264,14 +413,14 @@ void ReadSteering(Guest& _guest)
   }
   if (device == JOYSTICK_DEVICE)
   {
-    _guest.Call(READ_JOYSTICK_STEERING);
+    ReadJoystickSteering(_guest);
     if (_guest.Get(DS.joystickIsAmstrad) == 1)
     {
       ApplyKeyboardRates(_guest);
     }
     return;
   }
-  _guest.Call(READ_MOUSE_STEERING);
+  ReadMouseSteering(_guest);
 }
 
 void GetKey(Guest& _guest)
@@ -311,6 +460,85 @@ void ResetKeyboard(Guest& _guest)
   _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
 }
 
+void ReadJoystickAxes(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // With interrupts off, the one-shots fired, each axis's polls counted until its bit drops. The game port times its one-shots in
+  // the cycles of the instructions executed, and native code executes none: run natively, a stick that answers never drops a
+  // bit, and the X count times out (CF, with interrupts left off, as the original leaves them on a time-out).
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
+  regs.bx = AXIS_COUNT_START;
+  regs.cx = regs.bx;
+  regs.dx = GAME_PORT;
+  _guest.Out8(GAME_PORT, Low(regs.ax));
+  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & BOTH_AXES));
+  if (Low(regs.ax) != BOTH_AXES)
+  {
+    _guest.SetFlag(Machine::FLAG_CARRY, true);
+    return;
+  }
+  do
+  {
+    regs.bx = static_cast<std::uint16_t>(regs.bx + 1);
+    if (regs.bx == 0)
+    {
+      _guest.SetFlag(Machine::FLAG_CARRY, true);
+      return;
+    }
+    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & X_AXIS));
+  } while (Low(regs.ax) != 0);
+  // Both bits down before the one-shots fire again; this loop does not count, or time out.
+  do
+  {
+    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & BOTH_AXES));
+  } while (Low(regs.ax) != 0);
+  _guest.Out8(GAME_PORT, Low(regs.ax));
+  do
+  {
+    regs.cx = static_cast<std::uint16_t>(regs.cx + 1);
+    if (regs.cx == 0)
+    {
+      _guest.SetFlag(Machine::FLAG_CARRY, true);
+      return;
+    }
+    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & Y_AXIS));
+  } while (Low(regs.ax) != 0);
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  regs.cx = static_cast<std::uint16_t>(regs.cx - AXIS_COUNT_START);
+  regs.bx = static_cast<std::uint16_t>(regs.bx - AXIS_COUNT_START);
+  regs.dx = GAME_PORT;
+  SetLow(regs.ax, _guest.In8(GAME_PORT));
+  _guest.Set(DS.joystickPortByte, Low(regs.ax));
+  // Bit 4, the stick's first button, low while pressed.
+  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & STICK_BUTTON_B));
+  if (Low(regs.ax) == 0)
+  {
+    _guest.Set(DS.fireLatch, 1);
+  }
+  _guest.SetFlag(Machine::FLAG_CARRY, false);
+}
+
+void ReadJoystickSteering(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (_guest.Get(DS.joystickIsAmstrad) == 1)
+  {
+    ReadAmstradStick(_guest);
+    return;
+  }
+  ReadJoystickAxes(_guest);
+  if (_guest.Flag(Machine::FLAG_CARRY))
+  {
+    regs.ax = 0;
+    return;
+  }
+  regs.ax = regs.bx;
+  StickAxis(_guest, DS.joystickCenterX);
+  std::swap(regs.cx, regs.ax); // XCHG CX,AX: the roll kept, the Y count taken
+  StickAxis(_guest, DS.joystickCenterY);
+  regs.ax = Join(ClampRate(Negate(Low(regs.ax))), ClampRate(Low(regs.cx)));
+}
+
 void ReadKeyboardSteering(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -340,6 +568,36 @@ void ReadKeyboardSteering(Guest& _guest)
   RampAxis(_guest, roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
   RampAxis(_guest, pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
   regs.ax = Join(Negate(_guest.Get(DS.keyboardPitchRamp)), _guest.Get(DS.keyboardRollRamp));
+}
+
+void ReadMouseSteering(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The motion since the last call: CX across, DX down.
+  regs.ax = MOUSE_MOTION;
+  _guest.Interrupt(MOUSE_VECTOR);
+  regs.ax = MouseAxis(regs.cx);
+  std::swap(regs.cx, regs.ax); // XCHG CX,AX
+  regs.ax = MouseAxis(regs.dx);
+  regs.ax = Join(Low(regs.ax), Low(regs.cx));
+  const std::uint16_t steps = regs.ax; // PUSH AX / POP AX round the buttons
+  if (_guest.Get(DS.amstradPresent) == 1)
+  {
+    SetLow(regs.ax, static_cast<std::uint8_t>((_guest.Get(DS.keyDownAmstradMouseRight) << 1) | _guest.Get(DS.keyDownAmstradMouseLeft)));
+  }
+  else
+  {
+    regs.ax = MOUSE_BUTTON_PRESSES;
+    regs.bx = MOUSE_LEFT_BUTTON;
+    _guest.Interrupt(MOUSE_VECTOR);
+  }
+  _guest.Set(DS.mouseButtons, Low(regs.ax));
+  if ((Low(regs.ax) & 1) != 0)
+  {
+    _guest.Set(DS.fireLatch, 1);
+  }
+  // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
+  regs.ax = Join(MouseRate(Negate(High(steps)), _guest.Get(DS.pitchRate)), MouseRate(Low(steps), _guest.Byte(DS.rollRate.offset)));
 }
 
 void PollScreenDumpKey(Guest& _guest)
@@ -400,15 +658,24 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract FIRE_BUTTON{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
 constexpr Machine::NativeContract KEY{0, FLAG_ZERO | FLAG_INTERRUPT};
+// The stick's routines leave interrupts off on a time-out, which their callers live with: compared too.
+constexpr Machine::NativeContract STICK_AXES{REGISTER_AX, FLAG_CARRY | FLAG_INTERRUPT};
+constexpr Machine::NativeContract STICK_STEERING{REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_INTERRUPT};
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{0x02D4, "IsMouseDriverInstalled", &IsMouseDriverInstalled, Machine::NativeContract{0, FLAG_ZERO}},
+  // It waits as a rule: the mission briefings call it for the key that ends them.
+  NativeEntry{0x6DEC, "WaitForKeyPress", &WaitForKeyPress, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7443, "ReadScanCode", &ReadScanCode, CLOBBERS_AX},
   NativeEntry{0x74E0, "ReadFireButton", &ReadFireButton, FIRE_BUTTON},
   NativeEntry{0x7536, "ReadSteering", &ReadSteering, CLOBBERS_BX_CX_DX},
   NativeEntry{0x7616, "GetKey", &GetKey, KEY},
   NativeEntry{0x7668, "ResetKeyboard", &ResetKeyboard, PRESERVES_ALL},
+  NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxes, STICK_AXES},
+  NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteering, STICK_STEERING},
   NativeEntry{0x78EF, "ReadKeyboardSteering", &ReadKeyboardSteering, CLOBBERS_BX},
+  NativeEntry{0x797E, "ReadMouseSteering", &ReadMouseSteering, CLOBBERS_BX_CX_DX},
   NativeEntry{0x7F3D, "PollScreenDumpKey", &PollScreenDumpKey, PRESERVES_ALL},
   NativeEntry{0x7F5D, "ResetMouseIfSelected", &ResetMouseIfSelected, CLOBBERS_AX_BX},
   NativeEntry{0x8EA5, "ApplyReverseControls", &ApplyReverseControls, PRESERVES_ALL},

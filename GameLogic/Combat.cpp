@@ -24,15 +24,16 @@ constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
 constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
 constexpr std::uint16_t VECTOR_WITHIN_BOX = 0x2F6E;
+constexpr std::uint16_t COMPUTE_DEATH_DEBRIS_VECTOR = 0x2F8B;
 constexpr std::uint16_t SHOW_BOUNTY_MESSAGE = 0x3626;
-constexpr std::uint16_t LAUNCH_SHIP_FROM_OBJECT = 0x534E;
+constexpr std::uint16_t ROTATE_ROLL_YAW_PITCH = 0x3EC7;
 constexpr std::uint16_t ADD_CREDITS = 0x65EE;
 constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
 constexpr std::uint16_t START_EXPLOSION_SOUND = 0x7AFC;
+constexpr std::uint16_t START_PLAYER_DEATH_SOUND = 0x7B09;
 constexpr std::uint16_t START_LASER_SOUND = 0x7B71;
 constexpr std::uint16_t START_PLAYER_HIT_SOUND = 0x7B96;
 constexpr std::uint16_t CANCEL_DOCKING_COMPUTER = 0x8BAA;
-constexpr std::uint16_t ROUTINE_8C51 = 0x8C51;
 constexpr std::uint16_t PROJECT_TO_SCREEN = 0x8D2E;
 
 // The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type.
@@ -97,6 +98,36 @@ constexpr std::uint16_t MISSILE_MESSAGE_FRAMES = 0x19;
 constexpr std::uint16_t REPAIR_MESSAGE_FRAMES = 0x1E;
 constexpr std::uint8_t MISSILE_LOCKED = 2;
 
+// What else a launch can put in DL, besides MISSILE_LAUNCH and THARGON_LAUNCH.
+constexpr std::uint8_t ESCAPE_POD_LAUNCH = 0x15;
+constexpr std::uint8_t KRAIT_LAUNCH = 5;
+constexpr std::size_t MISSILE_TEMPLATE = 0; // spawnTemplates' first record
+constexpr std::uint8_t MISSILE_CLASS = 2;
+constexpr std::uint16_t MISSILE_LAUNCH_DISTANCE = 100; // the player's missile starts this far along the nose
+constexpr std::uint16_t MISSILE_SPIN = 0x28;
+constexpr std::uint16_t MISSILE_HIT_BOX = 0xC8;
+constexpr std::uint16_t MISSILE_DAMAGE = 0x320;
+constexpr std::uint8_t MISSILE_AT_STATION_CRIME = 5;
+constexpr std::uint8_t INVADED_STATION_HIT = 0x0A;
+
+constexpr std::uint16_t FIRST_SHIP_SLOT = 3; // the sun, the planet and the station come first
+constexpr std::uint8_t LEGAL_STATUS_PER_BOMB = 0x28;
+constexpr std::uint16_t OVERWHELMING_DAMAGE = 0x100; // from here the shield takes what it holds and the energy the rest
+constexpr std::uint16_t MASKING_ENERGY = 0x0C;
+constexpr std::uint8_t MASKING_COLOR = 9;
+constexpr std::uint8_t MASKING_CALMING = 2;
+
+// The wreck the player leaves: six splinters drifting with it, 40 units along the nose a frame, then a barrel of the cargo.
+constexpr std::uint16_t WRECK_SPEED = 8;
+constexpr std::uint16_t WRECK_SPLINTERS = 6;
+constexpr std::uint8_t WRECK_LIFETIME = 0x32;
+constexpr std::uint8_t SPLINTER_SCATTER_MASK = 0x1F; // a random -15..16 on each axis
+constexpr std::uint8_t SPLINTER_SCATTER_CENTER = 0x0F;
+constexpr std::uint8_t BARREL_SCATTER_MASK = 0x0F; // a random -7..8
+constexpr std::uint8_t BARREL_SCATTER_CENTER = 0x07;
+constexpr std::uint16_t BARREL_OFFSET_MASK = 0x3F; // a random -31..32, the same on x and y
+constexpr std::uint16_t BARREL_OFFSET_CENTER = 0x1F;
+
 // Where ApplyEnemyLaserHit's beam ends: on an edge of the view, by four ranges of a random word.
 constexpr std::uint16_t EDGE_LEFT_BELOW = 0x53FC;
 constexpr std::uint16_t EDGE_RIGHT_BELOW = 0xA7F8;
@@ -119,6 +150,11 @@ constexpr std::uint8_t SHIELD_HIT = 0x0F;
 [[nodiscard]] std::uint8_t SlotType(const Guest& _guest, std::uint16_t _slot) noexcept
 {
   return static_cast<std::uint8_t>((_guest.Byte(_slot) >> 1) & TYPE_MASK);
+}
+
+void AddWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value) noexcept
+{
+  _guest.SetWord(_offset, static_cast<std::uint16_t>(_guest.Word(_offset) + _value));
 }
 
 void OrByte(Guest& _guest, std::uint16_t _offset, std::uint8_t _bits) noexcept
@@ -203,7 +239,7 @@ void PayBounty(Guest& _guest)
   {
     return;
   }
-  _guest.Call(ROUTINE_8C51);
+  Routine8C51(_guest);
   if (!_guest.Flag(FLAG_ZERO))
   {
     return;
@@ -446,6 +482,12 @@ void DestroyTarget(Guest& _guest)
   return false;
 }
 
+// AND AL,_mask / SUB AL,_center / CBW / ADD AX,_drift: a random velocity about the wreck's drift on one axis.
+[[nodiscard]] std::uint16_t WreckScatter(std::uint8_t _random, std::uint8_t _mask, std::uint8_t _center, std::uint16_t _drift) noexcept
+{
+  return static_cast<std::uint16_t>(SignExtend(static_cast<std::uint8_t>((_random & _mask) - _center)) + _drift);
+}
+
 } // namespace
 
 void DrawLaserSights(Guest& _guest)
@@ -661,7 +703,7 @@ void TryLaunchMissileAtPlayer(Guest& _guest)
     return;
   }
   SetLow(regs.dx, MISSILE_LAUNCH);
-  _guest.Call(LAUNCH_SHIP_FROM_OBJECT);
+  LaunchShipFromObject(_guest);
   if (_guest.Flag(FLAG_CARRY))
   {
     _guest.SetByte(At(regs.di, SLOT_MISSILES), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_MISSILES)) - 1));
@@ -682,7 +724,7 @@ void TryLaunchThargon(Guest& _guest)
     return;
   }
   SetLow(regs.dx, THARGON_LAUNCH);
-  _guest.Call(LAUNCH_SHIP_FROM_OBJECT);
+  LaunchShipFromObject(_guest);
   if (_guest.Flag(FLAG_CARRY))
   {
     _guest.SetByte(At(regs.di, SLOT_THARGONS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_THARGONS)) - 1));
@@ -866,6 +908,410 @@ void ApplyEnemyLaserHit(Guest& _guest)
   _guest.Set(DS.playerDead, 1);
 }
 
+void TakeDamage(Guest& _guest)
+{
+  if (_guest.Get(DS.escapePodFrames) != 0)
+  {
+    return;
+  }
+  Machine::Registers& regs = _guest.Regs();
+  if (regs.ax >= OVERWHELMING_DAMAGE)
+  {
+    regs.bx = _guest.Get(DS.foreShield);
+    regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
+    _guest.Set(DS.foreShield, 0);
+  }
+  else
+  {
+    // MOV AH,AL / MOV AL,foreShield / SUB AL,AH: only the fore shield takes it, and what it cannot comes off the energy.
+    const std::uint8_t damage = Low(regs.ax);
+    const std::uint8_t shield = _guest.Get(DS.foreShield);
+    regs.ax = Join(damage, static_cast<std::uint8_t>(shield - damage));
+    _guest.Set(DS.foreShield, Low(regs.ax));
+    if (shield >= damage)
+    {
+      return;
+    }
+    _guest.Set(DS.foreShield, 0);
+    // NEG AL / CBW: the excess, sign-extended.
+    regs.ax = SignExtend(Negate(Low(regs.ax)));
+  }
+  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
+  _guest.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - regs.ax));
+  if (energy >= regs.ax)
+  {
+    return;
+  }
+  KillPlayer(_guest);
+  _guest.Set(DS.playerEnergy, 0);
+}
+
+void DetonateEnergyBomb(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(IN_SAFE_ZONE);
+  if (_guest.Flag(FLAG_CARRY))
+  {
+    AddSaturating(_guest, DS.legalStatus.offset, LEGAL_STATUS_PER_BOMB);
+  }
+  // Every active ship with a blip explodes, its cargo emptied first.
+  regs.di = DS.firstShipSlot.offset;
+  regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  do
+  {
+    if ((_guest.Byte(regs.di) & SLOT_ACTIVE) != 0 && (_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
+    {
+      _guest.SetByte(At(regs.di, SLOT_CARGO), 0);
+      const std::uint16_t slot = regs.di;
+      const std::uint16_t remaining = regs.cx;
+      ExplodeObject(_guest);
+      regs.cx = remaining;
+      regs.di = slot;
+    }
+    regs.di = At(regs.di, SLOT_BYTES);
+    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
+  } while (regs.cx != 0);
+}
+
+void SpawnPlayerWreckage(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(COMPUTE_DEATH_DEBRIS_VECTOR);
+  _guest.Set(DS.wreckDriftX, regs.ax);
+  _guest.Set(DS.wreckDriftY, regs.bx);
+  _guest.Set(DS.wreckDriftZ, regs.cx);
+  _guest.Set(DS.playerVelocityX, 0);
+  _guest.Set(DS.playerVelocityY, 0);
+  _guest.Set(DS.playerVelocityZ, 0);
+  _guest.Set(DS.playerSpeed, WRECK_SPEED);
+  _guest.Set(DS.velocityDirty, 1);
+  _guest.Set(DS.viewLocked, 1);
+  regs.cx = WRECK_SPLINTERS;
+  do
+  {
+    const std::uint16_t splinters = regs.cx;
+    FindDebrisSlot(_guest);
+    ClearObjectSlot(_guest);
+    _guest.SetByte(At(regs.di, SLOT_STATE), 0);
+    NextRandom(_guest);
+    _guest.SetWord(At(regs.di, SLOT_SPIN_ROLL), regs.ax);
+    regs.bx = regs.ax;
+    // Each velocity byte from its own bits of the random word: x from BL, y from BH, z from BL shifted right twice.
+    regs.ax = WreckScatter(Low(regs.bx), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _guest.Get(DS.wreckDriftX));
+    _guest.SetByte(At(regs.di, SLOT_VELOCITY), Low(regs.ax));
+    regs.ax = WreckScatter(High(regs.bx), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _guest.Get(DS.wreckDriftY));
+    _guest.SetByte(At(regs.di, SLOT_VELOCITY + 1), Low(regs.ax));
+    regs.ax = WreckScatter(static_cast<std::uint8_t>(Low(regs.bx) >> 2), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER,
+                           _guest.Get(DS.wreckDriftZ));
+    _guest.SetByte(At(regs.di, SLOT_VELOCITY + 2), Low(regs.ax));
+    _guest.SetByte(At(regs.di, SLOT_CLASS), DEBRIS_CLASS);
+    _guest.SetByte(At(regs.di, SLOT_LIFETIME), WRECK_LIFETIME);
+    SetLow(regs.ax, SPLINTER_ACTIVE);
+    _guest.SetByte(regs.di, SPLINTER_ACTIVE);
+    UpdateDebrisAi(_guest);
+    regs.cx = static_cast<std::uint16_t>(splinters - 1);
+  } while (regs.cx != 0);
+  if (_guest.Get(DS.cargoUsedTonnes) == 0)
+  {
+    return;
+  }
+  // The cargo's barrel: four drifts ahead, drifting at a quarter of the drift and a little, turned to face along it.
+  FindFreeShipSlot(_guest);
+  if (!_guest.Flag(FLAG_CARRY))
+  {
+    ReclaimShipSlot(_guest);
+  }
+  ClearObjectSlot(_guest);
+  const std::array<DataField<std::uint16_t>, 3> drift = {DS.wreckDriftX, DS.wreckDriftY, DS.wreckDriftZ};
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    const std::uint16_t axisDrift = _guest.Get(drift[static_cast<std::size_t>(axis)]);
+    NextRandom(_guest);
+    regs.ax = Sar(WreckScatter(Low(regs.ax), BARREL_SCATTER_MASK, BARREL_SCATTER_CENTER, axisDrift), 2);
+    _guest.SetByte(At(regs.di, SLOT_VELOCITY + axis), Low(regs.ax));
+    regs.ax = static_cast<std::uint16_t>(axisDrift << 2);
+    regs.dx = SignWord(regs.ax);
+    _guest.SetWord(At(regs.di, SLOT_X + 2 * axis), regs.ax);
+    _guest.SetByte(At(regs.di, SLOT_X_HIGH + axis), Low(regs.dx));
+  }
+  InitCargoBarrel(_guest);
+  GetObjectPosition(_guest);
+  ConvertVectorToAngles(_guest);
+  _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
+  _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
+  // The same random -31..32 added to x and to y.
+  NextRandom(_guest);
+  regs.bx = regs.ax;
+  regs.ax = static_cast<std::uint16_t>((regs.ax & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
+  regs.dx = SignWord(regs.ax);
+  AddToCoordinate(_guest, regs.di, 0, regs.ax);
+  regs.bx = static_cast<std::uint16_t>((regs.bx & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
+  regs.ax = regs.bx;
+  regs.dx = SignWord(regs.ax);
+  AddToCoordinate(_guest, regs.di, 1, regs.ax);
+}
+
+void KillPlayer(Guest& _guest)
+{
+  if (_guest.Get(DS.escapePodFrames) != 0)
+  {
+    return;
+  }
+  _guest.Set(DS.playerDead, 1);
+  _guest.Call(START_PLAYER_DEATH_SOUND);
+}
+
+void InitMissile(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.bx = DS.spawnTemplates.At(MISSILE_TEMPLATE);
+  SetLow(regs.ax, 0);
+  InitObjectFromTemplate(_guest);
+  _guest.SetByte(At(regs.di, SLOT_CLASS), MISSILE_CLASS);
+}
+
+void RemoveAllMissiles(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = DS.shipSlots.offset;
+  regs.cx = _guest.Get(DS.objectSlotCount);
+  do
+  {
+    // MOV AL,[DI] / SHR AL,1: the active bit falls into CF, and AL keeps the type above it.
+    const std::uint8_t first = _guest.Byte(regs.di);
+    SetLow(regs.ax, static_cast<std::uint8_t>(first >> 1));
+    if ((first & SLOT_ACTIVE) != 0)
+    {
+      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & TYPE_MASK));
+      if (Low(regs.ax) == TYPE_MISSILE)
+      {
+        const std::uint16_t remaining = regs.cx;
+        const std::uint16_t slot = regs.di;
+        RemoveObject(_guest);
+        regs.di = slot;
+        regs.cx = remaining;
+      }
+    }
+    regs.di = At(regs.di, SLOT_BYTES);
+    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
+  } while (regs.cx != 0);
+}
+
+void LaunchPlayerMissile(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  FindFreeShipSlot(_guest);
+  if (!_guest.Flag(FLAG_CARRY))
+  {
+    ReclaimShipSlot(_guest);
+  }
+  // A copy of the 64 bytes at the caller's DI, made a missile.
+  std::swap(regs.si, regs.di);
+  CopyObject(_guest);
+  SetLow(regs.dx, MISSILE_LAUNCH);
+  InitMissile(_guest);
+  // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
+  regs.ax = Negate(_guest.Get(DS.playerPitchAngle));
+  SetSinCos(_guest, DS.rotationSinCos.At(0));
+  regs.ax = Negate(_guest.Get(DS.playerYawAngle));
+  SetSinCos(_guest, DS.rotationSinCos.At(1));
+  regs.ax = Negate(_guest.Get(DS.playerRollAngle));
+  SetSinCos(_guest, DS.rotationSinCos.At(2));
+  regs.ax = 0;
+  regs.bx = MISSILE_LAUNCH_DISTANCE;
+  regs.cx = 0;
+  _guest.Call(ROTATE_ROLL_YAW_PITCH);
+  const std::array<std::uint16_t, 3> position = {regs.ax, regs.bx, regs.cx};
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    regs.ax = position[static_cast<std::size_t>(axis)];
+    _guest.SetWord(At(regs.di, SLOT_X + 2 * axis), regs.ax);
+    regs.dx = SignWord(regs.ax);
+    _guest.SetByte(At(regs.di, SLOT_X_HIGH + axis), Low(regs.dx));
+  }
+  // Locked on missileTarget, and aimed at where it is.
+  regs.si = _guest.Get(DS.missileTarget);
+  _guest.SetWord(At(regs.di, SLOT_TARGET), regs.si);
+  regs.ax = _guest.Word(At(regs.si, SLOT_X));
+  regs.bx = _guest.Word(At(regs.si, SLOT_Y));
+  regs.cx = _guest.Word(At(regs.si, SLOT_Z));
+  ConvertVectorToAngles(_guest);
+  _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
+  _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
+  ComputeVelocity(_guest);
+  MoveObject(_guest);
+  MoveObject(_guest);
+}
+
+void LaunchShipFromObject(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  FindFreeShipSlot(_guest);
+  if (!_guest.Flag(FLAG_CARRY))
+  {
+    return;
+  }
+  // A copy of the launcher in the free slot, made what DL names, and moved clear of it.
+  const std::uint16_t launcher = regs.di;
+  std::swap(regs.si, regs.di);
+  switch (Low(regs.dx))
+  {
+  case MISSILE_LAUNCH:
+    CopyObject(_guest);
+    InitMissile(_guest);
+    MoveObject(_guest);
+    MoveObject(_guest);
+    MoveObject(_guest);
+    _guest.SetWord(At(regs.di, SLOT_TARGET), 0); // at the player
+    break;
+  case ESCAPE_POD_LAUNCH:
+    CopyObject(_guest);
+    InitEscapePod(_guest);
+    RandomizeOrientation(_guest);
+    ComputeVelocity(_guest);
+    MoveObject(_guest);
+    MoveObject(_guest);
+    MoveObject(_guest);
+    break;
+  case THARGON_LAUNCH:
+    CopyObject(_guest);
+    InitThargon(_guest);
+    ComputeVelocity(_guest);
+    MoveObject(_guest);
+    MoveObject(_guest);
+    regs.si = launcher;
+    _guest.SetWord(At(regs.di, SLOT_OWNER), regs.si);
+    break;
+  case KRAIT_LAUNCH:
+    CopyObject(_guest);
+    InitKraitHunter(_guest);
+    ComputeVelocity(_guest);
+    MoveObject(_guest);
+    MoveObject(_guest);
+    // POP DI takes the launcher this path pushed, and RET the one pushed before it: the launch returns to CS:launcher, which
+    // is not code. Only the split at 56B1, which never runs, passes DL=5.
+    regs.di = launcher;
+    _guest.SetFlag(FLAG_CARRY, true);
+    _guest.Push(launcher);
+    return;
+  default:
+    regs.di = launcher;
+    _guest.SetFlag(FLAG_CARRY, false);
+    return;
+  }
+  regs.di = launcher;
+  _guest.SetFlag(FLAG_CARRY, true);
+}
+
+void UpdateMissileAi(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Set(DS.incomingMissileAlert, 0);
+  AddWord(_guest, At(regs.di, SLOT_ROLL), MISSILE_SPIN);
+  regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
+  if (regs.si == 0)
+  {
+    // At the player.
+    GetVectorToPlayer(_guest);
+    _guest.Set(DS.incomingMissileAlert, 1);
+  }
+  else
+  {
+    if ((_guest.Byte(regs.si) & SLOT_ACTIVE) == 0)
+    {
+      ExplodeObject(_guest); // its target is gone
+      return;
+    }
+    regs.ax = static_cast<std::uint16_t>(_guest.Word(At(regs.si, SLOT_X)) - _guest.Word(At(regs.di, SLOT_X)));
+    regs.bx = static_cast<std::uint16_t>(_guest.Word(At(regs.si, SLOT_Y)) - _guest.Word(At(regs.di, SLOT_Y)));
+    regs.cx = static_cast<std::uint16_t>(_guest.Word(At(regs.si, SLOT_Z)) - _guest.Word(At(regs.di, SLOT_Z)));
+  }
+  // VectorWithinBox with AX, BX and CX pushed and popped round it.
+  const std::uint16_t x = regs.ax;
+  const std::uint16_t y = regs.bx;
+  const std::uint16_t z = regs.cx;
+  regs.dx = MISSILE_HIT_BOX;
+  VectorWithinBox(_guest);
+  regs.cx = z;
+  regs.bx = y;
+  regs.ax = x;
+  if (!_guest.Flag(FLAG_CARRY))
+  {
+    ConvertVectorToAngles(_guest);
+    TurnTowardAngles(_guest);
+    ComputeVelocity(_guest);
+    MoveObject(_guest);
+    return;
+  }
+  ExplodeObject(_guest);
+  regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
+  if (regs.si == 0)
+  {
+    regs.ax = MISSILE_DAMAGE;
+    TakeDamage(_guest);
+    return;
+  }
+  std::swap(regs.si, regs.di);
+  IsStation(_guest);
+  std::swap(regs.si, regs.di);
+  if (!_guest.Flag(FLAG_ZERO))
+  {
+    regs.di = regs.si;
+    CreditKill(_guest);
+    if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_INDESTRUCTIBLE) == 0)
+    {
+      ExplodeObject(_guest);
+    }
+    return;
+  }
+  if (_guest.Get(DS.thargoidInvasionActive) != 1)
+  {
+    AddSaturating(_guest, DS.legalStatus.offset, MISSILE_AT_STATION_CRIME);
+    return;
+  }
+  // An invaded station loses energy to each missile, and goes when it runs out.
+  regs.di = regs.si;
+  const std::uint8_t energy = _guest.Byte(At(regs.di, SLOT_ENERGY));
+  _guest.SetByte(At(regs.di, SLOT_ENERGY), static_cast<std::uint8_t>(energy - INVADED_STATION_HIT));
+  if (energy >= INVADED_STATION_HIT)
+  {
+    return;
+  }
+  ExplodeObject(_guest);
+  _guest.Set(DS.invadedStationDestroyed, 1);
+  _guest.Set(DS.thargoidInvasionActive, 0);
+}
+
+void Routine8C51(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t type = SlotType(_guest, regs.di);
+  SetLow(regs.ax, type);
+  _guest.SetFlag(FLAG_ZERO, type == TYPE_THARGON || type == TYPE_THARGOID);
+  _guest.SetFlag(FLAG_CARRY, type == TYPE_THARGOID);
+}
+
+void UseMaskingDevice(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t energy = _guest.Get(DS.playerEnergy);
+  _guest.Set(DS.playerEnergy, energy >= MASKING_ENERGY ? static_cast<std::uint16_t>(energy - MASKING_ENERGY) : std::uint16_t{0});
+  _guest.Set(DS.maskingBackgroundColor, MASKING_COLOR);
+  // Every ship forgets its state and that the player hit it, and calms a little.
+  regs.si = DS.shipSlots.offset;
+  regs.cx = _guest.Get(DS.objectSlotCount);
+  do
+  {
+    _guest.SetByte(At(regs.si, SLOT_STATE), 0);
+    _guest.SetByte(At(regs.si, SLOT_FLAGS), static_cast<std::uint8_t>(_guest.Byte(At(regs.si, SLOT_FLAGS)) & ~FLAG_HOSTILE));
+    const std::uint8_t aggression = _guest.Byte(At(regs.si, SLOT_AGGRESSION));
+    _guest.SetByte(At(regs.si, SLOT_AGGRESSION),
+                   aggression >= MASKING_CALMING ? static_cast<std::uint8_t>(aggression - MASKING_CALMING) : std::uint8_t{0});
+    regs.si = At(regs.si, SLOT_BYTES);
+    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
+  } while (regs.cx != 0);
+}
+
 namespace
 {
 
@@ -889,18 +1335,30 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x066C, "GetViewLaser", &GetViewLaser, Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX, FLAG_CARRY}},
   NativeEntry{0x0A9A, "DrawLaserBeams", &DrawLaserBeams,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
+  NativeEntry{0x2C9B, "TakeDamage", &TakeDamage, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
+  NativeEntry{0x2ED6, "DetonateEnergyBomb", &DetonateEnergyBomb, CLOBBERS_ALL},
+  NativeEntry{0x2FE3, "SpawnPlayerWreckage", &SpawnPlayerWreckage, CLOBBERS_ALL},
+  NativeEntry{0x3115, "KillPlayer", &KillPlayer, Machine::NativeContract{REGISTER_AX, 0}},
+  NativeEntry{0x4C8C, "InitMissile", &InitMissile, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
+  NativeEntry{0x4F9F, "RemoveAllMissiles", &RemoveAllMissiles,
+              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_ES, 0}},
   NativeEntry{0x4FC1, "ExplodeObject", &ExplodeObject, CLOBBERS_ALL},
   NativeEntry{0x50FE, "TallyMaskMissionKill", &TallyMaskMissionKill, PRESERVES_ALL},
   NativeEntry{0x518B, "TryFireLaserAtPlayer", &TryFireLaserAtPlayer,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0}},
+  NativeEntry{0x5242, "LaunchPlayerMissile", &LaunchPlayerMissile, CLOBBERS_ALL},
+  NativeEntry{0x534E, "LaunchShipFromObject", &LaunchShipFromObject, Machine::NativeContract{LAUNCHES.clobbers, FLAG_CARRY}},
   NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayer, LAUNCHES},
   NativeEntry{0x5471, "TryLaunchThargon", &TryLaunchThargon, LAUNCHES},
+  NativeEntry{0x54F2, "UpdateMissileAi", &UpdateMissileAi, PRESERVES_ALL},
   NativeEntry{0x8A46, "FindShipInCrosshairs", &FindShipInCrosshairs,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_SI, FLAG_CARRY}},
   NativeEntry{0x8AC2, "ResolveLaserFire", &ResolveLaserFire, CLOBBERS_ALL},
   NativeEntry{0x8B8B, "CheckMissileTargetDestroyed", &CheckMissileTargetDestroyed, PRESERVES_ALL},
   NativeEntry{0x8BC6, "CreditKill", &CreditKill, PRESERVES_ALL},
+  NativeEntry{0x8C51, "Routine8C51", &Routine8C51, Machine::NativeContract{0, FLAG_ZERO | FLAG_CARRY}},
   NativeEntry{0x8C8E, "ApplyEnemyLaserHit", &ApplyEnemyLaserHit, CLOBBERS_ALL},
+  NativeEntry{0x8ECF, "UseMaskingDevice", &UseMaskingDevice, PRESERVES_ALL},
 };
 
 } // namespace

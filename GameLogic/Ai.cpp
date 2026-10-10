@@ -23,17 +23,7 @@ using Machine::FLAG_ZERO;
 // Routines outside these files, run through the original.
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
 constexpr std::uint16_t OBJECT_WITHIN_BOX = 0x2F65;
-constexpr std::uint16_t IS_MASK_SHIP_PRESENT = 0x4C20;
-constexpr std::uint16_t PLACE_ESCORT_NEAR = 0x4C38;
-constexpr std::uint16_t INIT_POLICE_VIPER = 0x4C76;
-constexpr std::uint16_t INIT_SHUTTLE = 0x4CC0;
-constexpr std::uint16_t SPAWN_RANDOM_DRIFTER = 0x4CE7;
-constexpr std::uint16_t SPAWN_RANDOM_TRADER = 0x4D08;
-constexpr std::uint16_t SPAWN_MASK_MISSION_SHIP = 0x4DAE;
-constexpr std::uint16_t SPAWN_INVASION_THARGOID = 0x4DF0;
 constexpr std::uint16_t CONVERT_VECTOR_TO_ANGLES = 0x4F08;
-constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
-constexpr std::uint16_t GET_VECTOR_TO_OBJECT = 0x54B4;
 
 constexpr std::uint8_t FLAG_HOSTILE = 0x01;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
@@ -92,6 +82,30 @@ constexpr std::uint16_t CLOSING_BOX = 5000;
 constexpr std::uint16_t CLOSING_MISSILE_ODDS = 0x9C4;
 constexpr std::uint16_t JINK_FRAMES = 10;
 constexpr std::uint16_t HALF_TURN = 0x400;
+
+constexpr std::uint16_t ESCORT_BYTES_COPIED = 0x10;  // the type, position and heading
+constexpr std::uint16_t ESCORT_SCATTER_MASK = 0x7FF; // a random -1024..1023 on each axis
+constexpr std::uint16_t ESCORT_SCATTER_CENTER = 0x400;
+
+constexpr std::uint16_t ROCK_SPIN = 0x14;
+constexpr std::uint8_t POLICE_ATTACK_STATUS = 5; // the police attack an offender from this legal status
+constexpr std::uint16_t TRADER_FLEE_ODDS = 0x53FC;
+constexpr std::uint8_t TRADER_FLEE_ENERGY = 8;
+constexpr std::uint16_t TRADER_BREAK_OFF_BOX = 0x320;
+constexpr std::uint16_t POLICE_MISSILE_ODDS = 0x64;
+constexpr std::uint8_t FUGITIVE_FOR_POLICE = 0x0A;
+constexpr std::uint16_t FUGITIVE_MISSILE_ODDS = 0xBB8;
+constexpr std::uint8_t DESPERATE_ENERGY = 3; // a fleeing trader fires a missile below this
+constexpr std::uint16_t DESPERATE_MISSILE_ODDS = 0x3E8;
+constexpr std::uint16_t TRADER_ECM_ODDS = 0x32;
+constexpr std::uint8_t TRADER_ECM_FRAMES = 0x14;
+constexpr std::uint8_t RETURN_ENERGY = 5; // a trader breaking off turns to flee below this, unless it is police
+
+// A trader's or a police Viper's states (+17h).
+constexpr std::uint8_t TRADER_DECIDING = 1;
+constexpr std::uint8_t TRADER_ATTACKING = 2;
+constexpr std::uint8_t TRADER_FLEEING = 3;
+constexpr std::uint8_t TRADER_BREAKING_OFF = 4; // and anything above
 
 // The AI states (+17h).
 constexpr std::uint8_t STATE_IDLE = 0;
@@ -200,7 +214,7 @@ void SpawnByGovernment(Guest& _guest)
       {
         return;
       }
-      _guest.Call(SPAWN_RANDOM_DRIFTER);
+      SpawnRandomDrifter(_guest);
     }
     if (BelowSpawnLimit(_guest, DS.traderLimitColumn.offset, DS.traderCount) && SpawnOddsMet(_guest, DS.traderOddsColumn.offset))
     {
@@ -208,7 +222,7 @@ void SpawnByGovernment(Guest& _guest)
       {
         return;
       }
-      _guest.Call(SPAWN_RANDOM_TRADER);
+      SpawnRandomTrader(_guest);
     }
     if (BelowSpawnLimit(_guest, DS.hunterLimitColumn.offset, DS.hunterCount) && SpawnOddsMet(_guest, DS.hunterOddsColumn.offset))
     {
@@ -257,7 +271,7 @@ void MarkMaskShip(Guest& _guest)
     return false;
   }
   _guest.SetFlag(FLAG_CARRY, _maskShip);
-  _guest.Call(SPAWN_MASK_MISSION_SHIP);
+  SpawnMaskMissionShip(_guest);
   return true;
 }
 
@@ -283,7 +297,7 @@ void SpawnMaskMissionShips(Guest& _guest)
     }
     _guest.Set(DS.maskShipSlot, regs.si);
     _guest.SetFlag(FLAG_CARRY, true);
-    _guest.Call(SPAWN_MASK_MISSION_SHIP);
+    SpawnMaskMissionShip(_guest);
     MarkMaskShip(_guest);
     for (int escort = 0; escort < 2; ++escort)
     {
@@ -292,7 +306,7 @@ void SpawnMaskMissionShips(Guest& _guest)
         return;
       }
       regs.si = _guest.Get(DS.maskShipSlot);
-      _guest.Call(PLACE_ESCORT_NEAR);
+      PlaceEscortNear(_guest);
     }
     return;
   }
@@ -301,7 +315,7 @@ void SpawnMaskMissionShips(Guest& _guest)
   {
     return;
   }
-  _guest.Call(IS_MASK_SHIP_PRESENT);
+  IsMaskShipPresent(_guest);
   if (_guest.Flag(FLAG_CARRY) || _guest.Get(DS.maskShipDestroyed) == 1)
   {
     return;
@@ -320,7 +334,7 @@ void SpawnInvasionWave(Guest& _guest)
   }
   if (TakeFreeShipSlot(_guest))
   {
-    _guest.Call(SPAWN_INVASION_THARGOID);
+    SpawnInvasionThargoid(_guest);
   }
 }
 
@@ -354,15 +368,15 @@ void LaunchAtOffender(Guest& _guest)
   NextRandom(_guest);
   if (regs.ax >= POLICE_FROM)
   {
-    _guest.Call(INIT_POLICE_VIPER);
+    InitPoliceViper(_guest);
   }
   else if (regs.ax >= SHUTTLE_FROM)
   {
-    _guest.Call(INIT_SHUTTLE);
+    InitShuttle(_guest);
   }
   else
   {
-    _guest.Call(SPAWN_RANDOM_TRADER);
+    SpawnRandomTrader(_guest);
   }
   // ADD [DI+8],0F0h / ADC [DI+3],0: out along z, turned round, its roll reversed.
   const std::uint16_t z = At(regs.di, SLOT_Z);
@@ -441,7 +455,7 @@ void CheckMissilesAtStation(Guest& _guest)
     return;
   }
   _guest.Set(DS.ecmFired, 1);
-  _guest.Call(REMOVE_ALL_MISSILES);
+  RemoveAllMissiles(_guest);
   _guest.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_guest.Get(DS.npcEcmFrames) - 1));
 }
 
@@ -584,6 +598,124 @@ void HunterIdle(Guest& _guest)
   MoveObject(_guest);
 }
 
+// UpdateTraderOrPoliceAi's state 1 (56CE): a police Viper attacks a player of legal status 5 or more; otherwise one the player
+// has hit flees, at odds of 53FCh in 65536, or attacks.
+void TraderDecide(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  IsPoliceViper(_guest);
+  if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) >= POLICE_ATTACK_STATUS)
+  {
+    SetState(_guest, TRADER_ATTACKING);
+  }
+  else if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_HOSTILE) != 0)
+  {
+    NextRandom(_guest);
+    SetState(_guest, regs.ax < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING);
+  }
+  MoveObject(_guest);
+}
+
+// UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until close or,
+// for any but the police, weak.
+void TraderAttack(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  IsPoliceViper(_guest);
+  if (!_guest.Flag(FLAG_ZERO) && _guest.Byte(At(regs.di, SLOT_ENERGY)) < TRADER_FLEE_ENERGY)
+  {
+    SetState(_guest, TRADER_FLEEING);
+    MoveObject(_guest);
+    return;
+  }
+  if (WithinBox(_guest, TRADER_BREAK_OFF_BOX))
+  {
+    SetState(_guest, TRADER_BREAKING_OFF);
+    MoveObject(_guest);
+    return;
+  }
+  GetVectorToPlayer(_guest);
+  TurnToVector(_guest);
+  TryFireLaserAtPlayer(_guest);
+  IsPoliceViper(_guest);
+  if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) != 0)
+  {
+    regs.bx = _guest.Get(DS.legalStatus) >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS;
+    TryLaunchMissileAtPlayer(_guest);
+  }
+  ComputeVelocity(_guest);
+  MoveObject(_guest);
+}
+
+// UpdateTraderOrPoliceAi's state 3 (5750): fleeing from the player with random jinks, a missile when nearly dead, and now and
+// then an ECM.
+void TraderFlee(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (_guest.Byte(At(regs.di, SLOT_ENERGY)) < DESPERATE_ENERGY)
+  {
+    regs.bx = DESPERATE_MISSILE_ODDS;
+    TryLaunchMissileAtPlayer(_guest);
+  }
+  const std::uint16_t frames = At(regs.di, SLOT_JINK_FRAMES);
+  if (_guest.Byte(frames) == 0)
+  {
+    NextRandom(_guest);
+    regs.ax = Jink(regs.ax);
+    _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), regs.ax);
+    NextRandom(_guest);
+    regs.ax = Jink(regs.ax);
+    _guest.SetWord(At(regs.di, SLOT_JINK_YAW), regs.ax);
+    _guest.SetByte(frames, JINK_FRAMES);
+  }
+  _guest.SetByte(frames, static_cast<std::uint8_t>(_guest.Byte(frames) - 1));
+  if (_guest.Byte(frames) == 0)
+  {
+    _guest.SetByte(frames, JINK_FRAMES);
+    _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), Negate(_guest.Word(At(regs.di, SLOT_JINK_PITCH))));
+    _guest.SetWord(At(regs.di, SLOT_JINK_YAW), Negate(_guest.Word(At(regs.di, SLOT_JINK_YAW))));
+  }
+  GetVectorToPlayer(_guest);
+  _guest.Call(CONVERT_VECTOR_TO_ANGLES);
+  regs.ax = static_cast<std::uint16_t>(regs.ax + HALF_TURN + _guest.Word(At(regs.di, SLOT_JINK_PITCH)));
+  regs.bx = static_cast<std::uint16_t>(regs.bx + _guest.Word(At(regs.di, SLOT_JINK_YAW)));
+  TurnTowardAngles(_guest);
+  ComputeVelocity(_guest);
+  NextRandom(_guest);
+  if (regs.ax < TRADER_ECM_ODDS)
+  {
+    _guest.Set(DS.npcEcmFrames, TRADER_ECM_FRAMES);
+  }
+  MoveObject(_guest);
+}
+
+// UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
+// the police flee.
+void TraderBreakOff(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (!WithinRange(_guest))
+  {
+    SetState(_guest, TRADER_ATTACKING);
+    MoveObject(_guest);
+    return;
+  }
+  if (_guest.Byte(At(regs.di, SLOT_ENERGY)) < RETURN_ENERGY)
+  {
+    IsPoliceViper(_guest);
+    if (!_guest.Flag(FLAG_ZERO))
+    {
+      SetState(_guest, TRADER_FLEEING);
+      MoveObject(_guest);
+      return;
+    }
+  }
+  GetObjectPosition(_guest);
+  TurnToVector(_guest);
+  ComputeVelocity(_guest);
+  MoveObject(_guest);
+}
+
 } // namespace
 
 void UpdateObjectsAndSpawn(Guest& _guest)
@@ -662,6 +794,47 @@ void ScaleSpawnOdds(Guest& _guest)
   }
 }
 
+void IsMaskShipPresent(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // Every object slot, active or not, for the device's bit.
+  regs.si = DS.shipSlots.offset;
+  regs.cx = _guest.Get(DS.objectSlotCount);
+  do
+  {
+    if ((_guest.Byte(At(regs.si, SLOT_FLAGS)) & FLAG_DEVICE) != 0)
+    {
+      _guest.SetFlag(FLAG_CARRY, true);
+      return;
+    }
+    regs.si = At(regs.si, SLOT_BYTES);
+    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
+  } while (regs.cx != 0);
+  _guest.SetFlag(FLAG_CARRY, false);
+}
+
+void PlaceEscortNear(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t escort = regs.di;
+  // The leader's first 16 bytes, byte by byte: its type too.
+  for (regs.cx = ESCORT_BYTES_COPIED; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+  {
+    SetLow(regs.ax, _guest.Byte(regs.si));
+    _guest.SetByte(regs.di, Low(regs.ax));
+    regs.si = static_cast<std::uint16_t>(regs.si + 1);
+    regs.di = static_cast<std::uint16_t>(regs.di + 1);
+  }
+  regs.di = escort;
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    NextRandom(_guest);
+    regs.ax = static_cast<std::uint16_t>((regs.ax & ESCORT_SCATTER_MASK) - ESCORT_SCATTER_CENTER);
+    regs.dx = SignWord(regs.ax);
+    AddToCoordinate(_guest, regs.di, axis, regs.ax);
+  }
+}
+
 void TurnTowardAngles(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -717,6 +890,30 @@ void CountOtherHuntersOnScanner(Guest& _guest)
   } while (regs.cx != 0);
 }
 
+void GetVectorToObject(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // Each coordinate quartered (SAR twice) before the difference, BP holding the slot's own.
+  regs.ax = Sar(_guest.Word(At(regs.si, SLOT_X)), 2);
+  regs.bp = Sar(_guest.Word(At(regs.di, SLOT_X)), 2);
+  regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bp);
+  regs.bx = Sar(_guest.Word(At(regs.si, SLOT_Y)), 2);
+  regs.bp = Sar(_guest.Word(At(regs.di, SLOT_Y)), 2);
+  regs.bx = static_cast<std::uint16_t>(regs.bx - regs.bp);
+  regs.cx = Sar(_guest.Word(At(regs.si, SLOT_Z)), 2);
+  regs.bp = Sar(_guest.Word(At(regs.di, SLOT_Z)), 2);
+  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.bp);
+  regs.dx = static_cast<std::uint16_t>(regs.dx >> 2);
+  // VectorWithinBox with AX, BX and CX pushed and popped round it.
+  const std::uint16_t x = regs.ax;
+  const std::uint16_t y = regs.bx;
+  const std::uint16_t z = regs.cx;
+  VectorWithinBox(_guest);
+  regs.cx = z;
+  regs.bx = y;
+  regs.ax = x;
+}
+
 void SkipInertObjectAi(Guest& /*_guest*/) {}
 
 void UpdateStationAi(Guest& _guest)
@@ -747,6 +944,43 @@ void UpdateDriftingObjectAi(Guest& _guest)
   }
   AddWord(_guest, At(regs.di, SLOT_PITCH), regs.ax);
   AddWord(_guest, At(regs.di, SLOT_ROLL), regs.bx);
+}
+
+void UpdateTraderOrPoliceAi(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  IsDebrisType(_guest);
+  if (_guest.Flag(FLAG_ZERO))
+  {
+    // A rock only spins. The split at 56B1 (LaunchShipFromObject with DL=5) never runs: 56A5 jumps past it when bit 0 of +1Eh is
+    // clear, and 56AB when it is set.
+    AddWord(_guest, At(regs.di, SLOT_ROLL), ROCK_SPIN);
+    MoveObject(_guest);
+    return;
+  }
+  const std::uint8_t state = State(_guest);
+  if (state == STATE_IDLE)
+  {
+    SetState(_guest, TRADER_DECIDING);
+    MoveObject(_guest);
+    return;
+  }
+  if (state == TRADER_DECIDING)
+  {
+    TraderDecide(_guest);
+    return;
+  }
+  if (state == TRADER_ATTACKING)
+  {
+    TraderAttack(_guest);
+    return;
+  }
+  if (state == TRADER_FLEEING)
+  {
+    TraderFlee(_guest);
+    return;
+  }
+  TraderBreakOff(_guest);
 }
 
 void UpdateWolfAi(Guest& _guest)
@@ -855,7 +1089,7 @@ void UpdateHunterAi(Guest& _guest)
   {
     regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
     regs.dx = FORMATION_BOX;
-    _guest.Call(GET_VECTOR_TO_OBJECT);
+    GetVectorToObject(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       SetState(_guest, STATE_CLOSING);
@@ -923,13 +1157,18 @@ constexpr Machine::NativeContract CLOBBERS_MOST{
 constexpr std::array ENTRIES = {
   NativeEntry{0x4A10, "UpdateObjectsAndSpawn", &UpdateObjectsAndSpawn, Machine::NativeContract{REGISTER_ALL, 0}},
   NativeEntry{0x4C0E, "ScaleSpawnOdds", &ScaleSpawnOdds, PRESERVES_ALL},
+  NativeEntry{0x4C20, "IsMaskShipPresent", &IsMaskShipPresent, Machine::NativeContract{REGISTER_CX, FLAG_CARRY}},
+  NativeEntry{0x4C38, "PlaceEscortNear", &PlaceEscortNear,
+              Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
   NativeEntry{0x514B, "TurnTowardAngles", &TurnTowardAngles, Machine::NativeContract{REGISTER_CX | REGISTER_DX | REGISTER_BP, 0}},
   NativeEntry{0x5166, "ClampTurnStep", &ClampTurnStep, Machine::NativeContract{REGISTER_CX, 0}},
   NativeEntry{0x548F, "CountOtherHuntersOnScanner", &CountOtherHuntersOnScanner, Machine::NativeContract{REGISTER_CX | REGISTER_SI, 0}},
+  NativeEntry{0x54B4, "GetVectorToObject", &GetVectorToObject, Machine::NativeContract{REGISTER_DX | REGISTER_BP, FLAG_CARRY}},
   NativeEntry{0x5594, "SkipInertObjectAi", &SkipInertObjectAi, PRESERVES_ALL},
   NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAi,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
   NativeEntry{0x5681, "UpdateDriftingObjectAi", &UpdateDriftingObjectAi, PRESERVES_ALL},
+  NativeEntry{0x569C, "UpdateTraderOrPoliceAi", &UpdateTraderOrPoliceAi, CLOBBERS_MOST},
   NativeEntry{0x57E8, "UpdateWolfAi", &UpdateWolfAi, CLOBBERS_MOST},
   NativeEntry{0x58DE, "UpdateHunterAi", &UpdateHunterAi, CLOBBERS_MOST},
   NativeEntry{0x5A10, "CheckSafeZoneHoldFire", &CheckSafeZoneHoldFire, Machine::NativeContract{0, FLAG_CARRY}},

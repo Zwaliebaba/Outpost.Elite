@@ -20,6 +20,13 @@ void UpdateObjectsAndSpawn(Guest& _guest);
 /// ScaleSpawnOdds (CS:4C0E): BX multiplied by 32 while jumpDriveEngaged is 1.
 void ScaleSpawnOdds(Guest& _guest);
 
+/// IsMaskShipPresent (CS:4C20): CF set and SI = the first object slot, active or not, that carries the masking device.
+void IsMaskShipPresent(Guest& _guest);
+
+/// PlaceEscortNear (CS:4C38): the escort at DI given the first 16 bytes of the leader at SI, then moved a random -1024..1023 on
+/// each axis.
+void PlaceEscortNear(Guest& _guest);
+
 /// TurnTowardAngles (CS:514B): the heading of the slot at DI turned toward AX, BX by at most its turn rate. Out: AX, BX the
 /// errors' magnitudes.
 void TurnTowardAngles(Guest& _guest);
@@ -30,6 +37,9 @@ void ClampTurnStep(Guest& _guest);
 /// CountOtherHuntersOnScanner (CS:548F): AL = the other class-6 ships with blips; BP = the last of them.
 void CountOtherHuntersOnScanner(Guest& _guest);
 
+/// GetVectorToObject (CS:54B4): AX, BX, CX = (SI's position - DI's) / 4, each quartered first; CF set when all are within DX / 4.
+void GetVectorToObject(Guest& _guest);
+
 /// SkipInertObjectAi (CS:5594): class 0's handler, which does nothing.
 void SkipInertObjectAi(Guest& _guest);
 
@@ -38,6 +48,10 @@ void UpdateStationAi(Guest& _guest);
 
 /// UpdateDriftingObjectAi (CS:5681): class 3: moves, and tumbles if a rock.
 void UpdateDriftingObjectAi(Guest& _guest);
+
+/// UpdateTraderOrPoliceAi (CS:569C): class 4: traders and the police: deciding, attacking, fleeing with jinks, breaking off; rocks
+/// only spin.
+void UpdateTraderOrPoliceAi(Guest& _guest);
 
 /// UpdateWolfAi (CS:57E8): class 5: attack passes at the player.
 void UpdateWolfAi(Guest& _guest);

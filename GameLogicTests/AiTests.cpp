@@ -19,8 +19,12 @@ using Elite::DS;
 
 constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
 constexpr std::uint16_t SCALE_SPAWN_ODDS = 0x4C0E;
+constexpr std::uint16_t IS_MASK_SHIP_PRESENT = 0x4C20;
+constexpr std::uint16_t PLACE_ESCORT_NEAR = 0x4C38;
+constexpr std::uint16_t GET_VECTOR_TO_OBJECT = 0x54B4;
 constexpr std::uint16_t UPDATE_STATION_AI = 0x5595;
 constexpr std::uint16_t UPDATE_DRIFTING_OBJECT_AI = 0x5681;
+constexpr std::uint16_t UPDATE_TRADER_OR_POLICE_AI = 0x569C;
 constexpr std::uint16_t UPDATE_WOLF_AI = 0x57E8;
 constexpr std::uint16_t UPDATE_HUNTER_AI = 0x58DE;
 constexpr std::uint16_t CHECK_SAFE_ZONE_HOLD_FIRE = 0x5A10;
@@ -32,6 +36,7 @@ constexpr int STATION_SLOT = 2;
 constexpr std::uint8_t TYPE_COBRA = 0x0E;
 constexpr std::uint8_t STATION_CLASS = 1;
 constexpr std::uint8_t DRIFTER_CLASS = 3;
+constexpr std::uint8_t TRADER_CLASS = 4;
 constexpr std::uint8_t WOLF_CLASS = 5;
 constexpr std::uint8_t HUNTER_CLASS = 6;
 constexpr std::uint8_t DEBRIS_CLASS = 7;
@@ -672,6 +677,116 @@ public:
     rig.Call(CHECK_SAFE_ZONE_HOLD_FIRE, {.ax = 0x4444, .di = viper});
     rig.Call(CHECK_SAFE_ZONE_HOLD_FIRE, {.ax = 0x4444, .di = cobra});
     rig.AssertAllAgreed(CHECK_SAFE_ZONE_HOLD_FIRE, 3);
+  }
+
+  // The device's bit on an inactive slot counts; with none, every object slot is looked at.
+  TEST_METHOD(IsMaskShipPresentAgreesWithAndWithoutTheDevice)
+  {
+    ComparisonRig rig("AiMaskShipPresent");
+    Space space(rig);
+    space.Clear();
+    rig.Call(IS_MASK_SHIP_PRESENT, {.cx = 0x1234, .si = 0x4321});
+    space.SetField(Slot(9), Elite::SLOT_FLAGS, CARRIES_DEVICE);
+    rig.Call(IS_MASK_SHIP_PRESENT, {.cx = 0x1234, .si = 0x4321});
+    rig.AssertAllAgreed(IS_MASK_SHIP_PRESENT, 2);
+  }
+
+  // An escort takes the leader's first 16 bytes, then a random offset on each axis, carried into the high bytes either way.
+  TEST_METHOD(PlaceEscortNearAgreesAcrossCarries)
+  {
+    ComparisonRig rig("AiEscort");
+    Space space(rig);
+    space.Clear();
+    const std::uint16_t leader = space.Ship(4, Elite::TYPE_ASP, WOLF_CLASS, 0x7F00, -0x7F00, 0x0100);
+    space.SetFieldWord(leader, Elite::SLOT_PITCH, 0x1234);
+    const std::uint16_t randoms[][2] = {{0x07FF, 0x0000}, {0x0000, 0x07FF}, {0x0123, 0x0456}};
+    for (const auto& random : randoms)
+    {
+      space.Random(random[0], random[1]);
+      rig.Call(PLACE_ESCORT_NEAR, {.ax = 0x1111, .si = leader, .di = Slot(6)});
+    }
+    rig.AssertAllAgreed(PLACE_ESCORT_NEAR, std::size(randoms));
+  }
+
+  // The quartered difference of two positions, within the box and not, negative coordinates rounding down.
+  TEST_METHOD(GetVectorToObjectAgreesInAndOutOfTheBox)
+  {
+    ComparisonRig rig("AiVectorToObject");
+    Space space(rig);
+    space.Clear();
+    const std::uint16_t self = space.Ship(4, TYPE_COBRA, HUNTER_CLASS, -0x103, 0x205, -0x7FF);
+    const std::uint16_t near = space.Ship(5, TYPE_COBRA, HUNTER_CLASS, -0x0FD, 0x1FF, -0x800);
+    const std::uint16_t far = space.Ship(6, TYPE_COBRA, HUNTER_CLASS, 0x2000, 0x1FF, -0x800);
+    rig.Call(GET_VECTOR_TO_OBJECT, {.dx = 0x7D0, .si = near, .di = self, .bp = 0x9999});
+    rig.Call(GET_VECTOR_TO_OBJECT, {.dx = 0x7D0, .si = far, .di = self, .bp = 0x9999});
+    rig.Call(GET_VECTOR_TO_OBJECT, {.dx = 0x7D0, .si = self, .di = far, .bp = 0x9999});
+    rig.AssertAllAgreed(GET_VECTOR_TO_OBJECT, 3);
+  }
+
+  // A trader's and a police Viper's states: rocks spinning, deciding by the legal status and chance, attacking with and without
+  // missiles, fleeing with jinks, missiles and the ECM, breaking off, and turning to flee when weak.
+  TEST_METHOD(UpdateTraderOrPoliceAiAgreesInEveryState)
+  {
+    ComparisonRig rig("AiTrader");
+    Space space(rig);
+    struct Trader
+    {
+      std::uint8_t type;
+      bool police;
+      std::uint8_t state;
+      std::uint8_t flags;
+      std::uint8_t energy;
+      std::uint8_t legalStatus;
+      std::int16_t x;
+      std::uint8_t jinkFrames;
+      std::uint16_t random;
+      std::uint16_t second;
+    };
+    const Trader traders[] = {
+      {Elite::TYPE_ASTEROID, false, 0, HOSTILE, 0x20, 0, 0x2000, 0, 0, 0},
+      {TYPE_COBRA, false, 0, 0, 0x20, 0, 0x2000, 0, 0, 0},
+      {Elite::TYPE_VIPER, true, 1, 0, 0x20, 5, 0x2000, 0, 0, 0},
+      {Elite::TYPE_VIPER, true, 1, 0, 0x20, 4, 0x2000, 0, 0, 0},
+      {TYPE_COBRA, false, 1, HOSTILE, 0x20, 0, 0x2000, 0, 0x1000, 0},
+      {TYPE_COBRA, false, 1, HOSTILE, 0x20, 0, 0x2000, 0, 0x6000, 0},
+      {TYPE_COBRA, false, 1, 0, 0x20, 0, 0x2000, 0, 0, 0},
+      {TYPE_COBRA, false, 2, BLIP_DRAWN | HOSTILE, 0x07, 0, 0x2000, 0, 0, 0},
+      {Elite::TYPE_VIPER, true, 2, BLIP_DRAWN | HOSTILE, 0x07, 0, 0x100, 0, 0, 0},
+      {TYPE_COBRA, false, 2, BLIP_DRAWN | HOSTILE, 0x20, 0, 0x2000, 0, 0, 0x100},
+      {Elite::TYPE_VIPER, true, 2, BLIP_DRAWN | HOSTILE, 0x20, 0, 0x2000, 0, 0, 0x100},
+      {Elite::TYPE_VIPER, true, 2, BLIP_DRAWN | HOSTILE, 0x20, 5, 0x2000, 0, 0, 0x100},
+      {Elite::TYPE_VIPER, true, 2, BLIP_DRAWN | HOSTILE, 0x20, 0x20, 0x2000, 0, 0, 0x100},
+      {TYPE_COBRA, false, 3, HOSTILE, 0x02, 0, 0x2000, 0, 0x0123, 0x0100},
+      {TYPE_COBRA, false, 3, HOSTILE, 0x20, 0, 0x2000, 0, 0x0122, 0x0101},
+      {TYPE_COBRA, false, 3, HOSTILE, 0x20, 0, 0x2000, 0, 0x0123, 0x0100},
+      {TYPE_COBRA, false, 3, HOSTILE, 0x20, 0, 0x2000, 1, 0x0010, 0x100},
+      {TYPE_COBRA, false, 3, HOSTILE, 0x20, 0, 0x2000, 5, 0x0010, 0x100},
+      {TYPE_COBRA, false, 4, HOSTILE, 0x20, 0, 0x2000, 0, 0, 0},
+      {TYPE_COBRA, false, 4, HOSTILE, 0x04, 0, 0x100, 0, 0, 0},
+      {Elite::TYPE_VIPER, true, 4, HOSTILE, 0x04, 0, 0x100, 0, 0, 0},
+      {TYPE_COBRA, false, 7, HOSTILE, 0x20, 0, 0x100, 0, 0, 0},
+    };
+    for (const Trader& trader : traders)
+    {
+      space.Clear();
+      Ordinary(space);
+      space.Set(DS.killCount, 5);
+      space.Set(DS.legalStatus, trader.legalStatus);
+      const std::uint16_t slot = space.Ship(4, trader.type, TRADER_CLASS, trader.x, 0x300, -0x300);
+      space.SetField(slot, Elite::SLOT_STATE, trader.state);
+      space.SetField(slot, Elite::SLOT_FLAGS, trader.flags);
+      space.SetField(slot, Elite::SLOT_ENERGY, trader.energy);
+      space.SetField(slot, Elite::SLOT_RANGE, 0x10);
+      space.SetField(slot, Elite::SLOT_AGGRESSION, 0x40);
+      space.SetField(slot, Elite::SLOT_MISSILES, 1);
+      space.SetField(slot, Elite::SLOT_JINK_FRAMES, trader.jinkFrames);
+      space.SetFieldWord(slot, Elite::SLOT_JINK_PITCH, 0x0123);
+      space.SetFieldWord(slot, Elite::SLOT_JINK_YAW, 0xFE00);
+      space.SetFieldWord(slot, Elite::SLOT_OWNER, trader.police ? std::uint16_t{1} : std::uint16_t{0});
+      space.Random(trader.random, trader.second);
+      rig.Call(UPDATE_TRADER_OR_POLICE_AI, {.dx = 0x0030, .di = slot});
+    }
+    rig.AssertAllAgreed(UPDATE_TRADER_OR_POLICE_AI, std::size(traders));
   }
 };
 
