@@ -1,49 +1,156 @@
-# Fights at Orerve again, from another random state, and meets the Plate and the Escape Pod drifting and a
-# Sidewinder, which no other replay meets. It starts from combat-orerve-drifters.cdr (Tools/PrepareCommanders.py):
-# the fighter (a military laser, ECM, an energy unit, 20 kills) with its random state 3,350,928 draws on. It finds
+# Fights at Orerve again, from another random state, and meets the Escape Pod, the Plate, an Anaconda, a Worm, a
+# Sidewinder and a Cobra Mk III. It starts from combat-orerve-drifters.cdr (Tools/PrepareCommanders.py): the
+# fighter (a military laser, ECM, an energy unit, 20 kills) with its random state 7,629,345 draws on. It finds
 # Orerve on the short-range chart and jumps there. In space it holds J and full speed whenever no ship but a rock
 # or a barrel is about: while the jump drive is engaged, ships of every class spawn 32 times as often
-# (ScaleSpawnOdds) until a ship mass-locks the drive. The draw count was found by a search over counts for the run
-# that meets the most ship types the rest of the corpus does not. The fight was played by a scratch program that
-# steered at the nearest ship by its position each frame and fired when it was in the sights; what it pressed is
-# recorded here like any other replay.
+# (ScaleSpawnOdds) until a ship mass-locks the drive. The draw count was found by the search combat-orerve.replay
+# describes, for the three combat replays together. The fight was played by a scratch program that steered at the
+# nearest ship by its position each frame and fired when it was in the sights; what it pressed is recorded here
+# like any other replay.
 file JAMESON.CDR combat-orerve-drifters.cdr
 wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
 key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded 6f9c6922c528fde0a295f7cedc2e90a7430dcfdc79152fb952a35c38ed7b0006
+digest loaded 430248d64996c2226a0b488bbe060471b388f252c8c336092e73bcbf5de3feb1
 key F6; wait 0.5                   # the short-range chart: F finds a system by name
 key f; wait 0.3; key o; key r; key e; key r; key v; key e; key Return; wait 0.3
 key F1; wait 0.5                   # launch
 down h; wait 1; up h               # the countdown to Orerve
 wait 8
-digest orerve b1751df02f36a99cf3c5d874d6a6d35c7b4a8d43d778880e5e051888b8e957a9
+digest orerve 36b48c3f19b9b7d4367fc8809ded9cd5e728c3ae5580cb4f3b79aff7fe911d7a
 # The fight, as recorded: a step for each change of the keys, and the frames between.
 down period; down j; wait 0.350
-up period; wait 1.100
-down Right; up j; wait 0.950
+up period; wait 1.350
+down Left; up j; wait 0.950
 down Up; wait 0.200
-down Left; up Right; wait 0.050
-down space; wait 0.050
+up Left; down Right; down space; wait 0.100
+up Up; down Down; wait 0.050
+up space; wait 0.200
+up Down; down space; wait 0.250
+down Up; wait 0.200
+up Right; up Up; up space; down j; wait 2.650
+down Right; down space; up j; wait 0.450
+down Up; wait 0.200
+up Right; wait 0.050
+up Up; down Down; wait 0.100
+down Right; wait 0.150
+down Up; up Down; wait 0.150
+down Left; up Right; wait 0.100
 up Up; wait 0.050
-down Down; up space; wait 0.200
-up Down; wait 0.650
+down Down; wait 0.200
+up Down; wait 0.300
+down Up; wait 0.200
+up Left; up Up; down Down; wait 0.100
+down Left; wait 0.100
+down Up; up Down; wait 0.100
+up Left; wait 0.050
+down Right; wait 0.050
+up Up; down Down; wait 0.200
+down Up; up Down; wait 0.200
+up Up; down Down; wait 0.150
+up Down; wait 0.050
+up space; wait 0.050
+down space; wait 0.050
+up space; wait 0.100
+down space; wait 0.050
+down Up; up space; wait 0.050
+down space; wait 0.050
+up space; wait 0.100
+up Up; down Down; down space; wait 0.050
+up space; wait 0.050
+down space; wait 0.050
+up Down; up space; wait 0.100
+down space; wait 0.050
+up space; wait 0.050
+down space; wait 0.050
+up space; wait 0.100
+down space; wait 0.050
+up space; wait 0.400
+down Up; wait 0.150
+up Right; wait 0.150
+down Right; wait 0.100
+up Up; down space; wait 0.050
+down Down; wait 0.050
+up space; wait 0.100
+up Down; wait 0.200
+down Up; wait 0.050
+up Right; wait 0.100
+up Up; down j; wait 0.150
+down Left; down Up; up j; wait 12.800
+up Left; up Up; down j; wait 0.750
+down Right; down space; wait 0.100
+up space; wait 0.150
+up j; wait 0.050
+down Up; wait 0.300
+up Right; wait 0.150
+down Left; wait 0.050
+up Left; wait 0.100
+down Left; wait 0.200
+up Left; wait 0.300
+down Left; wait 0.150
+up Up; wait 0.450
+down Up; wait 0.250
+up Left; wait 0.050
+down Right; down space; wait 0.050
+up Up; down Down; wait 0.050
+up space; wait 0.250
+up Down; down space; wait 0.100
+up space; wait 0.050
+down Up; wait 0.250
+down space; wait 0.050
+down Left; up Right; up space; wait 0.600
+up Left; wait 0.250
+down Right; wait 0.350
+up Right; wait 0.050
+down Right; wait 0.050
+down space; wait 0.050
+up Right; up Up; down Down; wait 0.050
+down Right; up space; wait 0.250
+up Down; down space; wait 0.100
+down Up; up space; wait 0.150
+down Left; up Right; wait 0.050
+down space; wait 0.100
+up Up; down Down; wait 0.050
+up space; wait 0.150
+up Down; down space; wait 0.150
+up space; wait 0.550
 down Up; wait 0.200
 up Left; down Right; wait 0.050
 down space; wait 0.050
-up Up; down Down; wait 0.050
-up space; wait 0.150
+up Up; wait 0.050
+down Down; wait 0.050
+up space; wait 0.100
 down space; wait 0.050
-up Down; wait 0.200
+up Down; wait 0.300
+down Up; wait 0.100
+down Left; up Right; wait 0.050
+up Up; wait 0.400
+up space; wait 0.100
 down Up; wait 0.250
-up Right; up Up; up space; down j; wait 0.600
-down Right; down Up; down space; up j; wait 0.100
+up Left; down Right; down space; wait 0.050
+up Up; wait 0.050
+down Down; wait 0.050
+up space; wait 0.050
+down space; wait 0.100
+up Down; wait 0.150
+down Up; wait 0.100
+down Left; up Right; wait 0.150
 up Up; wait 0.150
+up space; wait 0.250
 down Up; wait 0.150
-up Right; up Up; up space; down j; wait 1.150
-down Left; down Up; wait 0.250
-up Left; wait 0.900
-up j; wait 1.000
-up Up
-digest after-the-fight 979ebdba214dae0f90de3b86bf6231d77a5f0f2224075a2e0fda6b46fd1b57f4
+up Left; down Right; wait 0.150
+up Up; wait 0.300
+down Up; wait 0.100
+up Right; wait 0.150
+down Left; wait 0.100
+up Up; wait 0.500
+down Up; wait 0.100
+up Left; wait 0.200
+down Right; wait 0.050
+up Up; wait 0.850
+down Up; wait 0.100
+up Right; wait 0.100
+down Left; wait 0.050
+up Left; up Up
+digest after-the-fight 47294b61800e5c9f6cdc6aa27def5e120ff45003f7591b5076fb67046afd1e7f

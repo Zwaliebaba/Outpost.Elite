@@ -241,7 +241,7 @@ def mask_mission(_commander: Commander) -> None:
 
 def fighter_after(_draws: int):
   """The fighter, saved later: its random state _draws draws on. Each count was found by a search over counts for
-  the run of its replay that meets the most ship types the rest of the corpus does not (see the replay)."""
+  a run of its replay that meets the ship types the replay is there to meet (see the replay)."""
 
   def prepare(_commander: Commander) -> None:
     fighter(_commander)
@@ -271,9 +271,9 @@ COMMANDERS = [
   ("fighter.cdr", "at Lave, with a military laser for the pulse laser, ECM, an energy unit and 20 kills: enough "
    "for enemies to fire missiles (3)", fighter),
   ("armed.cdr", "the fighter, with an energy bomb and a pulse laser aft", armed),
-  ("combat-orerve.cdr", "the fighter, 3,261,171 random draws on", fighter_after(3261171)),
-  ("combat-reorte.cdr", "the fighter, 4,148,768 random draws on", fighter_after(4148768)),
-  ("combat-orerve-drifters.cdr", "the fighter, 3,350,928 random draws on", fighter_after(3350928)),
+  ("combat-orerve.cdr", "the fighter, 5,624,772 random draws on", fighter_after(5624772)),
+  ("combat-reorte.cdr", "the fighter, 18,240,617 random draws on", fighter_after(18240617)),
+  ("combat-orerve-drifters.cdr", "the fighter, 7,629,345 random draws on", fighter_after(7629345)),
   ("mask-mission.cdr", "the fighter, briefed for the second mission at Lave and docked at Leesti a jump later, "
    "where the mask ship and its escorts spawn", mask_mission),
   ("mask-mission-fight.cdr", "mask-mission.cdr, 3,680,037 random draws on", mask_mission_after(3680037)),
