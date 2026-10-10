@@ -17,16 +17,15 @@
 - **No cross-matching.** A signature never equals a register file.
 - **The limit.** A signature holds at most 16 words, the address included (`Pc::MOST_TURN_WORDS`). More is a programming error, and throws.
 
-**2. What a loop carries:** the values the original holds in registers at its jump that can change from one turn to the next. That is:
-- what the loop carries itself: a count, a cursor, the value it compares with;
-- what the turn read from a device: a port, or a service's result.
+**2. What a loop carries.** Two kinds of value the original holds in registers at its jump:
+- **What the next turn reads before writing it:** a count, a cursor, the value it compares with. A delay loop that counts CX down without touching memory carries CX. Without it, every turn would look idle.
+- **What the turn read from a device and still holds there:** a port, or a service's result. Reads can differ without the clock moving: paced time reports a retrace to the first status read only (ADR-008 item 2).
 
-A carried value must be one the original has in a register there, nothing else.
+A value that cannot change from turn to turn may be left out. A carried value must be one the original has in a register there, nothing else.
 
 **3. Why the native loop idles where the original does.** Take a turn that changed no byte and no port.
-- **Before the clock has moved,** no device has changed either. So the turn computes exactly what the turn before it computed. Two such turns in a row leave the same registers, and the same signature.
 - **When the original idles,** its registers are equal. The signature is a selection of those registers, so it is equal too, and the native loop idles.
-- **When the native loop idles and the original does not,** a register outside the signature differs from the last turn. That happens only on a loop's first turn, when the register is left from another loop or a call. That turn changed nothing, so the original's next turn computes the same registers and idles. The native loop moves the clock one turn sooner, at the same state and on the same cycle.
+- **When the native loop idles and the original does not,** the registers that differ are ones the next turn writes before it reads them, because everything it reads first is carried, and the carried values are equal. Its memory is unchanged, and a device read that differed would be carried and keep both from idling. So the original's next turn computes the same registers, writes the same values and idles. Typically this is a loop's first turn, with a register left over from another loop or a call. The native loop moves the clock one turn sooner, at the same state and on the same cycle.
 
 So in both cases the clock moves, and the interrupts are taken, at the same point of the game's state.
 
