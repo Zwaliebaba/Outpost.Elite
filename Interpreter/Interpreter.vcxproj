@@ -13,8 +13,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{20D2E016-F4F9-5FE2-9C7D-A4DB0F992259}</ProjectGuid>
-    <RootNamespace>Machine</RootNamespace>
+    <ProjectGuid>{244C2795-4774-56BE-A9D6-5A3714695E85}</ProjectGuid>
+    <RootNamespace>Interpreter</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -57,6 +57,7 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)Machine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
@@ -73,64 +74,19 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Bios.h" />
-    <ClInclude Include="Cga.h" />
-    <ClInclude Include="CgaFont.h" />
-    <ClInclude Include="DirectoryFileStore.h" />
-    <ClInclude Include="Dispatcher.h" />
-    <ClInclude Include="Dos.h" />
-    <ClInclude Include="ExeLoader.h" />
-    <ClInclude Include="FileStore.h" />
-    <ClInclude Include="Firmware.h" />
-    <ClInclude Include="GamePort.h" />
-    <ClInclude Include="HostServices.h" />
-    <ClInclude Include="InstructionObserver.h" />
-    <ClInclude Include="InterruptSource.h" />
-    <ClInclude Include="Mouse.h" />
-    <ClInclude Include="Pc.h" />
-    <ClInclude Include="PcServices.h" />
-    <ClInclude Include="Pit.h" />
-    <ClInclude Include="Processor.h" />
-    <ClInclude Include="PortRouter.h" />
-    <ClInclude Include="ServiceFault.h" />
-    <ClInclude Include="Speaker.h" />
-    <ClInclude Include="Timing.h" />
-    <ClInclude Include="Keyboard.h" />
-    <ClInclude Include="Memory.h" />
-    <ClInclude Include="NativeCode.h" />
-    <ClInclude Include="NativeFirmware.h" />
+    <ClInclude Include="Cpu.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Pic.h" />
-    <ClInclude Include="PortBus.h" />
-    <ClInclude Include="Registers.h" />
-    <ClInclude Include="Sha256.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Bios.cpp" />
-    <ClCompile Include="Cga.cpp" />
-    <ClCompile Include="CgaFont.cpp" />
-    <ClCompile Include="DirectoryFileStore.cpp" />
-    <ClCompile Include="Dispatcher.cpp" />
-    <ClCompile Include="Dos.cpp" />
-    <ClCompile Include="ExeLoader.cpp" />
-    <ClCompile Include="FileStore.cpp" />
-    <ClCompile Include="Firmware.cpp" />
-    <ClCompile Include="GamePort.cpp" />
-    <ClCompile Include="Keyboard.cpp" />
-    <ClCompile Include="Memory.cpp" />
-    <ClCompile Include="NativeCode.cpp" />
-    <ClCompile Include="NativeFirmware.cpp" />
-    <ClCompile Include="Mouse.cpp" />
-    <ClCompile Include="Pc.cpp" />
+    <ClCompile Include="Cpu.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="PcServices.cpp" />
-    <ClCompile Include="Pic.cpp" />
-    <ClCompile Include="Pit.cpp" />
-    <ClCompile Include="PortRouter.cpp" />
-    <ClCompile Include="Sha256.cpp" />
-    <ClCompile Include="Speaker.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Machine\Machine.vcxproj">
+      <Project>{20D2E016-F4F9-5FE2-9C7D-A4DB0F992259}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

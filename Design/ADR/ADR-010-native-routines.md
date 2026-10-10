@@ -143,7 +143,7 @@ A reason for an instruction the runs now cover is stale, and fails the check: it
 | Run | Must hold |
 |---|---|
 | Interpreted | Every digest. |
-| Native | Every digest, unchanged, and no stop. A stop includes `StopReason::Overran` (item 8). |
+| Native | Every digest, unchanged, and no stop. A stop includes `StopReason::Overran` (item 8). Since ADR-011 it runs on a `Dispatcher`, which interprets nothing, so it also shows that no original instruction runs. |
 | Compared | No mismatch, and no stop. |
 
 The coverage check (item 5) is a CI step of its own, after the tests.

@@ -1,6 +1,8 @@
 #include "pch.h"
 
+#include "Cpu.h"
 #include "DirectoryFileStore.h"
+#include "Dispatcher.h"
 #include "NativeRoutines.h"
 #include "Pc.h"
 #include "PngWriter.h"
@@ -44,13 +46,14 @@
 // program's code segment (default 0x7616, GetKey). --coverage writes the offsets in that segment of every
 // instruction start the run executed, one per line in hex.
 //
-// --native runs the routines ported so far in place of the original's (ADR-010); --compare does too,
-// and compares each call with the original as it is made. Either prints each native routine's calls
-// and what comparing found, and every mismatch; --native-report writes the same per routine as a table,
+// --native runs the native routines in place of the original's (ADR-010), on a Dispatcher, which
+// interprets nothing (ADR-011): a run that reaches code no native routine stands in for stops there.
+// --compare runs them on the interpreter instead, and compares each call with the original as it is
+// made. Either prints each native routine's calls and what comparing found, and every mismatch; --native-report writes the same per routine as a table,
 // with the offsets the original executed while it was compared, for Tools/RoutineCoverage.py.
 //
-// Exit status: 0 the steps ran, 1 the program stopped them (a refused call, its end, a deadlock or a
-// spin), a digest did not match, or a native routine did not match the original, 2 usage or file
+// Exit status: 0 the steps ran, 1 the program stopped them (a refused call, its end, a deadlock, a spin
+// or unported code), a digest did not match, or a native routine did not match the original, 2 usage or file
 // errors.
 
 namespace
@@ -235,6 +238,8 @@ std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
     return "the CPU halted with interrupts off";
   case Machine::StopReason::Spinning:
     return std::format("{} steps without waiting, at {:04X}:{:04X}", _pc.SpinLimit(), _pc.Processor().Regs().cs, _pc.Processor().Regs().ip);
+  case Machine::StopReason::Unported:
+    return std::format("code no native routine stands in for, at {:04X}:{:04X}", _pc.Processor().Regs().cs, _pc.Processor().Regs().ip);
   case Machine::StopReason::Overran:
     return std::format("native {} waited past the end of a run, and is not hooked as a routine that waits", _pc.Native().Overran());
   case Machine::StopReason::Reached:
@@ -280,7 +285,8 @@ int Run(int _argc, char** _argv)
   Machine::DirectoryFileStore files(options.out / "files");
   Machine::Pc::Desc desc;
   desc.startMoment = Elite::START_MOMENT;
-  const auto pc = std::make_unique<Machine::Pc>(files, desc);
+  const bool detached = options.native && !options.compare;
+  const auto pc = std::make_unique<Machine::Pc>(files, desc, detached ? &Machine::MakeDispatcher : &Machine::MakeCpu);
   Machine::LoadedProgram program;
   switch (Elite::LoadReference(*pc, Elite::ReadWholeFile(options.exe), Elite::PSP_SEGMENT, program))
   {

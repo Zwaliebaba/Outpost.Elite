@@ -2,6 +2,8 @@
 
 #include "Pc.h"
 
+#include "NativeFirmware.h"
+
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
@@ -67,23 +69,28 @@ private:
 
 } // namespace
 
-Pc::Pc(FileStore& _files, const Desc& _desc)
+Pc::Pc(FileStore& _files, const Desc& _desc, ProcessorFactory _makeProcessor)
   : m_speaker(m_clock),
     m_pit(m_clock, m_pic, m_speaker),
     m_keyboard(m_clock, m_pic, m_pit, m_speaker),
     m_gamePort(m_instructionCycles),
     m_cga(m_clock),
     m_services(m_memory, m_ports, _files, m_clock, _desc),
-    m_cpu(m_memory, m_ports)
+    m_processor(_makeProcessor(m_memory, m_ports))
 {
   MapPorts(Pic::COMMAND_PORT, Pic::DATA_PORT, m_pic);
   MapPorts(Pit::FIRST_PORT, Pit::LAST_PORT, m_pit);
   MapPorts(Keyboard::FIRST_PORT, Keyboard::LAST_PORT, m_keyboard);
   MapPorts(GamePort::PORT, GamePort::PORT, m_gamePort);
   MapPorts(CGA_FIRST_PORT, CGA_LAST_PORT, m_cga);
-  m_cpu.SetInterruptSource(&m_pic);
-  m_cpu.SetHostServices(&m_services);
+  m_processor->SetInterruptSource(&m_pic);
+  m_processor->SetHostServices(&m_services);
   m_services.PowerOn();
+  if (!m_processor->Interprets())
+  {
+    // The ROM's hardware interrupt handlers are code too, and nothing else would run them (ADR-011).
+    HookNativeFirmware(*this);
+  }
 }
 
 Pc::~Pc()
@@ -107,7 +114,7 @@ LoadError Pc::Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _
   const LoadError error = ExeLoader::Load(m_memory, _file, _desc, _program);
   if (error != LoadError::None)
     return error;
-  m_cpu.Regs() = _program.registers;
+  m_processor->Regs() = _program.registers;
   m_services.StartProgram(_program.pspSegment);
   return LoadError::None;
 }
@@ -140,12 +147,12 @@ void Pc::Step()
     StepPaced();
     return;
   }
-  const std::uint32_t cycles = m_cpu.Step();
+  const std::uint32_t cycles = m_processor->Step();
   m_clock += cycles;
   m_instructionCycles += cycles;
   m_pit.Advance();
   m_keyboard.Advance();
-  if (m_cpu.AtHook())
+  if (m_processor->AtHook())
   {
     RunHook();
   }
@@ -153,25 +160,25 @@ void Pc::Step()
 
 void Pc::StepPaced()
 {
-  if (m_cpu.Halted() && (m_cpu.Regs().flags & FLAG_INTERRUPT) != 0 && !m_pic.InterruptPending())
+  if (m_processor->Halted() && (m_processor->Regs().flags & FLAG_INTERRUPT) != 0 && !m_pic.InterruptPending())
   {
     // HLT is a wait by definition.
     Idle(m_runLimit);
     return;
   }
-  const std::uint16_t segment = m_cpu.Regs().cs;
-  const std::uint16_t offset = m_cpu.Regs().ip;
+  const std::uint16_t segment = m_processor->Regs().cs;
+  const std::uint16_t offset = m_processor->Regs().ip;
   const std::uint8_t opcode = m_memory.Read8(segment, offset);
-  const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
-  m_instructionCycles += m_cpu.Step();
+  const std::uint64_t interrupts = m_processor->HardwareInterruptCount();
+  m_instructionCycles += m_processor->Step();
   ++m_stepsSinceIdle;
-  if (m_cpu.AtHook())
+  if (m_processor->AtHook())
   {
     RunHook();
     return;
   }
-  const Registers& after = m_cpu.Regs();
-  if (after.cs == segment && after.ip <= offset && m_cpu.HardwareInterruptCount() == interrupts && IsJump(opcode))
+  const Registers& after = m_processor->Regs();
+  if (after.cs == segment && after.ip <= offset && m_processor->HardwareInterruptCount() == interrupts && IsJump(opcode))
   {
     NoteBackwardJump();
   }
@@ -179,7 +186,7 @@ void Pc::StepPaced()
 
 void Pc::NoteBackwardJump()
 {
-  const Turn turn{m_cpu.Regs(), m_memory.ChangeCount(), m_ports.WriteCount(), true};
+  const Turn turn{m_processor->Regs(), m_memory.ChangeCount(), m_ports.WriteCount(), true};
   const bool idle = m_lastTurn.valid && turn.registers == m_lastTurn.registers && turn.memoryChanges == m_lastTurn.memoryChanges &&
                     turn.portWrites == m_lastTurn.portWrites;
   m_lastTurn = turn;
@@ -229,7 +236,7 @@ void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, 
               NativeReturn _exit, NativeWait _wait)
 {
   m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract, _exit, _wait);
-  m_cpu.SetHookMap(&m_native.Map());
+  m_processor->SetHookMap(&m_native.Map());
   if (!m_comparison)
   {
     m_comparison = std::make_unique<Comparison>();
@@ -238,7 +245,7 @@ void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, 
 
 void Pc::CallNear(std::uint16_t _offset)
 {
-  Registers& regs = m_cpu.Regs();
+  Registers& regs = m_processor->Regs();
   regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
   m_memory.Write16(regs.ss, regs.sp, CALL_RETURN_OFFSET);
   const auto returned = static_cast<std::uint16_t>(regs.sp + 2);
@@ -276,14 +283,14 @@ void Pc::RunNative(NativeCode::Hook& _hook)
 
 void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
 {
-  Registers& regs = m_cpu.Regs();
+  Registers& regs = m_processor->Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
   regs.sp = static_cast<std::uint16_t>(regs.sp + 2 + _popBytes);
 }
 
 void Pc::ReturnFar(std::uint16_t _popBytes) noexcept
 {
-  Registers& regs = m_cpu.Regs();
+  Registers& regs = m_processor->Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
   regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
   regs.sp = static_cast<std::uint16_t>(regs.sp + 4 + _popBytes);
@@ -291,7 +298,7 @@ void Pc::ReturnFar(std::uint16_t _popBytes) noexcept
 
 void Pc::ReturnInterrupt() noexcept
 {
-  Registers& regs = m_cpu.Regs();
+  Registers& regs = m_processor->Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
   regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
   const std::uint16_t flags = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 4));
@@ -301,7 +308,7 @@ void Pc::ReturnInterrupt() noexcept
 
 void Pc::CallInterrupt(std::uint8_t _vector)
 {
-  if (m_services.ServiceInterrupt(m_cpu, _vector))
+  if (m_services.ServiceInterrupt(m_processor->Regs(), _vector))
   {
     if (Stopped() != StopReason::Reached)
     {
@@ -309,7 +316,7 @@ void Pc::CallInterrupt(std::uint8_t _vector)
     }
     return;
   }
-  Registers& regs = m_cpu.Regs();
+  Registers& regs = m_processor->Regs();
   const std::uint16_t segment = regs.cs;
   const std::uint16_t stackPointer = regs.sp;
   const auto push = [&](std::uint16_t _value)
@@ -348,7 +355,7 @@ bool Pc::EnterBesideNative() noexcept
 
 void Pc::RunHook()
 {
-  const Registers& regs = m_cpu.Regs();
+  const Registers& regs = m_processor->Regs();
   NativeCode::Hook* hook = m_native.At(Memory::Linear(regs.cs, regs.ip));
   if (hook == nullptr)
   {
@@ -496,8 +503,8 @@ void Pc::LoopTurn()
 
 void Pc::TakeDueInterrupts()
 {
-  Registers& regs = m_cpu.Regs();
-  while (m_cpu.InterruptDue())
+  Registers& regs = m_processor->Regs();
+  while (m_processor->InterruptDue())
   {
     // Park CS:IP where nothing executes, let the CPU take the interrupt there, and run the handler
     // until its IRET comes back to it.
@@ -521,15 +528,15 @@ void Pc::TakeDueInterrupts()
 // comparison (_original) also records what it executes.
 void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original)
 {
-  const Registers& regs = m_cpu.Regs();
+  const Registers& regs = m_processor->Regs();
   while ((regs.cs != _segment || regs.ip != _offset || regs.sp < _stackPointer) && regs.sp <= _stackPointer)
   {
     const std::uint16_t segment = regs.cs;
     const std::uint16_t offset = regs.ip;
-    const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
+    const std::uint64_t interrupts = m_processor->HardwareInterruptCount();
     const bool covered = _original != nullptr && segment == _original->segment;
     Step();
-    if (covered && m_cpu.HardwareInterruptCount() == interrupts)
+    if (covered && m_processor->HardwareInterruptCount() == interrupts)
     {
       _original->executed.push_back(offset);
     }
@@ -546,8 +553,12 @@ void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_
 
 void Pc::Compare(NativeCode::Hook& _hook)
 {
+  if (!m_processor->Interprets())
+  {
+    throw std::logic_error("Pc: native code is compared with the original only on a processor that interprets it (ADR-011)");
+  }
   Comparison& work = *m_comparison;
-  Registers& regs = m_cpu.Regs();
+  Registers& regs = m_processor->Regs();
   const Registers entry = regs;
   // Where the original's run ends: the return address its caller, or the interrupt, pushed.
   const std::uint16_t returnOffset = m_memory.Read16(regs.ss, regs.sp);
@@ -555,7 +566,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
     _hook.exit == NativeReturn::Near ? regs.cs : m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
   const std::uint16_t frameBytes = _hook.exit == NativeReturn::Near ? 2 : _hook.exit == NativeReturn::Far ? 4 : 6;
   const Cycles clock = m_clock;
-  const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
+  const std::uint64_t interrupts = m_processor->HardwareInterruptCount();
   const std::uint64_t services = m_services.CallCount();
   // What paced time sees before the call: each run starts from it.
   const Turn turnBefore = m_lastTurn;
@@ -571,7 +582,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
   work.executed.clear();
   {
     work.active = true;
-    m_cpu.SetHookMap(nullptr);
+    m_processor->SetHookMap(nullptr);
     m_memory.SetJournal(&work.originalWrites);
     m_ports.SetLog(&work.originalPorts);
     const OnExit stop(
@@ -579,12 +590,12 @@ void Pc::Compare(NativeCode::Hook& _hook)
       {
         m_memory.SetJournal(nullptr);
         m_ports.SetLog(nullptr);
-        m_cpu.SetHookMap(&m_native.Map());
+        m_processor->SetHookMap(&m_native.Map());
         work.active = false;
       });
     RunToReturn(returnSegment, returnOffset, static_cast<std::uint16_t>(entry.sp + frameBytes), &work);
   }
-  if (m_clock != clock || m_cpu.HardwareInterruptCount() != interrupts || m_services.CallCount() != services ||
+  if (m_clock != clock || m_processor->HardwareInterruptCount() != interrupts || m_services.CallCount() != services ||
       work.originalWrites.Overflowed())
   {
     ++_hook.unverifiable; // what it did cannot be undone, so its outcome stands, and covers nothing
@@ -639,7 +650,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
   {
     add("ports: " + ports);
   }
-  if (m_clock != clock || m_cpu.HardwareInterruptCount() != interrupts)
+  if (m_clock != clock || m_processor->HardwareInterruptCount() != interrupts)
   {
     add("the native routine waited or took an interrupt, and the original did neither");
   }
@@ -686,7 +697,9 @@ StopReason Pc::Stopped() const noexcept
     return StopReason::Fault;
   if (m_services.Terminated())
     return StopReason::Terminated;
-  if (m_cpu.Halted() && (m_cpu.Regs().flags & FLAG_INTERRUPT) == 0)
+  if (m_processor->AtUnportedCode())
+    return StopReason::Unported;
+  if (m_processor->Halted() && (m_processor->Regs().flags & FLAG_INTERRUPT) == 0)
     return StopReason::Deadlocked;
   if (m_timeMode == TimeMode::Paced && m_stepsSinceIdle >= m_spinLimit)
     return StopReason::Spinning;

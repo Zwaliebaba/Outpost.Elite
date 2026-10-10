@@ -25,6 +25,9 @@
     <Filter Include="Pc">
       <UniqueIdentifier>{4D391271-F4E6-54D0-8805-8197E7BC576D}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Processor">
+      <UniqueIdentifier>{2ABD52F0-9944-5A15-B8F9-025CCB6B5973}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Services">
       <UniqueIdentifier>{C629C94A-1F95-558B-B2D2-1AF3FD9AE872}</UniqueIdentifier>
     </Filter>
@@ -61,6 +64,9 @@
     </ClCompile>
     <ClCompile Include="CpuTests.cpp">
       <Filter>Cpu</Filter>
+    </ClCompile>
+    <ClCompile Include="DispatcherTests.cpp">
+      <Filter>Processor</Filter>
     </ClCompile>
     <ClCompile Include="DosTests.cpp">
       <Filter>Dos</Filter>

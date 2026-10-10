@@ -1,7 +1,9 @@
 // GameLogicTests/ReferenceRig.h
 #pragma once
 
+#include "Cpu.h"
 #include "DirectoryFileStore.h"
+#include "Dispatcher.h"
 #include "Pc.h"
 #include "Reference.h"
 
@@ -52,14 +54,15 @@ private:
 
 /// The reference loaded on a PC in paced time (ADR-008), as replays run it: the PSP where DOSBox-X puts
 /// it, the clock starting at midnight on 1 January 1980 unless _startMoment says otherwise, DOS's files
-/// in a scratch directory.
+/// in a scratch directory, and the program interpreted unless _makeProcessor makes a Dispatcher (ADR-011).
 class ReferenceRig
 {
 public:
-  explicit ReferenceRig(std::string_view _name, const Machine::Dos::DateTime& _startMoment = Elite::START_MOMENT)
+  explicit ReferenceRig(std::string_view _name, const Machine::Dos::DateTime& _startMoment = Elite::START_MOMENT,
+                        Machine::ProcessorFactory _makeProcessor = &Machine::MakeCpu)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment)))
+      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment), _makeProcessor))
   {
     m_pc->SetTimeMode(Machine::TimeMode::Paced);
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));

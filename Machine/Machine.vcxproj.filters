@@ -4,9 +4,6 @@
     <Filter Include="Build">
       <UniqueIdentifier>{819C6745-53D6-5A49-8FC6-9352646D103D}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Cpu">
-      <UniqueIdentifier>{6E59F20A-6C1E-56DB-8CEB-AF7F4C71E9AF}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Devices">
       <UniqueIdentifier>{4247BB1B-1667-5080-A1D7-C8D79DD0FAF1}</UniqueIdentifier>
     </Filter>
@@ -27,6 +24,9 @@
     </Filter>
     <Filter Include="Pc">
       <UniqueIdentifier>{4D391271-F4E6-54D0-8805-8197E7BC576D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Processor">
+      <UniqueIdentifier>{ACAFEE70-E560-5202-BBC3-FB87CF8F4323}</UniqueIdentifier>
     </Filter>
     <Filter Include="Services">
       <UniqueIdentifier>{C629C94A-1F95-558B-B2D2-1AF3FD9AE872}</UniqueIdentifier>
@@ -51,11 +51,11 @@
     <ClInclude Include="CgaFont.h">
       <Filter>Video</Filter>
     </ClInclude>
-    <ClInclude Include="Cpu.h">
-      <Filter>Cpu</Filter>
-    </ClInclude>
     <ClInclude Include="DirectoryFileStore.h">
       <Filter>Dos</Filter>
+    </ClInclude>
+    <ClInclude Include="Dispatcher.h">
+      <Filter>Processor</Filter>
     </ClInclude>
     <ClInclude Include="Dos.h">
       <Filter>Dos</Filter>
@@ -76,7 +76,7 @@
       <Filter>Services</Filter>
     </ClInclude>
     <ClInclude Include="InstructionObserver.h">
-      <Filter>Cpu</Filter>
+      <Filter>Processor</Filter>
     </ClInclude>
     <ClInclude Include="InterruptSource.h">
       <Filter>Io</Filter>
@@ -93,6 +93,9 @@
     <ClInclude Include="Pit.h">
       <Filter>Devices</Filter>
     </ClInclude>
+    <ClInclude Include="Processor.h">
+      <Filter>Processor</Filter>
+    </ClInclude>
     <ClInclude Include="PortRouter.h">
       <Filter>Devices</Filter>
     </ClInclude>
@@ -103,7 +106,7 @@
       <Filter>Sound</Filter>
     </ClInclude>
     <ClInclude Include="Timing.h">
-      <Filter>Cpu</Filter>
+      <Filter>Processor</Filter>
     </ClInclude>
     <ClInclude Include="Keyboard.h">
       <Filter>Devices</Filter>
@@ -113,6 +116,9 @@
     </ClInclude>
     <ClInclude Include="NativeCode.h">
       <Filter>Pc</Filter>
+    </ClInclude>
+    <ClInclude Include="NativeFirmware.h">
+      <Filter>Firmware</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
@@ -124,7 +130,7 @@
       <Filter>Io</Filter>
     </ClInclude>
     <ClInclude Include="Registers.h">
-      <Filter>Cpu</Filter>
+      <Filter>Processor</Filter>
     </ClInclude>
     <ClInclude Include="Sha256.h">
       <Filter>Verification</Filter>
@@ -140,11 +146,11 @@
     <ClCompile Include="CgaFont.cpp">
       <Filter>Video</Filter>
     </ClCompile>
-    <ClCompile Include="Cpu.cpp">
-      <Filter>Cpu</Filter>
-    </ClCompile>
     <ClCompile Include="DirectoryFileStore.cpp">
       <Filter>Dos</Filter>
+    </ClCompile>
+    <ClCompile Include="Dispatcher.cpp">
+      <Filter>Processor</Filter>
     </ClCompile>
     <ClCompile Include="Dos.cpp">
       <Filter>Dos</Filter>
@@ -169,6 +175,9 @@
     </ClCompile>
     <ClCompile Include="NativeCode.cpp">
       <Filter>Pc</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeFirmware.cpp">
+      <Filter>Firmware</Filter>
     </ClCompile>
     <ClCompile Include="Mouse.cpp">
       <Filter>Services</Filter>

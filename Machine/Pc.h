@@ -2,7 +2,6 @@
 #pragma once
 
 #include "Cga.h"
-#include "Cpu.h"
 #include "ExeLoader.h"
 #include "GamePort.h"
 #include "Keyboard.h"
@@ -12,6 +11,7 @@
 #include "Pic.h"
 #include "Pit.h"
 #include "PortRouter.h"
+#include "Processor.h"
 #include "Speaker.h"
 #include "Timing.h"
 
@@ -37,7 +37,8 @@ enum class StopReason : std::uint8_t
   Terminated, ///< The program ended through int 20h.
   Deadlocked, ///< The CPU halted with interrupts off, and nothing can wake it.
   Spinning,   ///< Paced time only: the program ran SpinLimit() steps without waiting once.
-  Overran     ///< Native code off the native thread waited past the end of the run (NativeCode::Overran).
+  Overran,    ///< Native code off the native thread waited past the end of the run (NativeCode::Overran).
+  Unported    ///< The processor reached code no native routine stands in for, and it does not interpret (Dispatcher).
 };
 
 /// How the machine's clock advances (ADR-008).
@@ -54,7 +55,12 @@ enum class TimeMode : std::uint8_t
   Paced
 };
 
-/// The IBM PC the reference runs on, put together (ADR-006): an 8088, 1 MiB of memory, the 8259, the
+/// Makes the Processor a Pc runs the program on, from the machine's memory and I/O bus (ADR-011): MakeCpu
+/// (the Interpreter project) to interpret it, MakeDispatcher to run a program that is all native.
+using ProcessorFactory = std::unique_ptr<Processor> (*)(Memory&, PortBus&);
+
+/// The IBM PC the reference runs on, put together (ADR-006): an 8088 (a Processor: the Cpu that interprets
+/// the program, or a Dispatcher once it is all native), 1 MiB of memory, the 8259, the
 /// 8253, the keyboard's 8255, the speaker, the game port and the CGA on one I/O bus, and the ROM, BIOS,
 /// DOS and mouse driver at the call level.
 ///
@@ -86,9 +92,9 @@ public:
   using Desc = PcServices::Desc;
 
   /// Powers on: every device in its power-on state, the ROM, the interrupt table and the BIOS data
-  /// area installed, video mode 3 set. _files holds DOS's files and must outlive the machine. Not
-  /// noexcept: the devices allocate.
-  Pc(FileStore& _files, const Desc& _desc);
+  /// area installed, video mode 3 set, and the processor _makeProcessor makes. _files holds DOS's files
+  /// and must outlive the machine. Not noexcept: the devices allocate.
+  Pc(FileStore& _files, const Desc& _desc, ProcessorFactory _makeProcessor);
   Pc(const Pc&) = delete;
   Pc& operator=(const Pc&) = delete;
   ~Pc();
@@ -148,14 +154,14 @@ public:
     m_instructionCycles += _cycles;
   }
 
-  [[nodiscard]] Cpu& Processor() noexcept
+  [[nodiscard]] Machine::Processor& Processor() noexcept
   {
-    return m_cpu;
+    return *m_processor;
   }
 
-  [[nodiscard]] const Cpu& Processor() const noexcept
+  [[nodiscard]] const Machine::Processor& Processor() const noexcept
   {
-    return m_cpu;
+    return *m_processor;
   }
 
   [[nodiscard]] Memory& Ram() noexcept
@@ -339,7 +345,7 @@ private:
   Cga m_cga;
   PortRouter m_ports;
   PcServices m_services;
-  Cpu m_cpu;
+  std::unique_ptr<Machine::Processor> m_processor;
   NativeCode m_native;
   std::unique_ptr<Comparison> m_comparison;
 

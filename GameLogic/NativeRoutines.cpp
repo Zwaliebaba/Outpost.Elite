@@ -21,6 +21,7 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
+#include "Firmware.h"
 #include "Reference.h"
 
 #include <format>
@@ -94,6 +95,10 @@ void WriteNativeReport(const Machine::NativeCode& _native, std::ostream& _out)
   _out << "entry\troutine\twait\tcalls\tverified\tunverifiable\tmismatches\texecuted\n";
   for (const auto& [linear, hook] : _native.Hooks())
   {
+    if (hook.segment == Machine::Firmware::ROM_SEGMENT)
+    {
+      continue; // the machine's own firmware (NativeFirmware.h), not a routine of the program
+    }
     std::string executed;
     for (const std::uint16_t offset : hook.executed.Offsets())
       executed += std::format("{}{:04X}", executed.empty() ? "" : " ", offset);

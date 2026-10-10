@@ -86,7 +86,7 @@ void Play(ComparisonRig& _rig, std::string_view _steps)
 // test's calls are not made while a native RunFlight waits (FlightTests' Launch says why).
 void Launch(ComparisonRig& _rig)
 {
-  Machine::Cpu& processor = _rig.Host().Processor();
+  Machine::Processor& processor = _rig.Host().Processor();
   processor.SetHookMap(nullptr);
   Play(_rig, "key space; wait 4; key F1; wait 6");
   processor.SetHookMap(&_rig.Host().Native().Map());

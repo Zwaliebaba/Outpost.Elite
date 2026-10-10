@@ -4,6 +4,7 @@
 
 #include "AudioStream.h"
 #include "DirectoryFileStore.h"
+#include "Dispatcher.h"
 #include "NativeRoutines.h"
 #include "Pc.h"
 #include "Presenter.h"
@@ -107,6 +108,8 @@ std::wstring Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
     return L"The game halted with interrupts off.";
   case Machine::StopReason::Spinning:
     return std::format(L"The game ran {} steps without waiting, at {:04X}:{:04X}.", _pc.SpinLimit(), registers.cs, registers.ip);
+  case Machine::StopReason::Unported:
+    return std::format(L"The game reached code no native routine stands in for, at {:04X}:{:04X}.", registers.cs, registers.ip);
   case Machine::StopReason::Overran:
     return L"A native routine waited where it cannot: " + std::wstring(_pc.Native().Overran().begin(), _pc.Native().Overran().end()) + L".";
   case Machine::StopReason::Terminated:
@@ -150,7 +153,8 @@ int Application::Run(HINSTANCE _instance)
   Machine::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
   Machine::Pc::Desc desc;
   desc.startMoment = Elite::START_MOMENT; // fixed, so the session's replay plays back exactly (ADR-008)
-  const auto pc = std::make_unique<Machine::Pc>(files, desc);
+  // Every routine is native, so nothing is interpreted: the Dispatcher runs them (ADR-011).
+  const auto pc = std::make_unique<Machine::Pc>(files, desc, &Machine::MakeDispatcher);
   Machine::LoadedProgram program;
   if (Elite::LoadReference(*pc, reference, Elite::PSP_SEGMENT, program) != Elite::ReferenceFailure::None)
   {
@@ -159,7 +163,7 @@ int Application::Run(HINSTANCE _instance)
     return 1;
   }
   pc->SetTimeMode(Machine::TimeMode::Paced);
-  Elite::InstallNativeRoutines(*pc, program); // the port so far, in place of the original (ADR-010)
+  Elite::InstallNativeRoutines(*pc, program); // in place of the original (ADR-010)
 
   const std::string session = SessionName();
   Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReferenceRunner --replay; see ADR-008.", session));

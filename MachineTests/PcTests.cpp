@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Cpu.h"
 #include "DirectoryFileStore.h"
 #include "Firmware.h"
 #include "Pc.h"
@@ -74,7 +75,7 @@ public:
     Machine::DirectoryFileStore files(directory.Path());
     Machine::Pc::Desc desc;
     desc.startMoment = Machine::Dos::DateTime{1980, 1, 1, 0, 0, 0, 0};
-    const auto pc = std::make_unique<Machine::Pc>(files, desc);
+    const auto pc = std::make_unique<Machine::Pc>(files, desc, &Machine::MakeCpu);
     Machine::ExeLoader::Desc load;
     load.pspSegment = 0x0813; // DOSBox-X's, so the traces compare
     Machine::LoadedProgram program;
