@@ -20,21 +20,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> CombatEntries() noexcept;
 
-/// DetonateEnergyBomb (CS:2ED6): every active ship with a blip exploded, its cargo emptied first; a crime in the safe zone.
-void DetonateEnergyBomb(Guest& _guest);
-
-/// ExplodeObject (CS:4FC1): the object at DI removed, and when it was drawn, its fragments and its cargo barrels spawned.
-void ExplodeObject(Guest& _guest);
-
-/// UpdateMissileAi (CS:54F2): class 2: the missile at DI flies at its target, or the player, and explodes on it.
-void UpdateMissileAi(Guest& _guest);
-
-/// FindShipInCrosshairs (CS:8A46): CF set and DI = the nearest drawn object over the view's centre; CF clear when none is.
-void FindShipInCrosshairs(Guest& _guest);
-
-/// ResolveLaserFire (CS:8AC2): a shot of the player's laser: the hit, its damage and its consequences, then the beams.
-void ResolveLaserFire(Guest& _guest);
-
 /// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player: its beam, then the damage to a shield and the energy.
 void ApplyEnemyLaserHit(Guest& _guest);
 
@@ -46,6 +31,44 @@ struct ThargoidTest
   std::uint8_t type;      ///< bits 1-5 of the type byte
   bool thargoidOrThargon; ///< a Thargon (7) or a Thargoid (16h)
   bool thargoid;
+};
+
+/// What ExplodeObject leaves of the registers its callers go on with.
+struct Explosion
+{
+  std::uint16_t slot; ///< DI: the object, or past the slots FindFreeShipSlot looks at once a barrel's search for one failed
+  std::uint16_t bx;   ///< BX, which the barrel count's divide of a later explosion saves, should it trap
+  /// DX, when it writes DX: what the last blip it erased or the last object it moved leaves there (MovedObject). UpdateMissileAi
+  /// hands it on to UpdateObjectsAndSpawn's next handler.
+  std::optional<std::uint16_t> dx;
+  std::optional<std::uint16_t> si; ///< SI, when it writes SI: the object once fragments flew, else what the last barrel was copied from
+  /// ES, when it writes ES: the data segment after a copy (CopyObject), the video segment after an erased blip.
+  std::optional<std::uint16_t> es;
+};
+
+/// What DetonateEnergyBomb's explosions leave in SI and ES, the last of them to write each, which DrawSunOrPlanet goes on with.
+struct Detonation
+{
+  std::optional<std::uint16_t> si;
+  std::optional<std::uint16_t> es;
+};
+
+/// What FindShipInCrosshairs finds.
+struct CrosshairTarget
+{
+  std::optional<std::uint16_t> slot; ///< the nearest drawn object over the view's centre, if there is one
+  /// What the original leaves in BX: BL the type byte of the last slot it looked at, BH what the last slot it tested left there,
+  /// which is all of BX when that was the last slot. ExplodeObject's barrel count saves it, should its divide trap.
+  std::uint16_t bx;
+  /// What the original leaves in DI: the slot found, or past the slots it looked at, which HandleMissileKeys' launch copies from.
+  std::uint16_t di;
+};
+
+/// What UpdateMissileAi leaves that UpdateObjectsAndSpawn's next handler can read.
+struct MissileFlight
+{
+  std::uint16_t slot; ///< DI: the missile, its target, or where an explosion left DI
+  std::uint16_t dx;   ///< DX, of which the next handler takes DL for its range's box
 };
 
 /// What CreditKill did with a kill.
@@ -81,6 +104,11 @@ bool DrawLaserBeams(GameState& _state);
 /// starts at, when it kills.
 std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage);
 
+/// DetonateEnergyBomb (CS:2ED6): in the safe zone a crime, 28h added to legalStatus up to FFh (the sum written, then FFh over
+/// it on a carry); then every active ship from firstShipSlot with its blip drawn has its cargo emptied and explodes
+/// (ExplodeObject, its copies backwards when _backward). Returns what the explosions leave in SI and ES.
+Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _backward);
+
 /// SpawnPlayerWreckage (CS:2FE3): the player's death: the drift, 40 along the nose (ComputeDeathDebrisVector), kept in
 /// wreckDrift; the player stopped at speed 8 with the view locked; six splinters in debris slots drifting with it and a
 /// random -15..16 on each axis, each run for a frame (UpdateDebrisAi); and with cargo aboard, a barrel in a ship slot, free or
@@ -96,8 +124,15 @@ std::optional<std::uint8_t> KillPlayer(GameState& _state);
 void InitMissile(GameState& _state, ObjectSlot _slot);
 
 /// RemoveAllMissiles (CS:4F9F): every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
-/// whether that erased a scanner blip.
-bool RemoveAllMissiles(GameState& _state);
+/// the last pixel of the last scanner blip that erased, if it erased one.
+std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state);
+
+/// ExplodeObject (CS:4FC1): _object removed (TallyMaskMissionKill first, then RemoveObject); when it was drawn this frame, the
+/// explosion's sound, its fragments in debris slots (copied from it, backwards when _backward), and its cargo's barrels in free
+/// ship slots: one for a ship that carries the device, else a random byte / (255 / (cargo + 1) + 1). _bx is the BX it is called
+/// with, which the barrel count's first divide saves when a cargo of FFh makes it divide by 0. Returns what it leaves in DI, BX
+/// and DX.
+Explosion ExplodeObject(GameState& _state, Hardware& _hardware, ObjectSlot _object, bool _backward, std::uint16_t _bx);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
@@ -129,6 +164,28 @@ void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t
 /// when _backward), at odds of 300 in 65536; one launched is one Thargon fewer.
 void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward);
 
+/// UpdateMissileAi (CS:54F2): class 2: the missile at _missile spins, and flies at its target, or at the player, raising the
+/// alert; when its target is gone it explodes. Within C8h of it on every axis it explodes (ExplodeObject) on it: the player
+/// takes 320h damage (TakeDamage); a station is a crime of 5 on legalStatus, or in an invasion loses 10 of its energy and
+/// explodes at the last; a ship is credited (CreditKill) and explodes unless indestructible. _backward is the direction flag the
+/// explosions copy by; _bx and _dx the BX and DX it is called with, which an explosion passes on. Returns what it leaves in DI
+/// and DX.
+MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, ObjectSlot _missile, bool _backward, std::uint16_t _bx,
+                              std::uint16_t _dx);
+
+/// FindShipInCrosshairs (CS:8A46): the nearest of objectSlotCount - 2 slots from stationSlot that is active, drawn this frame,
+/// not passed over (+1Eh bits 5 and 6 both set), and over the view's centre: |x| * 256 / z and |y| * 256 / z both below its
+/// type's shipTargetRadius * 256 / z, plus 2. The divides overflow into the game's trap for a near or off-axis object.
+[[nodiscard]] CrosshairTarget FindShipInCrosshairs(GameState& _state);
+
+/// ResolveLaserFire (CS:8AC2): while laserFiring, a shot of the player's laser: the ship in the crosshairs (FindShipInCrosshairs)
+/// is hit, marked hostile, and takes the laser's type + 1 in damage, added to its aggression up to FFh; a station's hit cancels
+/// the docking computer and is a crime of 28h, or in an invasion does half damage; a ship that runs out of energy is destroyed
+/// (CreditKill, CheckMissileTargetDestroyed, ExplodeObject, its copies backwards when _backward) unless indestructible, where a
+/// station stays at 0 and falls only in an invasion. Then the beams (DrawLaserBeams), the laser's sound unless the target was
+/// destroyed, and laserFiring cleared. Returns whether a beam was a horizontal line, which DrawLine fills by REP STOSB.
+bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward);
+
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 /// Returns whether it was.
 bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
@@ -151,7 +208,7 @@ void UseMaskingDevice(GameState& _state);
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 /// The registers RemoveAllMissiles' original leaves, _erased saying whether it erased a scanner blip: DI past the slots it looked
-/// at, and ES = B800h once it erased one. For its entry, and for UpdateStationAi's register code, whose contract compares them.
+/// at, and ES = B800h once it erased one. For its entry, and for UpdateStationAi's, whose contract compares them.
 void RemoveAllMissilesOut(Guest& _guest, bool _erased);
 
 void DrawLaserSightsEntry(Guest& _guest);      ///< AX, BX, CX, SI, DI clobbered.
@@ -173,5 +230,13 @@ void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: A
 void CreditKillEntry(Guest& _guest);                  ///< DI = the slot. Out: AX, BX, CX and SI as the original leaves them.
 void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.
 void UseMaskingDeviceEntry(Guest& _guest);            ///< Out: SI past the slots, CX = 0.
+void DetonateEnergyBombEntry(Guest& _guest);          ///< Clobbers all.
+void ExplodeObjectEntry(Guest& _guest);               ///< DI = the object. Clobbers all.
+/// DI = the missile. Out: DI and DX as the original leaves them, which UpdateObjectsAndSpawn goes on with; AX, BX, CX, SI, BP and
+/// ES clobbered.
+void UpdateMissileAiEntry(Guest& _guest);
+/// Out: CF set and DI = the slot when one is in the crosshairs, else DI past the slots. AX, BX, CX, DX, SI, BP clobbered.
+void FindShipInCrosshairsEntry(Guest& _guest);
+void ResolveLaserFireEntry(Guest& _guest); ///< Out: DF clear once a beam was horizontal. Clobbers all.
 
 } // namespace Elite

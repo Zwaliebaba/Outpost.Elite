@@ -6,6 +6,7 @@
 #include "Maths.h"
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
+#include "Video.h"
 
 #include <cstdint>
 #include <optional>
@@ -21,43 +22,9 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> FlightEntries() noexcept;
 
-/// UpdateStardust (CS:068F): moves and draws the 30 stardust particles for viewAngle, once a frame.
-void UpdateStardust(Guest& _guest);
-
-/// ComputeStardustShift (CS:0887): stardustShift from playerSpeed, one less while jumpDriveEngaged.
-/// AX clobbered, BL = 12.
-void ComputeStardustShift(Guest& _guest);
-
 /// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight. Out: AH = the F1-F4 scan code or 0; BX and CX
 /// come back as the scan leaves them.
 void HandleFlightFunctionKeys(Guest& _guest);
-
-/// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen, with a beep.
-void RestoreFlightScreen(Guest& _guest);
-
-/// UpdateDashboard (CS:254F): redraws every gauge whose value changed. Out: ES = B800h.
-void UpdateDashboard(Guest& _guest);
-
-/// DrawFiveLineBar (CS:2645): a bar 5 scanlines high for AL at ES:DI.
-void DrawFiveLineBar(Guest& _guest);
-
-/// DrawThreeLineBar (CS:273E): a bar 3 scanlines high for AL at ES:DI.
-void DrawThreeLineBar(Guest& _guest);
-
-/// DrawEnergyBanks (CS:283B): splits playerEnergy into the four banks and redraws those that changed.
-void DrawEnergyBanks(Guest& _guest);
-
-/// UpdateEnergyAndLaserHeat (CS:2882): cools the laser, recharges energy and shields, and at low energy
-/// may lose a piece of equipment.
-void UpdateEnergyAndLaserHeat(Guest& _guest);
-
-/// SetUpLocalSpace (CS:29D0): the current system's sun, planet and station, and the flight variables
-/// reset.
-void SetUpLocalSpace(Guest& _guest);
-
-/// UpdateCompass (CS:418F): moves the compass dot to the planet or the station. Every register comes
-/// back as the original leaves it; DI = stationSlot.
-void UpdateCompass(Guest& _guest);
 
 /// RunFlight (CS:7E9B): the station tunnel, then a frame at a time until the player docks or is 40
 /// frames dead; when the escape pod arrives TickEscapePod returns past it. Waits.
@@ -65,9 +32,6 @@ void RunFlight(Guest& _guest);
 
 /// ProcessFlightKeys (CS:7FA8): the flight controls other than steering.
 void ProcessFlightKeys(Guest& _guest);
-
-/// UpdatePlayerMotion (CS:8472): speed, roll and pitch for this frame, then the world moves.
-void UpdatePlayerMotion(Guest& _guest);
 
 /// RunPauseScreen (CS:8D6A): the pause menu, until space resumes; its keys toggle the options and set
 /// the frame time, and A drops two return addresses to leave RunFlight for the title. Waits.
@@ -190,6 +154,60 @@ std::uint16_t ResetStardust(GameState& _state);
 /// streaks.
 void SaveStardustPositions(GameState& _state);
 
+/// UpdateStardust (CS:068F): the 30 stardust particles moved and drawn for viewAngle, once a frame, in stardustColor; streaks
+/// from where they were while the jump drive is engaged (SaveStardustPositions first). The front and rear views shift them by
+/// the pitch, roll them by the roll and move them by the speed (ComputeStardustShift), the rear inwards with lifetimes; the side
+/// views shift them sideways by the speed (UpdateSideStardust). _bx is the BX it is called with, which reaches
+/// ComputeStardustShift's divide when neither the pitch nor the roll has turned the dust. Returns whether a DrawLine filled bytes
+/// with REP STOSB.
+bool UpdateStardust(GameState& _state, std::uint16_t _bx);
+
+/// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged, and returned.
+/// A speed above 34h, which the game never sets, divides into the game's trap, which saves BX: _bh over 12.
+std::uint8_t ComputeStardustShift(GameState& _state, std::uint8_t _bh);
+
+/// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen, its copies backwards when
+/// _backward), every gauge marked stale (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen
+/// did.
+ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _backward);
+
+/// UpdateDashboard (CS:254F): once a frame, in the CGA's video memory: the condition light, the energy and the laser's heat
+/// (UpdateEnergyAndLaserHeat), the safe zone's S and the ECM's E, the energy banks, the missiles, the pitch and roll
+/// indicators, then the bars for the laser's temperature, the altitude, the cabin's temperature, the fuel, the shields and the
+/// speed, each redrawn only when its value changed, the shields every frame.
+void UpdateDashboard(GameState& _state);
+
+/// DrawFiveLineBar (CS:2645): _value * 12 / 63, 0-48 pixels, as a bar 5 scanlines high on the dashboard line at B800:_line:
+/// colour 1, a partial byte from barPartialBytes, then colour 2 to the 48th pixel. For a value of fewer than 4 pixels the second
+/// run counts _countHigh, CH as the caller leaves it, in its high byte.
+void DrawFiveLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
+
+/// DrawThreeLineBar (CS:273E): DrawFiveLineBar's bar 3 scanlines high.
+void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
+
+/// DrawEnergyBanks (CS:283B): playerEnergy split into the four bank bytes of energyBankFill, FFh full, the rest, then 0, and
+/// each bank that changed redrawn (DrawFiveLineBar) from B800:3E38 upwards.
+void DrawEnergyBanks(GameState& _state);
+
+/// UpdateEnergyAndLaserHeat (CS:2882): unless the game is over or the escape pod flies, the laser cooled by 2 to 0, and the
+/// shields up by 1 to FFh at full energy, or the energy up by 1, or 3 with the energy unit, to 3FFh, each written and then
+/// floored or capped over it; then below one bank, at odds of 50 in 65536, one of the 13 equipment bytes from missileCount lost
+/// and its message posted.
+void UpdateEnergyAndLaserHeat(GameState& _state);
+
+/// SetUpLocalSpace (CS:29D0): the current system's seeds (LoadSystemSeeds), every gauge stale, the slot counts, the slots cleared
+/// (ClearAllObjects, backwards when _backward), the cockpit shown (ShowCockpitScreen), the stardust scattered, the flight's
+/// variables reset; then out of witch space the sun, the planet and the station, and spawnGovernment, else spawnGovernment 0.
+/// Returns what ShowCockpitScreen did.
+ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backward);
+
+/// UpdatePlayerMotion (CS:8472): skipped during GAME OVER after its first frame; with the escape pod flying, only the world moves
+/// (MoveObjectsByVelocity). Otherwise the steering for the frame, the docking computer's (RunDockingComputer) or the selected
+/// device's (ReadSteering, then ApplyReverseControls) after . and , change the speed; the roll, -23 to 23, turns the roll angle
+/// by twice as much, and the pitch the camera's frame (ApplyPitch); then, unless the docking computer flies, the velocity
+/// (UpdatePlayerVelocity) and the world moved (MoveObjectsByVelocity). Waits sometimes, in the stick's read.
+void UpdatePlayerMotion(GameState& _state, Hardware& _hardware);
+
 /// InvalidateDashboard (CS:2540): the 22 dashboard cache bytes from missileCountShown filled with 0x80, so that
 /// UpdateDashboard redraws every gauge.
 void InvalidateDashboard(GameState& _state);
@@ -246,10 +264,29 @@ WarningChecks CheckEnergyWarning(GameState& _state, std::uint16_t _checks);
 /// and the new one in. Returns the last pixel of the new blip, when it drew one.
 std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera);
 
+/// What UpdateCompass leaves for its entry.
+struct CompassUpdate
+{
+  DashboardPixel last;  ///< the last pixel of the dot it drew, one right of and one above its centre
+  std::uint16_t range;  ///< |z| + 1000 of the target in the camera's frame, the dot's divisor, which CX keeps
+  std::uint8_t inFront; ///< the station slot's BlipZ: 20h while the target is in front, else 0, which BP keeps sign-extended
+};
+
+/// UpdateCompass (CS:418F): while titleShown, the compass dot moved to the station when the planet is near
+/// (IsObjectNearKeepBlip), else to the planet (compassTargetIsStation 1 or 0). The target's and the station's scale shifts go to
+/// their depth bytes (+3Dh); the target's scaled position turned to the view goes to the station's compass words and, turned to
+/// the camera's frame, gives the dot: x and y as 8 * |c| / (|z| + 1000), at most 7, normalised by sqrtTable when their squares
+/// reach 41h, at (CFh + x, 27h + y). The old dot, kept in the station's blip bytes, is XORed out if drawn and the new one in.
+std::optional<CompassUpdate> UpdateCompass(GameState& _state);
+
 /// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
 /// neighbours, a ring, and the centre too while _inFront, solid. Returns the last pixel, one right of and one above
 /// the centre.
 DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
+
+/// A dashboard pixel's place as the original holds it in DX: x in DL, y in DH. What a routine that ends by XORing a pixel
+/// leaves there.
+[[nodiscard]] std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept;
 
 /// EraseScannerBlip (CS:42D6): unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
 /// says so cleared. Returns the blip's last pixel, when it erased one.
@@ -322,8 +359,20 @@ void DustToScreenEntry(Guest& _guest);
 void ResetStardustEntry(Guest& _guest); ///< Out: AX = the last random, its low byte the last lifetime; DI past the particles.
 void SaveStardustPositionsEntry(Guest& _guest);
 void InvalidateDashboardEntry(Guest& _guest);
-void DrawSignedIndicatorEntry(Guest& _guest); ///< AL = the value, DI = the line, ES = B800h. Out: CX = 0.
-void DrawMissileIconsEntry(Guest& _guest);    ///< ES = B800h. Out: CX = 0 once it draws, else CL = missileCount.
+void UpdateStardustEntry(Guest& _guest);       ///< Out: ES = DS and DF clear once a streak was horizontal.
+void ComputeStardustShiftEntry(Guest& _guest); ///< Out: BL = 12; AX clobbered.
+/// Out: every register as the original leaves it: InvalidateDashboard's AX, CX, DI and ES, and ShowCockpitScreen's SI, and its BX
+/// and DX once it set the mode.
+void RestoreFlightScreenEntry(Guest& _guest);
+void UpdateDashboardEntry(Guest& _guest);          ///< Out: ES = B800h. Every other register clobbered.
+void DrawFiveLineBarEntry(Guest& _guest);          ///< AL = the value, DI = the line, CH = the count's high byte, ES = B800h.
+void DrawThreeLineBarEntry(Guest& _guest);         ///< As DrawFiveLineBarEntry.
+void DrawEnergyBanksEntry(Guest& _guest);          ///< ES = B800h. Clobbers all.
+void UpdateEnergyAndLaserHeatEntry(Guest& _guest); ///< AX, BX clobbered.
+void SetUpLocalSpaceEntry(Guest& _guest);          ///< Out: DF clear once the cockpit was drawn. Clobbers all but DS.
+void UpdatePlayerMotionEntry(Guest& _guest);       ///< Clobbers all.
+void DrawSignedIndicatorEntry(Guest& _guest);      ///< AL = the value, DI = the line, ES = B800h. Out: CX = 0.
+void DrawMissileIconsEntry(Guest& _guest);         ///< ES = B800h. Out: CX = 0 once it draws, else CL = missileCount.
 void DrawMissileLockIndicatorEntry(Guest& _guest);
 void DrawConditionLightEntry(Guest& _guest);
 void UpdateConditionColorEntry(Guest& _guest);
@@ -340,6 +389,9 @@ void XorCompassDotEntry(Guest& _guest);     ///< DL, DH = the dot, BP = 0 behind
 void EraseScannerBlipEntry(Guest& _guest);  ///< DI = the slot. Out, once it erases: AX = DX the last pixel, BX its mask, CX, ES.
 void XorScannerBlipEntry(Guest& _guest);    ///< AH, BH, CH = the scanner bytes. Out: AX = DX the last pixel, BX its mask, CX.
 void XorDashboardPixelEntry(Guest& _guest);
+/// Out: every register as the original leaves it once titleShown: XorCompassDotEntry's AX, BX, DX and ES, CX the dot's divisor, BP
+/// the in-front byte sign-extended, and DI = stationSlot, which TransformAndDrawObjects goes on with.
+void UpdateCompassEntry(Guest& _guest);
 void EraseCompassAndBlipsEntry(Guest& _guest); ///< Out: ES = B800h once it erases anything.
 void DrainEnergyEntry(Guest& _guest);
 void EngageJumpDriveEntry(Guest& _guest); ///< Out: AX the message, and every register IsMassLocked leaves once it is asked.

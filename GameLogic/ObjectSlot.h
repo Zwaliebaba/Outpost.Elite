@@ -76,6 +76,7 @@ enum class SlotWord : std::uint16_t
   CompassY = 0x22,
   CompassZ = 0x24,
   Spin = 0x26,       ///< a fragment's spin, the roll's byte then the pitch's, which the spawners write as a word
+  CompassDot = 0x26, ///< the station's compass dot, x then y (BlipX, BlipY), which UpdateCompass exchanges as a word
   Target = 0x29,     ///< a missile's target, a hunter's pack mate
   Cargo = 0x2C,      ///< the cargo and the fragments above it, which SpawnFragments clears as a word
   Aggression = 0x30, ///< the aggression and the bounty above it, which SpawnRandomTrader writes as a word

@@ -130,6 +130,15 @@ struct PositionFit
   return PositionFit{true, lastHigh};
 }
 
+// What RotateBySinCos leaves in DX: its last product, the second coordinate doubled times the sine, then SHL AX,1 / RCL DX,1 /
+// SHL AX,1 / ADC DX,0, the high word of the product doubled, rounded on the bit below.
+[[nodiscard]] std::uint16_t RotationLeftover(std::int16_t _second, std::int16_t _sine) noexcept
+{
+  const auto doubled = static_cast<std::int16_t>(static_cast<std::uint16_t>(_second) << 1);
+  const auto product = static_cast<std::uint32_t>(std::int32_t{doubled} * _sine) << 1;
+  return static_cast<std::uint16_t>((product >> 16) + ((product >> 15) & 1));
+}
+
 // AND AX,7FFh / SHR AX,1 / NEG AX when the bit shifted out was set: a scatter of +-1023.
 [[nodiscard]] std::uint16_t Scatter(std::uint16_t _random) noexcept
 {
@@ -426,9 +435,9 @@ Vector GetVectorToPlayer(const ObjectSlot& _slot)
   return Vector{negated(position.x), negated(position.y), negated(position.z)};
 }
 
-Vector ComputeVelocity(GameState& _state, ObjectSlot _slot)
+Velocity ComputeVelocity(GameState& _state, ObjectSlot _slot)
 {
-  (void)SetSinCos(_state, 7, _slot.Get(SlotWord::Pitch));
+  const SinCos pitch = SetSinCos(_state, 7, _slot.Get(SlotWord::Pitch));
   (void)SetSinCos(_state, 6, _slot.Get(SlotWord::Yaw));
   // (0, speed) by pair 6, then (0, what that left) by pair 7: x, then y and z.
   const auto speed = static_cast<std::int16_t>(SignExtend(_slot.Get(SlotByte::Speed))); // CBW
@@ -437,7 +446,7 @@ Vector ComputeVelocity(GameState& _state, ObjectSlot _slot)
   const Pair second = RotateByStoredSinCos(_state, 7, Pair{0, first.second});
   _slot.Set(SlotByte::VelocityY, Low(static_cast<std::uint16_t>(second.first)));
   _slot.Set(SlotByte::VelocityZ, Low(static_cast<std::uint16_t>(second.second)));
-  return Vector{first.first, second.first, second.second};
+  return Velocity{Vector{first.first, second.first, second.second}, RotationLeftover(first.second, pitch.sine)};
 }
 
 MovedObject MoveObject(GameState& _state, ObjectSlot _slot)
@@ -447,12 +456,23 @@ MovedObject MoveObject(GameState& _state, ObjectSlot _slot)
   {
     AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.Get(VELOCITY[axis]))));
   }
+  // The last CWD leaves DX the z velocity's sign; then an erased blip leaves its last pixel there.
+  std::uint16_t dx = SignWord(SignExtend(_slot.Get(SlotByte::VelocityZ)));
   const NearTest near = IsObjectNear(_state, _slot);
+  if (near.erasedBlip)
+  {
+    dx = PixelPlace(*near.erasedBlip);
+  }
   if (near.nearby)
   {
-    return MovedObject{near, std::nullopt};
+    return MovedObject{near, std::nullopt, dx};
   }
-  return MovedObject{near, RemoveObject(_state, _slot)};
+  const std::optional<DashboardPixel> removed = RemoveObject(_state, _slot);
+  if (removed)
+  {
+    dx = PixelPlace(*removed);
+  }
+  return MovedObject{near, removed, dx};
 }
 
 std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot)
@@ -817,7 +837,7 @@ void RandomizeOrientationEntry(Guest& _guest)
 
 void ComputeVelocityEntry(Guest& _guest)
 {
-  const Vector velocity = ComputeVelocity(_guest.State(), SlotAtDi(_guest));
+  const Vector velocity = ComputeVelocity(_guest.State(), SlotAtDi(_guest)).words;
   // The original leaves the z word in BX, and UpdateMissileAi's contract compares BX after it.
   _guest.Regs().bx = static_cast<std::uint16_t>(velocity.z);
   _guest.Clobber(CLOBBERS_AX_DX);

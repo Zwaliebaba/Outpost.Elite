@@ -5,6 +5,7 @@
 #include "Ai.h"
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Docking.h"
 #include "Market.h"
 #include "Maths.h"
 #include "Ships.h"
@@ -26,12 +27,7 @@ using Machine::FLAG_ZERO;
 
 // Routines outside this file, run through the original.
 constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
-constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
-constexpr std::uint16_t START_IMPACT_SOUND = 0x7AC3;
-constexpr std::uint16_t START_EXPLOSION_SOUND = 0x7AFC;
-constexpr std::uint16_t START_LASER_SOUND = 0x7B71;
 constexpr std::uint16_t START_PLAYER_HIT_SOUND = 0x7B96;
-constexpr std::uint16_t CANCEL_DOCKING_COMPUTER = 0x8BAA;
 constexpr std::uint16_t PROJECT_TO_SCREEN = 0x8D2E;
 
 // The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type.
@@ -158,29 +154,7 @@ void SetCoordinate(ObjectSlot _slot, std::size_t _axis, std::uint16_t _value)
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> 1);
 }
 
-[[nodiscard]] std::uint8_t SlotType(const Guest& _guest, std::uint16_t _slot) noexcept
-{
-  return static_cast<std::uint8_t>((_guest.Byte(_slot) >> 1) & TYPE_MASK);
-}
-
-void AddWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value) noexcept
-{
-  _guest.SetWord(_offset, static_cast<std::uint16_t>(_guest.Word(_offset) + _value));
-}
-
-void OrByte(Guest& _guest, std::uint16_t _offset, std::uint8_t _bits) noexcept
-{
-  _guest.SetByte(_offset, static_cast<std::uint8_t>(_guest.Byte(_offset) | _bits));
-}
-
-// ADD byte,_value / JAE / MOV byte,0FFh: an add that stops at FFh.
-void AddSaturating(Guest& _guest, std::uint16_t _offset, std::uint8_t _value) noexcept
-{
-  const unsigned sum = _guest.Byte(_offset) + unsigned{_value};
-  _guest.SetByte(_offset, sum > 0xFF ? std::uint8_t{0xFF} : static_cast<std::uint8_t>(sum));
-}
-
-// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. (The Guest form above writes once.)
+// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry.
 void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
 {
   const unsigned sum = _state.Get(_field) + unsigned{_value};
@@ -222,20 +196,43 @@ bool DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   return DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
 }
 
-// |the coordinate at _field| * 256, divided by the view z, below BX: the crosshairs' test on one axis.
-[[nodiscard]] bool ScaledWithinRadius(Guest& _guest, int _field)
+// The crosshairs' test on one axis (8A7C, 8A93): |the view coordinate _axis of _slot| * 256 over its view z, below _radius, the
+// BX the divide's trap saves.
+[[nodiscard]] bool ScaledWithinRadius(GameState& _state, const ObjectSlot& _slot, SlotWord _axis, std::uint16_t _radius)
 {
-  Machine::Registers& regs = _guest.Regs();
-  std::uint16_t magnitude = _guest.Word(At(regs.di, _field));
+  std::uint16_t magnitude = _slot.Get(_axis);
   if ((magnitude & 0x8000) != 0)
   {
     magnitude = Negate(magnitude);
   }
   // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the magnitude * 256, with DH its sign.
-  regs.dx = Join(High(SignWord(magnitude)), High(magnitude));
-  regs.ax = Join(Low(magnitude), 0);
-  DivideWordOnRegisters(_guest, _guest.Word(At(regs.di, SLOT_VIEW_Z)));
-  return regs.ax < regs.bx;
+  const std::uint32_t dividend = (std::uint32_t{Join(High(SignWord(magnitude)), High(magnitude))} << 16) | Join(Low(magnitude), 0);
+  return DivideWord(_state, dividend, _slot.Get(SlotWord::ViewZ), _radius).quotient < _radius;
+}
+
+// What BX holds after MoveObject: the mask of the last blip it erased, as XorDashboardPixel leaves it, else _bx.
+[[nodiscard]] std::uint16_t BxAfterMove(const MovedObject& _moved, std::uint16_t _bx) noexcept
+{
+  if (_moved.removedBlip)
+  {
+    return _moved.removedBlip->mask;
+  }
+  if (_moved.near.erasedBlip)
+  {
+    return _moved.near.erasedBlip->mask;
+  }
+  return _bx;
+}
+
+// ADD [slot+_field],_value / JAE / MOV [slot+_field],0FFh: the sum written, and FFh over it on a carry.
+void AddSaturating(ObjectSlot _slot, SlotByte _field, std::uint8_t _value)
+{
+  const unsigned sum = _slot.Get(_field) + unsigned{_value};
+  _slot.Set(_field, static_cast<std::uint8_t>(sum));
+  if (sum > 0xFF)
+  {
+    _slot.Set(_field, 0xFF);
+  }
 }
 
 // What PayBounty found after paying: what Routine8C51 found of the slot, when a mis-jump's countdown runs, and whether the
@@ -279,16 +276,44 @@ PaidBounty PayBounty(GameState& _state, const ObjectSlot& _slot, std::uint16_t _
   return PaidBounty{killed, true};
 }
 
-// The fragments of an exploding object: from 4FEE, _count of them, each a Splinter in a debris slot copied from _object
-// (CopyObject, backwards when _backward), its velocity halved and scattered by a random -15..16 on each axis (halved again
-// for an asteroid the mining laser hit), and run for a frame, or for eleven when the station explodes. PUSH CX and POP CX keep
-// the count round each.
-void SpawnFragments(GameState& _state, const ObjectSlot& _object, std::uint16_t _count, bool _backward)
+// What the fragments' loop leaves of BX, DX and ES.
+struct FragmentsLeft
 {
+  std::uint16_t bx;                // the last fragment's scattered word, or the mask of the last blip a move erased
+  std::optional<std::uint16_t> dx; // what the last UpdateDebrisAi that moved its fragment left there
+  std::uint16_t es;                // the data segment from the last copy, or the video segment from a blip a move erased after it
+};
+
+// Whether MoveObject erased a blip, which leaves ES on the video memory.
+[[nodiscard]] bool ErasedBlip(const MovedObject& _moved) noexcept
+{
+  return _moved.removedBlip.has_value() || _moved.near.erasedBlip.has_value();
+}
+
+// The fragments of an exploding object: from 4FEE, _count of them, at least one, each a Splinter in a debris slot copied from
+// _object (CopyObject, backwards when _backward), its velocity halved and scattered by a random -15..16 on each axis (halved
+// again for an asteroid the mining laser hit), and run for a frame, or for eleven when the station explodes. PUSH CX and POP CX
+// keep the count round each.
+FragmentsLeft SpawnFragments(GameState& _state, const ObjectSlot& _object, std::uint16_t _count, bool _backward)
+{
+  FragmentsLeft left{0, std::nullopt, _state.DataSegment()};
+  const auto debrisMoved = [&left](const std::optional<MovedObject>& _moved)
+  {
+    if (_moved)
+    {
+      left.bx = BxAfterMove(*_moved, left.bx);
+      left.dx = _moved->dx;
+      if (ErasedBlip(*_moved))
+      {
+        left.es = GameState::VIDEO_SEGMENT;
+      }
+    }
+  };
   for (std::uint16_t fragments = _count; fragments != 0; --fragments)
   {
     ObjectSlot debris(_state, FindDebrisSlot(_state));
     CopyObject(_state, _object.Offset(), debris.Offset(), _backward);
+    left.es = _state.DataSegment();
     debris.Set(SlotByte::State, 0);
     const std::uint16_t spin = NextRandom(_state);
     debris.Set(SlotWord::Spin, spin);
@@ -311,6 +336,7 @@ void SpawnFragments(GameState& _state, const ObjectSlot& _object, std::uint16_t 
     {
       scatterZ = HalveSigned(scatterZ);
     }
+    left.bx = Join(High(static_cast<std::uint16_t>(spin >> 3)), scatterZ);
     debris.Set(SlotByte::VelocityZ, static_cast<std::uint8_t>(debris.Get(SlotByte::VelocityZ) + scatterZ));
     debris.Set(SlotByte::Flags, FLAG_RESTING);
     if (_state.Get(DS.miningLaserOnAsteroid) == 1 && NextRandom(_state) < MINERALS_ODDS)
@@ -328,153 +354,157 @@ void SpawnFragments(GameState& _state, const ObjectSlot& _object, std::uint16_t 
     }
     debris.Set(SlotByte::Lifetime, static_cast<std::uint8_t>(lifetime + FRAGMENT_LIFETIME));
     debris.Set(SlotByte::Type, SPLINTER_ACTIVE);
-    (void)UpdateDebrisAi(_state, debris);
+    debrisMoved(UpdateDebrisAi(_state, debris));
     if (_state.Get(DS.explodingStation) == 1)
     {
       // A station's fragments are flung ten frames further at once: LOOP from CX = 10, PUSH CX and POP CX round each.
       for (std::uint16_t steps = STATION_FRAGMENT_STEPS; steps != 0; --steps)
       {
-        (void)UpdateDebrisAi(_state, debris);
+        debrisMoved(UpdateDebrisAi(_state, debris));
       }
     }
   }
+  return left;
 }
 
-// DropCargo (5099): the barrels an exploded object leaves, each copied from it with a random heading. A failed slot search
-// leaves DI on what it returned, as the original's XCHG does.
-void DropCargo(Guest& _guest)
+// DropCargo (5099), the tail ExplodeObject ends in, with DI on _object and what ExplodeObject has left in _left: the barrels it
+// leaves, one when it carries the device, else a random byte / (255 / (cargo + 1) + 1), its first divide by 0 into the game's
+// trap for a cargo of FFh, which saves BX. Each barrel goes in a free ship slot, copied from what DI holds (CopyObject, backwards
+// when _backward), with a random heading, its velocity set and moved. A failed slot search leaves DI past the slots and SI on
+// what DI held, as the original's XCHG does, so a later barrel would be copied from there. Returns what it leaves in DI, BX, DX,
+// SI and ES.
+Explosion DropCargo(GameState& _state, const ObjectSlot& _object, bool _backward, Explosion _left)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_DEVICE) != 0)
+  Explosion left = _left;
+  std::uint16_t barrels = 1;
+  if ((_object.Get(SlotByte::Flags) & FLAG_DEVICE) == 0)
   {
-    regs.cx = 1;
+    // MOV BL,[DI+2Ch] / AND BL,BL / JE, then MOV AX,0FFh / INC BL / DIV BL and MOV BL,AL / INC BL / XOR AH,AH / DIV BL.
+    const std::uint8_t cargo = _object.Get(SlotByte::Cargo);
+    left.bx = WithLow(left.bx, cargo);
+    if (cargo == 0)
+    {
+      return left;
+    }
+    left.bx = WithLow(left.bx, static_cast<std::uint8_t>(cargo + 1));
+    const std::uint8_t share = DivideByte(_state, 0x00FF, Low(left.bx), left.bx).quotient;
+    left.bx = WithLow(left.bx, static_cast<std::uint8_t>(share + 1));
+    barrels = DivideByte(_state, Low(NextRandom(_state)), Low(left.bx), left.bx).quotient;
+    if (barrels == 0)
+    {
+      return left;
+    }
   }
-  else
+  // LOOP from CX = the count, PUSH CX and POP CX round each barrel.
+  std::uint16_t source = _object.Offset();
+  for (; barrels != 0; --barrels)
   {
-    // rand / (255 / (cargo + 1) + 1) barrels.
-    SetLow(regs.bx, _guest.Byte(At(regs.di, SLOT_CARGO)));
-    if (Low(regs.bx) == 0)
+    const SlotSearch free = FindFreeShipSlot(_state);
+    // XCHG DI,SI: the slot found, or past the slots, in DI, and what DI held in SI.
+    const std::uint16_t from = source;
+    left.slot = free.slot;
+    left.si = from;
+    if (!free.found)
     {
-      return;
+      source = left.slot;
+      continue;
     }
-    regs.ax = 0xFF;
-    SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
-    DivideByteOnRegisters(_guest, Low(regs.bx));
-    SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-    NextRandomEntry(_guest);
-    SetHigh(regs.ax, 0);
-    DivideByteOnRegisters(_guest, Low(regs.bx));
-    if (Low(regs.ax) == 0)
-    {
-      return;
-    }
-    regs.cx = Low(regs.ax);
+    ObjectSlot barrel(_state, free.slot);
+    // MOV AL,[SI+1Eh] / PUSH AX round the copy and the barrel's template: the device's bit (5) becomes the barrel's bit 6.
+    const std::uint8_t flags = _state.Byte(Offset(from, SLOT_FLAGS));
+    CopyObject(_state, from, free.slot, _backward);
+    InitCargoBarrel(_state, barrel);
+    barrel.Set(SlotByte::Flags, FLAG_RESTING);
+    barrel.Set(SlotByte::Flags, static_cast<std::uint8_t>(barrel.Get(SlotByte::Flags) | ((flags & FLAG_DEVICE) << 1)));
+    const std::uint16_t heading = NextRandom(_state);
+    barrel.Set(SlotWord::Pitch, heading);
+    barrel.Set(SlotWord::Yaw, Swap(heading));
+    // PUSH DI / PUSH SI round ComputeVelocity, which leaves BX the z word; then MoveObject, and MOV DI,SI.
+    const Velocity velocity = ComputeVelocity(_state, barrel);
+    const MovedObject moved = MoveObject(_state, barrel);
+    left.bx = BxAfterMove(moved, static_cast<std::uint16_t>(velocity.words.z));
+    left.dx = moved.dx;
+    left.es = ErasedBlip(moved) ? GameState::VIDEO_SEGMENT : _state.DataSegment();
+    left.slot = from;
+    source = from;
   }
-  do
-  {
-    const std::uint16_t barrels = regs.cx;
-    FindFreeShipSlotEntry(_guest);
-    std::swap(regs.di, regs.si);
-    if (_guest.Flag(FLAG_CARRY))
-    {
-      SetLow(regs.ax, _guest.Byte(At(regs.si, SLOT_FLAGS)));
-      const std::uint16_t flags = regs.ax;
-      CopyObjectEntry(_guest);
-      InitCargoBarrelEntry(_guest);
-      _guest.SetByte(At(regs.di, SLOT_FLAGS), FLAG_RESTING);
-      regs.ax = flags;
-      // The device's bit (5) becomes the barrel's bit 6.
-      SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) & FLAG_DEVICE) << 1));
-      OrByte(_guest, At(regs.di, SLOT_FLAGS), Low(regs.ax));
-      NextRandomEntry(_guest);
-      _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
-      regs.ax = Swap(regs.ax);
-      _guest.SetWord(At(regs.di, SLOT_YAW), regs.ax);
-      ComputeVelocityEntry(_guest);
-      MoveObjectEntry(_guest);
-      regs.di = regs.si;
-    }
-    regs.cx = static_cast<std::uint16_t>(barrels - 1);
-  } while (regs.cx != 0);
+  return left;
 }
 
-// 8B63: the target at DI is destroyed by the player's laser.
-void DestroyTarget(Guest& _guest)
+// 8B63: _target destroyed by the player's laser: credited (CreditKill), a missile locked on it unlocked
+// (CheckMissileTargetDestroyed), and exploded (ExplodeObject), with BX 0 once CreditKill paid, else _bx, what FindShipInCrosshairs
+// left there; then the beams, and the laser's flags cleared. Returns whether a beam was a horizontal line.
+bool DestroyTarget(GameState& _state, Hardware& _hardware, ObjectSlot _target, bool _backward, std::uint16_t _bx)
 {
-  CreditKillEntry(_guest);
-  CheckMissileTargetDestroyedEntry(_guest);
-  ExplodeObject(_guest);
-  DrawLaserBeamsEntry(_guest);
-  _guest.Set(DS.miningLaserOnAsteroid, 0);
-  _guest.Set(DS.laserFiring, 0);
+  const KillCredit credit = CreditKill(_state, _target);
+  (void)CheckMissileTargetDestroyed(_state, _target.Offset());
+  (void)ExplodeObject(_state, _hardware, _target, _backward, credit.paidTenths ? std::uint16_t{0} : _bx);
+  const bool filled = DrawLaserBeams(_state);
+  _state.Set(DS.miningLaserOnAsteroid, 0);
+  _state.Set(DS.laserFiring, 0);
+  return filled;
 }
 
-// The hit on the object at DI. False when it is destroyed (DestroyTarget has run), true when the beams and the laser sound
-// follow, as for a miss.
-[[nodiscard]] bool HitTarget(Guest& _guest)
+// From 8AD2: the player's laser hits _target, which is marked hostile, with the impact's sound and its STI; the damage is the
+// laser's type + 1, and a mining laser marks an asteroid mined. A station's hit cancels the docking computer and is a crime of
+// 28h, added to legalStatus up to FFh, or in an invasion does half the damage, rounded up (NEG AL / SAR AL,1 / NEG AL). The
+// damage goes on the aggression, up to FFh, and off the energy, each written and then FFh or nothing over it. Returns whether
+// the target is to be destroyed (DestroyTarget): it ran out of energy and is not indestructible, or is an invaded station; an
+// indestructible one is left at 0, and a station's is a crime of 28h, which cancels the docking computer only when it carries.
+[[nodiscard]] bool HitTarget(GameState& _state, Hardware& _hardware, ObjectSlot _target)
 {
-  Machine::Registers& regs = _guest.Regs();
-  OrByte(_guest, At(regs.di, SLOT_FLAGS), FLAG_HOSTILE);
-  _guest.Call(START_IMPACT_SOUND);
-  SetLow(regs.ax, _guest.Get(DS.firingLaserType));
-  if (Low(regs.ax) == MINING_LASER)
+  _target.Set(SlotByte::Flags, static_cast<std::uint8_t>(_target.Get(SlotByte::Flags) | FLAG_HOSTILE));
+  (void)StartImpactSound(_state);
+  _hardware.EnableInterrupts();
+  const std::uint8_t laser = _state.Get(DS.firingLaserType);
+  if (laser == MINING_LASER && TypeOf(_target) == TYPE_ASTEROID)
   {
-    SetHigh(regs.ax, SlotType(_guest, regs.di));
-    if (High(regs.ax) == TYPE_ASTEROID)
-    {
-      _guest.Set(DS.miningLaserOnAsteroid, 1);
-    }
+    _state.Set(DS.miningLaserOnAsteroid, 1);
   }
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-  const bool invasion = _guest.Get(DS.thargoidInvasionActive) == 1;
-  const std::uint16_t damage = regs.ax;
-  IsStationEntry(_guest);
-  regs.ax = damage;
-  if (_guest.Flag(FLAG_ZERO))
+  auto damage = static_cast<std::uint8_t>(laser + 1);
+  const bool invasion = _state.Get(DS.thargoidInvasionActive) == 1;
+  if (IsStation(_target).station)
   {
-    _guest.Call(CANCEL_DOCKING_COMPUTER);
+    CancelDockingComputer(_state, _hardware);
     if (invasion)
     {
-      // NEG AL / SAR AL,1 / NEG AL: half the damage, rounded up.
-      const auto halved = HalveSigned(static_cast<std::uint8_t>(0u - Low(regs.ax)));
-      SetLow(regs.ax, static_cast<std::uint8_t>(0u - halved));
+      damage = static_cast<std::uint8_t>(0u - HalveSigned(static_cast<std::uint8_t>(0u - damage)));
     }
     else
     {
-      AddSaturating(_guest, DS.legalStatus.offset, LEGAL_STATUS_PER_STATION_HIT);
+      AddSaturating(_state, DS.legalStatus, LEGAL_STATUS_PER_STATION_HIT);
     }
   }
-  AddSaturating(_guest, At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
-  const std::uint8_t energy = _guest.Byte(At(regs.di, SLOT_ENERGY));
-  _guest.SetByte(At(regs.di, SLOT_ENERGY), static_cast<std::uint8_t>(energy - Low(regs.ax)));
-  if (energy >= Low(regs.ax))
+  AddSaturating(_target, SlotByte::Aggression, damage);
+  const std::uint8_t energy = _target.Get(SlotByte::Energy);
+  _target.Set(SlotByte::Energy, static_cast<std::uint8_t>(energy - damage));
+  if (energy >= damage)
+  {
+    return false;
+  }
+  if ((_target.Get(SlotByte::Flags) & FLAG_INDESTRUCTIBLE) == 0)
   {
     return true;
   }
-  if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_INDESTRUCTIBLE) != 0)
+  _target.Set(SlotByte::Energy, 0);
+  if (!IsStation(_target).station)
   {
-    _guest.SetByte(At(regs.di, SLOT_ENERGY), 0);
-    IsStationEntry(_guest);
-    if (!_guest.Flag(FLAG_ZERO))
-    {
-      return true;
-    }
-    if (_guest.Get(DS.thargoidInvasionActive) != 1)
-    {
-      // Only an add that overflows cancels the docking computer.
-      const unsigned status = _guest.Get(DS.legalStatus) + unsigned{LEGAL_STATUS_PER_STATION_HIT};
-      _guest.Set(DS.legalStatus, static_cast<std::uint8_t>(status));
-      if (status > 0xFF)
-      {
-        _guest.Set(DS.legalStatus, 0xFF);
-        _guest.Call(CANCEL_DOCKING_COMPUTER);
-      }
-      return true;
-    }
-    _guest.Set(DS.invadedStationDestroyed, 1);
-    _guest.Set(DS.thargoidInvasionActive, 0);
+    return false;
   }
-  DestroyTarget(_guest);
+  if (_state.Get(DS.thargoidInvasionActive) == 1)
+  {
+    _state.Set(DS.invadedStationDestroyed, 1);
+    _state.Set(DS.thargoidInvasionActive, 0);
+    return true;
+  }
+  // ADD / JAE / MOV 0FFh, and only an add that carries cancels the docking computer.
+  const unsigned status = _state.Get(DS.legalStatus) + unsigned{LEGAL_STATUS_PER_STATION_HIT};
+  _state.Set(DS.legalStatus, static_cast<std::uint8_t>(status));
+  if (status > 0xFF)
+  {
+    _state.Set(DS.legalStatus, 0xFF);
+    CancelDockingComputer(_state, _hardware);
+  }
   return false;
 }
 
@@ -584,34 +614,42 @@ bool DrawLaserBeams(GameState& _state)
   return filled;
 }
 
-void ExplodeObject(Guest& _guest)
+Explosion ExplodeObject(GameState& _state, Hardware& _hardware, ObjectSlot _object, bool _backward, std::uint16_t _bx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  TallyMaskMissionKillEntry(_guest);
-  if ((_guest.Byte(regs.di) & SLOT_DRAWN) == 0)
+  TallyMaskMissionKill(_state, _object);
+  const bool drawn = (_object.Get(SlotByte::Type) & SLOT_DRAWN) != 0;
+  // RemoveObject, whether or not it was drawn: a blip it erases leaves BX its mask, DX its last pixel and ES the video segment.
+  Explosion left{_object.Offset(), _bx, std::nullopt, std::nullopt, std::nullopt};
+  if (const std::optional<DashboardPixel> erased = RemoveObject(_state, _object))
   {
-    RemoveObjectEntry(_guest);
-    return;
+    left.bx = erased->mask;
+    left.dx = PixelPlace(*erased);
+    left.es = GameState::VIDEO_SEGMENT;
   }
-  RemoveObjectEntry(_guest);
-  _guest.Call(START_EXPLOSION_SOUND);
-  _guest.Set(DS.explodingStation, 1);
-  IsStationEntry(_guest);
-  if (!_guest.Flag(FLAG_ZERO))
+  if (!drawn)
   {
-    _guest.Set(DS.explodingStation, 0);
+    return left;
   }
-  // MOV CL,[DI+2Dh] / AND CX,0FFh.
-  regs.cx = _guest.Byte(At(regs.di, SLOT_FRAGMENTS));
-  if (regs.cx != 0)
+  (void)StartExplosionSound(_state);
+  _hardware.EnableInterrupts();
+  _state.Set(DS.explodingStation, 1);
+  if (!IsStation(_object).station)
   {
-    SpawnFragments(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.cx, _guest.Flag(FLAG_DIRECTION));
-    // MOV DI,SI then the count's DEC to 0: SI and DI the object, CX = 0. The AX, BX, DX and ES the fragments' last
-    // UpdateDebrisAi leaves are not reproduced: poisoned, every comparison and digest still agrees.
-    regs.si = regs.di;
-    regs.cx = 0;
+    _state.Set(DS.explodingStation, 0);
   }
-  DropCargo(_guest);
+  // MOV CL,[DI+2Dh] / AND CX,0FFh / JNE: the fragments, then MOV DI,SI, back on the object.
+  if (const std::uint8_t fragments = _object.Get(SlotByte::Fragments); fragments != 0)
+  {
+    const FragmentsLeft flown = SpawnFragments(_state, _object, fragments, _backward);
+    left.bx = flown.bx;
+    if (flown.dx)
+    {
+      left.dx = flown.dx;
+    }
+    left.si = _object.Offset();
+    left.es = flown.es;
+  }
+  return DropCargo(_state, _object, _backward, left);
 }
 
 void TallyMaskMissionKill(GameState& _state, const ObjectSlot& _slot)
@@ -706,64 +744,62 @@ void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward)
   }
 }
 
-void FindShipInCrosshairs(Guest& _guest)
+CrosshairTarget FindShipInCrosshairs(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = DS.stationSlot.offset;
-  regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - 2);
-  regs.bp = 0xFFFF; // the nearest z so far
-  for (std::uint32_t count = LoopCount(regs.cx); count != 0; --count)
+  // MOV CL,objectSlotCount / SUB CL,2 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times. BP is the nearest z so far.
+  CrosshairTarget target{std::nullopt, 0, 0};
+  std::uint16_t nearestZ = 0xFFFF;
+  std::uint16_t slot = DS.stationSlot.offset;
+  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - 2);
+  for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    const std::uint8_t type = _guest.Byte(regs.di);
-    SetLow(regs.bx, type);
-    SetLow(regs.ax, static_cast<std::uint8_t>(type & (SLOT_DRAWN | SLOT_ACTIVE)));
-    if (Low(regs.ax) == (SLOT_DRAWN | SLOT_ACTIVE))
+    const ObjectSlot object(_state, slot);
+    const std::uint8_t type = object.Get(SlotByte::Type);
+    target.bx = WithLow(target.bx, type);
+    if ((type & (SLOT_DRAWN | SLOT_ACTIVE)) == (SLOT_DRAWN | SLOT_ACTIVE) &&
+        (object.Get(SlotByte::Flags) & CROSSHAIR_IGNORED) != CROSSHAIR_IGNORED)
     {
-      SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_FLAGS)) & CROSSHAIR_IGNORED));
-      if (Low(regs.ax) != CROSSHAIR_IGNORED)
+      // AND BX,3Eh / MOV AX,[BX+shipTargetRadius] / XCHG AH,AL / XOR DX,DX / DIV [DI+14h] / MOV BX,AX / ADD BX,2: the radius *
+      // 256 / z, plus 2, against |x| * 256 / z and |y| * 256 / z.
+      target.bx = static_cast<std::uint16_t>(type & (TYPE_MASK << 1));
+      const std::uint16_t radius = Swap(_state.Word(At(DS.shipTargetRadius.offset, target.bx)));
+      target.bx = Offset(DivideWord(_state, radius, object.Get(SlotWord::ViewZ), target.bx).quotient, 2);
+      if (ScaledWithinRadius(_state, object, SlotWord::ViewX, target.bx) &&
+          ScaledWithinRadius(_state, object, SlotWord::ViewY, target.bx) && object.Get(SlotWord::ViewZ) < nearestZ)
       {
-        // The radius * 256 / z, plus 2, against |x| * 256 / z and |y| * 256 / z. The divides overflow into the trap.
-        regs.bx = static_cast<std::uint16_t>(regs.bx & (TYPE_MASK << 1));
-        regs.ax = Swap(_guest.Word(At(DS.shipTargetRadius.offset, regs.bx)));
-        regs.dx = 0;
-        DivideWordOnRegisters(_guest, _guest.Word(At(regs.di, SLOT_VIEW_Z)));
-        regs.bx = static_cast<std::uint16_t>(regs.ax + 2);
-        if (ScaledWithinRadius(_guest, SLOT_VIEW_X) && ScaledWithinRadius(_guest, SLOT_VIEW_Y) &&
-            _guest.Word(At(regs.di, SLOT_VIEW_Z)) < regs.bp)
-        {
-          regs.si = regs.di;
-          regs.bp = _guest.Word(At(regs.di, SLOT_VIEW_Z));
-        }
+        target.slot = slot;
+        nearestZ = object.Get(SlotWord::ViewZ);
       }
     }
-    regs.di = At(regs.di, SLOT_BYTES);
+    slot = At(slot, SLOT_BYTES);
   }
-  regs.cx = 0;
-  regs.bp = static_cast<std::uint16_t>(regs.bp + 1);
-  if (regs.bp == 0)
-  {
-    _guest.SetFlag(FLAG_CARRY, false);
-    return;
-  }
-  regs.di = regs.si;
-  _guest.SetFlag(FLAG_CARRY, true);
+  // INC BP / JE: none found while BP is still FFFFh; else MOV DI,SI, the nearest.
+  target.di = target.slot.value_or(slot);
+  return target;
 }
 
-void ResolveLaserFire(Guest& _guest)
+bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  if (_guest.Get(DS.laserFiring) != 1)
+  if (_state.Get(DS.laserFiring) != 1)
   {
-    return;
+    return false;
   }
-  FindShipInCrosshairs(_guest);
-  if (_guest.Flag(FLAG_CARRY) && !HitTarget(_guest))
+  if (const CrosshairTarget target = FindShipInCrosshairs(_state); target.slot)
   {
-    return;
+    const ObjectSlot hit(_state, *target.slot);
+    if (HitTarget(_state, _hardware, hit))
+    {
+      return DestroyTarget(_state, _hardware, hit, _backward, target.bx);
+    }
   }
-  DrawLaserBeamsEntry(_guest);
-  _guest.Call(START_LASER_SOUND);
-  _guest.Set(DS.miningLaserOnAsteroid, 0);
-  _guest.Set(DS.laserFiring, 0);
+  const bool filled = DrawLaserBeams(_state);
+  if (StartLaserSound(_state))
+  {
+    _hardware.EnableInterrupts();
+  }
+  _state.Set(DS.miningLaserOnAsteroid, 0);
+  _state.Set(DS.laserFiring, 0);
+  return filled;
 }
 
 bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot)
@@ -922,31 +958,37 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
   return stepLength;
 }
 
-void DetonateEnergyBomb(Guest& _guest)
+Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(IN_SAFE_ZONE);
-  if (_guest.Flag(FLAG_CARRY))
+  if (InSafeZone(_state).inside)
   {
-    AddSaturating(_guest, DS.legalStatus.offset, LEGAL_STATUS_PER_BOMB);
+    AddSaturating(_state, DS.legalStatus, LEGAL_STATUS_PER_BOMB);
   }
-  // Every active ship with a blip explodes, its cargo emptied first.
-  regs.di = DS.firstShipSlot.offset;
-  regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
-  do
+  Detonation left{std::nullopt, std::nullopt};
+  // Every active ship with a blip explodes, its cargo emptied first: MOV CL,objectSlotCount / SUB CL,3 / XOR CH,CH, then LOOP, a
+  // count of 0 running 65,536 times; PUSH DI and PUSH CX round each explosion.
+  std::uint16_t slot = DS.firstShipSlot.offset;
+  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((_guest.Byte(regs.di) & SLOT_ACTIVE) != 0 && (_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
+    ObjectSlot ship(_state, slot);
+    if ((ship.Get(SlotByte::Type) & SLOT_ACTIVE) != 0 && (ship.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
     {
-      _guest.SetByte(At(regs.di, SLOT_CARGO), 0);
-      const std::uint16_t slot = regs.di;
-      const std::uint16_t remaining = regs.cx;
-      ExplodeObject(_guest);
-      regs.cx = remaining;
-      regs.di = slot;
+      ship.Set(SlotByte::Cargo, 0);
+      // With no cargo the barrel count is never divided, so no BX reaches the divide trap's save.
+      const Explosion exploded = ExplodeObject(_state, _hardware, ship, _backward, 0);
+      if (exploded.si)
+      {
+        left.si = exploded.si;
+      }
+      if (exploded.es)
+      {
+        left.es = exploded.es;
+      }
     }
-    regs.di = At(regs.di, SLOT_BYTES);
-    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
-  } while (regs.cx != 0);
+    slot = At(slot, SLOT_BYTES);
+  }
+  return left;
 }
 
 void SpawnPlayerWreckage(GameState& _state)
@@ -1026,21 +1068,24 @@ void InitMissile(GameState& _state, ObjectSlot _slot)
   _slot.Set(SlotByte::Class, MISSILE_CLASS);
 }
 
-bool RemoveAllMissiles(GameState& _state)
+std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
-  bool erased = false;
+  std::optional<DashboardPixel> lastErased;
   std::uint16_t slot = DS.shipSlots.offset;
   for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
   {
     const ObjectSlot object(_state, slot);
     if ((object.Get(SlotByte::Type) & ObjectSlot::ACTIVE) != 0 && TypeOf(object) == TYPE_MISSILE)
     {
-      erased = RemoveObject(_state, object).has_value() || erased;
+      if (const std::optional<DashboardPixel> erased = RemoveObject(_state, object))
+      {
+        lastErased = erased;
+      }
     }
     slot = Offset(slot, ObjectSlot::BYTES);
   }
-  return erased;
+  return lastErased;
 }
 
 void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward)
@@ -1131,83 +1176,80 @@ std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const Objec
   return free.slot;
 }
 
-void UpdateMissileAi(Guest& _guest)
+MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, ObjectSlot _missile, bool _backward, std::uint16_t _bx,
+                              std::uint16_t _dx)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.incomingMissileAlert, 0);
-  AddWord(_guest, At(regs.di, SLOT_ROLL), MISSILE_SPIN);
-  regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
-  if (regs.si == 0)
+  _state.Set(DS.incomingMissileAlert, 0);
+  _missile.Set(SlotWord::Roll, Offset(_missile.Get(SlotWord::Roll), MISSILE_SPIN));
+  const std::uint16_t target = _missile.Get(SlotWord::Target);
+  Vector toTarget{};
+  if (target == 0)
   {
     // At the player.
-    GetVectorToPlayerEntry(_guest);
-    _guest.Set(DS.incomingMissileAlert, 1);
+    toTarget = GetVectorToPlayer(_missile);
+    _state.Set(DS.incomingMissileAlert, 1);
   }
   else
   {
-    if ((_guest.Byte(regs.si) & SLOT_ACTIVE) == 0)
+    const ObjectSlot aimed(_state, target);
+    if ((aimed.Get(SlotByte::Type) & SLOT_ACTIVE) == 0)
     {
-      ExplodeObject(_guest); // its target is gone
-      return;
+      // JMP ExplodeObject: its target is gone.
+      const Explosion exploded = ExplodeObject(_state, _hardware, _missile, _backward, _bx);
+      return MissileFlight{exploded.slot, exploded.dx.value_or(_dx)};
     }
-    regs.ax = static_cast<std::uint16_t>(_guest.Word(At(regs.si, SLOT_X)) - _guest.Word(At(regs.di, SLOT_X)));
-    regs.bx = static_cast<std::uint16_t>(_guest.Word(At(regs.si, SLOT_Y)) - _guest.Word(At(regs.di, SLOT_Y)));
-    regs.cx = static_cast<std::uint16_t>(_guest.Word(At(regs.si, SLOT_Z)) - _guest.Word(At(regs.di, SLOT_Z)));
+    const auto difference = [&aimed, &_missile](SlotWord _axis)
+    { return static_cast<std::int16_t>(aimed.Get(_axis) - _missile.Get(_axis)); };
+    toTarget = Vector{difference(SlotWord::X), difference(SlotWord::Y), difference(SlotWord::Z)};
   }
-  // VectorWithinBox with AX, BX and CX pushed and popped round it.
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  regs.dx = MISSILE_HIT_BOX;
-  VectorWithinBoxEntry(_guest);
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
-  if (!_guest.Flag(FLAG_CARRY))
+  // MOV DX,0C8h / VectorWithinBox, with AX, BX and CX, the vector, pushed and popped round it.
+  if (!VectorWithinBox(toTarget, MISSILE_HIT_BOX))
   {
-    ConvertVectorToAnglesEntry(_guest);
-    TurnTowardAnglesEntry(_guest);
-    ComputeVelocityEntry(_guest);
-    MoveObjectEntry(_guest);
-    return;
+    (void)TurnTowardAngles(_missile, ConvertVectorToAngles(_state, toTarget));
+    (void)ComputeVelocity(_state, _missile);
+    return MissileFlight{_missile.Offset(), MoveObject(_state, _missile).dx};
   }
-  ExplodeObject(_guest);
-  regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
-  if (regs.si == 0)
+  // It explodes, with BX the vector's y; then MOV SI,[DI+29h] from where that leaves DI.
+  const Explosion exploded = ExplodeObject(_state, _hardware, _missile, _backward, static_cast<std::uint16_t>(toTarget.y));
+  const std::uint16_t dx = exploded.dx.value_or(MISSILE_HIT_BOX);
+  const std::uint16_t hit = _state.Word(At(exploded.slot, SLOT_TARGET));
+  if (hit == 0)
   {
-    regs.ax = MISSILE_DAMAGE;
-    TakeDamageEntry(_guest);
-    return;
-  }
-  std::swap(regs.si, regs.di);
-  IsStationEntry(_guest);
-  std::swap(regs.si, regs.di);
-  if (!_guest.Flag(FLAG_ZERO))
-  {
-    regs.di = regs.si;
-    CreditKillEntry(_guest);
-    if ((_guest.Byte(At(regs.di, SLOT_FLAGS)) & FLAG_INDESTRUCTIBLE) == 0)
+    // The player, with TakeDamage's STI when it kills.
+    if (TakeDamage(_state, MISSILE_DAMAGE))
     {
-      ExplodeObject(_guest);
+      _hardware.EnableInterrupts();
     }
-    return;
+    return MissileFlight{exploded.slot, dx};
   }
-  if (_guest.Get(DS.thargoidInvasionActive) != 1)
+  ObjectSlot struck(_state, hit);
+  if (!IsStation(struck).station)
   {
-    AddSaturating(_guest, DS.legalStatus.offset, MISSILE_AT_STATION_CRIME);
-    return;
+    // MOV DI,SI: a ship, credited, and exploded unless indestructible, with BX 0 once CreditKill paid.
+    const KillCredit credit = CreditKill(_state, struck);
+    if ((struck.Get(SlotByte::Flags) & FLAG_INDESTRUCTIBLE) != 0)
+    {
+      return MissileFlight{hit, dx};
+    }
+    const Explosion destroyed = ExplodeObject(_state, _hardware, struck, _backward, credit.paidTenths ? std::uint16_t{0} : exploded.bx);
+    return MissileFlight{destroyed.slot, destroyed.dx.value_or(dx)};
   }
-  // An invaded station loses energy to each missile, and goes when it runs out.
-  regs.di = regs.si;
-  const std::uint8_t energy = _guest.Byte(At(regs.di, SLOT_ENERGY));
-  _guest.SetByte(At(regs.di, SLOT_ENERGY), static_cast<std::uint8_t>(energy - INVADED_STATION_HIT));
+  if (_state.Get(DS.thargoidInvasionActive) != 1)
+  {
+    AddSaturating(_state, DS.legalStatus, MISSILE_AT_STATION_CRIME);
+    return MissileFlight{exploded.slot, dx};
+  }
+  // MOV DI,SI: an invaded station loses energy to each missile, the SUB written, and goes when it runs out.
+  const std::uint8_t energy = struck.Get(SlotByte::Energy);
+  struck.Set(SlotByte::Energy, static_cast<std::uint8_t>(energy - INVADED_STATION_HIT));
   if (energy >= INVADED_STATION_HIT)
   {
-    return;
+    return MissileFlight{hit, dx};
   }
-  ExplodeObject(_guest);
-  _guest.Set(DS.invadedStationDestroyed, 1);
-  _guest.Set(DS.thargoidInvasionActive, 0);
+  const Explosion destroyed = ExplodeObject(_state, _hardware, struck, _backward, exploded.bx);
+  _state.Set(DS.invadedStationDestroyed, 1);
+  _state.Set(DS.thargoidInvasionActive, 0);
+  return MissileFlight{destroyed.slot, destroyed.dx.value_or(dx)};
 }
 
 ThargoidTest Routine8C51(const ObjectSlot& _slot)
@@ -1277,6 +1319,11 @@ constexpr Machine::NativeContract LAUNCHES{REGISTER_AX | REGISTER_BX | REGISTER_
                                            0};
 constexpr Machine::NativeContract LAUNCHES_SHIP{LAUNCHES.clobbers, FLAG_CARRY};
 constexpr Machine::NativeContract LASER_BEAMS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0};
+// UpdateMissileAi's: DI, and DX, of which UpdateObjectsAndSpawn's next handler takes DL (UpdateMissileAiEntry).
+constexpr Machine::NativeContract MISSILE_FLIGHT{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP | REGISTER_ES, 0};
+// DetonateEnergyBomb's: SI, DI and ES as the original leaves them, and DS (DetonateEnergyBombEntry).
+constexpr Machine::NativeContract BOMB_DETONATED{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP, 0};
+constexpr Machine::NativeContract CROSSHAIRS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_SI, FLAG_CARRY};
 
 } // namespace
 
@@ -1445,8 +1492,54 @@ void RemoveAllMissilesOut(Guest& _guest, bool _erased)
 void RemoveAllMissilesEntry(Guest& _guest)
 {
   // UpdateStationAi's contract compares the DI and ES it leaves after it.
-  RemoveAllMissilesOut(_guest, RemoveAllMissiles(_guest.State()));
+  RemoveAllMissilesOut(_guest, RemoveAllMissiles(_guest.State()).has_value());
   _guest.Clobber(REMOVES_MISSILES);
+}
+
+void DetonateEnergyBombEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // DI past the slots it looked at, by the count it loaded, and SI and ES as its explosions leave them: DrawSunOrPlanet goes on
+  // with DI, and its contract compares SI and ES.
+  const auto slots = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  const Detonation left = DetonateEnergyBomb(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION));
+  regs.di = static_cast<std::uint16_t>(DS.firstShipSlot.offset + LoopCount(slots) * ObjectSlot::BYTES);
+  regs.si = left.si.value_or(regs.si);
+  regs.es = left.es.value_or(regs.es);
+  _guest.Clobber(BOMB_DETONATED);
+}
+
+void ExplodeObjectEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  (void)ExplodeObject(_guest.State(), _guest.Devices(), ObjectSlot(_guest.State(), regs.di), _guest.Flag(FLAG_DIRECTION), regs.bx);
+  _guest.Clobber(CLOBBERS_ALL);
+}
+
+void UpdateMissileAiEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const MissileFlight flight =
+    UpdateMissileAi(_guest.State(), _guest.Devices(), ObjectSlot(_guest.State(), regs.di), _guest.Flag(FLAG_DIRECTION), regs.bx, regs.dx);
+  // DI, and DX, of which UpdateObjectsAndSpawn's next handler takes DL for its range's box.
+  regs.di = flight.slot;
+  regs.dx = flight.dx;
+  _guest.Clobber(MISSILE_FLIGHT);
+}
+
+void FindShipInCrosshairsEntry(Guest& _guest)
+{
+  const CrosshairTarget target = FindShipInCrosshairs(_guest.State());
+  _guest.Regs().di = target.di;
+  _guest.SetFlag(FLAG_CARRY, target.slot.has_value());
+  _guest.Clobber(CROSSHAIRS);
+}
+
+void ResolveLaserFireEntry(Guest& _guest)
+{
+  // DrawLine's CLD, once a beam was a horizontal line: the direction flag is no register the contract can leave to it.
+  DrawLineOut(_guest, ResolveLaserFire(_guest.State(), _guest.Devices(), _guest.Flag(FLAG_DIRECTION)));
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
 }
 
 void TryFireLaserAtPlayerEntry(Guest& _guest)
@@ -1511,22 +1604,21 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x066C, "GetViewLaser", &GetViewLaserEntry, VIEW_LASER},
   NativeEntry{0x0A9A, "DrawLaserBeams", &DrawLaserBeamsEntry, LASER_BEAMS},
   NativeEntry{0x2C9B, "TakeDamage", &TakeDamageEntry, TAKES_DAMAGE},
-  NativeEntry{0x2ED6, "DetonateEnergyBomb", &DetonateEnergyBomb, CLOBBERS_ALL},
+  NativeEntry{0x2ED6, "DetonateEnergyBomb", &DetonateEnergyBombEntry, BOMB_DETONATED},
   NativeEntry{0x2FE3, "SpawnPlayerWreckage", &SpawnPlayerWreckageEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x3115, "KillPlayer", &KillPlayerEntry, KILLS_PLAYER},
   NativeEntry{0x4C8C, "InitMissile", &InitMissileEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4F9F, "RemoveAllMissiles", &RemoveAllMissilesEntry, REMOVES_MISSILES},
-  NativeEntry{0x4FC1, "ExplodeObject", &ExplodeObject, CLOBBERS_ALL},
+  NativeEntry{0x4FC1, "ExplodeObject", &ExplodeObjectEntry, CLOBBERS_ALL},
   NativeEntry{0x50FE, "TallyMaskMissionKill", &TallyMaskMissionKillEntry, PRESERVES_ALL},
   NativeEntry{0x518B, "TryFireLaserAtPlayer", &TryFireLaserAtPlayerEntry, FIRES_LASER},
   NativeEntry{0x5242, "LaunchPlayerMissile", &LaunchPlayerMissileEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x534E, "LaunchShipFromObject", &LaunchShipFromObjectEntry, LAUNCHES_SHIP},
   NativeEntry{0x543A, "TryLaunchMissileAtPlayer", &TryLaunchMissileAtPlayerEntry, LAUNCHES},
   NativeEntry{0x5471, "TryLaunchThargon", &TryLaunchThargonEntry, LAUNCHES},
-  NativeEntry{0x54F2, "UpdateMissileAi", &UpdateMissileAi, PRESERVES_ALL},
-  NativeEntry{0x8A46, "FindShipInCrosshairs", &FindShipInCrosshairs,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_SI, FLAG_CARRY}},
-  NativeEntry{0x8AC2, "ResolveLaserFire", &ResolveLaserFire, CLOBBERS_ALL},
+  NativeEntry{0x54F2, "UpdateMissileAi", &UpdateMissileAiEntry, MISSILE_FLIGHT},
+  NativeEntry{0x8A46, "FindShipInCrosshairs", &FindShipInCrosshairsEntry, CROSSHAIRS},
+  NativeEntry{0x8AC2, "ResolveLaserFire", &ResolveLaserFireEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x8B8B, "CheckMissileTargetDestroyed", &CheckMissileTargetDestroyedEntry, PRESERVES_ALL},
   NativeEntry{0x8BC6, "CreditKill", &CreditKillEntry, PRESERVES_ALL},
   NativeEntry{0x8C51, "Routine8C51", &Routine8C51Entry, THARGOID_TEST},

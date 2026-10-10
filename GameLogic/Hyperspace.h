@@ -18,10 +18,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> HyperspaceEntries() noexcept;
 
-/// ArriveInSystem (CS:2B5A): SetUpLocalSpace, then, unless in witch space, the sun, planet and station
-/// moved by one random offset and the player turned towards the station.
-void ArriveInSystem(Guest& _guest);
-
 /// CompleteHyperspaceJump (CS:4707): the jump, galactic when galacticJumpPending: the destination made
 /// current, or witch space on a mis-jump, the tunnel, and the arrival. Waits. Out: ES = B800h.
 void CompleteHyperspaceJump(Guest& _guest);
@@ -89,6 +85,11 @@ void LatchHyperspaceTarget(GameState& _state);
 /// digits, "10" or a space and the digit, written into hyperspaceCountdownMessage.
 void ShowHyperspaceCountdown(GameState& _state);
 
+/// ArriveInSystem (CS:2B5A): SetUpLocalSpace (its copies backwards when _backward), then, out of witch space, the sun, the planet
+/// and the station moved by one random offset, 200h-3FFh either way in the top 16 bits of x and y and a random word in z's low
+/// word, and the player turned to the station (ComputeAnglesToObject) with a random roll. Returns what ShowCockpitScreen did.
+ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 /// The registers IsMassLocked's original leaves once it found _lock: AL as InSafeZone leaves it; then what each IsObjectNear
@@ -102,5 +103,6 @@ void EnterWitchSpaceEntry(Guest& _guest);         ///< AX and BX clobbered.
 void UpdateMissionScheduleEntry(Guest& _guest);   ///< Out: AL the mission picked, once the jump counts.
 void LatchHyperspaceTargetEntry(Guest& _guest);   ///< Out: AL the last byte copied; CX, SI and DI clobbered.
 void ShowHyperspaceCountdownEntry(Guest& _guest); ///< AX clobbered.
+void ArriveInSystemEntry(Guest& _guest);          ///< Out: DF clear once the cockpit was drawn. Clobbers all.
 
 } // namespace Elite
