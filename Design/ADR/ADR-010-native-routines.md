@@ -15,6 +15,13 @@ It is the machinery plan §5's Phase 3 and §6.3 describe, and ADR-003 item 3 re
 - native code that waits where it cannot stops the run (item 8);
 - a routine that always waits is accepted on the digests, with the coverage of interpreted runs (item 5).
 
+**Amended a third time with the last 125 entries, Phase 3's exit:** the corpus runs no original instruction (item 7). This change also:
+
+- ports the routines that wait, through `Guest::JumpBack`, and unwinds native code that a call returns past (item 8);
+- lets a host's call run beside a routine that waits, and native code count the cycles of a poll loop it stands in for (item 8);
+- gives `TwinRig` its options, an uncompared twin among them, and makes a stale reason fail the coverage check (item 5);
+- names what the ported routines still do differently from the original (item 10).
+
 ## Context
 
 **Phase 3 replaces the original's routines with C++, bottom-up through the call graph** (plan §5). The interpreter keeps running whatever is not yet ported.
@@ -74,9 +81,9 @@ When `NativeCode::SetVerifying(true)` is on, a call of a native routine that is 
 5. **Whatever it finds, the run carries on from the original's outcome.** That outcome is:
    - its memory, the dead stack included;
    - its registers;
-   - the count of changed bytes and the last loop turn, which are what paced time saw of it (ADR-008).
+   - the counts of changed bytes and port writes, and the last loop turn, which are what paced time saw of it (ADR-008).
 
-   A compared run is then the interpreted run, observed. A loop around a ported routine is seen to wait exactly when it would be without the comparison, and one mismatch does not hide the next. A mismatch is recorded (`NativeCode::Mismatches`).
+   The native run starts from what paced time saw before the call, as the original's did. A compared run is then the interpreted run, observed. A loop around a ported routine is seen to wait exactly when it would be without the comparison, and one mismatch does not hide the next. A mismatch is recorded (`NativeCode::Mismatches`).
 
 A call whose original cannot be undone is not compared: its outcome stands, and it counts as unverifiable. The original cannot be undone when it waited (the clock moved), took a hardware interrupt, or called the BIOS, DOS or mouse services.
 
@@ -106,15 +113,30 @@ A call whose original cannot be undone is not compared: its outcome stands, and 
 - **Each must have run in such an interpreted run.** An offsets file records the instructions an interpreted run started:
   - GameLogicTests writes one for each corpus replay, from the interpreted run whose digests the native runs must reproduce;
   - `ReferenceRunner --coverage` writes one for a run.
-- **`TwinRig` reaches the states no replay does.** It boots the reference twice, interpreted and native with every call of a work routine compared. It gives both the same memory and the same keys, and requires every digest, and the state both end in, to agree. It writes the interpreted twin's offsets and the native twin's report.
+- **`TwinRig` reaches the states no replay does.** It boots the reference twice, interpreted and native with every call of a work routine compared. It gives both the same memory and the same keys, and requires every digest, and the state both end in, to agree. It writes the interpreted twin's offsets and the native twin's report. `TwinOptions` sets the rest:
+  - **`compared = false`** runs the native twin uncompared. A compared call keeps the original's outcome when the original waited or called the BIOS or DOS (item 4), so only an uncompared twin, or a native corpus run, executes the native code of those paths. `SaveLoadTests` runs the disc menu both ways for that reason, and its screenshots uncompared.
+  - **`startMoment`** sets DOS's clock at power-on, and **`fromPowerOn`** starts both twins there rather than at the title screen: `StartUpTests` starts at 55 seconds past the minute, where the start-up wait's target second wraps.
 - **For every other routine,** the instructions it answers for stop at a routine that always waits.
 
-**Measured 2026-10-10 for 262 entries:** 231 covered and 31 with reasons, 1,879 instructions explained. The reasons are of four kinds:
+**Measured 2026-10-10 for 262 entries:** 231 covered and 31 with reasons, 1,879 instructions explained.
 
-- **Unreachable.** No input takes the path, or the D5 byte closes it (ADR-001).
-- **Only in a call that waits.** These are the flight function-key screens, the pause and the Ctrl+Esc freeze. The native routines hand them to the original. Such a call cannot be compared (item 8), and `flight-screens.replay`'s digests check them.
-- **Only in calls that make a BIOS, DOS or mouse call.** Item 4 cannot undo those calls, so the digests are these paths' only test. This covers all of `PerformDiskRequest`, and `SetGraphicsMode`.
-- **Not reached yet.** No replay or constructed input reaches them, and each reason names the missing state. Examples are `RunDockingComputer` states, and `LaunchShipFromObject` for an escape pod, which `UpdateTraderOrPoliceAi` makes and which is not ported yet.
+**Measured 2026-10-10 for all 387 entries,** `Tools/RoutineCoverage.py` over everything g++'s `GameLogicTests` run left:
+
+| Entries | Count |
+|---|---|
+| Covered by compared calls | 312 |
+| Covered by the digests | 32 |
+| Explained, compared | 39 |
+| Explained, on the digests | 4 |
+
+Between them the 43 explained entries leave 435 instructions to `Design/NativeCoverage.tsv`. The reasons are of four kinds:
+
+- **Unreachable,** on any machine or on this one. No input takes the path, the D5 byte closes it (ADR-001), or this machine never answers as the path needs: a DOS before 2.0, a BIOS tick count past a day.
+- **Only in a call that waits.** These are the flight function-key screens, the pause and the Ctrl+Esc freeze. Such a call cannot be compared (item 8). `flight-screens.replay`'s native run, and the uncompared twins in `FlightTests`, run their native code, and the digests check it.
+- **Only in calls that make a BIOS or DOS call.** Item 4 cannot undo those calls. The native corpus runs and the uncompared twins run this code natively, and the digests, and the files the twins write, check it. This covers all of `PerformDiskRequest`, `WriteScreenshotFile`, `RestoreTimerInterrupt`, `SetGraphicsMode` and `SetTextMode`.
+- **Not reached.** No replay or test arranges the state, and the reason names it: a host I/O error after DOS opened or created the file, a commander file with attributes, the Amstrad's timer.
+
+A reason for an instruction the runs now cover is stale, and fails the check: it would explain away a regression. The 262-entry file had 1,884 rows, and most had gone stale unnoticed.
 
 **6. What gates in CI.** `GameLogicTests.CorpusTests` runs the corpus three ways:
 
@@ -132,8 +154,9 @@ The coverage check (item 5) is a CI step of its own, after the tests.
 |---|---|---|
 | Five replays, with the 23 maths entries | 8,717 | 8,500 |
 | Six replays, with 262 entries | 8,849 | 1,943 |
+| Six replays, with all 387 entries | 8,849 | **0** |
 
-The same six-replay run's times, g++ -O2:
+The 262-entry six-replay run's times, g++ -O2:
 
 | Run | Time |
 |---|---|
@@ -147,6 +170,22 @@ The compared run made 1,272,389 calls of ported entries:
 - 24 were unverifiable.
 - The rest ran inside a caller's comparison.
 
+With all 387 entries, each replay run on its own by `ReferenceRunner` (g++ Release), the times are summed over the six processes, start-up and screenshots included. That is not how the table above was taken, so the two are not compared:
+
+| Run | Time |
+|---|---|
+| Interpreted | 3.6 s |
+| Native | 0.6 s |
+| Compared | 4.1 s |
+
+The compared runs made 1,274,741 calls of ported entries, with no mismatch:
+
+| Entries | Calls | Compared on their own and verified | Unverifiable |
+|---|---|---|---|
+| 345 that never wait | 1,228,751 | 1,047,240 | 21 |
+| 6 that sometimes wait | 8,245 | 4,304 | 3 |
+| 36 that always wait | 37,745 | never compared (item 8) | — |
+
 **8. Native code waits on a thread of its own.**
 
 - **Which routines.** Each entry says whether it can wait (`NativeWait`, in `NativeEntry` and `Pc::Hook`):
@@ -157,10 +196,13 @@ The compared run made 1,272,389 calls of ported entries:
   A routine that can wait runs on the native thread, and so does everything it calls. It waits in one of two ways:
   - in original code it calls;
   - through `Pc::Wait`, one idle turn of a waiting loop. That turn is `Idle`, then the end of the run if that is where the clock now is, then any interrupt now due, taken as the CPU takes it at the loop's next instruction;
-  - through `Pc::LoopTurn`, called wherever the original jumps back, with the registers the original has there. Paced time looks at that turn as it looks at the original's jump: it idles when the turn changed no register, byte or port since the last. The native loop therefore waits on exactly the turns the original does, and the digests do not move. A loop that never idles stops the run as `Spinning`, as the original's would.
+  - through `Pc::LoopTurn`, called wherever the original jumps back, with the registers the original has there. Paced time looks at that turn as it looks at the original's jump: it idles when the turn changed no register, byte or port since the last. The native loop therefore waits on exactly the turns the original does, and the digests do not move. A loop that never idles stops the run as `Spinning`, as the original's would. `Guest::JumpBack(target)` is the form ported loops use: it sets IP to the original's jump target first, so the turn paced time compares holds the IP the original's would.
 - **How a run ends inside one.** When the clock reaches the end of a run there, in `Wait` or in original code it calls, the native thread hands the machine back and `RunUntil` returns. The next `RunUntil` carries on where it stopped.
 - **Why it stays deterministic.** The host thread and the native thread take turns through two semaphores, so only one runs at a time and a run is still a function of its inputs (ADR-008). `MachineTests` is clean under ThreadSanitizer.
 - **Teardown.** A machine destroyed while a routine waits unwinds the native thread by an exception.
+- **Returning past a caller.** A routine that drops its own return address returns past the code that called it (`RunPauseScreen`'s abort, `TickEscapePod`, the disc menu leaving `GameLoop`). Native code does it as the original does, popping the words and returning. `Pc::CallNear` then sees SP come back above its frame while a native routine runs on that thread, and throws `ReturnedPast`. `RunNative` catches it and ends that routine without a return of its own. The call that ran the routine makes the same check, so each native routine the original returned past ends in turn. A call a host makes from outside any native routine ends as calls do.
+- **A host's call beside a routine that waits.** A test, or the shell, may call into the program while a routine waits suspended on the native thread. That call runs on the host thread, beside the waiting routine, which stays where it is (`Pc::EnterBesideNative`). A routine that waits runs there as a plain call, and stops the run as `Overran` if it does wait. Handing the call to the native thread instead livelocked `FlightTests`.
+- **Cycles native code stands in for.** The game reads an IBM stick by counting turns of a poll loop while the game port's one-shots, timed by the instructions executed, run down. Native code takes no time, so a native read would count forever. `Pc::CountInstructionCycles` adds the cycles the 8088 takes over the instructions a native loop stands in for, so the one-shots drop at the poll they drop at in the original. `ReadJoystickAxes` counts them, and waits as the original does when Y's one-shot outlasts X's.
 - **A routine that never waits is a plain call,** with no thread switch.
   - **If one waits after all,** it cannot stop at the end of the run. What would end its wait, such as a key, reaches the machine only between runs.
   - **So the run stops there.** `RunUntil` returns `StopReason::Overran`, and `NativeCode::Overran` names the routine.
@@ -168,7 +210,8 @@ The compared run made 1,272,389 calls of ported entries:
 - **Which calls are compared:**
   - **`Always`: never.** Its original could not be undone, and the original of `Start` or `GameLoop` never returns. What it calls through hooks is compared instead, each call on its own. So native code that waits calls the work routines through `Guest::Call`, and work routines call each other directly.
   - **`Sometimes`: on the calls where its original does not wait.** The comparison runs on the native thread, so an original that does wait stops at the end of a run as native code does. That call is then unverifiable, and its outcome stands.
-- **The first two `Sometimes` routines are `ProcessFlightKeys` and `HandleFlightFunctionKeys`.** They work once a frame. They wait for a key only for the F5–F10 screens, the pause and Ctrl+Esc, and they hand those paths to the original.
+- **The `Sometimes` routines.** The first two were `ProcessFlightKeys` and `HandleFlightFunctionKeys`. They work once a frame, and wait for a key only for the F5–F10 screens, the pause and Ctrl+Esc. The other four are the stick's read and what calls it: `ReadJoystickAxes`, `ReadJoystickSteering`, `ReadSteering` and `UpdatePlayerMotion`.
+- **The `Always` routines** are the 36 that wait as a rule. They include `Start`, `GameLoop`, `RunFlight`, `RunTitleAndDocked`, the docked screens and menus, the charts, the tunnels, the text prompts and `TickHyperspaceCountdown` (item 10).
 - **How they were found.** A pass walked the closure of every ported entry for loops that poll a port, or memory an interrupt handler writes, and each loop it found was read:
   - two of them wait, in those two routines;
   - `CopyProtection`'s retrace poll is closed by the D5 byte;
@@ -185,6 +228,14 @@ The compared run made 1,272,389 calls of ported entries:
 - **Lists and registration.** The 19 subsystems of Symbols.tsv each have a source file in `GameLogic` with a list of `NativeEntry`, and `InstallNativeRoutines` walks every list. A port therefore touches only its own subsystem's file.
 - **Returns.** An entry says how the original returns: `RET n`, `RETF n`, or `IRET` for an interrupt handler's entry, which is hooked like any other because the CPU takes a due interrupt before it stops at a hook.
 - **What native code can do.** It makes interrupts through `Pc::CallInterrupt`, as it makes calls through `Pc::CallNear`. It reaches the code segment, any segment, CGA memory, the stack and the ports through `Guest`.
+
+**10. What the ported routines still do differently.** None of these moves a digest of the corpus or of a test. Each is a limit of the machinery, kept rather than built around, and Phase 4 replaces the machinery.
+
+- **An interrupt that comes due inside native code is taken late.** The CPU takes a due interrupt at the start of a step, and native code makes none. So an interrupt that comes due inside a native routine, or that it unmasks, is taken at the next step: in original code the routine calls, at its next loop turn, or after it returns. The original takes it at the instruction where it came due. The only effect found is a BIOS tick count read one lower in `RestoreTimerInterrupt`'s int 1Ah, in registers `GetKey` restores.
+- **A run of bad file names nests native frames.** After a bad name, `PromptCommanderFileName` drops its return address and jumps into the disc menu's key loop. The native port calls the key loop instead, one C++ frame deeper on the native thread for each bad name typed in a row, until a key leaves the menu and unwinds them all. Hundreds in a row could overflow the native thread's stack on Windows, where the original's stack does not grow.
+- **An IBM stick whose X axis outlasts its Y.** The original's read returns before X's one-shot drops, and the next read then depends on the cycles of everything run in between, which native code does not count. `InputTests` steers with X at or below Y.
+- **`Guest::Call` returns to FFFFh.** Native code calls the original with that return address on the stack, where the original's caller had pushed its own. The words differ only in the dead stack, which no digest reads.
+- **`TickHyperspaceCountdown` is hooked as `Always`,** though it waits only on the frame the countdown reaches 0. As `Sometimes`, a compared run would hand that frame's whole jump to the original with no hook in force, and none of the work routines the jump calls would be compared.
 
 ## What this forecloses
 

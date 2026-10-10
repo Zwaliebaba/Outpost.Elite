@@ -19,14 +19,15 @@ native report for each compared corpus replay and constructed test, and an offse
 interpreted corpus replay and twin test. ReferenceRunner writes them for a run with --compare
 --native-report FILE and --coverage FILE. This tool walks the code statically, as MapReference.py does,
 and lists the instructions nothing ran. Each one needs a replay or a test that reaches it, or a written
-reason in Design/NativeCoverage.tsv.
+reason in Design/NativeCoverage.tsv; a reason for an instruction the runs now cover is stale, and fails too.
 
     python Tools/RoutineCoverage.py [REPORT.tsv | RUN.offsets | DIRECTORY ...]
 
 With no argument it reads everything GameLogicTests left. CI runs it so after the tests.
 
 Development tool only (AGENTS.md R14). Needs Capstone, as MapReference.py does. Exit status 1 when an
-instruction is neither covered nor explained.
+instruction is neither covered nor explained, or a reason is stale. Read a partial set of reports with that
+in mind: an instruction no hooked routine of theirs reaches reads as stale.
 """
 
 import argparse
@@ -108,6 +109,7 @@ def main() -> int:
 
   always = {entry for entry, wait in waits.items() if wait == "always"}
   failed = False
+  uncovered: set[int] = set()
   for entry, name in sorted(hooked.items(), key=lambda _item: _item[0]):
     # A routine that always waits answers for itself and what it alone runs; any other answers for all
     # it reaches, short of a routine that always waits.
@@ -117,13 +119,18 @@ def main() -> int:
       members, executed, kind = closure_short_of(routines, entry, always - {entry}), compared, ""
     reachable = {address for member in members for address in routines[member].instructions}
     missing = sorted(reachable - executed)
+    uncovered.update(missing)
     unexplained = [offset for offset in missing if offset not in reasons]
     status = ("covered" if not missing else ("explained" if not unexplained else "NOT COVERED")) + kind
     print(f"{entry:04X}\t{name}\t{len(reachable) - len(missing)} of {len(reachable)} instructions\t{status}")
     for offset in missing:
       print(f"\t{offset:04X}\t{reasons.get(offset, 'no comparison reached it')}")
     failed = failed or bool(unexplained)
-  return 1 if failed else 0
+  # A reason for an instruction the runs now cover is stale: it would explain away a regression.
+  stale = sorted(set(reasons) - uncovered)
+  for offset in stale:
+    print(f"stale\t{offset:04X}\tlisted in {REASONS.name}, but every routine that reaches it is covered there")
+  return 1 if failed or stale else 0
 
 
 if __name__ == "__main__":
