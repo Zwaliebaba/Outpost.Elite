@@ -311,6 +311,8 @@ void Pc::RunHook()
 void Pc::Dispatch(NativeCode::Hook& _hook)
 {
   ++_hook.calls;
+  // A loop turn seen before the native code ran says nothing about the next one after it.
+  const OnExit forget([this]() noexcept { m_lastTurn.valid = false; });
   try
   {
     // A routine that waits is never compared: it could not be undone, and its original might never
