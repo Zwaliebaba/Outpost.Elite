@@ -83,7 +83,7 @@ Each is a choice about how much of the real part to model. The game's own use of
 
 **6. What checks it.**
 
-- **128 tests in `MachineTests`:** DOS 16, CGA 12, PC 11 (five of them paced time, ADR-008), PIC 10, CPU 10, PIT 9, firmware 8, BIOS 7, loader 7, speaker 7, keyboard 6, game port 5, mouse 5, SHA-256 5, port router 4, memory 3, font 3.
+- **136 tests in `MachineTests`:** DOS 16, CGA 12, PC 11 (five of them paced time, ADR-008), PIC 10, CPU 10, PIT 9, firmware 8, native code 8 (ADR-010), BIOS 7, loader 7, speaker 7, keyboard 6, game port 5, mouse 5, SHA-256 5, port router 4, memory 3, font 3.
 - **`PcTests.ReferenceBootsToItsFirstKeyRead` pins the boot of `ELITES.EXE` (ADR-007):** 39,255 instructions and 761,619 cycles from the entry to the first `GetKey`, the CGA in mode 4, and the SHA-256 of memory at that point. A change to the CPU, a device or a service that alters the boot by one instruction, one cycle or one byte fails CI, and has to say why.
 - **The boot trace matches DOSBox-X's** register for register at all 28,652 comparable records (ADR-003 item 1).
 - **The screens match DOSBox-X's shots** taken by the same script. Measured with ImageMagick at 10% fuzz:

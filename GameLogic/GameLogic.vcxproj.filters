@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Maths">
+      <UniqueIdentifier>{E8CC5C2B-DBCC-5A5D-8CD2-63CB1EB28F1F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Native">
+      <UniqueIdentifier>{E3FECD3E-1260-5FAE-B1A4-2F3CDDD6A58F}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Build">
       <UniqueIdentifier>{F2283DDF-E07B-54AA-8414-41DE2CFE031D}</UniqueIdentifier>
     </Filter>
@@ -12,6 +18,21 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DataField.h">
+      <Filter>Native</Filter>
+    </ClInclude>
+    <ClInclude Include="DataOverlay.h">
+      <Filter>Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Guest.h">
+      <Filter>Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Maths.h">
+      <Filter>Maths</Filter>
+    </ClInclude>
+    <ClInclude Include="NativeRoutines.h">
+      <Filter>Native</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
@@ -26,6 +47,12 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Maths.cpp">
+      <Filter>Maths</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeRoutines.cpp">
+      <Filter>Native</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>

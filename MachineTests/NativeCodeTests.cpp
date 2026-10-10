@@ -1,0 +1,243 @@
+#include "pch.h"
+
+#include "NativeCode.h"
+#include "Pc.h"
+#include "PcRig.h"
+
+#include <string>
+#include <vector>
+
+using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+
+namespace MachineTests
+{
+
+namespace
+{
+
+constexpr std::uint16_t ROUTINE = 0x0010;
+constexpr std::uint16_t HELPER = 0x0030;
+constexpr std::uint16_t COUNTER = 0x0040;
+constexpr std::uint16_t COUNTER_START = 0x1234;
+constexpr std::uint16_t SPEAKER_PORT = 0x61;
+
+// A program that sets DS to its own segment, calls the routine at 0010h and ends: the routine is what
+// _routine holds, the helper at 0030h sets BX to 7777h, and the counter word at 0040h starts at 1234h.
+std::vector<std::uint8_t> ProgramAround(std::initializer_list<std::uint8_t> _routine)
+{
+  std::vector<std::uint8_t> code = {0x0E,             // push cs
+                                    0x1F,             // pop ds
+                                    0xE8, 0x0B, 0x00, // call 0010h
+                                    0xCD, 0x20};      // int 20h
+  code.resize(ROUTINE, 0x90);
+  code.insert(code.end(), _routine);
+  code.resize(HELPER, 0x90);
+  code.insert(code.end(), {0xBB, 0x77, 0x77, 0xC3}); // mov bx,7777h; ret
+  code.resize(COUNTER, 0x90);
+  code.insert(code.end(), {COUNTER_START & 0xFF, COUNTER_START >> 8});
+  std::vector<std::uint8_t> file = TinyExe({});
+  file.insert(file.end(), code.begin(), code.end());
+  const std::size_t fileBytes = file.size();
+  file[2] = static_cast<std::uint8_t>(fileBytes % 512);
+  file[4] = static_cast<std::uint8_t>((fileBytes + 511) / 512);
+  return file;
+}
+
+// The original routine most tests compare with: the counter goes up by one, AX holds it, DX is 5.
+const std::initializer_list<std::uint8_t> COUNT_UP = {0xA1, 0x40, 0x00, // mov ax,[0040h]
+                                                      0x40,             // inc ax
+                                                      0xA3, 0x40, 0x00, // mov [0040h],ax
+                                                      0xBA, 0x05, 0x00, // mov dx,5
+                                                      0xC3};            // ret
+
+// A native counterpart of COUNT_UP that adds _step and leaves _dx in DX.
+Machine::NativeRoutine CountUp(std::uint16_t _step, std::uint16_t _dx)
+{
+  return [_step, _dx](Machine::Pc& _pc)
+  {
+    Machine::Registers& regs = _pc.Processor().Regs();
+    const std::uint16_t value = static_cast<std::uint16_t>(_pc.Ram().Read16(regs.ds, COUNTER) + _step);
+    _pc.Ram().Write16(regs.ds, COUNTER, value);
+    regs.ax = value;
+    regs.dx = _dx;
+    _pc.ReturnNear();
+  };
+}
+
+class NativeRig
+{
+public:
+  NativeRig(std::string_view _name, std::initializer_list<std::uint8_t> _routine)
+    : m_rig(_name)
+  {
+    m_program = m_rig.Load(ProgramAround(_routine));
+    m_rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+  }
+
+  [[nodiscard]] Machine::Pc& Host() noexcept
+  {
+    return m_rig.Host();
+  }
+
+  void Hook(Machine::NativeRoutine _routine, const Machine::NativeContract& _contract = {})
+  {
+    m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _contract);
+  }
+
+  void Run()
+  {
+    Assert::IsTrue(m_rig.Host().RunUntil(1'000'000) == Machine::StopReason::Terminated, L"the program ends");
+  }
+
+  [[nodiscard]] std::uint16_t Counter()
+  {
+    return m_rig.Host().Ram().Read16(m_program.loadSegment, COUNTER);
+  }
+
+  [[nodiscard]] const Machine::NativeCode::Hook& Books()
+  {
+    const auto found = m_rig.Host().Native().Hooks().find(Machine::Memory::Linear(m_program.loadSegment, ROUTINE));
+    Assert::IsTrue(found != m_rig.Host().Native().Hooks().end(), L"the routine is hooked");
+    return found->second;
+  }
+
+private:
+  PcRig m_rig;
+  Machine::LoadedProgram m_program;
+};
+
+} // namespace
+
+TEST_CLASS(NativeCodeTests)
+{
+public:
+  // ADR-010: execution that reaches a hooked entry runs the native routine, and the original's code
+  // there never runs.
+  TEST_METHOD(NativeCodeRunsInsteadOfTheOriginal)
+  {
+    NativeRig rig("NativeRuns", COUNT_UP);
+    rig.Hook(CountUp(100, 5));
+    rig.Run();
+    Assert::AreEqual(std::uint32_t{COUNTER_START + 100}, std::uint32_t{rig.Counter()});
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
+  }
+
+  // Native code calls the original's code, and gets control back when it returns.
+  TEST_METHOD(NativeCodeCallsTheOriginal)
+  {
+    NativeRig rig("NativeCalls", COUNT_UP);
+    rig.Hook(
+      [](Machine::Pc& _pc)
+      {
+        _pc.CallNear(HELPER);
+        Machine::Registers& regs = _pc.Processor().Regs();
+        regs.ax = static_cast<std::uint16_t>(regs.bx + 1);
+        _pc.ReturnNear();
+      });
+    rig.Run();
+    Assert::AreEqual(0x7778u, std::uint32_t{rig.Host().Processor().Regs().ax});
+    Assert::AreEqual(std::uint32_t{COUNTER_START}, std::uint32_t{rig.Counter()}, L"the original routine did not run");
+  }
+
+  // Compared, a routine that agrees with the original runs once in effect: the original's run is
+  // undone before the native one.
+  TEST_METHOD(AgreeingRoutineIsVerified)
+  {
+    NativeRig rig("NativeAgrees", COUNT_UP);
+    rig.Hook(CountUp(1, 5));
+    rig.Host().Native().SetVerifying(true);
+    rig.Run();
+    Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()});
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().verified);
+    Assert::IsTrue(rig.Host().Native().Mismatches().empty());
+    Assert::IsTrue(rig.Books().executed.count(ROUTINE) == 1, L"the original's instructions are covered");
+  }
+
+  // A routine that disagrees is reported, and the run carries on from the original's outcome.
+  TEST_METHOD(DisagreeingRoutineIsReportedAndTheOriginalStands)
+  {
+    NativeRig rig("NativeDisagrees", COUNT_UP);
+    rig.Hook(CountUp(2, 5));
+    rig.Host().Native().SetVerifying(true);
+    rig.Run();
+    Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()}, L"the original's outcome");
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().mismatches);
+    Assert::AreEqual(std::size_t{1}, rig.Host().Native().Mismatches().size());
+    const std::string& difference = rig.Host().Native().Mismatches().front().difference;
+    Assert::IsTrue(difference.find("AX 1236, original 1235") != std::string::npos, L"names the register");
+    Assert::IsTrue(difference.find("byte") != std::string::npos, L"names the memory");
+  }
+
+  // A register the contract says the routine clobbers is not compared; any other is.
+  TEST_METHOD(OnlyClobberedRegistersMayDiffer)
+  {
+    NativeRig clobbered("NativeClobbers", COUNT_UP);
+    clobbered.Hook(CountUp(1, 6), Machine::NativeContract{Machine::REGISTER_DX, 0});
+    clobbered.Host().Native().SetVerifying(true);
+    clobbered.Run();
+    Assert::AreEqual(std::uint64_t{1}, clobbered.Books().verified);
+
+    NativeRig kept("NativeKeeps", COUNT_UP);
+    kept.Hook(CountUp(1, 6));
+    kept.Host().Native().SetVerifying(true);
+    kept.Run();
+    Assert::AreEqual(std::uint64_t{1}, kept.Books().mismatches);
+  }
+
+  // The native run sees the port reads the original made, and its writes are compared rather than
+  // made a second time.
+  TEST_METHOD(PortAccessesAreReplayed)
+  {
+    const std::initializer_list<std::uint8_t> gateOn = {0xE4, 0x61, // in al,61h
+                                                        0x0C, 0x01, // or al,1
+                                                        0xE6, 0x61, // out 61h,al
+                                                        0xC3};      // ret
+    const auto gate = [](std::uint8_t _bits)
+    {
+      return [_bits](Machine::Pc& _pc)
+      {
+        const auto value = static_cast<std::uint8_t>(_pc.Ports().In8(SPEAKER_PORT) | _bits);
+        _pc.Ports().Out8(SPEAKER_PORT, value);
+        Machine::Registers& regs = _pc.Processor().Regs();
+        regs.ax = static_cast<std::uint16_t>((regs.ax & 0xFF00) | value);
+        _pc.ReturnNear();
+      };
+    };
+    NativeRig agrees("NativePortsAgree", gateOn);
+    agrees.Hook(gate(0x01));
+    agrees.Host().Native().SetVerifying(true);
+    const std::uint64_t writes = agrees.Host().Ports().WriteCount();
+    agrees.Run();
+    Assert::AreEqual(std::uint64_t{1}, agrees.Books().verified);
+    Assert::AreEqual(1u, std::uint32_t{agrees.Host().Ports().In8(SPEAKER_PORT) & 1u}, L"the gate is on");
+    Assert::IsTrue(agrees.Host().Ports().WriteCount() - writes >= 2, L"both runs' writes count for paced time");
+
+    NativeRig differs("NativePortsDiffer", gateOn);
+    differs.Hook(gate(0x02));
+    differs.Host().Native().SetVerifying(true);
+    differs.Run();
+    Assert::AreEqual(std::uint64_t{1}, differs.Books().mismatches);
+    Assert::IsTrue(differs.Host().Native().Mismatches().front().difference.find("ports") != std::string::npos);
+  }
+
+  // A routine whose original calls the BIOS cannot be undone, so it is not compared, and its outcome
+  // stands.
+  TEST_METHOD(ServiceCallMakesACallUnverifiable)
+  {
+    NativeRig rig("NativeUnverifiable", {0xB4, 0x00, 0xCD, 0x1A, 0xC3}); // mov ah,0; int 1Ah; ret
+    rig.Hook([](Machine::Pc& _pc) { _pc.ReturnNear(); });
+    rig.Host().Native().SetVerifying(true);
+    rig.Run();
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().unverifiable);
+    Assert::AreEqual(std::uint64_t{0}, rig.Books().verified);
+  }
+
+  TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
+  {
+    NativeRig rig("NativeTwice", COUNT_UP);
+    rig.Hook(CountUp(1, 5));
+    Assert::ExpectException<std::logic_error>([&] { rig.Hook(CountUp(1, 5)); });
+  }
+};
+
+} // namespace MachineTests

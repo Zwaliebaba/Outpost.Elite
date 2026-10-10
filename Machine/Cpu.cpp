@@ -128,6 +128,11 @@ void Cpu::SetInstructionObserver(InstructionObserver* _observer) noexcept
   m_observer = _observer;
 }
 
+void Cpu::SetHookMap(const std::vector<std::uint8_t>* _map) noexcept
+{
+  m_hookMap = _map;
+}
+
 void Cpu::Reset() noexcept
 {
   m_regs = Registers{};
@@ -142,6 +147,7 @@ void Cpu::Reset() noexcept
 std::uint32_t Cpu::Step()
 {
   m_cycles = 0;
+  m_atHook = false;
   if (m_interrupts != nullptr && !m_interruptShadow && Flag(FLAG_INTERRUPT) && m_interrupts->InterruptPending())
   {
     // The acknowledge cycle: the controller puts the vector on the bus and marks it in service.
@@ -153,6 +159,11 @@ std::uint32_t Cpu::Step()
   if (m_halted)
   {
     return HALT_IDLE_CYCLES;
+  }
+  if (m_hookMap != nullptr && (*m_hookMap)[Memory::Linear(m_regs.cs, m_regs.ip)] != 0)
+  {
+    m_atHook = true; // the caller runs the native code that stands in for what is here
+    return m_cycles;
   }
   m_interruptShadow = false;
   const bool trapping = Flag(FLAG_TRAP);

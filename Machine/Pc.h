@@ -7,6 +7,7 @@
 #include "GamePort.h"
 #include "Keyboard.h"
 #include "Memory.h"
+#include "NativeCode.h"
 #include "PcServices.h"
 #include "Pic.h"
 #include "Pit.h"
@@ -15,7 +16,9 @@
 #include "Timing.h"
 
 #include <cstdint>
+#include <memory>
 #include <span>
+#include <string>
 
 namespace Machine
 {
@@ -185,6 +188,41 @@ public:
     return m_ports;
   }
 
+  /// The I/O bus, for native code's port reads and writes.
+  [[nodiscard]] PortRouter& Ports() noexcept
+  {
+    return m_ports;
+  }
+
+  // ── Native code (ADR-010) ──
+
+  /// From now on, execution that reaches _segment:_offset runs _routine in place of the program's code
+  /// there: at the start of any step, after the CPU has taken an interrupt that was due. Native code
+  /// takes no time, which is what paced time expects of work (ADR-008). Throws std::logic_error if a
+  /// routine is there already.
+  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract);
+
+  /// The native routines, whether they are being compared with the original, and what that found.
+  [[nodiscard]] NativeCode& Native() noexcept
+  {
+    return m_native;
+  }
+
+  [[nodiscard]] const NativeCode& Native() const noexcept
+  {
+    return m_native;
+  }
+
+  /// For native code: calls the program's code at CS:_offset as a near CALL from CS:IP would, and runs it
+  /// until it returns. Hooked entries it reaches run natively. If the program stops on the way (a
+  /// fault, the end of the program), the native code is abandoned by an exception that the step which
+  /// started it catches, and RunUntil reports the stop. A call that waits past the end of a run goes
+  /// on to its return, and counts as an overrun (NativeCode::Overruns).
+  void CallNear(std::uint16_t _offset);
+
+  /// For native code: returns from a near call as RET _popBytes does.
+  void ReturnNear(std::uint16_t _popBytes = 0) noexcept;
+
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does
   /// between two waits, far fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
@@ -200,7 +238,20 @@ private:
     bool valid = false;
   };
 
+  // A comparison's working state, made at the first Hook (ADR-010).
+  struct Comparison
+  {
+    WriteJournal originalWrites{NativeCode::JOURNAL_CAPACITY};
+    WriteJournal nativeWrites{NativeCode::JOURNAL_CAPACITY};
+    std::vector<std::uint8_t> originalAfter;
+    std::vector<PortRouter::Access> originalPorts;
+    bool active = false;
+  };
+
   void MapPorts(std::uint16_t _first, std::uint16_t _last, PortBus& _device);
+  void RunHook();
+  void Compare(NativeCode::Hook& _hook);
+  void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, NativeCode::Hook* _covering);
   void StepPaced();
   void NoteBackwardJump();
   [[nodiscard]] StopReason Stopped() const noexcept;
@@ -224,6 +275,8 @@ private:
   PortRouter m_ports;
   PcServices m_services;
   Cpu m_cpu;
+  NativeCode m_native;
+  std::unique_ptr<Comparison> m_comparison;
 };
 
 } // namespace Machine

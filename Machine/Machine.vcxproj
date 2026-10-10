@@ -96,6 +96,7 @@
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Keyboard.h" />
     <ClInclude Include="Memory.h" />
+    <ClInclude Include="NativeCode.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Pic.h" />
     <ClInclude Include="PortBus.h" />
@@ -115,6 +116,7 @@
     <ClCompile Include="GamePort.cpp" />
     <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Memory.cpp" />
+    <ClCompile Include="NativeCode.cpp" />
     <ClCompile Include="Mouse.cpp" />
     <ClCompile Include="Pc.cpp" />
     <ClCompile Include="pch.cpp">

@@ -42,6 +42,9 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="PcRig.h">
+      <Filter>Pc</Filter>
+    </ClInclude>
     <ClInclude Include="ServiceRig.h">
       <Filter>Services</Filter>
     </ClInclude>
@@ -82,6 +85,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeCodeTests.cpp">
+      <Filter>Pc</Filter>
     </ClCompile>
     <ClCompile Include="PcTests.cpp">
       <Filter>Pc</Filter>
