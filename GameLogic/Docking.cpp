@@ -83,9 +83,6 @@ constexpr std::uint16_t HALF_TURN = 0x400; // in 2048ths
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
 constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shifted right once
 
-// The byte of a stardust particle that holds its lifetime, the last that ResetStardust stores.
-constexpr std::uint16_t PARTICLE_LIFETIME = 4;
-
 // A point about the view's centre, as DrawLine takes it: x and row from the top-left.
 [[nodiscard]] std::uint16_t FromCenter(std::uint16_t _point) noexcept
 {
@@ -212,8 +209,8 @@ void SlowDown(GameState& _state)
 }
 
 // States 1 and 5 (CS:8652, CS:8803): dockingTargetAngle, the roll that brings the target (the approach point, or the
-// station) into the pitch plane, whichever of up or down is nearer; then on to state _next. Returns that angle.
-std::uint16_t AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
+// station) into the pitch plane, whichever of up or down is nearer; then on to state _next.
+void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 {
   (void)LoadPlayerAngles(_state);
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
@@ -231,7 +228,6 @@ std::uint16_t AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
   roll = static_cast<std::uint16_t>(Offset(roll, _state.Get(DS.playerRollAngle)) & ANGLE_MASK);
   _state.Set(DS.dockingTargetAngle, roll);
   _state.Set(DS.dockingComputerState, _next);
-  return roll;
 }
 
 // An 11-bit angle sign-extended to 16 bits, as AngleWithinTolerance leaves its second.
@@ -242,29 +238,25 @@ std::uint16_t AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 }
 
 // States 2 and 6: roll at 9 a frame towards dockingTargetAngle, and onto it, sign-extended, once within 19; then on to
-// state _next. Returns what AngleWithinTolerance found.
-AngleTolerance RollToTarget(GameState& _state, std::uint8_t _next)
+// state _next.
+void RollToTarget(GameState& _state, std::uint8_t _next)
 {
   const std::uint16_t target = _state.Get(DS.dockingTargetAngle);
-  const AngleTolerance found = AngleWithinTolerance(_state.Get(DS.playerRollAngle), target, ROLL_TOLERANCE);
-  if (found.within)
+  if (AngleWithinTolerance(_state.Get(DS.playerRollAngle), target, ROLL_TOLERANCE))
   {
     _state.Set(DS.playerRollAngle, SignExtendAngle(target));
     _state.Set(DS.dockingComputerState, _next);
     _state.Set(DS.dockingComputerSteering, 0);
     _state.Set(DS.rollRate, 0);
-    return found;
+    return;
   }
   const auto turn = static_cast<std::uint16_t>(_state.Get(DS.dockingTargetAngle) - _state.Get(DS.playerRollAngle));
   Steer(_state, Join(0, (turn & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP));
-  return found;
 }
 
 // States 3 and 7 (CS:86E3, CS:8890): pitch towards the target by _step a frame, or by half the angle once within
-// _tolerance; the second time that happens, on to state _next at speed 4, else back to state _again. Returns the
-// steering it sets.
-std::uint16_t PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, std::uint8_t _step, std::uint8_t _again,
-                            std::uint8_t _next)
+// _tolerance; the second time that happens, on to state _next at speed 4, else back to state _again.
+void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, std::uint8_t _step, std::uint8_t _again, std::uint8_t _next)
 {
   if (!_approach)
   {
@@ -272,26 +264,23 @@ std::uint16_t PitchToTarget(GameState& _state, bool _approach, std::uint16_t _to
   }
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
   const std::uint16_t angle = ArcTangent2(_state, Quarter(target.y), Quarter(target.z));
-  if (!AngleWithinTolerance(angle, 0, _tolerance).within)
+  if (!AngleWithinTolerance(angle, 0, _tolerance))
   {
     // MOV AL,step / TEST AX,400h / NEG AL / MOV AH,AL / XOR AL,AL: the step, against the angle's sign, in the high byte.
-    const std::uint16_t steering = Join((angle & ANGLE_SIGN) != 0 ? Negate(_step) : _step, 0);
-    Steer(_state, steering);
-    return steering;
+    Steer(_state, Join((angle & ANGLE_SIGN) != 0 ? Negate(_step) : _step, 0));
+    return;
   }
   // SAR AX,1 / MOV AH,AL / XOR AL,AL: half the angle, its low byte in the high byte.
-  const std::uint16_t steering = Join(Low(Sar(angle, 1)), 0);
-  Steer(_state, steering);
+  Steer(_state, Join(Low(Sar(angle, 1)), 0));
   if (_state.Get(DS.dockingAlignPasses) != 1)
   {
     _state.Set(DS.dockingAlignPasses, static_cast<std::uint8_t>(_state.Get(DS.dockingAlignPasses) + 1));
     _state.Set(DS.dockingComputerState, _again);
-    return steering;
+    return;
   }
   _state.Set(DS.dockingComputerState, _next);
   _state.Set(DS.playerSpeed, LEAST_SPEED);
   _state.Set(DS.velocityDirty, 1);
-  return steering;
 }
 
 // CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap, which saves
@@ -358,15 +347,9 @@ void FlyToApproachPoint(GameState& _state)
   MoveObjectsByVelocity(_state);
 }
 
-// What CloseIn did.
-struct ClosingIn
-{
-  bool stopped;             // within 650: the spin is matched next
-  std::uint16_t lastRandom; // once it stopped, the last random number ResetStardust drew
-};
-
-// State 8 (CS:8904): straight in along z, slowing within 1000, until within 650: then the front view, locked.
-ClosingIn CloseIn(GameState& _state)
+// State 8 (CS:8904): straight in along z, slowing within 1000, until within 650: then the front view, locked. Returns whether
+// it stopped there, and the spin is matched next.
+bool CloseIn(GameState& _state)
 {
   const std::uint16_t distance = Negate(ObjectSlot(_state, DS.stationSlot.offset).Get(SlotWord::Z));
   if (distance < STOP_CLOSING_DISTANCE)
@@ -376,9 +359,9 @@ ClosingIn CloseIn(GameState& _state)
     {
       _state.Set(DS.viewAngle, 0);
     }
-    const std::uint16_t lastRandom = ResetStardust(_state);
+    (void)ResetStardust(_state);
     _state.Set(DS.viewLocked, 1);
-    return ClosingIn{true, lastRandom};
+    return true;
   }
   if (distance < CLOSE_SLOWLY_DISTANCE)
   {
@@ -393,7 +376,7 @@ ClosingIn CloseIn(GameState& _state)
   _state.Set(DS.playerVelocityZ, Negate(_state.Get(DS.playerSpeed)));
   MoveObjectsByVelocity(_state);
   _state.Set(DS.velocityDirty, 1);
-  return ClosingIn{false, 0};
+  return false;
 }
 
 // The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
@@ -405,35 +388,31 @@ ClosingIn CloseIn(GameState& _state)
 }
 
 // State 9 (CS:8976): inside, matching the station's spin: MoveObjectsByVelocity, then to state 10 once the roll is within 11
-// of the spin (AngleWithinTolerance), or to 11 once it is within 11 of it turned half round. Returns the spin, which the
-// original leaves in AX.
-std::uint16_t MatchSpin(GameState& _state)
+// of the spin (AngleWithinTolerance), or to 11 once it is within 11 of it turned half round.
+void MatchSpin(GameState& _state)
 {
   MoveObjectsByVelocity(_state);
   const std::uint16_t spin = LoadStationSpin(_state, 0);
   const std::uint16_t roll = _state.Get(DS.playerRollAngle);
-  if (AngleWithinTolerance(spin, roll, SPIN_TOLERANCE).within)
+  if (AngleWithinTolerance(spin, roll, SPIN_TOLERANCE))
   {
     _state.Set(DS.dockingComputerState, ROLL_WITH_SPIN);
   }
-  else if (AngleWithinTolerance(spin, Offset(roll, HALF_TURN), SPIN_TOLERANCE).within)
+  else if (AngleWithinTolerance(spin, Offset(roll, HALF_TURN), SPIN_TOLERANCE))
   {
     // ADD CX,400h on the roll the first test left sign-extended in CX, which the second masks off again.
     _state.Set(DS.dockingComputerState, ROLL_WITH_SPIN_TURNED);
   }
-  return spin;
 }
 
 // States 10 and 11 (CS:89AF, CS:89E0): MoveObjectsByVelocity, then the roll steered by half its difference from the station's
-// spin plus _turn, negated as a byte: NEG AL / XOR AH,AH. Returns the steering, which the original leaves in AX.
-std::uint16_t RollWithSpin(GameState& _state, std::uint16_t _turn)
+// spin plus _turn, negated as a byte: NEG AL / XOR AH,AH.
+void RollWithSpin(GameState& _state, std::uint16_t _turn)
 {
   MoveObjectsByVelocity(_state);
   const auto spin = static_cast<std::uint16_t>(LoadStationSpin(_state, _turn) & ANGLE_MASK);
   const auto roll = static_cast<std::uint16_t>(_state.Get(DS.playerRollAngle) & ANGLE_MASK);
-  const std::uint16_t steering = Negate(Low(Sar(static_cast<std::uint16_t>(spin - roll), 1)));
-  Steer(_state, steering);
-  return steering;
+  Steer(_state, Negate(Low(Sar(static_cast<std::uint16_t>(spin - roll), 1))));
 }
 
 } // namespace
@@ -457,15 +436,15 @@ bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, 
   // Pitch near 0 wants yaw near a half turn, and pitch near a half turn wants yaw near 0.
   const std::uint16_t pitch = _state.Get(DS.playerPitchAngle);
   std::uint16_t yaw = HALF_TURN;
-  if (!AngleWithinTolerance(pitch, 0, _tolerance).within)
+  if (!AngleWithinTolerance(pitch, 0, _tolerance))
   {
-    if (!AngleWithinTolerance(pitch, HALF_TURN, _tolerance).within)
+    if (!AngleWithinTolerance(pitch, HALF_TURN, _tolerance))
     {
       return false;
     }
     yaw = 0;
   }
-  if (!AngleWithinTolerance(_state.Get(DS.playerYawAngle), yaw, _tolerance).within)
+  if (!AngleWithinTolerance(_state.Get(DS.playerYawAngle), yaw, _tolerance))
   {
     return false;
   }
@@ -478,11 +457,11 @@ bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, 
     spin = Negate(spin);
   }
   spin &= ANGLE_MASK;
-  if (AngleWithinTolerance(roll, spin, _tolerance).within)
+  if (AngleWithinTolerance(roll, spin, _tolerance))
   {
     return true;
   }
-  return AngleWithinTolerance(roll, static_cast<std::uint16_t>((spin + HALF_TURN) & ANGLE_MASK), _tolerance).within;
+  return AngleWithinTolerance(roll, static_cast<std::uint16_t>((spin + HALF_TURN) & ANGLE_MASK), _tolerance);
 }
 
 void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwards)
@@ -632,11 +611,10 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   return PostDockingMessage(_state, DS.dockingComputerOnMessage);
 }
 
-DockingStep RunDockingComputer(GameState& _state)
+bool RunDockingComputer(GameState& _state)
 {
   Steer(_state, 0);
   const std::uint8_t state = _state.Get(DS.dockingComputerState);
-  DockingStep step{state, 0, false};
   switch (state)
   {
   case SLOW_TO_STOP:
@@ -645,58 +623,43 @@ DockingStep RunDockingComputer(GameState& _state)
     {
       _state.Set(DS.playerSpeed, static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) - SPEED_STEP));
       _state.Set(DS.velocityDirty, 1);
-      return step;
+      return false;
     }
     _state.Set(DS.dockingComputerState, AIM_ROLL_AT_APPROACH);
     _state.Set(DS.dockingAlignPasses, 0);
-    return step;
+    return false;
   case AIM_ROLL_AT_APPROACH:
-    step.result = AimRoll(_state, true, ROLL_TO_APPROACH);
-    return step;
+    AimRoll(_state, true, ROLL_TO_APPROACH);
+    return false;
   case ROLL_TO_APPROACH:
   case ROLL_TO_STATION:
-  {
-    // The roll angle AngleWithinTolerance compared, or the steering it sets.
-    const std::uint16_t roll = _state.Get(DS.playerRollAngle);
-    const bool within = RollToTarget(_state, state == ROLL_TO_APPROACH ? PITCH_TO_APPROACH : PITCH_TO_STATION).within;
-    step.result = within ? roll : _state.Get(DS.dockingComputerSteering);
-    return step;
-  }
+    RollToTarget(_state, state == ROLL_TO_APPROACH ? PITCH_TO_APPROACH : PITCH_TO_STATION);
+    return false;
   case PITCH_TO_APPROACH:
-    step.result = PitchToTarget(_state, true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH);
-    return step;
+    PitchToTarget(_state, true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH);
+    return false;
   case FLY_TO_APPROACH:
     FlyToApproachPoint(_state);
-    step.result = _state.Get(DS.playerVelocityZ);
-    return step;
+    return false;
   case AIM_ROLL_AT_STATION:
-    step.result = AimRoll(_state, false, ROLL_TO_STATION);
-    return step;
+    AimRoll(_state, false, ROLL_TO_STATION);
+    return false;
   case PITCH_TO_STATION:
-    step.result = PitchToTarget(_state, false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN);
-    return step;
+    PitchToTarget(_state, false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN);
+    return false;
   case CLOSE_IN:
-  {
-    // Once it stops, the last random number ResetStardust drew with the last lifetime it stored over its low byte; otherwise
-    // playerVelocityZ, as MoveObjectsByVelocity leaves it.
-    const ClosingIn closing = CloseIn(_state);
-    step.stopped = closing.stopped;
-    step.result = closing.stopped
-                    ? WithLow(closing.lastRandom, _state.Byte(Offset(DS.stardust.At(DS.stardust.ENTRY_COUNT - 1), PARTICLE_LIFETIME)))
-                    : _state.Get(DS.playerVelocityZ);
-    return step;
-  }
+    return CloseIn(_state);
   case MATCH_SPIN:
-    step.result = MatchSpin(_state);
-    return step;
+    MatchSpin(_state);
+    return false;
   case ROLL_WITH_SPIN:
-    step.result = RollWithSpin(_state, 0);
-    return step;
+    RollWithSpin(_state, 0);
+    return false;
   case ROLL_WITH_SPIN_TURNED:
-    step.result = RollWithSpin(_state, HALF_TURN);
-    return step;
+    RollWithSpin(_state, HALF_TURN);
+    return false;
   default:
-    return step;
+    return false;
   }
 }
 

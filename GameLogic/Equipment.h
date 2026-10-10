@@ -29,13 +29,6 @@ struct Scoop
   std::optional<DashboardPixel> removedBlip; ///< once it is scooped, what RemoveObject erased of its blip
 };
 
-/// What PayForEquipmentItem charged.
-struct EquipmentPayment
-{
-  bool paid;            ///< the credits were enough, and are now less the price
-  std::uint16_t tenths; ///< the price, in tenths of a credit
-};
-
 /// TryScoopObject (CS:4401): freeCargoTonnes, and the object in _slot scooped into the hold if its view position _view is in
 /// the scoop's box: a barrel's random product or its masking device, a splinter's alloys or precious metals, an escape pod's
 /// slaves, a Thargon's alien items, each removed (RemoveObject) with its message, or the message that the hold is full or the
@@ -43,8 +36,9 @@ struct EquipmentPayment
 Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view);
 
 /// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness,
-/// by a divide whose trap saves _bx, its caller's BX, with the row in BL.
-[[nodiscard]] EquipmentPayment PayForEquipmentItem(GameState& _state, std::uint16_t _bx);
+/// by a divide whose trap saves _bx, its caller's BX, with the row in BL. Returns whether the credits were enough, and are now
+/// less the price.
+[[nodiscard]] bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx);
 
 /// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.

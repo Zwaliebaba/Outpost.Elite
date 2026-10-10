@@ -598,12 +598,12 @@ void ToggleInputCursor(GameState& _state)
   _state.SetByte(cursor, static_cast<std::uint8_t>(_state.Byte(cursor) ^ toggle));
 }
 
-RedrawnInputLine RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment,
-                                 std::uint16_t _cell)
+PrintedText RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment, std::uint16_t _cell)
 {
   _state.SetByte(Offset(_length, _buffer), 0);
   const PrintedText line = PrintStringForLayout(_state, _buffer, MESSAGE_INK, _segment, _cell);
-  return RedrawnInputLine{line, PrintStringForLayout(_state, DS.inputCursorText.offset, MESSAGE_INK, _segment, line.nextCell)};
+  (void)PrintStringForLayout(_state, DS.inputCursorText.offset, MESSAGE_INK, _segment, line.nextCell);
+  return line;
 }
 
 PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)

@@ -40,13 +40,6 @@ struct PrintedLines
   std::uint16_t nextLine; ///< the text page's cell a row below the last line's first
 };
 
-/// Where RedrawInputLine's two prints stop: the line typed, and the cursor after it.
-struct RedrawnInputLine
-{
-  PrintedText line;
-  PrintedText cursor;
-};
-
 /// Where DrawSmallViewChar draws a letter: the byte of the space-view buffer, and the shift, 0 or 4, of the
 /// letter's left edge in it.
 struct SmallViewPlace
@@ -147,9 +140,8 @@ PrintedLines PrintTextLines(GameState& _state, std::uint16_t _text, std::uint16_
 void ToggleInputCursor(GameState& _state);
 
 /// RedrawInputLine (CS:773A): a NUL after the _length characters typed at DS:_buffer, then they and inputCursorText after them,
-/// each by PrintStringForLayout from _segment:_cell in the ink FFFFh.
-RedrawnInputLine RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment,
-                                 std::uint16_t _cell);
+/// each by PrintStringForLayout from _segment:_cell in the ink FFFFh. Returns where the line typed stopped.
+PrintedText RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment, std::uint16_t _cell);
 
 /// PrintStringForLayout (CS:7750): the text at DS:_text by PrintTextModeString at B800:_cell in the text layout, and by
 /// DrawScreenString in _ink at _segment:_cell otherwise.

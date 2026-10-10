@@ -50,32 +50,11 @@ struct Angles
   std::uint16_t second;
 };
 
-/// What AngleWithinTolerance finds.
-struct AngleTolerance
-{
-  bool within;          ///< the angles differ by less than the tolerance
-  std::uint16_t excess; ///< how much more than the tolerance they differ by, as a word
-};
-
-/// ScaleByInverseDistance's result and the divisor it took.
-struct InverseDistanceScale
-{
-  std::uint16_t scaled;  ///< at most 255
-  std::uint16_t divisor; ///< 256 times one more than the root of the high word of the view position's squared length
-};
-
 /// GetPositionScaleShift's result.
 struct PositionScale
 {
   std::uint8_t shift;      ///< what brings the largest coordinate below 10000h and then below 24B8h
   std::uint16_t magnitude; ///< that coordinate's magnitude, so shifted
-};
-
-/// What DivideOverflowInterrupt leaves for the divide that trapped.
-struct DivideTrap
-{
-  std::uint16_t resume; ///< the offset its IRET returns to
-  std::uint16_t ax;     ///< AL = 7Fh over the AX the divide left, or AX = 7FFFh
 };
 
 /// What a byte divide leaves: AL and AH.
@@ -95,9 +74,9 @@ struct WordQuotient
 /// DivideOverflowInterrupt (CS:025E), the int 0 handler, for the divide whose return address is _segment:_offset, with AX
 /// = _ax and BX = _bx there: BX and the data segment saved at CS:02A1/02A3, then AL = 7Fh or AX = 7FFFh, the remainder
 /// untouched, as bit 0 of the opcode two bytes before the return address says. An 80286 pushes the divide's own address,
-/// so it steps the return address over a DIV or IDIV it finds there, assuming a register operand.
-[[nodiscard]] DivideTrap DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax,
-                                                 std::uint16_t _bx);
+/// so it steps the return address over a DIV or IDIV it finds there, assuming a register operand. Returns AX as it leaves it.
+[[nodiscard]] std::uint16_t DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax,
+                                                    std::uint16_t _bx);
 
 /// DIV r/m16: _dividend / _divisor, or, when the quotient does not fit, what DivideOverflowInterrupt does for the divide
 /// whose next instruction is at CS:_returnOffset, with BX = _bx. That instruction must not itself be a divide.
@@ -143,7 +122,7 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 [[nodiscard]] std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::uint16_t _denominator);
 
 /// AngleWithinTolerance (CS:2CDB): whether 11-bit angles _a and _b differ by less than _tolerance.
-[[nodiscard]] AngleTolerance AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance);
+[[nodiscard]] bool AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance);
 
 /// VectorLength (CS:2E96): the length of _vector from the top 16 significant bits of its squared length,
 /// by subtracting odd numbers.
@@ -168,7 +147,7 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 
 /// ScaleByInverseDistance (CS:40A4): _value shifted right by _slot's disc scale, over 256 times one more
 /// than the square root of the high word of the view position's squared length, at most 255.
-[[nodiscard]] InverseDistanceScale ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value);
+[[nodiscard]] std::uint16_t ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value);
 
 /// ShiftRight24 (CS:4326): the 24-bit _value shifted arithmetically right _count times, in 24 bits.
 [[nodiscard]] std::uint32_t ShiftRight24(std::uint32_t _value, std::uint8_t _count);

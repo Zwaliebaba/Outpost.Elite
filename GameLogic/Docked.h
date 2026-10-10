@@ -94,8 +94,8 @@ std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint1
 /// How the docked screens end (DockedKeyDispatch, CS:0B40), and with them RunTitleAndDocked.
 struct DockedExit
 {
-  bool leaves;             ///< the disc menu left through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit)
-  ScreenKey key;           ///< otherwise F1, with AL as the screen and the waits for a key leave it
+  /// The disc menu left through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
+  bool leaves;
   std::uint16_t countLeft; ///< BP, as the screens leave it
   bool backward;           ///< the direction flag, as they leave it
 };

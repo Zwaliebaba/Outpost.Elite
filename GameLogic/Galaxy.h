@@ -75,25 +75,11 @@ struct LabelNudge
   ChartSpan rows; ///< the rows, as it leaves them either way
 };
 
-/// The last name InsertRandomName made: what GenerateSystemName counted and tested making it.
-struct RandomName
-{
-  std::uint8_t length;     ///< the name's length
-  std::uint8_t fourthPair; ///< bit 6 of the seed it began from: 40h when the name has a fourth pair of letters
-};
-
-/// What a description's expansion has written.
-struct DescriptionOutput
-{
-  std::uint16_t next;                       ///< past the last character written
-  std::optional<RandomName> lastRandomName; ///< the last name control code 3 made on the way, if one did
-};
-
 /// Where ExpandDescriptionText stops.
 struct ExpandedText
 {
-  std::uint16_t end; ///< past the coded text's NUL
-  DescriptionOutput output;
+  std::uint16_t end;  ///< past the coded text's NUL
+  std::uint16_t next; ///< past the last character it wrote
 };
 
 /// GetShortRangeOffset (CS:1076): whether the system in systemSeeds is on the current chart, and on the
@@ -213,16 +199,17 @@ void ShowSystemDescription(GameState& _state, bool _backward);
 ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::uint16_t _output);
 
 /// InsertSystemName (CS:707A): control code 1, the selected system's name, as CopySelectedNameLower leaves it,
-/// expanded into DS:_output.
-DescriptionOutput InsertSystemName(GameState& _state, std::uint16_t _output);
+/// expanded into DS:_output. Returns the place past the last character written.
+std::uint16_t InsertSystemName(GameState& _state, std::uint16_t _output);
 
 /// InsertSystemAdjective (CS:708D): control code 2, the selected system's name less a final vowel, and "ian ",
-/// expanded into DS:_output.
-DescriptionOutput InsertSystemAdjective(GameState& _state, std::uint16_t _output);
+/// expanded into DS:_output. Returns the place past the last character written.
+std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output);
 
 /// InsertRandomName (CS:70C1): control code 3, a name GenerateSystemName makes from descriptionSeed0-1, expanded into
-/// DS:_output; selectedSystemName's eight bytes are kept at DS:9650 meanwhile and put back, its length not.
-DescriptionOutput InsertRandomName(GameState& _state, std::uint16_t _output);
+/// DS:_output; selectedSystemName's eight bytes are kept at DS:9650 meanwhile and put back, its length not. Returns the place past
+/// the last character written.
+std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output);
 
 /// BackspaceDescription (CS:7107): control code 4, the description's output at _output back one.
 [[nodiscard]] std::uint16_t BackspaceDescription(std::uint16_t _output);

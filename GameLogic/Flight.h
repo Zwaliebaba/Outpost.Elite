@@ -50,8 +50,7 @@ struct DustScreenPosition
 /// What InSafeZone reads of safeZoneFlags.
 struct SafeZone
 {
-  bool inside;       ///< bit 0: inside the station's safe zone
-  std::uint8_t rest; ///< the other bits, shifted down: what UpdateSafeZone's RCL kept of AL
+  bool inside; ///< bit 0: inside the station's safe zone
 };
 
 /// The last pixel a dashboard routine XORed through XorDashboardPixel: where it is from the dashboard's origin, and
@@ -61,15 +60,6 @@ struct DashboardPixel
   std::uint8_t x;
   std::uint8_t y;
   std::uint8_t mask;
-};
-
-/// What the warning checks find: the check they stopped at, the count LOOP leaves, and the text of the warning that check
-/// posted, if it posted one.
-struct WarningChecks
-{
-  std::uint8_t check;
-  std::uint16_t checksLeft;
-  std::optional<std::uint16_t> text;
 };
 
 /// GetPreviousDustScreenPosition (CS:08A1): where the particle at DS:_particle was in the drawing buffer last frame,
@@ -240,9 +230,8 @@ std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _s
 /// What UpdateCompass leaves.
 struct CompassUpdate
 {
-  DashboardPixel last;  ///< the last pixel of the dot it drew, one right of and one above its centre
-  std::uint16_t range;  ///< |z| + 1000 of the target in the camera's frame, the dot's divisor, which CX keeps
-  std::uint8_t inFront; ///< the station slot's BlipZ: 20h while the target is in front, else 0, which BP keeps sign-extended
+  DashboardPixel last; ///< the last pixel of the dot it drew, one right of and one above its centre
+  std::uint16_t range; ///< |z| + 1000 of the target in the camera's frame, the dot's divisor, which CX keeps
 };
 
 /// UpdateCompass (CS:418F): while titleShown, the compass dot moved to the station when the planet is near
@@ -308,9 +297,8 @@ void MoveObjectsByVelocity(GameState& _state);
 /// next, which the original passes on by accident.
 struct FlightScreens
 {
-  std::uint8_t view;               ///< AH: the F1-F4 that ended it, or 0: no key, or the navigation computer's error
-  std::uint8_t al;                 ///< AL: as it came in, 9Eh after the navigation computer's error, or as the screens and waits left it
-  std::optional<std::uint8_t> key; ///< the first F key keyDown held, where the scan stopped, when it found one
+  std::uint8_t view; ///< AH: the F1-F4 that ended it, or 0: no key, or the navigation computer's error
+  std::uint8_t al;   ///< AL: as it came in, 9Eh after the navigation computer's error, or as the screens and waits left it
   std::optional<ScreenChange> restored; ///< what RestoreFlightScreen did, once a screen was shown
   /// BP: as it came in, the compass dot's in-front byte sign-extended once EraseCompassAndBlips erased the dot, or as the screens
   /// that select the system at the cursor leave it.

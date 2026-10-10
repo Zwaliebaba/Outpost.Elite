@@ -22,11 +22,8 @@ namespace Elite
 /// What UpdateStationAi did, and what it leaves in DX.
 struct StationTurn
 {
-  std::optional<NearTest> near;             ///< what IsObjectNear found of the station, when it looked for an offender
-  bool launched;                            ///< it launched a copy of itself
-  std::optional<std::uint16_t> traderPitch; ///< when that copy was made a trader, the pitch FacePlayerWithRandomRoll gave it
-  bool missilesRemoved;                     ///< its ECM ran, and RemoveAllMissiles with it
-  bool blipErased;                          ///< that erased a scanner blip
+  std::optional<NearTest> near; ///< what IsObjectNear found of the station, when it looked for an offender
+  bool launched;                ///< it launched a copy of itself
   /// DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's box: the DX it was
   /// called with, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it
   /// erased.
@@ -81,13 +78,6 @@ struct HoldFire
   std::optional<SafeZone> zone; ///< what InSafeZone read, when it was asked: neither in an invasion nor for a police Viper
 };
 
-/// What UpdateDriftingObjectAi did with a slot.
-struct DriftingObject
-{
-  MovedObject moved;          ///< what MoveObject did
-  std::optional<Pair> tumble; ///< for a rock, what it added to the pitch, then to the roll
-};
-
 /// ScaleSpawnOdds (CS:4C0E): _odds multiplied by 32 (shifted left 5) while jumpDriveEngaged is 1.
 [[nodiscard]] std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds);
 
@@ -115,8 +105,9 @@ Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted);
 [[nodiscard]] VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize);
 
 /// UpdateDriftingObjectAi (CS:5681): class 3: _slot moved (MoveObject), and a rock (IsDebrisType) tumbled: 37h added to its
-/// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear.
-DriftingObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot);
+/// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear. Returns what MoveObject
+/// did.
+MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot);
 
 /// UpdateTraderOrPoliceAi (CS:569C): class 4: traders and the police at _slot: deciding, attacking, fleeing with jinks, breaking
 /// off; rocks only spin. _rangeLow is DL, the low byte of the box a ship breaking off measures its range by; _backward the

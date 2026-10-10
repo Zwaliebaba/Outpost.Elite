@@ -41,10 +41,8 @@ struct VertexProgramEnd
 struct ShipRange
 {
   bool within;
-  std::uint8_t axes;                       ///< the magnitudes it took, 1-3
   std::array<std::uint16_t, 3> magnitudes; ///< |x|, |y|, |z|
-  std::uint8_t squares;                    ///< the squares it summed, 0, 2 or 3: none until every axis is within maxAxisDistance
-  std::uint16_t squaredHigh;               ///< the sum of their high words
+  std::uint16_t squaredHigh;               ///< the sum of the high words of their squares
 };
 
 /// What CheckShipInRange finds of a ship.
@@ -83,14 +81,6 @@ struct ViewWithBlip
 {
   Vector view;
   std::optional<DashboardPixel> blip;
-};
-
-/// What TransformShip finds of a ship.
-struct TransformedShip
-{
-  Vector view;      ///< its position in the view
-  ViewTest test;    ///< how far ClassifyViewPosition got with it
-  bool blipTouched; ///< UpdateScannerBlip drew its blip, or the scoop's RemoveObject erased it: both leave ES on the video segment
 };
 
 /// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
@@ -145,7 +135,8 @@ ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
 
 /// TransformShip (CS:3C7E): _slot's position, the low words, turned to the view (TransformToViewWithBlip); offered to the hold
 /// (TryScoopObject) while fuel scoops are fitted and the game is not over; _slot's depth (+3Dh) cleared; then ClassifyViewPosition.
-TransformedShip TransformShip(GameState& _state, ObjectSlot _slot);
+/// Returns its position in the view.
+Vector TransformShip(GameState& _state, ObjectSlot _slot);
 
 /// RunBlueprintHandler (CS:3CDD): boxHalfWidth from the blueprint at _blueprint, the handler it names run (BuildBoxCornerVertices
 /// or BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection

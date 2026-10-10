@@ -251,25 +251,25 @@ std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to
 struct TextControlHandler
 {
   std::uint16_t offset;
-  DescriptionOutput (*run)(GameState&, std::uint16_t); // with the output's place
+  std::uint16_t (*run)(GameState&, std::uint16_t); // with the output's place, returning the place past what it wrote
 };
 
 constexpr std::array<TextControlHandler, 6> TEXT_CONTROL_HANDLERS = {{
   {INSERT_SYSTEM_NAME, &InsertSystemName},
   {INSERT_SYSTEM_ADJECTIVE, &InsertSystemAdjective},
   {INSERT_RANDOM_NAME, &InsertRandomName},
-  {BACKSPACE_DESCRIPTION, [](GameState&, std::uint16_t _output) { return DescriptionOutput{BackspaceDescription(_output), std::nullopt}; }},
+  {BACKSPACE_DESCRIPTION, [](GameState&, std::uint16_t _output) { return BackspaceDescription(_output); }},
   {START_CAPITALIZING,
    [](GameState& _state, std::uint16_t _output)
    {
      StartCapitalizing(_state);
-     return DescriptionOutput{_output, std::nullopt};
+     return _output;
    }},
   {STOP_CAPITALIZING,
    [](GameState& _state, std::uint16_t _output)
    {
      StopCapitalizing(_state);
-     return DescriptionOutput{_output, std::nullopt};
+     return _output;
    }},
 }};
 
@@ -278,8 +278,8 @@ constexpr std::array<TextControlHandler, 6> TEXT_CONTROL_HANDLERS = {{
 // routine runs on the output at DS:_output. Codes 7-31 jump into descriptionPhraseLists, whose words the original
 // would run as code, and so would a code whose handler a description had written over; the routine runs nothing for
 // them. No text in the game holds such a code, and no description reaches textControlCodes: the longest is 144 bytes
-// of descriptionBuffer's 256.
-DescriptionOutput RunTextControlCode(GameState& _state, std::uint16_t _handler, std::uint16_t _output)
+// of descriptionBuffer's 256. Returns the place past what the handler wrote.
+std::uint16_t RunTextControlCode(GameState& _state, std::uint16_t _handler, std::uint16_t _output)
 {
   for (const TextControlHandler& handler : TEXT_CONTROL_HANDLERS)
   {
@@ -288,17 +288,7 @@ DescriptionOutput RunTextControlCode(GameState& _state, std::uint16_t _handler, 
       return handler.run(_state, _output);
     }
   }
-  return DescriptionOutput{_output, std::nullopt};
-}
-
-// What the expansion of _inner leaves of _outer: the inner one's place, and the last random name made in either.
-void ContinueOutput(DescriptionOutput& _outer, const DescriptionOutput& _inner)
-{
-  _outer.next = _inner.next;
-  if (_inner.lastRandomName)
-  {
-    _outer.lastRandomName = _inner.lastRandomName;
-  }
+  return _output;
 }
 
 // A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (_x, _row), across and then down, each a clipped line. The
@@ -1286,7 +1276,7 @@ void ShowSystemDescription(GameState& _state, bool _backward)
     word = Offset(word, WordStep(_backward));
   }
   const ExpandedText expanded = ExpandDescriptionText(_state, DS.descriptionTemplate.offset, DS.descriptionBuffer.offset);
-  _state.SetByte(expanded.output.next, 0);
+  _state.SetByte(expanded.next, 0);
 
   // Word-wrapped at the last space within 36 characters, a text row at a time.
   std::uint16_t line = DS.descriptionBuffer.offset;
@@ -1311,7 +1301,7 @@ void ShowSystemDescription(GameState& _state, bool _backward)
 
 ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::uint16_t _output)
 {
-  ExpandedText expanded{_text, DescriptionOutput{_output, std::nullopt}};
+  ExpandedText expanded{_text, _output};
   for (;;)
   {
     const std::uint8_t code = _state.Byte(expanded.end);
@@ -1323,7 +1313,7 @@ ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::
     if (code < SPACE)
     {
       const std::uint16_t handler = _state.Word(DS.textControlCodes.At(static_cast<std::uint8_t>(code - 1)));
-      ContinueOutput(expanded.output, RunTextControlCode(_state, handler, expanded.output.next));
+      expanded.next = RunTextControlCode(_state, handler, expanded.next);
       continue;
     }
     if (code >= DESCRIPTION_PHRASE_CODE)
@@ -1332,10 +1322,10 @@ ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::
       const std::uint16_t list = _state.Word(DS.descriptionPhraseLists.At(static_cast<std::uint8_t>(code - DESCRIPTION_PHRASE_CODE)));
       const auto pick = static_cast<std::uint8_t>(Low(NextDescriptionRandom(_state)) / DESCRIPTION_PHRASE_DIVISOR);
       const std::uint16_t phrase = _state.Word(Offset(list, static_cast<std::uint16_t>(pick << 1)));
-      ContinueOutput(expanded.output, ExpandDescriptionText(_state, phrase, expanded.output.next).output);
+      expanded.next = ExpandDescriptionText(_state, phrase, expanded.next).next;
       continue;
     }
-    const std::uint16_t output = expanded.output.next;
+    const std::uint16_t output = expanded.next;
     const std::uint8_t previous = _state.Byte(static_cast<std::uint16_t>(output - 1));
     if (code == SPACE && previous == SPACE)
     {
@@ -1348,18 +1338,18 @@ ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::
       character = static_cast<std::uint8_t>(code & UPPER_CASE_MASK);
     }
     _state.SetByte(output, character);
-    expanded.output.next = Offset(output, 1);
+    expanded.next = Offset(output, 1);
   }
 }
 
-DescriptionOutput InsertSystemName(GameState& _state, std::uint16_t _output)
+std::uint16_t InsertSystemName(GameState& _state, std::uint16_t _output)
 {
   // MOV AX,20h / MOV [DI],AX: the space and the NUL after the name again, as a word.
   _state.SetWord(CopySelectedNameLower(_state), SPACE);
-  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).output;
+  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).next;
 }
 
-DescriptionOutput InsertSystemAdjective(GameState& _state, std::uint16_t _output)
+std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
 {
   std::uint16_t suffix = CopySelectedNameLower(_state);
   const std::uint8_t last = _state.Byte(static_cast<std::uint16_t>(suffix - 1));
@@ -1368,10 +1358,10 @@ DescriptionOutput InsertSystemAdjective(GameState& _state, std::uint16_t _output
     --suffix;
   }
   CopyBytes(_state, DS.adjectiveSuffix.offset, suffix, ADJECTIVE_SUFFIX_BYTES);
-  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).output;
+  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).next;
 }
 
-DescriptionOutput InsertRandomName(GameState& _state, std::uint16_t _output)
+std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output)
 {
   CopyBytes(_state, DS.selectedSystemName.offset, SAVED_SYSTEM_NAME, SYSTEM_NAME_BYTES);
   const std::uint16_t seed0 = _state.Get(DS.descriptionSeed0);
@@ -1379,12 +1369,10 @@ DescriptionOutput InsertRandomName(GameState& _state, std::uint16_t _output)
   const std::uint16_t seed1 = _state.Get(DS.descriptionSeed1);
   _state.Set(DS.systemSeed1, seed1);
   _state.Set(DS.systemSeed2, static_cast<std::uint16_t>(seed1 ^ _state.Get(DS.descriptionSeed0)));
-  const RandomName name{GenerateSystemName(_state), static_cast<std::uint8_t>(seed0 & SYSTEM_NAME_FOURTH_PAIR)};
+  GenerateSystemName(_state);
   CopySelectedNameLower(_state);
   CopyBytes(_state, SAVED_SYSTEM_NAME, DS.selectedSystemName.offset, SYSTEM_NAME_BYTES);
-  DescriptionOutput output{_output, name};
-  ContinueOutput(output, ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).output);
-  return output;
+  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).next;
 }
 
 std::uint16_t BackspaceDescription(std::uint16_t _output)

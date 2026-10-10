@@ -446,7 +446,6 @@ struct WindingProducts
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.magnitudes[axis] = Magnitude(_slot.Get(POSITION[axis]));
-    range.axes = static_cast<std::uint8_t>(axis + 1);
     if (range.magnitudes[axis] >= _state.Get(DS.maxAxisDistance))
     {
       return range;
@@ -455,7 +454,6 @@ struct WindingProducts
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.squaredHigh = Offset(range.squaredHigh, static_cast<std::uint16_t>(UnsignedSquare(range.magnitudes[axis]) >> 16));
-    range.squares = static_cast<std::uint8_t>(axis + 1);
     if (axis != 0 && range.squaredHigh >= _state.Get(DS.maxDistanceSquaredHigh))
     {
       return range;
@@ -752,7 +750,7 @@ struct SunDisc
   else
   {
     // MOV DX,64h / XOR AX,AX: DX:AX = 100 * 65536.
-    disc.radius = ScaleByInverseDistance(_state, _slot, std::uint32_t{SUN_SCALE} << 16).scaled;
+    disc.radius = ScaleByInverseDistance(_state, _slot, std::uint32_t{SUN_SCALE} << 16);
   }
   _state.Set(DS.cabinTemperature, Low(disc.radius));
   if ((ObjectSlot(_state, disc.slot).Get(SlotByte::ViewZHigh) & 0x80) != 0)
@@ -807,8 +805,8 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
 {
   _state.Set(DS.sunFringeMask, FRINGE_NONE);
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
-  const InverseDistanceScale scale = ScaleByInverseDistance(_state, _slot, std::uint32_t{PLANET_SCALE} << 16);
-  auto altitude = static_cast<std::uint8_t>(~Low(scale.scaled));
+  const std::uint16_t scaled = ScaleByInverseDistance(_state, _slot, std::uint32_t{PLANET_SCALE} << 16);
+  auto altitude = static_cast<std::uint8_t>(~Low(scaled));
   if (altitude > ALTITUDE_LIMIT)
   {
     altitude = ALTITUDE_LIMIT;
@@ -819,7 +817,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
   {
     return std::nullopt;
   }
-  std::uint16_t radius = scale.scaled;
+  std::uint16_t radius = scaled;
   if (radius >= FATAL_RADIUS)
   {
     // PUSH AX / CALL KillPlayer / POP AX.
@@ -1150,23 +1148,20 @@ ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
   return ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
-TransformedShip TransformShip(GameState& _state, ObjectSlot _slot)
+Vector TransformShip(GameState& _state, ObjectSlot _slot)
 {
   // MOV AX,[DI+4] / MOV BX,[DI+6] / MOV CX,[DI+8], then PUSH DI / POP DI round the transform and the scoop, which keep the slot.
   const Vector position{static_cast<std::int16_t>(_slot.Get(SlotWord::X)), static_cast<std::int16_t>(_slot.Get(SlotWord::Y)),
                         static_cast<std::int16_t>(_slot.Get(SlotWord::Z))};
   const ViewWithBlip transformed = TransformToViewWithBlip(_state, _slot, position);
-  bool blipTouched = transformed.blip.has_value();
   if (_state.Get(DS.fuelScoopsFitted) == 1 && _state.Get(DS.gameOverFrames) == 0)
   {
     // The scoop keeps AX, BX and CX, the view position, round its work.
-    if (TryScoopObject(_state, _slot, transformed.view).removedBlip)
-    {
-      blipTouched = true;
-    }
+    (void)TryScoopObject(_state, _slot, transformed.view);
   }
   _slot.Set(SlotByte::Depth, 0);
-  return TransformedShip{transformed.view, ClassifyViewPosition(_state, _slot, transformed.view), blipTouched};
+  (void)ClassifyViewPosition(_state, _slot, transformed.view);
+  return transformed.view;
 }
 
 bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _backward)

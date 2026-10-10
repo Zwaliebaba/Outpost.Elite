@@ -650,15 +650,12 @@ void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
 
 // ---- The warnings ---------------------------------------------------------------------------------
 
-// SetWarning (0x36E7): posts warning _warning for 20 frames. Returns its text, warningTexts[_warning], which the
-// original leaves in AX.
-std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
+// SetWarning (0x36E7): posts warning _warning, its text warningTexts[_warning], for 20 frames.
+void SetWarning(GameState& _state, std::uint8_t _warning)
 {
   _state.Set(DS.warningFrames, 0x14);
   _state.Set(DS.warningIndex, _warning);
-  const std::uint16_t text = _state.Word(DS.warningTexts.At(_warning));
-  _state.Set(DS.warningMessage, text);
-  return text;
+  _state.Set(DS.warningMessage, _state.Word(DS.warningTexts.At(_warning)));
 }
 
 // CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning (0x36FD,
@@ -684,7 +681,7 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
 
 // The four checks round-robin from _first, each falling on to the next with LOOP while _checks lasts, until one posts its
 // warning.
-[[nodiscard]] WarningChecks RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
+void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
 {
   std::uint16_t check = _first;
   std::uint16_t checks = _checks;
@@ -692,12 +689,12 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
   {
     if (WarningApplies(_state, check))
     {
-      const auto warning = static_cast<std::uint8_t>(check);
-      return WarningChecks{warning, checks, SetWarning(_state, warning)};
+      SetWarning(_state, static_cast<std::uint8_t>(check));
+      return;
     }
     if (--checks == 0)
     {
-      return WarningChecks{static_cast<std::uint8_t>(check), checks, std::nullopt};
+      return;
     }
     check = static_cast<std::uint16_t>((check + 1) & 3);
   }
@@ -960,7 +957,7 @@ bool EraseForFlightScreen(GameState& _state)
 FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint8_t _al, std::uint16_t _countIfNone,
                                     std::uint16_t _segment, bool _backward)
 {
-  FlightScreens screens{0, _al, std::nullopt, std::nullopt, _countIfNone, _backward};
+  FlightScreens screens{0, _al, std::nullopt, _countIfNone, _backward};
   std::uint8_t key = _key;
   std::uint16_t segment = _segment;
   // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen). Of what
@@ -1684,9 +1681,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
       _state.Set(DS.flightScreenShown, 0);
-      FlightScreens screens = DispatchFlightScreens(_state, _hardware, Low(scan), _al, _countIfNone, _segment, _backward);
-      screens.key = Low(scan);
-      return screens;
+      return DispatchFlightScreens(_state, _hardware, Low(scan), _al, _countIfNone, _segment, _backward);
     }
     ++scan;
     if (--keys == 0)
@@ -1696,7 +1691,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
     _hardware.LoopTurn(FUNCTION_KEY_LOOP, {keys, scan});
   }
   _state.Set(DS.inFlight, 1);
-  return FlightScreens{0, _al, std::nullopt, std::nullopt, _countIfNone, _backward};
+  return FlightScreens{0, _al, std::nullopt, _countIfNone, _backward};
 }
 
 ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _backward)
@@ -2059,8 +2054,7 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 
 SafeZone InSafeZone(const GameState& _state)
 {
-  const std::uint8_t flags = _state.Get(DS.safeZoneFlags);
-  return SafeZone{(flags & 1) != 0, static_cast<std::uint8_t>(flags >> 1)};
+  return SafeZone{(_state.Get(DS.safeZoneFlags) & 1) != 0};
 }
 
 void UpdateSafeZone(GameState& _state)
@@ -2126,7 +2120,7 @@ void UpdateWarnings(GameState& _state)
     return;
   }
   // The four checks from the one after the last warning (JMP [BX+warningChecks]).
-  (void)RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Get(DS.warningIndex) + 1) & 3), WARNING_CHECKS);
+  RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Get(DS.warningIndex) + 1) & 3), WARNING_CHECKS);
 }
 
 std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera)
@@ -2230,7 +2224,7 @@ std::optional<CompassUpdate> UpdateCompass(GameState& _state)
   const std::uint8_t nowInFront = station.Get(SlotByte::BlipZ);
   const std::uint16_t dot = station.Get(SlotWord::CompassDot);
   station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
-  return CompassUpdate{XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0), range, nowInFront};
+  return CompassUpdate{XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0), range};
 }
 
 DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront)
@@ -2590,29 +2584,28 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 JumpDriveRequest EngageJumpDrive(GameState& _state)
 {
   // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
-  const auto post = [&_state](DataAt _message) -> std::uint16_t
-  {
-    SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES);
-    return _message.offset;
-  };
+  const auto post = [&_state](DataAt _message) { SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
   if (_state.Get(DS.dockingComputerOn) != 1)
   {
     if (_state.Get(DS.playerSpeed) != FULL_SPEED)
     {
       _state.Set(DS.jumpDriveEngaged, 0);
-      return JumpDriveRequest{post(DS.jumpDriveVelocityLockedMessage), lock};
+      post(DS.jumpDriveVelocityLockedMessage);
+      return JumpDriveRequest{lock};
     }
     lock = IsMassLocked(_state);
     if (!lock->locked)
     {
       _state.Set(DS.jumpDriveEngaged, 1);
       _state.Set(DS.velocityDirty, 1);
-      return JumpDriveRequest{post(DS.jumpDriveEngagedMessage), lock};
+      post(DS.jumpDriveEngagedMessage);
+      return JumpDriveRequest{lock};
     }
   }
   _state.Set(DS.jumpDriveEngaged, 0);
-  return JumpDriveRequest{post(DS.jumpDriveMassLockedMessage), lock};
+  post(DS.jumpDriveMassLockedMessage);
+  return JumpDriveRequest{lock};
 }
 
 void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)

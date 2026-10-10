@@ -414,7 +414,7 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
       const DiscMenuExit exit = ShowDiscControlScreen(_state, _hardware, backward);
       if (exit.leaves)
       {
-        return DockedExit{true, ScreenKey{}, countLeft, backward};
+        return DockedExit{true, countLeft, backward};
       }
       key = ScreenKey{exit.scanCode, exit.al, std::nullopt};
     }
@@ -430,7 +430,7 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
     {
       if (key.scanCode == SCAN_F1)
       {
-        return DockedExit{false, key, countLeft, backward};
+        return DockedExit{false, countLeft, backward};
       }
       if (std::ranges::find(DOCKED_SCREENS, key.scanCode, &DockedScreen::key) != DOCKED_SCREENS.end())
       {

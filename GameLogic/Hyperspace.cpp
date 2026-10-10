@@ -218,7 +218,7 @@ MassLock IsMassLocked(GameState& _state)
   // Any ship on the scanner but the rocks, barrels and splinters: MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3 / JG, else RET
   // with the SUB's borrow.
   const std::uint8_t slots = _state.Get(DS.objectSlotCount);
-  ShipScan scan{DS.firstShipSlot.offset, static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX), std::nullopt};
+  ShipScan scan{DS.firstShipSlot.offset, static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX)};
   if (static_cast<std::int8_t>(slots) <= FIRST_SHIP_SLOT_INDEX)
   {
     lock.locked = slots < FIRST_SHIP_SLOT_INDEX;
@@ -228,7 +228,6 @@ MassLock IsMassLocked(GameState& _state)
   do
   {
     const ObjectSlot ship(_state, scan.slot);
-    scan.lastLooked = scan.slot;
     const auto type = static_cast<std::uint8_t>((ship.Get(SlotByte::Type) >> 1) & SHIP_TYPE_MASK);
     const bool unlocking = std::find(UNLOCKING_TYPES.begin(), UNLOCKING_TYPES.end(), type) != UNLOCKING_TYPES.end();
     if ((ship.Get(SlotByte::Type) & ObjectSlot::ACTIVE) != 0 && !unlocking && (ship.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)

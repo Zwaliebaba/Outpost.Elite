@@ -796,7 +796,7 @@ bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot)
 KillCredit CreditKill(GameState& _state, ObjectSlot _slot)
 {
   const std::uint8_t bounty = _slot.Get(SlotByte::Bounty);
-  KillCredit credit{bounty, std::nullopt, std::nullopt, false, std::nullopt, std::nullopt};
+  KillCredit credit{std::nullopt, std::nullopt, false, std::nullopt, std::nullopt};
   if (bounty == 0)
   {
     return credit;
@@ -1221,7 +1221,7 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, ObjectSlot
 ThargoidTest Routine8C51(const ObjectSlot& _slot)
 {
   const std::uint8_t type = TypeOf(_slot);
-  return ThargoidTest{type, type == TYPE_THARGON || type == TYPE_THARGOID, type == TYPE_THARGOID};
+  return ThargoidTest{type == TYPE_THARGON || type == TYPE_THARGOID, type == TYPE_THARGOID};
 }
 
 void UseMaskingDevice(GameState& _state)
