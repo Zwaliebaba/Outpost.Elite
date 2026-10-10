@@ -22,10 +22,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> FlightEntries() noexcept;
 
-/// RunFlight (CS:7E9B): the station tunnel, then a frame at a time until the player docks or is 40
-/// frames dead; when the escape pod arrives TickEscapePod returns past it. Waits.
-void RunFlight(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight, and every byte it writes is
@@ -233,8 +229,9 @@ void UpdateSafeZone(GameState& _state);
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
 /// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's
-/// collisionRanges box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each.
-void CheckCollisions(GameState& _state, Hardware& _hardware);
+/// collisionRanges box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each. Returns where
+/// its look at the slots stopped, past the last, which the original leaves in DI.
+std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware);
 
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
@@ -371,6 +368,34 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
 /// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
 bool RunPauseScreen(GameState& _state, Hardware& _hardware, bool _backward);
 
+/// How RunFlight ends. Two of the ways are returns the original makes from deeper down, by dropping return addresses so that a
+/// callee's RET leaves RunFlight.
+enum class FlightEnd : std::uint8_t
+{
+  Docked,    ///< the player docked, and the station's tunnel played
+  GameOver,  ///< 40 frames after the player's death, with ELITE on the message line
+  EscapePod, ///< the escape pod arrived: TickEscapePod drops its own return address
+  Aborted,   ///< the pause screen's A: RunPauseScreen drops its own return address and ProcessFlightKeys'
+};
+
+/// What RunFlight leaves for GameLoop: how it ended, and BP and the direction flag, which GameLoop hands on to RunTitleAndDocked.
+struct FlightExit
+{
+  FlightEnd end;
+  /// BP: PresentSpaceView's 20h after docking, ClearMessageLine's 0 after GAME OVER and the pause screen's A, and after the escape
+  /// pod what the last frame left (RunFlight).
+  std::uint16_t countLeft;
+  bool backward; ///< the direction flag
+};
+
+/// RunFlight (CS:7E9B): the mouse reset if it steers, local space set up (SetUpLocalSpace, by _backward, the direction flag) and the
+/// station's tunnel played; then a frame at a time: the dashboard, the objects drawn, the lasers, the stardust, the fuel leak, the
+/// message line, the screen dump key, the frame presented, the objects moved and spawned, the player's motion and the collisions;
+/// docked, the tunnel again and the keyboard and the sound reset; otherwise the flight keys, the hyperspace countdown and the escape
+/// pod. While the player is dead, unless cheatEnabled, GAME OVER for 40 frames, then ELITE on the message line. Waits as a rule
+/// (ADR-015).
+FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results
@@ -448,6 +473,8 @@ void HandleFlightFunctionKeysEntry(Guest& _guest);
 void ProcessFlightKeysEntry(Guest& _guest);
 /// Out: when A leaves, pops its own return address and its caller's into AX, so that the RET leaves RunFlight. Clobbers all.
 void RunPauseScreenEntry(Guest& _guest);
+/// DF as RunFlight takes it. Out: BP and DF as RunFlight leaves them, which GameLoop goes on with. Clobbers all but BP and DS.
+void RunFlightEntry(Guest& _guest);
 
 /// What EraseScannerBlip leaves in the registers for _slot once it has _erased its blip: AX = DX the last pixel, BX its mask, CX
 /// the stick's step and 0, and ES the video segment. For the entries of the routines that end with it, whose callers go on

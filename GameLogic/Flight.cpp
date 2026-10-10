@@ -2,6 +2,7 @@
 
 #include "Flight.h"
 
+#include "Ai.h"
 #include "Arithmetic.h"
 #include "Combat.h"
 #include "DataOverlay.h"
@@ -31,32 +32,36 @@ namespace
 using Machine::FLAG_CARRY;
 using Machine::Registers;
 
-// The routines these call through their entries: the original's, or a native routine hooked there.
-constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
-constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
-constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
-constexpr std::uint16_t PLAY_STATION_TUNNEL = 0x2D5B;
-constexpr std::uint16_t SPAWN_PLAYER_WRECKAGE = 0x2FE3;
-constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
-constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
-constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
-constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t UPDATE_FUEL_LEAK = 0x499F;
-constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
-constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
-constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
-constexpr std::uint16_t STOP_SOUND_EFFECTS = 0x7A63;
-constexpr std::uint16_t STOP_CONTINUOUS_NOISE = 0x7B6B;
-constexpr std::uint16_t POLL_SCREEN_DUMP_KEY = 0x7F3D;
-constexpr std::uint16_t RESET_MOUSE_IF_SELECTED = 0x7F5D;
-constexpr std::uint16_t TICK_ESCAPE_POD = 0x7F69;
-constexpr std::uint16_t TICK_HYPERSPACE_COUNTDOWN = 0x7F79;
-constexpr std::uint16_t PROCESS_FLIGHT_KEYS = 0x7FA8;
-constexpr std::uint16_t UPDATE_PLAYER_MOTION = 0x8472;
-constexpr std::uint16_t RESOLVE_LASER_FIRE = 0x8AC2;
-constexpr std::uint16_t APPLY_ENEMY_LASER_HIT = 0x8C8E;
+// RunFlight's frame loop (FlightFrameLoop), where its four backward jumps land (ADR-015). The frame reads no register before it writes
+// it, but the direction flag, so its turns carry nothing.
+constexpr std::uint16_t FLIGHT_FRAME_LOOP = 0x7EA4;
+
+// What RunFlight hands its callees for the registers the original passes them by accident and no value routine computes (ADR-012).
+// Each reaches nothing the game can show:
+// - UpdateStardust's BX is what the frame's drawing leaves there: TransformAndDrawObjects', ApplyEnemyLaserHit's or ResolveLaserFire's
+//   last write to BX. Its BH reaches only ComputeStardustShift's divide trap, which saves BX, and only a speed above 34h divides into
+//   the trap. The speeds the game sets run from 4 to 30h (TOP_SPEED, MOST_SPEED), with 0 while the docking computer turns, as
+//   PlayStationTunnel's BX assumes (Docking.cpp). One state escapes that: the station shot while the docking computer has stopped
+//   (CancelDockingComputer), then , pressed, which takes the speed from 0 to FCh, as UpdatePlayerMotion's floor at 4 lets through.
+//   There the trap saves the drawing's BH, which this does not reproduce.
+// - ProcessFlightKeys' AL reaches nothing ProcessFlightKeys does: HandleFlightFunctionKeys only hands it back (FlightScreens::al).
+// - ProcessFlightKeys' ES is DS, as UpdateObjectsAndSpawn's PUSH DS / POP ES leaves it, or B800h, once a blip was XORed after it
+//   (XorDashboardPixel). Only a chart drawn while its frame shows already reads it (ChartSegment), and in flight the cockpit always
+//   shows when ProcessFlightKeys runs: SetUpLocalSpace shows it, and so does every leaving of the function keys' screens
+//   (RestoreFlightScreen).
+// - BP is PresentSpaceView's 20h, as FinishSpaceViewFrame leaves it each frame, unless one of UpdateObjectsAndSpawn's handlers
+//   leaves its own: ComputeAnglesToObject's first angle, TurnTowardAngles' pitch error, the last hunter CountOtherHuntersOnScanner
+//   found, or a quarter of the hunter's z from GetVectorToObject; and after ProcessFlightKeys, what its screens and its crosshair
+//   search leave, which TickHyperspaceCountdown is called with. It reaches only the count SelectSystemAtCursor makes an index from
+//   when no system is on the chart, through the function keys' screens, GalacticJump and, after the escape pod, the docked status
+//   screen; and a system always is. On the galactic chart every system is, and from any cursor one of each galaxy, 0 to 8, is near
+//   enough for its distance not to carry (at worst 19962, in galaxy 8, measured over every cursor with a scratch model of the search
+//   outside the repository); on the short-range chart, the current system at its centre is.
+constexpr std::uint16_t STARDUST_BX = 0;
+constexpr std::uint8_t FLIGHT_KEYS_AL = 0;
+// ClearMessageLine counts its eight rows down in BP (MOV BP,8 / DEC BP), and leaves it 0: after GAME OVER, and after the pause
+// screen's A, which clears the message line.
+constexpr std::uint16_t CLEARED_MESSAGE_LINE_BP = 0;
 
 // The stardust: 30 particles of 6 bytes, x and y words, a lifetime byte and a spare; stardustPrevious
 // follows at +0xB4 with the same layout, its lifetime copy at +0xB8 and its new-particle flag at +0xB9.
@@ -2063,7 +2068,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backw
   return change;
 }
 
-void CheckCollisions(GameState& _state, Hardware& _hardware)
+std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   std::uint16_t slot = DS.shipSlots.offset;
@@ -2076,6 +2081,7 @@ void CheckCollisions(GameState& _state, Hardware& _hardware)
     }
     slot = Plus(slot, SLOT_BYTES);
   }
+  return slot;
 }
 
 SafeZone InSafeZone(const GameState& _state)
@@ -2408,72 +2414,97 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
   _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
 
-void RunFlight(Guest& _guest)
+FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(RESET_MOUSE_IF_SELECTED);
-  _guest.Call(SET_UP_LOCAL_SPACE);
-  _guest.Call(PLAY_STATION_TUNNEL);
+  ResetMouseIfSelected(_state, _hardware);
+  // ShowCockpitScreen's CLD, once it drew.
+  const ScreenChange cockpit = SetUpLocalSpace(_state, _hardware, _backward);
+  bool backward = _backward && cockpit == ScreenChange::None;
+  PlayStationTunnel(_state, _hardware, backward);
+  // The tunnel's last FinishSpaceViewFrame: its CLD, and PresentSpaceView's MOV BP,20h.
+  backward = false;
+  std::uint16_t countLeft = PRESENT_SPACE_VIEW_BP;
   for (;;)
   {
-    // FlightFrameLoop (0x7EA4): one frame.
-    _guest.Call(UPDATE_DASHBOARD);
-    _guest.Call(TRANSFORM_AND_DRAW_OBJECTS);
-    _guest.Call(APPLY_ENEMY_LASER_HIT);
-    _guest.Call(RESOLVE_LASER_FIRE);
-    _guest.Call(UPDATE_STARDUST);
-    _guest.Call(UPDATE_FUEL_LEAK);
-    _guest.Call(UPDATE_MESSAGE_LINE);
-    _guest.Call(POLL_SCREEN_DUMP_KEY);
-    _guest.Call(FINISH_SPACE_VIEW_FRAME);
-    _guest.Call(UPDATE_OBJECTS_AND_SPAWN);
-    _guest.Call(UPDATE_PLAYER_MOTION);
-    _guest.Call(CHECK_COLLISIONS);
-    if (_guest.Get(DS.playerDocked) == 1)
+    // FlightFrameLoop: one frame. The direction flag goes as each routine leaves it: TransformAndDrawObjects', and the CLD of a
+    // DrawLine that fills a horizontal line's bytes, a beam's or a streak's.
+    UpdateDashboard(_state);
+    backward = TransformAndDrawObjects(_state, _hardware, backward);
+    if (ApplyEnemyLaserHit(_state, _hardware))
     {
-      _guest.Call(PLAY_STATION_TUNNEL);
-      _guest.Call(RESET_KEYBOARD);
-      _guest.Call(STOP_SOUND_EFFECTS);
-      _guest.Call(STOP_ALL_SOUND);
-      return;
+      backward = false;
     }
-    _guest.Call(PROCESS_FLIGHT_KEYS);
-    _guest.Call(TICK_HYPERSPACE_COUNTDOWN);
-    // When the escape pod arrives this returns past RunFlight, to its caller.
-    _guest.Call(TICK_ESCAPE_POD);
-    if (_guest.Get(DS.playerDead) != 1 || _guest.Get(DS.cheatEnabled) == 1)
+    if (ResolveLaserFire(_state, _hardware, backward))
     {
-      _guest.JumpBack(0x7EA4); // FlightFrameLoop
+      backward = false;
+    }
+    if (UpdateStardust(_state, STARDUST_BX))
+    {
+      backward = false;
+    }
+    UpdateFuelLeak(_state, _hardware);
+    (void)UpdateMessageLine(_state, backward);
+    (void)PollScreenDumpKey(_state, _hardware);
+    FinishSpaceViewFrame(_state, _hardware);
+    // Its CLD, and PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
+    backward = false;
+    countLeft = PRESENT_SPACE_VIEW_BP;
+    UpdateObjectsAndSpawn(_state, _hardware, backward, PRESENT_SPACE_VIEW_DX);
+    UpdatePlayerMotion(_state, _hardware);
+    // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
+    const std::uint16_t slotsEnd = CheckCollisions(_state, _hardware);
+    if (_state.Get(DS.playerDocked) == 1)
+    {
+      PlayStationTunnel(_state, _hardware, backward);
+      ResetKeyboard(_state, _hardware);
+      StopSoundEffects(_state);
+      StopAllSound(_state, _hardware);
+      // The tunnel's last frame's CLD and BP of 20h, which the docked status screen goes on with.
+      return FlightExit{FlightEnd::Docked, PRESENT_SPACE_VIEW_BP, false};
+    }
+    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, FLIGHT_KEYS_AL, slotsEnd, countLeft, _state.DataSegment(), backward);
+    backward = keys.backward;
+    if (keys.aborted)
+    {
+      return FlightExit{FlightEnd::Aborted, CLEARED_MESSAGE_LINE_BP, backward};
+    }
+    // CompleteHyperspaceJump's tunnel ends with a CLD.
+    if (TickHyperspaceCountdown(_state, _hardware, countLeft, backward))
+    {
+      backward = false;
+    }
+    if (TickEscapePod(_state))
+    {
+      return FlightExit{FlightEnd::EscapePod, countLeft, backward};
+    }
+    if (_state.Get(DS.playerDead) != 1 || _state.Get(DS.cheatEnabled) == 1)
+    {
+      _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
     // Dead: GAME OVER for 40 frames, then the title's ELITE on the message line, and back.
-    _guest.Set(DS.hyperspaceCountdown, 0);
-    if (_guest.Get(DS.gameOverFrames) == 0)
+    _state.Set(DS.hyperspaceCountdown, 0);
+    if (_state.Get(DS.gameOverFrames) == 0)
     {
-      _guest.Call(SPAWN_PLAYER_WRECKAGE);
-      _guest.Set(DS.gameOverFrames, 0x28);
-      regs.ax = DS.gameOverMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 0x28);
-      _guest.Call(STOP_CONTINUOUS_NOISE);
-      _guest.JumpBack(0x7EA4);
+      SpawnPlayerWreckage(_state);
+      _state.Set(DS.gameOverFrames, GAME_OVER_FRAMES);
+      SetMessage(_state, DS.gameOverMessage.offset, GAME_OVER_FRAMES);
+      StopContinuousNoise(_state);
+      _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
-    _guest.Set(DS.gameOverFrames, static_cast<std::uint8_t>(_guest.Get(DS.gameOverFrames) - 1));
-    if (_guest.Get(DS.gameOverFrames) != 0)
+    _state.Set(DS.gameOverFrames, static_cast<std::uint8_t>(_state.Get(DS.gameOverFrames) - 1));
+    if (_state.Get(DS.gameOverFrames) != 0)
     {
-      _guest.JumpBack(0x7EA4);
+      _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
-    _guest.Call(RESET_KEYBOARD);
-    regs.ax = Guest::VIDEO_SEGMENT;
-    regs.es = regs.ax;
-    _guest.Call(CLEAR_MESSAGE_LINE);
-    _guest.Set(DS.textPaperPattern, 0);
-    regs.bx = ALL_COLORS;
-    regs.si = DS.eliteTitleText.offset;
-    regs.di = TITLE_TEXT_POSITION;
-    _guest.Call(DRAW_SCREEN_STRING);
-    return;
+    ResetKeyboard(_state, _hardware);
+    // MOV AX,0B800h / MOV ES,AX for the message line and the title.
+    ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
+    _state.Set(DS.textPaperPattern, 0);
+    (void)DrawScreenString(_state, DS.eliteTitleText.offset, ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
+    return FlightExit{FlightEnd::GameOver, CLEARED_MESSAGE_LINE_BP, backward};
   }
 }
 
@@ -2822,6 +2853,8 @@ constexpr Machine::NativeContract CLOBBERS_ALL_BUT_DS = Clobbers(static_cast<std
 // HandleFlightFunctionKeys': BX, DX and SI, which the screens leave and no value routine computes; ProcessFlightKeys, its one caller,
 // writes each before it reads it (HandleFlightFunctionKeysEntry).
 constexpr Machine::NativeContract FUNCTION_KEY_SCREENS = Clobbers(REGISTER_BX | REGISTER_DX | REGISTER_SI);
+// RunFlight's: all but BP, which GameLoop hands on to RunTitleAndDocked, and DS, which nothing in the flight changes.
+constexpr Machine::NativeContract FLIES = Clobbers(static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_BP & ~REGISTER_DS));
 
 // MOV AX,DS / MOV ES,AX / MOV DI,missileCountShown / MOV CX,16h / MOV AL,80h / REP STOSB: what InvalidateDashboard leaves, ES =
 // DS, and AX, CX and DI, which RestoreFlightScreen's contract compares.
@@ -3323,10 +3356,8 @@ void UpdatePlayerVelocityEntry(Guest& _guest)
 
 void CheckCollisionsEntry(Guest& _guest)
 {
-  // DI past the slots it looked at, by the count it loaded, which nothing it does changes: LaunchPlayerMissile, through
-  // ProcessFlightKeys, copies the 64 bytes there.
-  CheckCollisions(_guest.State(), _guest.Devices());
-  _guest.Regs().di = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.objectSlotCount)) * ObjectSlot::BYTES);
+  // DI past the slots it looked at: LaunchPlayerMissile, through ProcessFlightKeys, copies the 64 bytes there.
+  _guest.Regs().di = CheckCollisions(_guest.State(), _guest.Devices());
   _guest.Clobber(COLLISIONS_CHECKED);
 }
 
@@ -3426,6 +3457,16 @@ void RunPauseScreenEntry(Guest& _guest)
   }
 }
 
+void RunFlightEntry(Guest& _guest)
+{
+  // The escape pod's arrival and the pause screen's A are returns here, where the original's callees dropped their return
+  // addresses, so the hook's RET leaves as the original's last RET does.
+  const FlightExit exit = RunFlight(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  _guest.Regs().bp = exit.countLeft;
+  _guest.SetFlag(Machine::FLAG_DIRECTION, exit.backward);
+  _guest.Clobber(FLIES);
+}
+
 namespace
 {
 
@@ -3484,7 +3525,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixelEntry, CLOBBERS_DI},
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlipsEntry, ERASES_COMPASS_AND_BLIPS},
   NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeakEntry, CLOBBERS_AX_DX},
-  NativeEntry{0x7E9B, "RunFlight", &RunFlight, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x7E9B, "RunFlight", &RunFlightEntry, FLIES, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x7F69, "TickEscapePod", &TickEscapePodEntry, PRESERVES_ALL},
   NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeysEntry, CLOBBERS_ALL_BUT_DS, NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x839F, "DrainEnergy", &DrainEnergyEntry, PRESERVES_ALL},

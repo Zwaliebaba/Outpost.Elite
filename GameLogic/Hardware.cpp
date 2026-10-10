@@ -423,4 +423,27 @@ void Hardware::Spend(const PacingPoint& _point)
   m_pc.Spend(_point.cycles);
 }
 
+// ── Start, GameLoop and RunFlight (level 5, group F) ──
+
+namespace
+{
+
+constexpr std::uint8_t DOS_GET_TIME = 0x2C;
+constexpr std::uint8_t DOS_GET_VERSION = 0x30;
+
+} // namespace
+
+DosVersion Hardware::ReadDosVersion(std::uint8_t _al)
+{
+  const Machine::Registers left =
+    CallService(m_pc, DOS_VECTOR, [_al](Machine::Registers& _regs) { _regs.ax = Join(DOS_GET_VERSION, _al); });
+  return DosVersion{Low(left.ax), High(left.ax)};
+}
+
+DosTime Hardware::ReadDosTime()
+{
+  const Machine::Registers left = CallService(m_pc, DOS_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, DOS_GET_TIME); });
+  return DosTime{High(left.cx), Low(left.cx), High(left.dx), Low(left.dx)};
+}
+
 } // namespace Elite
