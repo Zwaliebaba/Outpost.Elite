@@ -634,9 +634,9 @@ public:
     }
   }
 
-  // The galactic chart's every key from the dock: the cursor held against the top-left corner and the bottom,
-  // keypad 5 and fire recentring it, D, F with a name that is found, one that is not and none, keys it ignores,
-  // and Esc.
+  // The galactic chart's every key from the dock: the cursor held against the top-left corner and the bottom-right
+  // one, keypad 5 and fire recentring it, D, F with a name that is found, one that is not and none, keys it ignores,
+  // and Esc. Each hold lasts four of the chart's 117 ms frames (D18), long enough for the steering to reach the edge.
   TEST_METHOD(GalacticChartAgreesOnEveryKey)
   {
     TwinRig rig("TwinGalacticChart");
@@ -644,7 +644,7 @@ public:
     PokeBoth(rig, DS.galacticCursorX, 3);
     PokeBoth(rig, DS.galacticCursorY, 2);
     rig.Play("key F5; wait 0.3\n"
-             "down Left; down Up; wait 0.2; up Left; up Up; wait 0.1\n"
+             "down Left; down Up; wait 0.5; up Left; up Up; wait 0.1\n"
              "key KP_Begin; wait 0.1\n"
              "key d; wait 0.1\n"
              "key a; wait 0.1; key F5; wait 0.1; key Delete; wait 0.1\n"
@@ -652,12 +652,13 @@ public:
              "key f; wait 0.1; key l; key a; key v; key e; key Return; wait 0.1\n"
              "key f; wait 0.1; key z; key z; key Return; wait 0.1\n"
              "key f; wait 0.1; key Return; wait 0.1");
+    PokeBoth(rig, DS.chartCursorX, 0xFC);
     PokeBoth(rig, DS.chartCursorY, 0x7C);
-    rig.Play("down Down; wait 0.2; up Down; wait 0.1\nkey Escape; wait 0.3\ndigest closed");
+    rig.Play("down Right; down Down; wait 0.5; up Right; up Down; wait 0.1\nkey Escape; wait 0.3\ndigest closed");
   }
 
-  // The short-range chart's keys: the cursor held against each edge, D, keypad 5, F with a system on the chart
-  // and one off it, and F6, its own key, ignored.
+  // The short-range chart's keys: the cursor held against each edge, for five of the chart's frames of 84 to
+  // 100 ms (D18), D, keypad 5, F with a system on the chart and one off it, and F6, its own key, ignored.
   TEST_METHOD(ShortRangeChartAgreesOnEveryKey)
   {
     TwinRig rig("TwinShortRangeChart");
@@ -665,10 +666,10 @@ public:
     PokeBoth(rig, DS.shortRangeCursorX, 0xFC);
     PokeBoth(rig, DS.shortRangeCursorY, 0x7C);
     rig.Play("key F6; wait 0.3\n"
-             "down Right; down Down; wait 0.2; up Right; up Down; wait 0.1");
+             "down Right; down Down; wait 0.5; up Right; up Down; wait 0.1");
     PokeBoth(rig, DS.chartCursorX, 3);
     PokeBoth(rig, DS.chartCursorY, 2);
-    rig.Play("down Left; down Up; wait 0.2; up Left; up Up; wait 0.1\n"
+    rig.Play("down Left; down Up; wait 0.5; up Left; up Up; wait 0.1\n"
              "key d; wait 0.1; key KP_Begin; wait 0.1; key F6; wait 0.1\n"
              "key f; wait 0.1; key t; key i; key b; key e; key d; key i; key e; key d; key Return; wait 0.1\n"
              "key f; wait 0.1; key r; key i; key e; key d; key q; key u; key a; key t; key Return; wait 0.1\n"
