@@ -59,10 +59,10 @@ class ReferenceRig
 {
 public:
   explicit ReferenceRig(std::string_view _name, const Machine::Dos::DateTime& _startMoment = Elite::START_MOMENT,
-                        Machine::ProcessorFactory _makeProcessor = &Machine::MakeCpu)
+                        Machine::ProcessorFactory _makeProcessor = &Machine::MakeCpu, bool _mousePresent = false)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment), _makeProcessor))
+      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent), _makeProcessor))
   {
     m_pc->SetTimeMode(Machine::TimeMode::Paced);
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
@@ -97,10 +97,11 @@ public:
   }
 
 private:
-  [[nodiscard]] static Machine::Pc::Desc Desc(const Machine::Dos::DateTime& _startMoment) noexcept
+  [[nodiscard]] static Machine::Pc::Desc Desc(const Machine::Dos::DateTime& _startMoment, bool _mousePresent) noexcept
   {
     Machine::Pc::Desc desc;
     desc.startMoment = _startMoment;
+    desc.mousePresent = _mousePresent;
     return desc;
   }
 

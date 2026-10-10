@@ -191,6 +191,7 @@ The routines these leave unreached are compared by constructed tests (ADR-010 it
   - the paths of `TryScoopObject` the replays miss: the masking device's barrel, a full hold, splinters that carry minerals, and Thargons;
   - `ShowShipIdentity`'s labels other than Debris;
   - mission 1 declined, and its 1,400-credit reward.
+- **The known answers, 2026-10-10.** Every twin's digests are recorded from the original, and eight new twins reach the paths left to known answers (ADR-016). One label, `ShowShipIdentity`'s "None", is unreachable in the original: its only ship, the Cobra an escape capsule leaves behind, can be identified only while the capsule flies, and then no key is read.
 - **Found in the original on the way.**
   - An escape capsule's arrival does not set `playerDocked`. So the status screen briefs after one but never debriefs, and both mission replays dock for real before their debriefings.
   - The fuel leak's counters are in the commander block.

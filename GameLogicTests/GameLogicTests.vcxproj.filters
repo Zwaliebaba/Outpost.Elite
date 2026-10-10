@@ -159,4 +159,9 @@
       <Filter>Video</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="KnownAnswers.txt">
+      <Filter>Rigs</Filter>
+    </None>
+  </ItemGroup>
 </Project>
