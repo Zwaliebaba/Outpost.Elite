@@ -32,10 +32,6 @@ void ProjectVertices(Guest& _guest);
 /// (DrawClippedLine) and filled triangles (FillTriangle) in order. Out: SI past the list.
 void DrawVisibleFaces(Guest& _guest);
 
-/// TransformSunOrPlanet (CS:3C52): scales slot DI's position down, transforms it to the view, stores it
-/// at +10h/+12h/+14h and sets byte 0 bit 7.
-void TransformSunOrPlanet(Guest& _guest);
-
 /// TransformShip (CS:3C7E): slot DI's position to the view, scooping where it may, then
 /// ClassifyViewPosition. Out: CF clear when visible.
 void TransformShip(Guest& _guest);
@@ -174,6 +170,10 @@ Vector BuildDodoVertices(GameState& _state);
 /// sum shifted right 6 and its in-range bit (byte 0 bit 6) is set; out of range, EraseScannerBlip.
 ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot);
 
+/// TransformSunOrPlanet (CS:3C52): _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
+/// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.
+ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
+
 /// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
 /// set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the position stored at +10h/+12h/+14h and as
 /// drawCenter once z passes.
@@ -202,6 +202,8 @@ void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the
 /// high words agree; CX, DI clobbered.
 void TriangleWindingSignEntry(Guest& _guest);
 void CheckShipInRangeEntry(Guest& _guest); ///< DI = the slot. Out: CF clear in range; every register as the original leaves it.
+/// DI = the slot. Out: AX, BX, CX the view position; ES = B800h once UpdateScannerBlip draws a blip. DX, BP clobbered.
+void TransformSunOrPlanetEntry(Guest& _guest);
 /// DI = the slot. Out: CF clear when visible; AX, BX and CX the compass position, AX doubled |x| once z passes and BX doubled |y|
 /// once x does, as the original leaves them.
 void ClassifyStationPositionEntry(Guest& _guest);

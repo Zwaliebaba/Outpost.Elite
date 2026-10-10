@@ -22,15 +22,6 @@ namespace Elite
 /// It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
 void FinishSpaceViewFrame(Guest& _guest);
 
-/// PresentChartFrame (CS:0587): CopyChartBufferToScreen, with AL=0 whatever the caller passed, then
-/// ClearDrawBuffer. It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
-void PresentChartFrame(Guest& _guest);
-
-/// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it,
-/// WaitRetraceThenDelay, then copies spaceViewBuffer to the screen. In: ES=B800h, DF=0. AX, BX, CX, DX, SI, DI,
-/// BP clobbered.
-void PresentSpaceView(Guest& _guest);
-
 /// DrawClippedLine (CS:1603): the line from (DX, BX) to (CX, AX), signed words, clipped to the 256x128
 /// buffer, through DrawLine. Everything but DS clobbered.
 void DrawClippedLine(Guest& _guest);
@@ -78,6 +69,14 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware);
 /// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both graphics
 /// banks) written from B800:0000 through DOS, with its disk transfer area at diskTransferArea; diskError = 1 on a failure.
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
+
+/// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
+/// ClearDrawBuffer, both forwards. It waits.
+void PresentChartFrame(GameState& _state, Hardware& _hardware);
+
+/// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then copies
+/// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _hardware.
+void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
 /// a byte, of the drawing buffer from DS:_bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
@@ -144,11 +143,13 @@ void SetTextMode(Hardware& _hardware);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
 // there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
 // leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES,
-// FillTriangleSpanEntry's AX and BP, ShowCockpitScreenEntry's SI and ES, DrawChartFrameEntry's ES).
+// FillTriangleSpanEntry's AX and BP, PresentSpaceViewEntry's DX, ShowCockpitScreenEntry's SI and ES, DrawChartFrameEntry's ES).
 
 void SaveScreenshotEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, DX, SI, DI clobbered.
 /// AX, BX, CX, DX clobbered.
 void WriteScreenshotFileEntry(Guest& _guest);
+void PresentChartFrameEntry(Guest& _guest); ///< Out: ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
+void PresentSpaceViewEntry(Guest& _guest);  ///< ES = B800h. Out: DX = 1FF0h. AX, BX, CX, SI, DI, BP clobbered.
 /// AL = the bands to skip, ES = B800h, DF clear. AX, BX, CX, DX, SI, DI, BP clobbered.
 void CopyChartBufferToScreenEntry(Guest& _guest);
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.

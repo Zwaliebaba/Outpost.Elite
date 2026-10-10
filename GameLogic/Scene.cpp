@@ -45,7 +45,6 @@ constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
 constexpr std::uint16_t SLOT_POSITION_X = 0x04; // the low words of the 24-bit position
 constexpr std::uint16_t SLOT_POSITION_Y = 0x06;
 constexpr std::uint16_t SLOT_POSITION_Z = 0x08;
-constexpr std::uint16_t SLOT_SCALE_SHIFT = 0x0A; // byte; for a ship, the word is its pitch angle
 constexpr std::uint16_t SLOT_COLOR = 0x0B;
 constexpr std::uint16_t SLOT_COMPASS_X = 0x20;
 constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
@@ -611,7 +610,7 @@ void ClassifyObject(Guest& _guest)
   _guest.Call(IS_SUN_OR_PLANET);
   if (Flag(_guest, Machine::FLAG_ZERO))
   {
-    TransformSunOrPlanet(_guest);
+    TransformSunOrPlanetEntry(_guest);
     return;
   }
   _guest.Call(IS_STATION);
@@ -1303,21 +1302,19 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
   return check;
 }
 
-void TransformSunOrPlanet(Guest& _guest)
+ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  GetPositionScaleShiftEntry(_guest);
-  _guest.SetByte(Offset(regs.di, SLOT_SCALE_SHIFT), Low(regs.cx));
-  _guest.SetByte(Offset(regs.di, SLOT_DEPTH), Low(regs.cx));
-  regs.dx = WithHigh(regs.dx, Low(regs.cx));
-  ScalePositionDownEntry(_guest);
-  const std::uint16_t slot = regs.di;
-  TransformToViewWithBlipEntry(_guest);
-  regs.di = slot;
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_X), regs.ax);
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_Y), regs.bx);
-  _guest.SetWord(Offset(regs.di, SLOT_VIEW_Z), regs.cx);
-  OrByte(_guest, regs.di, SLOT_VISIBLE);
+  // MOV [DI+0Ah],CL / MOV [DI+3Dh],CL / MOV DH,CL: the shift, as the disc's scale and its depth, and for ScalePositionDown.
+  const std::uint8_t shift = GetPositionScaleShift(_slot).shift;
+  _slot.Set(SlotByte::DiscScale, shift);
+  _slot.Set(SlotByte::Depth, shift);
+  // PUSH DI / POP DI round TransformToViewWithBlip keep the slot.
+  const ViewWithBlip transformed = TransformToViewWithBlip(_state, _slot, ScalePositionDown(_slot, shift));
+  _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(transformed.view.x));
+  _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(transformed.view.y));
+  _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(transformed.view.z));
+  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_VISIBLE));
+  return transformed;
 }
 
 ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
@@ -1506,6 +1503,9 @@ constexpr Machine::NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 // TransformShip's: DX, TransformToViewWithBlip's leftover, is not compared. Its one caller, ClassifyObject in
 // TransformAndDrawObjects (CS:3D87), goes back to the first pass, which reads DX nowhere before MOV DX,0FFFFh (CS:3DA2).
 constexpr Machine::NativeContract TRANSFORMS_SHIP{REGISTER_DX, FLAG_CARRY};
+// TransformSunOrPlanet's: DX, TransformToViewWithBlip's leftover, and BP, ScalePositionDown's, are not compared. Its one caller,
+// ClassifyObject at CS:3D8C, goes back to the first pass, which reads neither before XOR BP,BP and MOV DX,0FFFFh (CS:3D9E).
+constexpr Machine::NativeContract TRANSFORMS_SUN_OR_PLANET{REGISTER_DX | REGISTER_BP, 0};
 
 // The rotations' leftover in DX, which no caller reads (ADR-012).
 constexpr Machine::NativeContract CLOBBERS_DX{REGISTER_DX, 0};
@@ -1619,6 +1619,19 @@ void ClassifyStationPositionEntry(Guest& _guest)
   _guest.Clobber(RETURNS_CARRY);
 }
 
+void TransformSunOrPlanetEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ViewWithBlip transformed = TransformSunOrPlanet(_guest.State(), ObjectSlot(_guest.State(), regs.di));
+  // The view position stays in AX, BX and CX after it is stored, and ES is the video segment once UpdateScannerBlip draws a blip.
+  PositionOut(regs, transformed.view);
+  if (transformed.blip)
+  {
+    regs.es = GameState::VIDEO_SEGMENT;
+  }
+  _guest.Clobber(TRANSFORMS_SUN_OR_PLANET);
+}
+
 void TransformToViewWithBlipEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1673,7 +1686,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3AB3, "DrawVisibleFaces", &DrawVisibleFaces,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0}},
   NativeEntry{0x3BEA, "CheckShipInRange", &CheckShipInRangeEntry, RETURNS_CARRY},
-  NativeEntry{0x3C52, "TransformSunOrPlanet", &TransformSunOrPlanet, PRESERVES_ALL},
+  NativeEntry{0x3C52, "TransformSunOrPlanet", &TransformSunOrPlanetEntry, TRANSFORMS_SUN_OR_PLANET},
   NativeEntry{0x3C72, "ClassifyStationPosition", &ClassifyStationPositionEntry, RETURNS_CARRY},
   NativeEntry{0x3C7E, "TransformShip", &TransformShip, TRANSFORMS_SHIP},
   NativeEntry{0x3CDD, "RunBlueprintHandler", &RunBlueprintHandler, Machine::NativeContract{ALL_BUT_DS & ~REGISTER_DI, 0}},
