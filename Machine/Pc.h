@@ -231,7 +231,10 @@ public:
   /// until it returns. Hooked entries it reaches run natively. If the program stops on the way (a
   /// fault, the end of the program), the native code is abandoned by an exception that the step which
   /// started it catches, and RunUntil reports the stop. Off the native thread, a call that waits past
-  /// the end of a run stops the run there: StopReason::Overran.
+  /// the end of a run stops the run there: StopReason::Overran. If the code returns past the native
+  /// routine that called it, dropping return addresses as RunPauseScreen's abort does, the routine is
+  /// unwound by an exception that its hook catches, and its own caller carries on from where the
+  /// program is, or is unwound in turn.
   void CallNear(std::uint16_t _offset);
 
   /// For native code: returns from a near call as RET _popBytes does.
@@ -300,6 +303,7 @@ private:
   void ReachedRunLimit();
   void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
+  void RunNative(NativeCode::Hook& _hook);
   void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original = nullptr);
   void StepPaced();
   void NoteBackwardJump();
@@ -340,6 +344,10 @@ private:
   bool m_abandon = false;        // the native thread is to unwind what it is running
   bool m_shutdown = false;       // the native thread is to end
   bool m_overran = false;        // native code off the native thread waited past the end of a run
+  // Native routines running on each thread: a call that returns past native code unwinds it, but one
+  // that a host makes from outside any of them ends as calls do.
+  std::uint32_t m_hostRoutines = 0;
+  std::uint32_t m_nativeRoutines = 0;
 };
 
 } // namespace Machine

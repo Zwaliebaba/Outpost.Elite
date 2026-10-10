@@ -473,6 +473,70 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
   }
 
+  // Original code that native code calls and that drops its return address returns past the native
+  // routine: the rest of the routine never runs, and the program carries on where the original went,
+  // after the program's own call.
+  TEST_METHOD(CalleeThatReturnsPastUnwindsTheNativeRoutine)
+  {
+    constexpr std::uint16_t DROPS_RETURN = 0x0017;
+    NativeRig rig("NativeUnwound", {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, // hooked: never runs
+                                    0x58,                                     // 0017: pop ax
+                                    0xC3});                                   //       ret
+    bool resumed = false;
+    rig.Hook(
+      [&resumed](Machine::Pc& _pc)
+      {
+        _pc.CallNear(DROPS_RETURN);
+        resumed = true;
+        _pc.ReturnNear();
+      },
+      {}, Machine::NativeWait::Always);
+    rig.Run();
+    Assert::IsFalse(resumed, L"the native routine is unwound");
+    Assert::AreEqual(0xFFFFu, std::uint32_t{rig.Host().Processor().Regs().ax}, L"the dropped return address was the call's");
+  }
+
+  // Native code that calls native code that returns past it is unwound one routine at a time, and a
+  // routine the program returns to carries on.
+  TEST_METHOD(ReturnPastStopsAtTheRoutineItReturnsTo)
+  {
+    NativeRig rig("NativeReturnsToOuter", COUNT_UP);
+    bool innerResumed = false;
+    rig.Host().Hook(
+      rig.CodeSegment(), HELPER, "Inner",
+      [&innerResumed](Machine::Pc& _pc)
+      {
+        Machine::Registers& regs = _pc.Processor().Regs();
+        regs.sp = static_cast<std::uint16_t>(regs.sp + 2); // drops its own return address
+        _pc.ReturnNear();                                  // and returns from its caller's call
+        innerResumed = true;
+      },
+      {}, Machine::NativeReturn::Near, Machine::NativeWait::Always);
+    bool middleResumed = false;
+    rig.Host().Hook(
+      rig.CodeSegment(), HANDLER, "Middle",
+      [&middleResumed](Machine::Pc& _pc)
+      {
+        _pc.CallNear(HELPER);
+        middleResumed = true;
+        _pc.ReturnNear();
+      },
+      {}, Machine::NativeReturn::Near, Machine::NativeWait::Always);
+    bool outerResumed = false;
+    rig.Hook(
+      [&outerResumed](Machine::Pc& _pc)
+      {
+        _pc.CallNear(HANDLER);
+        outerResumed = true;
+        _pc.ReturnNear();
+      },
+      {}, Machine::NativeWait::Always);
+    rig.Run();
+    Assert::IsTrue(innerResumed, L"the inner routine returns as it likes");
+    Assert::IsFalse(middleResumed, L"the routine it returned past is unwound");
+    Assert::IsTrue(outerResumed, L"the routine it returned to carries on");
+  }
+
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
   {
     NativeRig rig("NativeTwice", COUNT_UP);

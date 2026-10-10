@@ -37,6 +37,13 @@ struct NativeAbandoned
 {
 };
 
+// Thrown through a native routine when code it called returned past it, as a routine that drops its
+// own return address does. Dispatch catches it: the routine's frames are gone, and whatever called the
+// routine looks at where the program now is, which may be past it too.
+struct ReturnedPast
+{
+};
+
 // Runs _fn when the scope ends, however it ends.
 template <typename Fn> class OnExit
 {
@@ -237,6 +244,27 @@ void Pc::CallNear(std::uint16_t _offset)
   const auto returned = static_cast<std::uint16_t>(regs.sp + 2);
   regs.ip = _offset;
   RunToReturn(regs.cs, CALL_RETURN_OFFSET, returned);
+  if (regs.sp > returned && (m_onNativeThread ? m_nativeRoutines : m_hostRoutines) > 0)
+  {
+    throw ReturnedPast{};
+  }
+}
+
+void Pc::RunNative(NativeCode::Hook& _hook)
+{
+  std::uint32_t& running = m_onNativeThread ? m_nativeRoutines : m_hostRoutines;
+  ++running;
+  const OnExit done([&running]() noexcept { --running; });
+  try
+  {
+    _hook.routine(*this);
+  }
+  catch (const ReturnedPast&)
+  {
+    // Code it called returned past it, to where its caller called it from or beyond: its caller looks
+    // at where the program now is.
+    return;
+  }
 }
 
 void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
@@ -330,7 +358,7 @@ void Pc::Dispatch(NativeCode::Hook& _hook)
     }
     else
     {
-      _hook.routine(*this);
+      RunNative(_hook);
     }
   }
   catch (const ProgramStopped&)
@@ -461,14 +489,14 @@ void Pc::TakeDueInterrupts()
   }
 }
 
-// Runs until the code returns to _segment:_offset with SP back at _stackPointer. The original run in a
-// comparison (_original) also records what it executes, and ends as soon as SP is above _stackPointer:
-// a routine that discards its own return address returns past its caller (TickEscapePod), and its run
-// is over there.
+// Runs until the code returns to _segment:_offset with SP back at _stackPointer, or as soon as SP is
+// above _stackPointer: a routine that discards its own return address returns past its caller
+// (TickEscapePod, RunPauseScreen's abort), and the call is over there. The original run in a
+// comparison (_original) also records what it executes.
 void Pc::RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original)
 {
   const Registers& regs = m_cpu.Regs();
-  while ((regs.cs != _segment || regs.ip != _offset || regs.sp < _stackPointer) && (_original == nullptr || regs.sp <= _stackPointer))
+  while ((regs.cs != _segment || regs.ip != _offset || regs.sp < _stackPointer) && regs.sp <= _stackPointer)
   {
     const std::uint16_t segment = regs.cs;
     const std::uint16_t offset = regs.ip;
@@ -561,7 +589,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
         m_ports.EndReplay();
         work.active = false;
       });
-    _hook.routine(*this);
+    RunNative(_hook);
   }
 
   std::string difference = m_native.Compare(_hook, original, regs, work.originalWrites, work.originalAfter, work.nativeWrites, m_memory);
