@@ -20,8 +20,10 @@
 - **Results** that are more than one value come back as small aggregates (`SinCos`, `Pair`, `Vector`, `Angles` and so on). Signed words are `std::int16_t`; angles, 2048 to a turn, are `std::uint16_t`.
 
 **2. Typed views name the records the routines used to compute addresses into.**
-- **The first is `ObjectSlot`** (`GameLogic/ObjectSlot.h`), one of the 36 records of 64 bytes at `shipSlots`. It holds a `GameState` and the slot's offset, and names the fields Reference-Map.md lays out.
-- **A view grows with the routines that use it.** Each subsystem adds the fields it reads and writes, and no more.
+- **The first is `ObjectSlot`** (`GameLogic/ObjectSlot.h`), one of the 64-byte records at `shipSlots` and `debrisSlots`. It holds a `GameState` and the slot's offset.
+- **Its fields are two enumerations, `SlotByte` and `SlotWord`,** read and written with `Get` and `Set`. A byte field cannot be read as a word, nor a word as a byte.
+- **One name per use.** Five files named the slot's fields with constants of their own, and they disagreed. Flight called +3Dh the scale shift where Scene called it the depth and gave that name to +0Ah; Flight's view position at +20h is Scene's compass. An offset that holds different things for different kinds of object now has an enumerator for each, and the files' constants go as their routines are converted.
+- **A view grows with the routines that use it.** Fields no routine yet names are added when one does.
 
 **3. Every write the original makes stays, in the original's order.** Memory is compared after every call and digested, so a write is not a leftover to drop. That includes the scratch words (`rotateScratch`) and the divide trap's saves of BX and DS in the code segment.
 

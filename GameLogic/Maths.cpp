@@ -358,7 +358,7 @@ bool VectorWithinBox(Vector _vector, std::uint16_t _halfSize)
 
 bool ObjectWithinBox(const ObjectSlot& _slot, std::uint16_t _halfSize)
 {
-  return VectorWithinBox(Vector{Signed(_slot.PositionLowX()), Signed(_slot.PositionLowY()), Signed(_slot.PositionLowZ())}, _halfSize);
+  return VectorWithinBox(Vector{Signed(_slot.Get(SlotWord::X)), Signed(_slot.Get(SlotWord::Y)), Signed(_slot.Get(SlotWord::Z))}, _halfSize);
 }
 
 Vector RotatePitchYawRoll(GameState& _state, Vector _vector)
@@ -393,7 +393,7 @@ Vector RotateBySinCos7210(GameState& _state, Vector _vector)
 
 InverseDistanceScale ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value)
 {
-  const std::uint32_t sum = Square(_slot.ViewX()) + Square(_slot.ViewY()) + Square(_slot.ViewZ());
+  const std::uint32_t sum = Square(_slot.Get(SlotWord::ViewX)) + Square(_slot.Get(SlotWord::ViewY)) + Square(_slot.Get(SlotWord::ViewZ));
   // One more than the root of the high word, counted in the divisor's high byte: a count of 256 wraps to 0.
   auto remaining = static_cast<std::uint16_t>(sum >> 16);
   std::uint16_t odd = 0xFFFF;
@@ -408,7 +408,7 @@ InverseDistanceScale ScaleByInverseDistance(GameState& _state, const ObjectSlot&
   } while (!borrow);
   const auto divisor = static_cast<std::uint16_t>(count << 8);
   // The value shifted arithmetically right by the disc scale, then divided through the trap.
-  const std::uint8_t shift = _slot.DiscScale();
+  const std::uint8_t shift = _slot.Get(SlotByte::DiscScale);
   auto shifted = static_cast<std::int32_t>(_value);
   shifted >>= shift < 31 ? shift : 31;
   const auto dividend = static_cast<std::uint32_t>(shifted);
@@ -597,9 +597,9 @@ void ObjectWithinBoxEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   const ObjectSlot slot(_guest.State(), regs.di);
-  regs.ax = slot.PositionLowX();
-  regs.bx = slot.PositionLowY();
-  regs.cx = slot.PositionLowZ();
+  regs.ax = slot.Get(SlotWord::X);
+  regs.bx = slot.Get(SlotWord::Y);
+  regs.cx = slot.Get(SlotWord::Z);
   VectorWithinBoxEntry(_guest);
 }
 
