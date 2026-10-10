@@ -19,9 +19,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> CombatEntries() noexcept;
 
-/// DrawLaserSights (CS:0630): the sights of the current view's laser, ANDed and ORed into the centre of the space view.
-void DrawLaserSights(Guest& _guest);
-
 /// DrawLaserBeams (CS:0A9A): the player's beams, from the bottom of the view to near its centre, in firingLaserType's pattern.
 void DrawLaserBeams(Guest& _guest);
 
@@ -38,9 +35,6 @@ void SpawnPlayerWreckage(Guest& _guest);
 
 /// KillPlayer (CS:3115): playerDead and its sound, unless the escape pod flies.
 void KillPlayer(Guest& _guest);
-
-/// InitMissile (CS:4C8C): the slot at DI made a missile (spawnTemplates entry 0), class 2.
-void InitMissile(Guest& _guest);
 
 /// RemoveAllMissiles (CS:4F9F): every active missile among the object slots removed.
 void RemoveAllMissiles(Guest& _guest);
@@ -90,10 +84,17 @@ struct ThargoidTest
   bool thargoid;
 };
 
+/// DrawLaserSights (CS:0630): the sights of the current view's laser, a 16x16 sprite of laserSights, ANDed and ORed into the
+/// centre of the space view, a row of two words at a time. Nothing when the view's mount has no laser.
+void DrawLaserSights(GameState& _state);
+
 /// GetViewLaser (CS:066C): the laser type 0-3 of the current view's mount, or none when that mount has no laser. The mount is
 /// viewLaserMount's entry for the view; whether it is fitted, bit mount-1 of laserMountsFitted, which RCR reaches a bit at a
 /// time; its type, the 2-bit field mount-1 of laserMountTypes.
 [[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
+
+/// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
+void InitMissile(GameState& _state, ObjectSlot _slot);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
@@ -112,7 +113,9 @@ void UseMaskingDevice(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void DrawLaserSightsEntry(Guest& _guest);             ///< AX, BX, CX, SI, DI clobbered.
 void GetViewLaserEntry(Guest& _guest);                ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
+void InitMissileEntry(Guest& _guest);                 ///< DI = the slot. AX, BX clobbered.
 void TallyMaskMissionKillEntry(Guest& _guest);        ///< DI = the slot. Out: AL = its type while the mission runs.
 void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
 void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.

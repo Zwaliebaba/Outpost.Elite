@@ -156,18 +156,33 @@ void SetState(Guest& _guest, std::uint8_t _state) noexcept
 void TurnToVector(Guest& _guest)
 {
   _guest.Call(CONVERT_VECTOR_TO_ANGLES);
-  TurnTowardAngles(_guest);
+  TurnTowardAnglesEntry(_guest);
 }
 
-// NextRandom against the column of spawnOddsByGovernment at _column, scaled: true when the random word is below the odds.
-[[nodiscard]] bool SpawnOddsMet(Guest& _guest, std::uint16_t _column)
+// What SpawnOddsMet draws: a random word, and the odds it is held against.
+struct SpawnOdds
+{
+  bool met; // the random word is below the odds
+  std::uint16_t random;
+  std::uint16_t odds;
+};
+
+// NextRandom against the government's entry, at spawnOddsOffset, of the column of spawnOddsByGovernment at _column, scaled.
+[[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _state, std::uint16_t _column)
+{
+  const std::uint16_t random = NextRandom(_state);
+  const std::uint16_t odds = ScaleSpawnOdds(_state, _state.Word(At(_column, _state.Get(DS.spawnOddsOffset))));
+  return SpawnOdds{random < odds, random, odds};
+}
+
+// SpawnOddsMet with the registers its code leaves: AX the random word, BX the odds.
+[[nodiscard]] bool SpawnOddsMetOnRegisters(Guest& _guest, std::uint16_t _column)
 {
   Machine::Registers& regs = _guest.Regs();
-  NextRandomEntry(_guest);
-  regs.bx = _guest.Get(DS.spawnOddsOffset);
-  regs.bx = _guest.Word(At(_column, regs.bx));
-  ScaleSpawnOddsEntry(_guest);
-  return regs.ax < regs.bx;
+  const SpawnOdds odds = SpawnOddsMet(_guest.State(), _column);
+  regs.ax = odds.random;
+  regs.bx = odds.odds;
+  return odds.met;
 }
 
 // What BelowSpawnLimit finds: the government's limit for a class, and whether there is room below it.
@@ -195,17 +210,24 @@ struct SpawnLimit
   return limit.below;
 }
 
-// FindFreeShipSlot, and DI = the slot found. False when there is none, which ends UpdateObjectsAndSpawn.
-[[nodiscard]] bool TakeFreeShipSlot(Guest& _guest)
+// FindFreeShipSlot for a spawner: the slot it fills, when one is free. None ends UpdateObjectsAndSpawn.
+[[nodiscard]] SlotSearch TakeFreeShipSlot(GameState& _state)
 {
-  FindFreeShipSlotEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
-  {
-    return false;
-  }
+  return FindFreeShipSlot(_state);
+}
+
+// TakeFreeShipSlot with the registers its code leaves: SI the slot, or past the last; CF set and DI = SI when one is free.
+[[nodiscard]] bool TakeFreeShipSlotOnRegisters(Guest& _guest)
+{
   Machine::Registers& regs = _guest.Regs();
-  regs.di = regs.si;
-  return true;
+  const SlotSearch search = TakeFreeShipSlot(_guest.State());
+  regs.si = search.slot;
+  _guest.SetFlag(FLAG_CARRY, search.found);
+  if (search.found)
+  {
+    regs.di = search.slot;
+  }
+  return search.found;
 }
 
 // SpawnByGovernment (4A86): a drifter, a trader, a hunter and a wolf, each while its class is below the government's limit and
@@ -224,25 +246,27 @@ void SpawnByGovernment(Guest& _guest)
     {
       SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
     }
-    if (_guest.Get(DS.drifterCount) < Low(regs.ax) && SpawnOddsMet(_guest, DS.spawnOddsByGovernment.offset))
+    if (_guest.Get(DS.drifterCount) < Low(regs.ax) && SpawnOddsMetOnRegisters(_guest, DS.spawnOddsByGovernment.offset))
     {
-      if (!TakeFreeShipSlot(_guest))
+      if (!TakeFreeShipSlotOnRegisters(_guest))
       {
         return;
       }
       SpawnRandomDrifter(_guest);
     }
-    if (BelowSpawnLimitOnRegisters(_guest, DS.traderLimitColumn.offset, DS.traderCount) && SpawnOddsMet(_guest, DS.traderOddsColumn.offset))
+    if (BelowSpawnLimitOnRegisters(_guest, DS.traderLimitColumn.offset, DS.traderCount) &&
+        SpawnOddsMetOnRegisters(_guest, DS.traderOddsColumn.offset))
     {
-      if (!TakeFreeShipSlot(_guest))
+      if (!TakeFreeShipSlotOnRegisters(_guest))
       {
         return;
       }
       SpawnRandomTrader(_guest);
     }
-    if (BelowSpawnLimitOnRegisters(_guest, DS.hunterLimitColumn.offset, DS.hunterCount) && SpawnOddsMet(_guest, DS.hunterOddsColumn.offset))
+    if (BelowSpawnLimitOnRegisters(_guest, DS.hunterLimitColumn.offset, DS.hunterCount) &&
+        SpawnOddsMetOnRegisters(_guest, DS.hunterOddsColumn.offset))
     {
-      if (!TakeFreeShipSlot(_guest))
+      if (!TakeFreeShipSlotOnRegisters(_guest))
       {
         return;
       }
@@ -255,7 +279,7 @@ void SpawnByGovernment(Guest& _guest)
   }
   if (_guest.Get(DS.witchspaceCountdown) == 0)
   {
-    if (!SpawnOddsMet(_guest, DS.wolfOddsColumn.offset))
+    if (!SpawnOddsMetOnRegisters(_guest, DS.wolfOddsColumn.offset))
     {
       return;
     }
@@ -264,7 +288,7 @@ void SpawnByGovernment(Guest& _guest)
       return;
     }
   }
-  if (TakeFreeShipSlot(_guest))
+  if (TakeFreeShipSlotOnRegisters(_guest))
   {
     SpawnRandomWolf(_guest);
   }
@@ -282,7 +306,7 @@ void MarkMaskShip(ObjectSlot _slot)
 // SpawnMaskMissionShip in a free slot, CF in saying whether it is the mask ship. False when there is no slot.
 [[nodiscard]] bool SpawnMaskMissionShipInFreeSlot(Guest& _guest, bool _maskShip)
 {
-  if (!TakeFreeShipSlot(_guest))
+  if (!TakeFreeShipSlotOnRegisters(_guest))
   {
     return false;
   }
@@ -307,7 +331,7 @@ void SpawnMaskMissionShips(Guest& _guest)
   if (wolves == 0 && _guest.Get(DS.maskShipDestroyed) != 1)
   {
     // The mask ship and two escorts placed near it.
-    if (!TakeFreeShipSlot(_guest))
+    if (!TakeFreeShipSlotOnRegisters(_guest))
     {
       return;
     }
@@ -322,7 +346,7 @@ void SpawnMaskMissionShips(Guest& _guest)
         return;
       }
       regs.si = _guest.Get(DS.maskShipSlot);
-      PlaceEscortNear(_guest);
+      PlaceEscortNearEntry(_guest);
     }
     return;
   }
@@ -348,7 +372,7 @@ void SpawnInvasionWave(Guest& _guest)
   {
     return;
   }
-  if (TakeFreeShipSlot(_guest))
+  if (TakeFreeShipSlotOnRegisters(_guest))
   {
     SpawnInvasionThargoid(_guest);
   }
@@ -402,7 +426,7 @@ void LaunchAtOffender(Guest& _guest)
   _guest.SetByte(zHigh, static_cast<std::uint8_t>(_guest.Byte(zHigh) + (sum >> 16)));
   AddWord(_guest, At(regs.di, SLOT_YAW), LAUNCH_TURN);
   _guest.SetWord(At(regs.di, SLOT_ROLL), Negate(_guest.Word(At(regs.di, SLOT_ROLL))));
-  ComputeVelocity(_guest);
+  ComputeVelocityEntry(_guest);
   regs.di = station;
 }
 
@@ -436,7 +460,7 @@ void CheckMissilesAtStation(Guest& _guest)
             break;
           }
           std::swap(regs.di, regs.bx);
-          IsPoliceViper(_guest);
+          IsPoliceViperEntry(_guest);
           std::swap(regs.di, regs.bx);
           if (_guest.Flag(FLAG_ZERO))
           {
@@ -483,7 +507,7 @@ void WolfTurnAway(Guest& _guest)
   {
     GetObjectPositionEntry(_guest);
     TurnToVector(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     TryLaunchThargon(_guest);
     MoveObject(_guest);
     return;
@@ -494,7 +518,7 @@ void WolfTurnAway(Guest& _guest)
   if (!rest)
   {
     // A Thargon goes back to its run only while its mother is a Thargoid with a blip.
-    IsThargonType(_guest);
+    IsThargonTypeEntry(_guest);
     if (_guest.Flag(FLAG_ZERO))
     {
       regs.si = _guest.Word(At(regs.di, SLOT_OWNER));
@@ -510,7 +534,7 @@ void WolfTurnAway(Guest& _guest)
     _guest.SetByte(At(regs.di, SLOT_AGGRESSION), RESTING_AGGRESSION);
     _guest.SetByte(At(regs.di, SLOT_FLAGS), static_cast<std::uint8_t>(_guest.Byte(At(regs.di, SLOT_FLAGS)) & ~FLAG_HOSTILE));
     SetState(_guest, STATE_ATTACK);
-    IsThargonType(_guest);
+    IsThargonTypeEntry(_guest);
     if (_guest.Flag(FLAG_ZERO))
     {
       SetState(_guest, THARGON_ADRIFT);
@@ -561,14 +585,14 @@ void HunterEvade(Guest& _guest)
     _guest.SetWord(At(regs.di, SLOT_JINK_YAW), Negate(_guest.Word(At(regs.di, SLOT_JINK_YAW))));
   }
   // Away from the player: the heading to it turned half round, plus the jink.
-  GetVectorToPlayer(_guest);
+  GetVectorToPlayerEntry(_guest);
   _guest.Call(CONVERT_VECTOR_TO_ANGLES);
   regs.ax = static_cast<std::uint16_t>(regs.ax + HALF_TURN + _guest.Word(At(regs.di, SLOT_JINK_PITCH)));
   regs.bx = static_cast<std::uint16_t>(regs.bx + _guest.Word(At(regs.di, SLOT_JINK_YAW)));
-  TurnTowardAngles(_guest);
+  TurnTowardAnglesEntry(_guest);
   regs.bx = HUNTER_MISSILE_ODDS;
   TryLaunchMissileAtPlayer(_guest);
-  ComputeVelocity(_guest);
+  ComputeVelocityEntry(_guest);
   MoveObject(_guest);
 }
 
@@ -579,9 +603,9 @@ void HunterIdle(Guest& _guest)
   const std::uint8_t flags = _guest.Byte(At(regs.di, SLOT_FLAGS));
   if ((flags & FLAG_BLIP_DRAWN) == 0)
   {
-    GetVectorToPlayer(_guest);
+    GetVectorToPlayerEntry(_guest);
     TurnToVector(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     return;
   }
@@ -619,7 +643,7 @@ void HunterIdle(Guest& _guest)
 void TraderDecide(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  IsPoliceViper(_guest);
+  IsPoliceViperEntry(_guest);
   if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) >= POLICE_ATTACK_STATUS)
   {
     SetState(_guest, TRADER_ATTACKING);
@@ -637,7 +661,7 @@ void TraderDecide(Guest& _guest)
 void TraderAttack(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  IsPoliceViper(_guest);
+  IsPoliceViperEntry(_guest);
   if (!_guest.Flag(FLAG_ZERO) && _guest.Byte(At(regs.di, SLOT_ENERGY)) < TRADER_FLEE_ENERGY)
   {
     SetState(_guest, TRADER_FLEEING);
@@ -650,16 +674,16 @@ void TraderAttack(Guest& _guest)
     MoveObject(_guest);
     return;
   }
-  GetVectorToPlayer(_guest);
+  GetVectorToPlayerEntry(_guest);
   TurnToVector(_guest);
   TryFireLaserAtPlayer(_guest);
-  IsPoliceViper(_guest);
+  IsPoliceViperEntry(_guest);
   if (_guest.Flag(FLAG_ZERO) && _guest.Get(DS.legalStatus) != 0)
   {
     regs.bx = _guest.Get(DS.legalStatus) >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
   }
-  ComputeVelocity(_guest);
+  ComputeVelocityEntry(_guest);
   MoveObject(_guest);
 }
 
@@ -691,12 +715,12 @@ void TraderFlee(Guest& _guest)
     _guest.SetWord(At(regs.di, SLOT_JINK_PITCH), Negate(_guest.Word(At(regs.di, SLOT_JINK_PITCH))));
     _guest.SetWord(At(regs.di, SLOT_JINK_YAW), Negate(_guest.Word(At(regs.di, SLOT_JINK_YAW))));
   }
-  GetVectorToPlayer(_guest);
+  GetVectorToPlayerEntry(_guest);
   _guest.Call(CONVERT_VECTOR_TO_ANGLES);
   regs.ax = static_cast<std::uint16_t>(regs.ax + HALF_TURN + _guest.Word(At(regs.di, SLOT_JINK_PITCH)));
   regs.bx = static_cast<std::uint16_t>(regs.bx + _guest.Word(At(regs.di, SLOT_JINK_YAW)));
-  TurnTowardAngles(_guest);
-  ComputeVelocity(_guest);
+  TurnTowardAnglesEntry(_guest);
+  ComputeVelocityEntry(_guest);
   NextRandomEntry(_guest);
   if (regs.ax < TRADER_ECM_ODDS)
   {
@@ -718,7 +742,7 @@ void TraderBreakOff(Guest& _guest)
   }
   if (_guest.Byte(At(regs.di, SLOT_ENERGY)) < RETURN_ENERGY)
   {
-    IsPoliceViper(_guest);
+    IsPoliceViperEntry(_guest);
     if (!_guest.Flag(FLAG_ZERO))
     {
       SetState(_guest, TRADER_FLEEING);
@@ -728,7 +752,7 @@ void TraderBreakOff(Guest& _guest)
   }
   GetObjectPositionEntry(_guest);
   TurnToVector(_guest);
-  ComputeVelocity(_guest);
+  ComputeVelocityEntry(_guest);
   MoveObject(_guest);
 }
 
@@ -825,41 +849,27 @@ SlotSearch IsMaskShipPresent(GameState& _state)
   return SlotSearch{false, slot};
 }
 
-void PlaceEscortNear(Guest& _guest)
+void PlaceEscortNear(GameState& _state, ObjectSlot _escort, std::uint16_t _leader)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t escort = regs.di;
   // The leader's first 16 bytes, byte by byte: its type too.
-  for (regs.cx = ESCORT_BYTES_COPIED; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+  for (std::uint16_t index = 0; index < ESCORT_BYTES_COPIED; ++index)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    _guest.SetByte(regs.di, Low(regs.ax));
-    regs.si = static_cast<std::uint16_t>(regs.si + 1);
-    regs.di = static_cast<std::uint16_t>(regs.di + 1);
+    _state.SetByte(Offset(_escort.Offset(), index), _state.Byte(Offset(_leader, index)));
   }
-  regs.di = escort;
   for (int axis = 0; axis < 3; ++axis)
   {
-    NextRandomEntry(_guest);
-    regs.ax = static_cast<std::uint16_t>((regs.ax & ESCORT_SCATTER_MASK) - ESCORT_SCATTER_CENTER);
-    regs.dx = SignWord(regs.ax);
-    AddToCoordinate(ObjectSlot(_guest.State(), regs.di), axis, static_cast<std::int16_t>(regs.ax));
+    const auto scatter = static_cast<std::uint16_t>((NextRandom(_state) & ESCORT_SCATTER_MASK) - ESCORT_SCATTER_CENTER);
+    AddToCoordinate(_escort, axis, static_cast<std::int16_t>(scatter));
   }
 }
 
-void TurnTowardAngles(Guest& _guest)
+Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = regs.bx;
-  regs.cx = _guest.Word(At(regs.di, SLOT_PITCH));
-  ClampTurnStepEntry(_guest);
-  AddWord(_guest, At(regs.di, SLOT_PITCH), regs.ax);
-  regs.bp = regs.bx;
-  regs.cx = _guest.Word(At(regs.di, SLOT_YAW));
-  regs.ax = regs.dx;
-  ClampTurnStepEntry(_guest);
-  AddWord(_guest, At(regs.di, SLOT_YAW), regs.ax);
-  regs.ax = regs.bp;
+  const TurnStep pitch = ClampTurnStep(_slot, _wanted.first, _slot.Get(SlotWord::Pitch));
+  _slot.Set(SlotWord::Pitch, Offset(_slot.Get(SlotWord::Pitch), static_cast<std::uint16_t>(pitch.step)));
+  const TurnStep yaw = ClampTurnStep(_slot, _wanted.second, _slot.Get(SlotWord::Yaw));
+  _slot.Set(SlotWord::Yaw, Offset(_slot.Get(SlotWord::Yaw), static_cast<std::uint16_t>(yaw.step)));
+  return Turn{pitch, yaw};
 }
 
 TurnStep ClampTurnStep(const ObjectSlot& _slot, std::uint16_t _wanted, std::uint16_t _current)
@@ -892,28 +902,13 @@ HunterCount CountOtherHuntersOnScanner(GameState& _state, std::uint16_t _slot)
   return hunters;
 }
 
-void GetVectorToObject(Guest& _guest)
+VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // Each coordinate quartered (SAR twice) before the difference, BP holding the slot's own.
-  regs.ax = Sar(_guest.Word(At(regs.si, SLOT_X)), 2);
-  regs.bp = Sar(_guest.Word(At(regs.di, SLOT_X)), 2);
-  regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bp);
-  regs.bx = Sar(_guest.Word(At(regs.si, SLOT_Y)), 2);
-  regs.bp = Sar(_guest.Word(At(regs.di, SLOT_Y)), 2);
-  regs.bx = static_cast<std::uint16_t>(regs.bx - regs.bp);
-  regs.cx = Sar(_guest.Word(At(regs.si, SLOT_Z)), 2);
-  regs.bp = Sar(_guest.Word(At(regs.di, SLOT_Z)), 2);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.bp);
-  regs.dx = static_cast<std::uint16_t>(regs.dx >> 2);
-  // VectorWithinBox with AX, BX and CX pushed and popped round it.
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  VectorWithinBoxEntry(_guest);
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
+  // Each coordinate quartered (SAR twice) before the difference.
+  const auto difference = [&_slot, &_object](SlotWord _axis)
+  { return static_cast<std::int16_t>(Sar(_object.Get(_axis), 2) - Sar(_slot.Get(_axis), 2)); };
+  const Vector vector{difference(SlotWord::X), difference(SlotWord::Y), difference(SlotWord::Z)};
+  return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
 void SkipInertObjectAi(Guest& /*_guest*/) {}
@@ -932,7 +927,7 @@ void UpdateStationAi(Guest& _guest)
 void UpdateDriftingObjectAi(Guest& _guest)
 {
   MoveObject(_guest);
-  IsDebrisType(_guest);
+  IsDebrisTypeEntry(_guest);
   if (!_guest.Flag(FLAG_ZERO))
   {
     return;
@@ -951,7 +946,7 @@ void UpdateDriftingObjectAi(Guest& _guest)
 void UpdateTraderOrPoliceAi(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  IsDebrisType(_guest);
+  IsDebrisTypeEntry(_guest);
   if (_guest.Flag(FLAG_ZERO))
   {
     // A rock only spins. The split at 56B1 (LaunchShipFromObject with DL=5) never runs: 56A5 jumps past it when bit 0 of +1Eh is
@@ -988,7 +983,7 @@ void UpdateTraderOrPoliceAi(Guest& _guest)
 void UpdateWolfAi(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  IsThargoidType(_guest);
+  IsThargoidTypeEntry(_guest);
   bool spins = _guest.Flag(FLAG_ZERO);
   if (spins)
   {
@@ -1000,7 +995,7 @@ void UpdateWolfAi(Guest& _guest)
   }
   else
   {
-    IsThargonType(_guest);
+    IsThargonTypeEntry(_guest);
     spins = _guest.Flag(FLAG_ZERO);
   }
   if (spins)
@@ -1035,13 +1030,13 @@ void UpdateWolfAi(Guest& _guest)
       MoveObject(_guest);
       return;
     }
-    GetVectorToPlayer(_guest);
+    GetVectorToPlayerEntry(_guest);
     TurnToVector(_guest);
     TryFireLaserAtPlayer(_guest);
     regs.bx = WOLF_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
     TryLaunchThargon(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     AddWord(_guest, At(regs.di, SLOT_ROLL), ATTACK_RUN_SPIN);
     return;
@@ -1056,7 +1051,7 @@ void UpdateWolfAi(Guest& _guest)
   if (_guest.Byte(speed) >= SLOWEST_ADRIFT)
   {
     _guest.SetByte(speed, static_cast<std::uint8_t>(_guest.Byte(speed) - ADRIFT_SLOWING));
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
   }
   MoveObject(_guest);
 }
@@ -1077,12 +1072,12 @@ void UpdateHunterAi(Guest& _guest)
       MoveObject(_guest);
       return;
     }
-    GetVectorToPlayer(_guest);
+    GetVectorToPlayerEntry(_guest);
     TurnToVector(_guest);
     TryFireLaserAtPlayer(_guest);
     regs.bx = HUNTER_MISSILE_ODDS;
     TryLaunchMissileAtPlayer(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     AddWord(_guest, At(regs.di, SLOT_ROLL), HUNTER_SPIN);
     MoveObject(_guest);
     return;
@@ -1091,7 +1086,7 @@ void UpdateHunterAi(Guest& _guest)
   {
     regs.si = _guest.Word(At(regs.di, SLOT_TARGET));
     regs.dx = FORMATION_BOX;
-    GetVectorToObject(_guest);
+    GetVectorToObjectEntry(_guest);
     if (_guest.Flag(FLAG_CARRY))
     {
       SetState(_guest, STATE_CLOSING);
@@ -1099,7 +1094,7 @@ void UpdateHunterAi(Guest& _guest)
       return;
     }
     TurnToVector(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     return;
   }
@@ -1115,12 +1110,12 @@ void UpdateHunterAi(Guest& _guest)
     MoveObject(_guest);
     return;
   }
-  GetVectorToPlayer(_guest);
+  GetVectorToPlayerEntry(_guest);
   TurnToVector(_guest);
   TryFireLaserAtPlayer(_guest);
   regs.bx = CLOSING_MISSILE_ODDS;
   TryLaunchMissileAtPlayer(_guest);
-  ComputeVelocity(_guest);
+  ComputeVelocityEntry(_guest);
   MoveObject(_guest);
 }
 
@@ -1131,7 +1126,7 @@ void CheckSafeZoneHoldFire(Guest& _guest)
     _guest.SetFlag(FLAG_CARRY, false);
     return;
   }
-  IsPoliceViper(_guest);
+  IsPoliceViperEntry(_guest);
   if (_guest.Flag(FLAG_ZERO))
   {
     _guest.SetFlag(FLAG_CARRY, false);
@@ -1158,6 +1153,10 @@ constexpr Machine::NativeContract CLOBBERS_MOST{
 
 constexpr Machine::NativeContract CLOBBERS_CX_SI{REGISTER_CX | REGISTER_SI, 0};
 constexpr Machine::NativeContract MASK_SHIP_SEARCH{REGISTER_CX, FLAG_CARRY};
+constexpr Machine::NativeContract ESCORT_PLACED{REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0};
+// TurnTowardAngles: the CX and BP it leaves are compared (TurnTowardAnglesEntry).
+constexpr Machine::NativeContract TURNED{REGISTER_DX, 0};
+constexpr Machine::NativeContract OBJECT_VECTOR{REGISTER_DX | REGISTER_BP, FLAG_CARRY};
 
 } // namespace
 
@@ -1176,6 +1175,28 @@ void IsMaskShipPresentEntry(Guest& _guest)
   _guest.Regs().si = search.slot;
   _guest.SetFlag(FLAG_CARRY, search.found);
   _guest.Clobber(MASK_SHIP_SEARCH);
+}
+
+void PlaceEscortNearEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  PlaceEscortNear(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.si);
+  _guest.Clobber(ESCORT_PLACED);
+}
+
+void TurnTowardAnglesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot(_guest.State(), regs.di);
+  const Turn turn = TurnTowardAngles(slot, Angles{regs.ax, regs.bx});
+  regs.ax = turn.pitch.errorMagnitude;
+  regs.bx = turn.yaw.errorMagnitude;
+  // The original leaves the yaw's ClampTurnStep in CX, the turn rate, negated when it is the step, and the pitch's error in BP;
+  // UpdateMissileAi's contract compares both after it.
+  const std::uint16_t rate = slot.Get(SlotByte::TurnRate);
+  regs.cx = turn.yaw.errorMagnitude < rate ? rate : static_cast<std::uint16_t>(turn.yaw.step);
+  regs.bp = turn.pitch.errorMagnitude;
+  _guest.Clobber(TURNED);
 }
 
 void ClampTurnStepEntry(Guest& _guest)
@@ -1204,6 +1225,17 @@ void CountOtherHuntersOnScannerEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_CX_SI);
 }
 
+void GetVectorToObjectEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const VectorToObject toObject = GetVectorToObject(ObjectSlot(_guest.State(), regs.di), ObjectSlot(_guest.State(), regs.si), regs.dx);
+  regs.ax = static_cast<std::uint16_t>(toObject.vector.x);
+  regs.bx = static_cast<std::uint16_t>(toObject.vector.y);
+  regs.cx = static_cast<std::uint16_t>(toObject.vector.z);
+  _guest.SetFlag(FLAG_CARRY, toObject.within);
+  _guest.Clobber(OBJECT_VECTOR);
+}
+
 namespace
 {
 
@@ -1211,12 +1243,11 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4A10, "UpdateObjectsAndSpawn", &UpdateObjectsAndSpawn, Machine::NativeContract{REGISTER_ALL, 0}},
   NativeEntry{0x4C0E, "ScaleSpawnOdds", &ScaleSpawnOddsEntry, PRESERVES_ALL},
   NativeEntry{0x4C20, "IsMaskShipPresent", &IsMaskShipPresentEntry, MASK_SHIP_SEARCH},
-  NativeEntry{0x4C38, "PlaceEscortNear", &PlaceEscortNear,
-              Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},
-  NativeEntry{0x514B, "TurnTowardAngles", &TurnTowardAngles, Machine::NativeContract{REGISTER_CX | REGISTER_DX | REGISTER_BP, 0}},
+  NativeEntry{0x4C38, "PlaceEscortNear", &PlaceEscortNearEntry, ESCORT_PLACED},
+  NativeEntry{0x514B, "TurnTowardAngles", &TurnTowardAnglesEntry, TURNED},
   NativeEntry{0x5166, "ClampTurnStep", &ClampTurnStepEntry, PRESERVES_ALL},
   NativeEntry{0x548F, "CountOtherHuntersOnScanner", &CountOtherHuntersOnScannerEntry, CLOBBERS_CX_SI},
-  NativeEntry{0x54B4, "GetVectorToObject", &GetVectorToObject, Machine::NativeContract{REGISTER_DX | REGISTER_BP, FLAG_CARRY}},
+  NativeEntry{0x54B4, "GetVectorToObject", &GetVectorToObjectEntry, OBJECT_VECTOR},
   NativeEntry{0x5594, "SkipInertObjectAi", &SkipInertObjectAi, PRESERVES_ALL},
   NativeEntry{0x5595, "UpdateStationAi", &UpdateStationAi,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI, 0}},

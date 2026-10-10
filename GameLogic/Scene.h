@@ -82,10 +82,6 @@ void DrawSunOrPlanet(Guest& _guest);
 /// radius 7 rows when its depth byte +25h is below 14h and smaller further off, or nothing.
 void DrawDistantStation(Guest& _guest);
 
-/// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Out: AX, BX the roll's sine
-/// and cosine.
-void LoadPlayerAngles(Guest& _guest);
-
 /// ProjectToScreen (CS:8D2E): AX = 80h + 256x/z, BX = 40h + 256y/z for x = AX, y = BX, z = CX, an
 /// overflowing divide saturated by the trap. DX, BP clobbered.
 void ProjectToScreen(Guest& _guest);
@@ -143,6 +139,9 @@ Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex);
 /// difference, or of the low words' when the high words agree: true when _triangle faces the viewer.
 [[nodiscard]] bool TriangleWindingSign(Triangle _triangle);
 
+/// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Returns the roll's sine and cosine.
+SinCos LoadPlayerAngles(GameState& _state);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void ReflectVertexAboutCenterEntry(Guest& _guest); ///< SI = the vertex, DI = its reflection. Out: BX = drawCenterZ; AX clobbered.
@@ -152,5 +151,6 @@ void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the
 /// p0 = (AX, DX), p1 = (BX, BP), p2 = (CX, DI). Out: SF; DX:AX = (y0-y1)(x2-x1), BX = the low word of (x0-x1)(y2-y1), less AX when the
 /// high words agree; CX, DI clobbered.
 void TriangleWindingSignEntry(Guest& _guest);
+void LoadPlayerAnglesEntry(Guest& _guest); ///< Out: AX, BX the roll's sine and cosine.
 
 } // namespace Elite
