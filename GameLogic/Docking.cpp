@@ -8,6 +8,8 @@
 #include "Maths.h"
 #include "Scene.h"
 #include "Ships.h"
+#include "Sound.h"
+#include "Timer.h"
 #include "Video.h"
 
 namespace Elite
@@ -22,17 +24,10 @@ using Machine::Registers;
 // The routines these call through their entries: the original's, or a native routine hooked there.
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t DRAW_TUNNEL_RECTANGLE = 0x1AA0;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
 constexpr std::uint16_t MASK_OUTSIDE_TUNNEL = 0x2E0A;
-constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t START_MUSIC = 0x7401;
-constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
-constexpr std::uint16_t WAIT_FOR_TIMER_TICK = 0x7772;
-constexpr std::uint16_t START_BEEP = 0x7A57;
-constexpr std::uint16_t START_LOW_BEEP = 0x7A5D;
 constexpr std::uint16_t MOVE_OBJECTS_BY_VELOCITY = 0x85EC;
 
 // The station tunnel: ten frames of one to ten of tunnelRectangles' ten rectangles, ten bytes each, and
@@ -120,41 +115,64 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
   return at;
 }
 
-// CX of tunnelRectangles from SI, each by DrawTunnelRectangle in the tunnel's colour, the LOOP back to _loop. Out:
-// SI past them.
-void DrawTunnelRectangles(Guest& _guest, std::uint16_t _loop)
+// Where DrawTunnelRectangles stopped.
+struct TunnelDrawn
 {
-  Registers& regs = _guest.Regs();
+  std::uint16_t next; // past the last rectangle drawn, where the original leaves SI
+  bool filled;        // a DrawLine filled bytes with REP STOSB (DrawLineOut)
+};
+
+// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
+// (2DA1, 2DEE), which carries the count and the next rectangle (ADR-015).
+TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::uint16_t _first, std::uint16_t _count, std::uint16_t _loop)
+{
+  TunnelDrawn drawn{_first, false};
+  std::uint16_t count = _count;
   for (;;)
   {
-    const std::uint16_t count = regs.cx;
-    const std::uint16_t rectangle = regs.si;
-    _guest.Set(DS.drawColor, TUNNEL_COLOR);
-    _guest.Call(DRAW_TUNNEL_RECTANGLE);
-    regs.si = Offset(rectangle, TUNNEL_RECTANGLE_BYTES);
-    regs.cx = count;
-    if (--regs.cx == 0)
+    _state.Set(DS.drawColor, TUNNEL_COLOR);
+    drawn.filled = DrawTunnelRectangle(_state, drawn.next) || drawn.filled;
+    drawn.next = Offset(drawn.next, TUNNEL_RECTANGLE_BYTES);
+    if (--count == 0)
     {
-      return;
+      return drawn;
     }
-    _guest.JumpBack(_loop);
+    _hardware.LoopTurn(_loop, {count, drawn.next});
   }
 }
 
-// mov cx, _ticks, then WaitForTimerTick at _loop and LOOP: about _ticks milliseconds.
-void WaitTimerTicks(Guest& _guest, std::uint16_t _ticks, std::uint16_t _loop)
+// DrawTunnelRectangles from CX and SI, for PlayStationTunnel's register code: out, SI past the rectangles, CX = 0 from the
+// LOOP, and ES = DS and DF clear once a line was filled.
+void DrawTunnelRectanglesOnRegisters(Guest& _guest, std::uint16_t _loop)
 {
   Registers& regs = _guest.Regs();
-  regs.cx = _ticks;
+  const TunnelDrawn drawn = DrawTunnelRectangles(_guest.State(), _guest.Devices(), regs.si, regs.cx, _loop);
+  regs.si = drawn.next;
+  regs.cx = 0;
+  DrawLineOut(_guest, drawn.filled);
+}
+
+// MOV CX,_ticks, then WaitForTimerTick at CS:_loop and the LOOP back there, which carries the count (ADR-015): about _ticks
+// milliseconds. The original leaves CX = 0.
+void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks, std::uint16_t _loop)
+{
+  std::uint16_t count = _ticks;
   for (;;)
   {
-    _guest.Call(WAIT_FOR_TIMER_TICK);
-    if (--regs.cx == 0)
+    WaitForTimerTick(_state, _hardware);
+    if (--count == 0)
     {
       return;
     }
-    _guest.JumpBack(_loop);
+    _hardware.LoopTurn(_loop, {count});
   }
+}
+
+// WaitTimerTicks for PlayStationTunnel's register code: CX = 0 after it, from the LOOP.
+void WaitTimerTicksOnRegisters(Guest& _guest, std::uint16_t _ticks, std::uint16_t _loop)
+{
+  WaitTimerTicks(_guest.State(), _guest.Devices(), _ticks, _loop);
+  _guest.Regs().cx = 0;
 }
 
 // _text posted for 25 frames. Returns its offset, which the original leaves in AX (mov ax, _text).
@@ -548,12 +566,12 @@ void PlayStationTunnel(Guest& _guest)
     }
     else
     {
-      WaitTimerTicks(_guest, DOCKED_FIRST_TICKS, 0x2D9A);
+      WaitTimerTicksOnRegisters(_guest, DOCKED_FIRST_TICKS, 0x2D9A);
       regs.cx = regs.ax;
     }
-    DrawTunnelRectangles(_guest, 0x2DA1);
+    DrawTunnelRectanglesOnRegisters(_guest, 0x2DA1);
     _guest.Call(FINISH_SPACE_VIEW_FRAME);
-    WaitTimerTicks(_guest, TUNNEL_FRAME_TICKS, 0x2DB8);
+    WaitTimerTicksOnRegisters(_guest, TUNNEL_FRAME_TICKS, 0x2DB8);
     regs.ax = Offset(frame, 1);
     if (Low(regs.ax) == TUNNEL_FRAMES + 1)
     {
@@ -580,11 +598,11 @@ void PlayStationTunnel(Guest& _guest)
     }
     else
     {
-      WaitTimerTicks(_guest, TUNNEL_FRAME_TICKS, 0x2DE7);
+      WaitTimerTicksOnRegisters(_guest, TUNNEL_FRAME_TICKS, 0x2DE7);
       regs.si = first;
       regs.cx = frames;
     }
-    DrawTunnelRectangles(_guest, 0x2DEE);
+    DrawTunnelRectanglesOnRegisters(_guest, 0x2DEE);
     _guest.Call(FINISH_SPACE_VIEW_FRAME);
     regs.si = Offset(first, TUNNEL_RECTANGLE_BYTES);
     regs.cx = frames;
@@ -596,46 +614,40 @@ void PlayStationTunnel(Guest& _guest)
   }
 }
 
-void ToggleDockingComputer(Guest& _guest)
+std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.dockingKeyReleased, 0);
-  if (_guest.Get(DS.dockingComputerOn) == 1)
+  _state.Set(DS.dockingKeyReleased, 0);
+  if (_state.Get(DS.dockingComputerOn) == 1)
   {
-    _guest.Call(STOP_ALL_SOUND);
-    _guest.Set(DS.dockingComputerOn, 0);
-    _guest.Set(DS.viewLocked, 0);
-    if (_guest.Get(DS.playerSpeed) == 0)
+    StopAllSound(_state, _hardware);
+    _state.Set(DS.dockingComputerOn, 0);
+    _state.Set(DS.viewLocked, 0);
+    if (_state.Get(DS.playerSpeed) == 0)
     {
-      _guest.Set(DS.playerSpeed, LEAST_SPEED);
-      _guest.Set(DS.velocityDirty, 1);
+      _state.Set(DS.playerSpeed, LEAST_SPEED);
+      _state.Set(DS.velocityDirty, 1);
     }
-    _guest.Call(START_LOW_BEEP);
-    regs.ax = PostDockingMessage(_guest.State(), DS.dockingComputerOffMessage);
-    return;
+    StartLowBeep(_state);
+    return PostDockingMessage(_state, DS.dockingComputerOffMessage);
   }
-  _guest.Call(IN_SAFE_ZONE);
-  if (!_guest.Flag(FLAG_CARRY))
+  if (!InSafeZone(_state).inside)
   {
-    _guest.Set(DS.dataA137, 0);
-    _guest.Call(START_LOW_BEEP);
-    regs.ax = PostDockingMessage(_guest.State(), DS.stationOutOfRangeMessage);
-    return;
+    _state.Set(DS.dataA137, 0);
+    StartLowBeep(_state);
+    return PostDockingMessage(_state, DS.stationOutOfRangeMessage);
   }
-  regs.bx = DS.stationSlot.offset;
-  if ((_guest.Byte(Offset(regs.bx, SLOT_FLAGS)) & STATION_SHOT) != 0)
+  if ((ObjectSlot(_state, DS.stationSlot.offset).Get(SlotByte::Flags) & STATION_SHOT) != 0)
   {
-    _guest.Set(DS.dataA137, 0);
-    _guest.Call(START_LOW_BEEP);
-    regs.ax = PostDockingMessage(_guest.State(), DS.dockingDeniedMessage);
-    return;
+    _state.Set(DS.dataA137, 0);
+    StartLowBeep(_state);
+    return PostDockingMessage(_state, DS.dockingDeniedMessage);
   }
-  _guest.Set(DS.dockingComputerSteering, 0);
-  _guest.Set(DS.dockingComputerState, SLOW_TO_STOP);
-  _guest.Set(DS.dockingComputerOn, 1);
-  _guest.Call(START_MUSIC);
-  _guest.Call(START_BEEP);
-  regs.ax = PostDockingMessage(_guest.State(), DS.dockingComputerOnMessage);
+  _state.Set(DS.dockingComputerSteering, 0);
+  _state.Set(DS.dockingComputerState, SLOW_TO_STOP);
+  _state.Set(DS.dockingComputerOn, 1);
+  StartMusic(_state, _hardware);
+  StartBeep(_state);
+  return PostDockingMessage(_state, DS.dockingComputerOnMessage);
 }
 
 void RunDockingComputer(Guest& _guest)
@@ -730,19 +742,17 @@ void RunDockingComputer(Guest& _guest)
   }
 }
 
-void CancelDockingComputer(Guest& _guest)
+void CancelDockingComputer(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.dockingComputerOn) != 1)
+  if (_state.Get(DS.dockingComputerOn) != 1)
   {
     return;
   }
-  _guest.Set(DS.dockingComputerOn, 0);
-  _guest.Set(DS.dataA137, 0);
-  _guest.Set(DS.viewLocked, 0);
-  const std::uint16_t saved = regs.ax;
-  _guest.Call(STOP_ALL_SOUND);
-  regs.ax = saved;
+  _state.Set(DS.dockingComputerOn, 0);
+  _state.Set(DS.dataA137, 0);
+  _state.Set(DS.viewLocked, 0);
+  // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
+  StopAllSound(_state, _hardware);
 }
 
 namespace
@@ -782,6 +792,26 @@ void CheckDockingAlignmentEntry(Guest& _guest)
   _guest.Clobber(ALIGNMENT);
 }
 
+void ToggleDockingComputerEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The original leaves the message in AX and, once inside the safe zone with the computer off, the station's slot in BX, which
+  // the contract compares.
+  const bool looksAtStation = _guest.Get(DS.dockingComputerOn) != 1 && InSafeZone(_guest.State()).inside;
+  regs.ax = ToggleDockingComputer(_guest.State(), _guest.Devices());
+  if (looksAtStation)
+  {
+    regs.bx = DS.stationSlot.offset;
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void CancelDockingComputerEntry(Guest& _guest)
+{
+  CancelDockingComputer(_guest.State(), _guest.Devices());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void MaskOutsideTunnelEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -802,9 +832,9 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2D0F, "CheckDockingAlignment", &CheckDockingAlignmentEntry, ALIGNMENT},
   NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnel, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnelEntry, CLOBBERS_ALL_BUT_SI_ES},
-  NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputer, PRESERVES_ALL},
+  NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputerEntry, PRESERVES_ALL},
   NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputer, CLOBBERS_BX_CX_DX},
-  NativeEntry{0x8BAA, "CancelDockingComputer", &CancelDockingComputer, PRESERVES_ALL},
+  NativeEntry{0x8BAA, "CancelDockingComputer", &CancelDockingComputerEntry, PRESERVES_ALL},
 };
 
 } // namespace

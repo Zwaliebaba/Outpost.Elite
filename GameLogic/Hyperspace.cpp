@@ -4,7 +4,9 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Flight.h"
 #include "Maths.h"
+#include "Ships.h"
 #include "Sound.h"
 
 #include <algorithm>
@@ -27,9 +29,7 @@ constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t DRAW_CIRCLE = 0x1AC1;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
 constexpr std::uint16_t ARRIVE_IN_SYSTEM = 0x2B5A;
-constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
-constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
 constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
 constexpr std::uint16_t COMPLETE_HYPERSPACE_JUMP = 0x4707;
 constexpr std::uint16_t DRAW_HYPERSPACE_RINGS = 0x48C0;
@@ -43,7 +43,6 @@ constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
 // scanner.
 constexpr std::array<std::uint8_t, 4> UNLOCKING_TYPES = {5, 0x11, 6, 0x0B}; // Asteroid, Boulder, Barrel, Splinter
 constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F;
-constexpr std::uint16_t SLOT_FLAGS = 0x1E;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint8_t FIRST_SHIP_SLOT_INDEX = 3;
 
@@ -63,7 +62,6 @@ constexpr std::uint16_t HYPERSPACE_TUNNEL_FRAMES = 0x32;
 
 // ArriveInSystem: the slots it moves (sun, planet, station), 64 bytes apart.
 constexpr std::uint8_t ARRIVAL_SLOTS = 3;
-constexpr std::uint16_t SLOT_BYTES = 0x40;
 constexpr std::uint16_t ARRIVAL_OFFSET_MASK = 0x1FF;
 constexpr std::uint16_t ARRIVAL_OFFSET_LEAST = 0x200;
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
@@ -222,52 +220,49 @@ void ArriveInSystem(Guest& _guest)
   _guest.Set(DS.playerRollAngle, regs.ax);
 }
 
-void IsMassLocked(Guest& _guest)
+MassLock IsMassLocked(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(IN_SAFE_ZONE);
-  if (_guest.Flag(FLAG_CARRY))
+  MassLock lock{true, InSafeZone(_state), std::nullopt, std::nullopt, std::nullopt};
+  if (lock.zone.inside)
   {
-    return;
+    return lock;
   }
-  regs.di = DS.shipSlots.offset;
-  _guest.Call(IS_OBJECT_NEAR);
-  if (_guest.Flag(FLAG_CARRY))
+  lock.sun = IsObjectNear(_state, ObjectSlot(_state, DS.shipSlots.offset));
+  if (lock.sun->nearby)
   {
-    return;
+    return lock;
   }
-  regs.di = Offset(regs.di, SLOT_BYTES);
-  _guest.Call(IS_OBJECT_NEAR);
-  if (_guest.Flag(FLAG_CARRY))
+  lock.planet = IsObjectNear(_state, ObjectSlot(_state, Offset(DS.shipSlots.offset, ObjectSlot::BYTES)));
+  if (lock.planet->nearby)
   {
-    return;
+    return lock;
   }
-  // Any ship on the scanner but the rocks, barrels and splinters: sub cl,3; jg, else RET with its borrow.
-  regs.di = DS.firstShipSlot.offset;
-  const std::uint8_t slots = _guest.Get(DS.objectSlotCount);
-  regs.cx = static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX);
+  // Any ship on the scanner but the rocks, barrels and splinters: MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3 / JG, else RET
+  // with the SUB's borrow.
+  const std::uint8_t slots = _state.Get(DS.objectSlotCount);
+  ShipScan scan{DS.firstShipSlot.offset, static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX), std::nullopt};
   if (static_cast<std::int8_t>(slots) <= FIRST_SHIP_SLOT_INDEX)
   {
-    _guest.SetFlag(FLAG_CARRY, slots < FIRST_SHIP_SLOT_INDEX);
-    return;
+    lock.locked = slots < FIRST_SHIP_SLOT_INDEX;
+    lock.ships = scan;
+    return lock;
   }
   do
   {
-    const std::uint8_t slot = _guest.Byte(regs.di);
-    SetLow(regs.ax, static_cast<std::uint8_t>(slot >> 1));
-    if ((slot & 1) != 0)
+    const ObjectSlot ship(_state, scan.slot);
+    scan.lastLooked = scan.slot;
+    const auto type = static_cast<std::uint8_t>((ship.Get(SlotByte::Type) >> 1) & SHIP_TYPE_MASK);
+    const bool unlocking = std::find(UNLOCKING_TYPES.begin(), UNLOCKING_TYPES.end(), type) != UNLOCKING_TYPES.end();
+    if ((ship.Get(SlotByte::Type) & ObjectSlot::ACTIVE) != 0 && !unlocking && (ship.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
     {
-      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & SHIP_TYPE_MASK));
-      const bool unlocking = std::find(UNLOCKING_TYPES.begin(), UNLOCKING_TYPES.end(), Low(regs.ax)) != UNLOCKING_TYPES.end();
-      if (!unlocking && (_guest.Byte(Offset(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
-      {
-        _guest.SetFlag(FLAG_CARRY, true);
-        return;
-      }
+      lock.ships = scan;
+      return lock;
     }
-    regs.di = Offset(regs.di, SLOT_BYTES);
-  } while (--regs.cx != 0);
-  _guest.SetFlag(FLAG_CARRY, false);
+    scan.slot = Offset(scan.slot, ObjectSlot::BYTES);
+  } while (--scan.slotsLeft != 0);
+  lock.locked = false;
+  lock.ships = scan;
+  return lock;
 }
 
 void CompleteHyperspaceJump(Guest& _guest)
@@ -551,8 +546,42 @@ constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_CX_SI_DI{REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
+// IsMassLocked's: every register as the original leaves it, and CF.
+constexpr Machine::NativeContract MASS_LOCK{0, FLAG_CARRY};
 
 } // namespace
+
+void IsMassLockedEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const MassLock lock = IsMassLocked(_guest.State());
+  // What the original leaves, which the contract compares, as EngageJumpDrive's does after it: AL as InSafeZone leaves it; then
+  // what each IsObjectNear leaves, with DI on its slot; then DI and CX where the look at the ships stopped, and AL the last
+  // slot's type byte, SHR AL,1, and AND AL,1Fh once it is active.
+  SetLow(regs.ax, lock.zone.rest);
+  if (lock.sun)
+  {
+    regs.di = DS.shipSlots.offset;
+    IsObjectNearOut(_guest, ObjectSlot(_guest.State(), regs.di), *lock.sun);
+  }
+  if (lock.planet)
+  {
+    regs.di = Offset(DS.shipSlots.offset, ObjectSlot::BYTES);
+    IsObjectNearOut(_guest, ObjectSlot(_guest.State(), regs.di), *lock.planet);
+  }
+  if (lock.ships)
+  {
+    regs.di = lock.ships->slot;
+    regs.cx = lock.ships->slotsLeft;
+    if (lock.ships->lastLooked)
+    {
+      const std::uint8_t type = _guest.Byte(*lock.ships->lastLooked);
+      SetLow(regs.ax, static_cast<std::uint8_t>((type & ObjectSlot::ACTIVE) != 0 ? (type >> 1) & SHIP_TYPE_MASK : type >> 1));
+    }
+  }
+  _guest.SetFlag(FLAG_CARRY, lock.locked);
+  _guest.Clobber(MASS_LOCK);
+}
 
 void ResetHyperspaceRingsEntry(Guest& _guest)
 {
@@ -603,7 +632,7 @@ namespace
 // What it does on the other frames is a few decrements, and ShowHyperspaceCountdown, compared on its own.
 constexpr std::array ENTRIES = {
   NativeEntry{0x2B5A, "ArriveInSystem", &ArriveInSystem, Machine::NativeContract{REGISTER_ALL, 0}},
-  NativeEntry{0x4144, "IsMassLocked", &IsMassLocked, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x4144, "IsMassLocked", &IsMassLockedEntry, MASS_LOCK},
   NativeEntry{0x4707, "CompleteHyperspaceJump", &CompleteHyperspaceJump,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0},
               NativeReturn::Near, 0, NativeWait::Always},

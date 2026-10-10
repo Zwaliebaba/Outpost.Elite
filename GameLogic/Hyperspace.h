@@ -3,7 +3,10 @@
 
 #include "GameState.h"
 #include "NativeEntry.h"
+#include "Ships.h"
 
+#include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -18,10 +21,6 @@ namespace Elite
 /// ArriveInSystem (CS:2B5A): SetUpLocalSpace, then, unless in witch space, the sun, planet and station
 /// moved by one random offset and the player turned towards the station.
 void ArriveInSystem(Guest& _guest);
-
-/// IsMassLocked (CS:4144): CF set when the jump drive is mass-locked: in the station's safe zone, near
-/// the sun or the planet, or with a ship other than a rock, barrel or splinter on the scanner.
-void IsMassLocked(Guest& _guest);
 
 /// CompleteHyperspaceJump (CS:4707): the jump, galactic when galacticJumpPending: the destination made
 /// current, or witch space on a mis-jump, the tunnel, and the arrival. Waits. Out: ES = B800h.
@@ -39,6 +38,30 @@ void PlayHyperspaceTunnel(Guest& _guest);
 void TickHyperspaceCountdown(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// Where IsMassLocked's look at the ship slots stopped.
+struct ShipScan
+{
+  std::uint16_t slot;      ///< the ship that locks the jump drive, or past the last slot looked at: what the original leaves in DI
+  std::uint16_t slotsLeft; ///< the count LOOP had there, CX
+  std::optional<std::uint16_t> lastLooked; ///< the last slot it looked at, whose type byte the original leaves in AL
+};
+
+/// What IsMassLocked found, and what it looked at on the way, which the original leaves in the registers.
+struct MassLock
+{
+  bool locked;
+  SafeZone zone;                  ///< what InSafeZone read
+  std::optional<NearTest> sun;    ///< what IsObjectNear found of the sun's slot, outside the safe zone
+  std::optional<NearTest> planet; ///< and of the planet's, once the sun is far
+  std::optional<ShipScan> ships;  ///< once both are far
+};
+
+/// IsMassLocked (CS:4144): whether the jump drive is mass-locked: in the station's safe zone, near the sun or the planet
+/// (IsObjectNear, which erases the blip of one that is far), or with an active ship from firstShipSlot that is not an
+/// asteroid, boulder, barrel or splinter and has its blip drawn. With objectSlotCount 3 or less, or above 127, it looks at no
+/// ship, and is locked when the count is below 3, the borrow of its SUB.
+MassLock IsMassLocked(GameState& _state);
 
 /// ResetHyperspaceRings (CS:48AB): hyperspaceRings from hyperspaceRingStart, fifteen words copied up through the
 /// data segment, or down from each start when _backward (REP MOVSW with the direction flag set).
@@ -61,6 +84,7 @@ void ShowHyperspaceCountdown(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void IsMassLockedEntry(Guest& _guest);            ///< Out: CF set when locked; every register as the original leaves it.
 void ResetHyperspaceRingsEntry(Guest& _guest);    ///< Out: ES=B800h; AX, CX, SI and DI clobbered.
 void EnterWitchSpaceEntry(Guest& _guest);         ///< AX and BX clobbered.
 void UpdateMissionScheduleEntry(Guest& _guest);   ///< Out: AL the mission picked, once the jump counts.

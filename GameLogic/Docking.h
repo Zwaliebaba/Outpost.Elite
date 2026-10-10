@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
 
@@ -22,16 +23,9 @@ namespace Elite
 /// docking as playerDocked says. Waits. Clobbers all.
 void PlayStationTunnel(Guest& _guest);
 
-/// ToggleDockingComputer (CS:83B2): D, released: the docking computer off, or on when inside the station's
-/// safe zone and the station has not been shot. AX comes back the message posted.
-void ToggleDockingComputer(Guest& _guest);
-
 /// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState.
 /// Out: dockingComputerSteering and rollRate, the steering for the frame.
 void RunDockingComputer(Guest& _guest);
-
-/// CancelDockingComputer (CS:8BAA): the docking computer off, if it is on.
-void CancelDockingComputer(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
@@ -49,10 +43,22 @@ bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points);
 /// called with), then the rows below it and its right margins from the end of the buffer down.
 void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwards);
 
+/// ToggleDockingComputer (CS:83B2): D, released: dockingKeyReleased cleared, and the docking computer off (all sound stopped,
+/// the view unlocked, a stopped ship given speed 4, the low beep), or on (state 0, the music and the beep) when inside the
+/// station's safe zone and the station has not been shot; refused with the low beep otherwise. Returns the message it posts for
+/// 25 frames.
+std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware);
+
+/// CancelDockingComputer (CS:8BAA): the docking computer off, if it is on: dataA137 cleared, the view unlocked and all sound
+/// stopped (StopAllSound).
+void CancelDockingComputer(GameState& _state, Hardware& _hardware);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void DrawTunnelRectangleEntry(Guest& _guest);   ///< In: SI the points. Out: ES=DS and DF=0 after a REP STOSB; clobbers all.
 void CheckDockingAlignmentEntry(Guest& _guest); ///< In: BX the tolerance, DI the station's slot. Out: CF; AX, CX and DX clobbered.
 void MaskOutsideTunnelEntry(Guest& _guest);     ///< In: SI the rectangle. Out: ES=B800, DF=0; clobbers all but ES.
+void ToggleDockingComputerEntry(Guest& _guest); ///< Out: AX the message, and BX the station's slot once it looks at it.
+void CancelDockingComputerEntry(Guest& _guest); ///< Preserves every register.
 
 } // namespace Elite

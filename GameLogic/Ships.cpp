@@ -40,6 +40,8 @@ constexpr std::array<SlotByte, 9> TEMPLATE_FIELDS = {SlotByte::Speed,    SlotByt
 // The 24-bit position, by axis: the low words and the high bytes.
 constexpr std::array<SlotWord, 3> POSITION_LOW = {SlotWord::X, SlotWord::Y, SlotWord::Z};
 constexpr std::array<SlotByte, 3> POSITION_HIGH = {SlotByte::XHigh, SlotByte::YHigh, SlotByte::ZHigh};
+// The velocity, by axis: signed bytes.
+constexpr std::array<SlotByte, 3> VELOCITY = {SlotByte::VelocityX, SlotByte::VelocityY, SlotByte::VelocityZ};
 
 constexpr std::uint8_t ABANDONED_CLASS = 0; // no behaviour
 constexpr std::uint8_t BARREL_CLASS = 3;
@@ -141,6 +143,12 @@ struct PositionFit
   return (masked & 1) != 0 ? Negate(halved) : halved;
 }
 
+// AND AH,0Fh / XOR AL,AL / SHR AX,1 twice: ReclaimShipSlot's random word made the offset of one of 16 slots from slot 4.
+[[nodiscard]] std::uint16_t EvictedSlotBytes(std::uint16_t _random) noexcept
+{
+  return static_cast<std::uint16_t>((High(_random) & 0x0F) << 6);
+}
+
 // MOV BX,record / XOR AL,AL / CALL InitObjectFromTemplate / MOV [DI+33h],_class: _slot from one fixed record of spawnTemplates,
 // of behaviour class _class.
 void InitFromRecord(GameState& _state, ObjectSlot _slot, std::size_t _record, std::uint8_t _class)
@@ -149,12 +157,23 @@ void InitFromRecord(GameState& _state, ObjectSlot _slot, std::size_t _record, st
   _slot.Set(SlotByte::Class, _class);
 }
 
-// The start every spawned ship shares: record AL of the table at BX, placed at the spawn point and turned to the player.
-void SpawnFromRecord(Guest& _guest)
+// The start every spawned ship shares: _slot from record _index of the table at _table, placed at the spawn point and turned to
+// the player. Returns what FacePlayerWithRandomRoll gave it.
+RandomRollFacing SpawnFromRecord(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
 {
-  InitObjectFromTemplateEntry(_guest);
-  PlaceAtSpawnPointEntry(_guest);
-  FacePlayerWithRandomRollEntry(_guest);
+  InitObjectFromTemplate(_state, _slot, _table, _index);
+  PlaceAtSpawnPoint(_state, _slot);
+  return FacePlayerWithRandomRoll(_state, _slot);
+}
+
+// SpawnFromRecord for the register code that calls it: AL the record, BX the table and DI the slot; out, AX the roll and BP the
+// pitch, as FacePlayerWithRandomRoll leaves them.
+void SpawnFromRecordOnRegisters(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const RandomRollFacing facing = SpawnFromRecord(_guest.State(), ObjectSlot(_guest.State(), regs.di), regs.bx, Low(regs.ax));
+  regs.ax = facing.roll;
+  regs.bp = facing.heading.first;
 }
 
 } // namespace
@@ -217,7 +236,7 @@ void SpawnRandomDrifter(Guest& _guest)
   const auto rotated = static_cast<std::uint16_t>((regs.ax >> 1) | (regs.ax << 15));
   regs.ax = Join(High(rotated), static_cast<std::uint8_t>((Low(rotated) ^ High(rotated)) & DRIFTER_CHOICE_MASK));
   regs.bx = DS.spawnTemplates.At(ESCAPE_POD_TEMPLATE);
-  SpawnFromRecord(_guest);
+  SpawnFromRecordOnRegisters(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), DRIFTER_CLASS);
   _guest.SetByte(At(regs.di, SLOT_TURN_RATE), DRIFTER_TURN_RATE);
   ComputeVelocityEntry(_guest);
@@ -231,7 +250,7 @@ void SpawnRandomTrader(Guest& _guest)
   const std::uint8_t random = Low(regs.ax);
   regs.ax = Join(static_cast<std::uint8_t>(random % TRADER_CHOICE_DIVISOR), static_cast<std::uint8_t>(random / TRADER_CHOICE_DIVISOR));
   regs.bx = DS.spawnTemplates.At(COBRA_TEMPLATE);
-  SpawnFromRecord(_guest);
+  SpawnFromRecordOnRegisters(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), TRADER_CLASS);
   ComputeVelocityEntry(_guest);
   IsViperTypeEntry(_guest);
@@ -265,7 +284,7 @@ void SpawnMaskMissionShip(Guest& _guest)
   const std::uint16_t kept = regs.ax; // PUSH AX / POP AX round the record's set-up
   SetLow(regs.ax, 0);
   regs.bx = DS.spawnTemplates.At(ASP_TEMPLATE);
-  SpawnFromRecord(_guest);
+  SpawnFromRecordOnRegisters(_guest);
   // SHL AL,1 / INC AL: the type, active.
   regs.ax = WithLow(kept, static_cast<std::uint8_t>((type << 1) | SLOT_ACTIVE));
   _guest.SetByte(regs.di, Low(regs.ax));
@@ -284,7 +303,7 @@ void SpawnInvasionThargoid(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   SetLow(regs.ax, 0);
   regs.bx = DS.spawnTemplates.At(THARGOID_TEMPLATE);
-  SpawnFromRecord(_guest);
+  SpawnFromRecordOnRegisters(_guest);
   _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
   NextRandomEntry(_guest);
   SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & MISSION_AGGRESSION_MASK));
@@ -303,28 +322,23 @@ void RandomizeOrientation(GameState& _state, ObjectSlot _slot)
   }
 }
 
-void ReclaimShipSlot(Guest& _guest)
+ReclaimedSlot ReclaimShipSlot(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.firstShipSlot.offset;
-  regs.cx = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
-  do
+  // SUB CL,3 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
+  std::uint16_t slot = DS.firstShipSlot.offset;
+  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((_guest.Byte(At(regs.si, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) == 0)
+    if ((ObjectSlot(_state, slot).Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0)
     {
-      return;
+      return ReclaimedSlot{slot, false, std::nullopt};
     }
-    regs.si = At(regs.si, SLOT_BYTES);
-    regs.cx = static_cast<std::uint16_t>(regs.cx - 1);
-  } while (regs.cx != 0);
+    slot = Offset(slot, ObjectSlot::BYTES);
+  }
   // Every one has a blip: one of slots 4-19 at random (AND AH,0Fh / XOR AL,AL / SHR AX,1 twice), removed first.
-  NextRandomEntry(_guest);
-  regs.ax = static_cast<std::uint16_t>((High(regs.ax) & 0x0F) << 6);
-  regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * SLOT_BYTES + regs.ax);
-  const std::uint16_t slot = regs.si;
-  regs.di = slot;
-  RemoveObjectEntry(_guest);
-  regs.si = slot;
+  const auto evicted =
+    static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * ObjectSlot::BYTES + EvictedSlotBytes(NextRandom(_state)));
+  return ReclaimedSlot{evicted, true, RemoveObject(_state, ObjectSlot(_state, evicted))};
 }
 
 NearTest IsObjectNear(GameState& _state, ObjectSlot _slot)
@@ -363,57 +377,40 @@ void InitCargoBarrel(GameState& _state, ObjectSlot _slot)
   InitFromRecord(_state, _slot, BARREL_TEMPLATE, BARREL_CLASS);
 }
 
-void SpawnRandomHunter(Guest& _guest)
+void SpawnRandomHunter(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  NextRandomEntry(_guest);
-  // XOR AH,AH / DIV BL: the quotient picks the record, and the remainder stays in AH.
-  const std::uint8_t random = Low(regs.ax);
-  regs.ax = static_cast<std::uint16_t>(((random % HUNTER_CHOICE_DIVISOR) << 8) | (random / HUNTER_CHOICE_DIVISOR));
-  regs.bx = DS.spawnTemplates.At(HUNTER_TEMPLATES);
-  InitObjectFromTemplateEntry(_guest);
-  PlaceAtSpawnPointEntry(_guest);
-  FacePlayerWithRandomRollEntry(_guest);
-  _guest.SetByte(At(regs.di, SLOT_CLASS), HUNTER_CLASS);
-  NextRandomEntry(_guest);
-  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & HUNTER_AGGRESSION_MASK));
-  _guest.SetByte(At(regs.di, SLOT_AGGRESSION), Low(regs.ax));
-  ComputeVelocityEntry(_guest);
+  // XOR AH,AH / MOV BL,25h / DIV BL: the quotient of a random byte picks the record.
+  const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / HUNTER_CHOICE_DIVISOR);
+  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(HUNTER_TEMPLATES), record);
+  _slot.Set(SlotByte::Class, HUNTER_CLASS);
+  _slot.Set(SlotByte::Aggression, static_cast<std::uint8_t>(Low(NextRandom(_state)) & HUNTER_AGGRESSION_MASK));
+  (void)ComputeVelocity(_state, _slot);
 }
 
-void SpawnRandomWolf(Guest& _guest)
+void SpawnRandomWolf(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SetLow(regs.ax, WITCH_SPACE_WOLF);
-  if (_guest.Get(DS.witchspaceCountdown) == 0)
+  // MOV AL,5, or out of witch space XOR AH,AH / MOV BL,34h / DIV BL: the quotient of a random byte picks the record.
+  std::uint8_t record = WITCH_SPACE_WOLF;
+  if (_state.Get(DS.witchspaceCountdown) == 0)
   {
-    NextRandomEntry(_guest);
-    const std::uint8_t random = Low(regs.ax);
-    regs.ax = static_cast<std::uint16_t>(((random % WOLF_CHOICE_DIVISOR) << 8) | (random / WOLF_CHOICE_DIVISOR));
+    record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / WOLF_CHOICE_DIVISOR);
   }
-  regs.bx = DS.spawnTemplates.At(WOLF_TEMPLATES);
-  InitObjectFromTemplateEntry(_guest);
-  PlaceAtSpawnPointEntry(_guest);
-  FacePlayerWithRandomRollEntry(_guest);
-  _guest.SetByte(At(regs.di, SLOT_CLASS), WOLF_CLASS);
-  NextRandomEntry(_guest);
-  auto aggression = static_cast<std::uint8_t>(Low(regs.ax) & WOLF_AGGRESSION_MASK);
-  if (_guest.Get(DS.spawnGovernment) == 0)
+  (void)SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(WOLF_TEMPLATES), record);
+  _slot.Set(SlotByte::Class, WOLF_CLASS);
+  auto aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & WOLF_AGGRESSION_MASK);
+  if (_state.Get(DS.spawnGovernment) == 0)
   {
     aggression = static_cast<std::uint8_t>(aggression + ANARCHY_AGGRESSION);
   }
-  SetLow(regs.ax, aggression);
-  _guest.SetByte(At(regs.di, SLOT_AGGRESSION), aggression);
-  ComputeVelocityEntry(_guest);
-  IsThargoidTypeEntry(_guest);
-  if (!_guest.Flag(FLAG_ZERO))
+  _slot.Set(SlotByte::Aggression, aggression);
+  (void)ComputeVelocity(_state, _slot);
+  if (!IsThargoidType(_slot))
   {
     return;
   }
-  NextRandomEntry(_guest);
-  const auto thargons = static_cast<std::uint8_t>((((Low(regs.ax) ^ High(regs.ax)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS);
-  SetLow(regs.ax, thargons);
-  _guest.SetByte(At(regs.di, SLOT_THARGONS), thargons);
+  // XOR AL,AH / SHR AL,1 three times / AND AL,3 / ADD AL,2: 2 to 5 Thargons.
+  const std::uint16_t random = NextRandom(_state);
+  _slot.Set(SlotByte::Thargons, static_cast<std::uint8_t>((((Low(random) ^ High(random)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS));
 }
 
 void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
@@ -479,26 +476,19 @@ Vector ComputeVelocity(GameState& _state, ObjectSlot _slot)
   return Vector{first.first, second.first, second.second};
 }
 
-void MoveObject(Guest& _guest)
+MovedObject MoveObject(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t slot = regs.di;
-  for (int axis = 0; axis < 3; ++axis)
+  // MOV AL,[DI+19h+axis] / CBW / CWD, then ADD on the low word and ADC on the high byte: x, then y and z.
+  for (std::size_t axis = 0; axis < VELOCITY.size(); ++axis)
   {
-    // CBW / CWD, then ADD the low word and ADC the high byte: a 24-bit add.
-    regs.ax = SignExtend(_guest.Byte(At(slot, SLOT_VELOCITY + axis)));
-    regs.dx = SignWord(regs.ax);
-    const std::uint16_t low = At(slot, SLOT_X + 2 * axis);
-    const std::uint32_t sum = std::uint32_t{_guest.Word(low)} + regs.ax;
-    _guest.SetWord(low, static_cast<std::uint16_t>(sum));
-    const std::uint16_t high = At(slot, SLOT_X_HIGH + axis);
-    _guest.SetByte(high, static_cast<std::uint8_t>(_guest.Byte(high) + Low(regs.dx) + (sum >> 16)));
+    AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.Get(VELOCITY[axis]))));
   }
-  IsObjectNearEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  const NearTest near = IsObjectNear(_state, _slot);
+  if (near.nearby)
   {
-    RemoveObjectEntry(_guest);
+    return MovedObject{near, std::nullopt};
   }
+  return MovedObject{near, RemoveObject(_state, _slot)};
 }
 
 std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot)
@@ -602,7 +592,7 @@ void UpdateDebrisAi(Guest& _guest)
   _guest.SetWord(At(slot, SLOT_ROLL), static_cast<std::uint16_t>(_guest.Word(At(slot, SLOT_ROLL)) + regs.ax));
   regs.ax = SignExtend(_guest.Byte(At(slot, SLOT_SPIN_PITCH)));
   _guest.SetWord(At(slot, SLOT_PITCH), static_cast<std::uint16_t>(_guest.Word(At(slot, SLOT_PITCH)) + regs.ax));
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 bool IsDebrisType(const ObjectSlot& _slot)
@@ -645,6 +635,8 @@ using Machine::REGISTER_DX;
 using Machine::REGISTER_ES;
 
 constexpr Machine::NativeContract REMOVES{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_ES, 0};
+// MoveObject's: every register as the original leaves it (MoveObjectEntry).
+constexpr Machine::NativeContract MOVES{0, 0};
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 // ComputeVelocity: the BX it leaves is compared (ComputeVelocityEntry).
@@ -682,17 +674,21 @@ void ClearObjectSlotEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void IsObjectNearOut(Guest& _guest, const ObjectSlot& _slot, const NearTest& _test)
+{
+  // The position the test read is unchanged: EraseScannerBlip writes only the blip and the flags.
+  SetLow(_guest.Regs().ax, PositionFitsWords(_slot).lastHigh);
+  EraseScannerBlipOut(_guest, _slot, _test.erasedBlip);
+  _guest.SetFlag(FLAG_CARRY, _test.nearby);
+}
+
 void IsObjectNearEntry(Guest& _guest)
 {
-  Machine::Registers& regs = _guest.Regs();
   const ObjectSlot slot = SlotAtDi(_guest);
   // AL, the last high byte the test looked at, INC'd and DEC'd back, and the registers EraseScannerBlip leaves once it erases a
   // blip. The contract compares them all: UpdateSafeZone and UpdateDashboard go on with AL, IsMassLocked with AH, BX and DX,
   // EngageJumpDrive and CheckShipInRange with what EraseScannerBlip leaves, and UpdateDriftingObjectAi with CX and DX.
-  SetLow(regs.ax, PositionFitsWords(slot).lastHigh);
-  const NearTest test = IsObjectNear(_guest.State(), slot);
-  EraseScannerBlipOut(_guest, slot, test.erasedBlip);
-  _guest.SetFlag(FLAG_CARRY, test.nearby);
+  IsObjectNearOut(_guest, slot, IsObjectNear(_guest.State(), slot));
   _guest.Clobber(NEAR_TEST);
 }
 
@@ -771,6 +767,18 @@ void InitThargonEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX);
 }
 
+void SpawnRandomHunterEntry(Guest& _guest)
+{
+  SpawnRandomHunter(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX_BP);
+}
+
+void SpawnRandomWolfEntry(Guest& _guest)
+{
+  SpawnRandomWolf(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX_BP);
+}
+
 void InitObjectFromTemplateEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -828,6 +836,21 @@ void ComputeVelocityEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_DX);
 }
 
+void MoveObjectEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ObjectSlot slot = SlotAtDi(_guest);
+  const MovedObject moved = MoveObject(_guest.State(), slot);
+  // What the original leaves, which the contract compares: UpdateDriftingObjectAi's and UpdateMissileAi's contracts compare
+  // every register after it. The last axis's CBW and CWD leave AX and DX the z velocity, sign-extended; then IsObjectNear's AL,
+  // and the registers it leaves once it erased a blip; then RemoveObject's, once that erased one.
+  regs.ax = SignExtend(slot.Get(SlotByte::VelocityZ));
+  regs.dx = SignWord(regs.ax);
+  IsObjectNearOut(_guest, slot, moved.near);
+  EraseScannerBlipOut(_guest, slot, moved.removedBlip);
+  _guest.Clobber(MOVES);
+}
+
 void RemoveObjectEntry(Guest& _guest)
 {
   // The registers EraseScannerBlip leaves once it erases a blip, which the contract compares but for CX: ExplodeObject stores
@@ -852,6 +875,18 @@ void FindFreeShipSlotEntry(Guest& _guest)
   _guest.Regs().si = search.slot;
   _guest.SetFlag(FLAG_CARRY, search.found);
   _guest.Clobber(RETURNS_CARRY);
+}
+
+void ReclaimShipSlotEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ReclaimedSlot reclaimed = ReclaimShipSlot(_guest.State());
+  regs.si = reclaimed.slot;
+  if (reclaimed.evicted)
+  {
+    regs.di = reclaimed.slot;
+  }
+  _guest.Clobber(REMOVES);
 }
 
 void ClearAllObjectsEntry(Guest& _guest)
@@ -929,8 +964,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4CDA, "InitThargon", &InitThargonEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4CE7, "SpawnRandomDrifter", &SpawnRandomDrifter, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4D08, "SpawnRandomTrader", &SpawnRandomTrader, CLOBBERS_AX_BX_CX_DX_BP},
-  NativeEntry{0x4D3B, "SpawnRandomHunter", &SpawnRandomHunter, CLOBBERS_AX_BX_CX_DX_BP},
-  NativeEntry{0x4D60, "SpawnRandomWolf", &SpawnRandomWolf, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x4D3B, "SpawnRandomHunter", &SpawnRandomHunterEntry, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x4D60, "SpawnRandomWolf", &SpawnRandomWolfEntry, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4DAE, "SpawnMaskMissionShip", &SpawnMaskMissionShip, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4DF0, "SpawnInvasionThargoid", &SpawnInvasionThargoid, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4E1B, "InitObjectFromTemplate", &InitObjectFromTemplateEntry, CLOBBERS_AX_BX},
@@ -940,11 +975,11 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4EFE, "GetVectorToPlayer", &GetVectorToPlayerEntry, PRESERVES_ALL},
   NativeEntry{0x4F35, "RandomizeOrientation", &RandomizeOrientationEntry, CLOBBERS_AX},
   NativeEntry{0x4F48, "ComputeVelocity", &ComputeVelocityEntry, CLOBBERS_AX_DX},
-  NativeEntry{0x4F6E, "MoveObject", &MoveObject, REMOVES},
+  NativeEntry{0x4F6E, "MoveObject", &MoveObjectEntry, MOVES},
   NativeEntry{0x4F98, "RemoveObject", &RemoveObjectEntry, REMOVES_OBJECT},
   NativeEntry{0x513E, "FacePlayer", &FacePlayerEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x51E0, "FindFreeShipSlot", &FindFreeShipSlotEntry, RETURNS_CARRY},
-  NativeEntry{0x51FD, "ReclaimShipSlot", &ReclaimShipSlot, REMOVES},
+  NativeEntry{0x51FD, "ReclaimShipSlot", &ReclaimShipSlotEntry, REMOVES},
   NativeEntry{0x52B2, "ClearAllObjects", &ClearAllObjectsEntry, CLOBBERS_AX_CX_DI},
   NativeEntry{0x52EC, "FindDebrisSlot", &FindDebrisSlotEntry, PRESERVES_ALL},
   NativeEntry{0x5320, "CopyObject", &CopyObjectEntry, PRESERVES_ALL},

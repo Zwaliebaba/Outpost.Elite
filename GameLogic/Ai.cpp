@@ -300,7 +300,7 @@ void SpawnByGovernment(Guest& _guest)
       {
         return;
       }
-      SpawnRandomHunter(_guest);
+      SpawnRandomHunterEntry(_guest);
     }
   }
   if (!BelowSpawnLimitOnRegisters(_guest, DS.wolfLimitColumn.offset, DS.wolfCount))
@@ -320,7 +320,7 @@ void SpawnByGovernment(Guest& _guest)
   }
   if (TakeFreeShipSlotOnRegisters(_guest))
   {
-    SpawnRandomWolf(_guest);
+    SpawnRandomWolfEntry(_guest);
   }
 }
 
@@ -525,7 +525,7 @@ void CheckMissilesAtStation(Guest& _guest)
     return;
   }
   _guest.Set(DS.ecmFired, 1);
-  RemoveAllMissiles(_guest);
+  RemoveAllMissilesEntry(_guest);
   _guest.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_guest.Get(DS.npcEcmFrames) - 1));
 }
 
@@ -539,7 +539,7 @@ void WolfTurnAway(Guest& _guest)
     TurnToVectorOnRegisters(_guest);
     ComputeVelocityEntry(_guest);
     TryLaunchThargon(_guest);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   const std::uint16_t passes = At(regs.di, SLOT_PASSES);
@@ -574,7 +574,7 @@ void WolfTurnAway(Guest& _guest)
   {
     SetState(_guest, STATE_ATTACK_RUN);
   }
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 // MOV AH,1 / ROR AL,1 / NEG AX when the bit rotated out was set: a jink of +-(256 + AL/2, with AL's low bit on top).
@@ -593,7 +593,7 @@ void HunterEvade(Guest& _guest)
   if (!WithinRangeOnRegisters(_guest))
   {
     SetState(_guest, STATE_IDLE);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   const std::uint16_t frames = At(regs.di, SLOT_JINK_FRAMES);
@@ -623,7 +623,7 @@ void HunterEvade(Guest& _guest)
   regs.bx = HUNTER_MISSILE_ODDS;
   TryLaunchMissileAtPlayer(_guest);
   ComputeVelocityEntry(_guest);
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 // UpdateHunterAi's state 0 (58E4): flying at the player until it turns hostile, then picking how to hunt.
@@ -636,7 +636,7 @@ void HunterIdle(Guest& _guest)
     GetVectorToPlayerEntry(_guest);
     TurnToVectorOnRegisters(_guest);
     ComputeVelocityEntry(_guest);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if ((flags & FLAG_HOSTILE) != 0)
@@ -665,7 +665,7 @@ void HunterIdle(Guest& _guest)
       SetState(_guest, STATE_FORMATION);
     }
   }
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 // UpdateTraderOrPoliceAi's state 1 (56CE): a police Viper attacks a player of legal status 5 or more; otherwise one the player
@@ -683,7 +683,7 @@ void TraderDecide(Guest& _guest)
     NextRandomEntry(_guest);
     SetState(_guest, regs.ax < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING);
   }
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 // UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until close or,
@@ -695,13 +695,13 @@ void TraderAttack(Guest& _guest)
   if (!_guest.Flag(FLAG_ZERO) && _guest.Byte(At(regs.di, SLOT_ENERGY)) < TRADER_FLEE_ENERGY)
   {
     SetState(_guest, TRADER_FLEEING);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (WithinBoxOnRegisters(_guest, TRADER_BREAK_OFF_BOX))
   {
     SetState(_guest, TRADER_BREAKING_OFF);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   GetVectorToPlayerEntry(_guest);
@@ -714,7 +714,7 @@ void TraderAttack(Guest& _guest)
     TryLaunchMissileAtPlayer(_guest);
   }
   ComputeVelocityEntry(_guest);
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 // UpdateTraderOrPoliceAi's state 3 (5750): fleeing from the player with random jinks, a missile when nearly dead, and now and
@@ -756,7 +756,7 @@ void TraderFlee(Guest& _guest)
   {
     _guest.Set(DS.npcEcmFrames, TRADER_ECM_FRAMES);
   }
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 // UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
@@ -767,7 +767,7 @@ void TraderBreakOff(Guest& _guest)
   if (!WithinRangeOnRegisters(_guest))
   {
     SetState(_guest, TRADER_ATTACKING);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (_guest.Byte(At(regs.di, SLOT_ENERGY)) < RETURN_ENERGY)
@@ -776,14 +776,14 @@ void TraderBreakOff(Guest& _guest)
     if (!_guest.Flag(FLAG_ZERO))
     {
       SetState(_guest, TRADER_FLEEING);
-      MoveObject(_guest);
+      MoveObjectEntry(_guest);
       return;
     }
   }
   GetObjectPositionEntry(_guest);
   TurnToVectorOnRegisters(_guest);
   ComputeVelocityEntry(_guest);
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 } // namespace
@@ -956,7 +956,7 @@ void UpdateStationAi(Guest& _guest)
 
 void UpdateDriftingObjectAi(Guest& _guest)
 {
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
   IsDebrisTypeEntry(_guest);
   if (!_guest.Flag(FLAG_ZERO))
   {
@@ -982,14 +982,14 @@ void UpdateTraderOrPoliceAi(Guest& _guest)
     // A rock only spins. The split at 56B1 (LaunchShipFromObject with DL=5) never runs: 56A5 jumps past it when bit 0 of +1Eh is
     // clear, and 56AB when it is set.
     AddWord(_guest, At(regs.di, SLOT_ROLL), ROCK_SPIN);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   const std::uint8_t state = State(_guest);
   if (state == STATE_IDLE)
   {
     SetState(_guest, TRADER_DECIDING);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (state == TRADER_DECIDING)
@@ -1036,7 +1036,7 @@ void UpdateWolfAi(Guest& _guest)
   if (State(_guest) == STATE_IDLE)
   {
     SetState(_guest, STATE_ATTACK);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (State(_guest) == STATE_ATTACK)
@@ -1049,7 +1049,7 @@ void UpdateWolfAi(Guest& _guest)
       _guest.SetByte(At(regs.di, SLOT_PASSES), High(regs.ax));
       SetState(_guest, STATE_ATTACK_RUN);
     }
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (State(_guest) == STATE_ATTACK_RUN)
@@ -1057,7 +1057,7 @@ void UpdateWolfAi(Guest& _guest)
     if (WithinBoxOnRegisters(_guest, BREAK_OFF_BOX))
     {
       SetState(_guest, STATE_TURN_AWAY);
-      MoveObject(_guest);
+      MoveObjectEntry(_guest);
       return;
     }
     GetVectorToPlayerEntry(_guest);
@@ -1067,7 +1067,7 @@ void UpdateWolfAi(Guest& _guest)
     TryLaunchMissileAtPlayer(_guest);
     TryLaunchThargon(_guest);
     ComputeVelocityEntry(_guest);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     AddWord(_guest, At(regs.di, SLOT_ROLL), ATTACK_RUN_SPIN);
     return;
   }
@@ -1083,7 +1083,7 @@ void UpdateWolfAi(Guest& _guest)
     _guest.SetByte(speed, static_cast<std::uint8_t>(_guest.Byte(speed) - ADRIFT_SLOWING));
     ComputeVelocityEntry(_guest);
   }
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 void UpdateHunterAi(Guest& _guest)
@@ -1099,7 +1099,7 @@ void UpdateHunterAi(Guest& _guest)
     if (WithinBoxOnRegisters(_guest, BREAK_OFF_BOX))
     {
       SetState(_guest, STATE_TURN_AWAY);
-      MoveObject(_guest);
+      MoveObjectEntry(_guest);
       return;
     }
     GetVectorToPlayerEntry(_guest);
@@ -1109,7 +1109,7 @@ void UpdateHunterAi(Guest& _guest)
     TryLaunchMissileAtPlayer(_guest);
     ComputeVelocityEntry(_guest);
     AddWord(_guest, At(regs.di, SLOT_ROLL), HUNTER_SPIN);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (State(_guest) == STATE_FORMATION)
@@ -1120,12 +1120,12 @@ void UpdateHunterAi(Guest& _guest)
     if (_guest.Flag(FLAG_CARRY))
     {
       SetState(_guest, STATE_CLOSING);
-      MoveObject(_guest);
+      MoveObjectEntry(_guest);
       return;
     }
     TurnToVectorOnRegisters(_guest);
     ComputeVelocityEntry(_guest);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   if (State(_guest) == STATE_TURN_AWAY)
@@ -1137,7 +1137,7 @@ void UpdateHunterAi(Guest& _guest)
   if (WithinBoxOnRegisters(_guest, CLOSING_BOX))
   {
     SetState(_guest, STATE_IDLE);
-    MoveObject(_guest);
+    MoveObjectEntry(_guest);
     return;
   }
   GetVectorToPlayerEntry(_guest);
@@ -1146,7 +1146,7 @@ void UpdateHunterAi(Guest& _guest)
   regs.bx = CLOSING_MISSILE_ODDS;
   TryLaunchMissileAtPlayer(_guest);
   ComputeVelocityEntry(_guest);
-  MoveObject(_guest);
+  MoveObjectEntry(_guest);
 }
 
 HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
