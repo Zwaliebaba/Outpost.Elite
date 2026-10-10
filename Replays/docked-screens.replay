@@ -13,17 +13,17 @@ key b; wait 1                      # buy one
 digest equip-bought-missile 11632798c37bee4b25aaa56cd418100b572ca89c799849fe20305db573c5add4
 key F5; wait 1
 down Right; wait 0.3; up Right; wait 0.5
-digest galactic-chart 4859da740299e4381d829b5c217a743d7dd0f1cc75117ab6f54c269ad546960c
+digest galactic-chart 9e400291ff9af6e28e625bae02bbe1dc34714570dc6abf3023ed45c786d71f62
 key F6; wait 1
-down Left; wait 0.1; up Left; wait 0.5
-digest short-range-chart 3a9e79b5df1997a1feebc29d9b5374b5dd971a2ac63bb9adad6d9a907eac8afb
+down Left; wait 0.55; up Left; wait 0.05 # six frames of the short-range chart (D18): the cursor to Riedquat
+digest short-range-chart cc8dea82c55f006dea290101b3e45107e921059b4c05f67d4b38d3d7284b3519
 key F7; wait 1                     # data on the system at the cursor: Riedquat
-digest data-on-riedquat 049c9ec52733a60c3dcc223ce11f0cd8d54766e1d6328354aaf4d37e359971cf
+digest data-on-riedquat e5259bc2a8d7c0581f658dab498dfd5cbeb963b8459b30aac68f362358d3ab4b
 key F8; wait 1
-digest market-prices 5bbb9ba76ec8a7383c726c10f88c0257dd0f66ad72f5637c115332abaca2a9e3
+digest market-prices e17a014117325d04940b1dc68f3706a47fedc3f3b2bb1d75423ec0adb31f193f
 key F10; wait 1
-digest inventory 9238599fd2abff897aa20e84a570d6cba557c58c74c2b6d9cbc5dcd7cec84713
+digest inventory e9c82236602edb4cd2bc36473ffcf17bba513cad2a2649113590e0f6e9331b08
 key Escape; wait 1
-digest disc-menu ce307ab6ba05d23d28c6adc4f80f4c51e728fb5f40b25a9d52c64a9322d49e2e
+digest disc-menu 33c9eccdff8812c1af7fe86a3adec7f183e39043d68d8e73427c3b59e6a8c44a
 key F9; wait 1
-digest status-again 1db6bc2198a21b003947095c181b53c799a7d75a6445d0f2c119697e29e0a6b9
+digest status-again 071214782b7258eb35d6e33d7486f4ed75d615f2a2e024c4b96fedb71ca1ece9

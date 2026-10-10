@@ -81,20 +81,8 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 /// EraseScannerBlip, and CF clear. AL is the last high byte looked at (0 for FFh).
 void IsObjectNear(Guest& _guest);
 
-/// IsSunOrPlanet (CS:3F2A): AL = the type of the slot at DI; ZF set for 1Eh or 1Fh, the flags of the last CMP.
-void IsSunOrPlanet(Guest& _guest);
-
-/// IsPlanet (CS:3F37): AL = the type of the slot at DI; ZF set for 1Fh.
-void IsPlanet(Guest& _guest);
-
-/// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone.
-void IsObjectNearKeepBlip(Guest& _guest);
-
 /// InitPoliceViper (CS:4C76): the slot at DI made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
 void InitPoliceViper(Guest& _guest);
-
-/// InitCargoBarrel (CS:4C99): the slot at DI made a barrel (spawnTemplates entry 2), class 3.
-void InitCargoBarrel(Guest& _guest);
 
 /// InitAbandonedCobra (CS:4CA6): the slot at DI made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
 void InitAbandonedCobra(Guest& _guest);
@@ -130,20 +118,8 @@ void SpawnMaskMissionShip(Guest& _guest);
 /// SpawnInvasionThargoid (CS:4DF0): an invasion's Thargoid in the free slot at DI, with 8 Thargons.
 void SpawnInvasionThargoid(Guest& _guest);
 
-/// PlaceAtSpawnPoint (CS:4E75): the slot at DI placed at a random point 10000 out along the rotations in DS:41B8 and DS:41BC.
-void PlaceAtSpawnPoint(Guest& _guest);
-
 /// FacePlayerWithRandomRoll (CS:4EC5): FacePlayer, then a random roll.
 void FacePlayerWithRandomRoll(Guest& _guest);
-
-/// GetVectorToPlayer (CS:4EFE): AX, BX, CX = the position of the slot at DI, negated.
-void GetVectorToPlayer(Guest& _guest);
-
-/// RandomizeOrientation (CS:4F35): the pitch, yaw and roll of the slot at DI, a random word each.
-void RandomizeOrientation(Guest& _guest);
-
-/// ComputeVelocity (CS:4F48): the velocity bytes of the slot at DI from its speed and heading, through rotation pairs 7 and 6.
-void ComputeVelocity(Guest& _guest);
 
 /// MoveObject (CS:4F6E): adds the velocity of the slot at DI to its position, and removes it once IsObjectNear fails.
 void MoveObject(Guest& _guest);
@@ -160,18 +136,6 @@ void ReclaimShipSlot(Guest& _guest);
 
 /// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, its spin, MoveObject.
 void UpdateDebrisAi(Guest& _guest);
-
-/// IsDebrisType (CS:53FE): AL = the type of the slot at DI; ZF set for 5, 6, 0Bh or 0Ch.
-void IsDebrisType(Guest& _guest);
-
-/// IsPoliceViper (CS:541E): ZF set when the slot at DI is a Viper with word +3Ah = 1.
-void IsPoliceViper(Guest& _guest);
-
-/// IsThargoidType (CS:5428): AL = the type of the slot at DI; ZF set for 16h.
-void IsThargoidType(Guest& _guest);
-
-/// IsThargonType (CS:5431): AL = the type of the slot at DI; ZF set for 7.
-void IsThargonType(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -200,15 +164,42 @@ void AddToCoordinate(ObjectSlot _slot, int _axis, std::int16_t _value);
 /// ClearObjectSlot (CS:2FD8): the 64 bytes of the slot at _slot zeroed, byte by byte.
 void ClearObjectSlot(GameState& _state, std::uint16_t _slot);
 
+/// IsSunOrPlanet (CS:3F2A): whether _slot is the sun (type 1Eh) or the planet (1Fh).
+[[nodiscard]] bool IsSunOrPlanet(const ObjectSlot& _slot);
+
+/// IsPlanet (CS:3F37): whether _slot is the planet (type 1Fh).
+[[nodiscard]] bool IsPlanet(const ObjectSlot& _slot);
+
 /// IsStation (CS:3F40): _slot's type, and whether it is a station's.
 [[nodiscard]] StationTest IsStation(const ObjectSlot& _slot);
+
+/// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone: whether each 24-bit coordinate of _slot fits a signed word.
+[[nodiscard]] bool IsObjectNearKeepBlip(const ObjectSlot& _slot);
+
+/// InitCargoBarrel (CS:4C99): _slot made a barrel (spawnTemplates entry 3), class 3.
+void InitCargoBarrel(GameState& _state, ObjectSlot _slot);
 
 /// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of the table at _table: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
 void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index);
 
+/// PlaceAtSpawnPoint (CS:4E75): _slot placed at a random point 10000 out, by rotation pairs 7 and 6: (a scatter of +-1023,
+/// 10000) turned by pair 7, then (another scatter, what that left of the 10000) by pair 6. Its y, x and z, in that order.
+void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot);
+
 /// GetObjectPosition (CS:4EF4): the low words of _slot's position.
 [[nodiscard]] Vector GetObjectPosition(const ObjectSlot& _slot);
+
+/// GetVectorToPlayer (CS:4EFE): the low words of _slot's position, negated.
+[[nodiscard]] Vector GetVectorToPlayer(const ObjectSlot& _slot);
+
+/// RandomizeOrientation (CS:4F35): _slot's pitch, yaw and roll, a random word each.
+void RandomizeOrientation(GameState& _state, ObjectSlot _slot);
+
+/// ComputeVelocity (CS:4F48): _slot's velocity bytes from its speed and heading: the pitch into rotation pair 7 and the yaw
+/// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
+/// give it, in words; the slot keeps their low bytes.
+Vector ComputeVelocity(GameState& _state, ObjectSlot _slot);
 
 /// FindFreeShipSlot (CS:51E0): the first inactive ship slot, from firstShipSlot.
 [[nodiscard]] SlotSearch FindFreeShipSlot(GameState& _state);
@@ -224,19 +215,43 @@ void ClearAllObjects(GameState& _state, bool _backward);
 /// _backward (the direction flag) is set.
 void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destination, bool _backward);
 
+/// IsDebrisType (CS:53FE): whether _slot is a rock: a plate (0Ch), a boulder (6), an asteroid (5) or a splinter (0Bh).
+[[nodiscard]] bool IsDebrisType(const ObjectSlot& _slot);
+
 /// IsViperType (CS:5413): whether _slot is a Viper (type 1Ch).
 [[nodiscard]] bool IsViperType(const ObjectSlot& _slot);
+
+/// IsPoliceViper (CS:541E): whether _slot is a Viper with word +3Ah = 1.
+[[nodiscard]] bool IsPoliceViper(const ObjectSlot& _slot);
+
+/// IsThargoidType (CS:5428): whether _slot is a Thargoid (type 16h).
+[[nodiscard]] bool IsThargoidType(const ObjectSlot& _slot);
+
+/// IsThargonType (CS:5431): whether _slot is a Thargon (type 7).
+[[nodiscard]] bool IsThargonType(const ObjectSlot& _slot);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void ClearObjectSlotEntry(Guest& _guest);        ///< SI = the slot. Out: DI = the slot, SI = the slot + 40h, CX = 0.
+void IsSunOrPlanetEntry(Guest& _guest);          ///< DI = the slot. Out: AL = the type; ZF set for the sun or the planet.
+void IsPlanetEntry(Guest& _guest);               ///< DI = the slot. Out: AL = the type; ZF set for the planet.
 void IsStationEntry(Guest& _guest);              ///< DI = the slot. Out: AL = the type; ZF set for a station, CF for the Dodo.
+void IsObjectNearKeepBlipEntry(Guest& _guest);   ///< DI = the slot. Out: CF set when near; AX clobbered.
+void InitCargoBarrelEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
 void InitObjectFromTemplateEntry(Guest& _guest); ///< BX = the table, AL = the record, DI = the slot. AX, BX clobbered.
+void PlaceAtSpawnPointEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX clobbered.
 void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
+void GetVectorToPlayerEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
+void RandomizeOrientationEntry(Guest& _guest);   ///< DI = the slot. AX clobbered.
+void ComputeVelocityEntry(Guest& _guest);        ///< DI = the slot. Out: BX = the z word; AX, DX clobbered.
 void FindFreeShipSlotEntry(Guest& _guest);       ///< Out: CF set and SI = the slot when one is free, else SI past the slots.
 void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
 void FindDebrisSlotEntry(Guest& _guest);         ///< Out: SI = the slot.
 void CopyObjectEntry(Guest& _guest);             ///< SI = the source, DI = the destination. Out: ES = DS.
+void IsDebrisTypeEntry(Guest& _guest);           ///< DI = the slot. Out: AL = the type; ZF set for a rock.
 void IsViperTypeEntry(Guest& _guest);            ///< DI = the slot. Out: ZF set for a Viper; AX kept.
+void IsPoliceViperEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a police Viper; AX kept.
+void IsThargoidTypeEntry(Guest& _guest);         ///< DI = the slot. Out: ZF set for a Thargoid; AX clobbered.
+void IsThargonTypeEntry(Guest& _guest);          ///< DI = the slot. Out: ZF set for a Thargon; AX clobbered.
 
 } // namespace Elite

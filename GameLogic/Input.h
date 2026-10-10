@@ -49,10 +49,6 @@ void ReadJoystickAxes(Guest& _guest);
 /// ReadJoystickAxes.
 void ReadJoystickSteering(Guest& _guest);
 
-/// ReadKeyboardSteering (CS:78EF): AL=roll ramp and AH=pitch ramp (negated) from the cursor and QAOP keys. BL
-/// clobbered.
-void ReadKeyboardSteering(Guest& _guest);
-
 /// ReadMouseSteering (CS:797E): AL = roll and AH = pitch from the mouse's motion (int 33h), added to the rates the last frame
 /// left, within -23..23, with -1 and 1 snapped to 0; the buttons into mouseButtons and fireLatch. BX, CX and DX clobbered.
 void ReadMouseSteering(Guest& _guest);
@@ -85,6 +81,10 @@ struct Steering
 /// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero.
 void ResetKeyboard(GameState& _state);
 
+/// ReadKeyboardSteering (CS:78EF): the cursor and QAOP keys ramped into keyboardRollRamp and keyboardPitchRamp. Returns
+/// the roll ramp and the pitch ramp negated.
+[[nodiscard]] Steering ReadKeyboardSteering(GameState& _state);
+
 /// ApplyReverseControls (CS:8EA5): the reversing options on _steering: reverseYControl negates the pitch, and
 /// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH: its entry calls this.
 [[nodiscard]] Steering ApplyReverseControls(const GameState& _state, Steering _steering);
@@ -93,6 +93,7 @@ void ResetKeyboard(GameState& _state);
 
 void IsMouseDriverInstalledEntry(Guest& _guest);   ///< Out: ZF=0 if installed; ES the vector's segment.
 void ResetKeyboardEntry(Guest& _guest);            ///< Out: IF=1.
+void ReadKeyboardSteeringEntry(Guest& _guest);     ///< Out: AL=roll, AH=pitch; BX clobbered.
 void ApplyReverseControlsEntry(Guest& _guest);     ///< In/out: AL=roll, AH=pitch.
 void ApplyReverseControlsToDxEntry(Guest& _guest); ///< In/out: DL=roll, DH=pitch.
 

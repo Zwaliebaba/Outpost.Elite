@@ -2,6 +2,7 @@
 #pragma once
 
 #include "NativeEntry.h"
+#include "Text.h"
 
 #include <cstdint>
 #include <span>
@@ -20,23 +21,11 @@ namespace Elite
 /// Out: AH=the key that ended it.
 void ShowMarketPricesScreen(Guest& _guest);
 
-/// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: BX:AX tenths of
-/// credits off creditsTenths, and the balance reformatted. Out: CF=1, and the credits unchanged, when they are not
-/// enough.
-void SubtractCredits(Guest& _guest);
-
 /// SpendCredits (CS:65EC): SubtractCredits.
 void SpendCredits(Guest& _guest);
 
 /// AddCredits (CS:65EE): BX:AX tenths of credits onto creditsTenths, and the balance reformatted.
 void AddCredits(Guest& _guest);
-
-/// ComputeMarketPrices (CS:69CE): each commodity's buy and sell price into screenPrices, for the current
-/// system.
-void ComputeMarketPrices(Guest& _guest);
-
-/// PrintCargoQuantity (CS:6AD9): AX, or "-" for 0, in the quantity column of menuSelectedRow's row.
-void PrintCargoQuantity(Guest& _guest);
 
 /// RunCargoTradeMenu (CS:6B1E): the cargo menu: the cursor, and B or S with a typed quantity on the buy or sell
 /// screen (tradeScreenIsBuy). Waits. Out: AH=Esc or the F-key that ended it.
@@ -57,15 +46,26 @@ struct Quantity
   std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
 };
 
+/// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
+/// creditsTenths, and the balance reformatted. Returns false, and the credits as they were, when they are not enough.
+bool SubtractCredits(GameState& _state, std::uint32_t _tenths);
+
 /// ComputeResalePrice (CS:6995): resalePriceInput less one, less a 32nd of it halved until it is below 100;
 /// 0 for 0.
 [[nodiscard]] std::uint16_t ComputeResalePrice(const GameState& _state);
+
+/// ComputeMarketPrices (CS:69CE): each commodity's buy and sell price into screenPrices, for the current system.
+void ComputeMarketPrices(GameState& _state);
 
 /// NextMarketRandom (CS:6A85): NextRandom's step on marketRandomState, and the number it makes.
 std::uint16_t NextMarketRandom(GameState& _state);
 
 /// ParseQuantity (CS:6A99): the decimal number at DS:_text, spaces around it allowed.
 [[nodiscard]] Quantity ParseQuantity(const GameState& _state, std::uint16_t _text);
+
+/// PrintCargoQuantity (CS:6AD9): _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
+/// attribute, and textAttribute put back.
+PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
 
 /// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
 /// is 0. Returns that sum.
@@ -76,9 +76,12 @@ std::uint8_t AddContrabandPenalty(GameState& _state);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
+void SubtractCreditsEntry(Guest& _guest); ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
 void ComputeResalePriceEntry(Guest& _guest);
+void ComputeMarketPricesEntry(Guest& _guest);
 void NextMarketRandomEntry(Guest& _guest);
 void ParseQuantityEntry(Guest& _guest);
+void PrintCargoQuantityEntry(Guest& _guest);
 void AddContrabandPenaltyEntry(Guest& _guest);
 
 } // namespace Elite

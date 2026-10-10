@@ -5,6 +5,7 @@
 #include "NativeEntry.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -24,17 +25,9 @@ void UpdateStardust(Guest& _guest);
 /// AX clobbered, BL = 12.
 void ComputeStardustShift(Guest& _guest);
 
-/// GetPreviousDustScreenPosition (CS:08A1): the particle at SI's position last frame. Out: CF clear and
-/// CL, CH = its draw buffer position, or CF set when it was off screen. AX, BX clobbered.
-void GetPreviousDustScreenPosition(Guest& _guest);
-
 /// ShiftStardustSideways (CS:08CB): adds DX to x of every on-screen particle, respawning those that
 /// leave on the entering edge.
 void ShiftStardustSideways(Guest& _guest);
-
-/// RespawnDustAtSideEdge (CS:08F2): a new particle at SI on the edge DX moves away from, in the strip BP
-/// covers. Out: AX = x, BX = y.
-void RespawnDustAtSideEdge(Guest& _guest);
 
 /// RollStardust (CS:0927): rotates every particle by rotationSinCos[7].
 void RollStardust(Guest& _guest);
@@ -42,16 +35,6 @@ void RollStardust(Guest& _guest);
 /// ShiftStardustVertically (CS:0940): adds DX to y of every on-screen particle, respawning those that
 /// leave on the entering edge.
 void ShiftStardustVertically(Guest& _guest);
-
-/// RespawnDustAtVerticalEdge (CS:0969): a new particle at SI on the edge DX moves away from, in the
-/// strip BP covers. Out: AX = x, BX = y.
-void RespawnDustAtVerticalEdge(Guest& _guest);
-
-/// RespawnDustAnywhere (CS:09A3): a new particle at SI anywhere on screen. Out: AX = x, BX = y.
-void RespawnDustAnywhere(Guest& _guest);
-
-/// ResetStardust (CS:0A43): scatters all 30 particles at random.
-void ResetStardust(Guest& _guest);
 
 /// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight. Out: AH = the F1-F4 scan code or 0; BX and CX
 /// come back as the scan leaves them.
@@ -66,14 +49,8 @@ void UpdateDashboard(Guest& _guest);
 /// DrawFiveLineBar (CS:2645): a bar 5 scanlines high for AL at ES:DI.
 void DrawFiveLineBar(Guest& _guest);
 
-/// DrawSignedIndicator (CS:26BE): the roll or pitch indicator for the signed AL at ES:DI.
-void DrawSignedIndicator(Guest& _guest);
-
 /// DrawThreeLineBar (CS:273E): a bar 3 scanlines high for AL at ES:DI.
 void DrawThreeLineBar(Guest& _guest);
-
-/// DrawMissileIcons (CS:2799): the missile icons, when missileCount changed.
-void DrawMissileIcons(Guest& _guest);
 
 /// DrawEnergyBanks (CS:283B): splits playerEnergy into the four banks and redraws those that changed.
 void DrawEnergyBanks(Guest& _guest);
@@ -114,15 +91,8 @@ void UpdateScannerBlip(Guest& _guest);
 /// back as the original leaves it; DI = stationSlot.
 void UpdateCompass(Guest& _guest);
 
-/// XorCompassDot (CS:42A4): the compass dot at DL, DH, solid when BP is non-zero. DX comes back one
-/// right and one up.
-void XorCompassDot(Guest& _guest);
-
 /// EraseScannerBlip (CS:42D6): erases slot DI's scanner blip, if it has one.
 void EraseScannerBlip(Guest& _guest);
-
-/// XorScannerBlip (CS:42F6): the scanner blip for the scanner bytes AH, BH, CH.
-void XorScannerBlip(Guest& _guest);
 
 /// EraseCompassAndBlips (CS:4594): erases the compass dot and every scanner blip.
 void EraseCompassAndBlips(Guest& _guest);
@@ -149,9 +119,6 @@ void UpdatePlayerMotion(Guest& _guest);
 
 /// UpdatePlayerVelocity (CS:8599): playerVelocity from playerSpeed and the angles, when velocityDirty.
 void UpdatePlayerVelocity(Guest& _guest);
-
-/// MoveObjectsByVelocity (CS:85EC): moves every slot by the player's velocity.
-void MoveObjectsByVelocity(Guest& _guest);
 
 /// RunPauseScreen (CS:8D6A): the pause menu, until space resumes; its keys toggle the options and set
 /// the frame time, and A drops two return addresses to leave RunFlight for the title. Waits.
@@ -194,8 +161,34 @@ struct SafeZone
   std::uint8_t rest; ///< the other bits, shifted down: what UpdateSafeZone's RCL kept of AL
 };
 
+/// The last pixel a dashboard routine XORed through XorDashboardPixel: where it is from the dashboard's origin, and
+/// the mask it XORed.
+struct DashboardPixel
+{
+  std::uint8_t x;
+  std::uint8_t y;
+  std::uint8_t mask;
+};
+
+/// GetPreviousDustScreenPosition (CS:08A1): where the particle at DS:_particle was in the drawing buffer last frame,
+/// from its entry in stardustPrevious, when it was on screen then.
+[[nodiscard]] std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::uint16_t _particle);
+
 /// ComputeDustStripMask (CS:08B9): 2^n - 1 just covering |_step| / 2, the strip a respawned particle lands in.
 [[nodiscard]] std::uint16_t ComputeDustStripMask(std::int16_t _step);
+
+/// RespawnDustAtSideEdge (CS:08F2): the particle at DS:_particle born again, its lifetime and its copy's at random
+/// and the copy marked new, at a random y on the edge a sideways _step moves away from, its x in the strip
+/// _stripMask covers. Returns where.
+[[nodiscard]] DustPosition RespawnDustAtSideEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask);
+
+/// RespawnDustAtVerticalEdge (CS:0969): RespawnDustAtSideEdge for a vertical _step: a random x, and y in the strip on
+/// the edge the step moves away from.
+[[nodiscard]] DustPosition RespawnDustAtVerticalEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step,
+                                                     std::uint16_t _stripMask);
+
+/// RespawnDustAnywhere (CS:09A3): the particle at DS:_particle born again anywhere on screen.
+[[nodiscard]] DustPosition RespawnDustAnywhere(GameState& _state, std::uint16_t _particle);
 
 /// IsDustOnScreen (CS:09D6): whether the high byte of x is in -20h..1Fh and that of y in -10h..0Fh.
 [[nodiscard]] bool IsDustOnScreen(DustPosition _position);
@@ -220,6 +213,11 @@ void StorePreviousDustPosition(GameState& _state, std::uint16_t _particle, DustP
 /// DustToScreen (CS:0A28): where _position is in the drawing buffer.
 [[nodiscard]] DustScreenPosition DustToScreen(DustPosition _position);
 
+/// ResetStardust (CS:0A43): all 30 particles scattered at random, within 23h of the centre, with random lifetimes;
+/// messageFrames cleared first when its low byte is 0, so that the new view's title prints. Returns the last random number
+/// it drew, whose low byte gave the last particle's lifetime.
+std::uint16_t ResetStardust(GameState& _state);
+
 /// SaveStardustPositions (CS:0A88): stardust copied over stardustPrevious a byte at a time, for the jump drive's
 /// streaks.
 void SaveStardustPositions(GameState& _state);
@@ -227,6 +225,14 @@ void SaveStardustPositions(GameState& _state);
 /// InvalidateDashboard (CS:2540): the 22 dashboard cache bytes from missileCountShown filled with 0x80, so that
 /// UpdateDashboard redraws every gauge.
 void InvalidateDashboard(GameState& _state);
+
+/// DrawSignedIndicator (CS:26BE): the roll or pitch indicator for _value, held to -23..23, on the five scanlines of the
+/// dashboard line at B800:_line: the strip in colour 2, then the marker from indicatorMarkers.
+void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _value);
+
+/// DrawMissileIcons (CS:2799): when missileCount changed, that many missileIcon cells at B800:3E0C and the background
+/// up to four. Returns whether it drew.
+bool DrawMissileIcons(GameState& _state);
 
 /// DrawMissileLockIndicator (CS:2804): when missileState changed, the 12x6-pixel block at B800:1E15 in
 /// colorFillBytes[missileState]. Returns whether it drew.
@@ -243,6 +249,15 @@ std::uint8_t UpdateConditionColor(GameState& _state);
 /// InSafeZone (CS:2E63): safeZoneFlags, read.
 [[nodiscard]] SafeZone InSafeZone(const GameState& _state);
 
+/// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
+/// neighbours, a ring, and the centre too while _inFront, solid. Returns the last pixel, one right of and one above
+/// the centre.
+DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
+
+/// XorScannerBlip (CS:42F6): the scanner blip for the scanner bytes _x, _y and _z XORed into video memory: a stick from
+/// (3Dh + _x, 1Fh - _z / 4) of |_y / 4| pixels, up or down, and a pixel right of its end. Returns that last pixel.
+DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z);
+
 /// XorDashboardPixel (CS:43C4): the colour-2 pixel at _x, _y from the dashboard's origin (96, 144) XORed into
 /// video memory. Returns the mask, from dashboardPixelMasks.
 std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y);
@@ -250,14 +265,24 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
 /// DrainEnergy (CS:839F): playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
 void DrainEnergy(GameState& _state, std::int8_t _amount);
 
+/// MoveObjectsByVelocity (CS:85EC): the player's velocity, sign-extended, taken from the 24-bit position of each of
+/// shipSlotCount slots from shipSlots, and from its compass words: the player stays at the origin.
+void MoveObjectsByVelocity(GameState& _state);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results
 // back there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what
 // the original leaves in one: then the entry leaves that, and the contract compares it (InvalidateDashboardEntry,
-// DrawMissileLockIndicatorEntry's CX, and XorDashboardPixelEntry's AX, BX and ES).
+// DrawMissileLockIndicatorEntry's, DrawSignedIndicatorEntry's and DrawMissileIconsEntry's CX, XorDashboardPixelEntry's
+// AX, BX and ES, ResetStardustEntry's AX and DI, XorCompassDotEntry's AX and BX, XorScannerBlipEntry's BX, CX, DX and
+// ES, and MoveObjectsByVelocityEntry's AX and SI).
 
+void GetPreviousDustScreenPositionEntry(Guest& _guest); ///< SI = the particle. Out: CF clear and CL, CH, or CF set.
 void ComputeDustStripMaskEntry(Guest& _guest);
+void RespawnDustAtSideEdgeEntry(Guest& _guest);     ///< SI = the particle, DX = the step, BP = the strip. Out: AX, BX.
+void RespawnDustAtVerticalEdgeEntry(Guest& _guest); ///< SI = the particle, DX = the step, BP = the strip. Out: AX, BX.
+void RespawnDustAnywhereEntry(Guest& _guest);       ///< SI = the particle. Out: AX, BX.
 void IsDustOnScreenEntry(Guest& _guest);
 void IsDustNearCenterEntry(Guest& _guest);
 void ScaleDustStepEntry(Guest& _guest);
@@ -265,13 +290,19 @@ void LoadDustPositionEntry(Guest& _guest);
 void StoreDustPositionEntry(Guest& _guest);
 void StorePreviousDustPositionEntry(Guest& _guest);
 void DustToScreenEntry(Guest& _guest);
+void ResetStardustEntry(Guest& _guest); ///< Out: AX = the last random, its low byte the last lifetime; DI past the particles.
 void SaveStardustPositionsEntry(Guest& _guest);
 void InvalidateDashboardEntry(Guest& _guest);
+void DrawSignedIndicatorEntry(Guest& _guest); ///< AL = the value, DI = the line, ES = B800h. Out: CX = 0.
+void DrawMissileIconsEntry(Guest& _guest);    ///< ES = B800h. Out: CX = 0 once it draws, else CL = missileCount.
 void DrawMissileLockIndicatorEntry(Guest& _guest);
 void DrawConditionLightEntry(Guest& _guest);
 void UpdateConditionColorEntry(Guest& _guest);
 void InSafeZoneEntry(Guest& _guest);
+void XorCompassDotEntry(Guest& _guest);  ///< DL, DH = the dot, BP = 0 behind. Out: AX = DX one right and one up, BX the mask.
+void XorScannerBlipEntry(Guest& _guest); ///< AH, BH, CH = the scanner bytes. Out: AX = DX the last pixel, BX its mask, CX.
 void XorDashboardPixelEntry(Guest& _guest);
 void DrainEnergyEntry(Guest& _guest);
+void MoveObjectsByVelocityEntry(Guest& _guest); ///< Out: AX = playerVelocityZ, SI past the last slot.
 
 } // namespace Elite

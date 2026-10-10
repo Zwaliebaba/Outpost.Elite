@@ -135,6 +135,11 @@ constexpr std::uint16_t DISTANCE_TEXT_TENS = 0x0B;
 constexpr std::uint16_t DISTANCE_TEXT_UNITS = 0x0C;
 constexpr std::uint16_t DISTANCE_TEXT_TENTHS = 0x0E;
 constexpr std::uint8_t UPPER_CASE_MASK = 0xDF;
+constexpr std::uint8_t LOWER_CASE_BIT = 0x20;
+
+// A system's name: up to four pairs of letters from systemNameDigrams, the fourth only when this bit of systemSeed0 is set.
+constexpr std::uint16_t SYSTEM_NAME_PAIRS = 4;
+constexpr std::uint16_t SYSTEM_NAME_FOURTH_PAIR = 0x40;
 
 // The data screen's labels and figures in the data segment, and where it prints them (text offsets).
 constexpr std::uint16_t DATA_TITLE = 0x0054;
@@ -256,23 +261,29 @@ std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to
   return moved;
 }
 
-// One pass of PlaceChartLabels over chartItems: CF from the first item the label at DL/DH, BL/BH
-// overlaps, with DI on it.
-[[nodiscard]] bool AnyChartItemOverlaps(Guest& _guest)
+// What one pass of PlaceChartLabels over chartItems finds.
+struct ChartItemSearch
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.di = DS.chartItems.offset;
-  regs.cx = _guest.Get(DS.chartItemCount);
+  bool overlaps;           ///< an item overlaps the label
+  std::uint16_t item;      ///< the item that does, or the place after the last item
+  std::uint16_t itemsLeft; ///< the items from that one on, as LOOP leaves CX; 0 when none does
+};
+
+// One pass of PlaceChartLabels over chartItems (CS:152B): the first item the label with x range _x and rows _rows
+// overlaps.
+[[nodiscard]] ChartItemSearch AnyChartItemOverlaps(const GameState& _state, ChartSpan _x, ChartSpan _rows)
+{
+  ChartItemSearch search{.overlaps = false, .item = DS.chartItems.offset, .itemsLeft = _state.Get(DS.chartItemCount)};
   do
   {
-    ChartItemOverlapsEntry(_guest);
-    if (Carry(regs))
+    if (ChartItemOverlaps(_state, search.item, _x, _rows))
     {
-      return true;
+      search.overlaps = true;
+      return search;
     }
-    regs.di = static_cast<std::uint16_t>(regs.di + CHART_ITEM_BYTES);
-  } while (--regs.cx != 0);
-  return false;
+    search.item = Offset(search.item, CHART_ITEM_BYTES);
+  } while (--search.itemsLeft != 0);
+  return search;
 }
 
 // jmp [bx] to a control code's handler, with SI and the return to ResumeTextExpansion pushed; the
@@ -704,6 +715,7 @@ void ShowGalacticChart(Guest& _guest)
   do
   {
     DrawGalacticChart(_guest);
+    _guest.Spend(GALACTIC_CHART_PACING); // the IBM PC's redraw (D18)
     _guest.Call(PRESENT_CHART_FRAME);
     MoveChartCursor(_guest);
   } while (!ReadChartKey(_guest, GALACTIC_CHART_KEYS));
@@ -757,6 +769,7 @@ void ShowShortRangeChart(Guest& _guest)
   do
   {
     DrawShortRangeChart(_guest);
+    _guest.Spend(SHORT_RANGE_CHART_PACING); // the IBM PC's redraw (D18)
     _guest.Call(PRESENT_CHART_FRAME);
     MoveChartCursor(_guest);
   } while (!ReadChartKey(_guest, SHORT_RANGE_CHART_KEYS));
@@ -783,21 +796,10 @@ ShortRangeOffset GetShortRangeOffset(const GameState& _state)
   return ShortRangeOffset{.onChart = Magnitude(Word(row)) < SHORT_RANGE_HALF_HEIGHT, .x = x, .row = row};
 }
 
-void IsSystemOnChart(Guest& _guest)
+bool IsSystemOnChart(const GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.chartIsShortRange) == 0)
-  {
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
-    return;
-  }
-  const std::uint16_t ax = regs.ax;
-  const std::uint16_t cx = regs.cx;
-  const std::uint16_t dx = regs.dx;
-  GetShortRangeOffsetEntry(_guest);
-  regs.dx = dx;
-  regs.cx = cx;
-  regs.ax = ax;
+  // CMP chartIsShortRange,1 sets CF on the galactic chart, where GetShortRangeOffset would find every system too.
+  return GetShortRangeOffset(_state).onChart;
 }
 
 void TwistSystemSeeds(GameState& _state)
@@ -902,7 +904,7 @@ void SelectSystemAtCursor(Guest& _guest)
   const auto descriptionSeed0 = static_cast<std::uint16_t>(_guest.Get(DS.systemSeed0) ^ _guest.Get(DS.systemSeed1));
   _guest.Set(DS.descriptionSeed0, descriptionSeed0);
   _guest.Set(DS.descriptionSeed1, static_cast<std::uint16_t>(descriptionSeed0 ^ _guest.Get(DS.systemSeed2)));
-  GenerateSystemName(_guest);
+  GenerateSystemNameEntry(_guest);
 }
 
 void FindNearestSystem(Guest& _guest)
@@ -926,7 +928,7 @@ void FindNearestSystem(Guest& _guest)
     regs.ax = static_cast<std::uint16_t>(distance);
     if (distance <= 0xFFFF && regs.ax < regs.si)
     {
-      IsSystemOnChart(_guest);
+      IsSystemOnChartEntry(_guest);
       if (Carry(regs))
       {
         regs.si = regs.ax;
@@ -934,7 +936,7 @@ void FindNearestSystem(Guest& _guest)
         regs.bp = regs.cx;
       }
     }
-    AdvanceToNextSystem(_guest);
+    AdvanceToNextSystemEntry(_guest);
     regs.bx = cursor;
     regs.cx = count;
   }
@@ -989,7 +991,7 @@ void ShowNearestSystemDistance(Guest& _guest)
   regs.bx = INK_3;
   regs.di = CHART_TEXT_LINE_2;
   _guest.Call(DRAW_SCREEN_STRING);
-  GenerateSystemName(_guest);
+  GenerateSystemNameEntry(_guest);
   regs.si = DS.selectedSystemName.offset;
   regs.di = CHART_TEXT_LINE_1;
   regs.bx = INK_2;
@@ -1006,54 +1008,50 @@ void LoadSystemSeeds(Guest& _guest)
   LoadGalaxySeedsEntry(_guest);
   for (; regs.cx != 0; --regs.cx)
   {
-    AdvanceToNextSystem(_guest);
+    AdvanceToNextSystemEntry(_guest);
   }
 }
 
-void AdvanceToNextSystem(Guest& _guest)
+void AdvanceToNextSystem(GameState& _state)
 {
-  TwistSystemSeedsEntry(_guest);
-  TwistSystemSeedsEntry(_guest);
-  TwistSystemSeedsEntry(_guest);
-  TwistSystemSeedsEntry(_guest);
+  TwistSystemSeeds(_state);
+  TwistSystemSeeds(_state);
+  TwistSystemSeeds(_state);
+  TwistSystemSeeds(_state);
 }
 
-void GenerateSystemName(Guest& _guest)
+std::uint8_t GenerateSystemName(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.data75CA, 0x2020);
-  _guest.Set(DS.data75C8, 0x2020);
-  regs.dx = Low(_guest.Get(DS.systemSeed0));
-  regs.si = DS.selectedSystemName.offset;
-  for (regs.cx = 4; regs.cx != 0; --regs.cx)
+  _state.Set(DS.data75CA, 0x2020);
+  _state.Set(DS.data75C8, 0x2020);
+  // The fourth pair only when bit 6 of systemSeed0 was set.
+  const bool fourPairs = (_state.Get(DS.systemSeed0) & SYSTEM_NAME_FOURTH_PAIR) != 0;
+  std::uint16_t name = DS.selectedSystemName.offset;
+  std::uint8_t length = 0;
+  for (std::uint16_t pair = 0; pair < SYSTEM_NAME_PAIRS; ++pair)
   {
-    const std::uint8_t pick = _guest.Get(DS.systemSeed2High);
-    TwistSystemSeedsEntry(_guest);
-    regs.ax = static_cast<std::uint16_t>((pick & 0x1F) << 1);
-    regs.bx = static_cast<std::uint16_t>(DS.systemNameDigrams.offset + regs.ax);
-    regs.ax = _guest.Word(regs.bx);
-    if (regs.cx == 1)
+    const std::uint8_t pick = _state.Get(DS.systemSeed2High);
+    TwistSystemSeeds(_state);
+    const std::uint16_t digram = _state.Word(Offset(DS.systemNameDigrams.offset, static_cast<std::uint16_t>((pick & 0x1F) << 1)));
+    if (pair + 1 == SYSTEM_NAME_PAIRS && !fourPairs)
     {
-      // The fourth pair only when bit 6 of systemSeed0 was set.
-      SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) & 0x40));
-      if (Low(regs.dx) == 0)
-      {
-        continue;
-      }
+      continue;
     }
-    _guest.SetWord(regs.si, regs.ax);
-    if (High(regs.ax) != SPACE)
+    // A word: a letter of the pair that is a space is written, and the next pair overwrites it.
+    _state.SetWord(name, digram);
+    if (High(digram) != SPACE)
     {
-      ++regs.si;
-      SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + 1));
+      name = Offset(name, 1);
+      ++length;
     }
-    if (Low(regs.ax) != SPACE)
+    if (Low(digram) != SPACE)
     {
-      ++regs.si;
-      SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + 1));
+      name = Offset(name, 1);
+      ++length;
     }
   }
-  _guest.Set(DS.selectedSystemNameLength, High(regs.dx));
+  _state.Set(DS.selectedSystemNameLength, length);
+  return length;
 }
 
 void FindSystemByName(Guest& _guest)
@@ -1225,8 +1223,16 @@ void PlaceChartLabels(Guest& _guest)
     regs.di = static_cast<std::uint16_t>(regs.di + 4);
     _guest.Set(DS.chartLabelCursor, regs.di);
     _guest.Set(DS.labelNudgeCount, 0);
-    while (AnyChartItemOverlaps(_guest))
+    for (;;)
     {
+      // The pass leaves DI on the item it stopped at and CX the items it had left.
+      const ChartItemSearch search = AnyChartItemOverlaps(_guest.State(), SpanOf(regs.dx), SpanOf(regs.bx));
+      regs.di = search.item;
+      regs.cx = search.itemsLeft;
+      if (!search.overlaps)
+      {
+        break;
+      }
       NudgeChartLabelEntry(_guest);
       if (!Carry(regs))
       {
@@ -1538,7 +1544,7 @@ void InsertSystemName(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   const std::uint16_t text = regs.si;
   const std::uint16_t output = regs.di;
-  CopySelectedNameLower(_guest);
+  CopySelectedNameLowerEntry(_guest);
   regs.ax = SPACE;
   _guest.SetWord(regs.di, regs.ax);
   regs.si = DS.descriptionNameBuffer.offset;
@@ -1552,7 +1558,7 @@ void InsertSystemAdjective(Guest& _guest)
   Machine::Registers& regs = _guest.Regs();
   const std::uint16_t text = regs.si;
   const std::uint16_t output = regs.di;
-  CopySelectedNameLower(_guest);
+  CopySelectedNameLowerEntry(_guest);
   SetLow(regs.ax, _guest.Byte(static_cast<std::uint16_t>(regs.di - 1)));
   const std::uint8_t last = Low(regs.ax);
   if (last == 'a' || last == 'e' || last == 'i' || last == 'o' || last == 'u')
@@ -1589,8 +1595,8 @@ void InsertRandomName(Guest& _guest)
   _guest.Set(DS.systemSeed1, regs.ax);
   regs.ax = static_cast<std::uint16_t>(regs.ax ^ _guest.Get(DS.descriptionSeed0));
   _guest.Set(DS.systemSeed2, regs.ax);
-  GenerateSystemName(_guest);
-  CopySelectedNameLower(_guest);
+  GenerateSystemNameEntry(_guest);
+  CopySelectedNameLowerEntry(_guest);
   regs.si = SAVED_SYSTEM_NAME;
   regs.di = DS.selectedSystemName.offset;
   regs.cx = SYSTEM_NAME_BYTES;
@@ -1629,27 +1635,28 @@ std::uint16_t NextDescriptionRandom(GameState& _state)
   return sum;
 }
 
-void CopySelectedNameLower(Guest& _guest)
+std::uint16_t CopySelectedNameLower(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  TerminateSelectedSystemNameEntry(_guest);
-  regs.si = DS.selectedSystemName.offset;
-  regs.di = DS.descriptionNameBuffer.offset;
-  SetLow(regs.ax, _guest.Byte(regs.si));
+  TerminateSelectedSystemName(_state);
+  std::uint16_t from = DS.selectedSystemName.offset;
+  std::uint16_t to = DS.descriptionNameBuffer.offset;
+  std::uint8_t letter = _state.Byte(from);
   for (;;)
   {
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.si;
-    ++regs.di;
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    if (Low(regs.ax) == 0)
+    _state.SetByte(to, letter);
+    from = Offset(from, 1);
+    to = Offset(to, 1);
+    letter = _state.Byte(from);
+    if (letter == 0)
     {
       break;
     }
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) | 0x20));
+    letter = static_cast<std::uint8_t>(letter | LOWER_CASE_BIT);
   }
-  _guest.SetByte(regs.di, SPACE);
-  _guest.SetByte(static_cast<std::uint16_t>(regs.di + 1), Low(regs.ax));
+  // The space, then the NUL from AL.
+  _state.SetByte(to, SPACE);
+  _state.SetByte(Offset(to, 1), letter);
+  return to;
 }
 
 // ── Their entries ──
@@ -1678,6 +1685,10 @@ constexpr NativeContract CLOBBERS_CX{REGISTER_CX, 0};
 constexpr NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr NativeContract CLOBBERS_BX_DI{REGISTER_BX | REGISTER_DI, 0};
 constexpr NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+constexpr NativeContract CLOBBERS_SI{REGISTER_SI, 0};
+// GenerateSystemName's: it clobbers DL but returns DH, so DX is compared whole, and the entry leaves DL as the
+// original does; and AX, the last pair it read, which InsertRandomName keeps through CopySelectedNameLower.
+constexpr NativeContract CLOBBERS_BX_CX_SI{REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
 constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 constexpr NativeContract CLOBBERS_AX_RETURNS_CARRY{REGISTER_AX, FLAG_CARRY};
 
@@ -1698,6 +1709,12 @@ void GetShortRangeOffsetEntry(Guest& _guest)
   }
   _guest.SetFlag(FLAG_CARRY, offset.onChart);
   _guest.Clobber(CLOBBERS_AX_RETURNS_CARRY);
+}
+
+void IsSystemOnChartEntry(Guest& _guest)
+{
+  _guest.SetFlag(FLAG_CARRY, IsSystemOnChart(_guest.State()));
+  _guest.Clobber(RETURNS_CARRY);
 }
 
 void TwistSystemSeedsEntry(Guest& _guest)
@@ -1731,6 +1748,32 @@ void ComputeDistanceToSystemEntry(Guest& _guest)
 {
   ComputeDistanceToSystem(_guest.State());
   _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
+}
+
+void AdvanceToNextSystemEntry(Guest& _guest)
+{
+  AdvanceToNextSystem(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void GenerateSystemNameEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The original reads the fourth pair into AX whether or not it writes it, and InsertRandomName keeps AH: its pick is
+  // systemSeed2's high byte after three twists.
+  SystemSeeds seeds = ReadSystemSeeds(_guest.State());
+  const std::uint16_t seed0 = seeds.seed0;
+  for (std::uint16_t pair = 1; pair < SYSTEM_NAME_PAIRS; ++pair)
+  {
+    seeds = SystemSeeds{seeds.seed1, seeds.seed2, static_cast<std::uint16_t>(seeds.seed0 + seeds.seed1 + seeds.seed2)};
+  }
+  const auto pick = static_cast<std::uint16_t>((High(seeds.seed2) & 0x1F) << 1);
+  const std::uint16_t lastPair = _guest.Word(Offset(DS.systemNameDigrams.offset, pick));
+  const std::uint8_t length = GenerateSystemName(_guest.State());
+  regs.ax = lastPair;
+  // It counts the length in DH, and its test for the fourth pair leaves bit 6 of systemSeed0 in DL.
+  regs.dx = Join(length, static_cast<std::uint8_t>(seed0 & SYSTEM_NAME_FOURTH_PAIR));
+  _guest.Clobber(CLOBBERS_BX_CX_SI);
 }
 
 void AddChartLabelEntry(Guest& _guest)
@@ -1796,17 +1839,26 @@ void NextDescriptionRandomEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void CopySelectedNameLowerEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = CopySelectedNameLower(_guest.State());
+  // TerminateSelectedSystemName leaves the name's length in BX, which the original keeps, and it reads the NUL into AL
+  // and leaves AH alone: InsertSystemAdjective keeps AH.
+  regs.bx = _guest.Get(DS.selectedSystemNameLength);
+  SetLow(regs.ax, 0);
+  _guest.Clobber(CLOBBERS_SI);
+}
+
 namespace
 {
 
-// GenerateSystemName clobbers DL but returns DH: DX is compared whole, and the port leaves DL as the
-// original does.
 // The charts and the data screen wait for keys, and FindSystemByName for a line typed: each waits as a rule.
 constexpr std::array ENTRIES = {
   NativeEntry{0x0CAE, "ShowGalacticChart", &ShowGalacticChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x0E52, "ShowShortRangeChart", &ShowShortRangeChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x1076, "GetShortRangeOffset", &GetShortRangeOffsetEntry, CLOBBERS_AX_RETURNS_CARRY},
-  NativeEntry{0x10AF, "IsSystemOnChart", &IsSystemOnChart, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x10AF, "IsSystemOnChart", &IsSystemOnChartEntry, RETURNS_CARRY},
   NativeEntry{0x10C0, "TwistSystemSeeds", &TwistSystemSeedsEntry, PRESERVES_ALL},
   NativeEntry{0x10D6, "LoadGalaxySeeds", &LoadGalaxySeedsEntry, PRESERVES_ALL},
   NativeEntry{0x10FE, "GetCursorGalaxyPosition", &GetCursorGalaxyPositionEntry, CLOBBERS_CX},
@@ -1817,9 +1869,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x12F9, "ComputeDistanceToSystem", &ComputeDistanceToSystemEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x1341, "ShowNearestSystemDistance", &ShowNearestSystemDistance, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeeds, PRESERVES_ALL},
-  NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystem, PRESERVES_ALL},
-  NativeEntry{0x13C1, "GenerateSystemName", &GenerateSystemName,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0}},
+  NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystemEntry, PRESERVES_ALL},
+  NativeEntry{0x13C1, "GenerateSystemName", &GenerateSystemNameEntry, CLOBBERS_BX_CX_SI},
   NativeEntry{0x140D, "FindSystemByName", &FindSystemByName, Machine::NativeContract{GENERAL | REGISTER_ES, 0}, NativeReturn::Near, 0,
               NativeWait::Always},
   NativeEntry{0x14C5, "DrawChartItems", &DrawChartItems, Machine::NativeContract{GENERAL, 0}},
@@ -1841,7 +1892,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7109, "StartCapitalizing", &StartCapitalizingEntry, PRESERVES_ALL},
   NativeEntry{0x710F, "StopCapitalizing", &StopCapitalizingEntry, PRESERVES_ALL},
   NativeEntry{0x7115, "NextDescriptionRandom", &NextDescriptionRandomEntry, PRESERVES_ALL},
-  NativeEntry{0x7124, "CopySelectedNameLower", &CopySelectedNameLower, Machine::NativeContract{REGISTER_AX | REGISTER_SI, 0}},
+  NativeEntry{0x7124, "CopySelectedNameLower", &CopySelectedNameLowerEntry, CLOBBERS_SI},
 };
 
 } // namespace

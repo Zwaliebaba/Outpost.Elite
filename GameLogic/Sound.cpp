@@ -38,17 +38,16 @@ constexpr std::uint8_t NOISE_BURST_TICKS = 100;
   return stepLength;
 }
 
-// StartImpactSound and StartExplosionSound: the step length and its shrink, then BeginNoiseSweep
-// (CS:7ACE). Entered under CLI, which native code does not need: nothing interrupts it.
-void StartNoiseSweep(Guest& _guest, std::uint8_t _stepLength, std::uint8_t _stepShrink)
+// StartImpactSound and StartExplosionSound: the step length and its shrink, then BeginNoiseSweep (CS:7ACE). Entered
+// under CLI, which native code does not need: nothing interrupts it. Returns the step length, as BeginSweep does.
+std::uint8_t StartNoiseSweep(GameState& _state, std::uint8_t _stepLength, std::uint8_t _stepShrink)
 {
-  _guest.Set(DS.sweepStepLength, _stepLength);
-  _guest.Set(DS.sweepStepShrink, _stepShrink);
-  _guest.Set(DS.noiseSweepActive, 1);
-  _guest.Set(DS.toneSweepActive, 0);
-  _guest.Set(DS.sweepPeriodTicks, 1);
-  SetLow(_guest.Regs().ax, BeginSweep(_guest.State()));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _state.Set(DS.sweepStepLength, _stepLength);
+  _state.Set(DS.sweepStepShrink, _stepShrink);
+  _state.Set(DS.noiseSweepActive, 1);
+  _state.Set(DS.toneSweepActive, 0);
+  _state.Set(DS.sweepPeriodTicks, 1);
+  return BeginSweep(_state);
 }
 
 } // namespace
@@ -131,17 +130,23 @@ void ToggleSpeaker(Guest& _guest)
 
 void StartImpactSound(Guest& _guest)
 {
-  StartNoiseSweep(_guest, 30, 4);
+  // AL the step length, and the STI that ends BeginSweep.
+  SetLow(_guest.Regs().ax, StartNoiseSweep(_guest.State(), 30, 4));
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
 }
 
 void StartExplosionSound(Guest& _guest)
 {
-  StartNoiseSweep(_guest, 50, 8);
+  // AL the step length, and the STI that ends BeginSweep.
+  SetLow(_guest.Regs().ax, StartNoiseSweep(_guest.State(), 50, 8));
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
 }
 
 void StartPlayerDeathSound(Guest& _guest)
 {
-  StartNoiseSweep(_guest, 60, 7);
+  // AL the step length, and the STI that ends BeginSweep.
+  SetLow(_guest.Regs().ax, StartNoiseSweep(_guest.State(), 60, 7));
+  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
 }
 
 void StopContinuousNoise(GameState& _state)
@@ -149,19 +154,18 @@ void StopContinuousNoise(GameState& _state)
   _state.Set(DS.continuousNoise, 0);
 }
 
-void StartLaserSound(Guest& _guest)
+std::optional<std::uint8_t> StartLaserSound(GameState& _state)
 {
-  if (_guest.Get(DS.noiseSweepActive) == 1)
+  if (_state.Get(DS.noiseSweepActive) == 1)
   {
-    return;
+    return std::nullopt;
   }
-  _guest.Set(DS.noiseSweepActive, 0);
-  _guest.Set(DS.toneSweepActive, 1);
-  _guest.Set(DS.sweepStepLength, 20);
-  _guest.Set(DS.sweepStepShrink, 2);
-  _guest.Set(DS.sweepPeriodTicks, 2);
-  SetLow(_guest.Regs().ax, BeginSweep(_guest.State()));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _state.Set(DS.noiseSweepActive, 0);
+  _state.Set(DS.toneSweepActive, 1);
+  _state.Set(DS.sweepStepLength, 20);
+  _state.Set(DS.sweepStepShrink, 2);
+  _state.Set(DS.sweepPeriodTicks, 2);
+  return BeginSweep(_state);
 }
 
 void StartPlayerHitSound(GameState& _state)
@@ -211,6 +215,18 @@ void StopContinuousNoiseEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void StartLaserSoundEntry(Guest& _guest)
+{
+  // CLI before the writes, which nothing interrupts in native code, and the STI that ends BeginSweep: a sweep started
+  // leaves AL its step length and interrupts on.
+  if (const std::optional<std::uint8_t> stepLength = StartLaserSound(_guest.State()))
+  {
+    SetLow(_guest.Regs().ax, *stepLength);
+    _guest.SetFlag(FLAG_INTERRUPT, true);
+  }
+  _guest.Clobber(CLOBBERS_AX_ENABLES_INTERRUPTS);
+}
+
 void StartPlayerHitSoundEntry(Guest& _guest)
 {
   // CLI round the writes, which nothing interrupts in native code, then STI.
@@ -235,7 +251,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7AFC, "StartExplosionSound", &StartExplosionSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7B09, "StartPlayerDeathSound", &StartPlayerDeathSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7B6B, "StopContinuousNoise", &StopContinuousNoiseEntry, PRESERVES_ALL},
-  NativeEntry{0x7B71, "StartLaserSound", &StartLaserSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
+  NativeEntry{0x7B71, "StartLaserSound", &StartLaserSoundEntry, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7B96, "StartPlayerHitSound", &StartPlayerHitSoundEntry, ENABLES_INTERRUPTS},
 };
 

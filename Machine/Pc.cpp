@@ -116,6 +116,7 @@ LoadError Pc::Load(std::span<const std::uint8_t> _file, const ExeLoader::Desc& _
     return error;
   m_processor->Regs() = _program.registers;
   m_services.StartProgram(_program.pspSegment);
+  m_pacingAt = NOT_PACING;
   return LoadError::None;
 }
 
@@ -168,10 +169,20 @@ void Pc::StepPaced()
   }
   const std::uint16_t segment = m_processor->Regs().cs;
   const std::uint16_t offset = m_processor->Regs().ip;
+  const std::uint32_t linear = Memory::Linear(segment, offset);
+  if (!m_pacingCosts.empty() && PaceAt(linear))
+  {
+    return;
+  }
   const std::uint8_t opcode = m_memory.Read8(segment, offset);
   const std::uint64_t interrupts = m_processor->HardwareInterruptCount();
   m_instructionCycles += m_processor->Step();
   ++m_stepsSinceIdle;
+  if (linear == m_pacingAt && m_processor->HardwareInterruptCount() == interrupts)
+  {
+    // The instruction the cost was paid for has run: the next arrival pays again.
+    m_pacingAt = NOT_PACING;
+  }
   if (m_processor->AtHook())
   {
     RunHook();
@@ -181,6 +192,59 @@ void Pc::StepPaced()
   if (after.cs == segment && after.ip <= offset && m_processor->HardwareInterruptCount() == interrupts && IsJump(opcode))
   {
     NoteBackwardJump();
+  }
+}
+
+// Whether this step goes to paying the pacing cost at _linear (SetPacingCost) rather than to the instruction
+// there. An interrupt that is due is taken first, as the CPU would take it, and the handler's IRET comes back
+// to the same instruction, which then pays on: the cost is set at the first arrival and paid off as the
+// clock moves, a wait's step at a time.
+bool Pc::PaceAt(std::uint32_t _linear)
+{
+  if (!m_processor->Interprets() || m_processor->InterruptDue())
+  {
+    return false;
+  }
+  if (m_pacingAt != _linear)
+  {
+    const auto point = std::ranges::find(m_pacingCosts, _linear, &std::pair<std::uint32_t, Cycles>::first);
+    if (point == m_pacingCosts.end())
+    {
+      return false;
+    }
+    m_pacingAt = _linear;
+    m_pacingUntil = m_clock + point->second;
+  }
+  if (m_clock >= m_pacingUntil)
+  {
+    return false;
+  }
+  Idle(std::min(m_pacingUntil, m_runLimit));
+  return true;
+}
+
+void Pc::SetPacingCost(std::uint32_t _linear, Cycles _cycles)
+{
+  const auto point = std::ranges::find(m_pacingCosts, _linear, &std::pair<std::uint32_t, Cycles>::first);
+  if (point != m_pacingCosts.end())
+  {
+    point->second = _cycles;
+    return;
+  }
+  m_pacingCosts.emplace_back(_linear, _cycles);
+}
+
+void Pc::Spend(Cycles _cycles)
+{
+  const Cycles until = m_clock + _cycles;
+  while (m_clock < until)
+  {
+    Idle(std::min(until, m_runLimit));
+    if (m_clock >= m_runLimit)
+    {
+      ReachedRunLimit();
+    }
+    TakeDueInterrupts();
   }
 }
 

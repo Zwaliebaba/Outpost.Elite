@@ -1,15 +1,18 @@
 // GameLogic/Video.h
 #pragma once
 
+#include "GameState.h"
 #include "NativeEntry.h"
 
+#include <cstdint>
 #include <span>
 
 namespace Elite
 {
 
 // The reference's video routines, ported (plan §5 Phase 3, ADR-010): drawing: lines, spans, the space view and the dashboard into CGA memory. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv.
+// here once it is ported, on the registers of its contract in Symbols.tsv. Those de-assembled so far (ADR-012) follow
+// the bodies: they take values and give values back, and their entries keep the register contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
@@ -41,13 +44,6 @@ void PresentSpaceView(Guest& _guest);
 /// clobbered.
 void CopyChartBufferToScreen(Guest& _guest);
 
-/// ClearDrawBuffer (CS:060D): zero-fills DS:0000-1FFF, the drawing buffer. Out: ES=DS, AX=0, CX=0,
-/// DI=2000h.
-void ClearDrawBuffer(Guest& _guest);
-
-/// PlotPixel (CS:15E0): sets the pixel at DL=x, DH=row to colorFillBytes[drawColor]. BX, CX clobbered.
-void PlotPixel(Guest& _guest);
-
 /// DrawClippedLine (CS:1603): the line from (DX, BX) to (CX, AX), signed words, clipped to the 256x128
 /// buffer, through DrawLine. Everything but DS clobbered.
 void DrawClippedLine(Guest& _guest);
@@ -68,10 +64,6 @@ void DrawLine(Guest& _guest);
 /// DrawDisc (CS:1826): a filled disc of radius BX at (DX, CX), signed words, with a ragged edge while
 /// sunFringeMask is set. Everything but DS clobbered; ES=DS.
 void DrawDisc(Guest& _guest);
-
-/// FillSpan (CS:1A07): fills row CL/2 of the drawing buffer from x=DL to x=DH with discFillByte. DI
-/// clobbered.
-void FillSpan(Guest& _guest);
 
 /// DrawCircle (CS:1AC1): 32 chords round (CX, DX) with radius BL, through DrawClippedLine. Everything but
 /// DS clobbered.
@@ -98,13 +90,6 @@ void WaitRetraceThenDelay(Guest& _guest);
 /// the cockpit image copied in. AX, CX, SI, DI, ES clobbered, and BX and DX when it sets the mode.
 void ShowCockpitScreen(Guest& _guest);
 
-/// ClearCgaScreen (CS:7BFB): zero-fills both banks of CGA memory. Out: ES=B800h; AX, CX, DI clobbered.
-void ClearCgaScreen(Guest& _guest);
-
-/// ClearTextScreen (CS:7C12): the 40x25 text page filled with spaces in textAttribute. Out: ES=B800h;
-/// AX, CX, DI clobbered.
-void ClearTextScreen(Guest& _guest);
-
 /// DrawChartFrame (CS:7C25): unless the chart frame shows already, graphics mode or a clear screen and
 /// the frame's box lines. AX, BX, CX, DX, SI, DI, BP, ES clobbered.
 void DrawChartFrame(Guest& _guest);
@@ -118,5 +103,40 @@ void SetTextMode(Guest& _guest);
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then 0. The registers come back as DrawDisc
 /// leaves them.
 void DrawTitlePlanet(Guest& _guest);
+
+// ── The routines (ADR-012): values in, values out, on the GameState ──
+//
+// Each is what the routine Symbols.tsv names computes, with no register in sight, and every byte it writes is written as the
+// original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
+// entry finds: _backward.
+
+/// ClearDrawBuffer (CS:060D): the drawing buffer, DS:0000-1FFF, zeroed a word at a time as REP STOSW does.
+void ClearDrawBuffer(GameState& _state, bool _backward);
+
+/// PlotPixel (CS:15E0): the pixel at _x, _row of the drawing buffer set to colorFillBytes[drawColor].
+void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
+
+/// FillSpan (CS:1A07): row _doubledRow / 2 of the drawing buffer filled with discFillByte from x = _left to x = _right, the
+/// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
+/// Returns the offset of the span's last byte.
+std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward);
+
+/// ClearCgaScreen (CS:7BFB): both banks of CGA memory, B800:0000-1F3F and B800:2000-3F3F, zeroed a word at a time.
+void ClearCgaScreen(GameState& _state, bool _backward);
+
+/// ClearTextScreen (CS:7C12): the 40x25 text page filled with spaces in textAttribute, a cell at a time.
+void ClearTextScreen(GameState& _state, bool _backward);
+
+// ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+//
+// Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
+// there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
+// leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI).
+
+void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
+void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
+void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
+void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
+void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.
 
 } // namespace Elite

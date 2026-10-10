@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with level 0 of the call graph (item 10).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 and 1 of the call graph (items 10 and 11).
 
 ## Context
 
@@ -85,7 +85,7 @@
 | Contracts widened | 0 |
 | Entries, each handing `Clobber` its contract | 110, of which Maths has 20 |
 | Lines touching a register in `GameLogic/*.cpp` | 5,525 before, 5,167 after |
-| Routines ready for the next level | 83, and 52 more that need a device |
+| Routines ready for the next level | 81, and 52 more that need a device. The 83 first written here counted two register adapters, which are not routines. |
 | Register functions left | 467, on 19 levels |
 
 The 13 contracts poisoning narrowed:
@@ -110,7 +110,50 @@ The 13 contracts poisoning narrowed:
 - `Plot` and `DrawSmallViewChar`: the AND, then the OR;
 - `TwistSystemSeeds` and `NextMarketRandom`: the seeds in the order of the original's exchanges.
 
-`DrawSmallDisc` still collapses its AND and OR, and is converted with the next level.
+`DrawSmallDisc` still collapsed its AND and OR; level 1 split them (item 11).
+
+**11. Level 1, measured 2026-10-10.** The 81 routines ready after level 0 were converted by three workers, one per group of subsystems. Each calls only converted routines, and it calls their value routines, not their entries, so poisoning now sits only where register code meets converted code.
+
+| | Count |
+|---|---|
+| Routines converted | 81, none skipped: Flight and Video 27; Text, Galaxy, Market, Docked, Equipment, Docking, Input, Sound and StartUp 30; Ships, Scene, Ai and Combat 24 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 15 |
+| Contracts widened | 0 |
+| Entries added | 57 |
+| Lines touching a register in `GameLogic/*.cpp` | 5,167 before, 4,712 after |
+| Routines ready for the next level | 36, and 72 more that need a device |
+| Register functions left | 389, on 19 levels |
+
+Measured with item 9's call graph, entries counted as converted and the register adapters (`…OnRegisters`) left out; a line touching a register is one that names `regs.` or `Regs()`.
+
+The 15 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `FillSpan` | DI, the span's last byte, which `DrawTitlePlanet` and `DrawSunOrPlanet` go on from |
+| `XorCompassDot` | AX and BX: the last pixel and its mask |
+| `XorScannerBlip` | BX, CX, DX and ES: the mask, the step, the last pixel and B800h |
+| `MoveObjectsByVelocity` | AX, `playerVelocityZ`, and SI, past the last slot |
+| `ResetStardust` | AX, the last random number, and DI |
+| `DrawSignedIndicator` | CX = 0. With CX poisoned, the next bar ran A5h times and wrote about 50,000 bytes. |
+| `DrawMissileIcons` | CX: 0 when it draws, otherwise CL = `missileCount` |
+| `PrintCountedTextLines` | AX, the attribute with AL = 0, and CX = 0 |
+| `CopySelectedNameLower` | AX: AL = 0, and AH as it came in |
+| `GenerateSystemName` | AX, the fourth seed pair, which `InsertRandomName` reads through `CopySelectedNameLower` |
+| `MaskOutsideTunnel` | SI, from which `PlayStationTunnel` draws its rectangles |
+| `ComputeMarketPrices` | DS |
+| `IsDebrisType` | AX: AL, the type, which `UpdateDriftingObjectAi` hands back |
+| `ComputeVelocity` | BX, the z velocity word |
+| `TurnTowardAngles` | CX, the turn rate, and BP, the pitch error's magnitude |
+
+**What else changed shape.**
+- **Helpers removed.** Ships' `SetCompareFlags`, `CompareType` and `TypeMatch`: the type tests' entries set only ZF, the one flag their contracts name. Flight's `SetSinCosPair` and `RotateByPair`: their 28 callers call Maths' value forms.
+- **Register adapters added.** `RotateToViewDirectionOnRegisters`, `SpawnOddsMetOnRegisters` and `TakeFreeShipSlotOnRegisters` serve register code that calls a routine now converted. Each goes when its last caller converts.
+- **Register images.** `DrawDisc` rebuilds AX, BX, CX, DX and DI from two small structs, `SmallDiscPlace` and `SmallDiscEnd`, because the contracts of `DrawDistantStation` and `DrawSunOrPlanet` compare every register at their end. The structs go when those two convert.
+- **Views.** `ObjectSlot` names four more bytes (`XMiddle`, `YMiddle`, `ZLow`, `ZMiddle`) and one word (`Color`, the sun's and the planet's).
+- **Write order.** `DrawSmallDisc` now writes its AND and then its OR (CS:19D4 and CS:19E0), as the listing does. Every other routine kept the original's writes, in order and at their width, checked against the listing.
+
+**The suites.** `GameLogicTests` passes 173 of 173 with poisoning on, under g++ and clang++. The corpus keeps all 40 digests in all three of its runs.
 
 ## What this forecloses
 

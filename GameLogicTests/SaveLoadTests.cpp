@@ -38,7 +38,9 @@ constexpr std::uint8_t COCKPIT_LAYOUT = 0;
 constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
 
 // Alt and PrtSc held for a moment: GetKey saves a screenshot while both are down. PrtSc also types '*' at a prompt.
-constexpr std::string_view SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.02; up KP_Multiply; up Alt_L; wait 0.05";
+// On a chart, which reads its keys once a frame, 117 ms on the IBM PC (D18): held for longer than a frame, so
+// that GetKey sees both keys down and takes the screenshot.
+constexpr std::string_view CHART_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.15; up KP_Multiply; up Alt_L; wait 0.05";
 constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.002; up KP_Multiply; up Alt_L; wait 0.05";
 
 void SetDataByte(Machine::Pc& _pc, const Machine::LoadedProgram& _program, std::uint16_t _offset, std::uint8_t _value)
@@ -239,14 +241,15 @@ public:
   {
     TwinRig twin("TwinScreenshots", {.compared = false});
     twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
-    twin.Play(SCREENSHOT_KEYS);
+    twin.Play(CHART_SCREENSHOT_KEYS);
     // The numbers run '99', then '00', the name of a directory.
     twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
               { SetDataWord(_pc, _program, Elite::DS.screenshotNumber.offset, 0x3939); });
     for (const bool native : {false, true})
       std::filesystem::create_directories(twin.Files(native) / "ELITE00.HI");
-    twin.Play(SCREENSHOT_KEYS);
-    twin.Play("key Escape; wait 0.05; key s; wait 0.05");
+    twin.Play(CHART_SCREENSHOT_KEYS);
+    // GetKey hands the chart one key a frame: the screenshots' Alt and PrtSc go first, then Escape closes it.
+    twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
     // '09', then '10'; then '11', a directory.
     twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
               { SetDataWord(_pc, _program, Elite::DS.screenshotNumber.offset, 0x3930); });

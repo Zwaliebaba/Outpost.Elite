@@ -388,7 +388,7 @@ void DropCargo(Guest& _guest)
       SetLow(regs.ax, _guest.Byte(At(regs.si, SLOT_FLAGS)));
       const std::uint16_t flags = regs.ax;
       CopyObjectEntry(_guest);
-      InitCargoBarrel(_guest);
+      InitCargoBarrelEntry(_guest);
       _guest.SetByte(At(regs.di, SLOT_FLAGS), FLAG_RESTING);
       regs.ax = flags;
       // The device's bit (5) becomes the barrel's bit 6.
@@ -398,7 +398,7 @@ void DropCargo(Guest& _guest)
       _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
       regs.ax = Swap(regs.ax);
       _guest.SetWord(At(regs.di, SLOT_YAW), regs.ax);
-      ComputeVelocity(_guest);
+      ComputeVelocityEntry(_guest);
       MoveObject(_guest);
       regs.di = regs.si;
     }
@@ -494,31 +494,28 @@ void DestroyTarget(Guest& _guest)
 
 } // namespace
 
-void DrawLaserSights(Guest& _guest)
+void DrawLaserSights(GameState& _state)
 {
-  GetViewLaserEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  const std::optional<std::uint8_t> laser = GetViewLaser(_state);
+  if (!laser.has_value())
   {
     return;
   }
-  Machine::Registers& regs = _guest.Regs();
   // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
-  regs.ax = static_cast<std::uint16_t>(Low(regs.ax) << 7);
-  regs.di = SIGHTS_OFFSET;
-  regs.si = static_cast<std::uint16_t>(DS.laserSights.offset + regs.ax);
-  for (regs.cx = SIGHTS_ROWS; regs.cx != 0; regs.cx = static_cast<std::uint16_t>(regs.cx - 1))
+  std::uint16_t row = SIGHTS_OFFSET;
+  auto sprite = static_cast<std::uint16_t>(DS.laserSights.offset + (*laser << 7));
+  for (std::uint16_t rows = SIGHTS_ROWS; rows != 0; --rows)
   {
     // The buffer's words are big-endian pixels: XCHG AH,AL round the AND and the OR.
     for (int half = 0; half < 2; ++half)
     {
-      const std::uint16_t pixels = At(regs.di, 2 * half);
-      const std::uint16_t andMask = _guest.Word(At(regs.si, 2 * half));
-      const std::uint16_t orMask = _guest.Word(At(regs.si, 2 * half + 4));
-      regs.ax = Swap(static_cast<std::uint16_t>((Swap(_guest.Word(pixels)) & andMask) | orMask));
-      _guest.SetWord(pixels, regs.ax);
+      const std::uint16_t pixels = At(row, 2 * half);
+      const std::uint16_t andMask = _state.Word(At(sprite, 2 * half));
+      const std::uint16_t orMask = _state.Word(At(sprite, 2 * half + 4));
+      _state.SetWord(pixels, Swap(static_cast<std::uint16_t>((Swap(_state.Word(pixels)) & andMask) | orMask)));
     }
-    regs.di = At(regs.di, VIEW_ROW_BYTES);
-    regs.si = At(regs.si, SIGHTS_ROW_BYTES);
+    row = At(row, VIEW_ROW_BYTES);
+    sprite = At(sprite, SIGHTS_ROW_BYTES);
   }
 }
 
@@ -718,7 +715,7 @@ void TryLaunchMissileAtPlayer(Guest& _guest)
 void TryLaunchThargon(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  IsThargoidType(_guest);
+  IsThargoidTypeEntry(_guest);
   if (!_guest.Flag(FLAG_ZERO) || _guest.Byte(At(regs.di, SLOT_THARGONS)) == 0)
   {
     return;
@@ -826,7 +823,7 @@ void CreditKill(Guest& _guest)
     return;
   }
   SetLow(regs.ax, 0); // INC AL
-  IsThargoidType(_guest);
+  IsThargoidTypeEntry(_guest);
   regs.ax = THARGOID_BOUNTY;
   if (_guest.Flag(FLAG_ZERO))
   {
@@ -836,7 +833,7 @@ void CreditKill(Guest& _guest)
   // Killing what carries no bounty is a crime: 4 for a police Viper anywhere, 2 for anything else inside the safe zone.
   _guest.Call(IN_SAFE_ZONE);
   const bool inside = _guest.Flag(FLAG_CARRY);
-  IsPoliceViper(_guest);
+  IsPoliceViperEntry(_guest);
   const bool police = _guest.Flag(FLAG_ZERO);
   if (!inside && !police)
   {
@@ -1038,7 +1035,7 @@ void SpawnPlayerWreckage(Guest& _guest)
     _guest.SetWord(At(regs.di, SLOT_X + 2 * axis), regs.ax);
     _guest.SetByte(At(regs.di, SLOT_X_HIGH + axis), Low(regs.dx));
   }
-  InitCargoBarrel(_guest);
+  InitCargoBarrelEntry(_guest);
   GetObjectPositionEntry(_guest);
   ConvertVectorToAnglesEntry(_guest);
   _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
@@ -1065,13 +1062,10 @@ void KillPlayer(Guest& _guest)
   _guest.Call(START_PLAYER_DEATH_SOUND);
 }
 
-void InitMissile(Guest& _guest)
+void InitMissile(GameState& _state, ObjectSlot _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = DS.spawnTemplates.At(MISSILE_TEMPLATE);
-  SetLow(regs.ax, 0);
-  InitObjectFromTemplateEntry(_guest);
-  _guest.SetByte(At(regs.di, SLOT_CLASS), MISSILE_CLASS);
+  InitObjectFromTemplate(_state, _slot, DS.spawnTemplates.At(MISSILE_TEMPLATE), 0);
+  _slot.Set(SlotByte::Class, MISSILE_CLASS);
 }
 
 void RemoveAllMissiles(Guest& _guest)
@@ -1113,7 +1107,7 @@ void LaunchPlayerMissile(Guest& _guest)
   std::swap(regs.si, regs.di);
   CopyObjectEntry(_guest);
   SetLow(regs.dx, MISSILE_LAUNCH);
-  InitMissile(_guest);
+  InitMissileEntry(_guest);
   // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
   regs.ax = Negate(_guest.Get(DS.playerPitchAngle));
   SetSinCosEntry(_guest, DS.rotationSinCos.At(0));
@@ -1142,7 +1136,7 @@ void LaunchPlayerMissile(Guest& _guest)
   ConvertVectorToAnglesEntry(_guest);
   _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
   _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
-  ComputeVelocity(_guest);
+  ComputeVelocityEntry(_guest);
   MoveObject(_guest);
   MoveObject(_guest);
 }
@@ -1162,7 +1156,7 @@ void LaunchShipFromObject(Guest& _guest)
   {
   case MISSILE_LAUNCH:
     CopyObjectEntry(_guest);
-    InitMissile(_guest);
+    InitMissileEntry(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
@@ -1171,8 +1165,8 @@ void LaunchShipFromObject(Guest& _guest)
   case ESCAPE_POD_LAUNCH:
     CopyObjectEntry(_guest);
     InitEscapePod(_guest);
-    RandomizeOrientation(_guest);
-    ComputeVelocity(_guest);
+    RandomizeOrientationEntry(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
@@ -1180,7 +1174,7 @@ void LaunchShipFromObject(Guest& _guest)
   case THARGON_LAUNCH:
     CopyObjectEntry(_guest);
     InitThargon(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
     regs.si = launcher;
@@ -1189,7 +1183,7 @@ void LaunchShipFromObject(Guest& _guest)
   case KRAIT_LAUNCH:
     CopyObjectEntry(_guest);
     InitKraitHunter(_guest);
-    ComputeVelocity(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
     // POP DI takes the launcher this path pushed, and RET the one pushed before it: the launch returns to CS:launcher, which
@@ -1216,7 +1210,7 @@ void UpdateMissileAi(Guest& _guest)
   if (regs.si == 0)
   {
     // At the player.
-    GetVectorToPlayer(_guest);
+    GetVectorToPlayerEntry(_guest);
     _guest.Set(DS.incomingMissileAlert, 1);
   }
   else
@@ -1242,8 +1236,8 @@ void UpdateMissileAi(Guest& _guest)
   if (!_guest.Flag(FLAG_CARRY))
   {
     ConvertVectorToAnglesEntry(_guest);
-    TurnTowardAngles(_guest);
-    ComputeVelocity(_guest);
+    TurnTowardAnglesEntry(_guest);
+    ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     return;
   }
@@ -1335,9 +1329,17 @@ using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
 
 constexpr Machine::NativeContract VIEW_LASER{REGISTER_AX | REGISTER_BX | REGISTER_CX, FLAG_CARRY};
+constexpr Machine::NativeContract LASER_SIGHTS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract THARGOID_TEST{0, FLAG_ZERO | FLAG_CARRY};
 
 } // namespace
+
+void DrawLaserSightsEntry(Guest& _guest)
+{
+  DrawLaserSights(_guest.State());
+  _guest.Clobber(LASER_SIGHTS);
+}
 
 void GetViewLaserEntry(Guest& _guest)
 {
@@ -1349,6 +1351,12 @@ void GetViewLaserEntry(Guest& _guest)
     SetLow(_guest.Regs().ax, *laser);
   }
   _guest.SetFlag(FLAG_CARRY, laser.has_value());
+}
+
+void InitMissileEntry(Guest& _guest)
+{
+  InitMissile(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di));
+  _guest.Clobber(CLOBBERS_AX_BX);
 }
 
 void TallyMaskMissionKillEntry(Guest& _guest)
@@ -1404,8 +1412,7 @@ constexpr Machine::NativeContract LAUNCHES{REGISTER_AX | REGISTER_BX | REGISTER_
                                            0};
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0630, "DrawLaserSights", &DrawLaserSights,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0}},
+  NativeEntry{0x0630, "DrawLaserSights", &DrawLaserSightsEntry, LASER_SIGHTS},
   NativeEntry{0x066C, "GetViewLaser", &GetViewLaserEntry, VIEW_LASER},
   NativeEntry{0x0A9A, "DrawLaserBeams", &DrawLaserBeams,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
@@ -1413,7 +1420,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2ED6, "DetonateEnergyBomb", &DetonateEnergyBomb, CLOBBERS_ALL},
   NativeEntry{0x2FE3, "SpawnPlayerWreckage", &SpawnPlayerWreckage, CLOBBERS_ALL},
   NativeEntry{0x3115, "KillPlayer", &KillPlayer, Machine::NativeContract{REGISTER_AX, 0}},
-  NativeEntry{0x4C8C, "InitMissile", &InitMissile, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
+  NativeEntry{0x4C8C, "InitMissile", &InitMissileEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4F9F, "RemoveAllMissiles", &RemoveAllMissiles,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI | REGISTER_ES, 0}},
   NativeEntry{0x4FC1, "ExplodeObject", &ExplodeObject, CLOBBERS_ALL},

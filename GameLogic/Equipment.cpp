@@ -212,19 +212,26 @@ void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t
   }
 }
 
-// PrintEquipmentSellColumn (0x6949): the text at SI in the resale column of menuSelectedRow's row.
-void PrintEquipmentSellColumn(Guest& _guest)
+// PrintEquipmentSellColumn (0x6949): the text at DS:_text in the resale column of menuSelectedRow's row, in the resale
+// price's attribute, and the menu's attribute put back.
+PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.textAttribute, SELL_PRICE_ATTRIBUTE);
+  _state.Set(DS.textAttribute, SELL_PRICE_ATTRIBUTE);
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
-  regs.ax = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_guest.Get(DS.menuSelectedRow) - 1) << 8);
-  regs.ax = static_cast<std::uint16_t>(regs.ax >> 2);
-  regs.di = static_cast<std::uint16_t>(_guest.Get(DS.menuFirstRowAttr) + regs.ax);
-  regs.ax = static_cast<std::uint16_t>(regs.ax >> 2);
-  regs.di = static_cast<std::uint16_t>(regs.di + regs.ax + SELL_PRICE_COLUMN);
-  PrintTextModeStringEntry(_guest);
-  _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1) << 8) >> 2);
+  const auto cell = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) + quarter + (quarter >> 2) + SELL_PRICE_COLUMN);
+  const PrintedText printed = PrintTextModeString(_state, _text, cell);
+  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  return printed;
+}
+
+// What PrintEquipmentSellColumn leaves in the registers: PrintTextModeString's, the resale price's attribute in AH.
+void SellColumnOut(Registers& _regs, PrintedText _printed) noexcept
+{
+  _regs.si = _printed.end;
+  _regs.di = _printed.nextCell;
+  _regs.es = Guest::VIDEO_SEGMENT;
+  _regs.ax = Join(SELL_PRICE_ATTRIBUTE, 0);
 }
 
 // 61CF and 628A: B and S save CX, SI and textAttribute, for 6214 to put back after the message.
@@ -670,7 +677,7 @@ void LaunchEscapePod(Guest& _guest)
   for (regs.cx = ESCAPE_POD_MOVES; regs.cx != 0; --regs.cx)
   {
     const std::uint16_t count = regs.cx;
-    MoveObjectsByVelocity(_guest);
+    MoveObjectsByVelocityEntry(_guest);
     regs.cx = count;
   }
   // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
@@ -991,7 +998,7 @@ void DrawLaserMountMenu(Guest& _guest)
   _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
   regs.si = MOUNT_HEADER_TEXT;
   regs.di = MOUNT_HEADER_OFFSET;
-  PrintCountedTextLines(_guest);
+  PrintCountedTextLinesEntry(_guest);
   // Each mount's laser, or Free: its bit of laserMountsFitted in DH, its two bits of laserMountTypes in DL.
   regs.di = MOUNT_NAMES_OFFSET;
   regs.dx = Join(_guest.Get(DS.laserMountsFitted), _guest.Get(DS.laserMountTypes));
@@ -1039,7 +1046,7 @@ void RedrawEquipHelpText(Guest& _guest)
   _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
   regs.di = HELP_TEXT_OFFSET;
   regs.si = DS.equipHelpText.offset;
-  PrintCountedTextLines(_guest);
+  PrintCountedTextLinesEntry(_guest);
   _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
 }
 
@@ -1083,13 +1090,14 @@ void PayForEquipmentItem(Guest& _guest)
     regs.ax = _guest.Word(regs.bx);
   }
   regs.bx = 0;
-  SubtractCredits(_guest);
+  SubtractCreditsEntry(_guest);
 }
 
 void ClearEquipmentSellPrice(Guest& _guest)
 {
-  _guest.Regs().si = NO_RESALE_TEXT;
-  PrintEquipmentSellColumn(_guest);
+  Registers& regs = _guest.Regs();
+  regs.si = NO_RESALE_TEXT;
+  SellColumnOut(regs, PrintEquipmentSellColumn(_guest.State(), regs.si));
 }
 
 void ShowEquipmentSellPrice(Guest& _guest)
@@ -1102,9 +1110,9 @@ void ShowEquipmentSellPrice(Guest& _guest)
   _guest.Call(COMPUTE_RESALE_PRICE);
   regs.bx = slot;
   _guest.SetWord(static_cast<std::uint16_t>(regs.bx + 2), regs.ax);
-  FormatTenths(_guest);
+  FormatTenthsEntry(_guest);
   regs.si = DS.priceText.offset;
-  PrintEquipmentSellColumn(_guest);
+  SellColumnOut(regs, PrintEquipmentSellColumn(_guest.State(), regs.si));
 }
 
 void StartMenu(Guest& _guest)

@@ -132,6 +132,9 @@
     <ClInclude Include="ObjectSlot.h">
       <Filter>State</Filter>
     </ClInclude>
+    <ClInclude Include="Pacing.h">
+      <Filter>Timer</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
@@ -205,6 +208,9 @@
     </ClCompile>
     <ClCompile Include="NativeRoutines.cpp">
       <Filter>Native</Filter>
+    </ClCompile>
+    <ClCompile Include="Pacing.cpp">
+      <Filter>Timer</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>

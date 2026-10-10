@@ -30,19 +30,15 @@ void GameLoop(Guest& _guest);
 /// (3 s). Clobbers all but DS.
 void ShowCredits(Guest& _guest);
 
-/// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 saved and replaced by the game's, int 8's segment
-/// rewritten, then ResetKeyboard. In: ES=0. Out: ES=B800; AX clobbered.
-void InstallDivideAndKeyboardInterrupts(Guest& _guest);
-
 /// CopyProtection (CS:04A3): returns at once while protectionShown is set; otherwise asks a question from the manual.
 /// Clobbers all.
 void CopyProtection(Guest& _guest);
 
-/// StartNewGame (CS:4671): the start-up commander copied back, and the per-game state reset. Out: ES=DS; AX, CX, SI
-/// and DI clobbered.
-void StartNewGame(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 in the interrupt table at _vectors:0000 saved and
+/// replaced by the game's, int 8's segment rewritten, then ResetKeyboard.
+void InstallDivideAndKeyboardInterrupts(GameState& _state, std::uint16_t _vectors);
 
 /// RestoreDivideAndKeyboardInterrupts (CS:0148): int 9 and int 0 put back in the interrupt table, segment then
 /// offset, from what InstallDivideAndKeyboardInterrupts saved.
@@ -55,10 +51,16 @@ void CheckCheatArgument(GameState& _state);
 /// 0564h, or down from it when _backward (REP STOSB with the direction flag set).
 void WipeProgram(GameState& _state, bool _backward);
 
+/// StartNewGame (CS:4671): the start-up commander copied back over the commander, a byte at a time, going up or, when
+/// _backward, down (REP MOVSB), and the per-game state reset.
+void StartNewGame(GameState& _state, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< In: ES=0. Out: ES=B800, IF=1; AX clobbered.
 void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< Out: ES=0, IF=1; AX clobbered.
 void CheckCheatArgumentEntry(Guest& _guest);                 ///< AX, BX, CX and SI clobbered.
 void WipeProgramEntry(Guest& _guest);                        ///< Out: IF=0; AX, CX, DI and ES clobbered.
+void StartNewGameEntry(Guest& _guest);                       ///< Out: ES=DS; AX, CX, SI and DI clobbered.
 
 } // namespace Elite

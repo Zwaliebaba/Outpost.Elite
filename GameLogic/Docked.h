@@ -2,6 +2,7 @@
 #pragma once
 
 #include "NativeEntry.h"
+#include "Text.h"
 
 #include <cstdint>
 #include <span>
@@ -15,13 +16,6 @@ namespace Elite
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockedEntries() noexcept;
-
-/// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute. In: ES=B800.
-void PrintCreditsOnMessageLine(Guest& _guest);
-
-/// FormatFuelLightYears (CS:6923): fuel as "n.n" light years into the fuel text. Out: SI=DS:83E9; AX, BX and DI
-/// clobbered.
-void FormatFuelLightYears(Guest& _guest);
 
 /// DrawDockedFrame (CS:7C88): a docked screen's text page, border and frame, from the descriptor at SI. Out: SI=the
 /// title text, ES=B800.
@@ -73,6 +67,13 @@ void RunTitleAndDocked(Guest& _guest);
 /// AwardArchangelTitle (CS:49E4): 'ARCHANGEL' over the rank in commanderRankText.
 void AwardArchangelTitle(GameState& _state);
 
+/// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
+/// back after.
+PrintedText PrintCreditsOnMessageLine(GameState& _state);
+
+/// FormatFuelLightYears (CS:6923): fuel as "n.n" light years into the fuel text at DS:83E9.
+void FormatFuelLightYears(GameState& _state);
+
 /// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page at
 /// _segment from _cell, 65,536 for 0, as LOOP counts. Returns the cell a row below the last.
 std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
@@ -87,6 +88,8 @@ std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint1
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
 void AwardArchangelTitleEntry(Guest& _guest);
+void PrintCreditsOnMessageLineEntry(Guest& _guest); ///< In: ES=B800, which it sets again.
+void FormatFuelLightYearsEntry(Guest& _guest);      ///< Out: SI=DS:83E9, the fuel text; AX, BX and DI clobbered.
 void DrawFrameSidesEntry(Guest& _guest);
 void DrawFrameRowEntry(Guest& _guest);
 

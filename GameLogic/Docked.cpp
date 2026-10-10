@@ -465,34 +465,22 @@ void DispatchDockedKeys(Guest& _guest, std::uint16_t _screen)
 
 } // namespace
 
-void PrintCreditsOnMessageLine(Guest& _guest)
+PrintedText PrintCreditsOnMessageLine(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SwapTextAttributeNibblesEntry(_guest);
-  const std::uint16_t cx = regs.cx;
-  const std::uint16_t si = regs.si;
-  regs.si = DS.creditBalanceText.offset;
-  regs.di = CREDITS_ON_MESSAGE_LINE;
-  PrintTextModeStringEntry(_guest);
-  regs.si = si;
-  regs.cx = cx;
-  SwapTextAttributeNibblesEntry(_guest);
+  SwapTextAttributeNibbles(_state);
+  const PrintedText printed = PrintTextModeString(_state, DS.creditBalanceText.offset, CREDITS_ON_MESSAGE_LINE);
+  SwapTextAttributeNibbles(_state);
+  return printed;
 }
 
-void FormatFuelLightYears(Guest& _guest)
+void FormatFuelLightYears(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const auto tenths = static_cast<std::uint16_t>(_guest.Get(DS.fuel) * FUEL_TENTHS_PER_UNIT);
-  regs.bx = WithLow(regs.bx, FUEL_UNITS_PER_TENTH);
-  // DIV BL, which cannot overflow: at most 2550/36.
-  regs.ax = static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH);
-  regs.di = FUEL_DIGITS;
-  FormatDecimal5Entry(_guest);
-  regs.ax = WithLow(regs.ax, _guest.Get(DS.data840A));
-  _guest.Set(DS.data83F7, Low(regs.ax));
-  regs.ax = WithLow(regs.ax, _guest.Get(DS.data840B));
-  _guest.Set(DS.data83F9, Low(regs.ax));
-  regs.si = FUEL_TEXT;
+  // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
+  const auto tenths = static_cast<std::uint16_t>(_state.Get(DS.fuel) * FUEL_TENTHS_PER_UNIT);
+  FormatDecimal5(_state, static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), FUEL_DIGITS);
+  // The units and the tenths, the last two of the five digits, into the text either side of its point.
+  _state.Set(DS.data83F7, _state.Get(DS.data840A));
+  _state.Set(DS.data83F9, _state.Get(DS.data840B));
 }
 
 void DrawDockedFrame(Guest& _guest)
@@ -1148,6 +1136,26 @@ void AwardArchangelTitleEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
 }
 
+void PrintCreditsOnMessageLineEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const PrintedText printed = PrintCreditsOnMessageLine(_guest.State());
+  regs.di = printed.nextCell;
+  regs.es = Guest::VIDEO_SEGMENT;
+  // The original keeps SI and CX round the print. It leaves AH the swapped attribute PrintTextModeString printed in,
+  // and AL the attribute swapped back.
+  const std::uint8_t attribute = _guest.Get(DS.textAttribute);
+  regs.ax = Join(static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4)), attribute);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void FormatFuelLightYearsEntry(Guest& _guest)
+{
+  FormatFuelLightYears(_guest.State());
+  _guest.Regs().si = FUEL_TEXT;
+  _guest.Clobber(CLOBBERS_AX_BX_DI);
+}
+
 void DrawFrameSidesEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1179,8 +1187,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x5AE9, "ShowBuyCargoScreen", &ShowBuyCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x5EA9, "ShowCommanderStatusScreen", &ShowCommanderStatusScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x6020, "ShowInventoryScreen", &ShowInventoryScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x658F, "PrintCreditsOnMessageLine", &PrintCreditsOnMessageLine, PRESERVES_ALL},
-  NativeEntry{0x6923, "FormatFuelLightYears", &FormatFuelLightYears, CLOBBERS_AX_BX_DI},
+  NativeEntry{0x658F, "PrintCreditsOnMessageLine", &PrintCreditsOnMessageLineEntry, PRESERVES_ALL},
+  NativeEntry{0x6923, "FormatFuelLightYears", &FormatFuelLightYearsEntry, CLOBBERS_AX_BX_DI},
   NativeEntry{0x6DF2, "ShowMissionBriefing", &ShowMissionBriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x6EB7, "ShowMissionDebriefing", &ShowMissionDebriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrame, PRESERVES_ALL},

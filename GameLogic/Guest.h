@@ -3,6 +3,7 @@
 
 #include "DataField.h"
 #include "GameState.h"
+#include "Pacing.h"
 #include "Pc.h"
 
 #include <cstdint>
@@ -239,6 +240,14 @@ public:
   void Wait()
   {
     m_pc.Wait();
+  }
+
+  /// _point's cycles pass as they pass in a wait (Pc::Spend): the time the IBM PC spent on work the reference
+  /// sets no pace for, paid where an interpreted run pays it (ADR-013). Only a routine hooked as one that
+  /// waits may call it.
+  void Spend(const PacingPoint& _point)
+  {
+    m_pc.Spend(_point.cycles);
   }
 
   /// The end of one turn of a loop, where the original jumps back (Pc::LoopTurn): paced time idles
