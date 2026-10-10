@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,6 +14,7 @@
 namespace Machine
 {
 class Pc;
+class FileStore;
 struct LoadedProgram;
 enum class StopReason : std::uint8_t;
 } // namespace Machine
@@ -22,12 +24,13 @@ namespace Elite
 
 enum class StepKind : std::uint8_t
 {
-  Wait,  ///< let time pass
-  Key,   ///< press and release one key at once: what a menu reads through the key buffer
-  Down,  ///< press a key and hold it: what flight reads through the key-down table
-  Up,    ///< release a held key
-  Shot,  ///< write the screen as a PNG (the caller's business)
-  Digest ///< the SHA-256 of the game's state (GameStateDigest), checked when an expected value is given
+  Wait,   ///< let time pass
+  Key,    ///< press and release one key at once: what a menu reads through the key buffer
+  Down,   ///< press a key and hold it: what flight reads through the key-down table
+  Up,     ///< release a held key
+  Shot,   ///< write the screen as a PNG (the caller's business)
+  Digest, ///< the SHA-256 of the game's state (GameStateDigest), checked when an expected value is given
+  File    ///< copy a file from beside the replay into DOS's directory, as a commander the game can then load
 };
 
 struct Step
@@ -35,8 +38,9 @@ struct Step
   StepKind kind = StepKind::Wait;
   std::uint64_t waitMilliseconds = 0; ///< Wait
   std::uint8_t scanCode = 0;          ///< Key, Down and Up: the XT make code
-  std::string name;                   ///< Key, Down and Up: as written; Shot and Digest: the label
+  std::string name;                   ///< Key, Down and Up: as written; Shot and Digest: the label; File: the DOS name, canonical
   std::string expectedDigest;         ///< Digest: lowercase hex, or empty for none
+  std::string source;                 ///< File: the name of the file beside the replay that it copies
   std::size_t line = 0;               ///< the 1-based line the step was read from
 };
 
@@ -50,6 +54,11 @@ struct Step
 ///   down NAME, up NAME   press NAME and hold it; release it
 ///   shot NAME            write NAME.png
 ///   digest NAME [HEX]    the game-state digest, labelled NAME; with HEX, the value it must have
+///   file NAME SOURCE     put a copy of SOURCE, a file beside the replay (Replays/ for the corpus), into DOS's
+///                        directory as NAME, a DOS 8.3 name, at this moment: a file with no attributes, stamped
+///                        1980-01-01 00:00:00, as one copied there before the run would be. This is how a replay
+///                        starts from a prepared commander, which the disc menu then loads as the game's own save.
+///                        SOURCE is a bare file name, so a replay reaches nothing but the files beside it.
 ///
 /// Appends the steps to _steps and returns true, or returns false with _error naming the first step it
 /// could not read. (Not std::expected: clang 18 with libstdc++ 13 cannot compile it, ADR-004.)
@@ -104,11 +113,19 @@ private:
 class ReplayPlayer
 {
 public:
+  /// A player for steps that copy no file.
   ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program) noexcept;
 
+  /// A player whose file steps copy from _sources, the directory the replay is in, into _files, the store the
+  /// machine's DOS was given.
+  ReplayPlayer(Machine::Pc& _pc, const Machine::LoadedProgram& _program, Machine::FileStore& _files, std::filesystem::path _sources);
+
   /// Plays one step: a wait runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle), a
-  /// key queues its codes on the keyboard, a digest sets _digest to GameStateDigest. A shot does nothing
-  /// here; writing pictures is the caller's. Returns why the run stopped, StopReason::Reached if it did not.
+  /// key queues its codes on the keyboard, a digest sets _digest to GameStateDigest, a file step copies its
+  /// file into the store. A shot does nothing here; writing pictures is the caller's. Returns why the run
+  /// stopped, StopReason::Reached if it did not. Throws std::runtime_error for a file step that cannot be
+  /// done: no store, a source that cannot be read, or a store that refuses it. That is a fault in how the
+  /// replay is set up, not anything the game did.
   [[nodiscard]] Machine::StopReason Play(const Step& _step, std::string& _digest);
 
   /// Milliseconds since the replay began.
@@ -118,8 +135,12 @@ public:
   }
 
 private:
+  void CopyFile(const Step& _step);
+
   Machine::Pc& m_pc;
   const Machine::LoadedProgram& m_program;
+  Machine::FileStore* m_files = nullptr;
+  std::filesystem::path m_sources;
   Machine::Cycles m_start = 0;
   std::uint64_t m_elapsedMilliseconds = 0;
 };

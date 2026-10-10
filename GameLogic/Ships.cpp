@@ -18,7 +18,6 @@ using Machine::FLAG_ZERO;
 
 // Routines outside this file, run through the original.
 constexpr std::uint16_t ERASE_SCANNER_BLIP = 0x42D6;
-constexpr std::uint16_t CONVERT_VECTOR_TO_ANGLES = 0x4F08;
 
 constexpr std::uint16_t FIRST_SHIP_SLOT = 3; // firstShipSlot's index: the sun, the planet and the station come first
 
@@ -180,37 +179,36 @@ void ClearObjectSlot(GameState& _state, std::uint16_t _slot)
   }
 }
 
-void InitPoliceViper(Guest& _guest)
+void InitPoliceViper(GameState& _state, ObjectSlot _slot)
 {
-  InitFromRecord(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), VIPER_TEMPLATE, TRADER_CLASS);
-  const std::uint16_t slot = _guest.Regs().di;
-  _guest.SetWord(At(slot, SLOT_OWNER), POLICE_OWNER);
-  _guest.SetByte(At(slot, SLOT_AGGRESSION), POLICE_AGGRESSION);
+  InitFromRecord(_state, _slot, VIPER_TEMPLATE, TRADER_CLASS);
+  _slot.Set(SlotWord::Owner, POLICE_OWNER);
+  _slot.Set(SlotByte::Aggression, POLICE_AGGRESSION);
 }
 
-void InitAbandonedCobra(Guest& _guest)
+void InitAbandonedCobra(GameState& _state, ObjectSlot _slot)
 {
-  InitFromRecord(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), COBRA_TEMPLATE, ABANDONED_CLASS);
+  InitFromRecord(_state, _slot, COBRA_TEMPLATE, ABANDONED_CLASS);
 }
 
-void InitEscapePod(Guest& _guest)
+void InitEscapePod(GameState& _state, ObjectSlot _slot)
 {
-  InitFromRecord(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), ESCAPE_POD_TEMPLATE, DRIFTER_CLASS);
+  InitFromRecord(_state, _slot, ESCAPE_POD_TEMPLATE, DRIFTER_CLASS);
 }
 
-void InitShuttle(Guest& _guest)
+void InitShuttle(GameState& _state, ObjectSlot _slot)
 {
-  InitFromRecord(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), SHUTTLE_TEMPLATE, DRIFTER_CLASS);
+  InitFromRecord(_state, _slot, SHUTTLE_TEMPLATE, DRIFTER_CLASS);
 }
 
-void InitKraitHunter(Guest& _guest)
+void InitKraitHunter(GameState& _state, ObjectSlot _slot)
 {
-  InitFromRecord(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), KRAIT_TEMPLATE, HUNTER_CLASS);
+  InitFromRecord(_state, _slot, KRAIT_TEMPLATE, HUNTER_CLASS);
 }
 
-void InitThargon(Guest& _guest)
+void InitThargon(GameState& _state, ObjectSlot _slot)
 {
-  InitFromRecord(_guest.State(), ObjectSlot(_guest.State(), _guest.Regs().di), THARGON_TEMPLATE, WOLF_CLASS);
+  InitFromRecord(_state, _slot, THARGON_TEMPLATE, WOLF_CLASS);
 }
 
 void SpawnRandomDrifter(Guest& _guest)
@@ -455,7 +453,7 @@ void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot)
 
 void FacePlayerWithRandomRoll(Guest& _guest)
 {
-  FacePlayer(_guest);
+  FacePlayerEntry(_guest);
   NextRandomEntry(_guest);
   Machine::Registers& regs = _guest.Regs();
   _guest.SetWord(At(regs.di, SLOT_ROLL), regs.ax);
@@ -517,13 +515,12 @@ void RemoveObject(Guest& _guest)
   _guest.Call(ERASE_SCANNER_BLIP);
 }
 
-void FacePlayer(Guest& _guest)
+Angles FacePlayer(GameState& _state, ObjectSlot _slot)
 {
-  GetVectorToPlayerEntry(_guest);
-  _guest.Call(CONVERT_VECTOR_TO_ANGLES);
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetWord(At(regs.di, SLOT_PITCH), regs.ax);
-  _guest.SetWord(At(regs.di, SLOT_YAW), regs.bx);
+  const Angles heading = ConvertVectorToAngles(_state, GetVectorToPlayer(_slot));
+  _slot.Set(SlotWord::Pitch, heading.first);
+  _slot.Set(SlotWord::Yaw, heading.second);
+  return heading;
 }
 
 SlotSearch FindFreeShipSlot(GameState& _state)
@@ -660,6 +657,7 @@ constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 // ComputeVelocity: the BX it leaves is compared (ComputeVelocityEntry).
 constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
+// PlaceAtSpawnPoint's, and FacePlayer's, whose BP is compared (FacePlayerEntry).
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX_BP{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
@@ -721,9 +719,45 @@ void IsObjectNearKeepBlipEntry(Guest& _guest)
   _guest.Clobber(KEEP_BLIP_TEST);
 }
 
+void InitPoliceViperEntry(Guest& _guest)
+{
+  InitPoliceViper(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
 void InitCargoBarrelEntry(Guest& _guest)
 {
   InitCargoBarrel(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void InitAbandonedCobraEntry(Guest& _guest)
+{
+  InitAbandonedCobra(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void InitEscapePodEntry(Guest& _guest)
+{
+  InitEscapePod(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void InitShuttleEntry(Guest& _guest)
+{
+  InitShuttle(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void InitKraitHunterEntry(Guest& _guest)
+{
+  InitKraitHunter(_guest.State(), SlotAtDi(_guest));
+  _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void InitThargonEntry(Guest& _guest)
+{
+  InitThargon(_guest.State(), SlotAtDi(_guest));
   _guest.Clobber(CLOBBERS_AX_BX);
 }
 
@@ -772,6 +806,14 @@ void ComputeVelocityEntry(Guest& _guest)
   // The original leaves the z word in BX, and UpdateMissileAi's contract compares BX after it.
   _guest.Regs().bx = static_cast<std::uint16_t>(velocity.z);
   _guest.Clobber(CLOBBERS_AX_DX);
+}
+
+void FacePlayerEntry(Guest& _guest)
+{
+  // ConvertVectorToAngles leaves the pitch in BP, and UpdateStationAi's contract compares BP after SpawnRandomTrader, through
+  // FacePlayerWithRandomRoll.
+  _guest.Regs().bp = FacePlayer(_guest.State(), SlotAtDi(_guest)).first;
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
 }
 
 void FindFreeShipSlotEntry(Guest& _guest)
@@ -848,13 +890,13 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3F37, "IsPlanet", &IsPlanetEntry, TYPE_IN_AL},
   NativeEntry{0x3F40, "IsStation", &IsStationEntry, STATION_TEST},
   NativeEntry{0x460E, "IsObjectNearKeepBlip", &IsObjectNearKeepBlipEntry, KEEP_BLIP_TEST},
-  NativeEntry{0x4C76, "InitPoliceViper", &InitPoliceViper, CLOBBERS_AX_BX},
+  NativeEntry{0x4C76, "InitPoliceViper", &InitPoliceViperEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4C99, "InitCargoBarrel", &InitCargoBarrelEntry, CLOBBERS_AX_BX},
-  NativeEntry{0x4CA6, "InitAbandonedCobra", &InitAbandonedCobra, CLOBBERS_AX_BX},
-  NativeEntry{0x4CB3, "InitEscapePod", &InitEscapePod, CLOBBERS_AX_BX},
-  NativeEntry{0x4CC0, "InitShuttle", &InitShuttle, CLOBBERS_AX_BX},
-  NativeEntry{0x4CCD, "InitKraitHunter", &InitKraitHunter, CLOBBERS_AX_BX},
-  NativeEntry{0x4CDA, "InitThargon", &InitThargon, CLOBBERS_AX_BX},
+  NativeEntry{0x4CA6, "InitAbandonedCobra", &InitAbandonedCobraEntry, CLOBBERS_AX_BX},
+  NativeEntry{0x4CB3, "InitEscapePod", &InitEscapePodEntry, CLOBBERS_AX_BX},
+  NativeEntry{0x4CC0, "InitShuttle", &InitShuttleEntry, CLOBBERS_AX_BX},
+  NativeEntry{0x4CCD, "InitKraitHunter", &InitKraitHunterEntry, CLOBBERS_AX_BX},
+  NativeEntry{0x4CDA, "InitThargon", &InitThargonEntry, CLOBBERS_AX_BX},
   NativeEntry{0x4CE7, "SpawnRandomDrifter", &SpawnRandomDrifter, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4D08, "SpawnRandomTrader", &SpawnRandomTrader, CLOBBERS_AX_BX_CX_DX_BP},
   NativeEntry{0x4D3B, "SpawnRandomHunter", &SpawnRandomHunter, CLOBBERS_AX_BX_CX_DX_BP},
@@ -870,7 +912,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x4F48, "ComputeVelocity", &ComputeVelocityEntry, CLOBBERS_AX_DX},
   NativeEntry{0x4F6E, "MoveObject", &MoveObject, REMOVES},
   NativeEntry{0x4F98, "RemoveObject", &RemoveObject, REMOVES},
-  NativeEntry{0x513E, "FacePlayer", &FacePlayer, CLOBBERS_AX_BX_CX_DX_BP},
+  NativeEntry{0x513E, "FacePlayer", &FacePlayerEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x51E0, "FindFreeShipSlot", &FindFreeShipSlotEntry, RETURNS_CARRY},
   NativeEntry{0x51FD, "ReclaimShipSlot", &ReclaimShipSlot, REMOVES},
   NativeEntry{0x52B2, "ClearAllObjects", &ClearAllObjectsEntry, CLOBBERS_AX_CX_DI},

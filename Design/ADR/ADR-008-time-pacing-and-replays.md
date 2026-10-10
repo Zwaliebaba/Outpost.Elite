@@ -1,6 +1,6 @@
 # ADR-008 — Time, pacing and the replay digests
 
-**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC.
+**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8).
 
 ## Context
 
@@ -60,7 +60,7 @@ Only three loops read 3DAh (0x04C1, 0x05D0, 0x4602), all of this form; the first
 - **The docked screens' cursor delays take their 100 timer ticks.**
 - **There are no 1987 slowdowns,** because the work between waits takes no time, as D6 ruled. The charts are the one exception (ADR-013). The port's scheduler in Phase 4 runs the same way, so Phase 4 no longer moves the digests for this reason.
 
-**4. A replay** is a script of steps (`GameLogic/Replay.h`): `wait`, `key`, `down`, `up`, `shot` and `digest`.
+**4. A replay** is a script of steps (`GameLogic/Replay.h`): `wait`, `key`, `down`, `up`, `shot`, `digest` and `file`.
 
 - **It always runs in paced time.** It starts from these fixed conditions:
   - the reference loaded with the D5 byte (`Elite::LoadReference`);
@@ -71,6 +71,12 @@ Only three loops read 3DAh (0x04C1, 0x05D0, 0x4602), all of this form; the first
 - **Inputs are keys,** made and broken at moments of paced time. `key` makes and breaks at once, which is what a menu reads through the key buffer. `down` and `up` hold a key across frames, which is what flight reads through the key-down table.
 - **What it reproduces.** A replay reproduces the run it records bit for bit, on every build. Two runs, and builds by g++ 13 and clang++ 18, give the same digests (measured 2026-10-10).
 - **The same steps drive DOSBox-X.** `Tools/ReferenceScreens.py` reads them, in wall time, as an approximation of the run.
+- **`file NAME SOURCE` puts a commander where the game can load it.** At that moment a copy of SOURCE goes into DOS's directory as NAME, through the file store, as the game's own save leaves a file: created, written, its attributes cleared, and stamped 00:00 on 1 January 1980. It takes no time and replaces a file already there.
+  - SOURCE is a bare file name beside the replay, in `Replays/` for the corpus, so a replay reaches nothing else. NAME is a DOS 8.3 name.
+  - A step that cannot be done stops the replay with an error naming its line.
+  - The recorder writes no `file` steps, so a session that loaded a commander from the player's folder does not replay from its file alone.
+  - `ReferenceScreens.py` copies the file into DOSBox-X's mounted drive, with the sidecar that records a clear archive bit; without it the game's loader refuses the file.
+  - A run starts with DOS's directory empty, and `ReferenceRunner` refuses a run whose directory is not.
 
 **5. The game-state digest** (`Elite::GameStateDigest`) is a SHA-256 over three things:
 
@@ -114,6 +120,46 @@ The fight was played by a scratch program that steered by the targets' positions
 - The corpus executes 8,717 of the 13,831 instructions the static map reaches.
 
 **7. Digests change only by a ruling recorded here, with its cause,** in Phase 3 and Phase 4 alike. Re-recording a replay's digests is `ReferenceRunner --replay FILE --update`. That is how a new replay is finished, and never how a failing one is made to pass.
+
+**8. The corpus that the interpreter's deletion waits on** (D7, plan §6.2). Thirteen replays were added on 2026-10-10, so that the corpus reaches the subsystems the plan lists before the interpreter goes.
+
+**Prepared commanders.** Most of the list needs credits, equipment or a place the starting commander lacks, and the game takes a commander only from a file. So a replay loads one through the disc menu after a `file` step.
+- **The `.cdr` format** is exactly 208 bytes: the data segment's `commanderBlock`, DS:756B–763A, byte for byte. `SaveCommanderFile` (CS:0358) writes `commanderFileBytes` bytes from it and `LoadCommanderFile` (CS:031A) reads them back over it. The block holds, in the symbol table's names: the "Commander file" header and ^Z, the status frame and rank, the cash as text; `randomState0-2`, the galaxy and the chart cursors; the current and the selected system's 25-byte records; fuel, equipment, the laser mounts and their types, the 32-bit cash, legal status and kills; the name, the hold and the mission state. There is no checksum, version or length check. The loader refuses only a file with a DOS attribute set, and a loaded commander takes the file's name, so every replay copies its commander in as `JAMESON.CDR`.
+- **Why a prepared commander is faithful.** Each starts from `Replays/jameson.cdr`, which the reference saved itself: the starting commander after selecting Leesti, by the steps `Tools/PrepareCommanders.py` documents, its SHA-256 pinned. The script then changes only fields the symbol table names, and only to values the game's own code produces: equipment as the equipment screen fits and removes it, cash with its text as `FormatCredits` writes it, kills, an arrival as `CompleteHyperspaceJump` and `UpdateMissionSchedule` leave the bytes (checked against a real jump: identical but for the random state), the second mission as the briefing sets it up, and the random state stepped by `NextRandom`'s own recurrence. So each file is a state play reaches, loaded as the game loads its own saves. `PrepareCommanders.py --check` verifies the committed files.
+
+**The added replays**, every digest recorded from the interpreted original:
+
+| Replay | What it reaches |
+|---|---|
+| `trading` | buying and selling cargo at Lave, alien items refused, what it cannot afford refused, contraband sold and the commander made an offender |
+| `buy-every-equipment` | all 14 items bought at Leesti; a missile and the pulse laser sold; each laser fitted to each mount |
+| `disc-menu` | catalogue, delete, a bad name, a missing file and the retry declined, mouse, both joysticks, version, keyboard, and a load |
+| `docking-computer` | D pressed 6.0 s after the launch; the computer docks |
+| `galactic-hyperspace` | G then H; galaxy 2 and its chart |
+| `escape-pod` | C on the first frame in space; the capsule reaches the station |
+| `death` | the station rammed: GAME OVER, the title and a new game |
+| `witch-space` | the misjump the reference forces with Alt+W; Thargoids, Thargons, a missile the ECM removes; killed in the fight |
+| `attack-the-station` | a missile locked and launched, the station's ECM, laser fire that angers it, the police it launches, the energy bomb, the side views |
+| `mask-mission` | the second mission's Mask ship and escorts, which ram the first launch; a second commander copied in mid-replay, whose fight meets the Constrictor and the Cougar |
+| `combat-orerve` | a fight at Orerve: the Transporter, the Boulder, a Moray and a Krait |
+| `combat-reorte` | a fight at Reorte: the Boa, the Cobra Mk I, the Gecko and the Fer-de-Lance, with a Shuttle and a Barrel |
+| `combat-orerve-drifters` | a fight at Orerve: the Plate, an Escape Pod and a Sidewinder, with the Anaconda, the Worm and a Cobra Mk III |
+
+With the first six, the corpus meets every ship type the game spawns. Under D18 no single fight met all six types `combat-orerve` was first recorded for: a search of 4,000 random states at each of Orerve and Reorte found at most five, because the Anaconda and the Boulder are rare and about half the runs end in the player's death. So the three combat replays share the types out. They also meet the Moray, the Barrel and the Cobra Mk III, which `hyperspace-and-fight` stopped meeting under D18 and no other replay meets. The fights were played by a scratch steering program, as `hyperspace-and-fight`'s was, and recorded as key steps; the combat commanders' random states were found by searching draw counts for the runs that meet the most types not met elsewhere.
+
+**What the corpus reaches, measured 2026-10-10.** Interpreted, the replays execute 11,364 of the original's instruction starts, against 8,849 before. The corpus is 19 replays, 507.4 s of game time and 98 digests, summed from `ReferenceRunner`'s runs. `CorpusTests` takes about 18 s interpreted, 2 s native and 18 s compared (g++ Release, a shared machine), against about 12 s in all for the first six replays.
+
+**What it does not reach, and why.**
+- Missions 1 and 3 and their briefings; mission 2 only as prepared state.
+- Scooping, the mining laser splitting a rock, `ShowShipIdentity`, the masking device and the anti-ECM: they need precise flying or a mission's reward.
+- A Shuttle the station launches; an invasion's Thargoids.
+- Flight steered by mouse or joystick: `InputTests` constructs them.
+- Screenshots, which `SaveLoadTests` constructs, and leaving for DOS, which ends a run as `Terminated`, which the corpus does not accept.
+- `InitEscapePod` and `InitKraitHunter`, which nothing calls.
+
+The routines these leave unreached are compared by constructed tests (ADR-010 item 5), but the corpus is the only guard after D7; whether these gaps must close before the interpreter is deleted is decided then, with this list.
+
+**Found in the original on the way.** `PlaceAtSpawnPoint` turns the spawn point by `rotationSinCos` pairs 6 and 7, which nothing sets before the first `ComputeVelocity`; until then a ship spawns on the player. So the Mask's escorts ram the commander on the first launch after boot, and the first Thargoid in witch space dies ramming the ship. Escorts copy their leader's type (`PlaceEscortNear`), which is why the Constrictor and the Cougar appear only as replacement ships.
 
 ## What this forecloses
 

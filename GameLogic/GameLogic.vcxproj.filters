@@ -111,6 +111,9 @@
     <ClInclude Include="Guest.h">
       <Filter>Native</Filter>
     </ClInclude>
+    <ClInclude Include="Hardware.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Hyperspace.h">
       <Filter>Hyperspace</Filter>
     </ClInclude>
@@ -193,6 +196,9 @@
     </ClCompile>
     <ClCompile Include="Galaxy.cpp">
       <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Hardware.cpp">
+      <Filter>State</Filter>
     </ClCompile>
     <ClCompile Include="Hyperspace.cpp">
       <Filter>Hyperspace</Filter>

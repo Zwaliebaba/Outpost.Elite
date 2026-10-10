@@ -1,0 +1,84 @@
+# Misjumps into witch space and fights the Thargoids there until they kill the commander. It starts from
+# fighter.cdr (Tools/PrepareCommanders.py): the reference's own save, with Leesti selected, a military laser,
+# ECM, an energy unit and enough kills (20) that enemies fire missiles. Alt+W during the countdown sets
+# forceMisjump, the reference's own way to make a misjump; the arrival then puts the ship in witch space
+# between the systems, where only Thargoids spawn, ten at once. The first spawns where the ship is (see
+# mask-mission.replay: nothing has turned the spawn point yet) and dies ramming it; the military laser
+# destroys another, each kill shortening the witch-space countdown; they launch Thargons, the ECM (E) removes
+# the missile one fires, and they kill the commander: GAME OVER, then the title screen. The fight was played by
+# a scratch program that steered at the nearest ship by its position each frame and fired when it was in the
+# sights; what it pressed is recorded here like any other replay.
+file JAMESON.CDR fighter.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded e2eff85804b6af7386374de898d83c30b292a28e78bd7b5af7e2f7199fbbb23e
+key F1; wait 0.5                   # launch
+down h; wait 1; up h               # the countdown to Leesti
+down Alt_L; key w; up Alt_L        # Alt+W: a misjump
+wait 8
+digest witch-space 317b5583bebc75695a2b5e4e36aab0a29007f904c0c4075106709ad857d8ec47
+# The fight, as recorded: a step for each change of the keys, and the frames between.
+down Left; wait 0.500
+down Up; wait 0.100
+up Left; wait 0.150
+down Right; wait 0.200
+up Up; wait 0.450
+down Up; wait 0.200
+down Left; up Right; wait 0.050
+down space; wait 0.050
+up Up; wait 0.050
+down Down; wait 0.050
+up space; wait 0.200
+up Down; down space; wait 0.300
+down Up; wait 0.100
+key e; wait 0.050
+up Left; key e; wait 0.050
+down Right; wait 0.050
+up Up; down Down; wait 0.250
+up Down; wait 0.050
+down Up; wait 0.200
+up Right; wait 0.050
+up Up; down Down; wait 0.100
+down Right; wait 0.150
+down Up; up Down; wait 0.150
+up Right; wait 0.050
+down Left; wait 0.050
+up Up; down Down; wait 0.200
+up Down; wait 0.050
+down Up; wait 0.150
+up Up; wait 0.150
+down Up; wait 0.100
+up Left; up Up; wait 0.050
+down Right; up space; wait 0.600
+down Up; wait 0.200
+up Right; down space; wait 0.050
+down Left; wait 0.050
+up Up; down Down; wait 0.050
+up space; wait 0.150
+down space; wait 0.100
+down Up; up Down; wait 0.050
+up space; wait 0.050
+up Left; down Right; wait 0.150
+up Up; wait 0.500
+down Up; wait 0.250
+up Right; wait 0.150
+down Left; wait 0.450
+up Left; wait 0.150
+down Right; wait 0.100
+up Right; wait 0.050
+down Right; wait 0.100
+up Up; down space; wait 0.050
+down Down; up space; wait 0.200
+up Down; wait 0.650
+down Up; wait 0.200
+down Left; up Right; wait 0.100
+down space; wait 0.050
+up Up; down Down; wait 0.050
+up space; wait 0.150
+up Down; wait 0.550
+up Left
+digest killed 46d2795eeed7b46e2bb56742f623b42bff74555d8049ab898817434c5009d38e
+wait 2
+digest title e6ea30dabc7a62b1d5d4d6479dc9b4bd0194d9a68da736a34f80dc029be2401f

@@ -1,0 +1,38 @@
+# Fights at Orerve, a feudal system 6.8 light years from Lave, and meets the Transporter, Boulder, Moray and Krait.
+# It starts from combat-orerve.cdr (Tools/PrepareCommanders.py): the fighter (a military laser, ECM, an energy
+# unit, 20 kills) with its random state 5,624,772 draws on. It finds Orerve on the short-range chart and jumps
+# there. In space it holds J and full speed whenever no ship but a rock or a barrel is about: while the jump drive
+# is engaged, ships of every class spawn 32 times as often (ScaleSpawnOdds) until a ship mass-locks the drive. The
+# three combat replays share out the ship types the rest of the corpus does not meet. Between them they meet the
+# Boulder, Transporter, Shuttle, Anaconda, Moray, Barrel, Boa, Cobra Mk I, Gecko, Fer-de-Lance, Plate and Escape
+# Pod, which no other replay meets; a Cobra Mk III, which elsewhere is only the hull escape-pod abandons; and the
+# Krait, Worm and Sidewinder, which hyperspace-and-fight meets too. Their draw counts were found by a search over
+# counts for the three runs that meet all sixteen in the least game time. The fight was played by a scratch program
+# that steered at the nearest ship by its position each frame and fired when it was in the sights; what it pressed
+# is recorded here like any other replay.
+file JAMESON.CDR combat-orerve.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 301ed092a1bbf34d60b8a55a3ec9808679034bb9a0478114711b53c0d8b82489
+key F6; wait 0.5                   # the short-range chart: F finds a system by name
+key f; wait 0.3; key o; key r; key e; key r; key v; key e; key Return; wait 0.3
+key F1; wait 0.5                   # launch
+down h; wait 1; up h               # the countdown to Orerve
+wait 8
+digest orerve e8fce66bae1bdd6f16f6d7312a4054e3cd336e7b5976d59a2dc409570722e5d0
+# The fight, as recorded: a step for each change of the keys, and the frames between.
+down period; down j; wait 0.350
+up period; wait 0.300
+down Right; down Down; down space; up j; wait 0.200
+up Down; wait 0.500
+down Up; wait 0.200
+up Right; up Up; wait 0.050
+down Down; wait 0.100
+up Down; up space; down j; wait 0.100
+down Right; down Up; wait 0.400
+up j; wait 12.400
+down Left; up Right; wait 0.300
+up Left; up Up
+digest after-the-fight fc8e19d6435f775b92d184efe2779d1305cc4336d79828ddb564b55e3f4438fd

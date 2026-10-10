@@ -14,9 +14,12 @@ small script of steps, the format GameLogic/Replay.h defines (steps separated by
   down NAME, up NAME press a key and hold it; release it
   shot NAME          write NAME.png to --out
   digest NAME [HEX]  ignored here: ReferenceRunner prints a state digest, and one script serves both
+  file NAME SOURCE   copy SOURCE, a file beside the replay (Replays/ for --steps), onto the mounted drive
+                     as NAME, upper case, at that moment: how a replay starts from a prepared commander
 
 A replay (ADR-008) is timed in paced time and DOSBox-X runs in wall time, so a replay played here is
-an approximation of the run it records: good for comparing static screens, not for flight.
+an approximation of the run it records: good for comparing static screens, not for flight. The drive
+is mounted with -nocachedir, so that a file a step copies there mid-run is in DOS's directory at once.
 
 Each shot is the emulated screen as a 640x200 image on the CGA's dot grid, the same grid
 Machine::Cga renders: DOSBox-X draws the 200-line picture doubled to 400, so every other row is
@@ -51,6 +54,10 @@ PATCH_TO = 0x01
 CYCLES_PER_MILLISECOND = 310
 WINDOW_WIDTH = 640
 WINDOW_HEIGHT = 400
+# How DOSBox-X keeps a file's DOS attributes on a host without them: beside NAME, a file of this prefix and
+# NAME whose length has bit 0 set when the archive bit is clear, bit 1 for hidden and bit 2 for system
+# (localDrive::GetFileAttr and add_special_file_to_disk, DOSBox-X 2024.03.01).
+ATTRIBUTE_SIDECAR = ".DBLOCALFILE_ATR_"
 
 # The clock is set the way a PC/XT without a clock card boots, so that the game's reads of the time of
 # day (int 21h AH=2Ch, twice in RestartPlay) return the same in every run and in the host. DOS reports
@@ -71,7 +78,7 @@ nosound=true
 [speaker]
 pcspeaker=false
 [autoexec]
-mount c "{drive}"
+mount c "{drive}" -nocachedir
 c:
 date 01-01-1980
 time 00:00:00
@@ -81,6 +88,11 @@ time 00:00:00
 
 def run(_command: list[str], _env: dict[str, str]) -> subprocess.CompletedProcess:
   return subprocess.run(_command, env=_env, capture_output=True, text=True, check=False)
+
+
+def is_bare_file_name(_name: str) -> bool:
+  """A file name with no directory or drive in it: what a file step may copy, as GameLogic/Replay.cpp checks."""
+  return _name not in ("", ".", "..") and not any(character in _name for character in "/\\:")
 
 
 def patched_copy(_exe: Path, _drive: Path) -> None:
@@ -152,10 +164,14 @@ def main() -> int:
   text = args.replay.read_text(encoding="utf-8") if args.replay else args.steps
   lines = (line.split("#", 1)[0] for line in text.splitlines())
   steps = [part.split() for line in lines for part in line.split(";") if part.strip()]
+  arguments = {"wait": (2,), "key": (2,), "down": (2,), "up": (2,), "shot": (2,), "digest": (2, 3), "file": (3,)}
   for step in steps:
-    if step[0] not in ("wait", "key", "down", "up", "shot", "digest") or len(step) not in ((2, 3) if step[0] == "digest" else (2,)):
-      sys.exit(f"bad step {' '.join(step)!r}; steps are wait, key, down, up, shot and digest (GameLogic/Replay.h)")
-  steps = [(step[0], step[1]) for step in steps]
+    bad = f"bad step {' '.join(step)!r}"
+    if len(step) not in arguments.get(step[0], ()):
+      sys.exit(f"{bad}; steps are wait, key, down, up, shot, digest and file (GameLogic/Replay.h)")
+    if step[0] == "file" and not is_bare_file_name(step[2]):
+      sys.exit(f"{bad}; a file step copies a file beside the replay, named without a directory")
+  sources = args.replay.resolve().parent if args.replay else ROOT / "Replays"
   args.out.mkdir(parents=True, exist_ok=True)
 
   with tempfile.TemporaryDirectory(prefix="reference-screens-") as scratch:
@@ -175,7 +191,7 @@ def main() -> int:
       dosbox = subprocess.Popen(["dosbox-x", "-conf", str(config), "-nomenu", "-fastlaunch", "-nopromptfolder"],
                                 env=env, cwd=scratch, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       window = find_window(env, 15.0)
-      for verb, argument in steps:
+      for verb, argument, *rest in steps:
         if verb == "wait":
           time.sleep(float(argument))
         elif verb in ("key", "down", "up"):
@@ -183,6 +199,11 @@ def main() -> int:
           run(["xdotool", action, "--window", window, argument], env)
         elif verb == "digest":
           pass  # only the host can fingerprint its own state; the step is accepted so one script serves both
+        elif verb == "file":
+          shutil.copyfile(sources / rest[0], drive / argument.upper())
+          # DOSBox-X reports a host file with the archive bit set, which the game's loader refuses, unless a
+          # sidecar file of odd length says it is clear: what int 21h AX=4301h writes for the game's own save.
+          (drive / f"{ATTRIBUTE_SIDECAR}{argument.upper()}").write_bytes(b"\0")
         else:
           target = args.out / f"{argument}.png"
           capture(env, window, Path(scratch), target)

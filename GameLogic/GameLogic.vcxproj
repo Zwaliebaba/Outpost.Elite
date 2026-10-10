@@ -86,6 +86,7 @@
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Guest.h" />
+    <ClInclude Include="Hardware.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Market.h" />
@@ -115,6 +116,7 @@
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="Flight.cpp" />
     <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Market.cpp" />

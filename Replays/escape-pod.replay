@@ -1,0 +1,16 @@
+# Launches the escape capsule: C, held from the launch tunnel so that the first frame in space reads it, leaves
+# the Cobra behind (the rear view watches it go), and 80 frames later the capsule is back at Lave's station.
+# It starts from escape-pod.cdr (Tools/PrepareCommanders.py): the reference's own save with an escape capsule.
+file JAMESON.CDR escape-pod.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 810355dcb4c337685f69a0c9ec481993c210f081b1593adb3eabe7285ec72249
+key F1; wait 0.5                   # launch
+down c; wait 1; up c               # the capsule, on the first frame in space
+digest ejected a10e2a8f5fb413518519e9d39f0c6b4e539afee95c852ecaec56cb08501e8716
+wait 2
+digest in-the-capsule 1c429f2e4b87d0e2ba8967fb9a4f47328035f21f4740a9cde7e2f46a701d3e78
+wait 2                             # the capsule docks, and the status screen shows the capsule gone
+digest rescued 76fafef6796223736cde00a507dc0eac0beb50f1789f1a885f08c9815840f9b8

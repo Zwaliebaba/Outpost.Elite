@@ -127,6 +127,7 @@ constexpr std::uint8_t TEXT_LAYOUT_BIT = 2; // screenLayout: the text page shows
 constexpr std::uint16_t GRAPHICS_ERROR_POSITION = 0x0C90;
 constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
 constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
+constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 
 // INT 21h with AH=_function; true when DOS reports an error (CF).
 [[nodiscard]] bool CallDos(Guest& _guest, std::uint8_t _function)
@@ -292,13 +293,22 @@ void DeleteCommanderFile(Guest& _guest)
 
 // ---- The disc menu ----
 
-// MOV SI,_text / MOV DI,_position / CALL PrintTextModeString.
-void PrintAt(Guest& _guest, std::uint16_t _text, std::uint16_t _position)
+// MOV SI,_text / MOV DI,_position / CALL PrintTextModeString: the text at DS:_text at B800:_position.
+PrintedText PrintAt(GameState& _state, std::uint16_t _text, std::uint16_t _position)
+{
+  return PrintTextModeString(_state, _text, _position);
+}
+
+// PrintAt, and the registers as the original leaves them: PrintTextModeString's SI, DI and ES, and AX the attribute
+// it printed in with the NUL in AL.
+void PrintAtOnRegisters(Guest& _guest, std::uint16_t _text, std::uint16_t _position)
 {
   Machine::Registers& regs = _guest.Regs();
-  regs.si = _text;
-  regs.di = _position;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  const PrintedText printed = PrintAt(_guest.State(), _text, _position);
+  regs.si = printed.end;
+  regs.di = printed.nextCell;
+  regs.es = Guest::VIDEO_SEGMENT;
+  regs.ax = Join(_guest.Get(DS.textAttribute), 0);
 }
 
 // CALL GetKey / JZ back: the wait for a key at CS:_loop. Out: AH the key's scan code.
@@ -318,8 +328,8 @@ void WaitForKey(Guest& _guest, std::uint16_t _loop)
 // The two help rows blanked (CS:6664 and CS:671F).
 void BlankHelpRows(Guest& _guest)
 {
-  PrintAt(_guest, BLANK_LINE_TEXT, HELP_POSITION);
-  PrintAt(_guest, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
+  PrintAtOnRegisters(_guest, BLANK_LINE_TEXT, HELP_POSITION);
+  PrintAtOnRegisters(_guest, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
 }
 
 // LeaveGameLoopForDisk (CS:7E90): diskOperation=AL, and the return address of the call it is in dropped with
@@ -337,7 +347,7 @@ void LeaveGameLoopForDisk(Guest& _guest)
 void ShowControlDevice(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  PrintAt(_guest, DEVICE_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, DEVICE_TEXT, STATUS_POSITION);
   regs.bx = Join(0, _guest.Get(DS.inputDevice));
   regs.bx = static_cast<std::uint16_t>((regs.bx << 1) + DS.inputDeviceNames.offset);
   regs.si = _guest.Word(regs.bx);
@@ -349,8 +359,8 @@ void ShowControlDevice(Guest& _guest)
 void ShowNoJoystick(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  PrintAt(_guest, NO_JOYSTICK_TEXT, STATUS_POSITION);
-  PrintAt(_guest, JOYSTICK_HELP_TEXT, HELP_POSITION);
+  PrintAtOnRegisters(_guest, NO_JOYSTICK_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, JOYSTICK_HELP_TEXT, HELP_POSITION);
   if (_guest.Get(DS.joystickIsAmstrad) != 1)
   {
     ++regs.si;
@@ -364,7 +374,7 @@ void ShowNoJoystick(Guest& _guest)
 [[nodiscard]] bool ChooseJoystick(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  PrintAt(_guest, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
   regs.di = STATUS_POSITION;
   regs.si = JOYSTICK_TITLE_TEXT;
   bool amstrad = false;
@@ -386,7 +396,7 @@ void ShowNoJoystick(Guest& _guest)
   if (amstrad)
   {
     _guest.Set(DS.joystickIsAmstrad, 1);
-    PrintAt(_guest, MOVE_JOYSTICK_TEXT, HELP_POSITION);
+    PrintAtOnRegisters(_guest, MOVE_JOYSTICK_TEXT, HELP_POSITION);
     _guest.Set(DS.amstradJoystickMoved, 0);
     for (;;)
     {
@@ -405,7 +415,7 @@ void ShowNoJoystick(Guest& _guest)
     return _guest.Get(DS.amstradJoystickMoved) == 1;
   }
   _guest.Set(DS.joystickIsAmstrad, 0);
-  PrintAt(_guest, CENTER_JOYSTICK_TEXT, HELP_POSITION);
+  PrintAtOnRegisters(_guest, CENTER_JOYSTICK_TEXT, HELP_POSITION);
   WaitForKey(_guest, CENTER_KEY_LOOP);
   _guest.Call(READ_JOYSTICK_AXES);
   _guest.Set(DS.joystickCenterX, regs.bx);
@@ -441,7 +451,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
     const std::uint8_t scan = High(regs.ax);
     if (scan == SCAN_E)
     {
-      PrintAt(_guest, EXIT_QUESTION_TEXT, STATUS_POSITION);
+      PrintAtOnRegisters(_guest, EXIT_QUESTION_TEXT, STATUS_POSITION);
       for (;;)
       {
         WaitForKey(_guest, EXIT_KEY_LOOP);
@@ -490,8 +500,8 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
         showDevice = true;
         continue;
       }
-      PrintAt(_guest, NO_MOUSE_TEXT, STATUS_POSITION);
-      PrintAt(_guest, MOUSE_HELP_TEXT, HELP_POSITION);
+      PrintAtOnRegisters(_guest, NO_MOUSE_TEXT, STATUS_POSITION);
+      PrintAtOnRegisters(_guest, MOUSE_HELP_TEXT, HELP_POSITION);
       ++regs.si;
       regs.di = SECOND_HELP_POSITION;
       _guest.Call(PRINT_TEXT_MODE_STRING);
@@ -513,7 +523,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
     }
     if (scan == SCAN_V)
     {
-      PrintAt(_guest, DS.versionString.offset, HELP_POSITION);
+      PrintAtOnRegisters(_guest, DS.versionString.offset, HELP_POSITION);
       _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       continue;
     }
@@ -532,7 +542,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
 void ShowDiskResult(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  PrintAt(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
   regs.bx = Join(0, static_cast<std::uint8_t>(_guest.Get(DS.diskOperation) - 1));
   regs.bx = static_cast<std::uint16_t>((regs.bx << 1) + DS.diskOperationNames.offset);
   regs.si = _guest.Word(regs.bx);
@@ -644,31 +654,23 @@ void CriticalErrorInterrupt(Guest& _guest)
   regs.ds = _guest.Pop();
 }
 
-void ShowDiskError(Guest& _guest)
+void ShowDiskError(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = regs.ax;
-  _guest.Set(DS.diskError, 0);
-  if ((_guest.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) == 0)
+  _state.Set(DS.diskError, 0);
+  if ((_state.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) == 0)
   {
-    regs.si = DS.diskErrorText.offset;
-    regs.di = GRAPHICS_ERROR_POSITION;
-    regs.bx = 0xFFFF; // colour 3
-    DrawScreenStringEntry(_guest);
+    DrawScreenString(_state, DS.diskErrorText.offset, ERROR_INK, GameState::VIDEO_SEGMENT, GRAPHICS_ERROR_POSITION);
     return;
   }
   // The characters alone, over the text page's attributes.
-  regs.si = DS.diskErrorText.offset;
-  regs.di = TEXT_ERROR_POSITION;
-  regs.cx = DISK_ERROR_CHARACTERS;
-  do
+  std::uint16_t from = DS.diskErrorText.offset;
+  std::uint16_t to = TEXT_ERROR_POSITION;
+  for (std::uint16_t left = DISK_ERROR_CHARACTERS; left != 0; --left)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    ++regs.si;
-    _guest.SetFarByte(regs.es, regs.di, Low(regs.ax));
-    regs.di = static_cast<std::uint16_t>(regs.di + 2);
-  } while (--regs.cx != 0);
+    _state.SetVideoByte(to, _state.Byte(from));
+    from = Offset(from, 1);
+    to = Offset(to, 2);
+  }
 }
 
 void ShowDiscControlScreen(Guest& _guest)
@@ -694,7 +696,7 @@ void ShowDiscControlScreen(Guest& _guest)
     RunDiscControlKeys(_guest, false);
     return;
   }
-  PrintAt(_guest, RETRY_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, RETRY_TEXT, STATUS_POSITION);
   for (;;)
   {
     WaitForKey(_guest, RETRY_KEY_LOOP);
@@ -709,7 +711,7 @@ void ShowDiscControlScreen(Guest& _guest)
     }
     _guest.JumpBack(RETRY_KEY_LOOP);
   }
-  PrintAt(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, BLANK_STATUS_TEXT, STATUS_POSITION);
   SetLow(regs.ax, _guest.Get(DS.diskOperation));
   LeaveGameLoopForDisk(_guest);
 }
@@ -717,7 +719,7 @@ void ShowDiscControlScreen(Guest& _guest)
 void PromptCommanderFileName(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  PrintAt(_guest, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
+  PrintAtOnRegisters(_guest, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   regs.si = DS.commanderFileName.offset;
   regs.di = NAME_POSITION;
   regs.cx = MOST_NAME_CHARACTERS;
@@ -758,7 +760,7 @@ void PromptCommanderFileName(Guest& _guest)
   {
     // RejectFileName (CS:68AD): this call's return address dropped, and the menu's keys read on in its place.
     regs.ax = _guest.Pop();
-    PrintAt(_guest, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
+    PrintAtOnRegisters(_guest, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
     _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
     RunDiscControlKeys(_guest, false);
     return;
@@ -855,6 +857,13 @@ constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
 // ── The entries of the de-assembled routines ──
 
+void ShowDiskErrorEntry(Guest& _guest)
+{
+  ShowDiskError(_guest.State());
+  _guest.Regs().es = Guest::VIDEO_SEGMENT;
+  _guest.Clobber(SHOWS_DISK_ERROR);
+}
+
 void SaveStartupCommanderEntry(Guest& _guest)
 {
   SaveStartupCommander(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
@@ -867,7 +876,7 @@ namespace
 constexpr std::array ENTRIES = {
   NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequest, DISK_REQUEST},
-  NativeEntry{0x0470, "ShowDiskError", &ShowDiskError, SHOWS_DISK_ERROR},
+  NativeEntry{0x0470, "ShowDiskError", &ShowDiskErrorEntry, SHOWS_DISK_ERROR},
   NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},
   NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x6862, "PromptCommanderFileName", &PromptCommanderFileName, PROMPTS_FOR_NAME, Machine::NativeReturn::Near, 0, WAITS},

@@ -32,9 +32,6 @@ void ReadTextLine(Guest& _guest);
 /// RedrawInputLine (CS:773A): the BX characters at SI, then the cursor, printed for the layout. Preserves BX, SI, DI.
 void RedrawInputLine(Guest& _guest);
 
-/// PrintStringForLayout (CS:7750): PrintTextModeString in the text layout, DrawScreenString otherwise.
-void PrintStringForLayout(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
@@ -90,6 +87,12 @@ std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::ui
 
 /// DrawScreenString (CS:32D8): DrawScreenChar for each character of the text at DS:_text, from _segment:_cell.
 PrintedText DrawScreenString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
+
+/// What DrawScreenString leaves in AX, for the entries of the routines that call it, whose originals leave it there:
+/// the NUL in AL, over the last row of the last glyph it drew in _ink, or over _ax when it drew none. _text is where it
+/// began and _drawn what it returned.
+[[nodiscard]] std::uint16_t DrawnScreenStringAx(const GameState& _state, std::uint16_t _text, PrintedText _drawn, std::uint16_t _ink,
+                                                std::uint16_t _ax);
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits at DS:_digits. Returns what is left of it below the last
 /// divisor: its units.
@@ -148,6 +151,10 @@ PrintedLines PrintTextLines(GameState& _state, std::uint16_t _text, std::uint16_
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);
 
+/// PrintStringForLayout (CS:7750): the text at DS:_text by PrintTextModeString at B800:_cell in the text layout, and by
+/// DrawScreenString in _ink at _segment:_cell otherwise.
+PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
@@ -173,5 +180,6 @@ void PrintCountedTextLinesEntry(Guest& _guest);
 void FormatTenthsEntry(Guest& _guest);
 void PrintTextLinesEntry(Guest& _guest);
 void ToggleInputCursorEntry(Guest& _guest);
+void PrintStringForLayoutEntry(Guest& _guest);
 
 } // namespace Elite

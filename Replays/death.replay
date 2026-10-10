@@ -1,0 +1,13 @@
+# Dies, from the start of a game: launches from Lave, pitches back round at the station without matching its
+# spin, and hits it beside the slot. GAME OVER, the wreckage, then the title screen, where a key starts a new
+# game as the starting commander (StartNewGame). Down is held from the launch tunnel, so the turn starts with
+# the first frame in space.
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key F1; wait 0.5                   # launch
+down Down; wait 1.7; up Down       # round to the station
+wait 1.5                           # the collision: GAME OVER and the wreckage
+digest game-over 76562c8519d955b46a4dc9ddb06458d32d7122b96dee9de850d46c15c7e8a858
+wait 2.3
+digest title 6b71bcdccaa6b500c3f253f1c5d6bf2b70903d7a7816292f1e3378d6464a2479
+key space; wait 3.5                # a new game: the credits, then the status screen
+digest new-game 9f0e7230d750fc2f05fd595dcbc7b5921aef97b47d6a42ef60fefceebea5544e

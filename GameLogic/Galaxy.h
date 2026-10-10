@@ -2,6 +2,7 @@
 #pragma once
 
 #include "NativeEntry.h"
+#include "Text.h"
 
 #include <cstdint>
 #include <optional>
@@ -37,9 +38,6 @@ void FindNearestSystem(Guest& _guest);
 /// on the lines under the chart. Clobbers AX, BX, CX, DX, SI, DI, BP.
 void ShowNearestSystemDistance(Guest& _guest);
 
-/// LoadSystemSeeds (CS:139C): the seeds of system CL of the current galaxy. Out: CX = 0.
-void LoadSystemSeeds(Guest& _guest);
-
 /// FindSystemByName (CS:140D): reads a name under the chart (ReadTextLine) and, if a system of the galaxy has it
 /// and it is on the chart, moves the cursor there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing
 /// typed is ShowNearestSystemDistance alone. Waits for keys. Clobbers AX, BX, CX, DX, SI, DI, BP, ES.
@@ -47,12 +45,6 @@ void FindSystemByName(Guest& _guest);
 
 /// DrawChartItems (CS:14C5): the short-range chart's discs and labels.
 void DrawChartItems(Guest& _guest);
-
-/// PlaceChartLabels (CS:1505): each pending label, nudged clear of every chart item, into chartItems.
-void PlaceChartLabels(Guest& _guest);
-
-/// ClearChartTextLines (CS:15BC): blanks the two text lines under a chart.
-void ClearChartTextLines(Guest& _guest);
 
 /// ShowSystemDataScreen (CS:5CDE): F7's data on the selected system, then the keys until Esc or another F key
 /// (WaitForScreenExitKey, CS:60B4), which selects the system at the chart cursor again. Waits for keys. Out: AX the
@@ -62,19 +54,6 @@ void ShowSystemDataScreen(Guest& _guest);
 /// ShowSystemDescription (CS:6FC0): the selected system's description, expanded and word-wrapped onto
 /// the text screen.
 void ShowSystemDescription(Guest& _guest);
-
-/// ExpandDescriptionText (CS:700F): expands the coded text at SI into DI, recursively. Out: DI past the
-/// output.
-void ExpandDescriptionText(Guest& _guest);
-
-/// InsertSystemName (CS:707A): control code 1, the selected system's name into DI.
-void InsertSystemName(Guest& _guest);
-
-/// InsertSystemAdjective (CS:708D): control code 2, the selected system's name as an adjective into DI.
-void InsertSystemAdjective(Guest& _guest);
-
-/// InsertRandomName (CS:70C1): control code 3, a name made from descriptionSeed0-1 into DI.
-void InsertRandomName(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -136,6 +115,27 @@ struct LabelNudge
   ChartSpan rows; ///< the rows, as it leaves them either way
 };
 
+/// The last name InsertRandomName made: what GenerateSystemName counted and tested making it.
+struct RandomName
+{
+  std::uint8_t length;     ///< the name's length
+  std::uint8_t fourthPair; ///< bit 6 of the seed it began from: 40h when the name has a fourth pair of letters
+};
+
+/// What a description's expansion has written.
+struct DescriptionOutput
+{
+  std::uint16_t next;                       ///< past the last character written
+  std::optional<RandomName> lastRandomName; ///< the last name control code 3 made on the way, if one did
+};
+
+/// Where ExpandDescriptionText stops.
+struct ExpandedText
+{
+  std::uint16_t end; ///< past the coded text's NUL
+  DescriptionOutput output;
+};
+
 /// GetShortRangeOffset (CS:1076): whether the system in systemSeeds is on the current chart, and on the
 /// short-range chart its offsets from the current system.
 [[nodiscard]] ShortRangeOffset GetShortRangeOffset(const GameState& _state);
@@ -160,12 +160,20 @@ void MoveCursorToSystem(GameState& _state);
 /// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedDistanceTenthsLy.
 std::uint16_t ComputeDistanceToSystem(GameState& _state);
 
+/// LoadSystemSeeds (CS:139C): the seeds of system _system of the current galaxy: LoadGalaxySeeds, then
+/// AdvanceToNextSystem _system times.
+void LoadSystemSeeds(GameState& _state, std::uint8_t _system);
+
 /// AdvanceToNextSystem (CS:13B4): four TwistSystemSeeds, the seeds of the next system.
 void AdvanceToNextSystem(GameState& _state);
 
 /// GenerateSystemName (CS:13C1): selectedSystemName and its length from systemSeed0-2, leaving the seeds on the next
 /// system. Returns the length.
 std::uint8_t GenerateSystemName(GameState& _state);
+
+/// PlaceChartLabels (CS:1505): each of chartItemCount pending labels, nudged clear of every chart item until
+/// NudgeChartLabel runs out of tries, added to chartItems by AddChartLabel.
+void PlaceChartLabels(GameState& _state);
 
 /// AddChartLabel (CS:1552): appends a label item, its x range _x and its rows _rows, for the name at
 /// chartLabelCursor, and moves chartLabelCursor past the name.
@@ -178,12 +186,34 @@ void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows);
 /// ChartItemOverlaps (CS:15A9): whether the chart item at DS:_item overlaps x range _x and rows _rows.
 [[nodiscard]] bool ChartItemOverlaps(const GameState& _state, std::uint16_t _item, ChartSpan _x, ChartSpan _rows);
 
+/// ClearChartTextLines (CS:15BC): blankChartLine drawn in _ink at _segment over the two text lines under a chart.
+/// Returns where the second ends.
+PrintedText ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
+
 /// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName. Returns the name's length.
 std::uint8_t TerminateSelectedSystemName(GameState& _state);
 
 /// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, ending at DS:7D5F.
 /// Returns the offset of the first digit.
 std::uint16_t FormatSelectedSystemDistance(GameState& _state);
+
+/// ExpandDescriptionText (CS:700F): the coded text at DS:_text expanded into DS:_output, recursively: a byte of
+/// 1-31 runs the control code's handler from textControlCodes, one of 80h up a phrase from descriptionPhraseLists
+/// picked by NextDescriptionRandom, and any other is copied, but a space after a space, and a letter after a space
+/// upper-cased while descriptionCapitalize is 1.
+ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::uint16_t _output);
+
+/// InsertSystemName (CS:707A): control code 1, the selected system's name, as CopySelectedNameLower leaves it,
+/// expanded into DS:_output.
+DescriptionOutput InsertSystemName(GameState& _state, std::uint16_t _output);
+
+/// InsertSystemAdjective (CS:708D): control code 2, the selected system's name less a final vowel, and "ian ",
+/// expanded into DS:_output.
+DescriptionOutput InsertSystemAdjective(GameState& _state, std::uint16_t _output);
+
+/// InsertRandomName (CS:70C1): control code 3, a name GenerateSystemName makes from descriptionSeed0-1, expanded into
+/// DS:_output; selectedSystemName's eight bytes are kept at DS:9650 meanwhile and put back, its length not.
+DescriptionOutput InsertRandomName(GameState& _state, std::uint16_t _output);
 
 /// BackspaceDescription (CS:7107): control code 4, the description's output at _output back one.
 [[nodiscard]] std::uint16_t BackspaceDescription(std::uint16_t _output);
@@ -213,13 +243,20 @@ void LoadGalaxySeedsEntry(Guest& _guest);
 void GetCursorGalaxyPositionEntry(Guest& _guest);
 void MoveCursorToSystemEntry(Guest& _guest);
 void ComputeDistanceToSystemEntry(Guest& _guest);
+void LoadSystemSeedsEntry(Guest& _guest); ///< In: CL the system. Out: CX = 0.
 void AdvanceToNextSystemEntry(Guest& _guest);
 void GenerateSystemNameEntry(Guest& _guest);
+void PlaceChartLabelsEntry(Guest& _guest);
 void AddChartLabelEntry(Guest& _guest);
 void NudgeChartLabelEntry(Guest& _guest);
 void ChartItemOverlapsEntry(Guest& _guest);
+void ClearChartTextLinesEntry(Guest& _guest); ///< In: BX the ink, ES the screen.
 void TerminateSelectedSystemNameEntry(Guest& _guest);
 void FormatSelectedSystemDistanceEntry(Guest& _guest);
+void ExpandDescriptionTextEntry(Guest& _guest); ///< In: SI the coded text, DI the output. Out: SI past its NUL, DI past the output.
+void InsertSystemNameEntry(Guest& _guest);      ///< In: DI the output. Out: DI past it.
+void InsertSystemAdjectiveEntry(Guest& _guest); ///< In: DI the output. Out: DI past it.
+void InsertRandomNameEntry(Guest& _guest);      ///< In: DI the output. Out: DI past it.
 void BackspaceDescriptionEntry(Guest& _guest);
 void StartCapitalizingEntry(Guest& _guest);
 void StopCapitalizingEntry(Guest& _guest);

@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 
+#include <optional>
 #include <utility>
 
 namespace Elite
@@ -146,26 +147,27 @@ void RestartInputBlink(Guest& _guest)
   RedrawTypedLine(_guest);
 }
 
-// MessageLine's second half (0x35B9): the message at messagePointer, unless it is already shown.
-void ShowMessage(Guest& _guest)
+// What ShowMessage does.
+struct ShownMessage
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.messageDrawn, MESSAGE_DRAWN);
-  regs.si = _guest.Get(DS.messagePointer);
-  const bool shown = regs.si == _guest.Get(DS.messageShown);
-  _guest.Set(DS.messageShown, regs.si);
+  std::uint16_t message;            // messagePointer: the message it shows
+  std::optional<PrintedText> drawn; // where DrawScreenString stopped, unless the message was already shown
+};
+
+// MessageLine's second half (0x35B9): the message at messagePointer, unless it is already shown, on the message line,
+// cleared first a row at a time forwards or, _backwards, down. The original keeps SI round ClearMessageLine on the stack.
+ShownMessage ShowMessage(GameState& _state, bool _backwards)
+{
+  _state.Set(DS.messageDrawn, MESSAGE_DRAWN);
+  const std::uint16_t message = _state.Get(DS.messagePointer);
+  const bool shown = message == _state.Get(DS.messageShown);
+  _state.Set(DS.messageShown, message);
   if (shown)
   {
-    return;
+    return ShownMessage{message, std::nullopt};
   }
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  const std::uint16_t message = regs.si;
-  ClearMessageLineEntry(_guest);
-  regs.si = message;
-  regs.di = MESSAGE_LINE_OFFSET;
-  regs.bx = MESSAGE_INK;
-  DrawScreenStringEntry(_guest);
+  ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backwards);
+  return ShownMessage{message, DrawScreenString(_state, message, MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET)};
 }
 
 // The bounty's digits within bountyText.
@@ -236,6 +238,17 @@ PrintedText DrawScreenString(GameState& _state, std::uint16_t _text, std::uint16
     drawn.end = Offset(drawn.end, 1);
     drawn.nextCell = DrawScreenChar(_state, character, _ink, _segment, drawn.nextCell);
   }
+}
+
+std::uint16_t DrawnScreenStringAx(const GameState& _state, std::uint16_t _text, PrintedText _drawn, std::uint16_t _ink, std::uint16_t _ax)
+{
+  // The NUL read into AL over the last row the last DrawScreenChar drew, of which AH stays.
+  std::uint16_t ax = _ax;
+  if (_drawn.end != _text)
+  {
+    ax = GlyphRow(_state, _state.Byte(static_cast<std::uint16_t>(_drawn.end - 1)), GLYPH_ROWS - 1, _ink, _state.Get(DS.textPaperPattern));
+  }
+  return WithLow(ax, 0);
 }
 
 std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::uint16_t _digits)
@@ -360,6 +373,7 @@ void FormatCredits(GameState& _state)
 
 void UpdateMessageLine(Guest& _guest)
 {
+  Machine::Registers& regs = _guest.Regs();
   _guest.Call(UPDATE_WARNINGS);
   if (_guest.Get(DS.messageDrawn) != 0)
   {
@@ -370,7 +384,6 @@ void UpdateMessageLine(Guest& _guest)
       _guest.SetByte(DS.messageFrames.offset, static_cast<std::uint8_t>(frames - 1));
       return;
     }
-    Machine::Registers& regs = _guest.Regs();
     const std::uint16_t view = _guest.Get(DS.viewAngle);
     regs.si = view == 0           ? DS.frontViewText.offset
               : view == VIEW_REAR ? DS.rearViewText.offset
@@ -378,7 +391,18 @@ void UpdateMessageLine(Guest& _guest)
                                   : DS.rightViewText.offset;
     _guest.Set(DS.messagePointer, regs.si);
   }
-  ShowMessage(_guest);
+  const ShownMessage shown = ShowMessage(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION));
+  // The registers as the original leaves them: SI the message, and once it is drawn, ES the CGA's memory and SI, DI, BX
+  // and AX as DrawScreenString leaves them, AX over the 0 ClearMessageLine leaves.
+  regs.si = shown.message;
+  if (shown.drawn)
+  {
+    regs.es = Guest::VIDEO_SEGMENT;
+    regs.bx = MESSAGE_INK;
+    regs.ax = DrawnScreenStringAx(_guest.State(), shown.message, *shown.drawn, MESSAGE_INK, 0);
+    regs.si = shown.drawn->end;
+    regs.di = shown.drawn->nextCell;
+  }
 }
 
 void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards)
@@ -630,22 +654,22 @@ void RedrawInputLine(Guest& _guest)
   const std::uint16_t bx = regs.bx;
   _guest.SetByte(static_cast<std::uint16_t>(regs.bx + regs.si), 0);
   regs.bx = MESSAGE_INK;
-  PrintStringForLayout(_guest);
+  PrintStringForLayoutEntry(_guest);
   regs.si = DS.inputCursorText.offset;
-  PrintStringForLayout(_guest);
+  PrintStringForLayoutEntry(_guest);
   regs.bx = bx;
   regs.si = si;
   regs.di = di;
 }
 
-void PrintStringForLayout(Guest& _guest)
+PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
 {
-  if (_guest.Get(DS.screenLayout) == TEXT_LAYOUT)
+  // A tail jump to either printer.
+  if (_state.Get(DS.screenLayout) == TEXT_LAYOUT)
   {
-    PrintTextModeStringEntry(_guest);
-    return;
+    return PrintTextModeString(_state, _text, _cell);
   }
-  DrawScreenStringEntry(_guest);
+  return DrawScreenString(_state, _text, _ink, _segment, _cell);
 }
 
 // ── Their entries ──
@@ -885,6 +909,27 @@ void ToggleInputCursorEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void PrintStringForLayoutEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const bool textLayout = _guest.Get(DS.screenLayout) == TEXT_LAYOUT;
+  const std::uint16_t text = regs.si;
+  const PrintedText printed = PrintStringForLayout(_guest.State(), regs.si, regs.bx, regs.es, regs.di);
+  regs.si = printed.end;
+  regs.di = printed.nextCell;
+  if (textLayout)
+  {
+    // PrintTextModeString's: ES the text page, and AX the attribute it printed in with the NUL in AL.
+    regs.es = Guest::VIDEO_SEGMENT;
+    regs.ax = Join(_guest.Get(DS.textAttribute), 0);
+  }
+  else
+  {
+    regs.ax = DrawnScreenStringAx(_guest.State(), text, printed, regs.bx, regs.ax);
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 namespace
 {
 
@@ -913,7 +958,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7694, "ReadTextLine", &ReadTextLine, CLOBBERS_AX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7727, "ToggleInputCursor", &ToggleInputCursorEntry, PRESERVES_ALL},
   NativeEntry{0x773A, "RedrawInputLine", &RedrawInputLine, PRESERVES_ALL},
-  NativeEntry{0x7750, "PrintStringForLayout", &PrintStringForLayout, PRESERVES_ALL},
+  NativeEntry{0x7750, "PrintStringForLayout", &PrintStringForLayoutEntry, PRESERVES_ALL},
 };
 
 } // namespace

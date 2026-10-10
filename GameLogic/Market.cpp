@@ -20,7 +20,6 @@ using Machine::Registers;
 
 // The routines these call by their entries: whatever is hooked there runs, so each work routine that a routine that
 // waits calls is compared on its own (ADR-010 item 8).
-constexpr std::uint16_t FORMAT_CREDITS = 0x3543;
 constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
 constexpr std::uint16_t SPEND_CREDITS = 0x65EC;
@@ -465,18 +464,18 @@ bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
   return true;
 }
 
-void SpendCredits(Guest& _guest)
+bool SpendCredits(GameState& _state, std::uint32_t _tenths)
 {
-  SubtractCreditsEntry(_guest);
+  return SubtractCredits(_state, _tenths);
 }
 
-void AddCredits(Guest& _guest)
+void AddCredits(GameState& _state, std::uint32_t _tenths)
 {
-  const Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t low = std::uint32_t{_guest.Word(DS.creditsTenths.offset)} + regs.ax;
-  _guest.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(low));
-  _guest.Set(DS.data75F5, static_cast<std::uint16_t>(_guest.Get(DS.data75F5) + regs.bx + (low >> 16)));
-  _guest.Call(FORMAT_CREDITS);
+  // ADD the low word, then ADC the high word with the carry it makes.
+  const std::uint32_t low = std::uint32_t{_state.Word(DS.creditsTenths.offset)} + (_tenths & 0xFFFF);
+  _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(low));
+  _state.Set(DS.data75F5, static_cast<std::uint16_t>(_state.Get(DS.data75F5) + (_tenths >> 16) + (low >> 16)));
+  FormatCredits(_state);
 }
 
 std::uint16_t ComputeResalePrice(const GameState& _state)
@@ -616,7 +615,7 @@ void RunCargoTradeMenu(Guest& _guest)
   regs.es = regs.ax;
   _guest.Set(DS.menuFirstRowAttr, CARGO_MENU_FIRST_ROW);
   _guest.Set(DS.menuRowCount, static_cast<std::uint8_t>(COMMODITY_COUNT));
-  StartMenu(_guest);
+  StartMenuOnRegisters(_guest);
   for (;;)
   {
     SteerMenuCursor(_guest);
@@ -644,13 +643,13 @@ void RunCargoTradeMenu(Guest& _guest)
       if (key == SCAN_UP)
       {
         _guest.JumpBack(CARGO_CURSOR_UP);
-        MoveMenuCursorUp(_guest);
+        MoveMenuCursorUpOnRegisters(_guest);
         continue;
       }
       if (key == SCAN_DOWN)
       {
         _guest.JumpBack(CARGO_CURSOR_DOWN);
-        MoveMenuCursorDown(_guest);
+        MoveMenuCursorDownOnRegisters(_guest);
         continue;
       }
       // The screen's own key, F2 to sell or F3 to buy, does nothing here.
@@ -709,6 +708,28 @@ void SubtractCreditsEntry(Guest& _guest)
   }
   _guest.SetFlag(FLAG_CARRY, !paid);
   _guest.Clobber(RETURNS_CARRY);
+}
+
+void SpendCreditsEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const bool paid = SpendCredits(_guest.State(), regs.ax | (std::uint32_t{regs.bx} << 16));
+  if (paid)
+  {
+    // FormatCredits leaves SI on the balance's text.
+    regs.si = DS.creditBalanceText.offset;
+  }
+  _guest.SetFlag(FLAG_CARRY, !paid);
+  _guest.Clobber(RETURNS_CARRY);
+}
+
+void AddCreditsEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  AddCredits(_guest.State(), regs.ax | (std::uint32_t{regs.bx} << 16));
+  // FormatCredits leaves SI on the balance's text.
+  regs.si = DS.creditBalanceText.offset;
+  _guest.Clobber(PRESERVES_ALL);
 }
 
 void ComputeResalePriceEntry(Guest& _guest)
@@ -774,8 +795,8 @@ namespace
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x5E2C, "ShowMarketPricesScreen", &ShowMarketPricesScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x65EC, "SpendCredits", &SpendCredits, NativeContract{0, FLAG_CARRY}},
-  NativeEntry{0x65EE, "AddCredits", &AddCredits, PRESERVES_ALL},
+  NativeEntry{0x65EC, "SpendCredits", &SpendCreditsEntry, RETURNS_CARRY},
+  NativeEntry{0x65EE, "AddCredits", &AddCreditsEntry, PRESERVES_ALL},
   NativeEntry{0x6995, "ComputeResalePrice", &ComputeResalePriceEntry, RETURNS_ZERO},
   NativeEntry{0x69CE, "ComputeMarketPrices", &ComputeMarketPricesEntry, CLOBBERS_ALL_BUT_DS_BP},
   NativeEntry{0x6A85, "NextMarketRandom", &NextMarketRandomEntry, PRESERVES_ALL},

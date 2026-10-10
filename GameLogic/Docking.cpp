@@ -4,7 +4,10 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Flight.h"
 #include "Maths.h"
+#include "Scene.h"
+#include "Ships.h"
 
 namespace Elite
 {
@@ -18,7 +21,6 @@ using Machine::Registers;
 // The routines these call through their entries: the original's, or a native routine hooked there.
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t RESET_STARDUST = 0x0A43;
 constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t DRAW_TUNNEL_RECTANGLE = 0x1AA0;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
@@ -26,14 +28,12 @@ constexpr std::uint16_t MASK_OUTSIDE_TUNNEL = 0x2E0A;
 constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t IS_STATION = 0x3F40;
 constexpr std::uint16_t START_MUSIC = 0x7401;
 constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
 constexpr std::uint16_t WAIT_FOR_TIMER_TICK = 0x7772;
 constexpr std::uint16_t START_BEEP = 0x7A57;
 constexpr std::uint16_t START_LOW_BEEP = 0x7A5D;
 constexpr std::uint16_t MOVE_OBJECTS_BY_VELOCITY = 0x85EC;
-constexpr std::uint16_t LOAD_PLAYER_ANGLES = 0x8A16;
 
 // The station tunnel: ten frames of one to ten of tunnelRectangles' ten rectangles, ten bytes each, and
 // ten of ten to one; docked, each frame waits for timer ticks first.
@@ -44,11 +44,7 @@ constexpr std::uint16_t DOCKED_FIRST_TICKS = 0x19;
 constexpr std::uint16_t TUNNEL_FRAME_TICKS = 0x14;
 constexpr std::uint16_t DOCKING_MESSAGE_FRAMES = 0x19;
 
-// The station's slot.
-constexpr std::uint16_t SLOT_X = 4;
-constexpr std::uint16_t SLOT_Y = 6;
-constexpr std::uint16_t SLOT_Z = 8;
-constexpr std::uint16_t SLOT_FLAGS = 0x1E;
+// The station's slot, whose fields SLOT_X, SLOT_Y, SLOT_Z and SLOT_FLAGS name (Ships.h).
 constexpr std::uint8_t STATION_SHOT = 0x01; // in the slot's flags: docking is refused
 
 // The docking computer's states (dockingComputerState).
@@ -89,8 +85,10 @@ constexpr std::uint16_t VIEW_LAST_WORD = 0x1FFE; // of the buffer at DS:0000, ro
 
 constexpr std::uint16_t HALF_TURN = 0x400; // in 2048ths
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
-constexpr std::uint16_t STATION_SPIN_ANGLE = 0x0E; // in the station's slot
-constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F;      // of the slot's first byte, shifted right once
+constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shifted right once
+
+// The byte of a stardust particle that holds its lifetime, the last that ResetStardust stores.
+constexpr std::uint16_t PARTICLE_LIFETIME = 4;
 
 // A point about the view's centre, as DrawLine takes it: x and row from the top-left.
 [[nodiscard]] std::uint16_t FromCenter(std::uint16_t _point) noexcept
@@ -215,29 +213,33 @@ void SlowDown(GameState& _state)
   }
 }
 
-// States 1 and 5: dockingTargetAngle, the roll that brings the target (the approach point, or the
-// station) into the pitch plane, whichever of up or down is nearer.
-void AimRoll(Guest& _guest, bool _approach, std::uint8_t _next)
+// SAR r,1 twice: a rotated coordinate quartered for ArcTangent2.
+[[nodiscard]] std::int16_t Quarter(std::int16_t _value) noexcept
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(LOAD_PLAYER_ANGLES);
-  LoadStationPositionRegisters(regs, LoadStationPosition(_guest.State(), _approach));
-  RotatePitchYawRollEntry(_guest);
-  regs.ax = Sar(regs.ax, 2);
-  regs.bx = Sar(regs.bx, 2);
-  ArcTangent2Entry(_guest);
-  std::uint16_t magnitude = regs.ax;
+  return static_cast<std::int16_t>(Sar(static_cast<std::uint16_t>(_value), 2));
+}
+
+// States 1 and 5 (CS:8652, CS:8803): dockingTargetAngle, the roll that brings the target (the approach point, or the
+// station) into the pitch plane, whichever of up or down is nearer; then on to state _next. Returns that angle.
+std::uint16_t AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
+{
+  (void)LoadPlayerAngles(_state);
+  const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
+  const std::uint16_t angle = ArcTangent2(_state, Quarter(target.x), Quarter(target.y));
+  std::uint16_t magnitude = angle;
   if ((magnitude & ANGLE_SIGN) != 0)
   {
     magnitude = Negate(static_cast<std::uint16_t>(magnitude | ~ANGLE_MASK));
   }
+  std::uint16_t roll = angle;
   if (magnitude >= QUARTER_TURN)
   {
-    regs.ax = Offset(regs.ax, HALF_TURN);
+    roll = Offset(roll, HALF_TURN);
   }
-  regs.ax = static_cast<std::uint16_t>(Offset(regs.ax, _guest.Get(DS.playerRollAngle)) & ANGLE_MASK);
-  _guest.Set(DS.dockingTargetAngle, regs.ax);
-  _guest.Set(DS.dockingComputerState, _next);
+  roll = static_cast<std::uint16_t>(Offset(roll, _state.Get(DS.playerRollAngle)) & ANGLE_MASK);
+  _state.Set(DS.dockingTargetAngle, roll);
+  _state.Set(DS.dockingComputerState, _next);
+  return roll;
 }
 
 // An 11-bit angle sign-extended to 16 bits, as AngleWithinTolerance leaves its second.
@@ -266,41 +268,38 @@ AngleTolerance RollToTarget(GameState& _state, std::uint8_t _next)
   return found;
 }
 
-// States 3 and 7: pitch towards the target by _step a frame, or by half the angle once within
-// _tolerance; the second time that happens, on to state _next at speed 4, else back to state _again.
-void PitchToTarget(Guest& _guest, bool _approach, std::uint16_t _tolerance, std::uint8_t _step, std::uint8_t _again, std::uint8_t _next)
+// States 3 and 7 (CS:86E3, CS:8890): pitch towards the target by _step a frame, or by half the angle once within
+// _tolerance; the second time that happens, on to state _next at speed 4, else back to state _again. Returns the
+// steering it sets.
+std::uint16_t PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, std::uint8_t _step, std::uint8_t _again,
+                            std::uint8_t _next)
 {
-  Registers& regs = _guest.Regs();
   if (!_approach)
   {
-    _guest.Call(LOAD_PLAYER_ANGLES);
+    (void)LoadPlayerAngles(_state);
   }
-  LoadStationPositionRegisters(regs, LoadStationPosition(_guest.State(), _approach));
-  RotatePitchYawRollEntry(_guest);
-  regs.ax = Sar(regs.bx, 2);
-  regs.bx = Sar(regs.cx, 2);
-  ArcTangent2Entry(_guest);
-  regs.bx = _tolerance;
-  regs.cx = 0;
-  AngleWithinToleranceEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
+  const std::uint16_t angle = ArcTangent2(_state, Quarter(target.y), Quarter(target.z));
+  if (!AngleWithinTolerance(angle, 0, _tolerance).within)
   {
-    SetLow(regs.ax, (regs.ax & ANGLE_SIGN) != 0 ? Negate(_step) : _step);
-    regs.ax = Join(Low(regs.ax), 0);
-    Steer(_guest.State(), regs.ax);
-    return;
+    // MOV AL,step / TEST AX,400h / NEG AL / MOV AH,AL / XOR AL,AL: the step, against the angle's sign, in the high byte.
+    const std::uint16_t steering = Join((angle & ANGLE_SIGN) != 0 ? Negate(_step) : _step, 0);
+    Steer(_state, steering);
+    return steering;
   }
-  regs.ax = Join(Low(Sar(regs.ax, 1)), 0);
-  Steer(_guest.State(), regs.ax);
-  if (_guest.Get(DS.dockingAlignPasses) != 1)
+  // SAR AX,1 / MOV AH,AL / XOR AL,AL: half the angle, its low byte in the high byte.
+  const std::uint16_t steering = Join(Low(Sar(angle, 1)), 0);
+  Steer(_state, steering);
+  if (_state.Get(DS.dockingAlignPasses) != 1)
   {
-    _guest.Set(DS.dockingAlignPasses, static_cast<std::uint8_t>(_guest.Get(DS.dockingAlignPasses) + 1));
-    _guest.Set(DS.dockingComputerState, _again);
-    return;
+    _state.Set(DS.dockingAlignPasses, static_cast<std::uint8_t>(_state.Get(DS.dockingAlignPasses) + 1));
+    _state.Set(DS.dockingComputerState, _again);
+    return steering;
   }
-  _guest.Set(DS.dockingComputerState, _next);
-  _guest.Set(DS.playerSpeed, LEAST_SPEED);
-  _guest.Set(DS.velocityDirty, 1);
+  _state.Set(DS.dockingComputerState, _next);
+  _state.Set(DS.playerSpeed, LEAST_SPEED);
+  _state.Set(DS.velocityDirty, 1);
+  return steering;
 }
 
 // cwd; idiv bx: a coordinate over the frames left.
@@ -354,47 +353,59 @@ void FlyToApproachPoint(Guest& _guest)
   _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
 }
 
-// State 8: straight in along z, slowing within 1000, until within 650: then the front view, locked.
-void CloseIn(Guest& _guest)
+// What CloseIn did.
+struct ClosingIn
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.stationSlot.offset;
-  regs.ax = Negate(_guest.Word(Offset(regs.di, SLOT_Z)));
-  if (regs.ax < STOP_CLOSING_DISTANCE)
+  bool stopped;             // within 650: the spin is matched next
+  std::uint16_t lastRandom; // once it stopped, the last random number ResetStardust drew
+};
+
+// State 8 (CS:8904): straight in along z, slowing within 1000, until within 650: then the front view, locked.
+ClosingIn CloseIn(GameState& _state)
+{
+  const std::uint16_t distance = Negate(ObjectSlot(_state, DS.stationSlot.offset).Get(SlotWord::Z));
+  if (distance < STOP_CLOSING_DISTANCE)
   {
-    _guest.Set(DS.dockingComputerState, MATCH_SPIN);
-    if (_guest.Get(DS.viewAngle) != 0)
+    _state.Set(DS.dockingComputerState, MATCH_SPIN);
+    if (_state.Get(DS.viewAngle) != 0)
     {
-      _guest.Set(DS.viewAngle, 0);
+      _state.Set(DS.viewAngle, 0);
     }
-    _guest.Call(RESET_STARDUST);
-    _guest.Set(DS.viewLocked, 1);
-    return;
+    const std::uint16_t lastRandom = ResetStardust(_state);
+    _state.Set(DS.viewLocked, 1);
+    return ClosingIn{true, lastRandom};
   }
-  if (regs.ax < CLOSE_SLOWLY_DISTANCE)
+  if (distance < CLOSE_SLOWLY_DISTANCE)
   {
-    SlowDown(_guest.State());
+    SlowDown(_state);
   }
   else
   {
-    SpeedUp(_guest.State());
+    SpeedUp(_state);
   }
-  _guest.Set(DS.playerVelocityX, 0);
-  _guest.Set(DS.playerVelocityY, 0);
-  regs.ax = Negate(_guest.Get(DS.playerSpeed));
-  _guest.Set(DS.playerVelocityZ, regs.ax);
-  _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-  _guest.Set(DS.velocityDirty, 1);
+  _state.Set(DS.playerVelocityX, 0);
+  _state.Set(DS.playerVelocityY, 0);
+  _state.Set(DS.playerVelocityZ, Negate(_state.Get(DS.playerSpeed)));
+  MoveObjectsByVelocity(_state);
+  _state.Set(DS.velocityDirty, 1);
+  return ClosingIn{false, 0};
 }
 
-// The station's spin angle plus _turn, negated for a Dodo (IsStation's CF).
-void LoadStationSpin(Guest& _guest, std::uint16_t _turn)
+// The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
+[[nodiscard]] std::uint16_t LoadStationSpin(GameState& _state, std::uint16_t _turn)
+{
+  const ObjectSlot station(_state, DS.stationSlot.offset);
+  const auto spin = Offset(station.Get(SlotWord::Roll), _turn);
+  return IsStation(station).dodo ? Negate(spin) : spin;
+}
+
+// LoadStationSpin with the registers its code leaves: DI the station's slot, and AX the spin. Nothing reads the flags
+// IsStation leaves.
+void LoadStationSpinOnRegisters(Guest& _guest, std::uint16_t _turn)
 {
   Registers& regs = _guest.Regs();
   regs.di = DS.stationSlot.offset;
-  const auto spin = Offset(_guest.Word(Offset(regs.di, STATION_SPIN_ANGLE)), _turn);
-  _guest.Call(IS_STATION);
-  regs.ax = _guest.Flag(FLAG_CARRY) ? Negate(spin) : spin;
+  regs.ax = LoadStationSpin(_guest.State(), _turn);
 }
 
 // States 9-11: inside, matching the station's spin: to state 10 or 11 once the roll is within 11 of it
@@ -403,7 +414,7 @@ void MatchSpin(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
   _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-  LoadStationSpin(_guest, 0);
+  LoadStationSpinOnRegisters(_guest, 0);
   regs.bx = SPIN_TOLERANCE;
   regs.cx = _guest.Get(DS.playerRollAngle);
   AngleWithinToleranceEntry(_guest);
@@ -424,7 +435,7 @@ void RollWithSpin(Guest& _guest, std::uint16_t _turn)
 {
   Registers& regs = _guest.Regs();
   _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-  LoadStationSpin(_guest, _turn);
+  LoadStationSpinOnRegisters(_guest, _turn);
   regs.ax &= ANGLE_MASK;
   regs.bx = static_cast<std::uint16_t>(_guest.Get(DS.playerRollAngle) & ANGLE_MASK);
   regs.ax = static_cast<std::uint16_t>(regs.ax - regs.bx);
@@ -644,6 +655,31 @@ void RunDockingComputer(Guest& _guest)
     regs.cx = SignExtendAngle(target);
     regs.dx = found.excess;
   };
+  // States 1, 3, 5 and 7, with what the original leaves in the registers its contract compares: AX the angle aimed at or
+  // the steering, and DI the station's slot. BX, CX and DX, which it does not compare, are not reproduced here or in state
+  // 8: poisoned, every comparison and digest still agrees.
+  const auto aimed = [&regs](std::uint16_t _result)
+  {
+    regs.ax = _result;
+    regs.di = DS.stationSlot.offset;
+  };
+  // State 8, likewise: once it stops, what ResetStardust leaves, AX the last random number with the last lifetime it stored
+  // in AL, and DI past the particles; otherwise what MoveObjectsByVelocity leaves, AX = playerVelocityZ and SI past the
+  // last slot, and DI the station's slot.
+  const auto closeIn = [&]()
+  {
+    const ClosingIn closing = CloseIn(_guest.State());
+    if (closing.stopped)
+    {
+      const std::uint16_t lastParticle = DS.stardust.At(DS.stardust.ENTRY_COUNT - 1);
+      regs.ax = WithLow(closing.lastRandom, _guest.Byte(Offset(lastParticle, PARTICLE_LIFETIME)));
+      regs.di = DS.stardust.At(DS.stardust.ENTRY_COUNT);
+      return;
+    }
+    regs.ax = _guest.Get(DS.playerVelocityZ);
+    regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES);
+    regs.di = DS.stationSlot.offset;
+  };
   _guest.Set(DS.dockingComputerSteering, 0);
   _guest.Set(DS.rollRate, 0);
   switch (_guest.Get(DS.dockingComputerState))
@@ -659,28 +695,28 @@ void RunDockingComputer(Guest& _guest)
     _guest.Set(DS.dockingAlignPasses, 0);
     return;
   case AIM_ROLL_AT_APPROACH:
-    AimRoll(_guest, true, ROLL_TO_APPROACH);
+    aimed(AimRoll(_guest.State(), true, ROLL_TO_APPROACH));
     return;
   case ROLL_TO_APPROACH:
     rollToTarget(PITCH_TO_APPROACH);
     return;
   case PITCH_TO_APPROACH:
-    PitchToTarget(_guest, true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH);
+    aimed(PitchToTarget(_guest.State(), true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH));
     return;
   case FLY_TO_APPROACH:
     FlyToApproachPoint(_guest);
     return;
   case AIM_ROLL_AT_STATION:
-    AimRoll(_guest, false, ROLL_TO_STATION);
+    aimed(AimRoll(_guest.State(), false, ROLL_TO_STATION));
     return;
   case ROLL_TO_STATION:
     rollToTarget(PITCH_TO_STATION);
     return;
   case PITCH_TO_STATION:
-    PitchToTarget(_guest, false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN);
+    aimed(PitchToTarget(_guest.State(), false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN));
     return;
   case CLOSE_IN:
-    CloseIn(_guest);
+    closeIn();
     return;
   case MATCH_SPIN:
     MatchSpin(_guest);

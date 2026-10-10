@@ -3,6 +3,7 @@
 
 #include "GameState.h"
 #include "NativeEntry.h"
+#include "Text.h"
 
 #include <cstdint>
 #include <span>
@@ -32,43 +33,30 @@ void ShowEquipShipScreen(Guest& _guest);
 /// Out: AH=Esc or the F-key that ended it.
 void RunEquipShipMenu(Guest& _guest);
 
-/// DrawLaserMountMenu (CS:6367): the four mounts and what each holds, FORE highlighted. Out: selectedLaserMount=0,
-/// SI=1E5h.
-void DrawLaserMountMenu(Guest& _guest);
-
 /// ChooseMountToFitLaser (CS:63B2): the mount a bought laser goes on, chosen with the cursor and Space. Waits.
 void ChooseMountToFitLaser(Guest& _guest);
 
 /// ChooseMountToRemoveLaser (CS:646F): the mount a sold laser comes off, chosen with the cursor and Space. Waits.
 void ChooseMountToRemoveLaser(Guest& _guest);
 
-/// RedrawEquipHelpText (CS:653F): the equipment screen's help lines again, over the mount menu.
-void RedrawEquipHelpText(Guest& _guest);
-
 /// PayForEquipmentItem (CS:65A3): menuSelectedRow's price (fuel by the tank's emptiness) off creditsTenths, and
 /// creditBalanceText formatted. Out: CF=1, and the credits unchanged, when they are not enough.
 void PayForEquipmentItem(Guest& _guest);
 
-/// ClearEquipmentSellPrice (CS:6946): "-" in menuSelectedRow's resale column, once the last of an item is sold.
-void ClearEquipmentSellPrice(Guest& _guest);
-
-/// ShowEquipmentSellPrice (CS:6972): menuSelectedRow's resale price computed, stored and printed in its row.
-void ShowEquipmentSellPrice(Guest& _guest);
-
 // What the menus that wait share (RunEquipShipMenu, RunCargoTradeMenu and the two mount choosers): the same code at
 // each one's own addresses. Only a routine hooked as one that waits may call them (Guest::LoopTurn).
 
-/// The menus' start: the credits on the message line, row 1 selected and highlighted from menuFirstRowAttr.
-void StartMenu(Guest& _guest);
+/// StartMenu on the registers: SI, DI, ES and AX as the original leaves them.
+void StartMenuOnRegisters(Guest& _guest);
 
 /// ReadSteering, and the cursor moved up or down a row if its pitch says so.
 void SteerMenuCursor(Guest& _guest);
 
-/// The cursor up a row, from the first to the last.
-void MoveMenuCursorUp(Guest& _guest);
+/// MoveMenuCursorUp from the row at SI, on the registers: SI, DI, ES and AX as the original leaves them.
+void MoveMenuCursorUpOnRegisters(Guest& _guest);
 
-/// The cursor down a row, from the last to the first.
-void MoveMenuCursorDown(Guest& _guest);
+/// MoveMenuCursorDown from the row at SI, on the registers: SI, DI, ES and AX as the original leaves them.
+void MoveMenuCursorDownOnRegisters(Guest& _guest);
 
 /// 100 timer ticks, LOOP jumping back to CS:_tickLoop, then GetKey. Returns whether a key came, in AH.
 [[nodiscard]] bool PollMenuKey(Guest& _guest, std::uint16_t _tickLoop);
@@ -82,13 +70,50 @@ void MoveMenuCursorDown(Guest& _guest);
 /// the original does. Returns whether the row is a laser's.
 [[nodiscard]] bool SelectLaserType(GameState& _state);
 
+/// DrawLaserMountMenu (CS:6367): the mount header, each of the four mounts' laser or "Free" on the line after it, and
+/// FORE's box highlighted; selectedLaserMount = 0. Returns where the last mount's text ends.
+PrintedText DrawLaserMountMenu(GameState& _state);
+
+/// RedrawEquipHelpText (CS:653F): the equipment screen's help lines again, over the mount menu, and textAttribute put
+/// back to the menu's.
+PrintedLines RedrawEquipHelpText(GameState& _state);
+
 /// PaintLaserMountBox (CS:6564): textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
 /// B800:_box.
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box);
 
+/// ClearEquipmentSellPrice (CS:6946): "-" in menuSelectedRow's resale column, once the last of an item is sold.
+PrintedText ClearEquipmentSellPrice(GameState& _state);
+
+/// ShowEquipmentSellPrice (CS:6972): menuSelectedRow's resale price computed by ComputeResalePrice, stored after its
+/// price in screenPrices, and printed in its row's resale column.
+PrintedText ShowEquipmentSellPrice(GameState& _state);
+
+// What the menus that wait share, at each one's own addresses: no hook, and no entry.
+
+/// Where the menu's cursor is, after StartMenu or a move.
+struct MenuCursor
+{
+  std::uint16_t row;   ///< the selected row's first attribute byte on the text page
+  PrintedText credits; ///< where PrintCreditsOnMessageLine stopped on the way
+};
+
+/// The menus' start: the credits on the message line, then row 1 selected and highlighted from menuFirstRowAttr.
+MenuCursor StartMenu(GameState& _state);
+
+/// The cursor up a row from the row at _row, from the first round to the last.
+MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row);
+
+/// The cursor down a row from the row at _row, from the last round to the first.
+MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
-void SelectLaserTypeEntry(Guest& _guest);    ///< Out: ZF=1 if the row is a laser's.
-void PaintLaserMountBoxEntry(Guest& _guest); ///< In: SI=_box, ES=B800h. Out: AL=textAttribute, DL=0, CX=0.
+void SelectLaserTypeEntry(Guest& _guest);         ///< Out: ZF=1 if the row is a laser's.
+void DrawLaserMountMenuEntry(Guest& _guest);      ///< Out: SI=1E5h.
+void RedrawEquipHelpTextEntry(Guest& _guest);     ///< Out: AX=1F00h, CX=0.
+void PaintLaserMountBoxEntry(Guest& _guest);      ///< In: SI=_box, ES=B800h. Out: AL=textAttribute, DL=0, CX=0.
+void ClearEquipmentSellPriceEntry(Guest& _guest); ///< Out: AX=7900h, SI and DI where it stops printing, ES=B800h.
+void ShowEquipmentSellPriceEntry(Guest& _guest);  ///< Out: as ClearEquipmentSellPriceEntry, BX the price's slot.
 
 } // namespace Elite

@@ -1,0 +1,19 @@
+# Jumps to the second galaxy: launches from Lave with a galactic hyperdrive, arms it with G and starts the
+# countdown with H, and arrives at the system GalacticJump picks in galaxy 2, whose chart F5 then shows. It
+# starts from galactic-hyperdrive.cdr (Tools/PrepareCommanders.py): the reference's own save with a galactic
+# hyperdrive fitted. G is held from the launch tunnel, so the first frame in space arms the drive.
+file JAMESON.CDR galactic-hyperdrive.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded e6af492cb5c5f4dfa590afb1e3997b14b4ad77ba271abdad48ca620825f45862
+key F1; wait 0.5                   # launch
+down g; wait 1; up g               # the galactic drive armed for 40 frames
+down h; wait 0.1; up h             # and the countdown started
+wait 3
+digest countdown 0c35f6bc262118afc17dcbdc2a6bee9173b316b77200ffe00941de8d5da6b50a
+wait 5                             # the jump, and the tunnel
+digest galaxy-2 5bd6c3438cdce787f13c22aefd1e58686eeb2deea9d9acb07584d7b0520b6dc3
+down F5; wait 0.1; up F5; wait 1.5 # galaxy 2's chart
+digest galactic-chart-2 2de8c51ed7f5e401a6e0337d9b6ed5b099494d7ad07912cfb61daa75ca9ec3b0

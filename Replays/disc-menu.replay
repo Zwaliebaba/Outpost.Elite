@@ -1,0 +1,32 @@
+# Everything else the disc menu does, beyond the save and load of save-and-load.replay: with two commander files
+# copied into DOS's directory it catalogues them, deletes one and catalogues again, refuses a bad file name, fails
+# to load a file that is not there (ERROR: Retry (Y/N)? and N), and loads the other; and it tries every control
+# device on this machine, which has neither a mouse driver nor a joystick: the mouse, the IBM stick, the Amstrad
+# stick, then the version and the keyboard again.
+file JAMESON.CDR jameson.cdr
+file LEESTI.CDR rich-at-leesti.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key c; wait 0.5                    # Catalogue Disc: JAMESON and LEESTI
+digest catalogue 978aff15e9215700b5539c67d8d11e87c7b88aa3543b52a0209026ca051713ab
+key d; wait 0.3; key l; key e; key e; key s; key t; key i; key Return; wait 0.5
+key c; wait 0.5                    # DELETED: LEESTI, and the catalogue holds JAMESON alone
+digest deleted cf1311447e9c8f948171973acd9af4598d1686369d2a8bdea2ed6fb9fe537cd1
+key l; wait 0.3; key 1; key Return; wait 0.3   # FILENAME ERROR: a name starts with a letter
+digest bad-name 8aec408c3240356de483993617fb619f510da65888e8ddc545e13f71a497f8c7
+key l; wait 0.3; key m; key i; key s; key s; key i; key n; key g; key Return; wait 0.5
+digest disk-error c594ba7ebfe19a0fa56eca9170486388553b8c1160e1c9821105854bb439fa7a
+key n; wait 0.3                    # no retry
+key m; wait 0.3                    # ERROR: No Mouse!
+key j; wait 0.3; key i; wait 0.3   # the IBM stick: centre it and press a key
+key space; wait 0.5                # ERROR: No Joystick!
+key j; wait 0.3; key a; wait 0.3   # the Amstrad stick: move it and press a key
+key space; wait 0.5                # it never moved: ERROR: No Joystick!
+digest no-joystick 9c456a32c8da2ec0eb2a4cfaf9cf8fe05b042e8991d07a26429b3e3da4ff2353
+key v; wait 0.3                    # the version
+key k; wait 0.3                    # DEVICE: Keyboard
+digest keyboard f596ce705fd72a930b8bb8ceaac3a35b783e10cf9047f6d0471c14a827670831
+key l; wait 0.3; key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded fbe12bd3e4a3110f82f97c73f773e60eeb98870d92049e83203fcf2136a289b2
+key F9; wait 0.8
+digest status 09d3fdef88b41beb18f2c40213e6842a1125f599d48c14b53e523defef0b3d62

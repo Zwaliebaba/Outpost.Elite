@@ -226,18 +226,18 @@ void RotateVertices(GameState& _state, std::uint16_t _first, std::uint16_t _coun
   }
 }
 
-// The handlers' last rotation, by the view direction when it is not ahead (CS:383A, CS:39CF). Out: AX the angle.
-void RotateVerticesToView(Guest& _guest, std::uint16_t _first, std::uint16_t _count)
+// The handlers' last rotation, by the view direction when it is not ahead (CS:383A, CS:39CF): -viewAngle into rotation
+// pair 8, and the x and z of _count vertices from _first turned by it. Nothing reads what the original leaves in AX and BX:
+// the box's handler loads AX next (CS:3864), and both load them in ReflectVertexAboutCenter (CS:3740) before reading them.
+void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t _count)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = _guest.Get(DS.viewAngle);
-  if (regs.ax == 0)
+  const std::uint16_t angle = _state.Get(DS.viewAngle);
+  if (angle == 0)
   {
     return;
   }
-  regs.ax = Negate(regs.ax);
-  SetSinCosEntry(_guest, DS.rotationSinCos.At(8));
-  RotateVertices(_guest.State(), _first, _count, 0, VERTEX_Z, 8);
+  (void)SetSinCos(_state, 8, Negate(angle));
+  RotateVertices(_state, _first, _count, 0, VERTEX_Z, 8);
 }
 
 // What RenderBlueprintBody does with the blueprint at SI (CS:3CF2-3D20): the vertex program, the projection, the
@@ -1089,7 +1089,7 @@ void BuildBoxCornerVertices(Guest& _guest)
   RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 2, VERTEX_Z, 5);
   RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 1);
   RotateVertices(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, 2, 2);
-  RotateVerticesToView(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED);
+  RotateVerticesToView(_guest.State(), DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED);
   regs.si = DS.boxCornerVertices.offset;
 
   // The fourth corner completes the parallelogram, v2 - v1 + v0; the fifth and eighth are the second and third
@@ -1182,7 +1182,7 @@ void BuildDodoVertices(Guest& _guest)
   RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 2, VERTEX_Z, 5);
   RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 1);
   RotateVertices(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, 2, 2);
-  RotateVerticesToView(_guest, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES);
+  RotateVerticesToView(_guest.State(), DS.vertexBuffer.offset, DODO_ROTATED_VERTICES);
   // The first ten reflected through the centre, and the slot's four moved to it.
   regs.si = DS.vertexBuffer.offset;
   regs.di = DODO_REFLECTED;

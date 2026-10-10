@@ -1,0 +1,55 @@
+# Buys every item the equipment screen sells, at Leesti, whose tech level (10) sells all fourteen. It starts from
+# rich-at-leesti.cdr (Tools/PrepareCommanders.py): the reference's own save, jumped to Leesti as the game jumps,
+# with 30,000 credits. It fills the fuel, sells a missile and buys two, sells the fore pulse laser off its mount,
+# then buys and fits a laser of each type to each mount (pulse left, beam aft, mining right, military fore) and
+# every other item, and shows the status screen that lists them. The cursor moves one row a key, 0.15 s apart.
+file JAMESON.CDR rich-at-leesti.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 39e5e850c761ba48552806132ef15648c3172cce4a1b8bf68c75854bc4fa41d4
+key F4; wait 0.8                   # Equip Ship, its cursor on Fuel
+key b; wait 0.3                    # fuel: from 3.5 to 7.0 light years
+key Down; wait 0.15
+key s; wait 0.3                    # a missile sold, and two bought: four
+key b; wait 0.3
+key b; wait 0.3
+digest missiles 28f8462e76040777f8c233b42c9eed584a44d20bff744807558ff39302f13608
+key Down; wait 0.15
+key b; wait 0.3                    # the cargo bay extension
+key Down; wait 0.15
+key b; wait 0.3                    # ECM
+key Down; wait 0.15
+key s; wait 0.3                    # the pulse laser sold: Space takes it off the fore mount
+key space; wait 0.3
+key b; wait 0.3                    # and bought again: Left moves the box round from FORE to LEFT
+key Left; wait 0.15
+key space; wait 0.3
+key Down; wait 0.15
+key b; wait 0.3                    # the beam laser, aft
+key Right; wait 0.15
+key space; wait 0.3
+digest pulse-and-beam 4bcba41448252c27905329f7591407a9e84c31d8fd69530f6983013929d30eab
+key Down; wait 0.15
+key b; wait 0.3                    # fuel scoops
+key Down; wait 0.15
+key b; wait 0.3                    # the escape capsule
+key Down; wait 0.15
+key b; wait 0.3                    # the energy bomb
+key Down; wait 0.15
+key b; wait 0.3                    # the extra energy unit
+key Down; wait 0.15
+key b; wait 0.3                    # docking computers
+key Down; wait 0.15
+key b; wait 0.3                    # the galactic hyperdrive
+key Down; wait 0.15
+key b; wait 0.3                    # the mining laser, right
+key Right; wait 0.15; key Right; wait 0.15
+key space; wait 0.3
+key Down; wait 0.15
+key b; wait 0.3                    # the military laser, fore
+key space; wait 0.3
+digest equipped 6653e63f4641002a7645da7499e0e0ac952a0de4832418f1997d705a66015239
+key F9; wait 0.8
+digest status 07763af6ca5e3dc599a727ea819777ccc4013e17a277270e5f1b271c5dde528c

@@ -646,7 +646,7 @@ void TryFireLaserAtPlayer(Guest& _guest)
   {
     return;
   }
-  CheckSafeZoneHoldFire(_guest);
+  CheckSafeZoneHoldFireEntry(_guest);
   if (_guest.Flag(FLAG_CARRY))
   {
     return;
@@ -689,7 +689,7 @@ void TryLaunchMissileAtPlayer(Guest& _guest)
   {
     return;
   }
-  CheckSafeZoneHoldFire(_guest);
+  CheckSafeZoneHoldFireEntry(_guest);
   if (_guest.Flag(FLAG_CARRY) || _guest.Byte(At(regs.di, SLOT_MISSILES)) == 0)
   {
     return;
@@ -1164,7 +1164,7 @@ void LaunchShipFromObject(Guest& _guest)
     break;
   case ESCAPE_POD_LAUNCH:
     CopyObjectEntry(_guest);
-    InitEscapePod(_guest);
+    InitEscapePodEntry(_guest);
     RandomizeOrientationEntry(_guest);
     ComputeVelocityEntry(_guest);
     MoveObject(_guest);
@@ -1173,7 +1173,7 @@ void LaunchShipFromObject(Guest& _guest)
     break;
   case THARGON_LAUNCH:
     CopyObjectEntry(_guest);
-    InitThargon(_guest);
+    InitThargonEntry(_guest);
     ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     MoveObject(_guest);
@@ -1182,7 +1182,7 @@ void LaunchShipFromObject(Guest& _guest)
     break;
   case KRAIT_LAUNCH:
     CopyObjectEntry(_guest);
-    InitKraitHunter(_guest);
+    InitKraitHunterEntry(_guest);
     ComputeVelocityEntry(_guest);
     MoveObject(_guest);
     MoveObject(_guest);

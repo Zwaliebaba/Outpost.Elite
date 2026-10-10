@@ -1,6 +1,7 @@
 // GameLogic/Ai.h
 #pragma once
 
+#include "Flight.h"
 #include "GameState.h"
 #include "Maths.h"
 #include "NativeEntry.h"
@@ -43,9 +44,6 @@ void UpdateWolfAi(Guest& _guest);
 /// UpdateHunterAi (CS:58DE): class 6: pack hunting.
 void UpdateHunterAi(Guest& _guest);
 
-/// CheckSafeZoneHoldFire (CS:5A10): CF set when the ship at DI must not fire.
-void CheckSafeZoneHoldFire(Guest& _guest);
-
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
 /// ClampTurnStep's step and the error it was taken from.
@@ -76,6 +74,13 @@ struct HunterCount
   std::optional<std::uint16_t> last; ///< the last slot counted, if any
 };
 
+/// What CheckSafeZoneHoldFire finds.
+struct HoldFire
+{
+  bool hold;                    ///< the ship must not fire
+  std::optional<SafeZone> zone; ///< what InSafeZone read, when it was asked: neither in an invasion nor for a police Viper
+};
+
 /// ScaleSpawnOdds (CS:4C0E): _odds multiplied by 32 (shifted left 5) while jumpDriveEngaged is 1.
 [[nodiscard]] std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds);
 
@@ -102,6 +107,10 @@ Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted);
 /// _halfSize / 4 on every axis (VectorWithinBox).
 [[nodiscard]] VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize);
 
+/// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
+/// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.
+[[nodiscard]] HoldFire CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void ScaleSpawnOddsEntry(Guest& _guest);    ///< BX = the odds, in and out.
@@ -115,5 +124,7 @@ void ClampTurnStepEntry(Guest& _guest);
 void CountOtherHuntersOnScannerEntry(Guest& _guest); ///< DI = the slot. Out: AL the count, BP the last found; CX, SI clobbered.
 /// DI = the slot, SI = the object, DX = the box's half size. Out: AX, BX, CX the vector; CF set within the box; DX, BP clobbered.
 void GetVectorToObjectEntry(Guest& _guest);
+/// DI = the slot. Out: CF set when it must hold its fire; AL what InSafeZone leaves there, when it is asked.
+void CheckSafeZoneHoldFireEntry(Guest& _guest);
 
 } // namespace Elite

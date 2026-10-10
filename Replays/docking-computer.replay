@@ -1,0 +1,18 @@
+# Docks by computer at Lave: launches with docking computers fitted, switches them on with D, and lets them
+# fly the ship round and into the slot, to the music. It starts from docking-computer.cdr
+# (Tools/PrepareCommanders.py): the reference's own save with the docking computer fitted, which Lave's tech
+# level does not sell. D was found by probing every half second after the launch: at 6.0 s the computer docks
+# soonest, because how long it waits depends on where the station's spin brings the slot.
+file JAMESON.CDR docking-computer.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded 4e741a608bf90dc5c69bc1aacaaa5de035fe3209c9c071b503b6091c267192b8
+key F1; wait 6                     # launch: the tunnel, then space
+key d; wait 1                      # D, read when it is released: Docking Computer Locked On
+digest engaged 22271d980688de069d54f6c85d6002afcaef5ac2a5088d3987329f2e4fcab6c4
+wait 14.5
+digest auto-dock 9ca916327c92b62336de3950527d88b12faae1c8a30007d1ff470ff4bb2b4365
+wait 2                             # docked (playerDocked), then the status screen
+digest docked 1c53fbb03ecaddf33f78bdb4469e94e44c87d6bbf85d02c6f73cf33d451edbdb
