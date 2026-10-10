@@ -1138,8 +1138,7 @@ public:
   // what the digests check.
   TEST_METHOD(PauseScreenAgreesOnEveryKey)
   {
-    TwinRig rig("TwinPause");
-    rig.Native().Native().SetVerifying(false);
+    TwinRig rig("TwinPause", {.compared = false});
     Launch(rig);
     rig.Play("down Escape; wait 0.1; up Escape; wait 1\ndigest paused");
     rig.Play("key r; wait 0.5\nkey d; wait 0.5\nkey y; wait 0.5\nkey b; wait 0.5\nkey s; wait 0.5\nkey x; wait 0.5\n"
@@ -1152,8 +1151,7 @@ public:
   // Uncompared, as the pause screen is.
   TEST_METHOD(FlightScreensAgreeInWitchSpace)
   {
-    TwinRig rig("TwinWitchScreens");
-    rig.Native().Native().SetVerifying(false);
+    TwinRig rig("TwinWitchScreens", {.compared = false});
     Launch(rig);
     rig.Play("down F10; wait 0.1; up F10; wait 1\nkey Escape; wait 1\nkey F1; wait 1\ndigest after-escape");
     SetBoth(rig, DS.witchspaceCountdown, 1);

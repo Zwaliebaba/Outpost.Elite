@@ -41,11 +41,6 @@ constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
 constexpr std::string_view SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.02; up KP_Multiply; up Alt_L; wait 0.05";
 constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.002; up KP_Multiply; up Alt_L; wait 0.05";
 
-[[nodiscard]] std::wstring Widen(std::string_view _text)
-{
-  return std::wstring(_text.begin(), _text.end());
-}
-
 void SetDataByte(Machine::Pc& _pc, const Machine::LoadedProgram& _program, std::uint16_t _offset, std::uint8_t _value)
 {
   _pc.Ram().Write8(Elite::DataSegment(_program), _offset, _value);
@@ -69,12 +64,6 @@ void QueueScanCode(Machine::Pc& _pc, const Machine::LoadedProgram& _program, std
   ram.Write8(data, Elite::DS.keyBufferCount.offset, static_cast<std::uint8_t>(ram.Read8(data, Elite::DS.keyBufferCount.offset) + 1));
 }
 
-// The directory ReferenceRig named _machine keeps DOS's files in (ScratchDirectory).
-[[nodiscard]] std::filesystem::path FilesOf(std::string_view _machine)
-{
-  return std::filesystem::temp_directory_path() / ("OutpostEliteGameLogicTests-" + std::string(_machine));
-}
-
 // Every file in _directory, by name, with its bytes; a directory as an empty name's worth of nothing but its name.
 [[nodiscard]] std::map<std::string, std::string> Contents(const std::filesystem::path& _directory)
 {
@@ -92,83 +81,78 @@ void QueueScanCode(Machine::Pc& _pc, const Machine::LoadedProgram& _program, std
   return contents;
 }
 
-// The reference twice from one boot, as TwinRig has it, for the runs TwinRig cannot take. The native twin's calls are
-// not compared: a compared call of a routine that reaches DOS runs the original and keeps its outcome (ADR-010 item
-// 4), so only an uncompared twin runs SaveScreenshot's native code. And a step may end the program, as long as it ends
-// both. Every step must stop both twins the same way with the same digests, and they must end in one state. What the
-// interpreted twin ran is saved as _name's offsets.
-class UncomparedTwin
+// The Disc/Control menu's every path but leaving for DOS: the catalogue empty and with a name, the version, keys that do
+// nothing, a mouse driver absent and present, the IBM stick and the Amstrad's, saving, deleting, a load that DOS fails
+// and its retry, names cut at eight characters and edited, and every kind of bad name, each rejected into the menu's
+// key loop from inside PromptCommanderFileName.
+void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
-public:
-  explicit UncomparedTwin(std::string_view _name)
-    : m_name(_name),
-      m_original(m_name + "-Original"),
-      m_native(m_name + "-Native"),
-      m_originalPlayer(m_original.Host(), m_original.Program()),
-      m_nativePlayer(m_native.Host(), m_native.Program())
-  {
-    Assert::IsTrue(m_original.Loaded() && m_native.Loaded(), L"ELITES.EXE at the repository root");
-    Elite::InstallNativeRoutines(m_native.Host(), m_native.Program());
-    static_cast<void>(Play("wait 3"));
-    m_original.Host().Processor().SetExecutionMap(&m_executed);
-  }
-
-  UncomparedTwin(const UncomparedTwin&) = delete;
-  UncomparedTwin& operator=(const UncomparedTwin&) = delete;
-  UncomparedTwin(UncomparedTwin&&) = delete;
-  UncomparedTwin& operator=(UncomparedTwin&&) = delete;
-
-  ~UncomparedTwin()
-  {
-    SaveExecutedOffsets(m_name, m_executed, m_original.Program());
-  }
-
-  template <typename Change> void Both(Change _change)
-  {
-    _change(m_original.Host(), m_original.Program());
-    _change(m_native.Host(), m_native.Program());
-  }
-
-  /// Plays _steps on both, until the end or a step that stops them. Returns why the last step stopped.
-  [[nodiscard]] Machine::StopReason Play(std::string_view _steps)
-  {
-    std::vector<Elite::Step> steps;
-    std::string error;
-    Assert::IsTrue(Elite::ParseSteps(_steps, steps, error), Widen(error).c_str());
-    Machine::StopReason stopped = Machine::StopReason::Reached;
-    for (const Elite::Step& step : steps)
+  _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
+  _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
+  // A mouse driver: int 33h pointing at code that is not an IRET.
+  const Machine::Memory& ram = _rig.Original().Ram();
+  const std::uint16_t mouseOffset = ram.Read16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET);
+  const std::uint16_t mouseSegment = ram.Read16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT);
+  _rig.Both(
+    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
     {
-      std::string original;
-      std::string native;
-      const std::wstring where = Widen(m_name) + L" line " + std::to_wstring(step.line);
-      stopped = m_originalPlayer.Play(step, original);
-      Assert::IsTrue(m_nativePlayer.Play(step, native) == stopped, (where + L": the twins stopped differently").c_str());
-      Assert::IsTrue(original == native, (where + L": the digests differ").c_str());
-      if (stopped != Machine::StopReason::Reached)
-      {
-        break;
-      }
-    }
-    Assert::IsTrue(Elite::GameStateDigest(m_original.Host(), m_original.Program()) ==
-                     Elite::GameStateDigest(m_native.Host(), m_native.Program()),
-                   (Widen(m_name) + L": the two end in different states").c_str());
-    return stopped;
-  }
-
-  [[nodiscard]] std::filesystem::path Files(bool _native) const
-  {
-    return FilesOf(m_name + (_native ? "-Native" : "-Original"));
-  }
-
-private:
-  std::string m_name;
-  // What the interpreted twin runs once booted, made before the machine that marks it.
-  std::vector<std::uint8_t> m_executed;
-  ReferenceRig m_original;
-  ReferenceRig m_native;
-  Elite::ReplayPlayer m_originalPlayer;
-  Elite::ReplayPlayer m_nativePlayer;
-};
+      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET, 0);
+      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT, _program.loadSegment);
+    });
+  _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
+  _rig.Both(
+    [mouseOffset, mouseSegment](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    {
+      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET, mouseOffset);
+      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT, mouseSegment);
+    });
+  // The IBM stick, with nothing in the port and then with a stick in it.
+  _rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
+  constexpr std::array<std::size_t, 2> AXES = {0, 1};
+  _rig.Both(
+    [&AXES](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    {
+      for (const std::size_t axis : AXES)
+        _pc.Joystick().SetAxisResistance(axis, Machine::GamePort::MAXIMUM_OHMS / 2);
+    });
+  _rig.Play("key j; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest stick\nkey k; wait 0.05");
+  _rig.Both(
+    [&AXES](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    {
+      for (const std::size_t axis : AXES)
+        _pc.Joystick().SetAxisResistance(axis, Machine::GamePort::AXIS_DISCONNECTED);
+    });
+  // The Amstrad's, which never moves, and then sends codes from beyond the keyboard's before a key.
+  _rig.Play("key j; wait 0.05; key a; wait 0.05; key q; wait 0.05\ndigest amstrad-still\nkey j; wait 0.05; key a; wait 0.05");
+  _rig.Both(
+    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    {
+      constexpr std::array<std::uint8_t, 3> CODES = {0x60, 0x7D, 0x77};
+      for (const std::uint8_t code : CODES)
+        QueueScanCode(_pc, _program, code);
+    });
+  _rig.Play("key q; wait 0.05\ndigest amstrad-moved\nkey k; wait 0.05");
+  // Leaving for DOS, thought better of.
+  _rig.Play("key e; wait 0.05; key q; wait 0.05; key n; wait 0.05\ndigest stayed");
+  // AB1 saved, catalogued and deleted; then Z, which is not there, loaded, retried and given up.
+  _rig.Play("key s; wait 0.05; key a; down Shift_L; key b; up Shift_L; key 1; key Return; wait 0.1\ndigest saved\n"
+            "key c; wait 0.1\ndigest catalogued\n"
+            "key d; wait 0.05; key a; key b; key 1; key Return; wait 0.1\ndigest deleted\n"
+            "key l; wait 0.05; key z; key Return; wait 0.1\nkey q; wait 0.05; key y; wait 0.1\nkey n; wait 0.05\ndigest not-loaded");
+  // Nine characters typed keep eight, and a backspace takes one back: ABCDEFGI.
+  _rig.Play("key s; wait 0.05; key a; key b; key c; key d; key e; key f; key g; key h; key i; key BackSpace; key BackSpace; key i;"
+            " key Return; wait 0.1\ndigest long-name");
+  // Bad names: none, a digit or a bracket first, and then a minus, a semicolon or a bracket after a letter.
+  _rig.Play("key s; wait 0.05; key Return; wait 0.05\nkey s; wait 0.05; key 1; key Return; wait 0.05\n"
+            "key s; wait 0.05; key bracketleft; key Return; wait 0.05\nkey s; wait 0.05; key a; key minus; key Return; wait 0.05\n"
+            "key s; wait 0.05; key a; key semicolon; key Return; wait 0.05\n"
+            "key s; wait 0.05; key a; key bracketleft; key Return; wait 0.05\ndigest bad-names");
+  // From inside the last prompt's frame: a good name, saved; then, back in the menu after another bad one, the
+  // catalogue, and a function key out of the menu.
+  _rig.Play("key s; wait 0.05; key a; key Return; wait 0.1\ndigest saved-a\nkey s; wait 0.05; key Return; wait 0.05\n"
+            "key c; wait 0.1\ndigest catalogued-again\nkey s; wait 0.05; key Return; wait 0.05\nkey F9; wait 0.1\ndigest status");
+  Assert::IsTrue(Contents(_rig.Files(false)) == Contents(_rig.Files(true)), L"the twins wrote the same files");
+}
 
 } // namespace
 
@@ -233,77 +217,19 @@ public:
     rig.AssertAllAgreed(PRINT_COMMANDER_CATALOGUE, counts.size());
   }
 
-  // The Disc/Control menu's every path but leaving for DOS: the catalogue empty and with a name, the version, keys that do
-  // nothing, a mouse driver absent and present, the IBM stick and the Amstrad's, saving, deleting, a load that DOS fails
-  // and its retry, names cut at eight characters and edited, and every kind of bad name, each rejected into the menu's
-  // key loop from inside PromptCommanderFileName.
+  // Every path of the Disc/Control menu but leaving for DOS, each call of a work routine compared.
   TEST_METHOD(DiscMenuAgreesOnEveryPath)
   {
     TwinRig rig("TwinDiscMenu");
-    rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
-    rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-    // A mouse driver: int 33h pointing at code that is not an IRET.
-    const Machine::Memory& ram = rig.Original().Ram();
-    const std::uint16_t mouseOffset = ram.Read16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET);
-    const std::uint16_t mouseSegment = ram.Read16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT);
-    rig.Both(
-      [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-      {
-        _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET, 0);
-        _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT, _program.loadSegment);
-      });
-    rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
-    rig.Both(
-      [mouseOffset, mouseSegment](Machine::Pc& _pc, const Machine::LoadedProgram&)
-      {
-        _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET, mouseOffset);
-        _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT, mouseSegment);
-      });
-    // The IBM stick, with nothing in the port and then with a stick in it.
-    rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
-    constexpr std::array<std::size_t, 2> AXES = {0, 1};
-    rig.Both(
-      [&AXES](Machine::Pc& _pc, const Machine::LoadedProgram&)
-      {
-        for (const std::size_t axis : AXES)
-          _pc.Joystick().SetAxisResistance(axis, Machine::GamePort::MAXIMUM_OHMS / 2);
-      });
-    rig.Play("key j; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest stick\nkey k; wait 0.05");
-    rig.Both(
-      [&AXES](Machine::Pc& _pc, const Machine::LoadedProgram&)
-      {
-        for (const std::size_t axis : AXES)
-          _pc.Joystick().SetAxisResistance(axis, Machine::GamePort::AXIS_DISCONNECTED);
-      });
-    // The Amstrad's, which never moves, and then sends codes from beyond the keyboard's before a key.
-    rig.Play("key j; wait 0.05; key a; wait 0.05; key q; wait 0.05\ndigest amstrad-still\nkey j; wait 0.05; key a; wait 0.05");
-    rig.Both(
-      [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-      {
-        constexpr std::array<std::uint8_t, 3> CODES = {0x60, 0x7D, 0x77};
-        for (const std::uint8_t code : CODES)
-          QueueScanCode(_pc, _program, code);
-      });
-    rig.Play("key q; wait 0.05\ndigest amstrad-moved\nkey k; wait 0.05");
-    // Leaving for DOS, thought better of.
-    rig.Play("key e; wait 0.05; key q; wait 0.05; key n; wait 0.05\ndigest stayed");
-    // AB1 saved, catalogued and deleted; then Z, which is not there, loaded, retried and given up.
-    rig.Play("key s; wait 0.05; key a; down Shift_L; key b; up Shift_L; key 1; key Return; wait 0.1\ndigest saved\n"
-             "key c; wait 0.1\ndigest catalogued\n"
-             "key d; wait 0.05; key a; key b; key 1; key Return; wait 0.1\ndigest deleted\n"
-             "key l; wait 0.05; key z; key Return; wait 0.1\nkey q; wait 0.05; key y; wait 0.1\nkey n; wait 0.05\ndigest not-loaded");
-    // Nine characters typed keep eight, and a backspace takes one back: ABCDEFGI.
-    rig.Play("key s; wait 0.05; key a; key b; key c; key d; key e; key f; key g; key h; key i; key BackSpace; key BackSpace; key i;"
-             " key Return; wait 0.1\ndigest long-name");
-    // Bad names: none, a digit or a bracket first, and then a minus, a semicolon or a bracket after a letter.
-    rig.Play("key s; wait 0.05; key Return; wait 0.05\nkey s; wait 0.05; key 1; key Return; wait 0.05\n"
-             "key s; wait 0.05; key bracketleft; key Return; wait 0.05\nkey s; wait 0.05; key a; key minus; key Return; wait 0.05\n"
-             "key s; wait 0.05; key a; key semicolon; key Return; wait 0.05\n"
-             "key s; wait 0.05; key a; key bracketleft; key Return; wait 0.05\ndigest bad-names");
-    // From inside the last prompt's frame: a good name, saved; then, back in the menu after another bad one, the
-    // catalogue, and a function key out of the menu.
-    rig.Play("key s; wait 0.05; key a; key Return; wait 0.1\ndigest saved-a\nkey s; wait 0.05; key Return; wait 0.05\n"
-             "key c; wait 0.1\ndigest catalogued-again\nkey s; wait 0.05; key Return; wait 0.05\nkey F9; wait 0.1\ndigest status");
+    PlayEveryDiscMenuPath(rig);
+  }
+
+  // The same uncompared. PerformDiskRequest calls DOS, so a compared call of it keeps the original's outcome (ADR-010
+  // item 4): only here does its native code load, fail to load, list and delete.
+  TEST_METHOD(DiscMenuAgreesOnEveryPathUncompared)
+  {
+    TwinRig rig("TwinDiscMenuUncompared", {.compared = false});
+    PlayEveryDiscMenuPath(rig);
   }
 
   // Screenshots with SaveScreenshot's native code: of the galactic chart and of the file name prompt's text page, each
@@ -311,29 +237,40 @@ public:
   // ends the program. Both twins must write the same files.
   TEST_METHOD(ScreenshotsAndLeavingForDosAgreeUncompared)
   {
-    UncomparedTwin twin("TwinScreenshots");
-    Assert::IsTrue(twin.Play("key space; wait 3.3\nkey F5; wait 0.1") == Machine::StopReason::Reached, L"charted");
-    Assert::IsTrue(twin.Play(SCREENSHOT_KEYS) == Machine::StopReason::Reached, L"the chart saved");
+    TwinRig twin("TwinScreenshots", {.compared = false});
+    twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
+    twin.Play(SCREENSHOT_KEYS);
     // The numbers run '99', then '00', the name of a directory.
     twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
               { SetDataWord(_pc, _program, Elite::DS.screenshotNumber.offset, 0x3939); });
     for (const bool native : {false, true})
       std::filesystem::create_directories(twin.Files(native) / "ELITE00.HI");
-    Assert::IsTrue(twin.Play(SCREENSHOT_KEYS) == Machine::StopReason::Reached, L"the chart failed");
-    Assert::IsTrue(twin.Play("key Escape; wait 0.05; key s; wait 0.05") == Machine::StopReason::Reached, L"prompted");
+    twin.Play(SCREENSHOT_KEYS);
+    twin.Play("key Escape; wait 0.05; key s; wait 0.05");
     // '09', then '10'; then '11', a directory.
     twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
               { SetDataWord(_pc, _program, Elite::DS.screenshotNumber.offset, 0x3930); });
-    Assert::IsTrue(twin.Play(QUICK_SCREENSHOT_KEYS) == Machine::StopReason::Reached, L"the prompt saved");
+    twin.Play(QUICK_SCREENSHOT_KEYS);
     for (const bool native : {false, true})
       std::filesystem::create_directories(twin.Files(native) / "ELITE11.LO");
-    Assert::IsTrue(twin.Play(QUICK_SCREENSHOT_KEYS) == Machine::StopReason::Reached, L"the prompt failed");
-    Assert::IsTrue(twin.Play("key BackSpace; key BackSpace; key x; key Return; wait 0.1\ndigest saved") == Machine::StopReason::Reached,
-                   L"saved X");
-    Assert::IsTrue(twin.Play("key e; wait 0.05; key y; wait 0.5") == Machine::StopReason::Terminated, L"the program ended");
+    twin.Play(QUICK_SCREENSHOT_KEYS);
+    twin.Play("key BackSpace; key BackSpace; key x; key Return; wait 0.1\ndigest saved");
+    twin.Play("key e; wait 0.05; key y; wait 0.5", Machine::StopReason::Terminated);
     const std::map<std::string, std::string> original = Contents(twin.Files(false));
     Assert::IsTrue(original == Contents(twin.Files(true)), L"the twins wrote the same files");
     Assert::IsTrue(original.contains("ELITE01.HI") && original.contains("ELITE10.LO") && original.contains("X.CDR"), L"the files");
+  }
+
+  // A screenshot in flight, which PollScreenDumpKey takes from RunFlight's loop while Alt and PrtSc are down: its
+  // path to SaveScreenshot, which writes through DOS and so is never compared.
+  TEST_METHOD(ScreenshotInFlightAgreesUncompared)
+  {
+    TwinRig twin("TwinFlightScreenshot", {.compared = false});
+    twin.Play("key space; wait 3.3\nkey F1; wait 2\ndigest launched");
+    twin.Play("down Alt_L; down KP_Multiply; wait 0.1; up KP_Multiply; up Alt_L; wait 0.1\ndigest dumped");
+    const std::map<std::string, std::string> original = Contents(twin.Files(false));
+    Assert::IsTrue(original == Contents(twin.Files(true)), L"the twins wrote the same files");
+    Assert::IsTrue(original.contains("ELITE01.HI"), L"the screenshot");
   }
 };
 

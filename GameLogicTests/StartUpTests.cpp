@@ -2,12 +2,10 @@
 
 #include "ComparisonRig.h"
 #include "DataOverlay.h"
-#include "DirectoryFileStore.h"
 #include "Firmware.h"
 #include "StateDigest.h"
 #include "TwinRig.h"
 
-#include <memory>
 #include <string_view>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -43,120 +41,6 @@ void AssertAtTheTitle(TwinRig& _rig)
     });
 }
 
-// The reference loaded as ReferenceRig loads it, but with DOS's clock starting at a moment of the test's
-// own.
-class MomentRig
-{
-public:
-  MomentRig(std::string_view _name, const Machine::Dos::DateTime& _moment)
-    : m_directory(_name),
-      m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_moment)))
-  {
-    m_pc->SetTimeMode(Machine::TimeMode::Paced);
-    const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
-    m_loaded = Elite::LoadReference(*m_pc, file, Elite::PSP_SEGMENT, m_program) == Elite::ReferenceFailure::None;
-  }
-
-  [[nodiscard]] bool Loaded() const noexcept
-  {
-    return m_loaded;
-  }
-
-  [[nodiscard]] Machine::Pc& Host() noexcept
-  {
-    return *m_pc;
-  }
-
-  [[nodiscard]] const Machine::LoadedProgram& Program() const noexcept
-  {
-    return m_program;
-  }
-
-private:
-  [[nodiscard]] static Machine::Pc::Desc Desc(const Machine::Dos::DateTime& _moment) noexcept
-  {
-    Machine::Pc::Desc desc;
-    desc.startMoment = _moment;
-    return desc;
-  }
-
-  ScratchDirectory m_directory;
-  Machine::DirectoryFileStore m_files;
-  std::unique_ptr<Machine::Pc> m_pc;
-  Machine::LoadedProgram m_program;
-  bool m_loaded = false;
-};
-
-// TwinRig's two machines, from the power-on of a machine whose clock starts at _moment, and as far as
-// the end of the program: how a test drives Start through paths no replay takes. Both twins boot with
-// what they run recorded, the native one with every work call compared; each step must stop both for
-// the same reason, every digest must agree, and so must the state they end in.
-class StartUpTwin
-{
-public:
-  StartUpTwin(std::string_view _name, const Machine::Dos::DateTime& _moment)
-    : m_name(_name),
-      m_original(m_name + "-Original", _moment),
-      m_native(m_name + "-Native", _moment),
-      m_originalPlayer(m_original.Host(), m_original.Program()),
-      m_nativePlayer(m_native.Host(), m_native.Program())
-  {
-    Assert::IsTrue(m_original.Loaded() && m_native.Loaded(), L"ELITES.EXE at the repository root");
-    m_original.Host().Processor().SetExecutionMap(&m_executed);
-    Elite::InstallNativeRoutines(m_native.Host(), m_native.Program());
-    m_native.Host().Native().SetVerifying(true);
-  }
-
-  StartUpTwin(const StartUpTwin&) = delete;
-  StartUpTwin& operator=(const StartUpTwin&) = delete;
-  StartUpTwin(StartUpTwin&&) = delete;
-  StartUpTwin& operator=(StartUpTwin&&) = delete;
-
-  ~StartUpTwin()
-  {
-    SaveExecutedOffsets(m_name, m_executed, m_original.Program());
-    SaveNativeReport(m_name, m_native.Host().Native());
-  }
-
-  /// As TwinRig::Both.
-  template <typename Change> void Both(Change _change)
-  {
-    _change(m_original.Host(), m_original.Program());
-    _change(m_native.Host(), m_native.Program());
-  }
-
-  /// Plays _steps on both machines: each must reach its end, but for the last, which must stop both
-  /// with _end.
-  void Play(std::string_view _steps, Machine::StopReason _end = Machine::StopReason::Reached)
-  {
-    std::vector<Elite::Step> steps;
-    std::string error;
-    Assert::IsTrue(Elite::ParseSteps(_steps, steps, error), L"parses");
-    for (std::size_t index = 0; index < steps.size(); ++index)
-    {
-      std::string original;
-      std::string native;
-      const Machine::StopReason expected = index + 1 == steps.size() ? _end : Machine::StopReason::Reached;
-      Assert::IsTrue(m_originalPlayer.Play(steps[index], original) == expected, L"the interpreted run stops as it should");
-      Assert::IsTrue(m_nativePlayer.Play(steps[index], native) == expected, L"the native run stops as it should");
-      Assert::IsTrue(original == native, L"the digests agree");
-    }
-    Assert::IsTrue(Elite::GameStateDigest(m_original.Host(), m_original.Program()) ==
-                     Elite::GameStateDigest(m_native.Host(), m_native.Program()),
-                   L"the two end in one state");
-    Assert::IsTrue(m_native.Host().Native().Mismatches().empty(), L"every compared call agreed");
-  }
-
-private:
-  std::string m_name;
-  std::vector<std::uint8_t> m_executed; // made before the machine that marks it, so that it outlives it
-  MomentRig m_original;
-  MomentRig m_native;
-  Elite::ReplayPlayer m_originalPlayer;
-  Elite::ReplayPlayer m_nativePlayer;
-};
-
 } // namespace
 
 // Constructed inputs for start-up (plan §6.3): the command tails, start moments and ways out no replay
@@ -187,7 +71,7 @@ public:
   // WipeProgram and ExitToDos, to the end of the program.
   TEST_METHOD(StartAgreesLateInAMinuteAndOnTheWayOut)
   {
-    StartUpTwin twin("TwinStartAndExit", Machine::Dos::DateTime{1980, 1, 1, 0, 0, 55, 0});
+    TwinRig twin("TwinStartAndExit", {.startMoment = Machine::Dos::DateTime{1980, 1, 1, 0, 0, 55, 0}, .fromPowerOn = true});
     twin.Play("wait 3\ndigest title\nkey space; wait 3.2\nkey Escape; wait 0.2\nkey e; wait 0.2\ndigest exit-asked");
     twin.Both(
       [](Machine::Pc& _pc, const Machine::LoadedProgram&)

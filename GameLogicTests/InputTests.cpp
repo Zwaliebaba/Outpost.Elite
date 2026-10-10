@@ -26,6 +26,7 @@ constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t READ_JOYSTICK_AXES = 0x777E;
 constexpr std::uint16_t READ_JOYSTICK_STEERING = 0x77C1;
 constexpr std::uint16_t READ_MOUSE_STEERING = 0x797E;
+constexpr std::uint16_t RESET_MOUSE_IF_SELECTED = 0x7F5D;
 constexpr std::uint16_t APPLY_REVERSE_CONTROLS = 0x8EA5;
 constexpr std::uint16_t APPLY_REVERSE_CONTROLS_TO_DX = 0x8EBA;
 
@@ -38,6 +39,10 @@ constexpr std::uint16_t MIDDLE_COUNT = 60100;      // ReadJoystickAxes counts up
 constexpr std::uint16_t SMALL_CENTER = 100;
 constexpr std::uint16_t MOUSE_VECTOR_OFFSET = 0x33 * 4; // int 33h's, in the table at 0000:0000
 constexpr std::uint16_t MOUSE_VECTOR_SEGMENT = MOUSE_VECTOR_OFFSET + 2;
+// A stand-in mouse driver's code, in the BIOS's inter-application area at 0000:04F0, which nothing else uses.
+constexpr std::uint16_t MOUSE_DRIVER = 0x04F0;
+constexpr std::uint8_t MOV_AX = 0xB8;
+constexpr std::uint8_t IRET = 0xCF;
 
 void Poke(ComparisonRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
@@ -47,6 +52,17 @@ void Poke(ComparisonRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8
 void Poke(ComparisonRig& _rig, Elite::DataField<std::uint16_t> _field, std::uint16_t _value)
 {
   _rig.Host().Ram().Write16(Elite::DataSegment(_rig.Program()), _field.offset, _value);
+}
+
+// Points int 33h at a stand-in driver that answers every call with AX = _ax: MOV AX,_ax; IRET.
+void InstallMouseDriver(ComparisonRig& _rig, std::uint16_t _ax)
+{
+  Machine::Memory& memory = _rig.Host().Ram();
+  memory.Write8(0, MOUSE_DRIVER, MOV_AX);
+  memory.Write16(0, MOUSE_DRIVER + 1, _ax);
+  memory.Write8(0, MOUSE_DRIVER + 3, IRET);
+  memory.Write16(0, MOUSE_VECTOR_OFFSET, MOUSE_DRIVER);
+  memory.Write16(0, MOUSE_VECTOR_SEGMENT, 0);
 }
 
 // Calls an interrupt handler as the CPU enters one: the flags, with interrupts off, then CS and the return
@@ -168,7 +184,8 @@ public:
     rig.AssertAllAgreed(KEYBOARD_INTERRUPT, calls);
   }
 
-  // The Amstrad's stick and mouse by their key codes, and the IBM stick's two buttons.
+  // The Amstrad's stick and mouse by their key codes, the IBM stick's two buttons, and the mouse through int 33h: with no
+  // driver, the ROM's IRET, and with one that reports neither button, the left or the right.
   TEST_METHOD(ReadFireButtonAgreesOnEveryDevice)
   {
     ComparisonRig rig("ReadFireButton");
@@ -201,7 +218,27 @@ public:
       Poke(rig, DS.keyDownAmstradMouseLeft, pressed);
       read();
     }
+    Poke(rig, DS.amstradPresent, 0);
+    read();
+    for (const std::uint8_t buttons : Bytes{0, 1, 2})
+    {
+      InstallMouseDriver(rig, buttons);
+      read();
+    }
     rig.AssertAllAgreed(READ_FIRE_BUTTON, calls);
+  }
+
+  // Another device, and the mouse with no driver (the ROM's IRET) and with one, which answers a reset with FFFFh.
+  TEST_METHOD(ResetMouseIfSelectedAgreesWithAndWithoutTheMouse)
+  {
+    ComparisonRig rig("ResetMouseIfSelected");
+    Poke(rig, DS.inputDevice, 1);
+    rig.Call(RESET_MOUSE_IF_SELECTED, {.ax = 0x1111, .bx = 0x2222});
+    Poke(rig, DS.inputDevice, 2);
+    rig.Call(RESET_MOUSE_IF_SELECTED, {.ax = 0x1111, .bx = 0x2222});
+    InstallMouseDriver(rig, 0xFFFF);
+    rig.Call(RESET_MOUSE_IF_SELECTED, {.ax = 0x1111, .bx = 0x2222});
+    rig.AssertAllAgreed(RESET_MOUSE_IF_SELECTED, 3);
   }
 
   // The Amstrad's stick, whose keys go through the keyboard's rates, and the IBM stick: absent, at either end of
@@ -387,8 +424,7 @@ public:
   // cycles it counts for the original's instructions, and waits where the interpreted one waits.
   TEST_METHOD(IbmStickSteersTheChartNatively)
   {
-    TwinRig rig("TwinStickNative");
-    rig.Native().Native().SetVerifying(false);
+    TwinRig rig("TwinStickNative", {.compared = false});
     SteerTheChartWithTheStick(rig);
   }
 
