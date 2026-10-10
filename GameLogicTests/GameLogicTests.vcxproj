@@ -94,6 +94,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp" />
+    <ClCompile Include="SceneTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="VideoTests.cpp" />
   </ItemGroup>

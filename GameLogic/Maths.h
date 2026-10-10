@@ -16,6 +16,17 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> MathsEntries() noexcept;
 
+/// DivideOverflowInterrupt (CS:025E), the int 0 handler: saves BX and DS at CS:02A1/02A3 and leaves
+/// AL = 7Fh or AX = 7FFFh, the remainder untouched, as bit 0 of the opcode two bytes before the return
+/// address says. An 80286 pushes the divide's own address, so it steps the return address over a
+/// DIV or IDIV it finds there, assuming a register operand.
+void DivideOverflowInterrupt(Guest& _guest);
+
+/// DIV r/m16 by _divisor, in native code: DX:AX / _divisor to AX, the remainder to DX, or, when the
+/// quotient does not fit, what DivideOverflowInterrupt does for the divide whose next instruction is at
+/// CS:_returnOffset. That instruction must not itself be a divide.
+void DivideUnsigned(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset);
+
 /// NextRandom (CS:061C): the lagged-Fibonacci step on randomState0-2. Out: AX.
 void NextRandom(Guest& _guest);
 
@@ -45,5 +56,48 @@ void RatioArcTangent(Guest& _guest);
 /// AngleWithinTolerance (CS:2CDB): DX = |AX-CX| as 11-bit angles, less BX; CF set if within. CX comes
 /// back sign-extended.
 void AngleWithinTolerance(Guest& _guest);
+
+/// VectorLength (CS:2E96): sqrt(AX^2 + BX^2 + CX^2) of signed words, from the top 16 significant bits of
+/// the 32-bit sum, by subtracting odd numbers. Out: AX; BX, CX, DX clobbered.
+void VectorLength(Guest& _guest);
+
+/// ObjectWithinBox (CS:2F65): VectorWithinBox on the low words of slot DI's position.
+void ObjectWithinBox(Guest& _guest);
+
+/// VectorWithinBox (CS:2F6E): CF set if |AX|, |BX| and |CX| are all below DX, stopping at the first
+/// that is not. AX, BX, CX clobbered.
+void VectorWithinBox(Guest& _guest);
+
+/// RotatePitchYawRoll (CS:3EAC): (y, z) by rotationSinCos[0], (x, z) by [1], (x, y) by [2]. In and
+/// out: AX, BX, CX = x, y, z; DX is left as the last RotateBySinCos leaves it.
+void RotatePitchYawRoll(Guest& _guest);
+
+/// RotateBySinCos7210 (CS:3F02): (y, z) by rotationSinCos[7], then (x, y) by [2], (x, z) by [1] and
+/// (y, z) by [0]. In and out: AX, BX, CX = x, y, z; DX as the last RotateBySinCos leaves it.
+void RotateBySinCos7210(Guest& _guest);
+
+/// ScaleByInverseDistance (CS:40A4): DX:AX shifted right by slot DI's scale shift (+0Ah), over 256
+/// times one more than the square root of the high word of the view position's squared length. Out:
+/// AX at most 255, BX the divisor; CX, DX clobbered.
+void ScaleByInverseDistance(Guest& _guest);
+
+/// ShiftRight24 (CS:4326): DL:AX shifted arithmetically right DH times. Out: DL:AX, DH = 0.
+void ShiftRight24(Guest& _guest);
+
+/// GetPositionScaleShift (CS:4333): the shift that brings the largest magnitude of slot DI's 24-bit
+/// coordinates below 10000h and then below 24B8h. Out: CL, BX the shifted magnitude; AX, DX clobbered.
+void GetPositionScaleShift(Guest& _guest);
+
+/// ScalePositionDown (CS:439E): slot DI's 24-bit coordinates shifted right by DH. Out: AX, BX, CX = x,
+/// y, z; DX, BP clobbered.
+void ScalePositionDown(Guest& _guest);
+
+/// ComputeAnglesToObject (CS:4ECF): the two angles of the direction of slot DI's position, by
+/// ArcTangent2 and rotation slot 6. Out: AX, BX; CX, DX, BP clobbered.
+void ComputeAnglesToObject(Guest& _guest);
+
+/// ConvertVectorToAngles (CS:4F08): the two angles, negated, of the direction (AX, BX, CX) / 4, by
+/// ArcTangent2 and rotation slot 8. Out: AX, BX; CX, DX, BP clobbered.
+void ConvertVectorToAngles(Guest& _guest);
 
 } // namespace Elite
