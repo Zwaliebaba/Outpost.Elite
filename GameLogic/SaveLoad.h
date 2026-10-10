@@ -23,10 +23,6 @@ void CriticalErrorInterrupt(Guest& _guest);
 /// else lists the *.cdr files into commanderFileList. diskError=1 on a failure. AX, BX, CX, DX, SI and DI clobbered.
 void PerformDiskRequest(Guest& _guest);
 
-/// ShowDiskError (CS:0470): diskError cleared and "DISC ERROR" shown, on the text page or drawn on the graphics
-/// screen. Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
-void ShowDiskError(Guest& _guest);
-
 /// ShowDiscControlScreen (CS:660B): the Disc/Control menu, or, back from Start's disk work, what it came to. It
 /// waits for keys. A function key returns, with AH its scan code; a disk operation (or leaving for DOS) drops this
 /// call's return address and RunTitleAndDocked's, through LeaveGameLoopForDisk, so that its RET returns from GameLoop
@@ -44,11 +40,17 @@ void PrintCommanderCatalogue(Guest& _guest);
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
+/// ShowDiskError (CS:0470): diskError cleared and diskErrorText shown: its characters over the text page's when
+/// screenLayout says the text page shows, and drawn in colour 3 on the graphics screen otherwise.
+void ShowDiskError(GameState& _state);
+
 /// SaveStartupCommander (CS:4660): commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time,
 /// going up, or down from each start when _backward (REP MOVSB with the direction flag set).
 void SaveStartupCommander(GameState& _state, bool _backward);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
+
+void ShowDiskErrorEntry(Guest& _guest); ///< Out: ES=B800h; AX, BX, CX, SI, DI clobbered.
 
 void SaveStartupCommanderEntry(Guest& _guest); ///< AX, CX, SI, DI and ES clobbered.
 

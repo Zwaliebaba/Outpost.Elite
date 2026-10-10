@@ -76,14 +76,13 @@ constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 constexpr std::uint8_t SCAN_KEYPAD_5 = 0x4C;
 
-// The control codes' handlers as textControlCodes holds them, and where they return to.
+// The control codes' handlers as textControlCodes holds them.
 constexpr std::uint16_t INSERT_SYSTEM_NAME = 0x707A;
 constexpr std::uint16_t INSERT_SYSTEM_ADJECTIVE = 0x708D;
 constexpr std::uint16_t INSERT_RANDOM_NAME = 0x70C1;
 constexpr std::uint16_t BACKSPACE_DESCRIPTION = 0x7107;
 constexpr std::uint16_t START_CAPITALIZING = 0x7109;
 constexpr std::uint16_t STOP_CAPITALIZING = 0x710F;
-constexpr std::uint16_t RESUME_TEXT_EXPANSION = 0x7051;
 
 constexpr std::uint8_t SPACE = 0x20;
 constexpr std::uint8_t DECIMAL_POINT = 0x2E;
@@ -261,65 +260,93 @@ std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to
   return moved;
 }
 
-// What one pass of PlaceChartLabels over chartItems finds.
-struct ChartItemSearch
+// One pass of PlaceChartLabels over chartItems (CS:152B): whether an item overlaps the label with x range _x and
+// rows _rows. It stops at the first that does, and LOOP counts chartItemCount items, 65,536 for 0.
+[[nodiscard]] bool AnyChartItemOverlaps(const GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
-  bool overlaps;           ///< an item overlaps the label
-  std::uint16_t item;      ///< the item that does, or the place after the last item
-  std::uint16_t itemsLeft; ///< the items from that one on, as LOOP leaves CX; 0 when none does
-};
-
-// One pass of PlaceChartLabels over chartItems (CS:152B): the first item the label with x range _x and rows _rows
-// overlaps.
-[[nodiscard]] ChartItemSearch AnyChartItemOverlaps(const GameState& _state, ChartSpan _x, ChartSpan _rows)
-{
-  ChartItemSearch search{.overlaps = false, .item = DS.chartItems.offset, .itemsLeft = _state.Get(DS.chartItemCount)};
+  std::uint16_t item = DS.chartItems.offset;
+  std::uint16_t itemsLeft = _state.Get(DS.chartItemCount);
   do
   {
-    if (ChartItemOverlaps(_state, search.item, _x, _rows))
+    if (ChartItemOverlaps(_state, item, _x, _rows))
     {
-      search.overlaps = true;
-      return search;
+      return true;
     }
-    search.item = Offset(search.item, CHART_ITEM_BYTES);
-  } while (--search.itemsLeft != 0);
-  return search;
+    item = Offset(item, CHART_ITEM_BYTES);
+  } while (--itemsLeft != 0);
+  return false;
 }
 
-// jmp [bx] to a control code's handler, with SI and the return to ResumeTextExpansion pushed; the
-// handler returns there, which pops SI.
-void RunTextControlCode(Guest& _guest, std::uint16_t _handler)
+// A control code's handler, as textControlCodes holds it, and its value routine.
+struct TextControlHandler
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t text = regs.si;
-  switch (_handler)
+  std::uint16_t offset;
+  DescriptionOutput (*run)(GameState&, std::uint16_t); // with the output's place
+};
+
+constexpr std::array<TextControlHandler, 6> TEXT_CONTROL_HANDLERS = {{
+  {INSERT_SYSTEM_NAME, &InsertSystemName},
+  {INSERT_SYSTEM_ADJECTIVE, &InsertSystemAdjective},
+  {INSERT_RANDOM_NAME, &InsertRandomName},
+  {BACKSPACE_DESCRIPTION, [](GameState&, std::uint16_t _output) { return DescriptionOutput{BackspaceDescription(_output), std::nullopt}; }},
+  {START_CAPITALIZING,
+   [](GameState& _state, std::uint16_t _output)
+   {
+     StartCapitalizing(_state);
+     return DescriptionOutput{_output, std::nullopt};
+   }},
+  {STOP_CAPITALIZING,
+   [](GameState& _state, std::uint16_t _output)
+   {
+     StopCapitalizing(_state);
+     return DescriptionOutput{_output, std::nullopt};
+   }},
+}};
+
+// jmp [bx] to the control code handler at CS:_handler, with SI and the return to ResumeTextExpansion pushed; the
+// handler returns there, which pops SI. The stack keeps no more than SI and the way back, so the handler's value
+// routine runs on the output at DS:_output. Codes 7-31 jump into descriptionPhraseLists, whose words the original
+// would run as code, and so would a code whose handler a description had written over; the routine runs nothing for
+// them. No text in the game holds such a code, and no description reaches textControlCodes: the longest is 144 bytes
+// of descriptionBuffer's 256.
+DescriptionOutput RunTextControlCode(GameState& _state, std::uint16_t _handler, std::uint16_t _output)
+{
+  for (const TextControlHandler& handler : TEXT_CONTROL_HANDLERS)
   {
-  case INSERT_SYSTEM_NAME:
-    InsertSystemName(_guest);
-    break;
-  case INSERT_SYSTEM_ADJECTIVE:
-    InsertSystemAdjective(_guest);
-    break;
-  case INSERT_RANDOM_NAME:
-    InsertRandomName(_guest);
-    break;
-  case BACKSPACE_DESCRIPTION:
-    BackspaceDescriptionEntry(_guest);
-    break;
-  case START_CAPITALIZING:
-    StartCapitalizingEntry(_guest);
-    break;
-  case STOP_CAPITALIZING:
-    StopCapitalizingEntry(_guest);
-    break;
-  default:
-    // Codes 7-31 jump into descriptionPhraseLists, which no text uses: run whatever is there.
-    _guest.Push(text);
-    _guest.Call(_handler);
-    regs.si = _guest.Pop();
-    return;
+    if (handler.offset == _handler)
+    {
+      return handler.run(_state, _output);
+    }
   }
-  regs.si = text;
+  return DescriptionOutput{_output, std::nullopt};
+}
+
+// What the expansion of _inner leaves of _outer: the inner one's place, and the last random name made in either.
+void ContinueOutput(DescriptionOutput& _outer, const DescriptionOutput& _inner)
+{
+  _outer.next = _inner.next;
+  if (_inner.lastRandomName)
+  {
+    _outer.lastRandomName = _inner.lastRandomName;
+  }
+}
+
+// The pair of letters GenerateSystemName reads last from _seeds, whether or not it writes it: its pick is systemSeed2's
+// high byte after three twists.
+[[nodiscard]] std::uint16_t LastNamePair(const GameState& _state, SystemSeeds _seeds)
+{
+  SystemSeeds seeds = _seeds;
+  for (std::uint16_t pair = 1; pair < SYSTEM_NAME_PAIRS; ++pair)
+  {
+    seeds = SystemSeeds{seeds.seed1, seeds.seed2, static_cast<std::uint16_t>(seeds.seed0 + seeds.seed1 + seeds.seed2)};
+  }
+  return _state.Word(Offset(DS.systemNameDigrams.offset, static_cast<std::uint16_t>((High(seeds.seed2) & 0x1F) << 1)));
+}
+
+// What GenerateSystemName leaves in DX for _name: the length in DH, and in DL bit 6 of the seed it began from.
+[[nodiscard]] std::uint16_t RandomNameDx(RandomName _name) noexcept
+{
+  return Join(_name.length, _name.fourthPair);
 }
 
 // A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (DX, BX) across and down, as two clipped
@@ -660,30 +687,55 @@ struct ByteComparison
   return comparison;
 }
 
-// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B).
-void ShowNotOnMap(Guest& _guest)
+// What ShowNotOnMap draws: its three parts, the name as typed between the other two.
+struct NotOnMapMessage
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.findErrorPrefix.offset;
-  regs.di = CHART_TEXT_LINE_2;
-  regs.bx = INK_3;
-  _guest.Call(DRAW_SCREEN_STRING);
-  regs.si = DS.findInputEcho.offset;
-  regs.bx = INK_2;
-  _guest.Call(DRAW_SCREEN_STRING);
-  regs.si = DS.findErrorSuffix.offset;
-  regs.bx = INK_3;
-  _guest.Call(DRAW_SCREEN_STRING);
+  PrintedText prefix;
+  PrintedText name;
+  PrintedText suffix;
+};
+
+// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B), at _segment.
+NotOnMapMessage ShowNotOnMap(GameState& _state, std::uint16_t _segment)
+{
+  NotOnMapMessage message{};
+  message.prefix = DrawScreenString(_state, DS.findErrorPrefix.offset, INK_3, _segment, CHART_TEXT_LINE_2);
+  message.name = DrawScreenString(_state, DS.findInputEcho.offset, INK_2, _segment, message.prefix.nextCell);
+  message.suffix = DrawScreenString(_state, DS.findErrorSuffix.offset, INK_3, _segment, message.name.nextCell);
+  return message;
 }
 
-// PrintTextModeString of the text whose pointer is _bytes into _table, with AX = _bytes.
-void PrintNamed(Guest& _guest, std::uint16_t _table, std::uint16_t _bytes)
+// ShowNotOnMap at ES, and the registers as the original leaves them: DrawScreenString's SI, DI and AX for the
+// suffix, and BX its ink.
+void ShowNotOnMapOnRegisters(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  regs.ax = _bytes;
-  regs.bx = Offset(_table, regs.ax);
-  regs.si = _guest.Word(regs.bx);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
+  const NotOnMapMessage message = ShowNotOnMap(_guest.State(), regs.es);
+  regs.ax = DrawnScreenStringAx(_guest.State(), DS.findErrorPrefix.offset, message.prefix, INK_3, regs.ax);
+  regs.ax = DrawnScreenStringAx(_guest.State(), DS.findInputEcho.offset, message.name, INK_2, regs.ax);
+  regs.ax = DrawnScreenStringAx(_guest.State(), DS.findErrorSuffix.offset, message.suffix, INK_3, regs.ax);
+  regs.si = message.suffix.end;
+  regs.di = message.suffix.nextCell;
+  regs.bx = INK_3;
+}
+
+// PrintTextModeString, at B800:_cell, of the text whose pointer is _bytes into the table at DS:_table.
+PrintedText PrintNamed(GameState& _state, std::uint16_t _table, std::uint16_t _bytes, std::uint16_t _cell)
+{
+  return PrintTextModeString(_state, _state.Word(Offset(_table, _bytes)), _cell);
+}
+
+// PrintNamed from DI, and the registers as the original leaves them: BX the pointer's place, and PrintTextModeString's
+// SI, DI, ES and AX.
+void PrintNamedOnRegisters(Guest& _guest, std::uint16_t _table, std::uint16_t _bytes)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const PrintedText printed = PrintNamed(_guest.State(), _table, _bytes, regs.di);
+  regs.bx = Offset(_table, _bytes);
+  regs.si = printed.end;
+  regs.di = printed.nextCell;
+  regs.es = Guest::VIDEO_SEGMENT;
+  regs.ax = Join(_guest.Get(DS.textAttribute), 0);
 }
 
 } // namespace
@@ -942,7 +994,7 @@ void FindNearestSystem(Guest& _guest)
   }
   regs.cx = static_cast<std::uint16_t>(GALAXY_SYSTEMS - regs.bp);
   _guest.Set(DS.selectedSystemIndex, Low(regs.cx));
-  LoadSystemSeeds(_guest);
+  LoadSystemSeedsEntry(_guest);
   MoveCursorToSystemEntry(_guest);
 }
 
@@ -1001,14 +1053,13 @@ void ShowNearestSystemDistance(Guest& _guest)
   _guest.Call(DRAW_SCREEN_STRING);
 }
 
-void LoadSystemSeeds(Guest& _guest)
+void LoadSystemSeeds(GameState& _state, std::uint8_t _system)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = Low(regs.cx);
-  LoadGalaxySeedsEntry(_guest);
-  for (; regs.cx != 0; --regs.cx)
+  LoadGalaxySeeds(_state);
+  // Four TwistSystemSeeds a system, as AdvanceToNextSystem makes them.
+  for (std::uint8_t left = _system; left != 0; --left)
   {
-    AdvanceToNextSystemEntry(_guest);
+    AdvanceToNextSystem(_state);
   }
 }
 
@@ -1149,7 +1200,7 @@ void FindSystemByName(Guest& _guest)
       if (!_guest.Flag(Machine::FLAG_CARRY))
       {
         _guest.JumpBack(FIND_NOT_ON_MAP);
-        ShowNotOnMap(_guest);
+        ShowNotOnMapOnRegisters(_guest);
         return;
       }
       _guest.Call(MOVE_CURSOR_TO_SYSTEM);
@@ -1165,7 +1216,7 @@ void FindSystemByName(Guest& _guest)
   }
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = regs.ax;
-  ShowNotOnMap(_guest);
+  ShowNotOnMapOnRegisters(_guest);
 }
 
 void DrawChartItems(Guest& _guest)
@@ -1204,44 +1255,35 @@ void DrawChartItems(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
-void PlaceChartLabels(Guest& _guest)
+void PlaceChartLabels(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  SetLow(regs.ax, _guest.Get(DS.chartItemCount));
-  if (Low(regs.ax) == 0)
+  const std::uint8_t labels = _state.Get(DS.chartItemCount);
+  if (labels == 0)
   {
     return;
   }
-  _guest.Set(DS.labelsLeftToPlace, Low(regs.ax));
-  regs.di = DS.pendingChartLabels.offset;
-  _guest.Set(DS.chartLabelCursor, regs.di);
+  _state.Set(DS.labelsLeftToPlace, labels);
+  _state.Set(DS.chartLabelCursor, DS.pendingChartLabels.offset);
   do
   {
-    regs.di = _guest.Get(DS.chartLabelCursor);
-    regs.dx = _guest.Word(regs.di);
-    regs.bx = _guest.Word(static_cast<std::uint16_t>(regs.di + 2));
-    regs.di = static_cast<std::uint16_t>(regs.di + 4);
-    _guest.Set(DS.chartLabelCursor, regs.di);
-    _guest.Set(DS.labelNudgeCount, 0);
-    for (;;)
+    // The label's x range and rows, then its name.
+    const std::uint16_t label = _state.Get(DS.chartLabelCursor);
+    const ChartSpan x = SpanOf(_state.Word(label));
+    ChartSpan rows = SpanOf(_state.Word(Offset(label, 2)));
+    _state.Set(DS.chartLabelCursor, Offset(label, 4));
+    _state.Set(DS.labelNudgeCount, 0);
+    while (AnyChartItemOverlaps(_state, x, rows))
     {
-      // The pass leaves DI on the item it stopped at and CX the items it had left.
-      const ChartItemSearch search = AnyChartItemOverlaps(_guest.State(), SpanOf(regs.dx), SpanOf(regs.bx));
-      regs.di = search.item;
-      regs.cx = search.itemsLeft;
-      if (!search.overlaps)
-      {
-        break;
-      }
-      NudgeChartLabelEntry(_guest);
-      if (!Carry(regs))
+      const LabelNudge nudge = NudgeChartLabel(_state, rows);
+      rows = nudge.rows;
+      if (!nudge.moved)
       {
         break;
       }
     }
-    AddChartLabelEntry(_guest);
-    _guest.Set(DS.labelsLeftToPlace, static_cast<std::uint8_t>(_guest.Get(DS.labelsLeftToPlace) - 1));
-  } while (_guest.Get(DS.labelsLeftToPlace) != 0);
+    AddChartLabel(_state, x, rows);
+    _state.Set(DS.labelsLeftToPlace, static_cast<std::uint8_t>(_state.Get(DS.labelsLeftToPlace) - 1));
+  } while (_state.Get(DS.labelsLeftToPlace) != 0);
 }
 
 void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows)
@@ -1303,15 +1345,10 @@ bool ChartItemOverlaps(const GameState& _state, std::uint16_t _item, ChartSpan _
   return itemX.last >= _x.first && _x.last >= itemX.first && itemRows.last >= _rows.first && _rows.last >= itemRows.first;
 }
 
-void ClearChartTextLines(Guest& _guest)
+PrintedText ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.blankChartLine.offset;
-  regs.di = CHART_TEXT_LINE_1;
-  _guest.Call(DRAW_SCREEN_STRING);
-  regs.si = DS.blankChartLine.offset;
-  regs.di = CHART_TEXT_LINE_2;
-  _guest.Call(DRAW_SCREEN_STRING);
+  DrawScreenString(_state, DS.blankChartLine.offset, _ink, _segment, CHART_TEXT_LINE_1);
+  return DrawScreenString(_state, DS.blankChartLine.offset, _ink, _segment, CHART_TEXT_LINE_2);
 }
 
 void ShowSystemDataScreen(Guest& _guest)
@@ -1333,11 +1370,11 @@ void ShowSystemDataScreen(Guest& _guest)
   regs.si = ECONOMY_LABEL;
   regs.di = ECONOMY_ROW;
   _guest.Call(PRINT_TEXT_MODE_STRING);
-  PrintNamed(_guest, DS.economyNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedEconomy) << 1));
+  PrintNamedOnRegisters(_guest, DS.economyNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedEconomy) << 1));
   regs.si = GOVERNMENT_LABEL;
   regs.di = GOVERNMENT_ROW;
   _guest.Call(PRINT_TEXT_MODE_STRING);
-  PrintNamed(_guest, DS.governmentNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedGovernment) << 1));
+  PrintNamedOnRegisters(_guest, DS.governmentNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedGovernment) << 1));
   regs.si = TECH_LEVEL_LABEL;
   regs.di = TECH_LEVEL_ROW;
   _guest.Call(PRINT_TEXT_MODE_STRING);
@@ -1383,10 +1420,10 @@ void ShowSystemDataScreen(Guest& _guest)
   else
   {
     // shl al,1 on each byte, then xor ah,ah.
-    PrintNamed(_guest, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1));
-    PrintNamed(_guest, DS.speciesColorNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective2) << 1));
-    PrintNamed(_guest, DS.speciesTraitNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective3) << 1));
-    PrintNamed(_guest, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesType) << 1));
+    PrintNamedOnRegisters(_guest, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1));
+    PrintNamedOnRegisters(_guest, DS.speciesColorNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective2) << 1));
+    PrintNamedOnRegisters(_guest, DS.speciesTraitNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective3) << 1));
+    PrintNamedOnRegisters(_guest, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesType) << 1));
   }
 
   // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
@@ -1455,7 +1492,7 @@ void ShowSystemDescription(Guest& _guest)
   }
   regs.di = DS.descriptionBuffer.offset;
   regs.si = DS.descriptionTemplate.offset;
-  ExpandDescriptionText(_guest);
+  ExpandDescriptionTextEntry(_guest);
   _guest.SetByte(regs.di, 0);
 
   // Word-wrapped at the last space within 36 characters, a text row at a time.
@@ -1489,125 +1526,82 @@ void ShowSystemDescription(Guest& _guest)
   }
 }
 
-void ExpandDescriptionText(Guest& _guest)
+ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::uint16_t _output)
 {
-  Machine::Registers& regs = _guest.Regs();
+  ExpandedText expanded{_text, DescriptionOutput{_output, std::nullopt}};
   for (;;)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    ++regs.si;
-    const std::uint8_t code = Low(regs.ax);
+    const std::uint8_t code = _state.Byte(expanded.end);
+    expanded.end = Offset(expanded.end, 1);
     if (code == 0)
     {
-      return;
+      return expanded;
     }
     if (code < SPACE)
     {
-      regs.ax = static_cast<std::uint16_t>((code - 1) << 1);
-      regs.bx = static_cast<std::uint16_t>(DS.textControlCodes.offset + regs.ax);
-      regs.ax = RESUME_TEXT_EXPANSION;
-      RunTextControlCode(_guest, _guest.Word(regs.bx));
+      const std::uint16_t handler = _state.Word(DS.textControlCodes.At(static_cast<std::uint8_t>(code - 1)));
+      ContinueOutput(expanded.output, RunTextControlCode(_state, handler, expanded.output.next));
       continue;
     }
     if (code >= DESCRIPTION_PHRASE_CODE)
     {
       // One of the five phrases in the code's list, by the next random number's low byte / 52.
-      regs.ax = static_cast<std::uint16_t>((code - DESCRIPTION_PHRASE_CODE) << 1);
-      regs.bx = _guest.Word(static_cast<std::uint16_t>(DS.descriptionPhraseLists.offset + regs.ax));
-      NextDescriptionRandomEntry(_guest);
-      SetLow(regs.cx, DESCRIPTION_PHRASE_DIVISOR);
-      regs.ax = static_cast<std::uint16_t>((Low(regs.ax) / DESCRIPTION_PHRASE_DIVISOR) << 1);
-      regs.bx = static_cast<std::uint16_t>(regs.bx + regs.ax);
-      const std::uint16_t text = regs.si;
-      regs.si = _guest.Word(regs.bx);
-      ExpandDescriptionText(_guest);
-      regs.si = text;
+      const std::uint16_t list = _state.Word(DS.descriptionPhraseLists.At(static_cast<std::uint8_t>(code - DESCRIPTION_PHRASE_CODE)));
+      const auto pick = static_cast<std::uint8_t>(Low(NextDescriptionRandom(_state)) / DESCRIPTION_PHRASE_DIVISOR);
+      const std::uint16_t phrase = _state.Word(Offset(list, static_cast<std::uint16_t>(pick << 1)));
+      ContinueOutput(expanded.output, ExpandDescriptionText(_state, phrase, expanded.output.next).output);
       continue;
     }
-    const std::uint8_t previous = _guest.Byte(static_cast<std::uint16_t>(regs.di - 1));
+    const std::uint16_t output = expanded.output.next;
+    const std::uint8_t previous = _state.Byte(static_cast<std::uint16_t>(output - 1));
     if (code == SPACE && previous == SPACE)
     {
       continue;
     }
     // Capitalizing reaches only 0x60-0x78: y and z stay lower case.
-    if (_guest.Get(DS.descriptionCapitalize) == 1 && previous == SPACE && code >= 0x60 && code < 0x79)
+    std::uint8_t character = code;
+    if (_state.Get(DS.descriptionCapitalize) == 1 && previous == SPACE && code >= 0x60 && code < 0x79)
     {
-      SetLow(regs.ax, static_cast<std::uint8_t>(code & 0xDF));
+      character = static_cast<std::uint8_t>(code & UPPER_CASE_MASK);
     }
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.di;
+    _state.SetByte(output, character);
+    expanded.output.next = Offset(output, 1);
   }
 }
 
-void InsertSystemName(Guest& _guest)
+DescriptionOutput InsertSystemName(GameState& _state, std::uint16_t _output)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t text = regs.si;
-  const std::uint16_t output = regs.di;
-  CopySelectedNameLowerEntry(_guest);
-  regs.ax = SPACE;
-  _guest.SetWord(regs.di, regs.ax);
-  regs.si = DS.descriptionNameBuffer.offset;
-  regs.di = output;
-  ExpandDescriptionText(_guest);
-  regs.si = text;
+  // MOV AX,20h / MOV [DI],AX: the space and the NUL after the name again, as a word.
+  _state.SetWord(CopySelectedNameLower(_state), SPACE);
+  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).output;
 }
 
-void InsertSystemAdjective(Guest& _guest)
+DescriptionOutput InsertSystemAdjective(GameState& _state, std::uint16_t _output)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t text = regs.si;
-  const std::uint16_t output = regs.di;
-  CopySelectedNameLowerEntry(_guest);
-  SetLow(regs.ax, _guest.Byte(static_cast<std::uint16_t>(regs.di - 1)));
-  const std::uint8_t last = Low(regs.ax);
+  std::uint16_t suffix = CopySelectedNameLower(_state);
+  const std::uint8_t last = _state.Byte(static_cast<std::uint16_t>(suffix - 1));
   if (last == 'a' || last == 'e' || last == 'i' || last == 'o' || last == 'u')
   {
-    --regs.di;
+    --suffix;
   }
-  regs.si = DS.adjectiveSuffix.offset;
-  regs.cx = ADJECTIVE_SUFFIX_BYTES;
-  SetLow(regs.ax, CopyBytes(_guest.State(), regs.si, regs.di, regs.cx));
-  regs.si = Offset(regs.si, regs.cx);
-  regs.di = Offset(regs.di, regs.cx);
-  regs.cx = 0;
-  regs.si = DS.descriptionNameBuffer.offset;
-  regs.di = output;
-  ExpandDescriptionText(_guest);
-  regs.si = text;
+  CopyBytes(_state, DS.adjectiveSuffix.offset, suffix, ADJECTIVE_SUFFIX_BYTES);
+  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).output;
 }
 
-void InsertRandomName(Guest& _guest)
+DescriptionOutput InsertRandomName(GameState& _state, std::uint16_t _output)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t text = regs.si;
-  const std::uint16_t output = regs.di;
-  regs.si = DS.selectedSystemName.offset;
-  regs.di = SAVED_SYSTEM_NAME;
-  regs.cx = SYSTEM_NAME_BYTES;
-  SetLow(regs.ax, CopyBytes(_guest.State(), regs.si, regs.di, regs.cx));
-  regs.si = Offset(regs.si, regs.cx);
-  regs.di = Offset(regs.di, regs.cx);
-  regs.cx = 0;
-  regs.ax = _guest.Get(DS.descriptionSeed0);
-  _guest.Set(DS.systemSeed0, regs.ax);
-  regs.ax = _guest.Get(DS.descriptionSeed1);
-  _guest.Set(DS.systemSeed1, regs.ax);
-  regs.ax = static_cast<std::uint16_t>(regs.ax ^ _guest.Get(DS.descriptionSeed0));
-  _guest.Set(DS.systemSeed2, regs.ax);
-  GenerateSystemNameEntry(_guest);
-  CopySelectedNameLowerEntry(_guest);
-  regs.si = SAVED_SYSTEM_NAME;
-  regs.di = DS.selectedSystemName.offset;
-  regs.cx = SYSTEM_NAME_BYTES;
-  SetLow(regs.ax, CopyBytes(_guest.State(), regs.si, regs.di, regs.cx));
-  regs.si = Offset(regs.si, regs.cx);
-  regs.di = Offset(regs.di, regs.cx);
-  regs.cx = 0;
-  regs.di = output;
-  regs.si = DS.descriptionNameBuffer.offset;
-  ExpandDescriptionText(_guest);
-  regs.si = text;
+  CopyBytes(_state, DS.selectedSystemName.offset, SAVED_SYSTEM_NAME, SYSTEM_NAME_BYTES);
+  const std::uint16_t seed0 = _state.Get(DS.descriptionSeed0);
+  _state.Set(DS.systemSeed0, seed0);
+  const std::uint16_t seed1 = _state.Get(DS.descriptionSeed1);
+  _state.Set(DS.systemSeed1, seed1);
+  _state.Set(DS.systemSeed2, static_cast<std::uint16_t>(seed1 ^ _state.Get(DS.descriptionSeed0)));
+  const RandomName name{GenerateSystemName(_state), static_cast<std::uint8_t>(seed0 & SYSTEM_NAME_FOURTH_PAIR)};
+  CopySelectedNameLower(_state);
+  CopyBytes(_state, SAVED_SYSTEM_NAME, DS.selectedSystemName.offset, SYSTEM_NAME_BYTES);
+  DescriptionOutput output{_output, name};
+  ContinueOutput(output, ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).output);
+  return output;
 }
 
 std::uint16_t BackspaceDescription(std::uint16_t _output)
@@ -1691,6 +1685,23 @@ constexpr NativeContract CLOBBERS_SI{REGISTER_SI, 0};
 constexpr NativeContract CLOBBERS_BX_CX_SI{REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
 constexpr NativeContract RETURNS_CARRY{0, FLAG_CARRY};
 constexpr NativeContract CLOBBERS_AX_RETURNS_CARRY{REGISTER_AX, FLAG_CARRY};
+constexpr NativeContract PLACES_LABELS{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0};
+constexpr NativeContract CLEARS_TEXT_LINES{REGISTER_SI | REGISTER_DI, 0};
+constexpr NativeContract EXPANDS_TEXT{REGISTER_AX | REGISTER_BX | REGISTER_CX, 0};
+
+// What the control codes that expand a name leave of _output: DI past it, DX as the last GenerateSystemName leaves it
+// when one ran, and BX the length TerminateSelectedSystemName indexes the name by. A name is letters (systemNameDigrams),
+// and expanding it changes no other register but AL, the NUL it ends at, which each entry sets with AH.
+void InsertedNameOut(Guest& _guest, const DescriptionOutput& _output)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = _output.next;
+  if (_output.lastRandomName)
+  {
+    regs.dx = RandomNameDx(*_output.lastRandomName);
+  }
+  regs.bx = _guest.Get(DS.selectedSystemNameLength);
+}
 
 } // namespace
 
@@ -1750,6 +1761,15 @@ void ComputeDistanceToSystemEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
 }
 
+void LoadSystemSeedsEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  LoadSystemSeeds(_guest.State(), Low(regs.cx));
+  // CH cleared, and the LOOP counts CX down to 0.
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void AdvanceToNextSystemEntry(Guest& _guest)
 {
   AdvanceToNextSystem(_guest.State());
@@ -1776,6 +1796,12 @@ void GenerateSystemNameEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_BX_CX_SI);
 }
 
+void PlaceChartLabelsEntry(Guest& _guest)
+{
+  PlaceChartLabels(_guest.State());
+  _guest.Clobber(PLACES_LABELS);
+}
+
 void AddChartLabelEntry(Guest& _guest)
 {
   const Machine::Registers& regs = _guest.Regs();
@@ -1799,6 +1825,18 @@ void ChartItemOverlapsEntry(Guest& _guest)
   _guest.Clobber(RETURNS_CARRY);
 }
 
+void ClearChartTextLinesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const PrintedText drawn = ClearChartTextLines(_guest.State(), regs.bx, regs.es);
+  // The second DrawScreenString's SI and DI, and its AX, which the contract keeps: the same text drawn twice leaves
+  // what the second leaves.
+  regs.ax = DrawnScreenStringAx(_guest.State(), DS.blankChartLine.offset, drawn, regs.bx, regs.ax);
+  regs.si = drawn.end;
+  regs.di = drawn.nextCell;
+  _guest.Clobber(CLEARS_TEXT_LINES);
+}
+
 void TerminateSelectedSystemNameEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1812,6 +1850,53 @@ void FormatSelectedSystemDistanceEntry(Guest& _guest)
 {
   _guest.Regs().si = FormatSelectedSystemDistance(_guest.State());
   _guest.Clobber(CLOBBERS_AX_BX);
+}
+
+void ExpandDescriptionTextEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const ExpandedText expanded = ExpandDescriptionText(_guest.State(), regs.si, regs.di);
+  regs.si = expanded.end;
+  regs.di = expanded.output.next;
+  // DX, which the contract keeps, as the last GenerateSystemName leaves it, when control code 3 ran.
+  if (expanded.output.lastRandomName)
+  {
+    regs.dx = RandomNameDx(*expanded.output.lastRandomName);
+  }
+  _guest.Clobber(EXPANDS_TEXT);
+}
+
+void InsertSystemNameEntry(Guest& _guest)
+{
+  InsertedNameOut(_guest, InsertSystemName(_guest.State(), _guest.Regs().di));
+  // MOV AX,20h before the expansion, which ends with the NUL in AL.
+  _guest.Regs().ax = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void InsertSystemAdjectiveEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t ah = High(regs.ax);
+  InsertedNameOut(_guest, InsertSystemAdjective(_guest.State(), regs.di));
+  // AH as it came in, which only AL's loads pass over, and the LOOP that copies the suffix counts CX down to 0.
+  regs.ax = Join(ah, 0);
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void InsertRandomNameEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t seed0 = _guest.Get(DS.descriptionSeed0);
+  const std::uint16_t seed1 = _guest.Get(DS.descriptionSeed1);
+  const std::uint16_t lastPair = LastNamePair(_guest.State(), SystemSeeds{seed0, seed1, static_cast<std::uint16_t>(seed1 ^ seed0)});
+  InsertedNameOut(_guest, InsertRandomName(_guest.State(), regs.di));
+  // AH the last pair GenerateSystemName read, which only AL's loads pass over, and the LOOPs that copy the name count CX
+  // down to 0.
+  regs.ax = Join(High(lastPair), 0);
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
 }
 
 void BackspaceDescriptionEntry(Guest& _guest)
@@ -1868,26 +1953,25 @@ constexpr std::array ENTRIES = {
               Machine::NativeContract{static_cast<std::uint16_t>(GENERAL & ~REGISTER_DI), 0}},
   NativeEntry{0x12F9, "ComputeDistanceToSystem", &ComputeDistanceToSystemEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x1341, "ShowNearestSystemDistance", &ShowNearestSystemDistance, Machine::NativeContract{GENERAL, 0}},
-  NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeeds, PRESERVES_ALL},
+  NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeedsEntry, PRESERVES_ALL},
   NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystemEntry, PRESERVES_ALL},
   NativeEntry{0x13C1, "GenerateSystemName", &GenerateSystemNameEntry, CLOBBERS_BX_CX_SI},
   NativeEntry{0x140D, "FindSystemByName", &FindSystemByName, Machine::NativeContract{GENERAL | REGISTER_ES, 0}, NativeReturn::Near, 0,
               NativeWait::Always},
   NativeEntry{0x14C5, "DrawChartItems", &DrawChartItems, Machine::NativeContract{GENERAL, 0}},
-  NativeEntry{0x1505, "PlaceChartLabels", &PlaceChartLabels,
-              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
+  NativeEntry{0x1505, "PlaceChartLabels", &PlaceChartLabelsEntry, PLACES_LABELS},
   NativeEntry{0x1552, "AddChartLabel", &AddChartLabelEntry, CLOBBERS_BX_DI},
   NativeEntry{0x157D, "NudgeChartLabel", &NudgeChartLabelEntry, RETURNS_CARRY},
   NativeEntry{0x15A9, "ChartItemOverlaps", &ChartItemOverlapsEntry, RETURNS_CARRY},
-  NativeEntry{0x15BC, "ClearChartTextLines", &ClearChartTextLines, Machine::NativeContract{REGISTER_SI | REGISTER_DI, 0}},
+  NativeEntry{0x15BC, "ClearChartTextLines", &ClearChartTextLinesEntry, CLEARS_TEXT_LINES},
   NativeEntry{0x5CDE, "ShowSystemDataScreen", &ShowSystemDataScreen, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x60EB, "TerminateSelectedSystemName", &TerminateSelectedSystemNameEntry, PRESERVES_ALL},
   NativeEntry{0x60F7, "FormatSelectedSystemDistance", &FormatSelectedSystemDistanceEntry, CLOBBERS_AX_BX},
   NativeEntry{0x6FC0, "ShowSystemDescription", &ShowSystemDescription, Machine::NativeContract{REGISTER_ALL, 0}},
-  NativeEntry{0x700F, "ExpandDescriptionText", &ExpandDescriptionText, Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX, 0}},
-  NativeEntry{0x707A, "InsertSystemName", &InsertSystemName, PRESERVES_ALL},
-  NativeEntry{0x708D, "InsertSystemAdjective", &InsertSystemAdjective, PRESERVES_ALL},
-  NativeEntry{0x70C1, "InsertRandomName", &InsertRandomName, PRESERVES_ALL},
+  NativeEntry{0x700F, "ExpandDescriptionText", &ExpandDescriptionTextEntry, EXPANDS_TEXT},
+  NativeEntry{0x707A, "InsertSystemName", &InsertSystemNameEntry, PRESERVES_ALL},
+  NativeEntry{0x708D, "InsertSystemAdjective", &InsertSystemAdjectiveEntry, PRESERVES_ALL},
+  NativeEntry{0x70C1, "InsertRandomName", &InsertRandomNameEntry, PRESERVES_ALL},
   NativeEntry{0x7107, "BackspaceDescription", &BackspaceDescriptionEntry, PRESERVES_ALL},
   NativeEntry{0x7109, "StartCapitalizing", &StartCapitalizingEntry, PRESERVES_ALL},
   NativeEntry{0x710F, "StopCapitalizing", &StopCapitalizingEntry, PRESERVES_ALL},

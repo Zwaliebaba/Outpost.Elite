@@ -128,25 +128,19 @@ void ToggleSpeaker(Guest& _guest)
   _guest.Out8(SPEAKER_PORT, port);
 }
 
-void StartImpactSound(Guest& _guest)
+std::uint8_t StartImpactSound(GameState& _state)
 {
-  // AL the step length, and the STI that ends BeginSweep.
-  SetLow(_guest.Regs().ax, StartNoiseSweep(_guest.State(), 30, 4));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  return StartNoiseSweep(_state, 30, 4);
 }
 
-void StartExplosionSound(Guest& _guest)
+std::uint8_t StartExplosionSound(GameState& _state)
 {
-  // AL the step length, and the STI that ends BeginSweep.
-  SetLow(_guest.Regs().ax, StartNoiseSweep(_guest.State(), 50, 8));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  return StartNoiseSweep(_state, 50, 8);
 }
 
-void StartPlayerDeathSound(Guest& _guest)
+std::uint8_t StartPlayerDeathSound(GameState& _state)
 {
-  // AL the step length, and the STI that ends BeginSweep.
-  SetLow(_guest.Regs().ax, StartNoiseSweep(_guest.State(), 60, 7));
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  return StartNoiseSweep(_state, 60, 7);
 }
 
 void StopContinuousNoise(GameState& _state)
@@ -186,6 +180,10 @@ using Machine::REGISTER_AX;
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract ENABLES_INTERRUPTS{0, FLAG_INTERRUPT};
 constexpr Machine::NativeContract CLOBBERS_AX_ENABLES_INTERRUPTS{REGISTER_AX, FLAG_INTERRUPT};
+// StartExplosionSound's and StartPlayerDeathSound's: their callers' callers read what they leave in AX, the step length
+// in AL and AH as it was (ADR-012). DrawSunOrPlanet goes on with KillPlayer's, and UpdateMissileAi's contract compares
+// both, through ExplodeObject and KillPlayer.
+constexpr Machine::NativeContract LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS{0, FLAG_INTERRUPT};
 
 } // namespace
 
@@ -207,6 +205,31 @@ void StopSoundEffectsEntry(Guest& _guest)
   StopSoundEffects(_guest.State());
   _guest.SetFlag(FLAG_INTERRUPT, true);
   _guest.Clobber(ENABLES_INTERRUPTS);
+}
+
+void StartImpactSoundEntry(Guest& _guest)
+{
+  // CLI before the writes, which nothing interrupts in native code, and the STI that ends BeginSweep: AL the step
+  // length, and interrupts on.
+  SetLow(_guest.Regs().ax, StartImpactSound(_guest.State()));
+  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Clobber(CLOBBERS_AX_ENABLES_INTERRUPTS);
+}
+
+void StartExplosionSoundEntry(Guest& _guest)
+{
+  // As StartImpactSoundEntry; the contract compares AX.
+  SetLow(_guest.Regs().ax, StartExplosionSound(_guest.State()));
+  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Clobber(LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS);
+}
+
+void StartPlayerDeathSoundEntry(Guest& _guest)
+{
+  // As StartImpactSoundEntry; the contract compares AX.
+  SetLow(_guest.Regs().ax, StartPlayerDeathSound(_guest.State()));
+  _guest.SetFlag(FLAG_INTERRUPT, true);
+  _guest.Clobber(LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS);
 }
 
 void StopContinuousNoiseEntry(Guest& _guest)
@@ -247,9 +270,9 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x7A63, "StopSoundEffects", &StopSoundEffectsEntry, ENABLES_INTERRUPTS},
   NativeEntry{0x7A93, "EmitNoiseSample", &EmitNoiseSample, PRESERVES_ALL},
   NativeEntry{0x7AB8, "ToggleSpeaker", &ToggleSpeaker, PRESERVES_ALL},
-  NativeEntry{0x7AC3, "StartImpactSound", &StartImpactSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
-  NativeEntry{0x7AFC, "StartExplosionSound", &StartExplosionSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
-  NativeEntry{0x7B09, "StartPlayerDeathSound", &StartPlayerDeathSound, CLOBBERS_AX_ENABLES_INTERRUPTS},
+  NativeEntry{0x7AC3, "StartImpactSound", &StartImpactSoundEntry, CLOBBERS_AX_ENABLES_INTERRUPTS},
+  NativeEntry{0x7AFC, "StartExplosionSound", &StartExplosionSoundEntry, LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS},
+  NativeEntry{0x7B09, "StartPlayerDeathSound", &StartPlayerDeathSoundEntry, LEAVES_STEP_LENGTH_ENABLES_INTERRUPTS},
   NativeEntry{0x7B6B, "StopContinuousNoise", &StopContinuousNoiseEntry, PRESERVES_ALL},
   NativeEntry{0x7B71, "StartLaserSound", &StartLaserSoundEntry, CLOBBERS_AX_ENABLES_INTERRUPTS},
   NativeEntry{0x7B96, "StartPlayerHitSound", &StartPlayerHitSoundEntry, ENABLES_INTERRUPTS},

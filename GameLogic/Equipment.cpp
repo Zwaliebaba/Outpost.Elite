@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Docked.h"
 #include "Flight.h"
 #include "Market.h"
 #include "Maths.h"
@@ -29,15 +30,12 @@ constexpr std::uint16_t INIT_ABANDONED_COBRA = 0x4CA6;
 constexpr std::uint16_t RECLAIM_SHIP_SLOT = 0x51FD;
 constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t RUN_EQUIP_SHIP_MENU = 0x6111;
-constexpr std::uint16_t TOGGLE_MENU_ROW_HIGHLIGHT = 0x6328;
 constexpr std::uint16_t SELECT_LASER_TYPE = 0x633B;
 constexpr std::uint16_t DRAW_LASER_MOUNT_MENU = 0x6367;
 constexpr std::uint16_t CHOOSE_MOUNT_TO_FIT_LASER = 0x63B2;
 constexpr std::uint16_t CHOOSE_MOUNT_TO_REMOVE_LASER = 0x646F;
 constexpr std::uint16_t REDRAW_EQUIP_HELP_TEXT = 0x653F;
 constexpr std::uint16_t CLEAR_DOCKED_MESSAGE_LINE = 0x6553;
-constexpr std::uint16_t PAINT_LASER_MOUNT_BOX = 0x6564;
-constexpr std::uint16_t SWAP_TEXT_ATTRIBUTE_NIBBLES = 0x6580;
 constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
 constexpr std::uint16_t PAY_FOR_EQUIPMENT_ITEM = 0x65A3;
 constexpr std::uint16_t ADD_CREDITS = 0x65EE;
@@ -121,7 +119,8 @@ constexpr std::uint16_t MOUNT_OCCUPIED_TEXT = 0x8DF2;
 constexpr std::uint16_t NO_LASER_ON_MOUNT_TEXT = 0x8E06;
 constexpr std::uint16_t WRONG_LASER_TYPE_TEXT = 0x8E1A;
 
-constexpr std::uint16_t SCREEN_PRICES = 0x823B; // four bytes a row: the price, then the resale price, in tenths
+constexpr std::uint16_t SCREEN_PRICES = 0x823B;   // four bytes a row: the price, then the resale price, in tenths
+constexpr std::uint8_t TENTHS_DIGITS_BLANKED = 3; // the leading zeros FormatTenths blanks
 
 // The equipment menu's rows, from 1. Row r's fitted count is the byte at FITTED_BEFORE_FUEL + r: fuel's is row 1.
 constexpr std::uint8_t FUEL_ROW = 1;
@@ -232,6 +231,30 @@ void SellColumnOut(Registers& _regs, PrintedText _printed) noexcept
   _regs.di = _printed.nextCell;
   _regs.es = Guest::VIDEO_SEGMENT;
   _regs.ax = Join(SELL_PRICE_ATTRIBUTE, 0);
+}
+
+// The place of the laser type name's pointer for mount _mount, from its two bits of laserMountTypes _types.
+[[nodiscard]] std::uint16_t MountLaserName(std::uint8_t _types, std::uint16_t _mount) noexcept
+{
+  return DS.laserTypeNames.At(static_cast<std::uint8_t>(_types >> (_mount * 2)) & MOUNT_TYPE_BITS);
+}
+
+// A quarter of _rows rows of the text page, in bytes, as the menus measure it: _rows*256, shifted right twice.
+[[nodiscard]] std::uint16_t MenuRowsQuarter(std::uint8_t _rows) noexcept
+{
+  return static_cast<std::uint16_t>(Join(_rows, 0) >> 2);
+}
+
+// What StartMenu and the cursor's moves leave in the registers: SI on the row, PrintCreditsOnMessageLine's DI and ES,
+// and AX as the last ToggleMenuRowHighlight leaves it, AL the attribute it toggled the row to and AH the one the
+// credits were printed in, its nibbles swapped.
+void MenuCursorOut(Registers& _regs, const GameState& _state, MenuCursor _cursor)
+{
+  const std::uint8_t attribute = _state.Get(DS.textAttribute);
+  _regs.si = _cursor.row;
+  _regs.di = _cursor.credits.nextCell;
+  _regs.es = Guest::VIDEO_SEGMENT;
+  _regs.ax = Join(static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4)), attribute);
 }
 
 // 61CF and 628A: B and S save CX, SI and textAttribute, for 6214 to put back after the message.
@@ -465,38 +488,63 @@ void SellEquipment(Guest& _guest)
   _guest.JumpBack(EQUIP_MESSAGE);
 }
 
-// 63C3 and 6490: the mount box moved left, from FORE round to LEFT.
-void MoveMountBoxLeft(Guest& _guest)
+// 63C3 and 6490: the mount box at _box painted in textAttribute, then the one left of it, from FORE round to LEFT,
+// highlighted. Returns that box.
+std::uint16_t MoveMountBoxLeft(GameState& _state, std::uint16_t _box)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(PAINT_LASER_MOUNT_BOX);
-  regs.si = static_cast<std::uint16_t>(regs.si - MOUNT_BOX_STEP);
-  const auto mount = static_cast<std::uint8_t>(_guest.Get(DS.selectedLaserMount) - 1);
-  _guest.Set(DS.selectedLaserMount, mount);
+  PaintLaserMountBox(_state, _box);
+  auto box = static_cast<std::uint16_t>(_box - MOUNT_BOX_STEP);
+  const auto mount = static_cast<std::uint8_t>(_state.Get(DS.selectedLaserMount) - 1);
+  _state.Set(DS.selectedLaserMount, mount);
   if ((mount & 0x80) != 0)
   {
-    _guest.Set(DS.selectedLaserMount, LAST_MOUNT);
-    regs.si = LAST_MOUNT_BOX;
+    _state.Set(DS.selectedLaserMount, LAST_MOUNT);
+    box = LAST_MOUNT_BOX;
   }
-  _guest.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
-  _guest.Call(PAINT_LASER_MOUNT_BOX);
+  _state.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  PaintLaserMountBox(_state, box);
+  return box;
 }
 
-// 63E1 and 64AE: the mount box moved right, from LEFT round to FORE.
-void MoveMountBoxRight(Guest& _guest)
+// 63E1 and 64AE: the mount box at _box painted in textAttribute, then the one right of it, from LEFT round to FORE,
+// highlighted. Returns that box.
+std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(PAINT_LASER_MOUNT_BOX);
-  regs.si = static_cast<std::uint16_t>(regs.si + MOUNT_BOX_STEP);
-  const auto mount = static_cast<std::uint8_t>(_guest.Get(DS.selectedLaserMount) + 1);
-  _guest.Set(DS.selectedLaserMount, mount);
+  PaintLaserMountBox(_state, _box);
+  auto box = static_cast<std::uint16_t>(_box + MOUNT_BOX_STEP);
+  const auto mount = static_cast<std::uint8_t>(_state.Get(DS.selectedLaserMount) + 1);
+  _state.Set(DS.selectedLaserMount, mount);
   if (mount == MOUNT_COUNT)
   {
-    _guest.Set(DS.selectedLaserMount, 0);
-    regs.si = FIRST_MOUNT_BOX;
+    _state.Set(DS.selectedLaserMount, 0);
+    box = FIRST_MOUNT_BOX;
   }
-  _guest.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
-  _guest.Call(PAINT_LASER_MOUNT_BOX);
+  _state.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  PaintLaserMountBox(_state, box);
+  return box;
+}
+
+// What the last PaintLaserMountBox leaves in the registers: SI on _box, AL the attribute it painted, and DL and CX
+// counted down to 0.
+void MountBoxOut(Registers& _regs, const GameState& _state, std::uint16_t _box)
+{
+  _regs.si = _box;
+  SetLow(_regs.ax, _state.Get(DS.textAttribute));
+  SetLow(_regs.dx, 0);
+  _regs.cx = 0;
+}
+
+// The mount box moved from the one at SI, and the registers as the original leaves them.
+void MoveMountBoxLeftOnRegisters(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  MountBoxOut(regs, _guest.State(), MoveMountBoxLeft(_guest.State(), regs.si));
+}
+
+void MoveMountBoxRightOnRegisters(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  MountBoxOut(regs, _guest.State(), MoveMountBoxRight(_guest.State(), regs.si));
 }
 
 // 6438 and 6505: a mount message on the message line, SI kept.
@@ -606,11 +654,11 @@ void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
       _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
       if ((roll & 0x80) != 0)
       {
-        MoveMountBoxLeft(_guest);
+        MoveMountBoxLeftOnRegisters(_guest);
       }
       else
       {
-        MoveMountBoxRight(_guest);
+        MoveMountBoxRightOnRegisters(_guest);
       }
     }
     for (;;)
@@ -637,13 +685,13 @@ void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
       if (key == SCAN_LEFT)
       {
         _guest.JumpBack(_chooser.left);
-        MoveMountBoxLeft(_guest);
+        MoveMountBoxLeftOnRegisters(_guest);
         continue;
       }
       if (key == SCAN_RIGHT)
       {
         _guest.JumpBack(_chooser.right);
-        MoveMountBoxRight(_guest);
+        MoveMountBoxRightOnRegisters(_guest);
         continue;
       }
       _guest.JumpBack(_chooser.steer);
@@ -941,7 +989,7 @@ void RunEquipShipMenu(Guest& _guest)
   regs.ax = Guest::VIDEO_SEGMENT;
   regs.es = regs.ax;
   _guest.Set(DS.menuFirstRowAttr, regs.si);
-  StartMenu(_guest);
+  StartMenuOnRegisters(_guest);
   for (;;)
   {
     SteerMenuCursor(_guest);
@@ -973,13 +1021,13 @@ void RunEquipShipMenu(Guest& _guest)
       if (key == SCAN_UP)
       {
         _guest.JumpBack(EQUIP_CURSOR_UP);
-        MoveMenuCursorUp(_guest);
+        MoveMenuCursorUpOnRegisters(_guest);
         continue;
       }
       if (key == SCAN_DOWN)
       {
         _guest.JumpBack(EQUIP_CURSOR_DOWN);
-        MoveMenuCursorDown(_guest);
+        MoveMenuCursorDownOnRegisters(_guest);
         continue;
       }
       if (key != SCAN_F4 && IsScreenKey(key))
@@ -992,33 +1040,27 @@ void RunEquipShipMenu(Guest& _guest)
   }
 }
 
-void DrawLaserMountMenu(Guest& _guest)
+PrintedText DrawLaserMountMenu(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
-  regs.si = MOUNT_HEADER_TEXT;
-  regs.di = MOUNT_HEADER_OFFSET;
-  PrintCountedTextLinesEntry(_guest);
-  // Each mount's laser, or Free: its bit of laserMountsFitted in DH, its two bits of laserMountTypes in DL.
-  regs.di = MOUNT_NAMES_OFFSET;
-  regs.dx = Join(_guest.Get(DS.laserMountsFitted), _guest.Get(DS.laserMountTypes));
-  for (regs.cx = MOUNT_COUNT; regs.cx != 0; --regs.cx)
+  _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+  PrintCountedTextLines(_state, MOUNT_HEADER_TEXT, MOUNT_HEADER_OFFSET);
+  // Each mount's laser, or Free, one after the other: its bit of laserMountsFitted, its two bits of laserMountTypes.
+  const std::uint8_t types = _state.Get(DS.laserMountTypes);
+  const std::uint8_t fitted = _state.Get(DS.laserMountsFitted);
+  PrintedText printed{FREE_MOUNT_TEXT, MOUNT_NAMES_OFFSET};
+  for (std::uint16_t mount = 0; mount < MOUNT_COUNT; ++mount)
   {
-    const bool fitted = (High(regs.dx) & 1) != 0;
-    SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) >> 1));
-    regs.si = FREE_MOUNT_TEXT;
-    if (fitted)
+    std::uint16_t name = FREE_MOUNT_TEXT;
+    if (((fitted >> mount) & 1) != 0)
     {
-      regs.bx = DS.laserTypeNames.At(Low(regs.dx) & MOUNT_TYPE_BITS);
-      regs.si = _guest.Word(regs.bx);
+      name = _state.Word(MountLaserName(types, mount));
     }
-    PrintTextModeStringEntry(_guest);
-    SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) >> 2));
+    printed = PrintTextModeString(_state, name, printed.nextCell);
   }
-  regs.si = FIRST_MOUNT_BOX;
-  _guest.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
-  PaintLaserMountBoxEntry(_guest);
-  _guest.Set(DS.selectedLaserMount, 0);
+  _state.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  PaintLaserMountBox(_state, FIRST_MOUNT_BOX);
+  _state.Set(DS.selectedLaserMount, 0);
+  return printed;
 }
 
 void ChooseMountToFitLaser(Guest& _guest)
@@ -1040,14 +1082,12 @@ void ChooseMountToRemoveLaser(Guest& _guest)
   RunMountChooser(_guest, REMOVE_CHOOSER);
 }
 
-void RedrawEquipHelpText(Guest& _guest)
+PrintedLines RedrawEquipHelpText(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.textAttribute, HELP_ATTRIBUTE);
-  regs.di = HELP_TEXT_OFFSET;
-  regs.si = DS.equipHelpText.offset;
-  PrintCountedTextLinesEntry(_guest);
-  _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+  const PrintedLines printed = PrintCountedTextLines(_state, DS.equipHelpText.offset, HELP_TEXT_OFFSET);
+  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  return printed;
 }
 
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
@@ -1093,37 +1133,37 @@ void PayForEquipmentItem(Guest& _guest)
   SubtractCreditsEntry(_guest);
 }
 
-void ClearEquipmentSellPrice(Guest& _guest)
+PrintedText ClearEquipmentSellPrice(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.si = NO_RESALE_TEXT;
-  SellColumnOut(regs, PrintEquipmentSellColumn(_guest.State(), regs.si));
+  return PrintEquipmentSellColumn(_state, NO_RESALE_TEXT);
 }
 
-void ShowEquipmentSellPrice(Guest& _guest)
+PrintedText ShowEquipmentSellPrice(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = PriceSlot(_guest.Get(DS.menuSelectedRow));
-  regs.ax = _guest.Word(regs.bx);
-  _guest.Set(DS.resalePriceInput, regs.ax);
-  const std::uint16_t slot = regs.bx;
-  _guest.Call(COMPUTE_RESALE_PRICE);
-  regs.bx = slot;
-  _guest.SetWord(static_cast<std::uint16_t>(regs.bx + 2), regs.ax);
-  FormatTenthsEntry(_guest);
-  regs.si = DS.priceText.offset;
-  SellColumnOut(regs, PrintEquipmentSellColumn(_guest.State(), regs.si));
+  // The price's slot in screenPrices, and the resale price after it. The original keeps the slot in BX on the stack
+  // round ComputeResalePrice.
+  const std::uint16_t slot = PriceSlot(_state.Get(DS.menuSelectedRow));
+  _state.Set(DS.resalePriceInput, _state.Word(slot));
+  const std::uint16_t resale = ComputeResalePrice(_state);
+  _state.SetWord(Offset(slot, 2), resale);
+  FormatTenths(_state, resale);
+  return PrintEquipmentSellColumn(_state, DS.priceText.offset);
 }
 
-void StartMenu(Guest& _guest)
+MenuCursor StartMenu(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(SWAP_TEXT_ATTRIBUTE_NIBBLES);
-  _guest.Call(PRINT_CREDITS_ON_MESSAGE_LINE);
-  _guest.Call(SWAP_TEXT_ATTRIBUTE_NIBBLES);
-  regs.si = _guest.Get(DS.menuFirstRowAttr);
-  _guest.Set(DS.menuSelectedRow, 1);
-  _guest.Call(TOGGLE_MENU_ROW_HIGHLIGHT);
+  SwapTextAttributeNibbles(_state);
+  const PrintedText credits = PrintCreditsOnMessageLine(_state);
+  SwapTextAttributeNibbles(_state);
+  const std::uint16_t row = _state.Get(DS.menuFirstRowAttr);
+  _state.Set(DS.menuSelectedRow, 1);
+  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
+  return MenuCursor{row, credits};
+}
+
+void StartMenuOnRegisters(Guest& _guest)
+{
+  MenuCursorOut(_guest.Regs(), _guest.State(), StartMenu(_guest.State()));
 }
 
 void SteerMenuCursor(Guest& _guest)
@@ -1138,51 +1178,67 @@ void SteerMenuCursor(Guest& _guest)
   }
   if ((pitch & 0x80) != 0)
   {
-    MoveMenuCursorUp(_guest);
+    MoveMenuCursorUpOnRegisters(_guest);
   }
   else
   {
-    MoveMenuCursorDown(_guest);
+    MoveMenuCursorDownOnRegisters(_guest);
   }
 }
 
-void MoveMenuCursorUp(Guest& _guest)
+MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(PRINT_CREDITS_ON_MESSAGE_LINE);
-  _guest.Call(TOGGLE_MENU_ROW_HIGHLIGHT);
-  const auto row = static_cast<std::uint8_t>(_guest.Get(DS.menuSelectedRow) - 1);
-  _guest.Set(DS.menuSelectedRow, row);
-  if (row == 0)
+  const PrintedText credits = PrintCreditsOnMessageLine(_state);
+  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
+  std::uint16_t row = _row;
+  const auto selected = static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1);
+  _state.Set(DS.menuSelectedRow, selected);
+  if (selected == 0)
   {
     // To the last row: count*80 bytes on, as count*256/4 and that /4 again.
-    regs.si = _guest.Get(DS.menuFirstRowAttr);
-    const std::uint8_t count = _guest.Get(DS.menuRowCount);
-    _guest.Set(DS.menuSelectedRow, count);
-    regs.ax = static_cast<std::uint16_t>(Join(count, 0) >> 2);
-    regs.si = Offset(regs.si, regs.ax);
-    regs.ax = static_cast<std::uint16_t>(regs.ax >> 2);
-    regs.si = Offset(regs.si, regs.ax);
+    row = _state.Get(DS.menuFirstRowAttr);
+    const std::uint8_t count = _state.Get(DS.menuRowCount);
+    _state.Set(DS.menuSelectedRow, count);
+    const std::uint16_t quarter = MenuRowsQuarter(count);
+    row = Offset(Offset(row, quarter), static_cast<std::uint16_t>(quarter >> 2));
   }
-  regs.si = static_cast<std::uint16_t>(regs.si - ROW_BYTES);
-  _guest.Call(TOGGLE_MENU_ROW_HIGHLIGHT);
+  row = static_cast<std::uint16_t>(row - ROW_BYTES);
+  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
+  return MenuCursor{row, credits};
 }
 
-void MoveMenuCursorDown(Guest& _guest)
+void MoveMenuCursorUpOnRegisters(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
-  _guest.Call(PRINT_CREDITS_ON_MESSAGE_LINE);
-  _guest.Call(TOGGLE_MENU_ROW_HIGHLIGHT);
-  const auto row = static_cast<std::uint8_t>(_guest.Get(DS.menuSelectedRow) + 1);
-  _guest.Set(DS.menuSelectedRow, row);
-  SetLow(regs.ax, _guest.Get(DS.menuRowCount));
-  if (Low(regs.ax) < row)
+  const bool wraps = _guest.Get(DS.menuSelectedRow) == 1;
+  MenuCursorOut(regs, _guest.State(), MoveMenuCursorUp(_guest.State(), regs.si));
+  if (wraps)
   {
-    regs.si = static_cast<std::uint16_t>(_guest.Get(DS.menuFirstRowAttr) - ROW_BYTES);
-    _guest.Set(DS.menuSelectedRow, 1);
+    // AH from the SHRs that measure the way to the last row: menuRowCount*256/16.
+    SetHigh(regs.ax, High(static_cast<std::uint16_t>(MenuRowsQuarter(_guest.Get(DS.menuRowCount)) >> 2)));
   }
-  regs.si = static_cast<std::uint16_t>(regs.si + ROW_BYTES);
-  _guest.Call(TOGGLE_MENU_ROW_HIGHLIGHT);
+}
+
+MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
+{
+  const PrintedText credits = PrintCreditsOnMessageLine(_state);
+  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
+  std::uint16_t row = _row;
+  const auto selected = static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) + 1);
+  _state.Set(DS.menuSelectedRow, selected);
+  if (_state.Get(DS.menuRowCount) < selected)
+  {
+    row = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) - ROW_BYTES);
+    _state.Set(DS.menuSelectedRow, 1);
+  }
+  row = static_cast<std::uint16_t>(row + ROW_BYTES);
+  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
+  return MenuCursor{row, credits};
+}
+
+void MoveMenuCursorDownOnRegisters(Guest& _guest)
+{
+  MenuCursorOut(_guest.Regs(), _guest.State(), MoveMenuCursorDown(_guest.State(), _guest.Regs().si));
 }
 
 bool PollMenuKey(Guest& _guest, std::uint16_t _tickLoop)
@@ -1229,6 +1285,45 @@ void SelectLaserTypeEntry(Guest& _guest)
   _guest.Clobber(RETURNS_ZERO);
 }
 
+void DrawLaserMountMenuEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const PrintedText names = DrawLaserMountMenu(_guest.State());
+  // The contract keeps every register, so the entry leaves what the original does: the last PrintTextModeString's DI
+  // and ES, and AH the attribute it printed in; BX the place of the last fitted mount's name, when one is; DH what the
+  // four SHR DH,1 leave of laserMountsFitted; and PaintLaserMountBox's AL, the highlight, DL and CX counted down to 0,
+  // and SI on FORE's box.
+  const std::uint8_t types = _guest.Get(DS.laserMountTypes);
+  const std::uint8_t fitted = _guest.Get(DS.laserMountsFitted);
+  for (std::uint16_t mount = 0; mount < MOUNT_COUNT; ++mount)
+  {
+    if (((fitted >> mount) & 1) != 0)
+    {
+      regs.bx = MountLaserName(types, mount);
+    }
+  }
+  regs.di = names.nextCell;
+  regs.es = Guest::VIDEO_SEGMENT;
+  regs.ax = Join(HELP_ATTRIBUTE, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  regs.dx = Join(static_cast<std::uint8_t>(fitted >> MOUNT_COUNT), 0);
+  regs.cx = 0;
+  regs.si = FIRST_MOUNT_BOX;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void RedrawEquipHelpTextEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const PrintedLines printed = RedrawEquipHelpText(_guest.State());
+  regs.si = printed.end;
+  regs.di = printed.nextLine;
+  regs.es = Guest::VIDEO_SEGMENT;
+  // PrintCountedTextLines' AX, the help's attribute with the NUL in AL, and its LOOP's CX = 0.
+  regs.ax = Join(HELP_ATTRIBUTE, 0);
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void PaintLaserMountBoxEntry(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
@@ -1241,6 +1336,23 @@ void PaintLaserMountBoxEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void ClearEquipmentSellPriceEntry(Guest& _guest)
+{
+  SellColumnOut(_guest.Regs(), ClearEquipmentSellPrice(_guest.State()));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void ShowEquipmentSellPriceEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  const PrintedText printed = ShowEquipmentSellPrice(_guest.State());
+  // BX the price's slot, and CX as FormatTenths' BlankLeadingZeros leaves it; the print's SI, DI, ES and AX.
+  regs.bx = PriceSlot(_guest.Get(DS.menuSelectedRow));
+  regs.cx = BlankedLeadingZeros(_guest.State(), DS.priceText.offset, TENTHS_DIGITS_BLANKED).triesLeft;
+  SellColumnOut(regs, printed);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 namespace
 {
 
@@ -1250,14 +1362,14 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x633B, "SelectLaserType", &SelectLaserTypeEntry, RETURNS_ZERO},
-  NativeEntry{0x6367, "DrawLaserMountMenu", &DrawLaserMountMenu, PRESERVES_ALL},
+  NativeEntry{0x6367, "DrawLaserMountMenu", &DrawLaserMountMenuEntry, PRESERVES_ALL},
   NativeEntry{0x63B2, "ChooseMountToFitLaser", &ChooseMountToFitLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x646F, "ChooseMountToRemoveLaser", &ChooseMountToRemoveLaser, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x653F, "RedrawEquipHelpText", &RedrawEquipHelpText, PRESERVES_ALL},
+  NativeEntry{0x653F, "RedrawEquipHelpText", &RedrawEquipHelpTextEntry, PRESERVES_ALL},
   NativeEntry{0x6564, "PaintLaserMountBox", &PaintLaserMountBoxEntry, PRESERVES_ALL},
   NativeEntry{0x65A3, "PayForEquipmentItem", &PayForEquipmentItem, NativeContract{0, FLAG_CARRY}},
-  NativeEntry{0x6946, "ClearEquipmentSellPrice", &ClearEquipmentSellPrice, PRESERVES_ALL},
-  NativeEntry{0x6972, "ShowEquipmentSellPrice", &ShowEquipmentSellPrice, PRESERVES_ALL},
+  NativeEntry{0x6946, "ClearEquipmentSellPrice", &ClearEquipmentSellPriceEntry, PRESERVES_ALL},
+  NativeEntry{0x6972, "ShowEquipmentSellPrice", &ShowEquipmentSellPriceEntry, PRESERVES_ALL},
 };
 
 } // namespace

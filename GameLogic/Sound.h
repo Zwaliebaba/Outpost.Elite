@@ -34,15 +34,6 @@ void EmitNoiseSample(Guest& _guest);
 /// ToggleSpeaker (CS:7AB8): flips the speaker's data bit. Out: AL, the port 61h value.
 void ToggleSpeaker(Guest& _guest);
 
-/// StartImpactSound (CS:7AC3): a noise sweep, step 30 shrinking by 4. AL clobbered; IF set on return.
-void StartImpactSound(Guest& _guest);
-
-/// StartExplosionSound (CS:7AFC): a noise sweep, step 50 shrinking by 8. AL clobbered; IF set on return.
-void StartExplosionSound(Guest& _guest);
-
-/// StartPlayerDeathSound (CS:7B09): a noise sweep, step 60 shrinking by 7. AL clobbered; IF set on return.
-void StartPlayerDeathSound(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
 /// StartBeep (CS:7A57): beepTicks = 70.
@@ -53,6 +44,18 @@ void StartLowBeep(GameState& _state);
 
 /// StopSoundEffects (CS:7A63): every effect's trigger cleared. The original clears them under CLI.
 void StopSoundEffects(GameState& _state);
+
+/// StartImpactSound (CS:7AC3): a noise sweep, step 30 shrinking by 4. The original starts it under CLI. Returns the step
+/// length the step counter starts at.
+std::uint8_t StartImpactSound(GameState& _state);
+
+/// StartExplosionSound (CS:7AFC): a noise sweep, step 50 shrinking by 8. The original starts it under CLI. Returns the
+/// step length the step counter starts at.
+std::uint8_t StartExplosionSound(GameState& _state);
+
+/// StartPlayerDeathSound (CS:7B09): a noise sweep, step 60 shrinking by 7. The original starts it under CLI. Returns the
+/// step length the step counter starts at.
+std::uint8_t StartPlayerDeathSound(GameState& _state);
 
 /// StopContinuousNoise (CS:7B6B): continuousNoise = 0.
 void StopContinuousNoise(GameState& _state);
@@ -67,11 +70,14 @@ void StartPlayerHitSound(GameState& _state);
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
-void StartBeepEntry(Guest& _guest);           ///< Preserves every register.
-void StartLowBeepEntry(Guest& _guest);        ///< Preserves every register.
-void StopSoundEffectsEntry(Guest& _guest);    ///< Out: IF=1.
-void StopContinuousNoiseEntry(Guest& _guest); ///< Preserves every register.
-void StartLaserSoundEntry(Guest& _guest);     ///< AL clobbered; IF set on return when it starts a sweep.
-void StartPlayerHitSoundEntry(Guest& _guest); ///< Out: IF=1.
+void StartBeepEntry(Guest& _guest);             ///< Preserves every register.
+void StartLowBeepEntry(Guest& _guest);          ///< Preserves every register.
+void StopSoundEffectsEntry(Guest& _guest);      ///< Out: IF=1.
+void StartImpactSoundEntry(Guest& _guest);      ///< AL clobbered; IF set on return.
+void StartExplosionSoundEntry(Guest& _guest);   ///< Out: AL the step length, AH as it was; IF=1.
+void StartPlayerDeathSoundEntry(Guest& _guest); ///< Out: AL the step length, AH as it was; IF=1.
+void StopContinuousNoiseEntry(Guest& _guest);   ///< Preserves every register.
+void StartLaserSoundEntry(Guest& _guest);       ///< AL clobbered; IF set on return when it starts a sweep.
+void StartPlayerHitSoundEntry(Guest& _guest);   ///< Out: IF=1.
 
 } // namespace Elite

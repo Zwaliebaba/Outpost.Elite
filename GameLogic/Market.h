@@ -21,12 +21,6 @@ namespace Elite
 /// Out: AH=the key that ended it.
 void ShowMarketPricesScreen(Guest& _guest);
 
-/// SpendCredits (CS:65EC): SubtractCredits.
-void SpendCredits(Guest& _guest);
-
-/// AddCredits (CS:65EE): BX:AX tenths of credits onto creditsTenths, and the balance reformatted.
-void AddCredits(Guest& _guest);
-
 /// RunCargoTradeMenu (CS:6B1E): the cargo menu: the cursor, and B or S with a typed quantity on the buy or sell
 /// screen (tradeScreenIsBuy). Waits. Out: AH=Esc or the F-key that ended it.
 void RunCargoTradeMenu(Guest& _guest);
@@ -49,6 +43,13 @@ struct Quantity
 /// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
 /// creditsTenths, and the balance reformatted. Returns false, and the credits as they were, when they are not enough.
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths);
+
+/// SpendCredits (CS:65EC): a jump to SubtractCredits, for _tenths of credits. Returns false when they are not enough.
+bool SpendCredits(GameState& _state, std::uint32_t _tenths);
+
+/// AddCredits (CS:65EE): _tenths of credits onto creditsTenths, ADD and then ADC, and the balance reformatted by
+/// FormatCredits.
+void AddCredits(GameState& _state, std::uint32_t _tenths);
 
 /// ComputeResalePrice (CS:6995): resalePriceInput less one, less a 32nd of it halved until it is below 100;
 /// 0 for 0.
@@ -77,6 +78,8 @@ std::uint8_t AddContrabandPenalty(GameState& _state);
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
 void SubtractCreditsEntry(Guest& _guest); ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
+void SpendCreditsEntry(Guest& _guest);    ///< In: BX:AX the tenths. Out: CF=1 when they are not enough.
+void AddCreditsEntry(Guest& _guest);      ///< In: BX:AX the tenths.
 void ComputeResalePriceEntry(Guest& _guest);
 void ComputeMarketPricesEntry(Guest& _guest);
 void NextMarketRandomEntry(Guest& _guest);

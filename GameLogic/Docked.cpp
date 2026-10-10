@@ -49,8 +49,6 @@ constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
 constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
 constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
-constexpr std::uint16_t FORMAT_DECIMAL5 = 0x3407;
-constexpr std::uint16_t BLANK_LEADING_ZEROS = 0x3432;
 constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t START_NEW_GAME = 0x4671;
@@ -239,15 +237,29 @@ void WaitForKey(Guest& _guest, std::uint16_t _loop)
   }
 }
 
-// AX as a quantity, in the text at _text with up to four leading zeros blanked. Out: SI=_text.
-void FormatQuantity(Guest& _guest, std::uint16_t _text)
+// What FormatQuantity leaves: FormatDecimal5's units, and where BlankLeadingZeros stopped.
+struct FormattedQuantity
+{
+  std::uint16_t units;
+  BlankedZeros blanked;
+};
+
+// _quantity as five digits in the text at DS:_text, up to four of its leading zeros blanked.
+FormattedQuantity FormatQuantity(GameState& _state, std::uint16_t _quantity, std::uint16_t _text)
+{
+  const std::uint16_t units = FormatDecimal5(_state, _quantity, _text);
+  return FormattedQuantity{units, BlankLeadingZeros(_state, _text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED))};
+}
+
+// FormatQuantity of AX, and the registers as the original leaves them: FormatDecimal5's AX, the units with their digit
+// in AL, BlankLeadingZeros' DI and CX, and SI on the text.
+void FormatQuantityOnRegisters(Guest& _guest, std::uint16_t _text)
 {
   Machine::Registers& regs = _guest.Regs();
-  regs.di = _text;
-  _guest.Call(FORMAT_DECIMAL5);
-  regs.di = _text;
-  regs.cx = QUANTITY_DIGITS_BLANKED;
-  _guest.Call(BLANK_LEADING_ZEROS);
+  const FormattedQuantity formatted = FormatQuantity(_guest.State(), regs.ax, _text);
+  regs.ax = WithLow(formatted.units, static_cast<std::uint8_t>(Low(formatted.units) + '0'));
+  regs.di = formatted.blanked.firstKept;
+  regs.cx = formatted.blanked.triesLeft;
   regs.si = _text;
 }
 
@@ -598,7 +610,7 @@ void ShowSellCargoScreen(Guest& _guest)
     if (regs.ax != 0)
     {
       _guest.Push(regs.di);
-      FormatQuantity(_guest, DS.quantityText.offset);
+      FormatQuantityOnRegisters(_guest, DS.quantityText.offset);
       regs.di = Offset(_guest.Pop(), 2);
       _guest.Call(PRINT_TEXT_MODE_STRING);
       PrintUnit(_guest);
@@ -661,7 +673,7 @@ void ShowBuyCargoScreen(Guest& _guest)
     {
       _guest.Push(regs.ax);
       _guest.Push(regs.di);
-      FormatQuantity(_guest, DS.quantityText.offset);
+      FormatQuantityOnRegisters(_guest, DS.quantityText.offset);
       regs.di = Offset(_guest.Pop(), 2);
       _guest.Call(PRINT_TEXT_MODE_STRING);
       regs.bx = _guest.Get(DS.cargoRowPointer);
@@ -909,7 +921,7 @@ void ShowInventoryScreen(Guest& _guest)
       _guest.Push(regs.si);
       SetHigh(regs.ax, 0);
       _guest.Push(regs.di);
-      FormatQuantity(_guest, INVENTORY_QUANTITY_TEXT);
+      FormatQuantityOnRegisters(_guest, INVENTORY_QUANTITY_TEXT);
       regs.di = Offset(_guest.Pop(), 4);
       _guest.Call(PRINT_TEXT_MODE_STRING);
       regs.si = _guest.Pop();
