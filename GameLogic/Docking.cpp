@@ -193,15 +193,6 @@ void WaitTimerTicksOnRegisters(Guest& _guest, std::uint16_t _ticks, std::uint16_
                 static_cast<std::int16_t>(_approach ? Offset(z, APPROACH_DISTANCE) : z)};
 }
 
-// DI the station's slot, and AX, BX and CX its position, as LoadStationPosition gives it.
-void LoadStationPositionRegisters(Registers& _regs, Vector _position) noexcept
-{
-  _regs.di = DS.stationSlot.offset;
-  _regs.ax = static_cast<std::uint16_t>(_position.x);
-  _regs.bx = static_cast<std::uint16_t>(_position.y);
-  _regs.cx = static_cast<std::uint16_t>(_position.z);
-}
-
 // dockingComputerSteering and rollRate both _steering.
 void Steer(GameState& _state, std::uint16_t _steering)
 {
@@ -320,55 +311,68 @@ std::uint16_t PitchToTarget(GameState& _state, bool _approach, std::uint16_t _to
   return steering;
 }
 
-// cwd; idiv bx: a coordinate over the frames left.
-[[nodiscard]] std::uint16_t VelocityOver(Guest& _guest, std::uint16_t _coordinate)
+// CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap, which saves
+// BX, _frames.
+[[nodiscard]] std::uint16_t VelocityOver(GameState& _state, std::uint16_t _coordinate, std::uint16_t _frames)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = _coordinate;
-  regs.dx = SignWord(regs.ax);
-  DivideSignedWordOnRegisters(_guest, regs.bx);
-  return regs.ax;
+  const auto dividend = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(_coordinate)));
+  return DivideSignedWord(_state, dividend, _frames, _frames).quotient;
 }
 
-// State 4: fly straight to the approach point, faster while 350 or more away, at the velocity that gets
-// there in the frames left; on the last frame there, on to state 5.
-void FlyToApproachPoint(Guest& _guest)
+// What VectorLength leaves in BX: the last odd number its root subtracted, twice the root of the top 16 bits of _vector's squared
+// length, plus 1.
+[[nodiscard]] std::uint16_t VectorLengthOddLeftover(Vector _vector, std::uint16_t _length)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.dockingComputerSteering, 0);
-  _guest.Set(DS.rollRate, 0);
-  LoadStationPositionRegisters(regs, LoadStationPosition(_guest.State(), true));
-  VectorLengthEntry(_guest);
-  if (regs.ax >= SLOW_DOWN_DISTANCE)
+  const auto square = [](std::int16_t _value) { return static_cast<std::uint32_t>(std::int32_t{_value} * _value); };
+  const std::uint32_t sum = square(_vector.x) + square(_vector.y) + square(_vector.z);
+  unsigned shift = 0;
+  if ((sum >> 24) != 0)
   {
-    SpeedUp(_guest.State());
+    shift = 8;
+  }
+  else if ((sum >> 16) != 0)
+  {
+    shift = 4;
+  }
+  return static_cast<std::uint16_t>(((_length >> shift) << 1) + 1);
+}
+
+// State 4 (CS:8762): fly straight to the approach point, faster while 350 or more away (SpeedUp, SlowDown), at the velocity
+// that gets there in the frames left, the distance over the speed: XOR DX,DX / DIV playerSpeed, a speed of 0 dividing into the
+// game's trap, which saves the BX VectorLength left. On the last frame there, the ship stops on it and goes on to state 5.
+// MoveObjectsByVelocity moves the world either way.
+void FlyToApproachPoint(GameState& _state)
+{
+  Steer(_state, 0);
+  const Vector approach = LoadStationPosition(_state, true);
+  const std::uint16_t distance = VectorLength(approach);
+  if (distance >= SLOW_DOWN_DISTANCE)
+  {
+    SpeedUp(_state);
   }
   else
   {
-    SlowDown(_guest.State());
+    SlowDown(_state);
   }
-  regs.dx = 0;
-  DivideWordOnRegisters(_guest, _guest.Get(DS.playerSpeed));
-  if (regs.ax == 1)
+  const std::uint16_t frames =
+    DivideWord(_state, distance, _state.Get(DS.playerSpeed), VectorLengthOddLeftover(approach, distance)).quotient;
+  if (frames == 1)
   {
-    _guest.Set(DS.playerSpeed, 0);
-    _guest.Set(DS.velocityDirty, 1);
-    regs.ax = _guest.Word(Offset(regs.di, SLOT_X));
-    _guest.Set(DS.playerVelocityX, regs.ax);
-    regs.ax = _guest.Word(Offset(regs.di, SLOT_Y));
-    _guest.Set(DS.playerVelocityY, regs.ax);
-    regs.ax = Offset(_guest.Word(Offset(regs.di, SLOT_Z)), APPROACH_DISTANCE);
-    _guest.Set(DS.playerVelocityZ, regs.ax);
-    _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-    _guest.Set(DS.dockingComputerState, AIM_ROLL_AT_STATION);
-    _guest.Set(DS.dockingAlignPasses, 0);
+    _state.Set(DS.playerSpeed, 0);
+    _state.Set(DS.velocityDirty, 1);
+    _state.Set(DS.playerVelocityX, static_cast<std::uint16_t>(approach.x));
+    _state.Set(DS.playerVelocityY, static_cast<std::uint16_t>(approach.y));
+    _state.Set(DS.playerVelocityZ, static_cast<std::uint16_t>(approach.z));
+    MoveObjectsByVelocity(_state);
+    _state.Set(DS.dockingComputerState, AIM_ROLL_AT_STATION);
+    _state.Set(DS.dockingAlignPasses, 0);
     return;
   }
-  regs.bx = regs.ax;
-  _guest.Set(DS.playerVelocityX, VelocityOver(_guest, _guest.Word(Offset(regs.di, SLOT_X))));
-  _guest.Set(DS.playerVelocityY, VelocityOver(_guest, _guest.Word(Offset(regs.di, SLOT_Y))));
-  _guest.Set(DS.playerVelocityZ, VelocityOver(_guest, Offset(_guest.Word(Offset(regs.di, SLOT_Z)), APPROACH_DISTANCE)));
-  _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
+  // MOV AX,[DI+axis] (and ADD AX,7D0h for z), then the divide, for x, y and z.
+  _state.Set(DS.playerVelocityX, VelocityOver(_state, static_cast<std::uint16_t>(approach.x), frames));
+  _state.Set(DS.playerVelocityY, VelocityOver(_state, static_cast<std::uint16_t>(approach.y), frames));
+  _state.Set(DS.playerVelocityZ, VelocityOver(_state, static_cast<std::uint16_t>(approach.z), frames));
+  MoveObjectsByVelocity(_state);
 }
 
 // What CloseIn did.
@@ -638,103 +642,71 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   return PostDockingMessage(_state, DS.dockingComputerOnMessage);
 }
 
-void RunDockingComputer(Guest& _guest)
+DockingStep RunDockingComputer(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  // States 2 and 6, with what the original leaves in the registers: AX the roll angle it compared or the step it
-  // steers by, BX the tolerance, CX the target as AngleWithinTolerance sign-extends it, and DX the excess.
-  const auto rollToTarget = [&](std::uint8_t _next)
-  {
-    const std::uint16_t roll = _guest.Get(DS.playerRollAngle);
-    const std::uint16_t target = _guest.Get(DS.dockingTargetAngle);
-    const AngleTolerance found = RollToTarget(_guest.State(), _next);
-    regs.ax = found.within ? roll : _guest.Get(DS.dockingComputerSteering);
-    regs.bx = ROLL_TOLERANCE;
-    regs.cx = SignExtendAngle(target);
-    regs.dx = found.excess;
-  };
-  // States 1, 3, 5 and 7, with what the original leaves in the registers its contract compares: AX the angle aimed at or
-  // the steering, and DI the station's slot. BX, CX and DX, which it does not compare, are not reproduced here or in state
-  // 8: poisoned, every comparison and digest still agrees.
-  const auto aimed = [&regs](std::uint16_t _result)
-  {
-    regs.ax = _result;
-    regs.di = DS.stationSlot.offset;
-  };
-  // State 8, likewise: once it stops, what ResetStardust leaves, AX the last random number with the last lifetime it stored
-  // in AL, and DI past the particles; otherwise what MoveObjectsByVelocity leaves, AX = playerVelocityZ and SI past the
-  // last slot, and DI the station's slot.
-  const auto closeIn = [&]()
-  {
-    const ClosingIn closing = CloseIn(_guest.State());
-    if (closing.stopped)
-    {
-      const std::uint16_t lastParticle = DS.stardust.At(DS.stardust.ENTRY_COUNT - 1);
-      regs.ax = WithLow(closing.lastRandom, _guest.Byte(Offset(lastParticle, PARTICLE_LIFETIME)));
-      regs.di = DS.stardust.At(DS.stardust.ENTRY_COUNT);
-      return;
-    }
-    regs.ax = _guest.Get(DS.playerVelocityZ);
-    regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES);
-    regs.di = DS.stationSlot.offset;
-  };
-  // States 9 to 11, likewise: AX the spin or the steering, SI past the last slot as MoveObjectsByVelocity leaves it, and DI the
-  // station's slot. Their BX, CX and DX are not reproduced either: poisoned, every comparison and digest still agrees.
-  const auto matchedSpin = [&](std::uint16_t _result)
-  {
-    regs.ax = _result;
-    regs.si = static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES);
-    regs.di = DS.stationSlot.offset;
-  };
-  _guest.Set(DS.dockingComputerSteering, 0);
-  _guest.Set(DS.rollRate, 0);
-  switch (_guest.Get(DS.dockingComputerState))
+  Steer(_state, 0);
+  const std::uint8_t state = _state.Get(DS.dockingComputerState);
+  DockingStep step{state, 0, false};
+  switch (state)
   {
   case SLOW_TO_STOP:
-    if (_guest.Get(DS.playerSpeed) != 0)
+    // SUB WORD playerSpeed,4 while it is not 0, then on to state 1.
+    if (_state.Get(DS.playerSpeed) != 0)
     {
-      _guest.Set(DS.playerSpeed, static_cast<std::uint16_t>(_guest.Get(DS.playerSpeed) - SPEED_STEP));
-      _guest.Set(DS.velocityDirty, 1);
-      return;
+      _state.Set(DS.playerSpeed, static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) - SPEED_STEP));
+      _state.Set(DS.velocityDirty, 1);
+      return step;
     }
-    _guest.Set(DS.dockingComputerState, AIM_ROLL_AT_APPROACH);
-    _guest.Set(DS.dockingAlignPasses, 0);
-    return;
+    _state.Set(DS.dockingComputerState, AIM_ROLL_AT_APPROACH);
+    _state.Set(DS.dockingAlignPasses, 0);
+    return step;
   case AIM_ROLL_AT_APPROACH:
-    aimed(AimRoll(_guest.State(), true, ROLL_TO_APPROACH));
-    return;
+    step.result = AimRoll(_state, true, ROLL_TO_APPROACH);
+    return step;
   case ROLL_TO_APPROACH:
-    rollToTarget(PITCH_TO_APPROACH);
-    return;
-  case PITCH_TO_APPROACH:
-    aimed(PitchToTarget(_guest.State(), true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH));
-    return;
-  case FLY_TO_APPROACH:
-    FlyToApproachPoint(_guest);
-    return;
-  case AIM_ROLL_AT_STATION:
-    aimed(AimRoll(_guest.State(), false, ROLL_TO_STATION));
-    return;
   case ROLL_TO_STATION:
-    rollToTarget(PITCH_TO_STATION);
-    return;
+  {
+    // The roll angle AngleWithinTolerance compared, or the steering it sets.
+    const std::uint16_t roll = _state.Get(DS.playerRollAngle);
+    const bool within = RollToTarget(_state, state == ROLL_TO_APPROACH ? PITCH_TO_APPROACH : PITCH_TO_STATION).within;
+    step.result = within ? roll : _state.Get(DS.dockingComputerSteering);
+    return step;
+  }
+  case PITCH_TO_APPROACH:
+    step.result = PitchToTarget(_state, true, APPROACH_PITCH_TOLERANCE, APPROACH_PITCH_STEP, AIM_ROLL_AT_APPROACH, FLY_TO_APPROACH);
+    return step;
+  case FLY_TO_APPROACH:
+    FlyToApproachPoint(_state);
+    step.result = _state.Get(DS.playerVelocityZ);
+    return step;
+  case AIM_ROLL_AT_STATION:
+    step.result = AimRoll(_state, false, ROLL_TO_STATION);
+    return step;
   case PITCH_TO_STATION:
-    aimed(PitchToTarget(_guest.State(), false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN));
-    return;
+    step.result = PitchToTarget(_state, false, STATION_PITCH_TOLERANCE, STATION_PITCH_STEP, AIM_ROLL_AT_STATION, CLOSE_IN);
+    return step;
   case CLOSE_IN:
-    closeIn();
-    return;
+  {
+    // Once it stops, the last random number ResetStardust drew with the last lifetime it stored over its low byte; otherwise
+    // playerVelocityZ, as MoveObjectsByVelocity leaves it.
+    const ClosingIn closing = CloseIn(_state);
+    step.stopped = closing.stopped;
+    step.result = closing.stopped
+                    ? WithLow(closing.lastRandom, _state.Byte(Offset(DS.stardust.At(DS.stardust.ENTRY_COUNT - 1), PARTICLE_LIFETIME)))
+                    : _state.Get(DS.playerVelocityZ);
+    return step;
+  }
   case MATCH_SPIN:
-    matchedSpin(MatchSpin(_guest.State()));
-    return;
+    step.result = MatchSpin(_state);
+    return step;
   case ROLL_WITH_SPIN:
-    matchedSpin(RollWithSpin(_guest.State(), 0));
-    return;
+    step.result = RollWithSpin(_state, 0);
+    return step;
   case ROLL_WITH_SPIN_TURNED:
-    matchedSpin(RollWithSpin(_guest.State(), HALF_TURN));
-    return;
+    step.result = RollWithSpin(_state, HALF_TURN);
+    return step;
   default:
-    return;
+    return step;
   }
 }
 
@@ -802,6 +774,52 @@ void ToggleDockingComputerEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void RunDockingComputerEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const DockingStep step = RunDockingComputer(_guest.State());
+  // What each state leaves in AX, SI and DI, which the contract compares: the state's result in AX; DI the station's slot from
+  // LoadStationPosition and the docking states that read it; SI past the slots as MoveObjectsByVelocity leaves it, once it ran;
+  // and, once state 8 stopped, DI past the particles as ResetStardust leaves it. States 0 and 12 and up leave them alone.
+  const auto pastShipSlots = [&_guest]
+  { return static_cast<std::uint16_t>(DS.shipSlots.offset + LoopCount(_guest.Get(DS.shipSlotCount)) * ObjectSlot::BYTES); };
+  switch (step.state)
+  {
+  case AIM_ROLL_AT_APPROACH:
+  case PITCH_TO_APPROACH:
+  case AIM_ROLL_AT_STATION:
+  case PITCH_TO_STATION:
+    regs.ax = step.result;
+    regs.di = DS.stationSlot.offset;
+    break;
+  case ROLL_TO_APPROACH:
+  case ROLL_TO_STATION:
+    regs.ax = step.result;
+    break;
+  case CLOSE_IN:
+    regs.ax = step.result;
+    if (step.stopped)
+    {
+      regs.di = DS.stardust.At(DS.stardust.ENTRY_COUNT);
+      break;
+    }
+    regs.si = pastShipSlots();
+    regs.di = DS.stationSlot.offset;
+    break;
+  case FLY_TO_APPROACH:
+  case MATCH_SPIN:
+  case ROLL_WITH_SPIN:
+  case ROLL_WITH_SPIN_TURNED:
+    regs.ax = step.result;
+    regs.si = pastShipSlots();
+    regs.di = DS.stationSlot.offset;
+    break;
+  default:
+    break;
+  }
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
+}
+
 void CancelDockingComputerEntry(Guest& _guest)
 {
   CancelDockingComputer(_guest.State(), _guest.Devices());
@@ -829,7 +847,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnel, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnelEntry, CLOBBERS_ALL_BUT_SI_ES},
   NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputerEntry, PRESERVES_ALL},
-  NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputer, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputerEntry, CLOBBERS_BX_CX_DX},
   NativeEntry{0x8BAA, "CancelDockingComputer", &CancelDockingComputerEntry, PRESERVES_ALL},
 };
 

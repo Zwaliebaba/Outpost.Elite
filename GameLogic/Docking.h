@@ -23,11 +23,24 @@ namespace Elite
 /// docking as playerDocked says. Waits. Clobbers all.
 void PlayStationTunnel(Guest& _guest);
 
-/// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState.
-/// Out: dockingComputerSteering and rollRate, the steering for the frame.
-void RunDockingComputer(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// What a frame of the docking computer did.
+struct DockingStep
+{
+  std::uint8_t state; ///< dockingComputerState as the frame found it
+  /// What the state leaves in AX: 1 and 5 the roll they aim for; 2 and 6 the roll angle once within tolerance, else the steering;
+  /// 3, 7, 10 and 11 the steering; 9 the station's spin; 4 and 8 playerVelocityZ, or, once state 8 stops, the last random
+  /// number ResetStardust drew with the last lifetime over its low byte. Nothing for states 0 and 12 and up.
+  std::uint16_t result;
+  bool stopped; ///< state 8 came within 650 of the station and scattered the stardust
+};
+
+/// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState: 0 slow to a stop; 1 to 3
+/// roll and then pitch towards the approach point, 2000 out from the slot, twice; 4 fly to it; 5 to 7 the same towards the
+/// station; 8 close in until within 650, then the front view, locked; 9 to 11 roll to match the station's spin. Its steering for
+/// the frame is in dockingComputerSteering and rollRate, cleared first.
+DockingStep RunDockingComputer(GameState& _state);
 
 /// DrawTunnelRectangle (CS:1AA0): the four edges between the five points at DS:_points, x and y signed bytes about the view's
 /// centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB (DrawLineOut).
@@ -60,5 +73,7 @@ void CheckDockingAlignmentEntry(Guest& _guest); ///< In: BX the tolerance, DI th
 void MaskOutsideTunnelEntry(Guest& _guest);     ///< In: SI the rectangle. Out: ES=B800, DF=0; clobbers all but ES.
 void ToggleDockingComputerEntry(Guest& _guest); ///< Out: AX the message, and BX the station's slot once it looks at it.
 void CancelDockingComputerEntry(Guest& _guest); ///< Preserves every register.
+/// Out: AX, SI and DI as each state leaves them (DockingStep); BX, CX and DX clobbered.
+void RunDockingComputerEntry(Guest& _guest);
 
 } // namespace Elite

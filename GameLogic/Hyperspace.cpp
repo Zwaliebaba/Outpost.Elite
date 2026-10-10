@@ -26,7 +26,6 @@ constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t NEXT_RANDOM = 0x061C;
 constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t DRAW_CIRCLE = 0x1AC1;
-constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
 constexpr std::uint16_t ARRIVE_IN_SYSTEM = 0x2B5A;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
@@ -35,7 +34,6 @@ constexpr std::uint16_t DRAW_HYPERSPACE_RINGS = 0x48C0;
 constexpr std::uint16_t PLAY_HYPERSPACE_TUNNEL = 0x4906;
 constexpr std::uint16_t ENTER_WITCH_SPACE = 0x4917;
 constexpr std::uint16_t UPDATE_MISSION_SCHEDULE = 0x4953;
-constexpr std::uint16_t COMPUTE_ANGLES_TO_OBJECT = 0x4ECF;
 constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
 
 // IsMassLocked: the ships that do not lock the jump drive, by type, and the slot flag of a ship on the
@@ -177,42 +175,36 @@ void AddCarried(GameState& _state, std::uint16_t _low, std::uint16_t _high, std:
 
 } // namespace
 
-void ArriveInSystem(Guest& _guest)
+ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(SET_UP_LOCAL_SPACE);
-  if (_guest.Get(DS.witchspaceCountdown) != 0)
+  const ScreenChange change = SetUpLocalSpace(_state, _hardware, _backward);
+  if (_state.Get(DS.witchspaceCountdown) != 0)
   {
-    return;
+    return change;
   }
-  _guest.Call(NEXT_RANDOM);
-  regs.cx = regs.ax;
-  regs.ax = RandomArrivalOffset(_guest.State());
-  regs.bx = regs.ax;
-  regs.ax = RandomArrivalOffset(_guest.State());
-  // xchg cx,ax; cwd; xchg cx,ax: DL is the first number's sign, which carries into the z offset's top.
-  regs.dx = (regs.cx & 0x8000) != 0 ? static_cast<std::uint16_t>(0xFFFF) : static_cast<std::uint16_t>(0);
-  SetHigh(regs.dx, ARRIVAL_SLOTS);
-  regs.di = DS.shipSlots.offset;
-  do
+  // A random word for z, in CX, then the offsets for y, in BX, and x, in AX.
+  const std::uint16_t zOffset = NextRandom(_state);
+  const std::uint16_t yOffset = RandomArrivalOffset(_state);
+  const std::uint16_t xOffset = RandomArrivalOffset(_state);
+  // XCHG CX,AX / CWD / XCHG CX,AX: DL is z's sign, which carries into its top byte; DH counts the three slots.
+  const std::uint8_t zTop = (zOffset & 0x8000) != 0 ? std::uint8_t{0xFF} : std::uint8_t{0};
+  std::uint16_t slot = DS.shipSlots.offset;
+  for (std::uint8_t slots = ARRIVAL_SLOTS; slots != 0; --slots)
   {
-    AddCarried(_guest.State(), static_cast<std::uint16_t>(regs.di + 5), static_cast<std::uint16_t>(regs.di + 1), regs.ax);
-    AddCarried(_guest.State(), static_cast<std::uint16_t>(regs.di + 7), static_cast<std::uint16_t>(regs.di + 2), regs.bx);
-    const auto z = static_cast<std::uint16_t>(regs.di + 8);
-    const std::uint32_t sum = std::uint32_t{_guest.Word(z)} + regs.cx;
-    _guest.SetWord(z, static_cast<std::uint16_t>(sum));
-    const auto top = static_cast<std::uint16_t>(regs.di + 3);
-    _guest.SetByte(top, static_cast<std::uint8_t>(_guest.Byte(top) + Low(regs.dx) + (sum >> 16)));
-    regs.di = static_cast<std::uint16_t>(regs.di + SLOT_BYTES);
-    SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) - 1));
-  } while (High(regs.dx) != 0);
-  regs.di = DS.stationSlot.offset;
-  _guest.Call(COMPUTE_ANGLES_TO_OBJECT);
-  _guest.Set(DS.playerPitchAngle, regs.ax);
-  _guest.Set(DS.playerYawAngle, regs.bx);
-  _guest.Call(NEXT_RANDOM);
-  regs.ax = static_cast<std::uint16_t>(regs.ax & ANGLE_MASK);
-  _guest.Set(DS.playerRollAngle, regs.ax);
+    AddCarried(_state, static_cast<std::uint16_t>(slot + 5), static_cast<std::uint16_t>(slot + 1), xOffset);
+    AddCarried(_state, static_cast<std::uint16_t>(slot + 7), static_cast<std::uint16_t>(slot + 2), yOffset);
+    const auto z = static_cast<std::uint16_t>(slot + 8);
+    const std::uint32_t sum = std::uint32_t{_state.Word(z)} + zOffset;
+    _state.SetWord(z, static_cast<std::uint16_t>(sum));
+    const auto top = static_cast<std::uint16_t>(slot + 3);
+    _state.SetByte(top, static_cast<std::uint8_t>(_state.Byte(top) + zTop + (sum >> 16)));
+    slot = static_cast<std::uint16_t>(slot + SLOT_BYTES);
+  }
+  const Angles toStation = ComputeAnglesToObject(_state, ObjectSlot(_state, DS.stationSlot.offset));
+  _state.Set(DS.playerPitchAngle, toStation.first);
+  _state.Set(DS.playerYawAngle, toStation.second);
+  _state.Set(DS.playerRollAngle, static_cast<std::uint16_t>(NextRandom(_state) & ANGLE_MASK));
+  return change;
 }
 
 MassLock IsMassLocked(GameState& _state)
@@ -545,6 +537,8 @@ constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX
 constexpr Machine::NativeContract CLOBBERS_CX_SI_DI{REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
 // IsMassLocked's: every register as the original leaves it, and CF.
 constexpr Machine::NativeContract MASS_LOCK{0, FLAG_CARRY};
+// ArriveInSystem's: all but DS, which the original leaves alone and CompleteHyperspaceJump goes on with.
+constexpr Machine::NativeContract ARRIVES{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
 
 } // namespace
 
@@ -622,6 +616,16 @@ void ShowHyperspaceCountdownEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX);
 }
 
+void ArriveInSystemEntry(Guest& _guest)
+{
+  // ShowCockpitScreen's CLD, once SetUpLocalSpace drew the cockpit.
+  if (ArriveInSystem(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)) != ScreenChange::None)
+  {
+    _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  }
+  _guest.Clobber(ARRIVES);
+}
+
 namespace
 {
 
@@ -631,7 +635,7 @@ namespace
 // the original with no hook in force, and none of the work routines the jump calls would be compared.
 // What it does on the other frames is a few decrements, and ShowHyperspaceCountdown, compared on its own.
 constexpr std::array ENTRIES = {
-  NativeEntry{0x2B5A, "ArriveInSystem", &ArriveInSystem, Machine::NativeContract{REGISTER_ALL, 0}},
+  NativeEntry{0x2B5A, "ArriveInSystem", &ArriveInSystemEntry, ARRIVES},
   NativeEntry{0x4144, "IsMassLocked", &IsMassLockedEntry, MASS_LOCK},
   NativeEntry{0x4707, "CompleteHyperspaceJump", &CompleteHyperspaceJump,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0},
