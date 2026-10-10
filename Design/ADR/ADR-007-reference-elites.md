@@ -1,6 +1,6 @@
 # ADR-007 — The reference becomes ELITES.EXE
 
-**Status:** accepted 2026-10-09, from the owner's ruling D15 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner), with the change that implements it. It replaces ADR-001's reference file (item 2) and the file offset in its item 3. ADR-001 forecloses "any reference other than this file" except through a new ADR, and this is that ADR.
+**Status:** accepted 2026-10-09, from the owner's ruling D15 in [Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner), with the change that implements it. It replaces ADR-001's reference file (item 2) and the file offset in its item 3. ADR-001 forecloses "any reference other than this file" except through a new ADR, and this is that ADR. **Amended 2026-10-10 by [ADR-020](ADR-020-elites-exe-leaves-the-tree.md):** the file is no longer in the tree (D28); this ADR's hash is what the generator accepts and what the generated image was measured against.
 
 ## Context
 
