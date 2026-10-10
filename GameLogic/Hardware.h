@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <initializer_list>
 
 namespace Machine
 {
@@ -43,6 +44,13 @@ public:
 
   /// CLI.
   void DisableInterrupts() noexcept;
+
+  /// One turn of a loop that can wait, where the original jumps back to CS:_loop (ADR-015). _carried are the values the
+  /// original holds in registers there that change from one turn to the next: what the loop carries, and what it read from
+  /// a device in the turn. A turn that changed no byte and no port, with the same values as the last, idles to the next
+  /// device event, as the original's would; then the interrupts that fall due are taken. Only a routine hooked as one that
+  /// waits may call it.
+  void LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried);
 
 private:
   Machine::Pc& m_pc;

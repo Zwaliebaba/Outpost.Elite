@@ -462,16 +462,15 @@ void TimerTick(GameState& _state, Hardware& _hardware, bool _backward)
   TickSoundEffects(_state, _hardware);
 }
 
-void WaitForTimerTick(Guest& _guest)
+void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Push(regs.ax);
-  regs.ax = _guest.Get(DS.timerTicks);
-  while (regs.ax == _guest.Get(DS.timerTicks))
+  // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: the loop carries in AX the
+  // tick it started at. The stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
+  const std::uint16_t ticks = _state.Get(DS.timerTicks);
+  while (ticks == _state.Get(DS.timerTicks))
   {
-    _guest.JumpBack(TIMER_TICK_COMPARE);
+    _hardware.LoopTurn(TIMER_TICK_COMPARE, {ticks});
   }
-  regs.ax = _guest.Pop();
 }
 
 namespace
@@ -495,6 +494,12 @@ void InstallTimerInterruptEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX);
 }
 
+void WaitForTimerTickEntry(Guest& _guest)
+{
+  WaitForTimerTick(_guest.State(), _guest.Devices());
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void TimerTickEntry(Guest& _guest)
 {
   TimerTick(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
@@ -510,7 +515,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x7150, "TimerTick", &TimerTickEntry, CLOBBERS_AX},
   // WaitForTimerTick waits for the next tick as a rule.
-  NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTick, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
+  NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTickEntry, PRESERVES_ALL, Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Always},
 };
 
 } // namespace

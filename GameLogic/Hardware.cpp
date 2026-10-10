@@ -5,6 +5,11 @@
 #include "Arithmetic.h"
 #include "Pc.h"
 
+#include <algorithm>
+#include <array>
+#include <span>
+#include <stdexcept>
+
 namespace Elite
 {
 
@@ -53,6 +58,18 @@ void Hardware::EndOfInterrupt()
 void Hardware::EnableInterrupts() noexcept
 {
   m_pc.Processor().Regs().flags |= Machine::FLAG_INTERRUPT;
+}
+
+void Hardware::LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried)
+{
+  std::array<std::uint16_t, Machine::Pc::MOST_TURN_WORDS> signature{};
+  if (_carried.size() >= signature.size())
+  {
+    throw std::logic_error("Hardware::LoopTurn: more carried values than a turn signature holds");
+  }
+  signature[0] = _loop;
+  std::ranges::copy(_carried, signature.begin() + 1);
+  m_pc.LoopTurn(std::span<const std::uint16_t>(signature.data(), _carried.size() + 1));
 }
 
 void Hardware::DisableInterrupts() noexcept

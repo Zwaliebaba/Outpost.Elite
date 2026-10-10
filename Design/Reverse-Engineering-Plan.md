@@ -208,3 +208,4 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-012](ADR/ADR-012-de-assembling-the-native-routines.md) | De-assembling the native routines: the `GameState`, typed views, entries and poisoning (D17) | Phase 4 — written |
 | [ADR-013](ADR/ADR-013-the-charts-at-the-ibm-pcs-speed.md) | The charts at the IBM PC's speed: pacing points (D18) | Phase 4 — written |
 | [ADR-014](ADR/ADR-014-the-devices-behind-a-typed-boundary.md) | The devices behind a typed boundary: `Hardware`, the original's port sequences until D7, native devices after (D17) | Phase 4 — written |
+| [ADR-015](ADR/ADR-015-waiting-loops-de-assembled.md) | Waiting loops de-assembled: turn signatures in place of the registers (D17) | Phase 4 — written |

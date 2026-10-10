@@ -4,6 +4,7 @@
 #include "Pc.h"
 #include "PcRig.h"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -88,6 +89,22 @@ void WaitForTickByTurns(Machine::Pc& _pc)
   regs.bx = _pc.Ram().Read16(regs.es, 0x6C);
   while (_pc.Ram().Read16(regs.es, 0x6C) == regs.bx)
     _pc.LoopTurn();
+  _pc.ReturnNear();
+}
+
+// Its native counterpart de-assembled (ADR-015): no registers, and a turn signature where the original's JE jumps back,
+// the loop's offset and the tick count it carries in BX.
+void WaitForTickBySignature(Machine::Pc& _pc)
+{
+  constexpr std::uint16_t WAIT_LOOP = ROUTINE + 0x0B; // wait: cmp bx,es:[6Ch]
+  Machine::Registers& regs = _pc.Processor().Regs();
+  regs.flags = static_cast<std::uint16_t>(regs.flags | Machine::FLAG_INTERRUPT);
+  const std::uint16_t ticks = _pc.Ram().Read16(0x40, 0x6C);
+  while (_pc.Ram().Read16(0x40, 0x6C) == ticks)
+  {
+    const std::array signature{WAIT_LOOP, ticks};
+    _pc.LoopTurn(signature);
+  }
   _pc.ReturnNear();
 }
 
@@ -474,6 +491,36 @@ public:
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     rig.Run();
     Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+  }
+
+  // The same wait de-assembled, with a turn signature in place of the registers, idles on the same turns: the run
+  // ends inside it, and the first timer tick ends it on the original's cycle.
+  TEST_METHOD(SignatureTurnWaitsWhereTheOriginalDoes)
+  {
+    NativeRig rig("NativeSignatureTurn", WAIT_FOR_TICK);
+    rig.Hook(&WaitForTickBySignature, {}, Machine::NativeWait::Always);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
+    Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
+    rig.Run();
+    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
+  }
+
+  // A signature that never repeats never idles, and stops the run as the original's would.
+  TEST_METHOD(SignatureTurnThatNeverRepeatsSpins)
+  {
+    NativeRig rig("NativeSignatureTurnSpins", WAIT_FOR_TICK);
+    rig.Hook(
+      [](Machine::Pc& _pc)
+      {
+        for (std::uint16_t turn = 0;; ++turn)
+        {
+          const std::array signature{std::uint16_t{ROUTINE + 0x0B}, turn};
+          _pc.LoopTurn(signature);
+        }
+      },
+      {}, Machine::NativeWait::Always);
+    rig.Host().SetSpinLimit(1000);
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
   }
 
   // A loop whose turns never repeat never idles, and stops the run as the original's would.

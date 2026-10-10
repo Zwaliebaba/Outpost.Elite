@@ -15,6 +15,8 @@
 #include "Speaker.h"
 #include "Timing.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -279,6 +281,15 @@ public:
   /// routine hooked as one that waits may call it.
   void LoopTurn();
 
+  /// The most words a de-assembled loop's turn signature holds (LoopTurn(_signature)).
+  static constexpr std::size_t MOST_TURN_WORDS = 16;
+
+  /// LoopTurn for a de-assembled loop, which has no register file to compare (ADR-015): _signature stands for it, the
+  /// loop's address and the values it carries from one turn to the next. A turn that changed no byte and no port since
+  /// the last, with the same signature, idles. A signature never equals an original's register file. Only a routine
+  /// hooked as one that waits may call it; at most MOST_TURN_WORDS words.
+  void LoopTurn(std::span<const std::uint16_t> _signature);
+
   /// Paced time's charge for work the 8088 took time over where the program sets no pace of its own
   /// (ADR-013): an interpreted program that reaches _linear in paced time pays _cycles before the
   /// instruction there runs, the clock passing as it does in a wait, so that the interrupts falling due
@@ -307,6 +318,10 @@ private:
   struct Turn
   {
     Registers registers{};
+    // A de-assembled loop's signature in place of the registers (LoopTurn(_signature)).
+    std::array<std::uint16_t, MOST_TURN_WORDS> signature{};
+    std::size_t signatureWords = 0;
+    bool fromSignature = false;
     std::uint64_t memoryChanges = 0;
     std::uint64_t portWrites = 0;
     bool valid = false;
@@ -340,6 +355,8 @@ private:
   void StepPaced();
   [[nodiscard]] bool PaceAt(std::uint32_t _linear);
   void NoteBackwardJump();
+  void NoteTurn(const Turn& _turn);
+  void EndTurn();
   [[nodiscard]] StopReason Stopped() const noexcept;
 
   TimeMode m_timeMode = TimeMode::Clocked;

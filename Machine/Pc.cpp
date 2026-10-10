@@ -250,10 +250,24 @@ void Pc::Spend(Cycles _cycles)
 
 void Pc::NoteBackwardJump()
 {
-  const Turn turn{m_processor->Regs(), m_memory.ChangeCount(), m_ports.WriteCount(), true};
-  const bool idle = m_lastTurn.valid && turn.registers == m_lastTurn.registers && turn.memoryChanges == m_lastTurn.memoryChanges &&
-                    turn.portWrites == m_lastTurn.portWrites;
-  m_lastTurn = turn;
+  Turn turn;
+  turn.registers = m_processor->Regs();
+  turn.memoryChanges = m_memory.ChangeCount();
+  turn.portWrites = m_ports.WriteCount();
+  turn.valid = true;
+  NoteTurn(turn);
+}
+
+// A turn that changed nothing since the last idles: no byte, no port, and the same registers or the same signature.
+void Pc::NoteTurn(const Turn& _turn)
+{
+  const bool same = _turn.fromSignature
+                      ? m_lastTurn.fromSignature && _turn.signatureWords == m_lastTurn.signatureWords &&
+                          std::equal(_turn.signature.begin(), _turn.signature.begin() + _turn.signatureWords, m_lastTurn.signature.begin())
+                      : !m_lastTurn.fromSignature && _turn.registers == m_lastTurn.registers;
+  const bool idle =
+    m_lastTurn.valid && same && _turn.memoryChanges == m_lastTurn.memoryChanges && _turn.portWrites == m_lastTurn.portWrites;
+  m_lastTurn = _turn;
   if (idle)
   {
     Idle(m_runLimit);
@@ -554,6 +568,30 @@ void Pc::LoopTurn()
 {
   ++m_stepsSinceIdle;
   NoteBackwardJump();
+  EndTurn();
+}
+
+void Pc::LoopTurn(std::span<const std::uint16_t> _signature)
+{
+  if (_signature.size() > MOST_TURN_WORDS)
+  {
+    throw std::logic_error("Pc::LoopTurn: a turn signature of more than MOST_TURN_WORDS words");
+  }
+  ++m_stepsSinceIdle;
+  Turn turn;
+  std::ranges::copy(_signature, turn.signature.begin());
+  turn.signatureWords = _signature.size();
+  turn.fromSignature = true;
+  turn.memoryChanges = m_memory.ChangeCount();
+  turn.portWrites = m_ports.WriteCount();
+  turn.valid = true;
+  NoteTurn(turn);
+  EndTurn();
+}
+
+// After a turn is noted: the run's end if the clock reached it, and the interrupts now due.
+void Pc::EndTurn()
+{
   if (m_clock >= m_runLimit)
   {
     ReachedRunLimit();
