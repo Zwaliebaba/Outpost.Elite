@@ -200,7 +200,8 @@ public:
   /// there: at the start of any step, after the CPU has taken an interrupt that was due. Native code
   /// takes no time, which is what paced time expects of work (ADR-008). Throws std::logic_error if a
   /// routine is there already.
-  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract);
+  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
+            NativeReturn _exit = NativeReturn::Near);
 
   /// The native routines, whether they are being compared with the original, and what that found.
   [[nodiscard]] NativeCode& Native() noexcept
@@ -222,6 +223,17 @@ public:
 
   /// For native code: returns from a near call as RET _popBytes does.
   void ReturnNear(std::uint16_t _popBytes = 0) noexcept;
+
+  /// For native code: returns from a far call as RETF _popBytes does.
+  void ReturnFar(std::uint16_t _popBytes = 0) noexcept;
+
+  /// For native code: returns from an interrupt handler as IRET does.
+  void ReturnInterrupt() noexcept;
+
+  /// For native code: does what INT _vector does at CS:IP. The BIOS, DOS and mouse services take the
+  /// call if they serve that vector; otherwise the handler the vector table names runs until its IRET.
+  /// Like CallNear, a stop on the way abandons the native code.
+  void CallInterrupt(std::uint8_t _vector);
 
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does
   /// between two waits, far fewer than a host would run before someone notices.

@@ -147,9 +147,8 @@ void RatioArcTangent(Guest& _guest)
   if (regs.bx == 0 || dividend / regs.bx > 0xFFFF)
   {
     // The divide overflows: DivideOverflowInterrupt saves BX and DS, saturates AX and leaves DX.
-    Machine::Memory& ram = _guest.Host().Ram();
-    ram.Write16(regs.cs, DIVIDE_SAVED_BX_OFFSET, regs.bx);
-    ram.Write16(regs.cs, DIVIDE_SAVED_DS_OFFSET, regs.ds);
+    _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
+    _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
     regs.dx = static_cast<std::uint16_t>(dividend >> 16);
   }
   else
@@ -208,6 +207,50 @@ void AngleWithinTolerance(Guest& _guest)
   }
   _guest.SetFlag(Machine::FLAG_CARRY, difference < regs.bx);
   regs.dx = static_cast<std::uint16_t>(difference - regs.bx);
+}
+
+namespace
+{
+
+using Machine::FLAG_CARRY;
+using Machine::REGISTER_BX;
+using Machine::REGISTER_CX;
+using Machine::REGISTER_DX;
+
+constexpr Machine::NativeContract CLOBBERS_DX{REGISTER_DX, 0};
+constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+
+constexpr std::array ENTRIES = {
+  NativeEntry{0x061C, "NextRandom", &NextRandom, PRESERVES_ALL},
+  NativeEntry{0x2421, "SetSinCos0", [](Guest& _guest) { SetSinCos(_guest, 0x41A0); }, PRESERVES_ALL},
+  NativeEntry{0x2426, "SetSinCos1", [](Guest& _guest) { SetSinCos(_guest, 0x41A4); }, PRESERVES_ALL},
+  NativeEntry{0x242B, "SetSinCos2", [](Guest& _guest) { SetSinCos(_guest, 0x41A8); }, PRESERVES_ALL},
+  NativeEntry{0x2430, "SetSinCos3", [](Guest& _guest) { SetSinCos(_guest, 0x41AC); }, PRESERVES_ALL},
+  NativeEntry{0x2435, "SetSinCos4", [](Guest& _guest) { SetSinCos(_guest, 0x41B0); }, PRESERVES_ALL},
+  NativeEntry{0x243B, "SetSinCos5", [](Guest& _guest) { SetSinCos(_guest, 0x41B4); }, PRESERVES_ALL},
+  NativeEntry{0x2441, "SetSinCos6", [](Guest& _guest) { SetSinCos(_guest, 0x41B8); }, PRESERVES_ALL},
+  NativeEntry{0x2447, "SetSinCos8", [](Guest& _guest) { SetSinCos(_guest, 0x41C0); }, PRESERVES_ALL},
+  NativeEntry{0x244D, "SetSinCos7", [](Guest& _guest) { SetSinCos(_guest, 0x41BC); }, PRESERVES_ALL},
+  NativeEntry{0x2453, "RotateBySinCos0", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41A0); }, CLOBBERS_DX},
+  NativeEntry{0x2465, "RotateBySinCos1", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41A4); }, CLOBBERS_DX},
+  NativeEntry{0x246D, "RotateBySinCos2", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41A8); }, CLOBBERS_DX},
+  NativeEntry{0x2475, "RotateBySinCos3", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41AC); }, CLOBBERS_DX},
+  NativeEntry{0x247D, "RotateBySinCos4", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41B0); }, CLOBBERS_DX},
+  NativeEntry{0x2485, "RotateBySinCos5", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41B4); }, CLOBBERS_DX},
+  NativeEntry{0x248D, "RotateBySinCos6", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41B8); }, CLOBBERS_DX},
+  NativeEntry{0x2495, "RotateBySinCos7", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41BC); }, CLOBBERS_DX},
+  NativeEntry{0x249D, "RotateBySinCos8", [](Guest& _guest) { RotateByStoredSinCos(_guest, 0x41C0); }, CLOBBERS_DX},
+  NativeEntry{0x24A5, "ArcTangent2", &ArcTangent2, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x24E5, "QuadrantArcTangent", &QuadrantArcTangent, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x24F7, "RatioArcTangent", &RatioArcTangent, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x2CDB, "AngleWithinTolerance", &AngleWithinTolerance, Machine::NativeContract{0, FLAG_CARRY}},
+};
+
+} // namespace
+
+std::span<const NativeEntry> MathsEntries() noexcept
+{
+  return ENTRIES;
 }
 
 } // namespace Elite

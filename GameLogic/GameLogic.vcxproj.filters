@@ -1,14 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Ai">
+      <UniqueIdentifier>{2C381C1D-CA7E-5BA6-8399-C972905F9D2B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Build">
+      <UniqueIdentifier>{F2283DDF-E07B-54AA-8414-41DE2CFE031D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Combat">
+      <UniqueIdentifier>{B09526FE-DC3B-554E-9B50-36026767A2B3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Docked">
+      <UniqueIdentifier>{13F420DF-5721-5C5B-ABC8-0A44EAD73FF5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Docking">
+      <UniqueIdentifier>{9530420A-9CA5-511C-8936-A5D6D0986F4B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Equipment">
+      <UniqueIdentifier>{C08362C5-CCEF-5B5C-B713-6585EE90CAFE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Flight">
+      <UniqueIdentifier>{1A552B0A-873E-530A-82AB-22AE09DAB471}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Galaxy">
+      <UniqueIdentifier>{78528A9E-EDF7-5569-BCD7-1F20466BABB9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Hyperspace">
+      <UniqueIdentifier>{8222943B-64B3-54F4-AEEA-10E847B236C8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{1A628FB5-FB36-5367-897B-A13B31A943E3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Market">
+      <UniqueIdentifier>{2C209DAD-BCBB-522C-986E-A20716D10AEC}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Maths">
       <UniqueIdentifier>{E8CC5C2B-DBCC-5A5D-8CD2-63CB1EB28F1F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Native">
       <UniqueIdentifier>{E3FECD3E-1260-5FAE-B1A4-2F3CDDD6A58F}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Build">
-      <UniqueIdentifier>{F2283DDF-E07B-54AA-8414-41DE2CFE031D}</UniqueIdentifier>
     </Filter>
     <Filter Include="Reference">
       <UniqueIdentifier>{FA03127D-90C1-57F8-9A7E-7E0EDDC7A9E1}</UniqueIdentifier>
@@ -16,19 +46,76 @@
     <Filter Include="Replay">
       <UniqueIdentifier>{76CD6296-103E-5D07-AD3F-B20A9DA68ED4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="SaveLoad">
+      <UniqueIdentifier>{17AE04FC-2801-5FB4-AC47-827DB44D6D05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Scene">
+      <UniqueIdentifier>{51970647-1D31-554A-808C-03BFC80E5718}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ships">
+      <UniqueIdentifier>{234C0A57-0FA7-5F23-BAC8-21DE328397DF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound">
+      <UniqueIdentifier>{2251AD80-B622-5D41-A579-A3E3FA3211EC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="StartUp">
+      <UniqueIdentifier>{5108F650-EB43-5EB1-BDE1-C14A82862C40}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Text">
+      <UniqueIdentifier>{AB99293E-2657-50A8-BA28-2E5D4823C710}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Timer">
+      <UniqueIdentifier>{3687FE0C-5610-56F9-9106-456DFCA375F7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{96B27EB2-EAD5-526E-83E1-1501255B8C48}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Ai.h">
+      <Filter>Ai</Filter>
+    </ClInclude>
+    <ClInclude Include="Combat.h">
+      <Filter>Combat</Filter>
+    </ClInclude>
     <ClInclude Include="DataField.h">
       <Filter>Native</Filter>
     </ClInclude>
     <ClInclude Include="DataOverlay.h">
       <Filter>Native</Filter>
     </ClInclude>
+    <ClInclude Include="Docked.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
+    <ClInclude Include="Docking.h">
+      <Filter>Docking</Filter>
+    </ClInclude>
+    <ClInclude Include="Equipment.h">
+      <Filter>Equipment</Filter>
+    </ClInclude>
+    <ClInclude Include="Flight.h">
+      <Filter>Flight</Filter>
+    </ClInclude>
+    <ClInclude Include="Galaxy.h">
+      <Filter>Galaxy</Filter>
+    </ClInclude>
     <ClInclude Include="Guest.h">
       <Filter>Native</Filter>
     </ClInclude>
+    <ClInclude Include="Hyperspace.h">
+      <Filter>Hyperspace</Filter>
+    </ClInclude>
+    <ClInclude Include="Input.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Market.h">
+      <Filter>Market</Filter>
+    </ClInclude>
     <ClInclude Include="Maths.h">
       <Filter>Maths</Filter>
+    </ClInclude>
+    <ClInclude Include="NativeEntry.h">
+      <Filter>Native</Filter>
     </ClInclude>
     <ClInclude Include="NativeRoutines.h">
       <Filter>Native</Filter>
@@ -42,11 +129,65 @@
     <ClInclude Include="Replay.h">
       <Filter>Replay</Filter>
     </ClInclude>
+    <ClInclude Include="SaveLoad.h">
+      <Filter>SaveLoad</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Ships.h">
+      <Filter>Ships</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="StartUp.h">
+      <Filter>StartUp</Filter>
+    </ClInclude>
     <ClInclude Include="StateDigest.h">
       <Filter>Replay</Filter>
     </ClInclude>
+    <ClInclude Include="Text.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Filter>Timer</Filter>
+    </ClInclude>
+    <ClInclude Include="Video.h">
+      <Filter>Video</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Ai.cpp">
+      <Filter>Ai</Filter>
+    </ClCompile>
+    <ClCompile Include="Combat.cpp">
+      <Filter>Combat</Filter>
+    </ClCompile>
+    <ClCompile Include="Docked.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
+    <ClCompile Include="Docking.cpp">
+      <Filter>Docking</Filter>
+    </ClCompile>
+    <ClCompile Include="Equipment.cpp">
+      <Filter>Equipment</Filter>
+    </ClCompile>
+    <ClCompile Include="Flight.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
+    <ClCompile Include="Galaxy.cpp">
+      <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Hyperspace.cpp">
+      <Filter>Hyperspace</Filter>
+    </ClCompile>
+    <ClCompile Include="Input.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Market.cpp">
+      <Filter>Market</Filter>
+    </ClCompile>
     <ClCompile Include="Maths.cpp">
       <Filter>Maths</Filter>
     </ClCompile>
@@ -62,8 +203,32 @@
     <ClCompile Include="Replay.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="SaveLoad.cpp">
+      <Filter>SaveLoad</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Ships.cpp">
+      <Filter>Ships</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="StartUp.cpp">
+      <Filter>StartUp</Filter>
+    </ClCompile>
     <ClCompile Include="StateDigest.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="Text.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="Timer.cpp">
+      <Filter>Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="Video.cpp">
+      <Filter>Video</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Native">
+      <UniqueIdentifier>{262361E2-C492-5968-8372-873FD1FD79B3}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Maths">
       <UniqueIdentifier>{4CDA8523-BE40-5EB6-BB9F-9C0E029B2085}</UniqueIdentifier>
     </Filter>
@@ -15,6 +18,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ComparisonRig.h">
+      <Filter>Native</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>

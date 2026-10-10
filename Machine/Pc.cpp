@@ -182,9 +182,10 @@ StopReason Pc::RunUntil(Cycles _cycle)
   return StopReason::Reached;
 }
 
-void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract)
+void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
+              NativeReturn _exit)
 {
-  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract);
+  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract, _exit);
   m_cpu.SetHookMap(&m_native.Map());
   if (!m_comparison)
   {
@@ -207,6 +208,52 @@ void Pc::ReturnNear(std::uint16_t _popBytes) noexcept
   Registers& regs = m_cpu.Regs();
   regs.ip = m_memory.Read16(regs.ss, regs.sp);
   regs.sp = static_cast<std::uint16_t>(regs.sp + 2 + _popBytes);
+}
+
+void Pc::ReturnFar(std::uint16_t _popBytes) noexcept
+{
+  Registers& regs = m_cpu.Regs();
+  regs.ip = m_memory.Read16(regs.ss, regs.sp);
+  regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+  regs.sp = static_cast<std::uint16_t>(regs.sp + 4 + _popBytes);
+}
+
+void Pc::ReturnInterrupt() noexcept
+{
+  Registers& regs = m_cpu.Regs();
+  regs.ip = m_memory.Read16(regs.ss, regs.sp);
+  regs.cs = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+  const std::uint16_t flags = m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 4));
+  regs.flags = static_cast<std::uint16_t>((flags & FLAGS_WRITABLE) | FLAGS_FIXED_ONES);
+  regs.sp = static_cast<std::uint16_t>(regs.sp + 6);
+}
+
+void Pc::CallInterrupt(std::uint8_t _vector)
+{
+  if (m_services.ServiceInterrupt(m_cpu, _vector))
+  {
+    if (Stopped() != StopReason::Reached)
+    {
+      throw ProgramStopped{};
+    }
+    return;
+  }
+  Registers& regs = m_cpu.Regs();
+  const std::uint16_t segment = regs.cs;
+  const std::uint16_t stackPointer = regs.sp;
+  const auto push = [&](std::uint16_t _value)
+  {
+    regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+    m_memory.Write16(regs.ss, regs.sp, _value);
+  };
+  push(regs.flags);
+  push(regs.cs);
+  push(CALL_RETURN_OFFSET);
+  regs.flags = static_cast<std::uint16_t>(regs.flags & ~(FLAG_INTERRUPT | FLAG_TRAP));
+  const std::uint32_t entry = static_cast<std::uint32_t>(_vector) * 4;
+  regs.ip = m_memory.Read16(entry);
+  regs.cs = m_memory.Read16(entry + 2);
+  RunToReturn(segment, CALL_RETURN_OFFSET, stackPointer, nullptr);
 }
 
 void Pc::RunHook()
@@ -268,7 +315,11 @@ void Pc::Compare(NativeCode::Hook& _hook)
   Comparison& work = *m_comparison;
   Registers& regs = m_cpu.Regs();
   const Registers entry = regs;
+  // Where the original's run ends: the return address its caller, or the interrupt, pushed.
   const std::uint16_t returnOffset = m_memory.Read16(regs.ss, regs.sp);
+  const std::uint16_t returnSegment =
+    _hook.exit == NativeReturn::Near ? regs.cs : m_memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+  const std::uint16_t frameBytes = _hook.exit == NativeReturn::Near ? 2 : _hook.exit == NativeReturn::Far ? 4 : 6;
   const Cycles clock = m_clock;
   const std::uint64_t interrupts = m_cpu.HardwareInterruptCount();
   const std::uint64_t services = m_services.CallCount();
@@ -290,7 +341,7 @@ void Pc::Compare(NativeCode::Hook& _hook)
         m_cpu.SetHookMap(&m_native.Map());
         work.active = false;
       });
-    RunToReturn(entry.cs, returnOffset, static_cast<std::uint16_t>(entry.sp + 2), &_hook);
+    RunToReturn(returnSegment, returnOffset, static_cast<std::uint16_t>(entry.sp + frameBytes), &_hook);
   }
   if (m_clock != clock || m_cpu.HardwareInterruptCount() != interrupts || m_services.CallCount() != services ||
       work.originalWrites.Overflowed())

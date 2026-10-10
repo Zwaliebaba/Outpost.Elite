@@ -17,12 +17,15 @@ namespace
 
 constexpr std::uint16_t ROUTINE = 0x0010;
 constexpr std::uint16_t HELPER = 0x0030;
+constexpr std::uint16_t HANDLER = 0x0038;
 constexpr std::uint16_t COUNTER = 0x0040;
+constexpr std::uint8_t VECTOR = 0x60;
 constexpr std::uint16_t COUNTER_START = 0x1234;
 constexpr std::uint16_t SPEAKER_PORT = 0x61;
 
 // A program that sets DS to its own segment, calls the routine at 0010h and ends: the routine is what
-// _routine holds, the helper at 0030h sets BX to 7777h, and the counter word at 0040h starts at 1234h.
+// _routine holds, the helper at 0030h sets BX to 7777h, the interrupt handler at 0038h sets BX to 5555h,
+// and the counter word at 0040h starts at 1234h.
 std::vector<std::uint8_t> ProgramAround(std::initializer_list<std::uint8_t> _routine)
 {
   std::vector<std::uint8_t> code = {0x0E,             // push cs
@@ -33,6 +36,8 @@ std::vector<std::uint8_t> ProgramAround(std::initializer_list<std::uint8_t> _rou
   code.insert(code.end(), _routine);
   code.resize(HELPER, 0x90);
   code.insert(code.end(), {0xBB, 0x77, 0x77, 0xC3}); // mov bx,7777h; ret
+  code.resize(HANDLER, 0x90);
+  code.insert(code.end(), {0xBB, 0x55, 0x55, 0xCF}); // mov bx,5555h; iret
   code.resize(COUNTER, 0x90);
   code.insert(code.end(), {COUNTER_START & 0xFF, COUNTER_START >> 8});
   std::vector<std::uint8_t> file = TinyExe({});
@@ -82,6 +87,18 @@ public:
   void Hook(Machine::NativeRoutine _routine, const Machine::NativeContract& _contract = {})
   {
     m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _contract);
+  }
+
+  // Points the vector table's entry for VECTOR at the handler.
+  void InstallHandler()
+  {
+    m_rig.Host().Ram().Write16(VECTOR * 4u, HANDLER);
+    m_rig.Host().Ram().Write16(VECTOR * 4u + 2, m_program.loadSegment);
+  }
+
+  [[nodiscard]] std::uint16_t CodeSegment() const noexcept
+  {
+    return m_program.loadSegment;
   }
 
   void Run()
@@ -230,6 +247,46 @@ public:
     rig.Run();
     Assert::AreEqual(std::uint64_t{1}, rig.Books().unverifiable);
     Assert::AreEqual(std::uint64_t{0}, rig.Books().verified);
+  }
+
+  // Native code makes an INT: the handler the vector table names runs until its IRET.
+  TEST_METHOD(NativeCodeCallsAnInterruptHandler)
+  {
+    NativeRig rig("NativeInterrupts", COUNT_UP);
+    rig.InstallHandler();
+    rig.Hook(
+      [](Machine::Pc& _pc)
+      {
+        _pc.CallInterrupt(VECTOR);
+        Machine::Registers& regs = _pc.Processor().Regs();
+        regs.ax = regs.bx;
+        _pc.ReturnNear();
+      });
+    rig.Run();
+    Assert::AreEqual(0x5555u, std::uint32_t{rig.Host().Processor().Regs().ax});
+  }
+
+  // An interrupt handler's entry can be hooked: the native routine leaves with IRET, and a comparison
+  // runs the original to its IRET.
+  TEST_METHOD(InterruptHandlerEntryIsHookedAndCompared)
+  {
+    NativeRig rig("NativeHandler", {0xCD, VECTOR, 0xC3}); // int 60h; ret
+    rig.InstallHandler();
+    rig.Host().Hook(
+      rig.CodeSegment(), HANDLER, "Handler",
+      [](Machine::Pc& _pc)
+      {
+        _pc.Processor().Regs().bx = 0x5555;
+        _pc.ReturnInterrupt();
+      },
+      {}, Machine::NativeReturn::Interrupt);
+    rig.Host().Native().SetVerifying(true);
+    rig.Run();
+    const auto& hooks = rig.Host().Native().Hooks();
+    const auto found = hooks.find(Machine::Memory::Linear(rig.CodeSegment(), HANDLER));
+    Assert::IsTrue(found != hooks.end());
+    Assert::AreEqual(std::uint64_t{1}, found->second.verified);
+    Assert::AreEqual(0x5555u, std::uint32_t{rig.Host().Processor().Regs().bx});
   }
 
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)

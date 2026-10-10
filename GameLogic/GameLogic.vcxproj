@@ -74,17 +74,46 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Ai.h" />
+    <ClInclude Include="Combat.h" />
     <ClInclude Include="DataField.h" />
     <ClInclude Include="DataOverlay.h" />
+    <ClInclude Include="Docked.h" />
+    <ClInclude Include="Docking.h" />
+    <ClInclude Include="Equipment.h" />
+    <ClInclude Include="Flight.h" />
+    <ClInclude Include="Galaxy.h" />
     <ClInclude Include="Guest.h" />
+    <ClInclude Include="Hyperspace.h" />
+    <ClInclude Include="Input.h" />
+    <ClInclude Include="Market.h" />
     <ClInclude Include="Maths.h" />
+    <ClInclude Include="NativeEntry.h" />
     <ClInclude Include="NativeRoutines.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="Replay.h" />
+    <ClInclude Include="SaveLoad.h" />
+    <ClInclude Include="Scene.h" />
+    <ClInclude Include="Ships.h" />
+    <ClInclude Include="Sound.h" />
+    <ClInclude Include="StartUp.h" />
     <ClInclude Include="StateDigest.h" />
+    <ClInclude Include="Text.h" />
+    <ClInclude Include="Timer.h" />
+    <ClInclude Include="Video.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Ai.cpp" />
+    <ClCompile Include="Combat.cpp" />
+    <ClCompile Include="Docked.cpp" />
+    <ClCompile Include="Docking.cpp" />
+    <ClCompile Include="Equipment.cpp" />
+    <ClCompile Include="Flight.cpp" />
+    <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="Hyperspace.cpp" />
+    <ClCompile Include="Input.cpp" />
+    <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="NativeRoutines.cpp" />
     <ClCompile Include="pch.cpp">
@@ -92,7 +121,15 @@
     </ClCompile>
     <ClCompile Include="Reference.cpp" />
     <ClCompile Include="Replay.cpp" />
+    <ClCompile Include="SaveLoad.cpp" />
+    <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="Ships.cpp" />
+    <ClCompile Include="Sound.cpp" />
+    <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
+    <ClCompile Include="Text.cpp" />
+    <ClCompile Include="Timer.cpp" />
+    <ClCompile Include="Video.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Machine\Machine.vcxproj">

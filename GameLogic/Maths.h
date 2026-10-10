@@ -1,16 +1,20 @@
 // GameLogic/Maths.h
 #pragma once
 
-#include "Guest.h"
+#include "NativeEntry.h"
 
 #include <cstdint>
+#include <span>
 
 namespace Elite
 {
 
 // The reference's arithmetic, ported (plan §5 Phase 3, ADR-010). Each function is the body of the
 // routine Symbols.tsv names, on the registers its contract gives: it neither expects a return address
-// on the stack nor pops one, so native code calls it directly and NativeRoutines.cpp hooks it.
+// on the stack nor pops one, so native code calls it directly, and MathsEntries hooks it.
+
+/// The entries of this subsystem ported so far, for InstallNativeRoutines.
+[[nodiscard]] std::span<const NativeEntry> MathsEntries() noexcept;
 
 /// NextRandom (CS:061C): the lagged-Fibonacci step on randomState0-2. Out: AX.
 void NextRandom(Guest& _guest);

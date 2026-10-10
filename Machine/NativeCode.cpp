@@ -38,7 +38,7 @@ constexpr std::array<NamedRegister, 13> NAMED_REGISTERS = {{
 } // namespace
 
 void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine,
-                     const NativeContract& _contract)
+                     const NativeContract& _contract, NativeReturn _exit)
 {
   const std::uint32_t linear = Memory::Linear(_segment, _offset);
   // Made in place, never moved: a Hook's books are containers whose moves may allocate.
@@ -51,6 +51,7 @@ void NativeCode::Add(std::uint16_t _segment, std::uint16_t _offset, std::string 
   hook.name = std::move(_name);
   hook.routine = std::move(_routine);
   hook.contract = _contract;
+  hook.exit = _exit;
   hook.segment = _segment;
   hook.offset = _offset;
   m_map.resize(Memory::SIZE_BYTES, 0);

@@ -43,6 +43,15 @@ struct NativeContract
   std::uint16_t flags = 0;    ///< FLAG_* bits (Registers.h): flags its callers read
 };
 
+/// How the original at a hooked entry returns: what a comparison waits for to know its run is over,
+/// and what the native routine does to leave.
+enum class NativeReturn : std::uint8_t
+{
+  Near,     ///< RET or RET n: the return offset on the stack, in the same code segment
+  Far,      ///< RETF or RETF n: offset, then segment
+  Interrupt ///< IRET: offset, segment, then flags; an interrupt handler's entry
+};
+
 /// A routine in C++ that stands in for the program's own code at an entry (ADR-010). It is entered as
 /// the original is, with CS:IP at the entry and the caller's return address on the stack, and leaves
 /// the way the original does: through Pc::ReturnNear, or whatever return the original makes.
@@ -59,6 +68,7 @@ public:
     std::string name;
     NativeRoutine routine;
     NativeContract contract;
+    NativeReturn exit = NativeReturn::Near;
     std::uint16_t segment = 0;
     std::uint16_t offset = 0;
     std::uint64_t calls = 0;        ///< times execution reached the entry
@@ -84,7 +94,8 @@ public:
   static constexpr std::size_t MOST_DIFFERENCES = 8;
 
   /// Adds _routine at _segment:_offset. Throws std::logic_error if there is one there already.
-  void Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract);
+  void Add(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
+           NativeReturn _exit);
 
   /// A non-zero byte at the linear address of every entry: what the CPU stops at. Empty until the
   /// first routine is added.

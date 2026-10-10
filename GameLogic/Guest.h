@@ -10,16 +10,31 @@ namespace Elite
 {
 
 /// The machine as a native routine sees it (ADR-010): the registers, the reference's data segment by
-/// name (DataOverlay.h) or by offset, and the way back into the original's code. One is made for each
-/// call of a native routine, around the Pc that runs the program; everything it reads and writes goes
-/// through that Pc, so the replays, the journals and paced time's wait detection see it.
+/// name (DataOverlay.h) or by offset, its code segment, video memory, the stack, the ports, and the way
+/// back into the original's code. One is made for each call of a native routine, around the Pc that
+/// runs the program; everything it reads and writes goes through that Pc, so the replays, the journals
+/// and paced time's wait detection see it.
 class Guest
 {
 public:
-  Guest(Machine::Pc& _pc, std::uint16_t _dataSegment) noexcept
+  /// The CGA's video memory, which the reference writes directly.
+  static constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
+
+  Guest(Machine::Pc& _pc, std::uint16_t _codeSegment, std::uint16_t _dataSegment) noexcept
     : m_pc(_pc),
+      m_codeSegment(_codeSegment),
       m_dataSegment(_dataSegment)
   {
+  }
+
+  [[nodiscard]] std::uint16_t CodeSegment() const noexcept
+  {
+    return m_codeSegment;
+  }
+
+  [[nodiscard]] std::uint16_t DataSegment() const noexcept
+  {
+    return m_dataSegment;
   }
 
   [[nodiscard]] Machine::Registers& Regs() noexcept
@@ -74,6 +89,118 @@ public:
     m_pc.Ram().Write16(m_dataSegment, _offset, _value);
   }
 
+  /// The byte at _segment:_offset, in any segment.
+  [[nodiscard]] std::uint8_t FarByte(std::uint16_t _segment, std::uint16_t _offset) const noexcept
+  {
+    return m_pc.Ram().Read8(_segment, _offset);
+  }
+
+  [[nodiscard]] std::uint16_t FarWord(std::uint16_t _segment, std::uint16_t _offset) const noexcept
+  {
+    return m_pc.Ram().Read16(_segment, _offset);
+  }
+
+  void SetFarByte(std::uint16_t _segment, std::uint16_t _offset, std::uint8_t _value) noexcept
+  {
+    m_pc.Ram().Write8(_segment, _offset, _value);
+  }
+
+  void SetFarWord(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _value) noexcept
+  {
+    m_pc.Ram().Write16(_segment, _offset, _value);
+  }
+
+  /// The byte at CS:_offset: data the original keeps in its code segment, and the code it patches.
+  [[nodiscard]] std::uint8_t CodeByte(std::uint16_t _offset) const noexcept
+  {
+    return FarByte(m_codeSegment, _offset);
+  }
+
+  [[nodiscard]] std::uint16_t CodeWord(std::uint16_t _offset) const noexcept
+  {
+    return FarWord(m_codeSegment, _offset);
+  }
+
+  void SetCodeByte(std::uint16_t _offset, std::uint8_t _value) noexcept
+  {
+    SetFarByte(m_codeSegment, _offset, _value);
+  }
+
+  void SetCodeWord(std::uint16_t _offset, std::uint16_t _value) noexcept
+  {
+    SetFarWord(m_codeSegment, _offset, _value);
+  }
+
+  /// The byte at B800:_offset, in the CGA's video memory.
+  [[nodiscard]] std::uint8_t VideoByte(std::uint16_t _offset) const noexcept
+  {
+    return FarByte(VIDEO_SEGMENT, _offset);
+  }
+
+  [[nodiscard]] std::uint16_t VideoWord(std::uint16_t _offset) const noexcept
+  {
+    return FarWord(VIDEO_SEGMENT, _offset);
+  }
+
+  void SetVideoByte(std::uint16_t _offset, std::uint8_t _value) noexcept
+  {
+    SetFarByte(VIDEO_SEGMENT, _offset, _value);
+  }
+
+  void SetVideoWord(std::uint16_t _offset, std::uint16_t _value) noexcept
+  {
+    SetFarWord(VIDEO_SEGMENT, _offset, _value);
+  }
+
+  /// Pushes _value on the program's stack, as PUSH does.
+  void Push(std::uint16_t _value) noexcept
+  {
+    Machine::Registers& regs = Regs();
+    regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+    SetFarWord(regs.ss, regs.sp, _value);
+  }
+
+  /// Pops a word from the program's stack, as POP does.
+  [[nodiscard]] std::uint16_t Pop() noexcept
+  {
+    Machine::Registers& regs = Regs();
+    const std::uint16_t value = FarWord(regs.ss, regs.sp);
+    regs.sp = static_cast<std::uint16_t>(regs.sp + 2);
+    return value;
+  }
+
+  /// The word at SS:SP+_bytes: an argument a caller pushed, or, at a hooked entry, the return address
+  /// (at 0) and what lies above it.
+  [[nodiscard]] std::uint16_t StackWord(std::uint16_t _bytes) noexcept
+  {
+    const Machine::Registers& regs = Regs();
+    return FarWord(regs.ss, static_cast<std::uint16_t>(regs.sp + _bytes));
+  }
+
+  void SetStackWord(std::uint16_t _bytes, std::uint16_t _value) noexcept
+  {
+    const Machine::Registers& regs = Regs();
+    SetFarWord(regs.ss, static_cast<std::uint16_t>(regs.sp + _bytes), _value);
+  }
+
+  /// IN AL, _port.
+  [[nodiscard]] std::uint8_t In8(std::uint16_t _port)
+  {
+    return m_pc.Ports().In8(_port);
+  }
+
+  /// OUT _port, AL.
+  void Out8(std::uint16_t _port, std::uint8_t _value)
+  {
+    m_pc.Ports().Out8(_port, _value);
+  }
+
+  /// INT _vector (Pc::CallInterrupt): the BIOS, DOS and mouse calls, and the game's own handlers.
+  void Interrupt(std::uint8_t _vector)
+  {
+    m_pc.CallInterrupt(_vector);
+  }
+
   /// Sets or clears _flag (FLAG_* in Registers.h): what a routine does for a flag its callers read.
   void SetFlag(std::uint16_t _flag, bool _set) noexcept
   {
@@ -89,6 +216,7 @@ public:
 
 private:
   Machine::Pc& m_pc;
+  std::uint16_t m_codeSegment;
   std::uint16_t m_dataSegment;
 };
 
