@@ -85,7 +85,7 @@
 | Contracts widened | 0 |
 | Entries, each handing `Clobber` its contract | 110, of which Maths has 20 |
 | Lines touching a register in `GameLogic/*.cpp` | 5,525 before, 5,167 after |
-| Routines ready for the next level | 81 |
+| Routines ready for the next level | 83, and 52 more that need a device |
 | Register functions left | 467, on 19 levels |
 
 The 13 contracts poisoning narrowed:
