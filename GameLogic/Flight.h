@@ -26,10 +26,6 @@ namespace Elite
 /// come back as the scan leaves them.
 void HandleFlightFunctionKeys(Guest& _guest);
 
-/// UpdateCompass (CS:418F): moves the compass dot to the planet or the station. Every register comes
-/// back as the original leaves it; DI = stationSlot.
-void UpdateCompass(Guest& _guest);
-
 /// RunFlight (CS:7E9B): the station tunnel, then a frame at a time until the player docks or is 40
 /// frames dead; when the escape pod arrives TickEscapePod returns past it. Waits.
 void RunFlight(Guest& _guest);
@@ -268,6 +264,21 @@ WarningChecks CheckEnergyWarning(GameState& _state, std::uint16_t _checks);
 /// and the new one in. Returns the last pixel of the new blip, when it drew one.
 std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera);
 
+/// What UpdateCompass leaves for its entry.
+struct CompassUpdate
+{
+  DashboardPixel last;  ///< the last pixel of the dot it drew, one right of and one above its centre
+  std::uint16_t range;  ///< |z| + 1000 of the target in the camera's frame, the dot's divisor, which CX keeps
+  std::uint8_t inFront; ///< the station slot's BlipZ: 20h while the target is in front, else 0, which BP keeps sign-extended
+};
+
+/// UpdateCompass (CS:418F): while titleShown, the compass dot moved to the station when the planet is near
+/// (IsObjectNearKeepBlip), else to the planet (compassTargetIsStation 1 or 0). The target's and the station's scale shifts go to
+/// their depth bytes (+3Dh); the target's scaled position turned to the view goes to the station's compass words and, turned to
+/// the camera's frame, gives the dot: x and y as 8 * |c| / (|z| + 1000), at most 7, normalised by sqrtTable when their squares
+/// reach 41h, at (CFh + x, 27h + y). The old dot, kept in the station's blip bytes, is XORed out if drawn and the new one in.
+std::optional<CompassUpdate> UpdateCompass(GameState& _state);
+
 /// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
 /// neighbours, a ring, and the centre too while _inFront, solid. Returns the last pixel, one right of and one above
 /// the centre.
@@ -378,6 +389,9 @@ void XorCompassDotEntry(Guest& _guest);     ///< DL, DH = the dot, BP = 0 behind
 void EraseScannerBlipEntry(Guest& _guest);  ///< DI = the slot. Out, once it erases: AX = DX the last pixel, BX its mask, CX, ES.
 void XorScannerBlipEntry(Guest& _guest);    ///< AH, BH, CH = the scanner bytes. Out: AX = DX the last pixel, BX its mask, CX.
 void XorDashboardPixelEntry(Guest& _guest);
+/// Out: every register as the original leaves it once titleShown: XorCompassDotEntry's AX, BX, DX and ES, CX the dot's divisor, BP
+/// the in-front byte sign-extended, and DI = stationSlot, which TransformAndDrawObjects goes on with.
+void UpdateCompassEntry(Guest& _guest);
 void EraseCompassAndBlipsEntry(Guest& _guest); ///< Out: ES = B800h once it erases anything.
 void DrainEnergyEntry(Guest& _guest);
 void EngageJumpDriveEntry(Guest& _guest); ///< Out: AX the message, and every register IsMassLocked leaves once it is asked.

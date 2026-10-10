@@ -11,6 +11,7 @@
 #include "Input.h"
 #include "Maths.h"
 #include "ObjectSlot.h"
+#include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
 #include "Text.h"
@@ -32,12 +33,10 @@ using Machine::Registers;
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
 constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
-constexpr std::uint16_t NEXT_RANDOM = 0x061C;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
 constexpr std::uint16_t HANDLE_FLIGHT_FUNCTION_KEYS = 0x0BB3;
 constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
 constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
-constexpr std::uint16_t RESTORE_FLIGHT_SCREEN = 0x15CF;
 constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
 constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
@@ -49,21 +48,11 @@ constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
-constexpr std::uint16_t SHOW_SHIP_IDENTITY = 0x364D;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t ROTATE_PITCH_YAW_ROLL = 0x3EAC;
-constexpr std::uint16_t TRANSFORM_TO_VIEW = 0x3EE3;
-constexpr std::uint16_t IS_STATION = 0x3F40;
-constexpr std::uint16_t GET_POSITION_SCALE_SHIFT = 0x4333;
-constexpr std::uint16_t SCALE_POSITION_DOWN = 0x439E;
 constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
-constexpr std::uint16_t IS_OBJECT_NEAR_KEEP_BLIP = 0x460E;
-constexpr std::uint16_t RESET_HYPERSPACE_RINGS = 0x48AB;
 constexpr std::uint16_t UPDATE_FUEL_LEAK = 0x499F;
-constexpr std::uint16_t LATCH_HYPERSPACE_TARGET = 0x49F6;
 constexpr std::uint16_t UPDATE_OBJECTS_AND_SPAWN = 0x4A10;
 constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
-constexpr std::uint16_t LAUNCH_PLAYER_MISSILE = 0x5242;
 constexpr std::uint16_t SHOW_SYSTEM_DATA_SCREEN = 0x5CDE;
 constexpr std::uint16_t SHOW_MARKET_PRICES_SCREEN = 0x5E2C;
 constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
@@ -73,7 +62,6 @@ constexpr std::uint16_t SILENCE_SPEAKER_TIMER = 0x7436;
 constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
 constexpr std::uint16_t START_BEEP = 0x7A57;
-constexpr std::uint16_t START_LOW_BEEP = 0x7A5D;
 constexpr std::uint16_t STOP_SOUND_EFFECTS = 0x7A63;
 constexpr std::uint16_t STOP_CONTINUOUS_NOISE = 0x7B6B;
 constexpr std::uint16_t POLL_SCREEN_DUMP_KEY = 0x7F3D;
@@ -85,9 +73,7 @@ constexpr std::uint16_t DRAIN_ENERGY = 0x839F;
 constexpr std::uint16_t TOGGLE_DOCKING_COMPUTER = 0x83B2;
 constexpr std::uint16_t ENGAGE_JUMP_DRIVE = 0x8430;
 constexpr std::uint16_t UPDATE_PLAYER_MOTION = 0x8472;
-constexpr std::uint16_t FIND_SHIP_IN_CROSSHAIRS = 0x8A46;
 constexpr std::uint16_t RESOLVE_LASER_FIRE = 0x8AC2;
-constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
 constexpr std::uint16_t APPLY_ENEMY_LASER_HIT = 0x8C8E;
 constexpr std::uint16_t RUN_PAUSE_SCREEN = 0x8D6A;
 constexpr std::uint16_t USE_MASKING_DEVICE = 0x8ECF;
@@ -115,13 +101,19 @@ constexpr std::uint16_t LEFT_VIEW = 0x200;
 constexpr std::uint16_t REAR_VIEW = 0x400;
 constexpr std::uint16_t RIGHT_VIEW = 0x600;
 
-// An object slot's fields beyond those Ships.h names (SLOT_BYTES, SLOT_X, SLOT_Y, SLOT_Z, SLOT_FLAGS, SLOT_CLASS).
-constexpr std::uint16_t SLOT_COMPASS_X = 0x20; // the station's direction for the compass, where Ships.h has SLOT_VIEW_X at 10h
-constexpr std::uint16_t SLOT_COMPASS_Y = 0x22;
-constexpr std::uint16_t SLOT_COMPASS_Z = 0x24;
-constexpr std::uint16_t SLOT_BLIP = 0x26; // the scanner blip, or the compass dot: x, y, z bytes
-constexpr std::uint16_t SLOT_SCALE_SHIFT = 0x3D;
+// An object slot's flag (+1Eh) bit that says its scanner blip, or the station's compass dot, is drawn.
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
+
+// The compass: the dot's x and y run 0 to 7 from its centre (CFh, 27h), each 8 * |c| / (|z| + 1000), normalised by sqrtTable
+// once their squares reach 41h; the station slot's BlipZ is 20h while the target is in front.
+constexpr std::uint16_t COMPASS_STEPS = 8;
+constexpr std::uint16_t COMPASS_LAST_STEP = COMPASS_STEPS - 1;
+constexpr std::uint16_t COMPASS_DEPTH = 0x3E8;
+constexpr std::uint8_t COMPASS_NORMALIZED_FROM = 0x41;
+constexpr std::uint8_t COMPASS_STEP_MASK = 7;
+constexpr std::uint8_t COMPASS_CENTER_X = 0xCF;
+constexpr std::uint8_t COMPASS_CENTER_Y = 0x27;
+constexpr std::uint8_t COMPASS_IN_FRONT = 0x20;
 
 // What SetUpLocalSpace puts in the first three slots: the sun's and the planet's type bytes and flags, the planet's
 // z (its middle byte), and the station's heading, z, flags and energy.
@@ -209,6 +201,17 @@ constexpr std::uint16_t PAUSE_FIRST_OPTION = 0x0C08; // in spaceViewBuffer
 constexpr std::uint16_t PAUSE_OPTION_STEP = 0x200;
 constexpr std::uint16_t PAUSE_OPTIONS_LOOP = 0x8D98;
 constexpr std::uint16_t HYPERSPACE_REFUSAL_TAIL = 0x80A3; // posts the message in AX for 25 frames
+constexpr std::uint16_t PAST_HYPERSPACE_KEY = 0x8065;     // JMP 8101h, past H's handling
+
+// H: a distance of 47h tenths of a light year or more is out of range; the fuel, times 10 over 24h, must reach the distance's
+// low byte, and the jump costs that times 24h over 10, at least 1.
+constexpr std::uint16_t OUT_OF_RANGE_TENTHS = 0x47;
+constexpr std::uint8_t FUEL_FACTOR = 0x0A;
+constexpr std::uint8_t FUEL_DIVISOR = 0x24;
+
+// The missile keys: a launch jams on a random word below 1F4h, and no missile locks on a ship that carries the masking device.
+constexpr std::uint16_t MISSILE_JAM_ODDS = 0x1F4;
+constexpr std::uint8_t FLAG_MASKED = 0x20;
 constexpr std::uint16_t ALL_COLORS = 0xFFFF;
 constexpr std::uint16_t TITLE_TEXT_POSITION = 0x65; // on the message line, in CGA memory
 constexpr std::uint8_t DIGIT_ZERO = 0x30;
@@ -270,12 +273,6 @@ constexpr std::int16_t DEATH_DEBRIS_SPEED = 0x28;
 [[nodiscard]] std::int8_t WholePart(std::int16_t _value) noexcept
 {
   return static_cast<std::int8_t>(High(Word(_value)));
-}
-
-// MUL r8: AX = AL * _factor.
-void MultiplyByte(Registers& _regs, std::uint8_t _factor) noexcept
-{
-  _regs.ax = static_cast<std::uint16_t>(Low(_regs.ax) * _factor);
 }
 
 // mov [messagePointer], ax; mov [messageFrames], _frames, after mov ax, _text: the message at DS:_text, posted for
@@ -728,22 +725,18 @@ std::uint16_t SetWarning(GameState& _state, std::uint8_t _warning)
 
 // ---- The scanner and the compass ------------------------------------------------------------------
 
-// 0x41FF-0x4217: AX = 8 * AX / CX, at most 7, where CX is at least AX.
-void ScaleCompassAxis(Guest& _guest)
+// ScaleCompassAxis (0x41FF-0x4217, and again at 0x421B-0x4233): CMP CX,AX / JB, then CWD, three SHL AX / RCL DX and DIV CX:
+// 8 * _magnitude / _range when _range is not below _magnitude, else _magnitude; then at most 7. A magnitude of 8000h, which
+// NEG leaves so, is negative to CWD, and the divide traps, with BX = _bx.
+[[nodiscard]] std::uint16_t ScaleCompassAxis(GameState& _state, std::uint16_t _magnitude, std::uint16_t _range, std::uint16_t _bx)
 {
-  Registers& regs = _guest.Regs();
-  if (regs.cx >= regs.ax)
+  std::uint16_t scaled = _magnitude;
+  if (_range >= _magnitude)
   {
-    regs.dx = SignWord(regs.ax);
-    const std::uint32_t dividend = ((std::uint32_t{regs.dx} << 16) | regs.ax) << 3;
-    regs.dx = static_cast<std::uint16_t>(dividend >> 16);
-    regs.ax = static_cast<std::uint16_t>(dividend);
-    DivideWordOnRegisters(_guest, regs.cx);
+    const std::uint32_t dividend = ((std::uint32_t{SignWord(_magnitude)} << 16) | _magnitude) << 3;
+    scaled = DivideWord(_state, dividend, _range, _bx).quotient;
   }
-  if (regs.ax >= 8)
-  {
-    regs.ax = 7;
-  }
+  return scaled >= COMPASS_STEPS ? COMPASS_LAST_STEP : scaled;
 }
 
 // The eight neighbours XorCompassDot visits, in its order, as steps of DL and DH.
@@ -895,19 +888,23 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
   }
 }
 
-// FlightScreenDispatch (0x0BDE): leaving the function keys, the cockpit back if a screen was shown.
-void LeaveFlightScreens(Guest& _guest)
+// FlightScreenDispatch (0x0BDE): leaving the function keys: the cockpit back (RestoreFlightScreen, then ResetKeyboard) if a
+// screen was shown, then inFlight set. Returns what RestoreFlightScreen did, when it ran; _backward is the direction flag it
+// runs by.
+std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.flightScreenShown) != 0)
+  std::optional<ScreenChange> change;
+  if (_state.Get(DS.flightScreenShown) != 0)
   {
-    const std::uint16_t key = regs.ax;
-    _guest.Call(RESTORE_FLIGHT_SCREEN);
-    _guest.Call(RESET_KEYBOARD);
-    regs.ax = key;
+    change = RestoreFlightScreen(_state, _hardware, _backward);
+    ResetKeyboard(_state, _hardware);
   }
-  _guest.Set(DS.inFlight, 1);
+  _state.Set(DS.inFlight, 1);
+  return change;
 }
+
+// What RestoreFlightScreen leaves in the registers once it has made _change (RestoreFlightScreenEntry).
+void RestoreFlightScreenOut(Guest& _guest, ScreenChange _change) noexcept;
 
 // 0x0C13 and 0x0C72: flightScreenShown set, then push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
 // Returns whether EraseCompassAndBlips erased anything.
@@ -931,13 +928,25 @@ void DispatchFlightScreens(Guest& _guest)
       regs.es = GameState::VIDEO_SEGMENT;
     }
   };
+  // LeaveFlightScreens, with what RestoreFlightScreen leaves in the registers but AX, which PUSH AX / POP AX keep round it and
+  // ResetKeyboard: HandleFlightFunctionKeys' contract compares every register.
+  const auto leaveFlightScreens = [&_guest, &regs]
+  {
+    const std::uint16_t key = regs.ax;
+    if (const std::optional<ScreenChange> change =
+          LeaveFlightScreens(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)))
+    {
+      RestoreFlightScreenOut(_guest, *change);
+      regs.ax = key;
+    }
+  };
   for (;;)
   {
     const std::uint8_t key = High(regs.ax);
     if (key >= SCAN_F1 && key <= SCAN_F4)
     {
       _guest.JumpBack(0x0BDE);
-      LeaveFlightScreens(_guest);
+      leaveFlightScreens();
       return;
     }
     if (_guest.Get(DS.witchspaceCountdown) == 0)
@@ -978,7 +987,7 @@ void DispatchFlightScreens(Guest& _guest)
         SetMessage(_guest.State(), regs.ax, 0x19);
         SetHigh(regs.ax, 0);
         _guest.JumpBack(0x0BDE);
-        LeaveFlightScreens(_guest);
+        leaveFlightScreens();
         return;
       }
       eraseForFlightScreen();
@@ -1032,136 +1041,119 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
   SetMessage(_state, _text, 0x19);
 }
 
-// 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown
-// started, which ends ProcessFlightKeys.
-[[nodiscard]] bool PressHyperspace(Guest& _guest)
+// 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown started, which ends
+// ProcessFlightKeys. _backward is the direction flag ResetHyperspaceRings' copy runs by.
+[[nodiscard]] bool PressHyperspace(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.dockingComputerOn) == 1 || _guest.Get(DS.hyperspaceCountdown) != 0)
+  if (_state.Get(DS.dockingComputerOn) == 1 || _state.Get(DS.hyperspaceCountdown) != 0)
   {
-    _guest.JumpBack(0x8065); // past H
+    // JE or JNE back to the JMP past the key's handling: a backward jump into shared code, not a loop, so its turn carries
+    // nothing.
+    _hardware.LoopTurn(PAST_HYPERSPACE_KEY, {});
     return false;
   }
-  SetLow(regs.ax,
-         (_guest.Get(DS.invadedStationDestroyed) ^ 1) & _guest.Get(DS.thargoidInvasionActive) & _guest.Get(DS.jumpedSinceBriefing));
-  if (Low(regs.ax) != 0)
+  if (((_state.Get(DS.invadedStationDestroyed) ^ 1) & _state.Get(DS.thargoidInvasionActive) & _state.Get(DS.jumpedSinceBriefing)) != 0)
   {
-    regs.ax = DS.hyperspaceJammedMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 0x19);
+    SetMessage(_state, DS.hyperspaceJammedMessage.offset, 0x19);
     return false;
   }
-  if (_guest.Get(DS.galacticDriveReadyFrames) != 0)
+  if (_state.Get(DS.galacticDriveReadyFrames) != 0)
   {
-    _guest.Set(DS.galacticJumpPending, 1);
+    _state.Set(DS.galacticJumpPending, 1);
   }
   else
   {
-    regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
-    if (regs.ax == 0)
+    const std::uint16_t distance = _state.Get(DS.selectedDistanceTenthsLy);
+    if (distance == 0)
     {
-      regs.ax = DS.noSystemSelectedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 0x19);
+      SetMessage(_state, DS.noSystemSelectedMessage.offset, 0x19);
       return false;
     }
-    if (regs.ax >= 0x47)
+    if (distance >= OUT_OF_RANGE_TENTHS)
     {
-      regs.ax = DS.outOfRangeMessage.offset;
-      PostHyperspaceRefusal(_guest.State(), _guest.Devices(), regs.ax);
+      PostHyperspaceRefusal(_state, _hardware, DS.outOfRangeMessage.offset);
       return false;
     }
-    // The fuel in tenths of a light year against the distance, and the cost.
-    SetLow(regs.bx, Low(regs.ax));
-    SetHigh(regs.bx, 0x0A);
-    SetLow(regs.ax, _guest.Get(DS.fuel));
-    MultiplyByte(regs, High(regs.bx));
-    SetHigh(regs.bx, 0x24);
-    DivideByteOnRegisters(_guest, High(regs.bx));
-    if (Low(regs.ax) < Low(regs.bx))
+    // MOV BL,AL / MOV BH,0Ah / MOV AL,fuel / MUL BH / MOV BH,24h / DIV BH: the fuel times 10, over 24h, against the distance's
+    // low byte; then MOV AX,distance / MUL BH / MOV BH,0Ah / DIV BH: the cost, its low byte times 24h over 10, at least 1. BX
+    // holds BH and the distance's low byte at each divide.
+    const std::uint8_t tenths = Low(distance);
+    const ByteQuotient reach =
+      DivideByte(_state, static_cast<std::uint16_t>(_state.Get(DS.fuel) * FUEL_FACTOR), FUEL_DIVISOR, Join(FUEL_DIVISOR, tenths));
+    if (reach.quotient < tenths)
     {
-      regs.ax = DS.notEnoughFuelMessage.offset;
-      PostHyperspaceRefusal(_guest.State(), _guest.Devices(), regs.ax);
+      PostHyperspaceRefusal(_state, _hardware, DS.notEnoughFuelMessage.offset);
       return false;
     }
-    regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
-    MultiplyByte(regs, High(regs.bx));
-    SetHigh(regs.bx, 0x0A);
-    DivideByteOnRegisters(_guest, High(regs.bx));
-    if (Low(regs.ax) == 0)
-    {
-      SetLow(regs.ax, 1);
-    }
-    _guest.Set(DS.hyperspaceFuelCost, Low(regs.ax));
+    const auto product = static_cast<std::uint16_t>(Low(_state.Get(DS.selectedDistanceTenthsLy)) * FUEL_DIVISOR);
+    const ByteQuotient cost = DivideByte(_state, product, FUEL_FACTOR, Join(FUEL_FACTOR, tenths));
+    _state.Set(DS.hyperspaceFuelCost, cost.quotient == 0 ? std::uint8_t{1} : cost.quotient);
   }
-  _guest.Set(DS.hyperspaceCountdown, 0x0A);
-  _guest.Set(DS.hyperspaceCountdownFrames, 0x0A);
-  _guest.Call(SHOW_HYPERSPACE_COUNTDOWN);
-  _guest.Call(RESET_HYPERSPACE_RINGS);
-  _guest.Set(DS.missileState, 0);
-  _guest.Set(DS.shipIdRequested, 0);
-  _guest.Call(LATCH_HYPERSPACE_TARGET);
+  _state.Set(DS.hyperspaceCountdown, 0x0A);
+  _state.Set(DS.hyperspaceCountdownFrames, 0x0A);
+  ShowHyperspaceCountdown(_state);
+  ResetHyperspaceRings(_state, _backward);
+  _state.Set(DS.missileState, 0);
+  _state.Set(DS.shipIdRequested, 0);
+  LatchHyperspaceTarget(_state);
   return true;
 }
 
-// 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it.
-void HandleMissileKeys(Guest& _guest)
+// 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it. _di is the DI
+// ProcessFlightKeys holds here, which M's launch copies the missile from (LaunchPlayerMissile), unless the primed missile looked
+// in the sights this frame and FindShipInCrosshairs left DI; _backward is the direction flag the copy runs by.
+void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.keyDownT) == 1 && _guest.Get(DS.missileCount) != 0 && _guest.Get(DS.missileState) == 0 &&
-      _guest.Get(DS.hyperspaceCountdown) == 0 && _guest.Get(DS.shipIdRequested) != 1)
+  std::uint16_t source = _di;
+  if (_state.Get(DS.keyDownT) == 1 && _state.Get(DS.missileCount) != 0 && _state.Get(DS.missileState) == 0 &&
+      _state.Get(DS.hyperspaceCountdown) == 0 && _state.Get(DS.shipIdRequested) != 1)
   {
-    _guest.Set(DS.missileState, 1);
-    _guest.Set(DS.shipIdRequested, 0);
-    _guest.Call(START_BEEP);
-    regs.ax = DS.missilePrimedMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 0x0F);
+    _state.Set(DS.missileState, 1);
+    _state.Set(DS.shipIdRequested, 0);
+    StartBeep(_state);
+    SetMessage(_state, DS.missilePrimedMessage.offset, 0x0F);
   }
-  if (_guest.Get(DS.missileState) == 1)
+  if (_state.Get(DS.missileState) == 1)
   {
-    _guest.Call(FIND_SHIP_IN_CROSSHAIRS);
-    if (_guest.Flag(FLAG_CARRY) && (_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & 0x20) == 0)
+    const CrosshairTarget target = FindShipInCrosshairs(_state);
+    source = target.di;
+    if (target.slot && (ObjectSlot(_state, *target.slot).Get(SlotByte::Flags) & FLAG_MASKED) == 0)
     {
-      _guest.Set(DS.missileTarget, regs.di);
-      _guest.Set(DS.missileState, 2);
-      _guest.Call(START_BEEP);
-      regs.ax = DS.missileLockedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 0x14);
+      _state.Set(DS.missileTarget, *target.slot);
+      _state.Set(DS.missileState, 2);
+      StartBeep(_state);
+      SetMessage(_state, DS.missileLockedMessage.offset, 0x14);
     }
   }
-  if (_guest.Get(DS.missileState) == 2)
+  if (_state.Get(DS.missileState) == 2)
   {
-    regs.bx = _guest.Get(DS.missileTarget);
-    if ((_guest.Byte(regs.bx) & 1) == 0)
+    if ((ObjectSlot(_state, _state.Get(DS.missileTarget)).Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0)
     {
-      _guest.Set(DS.missileState, 0);
-      _guest.Call(START_LOW_BEEP);
-      regs.ax = DS.missileTargetDestroyedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 0x14);
+      _state.Set(DS.missileState, 0);
+      StartLowBeep(_state);
+      SetMessage(_state, DS.missileTargetDestroyedMessage.offset, 0x14);
     }
   }
-  if (_guest.Get(DS.keyDownU) == 1 && _guest.Get(DS.missileState) != 0)
+  if (_state.Get(DS.keyDownU) == 1 && _state.Get(DS.missileState) != 0)
   {
-    _guest.Set(DS.missileState, 0);
-    _guest.Set(DS.shipIdRequested, 0);
-    _guest.Call(START_LOW_BEEP);
-    regs.ax = DS.missileUnarmedMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 0x0F);
+    _state.Set(DS.missileState, 0);
+    _state.Set(DS.shipIdRequested, 0);
+    StartLowBeep(_state);
+    SetMessage(_state, DS.missileUnarmedMessage.offset, 0x0F);
   }
-  if (_guest.Get(DS.keyDownM) == 1 && _guest.Get(DS.missileState) == 2 && _guest.Get(DS.missileJammed) != 1)
+  if (_state.Get(DS.keyDownM) == 1 && _state.Get(DS.missileState) == 2 && _state.Get(DS.missileJammed) != 1)
   {
-    _guest.Call(NEXT_RANDOM);
-    if (regs.ax < 0x1F4)
+    if (NextRandom(_state) < MISSILE_JAM_ODDS)
     {
-      _guest.Set(DS.missileJammed, 1);
-      regs.ax = DS.missileJammedMessage.offset;
-      SetMessage(_guest.State(), regs.ax, 0x19);
+      _state.Set(DS.missileJammed, 1);
+      SetMessage(_state, DS.missileJammedMessage.offset, 0x19);
       return;
     }
-    _guest.Set(DS.missileState, 0);
-    _guest.Set(DS.shipIdRequested, 0);
-    regs.ax = DS.missileLaunchedMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 0x14);
-    _guest.Set(DS.missileCount, static_cast<std::uint8_t>(_guest.Get(DS.missileCount) - 1));
-    _guest.Call(LAUNCH_PLAYER_MISSILE);
+    _state.Set(DS.missileState, 0);
+    _state.Set(DS.shipIdRequested, 0);
+    SetMessage(_state, DS.missileLaunchedMessage.offset, 0x14);
+    _state.Set(DS.missileCount, static_cast<std::uint8_t>(_state.Get(DS.missileCount) - 1));
+    LaunchPlayerMissile(_state, source, _backward);
   }
 }
 
@@ -1197,46 +1189,41 @@ void HandleFireButton(GameState& _state, Hardware& _hardware)
 }
 
 // 0x82F7-0x8363: I identifies the ship in the sights, and locks a missile on it if there is one.
-void HandleIdentifyKey(Guest& _guest)
+void HandleIdentifyKey(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.shipIdRequested) != 1)
+  if (_state.Get(DS.shipIdRequested) != 1)
   {
-    if (_guest.Get(DS.keyDownI) != 1 || _guest.Get(DS.missileState) != 0 || _guest.Get(DS.hyperspaceCountdown) != 0)
+    if (_state.Get(DS.keyDownI) != 1 || _state.Get(DS.missileState) != 0 || _state.Get(DS.hyperspaceCountdown) != 0)
     {
       return;
     }
-    _guest.Call(START_BEEP);
-    if (_guest.Get(DS.missileCount) != 0)
+    StartBeep(_state);
+    if (_state.Get(DS.missileCount) != 0)
     {
-      _guest.Set(DS.missileState, 1);
+      _state.Set(DS.missileState, 1);
     }
-    _guest.Set(DS.shipIdRequested, 1);
-    regs.ax = DS.idIndicatorMessage.offset;
-    SetMessage(_guest.State(), regs.ax, 0x19);
+    _state.Set(DS.shipIdRequested, 1);
+    SetMessage(_state, DS.idIndicatorMessage.offset, 0x19);
   }
-  _guest.Call(FIND_SHIP_IN_CROSSHAIRS);
-  if (!_guest.Flag(FLAG_CARRY))
+  const CrosshairTarget target = FindShipInCrosshairs(_state);
+  if (!target.slot)
   {
     return;
   }
-  _guest.Call(IS_STATION);
-  if (_guest.Flag(FLAG_ZERO))
+  const ObjectSlot ship(_state, *target.slot);
+  if (IsStation(ship).station)
   {
     return;
   }
-  _guest.Set(DS.missileState, 0);
-  _guest.Set(DS.shipIdRequested, 0);
-  SetLow(regs.ax, (_guest.Byte(regs.di) >> 1) & 0x1F);
-  SetHigh(regs.ax, _guest.Byte(Plus(regs.di, SLOT_CLASS)));
-  const std::uint16_t slot = regs.di;
-  _guest.Call(SHOW_SHIP_IDENTITY);
-  _guest.Call(START_BEEP);
-  regs.di = slot;
-  if (_guest.Get(DS.missileCount) != 0)
+  _state.Set(DS.missileState, 0);
+  _state.Set(DS.shipIdRequested, 0);
+  // PUSH DI / POP DI keep the ship round ShowShipIdentity and StartBeep.
+  ShowShipIdentity(_state, static_cast<std::uint8_t>((ship.Get(SlotByte::Type) >> 1) & TYPE_MASK), ship.Get(SlotByte::Class), ship);
+  StartBeep(_state);
+  if (_state.Get(DS.missileCount) != 0)
   {
-    _guest.Set(DS.missileTarget, regs.di);
-    _guest.Set(DS.missileState, 2);
+    _state.Set(DS.missileTarget, ship.Offset());
+    _state.Set(DS.missileState, 2);
   }
 }
 
@@ -2112,126 +2099,84 @@ std::optional<DashboardPixel> UpdateScannerBlip(GameState& _state, ObjectSlot _s
   return last;
 }
 
-void UpdateCompass(Guest& _guest)
+std::optional<CompassUpdate> UpdateCompass(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.titleShown) == 0)
+  if (_state.Get(DS.titleShown) == 0)
   {
-    return;
+    return std::nullopt;
   }
-  // The target: the station when the planet is near, else the planet.
-  regs.di = DS.planetSlot.offset;
-  _guest.Set(DS.compassTargetIsStation, 0);
-  _guest.Call(IS_OBJECT_NEAR_KEEP_BLIP);
-  if (_guest.Flag(FLAG_CARRY))
+  // The target: the station when the planet is near, else the planet. Its scale shift goes to its depth byte.
+  std::uint16_t target = DS.planetSlot.offset;
+  _state.Set(DS.compassTargetIsStation, 0);
+  if (IsObjectNearKeepBlip(ObjectSlot(_state, target)))
   {
-    regs.di = Plus(regs.di, SLOT_BYTES);
-    _guest.Set(DS.compassTargetIsStation, 1);
+    target = Plus(target, ObjectSlot::BYTES);
+    _state.Set(DS.compassTargetIsStation, 1);
   }
-  _guest.Call(GET_POSITION_SCALE_SHIFT);
-  _guest.SetByte(Plus(regs.di, SLOT_SCALE_SHIFT), Low(regs.cx));
-  SetHigh(regs.dx, Low(regs.cx));
-  _guest.Call(SCALE_POSITION_DOWN);
-  regs.di = DS.stationSlot.offset;
-  const std::uint16_t x = regs.ax;
-  const std::uint16_t y = regs.bx;
-  const std::uint16_t z = regs.cx;
-  _guest.Call(GET_POSITION_SCALE_SHIFT);
-  _guest.SetByte(Plus(regs.di, SLOT_SCALE_SHIFT), Low(regs.cx));
-  // mov bp, sp, below the three words the original pushed.
-  regs.bp = static_cast<std::uint16_t>(regs.sp - 6);
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
-  _guest.Call(TRANSFORM_TO_VIEW);
-  _guest.SetWord(Plus(regs.di, SLOT_COMPASS_X), regs.ax);
-  _guest.SetWord(Plus(regs.di, SLOT_COMPASS_Y), regs.bx);
-  _guest.SetWord(Plus(regs.di, SLOT_COMPASS_Z), regs.cx);
-  regs.cx = z;
-  regs.bx = y;
-  regs.ax = x;
-  _guest.Call(ROTATE_PITCH_YAW_ROLL);
+  ObjectSlot aim(_state, target);
+  const std::uint8_t shift = GetPositionScaleShift(aim).shift;
+  aim.Set(SlotByte::Depth, shift);
+  const Vector position = ScalePositionDown(aim, shift);
+  // PUSH AX / PUSH BX / PUSH CX round the station's scale shift, read back through MOV BP,SP: the position turned to the view
+  // for the station's compass words, then, popped, turned to the camera's frame for the dot.
+  ObjectSlot station(_state, DS.stationSlot.offset);
+  station.Set(SlotByte::Depth, GetPositionScaleShift(station).shift);
+  const Vector view = TransformToView(_state, position);
+  station.Set(SlotWord::CompassX, Word(view.x));
+  station.Set(SlotWord::CompassY, Word(view.y));
+  station.Set(SlotWord::CompassZ, Word(view.z));
+  const Vector camera = RotatePitchYawRoll(_state, position);
 
-  // The dot: x and y as 8 * |c| / (|z| + 1000), at most 7, normalised when they reach 8 together.
-  // BP gathers z >= 0 in bit 15 and the signs of x and y in bits 0 and 1.
-  regs.bp = 0x8000;
-  if (Negative(regs.cx))
+  // BP gathers z >= 0 in bit 15 and the signs of x and y in bits 0 and 1, each coordinate NEGed to its magnitude.
+  const bool inFront = !Negative(Word(camera.z));
+  const std::uint16_t range = Plus(inFront ? Word(camera.z) : Negate(Word(camera.z)), COMPASS_DEPTH);
+  const bool left = Negative(Word(camera.x));
+  const bool below = Negative(Word(camera.y));
+  const std::uint16_t xMagnitude = left ? Negate(Word(camera.x)) : Word(camera.x);
+  const std::uint16_t yMagnitude = below ? Negate(Word(camera.y)) : Word(camera.y);
+  // XCHG BX,AX between the two: x's divide has |y| in BX, and y's has x's step.
+  const std::uint16_t xStep = ScaleCompassAxis(_state, xMagnitude, range, yMagnitude);
+  const std::uint16_t yStep = ScaleCompassAxis(_state, yMagnitude, range, xStep);
+  auto dotX = static_cast<std::uint8_t>(xStep);
+  auto dotY = static_cast<std::uint8_t>(yStep);
+  // MUL AL twice: the dot's distance squared; from 41h, each step CBW'd or under the remainder AH still holds, times 8, divided
+  // by its square root from sqrtTable (BX = the root), its low three bits kept. The second divide can overflow, and the trap's
+  // 7Fh comes out as 7.
+  const auto squared =
+    static_cast<std::uint8_t>(Low(static_cast<std::uint16_t>(dotY * dotY)) + Low(static_cast<std::uint16_t>(dotX * dotX)));
+  if (squared >= COMPASS_NORMALIZED_FROM)
   {
-    regs.cx = Negate(regs.cx);
-    regs.bp = 0;
+    const std::uint8_t root = _state.Byte(Plus(DS.sqrtTable.offset, squared));
+    const ByteQuotient first = DivideByte(_state, static_cast<std::uint16_t>(SignExtend(dotX) << 3), root, root);
+    dotX = static_cast<std::uint8_t>(first.quotient & COMPASS_STEP_MASK);
+    const ByteQuotient second = DivideByte(_state, static_cast<std::uint16_t>(Join(first.remainder, dotY) << 3), root, root);
+    dotY = static_cast<std::uint8_t>(second.quotient & COMPASS_STEP_MASK);
   }
-  regs.cx = Plus(regs.cx, 0x3E8);
-  if (Negative(regs.ax))
+  if (left)
   {
-    regs.ax = Negate(regs.ax);
-    regs.bp = Plus(regs.bp, 1);
+    dotX = Negate(dotX);
   }
-  if (Negative(regs.bx))
+  if (below)
   {
-    regs.bx = Negate(regs.bx);
-    regs.bp = Plus(regs.bp, 2);
+    dotY = Negate(dotY);
   }
-  ScaleCompassAxis(_guest);
-  std::swap(regs.ax, regs.bx);
-  ScaleCompassAxis(_guest);
-  SetHigh(regs.dx, Low(regs.ax));
-  SetLow(regs.dx, Low(regs.bx));
-  MultiplyByte(regs, Low(regs.ax));
-  SetLow(regs.bx, Low(regs.ax));
-  SetLow(regs.ax, Low(regs.dx));
-  MultiplyByte(regs, Low(regs.ax));
-  SetLow(regs.bx, Low(regs.bx) + Low(regs.ax));
-  if (Low(regs.bx) >= 0x41)
-  {
-    SetHigh(regs.bx, 0);
-    SetLow(regs.bx, _guest.Byte(Plus(DS.sqrtTable.offset, regs.bx)));
-    SetLow(regs.ax, Low(regs.dx));
-    regs.ax = static_cast<std::uint16_t>(SignExtend(Low(regs.ax)) << 3);
-    DivideByteOnRegisters(_guest, Low(regs.bx));
-    SetLow(regs.ax, Low(regs.ax) & 7);
-    SetLow(regs.dx, Low(regs.ax));
-    // AH still holds the remainder, so this divide can overflow, and the trap's 7Fh comes out as 7.
-    SetLow(regs.ax, High(regs.dx));
-    regs.ax = static_cast<std::uint16_t>(regs.ax << 3);
-    DivideByteOnRegisters(_guest, Low(regs.bx));
-    SetLow(regs.ax, Low(regs.ax) & 7);
-    SetHigh(regs.dx, Low(regs.ax));
-  }
-  if ((regs.bp & 1) != 0)
-  {
-    SetLow(regs.dx, -Low(regs.dx));
-  }
-  regs.bp = static_cast<std::uint16_t>(regs.bp >> 1);
-  if ((regs.bp & 1) != 0)
-  {
-    SetHigh(regs.dx, -High(regs.dx));
-  }
-  regs.bp = static_cast<std::uint16_t>(regs.bp >> 1);
-  SetHigh(regs.dx, High(regs.dx) + 0x27);
-  SetLow(regs.dx, Low(regs.dx) + 0xCF);
+  dotY = static_cast<std::uint8_t>(dotY + COMPASS_CENTER_Y);
+  dotX = static_cast<std::uint8_t>(dotX + COMPASS_CENTER_X);
 
-  // The new dot replaces the old in the station slot's blip bytes: the old is erased, the new drawn.
-  regs.di = DS.stationSlot.offset;
-  const std::uint16_t dot = Plus(regs.di, SLOT_BLIP);
-  const std::uint16_t front = Plus(regs.di, SLOT_BLIP + 2);
-  const std::uint16_t oldDot = _guest.Word(dot);
-  _guest.SetWord(dot, regs.dx);
-  regs.dx = oldDot;
-  regs.ax = regs.bp;
-  const std::uint8_t oldFront = _guest.Byte(front);
-  _guest.SetByte(front, High(regs.ax));
-  SetHigh(regs.ax, oldFront);
-  regs.bp = regs.ax;
-  if ((_guest.Byte(Plus(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
+  // XCHG [DI+26h],DX and XCHG [DI+28h],AH: the new dot and whether it is in front go into the station's blip bytes, the old
+  // ones come out, and the old dot is XORed out if it is drawn; then the new one in, from what the bytes hold.
+  const std::uint16_t oldDot = station.Get(SlotWord::CompassDot);
+  station.Set(SlotWord::CompassDot, Join(dotY, dotX));
+  const std::uint8_t wasInFront = station.Get(SlotByte::BlipZ);
+  station.Set(SlotByte::BlipZ, inFront ? COMPASS_IN_FRONT : std::uint8_t{0});
+  if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
   {
-    XorCompassDotEntry(_guest);
+    (void)XorCompassDot(_state, Low(oldDot), High(oldDot), wasInFront != 0);
   }
-  regs.ax = SignExtend(_guest.Byte(front));
-  regs.bp = regs.ax;
-  regs.dx = _guest.Word(dot);
-  const std::uint16_t flags = Plus(regs.di, SLOT_FLAGS);
-  _guest.SetByte(flags, static_cast<std::uint8_t>(_guest.Byte(flags) | FLAG_BLIP_DRAWN));
-  XorCompassDotEntry(_guest);
+  const std::uint8_t nowInFront = station.Get(SlotByte::BlipZ);
+  const std::uint16_t dot = station.Get(SlotWord::CompassDot);
+  station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
+  return CompassUpdate{XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0), range, nowInFront};
 }
 
 DashboardPixel XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront)
@@ -2476,7 +2421,7 @@ void ProcessFlightKeys(Guest& _guest)
     SetMessage(_guest.State(), regs.ax, 0x28);
     _guest.Set(DS.galacticDriveReadyFrames, 0x28);
   }
-  if (_guest.Get(DS.keyDownH) == 1 && PressHyperspace(_guest))
+  if (_guest.Get(DS.keyDownH) == 1 && PressHyperspace(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)))
   {
     return;
   }
@@ -2516,8 +2461,9 @@ void ProcessFlightKeys(Guest& _guest)
     }
     _guest.Set(DS.gamePaused, 0);
   }
-  HandleMissileKeys(_guest);
-  // What ReadFireButton and GetViewLaser leave in the registers, the keys below write before they read.
+  // What these leave in the registers, the keys below write before they read. HandleMissileKeys takes the DI its launch copies
+  // from.
+  HandleMissileKeys(_guest.State(), regs.di, _guest.Flag(Machine::FLAG_DIRECTION));
   HandleFireButton(_guest.State(), _guest.Devices());
   if (_guest.Get(DS.keyDownE) == 1 && _guest.Get(DS.ecmFitted) == 1)
   {
@@ -2538,7 +2484,7 @@ void ProcessFlightKeys(Guest& _guest)
     _guest.Call(START_BEEP);
     _guest.Call(LAUNCH_ESCAPE_POD);
   }
-  HandleIdentifyKey(_guest);
+  HandleIdentifyKey(_guest.State());
   if (_guest.Get(DS.keyDownN) == 1 && _guest.Get(DS.maskingDeviceFitted) == 1)
   {
     _guest.Call(USE_MASKING_DEVICE);
@@ -2804,6 +2750,24 @@ void InvalidateDashboardOut(Registers& _regs) noexcept
   _regs.di = Plus(DS.missileCountShown.offset, DASHBOARD_CACHE_BYTES);
 }
 
+// What ShowCockpitScreen leaves once it draws, CLD and SI past the image, and BX and DX as SetGraphicsMode leaves them once it
+// sets the mode; then what InvalidateDashboard leaves.
+void RestoreFlightScreenOut(Guest& _guest, ScreenChange _change) noexcept
+{
+  Registers& regs = _guest.Regs();
+  if (_change != ScreenChange::None)
+  {
+    _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+    regs.si = COCKPIT_IMAGE_END;
+    if (_change == ScreenChange::ModeSet)
+    {
+      regs.bx = GRAPHICS_MODE_BX;
+      regs.dx = GRAPHICS_MODE_DX;
+    }
+  }
+  InvalidateDashboardOut(regs);
+}
+
 // A particle's position as the dust routines hold it: x in AX, y in BX.
 [[nodiscard]] DustPosition DustIn(const Registers& _regs) noexcept
 {
@@ -3004,21 +2968,8 @@ void ComputeStardustShiftEntry(Guest& _guest)
 
 void RestoreFlightScreenEntry(Guest& _guest)
 {
-  Registers& regs = _guest.Regs();
-  const ScreenChange change = RestoreFlightScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  // The contract compares every register: what ShowCockpitScreen leaves once it draws, CLD and SI past the image, and BX and DX
-  // as SetGraphicsMode leaves them once it sets the mode; then what InvalidateDashboard leaves.
-  if (change != ScreenChange::None)
-  {
-    _guest.SetFlag(Machine::FLAG_DIRECTION, false);
-    regs.si = COCKPIT_IMAGE_END;
-    if (change == ScreenChange::ModeSet)
-    {
-      regs.bx = GRAPHICS_MODE_BX;
-      regs.dx = GRAPHICS_MODE_DX;
-    }
-  }
-  InvalidateDashboardOut(regs);
+  // The contract compares every register.
+  RestoreFlightScreenOut(_guest, RestoreFlightScreen(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION)));
   _guest.Clobber(PRESERVES_ALL);
 }
 
@@ -3191,6 +3142,26 @@ void UpdateScannerBlipEntry(Guest& _guest)
   else if (regs.di < DS.debrisSlots.offset)
   {
     regs.dx = regs.ax;
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void UpdateCompassEntry(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  // The contract compares every register. Once it runs, the original leaves what its last XorCompassDot leaves
+  // (XorCompassDotEntry): DX one right of and one above the dot, AX = DX, BX the last mask and ES the video segment; CX the
+  // dot's divisor, which no divide changes; BP the in-front byte, CBW'd; and DI = stationSlot, which TransformAndDrawObjects
+  // goes on with. Nothing it calls touches SI.
+  if (const std::optional<CompassUpdate> update = UpdateCompass(_guest.State()))
+  {
+    regs.dx = PixelPlace(update->last);
+    regs.ax = regs.dx;
+    regs.bx = update->last.mask;
+    regs.es = GameState::VIDEO_SEGMENT;
+    regs.cx = update->range;
+    regs.bp = SignExtend(update->inFront);
+    regs.di = DS.stationSlot.offset;
   }
   _guest.Clobber(PRESERVES_ALL);
 }
@@ -3374,7 +3345,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x371A, "CheckTemperatureWarning", &CheckTemperatureWarningEntry, PRESERVES_ALL},
   NativeEntry{0x3726, "CheckEnergyWarning", &CheckEnergyWarningEntry, PRESERVES_ALL},
   NativeEntry{0x40EC, "UpdateScannerBlip", &UpdateScannerBlipEntry, PRESERVES_ALL},
-  NativeEntry{0x418F, "UpdateCompass", &UpdateCompass, PRESERVES_ALL},
+  NativeEntry{0x418F, "UpdateCompass", &UpdateCompassEntry, PRESERVES_ALL},
   NativeEntry{0x42A4, "XorCompassDot", &XorCompassDotEntry, PRESERVES_ALL},
   NativeEntry{0x42D6, "EraseScannerBlip", &EraseScannerBlipEntry, PRESERVES_ALL},
   NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlipEntry, CLOBBERS_DI},

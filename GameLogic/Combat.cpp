@@ -747,7 +747,7 @@ void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward)
 CrosshairTarget FindShipInCrosshairs(GameState& _state)
 {
   // MOV CL,objectSlotCount / SUB CL,2 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times. BP is the nearest z so far.
-  CrosshairTarget target{std::nullopt, 0};
+  CrosshairTarget target{std::nullopt, 0, 0};
   std::uint16_t nearestZ = 0xFFFF;
   std::uint16_t slot = DS.stationSlot.offset;
   const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - 2);
@@ -773,6 +773,8 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
     }
     slot = At(slot, SLOT_BYTES);
   }
+  // INC BP / JE: none found while BP is still FFFFh; else MOV DI,SI, the nearest.
+  target.di = target.slot.value_or(slot);
   return target;
 }
 
@@ -1527,10 +1529,8 @@ void UpdateMissileAiEntry(Guest& _guest)
 
 void FindShipInCrosshairsEntry(Guest& _guest)
 {
-  // DI the slot found, or past the slots it looked at, by the count it loaded, which nothing it does changes.
-  const auto slots = static_cast<std::uint8_t>(_guest.Get(DS.objectSlotCount) - 2);
   const CrosshairTarget target = FindShipInCrosshairs(_guest.State());
-  _guest.Regs().di = target.slot.value_or(static_cast<std::uint16_t>(DS.stationSlot.offset + LoopCount(slots) * ObjectSlot::BYTES));
+  _guest.Regs().di = target.di;
   _guest.SetFlag(FLAG_CARRY, target.slot.has_value());
   _guest.Clobber(CROSSHAIRS);
 }

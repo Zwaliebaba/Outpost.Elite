@@ -60,6 +60,8 @@ struct CrosshairTarget
   /// What the original leaves in BX: BL the type byte of the last slot it looked at, BH what the last slot it tested left there,
   /// which is all of BX when that was the last slot. ExplodeObject's barrel count saves it, should its divide trap.
   std::uint16_t bx;
+  /// What the original leaves in DI: the slot found, or past the slots it looked at, which HandleMissileKeys' launch copies from.
+  std::uint16_t di;
 };
 
 /// What UpdateMissileAi leaves that UpdateObjectsAndSpawn's next handler can read.
