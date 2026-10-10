@@ -524,6 +524,7 @@ void VectorOut(Machine::Registers& _regs, Vector _vector) noexcept
 void NextRandomEntry(Guest& _guest)
 {
   _guest.Regs().ax = NextRandom(_guest.State());
+  _guest.Clobber(PRESERVES_ALL);
 }
 
 void SetSinCosEntry(Guest& _guest, std::uint16_t _pairOffset)
@@ -532,6 +533,7 @@ void SetSinCosEntry(Guest& _guest, std::uint16_t _pairOffset)
   const SinCos pair = SetSinCos(_guest.State(), PairIndex(_pairOffset), regs.ax);
   regs.ax = Word(pair.sine);
   regs.bx = Word(pair.cosine);
+  _guest.Clobber(PRESERVES_ALL);
 }
 
 void RotateBySinCosEntry(Guest& _guest)
@@ -540,7 +542,7 @@ void RotateBySinCosEntry(Guest& _guest)
   const Pair rotated = RotateBySinCos(Pair{Signed(regs.ax), Signed(regs.bx)}, SinCos{Signed(regs.di), Signed(regs.bp)});
   regs.ax = Word(rotated.first);
   regs.bx = Word(rotated.second);
-  _guest.Clobber(CLOBBERS_DX_BP.clobbers);
+  _guest.Clobber(CLOBBERS_DX_BP);
 }
 
 void RotateByStoredSinCosEntry(Guest& _guest, std::uint16_t _pairOffset)
@@ -549,28 +551,28 @@ void RotateByStoredSinCosEntry(Guest& _guest, std::uint16_t _pairOffset)
   const Pair rotated = RotateByStoredSinCos(_guest.State(), PairIndex(_pairOffset), Pair{Signed(regs.ax), Signed(regs.bx)});
   regs.ax = Word(rotated.first);
   regs.bx = Word(rotated.second);
-  _guest.Clobber(CLOBBERS_DX.clobbers);
+  _guest.Clobber(CLOBBERS_DX);
 }
 
 void ArcTangent2Entry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = ArcTangent2(_guest.State(), Signed(regs.ax), Signed(regs.bx));
-  _guest.Clobber(CLOBBERS_BX_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
 }
 
 void QuadrantArcTangentEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = QuadrantArcTangent(_guest.State(), regs.ax, regs.bx);
-  _guest.Clobber(CLOBBERS_BX_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
 }
 
 void RatioArcTangentEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = RatioArcTangent(_guest.State(), regs.ax, regs.bx);
-  _guest.Clobber(CLOBBERS_BX_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
 }
 
 void AngleWithinToleranceEntry(Guest& _guest)
@@ -581,13 +583,14 @@ void AngleWithinToleranceEntry(Guest& _guest)
   regs.cx = SignExtendAngle(regs.cx);
   regs.dx = tolerance.excess;
   _guest.SetFlag(Machine::FLAG_CARRY, tolerance.within);
+  _guest.Clobber(RETURNS_CARRY);
 }
 
 void VectorLengthEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.ax = VectorLength(VectorIn(regs));
-  _guest.Clobber(CLOBBERS_BX_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_BX_CX_DX);
 }
 
 void ObjectWithinBoxEntry(Guest& _guest)
@@ -615,27 +618,28 @@ void VectorWithinBoxEntry(Guest& _guest)
       regs.cx = Magnitude(regs.cx);
     }
   }
+  _guest.Clobber(RETURNS_CARRY);
 }
 
 void RotatePitchYawRollEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   VectorOut(regs, RotatePitchYawRoll(_guest.State(), VectorIn(regs)));
-  _guest.Clobber(CLOBBERS_DX.clobbers);
+  _guest.Clobber(CLOBBERS_DX);
 }
 
 void RotateRollYawPitchEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   VectorOut(regs, RotateRollYawPitch(_guest.State(), VectorIn(regs)));
-  _guest.Clobber(CLOBBERS_DX.clobbers);
+  _guest.Clobber(CLOBBERS_DX);
 }
 
 void RotateBySinCos7210Entry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   VectorOut(regs, RotateBySinCos7210(_guest.State(), VectorIn(regs)));
-  _guest.Clobber(CLOBBERS_DX.clobbers);
+  _guest.Clobber(CLOBBERS_DX);
 }
 
 void ScaleByInverseDistanceEntry(Guest& _guest)
@@ -645,11 +649,12 @@ void ScaleByInverseDistanceEntry(Guest& _guest)
     ScaleByInverseDistance(_guest.State(), ObjectSlot(_guest.State(), regs.di), (std::uint32_t{regs.dx} << 16) | regs.ax);
   regs.ax = scale.scaled;
   regs.bx = scale.divisor;
-  _guest.Clobber(CLOBBERS_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_CX_DX);
 }
 
 void ShiftRight24Entry(Guest& _guest)
 {
+  _guest.Clobber(PRESERVES_ALL);
   Machine::Registers& regs = _guest.Regs();
   const std::uint8_t count = High(regs.dx);
   if (count == 0)
@@ -667,14 +672,14 @@ void GetPositionScaleShiftEntry(Guest& _guest)
   const PositionScale scale = GetPositionScaleShift(ObjectSlot(_guest.State(), regs.di));
   regs.bx = scale.magnitude;
   SetLow(regs.cx, scale.shift);
-  _guest.Clobber(CLOBBERS_AX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_AX_DX);
 }
 
 void ScalePositionDownEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   VectorOut(regs, ScalePositionDown(ObjectSlot(_guest.State(), regs.di), High(regs.dx)));
-  _guest.Clobber(CLOBBERS_DX_BP.clobbers);
+  _guest.Clobber(CLOBBERS_DX_BP);
 }
 
 void ComputeAnglesToObjectEntry(Guest& _guest)
@@ -685,7 +690,7 @@ void ComputeAnglesToObjectEntry(Guest& _guest)
   regs.bx = angles.second;
   // The original keeps the first angle in BP, and leaves it there.
   regs.bp = regs.ax;
-  _guest.Clobber(CLOBBERS_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_CX_DX);
 }
 
 void ConvertVectorToAnglesEntry(Guest& _guest)
@@ -696,7 +701,7 @@ void ConvertVectorToAnglesEntry(Guest& _guest)
   regs.bx = angles.second;
   // The original keeps the first angle in BP, and leaves it there.
   regs.bp = regs.ax;
-  _guest.Clobber(CLOBBERS_CX_DX.clobbers);
+  _guest.Clobber(CLOBBERS_CX_DX);
 }
 
 namespace

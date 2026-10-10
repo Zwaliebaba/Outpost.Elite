@@ -259,12 +259,13 @@ public:
     m_pc.LoopTurn();
   }
 
-  /// What an entry does for the registers its contract leaves to it (ADR-012): nothing, so they keep
-  /// what they held, unless a test has switched poisoning on (NativeCode::SetPoisoning), when each gets
-  /// a marked value that shows up wherever code reads it.
-  void Clobber(std::uint16_t _registers) noexcept
+  /// What an entry does for the registers and flags its contract leaves to it (ADR-012): the registers it
+  /// clobbers, and every status flag it does not name. Nothing, so they keep what they held, unless a test
+  /// has switched poisoning on (NativeCode::SetPoisoning), when they get marked values that show up wherever
+  /// code reads them.
+  void Clobber(const Machine::NativeContract& _contract) noexcept
   {
-    m_pc.Native().Poison(Regs(), _registers);
+    m_pc.Native().Poison(Regs(), _contract.clobbers, static_cast<std::uint16_t>(~_contract.flags));
   }
 
 private:

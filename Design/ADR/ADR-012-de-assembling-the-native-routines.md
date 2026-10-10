@@ -31,16 +31,22 @@
 - **When it goes.** When neither the hook nor any register caller needs it.
 
 **5. Poisoning makes undefined leftovers visible.**
-- **The mechanism.** An entry hands `Guest::Clobber` the registers its contract leaves to the routine. With `NativeCode::SetPoisoning(true)`, `Clobber` fills each with a marked value: `A5A1h` plus the register's index, AX `A5A1h`, BX `A5A2h`, CX `A5A3h`, DX `A5A4h`, BP `A5A7h` and so on. A caller that reads one is unlikely to agree with the original by chance, and a comparison or a digest shows that it does not.
+- **The mechanism.** Every entry hands `Guest::Clobber` its contract. With `NativeCode::SetPoisoning(true)`, `Clobber` marks what the contract leaves to the routine:
+  - **each register the contract clobbers** gets a marked value, `A5A1h` plus the register's index: AX `A5A1h`, BX `A5A2h`, CX `A5A3h`, DX `A5A4h`, BP `A5A7h` and so on;
+  - **each status flag the contract does not name** is set on one call and cleared on the next. A flag has no unlikely value, but a caller that reads it, reached twice, sees both.
+
+  A caller that reads a marked register or flag is unlikely to agree with the original by chance, and a comparison or a digest shows that it does not.
+- **Why flags too.** ADR-010 compares only the flags a contract names, on the ground that no caller reads the others. The contracts in Symbols.tsv were written by hand, so poisoning is the first machine check of that ground.
 - **Where it is on.** Everywhere a test installs native routines: every `ComparisonRig` comparison, every twin (`TwinRig`), and both of `CorpusTests`' runs.
 - **Where it is off.** In the game. `Clobber` then does nothing.
+- **Where a mark travels.** A compared call through a hook ends with the run carrying on from the original's registers and flags (ADR-010), so a mark goes no further than the comparison of the call itself. Marks travel through native code that calls an entry directly, and through every uncompared run. Those runs are where a reader shows: in the caller's comparison, or in a digest.
 
 **6. The rule for contracts.**
 - **An entry clobbers exactly what its contract declares,** and nothing else.
 - **A contract may be widened only with poisoning as the evidence.** Every comparison and every digest must still agree with the widened registers poisoned, and the callers in code must be read to agree.
 - **Once poisoning finds a reader, the entry reproduces the leftover** the original leaves, and the contract narrows so that the comparison checks it.
 
-**7. What the arithmetic's pilot found.** The first run with poisoning on failed six tests. The native corpus kept all 40 digests throughout.
+**7. What the arithmetic's pilot found.** The first run with registers poisoned failed six tests. The native corpus kept all 40 digests throughout. Poisoning flags as well, added afterwards, found no caller that reads a flag Maths' contracts leave unnamed.
 
 | Routine | What poisoning showed | Resolution |
 |---|---|---|

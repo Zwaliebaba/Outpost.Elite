@@ -176,9 +176,13 @@ public:
     return m_poisoning;
   }
 
-  /// When Poisoning(), sets each register in _registers (REGISTER_* bits) to its own marked value;
-  /// otherwise leaves them as they are.
-  void Poison(Registers& _registers, std::uint16_t _registersToPoison) const noexcept;
+  /// When Poisoning(), sets each register in _registersToPoison (REGISTER_* bits) to its own marked value,
+  /// and the status flags in _flagsToPoison (FLAG_* bits) all set or all clear, in turn from one call to the
+  /// next; otherwise leaves them as they are.
+  void Poison(Registers& _registers, std::uint16_t _registersToPoison, std::uint16_t _flagsToPoison) noexcept;
+
+  /// The flags Poison marks: the six status flags, never IF, TF or DF.
+  static constexpr std::uint16_t POISONABLE_FLAGS = FLAG_CARRY | FLAG_PARITY | FLAG_AUXILIARY | FLAG_ZERO | FLAG_SIGN | FLAG_OVERFLOW;
 
   /// The lowest linear address of the program's stack. Once a routine has returned, what lies from
   /// here up to SS:SP is dead, and the two runs may differ there. Zero (the default) means nothing is.
@@ -231,6 +235,7 @@ private:
   std::string m_overran;
   bool m_verifying = false;
   bool m_poisoning = false;
+  bool m_poisonSetsFlags = true;
 };
 
 } // namespace Machine
