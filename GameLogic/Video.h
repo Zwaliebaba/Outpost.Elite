@@ -56,6 +56,10 @@ void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 /// screen shown after the credits, or after docking, hands it to SelectSystemAtCursor as the count when no system is on the chart.
 inline constexpr std::uint16_t PRESENT_SPACE_VIEW_BP = 0x20;
 
+/// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in DX: its MOV DX,1FF0h, the copy's step from an odd line back
+/// to the next even line. The flight loop hands it to UpdateObjectsAndSpawn, whose first handler to measure its range reads DL.
+inline constexpr std::uint16_t PRESENT_SPACE_VIEW_DX = 0x1FF0;
+
 /// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
 /// ClearDrawBuffer, both forwards. It waits.
 void PresentChartFrame(GameState& _state, Hardware& _hardware);

@@ -62,6 +62,24 @@ struct DosFileAttributes
   std::uint16_t attributes; ///< CX: the attributes when the service did not fail, and CX as it went in when it did
 };
 
+// ── Start, GameLoop and RunFlight (level 5, group F) ──
+
+/// What DOS answers to int 21h AH=30h: its version.
+struct DosVersion
+{
+  std::uint8_t major; ///< AL: 0 from DOS 1, which does not know the call
+  std::uint8_t minor; ///< AH
+};
+
+/// What DOS answers to int 21h AH=2Ch: the time of day.
+struct DosTime
+{
+  std::uint8_t hours;      ///< CH
+  std::uint8_t minutes;    ///< CL
+  std::uint8_t seconds;    ///< DH
+  std::uint8_t hundredths; ///< DL
+};
+
 /// The IBM PC's devices as the game drives them (ADR-014): what a de-assembled routine does to the speaker, the timer, the
 /// interrupt controller, the keyboard, the game port, the mouse, the BIOS and DOS, named for what it does rather than by port or
 /// vector. Each port operation is the original's own sequence of port accesses, in its order and at its width, so the emulated
@@ -223,6 +241,15 @@ public:
   /// _point's cycles pass as they pass in a wait (Pc::Spend): the time the IBM PC spent on work the reference sets no pace
   /// for, paid where an interpreted run pays it (ADR-013). Only a routine hooked as one that waits may call it.
   void Spend(const PacingPoint& _point);
+
+  // ── Start, GameLoop and RunFlight (level 5, group F) ──
+
+  /// Int 21h AH=30h, AL=_al: DOS's version. AL goes in as the caller has it: DOS 5 and later read it as which of two answers to
+  /// give in BH.
+  [[nodiscard]] DosVersion ReadDosVersion(std::uint8_t _al);
+
+  /// Int 21h AH=2Ch: DOS's time of day.
+  [[nodiscard]] DosTime ReadDosTime();
 
 private:
   Machine::Pc& m_pc;

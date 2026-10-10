@@ -32,6 +32,10 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware);
 /// interrupts on, and the BIOS clock set back by a day when it is past one. Returns the clock as int 1Ah gave it.
 BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
 
+/// What RestoreTimerInterrupt leaves in CX: the high word of its SUB DX / SBB CX, _clock less a day, whether or not it set the
+/// clock back. Start hands it to PerformDiskRequest, whose catalogue searches with it as the attributes (ADR-012 item 14).
+[[nodiscard]] std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept;
+
 /// WaitForTimerTick (CS:7772): until timerTicks changes, at most one tick. Waits as a rule (ADR-015).
 void WaitForTimerTick(GameState& _state, Hardware& _hardware);
 

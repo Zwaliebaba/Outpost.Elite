@@ -25,6 +25,7 @@ constexpr std::uint16_t INIT_MISSILE = 0x4C8C;
 constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
 constexpr std::uint16_t EXPLODE_OBJECT = 0x4FC1;
 constexpr std::uint16_t TALLY_MASK_MISSION_KILL = 0x50FE;
+constexpr std::uint16_t TRY_FIRE_LASER_AT_PLAYER = 0x518B;
 constexpr std::uint16_t LAUNCH_PLAYER_MISSILE = 0x5242;
 constexpr std::uint16_t LAUNCH_SHIP_FROM_OBJECT = 0x534E;
 constexpr std::uint16_t TRY_LAUNCH_MISSILE_AT_PLAYER = 0x543A;
@@ -283,7 +284,34 @@ public:
       space.Set(DS.laserFiring, 1);
       rig.Call(RESOLVE_LASER_FIRE, {});
     }
-    rig.AssertAllAgreed(RESOLVE_LASER_FIRE, std::size(shots));
+    // And a shot with nothing in the crosshairs.
+    space.Clear();
+    space.Set(DS.firingLaserType, 1);
+    space.Set(DS.laserFiring, 1);
+    rig.Call(RESOLVE_LASER_FIRE, {});
+    rig.AssertAllAgreed(RESOLVE_LASER_FIRE, std::size(shots) + 1);
+  }
+
+  // A ship that fires at the player with its aim inside 200 on both axes hits; inside 70, squarely.
+  TEST_METHOD(TryFireLaserAtPlayerAgreesOnAHit)
+  {
+    ComparisonRig rig("CombatEnemyFire");
+    Space space(rig);
+    space.Clear();
+    space.Set(DS.thargoidInvasionActive, 0);
+    space.Set(DS.safeZoneFlags, 0);
+    space.Set(DS.gameOverFrames, 0);
+    space.Set(DS.escapePodFrames, 0);
+    space.Set(DS.maskingBackgroundColor, 0);
+    const std::uint16_t slot = space.Object(4, TYPE_COBRA, 0, 0x100, 0x80, 0x800);
+    for (const std::uint16_t aim : {std::uint16_t{0x0080}, std::uint16_t{0x0010}})
+    {
+      space.SetField(slot, Elite::SLOT_FLAGS, BLIP_DRAWN);
+      space.SetField(slot, Elite::SLOT_AGGRESSION, 0xFF);
+      space.Random(0x0010, 0x0100);
+      rig.Call(TRY_FIRE_LASER_AT_PLAYER, {.ax = aim, .bx = aim, .di = slot});
+    }
+    rig.AssertAllAgreed(TRY_FIRE_LASER_AT_PLAYER, 2);
   }
 
   // A missile locked on the destroyed object loses its lock, with the message.

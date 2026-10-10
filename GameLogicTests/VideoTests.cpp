@@ -145,6 +145,22 @@ public:
                                         0x20A8, 0x20AA, 0x20AC, 0x20AE, 0x20B0, 0x20B2, 0x20B6, 0x20B8, 0x20BA, 0x20BB, 0x20BE});
   }
 
+  // A triangle on one row of the buffer, its corners' x in each order: the span runs from the least to the greatest, which the
+  // sort finds wherever it is.
+  TEST_METHOD(FillTriangleAgreesOnOneRow)
+  {
+    ComparisonRig rig("FillOneRowTriangle");
+    const std::initializer_list<Inputs> calls = {
+      {.ax = 80, .bx = 100, .cx = 120, .dx = 50, .di = 50, .bp = 50},
+      {.ax = 120, .bx = 80, .cx = 100, .dx = 50, .di = 50, .bp = 50},
+      {.ax = 100, .bx = 120, .cx = 80, .dx = 50, .di = 50, .bp = 50},
+    };
+    for (const Inputs& inputs : calls)
+      rig.Call(FILL_TRIANGLE, inputs);
+    rig.AssertAllAgreed(FILL_TRIANGLE, calls.size());
+    AssertExecuted(rig, FILL_TRIANGLE, {0x1D63, 0x1D69, 0x1D6F});
+  }
+
   // FillClippedTriangle's own entry, as FillTriangle jumps to it: A's x in SI, and the rows (DX, BP, DI) doubled. All three
   // x below 0, all rows below 0, all x past 255 and all rows past 127 return at once; the rest are FillTriangle's
   // clipped cases above.

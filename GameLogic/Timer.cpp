@@ -385,6 +385,11 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   return clock;
 }
 
+std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
+{
+  return static_cast<std::uint16_t>((_clock.ticks - TICKS_PER_DAY) >> 16);
+}
+
 void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // PUSH AX / PUSH DS / PUSH ES, and their POPs before the IRET or the chain: what it loads into them, the data segment, B800h
@@ -474,7 +479,7 @@ void RestoreTimerInterruptEntry(Guest& _guest)
   regs.es = _guest.Get(DS.amstradPresent) == 1 ? IsMouseDriverInstalled(_guest.State()).segment : VECTOR_TABLE_SEGMENT;
   // CX is left the high word of SUB DX / SBB CX, the clock less a day, whether or not the clock was set back: Start goes on with
   // it into PerformDiskRequest, whose catalogue searches with it as the attributes (ListCommanderFiles, CS:03B8).
-  regs.cx = static_cast<std::uint16_t>((clock.ticks - TICKS_PER_DAY) >> 16);
+  regs.cx = ClockLessADayHigh(clock);
   _guest.Clobber(CLOBBERS_AX_BX_DX);
 }
 
