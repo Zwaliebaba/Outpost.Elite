@@ -4,8 +4,12 @@
 #include "GameState.h"
 #include "Maths.h"
 #include "NativeEntry.h"
+#include "ObjectSlot.h"
+#include "Ships.h"
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace Elite
@@ -27,10 +31,6 @@ void ProjectVertices(Guest& _guest);
 /// DrawVisibleFaces (CS:3AB3): for each of CX faces at SI that faces the viewer, its edges
 /// (DrawClippedLine) and filled triangles (FillTriangle) in order. Out: SI past the list.
 void DrawVisibleFaces(Guest& _guest);
-
-/// CheckShipInRange (CS:3BEA): CF clear when slot DI is near and within maxAxisDistance and
-/// maxDistanceSquaredHigh, setting its +3Eh and byte 0 bit 6; else erases its blip and sets CF.
-void CheckShipInRange(Guest& _guest);
 
 /// TransformSunOrPlanet (CS:3C52): scales slot DI's position down, transforms it to the view, stores it
 /// at +10h/+12h/+14h and sets byte 0 bit 7.
@@ -109,6 +109,30 @@ struct VertexProgramEnd
   Vector accumulator;
 };
 
+/// How far CheckShipInRange's test went with a ship IsObjectNear calls near: it stops at the first bound the ship exceeds.
+struct ShipRange
+{
+  bool within;
+  std::uint8_t axes;                       ///< the magnitudes it took, 1-3
+  std::array<std::uint16_t, 3> magnitudes; ///< |x|, |y|, |z|
+  std::uint8_t squares;                    ///< the squares it summed, 0, 2 or 3: none until every axis is within maxAxisDistance
+  std::uint16_t squaredHigh;               ///< the sum of their high words
+};
+
+/// What CheckShipInRange finds of a ship.
+struct ShipRangeCheck
+{
+  NearTest near;                            ///< IsObjectNear's test
+  ShipRange range;                          ///< once the ship is near, how far the test went
+  std::optional<DashboardPixel> erasedBlip; ///< out of range, the last pixel of the blip the EraseScannerBlip after it erased
+
+  /// Whether the ship is in range: near, and within both bounds.
+  [[nodiscard]] bool InRange() const noexcept
+  {
+    return near.nearby && range.within;
+  }
+};
+
 /// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
 /// then the vertex at _vertex += drawCenter. Returns drawCenter, each coordinate as it read it.
 Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection);
@@ -139,6 +163,11 @@ Vector BuildDodoVertices(GameState& _state);
 /// difference, or of the low words' when the high words agree: true when _triangle faces the viewer.
 [[nodiscard]] bool TriangleWindingSign(Triangle _triangle);
 
+/// CheckShipInRange (CS:3BEA): IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
+/// of their squares, summed, below maxDistanceSquaredHigh after the second and the third. In range, _slot's size (+3Eh) is that
+/// sum shifted right 6 and its in-range bit (byte 0 bit 6) is set; out of range, EraseScannerBlip.
+ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot);
+
 /// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Returns the roll's sine and cosine.
 SinCos LoadPlayerAngles(GameState& _state);
 
@@ -153,6 +182,7 @@ void RunVertexProgramEntry(Guest& _guest); ///< SI = the program, BP, BX, DX the
 /// p0 = (AX, DX), p1 = (BX, BP), p2 = (CX, DI). Out: SF; DX:AX = (y0-y1)(x2-x1), BX = the low word of (x0-x1)(y2-y1), less AX when the
 /// high words agree; CX, DI clobbered.
 void TriangleWindingSignEntry(Guest& _guest);
+void CheckShipInRangeEntry(Guest& _guest); ///< DI = the slot. Out: CF clear in range; every register as the original leaves it.
 void LoadPlayerAnglesEntry(Guest& _guest); ///< Out: AX, BX the roll's sine and cosine.
 
 } // namespace Elite

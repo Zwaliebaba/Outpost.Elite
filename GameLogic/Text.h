@@ -2,6 +2,7 @@
 #pragma once
 
 #include "NativeEntry.h"
+#include "ObjectSlot.h"
 
 #include <cstdint>
 #include <span>
@@ -15,11 +16,6 @@ namespace Elite
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> TextEntries() noexcept;
-
-/// ShowShipIdentity (CS:364D): 'CLASS: <class> TYPE: <type>' for ship type AL and class AH on the message line for 30
-/// frames; class 3 is Simple unless IsDebrisType says the slot at DI is debris, a class 4 of type 5 is a Hermit, and
-/// type 1Ch the police. Out: AX = shipIdentityText, BX, CX = 0 and DI past the copies.
-void ShowShipIdentity(Guest& _guest);
 
 /// ReadTextLine (CS:7694): a line typed into the buffer at SI, at most CL characters, echoed at DI with a blinking
 /// cursor; Enter ends it, Backspace deletes, letters are lower case unless Shift is held. Waits for keys. Out: BX the
@@ -135,6 +131,11 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
 /// the register code of the routines that call it, whose originals leave its CX.
 [[nodiscard]] BlankedZeros BlankedBountyZeros(const GameState& _state);
 
+/// ShowShipIdentity (CS:364D): 'CLASS: <class> TYPE: <type>' for ship type _type and class _class on the message line for
+/// 30 frames; class 3 is Simple unless IsDebrisType says _slot is debris, a class 4 of type 5 is a Hermit, and type 1Ch
+/// the police.
+void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const ObjectSlot& _slot);
+
 /// PrintTextModeString (CS:60D2): the text at DS:_text to the text page at B800:_cell, in textAttribute.
 PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell);
 
@@ -188,6 +189,7 @@ void FormatCreditsEntry(Guest& _guest);
 void UpdateMessageLineEntry(Guest& _guest); ///< Out: ES = B800h once it draws a message.
 void ClearMessageLineEntry(Guest& _guest);
 void ShowBountyMessageEntry(Guest& _guest);
+void ShowShipIdentityEntry(Guest& _guest); ///< In: AL the type, AH the class, DI the slot. Out: AX, BX, CX and DI as the original's.
 void PrintTextModeStringEntry(Guest& _guest);
 void ToggleMenuRowHighlightEntry(Guest& _guest);
 void ClearDockedMessageLineEntry(Guest& _guest);

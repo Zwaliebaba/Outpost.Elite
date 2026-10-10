@@ -1,6 +1,7 @@
 // GameLogic/Combat.h
 #pragma once
 
+#include "Flight.h"
 #include "GameState.h"
 #include "NativeEntry.h"
 #include "ObjectSlot.h"
@@ -22,19 +23,12 @@ namespace Elite
 /// DrawLaserBeams (CS:0A9A): the player's beams, from the bottom of the view to near its centre, in firingLaserType's pattern.
 void DrawLaserBeams(Guest& _guest);
 
-/// TakeDamage (CS:2C9B): AX of damage, taken by the fore shield and then the energy, which KillPlayer follows below 0. Nothing
-/// while the escape pod flies. AX and BX clobbered.
-void TakeDamage(Guest& _guest);
-
 /// DetonateEnergyBomb (CS:2ED6): every active ship with a blip exploded, its cargo emptied first; a crime in the safe zone.
 void DetonateEnergyBomb(Guest& _guest);
 
 /// SpawnPlayerWreckage (CS:2FE3): the player's death: the view stopped, six splinters drifting along the nose, and a barrel of
 /// the cargo if there is any.
 void SpawnPlayerWreckage(Guest& _guest);
-
-/// RemoveAllMissiles (CS:4F9F): every active missile among the object slots removed.
-void RemoveAllMissiles(Guest& _guest);
 
 /// ExplodeObject (CS:4FC1): the object at DI removed, and when it was drawn, its fragments and its cargo barrels spawned.
 void ExplodeObject(Guest& _guest);
@@ -62,9 +56,6 @@ void FindShipInCrosshairs(Guest& _guest);
 /// ResolveLaserFire (CS:8AC2): a shot of the player's laser: the hit, its damage and its consequences, then the beams.
 void ResolveLaserFire(Guest& _guest);
 
-/// CreditKill (CS:8BC6): the kill of DI paid for, or held against the player's legal status.
-void CreditKill(Guest& _guest);
-
 /// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player: its beam, then the damage to a shield and the energy.
 void ApplyEnemyLaserHit(Guest& _guest);
 
@@ -78,6 +69,17 @@ struct ThargoidTest
   bool thargoid;
 };
 
+/// What CreditKill did with a kill.
+struct KillCredit
+{
+  std::uint8_t bounty;                     ///< the slot's bounty byte: 0 pays nothing, and FFh pays only for a Thargoid
+  std::optional<std::uint16_t> paidTenths; ///< what it paid, in tenths of a credit, when it paid
+  std::optional<ThargoidTest> killed;      ///< once it paid while a mis-jump's countdown runs: what Routine8C51 found of the slot
+  bool repaired;                           ///< the countdown reached 1, and the Nav-Comp's repair was announced
+  std::optional<SafeZone> zone;            ///< for a kill that paid nothing: what InSafeZone read
+  std::optional<std::uint8_t> crime;       ///< what that kill added to legalStatus, when it was a crime
+};
+
 /// DrawLaserSights (CS:0630): the sights of the current view's laser, a 16x16 sprite of laserSights, ANDed and ORed into the
 /// centre of the space view, a row of two words at a time. Nothing when the view's mount has no laser.
 void DrawLaserSights(GameState& _state);
@@ -87,12 +89,22 @@ void DrawLaserSights(GameState& _state);
 /// time; its type, the 2-bit field mount-1 of laserMountTypes.
 [[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
 
+/// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
+/// it holds; below, the low byte goes against the shield, written back, and 0 over it on a borrow. An energy that goes below 0
+/// kills the player (KillPlayer) and is then 0. Nothing while the escape pod flies. Returns the step length the death sound
+/// starts at, when it kills.
+std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage);
+
 /// KillPlayer (CS:3115): unless the escape pod flies, playerDead and StartPlayerDeathSound. Returns the step length that sound
 /// starts at, when it starts.
 std::optional<std::uint8_t> KillPlayer(GameState& _state);
 
 /// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
 void InitMissile(GameState& _state, ObjectSlot _slot);
+
+/// RemoveAllMissiles (CS:4F9F): every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
+/// whether that erased a scanner blip.
+bool RemoveAllMissiles(GameState& _state);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
@@ -108,6 +120,14 @@ void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pi
 /// Returns whether it was.
 bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
 
+/// CreditKill (CS:8BC6): the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
+/// any other counts a kill in killCount, the INC written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a
+/// crime, 4 for a police Viper and 2 for anything else inside the safe zone, added to legalStatus up to FFh, the sum written and
+/// then FFh over it on a carry. A bounty paid goes through ShowBountyMessage and AddCredits, and while a mis-jump's countdown
+/// runs, the kill of a Thargon or a Thargoid counts it down by 5 or 35, to 1 at the least, where the Nav-Comp's repair is
+/// announced.
+KillCredit CreditKill(GameState& _state, ObjectSlot _slot);
+
 /// Routine8C51 (CS:8C51): _slot's type, and whether it is a Thargon's or a Thargoid's.
 [[nodiscard]] ThargoidTest Routine8C51(const ObjectSlot& _slot);
 
@@ -119,11 +139,14 @@ void UseMaskingDevice(GameState& _state);
 
 void DrawLaserSightsEntry(Guest& _guest);             ///< AX, BX, CX, SI, DI clobbered.
 void GetViewLaserEntry(Guest& _guest);                ///< Out: CF set and AL = the type when the mount has a laser; AX, BX, CX clobbered.
+void TakeDamageEntry(Guest& _guest);                  ///< AX = the damage. Out: AX and BX as the original leaves them; IF=1 when it kills.
 void KillPlayerEntry(Guest& _guest);                  ///< Out: AL the sound's step length and IF=1, when it starts.
 void InitMissileEntry(Guest& _guest);                 ///< DI = the slot. AX, BX clobbered.
+void RemoveAllMissilesEntry(Guest& _guest);           ///< Out: DI past the slots, ES = B800h once a blip is erased; AX-DX clobbered.
 void TallyMaskMissionKillEntry(Guest& _guest);        ///< DI = the slot. Out: AL = its type while the mission runs.
 void TryFireLaserAtPlayerEntry(Guest& _guest);        ///< DI = the slot, AX, BX = the aim errors. AX, BX, CX, DX clobbered.
 void CheckMissileTargetDestroyedEntry(Guest& _guest); ///< DI = the slot. Out: AX = the message, when unlocked.
+void CreditKillEntry(Guest& _guest);                  ///< DI = the slot. Out: AX, BX, CX and SI as the original leaves them.
 void Routine8C51Entry(Guest& _guest);                 ///< DI = the slot. Out: AL = its type; ZF for either, CF for the Thargoid.
 void UseMaskingDeviceEntry(Guest& _guest);            ///< Out: SI past the slots, CX = 0.
 

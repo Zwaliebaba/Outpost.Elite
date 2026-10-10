@@ -1,6 +1,6 @@
 # ADR-012 — De-assembling the native routines: the GameState, typed views, entries and poisoning
 
-**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 3 of the call graph (items 10 to 13).
+**Status:** accepted 2026-10-10, with the change that implements it: the arithmetic (`Maths`), the first subsystem of Phase 4's second step (D17, ADR-011 item 7). Amended the same day with levels 0 to 4 of the call graph (items 10 to 14).
 
 ## Context
 
@@ -47,6 +47,7 @@
 - **An entry clobbers exactly what its contract declares,** and nothing else.
 - **A contract may be widened only with poisoning as the evidence.** Every comparison and every digest must still agree with the widened registers poisoned, and the callers in code must be read to agree.
 - **Once poisoning finds a reader, the entry reproduces the leftover** the original leaves, and the contract narrows so that the comparison checks it.
+- **The code's contract is the contract.** Symbols.tsv's contract column is Phase 1's reading of the listing, and the narrowings poisoning finds are recorded here, not written back into it.
 
 **7. What the arithmetic's pilot found.** The first run with registers poisoned failed six tests. The native corpus kept all 40 digests throughout. Poisoning flags as well, added afterwards, found no caller that reads a flag Maths' contracts leave unnamed.
 
@@ -225,6 +226,46 @@ The 6 contracts poisoning narrowed:
 By that rule, 55 routines are ready for level 4.
 
 **The suites.** `GameLogicTests` passes 176 of 176 with poisoning on, under g++ and clang++. The coverage check is clean, and the corpus keeps all 98 digests in all three of its runs.
+
+**14. Level 4, measured 2026-10-10:** the first level of routines that wait, drive a device or use the stack. Four workers converted 44 of the 55 routines item 13 counted ready, on ADR-014's devices and ADR-015's loop turns.
+
+| | Count |
+|---|---|
+| Routines converted | 44: Flight, Video and Scene 16; the docked screens 5; SaveLoad, StartUp, Timer, Input and Maths 10; Combat, Docking, Hyperspace and Ships 13 |
+| Left, as fragments of a unit whose owner is not ready | 11 |
+| Contracts narrowed, because poisoning found a caller reading a leftover | 6 |
+| Contracts widened | 0 |
+| Lines touching a register in `GameLogic/*.cpp` | 4,211 before, 3,896 after |
+| Register functions left | 265 on 18 levels: 236 routines and 29 register adapters |
+| Routines ready for level 5 | 37, of which the 11 fragments still wait for their units |
+
+The 6 contracts poisoning narrowed:
+
+| Routine | The leftover its callers read |
+|---|---|
+| `FillTriangleSpan` | AX and BP: `DrawVisibleFaces` hands them back to `RenderBlueprintBody`, whose contract compares every register |
+| `MoveObject` | everything it clobbered: `UpdateDriftingObjectAi` and `UpdateMissileAi` read AX to DX and ES, and the spawning that follows stores them |
+| `TakeDamage` | AX and BX, which `UpdateMissileAi` reads |
+| `RemoveAllMissiles` | DI and ES, which `UpdateStationAi` reads |
+| `CopyProtection` | ES: `Start` goes on to `InstallDivideAndKeyboardInterrupts`, which takes ES as the interrupt table's segment |
+| `RestoreTimerInterrupt` | CX: `Start` hands it to `PerformDiskRequest`, whose find-first uses it as the search's attributes, and DOS writes its low byte into the transfer area, which is digested |
+
+**The units.** A fragment that passes data on the stack, or jumps back into another routine's loop, waits for the routine whose loop it is (item 13):
+- the cargo menu, `RunCargoTradeMenu`, with `OpenCargoMessage` and `ShowCargoMessage`;
+- the equipment menu, `RunEquipShipMenu`, with `OpenEquipMessage`, `ShowEquipMessage`, `ReportNotEnoughCredits` and `SellFuelOrMissile`;
+- the trade screens, `ShowSellCargoScreen` and `ShowBuyCargoScreen`, with `PrintNameAndPrice`, `PrintUnit` and `EndTradeRow`;
+- `ReadTextLine` with `RedrawTypedLine`, which jumps into its blink loop;
+- the triangle filler, `FillTriangle` and `FillClippedTriangle`, with `PushClippedSpan` and `DrawStackedSpansFromRow`, which pass spans on the stack.
+
+Most of these menus wait on `GetKey`, `ReadSteering` and `ReadTextLine`, which are the input routines left.
+
+**Write order.** Four more routines now make writes the Phase 3 port had collapsed: `CreditKill`'s INC and FEh on `killCount` and its ADD and FFh on `legalStatus`; `UpdateFuelLeak`'s SUB and 0 on the fuel; `HandleFireButton`'s ADD and FFh on the laser's temperature. Combat's register-side `AddSaturating` still collapses the sum and FFh for `HitTarget`, `DetonateEnergyBomb` and `UpdateMissileAi`, and is fixed when they convert.
+
+**Coverage.** `DrawTunnelRectangle` lost its only compared caller to a value call, and `DockingTests.DrawTunnelRectangleAgreesOnEveryRectangle` now compares it on all ten of the tunnel's rectangles.
+
+**Hooks.** `CopyProtection` reports its loops' turns now, so it is hooked as a routine that sometimes waits. The D5 byte keeps the game off that path.
+
+**The suites.** `GameLogicTests` passes 177 of 177 with poisoning on, under g++ and clang++. The coverage check is clean, and the corpus keeps all 98 digests in all three of its runs.
 
 ## What this forecloses
 

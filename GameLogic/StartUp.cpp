@@ -6,6 +6,7 @@
 #include "DataOverlay.h"
 #include "Input.h"
 #include "Maths.h"
+#include "Timer.h"
 
 namespace Elite
 {
@@ -29,11 +30,8 @@ constexpr std::uint16_t COMMAND_TAIL_TEXT = 0x81;
 constexpr std::uint8_t CHEAT_KEY = 0xAA;
 constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
-constexpr std::uint8_t VIDEO_VECTOR = 0x10;
 constexpr std::uint8_t DOS_VECTOR = 0x21;
-constexpr std::uint8_t DOS_FLUSH_AND_READ = 0x0C;
-constexpr std::uint8_t DOS_BUFFERED_INPUT = 0x0A;
-constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
+constexpr std::uint8_t VIDEO_MODE_TEXT_40 = 0x00; // 40x25 text, the colour burst off
 constexpr std::uint8_t CGA_VERTICAL_RETRACE = 0x08;
 constexpr std::uint8_t QUESTION_MASK = 0x3F; // 64 questions
 constexpr std::uint16_t QUESTION_KEY = 0x6161;
@@ -63,9 +61,11 @@ constexpr std::uint16_t GAME_LOOP = 0x7D30;
 constexpr std::uint16_t RUN_TITLE_AND_DOCKED = 0x7D81;
 constexpr std::uint16_t RUN_FLIGHT = 0x7E9B;
 
-// Where the original jumps back (Guest::LoopTurn).
+// Where the original jumps back (Guest::LoopTurn, Hardware::LoopTurn).
 constexpr std::uint16_t RESTART_PLAY = 0x003B;
 constexpr std::uint16_t EXIT_KEY_DRAIN = 0x00B9;
+constexpr std::uint16_t RETRACE_POLL = 0x04C1;
+constexpr std::uint16_t UPPER_CASE_LOOP = 0x0529;
 constexpr std::uint16_t CREDITS_LINE = 0x8F0E;
 constexpr std::uint16_t CREDITS_WAIT = 0x8F2B;
 
@@ -105,27 +105,19 @@ std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::ui
   return moved;
 }
 
-// ExitToDos (CS:00AD): the BIOS's text mode, the farewell, and the BIOS's key buffer emptied. The RETF
-// that follows, to PSP:0000 where Start pushed it, is the entry's own return. Its devices are Hardware's; it
-// keeps the Guest for its loop's turns, inside Start, which waits. Of what the services leave, the original
-// reads only ZF, the loop's test, which is PeekBiosKey's answer here, and the program ends at the RETF. Each
-// turn takes a key out of the BIOS's buffer, a change paced time sees at the jump back whatever the registers
-// hold.
-void ExitToDos(Guest& _guest)
+// ExitToDos (CS:00AD): the BIOS's text mode, the farewell, and the BIOS's key buffer emptied. The RETF that follows, to
+// PSP:0000 where Start pushed it, is Start's own return, and the program ends there: of what the services leave in the
+// registers, the original reads only ZF, the loop's test, which is PeekBiosKey's answer here.
+void ExitToDos(GameState& _state, Hardware& _hardware)
 {
-  Hardware& hardware = _guest.Devices();
-  Machine::Registers& regs = _guest.Regs();
-  hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  hardware.PrintDosString(_guest.DataSegment(), DS.exitMessage.offset);
-  // At the jump back the original holds the key int 16h took out in AX, the message's offset from the print in DX, and
-  // ZF clear from the peek that found the key: the registers JumpBack compares (ADR-010 item 8). Every turn takes a key,
-  // a change paced time sees, so no turn idles.
-  regs.dx = DS.exitMessage.offset;
-  while (hardware.PeekBiosKey().has_value())
+  _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
+  _hardware.PrintDosString(_state.DataSegment(), DS.exitMessage.offset);
+  // At the jump back the original holds in AX the key int 16h took out, and the next turn reads no register before it writes
+  // it but DX, the message, which does not change. Every turn takes a key, a change paced time sees, so no turn idles.
+  while (_hardware.PeekBiosKey().has_value())
   {
-    regs.ax = hardware.ReadBiosKey();
-    _guest.SetFlag(Machine::FLAG_ZERO, false);
-    _guest.JumpBack(EXIT_KEY_DRAIN);
+    const std::uint16_t key = _hardware.ReadBiosKey();
+    _hardware.LoopTurn(EXIT_KEY_DRAIN, {key});
   }
 }
 
@@ -179,62 +171,64 @@ void CheckCheatArgument(GameState& _state)
   _state.Set(DS.cheatEnabled, 1);
 }
 
-void CopyProtection(Guest& _guest)
+void CopyProtection(GameState& _state, Hardware& _hardware)
 {
-  if (_guest.Get(DS.protectionShown) != 0)
+  if (_state.Get(DS.protectionShown) != 0)
   {
     return;
   }
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.protectionShown, 1);
-  regs.ax = 0;
-  _guest.Interrupt(VIDEO_VECTOR);
-  regs.di = _guest.Get(DS.protectionDescriptor);
-  // What the print leaves, DX the text and AH 9, the next instructions overwrite.
-  _guest.Devices().PrintDosString(_guest.DataSegment(), _guest.Word(regs.di));
+  _state.Set(DS.protectionShown, 1);
+  _hardware.SetVideoMode(VIDEO_MODE_TEXT_40);
+  const std::uint16_t descriptor = _state.Get(DS.protectionDescriptor);
+  _hardware.PrintDosString(_state.DataSegment(), _state.Word(descriptor));
 
-  // The question depends on how long the random generator runs before a vertical retrace.
-  regs.dx = CGA_STATUS_PORT;
-  do
+  // The question depends on how long the random generator runs before a vertical retrace. At the jump back the original
+  // holds the status it read, masked, in AL; the next turn reads no register before it writes it but DX, the port.
+  for (;;)
   {
-    NextRandomEntry(_guest);
-    regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(regs.dx) & CGA_VERTICAL_RETRACE));
-  } while (Low(regs.ax) == 0);
-  NextRandomEntry(_guest);
-  const auto index = static_cast<std::uint8_t>(Low(regs.ax) & QUESTION_MASK);
-  regs.bx = static_cast<std::uint16_t>(static_cast<std::uint8_t>(index * 3) * 2);
+    static_cast<void>(NextRandom(_state));
+    const auto retrace = static_cast<std::uint8_t>(_hardware.CgaStatus() & CGA_VERTICAL_RETRACE);
+    if (retrace != 0)
+    {
+      break;
+    }
+    _hardware.LoopTurn(RETRACE_POLL, {retrace});
+  }
+  const auto index = static_cast<std::uint8_t>(Low(NextRandom(_state)) & QUESTION_MASK);
   const auto question = static_cast<std::uint8_t>(index + 1);
-  _guest.Set(DS.protectionQuestion, question);
+  _state.Set(DS.protectionQuestion, question);
 
-  // The question's three words (page, line, word), each XORed with its number and 6161h, into the prompt.
-  regs.di = _guest.Get(DS.protectionDescriptor);
-  regs.si = static_cast<std::uint16_t>(_guest.Word(static_cast<std::uint16_t>(regs.di + 8)) + regs.bx);
-  regs.bx = static_cast<std::uint16_t>(((question << 8) | question) ^ QUESTION_KEY);
+  // The question's three words (page, line, word), each XORed with its number in both bytes and 6161h, into the prompt.
+  const auto words = static_cast<std::uint16_t>(_state.Word(Offset(descriptor, 8)) + static_cast<std::uint8_t>(index * 3) * 2);
+  const auto key = static_cast<std::uint16_t>(Join(question, question) ^ QUESTION_KEY);
   for (std::uint16_t field = 0; field < 3; ++field)
   {
-    regs.ax = static_cast<std::uint16_t>(regs.bx ^ _guest.Word(static_cast<std::uint16_t>(regs.si + field * 2)));
-    _guest.SetWord(_guest.Word(static_cast<std::uint16_t>(regs.di + 2 + field * 2)), regs.ax);
+    const auto word = static_cast<std::uint16_t>(key ^ _state.Word(Offset(words, static_cast<std::uint16_t>(field * 2))));
+    _state.SetWord(_state.Word(Offset(descriptor, static_cast<std::uint16_t>(2 + field * 2))), word);
   }
-  _guest.Devices().PrintDosString(_guest.DataSegment(), _guest.Word(static_cast<std::uint16_t>(regs.di + 2)));
+  _hardware.PrintDosString(_state.DataSegment(), _state.Word(Offset(descriptor, 2)));
 
-  regs.dx = DS.protectionInput.offset;
-  regs.ax = static_cast<std::uint16_t>((DOS_FLUSH_AND_READ << 8) | DOS_BUFFERED_INPUT);
-  _guest.Interrupt(DOS_VECTOR);
-  regs.di = DS.data25CA.offset;
-  regs.cx = WithLow(regs.cx, _guest.Byte(regs.di));
-  if (Low(regs.cx) != 0)
+  // The answer typed, upper-cased in place: LOOP back with DI at the character done and CX the count left, which the next
+  // turn reads.
+  _hardware.ReadDosLine(_state.DataSegment(), DS.protectionInput.offset);
+  std::uint16_t at = DS.data25CA.offset;
+  const std::uint8_t typed = _state.Byte(at);
+  if (typed != 0)
   {
-    regs.cx = Low(regs.cx);
-    do
+    for (std::uint16_t left = typed;;)
     {
-      ++regs.di;
-      _guest.SetByte(regs.di, static_cast<std::uint8_t>(_guest.Byte(regs.di) & UPPER_CASE_MASK));
-      --regs.cx;
-    } while (regs.cx != 0);
+      at = Offset(at, 1);
+      _state.SetByte(at, static_cast<std::uint8_t>(_state.Byte(at) & UPPER_CASE_MASK));
+      if (--left == 0)
+      {
+        break;
+      }
+      _hardware.LoopTurn(UPPER_CASE_LOOP, {at, left});
+    }
   }
-  _guest.Call(WAIT_FOR_TIMER_TICK);
-  _guest.Set(DS.protectionAnswerCorrect, 1);
-  _guest.Set(DS.protectionQuestion, NO_QUESTION);
+  WaitForTimerTick(_state, _hardware);
+  _state.Set(DS.protectionAnswerCorrect, 1);
+  _state.Set(DS.protectionQuestion, NO_QUESTION);
 }
 
 void StartNewGame(GameState& _state, bool _backward)
@@ -287,7 +281,7 @@ void Start(Guest& _guest)
   {
     // DOS 1 reports no major version, and is not enough. What the print leaves ExitToDos overwrites.
     _guest.Devices().PrintDosString(_guest.DataSegment(), DS.dosVersionMessage.offset);
-    ExitToDos(_guest);
+    ExitToDos(_guest.State(), _guest.Devices());
     return;
   }
   _guest.Call(SAVE_STARTUP_COMMANDER);
@@ -345,7 +339,7 @@ void Start(Guest& _guest)
     if (Low(regs.ax) == 0)
     {
       _guest.Call(WIPE_PROGRAM);
-      ExitToDos(_guest);
+      ExitToDos(_guest.State(), _guest.Devices());
       return;
     }
     // The request, with the game's own critical-error handler on int 24h.
@@ -453,6 +447,10 @@ constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_SI{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0};
 constexpr Machine::NativeContract CLOBBERS_ALL{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
+// CopyProtection never writes ES, and Start goes on with it into InstallDivideAndKeyboardInterrupts, which takes the
+// interrupt table's segment there: compared.
+constexpr Machine::NativeContract PROTECTION{
+  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF{REGISTER_AX | REGISTER_CX | REGISTER_DI | REGISTER_ES,
                                                                       Machine::FLAG_INTERRUPT};
@@ -460,6 +458,7 @@ constexpr Machine::NativeContract CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF{REGISTER_A
 constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{REGISTER_ALL, 0};
 
 constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
+constexpr Machine::NativeWait SOMETIMES = Machine::NativeWait::Sometimes;
 
 } // namespace
 
@@ -492,6 +491,12 @@ void WipeProgramEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF);
 }
 
+void CopyProtectionEntry(Guest& _guest)
+{
+  CopyProtection(_guest.State(), _guest.Devices());
+  _guest.Clobber(PROTECTION);
+}
+
 void StartNewGameEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -510,7 +515,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x0105, "InstallDivideAndKeyboardInterrupts", &InstallDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
   NativeEntry{0x0148, "RestoreDivideAndKeyboardInterrupts", &RestoreDivideAndKeyboardInterruptsEntry, CLOBBERS_AX},
   NativeEntry{0x02A5, "CheckCheatArgument", &CheckCheatArgumentEntry, CLOBBERS_AX_BX_CX_SI},
-  NativeEntry{0x04A3, "CopyProtection", &CopyProtection, CLOBBERS_ALL},
+  // CopyProtection waits on the question's path, in its loops and WaitForTimerTick, which the D5 byte closes.
+  NativeEntry{0x04A3, "CopyProtection", &CopyProtectionEntry, PROTECTION, Machine::NativeReturn::Near, 0, SOMETIMES},
   NativeEntry{0x0554, "WipeProgram", &WipeProgramEntry, CLOBBERS_AX_CX_DI_ES_INTERRUPTS_OFF},
   NativeEntry{0x4671, "StartNewGame", &StartNewGameEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x7D30, "GameLoop", &GameLoop, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, ALWAYS},

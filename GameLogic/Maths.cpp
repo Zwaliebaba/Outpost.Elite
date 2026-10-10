@@ -82,12 +82,6 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
   _state.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, _ds);
 }
 
-void SaveDivideRegisters(Guest& _guest)
-{
-  const Machine::Registers& regs = _guest.Regs();
-  SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
-}
-
 // DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: the
 // offset it resumes at, and AX as it leaves AX = _ax.
 struct TrapOutcome
@@ -113,7 +107,7 @@ struct TrapOutcome
 std::uint16_t TrapDivideOverflow(Guest& _guest, std::uint16_t _segment, std::uint16_t _offset)
 {
   Machine::Registers& regs = _guest.Regs();
-  SaveDivideRegisters(_guest);
+  SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
   const TrapOutcome outcome = SaturateDivide(_guest.State(), _segment, _offset, regs.ax);
   regs.ax = outcome.ax;
   return outcome.resume;
@@ -161,7 +155,7 @@ void DivideByte(Guest& _guest, std::uint8_t _divisor)
   Machine::Registers& regs = _guest.Regs();
   if (High(regs.ax) >= _divisor)
   {
-    SaveDivideRegisters(_guest);
+    SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
     SetLow(regs.ax, DIVIDE_OVERFLOW_BYTE);
     return;
   }
@@ -174,7 +168,7 @@ void DivideWord(Guest& _guest, std::uint16_t _divisor)
   Machine::Registers& regs = _guest.Regs();
   if (regs.dx >= _divisor)
   {
-    SaveDivideRegisters(_guest);
+    SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
     regs.ax = DIVIDE_OVERFLOW_WORD;
     return;
   }
@@ -194,7 +188,7 @@ void DivideSignedWord(Guest& _guest, std::uint16_t _divisor)
   const std::uint32_t quotient = (dividendMagnitude >> 16) >= divisorMagnitude ? 0x8000u : dividendMagnitude / divisorMagnitude;
   if ((quotient & 0x8000u) != 0)
   {
-    SaveDivideRegisters(_guest);
+    SaveDivideRegisters(_guest.State(), regs.bx, regs.ds);
     regs.ax = DIVIDE_OVERFLOW_WORD;
     return;
   }

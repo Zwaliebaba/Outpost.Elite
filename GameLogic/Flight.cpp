@@ -3,11 +3,14 @@
 #include "Flight.h"
 
 #include "Arithmetic.h"
+#include "Combat.h"
 #include "DataOverlay.h"
+#include "Input.h"
 #include "Maths.h"
 #include "ObjectSlot.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "Text.h"
 #include "Video.h"
 
 #include <utility>
@@ -27,7 +30,6 @@ constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
 constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
 constexpr std::uint16_t NEXT_RANDOM = 0x061C;
-constexpr std::uint16_t GET_VIEW_LASER = 0x066C;
 constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
 constexpr std::uint16_t HANDLE_FLIGHT_FUNCTION_KEYS = 0x0BB3;
 constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
@@ -40,20 +42,17 @@ constexpr std::uint16_t CHECK_COLLISIONS = 0x2BC5;
 constexpr std::uint16_t TAKE_DAMAGE = 0x2C9B;
 constexpr std::uint16_t CHECK_DOCKING_ALIGNMENT = 0x2D0F;
 constexpr std::uint16_t PLAY_STATION_TUNNEL = 0x2D5B;
-constexpr std::uint16_t VECTOR_LENGTH = 0x2E96;
 constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
 constexpr std::uint16_t LAUNCH_ESCAPE_POD = 0x2F0F;
 constexpr std::uint16_t OBJECT_WITHIN_BOX = 0x2F65;
 constexpr std::uint16_t VECTOR_WITHIN_BOX = 0x2F6E;
 constexpr std::uint16_t SPAWN_PLAYER_WRECKAGE = 0x2FE3;
-constexpr std::uint16_t DRAW_VIEW_CHAR = 0x3130;
 constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_CHAR = 0x31F9;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
 constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
 constexpr std::uint16_t SHOW_SHIP_IDENTITY = 0x364D;
-constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t ROTATE_PITCH_YAW_ROLL = 0x3EAC;
 constexpr std::uint16_t TRANSFORM_TO_VIEW = 0x3EE3;
@@ -77,7 +76,6 @@ constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
 constexpr std::uint16_t SHOW_INVENTORY_SCREEN = 0x6020;
 constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
 constexpr std::uint16_t SILENCE_SPEAKER_TIMER = 0x7436;
-constexpr std::uint16_t READ_FIRE_BUTTON = 0x74E0;
 constexpr std::uint16_t READ_STEERING = 0x7536;
 constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
@@ -193,6 +191,8 @@ constexpr std::uint16_t PAUSE_MENU_LINES = 8;
 constexpr std::uint16_t PAUSE_OPTIONS = 5;
 constexpr std::uint16_t PAUSE_FIRST_OPTION = 0x0C08; // in spaceViewBuffer
 constexpr std::uint16_t PAUSE_OPTION_STEP = 0x200;
+constexpr std::uint16_t PAUSE_OPTIONS_LOOP = 0x8D98;
+constexpr std::uint16_t HYPERSPACE_REFUSAL_TAIL = 0x80A3; // posts the message in AX for 25 frames
 constexpr std::uint16_t ALL_COLORS = 0xFFFF;
 constexpr std::uint16_t TITLE_TEXT_POSITION = 0x65; // on the message line, in CGA memory
 constexpr std::uint8_t DIGIT_ZERO = 0x30;
@@ -200,6 +200,22 @@ constexpr std::uint8_t DIGIT_ONE = 0x31;
 constexpr std::uint8_t DIGIT_NINE = 0x39;
 constexpr std::uint8_t CLOSING_BRACKET = 0x29;
 constexpr std::uint8_t SPACE = 0x20;
+
+// The fire button: a laser at F0h or hotter does not fire, and each shot heats it by 5; a pulse laser fires every other
+// frame.
+constexpr std::uint8_t LASER_TOO_HOT = 0xF0;
+constexpr std::uint8_t LASER_HEAT_PER_SHOT = 5;
+constexpr std::uint8_t PULSE_LASER = 0;
+
+// The station's safe zone: a distance below 32C8h.
+constexpr std::uint16_t SAFE_ZONE_RADIUS = 0x32C8;
+
+// A fuel leak: frames of leaking once its delay runs out, the fuel each takes, and the border it shows while it leaks, red,
+// with the bright palette's bit.
+constexpr std::uint8_t FUEL_LEAK_FRAMES = 0x33;
+constexpr std::uint8_t FUEL_LEAK_STEP = 5;
+constexpr std::uint8_t FUEL_LEAK_BORDER = 4;
+constexpr std::uint8_t BRIGHT_PALETTE = 0x10;
 
 // The warnings: four checks, round from the one after the last warning.
 constexpr std::uint16_t WARNING_CHECKS = 4;
@@ -805,36 +821,31 @@ void WaitForKey(Guest& _guest, std::uint16_t _call)
   }
 }
 
-// PauseShowOptions (0x8D8F): the five option letters, in reverse video when on.
-void ShowPauseOptions(Guest& _guest)
+// PauseShowOptions (0x8D8F): the five option letters, in reverse video when on. The loop at 0x8D98 pushes and pops CX, DI
+// and SI round DrawViewChar, and each turn carries them: the options left, the letter's place and the option's flag byte.
+void ShowPauseOptions(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = PAUSE_FIRST_OPTION;
-  regs.cx = PAUSE_OPTIONS;
-  regs.si = DS.keyboardRecenter.offset;
+  std::uint16_t position = PAUSE_FIRST_OPTION;
+  std::uint16_t option = DS.keyboardRecenter.offset;
+  std::uint16_t options = PAUSE_OPTIONS;
   for (;;)
   {
-    const std::uint16_t options = regs.cx;
-    const std::uint16_t position = regs.di;
-    const std::uint16_t option = regs.si;
-    _guest.Set(DS.textPaperPattern, 0);
-    regs.bx = ALL_COLORS;
-    if (_guest.Byte(regs.si) == 1)
+    _state.Set(DS.textPaperPattern, 0);
+    std::uint16_t ink = ALL_COLORS;
+    if (_state.Byte(option) == 1)
     {
       // xchg [textPaperPattern], bx
-      regs.bx = _guest.Get(DS.textPaperPattern);
-      _guest.Set(DS.textPaperPattern, ALL_COLORS);
+      ink = _state.Get(DS.textPaperPattern);
+      _state.Set(DS.textPaperPattern, ALL_COLORS);
     }
-    SetLow(regs.ax, _guest.Byte(Plus(regs.si, 1)));
-    _guest.Call(DRAW_VIEW_CHAR);
-    regs.si = Plus(option, 2);
-    regs.di = Plus(position, PAUSE_OPTION_STEP);
-    regs.cx = options;
-    if (--regs.cx == 0)
+    (void)DrawViewChar(_state, _state.Byte(Plus(option, 1)), ink, position);
+    option = Plus(option, 2);
+    position = Plus(position, PAUSE_OPTION_STEP);
+    if (--options == 0)
     {
       return;
     }
-    _guest.JumpBack(0x8D98);
+    _hardware.LoopTurn(PAUSE_OPTIONS_LOOP, {options, position, option});
   }
 }
 
@@ -862,7 +873,8 @@ void ShowPauseOptions(Guest& _guest)
   Registers& regs = _guest.Regs();
   for (;;)
   {
-    ShowPauseOptions(_guest);
+    // What the options' loop leaves in the registers, PresentSpaceView, next, writes before it reads.
+    ShowPauseOptions(_guest.State(), _guest.Devices());
     regs.ax = Guest::VIDEO_SEGMENT;
     regs.es = regs.ax;
     _guest.Call(PRESENT_SPACE_VIEW);
@@ -944,14 +956,12 @@ void LeaveFlightScreens(Guest& _guest)
   _guest.Set(DS.inFlight, 1);
 }
 
-// push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
-void EraseForFlightScreen(Guest& _guest)
+// 0x0C13 and 0x0C72: flightScreenShown set, then push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
+// Returns whether EraseCompassAndBlips erased anything.
+bool EraseForFlightScreen(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.flightScreenShown, 1);
-  const std::uint16_t key = regs.ax;
-  _guest.Call(ERASE_COMPASS_AND_BLIPS);
-  regs.ax = key;
+  _state.Set(DS.flightScreenShown, 1);
+  return EraseCompassAndBlips(_state);
 }
 
 // FlightScreenDispatch (0x0BF8): the screen for the key in AH, then the key that screen returns, until
@@ -959,6 +969,15 @@ void EraseForFlightScreen(Guest& _guest)
 void DispatchFlightScreens(Guest& _guest)
 {
   Registers& regs = _guest.Regs();
+  // EraseForFlightScreen, with the ES EraseCompassAndBlips leaves once it erases anything, which ShowShortRangeChart goes on
+  // with. Its PUSH and POP keep AX.
+  const auto eraseForFlightScreen = [&_guest, &regs]
+  {
+    if (EraseForFlightScreen(_guest.State()))
+    {
+      regs.es = GameState::VIDEO_SEGMENT;
+    }
+  };
   for (;;)
   {
     const std::uint8_t key = High(regs.ax);
@@ -970,7 +989,7 @@ void DispatchFlightScreens(Guest& _guest)
     }
     if (_guest.Get(DS.witchspaceCountdown) == 0)
     {
-      EraseForFlightScreen(_guest);
+      eraseForFlightScreen();
       constexpr std::array<std::uint16_t, 4> SCREENS = {SHOW_GALACTIC_CHART, SHOW_SHORT_RANGE_CHART, SHOW_SYSTEM_DATA_SCREEN,
                                                         SHOW_MARKET_PRICES_SCREEN};
       if (key >= SCAN_F5 && key <= SCAN_F8)
@@ -1009,7 +1028,7 @@ void DispatchFlightScreens(Guest& _guest)
         LeaveFlightScreens(_guest);
         return;
       }
-      EraseForFlightScreen(_guest);
+      eraseForFlightScreen();
       _guest.JumpBack(0x0C45);
     }
     // 0x0C45: F9 and F10; any other key the screens return is waited past.
@@ -1052,12 +1071,12 @@ std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
   return ResetStardust(_state);
 }
 
-// mov ax, _text; jmp back to 0x80A3, which posts it for 25 frames.
-void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
+// mov ax, _text; jmp back to 0x80A3, the tail that posts it for 25 frames: a backward jump into shared code, not a loop, so
+// its turn carries nothing.
+void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t _text)
 {
-  _guest.Regs().ax = _text.offset;
-  _guest.JumpBack(0x80A3);
-  SetMessage(_guest.State(), _text.offset, 0x19);
+  _hardware.LoopTurn(HYPERSPACE_REFUSAL_TAIL, {});
+  SetMessage(_state, _text, 0x19);
 }
 
 // 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown
@@ -1093,7 +1112,8 @@ void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
     }
     if (regs.ax >= 0x47)
     {
-      PostHyperspaceRefusal(_guest, DS.outOfRangeMessage);
+      regs.ax = DS.outOfRangeMessage.offset;
+      PostHyperspaceRefusal(_guest.State(), _guest.Devices(), regs.ax);
       return false;
     }
     // The fuel in tenths of a light year against the distance, and the cost.
@@ -1105,7 +1125,8 @@ void PostHyperspaceRefusal(Guest& _guest, DataAt _text)
     DivideByte(_guest, High(regs.bx));
     if (Low(regs.ax) < Low(regs.bx))
     {
-      PostHyperspaceRefusal(_guest, DS.notEnoughFuelMessage);
+      regs.ax = DS.notEnoughFuelMessage.offset;
+      PostHyperspaceRefusal(_guest.State(), _guest.Devices(), regs.ax);
       return false;
     }
     regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
@@ -1191,31 +1212,35 @@ void HandleMissileKeys(Guest& _guest)
   }
 }
 
-// 0x826F-0x829A: fire heats the laser by 5; a pulse laser (type 0) fires every other frame.
-void HandleFireButton(Guest& _guest)
+// 0x826F-0x829E: fire heats the laser by 5; a pulse laser (type 0) fires every other frame.
+void HandleFireButton(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Call(READ_FIRE_BUTTON);
-  if (!_guest.Flag(FLAG_CARRY))
+  if (!ReadFireButton(_state, _hardware))
   {
     return;
   }
-  _guest.Call(GET_VIEW_LASER);
-  if (!_guest.Flag(FLAG_CARRY) || _guest.Get(DS.laserTemperature) >= 0xF0)
+  const std::optional<std::uint8_t> laser = GetViewLaser(_state);
+  if (!laser || _state.Get(DS.laserTemperature) >= LASER_TOO_HOT)
   {
     return;
   }
-  _guest.Set(DS.laserTemperature, SaturatingAdd(_guest.Get(DS.laserTemperature), 5));
-  if (Low(regs.ax) == 0)
+  // ADD [laserTemperature],5, and FFh written over it on a carry, which a temperature below F0h never makes.
+  const std::uint8_t temperature = _state.Get(DS.laserTemperature);
+  _state.Set(DS.laserTemperature, static_cast<std::uint8_t>(temperature + LASER_HEAT_PER_SHOT));
+  if (temperature + LASER_HEAT_PER_SHOT > 0xFF)
   {
-    _guest.Set(DS.laserAlternateFrame, static_cast<std::uint8_t>(_guest.Get(DS.laserAlternateFrame) ^ 1));
-    if (_guest.Get(DS.laserAlternateFrame) != 0)
+    _state.Set(DS.laserTemperature, 0xFF);
+  }
+  if (*laser == PULSE_LASER)
+  {
+    _state.Set(DS.laserAlternateFrame, static_cast<std::uint8_t>(_state.Get(DS.laserAlternateFrame) ^ 1));
+    if (_state.Get(DS.laserAlternateFrame) != 0)
     {
       return;
     }
   }
-  _guest.Set(DS.firingLaserType, Low(regs.ax));
-  _guest.Set(DS.laserFiring, 1);
+  _state.Set(DS.firingLaserType, *laser);
+  _state.Set(DS.laserFiring, 1);
 }
 
 // 0x82F7-0x8363: I identifies the ship in the sights, and locks a missile on it if there is one.
@@ -1694,7 +1719,7 @@ void UpdateDashboard(Guest& _guest)
   UpdateConditionColorEntry(_guest);
   DrawConditionLightEntry(_guest);
   UpdateEnergyAndLaserHeat(_guest);
-  UpdateSafeZone(_guest);
+  UpdateSafeZoneEntry(_guest);
   InSafeZoneEntry(_guest);
 
   // The S glyph inside the station's safe zone, and E for a frame when the ECM fires.
@@ -2062,34 +2087,25 @@ SafeZone InSafeZone(const GameState& _state)
   return SafeZone{(flags & 1) != 0, static_cast<std::uint8_t>(flags >> 1)};
 }
 
-void UpdateSafeZone(Guest& _guest)
+void UpdateSafeZone(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  regs.di = DS.stationSlot.offset;
-  if ((_guest.Byte(regs.di) & 1) == 0)
+  const ObjectSlot station(_state, DS.stationSlot.offset);
+  if ((station.Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0 || !IsStation(station).station)
   {
-    _guest.Set(DS.safeZoneFlags, 0);
+    _state.Set(DS.safeZoneFlags, 0);
     return;
   }
-  _guest.Call(IS_STATION);
-  if (!_guest.Flag(FLAG_ZERO))
-  {
-    _guest.Set(DS.safeZoneFlags, 0);
-    return;
-  }
-  _guest.Call(IS_OBJECT_NEAR);
+  // RCL AL,1: bit 0 the answer, over what AL held: IsObjectNear's last high byte, or the low byte of the station's distance.
+  const NearTest near = IsObjectNear(_state, station);
+  std::uint8_t held = near.lastHigh;
   bool inside = false;
-  if (_guest.Flag(FLAG_CARRY))
+  if (near.nearby)
   {
-    regs.ax = _guest.Word(Plus(regs.di, SLOT_X));
-    regs.bx = _guest.Word(Plus(regs.di, SLOT_Y));
-    regs.cx = _guest.Word(Plus(regs.di, SLOT_Z));
-    _guest.Call(VECTOR_LENGTH);
-    inside = regs.ax < 0x32C8;
+    const std::uint16_t distance = VectorLength(GetObjectPosition(station));
+    held = Low(distance);
+    inside = distance < SAFE_ZONE_RADIUS;
   }
-  // rcl al,1: bit 0 the answer, the rest whatever AL held.
-  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) << 1) | (inside ? 1 : 0)));
-  _guest.Set(DS.safeZoneFlags, Low(regs.ax));
+  _state.Set(DS.safeZoneFlags, static_cast<std::uint8_t>((held << 1) | (inside ? 1 : 0)));
 }
 
 Vector ComputeDeathDebrisVector(GameState& _state)
@@ -2398,37 +2414,38 @@ bool EraseCompassAndBlips(GameState& _state)
   return erased;
 }
 
-void UpdateFuelLeak(Guest& _guest)
+void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
-  if (_guest.Get(DS.fuelLeakDelayFrames) != 0)
+  std::uint8_t border = 0;
+  if (_state.Get(DS.fuelLeakDelayFrames) != 0)
   {
-    _guest.Set(DS.fuelLeakDelayFrames, static_cast<std::uint8_t>(_guest.Get(DS.fuelLeakDelayFrames) - 1));
-    if (_guest.Get(DS.fuelLeakDelayFrames) == 0)
+    _state.Set(DS.fuelLeakDelayFrames, static_cast<std::uint8_t>(_state.Get(DS.fuelLeakDelayFrames) - 1));
+    if (_state.Get(DS.fuelLeakDelayFrames) == 0)
     {
-      _guest.Set(DS.fuelLeakFrames, 0x33);
+      _state.Set(DS.fuelLeakFrames, FUEL_LEAK_FRAMES);
       return;
     }
-    SetLow(regs.ax, _guest.Get(DS.maskingBackgroundColor));
+    border = _state.Get(DS.maskingBackgroundColor);
   }
-  else if (_guest.Get(DS.fuelLeakFrames) != 0)
+  else if (_state.Get(DS.fuelLeakFrames) != 0)
   {
-    _guest.Set(DS.fuelLeakFrames, static_cast<std::uint8_t>(_guest.Get(DS.fuelLeakFrames) - 1));
-    _guest.Set(DS.fuel, SaturatingSubtract(_guest.Get(DS.fuel), 5));
-    regs.ax = SignExtend(_guest.Get(DS.fuelLeakFrames));
-    _guest.Set(DS.messageFrames, regs.ax);
-    regs.ax = DS.fuelLeakText.offset;
-    _guest.Set(DS.messagePointer, regs.ax);
-    SetLow(regs.ax, 4); // red
+    _state.Set(DS.fuelLeakFrames, static_cast<std::uint8_t>(_state.Get(DS.fuelLeakFrames) - 1));
+    // SUB [fuel],5, and 0 written over it on a borrow.
+    const std::uint8_t fuel = _state.Get(DS.fuel);
+    _state.Set(DS.fuel, static_cast<std::uint8_t>(fuel - FUEL_LEAK_STEP));
+    if (fuel < FUEL_LEAK_STEP)
+    {
+      _state.Set(DS.fuel, 0);
+    }
+    _state.Set(DS.messageFrames, SignExtend(_state.Get(DS.fuelLeakFrames)));
+    _state.Set(DS.messagePointer, DS.fuelLeakText.offset);
+    border = FUEL_LEAK_BORDER;
   }
   else
   {
-    SetLow(regs.ax, _guest.Get(DS.maskingBackgroundColor));
+    border = _state.Get(DS.maskingBackgroundColor);
   }
-  // The CGA's colour select register: the border and background, with intensity.
-  regs.dx = 0x3D9;
-  SetLow(regs.ax, Low(regs.ax) | 0x10);
-  _guest.Out8(regs.dx, Low(regs.ax));
+  _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
 
 void RunFlight(Guest& _guest)
@@ -2500,18 +2517,14 @@ void RunFlight(Guest& _guest)
   }
 }
 
-void TickEscapePod(Guest& _guest)
+bool TickEscapePod(GameState& _state)
 {
-  if (_guest.Get(DS.escapePodFrames) == 0)
+  if (_state.Get(DS.escapePodFrames) == 0)
   {
-    return;
+    return false;
   }
-  _guest.Set(DS.escapePodFrames, static_cast<std::uint8_t>(_guest.Get(DS.escapePodFrames) - 1));
-  if (_guest.Get(DS.escapePodFrames) == 0)
-  {
-    // pop ax: the return address goes, and the RET after it returns from RunFlight.
-    _guest.Regs().ax = _guest.Pop();
-  }
+  _state.Set(DS.escapePodFrames, static_cast<std::uint8_t>(_state.Get(DS.escapePodFrames) - 1));
+  return _state.Get(DS.escapePodFrames) == 0;
 }
 
 void ProcessFlightKeys(Guest& _guest)
@@ -2584,7 +2597,8 @@ void ProcessFlightKeys(Guest& _guest)
     _guest.Set(DS.gamePaused, 0);
   }
   HandleMissileKeys(_guest);
-  HandleFireButton(_guest);
+  // What ReadFireButton and GetViewLaser leave in the registers, the keys below write before they read.
+  HandleFireButton(_guest.State(), _guest.Devices());
   if (_guest.Get(DS.keyDownE) == 1 && _guest.Get(DS.ecmFitted) == 1)
   {
     _guest.Set(DS.ecmFired, 1);
@@ -2846,6 +2860,8 @@ constexpr Machine::NativeContract CLOBBERS_AX_SI_DI = Clobbers(REGISTER_AX | REG
 constexpr Machine::NativeContract CLOBBERS_CX_DX = Clobbers(REGISTER_CX | REGISTER_DX);
 constexpr Machine::NativeContract CLOBBERS_AX_BX_DX = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_DX);
 constexpr Machine::NativeContract CLOBBERS_AX_BX_CX = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX);
+constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX);
+constexpr Machine::NativeContract CLOBBERS_AX_DX = Clobbers(REGISTER_AX | REGISTER_DX);
 constexpr Machine::NativeContract CLOBBERS_DX_DI_BP = Clobbers(REGISTER_DX | REGISTER_DI | REGISTER_BP);
 constexpr Machine::NativeContract SHIFTS_STARDUST = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI | REGISTER_BP);
 constexpr Machine::NativeContract ROLLS_STARDUST = Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI);
@@ -3255,6 +3271,30 @@ void MoveObjectsByVelocityEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_CX_DX);
 }
 
+void UpdateSafeZoneEntry(Guest& _guest)
+{
+  UpdateSafeZone(_guest.State());
+  // MOV DI,stationSlot: the contract keeps DI.
+  _guest.Regs().di = DS.stationSlot.offset;
+  _guest.Clobber(CLOBBERS_AX_BX_CX_DX);
+}
+
+void UpdateFuelLeakEntry(Guest& _guest)
+{
+  UpdateFuelLeak(_guest.State(), _guest.Devices());
+  _guest.Clobber(CLOBBERS_AX_DX);
+}
+
+void TickEscapePodEntry(Guest& _guest)
+{
+  if (TickEscapePod(_guest.State()))
+  {
+    // POP AX: the return address goes, and the RET after it returns from RunFlight.
+    _guest.Regs().ax = _guest.Pop();
+  }
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 namespace
 {
 
@@ -3298,7 +3338,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x29D0, "SetUpLocalSpace", &SetUpLocalSpace, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2BC5, "CheckCollisions", &CheckCollisions, Clobbers(REGISTER_ALL)},
   NativeEntry{0x2E63, "InSafeZone", &InSafeZoneEntry, CARRY_OUT},
-  NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZone, Clobbers(REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX)},
+  NativeEntry{0x2E69, "UpdateSafeZone", &UpdateSafeZoneEntry, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{0x2F8B, "ComputeDeathDebrisVector", &ComputeDeathDebrisVectorEntry, CLOBBERS_DX_DI_BP},
   NativeEntry{0x36B6, "UpdateWarnings", &UpdateWarningsEntry, CLOBBERS_AX_BX_CX},
   NativeEntry{0x36FD, "CheckMissileWarning", &CheckMissileWarningEntry, PRESERVES_ALL},
@@ -3312,9 +3352,9 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x42F6, "XorScannerBlip", &XorScannerBlipEntry, CLOBBERS_DI},
   NativeEntry{0x43C4, "XorDashboardPixel", &XorDashboardPixelEntry, CLOBBERS_DI},
   NativeEntry{0x4594, "EraseCompassAndBlips", &EraseCompassAndBlipsEntry, ERASES_COMPASS_AND_BLIPS},
-  NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeak, Clobbers(REGISTER_AX | REGISTER_DX)},
+  NativeEntry{0x499F, "UpdateFuelLeak", &UpdateFuelLeakEntry, CLOBBERS_AX_DX},
   NativeEntry{0x7E9B, "RunFlight", &RunFlight, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x7F69, "TickEscapePod", &TickEscapePod, PRESERVES_ALL},
+  NativeEntry{0x7F69, "TickEscapePod", &TickEscapePodEntry, PRESERVES_ALL},
   NativeEntry{0x7FA8, "ProcessFlightKeys", &ProcessFlightKeys, Clobbers(REGISTER_ALL), NativeReturn::Near, 0, NativeWait::Sometimes},
   NativeEntry{0x839F, "DrainEnergy", &DrainEnergyEntry, PRESERVES_ALL},
   NativeEntry{0x8430, "EngageJumpDrive", &EngageJumpDrive, PRESERVES_ALL},

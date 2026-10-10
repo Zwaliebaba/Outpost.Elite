@@ -178,4 +178,239 @@ std::uint16_t Hardware::ReadBiosKey()
   return CallService(m_pc, BIOS_KEYBOARD_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, BIOS_READ_KEY); }).ax;
 }
 
+// ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
+
+namespace
+{
+
+constexpr std::uint16_t CRTC_INDEX_PORT = 0x3D4;
+constexpr std::uint16_t CRTC_DATA_PORT = 0x3D5;
+constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
+constexpr std::uint16_t CGA_MODE_CONTROL_PORT = 0x3D8;
+constexpr std::uint16_t CGA_COLOR_SELECT_PORT = 0x3D9;
+constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
+constexpr std::uint8_t VIDEO_SET_PALETTE = 0x0B;
+constexpr std::uint8_t VIDEO_PALETTE_SELECT = 0x01; // BH=1: BL picks mode 4's palette
+constexpr std::uint8_t TIMER_VECTOR = 0x08;
+constexpr std::uint16_t TIMER_VECTOR_OFFSET = TIMER_VECTOR * 4; // in the interrupt table at 0000:0000
+constexpr std::uint16_t TIMER_VECTOR_SEGMENT = TIMER_VECTOR_OFFSET + 2;
+constexpr std::uint8_t TIME_OF_DAY_VECTOR = 0x1A;
+constexpr std::uint8_t READ_CLOCK = 0x00;
+constexpr std::uint8_t SET_CLOCK = 0x01;
+constexpr std::uint16_t DOS_FLUSH_AND_READ_LINE = 0x0C0A; // AH=0Ch, flush the buffer, then AL=0Ah, buffered input
+constexpr std::uint8_t DOS_SET_TRANSFER_AREA = 0x1A;
+constexpr std::uint8_t DOS_CREATE = 0x3C;
+constexpr std::uint8_t DOS_OPEN = 0x3D;
+constexpr std::uint8_t DOS_CLOSE = 0x3E;
+constexpr std::uint8_t DOS_READ = 0x3F;
+constexpr std::uint8_t DOS_WRITE = 0x40;
+constexpr std::uint8_t DOS_DELETE = 0x41;
+constexpr std::uint8_t DOS_ATTRIBUTES = 0x43;
+constexpr std::uint8_t GET_ATTRIBUTES = 0x00; // AL
+constexpr std::uint8_t SET_ATTRIBUTES = 0x01;
+constexpr std::uint8_t DOS_FIND_FIRST = 0x4E;
+constexpr std::uint8_t DOS_FIND_NEXT = 0x4F;
+
+// CF and AX, as a DOS file service leaves them.
+[[nodiscard]] DosAnswer Answer(const Machine::Registers& _left) noexcept
+{
+  return DosAnswer{(_left.flags & Machine::FLAG_CARRY) != 0, _left.ax};
+}
+
+// A DOS service on the file named, or the pattern given, at _segment:_name: AH=_function and DS:DX the name, then what
+// _setMore sets, the rest as the processor holds it.
+template <typename SetMore>
+[[nodiscard]] Machine::Registers CallDosOnName(Machine::Pc& _pc, std::uint8_t _function, std::uint16_t _segment, std::uint16_t _name,
+                                               SetMore _setMore)
+{
+  return CallService(_pc, DOS_VECTOR,
+                     [&](Machine::Registers& _regs)
+                     {
+                       SetHigh(_regs.ax, _function);
+                       _regs.ds = _segment;
+                       _regs.dx = _name;
+                       _setMore(_regs);
+                     });
+}
+
+// For a DOS service on a name that reads no other register.
+void SetNothingMore(Machine::Registers&) noexcept {}
+
+// Int 21h AH=_function on the file _handle, with _bytes at _segment:_buffer: a read or a write.
+[[nodiscard]] DosAnswer TransferFile(Machine::Pc& _pc, std::uint8_t _function, std::uint16_t _handle, std::uint16_t _segment,
+                                     std::uint16_t _buffer, std::uint16_t _bytes)
+{
+  return Answer(CallService(_pc, DOS_VECTOR,
+                            [=](Machine::Registers& _regs)
+                            {
+                              SetHigh(_regs.ax, _function);
+                              _regs.bx = _handle;
+                              _regs.cx = _bytes;
+                              _regs.ds = _segment;
+                              _regs.dx = _buffer;
+                            }));
+}
+
+} // namespace
+
+std::uint8_t Hardware::CgaStatus()
+{
+  return m_pc.Ports().In8(CGA_STATUS_PORT);
+}
+
+void Hardware::SetColorSelect(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(CGA_COLOR_SELECT_PORT, _value);
+}
+
+void Hardware::SetCursorAddressHigh(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(CRTC_INDEX_PORT, CRTC_CURSOR_ADDRESS_HIGH);
+  m_pc.Ports().Out8(CRTC_DATA_PORT, _value);
+}
+
+void Hardware::SetModeControl(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(CGA_MODE_CONTROL_PORT, _value);
+}
+
+void Hardware::SelectPalette(std::uint8_t _palette)
+{
+  CallService(m_pc, VIDEO_VECTOR,
+              [_palette](Machine::Registers& _regs)
+              {
+                SetHigh(_regs.ax, VIDEO_SET_PALETTE);
+                _regs.bx = Join(VIDEO_PALETTE_SELECT, _palette);
+              });
+}
+
+void Hardware::FireGamePort(std::uint8_t _value)
+{
+  m_pc.Ports().Out8(GAME_PORT, _value);
+}
+
+std::uint8_t Hardware::GamePortOneShots()
+{
+  return m_pc.Ports().In8(GAME_PORT);
+}
+
+void Hardware::CountInstructionCycles(Machine::Cycles _cycles) noexcept
+{
+  m_pc.CountInstructionCycles(_cycles);
+}
+
+BiosClock Hardware::ReadBiosClock()
+{
+  const Machine::Registers left = CallService(m_pc, TIME_OF_DAY_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, READ_CLOCK); });
+  return BiosClock{(std::uint32_t{left.cx} << 16) | left.dx, Low(left.ax)};
+}
+
+void Hardware::SetBiosClock(std::uint32_t _ticks)
+{
+  CallService(m_pc, TIME_OF_DAY_VECTOR,
+              [_ticks](Machine::Registers& _regs)
+              {
+                SetHigh(_regs.ax, SET_CLOCK);
+                _regs.cx = static_cast<std::uint16_t>(_ticks >> 16);
+                _regs.dx = static_cast<std::uint16_t>(_ticks);
+              });
+}
+
+void Hardware::RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset)
+{
+  Machine::Memory& memory = m_pc.Ram();
+  const std::uint16_t offset = memory.Read16(0, TIMER_VECTOR_OFFSET);
+  const std::uint16_t segment = memory.Read16(0, TIMER_VECTOR_SEGMENT);
+  memory.Write16(0, TIMER_VECTOR_OFFSET, _offset);
+  memory.Write16(0, TIMER_VECTOR_SEGMENT, _segment);
+  m_pc.CallInterrupt(TIMER_VECTOR);
+  memory.Write16(0, TIMER_VECTOR_OFFSET, offset);
+  memory.Write16(0, TIMER_VECTOR_SEGMENT, segment);
+}
+
+void Hardware::ReadDosLine(std::uint16_t _segment, std::uint16_t _offset)
+{
+  CallService(m_pc, DOS_VECTOR,
+              [_segment, _offset](Machine::Registers& _regs)
+              {
+                _regs.ax = DOS_FLUSH_AND_READ_LINE;
+                _regs.ds = _segment;
+                _regs.dx = _offset;
+              });
+}
+
+void Hardware::SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset)
+{
+  CallService(m_pc, DOS_VECTOR,
+              [_segment, _offset](Machine::Registers& _regs)
+              {
+                SetHigh(_regs.ax, DOS_SET_TRANSFER_AREA);
+                _regs.ds = _segment;
+                _regs.dx = _offset;
+              });
+}
+
+DosFileAttributes Hardware::ReadFileAttributes(std::uint16_t _segment, std::uint16_t _name)
+{
+  const Machine::Registers left =
+    CallDosOnName(m_pc, DOS_ATTRIBUTES, _segment, _name, [](Machine::Registers& _regs) { SetLow(_regs.ax, GET_ATTRIBUTES); });
+  return DosFileAttributes{Answer(left), left.cx};
+}
+
+DosAnswer Hardware::SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
+{
+  return Answer(CallDosOnName(m_pc, DOS_ATTRIBUTES, _segment, _name,
+                              [_attributes](Machine::Registers& _regs)
+                              {
+                                SetLow(_regs.ax, SET_ATTRIBUTES);
+                                _regs.cx = _attributes;
+                              }));
+}
+
+DosAnswer Hardware::CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
+{
+  return Answer(CallDosOnName(m_pc, DOS_CREATE, _segment, _name, [_attributes](Machine::Registers& _regs) { _regs.cx = _attributes; }));
+}
+
+DosAnswer Hardware::OpenFile(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access)
+{
+  return Answer(CallDosOnName(m_pc, DOS_OPEN, _segment, _name, [_access](Machine::Registers& _regs) { SetLow(_regs.ax, _access); }));
+}
+
+DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+{
+  return TransferFile(m_pc, DOS_READ, _handle, _segment, _buffer, _bytes);
+}
+
+DosAnswer Hardware::WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+{
+  return TransferFile(m_pc, DOS_WRITE, _handle, _segment, _buffer, _bytes);
+}
+
+DosAnswer Hardware::CloseFile(std::uint16_t _handle)
+{
+  return Answer(CallService(m_pc, DOS_VECTOR,
+                            [_handle](Machine::Registers& _regs)
+                            {
+                              SetHigh(_regs.ax, DOS_CLOSE);
+                              _regs.bx = _handle;
+                            }));
+}
+
+DosAnswer Hardware::DeleteFile(std::uint16_t _segment, std::uint16_t _name)
+{
+  return Answer(CallDosOnName(m_pc, DOS_DELETE, _segment, _name, &SetNothingMore));
+}
+
+DosAnswer Hardware::FindFirstFile(std::uint16_t _segment, std::uint16_t _pattern, std::uint16_t _attributes)
+{
+  return Answer(
+    CallDosOnName(m_pc, DOS_FIND_FIRST, _segment, _pattern, [_attributes](Machine::Registers& _regs) { _regs.cx = _attributes; }));
+}
+
+DosAnswer Hardware::FindNextFile()
+{
+  return Answer(CallService(m_pc, DOS_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, DOS_FIND_NEXT); }));
+}
+
 } // namespace Elite

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameState.h"
+#include "Hardware.h"
 #include "NativeEntry.h"
 
 #include <cstdint>
@@ -21,10 +22,6 @@ namespace Elite
 /// CriticalErrorInterrupt on int 24h, WriteScreenshotFile, then ShowDiskError if it failed. Out: ES=B800h; AX,
 /// BX, CX, DX, SI, DI clobbered.
 void SaveScreenshot(Guest& _guest);
-
-/// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both
-/// graphics banks) written through DOS; diskError=1 on a failure. AX, BX, CX, DX clobbered.
-void WriteScreenshotFile(Guest& _guest);
 
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, PresentSpaceView and ClearDrawBuffer, through their hooks.
 /// It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
@@ -65,11 +62,6 @@ void DrawDisc(Guest& _guest);
 /// DS clobbered.
 void DrawCircle(Guest& _guest);
 
-/// FillTriangleSpan (CS:1B7A): fills x=DL to DH of the buffer row at SI with BL, the end bytes through
-/// triangleEdgeMasks at SS:0000. Out: DL=DH when the span crosses a byte, else DX the right edge's mask
-/// word; AX, DI, BP clobbered.
-void FillTriangleSpan(Guest& _guest);
-
 /// FillTriangle (CS:1BFB) and FillClippedTriangle (CS:1E6E), which it runs into: the triangle (AX, DX),
 /// (BX, BP), (CX, DI) filled with triangleFillPattern. Out: ES=DS unless it is wholly outside;
 /// everything else but DS clobbered.
@@ -90,12 +82,6 @@ void ShowCockpitScreen(Guest& _guest);
 /// the frame's box lines. AX, BX, CX, DX, SI, DI, BP, ES clobbered.
 void DrawChartFrame(Guest& _guest);
 
-/// SetGraphicsMode (CS:7CFE): BIOS mode 4, palette 0, bright on black. AX, BX, DX clobbered.
-void SetGraphicsMode(Guest& _guest);
-
-/// SetTextMode (CS:7D11): BIOS mode 1, the cursor off the page, blink off. AX, DX clobbered.
-void SetTextMode(Guest& _guest);
-
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then 0. The registers come back as DrawDisc
 /// leaves them.
 void DrawTitlePlanet(Guest& _guest);
@@ -105,6 +91,10 @@ void DrawTitlePlanet(Guest& _guest);
 // Each is what the routine Symbols.tsv names computes, with no register in sight, and every byte it writes is written as the
 // original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
 // entry finds: _backward.
+
+/// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both graphics
+/// banks) written from B800:0000 through DOS, with its disk transfer area at diskTransferArea; diskError = 1 on a failure.
+void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
 
 /// ClearDrawBuffer (CS:060D): the drawing buffer, DS:0000-1FFF, zeroed a word at a time as REP STOSW does.
 void ClearDrawBuffer(GameState& _state, bool _backward);
@@ -122,18 +112,33 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
 /// Returns the offset of the span's last byte.
 std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward);
 
+/// FillTriangleSpan (CS:1B7A): x = _left to _right, _left first, of the drawing buffer's row at DS:_row filled with _fill: the
+/// end bytes through triangleEdgeMasks, which the original reads through BP from SS:0000, DS:AD60, and the bytes between
+/// them by STOSB and REP STOSW into ES = DS.
+void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward);
+
 /// ClearCgaScreen (CS:7BFB): both banks of CGA memory, B800:0000-1F3F and B800:2000-3F3F, zeroed a word at a time.
 void ClearCgaScreen(GameState& _state, bool _backward);
 
 /// ClearTextScreen (CS:7C12): the 40x25 text page filled with spaces in textAttribute, a cell at a time.
 void ClearTextScreen(GameState& _state, bool _backward);
 
+/// SetGraphicsMode (CS:7CFE): BIOS mode 4, palette 0, and the colour select register bright on black.
+void SetGraphicsMode(Hardware& _hardware);
+
+/// SetTextMode (CS:7D11): BIOS mode 1, the cursor's address off the page, and the mode control register with blinking off,
+/// so that attribute bit 7 is a bright background.
+void SetTextMode(Hardware& _hardware);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 //
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its results back
 // there. The registers the contract leaves to the routine it hands to Guest::Clobber, unless a caller reads what the original
-// leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES).
+// leaves in one: then the entry leaves that, and the contract compares it (FillSpanEntry's DI, DrawLineEntry's ES,
+// FillTriangleSpanEntry's AX and BP).
 
+/// AX, BX, CX, DX clobbered.
+void WriteScreenshotFileEntry(Guest& _guest);
 void ClearDrawBufferEntry(Guest& _guest); ///< Out: ES = DS, AX = 0, CX = 0, DI past the buffer.
 void PlotPixelEntry(Guest& _guest);       ///< DL = x, DH = row. BX, CX clobbered.
 void DrawLineEntry(Guest& _guest);        ///< DL, DH to CL, CH. Out: ES = DS and DF clear after REP STOSB.
@@ -144,5 +149,10 @@ void DrawLineOut(Guest& _guest, bool _filled);
 void FillSpanEntry(Guest& _guest);        ///< DL = left x, DH = right x, CL = 2 * row, ES = DS. Out: DI = the last byte.
 void ClearCgaScreenEntry(Guest& _guest);  ///< Out: ES = B800h. AX, CX, DI clobbered.
 void ClearTextScreenEntry(Guest& _guest); ///< Out: ES = B800h. AX, CX, DI clobbered.
+/// DL = left x, DH = right x, SI = the row, BL = the fill, ES = DS. Out: DL = DH when the span crosses a byte, else DX the
+/// right end's mask word; AX the right end's AND and OR, BP its mask's index; DI clobbered.
+void FillTriangleSpanEntry(Guest& _guest);
+void SetGraphicsModeEntry(Guest& _guest); ///< AX, BX, DX clobbered.
+void SetTextModeEntry(Guest& _guest);     ///< AX, DX clobbered.
 
 } // namespace Elite

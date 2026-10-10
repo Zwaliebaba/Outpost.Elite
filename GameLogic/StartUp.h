@@ -31,10 +31,6 @@ void GameLoop(Guest& _guest);
 /// (3 s). Clobbers all but DS.
 void ShowCredits(Guest& _guest);
 
-/// CopyProtection (CS:04A3): returns at once while protectionShown is set; otherwise asks a question from the manual.
-/// Clobbers all.
-void CopyProtection(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
 /// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 in the interrupt table at _vectors:0000 saved and,
@@ -44,6 +40,11 @@ void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware, 
 /// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, int 9 and int 0 put back in the interrupt table,
 /// segment then offset, from what InstallDivideAndKeyboardInterrupts saved; then interrupts on.
 void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
+
+/// CopyProtection (CS:04A3): nothing while protectionShown is set, as the D5 byte makes it; otherwise, once, a question from
+/// the manual: the BIOS's 40-column text, the title, a question picked by how long NextRandom runs before a vertical retrace,
+/// its page, line and word decoded into the prompt, the answer read by DOS and upper-cased, and a timer tick. Waits then.
+void CopyProtection(GameState& _state, Hardware& _hardware);
 
 /// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail is exactly ' cheat', 0 otherwise.
 void CheckCheatArgument(GameState& _state);
@@ -61,6 +62,7 @@ void StartNewGame(GameState& _state, bool _backward);
 void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< In: ES=0. Out: ES=B800, IF=1; AX clobbered.
 void RestoreDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< Out: ES=0, IF=1; AX clobbered.
 void CheckCheatArgumentEntry(Guest& _guest);                 ///< AX, BX, CX and SI clobbered.
+void CopyProtectionEntry(Guest& _guest);                     ///< Clobbers all. Waits sometimes.
 void WipeProgramEntry(Guest& _guest);                        ///< Out: IF=0; AX, CX, DI and ES clobbered.
 void StartNewGameEntry(Guest& _guest);                       ///< Out: ES=DS; AX, CX, SI and DI clobbered.
 

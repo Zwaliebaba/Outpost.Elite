@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Flight.h"
+#include "Ships.h"
 
 #include <utility>
 
@@ -14,7 +15,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t IS_DEBRIS_TYPE = 0x53FE;
 constexpr std::uint16_t GET_KEY = 0x7616;
 constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
 constexpr std::uint16_t TOGGLE_INPUT_CURSOR = 0x7727;
@@ -129,6 +129,16 @@ std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_
     at = static_cast<std::uint16_t>(at + step);
   }
   return at;
+}
+
+// A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP):
+// _count bytes from DS:_from to DS:_to.
+void CopyNameInto(GameState& _state, std::uint16_t _from, std::uint16_t _to, std::uint16_t _count)
+{
+  for (std::uint16_t moved = 0; moved < _count; ++moved)
+  {
+    _state.SetByte(Offset(_to, moved), _state.Byte(Offset(_from, moved)));
+  }
 }
 
 // ReadTextLine's redraw (0x76FF): the line and the cursor printed, then back to counting the blink.
@@ -416,52 +426,27 @@ BlankedZeros BlankedBountyZeros(const GameState& _state)
   return BlankedLeadingZeros(_state, BountyDigits(), TENTHS_BLANKS);
 }
 
-void ShowShipIdentity(Guest& _guest)
+void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const ObjectSlot& _slot)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if (High(regs.ax) == CLASS_SIMPLE_OR_DEBRIS)
+  // PUSH AX / POP AX round IsDebrisType keep the type and the class.
+  std::uint8_t shipClass = _class;
+  if (shipClass == CLASS_SIMPLE_OR_DEBRIS && !IsDebrisType(_slot))
   {
-    _guest.Push(regs.ax);
-    _guest.Call(IS_DEBRIS_TYPE);
-    regs.ax = _guest.Pop();
-    if (!_guest.Flag(Machine::FLAG_ZERO))
-    {
-      SetHigh(regs.ax, CLASS_SIMPLE);
-    }
+    shipClass = CLASS_SIMPLE;
   }
-  if (High(regs.ax) == CLASS_ROCK && Low(regs.ax) == TYPE_HERMIT)
+  if (shipClass == CLASS_ROCK && _type == TYPE_HERMIT)
   {
-    SetHigh(regs.ax, CLASS_HERMIT);
+    shipClass = CLASS_HERMIT;
   }
-  if (Low(regs.ax) == TYPE_POLICE)
+  if (_type == TYPE_POLICE)
   {
-    SetHigh(regs.ax, CLASS_POLICE);
+    shipClass = CLASS_POLICE;
   }
-  // The class's name through AH, then the type's through AL.
-  regs.bx = DS.shipClassNames.At(High(regs.ax));
-  regs.di = Offset(DS.shipIdentityText.offset, CLASS_TEXT_OFFSET);
-  for (regs.cx = CLASS_NAME_BYTES; regs.cx != 0; --regs.cx)
-  {
-    SetHigh(regs.ax, _guest.Byte(regs.bx));
-    ++regs.bx;
-    _guest.SetByte(regs.di, High(regs.ax));
-    ++regs.di;
-  }
-  regs.ax = static_cast<std::uint16_t>(Low(regs.ax) << 2);
-  regs.bx = static_cast<std::uint16_t>(regs.ax * 3);
-  regs.ax = DS.shipTypeNames.offset;
-  regs.bx = Offset(regs.bx, regs.ax);
-  regs.di = Offset(DS.shipIdentityText.offset, TYPE_TEXT_OFFSET);
-  for (regs.cx = TYPE_NAME_BYTES; regs.cx != 0; --regs.cx)
-  {
-    SetLow(regs.ax, _guest.Byte(regs.bx));
-    ++regs.bx;
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.di;
-  }
-  regs.ax = DS.shipIdentityText.offset;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, IDENTITY_FRAMES);
+  // The class's name, then the type's, a byte at a time.
+  CopyNameInto(_state, DS.shipClassNames.At(shipClass), Offset(DS.shipIdentityText.offset, CLASS_TEXT_OFFSET), CLASS_NAME_BYTES);
+  CopyNameInto(_state, DS.shipTypeNames.At(_type), Offset(DS.shipIdentityText.offset, TYPE_TEXT_OFFSET), TYPE_NAME_BYTES);
+  _state.Set(DS.messagePointer, DS.shipIdentityText.offset);
+  _state.Set(DS.messageFrames, IDENTITY_FRAMES);
 }
 
 PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell)
@@ -807,6 +792,20 @@ void ShowBountyMessageEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void ShowShipIdentityEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint8_t type = Low(regs.ax);
+  ShowShipIdentity(_guest.State(), type, High(regs.ax), ObjectSlot(_guest.State(), regs.di));
+  // The original leaves AX the text, BX past the type's name, CX counted down to 0 and DI past the copies, which the
+  // contract compares.
+  regs.ax = DS.shipIdentityText.offset;
+  regs.bx = Offset(DS.shipTypeNames.At(type), TYPE_NAME_BYTES);
+  regs.cx = 0;
+  regs.di = Offset(DS.shipIdentityText.offset, TYPE_TEXT_OFFSET + TYPE_NAME_BYTES);
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void UpdateMessageLineEntry(Guest& _guest)
 {
   // MOV AX,0B800h / MOV ES,AX before a message is drawn, which the contract compares.
@@ -953,7 +952,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x35A3, "UpdateMessageLine", &UpdateMessageLineEntry, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3609, "ClearMessageLine", &ClearMessageLineEntry, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3626, "ShowBountyMessage", &ShowBountyMessageEntry, PRESERVES_ALL},
-  NativeEntry{0x364D, "ShowShipIdentity", &ShowShipIdentity, PRESERVES_ALL},
+  NativeEntry{0x364D, "ShowShipIdentity", &ShowShipIdentityEntry, PRESERVES_ALL},
   NativeEntry{0x60D2, "PrintTextModeString", &PrintTextModeStringEntry, PRESERVES_ALL},
   NativeEntry{0x6328, "ToggleMenuRowHighlight", &ToggleMenuRowHighlightEntry, PRESERVES_ALL},
   NativeEntry{0x6553, "ClearDockedMessageLine", &ClearDockedMessageLineEntry, CLOBBERS_AX_CX_DI},

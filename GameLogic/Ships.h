@@ -85,25 +85,12 @@ void SpawnRandomDrifter(Guest& _guest);
 /// SpawnRandomTrader (CS:4D08): one of the six traders from entry 9 in the free slot at DI, class 4; a Viper is police half the time.
 void SpawnRandomTrader(Guest& _guest);
 
-/// SpawnRandomHunter (CS:4D3B): a random class-6 ship in the free slot at DI.
-void SpawnRandomHunter(Guest& _guest);
-
-/// SpawnRandomWolf (CS:4D60): a random class-5 ship in the free slot at DI, a Thargoid in witch space.
-void SpawnRandomWolf(Guest& _guest);
-
 /// SpawnMaskMissionShip (CS:4DAE): a mask-mission ship in the free slot at DI from the Asp's record: the Asp when CF is set,
 /// otherwise type 12h or 13h by a random sign.
 void SpawnMaskMissionShip(Guest& _guest);
 
 /// SpawnInvasionThargoid (CS:4DF0): an invasion's Thargoid in the free slot at DI, with 8 Thargons.
 void SpawnInvasionThargoid(Guest& _guest);
-
-/// MoveObject (CS:4F6E): adds the velocity of the slot at DI to its position, and removes it once IsObjectNear fails.
-void MoveObject(Guest& _guest);
-
-/// ReclaimShipSlot (CS:51FD): SI = the first ship slot whose blip is not drawn; when every one has a blip, one of slots 4-19 at
-/// random, removed (DI = SI).
-void ReclaimShipSlot(Guest& _guest);
 
 /// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, its spin, MoveObject.
 void UpdateDebrisAi(Guest& _guest);
@@ -125,6 +112,7 @@ struct NearTest
 {
   bool nearby;                              ///< each 24-bit coordinate fits a signed word
   std::optional<DashboardPixel> erasedBlip; ///< when one does not, the last pixel of the blip EraseScannerBlip erased, if it erased one
+  std::uint8_t lastHigh;                    ///< the last high byte the test looked at, INC'd and DEC'd back: what the original leaves in AL
 };
 
 /// What FacePlayerWithRandomRoll gives a slot.
@@ -140,6 +128,21 @@ struct StationTest
   std::uint8_t type; ///< bits 1-5 of the type byte
   bool station;      ///< a Dodo (type 0) or a Coriolis (type 1)
   bool dodo;
+};
+
+/// What MoveObject did once it had moved a slot.
+struct MovedObject
+{
+  NearTest near;                             ///< what IsObjectNear found of it
+  std::optional<DashboardPixel> removedBlip; ///< when it was not near, it was removed: what RemoveObject erased of its blip
+};
+
+/// The slot ReclaimShipSlot found.
+struct ReclaimedSlot
+{
+  std::uint16_t slot;                       ///< its offset, which the original leaves in SI
+  bool evicted;                             ///< every ship slot had a blip, so this one was removed to make room
+  std::optional<DashboardPixel> erasedBlip; ///< then, what RemoveObject erased of its blip
 };
 
 /// ADD [slot+4+2*axis],_value / ADC [slot+1+axis],DL with DL from CWD: _value added to the 24-bit coordinate _axis (0 x, 1 y,
@@ -185,6 +188,16 @@ void InitKraitHunter(GameState& _state, ObjectSlot _slot);
 /// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
 void InitThargon(GameState& _state, ObjectSlot _slot);
 
+/// SpawnRandomHunter (CS:4D3B): _slot, a free one, made one of the seven hunters from spawnTemplates' entry 15 by a random
+/// byte / 37, placed at the spawn point and turned to the player, of class 6 with a random aggression below 20h, and its velocity
+/// set.
+void SpawnRandomHunter(GameState& _state, ObjectSlot _slot);
+
+/// SpawnRandomWolf (CS:4D60): _slot, a free one, made one of the five wolves from spawnTemplates' entry 22 by a random byte / 52,
+/// or in witch space the sixth, the Thargoid; placed and turned as SpawnRandomHunter does, of class 5 with a random aggression
+/// below 40h, 20h more in an anarchy, its velocity set, and a Thargoid given 2 to 5 Thargons.
+void SpawnRandomWolf(GameState& _state, ObjectSlot _slot);
+
 /// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of the table at _table: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
 void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index);
@@ -210,6 +223,10 @@ void RandomizeOrientation(GameState& _state, ObjectSlot _slot);
 /// give it, in words; the slot keeps their low bytes.
 Vector ComputeVelocity(GameState& _state, ObjectSlot _slot);
 
+/// MoveObject (CS:4F6E): _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each as ADD on the
+/// low word and ADC on the high byte; then IsObjectNear, and RemoveObject when it is not near.
+MovedObject MoveObject(GameState& _state, ObjectSlot _slot);
+
 /// RemoveObject (CS:4F98): _slot's active bit cleared, then EraseScannerBlip. Returns the blip's last pixel, when it erased one.
 std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot);
 
@@ -219,6 +236,10 @@ Angles FacePlayer(GameState& _state, ObjectSlot _slot);
 
 /// FindFreeShipSlot (CS:51E0): the first inactive ship slot, from firstShipSlot.
 [[nodiscard]] SlotSearch FindFreeShipSlot(GameState& _state);
+
+/// ReclaimShipSlot (CS:51FD): the first ship slot from firstShipSlot whose blip is not drawn; when every one has a blip, one of
+/// slots 4-19 at random, removed (RemoveObject) to make room.
+ReclaimedSlot ReclaimShipSlot(GameState& _state);
 
 /// ClearAllObjects (CS:52B2): shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, backwards when
 /// _backward (the direction flag) is set.
@@ -248,6 +269,11 @@ void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destina
 
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
+/// The registers and the flag IsObjectNear's original leaves for _test of _slot: AL the last high byte it looked at, the registers
+/// EraseScannerBlip leaves once it erased a blip (EraseScannerBlipOut), and CF set when near. For its entry, and for the entries
+/// of the routines that call it, whose contracts compare what it leaves.
+void IsObjectNearOut(Guest& _guest, const ObjectSlot& _slot, const NearTest& _test);
+
 void ClearObjectSlotEntry(Guest& _guest);        ///< SI = the slot. Out: DI = the slot, SI = the slot + 40h, CX = 0.
 void IsObjectNearEntry(Guest& _guest);           ///< DI = the slot. Out: CF set when near; AL the last high byte looked at.
 void IsSunOrPlanetEntry(Guest& _guest);          ///< DI = the slot. Out: AL = the type; ZF set for the sun or the planet.
@@ -261,15 +287,19 @@ void InitEscapePodEntry(Guest& _guest);          ///< DI = the slot. AX, BX clob
 void InitShuttleEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
 void InitKraitHunterEntry(Guest& _guest);        ///< DI = the slot. AX, BX clobbered.
 void InitThargonEntry(Guest& _guest);            ///< DI = the slot. AX, BX clobbered.
+void SpawnRandomHunterEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
+void SpawnRandomWolfEntry(Guest& _guest);        ///< DI = the slot. AX, BX, CX, DX, BP clobbered.
 void InitObjectFromTemplateEntry(Guest& _guest); ///< BX = the table, AL = the record, DI = the slot. AX, BX clobbered.
 void PlaceAtSpawnPointEntry(Guest& _guest);      ///< DI = the slot. AX, BX, CX, DX clobbered.
 void GetObjectPositionEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
 void GetVectorToPlayerEntry(Guest& _guest);      ///< DI = the slot. Out: AX, BX, CX.
 void RandomizeOrientationEntry(Guest& _guest);   ///< DI = the slot. AX clobbered.
 void ComputeVelocityEntry(Guest& _guest);        ///< DI = the slot. Out: BX = the z word; AX, DX clobbered.
+void MoveObjectEntry(Guest& _guest);             ///< DI = the slot. Out: every register as the original leaves it.
 void RemoveObjectEntry(Guest& _guest);           ///< DI = the slot.
 void FacePlayerEntry(Guest& _guest);             ///< DI = the slot. Out: BP = the pitch; AX, BX, CX, DX clobbered.
 void FindFreeShipSlotEntry(Guest& _guest);       ///< Out: CF set and SI = the slot when one is free, else SI past the slots.
+void ReclaimShipSlotEntry(Guest& _guest);        ///< Out: SI = the slot, and DI = SI once it evicts. AX, BX, CX, DX, ES clobbered.
 void ClearAllObjectsEntry(Guest& _guest);        ///< Out: ES = DS. AX, CX, DI clobbered.
 void FindDebrisSlotEntry(Guest& _guest);         ///< Out: SI = the slot.
 void CopyObjectEntry(Guest& _guest);             ///< SI = the source, DI = the destination. Out: ES = DS.

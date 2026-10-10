@@ -22,8 +22,6 @@ constexpr std::uint16_t SAVED_TIMER_SEGMENT = 0x025C;
 constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0x0000;
 constexpr std::uint16_t TIMER_VECTOR_OFFSET = 0x0020; // 0000:0020, int 8
 constexpr std::uint16_t TIMER_VECTOR_SEGMENT = 0x0022;
-constexpr std::uint8_t TIMER_VECTOR = 0x08;
-constexpr std::uint8_t TIME_OF_DAY_VECTOR = 0x1A;
 
 constexpr std::uint8_t END_OF_INTERRUPT = 0x20;
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
@@ -335,18 +333,12 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
   }
 }
 
-// TimerInterrupt's chain to the BIOS (0x0255): a far jump to the saved int 8 vector with the interrupt's frame in
-// place. Here the BIOS handler is called as int 8 instead, with the vector pointing at it for the call, so that its
-// IRET comes back to this routine and this routine's IRET takes the frame.
-void ChainToBiosTimer(Guest& _guest)
+// TimerInterrupt's chain to the BIOS (0x0255): a far jump, through savedTimerVector, to the BIOS's handler for the tick, with
+// the interrupt's frame in place, so that the BIOS's IRET ends the interrupt. Here the handler is run to its IRET, which comes
+// back to this routine, and TimerInterrupt's own IRET takes the frame.
+void ChainToBiosTimer(const GameState& _state, Hardware& _hardware)
 {
-  const std::uint16_t offset = _guest.FarWord(0, TIMER_VECTOR_OFFSET);
-  const std::uint16_t segment = _guest.FarWord(0, TIMER_VECTOR_SEGMENT);
-  _guest.SetFarWord(0, TIMER_VECTOR_OFFSET, _guest.CodeWord(SAVED_TIMER_OFFSET));
-  _guest.SetFarWord(0, TIMER_VECTOR_SEGMENT, _guest.CodeWord(SAVED_TIMER_SEGMENT));
-  _guest.Interrupt(TIMER_VECTOR);
-  _guest.SetFarWord(0, TIMER_VECTOR_OFFSET, offset);
-  _guest.SetFarWord(0, TIMER_VECTOR_SEGMENT, segment);
+  _hardware.RunBiosTimerTick(_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET));
 }
 
 } // namespace
@@ -366,44 +358,33 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   _hardware.EnableInterrupts();
 }
 
-void RestoreTimerInterrupt(Guest& _guest)
+BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.es = 0;
-  _guest.Devices().DisableInterrupts();
-  _guest.SetFarWord(regs.es, TIMER_VECTOR_SEGMENT, _guest.CodeWord(SAVED_TIMER_SEGMENT));
-  regs.ax = _guest.CodeWord(SAVED_TIMER_OFFSET);
-  _guest.SetFarWord(regs.es, TIMER_VECTOR_OFFSET, regs.ax);
-  regs.ax = WithLow(regs.ax, _guest.Get(DS.savedSpeakerPort));
-  _guest.Devices().SetSystemControl(Low(regs.ax));
-  regs.bx = 0;
-  regs.ax = WithLow(regs.ax, PIT_CHANNEL0_SQUARE_WAVE);
-  if (_guest.Get(DS.amstradPresent) == 1)
+  _hardware.DisableInterrupts();
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_SEGMENT, _state.CodeWord(SAVED_TIMER_SEGMENT));
+  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_OFFSET, _state.CodeWord(SAVED_TIMER_OFFSET));
+  _hardware.SetSystemControl(_state.Get(DS.savedSpeakerPort));
+  std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
+  std::uint16_t divisor = 0;
+  if (_state.Get(DS.amstradPresent) == 1)
   {
-    _guest.Call(IS_MOUSE_DRIVER_INSTALLED);
-    regs.ax = WithLow(regs.ax, PIT_CHANNEL0_RATE);
-    if ((regs.flags & Machine::FLAG_ZERO) == 0)
+    // The Amstrad's mouse driver keeps its own rate.
+    mode = PIT_CHANNEL0_RATE;
+    if (IsMouseDriverInstalled(_state).installed)
     {
-      regs.bx = AMSTRAD_MOUSE_DIVISOR;
+      divisor = AMSTRAD_MOUSE_DIVISOR;
     }
   }
-  _guest.Devices().SetTickDivisor(Low(regs.ax), regs.bx);
-  // The divisor's bytes go out through AL: AX ends as BH twice.
-  regs.ax = WithLow(regs.bx, High(regs.bx));
-  _guest.Devices().EnableInterrupts();
+  _hardware.SetTickDivisor(mode, divisor);
+  _hardware.EnableInterrupts();
 
-  // The BIOS clock past a day is set back by one: SUB DX / SBB CX, kept in the registers either way.
-  regs.ax = WithHigh(regs.ax, 0);
-  _guest.Interrupt(TIME_OF_DAY_VECTOR);
-  const std::uint32_t ticks = (std::uint32_t{regs.cx} << 16) | regs.dx;
-  const std::uint32_t lessADay = ticks - TICKS_PER_DAY;
-  regs.dx = static_cast<std::uint16_t>(lessADay);
-  regs.cx = static_cast<std::uint16_t>(lessADay >> 16);
-  if (ticks >= TICKS_PER_DAY)
+  // The BIOS clock past a day is set back by one: SUB DX / SBB CX.
+  const BiosClock clock = _hardware.ReadBiosClock();
+  if (clock.ticks >= TICKS_PER_DAY)
   {
-    regs.ax = WithHigh(regs.ax, 1);
-    _guest.Interrupt(TIME_OF_DAY_VECTOR);
+    _hardware.SetBiosClock(clock.ticks - TICKS_PER_DAY);
   }
+  return clock;
 }
 
 void TimerInterrupt(Guest& _guest)
@@ -436,7 +417,7 @@ void TimerInterrupt(Guest& _guest)
   regs.ax = ax;
   if (chain)
   {
-    ChainToBiosTimer(_guest);
+    ChainToBiosTimer(_guest.State(), _guest.Devices());
   }
 }
 
@@ -478,11 +459,11 @@ namespace
 
 using Machine::REGISTER_AX;
 using Machine::REGISTER_BX;
-using Machine::REGISTER_CX;
 using Machine::REGISTER_DX;
 
 constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
-constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+// RestoreTimerInterrupt: CX, the clock less a day, is compared (RestoreTimerInterruptEntry).
+constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | REGISTER_DX, 0};
 
 } // namespace
 
@@ -492,6 +473,19 @@ void InstallTimerInterruptEntry(Guest& _guest)
   _guest.Regs().es = VECTOR_TABLE_SEGMENT;
   _guest.Regs().ax = _guest.CodeSegment();
   _guest.Clobber(CLOBBERS_AX);
+}
+
+void RestoreTimerInterruptEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const BiosClock clock = RestoreTimerInterrupt(_guest.State(), _guest.Devices());
+  // XOR AX,AX / MOV ES,AX for the interrupt table; on the Amstrad, IsMouseDriverInstalled leaves the int 33h vector's
+  // segment there.
+  regs.es = _guest.Get(DS.amstradPresent) == 1 ? IsMouseDriverInstalled(_guest.State()).segment : VECTOR_TABLE_SEGMENT;
+  // CX is left the high word of SUB DX / SBB CX, the clock less a day, whether or not the clock was set back: Start goes on with
+  // it into PerformDiskRequest, whose catalogue searches with it as the attributes (ListCommanderFiles, CS:03B8).
+  regs.cx = static_cast<std::uint16_t>((clock.ticks - TICKS_PER_DAY) >> 16);
+  _guest.Clobber(CLOBBERS_AX_BX_DX);
 }
 
 void WaitForTimerTickEntry(Guest& _guest)
@@ -511,7 +505,7 @@ namespace
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x00C6, "InstallTimerInterrupt", &InstallTimerInterruptEntry, CLOBBERS_AX},
-  NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterrupt, CLOBBERS_AX_BX_CX_DX},
+  NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterruptEntry, CLOBBERS_AX_BX_DX},
   NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x7150, "TimerTick", &TimerTickEntry, CLOBBERS_AX},
   // WaitForTimerTick waits for the next tick as a rule.

@@ -19,6 +19,7 @@ namespace
 
 using Elite::DS;
 
+constexpr std::uint16_t DRAW_TUNNEL_RECTANGLE = 0x1AA0;
 constexpr std::uint16_t CHECK_DOCKING_ALIGNMENT = 0x2D0F;
 constexpr std::uint16_t TOGGLE_DOCKING_COMPUTER = 0x83B2;
 constexpr std::uint16_t RUN_DOCKING_COMPUTER = 0x8622;
@@ -28,6 +29,9 @@ constexpr std::uint16_t STATION_SPIN_ANGLE = 0x0E; // in the slot
 constexpr std::uint16_t STATION_SPIN = 0x100;
 constexpr std::uint16_t TOLERANCE = 0x20;
 constexpr std::uint16_t SLOT_FLAGS = 0x1E;
+constexpr std::uint16_t TUNNEL_RECTANGLES = 10; // tunnelRectangles' records, ten bytes each, drawn in colour 3
+constexpr std::uint16_t TUNNEL_RECTANGLE_BYTES = 10;
+constexpr std::uint8_t TUNNEL_COLOR = 3;
 
 // Every register given a value of its own, so that each one the routine leaves is seen.
 constexpr Inputs ALL_REGISTERS = {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = 0x5555, .di = 0x6666, .bp = 0x7777};
@@ -116,6 +120,20 @@ void PlaceStation(Elite::Guest& _guest, const Station& _station)
 TEST_CLASS(DockingTests)
 {
 public:
+  // Each of the station tunnel's ten rectangles, in its colour, as PlayStationTunnel draws them. PlayStationTunnel waits, so no
+  // replay compares it, and it calls DrawTunnelRectangle's value routine, not its hook: these are the routine's compared calls.
+  TEST_METHOD(DrawTunnelRectangleAgreesOnEveryRectangle)
+  {
+    ComparisonRig rig("DrawTunnelRectangle");
+    Elite::Guest guest = GuestOf(rig);
+    for (std::uint16_t rectangle = 0; rectangle < TUNNEL_RECTANGLES; ++rectangle)
+    {
+      guest.Set(DS.drawColor, TUNNEL_COLOR);
+      rig.Call(DRAW_TUNNEL_RECTANGLE, {.si = static_cast<std::uint16_t>(DS.tunnelRectangles.offset + rectangle * TUNNEL_RECTANGLE_BYTES)});
+    }
+    rig.AssertAllAgreed(DRAW_TUNNEL_RECTANGLE, TUNNEL_RECTANGLES);
+  }
+
   // Either pitch, the roll against the spin and half a turn from it, a type 0 station's negated spin, and
   // misses at each test.
   TEST_METHOD(CheckDockingAlignmentAgreesOnEveryAlignment)
