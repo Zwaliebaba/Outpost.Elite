@@ -19,11 +19,15 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> DockingEntries() noexcept;
 
-/// PlayStationTunnel (CS:2D5B): the tunnel between the station and space, twenty frames, leaving or
-/// docking as playerDocked says. Waits. Clobbers all.
-void PlayStationTunnel(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
+
+/// PlayStationTunnel (CS:2D5B): the tunnel between the station and space, leaving or docking as playerDocked says: the message
+/// for a frame (UpdateMessageLine) and the dashboard, then twenty frames of tunnelRectangles, the first ten one to ten of them and
+/// the last ten ten to one, from one further along each time, each presented (FinishSpaceViewFrame) and the first ten followed by
+/// 20 timer ticks. Leaving, the world moves on behind the tunnel (TransformAndDrawObjects, MoveObjectsByVelocity,
+/// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. _backward is the
+/// direction flag; it leaves it clear. Waits as a rule (ADR-015).
+void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// What a frame of the docking computer did.
 struct DockingStep
@@ -69,6 +73,7 @@ void CancelDockingComputer(GameState& _state, Hardware& _hardware);
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void DrawTunnelRectangleEntry(Guest& _guest);   ///< In: SI the points. Out: ES=DS and DF=0 after a REP STOSB; clobbers all.
+void PlayStationTunnelEntry(Guest& _guest);     ///< Out: DF=0, BP=20h. Clobbers all but DS and BP.
 void CheckDockingAlignmentEntry(Guest& _guest); ///< In: BX the tolerance, DI the station's slot. Out: CF; AX, CX and DX clobbered.
 void MaskOutsideTunnelEntry(Guest& _guest);     ///< In: SI the rectangle. Out: ES=B800, DF=0; clobbers all but ES.
 void ToggleDockingComputerEntry(Guest& _guest); ///< Out: AX the message, and BX the station's slot once it looks at it.

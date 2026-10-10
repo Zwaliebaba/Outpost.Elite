@@ -21,6 +21,7 @@ using Elite::DS;
 
 constexpr std::uint16_t DRAW_TUNNEL_RECTANGLE = 0x1AA0;
 constexpr std::uint16_t CHECK_DOCKING_ALIGNMENT = 0x2D0F;
+constexpr std::uint16_t MASK_OUTSIDE_TUNNEL = 0x2E0A;
 constexpr std::uint16_t TOGGLE_DOCKING_COMPUTER = 0x83B2;
 constexpr std::uint16_t RUN_DOCKING_COMPUTER = 0x8622;
 constexpr std::uint16_t CANCEL_DOCKING_COMPUTER = 0x8BAA;
@@ -132,6 +133,20 @@ public:
       rig.Call(DRAW_TUNNEL_RECTANGLE, {.si = static_cast<std::uint16_t>(DS.tunnelRectangles.offset + rectangle * TUNNEL_RECTANGLE_BYTES)});
     }
     rig.AssertAllAgreed(DRAW_TUNNEL_RECTANGLE, TUNNEL_RECTANGLES);
+  }
+
+  // The view masked outside each of the tunnel's ten rectangles, forwards, as PlayStationTunnel masks it leaving the station. It
+  // calls MaskOutsideTunnel's value routine since level 5 of the de-assembly, and it waits: these are the routine's compared calls.
+  TEST_METHOD(MaskOutsideTunnelAgreesOnEveryRectangle)
+  {
+    ComparisonRig rig("MaskOutsideTunnel");
+    Machine::Registers& regs = rig.Host().Processor().Regs();
+    regs.flags = static_cast<std::uint16_t>(regs.flags & ~Machine::FLAG_DIRECTION);
+    for (std::uint16_t rectangle = 0; rectangle < TUNNEL_RECTANGLES; ++rectangle)
+    {
+      rig.Call(MASK_OUTSIDE_TUNNEL, {.si = static_cast<std::uint16_t>(DS.tunnelRectangles.offset + rectangle * TUNNEL_RECTANGLE_BYTES)});
+    }
+    rig.AssertAllAgreed(MASK_OUTSIDE_TUNNEL, TUNNEL_RECTANGLES);
   }
 
   // Either pitch, the roll against the spin and half a turn from it, a type 0 station's negated spin, and

@@ -62,7 +62,8 @@ enum class SlotByte : std::uint16_t
 /// The word fields of an object slot.
 enum class SlotWord : std::uint16_t
 {
-  X = 0x04, ///< the low words of the 24-bit position
+  XYHigh = 0x01, ///< the high bytes of x and y (XHigh, YHigh), which the title clears as a word
+  X = 0x04,      ///< the low words of the 24-bit position
   Y = 0x06,
   Z = 0x08,
   Pitch = 0x0A, ///< the heading, as ConvertVectorToAngles gives it

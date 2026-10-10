@@ -9,6 +9,7 @@
 #include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "Text.h"
 #include "Timer.h"
 #include "Video.h"
 
@@ -19,16 +20,6 @@ namespace
 {
 
 using Machine::FLAG_CARRY;
-using Machine::Registers;
-
-// The routines these call through their entries: the original's, or a native routine hooked there.
-constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t UPDATE_STARDUST = 0x068F;
-constexpr std::uint16_t UPDATE_DASHBOARD = 0x254F;
-constexpr std::uint16_t MASK_OUTSIDE_TUNNEL = 0x2E0A;
-constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
-constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
-constexpr std::uint16_t MOVE_OBJECTS_BY_VELOCITY = 0x85EC;
 
 // The station tunnel: ten frames of one to ten of tunnelRectangles' ten rectangles, ten bytes each, and
 // ten of ten to one; docked, each frame waits for timer ticks first.
@@ -38,6 +29,18 @@ constexpr std::uint8_t TUNNEL_COLOR = 3;
 constexpr std::uint16_t DOCKED_FIRST_TICKS = 0x19;
 constexpr std::uint16_t TUNNEL_FRAME_TICKS = 0x14;
 constexpr std::uint16_t DOCKING_MESSAGE_FRAMES = 0x19;
+// Where PlayStationTunnel jumps back (ADR-015): its two frame loops, their rectangles' loops and their waits for the timer.
+constexpr std::uint16_t FIRST_TUNNEL_FRAME = 0x2D7A;
+constexpr std::uint16_t DOCKED_FIRST_WAIT = 0x2D9A;
+constexpr std::uint16_t FIRST_RECTANGLES = 0x2DA1;
+constexpr std::uint16_t FIRST_FRAME_WAIT = 0x2DB8;
+constexpr std::uint16_t LAST_TUNNEL_FRAME = 0x2DC9;
+constexpr std::uint16_t LAST_FRAME_WAIT = 0x2DE7;
+constexpr std::uint16_t LAST_RECTANGLES = 0x2DEE;
+// The BX PlayStationTunnel calls UpdateStardust with is what TransformAndDrawObjects leaves there, which MoveObjectsByVelocity
+// keeps. It reaches nothing but ComputeStardustShift's divide trap, which only a speed above 34h reaches, and no speed the game
+// sets is above 30h (TOP_SPEED, MOST_SPEED): 0 stands in for it.
+constexpr std::uint16_t STARDUST_BX = 0;
 
 // The station's slot, whose fields SLOT_X, SLOT_Y, SLOT_Z and SLOT_FLAGS name (Ships.h).
 constexpr std::uint8_t STATION_SHOT = 0x01; // in the slot's flags: docking is refused
@@ -141,17 +144,6 @@ TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::ui
   }
 }
 
-// DrawTunnelRectangles from CX and SI, for PlayStationTunnel's register code: out, SI past the rectangles, CX = 0 from the
-// LOOP, and ES = DS and DF clear once a line was filled.
-void DrawTunnelRectanglesOnRegisters(Guest& _guest, std::uint16_t _loop)
-{
-  Registers& regs = _guest.Regs();
-  const TunnelDrawn drawn = DrawTunnelRectangles(_guest.State(), _guest.Devices(), regs.si, regs.cx, _loop);
-  regs.si = drawn.next;
-  regs.cx = 0;
-  DrawLineOut(_guest, drawn.filled);
-}
-
 // MOV CX,_ticks, then WaitForTimerTick at CS:_loop and the LOOP back there, which carries the count (ADR-015): about _ticks
 // milliseconds. The original leaves CX = 0.
 void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks, std::uint16_t _loop)
@@ -166,13 +158,6 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
     }
     _hardware.LoopTurn(_loop, {count});
   }
-}
-
-// WaitTimerTicks for PlayStationTunnel's register code: CX = 0 after it, from the LOOP.
-void WaitTimerTicksOnRegisters(Guest& _guest, std::uint16_t _ticks, std::uint16_t _loop)
-{
-  WaitTimerTicks(_guest.State(), _guest.Devices(), _ticks, _loop);
-  _guest.Regs().cx = 0;
 }
 
 // _text posted for 25 frames. Returns its offset, which the original leaves in AX (mov ax, _text).
@@ -531,78 +516,85 @@ void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwa
   } while (--left != 0);
 }
 
-void PlayStationTunnel(Guest& _guest)
+void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Registers& regs = _guest.Regs();
-  regs.ax = _guest.Get(DS.playerDocked) != 0 ? DS.autoDockMessage.offset : DS.leavingStationMessage.offset;
-  _guest.Set(DS.messagePointer, regs.ax);
-  _guest.Set(DS.messageFrames, 1);
-  _guest.Call(UPDATE_MESSAGE_LINE);
-  _guest.Call(UPDATE_DASHBOARD);
+  // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
+  const std::uint16_t message = _state.Get(DS.playerDocked) != 0 ? DS.autoDockMessage.offset : DS.leavingStationMessage.offset;
+  _state.Set(DS.messagePointer, message);
+  _state.Set(DS.messageFrames, 1);
+  (void)UpdateMessageLine(_state, _backward);
+  UpdateDashboard(_state);
 
-  // Frame AX of the first ten draws the first AX rectangles. Leaving, the world moves on behind the
-  // tunnel; docking, each frame waits for the timer.
-  regs.ax = 1;
-  for (;;)
+  // Frame n of the first ten draws the first n rectangles, n in AX, pushed round the frame and popped for its INC; the turns carry
+  // it. Leaving, the world moves on behind the tunnel, which masks the view outside the first rectangle; docking, each frame waits
+  // for the timer first. The direction flag goes as the original's does: a DrawLine that fills clears it, and so do
+  // MaskOutsideTunnel's and FinishSpaceViewFrame's CLD.
+  bool backward = _backward;
+  for (std::uint16_t frame = 1;;)
   {
-    const std::uint16_t frame = regs.ax;
-    regs.si = DS.tunnelRectangles.offset;
-    if (_guest.Get(DS.playerDocked) == 0)
+    if (_state.Get(DS.playerDocked) == 0)
     {
-      _guest.Call(TRANSFORM_AND_DRAW_OBJECTS);
-      _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-      _guest.Call(UPDATE_STARDUST);
-      regs.si = DS.tunnelRectangles.offset;
-      _guest.Call(MASK_OUTSIDE_TUNNEL);
-      regs.cx = frame;
+      backward = TransformAndDrawObjects(_state, _hardware, backward);
+      MoveObjectsByVelocity(_state);
+      if (UpdateStardust(_state, STARDUST_BX))
+      {
+        backward = false;
+      }
+      MaskOutsideTunnel(_state, DS.tunnelRectangles.offset, backward);
+      backward = false;
     }
     else
     {
-      WaitTimerTicksOnRegisters(_guest, DOCKED_FIRST_TICKS, 0x2D9A);
-      regs.cx = regs.ax;
+      WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS, DOCKED_FIRST_WAIT);
     }
-    DrawTunnelRectanglesOnRegisters(_guest, 0x2DA1);
-    _guest.Call(FINISH_SPACE_VIEW_FRAME);
-    WaitTimerTicksOnRegisters(_guest, TUNNEL_FRAME_TICKS, 0x2DB8);
-    regs.ax = Offset(frame, 1);
-    if (Low(regs.ax) == TUNNEL_FRAMES + 1)
+    if (DrawTunnelRectangles(_state, _hardware, DS.tunnelRectangles.offset, frame, FIRST_RECTANGLES).filled)
+    {
+      backward = false;
+    }
+    FinishSpaceViewFrame(_state, _hardware);
+    backward = false;
+    WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS, FIRST_FRAME_WAIT);
+    // INC AX / CMP AL,0Bh.
+    frame = Offset(frame, 1);
+    if (Low(frame) == TUNNEL_FRAMES + 1)
     {
       break;
     }
-    _guest.JumpBack(0x2D7A);
+    _hardware.LoopTurn(FIRST_TUNNEL_FRAME, {frame});
   }
 
-  // The last ten draw ten rectangles less one each frame, from one further along each time.
-  regs.si = DS.tunnelRectangles.offset;
-  regs.cx = TUNNEL_FRAMES;
-  for (;;)
+  // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
+  // frame, which the turns carry.
+  std::uint16_t first = DS.tunnelRectangles.offset;
+  for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
-    const std::uint16_t frames = regs.cx;
-    const std::uint16_t first = regs.si;
-    if (_guest.Get(DS.playerDocked) == 0)
+    if (_state.Get(DS.playerDocked) == 0)
     {
-      _guest.Call(TRANSFORM_AND_DRAW_OBJECTS);
-      _guest.Call(UPDATE_STARDUST);
-      _guest.Call(MOVE_OBJECTS_BY_VELOCITY);
-      regs.si = first;
-      _guest.Call(MASK_OUTSIDE_TUNNEL);
-      regs.cx = frames;
+      backward = TransformAndDrawObjects(_state, _hardware, backward);
+      if (UpdateStardust(_state, STARDUST_BX))
+      {
+        backward = false;
+      }
+      MoveObjectsByVelocity(_state);
+      MaskOutsideTunnel(_state, first, backward);
+      backward = false;
     }
     else
     {
-      WaitTimerTicksOnRegisters(_guest, TUNNEL_FRAME_TICKS, 0x2DE7);
-      regs.si = first;
-      regs.cx = frames;
+      WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS, LAST_FRAME_WAIT);
     }
-    DrawTunnelRectanglesOnRegisters(_guest, 0x2DEE);
-    _guest.Call(FINISH_SPACE_VIEW_FRAME);
-    regs.si = Offset(first, TUNNEL_RECTANGLE_BYTES);
-    regs.cx = frames;
-    if (--regs.cx == 0)
+    if (DrawTunnelRectangles(_state, _hardware, first, frames, LAST_RECTANGLES).filled)
+    {
+      backward = false;
+    }
+    FinishSpaceViewFrame(_state, _hardware);
+    backward = false;
+    first = Offset(first, TUNNEL_RECTANGLE_BYTES);
+    if (--frames == 0)
     {
       return;
     }
-    _guest.JumpBack(0x2DC9);
+    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, first});
   }
 }
 
@@ -744,6 +736,9 @@ constexpr Machine::NativeContract CLOBBERS_ALL_BUT_SI_ES{REGISTER_AX | REGISTER_
 constexpr Machine::NativeContract ALIGNMENT{REGISTER_AX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
 // ArcTangent2's leftovers, which no caller reads (ADR-012).
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+// PlayStationTunnel's: every register but DS and BP, which its last FinishSpaceViewFrame leaves (PlayStationTunnelEntry).
+constexpr Machine::NativeContract PLAYS_STATION_TUNNEL{
+  REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_ES, 0};
 
 } // namespace
 
@@ -751,6 +746,17 @@ void DrawTunnelRectangleEntry(Guest& _guest)
 {
   DrawLineOut(_guest, DrawTunnelRectangle(_guest.State(), _guest.Regs().si));
   _guest.Clobber(CLOBBERS_ALL);
+}
+
+void PlayStationTunnelEntry(Guest& _guest)
+{
+  PlayStationTunnel(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  // The last FinishSpaceViewFrame's CLD, which the first frame of flight draws by, and its PresentSpaceView's MOV BP,20h, which
+  // nothing after it changes: after docking, the status screen RunTitleAndDocked shows next hands it to SelectSystemAtCursor as the
+  // count when no system is on the chart, as after the credits (ShowCreditsEntry).
+  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+  _guest.Regs().bp = PRESENT_SPACE_VIEW_BP;
+  _guest.Clobber(PLAYS_STATION_TUNNEL);
 }
 
 void CheckDockingAlignmentEntry(Guest& _guest)
@@ -844,7 +850,8 @@ namespace
 constexpr std::array ENTRIES = {
   NativeEntry{0x1AA0, "DrawTunnelRectangle", &DrawTunnelRectangleEntry, CLOBBERS_ALL},
   NativeEntry{0x2D0F, "CheckDockingAlignment", &CheckDockingAlignmentEntry, ALIGNMENT},
-  NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnel, CLOBBERS_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
+  NativeEntry{0x2D5B, "PlayStationTunnel", &PlayStationTunnelEntry, PLAYS_STATION_TUNNEL, Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Always},
   NativeEntry{0x2E0A, "MaskOutsideTunnel", &MaskOutsideTunnelEntry, CLOBBERS_ALL_BUT_SI_ES},
   NativeEntry{0x83B2, "ToggleDockingComputer", &ToggleDockingComputerEntry, PRESERVES_ALL},
   NativeEntry{0x8622, "RunDockingComputer", &RunDockingComputerEntry, CLOBBERS_BX_CX_DX},
