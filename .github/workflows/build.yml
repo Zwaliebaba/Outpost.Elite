@@ -155,8 +155,9 @@ jobs:
         shell: pwsh
         run: python Build\CheckProjectFiles.py
 
-      # GameLogic/DataOverlay.h is generated from Design/Symbols.tsv and never edited (ADR-010): a
-      # symbol renamed or resized without regenerating it fails here, not in a native routine.
+      # GameLogic/DataOverlay.h and GameLogic/GameData.h are generated from Design/Symbols.tsv and
+      # never edited (ADR-010, D19): a symbol renamed or resized without regenerating them fails here,
+      # not in a native routine.
       - name: Check the data overlay
         shell: pwsh
         run: python Tools\GenerateOverlay.py --check

@@ -84,6 +84,7 @@
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="Flight.h" />
     <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="GameData.h" />
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Guest.h" />
     <ClInclude Include="Hardware.h" />
