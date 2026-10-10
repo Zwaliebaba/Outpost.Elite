@@ -16,6 +16,7 @@ constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
 constexpr std::uint16_t DRAW_DISC = 0x1826;
 constexpr std::uint16_t FILL_SPAN = 0x1A07;
 constexpr std::uint16_t FILL_TRIANGLE = 0x1BFB;
+constexpr std::uint16_t FILL_CLIPPED_TRIANGLE = 0x1E6E;
 constexpr std::uint16_t DRAW_CHART_FRAME = 0x7C25;
 
 // DivideOverflowInterrupt saves BX here, in the code segment, when a divide traps.
@@ -135,6 +136,29 @@ public:
     AssertExecuted(rig, FILL_TRIANGLE, {0x1E88, 0x1E8A, 0x1EF4, 0x1F86, 0x1F88, 0x1FA2, 0x1FB5, 0x1FF7, 0x208B, 0x208F, 0x2091,
                                         0x2093, 0x2094, 0x2096, 0x2098, 0x2099, 0x209B, 0x209D, 0x209F, 0x20A1, 0x20A3, 0x20A6,
                                         0x20A8, 0x20AA, 0x20AC, 0x20AE, 0x20B0, 0x20B2, 0x20B6, 0x20B8, 0x20BA, 0x20BB, 0x20BE});
+  }
+
+  // FillClippedTriangle's own entry, as FillTriangle jumps to it: A's x in SI, and the rows (DX, BP, DI) doubled. All three
+  // x below 0, all rows below 0, all x past 255 and all rows past 127 return at once; the rest are FillTriangle's
+  // clipped cases above.
+  TEST_METHOD(FillClippedTriangleAgreesWhenEnteredDirectly)
+  {
+    ComparisonRig rig("FillClippedTriangle");
+    const std::initializer_list<Inputs> calls = {
+      {.bx = Word(-5), .cx = Word(-9), .dx = 20, .si = Word(-1), .di = 40, .bp = 60},
+      {.bx = 10, .cx = 20, .dx = Word(-2), .si = 30, .di = Word(-4), .bp = Word(-6)},
+      {.bx = 300, .cx = 400, .dx = 20, .si = 256, .di = 40, .bp = 60},
+      {.bx = 10, .cx = 20, .dx = 300, .si = 30, .di = 256, .bp = 400},
+      {.bx = 300, .cx = 10, .dx = 20, .si = 300, .di = 60, .bp = 40},
+      {.bx = 100, .cx = 300, .dx = 100, .si = Word(-10), .di = 100, .bp = 100},
+      {.bx = 100, .cx = 400, .dx = 20, .si = 300, .di = 120, .bp = 120},
+      {.bx = 400, .cx = 100, .dx = 20, .si = 200, .di = 120, .bp = 120},
+      {.bx = Word(-100), .cx = Word(-50), .dx = Word(-100), .si = 100, .di = 20, .bp = 20},
+    };
+    for (const Inputs& inputs : calls)
+      rig.Call(FILL_CLIPPED_TRIANGLE, inputs);
+    rig.AssertAllAgreed(FILL_CLIPPED_TRIANGLE, calls.size());
+    AssertExecuted(rig, FILL_CLIPPED_TRIANGLE, {0x1E8C, 0x1E9B, 0x1E9D});
   }
 
   // From the cockpit (screenLayout 0) the chart frame clears the screen rather than setting the mode.

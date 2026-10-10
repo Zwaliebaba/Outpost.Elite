@@ -14,6 +14,33 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> VideoEntries() noexcept;
 
+/// SaveScreenshot (CS:01B7): with the game's divide, keyboard and timer handlers taken out and
+/// CriticalErrorInterrupt on int 24h, WriteScreenshotFile, then ShowDiskError if it failed. Out: ES=B800h; AX,
+/// BX, CX, DX, SI, DI clobbered.
+void SaveScreenshot(Guest& _guest);
+
+/// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both
+/// graphics banks) written through DOS; diskError=1 on a failure. AX, BX, CX, DX clobbered.
+void WriteScreenshotFile(Guest& _guest);
+
+/// FinishSpaceViewFrame (CS:0570): DrawLaserSights, PresentSpaceView and ClearDrawBuffer, through their hooks.
+/// It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
+void FinishSpaceViewFrame(Guest& _guest);
+
+/// PresentChartFrame (CS:0587): CopyChartBufferToScreen, with AL=0 whatever the caller passed, then
+/// ClearDrawBuffer. It waits. Out: ES=B800h, DF=0; AX, BX, CX, DX, SI, DI, BP clobbered.
+void PresentChartFrame(Guest& _guest);
+
+/// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it,
+/// WaitRetraceThenDelay, then copies spaceViewBuffer to the screen. In: ES=B800h, DF=0. AX, BX, CX, DX, SI, DI,
+/// BP clobbered.
+void PresentSpaceView(Guest& _guest);
+
+/// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64-4*AL line pairs of
+/// the drawing buffer to the chart's place on the screen. In: ES=B800h, DF=0. AX, BX, CX, DX, SI, DI, BP
+/// clobbered.
+void CopyChartBufferToScreen(Guest& _guest);
+
 /// ClearDrawBuffer (CS:060D): zero-fills DS:0000-1FFF, the drawing buffer. Out: ES=DS, AX=0, CX=0,
 /// DI=2000h.
 void ClearDrawBuffer(Guest& _guest);
@@ -59,6 +86,13 @@ void FillTriangleSpan(Guest& _guest);
 /// (BX, BP), (CX, DI) filled with triangleFillPattern. Out: ES=DS unless it is wholly outside;
 /// everything else but DS clobbered.
 void FillTriangle(Guest& _guest);
+
+/// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly inside the buffer, entered with SI
+/// = A's x and the rows doubled.
+void FillClippedTriangle(Guest& _guest);
+
+/// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace, then spins 2000 turns. AX, DX clobbered.
+void WaitRetraceThenDelay(Guest& _guest);
 
 /// ShowCockpitScreen (CS:7BC0): unless the cockpit shows already, graphics mode or a clear screen and
 /// the cockpit image copied in. AX, CX, SI, DI, ES clobbered, and BX and DX when it sets the mode.

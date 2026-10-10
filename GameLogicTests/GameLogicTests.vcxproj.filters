@@ -67,6 +67,9 @@
     <Filter Include="Docked">
       <UniqueIdentifier>{5C7DC198-E3EA-5855-912E-EBC3CAE831AC}</UniqueIdentifier>
     </Filter>
+    <Filter Include="SaveLoad">
+      <UniqueIdentifier>{C58A71FB-9CFD-5D0E-ACF3-B65DE4C3B974}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -124,6 +127,9 @@
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="SaveLoadTests.cpp">
+      <Filter>SaveLoad</Filter>
     </ClCompile>
     <ClCompile Include="SceneTests.cpp">
       <Filter>Scene</Filter>

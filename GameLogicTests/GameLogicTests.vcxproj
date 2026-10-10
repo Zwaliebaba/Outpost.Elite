@@ -105,6 +105,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp" />
+    <ClCompile Include="SaveLoadTests.cpp" />
     <ClCompile Include="SceneTests.cpp" />
     <ClCompile Include="ShipsTests.cpp" />
     <ClCompile Include="SoundTests.cpp" />
