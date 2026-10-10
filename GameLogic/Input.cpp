@@ -42,6 +42,27 @@ constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / cen
 constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
 constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
 
+// ReadJoystickAxes's backward jumps: the X count's, the wait for both bits, and the Y count's.
+constexpr std::uint16_t X_COUNT_TURN = 0x778F;
+constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
+constexpr std::uint16_t Y_COUNT_TURN = 0x779D;
+
+// The cycles the 8088 model (Machine/Cpu.cpp) charges for ReadJoystickAxes's instructions: the game port times its one-shots by
+// them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
+constexpr Machine::Cycles BEFORE_FIRING_CYCLES = 12;    // CLI 2, MOV BX,imm16 4, MOV CX,BX 2, MOV DX,imm16 4
+constexpr Machine::Cycles OUT_CYCLES = 8;               // OUT DX,AL
+constexpr Machine::Cycles IN_CYCLES = 8;                // IN AL,DX
+constexpr Machine::Cycles AND_CYCLES = 4;               // AND AL,imm8
+constexpr Machine::Cycles CMP_CYCLES = 4;               // CMP AL,imm8
+constexpr Machine::Cycles INC_CYCLES = 2;               // INC r16
+constexpr Machine::Cycles TAKEN_CYCLES = 16;            // a conditional short jump taken
+constexpr Machine::Cycles NOT_TAKEN_CYCLES = 4;         // and not taken
+constexpr Machine::Cycles TIME_OUT_CYCLES = 14;         // STC 2, RET 12
+constexpr Machine::Cycles BEFORE_LAST_READ_CYCLES = 14; // STI 2, SUB CX,imm16 4, SUB BX,imm16 4, MOV DX,imm16 4
+constexpr Machine::Cycles STORE_CYCLES = 10;            // MOV [joystickPortByte],AL
+constexpr Machine::Cycles LATCH_CYCLES = 16;            // MOV byte [fireLatch],1: 10, and 6 for the direct address
+constexpr Machine::Cycles RET_CYCLES = 12;              // RET: 8, and 4 for the word popped over the 8-bit bus
+
 constexpr std::uint8_t OVERRUN_CODE = 0xFF;
 constexpr std::uint8_t BREAK_BIT = 0x80;
 constexpr std::uint8_t SHIFT_BIT = 0x80; // on a code in keyBuffer
@@ -463,58 +484,105 @@ void ResetKeyboard(Guest& _guest)
 void ReadJoystickAxes(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  // With interrupts off, the one-shots fired, each axis's polls counted until its bit drops. The game port times its one-shots in
-  // the cycles of the instructions executed, and native code executes none: run natively, a stick that answers never drops a
-  // bit, and the X count times out (CF, with interrupts left off, as the original leaves them on a time-out).
+  // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
+  // by the instructions executed, so each of the original's is counted (CountCycles) before the port access after it, and each of
+  // its backward jumps ends a turn (JumpBack): the wait for both bits idles as the original's does.
   _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
   regs.bx = AXIS_COUNT_START;
   regs.cx = regs.bx;
   regs.dx = GAME_PORT;
+  _guest.CountCycles(BEFORE_FIRING_CYCLES);
   _guest.Out8(GAME_PORT, Low(regs.ax));
+  _guest.CountCycles(OUT_CYCLES);
   SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & BOTH_AXES));
+  _guest.CountCycles(IN_CYCLES + AND_CYCLES + CMP_CYCLES);
+  // A time-out leaves interrupts off, as the original does.
+  const auto timeOut = [&]()
+  {
+    _guest.CountCycles(TAKEN_CYCLES + TIME_OUT_CYCLES);
+    _guest.SetFlag(Machine::FLAG_CARRY, true);
+  };
   if (Low(regs.ax) != BOTH_AXES)
   {
-    _guest.SetFlag(Machine::FLAG_CARRY, true);
+    timeOut();
     return;
   }
-  do
+  _guest.CountCycles(NOT_TAKEN_CYCLES);
+  for (;;)
   {
     regs.bx = static_cast<std::uint16_t>(regs.bx + 1);
+    _guest.CountCycles(INC_CYCLES);
     if (regs.bx == 0)
     {
-      _guest.SetFlag(Machine::FLAG_CARRY, true);
+      timeOut();
       return;
     }
+    _guest.CountCycles(NOT_TAKEN_CYCLES);
     SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & X_AXIS));
-  } while (Low(regs.ax) != 0);
-  // Both bits down before the one-shots fire again; this loop does not count, or time out.
-  do
+    _guest.CountCycles(IN_CYCLES + AND_CYCLES);
+    if (Low(regs.ax) == 0)
+    {
+      break;
+    }
+    _guest.CountCycles(TAKEN_CYCLES);
+    JumpBack(_guest, X_COUNT_TURN);
+  }
+  _guest.CountCycles(NOT_TAKEN_CYCLES);
+  // Both bits down before the one-shots fire again: a wait when X's drops first.
+  for (;;)
   {
     SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & BOTH_AXES));
-  } while (Low(regs.ax) != 0);
+    _guest.CountCycles(IN_CYCLES + AND_CYCLES);
+    if (Low(regs.ax) == 0)
+    {
+      break;
+    }
+    _guest.CountCycles(TAKEN_CYCLES);
+    JumpBack(_guest, BOTH_DOWN_TURN);
+  }
+  _guest.CountCycles(NOT_TAKEN_CYCLES);
   _guest.Out8(GAME_PORT, Low(regs.ax));
-  do
+  _guest.CountCycles(OUT_CYCLES);
+  for (;;)
   {
     regs.cx = static_cast<std::uint16_t>(regs.cx + 1);
+    _guest.CountCycles(INC_CYCLES);
     if (regs.cx == 0)
     {
-      _guest.SetFlag(Machine::FLAG_CARRY, true);
+      timeOut();
       return;
     }
+    _guest.CountCycles(NOT_TAKEN_CYCLES);
     SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(GAME_PORT) & Y_AXIS));
-  } while (Low(regs.ax) != 0);
+    _guest.CountCycles(IN_CYCLES + AND_CYCLES);
+    if (Low(regs.ax) == 0)
+    {
+      break;
+    }
+    _guest.CountCycles(TAKEN_CYCLES);
+    JumpBack(_guest, Y_COUNT_TURN);
+  }
+  _guest.CountCycles(NOT_TAKEN_CYCLES);
   _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
   regs.cx = static_cast<std::uint16_t>(regs.cx - AXIS_COUNT_START);
   regs.bx = static_cast<std::uint16_t>(regs.bx - AXIS_COUNT_START);
   regs.dx = GAME_PORT;
+  _guest.CountCycles(BEFORE_LAST_READ_CYCLES);
   SetLow(regs.ax, _guest.In8(GAME_PORT));
   _guest.Set(DS.joystickPortByte, Low(regs.ax));
   // Bit 4, the stick's first button, low while pressed.
   SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & STICK_BUTTON_B));
+  _guest.CountCycles(IN_CYCLES + STORE_CYCLES + AND_CYCLES);
   if (Low(regs.ax) == 0)
   {
     _guest.Set(DS.fireLatch, 1);
+    _guest.CountCycles(NOT_TAKEN_CYCLES + LATCH_CYCLES);
   }
+  else
+  {
+    _guest.CountCycles(TAKEN_CYCLES);
+  }
+  _guest.CountCycles(RET_CYCLES);
   _guest.SetFlag(Machine::FLAG_CARRY, false);
 }
 
@@ -658,7 +726,8 @@ constexpr Machine::NativeContract CLOBBERS_AX_BX{REGISTER_AX | REGISTER_BX, 0};
 constexpr Machine::NativeContract CLOBBERS_BX_CX_DX{REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract FIRE_BUTTON{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_CARRY};
 constexpr Machine::NativeContract KEY{0, FLAG_ZERO | FLAG_INTERRUPT};
-// The stick's routines leave interrupts off on a time-out, which their callers live with: compared too.
+// The stick's routines leave interrupts off on a time-out, which their callers live with: compared too. They wait when the stick's
+// X one-shot drops before its Y one-shot (ReadJoystickAxes's loop at 7797), and so does ReadSteering through them.
 constexpr Machine::NativeContract STICK_AXES{REGISTER_AX, FLAG_CARRY | FLAG_INTERRUPT};
 constexpr Machine::NativeContract STICK_STEERING{REGISTER_BX | REGISTER_CX | REGISTER_DX, FLAG_INTERRUPT};
 
@@ -669,11 +738,12 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x6DEC, "WaitForKeyPress", &WaitForKeyPress, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7443, "ReadScanCode", &ReadScanCode, CLOBBERS_AX},
   NativeEntry{0x74E0, "ReadFireButton", &ReadFireButton, FIRE_BUTTON},
-  NativeEntry{0x7536, "ReadSteering", &ReadSteering, CLOBBERS_BX_CX_DX},
+  NativeEntry{0x7536, "ReadSteering", &ReadSteering, CLOBBERS_BX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
   NativeEntry{0x7616, "GetKey", &GetKey, KEY},
   NativeEntry{0x7668, "ResetKeyboard", &ResetKeyboard, PRESERVES_ALL},
-  NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxes, STICK_AXES},
-  NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteering, STICK_STEERING},
+  NativeEntry{0x777E, "ReadJoystickAxes", &ReadJoystickAxes, STICK_AXES, Machine::NativeReturn::Near, 0, Machine::NativeWait::Sometimes},
+  NativeEntry{0x77C1, "ReadJoystickSteering", &ReadJoystickSteering, STICK_STEERING, Machine::NativeReturn::Near, 0,
+              Machine::NativeWait::Sometimes},
   NativeEntry{0x78EF, "ReadKeyboardSteering", &ReadKeyboardSteering, CLOBBERS_BX},
   NativeEntry{0x797E, "ReadMouseSteering", &ReadMouseSteering, CLOBBERS_BX_CX_DX},
   NativeEntry{0x7F3D, "PollScreenDumpKey", &PollScreenDumpKey, PRESERVES_ALL},

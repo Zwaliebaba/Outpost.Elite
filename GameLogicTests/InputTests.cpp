@@ -77,6 +77,62 @@ void Deliver(ComparisonRig& _rig, std::uint8_t _code)
   CallHandler(_rig, KEYBOARD_INTERRUPT);
 }
 
+// The IBM stick attached to both twins and selected, centred on the count 50 kOhm gives, steering the galactic chart's cursor:
+// the same resistance on both axes, which ends both counts together, and X's below Y's, which makes the read wait for Y's
+// one-shot. (With X's above Y's, X's one-shot would outlast the read, and the next read would depend on the cycles of everything
+// run between the two, which native code does not count.) Every digest of the twins must agree, and the cursor must move.
+void SteerTheChartWithTheStick(TwinRig& _rig)
+{
+  _rig.Play("key space; wait 4");
+  _rig.Both(
+    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    {
+      const std::uint16_t segment = Elite::DataSegment(_program);
+      _pc.Ram().Write8(segment, DS.inputDevice.offset, 1);
+      _pc.Ram().Write8(segment, DS.joystickIsAmstrad.offset, 0);
+      _pc.Ram().Write16(segment, DS.joystickCenterX.offset, 81);
+      _pc.Ram().Write16(segment, DS.joystickCenterY.offset, 81);
+    });
+  const auto attach = [&](std::uint32_t _xOhms, std::uint32_t _yOhms)
+  {
+    _rig.Both(
+      [=](Machine::Pc& _pc, const Machine::LoadedProgram&)
+      {
+        _pc.Joystick().SetAxisResistance(0, _xOhms);
+        _pc.Joystick().SetAxisResistance(1, _yOhms);
+      });
+  };
+  // The interpreted twin's chart cursor, x and y (Both calls it first).
+  const auto cursor = [&]()
+  {
+    std::uint16_t position = 0;
+    bool first = true;
+    _rig.Both(
+      [&](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+      {
+        if (first)
+          position = _pc.Ram().Read16(Elite::DataSegment(_program), DS.chartCursorX.offset);
+        first = false;
+      });
+    return position;
+  };
+  attach(50'000, 50'000);
+  _rig.Play("key F5; wait 0.5\ndigest centred");
+  const std::uint16_t centered = cursor();
+  attach(10'000, 10'000);
+  _rig.Play("wait 0.5\ndigest low");
+  const std::uint16_t low = cursor();
+  attach(100'000, 100'000);
+  _rig.Play("wait 0.5\ndigest high");
+  const std::uint16_t high = cursor();
+  attach(0, 0);
+  _rig.Play("wait 0.5\ndigest lowest");
+  attach(20'000, 80'000);
+  _rig.Play("wait 0.5\ndigest left-and-down");
+  Assert::IsTrue(centered != low, L"the stick moved the cursor");
+  Assert::IsTrue(low != high, L"the stick moved the cursor back");
+}
+
 } // namespace
 
 // Constructed inputs for the keyboard, joystick and mouse routines (plan §6.3): the keys, devices and options no
@@ -325,6 +381,22 @@ public:
     rig.Call(READ_STEERING, {.cx = 0x0040, .dx = 0xFFC0});
     Poke(rig, DS.inputDevice, 0);
     rig.AssertAllAgreed(READ_STEERING, 1);
+  }
+
+  // The stick read natively, the native twin's calls not compared: its read counts the polls the interpreted one does, by the
+  // cycles it counts for the original's instructions, and waits where the interpreted one waits.
+  TEST_METHOD(IbmStickSteersTheChartNatively)
+  {
+    TwinRig rig("TwinStickNative");
+    rig.Native().Native().SetVerifying(false);
+    SteerTheChartWithTheStick(rig);
+  }
+
+  // The same with every call of a work routine compared, ReadSteering's among them.
+  TEST_METHOD(IbmStickSteersTheChartCompared)
+  {
+    TwinRig rig("TwinStickCompared");
+    SteerTheChartWithTheStick(rig);
   }
 
   // The mask mission's briefing, which the docked status screen shows first when F9 brings it back from another screen, waits in

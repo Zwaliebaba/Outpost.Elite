@@ -33,7 +33,7 @@ void ReadScanCode(Guest& _guest);
 void ReadFireButton(Guest& _guest);
 
 /// ReadSteering (CS:7536): AL=roll and AH=pitch input from the selected device, +-23. BX clobbered (and CX and DX by
-/// the joystick and the mouse).
+/// the joystick and the mouse). Waits sometimes, in ReadJoystickAxes.
 void ReadSteering(Guest& _guest);
 
 /// GetKey (CS:7616): the next key from keyBuffer: ZF=0, AH=scan code, AL=AL<<1 | Shift; or ZF=1, AH=0 when there is
@@ -45,10 +45,12 @@ void ResetKeyboard(Guest& _guest);
 
 /// ReadJoystickAxes (CS:777E): the IBM stick's two axes as counted polls: CF clear, BX = X and CX = Y; CF set when the stick does
 /// not answer or a count times out, with interrupts then left off. DX = 201h, AX clobbered; fireLatch set while button 1 is down.
+/// Waits when X's one-shot drops before Y's, for Y's.
 void ReadJoystickAxes(Guest& _guest);
 
 /// ReadJoystickSteering (CS:77C1): AL = roll and AH = pitch from the joystick: the Amstrad's keys ramped, or the IBM stick about its
-/// centre, within -23..23; AX = 0 when the IBM stick does not answer. BX, CX and DX clobbered.
+/// centre, within -23..23; AX = 0 when the IBM stick does not answer. BX, CX and DX clobbered. Waits sometimes, in
+/// ReadJoystickAxes.
 void ReadJoystickSteering(Guest& _guest);
 
 /// ReadKeyboardSteering (CS:78EF): AL=roll ramp and AH=pitch ramp (negated) from the cursor and QAOP keys. BL
