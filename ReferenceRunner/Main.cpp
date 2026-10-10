@@ -8,6 +8,7 @@
 #include "Replay.h"
 #include "TraceWriter.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstdio>
@@ -355,16 +356,10 @@ int Run(int _argc, char** _argv)
   if (!options.coverage.empty())
   {
     std::ofstream out(options.coverage, std::ios::trunc);
-    std::size_t count = 0;
+    Elite::WriteExecutedOffsets(executed, program, out);
     const std::uint32_t base = Machine::Memory::Linear(program.loadSegment, 0);
-    for (std::uint32_t offset = 0; offset < Elite::CODE_SEGMENT_BYTES; ++offset)
-    {
-      if (executed[base + offset] != 0)
-      {
-        out << std::format("{:04X}\n", offset);
-        ++count;
-      }
-    }
+    const auto count = static_cast<std::size_t>(std::count_if(executed.begin() + base, executed.begin() + base + Elite::CODE_SEGMENT_BYTES,
+                                                              [](std::uint8_t _byte) { return _byte != 0; }));
     Print(std::format("coverage\t{}\t{} instruction starts\n", options.coverage.string(), count));
   }
   if (options.update && reason == Machine::StopReason::Reached)

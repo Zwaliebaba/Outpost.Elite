@@ -201,6 +201,12 @@ public:
     m_pc.CallInterrupt(_vector);
   }
 
+  /// Whether _flag (FLAG_* in Registers.h) is set: what a routine reads of a flag a call left it.
+  [[nodiscard]] bool Flag(std::uint16_t _flag) const noexcept
+  {
+    return (m_pc.Processor().Regs().flags & _flag) != 0;
+  }
+
   /// Sets or clears _flag (FLAG_* in Registers.h): what a routine does for a flag its callers read.
   void SetFlag(std::uint16_t _flag, bool _set) noexcept
   {
@@ -212,6 +218,39 @@ public:
   void Call(std::uint16_t _offset)
   {
     m_pc.CallNear(_offset);
+  }
+
+  /// What the original's instructions here would have taken, in 8088 cycles, for a device timed by the
+  /// instructions executed (Pc::CountInstructionCycles): the game port, which a stick read counts.
+  void CountCycles(Machine::Cycles _cycles) noexcept
+  {
+    m_pc.CountInstructionCycles(_cycles);
+  }
+
+  /// One turn of a waiting loop that found nothing to do (Pc::Wait): the clock moves to the next device
+  /// event, the run ends there if that is its end, and an interrupt now due is taken. Only a routine
+  /// hooked as one that waits may call it (NativeEntry::wait).
+  void Wait()
+  {
+    m_pc.Wait();
+  }
+
+  /// The end of one turn of a loop, where the original jumps back (Pc::LoopTurn): paced time idles
+  /// here when the turn changed nothing, as it would at the original's jump. Call it at every backward
+  /// jump the original takes in a loop that can wait, with the registers the original has there. Only a
+  /// routine hooked as one that waits may call it.
+  void LoopTurn()
+  {
+    m_pc.LoopTurn();
+  }
+
+  /// LoopTurn at a backward jump the original takes to CS:_target: IP is set to the target first, as the
+  /// jump leaves it, because paced time compares IP with the rest of the registers, and two jumps that
+  /// land in different places are different turns.
+  void JumpBack(std::uint16_t _target)
+  {
+    Regs().ip = _target;
+    m_pc.LoopTurn();
   }
 
 private:

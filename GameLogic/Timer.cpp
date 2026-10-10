@@ -2,6 +2,7 @@
 
 #include "Timer.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 namespace Elite
@@ -57,25 +58,8 @@ constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 constexpr std::uint16_t DECODED_ANSWER = 0xA5B7; // a length byte and the decoded answer, past dockingKeyReleased
 constexpr std::uint8_t ANSWER_KEY = 0x61;
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0x00FF) | (_high << 8));
-}
+// Where WaitForTimerTick's loop jumps back to: the compare.
+constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
 
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
 std::uint8_t Decrement(Guest& _guest, DataField<std::uint8_t> _field)
@@ -504,6 +488,18 @@ void TimerTick(Guest& _guest)
   TickSoundEffects(_guest);
 }
 
+void WaitForTimerTick(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Push(regs.ax);
+  regs.ax = _guest.Get(DS.timerTicks);
+  while (regs.ax == _guest.Get(DS.timerTicks))
+  {
+    _guest.JumpBack(TIMER_TICK_COMPARE);
+  }
+  regs.ax = _guest.Pop();
+}
+
 namespace
 {
 
@@ -520,6 +516,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x016B, "RestoreTimerInterrupt", &RestoreTimerInterrupt, CLOBBERS_AX_BX_CX_DX},
   NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterrupt, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
   NativeEntry{0x7150, "TimerTick", &TimerTick, CLOBBERS_AX},
+  // WaitForTimerTick waits for the next tick as a rule.
+  NativeEntry{0x7772, "WaitForTimerTick", &WaitForTimerTick, PRESERVES_ALL, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
 };
 
 } // namespace

@@ -61,6 +61,15 @@
     <Filter Include="Flight">
       <UniqueIdentifier>{B4D92709-259D-5C8F-BBFF-8CBB010A7723}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Sound">
+      <UniqueIdentifier>{CCF4BC43-61A6-515A-B282-7FBF8E93F1F8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Docked">
+      <UniqueIdentifier>{5C7DC198-E3EA-5855-912E-EBC3CAE831AC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="SaveLoad">
+      <UniqueIdentifier>{C58A71FB-9CFD-5D0E-ACF3-B65DE4C3B974}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComparisonRig.h">
@@ -70,6 +79,9 @@
       <Filter>Build</Filter>
     </ClInclude>
     <ClInclude Include="ReferenceRig.h">
+      <Filter>Rigs</Filter>
+    </ClInclude>
+    <ClInclude Include="TwinRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>
   </ItemGroup>
@@ -82,6 +94,9 @@
     </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedTests.cpp">
+      <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="DockingTests.cpp">
       <Filter>Docking</Filter>
@@ -113,11 +128,17 @@
     <ClCompile Include="ReplayTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="SaveLoadTests.cpp">
+      <Filter>SaveLoad</Filter>
+    </ClCompile>
     <ClCompile Include="SceneTests.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
     <ClCompile Include="ShipsTests.cpp">
       <Filter>Ships</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundTests.cpp">
+      <Filter>Sound</Filter>
     </ClCompile>
     <ClCompile Include="StartUpTests.cpp">
       <Filter>StartUp</Filter>
@@ -130,6 +151,9 @@
     </ClCompile>
     <ClCompile Include="TimerTests.cpp">
       <Filter>Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="TwinRigTests.cpp">
+      <Filter>Rigs</Filter>
     </ClCompile>
     <ClCompile Include="VideoTests.cpp">
       <Filter>Video</Filter>

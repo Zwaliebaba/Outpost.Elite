@@ -4,6 +4,8 @@
 #include "DataOverlay.h"
 #include "Ships.h"
 
+#include <initializer_list>
+
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace GameLogicTests
@@ -15,14 +17,25 @@ namespace
 using Elite::DS;
 
 constexpr std::uint16_t DRAW_LASER_BEAMS = 0x0A9A;
+constexpr std::uint16_t TAKE_DAMAGE = 0x2C9B;
+constexpr std::uint16_t DETONATE_ENERGY_BOMB = 0x2ED6;
+constexpr std::uint16_t SPAWN_PLAYER_WRECKAGE = 0x2FE3;
+constexpr std::uint16_t KILL_PLAYER = 0x3115;
+constexpr std::uint16_t INIT_MISSILE = 0x4C8C;
+constexpr std::uint16_t REMOVE_ALL_MISSILES = 0x4F9F;
 constexpr std::uint16_t EXPLODE_OBJECT = 0x4FC1;
 constexpr std::uint16_t TALLY_MASK_MISSION_KILL = 0x50FE;
+constexpr std::uint16_t LAUNCH_PLAYER_MISSILE = 0x5242;
+constexpr std::uint16_t LAUNCH_SHIP_FROM_OBJECT = 0x534E;
 constexpr std::uint16_t TRY_LAUNCH_MISSILE_AT_PLAYER = 0x543A;
 constexpr std::uint16_t TRY_LAUNCH_THARGON = 0x5471;
+constexpr std::uint16_t UPDATE_MISSILE_AI = 0x54F2;
 constexpr std::uint16_t RESOLVE_LASER_FIRE = 0x8AC2;
 constexpr std::uint16_t CHECK_MISSILE_TARGET_DESTROYED = 0x8B8B;
 constexpr std::uint16_t CREDIT_KILL = 0x8BC6;
+constexpr std::uint16_t ROUTINE_8C51 = 0x8C51;
 constexpr std::uint16_t APPLY_ENEMY_LASER_HIT = 0x8C8E;
+constexpr std::uint16_t USE_MASKING_DEVICE = 0x8ECF;
 
 constexpr std::uint8_t ALL_SLOTS = 36;
 constexpr std::uint8_t OBJECT_SLOTS = 20;
@@ -30,6 +43,9 @@ constexpr std::uint8_t DEBRIS_SLOTS = 16;
 constexpr std::uint8_t SLOT_DRAWN = 0x80;
 constexpr std::uint8_t TYPE_COBRA = 0x0E;
 constexpr std::uint8_t NO_BOUNTY = 0xFF;
+constexpr std::uint8_t BLIP_DRAWN = 0x02;
+constexpr std::uint8_t INDESTRUCTIBLE = 0x04;
+constexpr std::uint8_t MISSILE_CLASS = 2;
 
 /// The reference's data segment in a rig, where the slots and variables a routine reads are set up before a call.
 class Space
@@ -367,6 +383,267 @@ public:
     space.SetByte(Slot(4), static_cast<std::uint8_t>(Elite::SLOT_ACTIVE | (TYPE_COBRA << 1)));
     rig.Call(APPLY_ENEMY_LASER_HIT, {});
     rig.AssertAllAgreed(APPLY_ENEMY_LASER_HIT, std::size(hits) + 1);
+  }
+
+  // Damage from 100h on empties the shield and takes the rest off the energy; less is the shield's until it runs out, and an
+  // excess over 127 sign-extends; energy below 0 kills, unless the escape pod flies.
+  TEST_METHOD(TakeDamageAndKillPlayerAgree)
+  {
+    ComparisonRig rig("CombatDamage");
+    Space space(rig);
+    struct Damage
+    {
+      std::uint16_t amount;
+      std::uint8_t shield;
+      std::uint16_t energy;
+      std::uint8_t pod;
+    };
+    const Damage damages[] = {
+      {0x320, 0x40, 0x300, 0}, {0x320, 0x10, 0x100, 0}, {0x20, 0x40, 0x100, 0}, {0x20, 0x10, 0x100, 0},
+      {0x20, 0x10, 0x08, 0},   {0xC0, 0x00, 0x300, 0},  {0x20, 0x10, 0x100, 5},
+    };
+    for (const Damage& damage : damages)
+    {
+      space.Set(DS.foreShield, damage.shield);
+      space.Set(DS.playerEnergy, damage.energy);
+      space.Set(DS.escapePodFrames, damage.pod);
+      space.Set(DS.playerDead, 0);
+      rig.Call(TAKE_DAMAGE, {.ax = damage.amount, .bx = 0x1234});
+    }
+    for (const std::uint8_t pod : {std::uint8_t{0}, std::uint8_t{3}})
+    {
+      space.Set(DS.escapePodFrames, pod);
+      space.Set(DS.playerDead, 0);
+      rig.Call(KILL_PLAYER, {.ax = 0x5555});
+    }
+    space.Set(DS.escapePodFrames, 0);
+    rig.AssertAllAgreed(TAKE_DAMAGE, std::size(damages));
+    rig.AssertAllAgreed(KILL_PLAYER, 2);
+  }
+
+  // Every active ship with a blip goes, drawn or not; one without a blip, or inactive, stays; in the safe zone it is a crime,
+  // to the limit of the legal status.
+  TEST_METHOD(DetonateEnergyBombAgreesInAndOutOfTheSafeZone)
+  {
+    ComparisonRig rig("CombatEnergyBomb");
+    Space space(rig);
+    const std::uint8_t statuses[][2] = {{1, 0x10}, {1, 0xF0}, {0, 0x10}};
+    for (const auto& status : statuses)
+    {
+      space.Clear();
+      const std::uint16_t drawn = space.Object(4, TYPE_COBRA, SLOT_DRAWN, 100, 200, 300);
+      space.SetField(drawn, Elite::SLOT_FLAGS, BLIP_DRAWN);
+      space.SetField(drawn, Elite::SLOT_CARGO, 5);
+      space.SetField(drawn, Elite::SLOT_FRAGMENTS, 2);
+      const std::uint16_t hidden = space.Object(6, TYPE_COBRA, 0, -300, 200, 900);
+      space.SetField(hidden, Elite::SLOT_FLAGS, BLIP_DRAWN);
+      space.Object(7, TYPE_COBRA, SLOT_DRAWN, 50, 60, 70);
+      space.SetField(Slot(9), Elite::SLOT_FLAGS, BLIP_DRAWN);
+      space.Set(DS.safeZoneFlags, status[0]);
+      space.Set(DS.legalStatus, status[1]);
+      rig.Call(DETONATE_ENERGY_BOMB, {});
+    }
+    rig.AssertAllAgreed(DETONATE_ENERGY_BOMB, std::size(statuses));
+  }
+
+  // The wreck with and without cargo: its barrel in a free slot, in the first slot without a blip, or in one evicted at random;
+  // the drift from the player's angles and view, negative and positive.
+  TEST_METHOD(SpawnPlayerWreckageAgreesWithAndWithoutCargo)
+  {
+    ComparisonRig rig("CombatWreckage");
+    Space space(rig);
+    struct Wreck
+    {
+      std::uint8_t cargo;
+      int fill; // 0 none, 1 every ship slot but one without a blip, 2 every one with a blip
+      std::uint16_t view;
+      std::uint16_t pitch;
+    };
+    const Wreck wrecks[] = {{0, 0, 0, 0}, {5, 0, 0, 0x123}, {5, 1, 0x400, 0x5A0}, {5, 2, 0x200, 0x2F0}, {5, 2, 0x600, 0x7E0}};
+    std::uint16_t random = 0x1357;
+    for (const Wreck& wreck : wrecks)
+    {
+      space.Clear();
+      if (wreck.fill != 0)
+      {
+        for (int index = 3; index < OBJECT_SLOTS; ++index)
+        {
+          const std::uint16_t slot = space.Object(index, TYPE_COBRA, 0, static_cast<std::int16_t>(0x100 * index), 0x200, 0x300);
+          space.SetField(slot, Elite::SLOT_FLAGS, BLIP_DRAWN);
+        }
+        if (wreck.fill == 1)
+          space.SetField(Slot(11), Elite::SLOT_FLAGS, 0);
+      }
+      space.Set(DS.cargoUsedTonnes, wreck.cargo);
+      space.Set(DS.viewAngle, wreck.view);
+      space.Set(DS.playerPitchAngle, wreck.pitch);
+      space.Set(DS.playerYawAngle, static_cast<std::uint16_t>(wreck.pitch * 3));
+      space.Set(DS.playerRollAngle, static_cast<std::uint16_t>(wreck.pitch + 0x100));
+      space.Random(random, static_cast<std::uint16_t>(~random));
+      random = static_cast<std::uint16_t>(random * 7 + 0x3F1);
+      rig.Call(SPAWN_PLAYER_WRECKAGE, {});
+    }
+    rig.AssertAllAgreed(SPAWN_PLAYER_WRECKAGE, std::size(wrecks));
+  }
+
+  // Only active missiles go: not an inactive one, nor any other type.
+  TEST_METHOD(RemoveAllMissilesAgreesOnMissilesOnly)
+  {
+    ComparisonRig rig("CombatRemoveMissiles");
+    Space space(rig);
+    space.Clear();
+    space.Object(4, Elite::TYPE_MISSILE, 0, 100, 200, 300);
+    space.Object(5, Elite::TYPE_MISSILE, 0, 100, 200, 300);
+    space.SetByte(Slot(5), static_cast<std::uint8_t>(Elite::TYPE_MISSILE << 1));
+    space.Object(6, TYPE_COBRA, 0, 100, 200, 300);
+    space.SetField(space.Object(9, Elite::TYPE_MISSILE, 0, -100, 200, 300), Elite::SLOT_FLAGS, BLIP_DRAWN);
+    rig.Call(REMOVE_ALL_MISSILES, {.ax = 0x1111, .bx = 0x2222});
+    rig.AssertAllAgreed(REMOVE_ALL_MISSILES, 1);
+  }
+
+  // The player's missile, in a free slot or in one reclaimed, aimed at its target from 100 along the nose.
+  TEST_METHOD(LaunchPlayerMissileAgreesWithAndWithoutAFreeSlot)
+  {
+    ComparisonRig rig("CombatPlayerMissile");
+    Space space(rig);
+    for (int full = 0; full < 2; ++full)
+    {
+      space.Clear();
+      if (full != 0)
+      {
+        for (int index = 3; index < OBJECT_SLOTS; ++index)
+          space.SetField(space.Object(index, TYPE_COBRA, 0, static_cast<std::int16_t>(0x80 * index), -0x200, 0x300), Elite::SLOT_FLAGS,
+                         BLIP_DRAWN);
+      }
+      const std::uint16_t target = space.Object(5, TYPE_COBRA, SLOT_DRAWN, 0x300, -0x150, 0x900);
+      space.Set(DS.missileTarget, target);
+      space.Set(DS.playerPitchAngle, static_cast<std::uint16_t>(0x120 + 0x300 * full));
+      space.Set(DS.playerYawAngle, 0x7A0);
+      space.Set(DS.playerRollAngle, 0x055);
+      space.Random(0x4321, 0x8765);
+      rig.Call(LAUNCH_PLAYER_MISSILE, {.di = Slot(2)});
+    }
+    rig.AssertAllAgreed(LAUNCH_PLAYER_MISSILE, 2);
+  }
+
+  // A missile at the player, an escape pod, a Thargon and a kind it does not know, from a launcher; and no free slot. (DL=5, a
+  // Krait, returns to CS:launcher, which a comparison cannot follow.)
+  TEST_METHOD(LaunchShipFromObjectAgreesOnEveryKind)
+  {
+    ComparisonRig rig("CombatLaunchShip");
+    Space space(rig);
+    const std::uint8_t kinds[] = {0x14, 0x15, 0x07, 0x00, 0x16};
+    for (const std::uint8_t kind : kinds)
+    {
+      space.Clear();
+      const std::uint16_t launcher = space.Object(4, Elite::TYPE_THARGOID, 0, 0x300, -0x400, 0x500);
+      space.SetField(launcher, Elite::SLOT_SPEED, 12);
+      space.Random(0x2468, 0xACE0);
+      rig.Call(LAUNCH_SHIP_FROM_OBJECT, {.dx = static_cast<std::uint16_t>(0x3300 | kind), .di = launcher});
+    }
+    for (int index = 3; index < OBJECT_SLOTS; ++index)
+      space.Object(index, TYPE_COBRA, 0, 0, 0, 0x1000);
+    rig.Call(LAUNCH_SHIP_FROM_OBJECT, {.dx = 0x14, .di = Slot(4)});
+    rig.Call(INIT_MISSILE, {.ax = 0x7777, .di = Slot(6)});
+    rig.AssertAllAgreed(LAUNCH_SHIP_FROM_OBJECT, std::size(kinds) + 1);
+    rig.AssertAllAgreed(INIT_MISSILE, 1);
+  }
+
+  // A missile far from its target turns to it; near it, it explodes: on the player (TakeDamage), on a gone target, on a ship
+  // (credited, and destroyed unless indestructible), on a station (a crime, or in an invasion its energy).
+  TEST_METHOD(UpdateMissileAiAgreesOnEveryTarget)
+  {
+    ComparisonRig rig("CombatMissileAi");
+    Space space(rig);
+    struct Flight
+    {
+      int target; // -1 the player, else a slot index
+      std::uint8_t targetType;
+      bool active;
+      std::int16_t distance; // the missile's offset from the target on each axis
+      std::uint8_t flags;
+      std::uint8_t legalStatus;
+      std::uint8_t invasion;
+      std::uint8_t energy;
+    };
+    const Flight flights[] = {
+      {-1, 0, true, 0x2000, 0, 0, 0, 0},
+      {-1, 0, true, 0x40, 0, 0, 0, 0},
+      {6, TYPE_COBRA, false, 0x40, 0, 0, 0, 0},
+      {6, TYPE_COBRA, true, -0x1000, 0, 0, 0, 0},
+      {6, TYPE_COBRA, true, 0x40, 0, 0, 0, 0x20},
+      {6, TYPE_COBRA, true, -0x40, INDESTRUCTIBLE, 0, 0, 0x20},
+      {2, Elite::TYPE_CORIOLIS, true, 0x40, 0, 0x10, 0, 0x20},
+      {2, Elite::TYPE_CORIOLIS, true, 0x40, 0, 0xFE, 0, 0x20},
+      {2, Elite::TYPE_CORIOLIS, true, 0x40, 0, 0, 1, 0x20},
+      {2, Elite::TYPE_CORIOLIS, true, 0x40, 0, 0, 1, 0x05},
+    };
+    for (const Flight& flight : flights)
+    {
+      space.Clear();
+      space.Set(DS.legalStatus, flight.legalStatus);
+      space.Set(DS.thargoidInvasionActive, flight.invasion);
+      space.Set(DS.invadedStationDestroyed, 0);
+      space.Set(DS.foreShield, 0x20);
+      space.Set(DS.playerEnergy, 0x200);
+      space.Set(DS.escapePodFrames, 0);
+      space.Set(DS.witchspaceCountdown, 0);
+      std::int16_t origin[3] = {0, 0, 0};
+      std::uint16_t target = 0;
+      if (flight.target >= 0)
+      {
+        origin[0] = 0x500;
+        origin[1] = -0x300;
+        origin[2] = 0x700;
+        target = space.Object(flight.target, flight.targetType, SLOT_DRAWN, origin[0], origin[1], origin[2]);
+        space.SetField(target, Elite::SLOT_FLAGS, flight.flags);
+        space.SetField(target, Elite::SLOT_ENERGY, flight.energy);
+        space.SetField(target, Elite::SLOT_BOUNTY, 10);
+        if (!flight.active)
+          space.SetByte(target, static_cast<std::uint8_t>(flight.targetType << 1));
+      }
+      const std::uint16_t missile =
+        space.Object(5, Elite::TYPE_MISSILE, SLOT_DRAWN, static_cast<std::int16_t>(origin[0] + flight.distance),
+                     static_cast<std::int16_t>(origin[1] + flight.distance), static_cast<std::int16_t>(origin[2] - flight.distance));
+      space.SetField(missile, Elite::SLOT_CLASS, MISSILE_CLASS);
+      space.SetField(missile, Elite::SLOT_SPEED, 30);
+      space.SetField(missile, Elite::SLOT_TURN_RATE, 0x20);
+      space.SetFieldWord(missile, Elite::SLOT_TARGET, target);
+      rig.Call(UPDATE_MISSILE_AI, {.ax = 0x0101, .bx = 0x0202, .cx = 0x0303, .dx = 0x0404, .di = missile, .bp = 0x0505});
+    }
+    rig.AssertAllAgreed(UPDATE_MISSILE_AI, std::size(flights));
+  }
+
+  // A Thargon, a Thargoid, and anything else.
+  TEST_METHOD(Routine8C51AgreesOnThargoidsAndThargons)
+  {
+    ComparisonRig rig("Combat8C51");
+    Space space(rig);
+    space.Clear();
+    const std::uint8_t types[] = {Elite::TYPE_THARGON, Elite::TYPE_THARGOID, TYPE_COBRA};
+    for (const std::uint8_t type : types)
+      rig.Call(ROUTINE_8C51, {.ax = 0x9999, .di = space.Object(4, type, 0, 0, 0, 0)});
+    rig.AssertAllAgreed(ROUTINE_8C51, std::size(types));
+  }
+
+  // The device's energy with and without 12 to take, and every slot calmed, by 2 or to 0.
+  TEST_METHOD(UseMaskingDeviceAgreesOnEnergyAndAggression)
+  {
+    ComparisonRig rig("CombatMasking");
+    Space space(rig);
+    for (const std::uint16_t energy : {std::uint16_t{0x100}, std::uint16_t{5}})
+    {
+      space.Clear();
+      for (int index = 0; index < OBJECT_SLOTS; ++index)
+      {
+        space.SetField(Slot(index), Elite::SLOT_STATE, static_cast<std::uint8_t>(index));
+        space.SetField(Slot(index), Elite::SLOT_FLAGS, static_cast<std::uint8_t>(0xF0 | index));
+        space.SetField(Slot(index), Elite::SLOT_AGGRESSION, static_cast<std::uint8_t>(index * 13));
+      }
+      space.Set(DS.playerEnergy, energy);
+      rig.Call(USE_MASKING_DEVICE, {.cx = 0x1234, .si = 0x5678});
+    }
+    rig.AssertAllAgreed(USE_MASKING_DEVICE, 2);
   }
 };
 

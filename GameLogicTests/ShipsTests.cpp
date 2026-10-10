@@ -4,6 +4,8 @@
 #include "DataOverlay.h"
 #include "Ships.h"
 
+#include <initializer_list>
+
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace GameLogicTests
@@ -14,11 +16,24 @@ namespace
 
 using Elite::DS;
 
+constexpr std::uint16_t CLEAR_OBJECT_SLOT = 0x2FD8;
 constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
 constexpr std::uint16_t IS_OBJECT_NEAR_KEEP_BLIP = 0x460E;
+constexpr std::uint16_t INIT_POLICE_VIPER = 0x4C76;
+constexpr std::uint16_t INIT_ABANDONED_COBRA = 0x4CA6;
+constexpr std::uint16_t INIT_ESCAPE_POD = 0x4CB3;
+constexpr std::uint16_t INIT_SHUTTLE = 0x4CC0;
+constexpr std::uint16_t INIT_KRAIT_HUNTER = 0x4CCD;
+constexpr std::uint16_t INIT_THARGON = 0x4CDA;
+constexpr std::uint16_t SPAWN_RANDOM_DRIFTER = 0x4CE7;
+constexpr std::uint16_t SPAWN_RANDOM_TRADER = 0x4D08;
 constexpr std::uint16_t SPAWN_RANDOM_WOLF = 0x4D60;
+constexpr std::uint16_t SPAWN_MASK_MISSION_SHIP = 0x4DAE;
+constexpr std::uint16_t SPAWN_INVASION_THARGOID = 0x4DF0;
+constexpr std::uint16_t RANDOMIZE_ORIENTATION = 0x4F35;
 constexpr std::uint16_t MOVE_OBJECT = 0x4F6E;
 constexpr std::uint16_t FIND_FREE_SHIP_SLOT = 0x51E0;
+constexpr std::uint16_t RECLAIM_SHIP_SLOT = 0x51FD;
 constexpr std::uint16_t FIND_DEBRIS_SLOT = 0x52EC;
 constexpr std::uint16_t IS_POLICE_VIPER = 0x541E;
 
@@ -183,6 +198,95 @@ public:
       rig.Call(SPAWN_RANDOM_WOLF, {.di = static_cast<std::uint16_t>(DS.shipSlots.offset + 7 * Elite::SLOT_BYTES)});
     }
     rig.AssertAllAgreed(SPAWN_RANDOM_WOLF, 3);
+  }
+
+  // A slot full of bytes cleared; and each fixed record made in a slot that held something else.
+  TEST_METHOD(ClearObjectSlotAndTheFixedRecordsAgree)
+  {
+    ComparisonRig rig("ShipsFixedRecords");
+    Space space(rig);
+    space.Clear();
+    const auto slot = static_cast<std::uint16_t>(DS.shipSlots.offset + 8 * Elite::SLOT_BYTES);
+    for (std::uint16_t offset = 0; offset < Elite::SLOT_BYTES; ++offset)
+      space.SetByte(static_cast<std::uint16_t>(slot + offset), static_cast<std::uint8_t>(0xA5 ^ offset));
+    rig.Call(CLEAR_OBJECT_SLOT, {.cx = 0x9999, .si = slot, .di = 0x1234});
+    const std::uint16_t entries[] = {INIT_POLICE_VIPER, INIT_ABANDONED_COBRA, INIT_ESCAPE_POD,
+                                     INIT_SHUTTLE,      INIT_KRAIT_HUNTER,    INIT_THARGON};
+    for (const std::uint16_t entry : entries)
+    {
+      space.Object(8, Elite::TYPE_ASP, 0x123, -0x456, 0x789);
+      rig.Call(entry, {.ax = 0x4321, .bx = 0x8765, .cx = 0x1111, .di = slot});
+    }
+    rig.AssertAllAgreed(CLEAR_OBJECT_SLOT, 1);
+    for (const std::uint16_t entry : entries)
+      rig.AssertAllAgreed(entry, 1);
+  }
+
+  // Each of the drifters' and the traders' records at random, a Viper as police and not, the mask mission's three types, the
+  // invasion's Thargoid and a random orientation.
+  TEST_METHOD(SpawnsAgreeOnEveryRecord)
+  {
+    ComparisonRig rig("ShipsSpawns");
+    Space space(rig);
+    space.Clear();
+    space.Set(DS.legalStatus, 0x23);
+    const auto slot = static_cast<std::uint16_t>(DS.shipSlots.offset + 7 * Elite::SLOT_BYTES);
+    const std::uint16_t drifters[] = {0x0000, 0x0003, 0x1234, 0x8007, 0xFFFF};
+    for (const std::uint16_t random : drifters)
+    {
+      space.Random(random, static_cast<std::uint16_t>(random ^ 0x0F0F));
+      rig.Call(SPAWN_RANDOM_DRIFTER, {.di = slot});
+    }
+    // The record is the first random byte / 43: from D7h, a Viper, police when that first word is odd (the fifth is 6s + 3f).
+    const std::uint16_t traders[] = {0x0010, 0x0056, 0x00D7, 0x00D8, 0x00FF};
+    for (const std::uint16_t random : traders)
+    {
+      space.Random(random, static_cast<std::uint16_t>(random * 3));
+      rig.Call(SPAWN_RANDOM_TRADER, {.di = slot});
+    }
+    Machine::Registers& regs = rig.Host().Processor().Regs();
+    const std::uint16_t flags = regs.flags;
+    for (const std::uint16_t random : {std::uint16_t{0x1234}, std::uint16_t{0x9234}})
+    {
+      for (const bool maskShip : {true, false})
+      {
+        regs.flags = static_cast<std::uint16_t>(maskShip ? (flags | Machine::FLAG_CARRY) : (flags & ~Machine::FLAG_CARRY));
+        space.Random(random, static_cast<std::uint16_t>(~random));
+        rig.Call(SPAWN_MASK_MISSION_SHIP, {.ax = 0x5555, .di = slot});
+      }
+    }
+    regs.flags = flags;
+    space.Random(0x2222, 0x3333);
+    rig.Call(SPAWN_INVASION_THARGOID, {.di = slot});
+    space.Random(0x4444, 0x5555);
+    rig.Call(RANDOMIZE_ORIENTATION, {.ax = 0x1, .di = slot});
+    rig.AssertAllAgreed(SPAWN_RANDOM_DRIFTER, std::size(drifters));
+    rig.AssertAllAgreed(SPAWN_RANDOM_TRADER, std::size(traders));
+    rig.AssertAllAgreed(SPAWN_MASK_MISSION_SHIP, 4);
+    rig.AssertAllAgreed(SPAWN_INVASION_THARGOID, 1);
+    rig.AssertAllAgreed(RANDOMIZE_ORIENTATION, 1);
+  }
+
+  // The first ship slot without a blip; or, when every one has a blip, one of slots 4-19 removed at random.
+  TEST_METHOD(ReclaimShipSlotAgreesWithAndWithoutABlipFree)
+  {
+    ComparisonRig rig("ShipsReclaim");
+    Space space(rig);
+    space.Clear();
+    for (int index = 3; index < OBJECT_SLOTS; ++index)
+    {
+      const std::uint16_t slot = space.Object(index, Elite::TYPE_ASTEROID, static_cast<std::int16_t>(0x40 * index), 0, 0x400);
+      space.SetByte(static_cast<std::uint16_t>(slot + Elite::SLOT_FLAGS), 0x02);
+    }
+    space.SetByte(static_cast<std::uint16_t>(DS.shipSlots.offset + 12 * Elite::SLOT_BYTES + Elite::SLOT_FLAGS), 0x01);
+    rig.Call(RECLAIM_SHIP_SLOT, {.ax = 0x7777, .bx = 0x1, .cx = 0x2, .dx = 0x3, .di = 0x4});
+    space.SetByte(static_cast<std::uint16_t>(DS.shipSlots.offset + 12 * Elite::SLOT_BYTES + Elite::SLOT_FLAGS), 0x03);
+    for (const std::uint16_t random : {std::uint16_t{0x0000}, std::uint16_t{0x0F00}, std::uint16_t{0xF5FF}})
+    {
+      space.Random(random, 0);
+      rig.Call(RECLAIM_SHIP_SLOT, {.ax = 0x7777, .bx = 0x1, .cx = 0x2, .dx = 0x3, .di = 0x4});
+    }
+    rig.AssertAllAgreed(RECLAIM_SHIP_SLOT, 4);
   }
 };
 

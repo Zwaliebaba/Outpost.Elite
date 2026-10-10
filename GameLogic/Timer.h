@@ -28,4 +28,7 @@ void TimerInterrupt(Guest& _guest);
 /// TimerTick (CS:7150): one tick's counters, the protection's answer check, and the sound. AX clobbered.
 void TimerTick(Guest& _guest);
 
+/// WaitForTimerTick (CS:7772): until timerTicks changes, at most one tick. Waits as a rule. Preserves every register.
+void WaitForTimerTick(Guest& _guest);
+
 } // namespace Elite

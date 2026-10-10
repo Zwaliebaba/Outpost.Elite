@@ -2,7 +2,9 @@
 
 #include "Video.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Maths.h"
 
 #include <utility>
 
@@ -37,12 +39,6 @@ constexpr std::uint16_t CRTC_INDEX_PORT = 0x3D4;
 constexpr std::uint16_t CGA_MODE_PORT = 0x3D8;
 constexpr std::uint16_t CGA_COLOR_PORT = 0x3D9;
 
-// DivideOverflowInterrupt's scratch words in the code segment, and what it leaves in AX after a word
-// divide overflows (see Maths.cpp).
-constexpr std::uint16_t DIVIDE_SAVED_BX_OFFSET = 0x02A1;
-constexpr std::uint16_t DIVIDE_SAVED_DS_OFFSET = 0x02A3;
-constexpr std::uint16_t DIVIDE_OVERFLOW_WORD = 0x7FFF;
-
 // triangleStepOpcodes (CS:1CF3), after FillTriangle's RET: SUB AX,SI; SUB BX,DI; ADD AX,SI; ADD BX,DI.
 constexpr std::uint16_t SUB_AX_SI = 0x1CF3;
 constexpr std::uint16_t SUB_BX_DI = 0x1CF5;
@@ -75,41 +71,68 @@ constexpr std::uint16_t NO_ROW = 0x8000;
 // Row 64 * row, in AL after DrawStackedSpans shifts it: bit 6 is the row's lowest bit.
 constexpr std::uint8_t ODD_ROW_BIT = 0x40;
 
+// The frame routines wait on the CGA's status port, whose bit 3 is the vertical retrace.
+constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
+constexpr std::uint8_t STATUS_VERTICAL_RETRACE = 0x08;
+// What they call, through the hooks.
+constexpr std::uint16_t DRAW_LASER_SIGHTS = 0x0630;
+constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
+constexpr std::uint16_t COPY_CHART_BUFFER_TO_SCREEN = 0x05CC;
+constexpr std::uint16_t CLEAR_DRAW_BUFFER = 0x060D;
+constexpr std::uint16_t WAIT_RETRACE_THEN_DELAY = 0x45FF;
+// Where their loops jump back to.
+constexpr std::uint16_t SPACE_VIEW_COPY_LOOP = 0x05BC;
+constexpr std::uint16_t CHART_RETRACE_LOOP = 0x05D0;
+constexpr std::uint16_t CHART_DELAY_LOOP = 0x05D8;
+constexpr std::uint16_t CHART_COPY_LOOP = 0x05FD;
+constexpr std::uint16_t SPACE_VIEW_RETRACE_LOOP = 0x4602;
+constexpr std::uint16_t SPACE_VIEW_DELAY_LOOP = 0x460A;
+// The delays after a retrace, in DEC/JNZ turns.
+constexpr std::uint16_t CHART_DELAY_TURNS = 0x2BC;
+constexpr std::uint16_t SPACE_VIEW_DELAY_TURNS = 0x7D0;
+// The drawing buffer's 64-byte lines onto the screen, a pair of lines (one in each bank) a turn.
+constexpr std::uint16_t BUFFER_LINE_WORDS = 0x20;
+constexpr std::uint16_t TO_ODD_LINE = 0x1FC0;              // from the end of an even line to the odd line below it
+constexpr std::uint16_t TO_NEXT_EVEN_LINE = 0x1FF0;        // from the end of that odd line back to the next even line
+constexpr std::uint16_t SPACE_VIEW_SCREEN_OFFSET = 0x01E8; // x=32, line 12
+constexpr std::uint16_t SPACE_VIEW_LINE_PAIRS = 0x3F;
+constexpr std::uint16_t CHART_SCREEN_OFFSET = 0x0648; // x=32, line 40
+constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
+
+// What SaveScreenshot calls, through the hooks. Reprogramming the PIT raises IRQ 0 when the timer's output is low, and
+// the original's CPU takes it as soon as interrupts are on again, with whichever handler is installed then: a call
+// through a hook takes it at the next entry (Pc::CallNear), as near to that as native code gets, where a C++ call
+// would leave it to the game's own handler after SaveScreenshot.
+constexpr std::uint16_t INSTALL_TIMER_INTERRUPT = 0x00C6;
+constexpr std::uint16_t INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0105;
+constexpr std::uint16_t RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS = 0x0148;
+constexpr std::uint16_t RESTORE_TIMER_INTERRUPT = 0x016B;
+constexpr std::uint16_t WRITE_SCREENSHOT_FILE = 0x03FD;
+constexpr std::uint16_t SHOW_DISK_ERROR = 0x0470;
+// It puts CriticalErrorInterrupt on int 24h, at 0000:0090, while it writes.
+constexpr std::uint16_t CRITICAL_ERROR_VECTOR_OFFSET = 0x0090;
+constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
+constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
+constexpr std::uint8_t DOS_VECTOR = 0x21;
+constexpr std::uint8_t DOS_SET_TRANSFER_AREA = 0x1A;
+constexpr std::uint8_t DOS_CREATE = 0x3C;
+constexpr std::uint8_t DOS_CLOSE = 0x3E;
+constexpr std::uint8_t DOS_WRITE = 0x40;
+constexpr std::uint8_t FIRST_DIGIT = '0';
+constexpr std::uint8_t PAST_DIGITS = ':';               // the character after '9'
+constexpr std::uint16_t TEXT_PAGE_BYTES = 0x07D0;       // 40x25 cells of character and attribute
+constexpr std::uint16_t GRAPHICS_SCREEN_BYTES = 0x3F40; // both of mode 4's banks, the gap between them included
+
 constexpr std::uint16_t SMALL_DISC_RADIUS = 5; // below it, DrawDisc draws a sprite
 constexpr std::uint16_t SMALL_DISC_ROWS = 4;
 constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte is drawn
 constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
 
-[[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
-[[nodiscard]] constexpr std::uint16_t Pair(std::uint8_t _high, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_high << 8) | _low);
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = Pair(High(_word), _value);
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = Pair(_value, Low(_word));
-}
-
 // XCHG AH,AL.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
 {
-  return Pair(Low(_word), High(_word));
+  return Join(Low(_word), High(_word));
 }
 
 [[nodiscard]] constexpr bool Negative(std::uint16_t _word) noexcept
@@ -132,11 +155,6 @@ void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
   return static_cast<std::int8_t>(_byte);
 }
 
-[[nodiscard]] constexpr std::uint16_t Negate(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint16_t>(0u - _word);
-}
-
 [[nodiscard]] constexpr std::uint8_t Negate8(std::uint8_t _byte) noexcept
 {
   return static_cast<std::uint8_t>(0u - _byte);
@@ -157,7 +175,7 @@ void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
 [[nodiscard]] std::uint16_t ColorFillByteOffset(std::uint8_t _color) noexcept
 {
   const std::uint16_t table = DS.colorFillBytes.offset;
-  return Pair(High(table), static_cast<std::uint8_t>(Low(table) + _color));
+  return Join(High(table), static_cast<std::uint8_t>(Low(table) + _color));
 }
 
 // AND [_offset],_keep / OR [_offset],_color.
@@ -212,56 +230,6 @@ void RepeatMoveWords(Guest& _guest, std::uint16_t _sourceSegment)
     regs.si = static_cast<std::uint16_t>(regs.si + step);
     regs.di = static_cast<std::uint16_t>(regs.di + step);
   }
-}
-
-// DivideOverflowInterrupt (CS:025E) after a word divide: BX and DS saved in the code segment, AX the
-// positive maximum, DX as it was.
-void DivideTrap(Guest& _guest)
-{
-  Machine::Registers& regs = _guest.Regs();
-  _guest.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, regs.bx);
-  _guest.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, regs.ds);
-  regs.ax = DIVIDE_OVERFLOW_WORD;
-}
-
-// DIV _divisor: DX:AX divided, through the trap when the quotient does not fit.
-void Divide(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  if (regs.dx >= _divisor)
-  {
-    DivideTrap(_guest);
-    return;
-  }
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  regs.ax = static_cast<std::uint16_t>(dividend / _divisor);
-  regs.dx = static_cast<std::uint16_t>(dividend % _divisor);
-}
-
-// IDIV _divisor, as the 8088 does it: magnitudes divided, and a trap when the quotient's magnitude
-// reaches the sign bit, so that -32768 traps too.
-void SignedDivide(Guest& _guest, std::uint16_t _divisor)
-{
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint32_t dividend = (std::uint32_t{regs.dx} << 16) | regs.ax;
-  const bool dividendNegative = (dividend & 0x80000000u) != 0;
-  const bool divisorNegative = Negative(_divisor);
-  const std::uint32_t dividendMagnitude = dividendNegative ? 0u - dividend : dividend;
-  const std::uint32_t divisorMagnitude = divisorNegative ? 0x10000u - _divisor : _divisor;
-  if ((dividendMagnitude >> 16) >= divisorMagnitude)
-  {
-    DivideTrap(_guest);
-    return;
-  }
-  const std::uint32_t quotient = dividendMagnitude / divisorMagnitude;
-  if ((quotient & 0x8000u) != 0)
-  {
-    DivideTrap(_guest);
-    return;
-  }
-  const std::uint32_t remainder = dividendMagnitude % divisorMagnitude;
-  regs.ax = static_cast<std::uint16_t>(dividendNegative != divisorNegative ? 0u - quotient : quotient);
-  regs.dx = static_cast<std::uint16_t>(dividendNegative ? 0u - remainder : remainder);
 }
 
 // CWD.
@@ -485,7 +453,7 @@ void MoveEndpointToEdge(Guest& _guest)
   const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(regs.ax)} * Signed(regs.dx));
   regs.ax = static_cast<std::uint16_t>(product);
   regs.dx = static_cast<std::uint16_t>(product >> 16);
-  SignedDivide(_guest, regs.cx);
+  DivideSignedWord(_guest, regs.cx);
   regs.ax = static_cast<std::uint16_t>(regs.ax + regs.bx);
   regs.cx = 0;
   regs.dx = regs.si;
@@ -670,7 +638,7 @@ void DrawSmallDisc(Guest& _guest)
   do
   {
     const std::uint16_t rows = regs.cx;
-    regs.ax = Pair(_guest.Byte(regs.bx), 0);
+    regs.ax = Join(_guest.Byte(regs.bx), 0);
     ++regs.bx;
     SetLow(regs.cx, Low(regs.dx));
     regs.ax = static_cast<std::uint16_t>(regs.ax >> Low(regs.cx));
@@ -696,7 +664,7 @@ void DrawSmallDisc(Guest& _guest)
       {
         // Both bytes, as a word: the sprite's left byte at DI.
         const std::uint16_t sprite = SwapBytes(regs.ax);
-        regs.ax = static_cast<std::uint16_t>(sprite & Pair(fill, fill));
+        regs.ax = static_cast<std::uint16_t>(sprite & Join(fill, fill));
         _guest.SetWord(regs.di, static_cast<std::uint16_t>((_guest.Word(regs.di) & ~sprite) | regs.ax));
       }
     }
@@ -754,7 +722,7 @@ void DrawStackedSpans(Guest& _guest)
   {
     std::swap(left, right);
   }
-  return Pair(right, left);
+  return Join(right, left);
 }
 
 // ADD AX,SI or SUB AX,SI: an 8.8 edge stepped by its slope.
@@ -786,7 +754,7 @@ void EdgeSlope(Guest& _guest)
   SetHigh(regs.ax, 0);
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
-  Divide(_guest, regs.cx);
+  DivideWord(_guest, regs.cx);
 }
 
 // FillFlatBottomTriangle (CS:1C62): A on top, B and C on the bottom row.
@@ -820,8 +788,8 @@ void FillFlatBottomTriangle(Guest& _guest)
   }
   EdgeSlope(_guest);
   regs.di = regs.ax;
-  regs.ax = Pair(_guest.Get(DS.triangleEdgeStartX), 0);
-  regs.bx = Pair(_guest.Get(DS.triangleEdgeStartX2), 0);
+  regs.ax = Join(_guest.Get(DS.triangleEdgeStartX), 0);
+  regs.bx = Join(_guest.Get(DS.triangleEdgeStartX2), 0);
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
   regs.bp = regs.cx;
   TraceTwoEdges(_guest, subtractA, subtractB);
@@ -857,10 +825,10 @@ void FillFlatTopTriangle(Guest& _guest)
   }
   SetLow(regs.ax, 0);
   regs.dx = 0;
-  Divide(_guest, regs.cx);
+  DivideWord(_guest, regs.cx);
   regs.di = regs.ax;
-  regs.ax = Pair(_guest.Get(DS.triangleEdgeStartX2), 0);
-  regs.bx = Pair(_guest.Get(DS.triangleEdgeStartX), 0);
+  regs.ax = Join(_guest.Get(DS.triangleEdgeStartX2), 0);
+  regs.bx = Join(_guest.Get(DS.triangleEdgeStartX), 0);
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
   regs.bp = regs.cx;
   TraceTwoEdges(_guest, subtractA, subtractB);
@@ -894,7 +862,7 @@ void FillOneRowTriangle(Guest& _guest)
   {
     std::swap(dl, dh);
   }
-  regs.dx = Pair(dh, dl);
+  regs.dx = Join(dh, dl);
   _guest.Push(regs.dx);
   regs.cx = 1;
   DrawStackedSpans(_guest);
@@ -947,9 +915,9 @@ void FillGeneralTriangle(Guest& _guest)
   ConvertToDoubleWord(regs);
   regs.ax = SwapBytes(regs.ax);
   SetLow(regs.cx, _guest.Get(DS.triangleUpperRows));
-  Divide(_guest, regs.cx);
+  DivideWord(_guest, regs.cx);
   regs.di = regs.ax;
-  regs.ax = Pair(_guest.Get(DS.triangleEdgeStartX), 0);
+  regs.ax = Join(_guest.Get(DS.triangleEdgeStartX), 0);
   regs.bx = regs.ax;
   SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
   // TraceUpperEdges (CS:1E15): rows A to B inclusive.
@@ -974,7 +942,7 @@ void FillGeneralTriangle(Guest& _guest)
   }
   EdgeSlope(_guest);
   regs.di = regs.ax;
-  regs.bx = Pair(_guest.Get(DS.triangleMiddleX), 0);
+  regs.bx = Join(_guest.Get(DS.triangleMiddleX), 0);
   regs.ax = longEdge;
   do
   {
@@ -992,7 +960,7 @@ void FillOnScreenTriangle(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   // AL, AH = A's x and row; BL, BH = B's; CL, CH = C's.
-  regs.ax = Pair(Low(regs.dx), Low(regs.si));
+  regs.ax = Join(Low(regs.dx), Low(regs.si));
   regs.dx = regs.bp;
   SetHigh(regs.bx, Low(regs.dx));
   regs.dx = regs.di;
@@ -1092,10 +1060,10 @@ void ClippedSlope(Guest& _guest, std::uint16_t _rows, DataField<std::uint16_t> _
 {
   Machine::Registers& regs = _guest.Regs();
   regs.dx = 0;
-  Divide(_guest, _rows);
+  DivideWord(_guest, _rows);
   _guest.Set(_whole, regs.ax);
   regs.ax = 0;
-  Divide(_guest, _rows);
+  DivideWord(_guest, _rows);
   _guest.Set(_fraction, regs.ax);
 }
 
@@ -1129,7 +1097,7 @@ void PushClippedSpan(Guest& _guest)
     right = High(regs.ax) != 0 ? std::uint8_t{0xFF} : Low(regs.ax);
     left = High(regs.bx) != 0 ? std::uint8_t{0} : Low(regs.bx);
   }
-  regs.dx = Pair(right, left);
+  regs.dx = Join(right, left);
   _guest.Push(regs.dx);
 }
 
@@ -1287,7 +1255,7 @@ void FillClippedOneRow(Guest& _guest)
   {
     right = 0xFF;
   }
-  regs.dx = Pair(right, left);
+  regs.dx = Join(right, left);
   _guest.Push(regs.dx);
   regs.cx = 1;
   DrawStackedSpans(_guest);
@@ -1415,85 +1383,232 @@ void FillClippedGeneral(Guest& _guest)
   DrawStackedSpansFromRow(_guest);
 }
 
-// FillClippedTriangle (CS:1E6E), entered with SI = A's x and the rows doubled.
-void FillClippedTriangle(Guest& _guest)
+// ---- Frames ----
+
+// IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace, the loop at CS:_loop. A read
+// that sees a retrace uses it up (Cga::SetRetraceSeenOnce), so these are the original's reads, one a turn.
+void WaitForRetrace(Guest& _guest, std::uint16_t _loop)
 {
   Machine::Registers& regs = _guest.Regs();
-  regs.ax = static_cast<std::uint16_t>(regs.si & regs.bx & regs.cx);
-  if (Negative(regs.ax))
+  for (;;)
   {
-    return;
-  }
-  regs.ax = static_cast<std::uint16_t>(regs.dx & regs.bp & regs.di);
-  if (Negative(regs.ax))
-  {
-    return;
-  }
-  regs.ax = regs.si;
-  if (Signed8(High(regs.ax)) > 0 && Signed8(High(regs.bx)) > 0 && Signed8(High(regs.cx)) > 0)
-  {
-    return;
-  }
-  if (Signed8(High(regs.dx)) > 0 && Signed(regs.bp) >= 0x100 && Signed(regs.di) >= 0x100)
-  {
-    return;
-  }
-  // PrepareClippedTriangle (CS:1E9D).
-  regs.dx = static_cast<std::uint16_t>(Signed(regs.dx) >> 1);
-  regs.bp = static_cast<std::uint16_t>(Signed(regs.bp) >> 1);
-  regs.di = static_cast<std::uint16_t>(Signed(regs.di) >> 1);
-  regs.si = regs.ds;
-  regs.es = regs.si;
-  PatchClippedStep(_guest, regs.si, ADD_TO_EDGE_A, STEP_CLIPPED_EDGE_A);
-  PatchClippedStep(_guest, regs.si, ADD_TO_EDGE_B, STEP_CLIPPED_EDGE_B);
-  if (regs.dx == regs.bp)
-  {
-    const std::int16_t topRow = Signed(regs.dx);
-    const std::int16_t otherRow = Signed(regs.di);
-    std::swap(regs.cx, regs.ax);
-    std::swap(regs.di, regs.dx);
-    if (topRow == otherRow)
+    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.In8(regs.dx) & STATUS_VERTICAL_RETRACE));
+    if (Low(regs.ax) != 0)
     {
-      FillClippedOneRow(_guest);
+      return;
     }
-    else if (topRow > otherRow)
-    {
-      FillClippedFlatBottom(_guest);
-    }
-    else
-    {
-      FillClippedFlatTop(_guest);
-    }
-    return;
-  }
-  if (Signed(regs.dx) > Signed(regs.bp))
-  {
-    std::swap(regs.bx, regs.ax);
-    std::swap(regs.bp, regs.dx);
-  }
-  if (regs.dx == regs.di)
-  {
-    std::swap(regs.bx, regs.ax);
-    std::swap(regs.bp, regs.dx);
-    FillClippedFlatTop(_guest);
-    return;
-  }
-  if (Signed(regs.dx) > Signed(regs.di))
-  {
-    std::swap(regs.cx, regs.ax);
-    std::swap(regs.di, regs.dx);
-  }
-  if (regs.bp == regs.di)
-  {
-    FillClippedFlatBottom(_guest);
-  }
-  else
-  {
-    FillClippedGeneral(_guest);
+    _guest.JumpBack(_loop);
   }
 }
 
+// MOV AX,_turns / DEC AX / JNZ at CS:_loop: a delay the 8088's speed made. Each turn changes AX, so paced time
+// never idles in it.
+void SpinDelay(Guest& _guest, std::uint16_t _turns, std::uint16_t _loop)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = _turns;
+  for (;;)
+  {
+    --regs.ax;
+    if (regs.ax == 0)
+    {
+      return;
+    }
+    _guest.JumpBack(_loop);
+  }
+}
+
+// BX line pairs of BP words from DS:SI to ES:DI, the even line and then the odd one AX on, DI back by DX for the
+// next pair: the copy loop at CS:_loop.
+void CopyLinePairs(Guest& _guest, std::uint16_t _loop)
+{
+  Machine::Registers& regs = _guest.Regs();
+  for (;;)
+  {
+    regs.cx = regs.bp;
+    RepeatMoveWords(_guest, regs.ds);
+    regs.di = static_cast<std::uint16_t>(regs.di + regs.ax);
+    regs.cx = regs.bp;
+    RepeatMoveWords(_guest, regs.ds);
+    regs.di = static_cast<std::uint16_t>(regs.di - regs.dx);
+    --regs.bx;
+    if (regs.bx == 0)
+    {
+      return;
+    }
+    _guest.JumpBack(_loop);
+  }
+}
+
+// The registers CopyLinePairs takes for a 64-byte buffer line onto the screen: 32 words, then the odd bank,
+// then back to the next even line.
+void SetLinePairSteps(Machine::Registers& _regs) noexcept
+{
+  _regs.bp = BUFFER_LINE_WORDS;
+  _regs.ax = TO_ODD_LINE;
+  _regs.dx = TO_NEXT_EVEN_LINE;
+}
+
 } // namespace
+
+void SaveScreenshot(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(RESTORE_DIVIDE_AND_KEYBOARD_INTERRUPTS);
+  _guest.Call(RESTORE_TIMER_INTERRUPT);
+  _guest.Set(DS.diskError, 0);
+  regs.bx = 0;
+  regs.es = regs.bx;
+  _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET));
+  _guest.Push(_guest.FarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT));
+  regs.bx = CRITICAL_ERROR_INTERRUPT;
+  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, regs.bx);
+  regs.bx = regs.cs;
+  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, regs.bx);
+  _guest.Call(WRITE_SCREENSHOT_FILE);
+  if (_guest.Get(DS.diskError) != 0)
+  {
+    _guest.Call(SHOW_DISK_ERROR);
+  }
+  regs.ax = 0;
+  regs.es = regs.ax;
+  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_SEGMENT, _guest.Pop());
+  _guest.SetFarWord(regs.es, CRITICAL_ERROR_VECTOR_OFFSET, _guest.Pop());
+  _guest.Call(INSTALL_TIMER_INTERRUPT);
+  _guest.Call(INSTALL_DIVIDE_AND_KEYBOARD_INTERRUPTS);
+}
+
+void WriteScreenshotFile(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  SetHigh(regs.ax, DOS_SET_TRANSFER_AREA);
+  regs.dx = DS.diskTransferArea.offset;
+  _guest.Interrupt(DOS_VECTOR);
+  // The two digits, the second counting fastest: '00', '01' ... '99', '00'.
+  regs.ax = _guest.Get(DS.screenshotNumber);
+  SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) + 1));
+  if (High(regs.ax) == PAST_DIGITS)
+  {
+    SetHigh(regs.ax, FIRST_DIGIT);
+    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
+    if (Low(regs.ax) == PAST_DIGITS)
+    {
+      SetLow(regs.ax, FIRST_DIGIT);
+    }
+  }
+  _guest.Set(DS.screenshotNumber, regs.ax);
+  _guest.Set(DS.screenshotTextFileDigits, regs.ax);
+  _guest.Set(DS.screenshotGraphicsFileDigits, regs.ax);
+  SetHigh(regs.ax, DOS_CREATE);
+  regs.dx = DS.screenshotTextFileName.offset;
+  if ((_guest.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) == 0)
+  {
+    regs.dx = DS.screenshotGraphicsFileName.offset;
+  }
+  regs.cx = 0;
+  _guest.Interrupt(DOS_VECTOR);
+  if (Flag(regs, FLAG_CARRY))
+  {
+    _guest.Set(DS.diskError, 1);
+    return;
+  }
+  _guest.Set(DS.fileHandle, regs.ax);
+  SetHigh(regs.ax, DOS_WRITE);
+  regs.bx = _guest.Get(DS.fileHandle);
+  regs.cx = TEXT_PAGE_BYTES;
+  if ((_guest.Get(DS.screenLayout) & TEXT_LAYOUT_BIT) == 0)
+  {
+    regs.cx = GRAPHICS_SCREEN_BYTES;
+  }
+  // From B800:0000, with DS pointing there for the call.
+  _guest.Push(regs.ds);
+  regs.dx = Guest::VIDEO_SEGMENT;
+  regs.ds = regs.dx;
+  regs.dx = 0;
+  _guest.Interrupt(DOS_VECTOR);
+  regs.ds = _guest.Pop();
+  if (Flag(regs, FLAG_CARRY))
+  {
+    _guest.Set(DS.diskError, 1);
+  }
+  SetHigh(regs.ax, DOS_CLOSE);
+  regs.bx = _guest.Get(DS.fileHandle);
+  _guest.Interrupt(DOS_VECTOR);
+  if (Flag(regs, FLAG_CARRY))
+  {
+    _guest.Set(DS.diskError, 1);
+  }
+}
+
+void FinishSpaceViewFrame(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = regs.ax;
+  _guest.Call(DRAW_LASER_SIGHTS);
+  SetLow(regs.ax, 0);
+  _guest.SetFlag(FLAG_DIRECTION, false);
+  _guest.Call(PRESENT_SPACE_VIEW);
+  _guest.Call(CLEAR_DRAW_BUFFER);
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = regs.ax;
+}
+
+void PresentChartFrame(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // MOV AX,B800h: AL, the bands CopyChartBufferToScreen skips, is 0 whatever the caller passed.
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = regs.ax;
+  _guest.SetFlag(FLAG_DIRECTION, false);
+  _guest.Call(COPY_CHART_BUFFER_TO_SCREEN);
+  _guest.Call(CLEAR_DRAW_BUFFER);
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = regs.ax;
+}
+
+void PresentSpaceView(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // The timer interrupt counts msSinceFrame up while this idles.
+  for (;;)
+  {
+    SetLow(regs.ax, _guest.Get(DS.msSinceFrame));
+    if (Low(regs.ax) >= _guest.Get(DS.minimumFrameMs))
+    {
+      break;
+    }
+    _guest.JumpBack(PRESENT_SPACE_VIEW);
+  }
+  _guest.Set(DS.msSinceFrame, 0);
+  _guest.Call(WAIT_RETRACE_THEN_DELAY);
+  regs.si = DS.spaceViewBuffer.offset;
+  regs.di = SPACE_VIEW_SCREEN_OFFSET;
+  SetLinePairSteps(regs);
+  regs.bx = SPACE_VIEW_LINE_PAIRS;
+  CopyLinePairs(_guest, SPACE_VIEW_COPY_LOOP);
+}
+
+void CopyChartBufferToScreen(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.dx = CGA_STATUS_PORT;
+  _guest.Push(regs.ax);
+  WaitForRetrace(_guest, CHART_RETRACE_LOOP);
+  SpinDelay(_guest, CHART_DELAY_TURNS, CHART_DELAY_LOOP);
+  regs.ax = _guest.Pop();
+  // AL bands of 8 lines skipped: 64 - 4*AL line pairs from DS:AL*512.
+  SetLow(regs.bx, Low(regs.ax));
+  SetHigh(regs.ax, Low(regs.bx));
+  SetLow(regs.bx, Negate(static_cast<std::uint8_t>(static_cast<std::uint8_t>(Low(regs.bx) << 2) - CHART_LINE_PAIRS)));
+  SetHigh(regs.bx, 0);
+  SetLow(regs.ax, 0);
+  SetHigh(regs.ax, static_cast<std::uint8_t>(High(regs.ax) << 1));
+  regs.si = regs.ax;
+  regs.di = CHART_SCREEN_OFFSET;
+  SetLinePairSteps(regs);
+  CopyLinePairs(_guest, CHART_COPY_LOOP);
+}
 
 void ClearDrawBuffer(Guest& _guest)
 {
@@ -1512,7 +1627,7 @@ void PlotPixel(Guest& _guest)
   regs.bx = ColorFillByteOffset(_guest.Get(DS.drawColor));
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((Low(regs.dx) & 3) << 1));
   const auto color = static_cast<std::uint8_t>(pixel & _guest.Byte(regs.bx));
-  regs.cx = Pair(color, static_cast<std::uint8_t>(~pixel));
+  regs.cx = Join(color, static_cast<std::uint8_t>(~pixel));
   regs.bx = static_cast<std::uint16_t>(regs.dx >> 2);
   Plot(_guest, regs.bx, Low(regs.cx), color);
 }
@@ -1671,7 +1786,7 @@ void DrawLine(Guest& _guest)
     line.bp = Negate(line.bp);
   }
   line.bh = line.al;
-  line.di = static_cast<std::uint16_t>(Pair(dh, dl) >> 2);
+  line.di = static_cast<std::uint16_t>(Join(dh, dl) >> 2);
   line.al = _guest.Byte(ColorFillByteOffset(_guest.Get(DS.drawColor)));
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
@@ -1702,10 +1817,10 @@ void DrawLine(Guest& _guest)
   {
     DrawDiagonalLine(_guest, line);
   }
-  regs.ax = Pair(line.ah, line.al);
-  regs.bx = Pair(line.bh, line.bl);
+  regs.ax = Join(line.ah, line.al);
+  regs.bx = Join(line.bh, line.bl);
   regs.cx = line.cx;
-  regs.dx = Pair(line.dh, line.dl);
+  regs.dx = Join(line.dh, line.dl);
   regs.di = line.di;
   regs.bp = line.bp;
 }
@@ -1738,7 +1853,7 @@ void DrawDisc(Guest& _guest)
   }
   else
   {
-    Divide(_guest, regs.bx);
+    DivideWord(_guest, regs.bx);
   }
   regs.ax = SwapBytes(regs.ax);
   _guest.Set(DS.discProfileStepFraction, regs.ax);
@@ -1790,7 +1905,7 @@ void FillSpan(Guest& _guest)
   if (bytes == 0)
   {
     // One byte holds the whole span: both masks at once.
-    regs.di = static_cast<std::uint16_t>(Pair(row, leftX) >> 2);
+    regs.di = static_cast<std::uint16_t>(Join(row, leftX) >> 2);
     Plot(_guest, regs.di, static_cast<std::uint8_t>(High(rightMask) | High(leftMask)),
          static_cast<std::uint8_t>(Low(rightMask) & Low(leftMask) & fill));
   }
@@ -1808,7 +1923,7 @@ void FillSpan(Guest& _guest)
       {
         StoreByte(_guest, fill);
       }
-      RepeatStoreWords(_guest, Pair(fill, fill));
+      RepeatStoreWords(_guest, Join(fill, fill));
     }
     Plot(_guest, regs.di, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
   }
@@ -1994,6 +2109,91 @@ void FillTriangle(Guest& _guest)
   FillOnScreenTriangle(_guest);
 }
 
+void FillClippedTriangle(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = static_cast<std::uint16_t>(regs.si & regs.bx & regs.cx);
+  if (Negative(regs.ax))
+  {
+    return;
+  }
+  regs.ax = static_cast<std::uint16_t>(regs.dx & regs.bp & regs.di);
+  if (Negative(regs.ax))
+  {
+    return;
+  }
+  regs.ax = regs.si;
+  if (Signed8(High(regs.ax)) > 0 && Signed8(High(regs.bx)) > 0 && Signed8(High(regs.cx)) > 0)
+  {
+    return;
+  }
+  if (Signed8(High(regs.dx)) > 0 && Signed(regs.bp) >= 0x100 && Signed(regs.di) >= 0x100)
+  {
+    return;
+  }
+  // PrepareClippedTriangle (CS:1E9D).
+  regs.dx = static_cast<std::uint16_t>(Signed(regs.dx) >> 1);
+  regs.bp = static_cast<std::uint16_t>(Signed(regs.bp) >> 1);
+  regs.di = static_cast<std::uint16_t>(Signed(regs.di) >> 1);
+  regs.si = regs.ds;
+  regs.es = regs.si;
+  PatchClippedStep(_guest, regs.si, ADD_TO_EDGE_A, STEP_CLIPPED_EDGE_A);
+  PatchClippedStep(_guest, regs.si, ADD_TO_EDGE_B, STEP_CLIPPED_EDGE_B);
+  if (regs.dx == regs.bp)
+  {
+    const std::int16_t topRow = Signed(regs.dx);
+    const std::int16_t otherRow = Signed(regs.di);
+    std::swap(regs.cx, regs.ax);
+    std::swap(regs.di, regs.dx);
+    if (topRow == otherRow)
+    {
+      FillClippedOneRow(_guest);
+    }
+    else if (topRow > otherRow)
+    {
+      FillClippedFlatBottom(_guest);
+    }
+    else
+    {
+      FillClippedFlatTop(_guest);
+    }
+    return;
+  }
+  if (Signed(regs.dx) > Signed(regs.bp))
+  {
+    std::swap(regs.bx, regs.ax);
+    std::swap(regs.bp, regs.dx);
+  }
+  if (regs.dx == regs.di)
+  {
+    std::swap(regs.bx, regs.ax);
+    std::swap(regs.bp, regs.dx);
+    FillClippedFlatTop(_guest);
+    return;
+  }
+  if (Signed(regs.dx) > Signed(regs.di))
+  {
+    std::swap(regs.cx, regs.ax);
+    std::swap(regs.di, regs.dx);
+  }
+  if (regs.bp == regs.di)
+  {
+    FillClippedFlatBottom(_guest);
+  }
+  else
+  {
+    FillClippedGeneral(_guest);
+  }
+}
+
+void WaitRetraceThenDelay(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.dx = CGA_STATUS_PORT;
+  WaitForRetrace(_guest, SPACE_VIEW_RETRACE_LOOP);
+  SpinDelay(_guest, SPACE_VIEW_DELAY_TURNS, SPACE_VIEW_DELAY_LOOP);
+}
+
 void ShowCockpitScreen(Guest& _guest)
 {
   const std::uint8_t layout = _guest.Get(DS.screenLayout);
@@ -2045,7 +2245,7 @@ void ClearTextScreen(Guest& _guest)
   regs.es = regs.ax;
   regs.cx = TEXT_CELLS;
   regs.di = 0;
-  regs.ax = Pair(_guest.Get(DS.textAttribute), SPACE);
+  regs.ax = Join(_guest.Get(DS.textAttribute), SPACE);
   RepeatStoreWords(_guest, regs.ax);
 }
 
@@ -2159,8 +2359,20 @@ constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | 
 constexpr Machine::NativeContract CLOBBERS_GENERAL_AND_ES{GENERAL_REGISTERS | REGISTER_ES, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BX_DX{REGISTER_AX | REGISTER_BX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_DX{REGISTER_AX | REGISTER_DX, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_BX_CX_DX{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0};
+constexpr Machine::NativeContract SAVES_SCREENSHOT{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI, 0};
+
+// The frame routines wait for the timer and the CGA's retrace as a rule: they run on the native thread, and the
+// digests accept them (ADR-010 items 5 and 8).
+constexpr Machine::NativeWait WAITS = Machine::NativeWait::Always;
 
 constexpr std::array ENTRIES = {
+  NativeEntry{0x01B7, "SaveScreenshot", &SaveScreenshot, SAVES_SCREENSHOT},
+  NativeEntry{0x03FD, "WriteScreenshotFile", &WriteScreenshotFile, CLOBBERS_AX_BX_CX_DX},
+  NativeEntry{0x0570, "FinishSpaceViewFrame", &FinishSpaceViewFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0587, "PresentChartFrame", &PresentChartFrame, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x0599, "PresentSpaceView", &PresentSpaceView, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
+  NativeEntry{0x05CC, "CopyChartBufferToScreen", &CopyChartBufferToScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x060D, "ClearDrawBuffer", &ClearDrawBuffer, PRESERVES_ALL},
   NativeEntry{0x15E0, "PlotPixel", &PlotPixel, CLOBBERS_BX_CX},
   NativeEntry{0x1603, "DrawClippedLine", &DrawClippedLine, CLOBBERS_GENERAL},
@@ -2172,6 +2384,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x1AC1, "DrawCircle", &DrawCircle, CLOBBERS_GENERAL},
   NativeEntry{0x1B7A, "FillTriangleSpan", &FillTriangleSpan, FILLS_TRIANGLE_SPAN},
   NativeEntry{0x1BFB, "FillTriangle", &FillTriangle, CLOBBERS_GENERAL},
+  NativeEntry{0x1E6E, "FillClippedTriangle", &FillClippedTriangle, CLOBBERS_GENERAL},
+  NativeEntry{0x45FF, "WaitRetraceThenDelay", &WaitRetraceThenDelay, CLOBBERS_AX_DX, Machine::NativeReturn::Near, 0, WAITS},
   NativeEntry{0x7BC0, "ShowCockpitScreen", &ShowCockpitScreen, CLOBBERS_AX_CX_SI_DI_ES},
   NativeEntry{0x7BFB, "ClearCgaScreen", &ClearCgaScreen, CLOBBERS_AX_CX_DI},
   NativeEntry{0x7C12, "ClearTextScreen", &ClearTextScreen, CLOBBERS_AX_CX_DI},

@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
 """Check that comparisons exercised every reachable instruction of each ported routine (plan §5 Phase 3).
 
-A native routine is accepted when it matched the original on every compared call and those calls
-covered every reachable instruction of the code it replaces (ADR-010). A native report lists, for each
-hooked entry, the offsets the original executed in the calls that were compared. GameLogicTests writes
-one for each corpus replay and for each constructed test into OutpostEliteNativeReports under the
-system's temporary directory, and ReferenceRunner --compare --native-report FILE writes one for a run.
-This tool walks the code statically, as MapReference.py does, takes for each hooked entry the
-instructions of the routine and of everything it calls or runs into, and lists those no comparison
-executed. Each one needs a replay or a constructed test that reaches it, or a written reason in
-Design/NativeCoverage.tsv.
+A native routine is accepted when it matched the original and the runs that showed it covered every
+reachable instruction of the code it replaces (ADR-010 item 5). What counts as matching depends on
+whether the routine waits (NativeWait):
 
-    python Tools/RoutineCoverage.py [REPORT.tsv | DIRECTORY ...]
+- A routine that never waits, or waits only sometimes, is compared call by call. Its instructions are
+  those of the routine and of everything it calls or runs into, short of a routine that always waits;
+  each must have run in a compared call. A native report (*.tsv) lists, for each hooked entry, the
+  offsets the original executed in the calls that were compared.
+- A routine that always waits is never compared on its own: the digests compare it, an interpreted run
+  with the native one. Its instructions are those of the routine and of what it calls or runs into,
+  short of any other hooked entry; each must have run in an interpreted run whose digests the native
+  run reproduces. An offsets file (*.offsets) lists the instructions such a run executed.
 
-With no argument it reads every report GameLogicTests left. CI runs it so after the tests.
+GameLogicTests writes both into OutpostEliteNativeReports under the system's temporary directory: a
+native report for each compared corpus replay and constructed test, and an offsets file for each
+interpreted corpus replay and twin test. ReferenceRunner writes them for a run with --compare
+--native-report FILE and --coverage FILE. This tool walks the code statically, as MapReference.py does,
+and lists the instructions nothing ran. Each one needs a replay or a test that reaches it, or a written
+reason in Design/NativeCoverage.tsv; a reason for an instruction the runs now cover is stale, and fails too.
+
+    python Tools/RoutineCoverage.py [REPORT.tsv | RUN.offsets | DIRECTORY ...]
+
+With no argument it reads everything GameLogicTests left. CI runs it so after the tests.
 
 Development tool only (AGENTS.md R14). Needs Capstone, as MapReference.py does. Exit status 1 when an
-instruction is neither covered nor explained.
+instruction is neither covered nor explained, or a reason is stale. Read a partial set of reports with that
+in mind: an instruction no hooked routine of theirs reaches reads as stale.
 """
 
 import argparse
@@ -46,24 +57,45 @@ def read_reasons() -> dict[int, str]:
   return reasons
 
 
+def closure_short_of(routines: dict, root: int, stops: set[int]) -> set[int]:
+  """Every routine reachable from root by call or by running on into another, not entering those in stops."""
+  seen: set[int] = set()
+  pending = [root]
+  while pending:
+    entry = pending.pop()
+    if entry in seen or entry not in routines or (entry != root and entry in stops):
+      continue
+    seen.add(entry)
+    pending += list(routines[entry].calls) + list(routines[entry].leaves_to)
+  return seen
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
   parser.add_argument("reports", nargs="*", type=Path, default=[TEST_REPORTS],
-                      help=f"native reports, or directories of them (default {TEST_REPORTS})")
+                      help=f"native reports and offsets files, or directories of them (default {TEST_REPORTS})")
   arguments = parser.parse_args()
-  reports = [file for path in arguments.reports for file in (sorted(path.glob("*.tsv")) if path.is_dir() else [path])]
+  files = [file for path in arguments.reports
+           for file in (sorted([*path.glob("*.tsv"), *path.glob("*.offsets")]) if path.is_dir() else [path])]
+  reports = [file for file in files if file.suffix == ".tsv"]
+  runs = [file for file in files if file.suffix == ".offsets"]
   if not reports:
     print(f"no native report in {' '.join(str(path) for path in arguments.reports)}: run GameLogicTests first", file=sys.stderr)
     return 1
 
   hooked: dict[int, str] = {}
-  executed: set[int] = set()
+  waits: dict[int, str] = {}
+  compared: set[int] = set()
   for report in reports:
     with report.open(encoding="utf-8", newline="") as file:
       for row in csv.DictReader(file, delimiter="\t"):
         entry = int(row["entry"], 16)
         hooked[entry] = row["routine"]
-        executed.update(int(offset, 16) for offset in row["executed"].split())
+        waits[entry] = row.get("wait") or "never"
+        compared.update(int(offset, 16) for offset in row["executed"].split())
+  interpreted: set[int] = set()
+  for run in runs:
+    interpreted.update(int(line, 16) for line in run.read_text(encoding="utf-8").split())
 
   data = (Map.ROOT / "ELITES.EXE").read_bytes()
   image = data[struct.unpack_from("<H", data, 8)[0] * 16:]
@@ -75,17 +107,30 @@ def main() -> int:
   routines = Map.build_routines(instructions, (entries | call_targets | set(hooked)) & set(instructions))
   reasons = read_reasons()
 
+  always = {entry for entry, wait in waits.items() if wait == "always"}
   failed = False
+  uncovered: set[int] = set()
   for entry, name in sorted(hooked.items(), key=lambda _item: _item[0]):
-    reachable = {address for member in Map.closure(routines, [entry]) for address in routines[member].instructions}
+    # A routine that always waits answers for itself and what it alone runs; any other answers for all
+    # it reaches, short of a routine that always waits.
+    if entry in always:
+      members, executed, kind = closure_short_of(routines, entry, set(hooked) - {entry}), interpreted, " (digests)"
+    else:
+      members, executed, kind = closure_short_of(routines, entry, always - {entry}), compared, ""
+    reachable = {address for member in members for address in routines[member].instructions}
     missing = sorted(reachable - executed)
+    uncovered.update(missing)
     unexplained = [offset for offset in missing if offset not in reasons]
-    status = "covered" if not missing else ("explained" if not unexplained else "NOT COVERED")
+    status = ("covered" if not missing else ("explained" if not unexplained else "NOT COVERED")) + kind
     print(f"{entry:04X}\t{name}\t{len(reachable) - len(missing)} of {len(reachable)} instructions\t{status}")
     for offset in missing:
       print(f"\t{offset:04X}\t{reasons.get(offset, 'no comparison reached it')}")
     failed = failed or bool(unexplained)
-  return 1 if failed else 0
+  # A reason for an instruction the runs now cover is stale: it would explain away a regression.
+  stale = sorted(set(reasons) - uncovered)
+  for offset in stale:
+    print(f"stale\t{offset:04X}\tlisted in {REASONS.name}, but every routine that reaches it is covered there")
+  return 1 if failed or stale else 0
 
 
 if __name__ == "__main__":

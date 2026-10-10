@@ -19,10 +19,10 @@
 #include <exception>
 #include <memory>
 #include <semaphore>
-#include <set>
 #include <span>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace Machine
 {
@@ -140,6 +140,14 @@ public:
     return m_instructionCycles;
   }
 
+  /// For native code that stands in for instructions a device times by the instructions executed: adds
+  /// the cycles the 8088 takes over them to InstructionCycles(), as the CPU would have. The game port
+  /// times its one-shots so, and the game reads a stick by counting turns of a polling loop.
+  void CountInstructionCycles(Cycles _cycles) noexcept
+  {
+    m_instructionCycles += _cycles;
+  }
+
   [[nodiscard]] Cpu& Processor() noexcept
   {
     return m_cpu;
@@ -231,7 +239,13 @@ public:
   /// until it returns. Hooked entries it reaches run natively. If the program stops on the way (a
   /// fault, the end of the program), the native code is abandoned by an exception that the step which
   /// started it catches, and RunUntil reports the stop. Off the native thread, a call that waits past
-  /// the end of a run stops the run there: StopReason::Overran.
+  /// the end of a run stops the run there: StopReason::Overran. If the code returns past the native
+  /// routine that called it, dropping return addresses as RunPauseScreen's abort does, the routine is
+  /// unwound by an exception that its hook catches, and its own caller carries on from where the
+  /// program is, or is unwound in turn. A host may call while a native routine waits at the end of a run
+  /// (a test does): the call runs beside it, to its return, and the waiting routine carries on in the
+  /// next run; a routine that waits on the way runs as a plain call, and stops the run as Overran if it
+  /// does wait.
   void CallNear(std::uint16_t _offset);
 
   /// For native code: returns from a near call as RET _popBytes does.
@@ -249,6 +263,15 @@ public:
   /// hooked as one that waits may call it.
   void Wait();
 
+  /// For native code that stands in for a loop: the turn ends where the original's backward jump is.
+  /// Paced time looks at it as it looks at the original's (ADR-008): a turn that changed no register,
+  /// no byte and no port since the last idles to the next device event. Then the run ends there if
+  /// that is its end, and any interrupt now due is taken. Native code that calls it wherever the
+  /// original jumps back, with the registers the original has there, waits on exactly the turns the
+  /// original would. A loop that never idles stops the run as Spinning, as the original's would. Only a
+  /// routine hooked as one that waits may call it.
+  void LoopTurn();
+
   /// For native code: does what INT _vector does at CS:IP. The BIOS, DOS and mouse services take the
   /// call if they serve that vector; otherwise the handler the vector table names runs until its IRET.
   /// Like CallNear, a stop on the way abandons the native code.
@@ -261,7 +284,7 @@ public:
 private:
   // The state at a taken backward jump, kept to tell whether the next turn of the loop changed
   // anything.
-  struct LoopTurn
+  struct Turn
   {
     Registers registers{};
     std::uint64_t memoryChanges = 0;
@@ -276,8 +299,8 @@ private:
     WriteJournal nativeWrites{NativeCode::JOURNAL_CAPACITY};
     std::vector<std::uint8_t> originalAfter;
     std::vector<PortRouter::Access> originalPorts;
-    std::uint16_t segment = 0;        // the compared entry's code segment
-    std::set<std::uint16_t> executed; // offsets in it the original ran
+    std::uint16_t segment = 0;           // the compared entry's code segment
+    std::vector<std::uint16_t> executed; // offsets in it the original ran, in order and repeated
     bool active = false;
   };
 
@@ -291,6 +314,8 @@ private:
   void ReachedRunLimit();
   void TakeDueInterrupts();
   void Compare(NativeCode::Hook& _hook);
+  void RunNative(NativeCode::Hook& _hook);
+  [[nodiscard]] bool EnterBesideNative() noexcept;
   void RunToReturn(std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _stackPointer, Comparison* _original = nullptr);
   void StepPaced();
   void NoteBackwardJump();
@@ -300,7 +325,7 @@ private:
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;
-  LoopTurn m_lastTurn{};
+  Turn m_lastTurn{};
 
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;
@@ -331,6 +356,13 @@ private:
   bool m_abandon = false;        // the native thread is to unwind what it is running
   bool m_shutdown = false;       // the native thread is to end
   bool m_overran = false;        // native code off the native thread waited past the end of a run
+  // Native routines running on each thread: a call that returns past native code unwinds it, but one
+  // that a host makes from outside any of them ends as calls do.
+  std::uint32_t m_hostRoutines = 0;
+  std::uint32_t m_nativeRoutines = 0;
+  // A host's call is running beside a native routine that waits: the CPU steps here, and a routine
+  // that waits runs as a plain call, stopping the run as Overran if it does wait.
+  bool m_besideNative = false;
 };
 
 } // namespace Machine

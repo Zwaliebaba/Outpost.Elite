@@ -2,6 +2,7 @@
 
 #include "Scene.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Maths.h"
 
@@ -122,9 +123,53 @@ constexpr std::uint8_t FRINGE_LARGE = 7;
 constexpr std::uint8_t SCOOP_FUEL = 6;
 constexpr std::uint16_t SCOOP_MESSAGE_FRAMES = 5;
 
-[[nodiscard]] std::uint16_t Negate(std::uint16_t _value) noexcept
+// DrawDistantStation: a station's disc, by its depth byte +25h.
+constexpr std::uint16_t SLOT_STATION_DEPTH = 0x25;
+constexpr std::uint8_t STATION_COLOR = 3;
+constexpr std::uint8_t NEAR_STATION_DEPTH = 0x14;
+constexpr std::uint16_t NEAR_STATION_RADIUS = 0x0E;
+constexpr std::uint8_t STATION_DEPTH_BASE = 0x25;
+constexpr std::uint8_t STATION_DEPTH_SMALLEST = 4;
+
+// The blueprint handlers' vertices: the angle tables' words, a 2048-entry turn, and the vertices written.
+constexpr std::uint16_t ANGLE_BITS = 0x7FF;
+constexpr std::uint16_t SINE_BYTE_BITS = 0xFFF;
+constexpr std::uint16_t SINE_HIGH_BYTES = 0x2FA1; // sineTable's high bytes, a signed byte each
+constexpr std::uint16_t QUARTER_TURN_BYTES = 0x400;
+constexpr std::uint16_t DODO_RING_STEP_BYTES = 0x734; // 72 degrees on, from the cosine back to a sine
+constexpr std::uint16_t DODO_SLOT_START_BYTES = 0x1FC;
+constexpr std::uint16_t HALF_TURN_BYTES = 0x800;
+constexpr std::uint16_t DODO_RING_VERTICES = 5;
+constexpr std::uint16_t DODO_SLOT_VERTICES = 2;
+constexpr std::uint16_t DODO_ROTATED_VERTICES = 14;
+constexpr std::uint16_t DODO_REFLECTED_VERTICES = 10;
+constexpr std::uint16_t DODO_SLOT_CORNERS = 4;
+constexpr std::uint16_t DODO_OUTER_RING = 0x1E; // the ring of radius 3.80, five vertices on
+constexpr std::uint16_t DODO_NEAR_RING_Z = 0xC4;
+constexpr std::uint16_t DODO_FAR_RING_Z = 0x2E;
+constexpr std::uint16_t DODO_SLOT_Z = 0xFF3C;
+constexpr std::uint16_t DODO_SLOT_OPPOSITE = 0x0C; // the slot's corner two vertices on, reflected
+constexpr std::uint16_t DODO_REFLECTED = 0x7284;   // vertex 14
+constexpr std::uint16_t BOX_CORNERS_ROTATED = 3;
+constexpr std::uint16_t BOX_FOURTH_CORNER = 0x12;
+constexpr std::uint16_t BOX_SECOND_CORNER = 0x7302;  // vertex 35
+constexpr std::uint16_t BOX_FIFTH_CORNER = 0x7314;   // vertex 38
+constexpr std::uint16_t BOX_SEVENTH_CORNER = 0x7320; // vertex 40
+constexpr std::uint16_t BOX_EIGHTH_CORNER = 0x7326;  // vertex 41
+constexpr std::uint16_t BOX_REFLECTION_STEP = 0x18;  // four vertices
+constexpr std::uint16_t BOX_REFLECTION_SKIP = 0x12;  // three vertices
+
+// The handlers' rotations by the drawn object's angles: -roll into rotation pair 3, yaw into 4, and pitch with the
+// player's into 5 (CS:3781, CS:38C0).
+void SetDrawAngles(Guest& _guest)
 {
-  return static_cast<std::uint16_t>(0u - _value);
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = Negate(_guest.Get(DS.drawRollAngle));
+  SetSinCos(_guest, DS.rotationSinCos.At(3));
+  regs.ax = _guest.Get(DS.drawYawAngle);
+  SetSinCos(_guest, DS.rotationSinCos.At(4));
+  regs.ax = static_cast<std::uint16_t>(_guest.Get(DS.drawPitchAngle) + _guest.Get(DS.playerPitchAngle));
+  SetSinCos(_guest, DS.rotationSinCos.At(5));
 }
 
 [[nodiscard]] bool Negative(std::uint16_t _value) noexcept
@@ -136,31 +181,6 @@ constexpr std::uint16_t SCOOP_MESSAGE_FRAMES = 5;
 [[nodiscard]] std::uint16_t Magnitude(std::uint16_t _value) noexcept
 {
   return Negative(_value) ? Negate(_value) : _value;
-}
-
-[[nodiscard]] std::uint8_t Low(std::uint16_t _register) noexcept
-{
-  return static_cast<std::uint8_t>(_register);
-}
-
-[[nodiscard]] std::uint8_t High(std::uint16_t _register) noexcept
-{
-  return static_cast<std::uint8_t>(_register >> 8);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _register, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_register & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _register, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_register & 0x00FF) | (_high << 8));
-}
-
-[[nodiscard]] std::uint16_t Offset(std::uint16_t _base, std::uint16_t _bytes) noexcept
-{
-  return static_cast<std::uint16_t>(_base + _bytes);
 }
 
 // LOOP: decrements the counter, and says whether to go round again.
@@ -191,6 +211,66 @@ void OrByte(Guest& _guest, std::uint16_t _offset, std::uint8_t _bits) noexcept
 {
   const auto difference = static_cast<std::uint16_t>(_a - _b);
   return Negative(static_cast<std::uint16_t>((_a ^ _b) & (_a ^ difference)));
+}
+
+// A rotation loop of the blueprint handlers: _count vertices from _first, the coordinates at byte offsets _a and
+// _b of each rotated by the stored pair _pair (RotateBySinCosN). Out: SI past them, CX = 0.
+void RotateVertices(Guest& _guest, std::uint16_t _first, std::uint16_t _count, std::uint16_t _a, std::uint16_t _b, std::uint16_t _pair)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.si = _first;
+  regs.cx = _count;
+  do
+  {
+    regs.ax = _guest.Word(Offset(regs.si, _a));
+    regs.bx = _guest.Word(Offset(regs.si, _b));
+    RotateByStoredSinCos(_guest, _pair);
+    _guest.SetWord(Offset(regs.si, _a), regs.ax);
+    _guest.SetWord(Offset(regs.si, _b), regs.bx);
+    regs.si = Offset(regs.si, VERTEX_BYTES);
+  } while (Loop(regs.cx));
+}
+
+// The handlers' last rotation, by the view direction when it is not ahead (CS:383A, CS:39CF). Out: AX the angle.
+void RotateVerticesToView(Guest& _guest, std::uint16_t _first, std::uint16_t _count)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = _guest.Get(DS.viewAngle);
+  if (regs.ax == 0)
+  {
+    return;
+  }
+  regs.ax = Negate(regs.ax);
+  SetSinCos(_guest, DS.rotationSinCos.At(8));
+  RotateVertices(_guest, _first, _count, 0, VERTEX_Z, DS.rotationSinCos.At(8));
+}
+
+// What RenderBlueprintBody does with the blueprint at SI (CS:3CF2-3D20): the vertex program, the projection, the
+// edge lists and the faces.
+void RenderBlueprint(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  RunVertexProgram(_guest);
+  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
+  _guest.Set(DS.projectedVertexCount, regs.cx);
+  regs.si = Offset(regs.si, 1);
+  ProjectVertices(_guest);
+  // Fixed edges, then face edges: a count byte, then two bytes for each.
+  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
+  _guest.Set(DS.fixedEdgeCount, regs.cx);
+  regs.cx = static_cast<std::uint16_t>(regs.cx << 1);
+  regs.si = Offset(regs.si, 1);
+  _guest.Set(DS.fixedEdgeList, regs.si);
+  regs.si = Offset(regs.si, regs.cx);
+  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
+  _guest.Set(DS.faceEdgeCount, regs.cx);
+  regs.cx = static_cast<std::uint16_t>(regs.cx << 1);
+  regs.si = Offset(regs.si, 1);
+  _guest.Set(DS.faceEdgeList, regs.si);
+  regs.si = Offset(regs.si, regs.cx);
+  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
+  regs.si = Offset(regs.si, 1);
+  DrawVisibleFaces(_guest);
 }
 
 // mov dl,ah / mov ah,al / xor al,al, DH being _high: DX:AX = AX * 256, what ProjectVertices,
@@ -860,6 +940,189 @@ void ReflectVertexAboutCenter(Guest& _guest)
   }
 }
 
+void OffsetVertexByCenter(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  std::uint16_t bytes = 0;
+  for (const DataField<std::uint16_t> center : {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ})
+  {
+    regs.ax = _guest.Get(center);
+    _guest.SetWord(Offset(regs.si, bytes), Offset(_guest.Word(Offset(regs.si, bytes)), regs.ax));
+    bytes = Offset(bytes, 2);
+  }
+}
+
+void BuildBoxCornerVertices(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.bx = _guest.Word(regs.si);
+  regs.si = Offset(regs.si, 2);
+  const std::uint16_t blueprint = regs.si;
+  const std::uint16_t extents = regs.bx;
+  SetDrawAngles(_guest);
+  // q, the half-height, in BX; h, the half-length, negated in CX; p is boxHalfWidth.
+  regs.bx = extents;
+  regs.cx = High(regs.bx);
+  regs.bx = Low(regs.bx);
+  const std::uint16_t height = regs.bx;
+  regs.ax = _guest.Get(DS.boxHalfWidth);
+  regs.si = DS.boxCornerVertices.offset;
+  regs.cx = Negate(regs.cx);
+  _guest.SetWord(Offset(regs.si, VERTEX_Z), regs.cx);
+  _guest.SetWord(Offset(regs.si, VERTEX_BYTES + VERTEX_Z), regs.cx);
+  _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES + VERTEX_Z), regs.cx);
+  // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
+  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(3));
+  _guest.SetWord(regs.si, regs.ax);
+  _guest.SetWord(Offset(regs.si, 2), regs.bx);
+  regs.ax = Negate(regs.ax);
+  regs.bx = Negate(regs.bx);
+  _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES), regs.ax);
+  _guest.SetWord(Offset(regs.si, 2 * VERTEX_BYTES + 2), regs.bx);
+  regs.bx = Negate(height);
+  regs.ax = _guest.Get(DS.boxHalfWidth);
+  RotateByStoredSinCos(_guest, DS.rotationSinCos.At(3));
+  _guest.SetWord(Offset(regs.si, VERTEX_BYTES), regs.ax);
+  _guest.SetWord(Offset(regs.si, VERTEX_BYTES + 2), regs.bx);
+  RotateVertices(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, VERTEX_Z, DS.rotationSinCos.At(4));
+  RotateVertices(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 2, VERTEX_Z, DS.rotationSinCos.At(5));
+  RotateVertices(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, VERTEX_Z, DS.rotationSinCos.At(1));
+  RotateVertices(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED, 0, 2, DS.rotationSinCos.At(2));
+  RotateVerticesToView(_guest, DS.boxCornerVertices.offset, BOX_CORNERS_ROTATED);
+  regs.si = DS.boxCornerVertices.offset;
+
+  // The fourth corner completes the parallelogram, v2 - v1 + v0; the fifth and eighth are the second and third
+  // again, and four reflections through the centre make the far face.
+  regs.cx = BOX_CORNERS_ROTATED;
+  do
+  {
+    regs.ax = static_cast<std::uint16_t>(_guest.Word(Offset(regs.si, 2 * VERTEX_BYTES)) - _guest.Word(Offset(regs.si, VERTEX_BYTES)) +
+                                         _guest.Word(regs.si));
+    _guest.SetWord(Offset(regs.si, BOX_FOURTH_CORNER), regs.ax);
+    regs.si = Offset(regs.si, 2);
+  } while (Loop(regs.cx));
+  regs.si = BOX_SECOND_CORNER;
+  for (const std::uint16_t copy : {BOX_FIFTH_CORNER, BOX_EIGHTH_CORNER})
+  {
+    regs.di = copy;
+    regs.cx = BOX_CORNERS_ROTATED;
+    do
+    {
+      regs.ax = _guest.Word(regs.si);
+      _guest.SetWord(regs.di, regs.ax);
+      regs.si = Offset(regs.si, 2);
+      regs.di = Offset(regs.di, 2);
+    } while (Loop(regs.cx));
+  }
+  regs.si = DS.boxCornerVertices.offset;
+  regs.di = BOX_SEVENTH_CORNER;
+  ReflectVertexAboutCenter(_guest);
+  regs.si = Offset(regs.si, BOX_REFLECTION_STEP);
+  regs.di = static_cast<std::uint16_t>(regs.di - BOX_REFLECTION_STEP);
+  ReflectVertexAboutCenter(_guest);
+  regs.si = Offset(regs.si, BOX_REFLECTION_SKIP);
+  regs.di = static_cast<std::uint16_t>(regs.di - VERTEX_BYTES);
+  ReflectVertexAboutCenter(_guest);
+  regs.si = static_cast<std::uint16_t>(regs.si - BOX_REFLECTION_STEP);
+  regs.di = Offset(regs.di, BOX_REFLECTION_STEP);
+  ReflectVertexAboutCenter(_guest);
+  regs.si = blueprint;
+}
+
+void BuildDodoVertices(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t blueprint = regs.si;
+  SetDrawAngles(_guest);
+  // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
+  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.drawRollAngle) & ANGLE_BITS) << 1);
+  regs.si = SINE_HIGH_BYTES;
+  regs.cx = DODO_RING_VERTICES;
+  regs.di = DS.vertexBuffer.offset;
+  do
+  {
+    const std::uint16_t left = regs.cx;
+    regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.bx, regs.si)));
+    ScaleDodoRadii(_guest);
+    _guest.SetWord(regs.di, regs.cx);
+    _guest.SetWord(Offset(regs.di, DODO_OUTER_RING), regs.dx);
+    _guest.SetWord(Offset(regs.di, VERTEX_Z), DODO_NEAR_RING_Z);
+    _guest.SetWord(Offset(regs.di, DODO_OUTER_RING + VERTEX_Z), DODO_FAR_RING_Z);
+    regs.bx = static_cast<std::uint16_t>((regs.bx - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
+    regs.ax = WithLow(regs.ax, _guest.Byte(Offset(regs.bx, regs.si)));
+    ScaleDodoRadii(_guest);
+    _guest.SetWord(Offset(regs.di, 2), regs.cx);
+    _guest.SetWord(Offset(regs.di, DODO_OUTER_RING + 2), regs.dx);
+    regs.bx = static_cast<std::uint16_t>((regs.bx + DODO_RING_STEP_BYTES) & SINE_BYTE_BITS);
+    regs.di = Offset(regs.di, VERTEX_BYTES);
+    regs.cx = left;
+  } while (Loop(regs.cx));
+  // The slot: two corners at half the high bytes, and their opposites.
+  regs.di = Offset(regs.di, DODO_OUTER_RING);
+  regs.bx = static_cast<std::uint16_t>((regs.bx + DODO_SLOT_START_BYTES) & SINE_BYTE_BITS);
+  regs.cx = DODO_SLOT_VERTICES;
+  do
+  {
+    regs.ax = Sar(SignExtend(_guest.Byte(Offset(regs.bx, regs.si))), 1);
+    _guest.SetWord(regs.di, regs.ax);
+    regs.ax = Negate(regs.ax);
+    _guest.SetWord(Offset(regs.di, DODO_SLOT_OPPOSITE), regs.ax);
+    _guest.SetWord(Offset(regs.di, VERTEX_Z), DODO_SLOT_Z);
+    _guest.SetWord(Offset(regs.di, DODO_SLOT_OPPOSITE + VERTEX_Z), DODO_SLOT_Z);
+    regs.bx = static_cast<std::uint16_t>((regs.bx - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
+    regs.ax = Sar(SignExtend(_guest.Byte(Offset(regs.bx, regs.si))), 1);
+    _guest.SetWord(Offset(regs.di, 2), regs.ax);
+    regs.ax = Negate(regs.ax);
+    _guest.SetWord(Offset(regs.di, DODO_SLOT_OPPOSITE + 2), regs.ax);
+    regs.bx = static_cast<std::uint16_t>((regs.bx + HALF_TURN_BYTES) & SINE_BYTE_BITS);
+    regs.di = Offset(regs.di, VERTEX_BYTES);
+  } while (Loop(regs.cx));
+  RotateVertices(_guest, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, DS.rotationSinCos.At(4));
+  RotateVertices(_guest, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 2, VERTEX_Z, DS.rotationSinCos.At(5));
+  RotateVertices(_guest, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, DS.rotationSinCos.At(1));
+  RotateVertices(_guest, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, 2, DS.rotationSinCos.At(2));
+  RotateVerticesToView(_guest, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES);
+  // The first ten reflected through the centre, and the slot's four moved to it.
+  regs.si = DS.vertexBuffer.offset;
+  regs.di = DODO_REFLECTED;
+  regs.cx = DODO_REFLECTED_VERTICES;
+  do
+  {
+    ReflectVertexAboutCenter(_guest);
+    regs.si = Offset(regs.si, VERTEX_BYTES);
+    regs.di = Offset(regs.di, VERTEX_BYTES);
+  } while (Loop(regs.cx));
+  regs.cx = DODO_SLOT_CORNERS;
+  do
+  {
+    OffsetVertexByCenter(_guest);
+    regs.si = Offset(regs.si, VERTEX_BYTES);
+  } while (Loop(regs.cx));
+  regs.si = blueprint;
+}
+
+void ScaleDodoRadii(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // CX = 2a + a/4 + a/8 - a/32 and DX = 3a + a/2 + a/4 + a/16 - a/64, each shift arithmetic.
+  regs.ax = SignExtend(Low(regs.ax));
+  regs.cx = static_cast<std::uint16_t>(regs.ax << 1);
+  regs.dx = static_cast<std::uint16_t>((regs.ax << 1) + regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.dx = Offset(regs.dx, regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.cx = Offset(regs.cx, regs.ax);
+  regs.dx = Offset(regs.dx, regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.cx = Offset(regs.cx, regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.dx = Offset(regs.dx, regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.cx = static_cast<std::uint16_t>(regs.cx - regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.dx = static_cast<std::uint16_t>(regs.dx - regs.ax);
+}
+
 void RunVertexProgram(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1025,28 +1288,14 @@ void RunBlueprintHandler(Guest& _guest)
   regs.si = Offset(regs.si, 1);
   // The handler returns to RenderBlueprintBody (CS:3CF2), which the original pushed as its return address.
   _guest.Call(regs.ax);
-  RunVertexProgram(_guest);
-  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
-  _guest.Set(DS.projectedVertexCount, regs.cx);
-  regs.si = Offset(regs.si, 1);
-  ProjectVertices(_guest);
-  // Fixed edges, then face edges: a count byte, then two bytes for each.
-  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
-  _guest.Set(DS.fixedEdgeCount, regs.cx);
-  regs.cx = static_cast<std::uint16_t>(regs.cx << 1);
-  regs.si = Offset(regs.si, 1);
-  _guest.Set(DS.fixedEdgeList, regs.si);
-  regs.si = Offset(regs.si, regs.cx);
-  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
-  _guest.Set(DS.faceEdgeCount, regs.cx);
-  regs.cx = static_cast<std::uint16_t>(regs.cx << 1);
-  regs.si = Offset(regs.si, 1);
-  _guest.Set(DS.faceEdgeList, regs.si);
-  regs.si = Offset(regs.si, regs.cx);
-  regs.cx = WithLow(regs.cx, _guest.Byte(regs.si));
-  regs.si = Offset(regs.si, 1);
-  DrawVisibleFaces(_guest);
+  RenderBlueprint(_guest);
   regs.di = slot;
+}
+
+void RenderBlueprintBody(Guest& _guest)
+{
+  RenderBlueprint(_guest);
+  _guest.Regs().di = _guest.Pop();
 }
 
 void TransformAndDrawObjects(Guest& _guest)
@@ -1095,6 +1344,51 @@ void DrawSunOrPlanet(Guest& _guest)
   {
     DrawSunOrPlanetDisc(_guest);
   }
+}
+
+void DrawDistantStation(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = _guest.Word(Offset(regs.di, SLOT_COMPASS_X));
+  regs.bx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Y));
+  regs.cx = _guest.Word(Offset(regs.di, SLOT_COMPASS_Z));
+  ProjectToScreen(_guest);
+  regs.dx = regs.ax;
+  regs.cx = regs.bx;
+  _guest.Set(DS.drawColor, STATION_COLOR);
+  SetLow(regs.ax, _guest.Byte(Offset(regs.di, SLOT_STATION_DEPTH)));
+  if (Low(regs.ax) < NEAR_STATION_DEPTH)
+  {
+    regs.bx = NEAR_STATION_RADIUS;
+    _guest.Call(DRAW_DISC);
+    return;
+  }
+  // r = (21h - depth) / 2, as bytes: none when 25h - depth, taken as signed, is 4 or less, or r is 0.
+  SetLow(regs.ax, Negate(static_cast<std::uint8_t>(Low(regs.ax) - STATION_DEPTH_BASE)));
+  const auto beyond = static_cast<std::int8_t>(Low(regs.ax));
+  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) - STATION_DEPTH_SMALLEST));
+  if (beyond <= static_cast<std::int8_t>(STATION_DEPTH_SMALLEST))
+  {
+    return;
+  }
+  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) >> 1));
+  if (Low(regs.ax) == 0)
+  {
+    return;
+  }
+  regs.bx = static_cast<std::uint16_t>(Low(regs.ax) << 1);
+  _guest.Call(DRAW_DISC);
+}
+
+void LoadPlayerAngles(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = _guest.Get(DS.playerPitchAngle);
+  SetSinCos(_guest, DS.rotationSinCos.At(0));
+  regs.ax = _guest.Get(DS.playerYawAngle);
+  SetSinCos(_guest, DS.rotationSinCos.At(1));
+  regs.ax = _guest.Get(DS.playerRollAngle);
+  SetSinCos(_guest, DS.rotationSinCos.At(2));
 }
 
 void ProjectToScreen(Guest& _guest)
@@ -1154,6 +1448,11 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x2340, "ProjectVertices", &ProjectVertices,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
   NativeEntry{0x3740, "ReflectVertexAboutCenter", &ReflectVertexAboutCenter, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
+  NativeEntry{0x3768, "OffsetVertexByCenter", &OffsetVertexByCenter, Machine::NativeContract{REGISTER_AX, 0}},
+  NativeEntry{0x377A, "BuildBoxCornerVertices", &BuildBoxCornerVertices,
+              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_BP | REGISTER_DI, 0}},
+  NativeEntry{0x38BF, "BuildDodoVertices", &BuildDodoVertices, PRESERVES_ALL},
+  NativeEntry{0x3A13, "ScaleDodoRadii", &ScaleDodoRadii, Machine::NativeContract{REGISTER_AX, 0}},
   NativeEntry{0x3A40, "RunVertexProgram", &RunVertexProgram, Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0}},
   NativeEntry{0x3A9B, "TriangleWindingSign", &TriangleWindingSign, Machine::NativeContract{ALL_BUT_DS, FLAG_SIGN}},
   NativeEntry{0x3AB3, "DrawVisibleFaces", &DrawVisibleFaces,
@@ -1163,10 +1462,13 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x3C72, "ClassifyStationPosition", &ClassifyStationPosition, RETURNS_CARRY},
   NativeEntry{0x3C7E, "TransformShip", &TransformShip, RETURNS_CARRY},
   NativeEntry{0x3CDD, "RunBlueprintHandler", &RunBlueprintHandler, Machine::NativeContract{ALL_BUT_DS & ~REGISTER_DI, 0}},
+  NativeEntry{0x3CF2, "RenderBlueprintBody", &RenderBlueprintBody, PRESERVES_ALL},
   NativeEntry{0x3D25, "TransformAndDrawObjects", &TransformAndDrawObjects, Machine::NativeContract{ALL_BUT_DS, 0}},
   NativeEntry{0x3ED7, "TransformToViewWithBlip", &TransformToViewWithBlip, PRESERVES_ALL},
   NativeEntry{0x3EE3, "TransformToView", &TransformToView, PRESERVES_ALL},
   NativeEntry{0x3F4F, "DrawSunOrPlanet", &DrawSunOrPlanet, PRESERVES_ALL},
+  NativeEntry{0x45C6, "DrawDistantStation", &DrawDistantStation, PRESERVES_ALL},
+  NativeEntry{0x8A16, "LoadPlayerAngles", &LoadPlayerAngles, PRESERVES_ALL},
   NativeEntry{0x8D2E, "ProjectToScreen", &ProjectToScreen, Machine::NativeContract{REGISTER_DX | REGISTER_BP, 0}},
 };
 

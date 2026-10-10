@@ -18,6 +18,10 @@ constexpr std::uint16_t RATIO_ARC_TANGENT = 0x24F7;
 constexpr std::uint16_t ANGLE_WITHIN_TOLERANCE = 0x2CDB;
 constexpr std::uint16_t VECTOR_LENGTH = 0x2E96;
 constexpr std::uint16_t SCALE_BY_INVERSE_DISTANCE = 0x40A4;
+constexpr std::uint16_t SET_SIN_COS_0 = 0x2421;
+constexpr std::uint16_t SET_SIN_COS_1 = 0x2426;
+constexpr std::uint16_t SET_SIN_COS_2 = 0x242B;
+constexpr std::uint16_t ROTATE_ROLL_YAW_PITCH = 0x3EC7;
 
 constexpr std::uint8_t DIVIDE_VECTOR = 0;
 // Where Pc::CallInterrupt returns to; the divide trap reads the opcode two bytes before it.
@@ -33,7 +37,7 @@ void AssertExecuted(ComparisonRig& _rig, std::uint16_t _entry, std::initializer_
   Assert::IsTrue(found != hooks.end(), L"the routine is ported");
   for (const std::uint16_t offset : _offsets)
   {
-    Assert::IsTrue(found->second.executed.contains(offset), (L"reached CS:" + std::to_wstring(offset)).c_str());
+    Assert::IsTrue(found->second.executed.Contains(offset), (L"reached CS:" + std::to_wstring(offset)).c_str());
   }
 }
 
@@ -134,6 +138,27 @@ public:
     }
     rig.AssertAllAgreed(SCALE_BY_INVERSE_DISTANCE, shifts.size() * scales.size());
     AssertExecuted(rig, SCALE_BY_INVERSE_DISTANCE, {0x40E7, 0x40E8, 0x0291});
+  }
+
+  // LaunchPlayerMissile's rotation, from three orientations of rotation pairs 0-2, of vectors along each axis
+  // and at the extremes.
+  TEST_METHOD(RotateRollYawPitchAgreesFromSeveralOrientations)
+  {
+    ComparisonRig rig("RotateRollYawPitch");
+    const std::initializer_list<Inputs> vectors = {{.ax = 0x0100, .dx = 0x4444},
+                                                   {.bx = 0xFF00, .dx = 0x4444},
+                                                   {.cx = 0x4000, .dx = 0x4444},
+                                                   {.ax = 0x7FFF, .bx = 0x8000, .cx = 0x7FFF, .dx = 0x4444, .di = 0x6666, .bp = 0x7777}};
+    const std::initializer_list<std::uint16_t> angles = {0x0000, 0x0123, 0x0700};
+    for (const std::uint16_t angle : angles)
+    {
+      rig.Call(SET_SIN_COS_0, {.ax = angle});
+      rig.Call(SET_SIN_COS_1, {.ax = static_cast<std::uint16_t>(angle * 3)});
+      rig.Call(SET_SIN_COS_2, {.ax = static_cast<std::uint16_t>(angle + 0x0345)});
+      for (const Inputs& inputs : vectors)
+        rig.Call(ROTATE_ROLL_YAW_PITCH, inputs);
+    }
+    rig.AssertAllAgreed(ROTATE_ROLL_YAW_PITCH, angles.size() * vectors.size());
   }
 };
 

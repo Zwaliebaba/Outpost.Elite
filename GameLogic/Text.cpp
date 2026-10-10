@@ -2,6 +2,7 @@
 
 #include "Text.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
 
 #include <utility>
@@ -13,6 +14,44 @@ namespace
 {
 
 constexpr std::uint16_t UPDATE_WARNINGS = 0x36B6;
+constexpr std::uint16_t IS_DEBRIS_TYPE = 0x53FE;
+constexpr std::uint16_t GET_KEY = 0x7616;
+constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
+constexpr std::uint16_t TOGGLE_INPUT_CURSOR = 0x7727;
+constexpr std::uint16_t REDRAW_INPUT_LINE = 0x773A;
+constexpr std::uint16_t WAIT_FOR_TIMER_TICK = 0x7772;
+
+// Where ReadTextLine's loop jumps back to: the blink restarted, a key read, the blink counted, the line
+// redrawn.
+constexpr std::uint16_t INPUT_RESTART_BLINK = 0x76A3;
+constexpr std::uint16_t INPUT_READ_KEY = 0x76AF;
+constexpr std::uint16_t INPUT_COUNT_BLINK = 0x76B7;
+constexpr std::uint16_t INPUT_REDRAW = 0x76FF;
+constexpr std::uint16_t CURSOR_BLINK_TICKS = 300;
+constexpr std::uint8_t FIRST_UNMAPPED_SCAN = 0x54; // scanCodeToAscii's length
+constexpr std::uint8_t ENTER_KEY = 0x0D;
+constexpr std::uint8_t BACKSPACE_KEY = 0x00;
+constexpr std::uint8_t CURSOR_HIDDEN = ' ';
+constexpr std::uint8_t LOWER_CASE_BIT = 0x20;
+constexpr std::uint8_t UPPER_CASE_MASK = 0xDF;
+
+// ShowShipIdentity's classes: 3 is Simple, unless it is debris; a Hermit is a class 4 of type 5, and type 1Ch
+// is the police.
+constexpr std::uint8_t CLASS_SIMPLE_OR_DEBRIS = 3;
+constexpr std::uint8_t CLASS_SIMPLE = 8;
+constexpr std::uint8_t CLASS_ROCK = 4;
+constexpr std::uint8_t TYPE_HERMIT = 5;
+constexpr std::uint8_t CLASS_HERMIT = 9;
+constexpr std::uint8_t TYPE_POLICE = 0x1C;
+constexpr std::uint8_t CLASS_POLICE = 10;
+constexpr std::uint16_t CLASS_NAME_BYTES = 7;
+constexpr std::uint16_t TYPE_NAME_BYTES = 11;
+constexpr std::uint16_t CLASS_TEXT_OFFSET = 7;   // 'CLASS: '
+constexpr std::uint16_t TYPE_TEXT_OFFSET = 0x15; // 'CLASS: 1234567 TYPE: '
+constexpr std::uint16_t IDENTITY_FRAMES = 0x1E;
+
+constexpr std::uint16_t DOCKED_MESSAGE_OFFSET = 0x78; // row 1, column 20
+constexpr std::uint16_t DOCKED_MESSAGE_CHARACTERS = 0x13;
 
 constexpr std::uint8_t FIRST_GLYPH = 0x20;         // screenFont starts at the space
 constexpr std::uint8_t FIRST_SMALL_LETTER = 0x41;  // smallFont starts at 'A'
@@ -46,21 +85,6 @@ constexpr std::uint16_t MENU_ROW_ATTRIBUTES = 0x24;
 constexpr std::uint8_t CURSOR_GRAPHICS_TOGGLE = 0xA0; // space <-> 80h glyph
 constexpr std::uint8_t CURSOR_TEXT_TOGGLE = 0xFB;     // space <-> DBh, CP437's block
 
-[[nodiscard]] std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0xFF00) | _low);
-}
-
-[[nodiscard]] std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
-{
-  return static_cast<std::uint16_t>((_word & 0x00FF) | (_high << 8));
-}
-
 // SHL r16, CL on the 8088, which does not mask the count.
 [[nodiscard]] std::uint16_t ShiftLeft(std::uint16_t _value, std::uint8_t _count) noexcept
 {
@@ -88,6 +112,21 @@ void StoreWords(Guest& _guest, std::uint16_t _value)
     _guest.SetFarWord(regs.es, regs.di, _value);
     regs.di = static_cast<std::uint16_t>(regs.di + step);
   }
+}
+
+// ReadTextLine's redraw (0x76FF): the line and the cursor printed, then back to counting the blink.
+void RedrawTypedLine(Guest& _guest)
+{
+  _guest.Call(REDRAW_INPUT_LINE);
+  _guest.JumpBack(INPUT_COUNT_BLINK);
+}
+
+// ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
+void RestartInputBlink(Guest& _guest)
+{
+  _guest.Set(DS.cursorBlinkTicks, CURSOR_BLINK_TICKS);
+  _guest.Call(TOGGLE_INPUT_CURSOR);
+  RedrawTypedLine(_guest);
 }
 
 // MessageLine's second half (0x35B9): the message at messagePointer, unless it is already shown.
@@ -370,6 +409,54 @@ void ShowBountyMessage(Guest& _guest)
   _guest.Set(DS.messageFrames, BOUNTY_FRAMES);
 }
 
+void ShowShipIdentity(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (High(regs.ax) == CLASS_SIMPLE_OR_DEBRIS)
+  {
+    _guest.Push(regs.ax);
+    _guest.Call(IS_DEBRIS_TYPE);
+    regs.ax = _guest.Pop();
+    if (!_guest.Flag(Machine::FLAG_ZERO))
+    {
+      SetHigh(regs.ax, CLASS_SIMPLE);
+    }
+  }
+  if (High(regs.ax) == CLASS_ROCK && Low(regs.ax) == TYPE_HERMIT)
+  {
+    SetHigh(regs.ax, CLASS_HERMIT);
+  }
+  if (Low(regs.ax) == TYPE_POLICE)
+  {
+    SetHigh(regs.ax, CLASS_POLICE);
+  }
+  // The class's name through AH, then the type's through AL.
+  regs.bx = DS.shipClassNames.At(High(regs.ax));
+  regs.di = Offset(DS.shipIdentityText.offset, CLASS_TEXT_OFFSET);
+  for (regs.cx = CLASS_NAME_BYTES; regs.cx != 0; --regs.cx)
+  {
+    SetHigh(regs.ax, _guest.Byte(regs.bx));
+    ++regs.bx;
+    _guest.SetByte(regs.di, High(regs.ax));
+    ++regs.di;
+  }
+  regs.ax = static_cast<std::uint16_t>(Low(regs.ax) << 2);
+  regs.bx = static_cast<std::uint16_t>(regs.ax * 3);
+  regs.ax = DS.shipTypeNames.offset;
+  regs.bx = Offset(regs.bx, regs.ax);
+  regs.di = Offset(DS.shipIdentityText.offset, TYPE_TEXT_OFFSET);
+  for (regs.cx = TYPE_NAME_BYTES; regs.cx != 0; --regs.cx)
+  {
+    SetLow(regs.ax, _guest.Byte(regs.bx));
+    ++regs.bx;
+    _guest.SetByte(regs.di, Low(regs.ax));
+    ++regs.di;
+  }
+  regs.ax = DS.shipIdentityText.offset;
+  _guest.Set(DS.messagePointer, regs.ax);
+  _guest.Set(DS.messageFrames, IDENTITY_FRAMES);
+}
+
 void PrintTextModeString(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -398,6 +485,18 @@ void ToggleMenuRowHighlight(Guest& _guest)
   {
     _guest.SetFarByte(regs.es, attribute, Low(regs.ax));
     attribute = static_cast<std::uint16_t>(attribute + 2);
+  }
+}
+
+void ClearDockedMessageLine(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = DOCKED_MESSAGE_OFFSET;
+  SetLow(regs.ax, ' ');
+  for (regs.cx = DOCKED_MESSAGE_CHARACTERS; regs.cx != 0; --regs.cx)
+  {
+    _guest.SetFarByte(regs.es, regs.di, Low(regs.ax));
+    regs.di = Offset(regs.di, 2);
   }
 }
 
@@ -437,6 +536,104 @@ void FormatTenths(Guest& _guest)
   _guest.Set(DS.data8041, Low(regs.ax));
   regs.ax = WithLow(regs.ax, '.');
   _guest.Set(DS.data8040, Low(regs.ax));
+}
+
+void PrintTextLines(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  do
+  {
+    const std::uint16_t line = regs.di;
+    PrintTextModeString(_guest);
+    ++regs.si;
+    regs.di = Offset(line, TEXT_ROW_BYTES);
+  } while (--regs.cx != 0);
+}
+
+void ReadTextLine(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(RESET_KEYBOARD);
+  _guest.Set(DS.textPaperPattern, 0);
+  _guest.Set(DS.inputCharsLeft, Low(regs.cx));
+  regs.bx = 0;
+  RestartInputBlink(_guest);
+  for (;;)
+  {
+    const auto blink = static_cast<std::uint16_t>(_guest.Get(DS.cursorBlinkTicks) - 1);
+    _guest.Set(DS.cursorBlinkTicks, blink);
+    if (blink == 0)
+    {
+      _guest.JumpBack(INPUT_RESTART_BLINK);
+      RestartInputBlink(_guest);
+      continue;
+    }
+    _guest.JumpBack(INPUT_READ_KEY);
+    _guest.Call(WAIT_FOR_TIMER_TICK);
+    _guest.Call(GET_KEY);
+    if (_guest.Flag(Machine::FLAG_ZERO))
+    {
+      continue;
+    }
+    if (High(regs.ax) >= FIRST_UNMAPPED_SCAN)
+    {
+      _guest.JumpBack(INPUT_COUNT_BLINK);
+      continue;
+    }
+    // The key's character: inc dl / je skips FFh, a key with none, and leaves DL zero.
+    regs.cx = DS.scanCodeToAscii.At(High(regs.ax));
+    SetLow(regs.dx, static_cast<std::uint8_t>(_guest.Byte(regs.cx) + 1));
+    if (Low(regs.dx) == 0)
+    {
+      _guest.JumpBack(INPUT_COUNT_BLINK);
+      continue;
+    }
+    SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) - 1));
+    const std::uint8_t character = Low(regs.dx);
+    if (character == ENTER_KEY)
+    {
+      if (_guest.Byte(DS.inputCursorText.offset) != CURSOR_HIDDEN)
+      {
+        _guest.Call(TOGGLE_INPUT_CURSOR);
+        _guest.Call(REDRAW_INPUT_LINE);
+      }
+      return;
+    }
+    if (character == BACKSPACE_KEY)
+    {
+      if (regs.bx != 0)
+      {
+        --regs.bx;
+        _guest.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(_guest.Get(DS.inputCharsLeft) + 1));
+        _guest.Call(REDRAW_INPUT_LINE);
+      }
+      _guest.JumpBack(INPUT_COUNT_BLINK);
+      continue;
+    }
+    if (character >= 'A' && character <= 'Z')
+    {
+      // Lower case, unless GetKey's AL says Shift was held: shr al,1 into the carry.
+      SetLow(regs.dx, static_cast<std::uint8_t>(character | LOWER_CASE_BIT));
+      const bool shift = (Low(regs.ax) & 1) != 0;
+      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) >> 1));
+      if (shift)
+      {
+        SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) & UPPER_CASE_MASK));
+      }
+    }
+    _guest.SetByte(Offset(regs.bx, regs.si), Low(regs.dx));
+    ++regs.bx;
+    const auto left = static_cast<std::uint8_t>(_guest.Get(DS.inputCharsLeft) - 1);
+    _guest.Set(DS.inputCharsLeft, left);
+    if ((left & 0x80) != 0)
+    {
+      // No room: the character is taken back.
+      --regs.bx;
+      _guest.Set(DS.inputCharsLeft, static_cast<std::uint8_t>(left + 1));
+      _guest.JumpBack(INPUT_REDRAW);
+    }
+    RedrawTypedLine(_guest);
+  }
 }
 
 void ToggleInputCursor(Guest& _guest)
@@ -487,6 +684,8 @@ constexpr Machine::NativeContract CLOBBERS_AX{REGISTER_AX, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_BP{REGISTER_AX | REGISTER_BP, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_SI{REGISTER_AX | REGISTER_SI, 0};
 constexpr Machine::NativeContract CLOBBERS_AX_CX{REGISTER_AX | REGISTER_CX, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_CX_DI{REGISTER_AX | REGISTER_CX | REGISTER_DI, 0};
+constexpr Machine::NativeContract CLOBBERS_AX_CX_DX{REGISTER_AX | REGISTER_CX | REGISTER_DX, 0};
 constexpr Machine::NativeContract CLOBBERS_ALL_BUT_ES{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0};
 
@@ -503,11 +702,16 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x35A3, "UpdateMessageLine", &UpdateMessageLine, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3609, "ClearMessageLine", &ClearMessageLine, CLOBBERS_ALL_BUT_ES},
   NativeEntry{0x3626, "ShowBountyMessage", &ShowBountyMessage, PRESERVES_ALL},
+  NativeEntry{0x364D, "ShowShipIdentity", &ShowShipIdentity, PRESERVES_ALL},
   NativeEntry{0x60D2, "PrintTextModeString", &PrintTextModeString, CLOBBERS_AX},
   NativeEntry{0x6328, "ToggleMenuRowHighlight", &ToggleMenuRowHighlight, PRESERVES_ALL},
+  NativeEntry{0x6553, "ClearDockedMessageLine", &ClearDockedMessageLine, CLOBBERS_AX_CX_DI},
   NativeEntry{0x6580, "SwapTextAttributeNibbles", &SwapTextAttributeNibbles, PRESERVES_ALL},
   NativeEntry{0x65FA, "PrintCountedTextLines", &PrintCountedTextLines, CLOBBERS_AX_CX},
   NativeEntry{0x69B3, "FormatTenths", &FormatTenths, PRESERVES_ALL},
+  NativeEntry{0x6DDE, "PrintTextLines", &PrintTextLines, PRESERVES_ALL},
+  // ReadTextLine waits for keys as a rule.
+  NativeEntry{0x7694, "ReadTextLine", &ReadTextLine, CLOBBERS_AX_CX_DX, Machine::NativeReturn::Near, 0, Machine::NativeWait::Always},
   NativeEntry{0x7727, "ToggleInputCursor", &ToggleInputCursor, PRESERVES_ALL},
   NativeEntry{0x773A, "RedrawInputLine", &RedrawInputLine, PRESERVES_ALL},
   NativeEntry{0x7750, "PrintStringForLayout", &PrintStringForLayout, PRESERVES_ALL},

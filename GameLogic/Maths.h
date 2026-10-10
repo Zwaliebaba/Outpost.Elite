@@ -27,6 +27,20 @@ void DivideOverflowInterrupt(Guest& _guest);
 /// CS:_returnOffset. That instruction must not itself be a divide.
 void DivideUnsigned(Guest& _guest, std::uint16_t _divisor, std::uint16_t _returnOffset);
 
+/// DIV r/m8 by _divisor, in native code: AX / _divisor to AL and the remainder to AH, or, when the
+/// quotient does not fit, what DivideOverflowInterrupt does for a byte divide: AL = 7Fh, AH as it was.
+/// The handler reads every byte divide in the program as one.
+void DivideByte(Guest& _guest, std::uint8_t _divisor);
+
+/// DIV r/m16 by _divisor: DX:AX / _divisor to AX and the remainder to DX, or AX = 7FFFh and DX as it
+/// was. The handler reads every word divide in the program as one but ProjectVertices' two, at
+/// CS:2369 and CS:2392, which DivideUnsigned serves.
+void DivideWord(Guest& _guest, std::uint16_t _divisor);
+
+/// IDIV r/m16 by _divisor, as the 8088 does it: the magnitudes divided, and the trap as DivideWord's
+/// when the quotient's magnitude reaches the sign bit, so that -32768 traps too.
+void DivideSignedWord(Guest& _guest, std::uint16_t _divisor);
+
 /// NextRandom (CS:061C): the lagged-Fibonacci step on randomState0-2. Out: AX.
 void NextRandom(Guest& _guest);
 
@@ -71,6 +85,10 @@ void VectorWithinBox(Guest& _guest);
 /// RotatePitchYawRoll (CS:3EAC): (y, z) by rotationSinCos[0], (x, z) by [1], (x, y) by [2]. In and
 /// out: AX, BX, CX = x, y, z; DX is left as the last RotateBySinCos leaves it.
 void RotatePitchYawRoll(Guest& _guest);
+
+/// RotateRollYawPitch (CS:3EC7): (x, y) by rotationSinCos[2], (x, z) by [1], (y, z) by [0], RotatePitchYawRoll's
+/// inverse with the angles negated. In and out: AX, BX, CX = x, y, z; DX as the last RotateBySinCos leaves it.
+void RotateRollYawPitch(Guest& _guest);
 
 /// RotateBySinCos7210 (CS:3F02): (y, z) by rotationSinCos[7], then (x, y) by [2], (x, z) by [1] and
 /// (y, z) by [0]. In and out: AX, BX, CX = x, y, z; DX as the last RotateBySinCos leaves it.

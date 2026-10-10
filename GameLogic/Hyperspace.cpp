@@ -2,7 +2,10 @@
 
 #include "Hyperspace.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
+
+#include <algorithm>
 
 namespace Elite
 {
@@ -10,12 +13,52 @@ namespace Elite
 namespace
 {
 
-// The original routines these call, which other subsystems port.
+using Machine::FLAG_CARRY;
+using Machine::Registers;
+
+// The routines these call through their entries: the original's, or a native routine hooked there.
+constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
 constexpr std::uint16_t NEXT_RANDOM = 0x061C;
+constexpr std::uint16_t FIND_NEAREST_SYSTEM = 0x1292;
+constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
+constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
 constexpr std::uint16_t DRAW_CIRCLE = 0x1AC1;
 constexpr std::uint16_t SET_UP_LOCAL_SPACE = 0x29D0;
+constexpr std::uint16_t ARRIVE_IN_SYSTEM = 0x2B5A;
+constexpr std::uint16_t IN_SAFE_ZONE = 0x2E63;
+constexpr std::uint16_t UPDATE_MESSAGE_LINE = 0x35A3;
+constexpr std::uint16_t IS_OBJECT_NEAR = 0x3B9A;
+constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
+constexpr std::uint16_t COMPLETE_HYPERSPACE_JUMP = 0x4707;
+constexpr std::uint16_t DRAW_HYPERSPACE_RINGS = 0x48C0;
+constexpr std::uint16_t PLAY_HYPERSPACE_TUNNEL = 0x4906;
+constexpr std::uint16_t ENTER_WITCH_SPACE = 0x4917;
+constexpr std::uint16_t UPDATE_MISSION_SCHEDULE = 0x4953;
 constexpr std::uint16_t COMPUTE_ANGLES_TO_OBJECT = 0x4ECF;
 constexpr std::uint16_t START_BEEP = 0x7A57;
+constexpr std::uint16_t SHOW_HYPERSPACE_COUNTDOWN = 0x8C62;
+
+// IsMassLocked: the ships that do not lock the jump drive, by type, and the slot flag of a ship on the
+// scanner.
+constexpr std::array<std::uint8_t, 4> UNLOCKING_TYPES = {5, 0x11, 6, 0x0B}; // Asteroid, Boulder, Barrel, Splinter
+constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F;
+constexpr std::uint16_t SLOT_FLAGS = 0x1E;
+constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
+constexpr std::uint8_t FIRST_SHIP_SLOT_INDEX = 3;
+
+// CompleteHyperspaceJump.
+constexpr std::uint16_t ENGAGED_MESSAGE_FRAMES = 0x32;
+constexpr std::uint16_t ARRIVAL_MESSAGE_FRAMES = 0x1E;
+constexpr std::uint8_t LEGAL_STATUS_PER_JUMP = 5;
+constexpr std::uint16_t MISJUMP_ODDS = 0xC8;       // in 65536
+constexpr std::uint16_t NINTH_GALAXY_ODDS = 0x12C; // in 65536, of staying there
+constexpr std::uint8_t NINTH_GALAXY = 8;
+constexpr std::uint8_t GALAXY_DIGIT_ONE = 0x31;
+constexpr std::uint8_t WITCHSPACE_FRAMES = 0x64;
+constexpr std::uint8_t CHART_CENTER_X = 0x50;
+constexpr std::uint8_t CHART_CENTER_Y = 0x40;
+constexpr std::uint8_t FUEL_LEAK_DELAY_FRAMES = 0x32;
+constexpr std::uint16_t HYPERSPACE_TUNNEL_FRAMES = 0x32;
 
 // ArriveInSystem: the slots it moves (sun, planet, station), 64 bytes apart.
 constexpr std::uint8_t ARRIVAL_SLOTS = 3;
@@ -39,31 +82,12 @@ constexpr std::uint8_t SECOND_MISSION_JUMPS = 0x40;
 constexpr std::uint8_t THIRD_MISSION_JUMPS = 0x80;
 
 constexpr std::uint8_t COUNTDOWN_TEN = 10;
+constexpr std::uint8_t COUNTDOWN_STEP_FRAMES = 10;
 constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
-
-[[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
 
 [[nodiscard]] constexpr std::uint16_t MakeWord(std::uint8_t _low, std::uint8_t _high) noexcept
 {
   return static_cast<std::uint16_t>(_low | (_high << 8));
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(_value, High(_word));
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(Low(_word), _value);
 }
 
 // The step MOVSW takes, backwards with the direction flag set.
@@ -84,6 +108,71 @@ void RandomArrivalOffset(Guest& _guest)
   if ((top & 0x80) != 0)
   {
     regs.ax = static_cast<std::uint16_t>(0u - regs.ax);
+  }
+}
+
+// GalacticJump (0x485B): the next galaxy, the ninth now and then after the eighth, and the system
+// nearest a random point of its chart selected.
+void GalacticJump(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  if (_guest.Get(DS.galaxyNumber) == NINTH_GALAXY)
+  {
+    _guest.Set(DS.galaxyNumber, 0);
+  }
+  else
+  {
+    _guest.Set(DS.galaxyNumber, static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) + 1));
+    if (_guest.Get(DS.galaxyNumber) == NINTH_GALAXY)
+    {
+      _guest.Call(NEXT_RANDOM);
+      if (regs.ax >= NINTH_GALAXY_ODDS)
+      {
+        _guest.Set(DS.galaxyNumber, 0);
+      }
+    }
+  }
+  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) + GALAXY_DIGIT_ONE));
+  _guest.SetByte(DS.arrivalGalaxyDigit.offset, Low(regs.ax));
+  _guest.Call(NEXT_RANDOM);
+  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) & 0x3F) + 0x60));
+  _guest.Set(DS.chartCursorX, Low(regs.ax));
+  SetHigh(regs.ax, static_cast<std::uint8_t>((High(regs.ax) & 0x1F) + 0x30));
+  _guest.Set(DS.chartCursorY, High(regs.ax));
+  _guest.Set(DS.chartIsShortRange, 0);
+  _guest.Call(FIND_NEAREST_SYSTEM);
+  _guest.Call(SELECT_SYSTEM_AT_CURSOR);
+}
+
+// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages.
+void PostArrival(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.si = DS.arrivalSystemText.offset;
+  if (_guest.Get(DS.galacticJumpPending) != 0)
+  {
+    regs.si = _guest.Get(DS.galaxyNumber) == NINTH_GALAXY ? DS.ninthGalaxyText.offset : DS.arrivalGalaxyText.offset;
+    _guest.Set(DS.legalStatus, 0);
+    _guest.Set(DS.galacticHyperdriveFitted, 0);
+  }
+  if (_guest.Get(DS.witchspaceCountdown) == 1)
+  {
+    regs.si = DS.witchSpaceArrivalText.offset;
+  }
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = regs.ax;
+  _guest.Set(DS.messagePointer, regs.si);
+  _guest.Set(DS.messageFrames, ARRIVAL_MESSAGE_FRAMES);
+  _guest.Set(DS.galacticJumpPending, 0);
+  if (_guest.Get(DS.witchspaceCountdown) == 1)
+  {
+    return;
+  }
+  const std::uint8_t mission = _guest.Get(DS.missionNumber);
+  const std::uint8_t stage = _guest.Get(DS.missionStage);
+  if ((mission == 1 && stage == 0) || (mission == 3 && stage == 1 && _guest.Get(DS.invadedStationDestroyed) != 1))
+  {
+    _guest.Set(DS.fuelLeakDelayFrames, FUEL_LEAK_DELAY_FRAMES);
   }
 }
 
@@ -133,6 +222,143 @@ void ArriveInSystem(Guest& _guest)
   _guest.Call(NEXT_RANDOM);
   regs.ax = static_cast<std::uint16_t>(regs.ax & ANGLE_MASK);
   _guest.Set(DS.playerRollAngle, regs.ax);
+}
+
+void IsMassLocked(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  _guest.Call(IN_SAFE_ZONE);
+  if (_guest.Flag(FLAG_CARRY))
+  {
+    return;
+  }
+  regs.di = DS.shipSlots.offset;
+  _guest.Call(IS_OBJECT_NEAR);
+  if (_guest.Flag(FLAG_CARRY))
+  {
+    return;
+  }
+  regs.di = Offset(regs.di, SLOT_BYTES);
+  _guest.Call(IS_OBJECT_NEAR);
+  if (_guest.Flag(FLAG_CARRY))
+  {
+    return;
+  }
+  // Any ship on the scanner but the rocks, barrels and splinters: sub cl,3; jg, else RET with its borrow.
+  regs.di = DS.firstShipSlot.offset;
+  const std::uint8_t slots = _guest.Get(DS.objectSlotCount);
+  regs.cx = static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX);
+  if (static_cast<std::int8_t>(slots) <= FIRST_SHIP_SLOT_INDEX)
+  {
+    _guest.SetFlag(FLAG_CARRY, slots < FIRST_SHIP_SLOT_INDEX);
+    return;
+  }
+  do
+  {
+    const std::uint8_t slot = _guest.Byte(regs.di);
+    SetLow(regs.ax, static_cast<std::uint8_t>(slot >> 1));
+    if ((slot & 1) != 0)
+    {
+      SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) & SHIP_TYPE_MASK));
+      const bool unlocking = std::find(UNLOCKING_TYPES.begin(), UNLOCKING_TYPES.end(), Low(regs.ax)) != UNLOCKING_TYPES.end();
+      if (!unlocking && (_guest.Byte(Offset(regs.di, SLOT_FLAGS)) & FLAG_BLIP_DRAWN) != 0)
+      {
+        _guest.SetFlag(FLAG_CARRY, true);
+        return;
+      }
+    }
+    regs.di = Offset(regs.di, SLOT_BYTES);
+  } while (--regs.cx != 0);
+  _guest.SetFlag(FLAG_CARRY, false);
+}
+
+void CompleteHyperspaceJump(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  _guest.Call(ERASE_COMPASS_AND_BLIPS);
+  regs.ax = DS.hyperspaceEngagedText.offset;
+  _guest.Set(DS.messagePointer, regs.ax);
+  _guest.Set(DS.messageFrames, ENGAGED_MESSAGE_FRAMES);
+  if (_guest.Get(DS.galacticJumpPending) == 1)
+  {
+    GalacticJump(_guest);
+    _guest.JumpBack(0x4733);
+  }
+  else
+  {
+    SetLow(regs.ax, _guest.Get(DS.hyperspaceFuelCost));
+    _guest.Set(DS.fuel, static_cast<std::uint8_t>(_guest.Get(DS.fuel) - Low(regs.ax)));
+    const std::uint8_t legal = _guest.Get(DS.legalStatus);
+    _guest.Set(DS.legalStatus, legal < LEGAL_STATUS_PER_JUMP ? std::uint8_t{0} : static_cast<std::uint8_t>(legal - LEGAL_STATUS_PER_JUMP));
+  }
+
+  // 0x4733: the destination becomes the current system.
+  regs.ax = 0;
+  _guest.Set(DS.selectedDistanceTenthsLy, regs.ax);
+  const bool galactic = _guest.Get(DS.galacticJumpPending) == 1;
+  regs.si = galactic ? DS.selectedSystemName.offset : DS.hyperspaceTargetRecord.offset;
+  regs.di = DS.currentSystemName.offset;
+  regs.cx = _guest.Get(DS.systemRecordBytes);
+  for (;;)
+  {
+    SetLow(regs.ax, _guest.Byte(regs.si));
+    _guest.SetByte(regs.di, Low(regs.ax));
+    ++regs.si;
+    ++regs.di;
+    if (--regs.cx == 0)
+    {
+      break;
+    }
+    _guest.JumpBack(0x474C);
+  }
+  _guest.Set(DS.marketQuantitiesSet, 0);
+  SetLow(regs.cx, _guest.Get(galactic ? DS.selectedSystemIndex : DS.hyperspaceTargetIndex));
+  _guest.Call(LOAD_SYSTEM_SEEDS);
+
+  // A mis-jump into witch space: 200 in 65536 outside the missions, or when forceMisjump asks.
+  bool misjump = false;
+  if (_guest.Get(DS.galacticJumpPending) != 1)
+  {
+    _guest.Call(NEXT_RANDOM);
+    misjump = regs.ax < MISJUMP_ODDS && _guest.Get(DS.missionNumber) == 0;
+  }
+  if (!misjump && _guest.Get(DS.forceMisjump) == 1)
+  {
+    _guest.JumpBack(0x4781); // MisJump
+    misjump = true;
+  }
+  if (misjump)
+  {
+    _guest.Set(DS.forceMisjump, 0);
+    _guest.Call(ENTER_WITCH_SPACE);
+  }
+  else
+  {
+    _guest.Set(DS.witchspaceCountdown, 0);
+    SetLow(regs.ax, _guest.Get(DS.systemX));
+    _guest.Set(DS.currentSystemX, Low(regs.ax));
+    _guest.Set(DS.chartCursorX, Low(regs.ax));
+    _guest.Set(DS.galacticCursorX, Low(regs.ax));
+    _guest.Set(DS.shortRangeCursorX, CHART_CENTER_X);
+    SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
+    _guest.Set(DS.currentSystemChartY, Low(regs.ax));
+    _guest.Set(DS.chartCursorY, Low(regs.ax));
+    _guest.Set(DS.galacticCursorY, Low(regs.ax));
+    _guest.Set(DS.shortRangeCursorY, CHART_CENTER_Y);
+    if (_guest.Get(DS.chartIsShortRange) == 1)
+    {
+      _guest.Set(DS.chartCursorX, CHART_CENTER_X);
+      _guest.Set(DS.chartCursorY, CHART_CENTER_Y);
+    }
+  }
+
+  _guest.Call(PLAY_HYPERSPACE_TUNNEL);
+  _guest.Call(ARRIVE_IN_SYSTEM);
+  _guest.Call(UPDATE_MISSION_SCHEDULE);
+  _guest.Set(DS.supernovaHeat, 0);
+  _guest.Set(DS.supernovaFrames, 0);
+  _guest.Set(DS.jumpedSinceBriefing, 1);
+  PostArrival(_guest);
 }
 
 void ResetHyperspaceRings(Guest& _guest)
@@ -195,6 +421,47 @@ void DrawHyperspaceRings(Guest& _guest)
   }
 }
 
+void PlayHyperspaceTunnel(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  regs.cx = HYPERSPACE_TUNNEL_FRAMES;
+  for (;;)
+  {
+    const std::uint16_t frames = regs.cx;
+    _guest.Call(UPDATE_MESSAGE_LINE);
+    _guest.Call(DRAW_HYPERSPACE_RINGS);
+    _guest.Call(FINISH_SPACE_VIEW_FRAME);
+    regs.cx = frames;
+    if (--regs.cx == 0)
+    {
+      return;
+    }
+    _guest.JumpBack(0x4909);
+  }
+}
+
+void EnterWitchSpace(Guest& _guest)
+{
+  Registers& regs = _guest.Regs();
+  _guest.Set(DS.witchspaceCountdown, WITCHSPACE_FRAMES);
+  // Halfway along the jump: x the mean of the two, y the mean of the chart's (the destination's halved).
+  regs.ax = _guest.Get(DS.systemX);
+  regs.bx = _guest.Get(DS.currentSystemX);
+  regs.ax = static_cast<std::uint16_t>((regs.ax + regs.bx) >> 1);
+  _guest.Set(DS.currentSystemX, Low(regs.ax));
+  _guest.Set(DS.chartCursorX, Low(regs.ax));
+  _guest.Set(DS.galacticCursorX, Low(regs.ax));
+  _guest.Set(DS.shortRangeCursorX, CHART_CENTER_X);
+  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
+  // add al, [currentSystemChartY]; shr al,1: a byte sum, its carry lost.
+  const auto sum = static_cast<std::uint8_t>(Low(regs.ax) + _guest.Get(DS.currentSystemChartY));
+  SetLow(regs.ax, static_cast<std::uint8_t>(sum >> 1));
+  _guest.Set(DS.currentSystemChartY, Low(regs.ax));
+  _guest.Set(DS.chartCursorY, Low(regs.ax));
+  _guest.Set(DS.galacticCursorY, Low(regs.ax));
+  _guest.Set(DS.shortRangeCursorY, CHART_CENTER_Y);
+}
+
 void UpdateMissionSchedule(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -251,6 +518,30 @@ void LatchHyperspaceTarget(Guest& _guest)
   } while (--regs.cx != 0);
 }
 
+void TickHyperspaceCountdown(Guest& _guest)
+{
+  if (_guest.Get(DS.galacticDriveReadyFrames) != 0)
+  {
+    _guest.Set(DS.galacticDriveReadyFrames, static_cast<std::uint8_t>(_guest.Get(DS.galacticDriveReadyFrames) - 1));
+  }
+  if (_guest.Get(DS.hyperspaceCountdown) == 0)
+  {
+    return;
+  }
+  _guest.Set(DS.hyperspaceCountdownFrames, static_cast<std::uint8_t>(_guest.Get(DS.hyperspaceCountdownFrames) - 1));
+  if (_guest.Get(DS.hyperspaceCountdownFrames) != 0)
+  {
+    return;
+  }
+  _guest.Set(DS.hyperspaceCountdownFrames, COUNTDOWN_STEP_FRAMES);
+  _guest.Set(DS.hyperspaceCountdown, static_cast<std::uint8_t>(_guest.Get(DS.hyperspaceCountdown) - 1));
+  _guest.Call(SHOW_HYPERSPACE_COUNTDOWN);
+  if (_guest.Get(DS.hyperspaceCountdown) == 0)
+  {
+    _guest.Call(COMPLETE_HYPERSPACE_JUMP);
+  }
+}
+
 void ShowHyperspaceCountdown(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -268,21 +559,40 @@ void ShowHyperspaceCountdown(Guest& _guest)
 namespace
 {
 
+using Machine::NativeReturn;
+using Machine::NativeWait;
 using Machine::REGISTER_ALL;
 using Machine::REGISTER_AX;
+using Machine::REGISTER_BP;
+using Machine::REGISTER_BX;
 using Machine::REGISTER_CX;
 using Machine::REGISTER_DI;
+using Machine::REGISTER_DX;
 using Machine::REGISTER_SI;
 
 // UpdateMissionSchedule and LatchHyperspaceTarget clobber AL but keep AH: AX is compared whole, and the
 // ports leave AL as the original does.
+// CompleteHyperspaceJump and PlayHyperspaceTunnel wait as a rule, for the tunnel's frames.
+// TickHyperspaceCountdown waits only on the frame the countdown reaches 0, but it is hooked as a routine
+// that always waits: as one that sometimes waits, a compared run would hand that frame's whole jump to
+// the original with no hook in force, and none of the work routines the jump calls would be compared.
+// What it does on the other frames is a few decrements, and ShowHyperspaceCountdown, compared on its own.
 constexpr std::array ENTRIES = {
   NativeEntry{0x2B5A, "ArriveInSystem", &ArriveInSystem, Machine::NativeContract{REGISTER_ALL, 0}},
+  NativeEntry{0x4144, "IsMassLocked", &IsMassLocked, Machine::NativeContract{0, FLAG_CARRY}},
+  NativeEntry{0x4707, "CompleteHyperspaceJump", &CompleteHyperspaceJump,
+              Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP, 0},
+              NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x48AB, "ResetHyperspaceRings", &ResetHyperspaceRings,
               Machine::NativeContract{REGISTER_AX | REGISTER_CX | REGISTER_SI | REGISTER_DI, 0}},
   NativeEntry{0x48C0, "DrawHyperspaceRings", &DrawHyperspaceRings, Machine::NativeContract{REGISTER_ALL, 0}},
+  NativeEntry{0x4906, "PlayHyperspaceTunnel", &PlayHyperspaceTunnel, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
+              NativeWait::Always},
+  NativeEntry{0x4917, "EnterWitchSpace", &EnterWitchSpace, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
   NativeEntry{0x4953, "UpdateMissionSchedule", &UpdateMissionSchedule, PRESERVES_ALL},
   NativeEntry{0x49F6, "LatchHyperspaceTarget", &LatchHyperspaceTarget, Machine::NativeContract{REGISTER_CX | REGISTER_SI | REGISTER_DI, 0}},
+  NativeEntry{0x7F79, "TickHyperspaceCountdown", &TickHyperspaceCountdown, Machine::NativeContract{REGISTER_ALL, 0}, NativeReturn::Near, 0,
+              NativeWait::Always},
   NativeEntry{0x8C62, "ShowHyperspaceCountdown", &ShowHyperspaceCountdown, Machine::NativeContract{REGISTER_AX, 0}},
 };
 

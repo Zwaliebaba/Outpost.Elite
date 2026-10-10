@@ -61,9 +61,16 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
     if (!Elite::ParseSteps(ReadText(path), steps, error))
       Assert::Fail((name + L": " + Widen(error)).c_str());
 
+    // What the interpreted run executes, which the native runs' digests are compared with. Made before
+    // the machine that marks it, so that it outlives it.
+    std::vector<std::uint8_t> executed;
     ReferenceRig rig("Corpus");
     Assert::IsTrue(rig.Loaded(), L"ELITES.EXE at the repository root");
-    if (_running != Running::Original)
+    if (_running == Running::Original)
+    {
+      rig.Host().Processor().SetExecutionMap(&executed);
+    }
+    else
     {
       Elite::InstallNativeRoutines(rig.Host(), rig.Program());
       rig.Host().Native().SetVerifying(_running == Running::Compared);
@@ -89,6 +96,8 @@ template <typename Check> void PlayEveryReplay(Running _running, Check _check)
       ++checked;
     }
     Assert::IsTrue(checked > 0, (name + L": checks no digest").c_str());
+    if (_running == Running::Original)
+      SaveExecutedOffsets("Corpus-" + path.stem().string(), executed, rig.Program());
     if (_running == Running::Compared)
       SaveNativeReport("Corpus-" + path.stem().string(), rig.Host().Native());
     _check(name, rig.Host());

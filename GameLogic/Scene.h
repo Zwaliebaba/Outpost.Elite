@@ -24,6 +24,23 @@ void ProjectVertices(Guest& _guest);
 /// each. AX, BX clobbered.
 void ReflectVertexAboutCenter(Guest& _guest);
 
+/// OffsetVertexByCenter (CS:3768): the vertex at SI plus drawCenter, three words. AX clobbered.
+void OffsetVertexByCenter(Guest& _guest);
+
+/// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from SI = blueprint+3. The eight corners
+/// (+-boxHalfWidth, +-byte +3, +-byte +4) about drawCenter, rotated by the drawn angles, the player's pitch and the
+/// view direction, as vertices 34-41. Out: SI = blueprint+5; AX, BX, CX, DX, BP, DI clobbered.
+void BuildBoxCornerVertices(Guest& _guest);
+
+/// BuildDodoVertices (CS:38BF): the blueprint handler of type 0, the Dodo station: two rings of five from the sine
+/// table in 72-degree steps from the roll angle, a slot of four, rotated as BuildBoxCornerVertices rotates, and the
+/// rings reflected through drawCenter, as vertices 0-23. Keeps SI.
+void BuildDodoVertices(Guest& _guest);
+
+/// ScaleDodoRadii (CS:3A13): the signed byte AL by shifts and adds. Out: CX = AL * 2.34, DX = AL * 3.80; AX
+/// clobbered.
+void ScaleDodoRadii(Guest& _guest);
+
 /// RunVertexProgram (CS:3A40): runs the count byte and ops at SI on vertexBuffer, with BP, BX, DX as the
 /// accumulator. Out: SI past the program; AX, CX, DI clobbered.
 void RunVertexProgram(Guest& _guest);
@@ -57,6 +74,10 @@ void TransformShip(Guest& _guest);
 /// the faces. Out: DI = the slot; every other register clobbered.
 void RunBlueprintHandler(Guest& _guest);
 
+/// RenderBlueprintBody (CS:3CF2): what a blueprint handler returns into: RunBlueprintHandler's rendering of the
+/// blueprint at SI, then the slot it pushed popped into DI.
+void RenderBlueprintBody(Guest& _guest);
+
 /// TransformAndDrawObjects (CS:3D25): classifies and transforms every slot, then draws the visible ones
 /// from the farthest in. Clobbers every register.
 void TransformAndDrawObjects(Guest& _guest);
@@ -71,6 +92,14 @@ void TransformToView(Guest& _guest);
 /// DrawSunOrPlanet (CS:3F4F): the disc of the sun or planet in slot DI, with its altitude, cabin
 /// temperature, fuel scooping and death by heat.
 void DrawSunOrPlanet(Guest& _guest);
+
+/// DrawDistantStation (CS:45C6): the station in slot DI as a disc in colour 3 at its projected compass position,
+/// radius 7 rows when its depth byte +25h is below 14h and smaller further off, or nothing.
+void DrawDistantStation(Guest& _guest);
+
+/// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Out: AX, BX the roll's sine
+/// and cosine.
+void LoadPlayerAngles(Guest& _guest);
 
 /// ProjectToScreen (CS:8D2E): AX = 80h + 256x/z, BX = 40h + 256y/z for x = AX, y = BX, z = CX, an
 /// overflowing divide saturated by the trap. DX, BP clobbered.

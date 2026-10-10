@@ -75,6 +75,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Ai.h" />
+    <ClInclude Include="Arithmetic.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="DataField.h" />
     <ClInclude Include="DataOverlay.h" />

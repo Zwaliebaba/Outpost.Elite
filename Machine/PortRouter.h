@@ -58,6 +58,13 @@ public:
     return m_writes;
   }
 
+  /// Sets the count WriteCount returns. A comparison of native code with the original (ADR-010) runs
+  /// the same call twice and keeps one outcome; it puts back the count that outcome left.
+  void SetWriteCount(std::uint64_t _writes) noexcept
+  {
+    m_writes = _writes;
+  }
+
   /// One read or write that reached the bus.
   struct Access
   {

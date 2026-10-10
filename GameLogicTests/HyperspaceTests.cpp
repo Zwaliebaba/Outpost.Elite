@@ -3,6 +3,7 @@
 #include "ComparisonRig.h"
 #include "DataOverlay.h"
 #include "Guest.h"
+#include "TwinRig.h"
 
 #include <array>
 #include <initializer_list>
@@ -20,6 +21,34 @@ namespace
 using Elite::DS;
 
 constexpr std::uint16_t ARRIVE_IN_SYSTEM = 0x2B5A;
+constexpr std::uint16_t IS_MASS_LOCKED = 0x4144;
+constexpr std::uint16_t ENTER_WITCH_SPACE = 0x4917;
+constexpr std::uint16_t SLOT_BYTES = 0x40;
+constexpr std::uint16_t SLOT_FLAGS = 0x1E;
+
+// Every register given a value of its own, so that each one the routine leaves is seen.
+constexpr Inputs ALL_REGISTERS = {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444, .si = 0x5555, .di = 0x6666, .bp = 0x7777};
+
+// A jump set up to happen on the next frame: galactic or not, from which galaxy, with the random
+// numbers all 0 (randomState0-2 all 0 stay so, below the 200 of a mis-jump and the 300 of the ninth
+// galaxy) or from a seed that draws as usual, a forced mis-jump, and the mission.
+struct Jump
+{
+  std::uint8_t galactic;
+  std::uint8_t galaxy;
+  bool zeroRandom;
+  std::uint8_t forceMisjump;
+  std::uint8_t mission;
+  std::uint8_t missionStage;
+};
+
+// randomState0-2, from which the next numbers draw as usual.
+constexpr std::array<std::uint16_t, 3> RANDOM_SEED = {0x1234, 0x5678, 0x9ABC};
+
+[[nodiscard]] std::uint16_t Slot(std::uint16_t _index) noexcept
+{
+  return static_cast<std::uint16_t>(DS.shipSlots.offset + _index * SLOT_BYTES);
+}
 constexpr std::uint16_t RESET_HYPERSPACE_RINGS = 0x48AB;
 constexpr std::uint16_t DRAW_HYPERSPACE_RINGS = 0x48C0;
 constexpr std::uint16_t UPDATE_MISSION_SCHEDULE = 0x4953;
@@ -63,7 +92,7 @@ void AssertExecuted(ComparisonRig& _rig, std::uint16_t _entry, std::initializer_
   for (const std::uint16_t offset : _offsets)
   {
     const std::wstring message = Hex(offset) + L" ran in a comparison";
-    Assert::IsTrue(found->second.executed.contains(offset), message.c_str());
+    Assert::IsTrue(found->second.executed.Contains(offset), message.c_str());
   }
 }
 
@@ -80,6 +109,40 @@ public:
 private:
   std::uint32_t m_state = 1;
 };
+
+// Launches from Lave on both twins, and flies on for 6 seconds.
+void Launch(TwinRig& _rig)
+{
+  _rig.Play("key space; wait 4\nkey F1; wait 6");
+}
+
+// _jump set up on both twins, to the system selected as LatchHyperspaceTarget would latch it, and played
+// through the tunnel to the arrival.
+void PlayJump(TwinRig& _rig, const Jump& _jump)
+{
+  _rig.Both(
+    [&](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    {
+      Elite::Guest guest(_pc, _program.loadSegment, Elite::DataSegment(_program));
+      guest.Set(DS.hyperspaceTargetIndex, guest.Get(DS.selectedSystemIndex));
+      for (std::uint16_t index = 0; index < guest.Get(DS.systemRecordBytes); ++index)
+      {
+        guest.SetByte(static_cast<std::uint16_t>(DS.hyperspaceTargetRecord.offset + index),
+                      guest.Byte(static_cast<std::uint16_t>(DS.selectedSystemName.offset + index)));
+      }
+      guest.Set(DS.galacticJumpPending, _jump.galactic);
+      guest.Set(DS.galaxyNumber, _jump.galaxy);
+      guest.Set(DS.randomState0, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0]);
+      guest.Set(DS.randomState1, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1]);
+      guest.Set(DS.randomState2, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2]);
+      guest.Set(DS.forceMisjump, _jump.forceMisjump);
+      guest.Set(DS.missionNumber, _jump.mission);
+      guest.Set(DS.missionStage, _jump.missionStage);
+      guest.Set(DS.hyperspaceCountdown, 1);
+      guest.Set(DS.hyperspaceCountdownFrames, 1);
+    });
+  _rig.Play("wait 3.5\ndigest arrived");
+}
 
 } // namespace
 
@@ -226,6 +289,96 @@ public:
       rig.Call(SHOW_HYPERSPACE_COUNTDOWN, {.ax = 0x1111, .bx = 0x2222, .cx = 0x3333, .dx = 0x4444});
     }
     rig.AssertAllAgreed(SHOW_HYPERSPACE_COUNTDOWN, COUNTDOWNS);
+  }
+
+  // Mass-locked in the safe zone, near the sun and near the planet; by ships on the scanner but not by
+  // rocks, barrels and splinters, by ships without a blip or by empty slots; and with no ship slots, or
+  // too few, at all.
+  TEST_METHOD(IsMassLockedAgreesOnEveryLock)
+  {
+    ComparisonRig rig("IsMassLocked");
+    Elite::Guest guest = GuestOf(rig);
+    std::uint64_t calls = 0;
+    const auto call = [&]()
+    {
+      rig.Call(IS_MASS_LOCKED, ALL_REGISTERS);
+      ++calls;
+    };
+    // The sun and the planet far off: a 24-bit coordinate past 16 bits.
+    for (std::uint16_t index = 0; index < 2; ++index)
+    {
+      guest.SetByte(static_cast<std::uint16_t>(Slot(index) + 1), 0x10);
+      guest.SetByte(static_cast<std::uint16_t>(Slot(index) + 5), 0);
+    }
+    for (std::uint16_t index = 3; index < 20; ++index)
+      guest.SetByte(Slot(index), 0);
+    guest.Set(DS.objectSlotCount, 0x14);
+    guest.Set(DS.safeZoneFlags, 1);
+    call();
+    guest.Set(DS.safeZoneFlags, 0);
+    call();
+    for (std::uint16_t index = 0; index < 2; ++index)
+    {
+      guest.SetByte(static_cast<std::uint16_t>(Slot(index) + 1), 0);
+      call();
+      guest.SetByte(static_cast<std::uint16_t>(Slot(index) + 1), 0x10);
+    }
+    for (const std::uint8_t type : {std::uint8_t{5}, std::uint8_t{0x11}, std::uint8_t{6}, std::uint8_t{0x0B}, std::uint8_t{2}})
+    {
+      for (const std::uint8_t blip : {std::uint8_t{0}, std::uint8_t{2}})
+      {
+        guest.SetByte(Slot(7), static_cast<std::uint8_t>(0x81 | (type << 1)));
+        guest.SetByte(static_cast<std::uint16_t>(Slot(7) + SLOT_FLAGS), blip);
+        call();
+      }
+    }
+    for (const std::uint8_t slots : {std::uint8_t{3}, std::uint8_t{2}, std::uint8_t{0x82}, std::uint8_t{4}})
+    {
+      guest.Set(DS.objectSlotCount, slots);
+      call();
+    }
+    rig.AssertAllAgreed(IS_MASS_LOCKED, calls);
+  }
+
+  // Witch space between two systems either side, with a chart y whose sum carries.
+  TEST_METHOD(EnterWitchSpaceAgrees)
+  {
+    ComparisonRig rig("EnterWitchSpace");
+    Elite::Guest guest = GuestOf(rig);
+    struct Between
+    {
+      std::uint8_t fromX;
+      std::uint8_t fromY;
+      std::uint8_t toX;
+      std::uint8_t toY;
+    };
+    constexpr std::array<Between, 3> BETWEEN = {{{0x10, 0x20, 0xF0, 0xE0}, {0xF0, 0xF0, 0x10, 0xFE}, {0x80, 0x00, 0x80, 0x00}}};
+    for (const Between& between : BETWEEN)
+    {
+      guest.Set(DS.currentSystemX, between.fromX);
+      guest.Set(DS.currentSystemChartY, between.fromY);
+      guest.Set(DS.systemX, between.toX);
+      guest.Set(DS.systemY, between.toY);
+      rig.Call(ENTER_WITCH_SPACE, ALL_REGISTERS);
+    }
+    rig.AssertAllAgreed(ENTER_WITCH_SPACE, BETWEEN.size());
+  }
+
+  // The galactic drive's ready frames counted down; galactic jumps into the ninth galaxy and out of it,
+  // and into it and straight out; a mis-jump into witch space at random and one forced; and arrivals
+  // that arm missions 1 and 3's fuel leaks.
+  TEST_METHOD(JumpsAgreeGalacticAndIntoWitchSpace)
+  {
+    TwinRig rig("TwinJumps");
+    Launch(rig);
+    rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+             { _pc.Ram().Write8(Elite::DataSegment(_program), DS.galacticDriveReadyFrames.offset, 3); });
+    rig.Play("wait 0.5");
+    PlayJump(rig, {1, 7, true, 0, 1, 0});
+    PlayJump(rig, {1, 8, false, 0, 3, 1});
+    PlayJump(rig, {1, 7, false, 0, 0, 0});
+    PlayJump(rig, {0, 0, true, 0, 0, 0});
+    PlayJump(rig, {0, 0, false, 1, 0, 0});
   }
 };
 

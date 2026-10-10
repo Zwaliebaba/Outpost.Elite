@@ -1,8 +1,12 @@
 #include "pch.h"
 
+#include "Docked.h"
 #include "Galaxy.h"
 
+#include "Arithmetic.h"
 #include "DataOverlay.h"
+
+#include <initializer_list>
 
 namespace Elite
 {
@@ -11,12 +15,66 @@ namespace
 {
 
 // The original routines these call, which other subsystems port.
+constexpr std::uint16_t PRESENT_CHART_FRAME = 0x0587;
+constexpr std::uint16_t PLOT_PIXEL = 0x15E0;
+constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
+constexpr std::uint16_t DRAW_LINE = 0x16D1;
 constexpr std::uint16_t DRAW_DISC = 0x1826;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t FORMAT_DECIMAL_5 = 0x3407;
 constexpr std::uint16_t BLANK_LEADING_ZEROS = 0x3432;
 constexpr std::uint16_t DRAW_SMALL_VIEW_STRING = 0x3527;
 constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
+constexpr std::uint16_t READ_FIRE_BUTTON = 0x74E0;
+constexpr std::uint16_t READ_STEERING = 0x7536;
+constexpr std::uint16_t GET_KEY = 0x7616;
+constexpr std::uint16_t READ_TEXT_LINE = 0x7694;
+constexpr std::uint16_t DRAW_CHART_FRAME = 0x7C25;
+constexpr std::uint16_t DRAW_DOCKED_FRAME = 0x7C88;
+
+// This subsystem's routines, which the routines that wait call through their entries.
+constexpr std::uint16_t GET_SHORT_RANGE_OFFSET = 0x1076;
+constexpr std::uint16_t TWIST_SYSTEM_SEEDS = 0x10C0;
+constexpr std::uint16_t LOAD_GALAXY_SEEDS = 0x10D6;
+constexpr std::uint16_t MOVE_CURSOR_TO_SYSTEM = 0x1146;
+constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
+constexpr std::uint16_t SHOW_NEAREST_SYSTEM_DISTANCE = 0x1341;
+constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
+constexpr std::uint16_t ADVANCE_TO_NEXT_SYSTEM = 0x13B4;
+constexpr std::uint16_t GENERATE_SYSTEM_NAME = 0x13C1;
+constexpr std::uint16_t FIND_SYSTEM_BY_NAME = 0x140D;
+constexpr std::uint16_t DRAW_CHART_ITEMS = 0x14C5;
+constexpr std::uint16_t PLACE_CHART_LABELS = 0x1505;
+constexpr std::uint16_t CLEAR_CHART_TEXT_LINES = 0x15BC;
+constexpr std::uint16_t TERMINATE_SELECTED_SYSTEM_NAME = 0x60EB;
+constexpr std::uint16_t FORMAT_SELECTED_SYSTEM_DISTANCE = 0x60F7;
+constexpr std::uint16_t SHOW_SYSTEM_DESCRIPTION = 0x6FC0;
+
+// Where the loops of the routines that wait jump back to.
+constexpr std::uint16_t GALACTIC_CHART_FRAME = 0x0CF9;
+constexpr std::uint16_t GALACTIC_SYSTEM_DOT = 0x0D92;
+constexpr std::uint16_t GALACTIC_KEY_IGNORED = 0x0E0A;
+constexpr std::uint16_t SHORT_RANGE_NEXT_SYSTEM = 0x0E96;
+constexpr std::uint16_t SHORT_RANGE_LABEL_BELOW_TOP = 0x0F23;
+constexpr std::uint16_t SHORT_RANGE_LABEL_ABOVE_BOTTOM = 0x0F2D;
+constexpr std::uint16_t SHORT_RANGE_LABEL_NAME = 0x0F41;
+constexpr std::uint16_t SHORT_RANGE_SYSTEM_DONE = 0x0F50;
+constexpr std::uint16_t SHORT_RANGE_CHART_FRAME = 0x0F60;
+constexpr std::uint16_t SHORT_RANGE_KEY_IGNORED = 0x1030;
+constexpr std::uint16_t FIND_UPPER_CASE = 0x144F;
+constexpr std::uint16_t FIND_NEXT_SYSTEM = 0x146F;
+constexpr std::uint16_t FIND_NOT_ON_MAP = 0x148B;
+
+// Scan codes the charts and the data screen read.
+constexpr std::uint8_t SCAN_ESCAPE = 0x01;
+constexpr std::uint8_t SCAN_D = 0x20;
+constexpr std::uint8_t SCAN_F = 0x21;
+constexpr std::uint8_t SCAN_F1 = 0x3B;
+constexpr std::uint8_t SCAN_F5 = 0x3F;
+constexpr std::uint8_t SCAN_F6 = 0x40;
+constexpr std::uint8_t SCAN_F7 = 0x41;
+constexpr std::uint8_t SCAN_F10 = 0x44;
+constexpr std::uint8_t SCAN_KEYPAD_5 = 0x4C;
 
 // The control codes' handlers as textControlCodes holds them, and where they return to.
 constexpr std::uint16_t INSERT_SYSTEM_NAME = 0x707A;
@@ -47,6 +105,55 @@ constexpr std::uint8_t LABEL_LOWEST_ROW = 0x7C;
 // The text lines under a chart, as CGA offsets.
 constexpr std::uint16_t CHART_TEXT_LINE_1 = 0x1B8A;
 constexpr std::uint16_t CHART_TEXT_LINE_2 = 0x1D1A;
+constexpr std::uint16_t CHART_NAME_PADDING = 0x1B9A; // past the eight characters of a name on line 1
+constexpr std::uint16_t CHART_TITLE = 0x0388;
+
+// Inks as CGA pixel patterns: colours 1, 2 and 3.
+constexpr std::uint16_t INK_1 = 0x5555;
+constexpr std::uint16_t INK_2 = 0xAAAA;
+constexpr std::uint16_t INK_3 = 0xFFFF;
+
+// The charts' crosses: half their arms, in pixels.
+constexpr std::uint16_t CURRENT_SYSTEM_ARM = 0x11;
+constexpr std::uint16_t CURSOR_ARM = 5;
+constexpr std::uint8_t CURSOR_LOWEST_ROW = 0x7F;
+constexpr std::uint8_t CHART_ROWS = 0x80;
+constexpr std::uint8_t LABEL_OFFSET_X = 7;
+constexpr std::uint8_t LABEL_ABOVE = 2;
+constexpr std::uint8_t LABEL_BELOW = 3;
+constexpr std::uint8_t SMALL_LETTER_PIXELS = 6;
+
+// distanceText's digits: hundreds, tens and units, then the tenths past the point.
+constexpr std::uint16_t DISTANCE_TEXT_HUNDREDS = 0x0A;
+constexpr std::uint16_t DISTANCE_TEXT_TENS = 0x0B;
+constexpr std::uint16_t DISTANCE_TEXT_UNITS = 0x0C;
+constexpr std::uint16_t DISTANCE_TEXT_TENTHS = 0x0E;
+constexpr std::uint8_t UPPER_CASE_MASK = 0xDF;
+
+// The data screen's labels and figures in the data segment, and where it prints them (text offsets).
+constexpr std::uint16_t DATA_TITLE = 0x0054;
+constexpr std::uint16_t DISTANCE_LABEL = 0x7D4B; // 'Distance:     '
+constexpr std::uint16_t DISTANCE_ROW = 0x0144;
+constexpr std::uint16_t LIGHT_YEARS_LABEL = 0x7D61; // ' Light Years'
+constexpr std::uint16_t ECONOMY_LABEL = 0x7C1C;     // 'Economy:      '
+constexpr std::uint16_t ECONOMY_ROW = 0x01E4;
+constexpr std::uint16_t GOVERNMENT_LABEL = 0x7CCD; // 'Government:   '
+constexpr std::uint16_t GOVERNMENT_ROW = 0x0284;
+constexpr std::uint16_t TECH_LEVEL_LABEL = 0x7D39; // 'Tech. Level:  '
+constexpr std::uint16_t TECH_LEVEL_ROW = 0x0324;
+constexpr std::uint16_t POPULATION_DIGITS = 0x7D7D; // '000.0 Billion'
+constexpr std::uint16_t POPULATION_LABEL = 0x7D6E;  // 'Population:   '
+constexpr std::uint16_t POPULATION_ROW = 0x03C4;
+constexpr std::uint16_t POPULATION_SHOWN = 0x7D7F; // the units digit, where the point goes after it
+constexpr std::uint16_t SPECIES_OPEN = 0x7D8B;     // '('
+constexpr std::uint16_t SPECIES_ROW = 0x0414;
+constexpr std::uint16_t HUMAN_COLONIALS = 0x7D8D; // 'Human Colonials)'
+constexpr std::uint8_t NO_SPECIES = 0xFF;
+constexpr std::uint16_t PRODUCTIVITY_LABEL = 0x7E94; // 'Productivity: '
+constexpr std::uint16_t PRODUCTIVITY_ROW = 0x04B4;
+constexpr std::uint16_t RADIUS_LABEL = 0x7EAE; // 'Radius (Av): 00000 km'
+constexpr std::uint16_t RADIUS_ROW = 0x0554;
+constexpr std::uint8_t TECH_LEVEL_TENS = 10;
 
 // FormatSelectedSystemDistance's text ends here, its tenths digit last.
 constexpr std::uint16_t SELECTED_DISTANCE_TEXT_END = 0x7D5F;
@@ -62,29 +169,9 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint8_t DESCRIPTION_PHRASE_CODE = 0x80;
 constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
 
-[[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word);
-}
-
-[[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
-{
-  return static_cast<std::uint8_t>(_word >> 8);
-}
-
 [[nodiscard]] constexpr std::uint16_t MakeWord(std::uint8_t _low, std::uint8_t _high) noexcept
 {
   return static_cast<std::uint16_t>(_low | (_high << 8));
-}
-
-void SetLow(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(_value, High(_word));
-}
-
-void SetHigh(std::uint16_t& _word, std::uint8_t _value) noexcept
-{
-  _word = MakeWord(Low(_word), _value);
 }
 
 [[nodiscard]] bool Carry(const Machine::Registers& _regs) noexcept
@@ -177,13 +264,13 @@ void RunTextControlCode(Guest& _guest, std::uint16_t _handler)
     InsertRandomName(_guest);
     break;
   case BACKSPACE_DESCRIPTION:
-    --regs.di;
+    BackspaceDescription(_guest);
     break;
   case START_CAPITALIZING:
-    _guest.Set(DS.descriptionCapitalize, 1);
+    StartCapitalizing(_guest);
     break;
   case STOP_CAPITALIZING:
-    _guest.Set(DS.descriptionCapitalize, 0);
+    StopCapitalizing(_guest);
     break;
   default:
     // Codes 7-31 jump into descriptionPhraseLists, which no text uses: run whatever is there.
@@ -195,7 +282,447 @@ void RunTextControlCode(Guest& _guest, std::uint16_t _handler)
   regs.si = text;
 }
 
+// A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (DX, BX) across and down, as two clipped
+// lines, with CX = DX and AX = BX on entry.
+void DrawCross(Guest& _guest, std::uint16_t _arm)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Push(regs.bx);
+  _guest.Push(regs.dx);
+  regs.cx = static_cast<std::uint16_t>(regs.cx - _arm);
+  regs.dx = static_cast<std::uint16_t>(regs.dx + _arm);
+  _guest.Call(DRAW_CLIPPED_LINE);
+  regs.dx = _guest.Pop();
+  regs.bx = _guest.Pop();
+  regs.ax = regs.bx;
+  regs.cx = regs.dx;
+  regs.ax = static_cast<std::uint16_t>(regs.ax - _arm);
+  regs.bx = static_cast<std::uint16_t>(regs.bx + _arm);
+  _guest.Call(DRAW_CLIPPED_LINE);
+}
+
+// The chart cursor's cross and the dot at its centre, in colour 1 then 0 (CS:0D4D, CS:0F99).
+void DrawChartCursor(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Set(DS.drawColor, 1);
+  regs.cx = _guest.Get(DS.chartCursorX);
+  regs.dx = regs.cx;
+  regs.ax = _guest.Get(DS.chartCursorY);
+  regs.bx = regs.ax;
+  DrawCross(_guest, CURSOR_ARM);
+  _guest.Set(DS.drawColor, 0);
+  regs.dx = Join(_guest.Get(DS.chartCursorY), _guest.Get(DS.chartCursorX));
+  _guest.Call(PLOT_PIXEL);
+}
+
+// The steering moves a chart's cursor (CS:0DB4, CS:0FDA): AL across, clamped to the chart, and AH negated
+// down, clamped to its 128 rows.
+void MoveChartCursor(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(READ_STEERING);
+  SetHigh(regs.ax, Negate(High(regs.ax)));
+  const std::uint8_t across = Low(regs.ax);
+  const unsigned x = unsigned{across} + unsigned{_guest.Get(DS.chartCursorX)};
+  if ((across & 0x80) == 0)
+  {
+    SetLow(regs.ax, x > 0xFF ? std::uint8_t{0xFF} : static_cast<std::uint8_t>(x));
+  }
+  else
+  {
+    // Adding a negative byte carries unless it goes below 0.
+    SetLow(regs.ax, x > 0xFF ? static_cast<std::uint8_t>(x) : std::uint8_t{0});
+  }
+  _guest.Set(DS.chartCursorX, Low(regs.ax));
+  const std::uint8_t down = High(regs.ax);
+  const unsigned y = unsigned{down} + unsigned{_guest.Get(DS.chartCursorY)};
+  if ((down & 0x80) == 0)
+  {
+    const auto row = static_cast<std::uint8_t>(y);
+    SetHigh(regs.ax, row < CHART_ROWS ? row : CURSOR_LOWEST_ROW);
+  }
+  else
+  {
+    SetHigh(regs.ax, y > 0xFF ? static_cast<std::uint8_t>(y) : std::uint8_t{0});
+  }
+  _guest.Set(DS.chartCursorY, High(regs.ax));
+}
+
+// What tells the two charts' key handling apart.
+struct ChartKeys
+{
+  std::uint16_t frame;   // the start of the chart's frame, where its loop jumps back to
+  std::uint16_t ignored; // the jump to it that the key tests reach (CS:0E0A, CS:1030)
+  std::uint8_t ownKey;   // the chart's own F key, which leaves it open
+  void (*recenter)(Guest&);
+  DataField<std::uint8_t> keptCursorX;
+  DataField<std::uint8_t> keptCursorY;
+};
+
+// The galactic chart's cursor back on the current system, through AL (CS:0E19).
+void RecenterGalacticCursor(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  SetLow(regs.ax, _guest.Get(DS.currentSystemX));
+  _guest.Set(DS.chartCursorX, Low(regs.ax));
+  SetLow(regs.ax, _guest.Get(DS.currentSystemChartY));
+  _guest.Set(DS.chartCursorY, Low(regs.ax));
+}
+
+// The short-range chart's cursor back on its centre (CS:103F).
+void RecenterShortRangeCursor(Guest& _guest)
+{
+  _guest.Set(DS.chartCursorX, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_X));
+  _guest.Set(DS.chartCursorY, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_ROW));
+}
+
+constexpr ChartKeys GALACTIC_CHART_KEYS{.frame = GALACTIC_CHART_FRAME,
+                                        .ignored = GALACTIC_KEY_IGNORED,
+                                        .ownKey = SCAN_F5,
+                                        .recenter = &RecenterGalacticCursor,
+                                        .keptCursorX = DS.galacticCursorX,
+                                        .keptCursorY = DS.galacticCursorY};
+constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
+                                           .ignored = SHORT_RANGE_KEY_IGNORED,
+                                           .ownKey = SCAN_F6,
+                                           .recenter = &RecenterShortRangeCursor,
+                                           .keptCursorX = DS.shortRangeCursorX,
+                                           .keptCursorY = DS.shortRangeCursorY};
+
+// A chart's key (CS:0DEF, CS:1015): D shows the distance to the system nearest the cursor, F finds one by
+// name, keypad 5 or fire recentres the cursor, and Esc or an F key other than the chart's own closes it,
+// selecting the system at the cursor unless the hyperspace countdown runs. True when it closes, with the
+// key in AX; otherwise it jumps back to the chart's frame.
+[[nodiscard]] bool ReadChartKey(Guest& _guest, const ChartKeys& _chart)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(GET_KEY);
+  if (_guest.Flag(Machine::FLAG_ZERO))
+  {
+    _guest.JumpBack(_chart.frame);
+    return false;
+  }
+  const std::uint8_t key = High(regs.ax);
+  if (key == SCAN_D || key == SCAN_F)
+  {
+    _guest.Call(key == SCAN_D ? SHOW_NEAREST_SYSTEM_DISTANCE : FIND_SYSTEM_BY_NAME);
+    _guest.JumpBack(_chart.frame);
+    return false;
+  }
+  bool recenter = key == SCAN_KEYPAD_5;
+  if (!recenter)
+  {
+    _guest.Push(regs.ax);
+    _guest.Call(READ_FIRE_BUTTON);
+    regs.ax = _guest.Pop();
+    recenter = _guest.Flag(Machine::FLAG_CARRY);
+  }
+  if (recenter)
+  {
+    _chart.recenter(_guest);
+  }
+  const bool closes = key == SCAN_ESCAPE || (key >= SCAN_F1 && key <= SCAN_F10 && key != _chart.ownKey);
+  if (!closes)
+  {
+    _guest.JumpBack(_chart.ignored);
+    _guest.JumpBack(_chart.frame);
+    return false;
+  }
+  _guest.Push(regs.ax);
+  if (_guest.Get(DS.hyperspaceCountdown) == 0)
+  {
+    _guest.Call(SELECT_SYSTEM_AT_CURSOR);
+    SetLow(regs.ax, _guest.Get(DS.chartCursorX));
+    _guest.Set(_chart.keptCursorX, Low(regs.ax));
+    SetLow(regs.ax, _guest.Get(DS.chartCursorY));
+    _guest.Set(_chart.keptCursorY, Low(regs.ax));
+  }
+  regs.ax = _guest.Pop();
+  return true;
+}
+
+// One frame of the galactic chart up to its presentation (CS:0CF9): the fuel range about the current
+// system, its cross, the cursor, and a dot for each of the galaxy's 256 systems.
+void DrawGalacticChart(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(LOAD_GALAXY_SEEDS);
+  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.fuel) >> 3) + 3);
+  regs.dx = _guest.Get(DS.currentSystemX);
+  regs.cx = _guest.Get(DS.currentSystemChartY);
+  _guest.Set(DS.drawColor, 2);
+  _guest.Call(DRAW_DISC);
+  _guest.Set(DS.drawColor, 0);
+  regs.cx = _guest.Get(DS.currentSystemX);
+  regs.dx = regs.cx;
+  regs.ax = _guest.Get(DS.currentSystemChartY);
+  regs.bx = regs.ax;
+  DrawCross(_guest, CURRENT_SYSTEM_ARM);
+  DrawChartCursor(_guest);
+  _guest.Set(DS.drawColor, CHART_DISC_COLOR);
+  SetLow(regs.ax, 0);
+  for (;;)
+  {
+    _guest.Push(regs.ax);
+    regs.dx = Join(static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1), _guest.Get(DS.systemX));
+    _guest.Call(PLOT_PIXEL);
+    _guest.Call(TWIST_SYSTEM_SEEDS);
+    _guest.Call(TWIST_SYSTEM_SEEDS);
+    _guest.Call(TWIST_SYSTEM_SEEDS);
+    _guest.Call(TWIST_SYSTEM_SEEDS);
+    regs.ax = _guest.Pop();
+    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
+    if (Low(regs.ax) == 0)
+    {
+      return;
+    }
+    _guest.JumpBack(GALACTIC_SYSTEM_DOT);
+  }
+}
+
+// One frame of the short-range chart up to its presentation (CS:0F60): the fuel range about the centre, the
+// current system's cross, the chart's discs and labels, and the cursor.
+void DrawShortRangeChart(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.bx = static_cast<std::uint16_t>(_guest.Get(DS.fuel) >> 1);
+  regs.dx = SHORT_RANGE_CENTER_X;
+  regs.cx = SHORT_RANGE_CENTER_ROW;
+  _guest.Set(DS.drawColor, 2);
+  _guest.Call(DRAW_DISC);
+  _guest.Set(DS.drawColor, 0);
+  // The current system's cross, from (50h, 2Fh) to (50h, 51h) and from (3Fh, 40h) to (61h, 40h).
+  regs.cx = 0x2F50;
+  regs.dx = 0x5150;
+  _guest.Call(DRAW_LINE);
+  regs.cx = 0x403F;
+  regs.dx = 0x4061;
+  _guest.Call(DRAW_LINE);
+  _guest.Set(DS.drawColor, CHART_DISC_COLOR);
+  _guest.Call(DRAW_CHART_ITEMS);
+  DrawChartCursor(_guest);
+}
+
+// ShowShortRangeChart's item for the system in systemSeeds (CS:0E9F), DX and CX its offsets from the
+// current system: a disc of radius 4 or 6 at 3.5 times them about the centre, and a label to place to its
+// right, the name GenerateSystemName makes. The seeds are left on the next system.
+void AddShortRangeSystem(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = regs.cx;
+  regs.cx = static_cast<std::uint16_t>((regs.cx << 1) + regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.cx = static_cast<std::uint16_t>(regs.cx + regs.ax);
+  regs.ax = regs.dx;
+  regs.dx = static_cast<std::uint16_t>((regs.dx << 1) + regs.ax);
+  regs.ax = Sar(regs.ax, 1);
+  regs.dx = static_cast<std::uint16_t>(regs.dx + regs.ax + SHORT_RANGE_CENTER_X);
+  regs.cx = static_cast<std::uint16_t>(regs.cx + SHORT_RANGE_CENTER_ROW);
+  _guest.Push(regs.cx);
+  _guest.Push(regs.dx);
+  regs.di = _guest.Get(DS.chartItemEnd);
+  regs.bx = Join(Low(regs.cx), Low(regs.dx));
+  _guest.SetWord(Offset(regs.di, 4), regs.bx);
+  regs.bx = static_cast<std::uint16_t>(((_guest.Get(DS.systemY) & 1) << 1) + 4);
+  _guest.SetWord(Offset(regs.di, 6), regs.bx);
+  // Its box: half the radius either side, as add al,dl / xchg / sub al,dl / neg al make it.
+  for (const std::uint8_t center : {Low(regs.dx), Low(regs.cx)})
+  {
+    const auto half = static_cast<std::uint8_t>(regs.bx >> 1);
+    regs.ax = Join(static_cast<std::uint8_t>(half + center), static_cast<std::uint8_t>(center - half));
+    _guest.SetWord(regs.di, regs.ax);
+    regs.di = Offset(regs.di, 2);
+  }
+  regs.di = Offset(regs.di, CHART_ITEM_BYTES - 4);
+  _guest.Set(DS.chartItemEnd, regs.di);
+  _guest.Set(DS.chartItemCount, static_cast<std::uint8_t>(_guest.Get(DS.chartItemCount) + 1));
+  _guest.Call(GENERATE_SYSTEM_NAME);
+  regs.cx = High(regs.dx);
+  regs.ax = static_cast<std::uint16_t>(SMALL_LETTER_PIXELS * Low(regs.cx));
+  regs.dx = _guest.Pop();
+  SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) + LABEL_OFFSET_X));
+  SetHigh(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) + Low(regs.ax)));
+  regs.di = _guest.Get(DS.chartLabelCursor);
+  _guest.SetWord(regs.di, regs.dx);
+  regs.bx = _guest.Pop();
+  SetHigh(regs.bx, Low(regs.bx));
+  SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - LABEL_ABOVE));
+  if ((Low(regs.bx) & 0x80) != 0)
+  {
+    // A label above the chart's top would loop here for ever: the jump goes back past the test. No system
+    // on the chart is near enough the top (its rows are 4-7Bh).
+    for (;;)
+    {
+      SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) + 1));
+      SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
+      _guest.JumpBack(SHORT_RANGE_LABEL_BELOW_TOP);
+    }
+  }
+  SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) + LABEL_BELOW));
+  while (High(regs.bx) >= CHART_ROWS)
+  {
+    SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) - 1));
+    SetHigh(regs.bx, static_cast<std::uint8_t>(High(regs.bx) - 1));
+    _guest.JumpBack(SHORT_RANGE_LABEL_ABOVE_BOTTOM);
+  }
+  _guest.SetWord(Offset(regs.di, 2), regs.bx);
+  regs.di = Offset(regs.di, 4);
+  regs.si = DS.selectedSystemName.offset;
+  for (;;)
+  {
+    SetLow(regs.ax, _guest.Byte(regs.si));
+    _guest.SetByte(regs.di, Low(regs.ax));
+    ++regs.si;
+    ++regs.di;
+    if (--regs.cx == 0)
+    {
+      break;
+    }
+    _guest.JumpBack(SHORT_RANGE_LABEL_NAME);
+  }
+  _guest.SetByte(regs.di, High(regs.cx));
+  ++regs.di;
+  _guest.Set(DS.chartLabelCursor, regs.di);
+}
+
+// REPE CMPSB: DS:SI with ES:DI for at most CX bytes, in DF's direction. ZF set when every byte compared
+// was equal; returned.
+bool CompareBytes(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  if (regs.cx == 0)
+  {
+    return _guest.Flag(Machine::FLAG_ZERO);
+  }
+  const auto step = static_cast<std::uint16_t>(_guest.Flag(Machine::FLAG_DIRECTION) ? 0xFFFF : 1);
+  bool equal = true;
+  do
+  {
+    const std::uint8_t source = _guest.Byte(regs.si);
+    const std::uint8_t destination = _guest.FarByte(regs.es, regs.di);
+    equal = source == destination;
+    _guest.SetFlag(Machine::FLAG_CARRY, source < destination);
+    regs.si = Offset(regs.si, step);
+    regs.di = Offset(regs.di, step);
+    --regs.cx;
+  } while (regs.cx != 0 && equal);
+  _guest.SetFlag(Machine::FLAG_ZERO, equal);
+  return equal;
+}
+
+// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B).
+void ShowNotOnMap(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.si = DS.findErrorPrefix.offset;
+  regs.di = CHART_TEXT_LINE_2;
+  regs.bx = INK_3;
+  _guest.Call(DRAW_SCREEN_STRING);
+  regs.si = DS.findInputEcho.offset;
+  regs.bx = INK_2;
+  _guest.Call(DRAW_SCREEN_STRING);
+  regs.si = DS.findErrorSuffix.offset;
+  regs.bx = INK_3;
+  _guest.Call(DRAW_SCREEN_STRING);
+}
+
+// PrintTextModeString of the text whose pointer is _bytes into _table, with AX = _bytes.
+void PrintNamed(Guest& _guest, std::uint16_t _table, std::uint16_t _bytes)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = _bytes;
+  regs.bx = Offset(_table, regs.ax);
+  regs.si = _guest.Word(regs.bx);
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+}
+
 } // namespace
+
+void ShowGalacticChart(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Set(DS.sunFringeMask, 0);
+  SetLow(regs.cx, _guest.Get(DS.currentSystemIndex));
+  _guest.Call(LOAD_SYSTEM_SEEDS);
+  SetLow(regs.ax, _guest.Get(DS.systemX));
+  _guest.Set(DS.currentSystemX, Low(regs.ax));
+  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
+  _guest.Set(DS.currentSystemChartY, Low(regs.ax));
+  _guest.Call(DRAW_CHART_FRAME);
+  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) + '1'));
+  _guest.Set(DS.galacticChartNumber, Low(regs.ax));
+  regs.si = DS.galacticChartTitle.offset;
+  regs.di = CHART_TITLE;
+  _guest.Set(DS.textPaperPattern, 0);
+  regs.bx = INK_1;
+  _guest.Call(DRAW_SCREEN_STRING);
+  _guest.Call(CLEAR_CHART_TEXT_LINES);
+  SetLow(regs.ax, _guest.Get(DS.galacticCursorX));
+  _guest.Set(DS.chartCursorX, Low(regs.ax));
+  SetLow(regs.ax, _guest.Get(DS.galacticCursorY));
+  _guest.Set(DS.chartCursorY, Low(regs.ax));
+  _guest.Set(DS.chartIsShortRange, 0);
+  do
+  {
+    DrawGalacticChart(_guest);
+    _guest.Call(PRESENT_CHART_FRAME);
+    MoveChartCursor(_guest);
+  } while (!ReadChartKey(_guest, GALACTIC_CHART_KEYS));
+}
+
+void ShowShortRangeChart(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Set(DS.sunFringeMask, 0);
+  _guest.Call(DRAW_CHART_FRAME);
+  regs.si = DS.shortRangeChartTitle.offset;
+  regs.di = CHART_TITLE;
+  _guest.Set(DS.textPaperPattern, 0);
+  regs.bx = INK_1;
+  _guest.Call(DRAW_SCREEN_STRING);
+  _guest.Call(CLEAR_CHART_TEXT_LINES);
+  SetLow(regs.ax, _guest.Get(DS.shortRangeCursorX));
+  _guest.Set(DS.chartCursorX, Low(regs.ax));
+  SetLow(regs.ax, _guest.Get(DS.shortRangeCursorY));
+  _guest.Set(DS.chartCursorY, Low(regs.ax));
+  _guest.Set(DS.chartIsShortRange, 1);
+  _guest.Set(DS.chartItemCount, 0);
+  regs.ax = DS.chartItems.offset;
+  _guest.Set(DS.chartItemEnd, regs.ax);
+  regs.ax = DS.pendingChartLabels.offset;
+  _guest.Set(DS.chartLabelCursor, regs.ax);
+  _guest.Call(LOAD_GALAXY_SEEDS);
+  SetLow(regs.ax, 0);
+  for (;;)
+  {
+    _guest.Push(regs.ax);
+    _guest.Call(GET_SHORT_RANGE_OFFSET);
+    if (_guest.Flag(Machine::FLAG_CARRY))
+    {
+      AddShortRangeSystem(_guest);
+    }
+    else
+    {
+      _guest.Call(ADVANCE_TO_NEXT_SYSTEM);
+      _guest.JumpBack(SHORT_RANGE_SYSTEM_DONE);
+    }
+    regs.ax = _guest.Pop();
+    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
+    if (Low(regs.ax) == 0)
+    {
+      break;
+    }
+    _guest.JumpBack(SHORT_RANGE_NEXT_SYSTEM);
+  }
+  _guest.Call(PLACE_CHART_LABELS);
+  do
+  {
+    DrawShortRangeChart(_guest);
+    _guest.Call(PRESENT_CHART_FRAME);
+    MoveChartCursor(_guest);
+  } while (!ReadChartKey(_guest, SHORT_RANGE_CHART_KEYS));
+}
 
 void GetShortRangeOffset(Guest& _guest)
 {
@@ -407,6 +934,40 @@ void ComputeDistanceToSystem(Guest& _guest)
   _guest.Set(DS.selectedDistanceTenthsLy, regs.ax);
 }
 
+void ShowNearestSystemDistance(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  FindNearestSystem(_guest);
+  ComputeDistanceToSystem(_guest);
+  regs.ax = _guest.Get(DS.selectedDistanceTenthsLy);
+  regs.di = DS.distanceDigits.offset;
+  _guest.Call(FORMAT_DECIMAL_5);
+  regs.di = DS.distanceDigits.offset;
+  regs.cx = 3;
+  _guest.Call(BLANK_LEADING_ZEROS);
+  regs.si = DS.distanceText.offset;
+  constexpr std::array<std::uint16_t, 4> PLACES = {DISTANCE_TEXT_HUNDREDS, DISTANCE_TEXT_TENS, DISTANCE_TEXT_UNITS, DISTANCE_TEXT_TENTHS};
+  constexpr std::array<DataField<std::uint8_t>, 4> DIGITS = {DS.distanceHundredsDigit, DS.distanceTensDigit, DS.distanceUnitsDigit,
+                                                             DS.distanceTenthsDigit};
+  for (std::size_t digit = 0; digit < DIGITS.size(); ++digit)
+  {
+    SetLow(regs.ax, _guest.Get(DIGITS[digit]));
+    _guest.SetByte(Offset(regs.si, PLACES[digit]), Low(regs.ax));
+  }
+  _guest.Set(DS.textPaperPattern, 0);
+  regs.bx = INK_3;
+  regs.di = CHART_TEXT_LINE_2;
+  _guest.Call(DRAW_SCREEN_STRING);
+  GenerateSystemName(_guest);
+  regs.si = DS.selectedSystemName.offset;
+  regs.di = CHART_TEXT_LINE_1;
+  regs.bx = INK_2;
+  _guest.Call(DRAW_SCREEN_STRING);
+  regs.si = DS.nameLinePadding.offset;
+  regs.di = CHART_NAME_PADDING;
+  _guest.Call(DRAW_SCREEN_STRING);
+}
+
 void LoadSystemSeeds(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -462,6 +1023,107 @@ void GenerateSystemName(Guest& _guest)
     }
   }
   _guest.Set(DS.selectedSystemNameLength, High(regs.dx));
+}
+
+void FindSystemByName(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  _guest.Call(LOAD_GALAXY_SEEDS);
+  regs.si = DS.findPrompt.offset;
+  regs.di = CHART_TEXT_LINE_1;
+  regs.bx = INK_1;
+  _guest.Call(DRAW_SCREEN_STRING);
+  regs.si = DS.blankChartLine.offset;
+  regs.di = CHART_TEXT_LINE_2;
+  _guest.Call(DRAW_SCREEN_STRING);
+  regs.si = DS.findInput.offset;
+  regs.ax = 0;
+  for (std::uint16_t word = 0; word < SYSTEM_NAME_BYTES; word = static_cast<std::uint16_t>(word + 2))
+  {
+    _guest.SetWord(Offset(regs.si, word), regs.ax);
+  }
+  regs.di = CHART_TEXT_LINE_2;
+  SetLow(regs.cx, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES));
+  _guest.Call(READ_TEXT_LINE);
+  if (_guest.Byte(DS.findInput.offset) == 0)
+  {
+    // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry.
+    _guest.JumpBack(SHOW_NEAREST_SYSTEM_DISTANCE);
+    _guest.Call(SHOW_NEAREST_SYSTEM_DISTANCE);
+    return;
+  }
+
+  // The name echoed for the error message and upper-cased in place, a space after it; CX its length,
+  // counting the space when there is room for it.
+  regs.si = DS.findInput.offset;
+  regs.di = DS.findInputEcho.offset;
+  regs.cx = 0;
+  for (;;)
+  {
+    SetLow(regs.ax, _guest.Byte(regs.si));
+    _guest.SetByte(regs.di, Low(regs.ax));
+    if (Low(regs.ax) == 0)
+    {
+      break;
+    }
+    SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) + 1));
+    _guest.SetByte(regs.si, static_cast<std::uint8_t>(_guest.Byte(regs.si) & UPPER_CASE_MASK));
+    ++regs.si;
+    ++regs.di;
+    _guest.JumpBack(FIND_UPPER_CASE);
+  }
+  _guest.SetByte(regs.si, SPACE);
+  if (regs.cx != SYSTEM_NAME_BYTES)
+  {
+    ++regs.cx;
+  }
+
+  // Each system's name in turn, compared with it.
+  regs.ax = regs.ds;
+  regs.es = regs.ax;
+  regs.ax = 0;
+  for (;;)
+  {
+    _guest.Push(regs.ax);
+    _guest.Push(regs.cx);
+    _guest.Call(GENERATE_SYSTEM_NAME);
+    regs.cx = _guest.Pop();
+    _guest.Push(regs.cx);
+    regs.si = DS.selectedSystemName.offset;
+    regs.di = DS.findInput.offset;
+    const bool found = CompareBytes(_guest);
+    regs.cx = _guest.Pop();
+    regs.ax = _guest.Pop();
+    if (found)
+    {
+      SetLow(regs.cx, Low(regs.ax));
+      _guest.Push(regs.cx);
+      _guest.Call(LOAD_GALAXY_SEEDS);
+      regs.cx = _guest.Pop();
+      regs.ax = Guest::VIDEO_SEGMENT;
+      regs.es = regs.ax;
+      _guest.Call(LOAD_SYSTEM_SEEDS);
+      _guest.Call(GET_SHORT_RANGE_OFFSET);
+      if (!_guest.Flag(Machine::FLAG_CARRY))
+      {
+        _guest.JumpBack(FIND_NOT_ON_MAP);
+        ShowNotOnMap(_guest);
+        return;
+      }
+      _guest.Call(MOVE_CURSOR_TO_SYSTEM);
+      _guest.Call(SHOW_NEAREST_SYSTEM_DISTANCE);
+      return;
+    }
+    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
+    if (Low(regs.ax) == 0)
+    {
+      break;
+    }
+    _guest.JumpBack(FIND_NEXT_SYSTEM);
+  }
+  regs.ax = Guest::VIDEO_SEGMENT;
+  regs.es = regs.ax;
+  ShowNotOnMap(_guest);
 }
 
 void DrawChartItems(Guest& _guest)
@@ -608,6 +1270,107 @@ void ClearChartTextLines(Guest& _guest)
   regs.si = DS.blankChartLine.offset;
   regs.di = CHART_TEXT_LINE_2;
   _guest.Call(DRAW_SCREEN_STRING);
+}
+
+void ShowSystemDataScreen(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.si = DS.systemDataFrame.offset;
+  _guest.Call(DRAW_DOCKED_FRAME);
+  regs.di = DATA_TITLE;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  _guest.Call(TERMINATE_SELECTED_SYSTEM_NAME);
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  regs.si = DISTANCE_LABEL;
+  regs.di = DISTANCE_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  _guest.Call(FORMAT_SELECTED_SYSTEM_DISTANCE);
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  regs.si = LIGHT_YEARS_LABEL;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  regs.si = ECONOMY_LABEL;
+  regs.di = ECONOMY_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  PrintNamed(_guest, DS.economyNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedEconomy) << 1));
+  regs.si = GOVERNMENT_LABEL;
+  regs.di = GOVERNMENT_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  PrintNamed(_guest, DS.governmentNames.offset, static_cast<std::uint16_t>(_guest.Get(DS.selectedGovernment) << 1));
+  regs.si = TECH_LEVEL_LABEL;
+  regs.di = TECH_LEVEL_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+
+  // The tech level, one to sixteen, in the two characters at data7D48, a column left when it is one digit.
+  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.selectedTechLevel) + 1));
+  regs.di = static_cast<std::uint16_t>(regs.di - 2);
+  _guest.Set(DS.data7D48, SPACE);
+  if (Low(regs.ax) >= TECH_LEVEL_TENS)
+  {
+    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) - TECH_LEVEL_TENS));
+    _guest.Set(DS.data7D48, '1');
+    regs.di = static_cast<std::uint16_t>(regs.di + 2);
+  }
+  SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + '0'));
+  _guest.Set(DS.data7D49, Low(regs.ax));
+  regs.si = DS.data7D48.offset;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+
+  // The population in tenths of a billion, its last two digits about a point.
+  regs.ax = _guest.Get(DS.selectedPopulationTenthsBillion);
+  regs.di = POPULATION_DIGITS;
+  _guest.Call(FORMAT_DECIMAL_5);
+  regs.si = POPULATION_LABEL;
+  regs.di = POPULATION_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  regs.si = POPULATION_SHOWN;
+  SetLow(regs.ax, _guest.Byte(Offset(regs.si, 1)));
+  _guest.SetByte(regs.si, Low(regs.ax));
+  _guest.SetByte(Offset(regs.si, 1), DECIMAL_POINT);
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+
+  regs.si = SPECIES_OPEN;
+  regs.di = SPECIES_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  const std::uint8_t size = _guest.Get(DS.selectedSpeciesAdjective1);
+  if (size == NO_SPECIES)
+  {
+    SetLow(regs.ax, 0);
+    regs.si = HUMAN_COLONIALS;
+    _guest.Call(PRINT_TEXT_MODE_STRING);
+  }
+  else
+  {
+    // shl al,1 on each byte, then xor ah,ah.
+    PrintNamed(_guest, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1));
+    PrintNamed(_guest, DS.speciesColorNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective2) << 1));
+    PrintNamed(_guest, DS.speciesTraitNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesAdjective3) << 1));
+    PrintNamed(_guest, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_guest.Get(DS.selectedSpeciesType) << 1));
+  }
+
+  // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
+  regs.ax = _guest.Get(DS.selectedProductivityMillionCredits);
+  regs.di = DS.data7EA3.offset;
+  _guest.Call(FORMAT_DECIMAL_5);
+  regs.si = PRODUCTIVITY_LABEL;
+  regs.di = PRODUCTIVITY_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  regs.si = DS.data7EA3.offset;
+  if (_guest.Get(DS.data7EA3) == '0')
+  {
+    _guest.Set(DS.data7EA3, SPACE);
+    regs.di = static_cast<std::uint16_t>(regs.di - 2);
+  }
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  regs.ax = _guest.Get(DS.selectedRadiusKm);
+  regs.di = DS.data7EBB.offset;
+  _guest.Call(FORMAT_DECIMAL_5);
+  _guest.Set(DS.data7EBB, SPACE);
+  regs.si = RADIUS_LABEL;
+  regs.di = RADIUS_ROW;
+  _guest.Call(PRINT_TEXT_MODE_STRING);
+  _guest.Call(SHOW_SYSTEM_DESCRIPTION);
+  SetLow(regs.dx, SCAN_F7);
+  WaitForScreenExitKey(_guest);
 }
 
 void TerminateSelectedSystemName(Guest& _guest)
@@ -798,6 +1561,21 @@ void InsertRandomName(Guest& _guest)
   regs.si = text;
 }
 
+void BackspaceDescription(Guest& _guest)
+{
+  --_guest.Regs().di;
+}
+
+void StartCapitalizing(Guest& _guest)
+{
+  _guest.Set(DS.descriptionCapitalize, 1);
+}
+
+void StopCapitalizing(Guest& _guest)
+{
+  _guest.Set(DS.descriptionCapitalize, 0);
+}
+
 void NextDescriptionRandom(Guest& _guest)
 {
   const std::uint16_t a = _guest.Get(DS.descriptionSeed0);
@@ -835,6 +1613,8 @@ namespace
 {
 
 using Machine::FLAG_CARRY;
+using Machine::NativeReturn;
+using Machine::NativeWait;
 using Machine::REGISTER_ALL;
 using Machine::REGISTER_AX;
 using Machine::REGISTER_BP;
@@ -842,6 +1622,7 @@ using Machine::REGISTER_BX;
 using Machine::REGISTER_CX;
 using Machine::REGISTER_DI;
 using Machine::REGISTER_DX;
+using Machine::REGISTER_ES;
 using Machine::REGISTER_SI;
 
 constexpr auto GENERAL =
@@ -849,7 +1630,10 @@ constexpr auto GENERAL =
 
 // GenerateSystemName clobbers DL but returns DH: DX is compared whole, and the port leaves DL as the
 // original does.
+// The charts and the data screen wait for keys, and FindSystemByName for a line typed: each waits as a rule.
 constexpr std::array ENTRIES = {
+  NativeEntry{0x0CAE, "ShowGalacticChart", &ShowGalacticChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x0E52, "ShowShortRangeChart", &ShowShortRangeChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x1076, "GetShortRangeOffset", &GetShortRangeOffset, Machine::NativeContract{REGISTER_AX, FLAG_CARRY}},
   NativeEntry{0x10AF, "IsSystemOnChart", &IsSystemOnChart, Machine::NativeContract{0, FLAG_CARRY}},
   NativeEntry{0x10C0, "TwistSystemSeeds", &TwistSystemSeeds, PRESERVES_ALL},
@@ -861,10 +1645,13 @@ constexpr std::array ENTRIES = {
               Machine::NativeContract{static_cast<std::uint16_t>(GENERAL & ~REGISTER_DI), 0}},
   NativeEntry{0x12F9, "ComputeDistanceToSystem", &ComputeDistanceToSystem,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX, 0}},
+  NativeEntry{0x1341, "ShowNearestSystemDistance", &ShowNearestSystemDistance, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x139C, "LoadSystemSeeds", &LoadSystemSeeds, PRESERVES_ALL},
   NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystem, PRESERVES_ALL},
   NativeEntry{0x13C1, "GenerateSystemName", &GenerateSystemName,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_SI, 0}},
+  NativeEntry{0x140D, "FindSystemByName", &FindSystemByName, Machine::NativeContract{GENERAL | REGISTER_ES, 0}, NativeReturn::Near, 0,
+              NativeWait::Always},
   NativeEntry{0x14C5, "DrawChartItems", &DrawChartItems, Machine::NativeContract{GENERAL, 0}},
   NativeEntry{0x1505, "PlaceChartLabels", &PlaceChartLabels,
               Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_DI, 0}},
@@ -872,10 +1659,17 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x157D, "NudgeChartLabel", &NudgeChartLabel, Machine::NativeContract{0, FLAG_CARRY}},
   NativeEntry{0x15A9, "ChartItemOverlaps", &ChartItemOverlaps, Machine::NativeContract{0, FLAG_CARRY}},
   NativeEntry{0x15BC, "ClearChartTextLines", &ClearChartTextLines, Machine::NativeContract{REGISTER_SI | REGISTER_DI, 0}},
+  NativeEntry{0x5CDE, "ShowSystemDataScreen", &ShowSystemDataScreen, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x60EB, "TerminateSelectedSystemName", &TerminateSelectedSystemName, Machine::NativeContract{REGISTER_BX, 0}},
   NativeEntry{0x60F7, "FormatSelectedSystemDistance", &FormatSelectedSystemDistance, Machine::NativeContract{REGISTER_AX | REGISTER_BX, 0}},
   NativeEntry{0x6FC0, "ShowSystemDescription", &ShowSystemDescription, Machine::NativeContract{REGISTER_ALL, 0}},
   NativeEntry{0x700F, "ExpandDescriptionText", &ExpandDescriptionText, Machine::NativeContract{REGISTER_AX | REGISTER_BX | REGISTER_CX, 0}},
+  NativeEntry{0x707A, "InsertSystemName", &InsertSystemName, PRESERVES_ALL},
+  NativeEntry{0x708D, "InsertSystemAdjective", &InsertSystemAdjective, PRESERVES_ALL},
+  NativeEntry{0x70C1, "InsertRandomName", &InsertRandomName, PRESERVES_ALL},
+  NativeEntry{0x7107, "BackspaceDescription", &BackspaceDescription, PRESERVES_ALL},
+  NativeEntry{0x7109, "StartCapitalizing", &StartCapitalizing, PRESERVES_ALL},
+  NativeEntry{0x710F, "StopCapitalizing", &StopCapitalizing, PRESERVES_ALL},
   NativeEntry{0x7115, "NextDescriptionRandom", &NextDescriptionRandom, PRESERVES_ALL},
   NativeEntry{0x7124, "CopySelectedNameLower", &CopySelectedNameLower, Machine::NativeContract{REGISTER_AX | REGISTER_SI, 0}},
 };

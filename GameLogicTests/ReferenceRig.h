@@ -51,14 +51,15 @@ private:
 };
 
 /// The reference loaded on a PC in paced time (ADR-008), as replays run it: the PSP where DOSBox-X puts
-/// it, the clock starting at midnight on 1 January 1980, DOS's files in a scratch directory.
+/// it, the clock starting at midnight on 1 January 1980 unless _startMoment says otherwise, DOS's files
+/// in a scratch directory.
 class ReferenceRig
 {
 public:
-  explicit ReferenceRig(std::string_view _name)
+  explicit ReferenceRig(std::string_view _name, const Machine::Dos::DateTime& _startMoment = Elite::START_MOMENT)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc()))
+      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment)))
   {
     m_pc->SetTimeMode(Machine::TimeMode::Paced);
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));
@@ -80,11 +81,17 @@ public:
     return m_program;
   }
 
+  /// Where DOS's files are.
+  [[nodiscard]] const std::filesystem::path& Files() const noexcept
+  {
+    return m_directory.Path();
+  }
+
 private:
-  [[nodiscard]] static Machine::Pc::Desc Desc() noexcept
+  [[nodiscard]] static Machine::Pc::Desc Desc(const Machine::Dos::DateTime& _startMoment) noexcept
   {
     Machine::Pc::Desc desc;
-    desc.startMoment = Elite::START_MOMENT;
+    desc.startMoment = _startMoment;
     return desc;
   }
 

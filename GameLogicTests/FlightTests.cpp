@@ -3,6 +3,7 @@
 #include "ComparisonRig.h"
 #include "DataOverlay.h"
 #include "Flight.h"
+#include "TwinRig.h"
 
 #include <initializer_list>
 
@@ -63,6 +64,19 @@ constexpr std::uint16_t XOR_SCANNER_BLIP = 0x42F6;
 constexpr std::uint16_t XOR_DASHBOARD_PIXEL = 0x43C4;
 constexpr std::uint16_t ERASE_COMPASS_AND_BLIPS = 0x4594;
 constexpr std::uint16_t MOVE_OBJECTS_BY_VELOCITY = 0x85EC;
+constexpr std::uint16_t GET_PREVIOUS_DUST_SCREEN_POSITION = 0x08A1;
+constexpr std::uint16_t SHIFT_STARDUST_SIDEWAYS = 0x08CB;
+constexpr std::uint16_t RESPAWN_DUST_AT_SIDE_EDGE = 0x08F2;
+constexpr std::uint16_t IS_DUST_NEAR_CENTER = 0x09EE;
+constexpr std::uint16_t SAVE_STARDUST_POSITIONS = 0x0A88;
+constexpr std::uint16_t RESTORE_FLIGHT_SCREEN = 0x15CF;
+constexpr std::uint16_t COMPUTE_DEATH_DEBRIS_VECTOR = 0x2F8B;
+constexpr std::uint16_t CHECK_MISSILE_WARNING = 0x36FD;
+constexpr std::uint16_t CHECK_ALTITUDE_WARNING = 0x370E;
+constexpr std::uint16_t CHECK_TEMPERATURE_WARNING = 0x371A;
+constexpr std::uint16_t CHECK_ENERGY_WARNING = 0x3726;
+constexpr std::uint16_t DRAIN_ENERGY = 0x839F;
+constexpr std::uint16_t ENGAGE_JUMP_DRIVE = 0x8430;
 
 constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
 
@@ -189,10 +203,16 @@ void Play(ComparisonRig& _rig, std::string_view _steps)
 }
 
 // Launches from Lave as launch-and-dock.replay does, and flies on for 6 seconds: the state the flight
-// routines run in.
+// routines run in. The original runs it, with no hook in force, so that RunFlight is the original's
+// too: native, it would be waiting on the native thread when the test calls an entry, and a call made
+// then would resume it instead (ADR-010 item 8). Later steps run on in the original RunFlight, which
+// calls the native routines, each call compared.
 void Launch(ComparisonRig& _rig)
 {
+  Machine::Cpu& processor = _rig.Host().Processor();
+  processor.SetHookMap(nullptr);
   Play(_rig, "key space; wait 4; key F1; wait 6");
+  processor.SetHookMap(&_rig.Host().Native().Map());
 }
 
 // A slot's 24-bit position and its camera-frame copy, both _x, _y, _z.
@@ -221,6 +241,19 @@ void PlaceShip(ComparisonRig& _rig, std::uint16_t _slot, std::uint8_t _type, std
 [[nodiscard]] std::uint16_t Slot(std::uint16_t _index) noexcept
 {
   return static_cast<std::uint16_t>(Elite::DS.shipSlots.offset + _index * SLOT_BYTES);
+}
+
+// A byte of the data segment set on both twins.
+void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
+{
+  _rig.Both([&](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+            { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
+}
+
+// Launches from Lave on both twins, and flies on for 6 seconds.
+void Launch(TwinRig& _rig)
+{
+  _rig.Play("key space; wait 4\nkey F1; wait 6");
 }
 
 } // namespace
@@ -946,6 +979,185 @@ public:
     const std::uint64_t unverifiable = FlightUnverifiable(rig);
     Play(rig, "wait 40");
     Assert::AreEqual(unverifiable, FlightUnverifiable(rig), L"every call of a flight entry compared");
+  }
+
+  // The jump drive's streaks from where a particle was, the rear view's centre at its edges, and the
+  // side views' sideways shift, both ways and far enough that particles leave and respawn.
+  TEST_METHOD(StreakAndSideStardustLeavesAgree)
+  {
+    ComparisonRig rig("StardustSides");
+    Launch(rig);
+    const std::uint16_t particle = DS.stardust.At(3);
+    for (const std::uint16_t coordinate : Words{0x0000, 0x1FFF, 0x2000, 0xE000, 0xDFFF, 0x0FFF, 0x1000, 0xF000, 0xEFFF})
+    {
+      SetWord(rig, particle + 0xB4, coordinate);
+      SetWord(rig, particle + 0xB6, coordinate >> 1);
+      CallVerified(rig, GET_PREVIOUS_DUST_SCREEN_POSITION, {.cx = 0x1234, .si = particle});
+      SetWord(rig, particle + 0xB4, 0);
+      SetWord(rig, particle + 0xB6, coordinate);
+      CallVerified(rig, GET_PREVIOUS_DUST_SCREEN_POSITION, {.cx = 0x1234, .si = particle});
+    }
+    for (const std::uint16_t coordinate : Words{0x0000, 0x0600, 0x06FF, 0x0700, 0xFA00, 0xF9FF, 0x0300, 0x0400, 0xFD00, 0xFCFF})
+    {
+      CallVerified(rig, IS_DUST_NEAR_CENTER, {.ax = coordinate});
+      CallVerified(rig, IS_DUST_NEAR_CENTER, {.bx = coordinate});
+    }
+    for (const std::uint16_t step : Words{0x0100, 0xFF00})
+      CallVerified(rig, RESPAWN_DUST_AT_SIDE_EDGE, {.dx = step, .si = particle, .bp = 0x0FFF});
+    for (const std::uint16_t step : Words{0x0C00, 0xF400, 0})
+      CallVerified(rig, SHIFT_STARDUST_SIDEWAYS, {.dx = step, .di = 0x1234});
+    CallVerified(rig, SAVE_STARDUST_POSITIONS, {.bx = 0x1234});
+  }
+
+  // The death debris from each view; each warning check on its own and falling on to the next, round
+  // past the last; the energy drained to nothing, and by a negative amount; the jump drive refused and
+  // engaged; and the cockpit restored.
+  TEST_METHOD(FlightLeavesAgreeAtTheirLimits)
+  {
+    ComparisonRig rig("FlightLimits");
+    Launch(rig);
+    Set(rig, DS.playerPitchAngle, 0x123);
+    Set(rig, DS.playerYawAngle, 0x456);
+    Set(rig, DS.playerRollAngle, 0x789);
+    for (const std::uint16_t view : Words{0, 0x200, 0x400, 0x600})
+    {
+      Set(rig, DS.viewAngle, view);
+      CallVerified(rig, COMPUTE_DEATH_DEBRIS_VECTOR, {.si = 0x1234});
+    }
+    Set(rig, DS.viewAngle, 0);
+
+    Set(rig, DS.warningFrames, 0);
+    Set(rig, DS.incomingMissileAlert, 0);
+    Set(rig, DS.altitude, 0xFF);
+    Set(rig, DS.cabinTemperature, 0);
+    Set(rig, DS.playerEnergy, 0x3FF);
+    for (const std::uint16_t check : Words{CHECK_MISSILE_WARNING, CHECK_ALTITUDE_WARNING, CHECK_TEMPERATURE_WARNING, CHECK_ENERGY_WARNING})
+    {
+      for (const std::uint16_t count : Words{1, 2, 4})
+        CallVerified(rig, check, {.ax = 0x1234, .bx = 0x5678, .cx = count});
+    }
+    Set(rig, DS.incomingMissileAlert, 1);
+    CallVerified(rig, CHECK_ENERGY_WARNING, {.ax = 0x1234, .bx = 0x5678, .cx = 2});
+    Set(rig, DS.altitude, 0x10);
+    CallVerified(rig, CHECK_ALTITUDE_WARNING, {.ax = 0x1234, .cx = 1});
+    Set(rig, DS.cabinTemperature, 0xF0);
+    CallVerified(rig, CHECK_TEMPERATURE_WARNING, {.ax = 0x1234, .cx = 1});
+    Set(rig, DS.playerEnergy, 0x80);
+    CallVerified(rig, CHECK_ENERGY_WARNING, {.ax = 0x1234, .cx = 1});
+    Set(rig, DS.altitude, 0xFF);
+    Set(rig, DS.cabinTemperature, 0);
+
+    for (const std::uint16_t energy : Words{0x200, 0x10, 0x3FF})
+    {
+      Set(rig, DS.playerEnergy, energy);
+      Set(rig, DS.playerDead, 0);
+      CallVerified(rig, DRAIN_ENERGY, {.ax = 0x1214});
+      CallVerified(rig, DRAIN_ENERGY, {.ax = 0x12F0});
+    }
+    Set(rig, DS.playerDead, 0);
+    Set(rig, DS.playerEnergy, 0x3FF);
+
+    Set(rig, DS.dockingComputerOn, 1);
+    CallVerified(rig, ENGAGE_JUMP_DRIVE, {.ax = 0x1234});
+    Set(rig, DS.dockingComputerOn, 0);
+    Set(rig, DS.playerSpeed, 0x20);
+    CallVerified(rig, ENGAGE_JUMP_DRIVE, {.ax = 0x1234});
+    Set(rig, DS.playerSpeed, 0x30);
+    Set(rig, DS.safeZoneFlags, 1);
+    CallVerified(rig, ENGAGE_JUMP_DRIVE, {.ax = 0x1234});
+    Set(rig, DS.safeZoneFlags, 0);
+    for (std::uint16_t index = 3; index < 20; ++index)
+      SetByte(rig, Slot(index), 0);
+    CallVerified(rig, ENGAGE_JUMP_DRIVE, {.ax = 0x1234});
+
+    CallVerified(rig, RESTORE_FLIGHT_SCREEN, {.ax = 0x1234, .bx = 0x5678, .si = 0x9ABC});
+  }
+
+  // H refused while the docking computer flies and while a countdown runs.
+  TEST_METHOD(ProcessFlightKeysAgreesOnHyperspaceRefusedWhileBusy)
+  {
+    ComparisonRig rig("HyperspaceRefused");
+    Launch(rig);
+    Set(rig, DS.keyDownH, 1);
+    Set(rig, DS.dockingComputerOn, 1);
+    CallVerified(rig, PROCESS_FLIGHT_KEYS);
+    Set(rig, DS.dockingComputerOn, 0);
+    Set(rig, DS.hyperspaceCountdown, 5);
+    CallVerified(rig, PROCESS_FLIGHT_KEYS);
+  }
+
+  // Dead with the cheat on, the flight goes on; with it off, GAME OVER for 40 frames, then the title.
+  TEST_METHOD(RunFlightAgreesThroughGameOver)
+  {
+    TwinRig rig("TwinGameOver");
+    Launch(rig);
+    SetBoth(rig, DS.cheatEnabled, 1);
+    SetBoth(rig, DS.playerDead, 1);
+    rig.Play("wait 0.5");
+    SetBoth(rig, DS.cheatEnabled, 0);
+    rig.Play("wait 5\ndigest game-over");
+  }
+
+  // GAME OVER with cargo aboard and every ship slot taken: the wreckage's barrel needs a slot reclaimed.
+  TEST_METHOD(RunFlightAgreesThroughGameOverWithCargo)
+  {
+    TwinRig rig("TwinGameOverCargo");
+    Launch(rig);
+    SetBoth(rig, DS.cargoUsedTonnes, 1);
+    rig.Both(
+      [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+      {
+        Elite::Guest guest(_pc, _program.loadSegment, Elite::DataSegment(_program));
+        for (std::uint16_t index = 3; index < 20; ++index)
+        {
+          const std::uint16_t slot = Slot(index);
+          guest.SetByte(slot, 0x85); // a Sidewinder, active
+          for (std::uint16_t offset = 1; offset < SLOT_BYTES; ++offset)
+            guest.SetByte(static_cast<std::uint16_t>(slot + offset), 0);
+          guest.SetWord(static_cast<std::uint16_t>(slot + 4), static_cast<std::uint16_t>(index * 0x100));
+          guest.SetWord(static_cast<std::uint16_t>(slot + 8), 0x2000);
+          guest.SetByte(static_cast<std::uint16_t>(slot + 0x1E), 2); // its blip drawn
+        }
+      });
+    SetBoth(rig, DS.playerDead, 1);
+    rig.Play("wait 5\ndigest game-over");
+  }
+
+  // When the escape pod arrives TickEscapePod returns past RunFlight, to GameLoop, which docks.
+  TEST_METHOD(RunFlightAgreesWhenTheEscapePodArrives)
+  {
+    TwinRig rig("TwinEscapePod");
+    Launch(rig);
+    SetBoth(rig, DS.escapePodFrames, 3);
+    rig.Play("wait 3\ndigest docked");
+  }
+
+  // The pause screen's every key: the five options toggled, a key it ignores, two frame rates, and A,
+  // which leaves RunFlight for the title. ProcessFlightKeys reaches it only in a call that waits, which
+  // a compared run hands to the original, so the native twin runs uncompared here: its native code is
+  // what the digests check.
+  TEST_METHOD(PauseScreenAgreesOnEveryKey)
+  {
+    TwinRig rig("TwinPause", {.compared = false});
+    Launch(rig);
+    rig.Play("down Escape; wait 0.1; up Escape; wait 1\ndigest paused");
+    rig.Play("key r; wait 0.5\nkey d; wait 0.5\nkey y; wait 0.5\nkey b; wait 0.5\nkey s; wait 0.5\nkey x; wait 0.5\n"
+             "key F3; wait 0.5\nkey F10; wait 0.5\ndigest options");
+    rig.Play("key a; wait 2\ndigest title");
+  }
+
+  // A screen left by Escape, which waits for a key at 0BF3; in witch space the short-range chart at the
+  // last of the countdown, F9 past the navigation computer, Escape back to it, and the charts refused.
+  // Uncompared, as the pause screen is.
+  TEST_METHOD(FlightScreensAgreeInWitchSpace)
+  {
+    TwinRig rig("TwinWitchScreens", {.compared = false});
+    Launch(rig);
+    rig.Play("down F10; wait 0.1; up F10; wait 1\nkey Escape; wait 1\nkey F1; wait 1\ndigest after-escape");
+    SetBoth(rig, DS.witchspaceCountdown, 1);
+    rig.Play("down F6; wait 0.1; up F6; wait 1\nkey F9; wait 1\nkey Escape; wait 1\ndigest witch-chart");
+    SetBoth(rig, DS.witchspaceCountdown, 2);
+    rig.Play("down F6; wait 0.1; up F6; wait 0.5\ndown F10; wait 0.1; up F10; wait 1\nkey F1; wait 1\ndigest witch-inventory");
   }
 };
 

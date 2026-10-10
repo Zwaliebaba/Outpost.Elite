@@ -55,12 +55,21 @@ void ClearMessageLine(Guest& _guest);
 /// ShowBountyMessage (CS:3626): shows AX tenths of a credit in bountyText for 20 frames.
 void ShowBountyMessage(Guest& _guest);
 
+/// ShowShipIdentity (CS:364D): 'CLASS: <class> TYPE: <type>' for ship type AL and class AH on the message line for 30
+/// frames; class 3 is Simple unless IsDebrisType says the slot at DI is debris, a class 4 of type 5 is a Hermit, and
+/// type 1Ch the police. Out: AX = shipIdentityText, BX, CX = 0 and DI past the copies.
+void ShowShipIdentity(Guest& _guest);
+
 /// PrintTextModeString (CS:60D2): the text at SI to B800:DI in textAttribute. Out: SI at the NUL, DI past the text,
 /// ES=B800; AX clobbered.
 void PrintTextModeString(Guest& _guest);
 
 /// ToggleMenuRowHighlight (CS:6328): the swapped textAttribute into 36 attribute bytes at ES:SI. Out: AL.
 void ToggleMenuRowHighlight(Guest& _guest);
+
+/// ClearDockedMessageLine (CS:6553): 19 spaces from text offset 78h at ES, characters only. Out: AL = space, CX = 0,
+/// DI past them.
+void ClearDockedMessageLine(Guest& _guest);
 
 /// SwapTextAttributeNibbles (CS:6580): textAttribute's nibbles exchanged. Out: AL=textAttribute.
 void SwapTextAttributeNibbles(Guest& _guest);
@@ -71,6 +80,15 @@ void PrintCountedTextLines(Guest& _guest);
 
 /// FormatTenths (CS:69B3): AX tenths into priceText as "nnnn.n".
 void FormatTenths(Guest& _guest);
+
+/// PrintTextLines (CS:6DDE): CX lines from SI, one a text row from DI. Out: SI past the last line, DI a row below it,
+/// CX = 0; AX and ES as PrintTextModeString leaves them.
+void PrintTextLines(Guest& _guest);
+
+/// ReadTextLine (CS:7694): a line typed into the buffer at SI, at most CL characters, echoed at DI with a blinking
+/// cursor; Enter ends it, Backspace deletes, letters are lower case unless Shift is held. Waits for keys. Out: BX the
+/// length; AX, CX, DX clobbered.
+void ReadTextLine(Guest& _guest);
 
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(Guest& _guest);
