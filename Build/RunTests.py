@@ -30,15 +30,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The groups, by CI's Debug times on 2026-10-10 over GameLogicTests' 176 tests and MachineTests, 2,295 s
-# in all. The 19-replay corpus is 824 s of it: 503 s interpreted, 284 s compared call by call and 37 s
-# native, so its two heavy tests go to different shards. FlightTests is 457 s. Each group, and the shard
-# that takes the rest, comes to 560-620 s. MachineTests runs in about a second and is left to the rest.
-# Four even shards keep every core of a four-core runner busy to the end; each test is one thread.
+# The groups, by the classes' times measured on 2026-10-10 after D7 deleted the interpreter and the comparisons:
+# GameLogicTests' 47 tests and MachineTests' 131, each test timed by a stand-in test host, in one process, from a g++
+# -O0 build (Debug, as CI builds) and a g++ -O2 one. The replay corpus, one test, is 14.8 s of the Debug 28.3 s
+# (2.3 s of the Release 4.4 s), and every other class together is 13.5 s (2.2 s), the twins most of it; MachineTests
+# is 0.4 s (0.1 s). No shard can be shorter than the corpus, so two shards, the corpus and the rest, are as even as
+# the classes allow, and keep both of a private repository's two vCPUs busy to the end; each test is one thread.
 GROUPS = [
-  ("corpus", ["EveryReplayReproducesItsDigests", "StartUpTests", "TimerTests", "SoundTests", "VideoTests"]),
-  ("compared", ["NativeCodeAgreesWithTheOriginalOnEveryCall", "NativeCodeKeepsEveryDigest", "GalaxyTests", "MarketTests", "TextTests"]),
-  ("flight", ["FlightTests", "DockedTests", "MathsTests", "TwinRigTests"]),
+  ("corpus", ["CorpusTests"]),
 ]
 REST = "rest"
 RESULTS = "TestResults"
