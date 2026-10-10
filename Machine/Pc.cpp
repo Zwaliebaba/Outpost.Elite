@@ -229,10 +229,9 @@ StopReason Pc::RunUntil(Cycles _cycle)
   return StopReason::Reached;
 }
 
-void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-              NativeReturn _exit, NativeWait _wait)
+void Pc::Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, NativeWait _wait)
 {
-  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _contract, _exit, _wait);
+  m_native.Add(_segment, _offset, std::move(_name), std::move(_routine), _wait);
   m_processor.SetHookMap(&m_native.Map());
 }
 

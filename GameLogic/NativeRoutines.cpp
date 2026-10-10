@@ -30,28 +30,24 @@ void InstallNativeRoutines(Machine::Pc& _pc, const Machine::LoadedProgram& _prog
     for (const NativeEntry& entry : entries())
     {
       const auto body = entry.body;
-      const Machine::NativeReturn exit = entry.exit;
-      const std::uint16_t popBytes = entry.popBytes;
+      const EntryReturn exit = entry.exit;
       _pc.Hook(
         code, entry.offset, std::string(entry.name),
-        [body, exit, popBytes, code, data](Machine::Pc& _host)
+        [body, exit, code, data](Machine::Pc& _host)
         {
           Guest guest(_host, code, data);
           body(guest);
           switch (exit)
           {
-          case Machine::NativeReturn::Near:
-            _host.ReturnNear(popBytes);
+          case EntryReturn::Far:
+            _host.ReturnFar();
             break;
-          case Machine::NativeReturn::Far:
-            _host.ReturnFar(popBytes);
-            break;
-          case Machine::NativeReturn::Interrupt:
+          case EntryReturn::Interrupt:
             _host.ReturnInterrupt();
             break;
           }
         },
-        entry.contract, exit, entry.wait);
+        entry.wait);
     }
   }
 }

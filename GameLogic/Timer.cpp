@@ -447,15 +447,15 @@ void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 
 void TimerInterruptEntry(Guest& _guest)
 {
+  // AX, DS and ES pushed round what it loads into them, and popped: every register is kept, and the IRET takes the flags.
   TimerInterrupt(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(PRESERVES_ALL);
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

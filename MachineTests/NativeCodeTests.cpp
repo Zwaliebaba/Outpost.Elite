@@ -121,8 +121,8 @@ public:
   {
     m_program = m_rig.Load(Program());
     m_rig.Host().SetTimeMode(Machine::TimeMode::Paced);
-    m_rig.Host().Hook(m_program.loadSegment, MAIN, "Main", &Main, {});
-    m_rig.Host().Hook(m_program.loadSegment, FINISH, "Finish", &Finish, {});
+    m_rig.Host().Hook(m_program.loadSegment, MAIN, "Main", &Main);
+    m_rig.Host().Hook(m_program.loadSegment, FINISH, "Finish", &Finish);
   }
 
   [[nodiscard]] Machine::Pc& Host() noexcept
@@ -130,10 +130,9 @@ public:
     return m_rig.Host();
   }
 
-  void Hook(Machine::NativeRoutine _routine, const Machine::NativeContract& _contract = {},
-            Machine::NativeWait _wait = Machine::NativeWait::Never)
+  void Hook(Machine::NativeRoutine _routine, Machine::NativeWait _wait = Machine::NativeWait::Never)
   {
-    m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _contract, Machine::NativeReturn::Near, _wait);
+    m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _wait);
   }
 
   // Points the vector table's entry for VECTOR at a handler, hooked: MOV BX,5555h; IRET, natively.
@@ -141,14 +140,12 @@ public:
   {
     m_rig.Host().Ram().Write16(VECTOR * 4u, HANDLER);
     m_rig.Host().Ram().Write16(VECTOR * 4u + 2, m_program.loadSegment);
-    m_rig.Host().Hook(
-      m_program.loadSegment, HANDLER, "Handler",
-      [](Machine::Pc& _pc)
-      {
-        _pc.Processor().Regs().bx = 0x5555;
-        _pc.ReturnInterrupt();
-      },
-      {}, Machine::NativeReturn::Interrupt);
+    m_rig.Host().Hook(m_program.loadSegment, HANDLER, "Handler",
+                      [](Machine::Pc& _pc)
+                      {
+                        _pc.Processor().Regs().bx = 0x5555;
+                        _pc.ReturnInterrupt();
+                      });
   }
 
   void Run()
@@ -211,7 +208,7 @@ public:
   TEST_METHOD(WaitingRoutineStopsAtTheEndOfARunAndCarriesOn)
   {
     NativeRig rig("NativeWaits");
-    rig.Hook(&WaitForTick, {}, Machine::NativeWait::Always);
+    rig.Hook(&WaitForTick, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
@@ -224,7 +221,7 @@ public:
   TEST_METHOD(MachineDestroyedMidWaitUnwindsTheNativeThread)
   {
     NativeRig rig("NativeAbandoned");
-    rig.Hook(&WaitForTick, {}, Machine::NativeWait::Always);
+    rig.Hook(&WaitForTick, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
   }
 
@@ -232,7 +229,7 @@ public:
   TEST_METHOD(RoutineThatSometimesWaitsRunsWhenItDoesNotWait)
   {
     NativeRig rig("NativeSometimesWork");
-    rig.Hook(CountUp(1, 5), {}, Machine::NativeWait::Sometimes);
+    rig.Hook(CountUp(1, 5), Machine::NativeWait::Sometimes);
     rig.Run();
     Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()});
     Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
@@ -242,7 +239,7 @@ public:
   TEST_METHOD(RoutineThatSometimesWaitsStopsAtTheEndOfARun)
   {
     NativeRig rig("NativeSometimesWaits");
-    rig.Hook(&WaitForTick, {}, Machine::NativeWait::Sometimes);
+    rig.Hook(&WaitForTick, Machine::NativeWait::Sometimes);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     rig.Run();
@@ -265,7 +262,7 @@ public:
   TEST_METHOD(LoopTurnWaitsWhereTheOriginalDoes)
   {
     NativeRig rig("NativeLoopTurn");
-    rig.Hook(&WaitForTickByTurns, {}, Machine::NativeWait::Always);
+    rig.Hook(&WaitForTickByTurns, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     rig.Run();
@@ -277,7 +274,7 @@ public:
   TEST_METHOD(SignatureTurnWaitsWhereTheOriginalDoes)
   {
     NativeRig rig("NativeSignatureTurn");
-    rig.Hook(&WaitForTickBySignature, {}, Machine::NativeWait::Always);
+    rig.Hook(&WaitForTickBySignature, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     rig.Run();
@@ -297,7 +294,7 @@ public:
           _pc.LoopTurn(signature);
         }
       },
-      {}, Machine::NativeWait::Always);
+      Machine::NativeWait::Always);
     rig.Host().SetSpinLimit(1000);
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
   }
@@ -316,7 +313,7 @@ public:
           _pc.LoopTurn();
         }
       },
-      {}, Machine::NativeWait::Always);
+      Machine::NativeWait::Always);
     rig.Host().SetSpinLimit(1000);
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
   }

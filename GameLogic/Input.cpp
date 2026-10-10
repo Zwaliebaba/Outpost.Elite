@@ -613,14 +613,13 @@ void KeyboardInterruptEntry(Guest& _guest)
 {
   // AX, DS and ES pushed round MOV ES,B800h / MOV DS,data and the call, and popped: every register is kept.
   KeyboardInterrupt(_guest.State(), _guest.Devices());
-  _guest.Clobber(PRESERVES_ALL);
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
+  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

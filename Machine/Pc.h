@@ -222,8 +222,7 @@ public:
   /// carries on where it stopped. Only one thread runs at a time, so a run is still a function of its
   /// inputs (ADR-010 item 8). Any other native routine runs as a plain call; if it waits past the end of a
   /// run after all, the run stops there as Overran.
-  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, const NativeContract& _contract,
-            NativeReturn _exit = NativeReturn::Near, NativeWait _wait = NativeWait::Never);
+  void Hook(std::uint16_t _segment, std::uint16_t _offset, std::string _name, NativeRoutine _routine, NativeWait _wait = NativeWait::Never);
 
   /// The native routines, and how often each was called.
   [[nodiscard]] NativeCode& Native() noexcept

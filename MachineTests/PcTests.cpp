@@ -24,7 +24,7 @@ constexpr std::uint16_t BIOS_TICKS = 0x6C;
 Machine::LoadedProgram LoadNative(PcRig& _rig, Machine::NativeRoutine _routine, Machine::NativeWait _wait = Machine::NativeWait::Always)
 {
   const Machine::LoadedProgram program = _rig.Load(TinyExe({NOP}));
-  _rig.Host().Hook(program.loadSegment, 0, "Program", std::move(_routine), {}, Machine::NativeReturn::Near, _wait);
+  _rig.Host().Hook(program.loadSegment, 0, "Program", std::move(_routine), _wait);
   return program;
 }
 

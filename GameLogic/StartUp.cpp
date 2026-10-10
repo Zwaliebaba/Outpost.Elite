@@ -405,14 +405,6 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 
 // ── The entry of the program ──
 
-namespace
-{
-
-// Start sets DS to the data segment, and never returns.
-constexpr Machine::NativeContract CLOBBERS_EVERY_REGISTER{Machine::REGISTER_ALL, 0};
-
-} // namespace
-
 void StartEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -423,17 +415,16 @@ void StartEntry(Guest& _guest)
   _guest.Push(psp);
   regs.bx = 0;
   _guest.Push(regs.bx);
-  regs.bx = _guest.DataSegment();
+  regs.bx = _guest.State().DataSegment();
   regs.ds = regs.bx;
   Start(_guest.State(), _guest.Devices(), psp, regs.bp, _guest.Flag(Machine::FLAG_DIRECTION));
-  _guest.Clobber(CLOBBERS_EVERY_REGISTER);
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0000, "Start", &StartEntry, CLOBBERS_EVERY_REGISTER, Machine::NativeReturn::Far, 0, Machine::NativeWait::Always},
+  NativeEntry{0x0000, "Start", &StartEntry, EntryReturn::Far, Machine::NativeWait::Always},
 };
 
 } // namespace
