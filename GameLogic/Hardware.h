@@ -85,8 +85,8 @@ struct DosTime
 /// vector. Each port operation is the original's own sequence of port accesses, in its order and at its width, so the emulated
 /// devices and paced time's wait detection see what they saw. Each service operation sets the registers the service reads,
 /// calls it as INT does (Pc::CallInterrupt), returns what it gives as a small typed result, and puts the processor's registers
-/// back as they were: it has no register effect of its own. When the interpreter goes (D7), the implementation becomes native
-/// devices and the routines do not change.
+/// back as they were: it has no register effect of its own. Once the interpreter has gone (D7), the implementation becomes
+/// native devices and the routines do not change.
 class Hardware
 {
 public:
@@ -239,7 +239,7 @@ public:
   // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
 
   /// _point's cycles pass as they pass in a wait (Pc::Spend): the time the IBM PC spent on work the reference sets no pace
-  /// for, paid where an interpreted run pays it (ADR-013). Only a routine hooked as one that waits may call it.
+  /// for, paid where an interpreted run paid it (ADR-013). Only a routine hooked as one that waits may call it.
   void Spend(const PacingPoint& _point);
 
   // ── Start, GameLoop and RunFlight (level 5, group F) ──

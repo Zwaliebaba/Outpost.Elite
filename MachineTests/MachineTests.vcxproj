@@ -57,7 +57,7 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(SolutionDir)Interpreter;$(SolutionDir)Machine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(SolutionDir)Machine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -91,7 +91,6 @@
     <ClCompile Include="BiosTests.cpp" />
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
-    <ClCompile Include="CpuTests.cpp" />
     <ClCompile Include="DispatcherTests.cpp" />
     <ClCompile Include="DosTests.cpp" />
     <ClCompile Include="ExeLoaderTests.cpp" />
@@ -112,9 +111,6 @@
     <ClCompile Include="SpeakerTests.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Interpreter\Interpreter.vcxproj">
-      <Project>{244C2795-4774-56BE-A9D6-5A3714695E85}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\Machine\Machine.vcxproj">
       <Project>{20D2E016-F4F9-5FE2-9C7D-A4DB0F992259}</Project>
     </ProjectReference>

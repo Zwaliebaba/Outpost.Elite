@@ -1,8 +1,11 @@
 #include "pch.h"
 
+#include "PcRig.h"
 #include "ServiceRig.h"
 
 #include "Firmware.h"
+#include "Pc.h"
+#include "PortRouter.h"
 
 #include <vector>
 
@@ -39,19 +42,77 @@ void SetTicks(Machine::Memory& _memory, std::uint32_t _ticks)
   _memory.Write16(BIOS_DATA, Machine::Firmware::TIMER_TICKS + 2, static_cast<std::uint16_t>(_ticks >> 16));
 }
 
-// Calls the game's IsMouseDriverInstalled from CODE:0000 and returns ZF after it returns.
-bool MouseCheckSetsZero(ServiceRig& _rig)
+// What the game's own test, IsMouseDriverInstalled (CS:02D4), reads, and the ZF it leaves: set, for no driver, when the int
+// 33h vector is zero or its first byte is CFh, an IRET.
+bool MouseCheckSetsZero(const Machine::Memory& _memory)
 {
-  _rig.Ram().Write8(ServiceRig::CODE_SEGMENT, 0, 0xE8); // call 0100h
-  _rig.Ram().Write16(ServiceRig::CODE_SEGMENT, 1, 0x00FD);
-  for (std::size_t index = 0; index < IS_MOUSE_DRIVER_INSTALLED.size(); ++index)
-  {
-    _rig.Ram().Write8(ServiceRig::CODE_SEGMENT, static_cast<std::uint16_t>(0x100 + index), IS_MOUSE_DRIVER_INSTALLED[index]);
-  }
-  _rig.Regs().ip = 0;
-  Assert::IsTrue(_rig.RunUntil(ServiceRig::CODE_SEGMENT, 3), L"the routine returns");
-  return _rig.Zero();
+  const std::uint16_t offset = _memory.Read16(0x33u * 4);
+  const std::uint16_t segment = _memory.Read16(0x33u * 4 + 2);
+  return (offset | segment) == 0 || _memory.Read8(segment, offset) == 0xCF;
 }
+
+// A machine with a stack at STACK:STACK_TOP, interrupts on and AX and DS given, from which a test makes an interrupt as the
+// 8088 enters one (Pc::CallInterrupt): the ROM's handler, native on the Pc's Dispatcher (NativeFirmware.h), runs to its
+// IRET, and every port access it makes is logged.
+class HandlerRig
+{
+public:
+  static constexpr std::uint16_t STACK_SEGMENT = 0x4000;
+  static constexpr std::uint16_t STACK_TOP = 0x0100;
+
+  HandlerRig(std::string_view _name, std::uint16_t _ax, std::uint16_t _ds)
+    : m_rig(_name)
+  {
+    Machine::Registers& regs = m_rig.Host().Processor().Regs();
+    regs.cs = ServiceRig::CODE_SEGMENT;
+    regs.ip = 0;
+    regs.ss = STACK_SEGMENT;
+    regs.sp = STACK_TOP;
+    regs.ax = _ax;
+    regs.ds = _ds;
+    regs.flags = static_cast<std::uint16_t>(Machine::FLAGS_FIXED_ONES | Machine::FLAG_INTERRUPT);
+  }
+
+  [[nodiscard]] Machine::Pc& Host() noexcept
+  {
+    return m_rig.Host();
+  }
+
+  void Interrupt(std::uint8_t _vector)
+  {
+    m_rig.Host().Ports().SetLog(&m_ports);
+    m_rig.Host().CallInterrupt(_vector);
+    m_rig.Host().Ports().SetLog(nullptr);
+  }
+
+  /// The ports read, in order.
+  [[nodiscard]] std::vector<std::uint16_t> Reads() const
+  {
+    std::vector<std::uint16_t> reads;
+    for (const Machine::PortRouter::Access& access : m_ports)
+    {
+      if (!access.write)
+        reads.push_back(access.port);
+    }
+    return reads;
+  }
+
+  /// The byte writes, in order.
+  [[nodiscard]] std::vector<PortWrite> Writes() const
+  {
+    std::vector<PortWrite> writes;
+    for (const Machine::PortRouter::Access& access : m_ports)
+    {
+      if (access.write)
+        writes.push_back(PortWrite{access.port, static_cast<std::uint8_t>(access.value)});
+    }
+    return writes;
+  }
+
+private:
+  PcRig m_rig;
+  std::vector<Machine::PortRouter::Access> m_ports;
+};
 
 } // namespace
 
@@ -112,62 +173,66 @@ public:
     Assert::AreEqual(Machine::Firmware::TICKS_PER_DAY - 1, Machine::Firmware::TimerTicksAt(8'639'999), L"never a whole day");
   }
 
-  TEST_METHOD(TimerHandlerRunsOnTheCpuCountingATickAndSendingEoi)
+  // The ROM's timer handler, native on the Dispatcher in the ROM code's place: a tick counted, its carry into the high
+  // word, and EOI sent, with the registers and the stack as they were.
+  TEST_METHOD(TimerHandlerCountsATickAndSendsEoi)
   {
-    ServiceRig rig("FirmwareTimer");
-    SetTicks(rig.Ram(), 0x0000FFFF);
-    rig.Regs().ax = 0x1234;
-    rig.Regs().ds = 0x5678;
+    HandlerRig rig("FirmwareTimer", 0x1234, 0x5678);
+    Machine::Pc& pc = rig.Host();
+    SetTicks(pc.Ram(), 0x0000FFFF);
+    Assert::AreEqual(std::uint32_t{ROM}, VectorSegment(pc.Ram(), 0x08));
+    Assert::AreEqual(std::uint32_t{Machine::Firmware::TIMER_HANDLER_OFFSET}, VectorOffset(pc.Ram(), 0x08));
 
     rig.Interrupt(0x08);
-    Assert::AreEqual(std::uint32_t{ROM}, std::uint32_t{rig.Regs().cs});
-    Assert::AreEqual(std::uint32_t{Machine::Firmware::TIMER_HANDLER_OFFSET}, std::uint32_t{rig.Regs().ip});
-    Assert::IsTrue(rig.RunUntil(ServiceRig::CODE_SEGMENT, 2), L"the handler returns to the interrupted code");
 
-    Assert::AreEqual(0x00010000u, Ticks(rig.Ram()), L"the carry reaches the high word");
-    Assert::AreEqual(0u, std::uint32_t{rig.Ram().Read8(BIOS_DATA, Machine::Firmware::TIMER_ROLLOVER)});
-    Assert::IsTrue(rig.Bus().Writes() == std::vector<PortWrite>{{0x20, 0x20}}, L"one OUT: EOI to the 8259");
-    Assert::AreEqual(0x1234u, std::uint32_t{rig.Regs().ax}, L"AX preserved");
-    Assert::AreEqual(0x5678u, std::uint32_t{rig.Regs().ds}, L"DS preserved");
-    Assert::AreEqual(std::uint32_t{ServiceRig::STACK_TOP}, std::uint32_t{rig.Regs().sp}, L"stack balanced");
-    Assert::IsFalse(rig.Services().Fault().has_value());
+    Assert::AreEqual(0x00010000u, Ticks(pc.Ram()), L"the carry reaches the high word");
+    Assert::AreEqual(0u, std::uint32_t{pc.Ram().Read8(BIOS_DATA, Machine::Firmware::TIMER_ROLLOVER)});
+    Assert::IsTrue(rig.Writes() == std::vector<PortWrite>{{0x20, 0x20}}, L"one OUT: EOI to the 8259");
+    const Machine::Registers& regs = pc.Processor().Regs();
+    Assert::AreEqual(0x1234u, std::uint32_t{regs.ax}, L"AX preserved");
+    Assert::AreEqual(0x5678u, std::uint32_t{regs.ds}, L"DS preserved");
+    Assert::AreEqual(std::uint32_t{HandlerRig::STACK_TOP}, std::uint32_t{regs.sp}, L"stack balanced");
+    Assert::IsFalse(pc.Services().Fault().has_value());
   }
 
   TEST_METHOD(TimerHandlerStartsAgainAfterTwentyFourHours)
   {
-    ServiceRig rig("FirmwareMidnight");
-    SetTicks(rig.Ram(), Machine::Firmware::TICKS_PER_DAY - 1);
+    HandlerRig rig("FirmwareMidnight", 0, 0);
+    SetTicks(rig.Host().Ram(), Machine::Firmware::TICKS_PER_DAY - 1);
 
     rig.Interrupt(0x08);
-    Assert::IsTrue(rig.RunUntil(ServiceRig::CODE_SEGMENT, 2));
 
-    Assert::AreEqual(0u, Ticks(rig.Ram()));
-    Assert::AreEqual(1u, std::uint32_t{rig.Ram().Read8(BIOS_DATA, Machine::Firmware::TIMER_ROLLOVER)}, L"TIMER_OFL");
+    Assert::AreEqual(0u, Ticks(rig.Host().Ram()));
+    Assert::AreEqual(1u, std::uint32_t{rig.Host().Ram().Read8(BIOS_DATA, Machine::Firmware::TIMER_ROLLOVER)}, L"TIMER_OFL");
   }
 
+  // The ROM's keyboard handler, native in the ROM code's place, with a key latched in the 8255: the scan code read, the key
+  // acknowledged on port 61h, and EOI sent; the key is not buffered.
   TEST_METHOD(KeyboardHandlerAcknowledgesTheKeyAndDiscardsIt)
   {
-    ServiceRig rig("FirmwareKeyboard");
-    rig.Bus().SetInput(0x60, 0x1E);
-    rig.Bus().SetInput(0x61, 0x4C);
-    rig.Regs().ax = 0xBEEF;
+    HandlerRig rig("FirmwareKeyboard", 0xBEEF, 0);
+    Machine::Pc& pc = rig.Host();
+    pc.KeyboardController().Inject(0x1E);
+    while (!pc.KeyboardController().LatchFull())
+      pc.Idle(Machine::NO_EVENT);
+    Assert::AreEqual(0x1Eu, std::uint32_t{pc.Ports().In8(0x60)}, L"the key latched");
+    Assert::AreEqual(0x4Cu, std::uint32_t{pc.Ports().In8(0x61)}, L"port 61h as the BIOS leaves it");
 
     rig.Interrupt(0x09);
-    Assert::IsTrue(rig.RunUntil(ServiceRig::CODE_SEGMENT, 2));
 
-    Assert::IsTrue(rig.Bus().Reads() == std::vector<std::uint16_t>{0x60, 0x61}, L"scan code, then the control port");
+    Assert::IsTrue(rig.Reads() == std::vector<std::uint16_t>{0x60, 0x61}, L"scan code, then the control port");
     const std::vector<PortWrite> expected = {{0x61, 0xCC}, {0x61, 0x4C}, {0x20, 0x20}};
-    Assert::IsTrue(rig.Bus().Writes() == expected, L"61h bit 7 high, then low, then EOI");
-    Assert::AreEqual(0xBEEFu, std::uint32_t{rig.Regs().ax});
-    Assert::AreEqual(0x1Eu, std::uint32_t{rig.Ram().Read16(BIOS_DATA, Machine::Firmware::KEYBOARD_TAIL)}, L"nothing buffered");
+    Assert::IsTrue(rig.Writes() == expected, L"61h bit 7 high, then low, then EOI");
+    Assert::AreEqual(0xBEEFu, std::uint32_t{pc.Processor().Regs().ax});
+    Assert::AreEqual(0x1Eu, std::uint32_t{pc.Ram().Read16(BIOS_DATA, Machine::Firmware::KEYBOARD_TAIL)}, L"nothing buffered");
   }
 
-  // The game's own test (CS:02D4), run on the CPU: ZF=1 means no driver.
+  // What the game's own test (CS:02D4) reads of the int 33h vector: ZF=1, no driver.
   TEST_METHOD(GamesMouseCheckSeesNoDriverWithoutOne)
   {
     ServiceRig rig("FirmwareNoMouse", false);
     Assert::AreEqual(0x33u + Machine::Firmware::IRET_STUBS_OFFSET, VectorOffset(rig.Ram(), 0x33));
-    Assert::IsTrue(MouseCheckSetsZero(rig));
+    Assert::IsTrue(MouseCheckSetsZero(rig.Ram()));
   }
 
   TEST_METHOD(GamesMouseCheckSeesTheDriverWithOne)
@@ -175,7 +240,7 @@ public:
     ServiceRig rig("FirmwareMouse", true);
     Assert::AreEqual(std::uint32_t{Machine::Firmware::MOUSE_DRIVER_OFFSET}, VectorOffset(rig.Ram(), 0x33));
     Assert::IsTrue(rig.Ram().Read8(ROM, Machine::Firmware::MOUSE_DRIVER_OFFSET) != 0xCF, L"the driver entry is not an IRET");
-    Assert::IsFalse(MouseCheckSetsZero(rig));
+    Assert::IsFalse(MouseCheckSetsZero(rig.Ram()));
   }
 };
 

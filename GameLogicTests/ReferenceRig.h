@@ -2,7 +2,6 @@
 #pragma once
 
 #include "DirectoryFileStore.h"
-#include "Dispatcher.h"
 #include "NativeRoutines.h"
 #include "Pc.h"
 #include "Reference.h"
@@ -63,7 +62,7 @@ public:
                         bool _mousePresent = false)
     : m_directory(_name),
       m_files(m_directory.Path()),
-      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent), &Machine::MakeDispatcher))
+      m_pc(std::make_unique<Machine::Pc>(m_files, Desc(_startMoment, _mousePresent)))
   {
     m_pc->SetTimeMode(Machine::TimeMode::Paced);
     const std::vector<std::uint8_t> file = Elite::ReadWholeFile(Elite::FindInRepository(Elite::REFERENCE_FILE_NAME));

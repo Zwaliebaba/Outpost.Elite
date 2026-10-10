@@ -75,9 +75,6 @@
     <ClInclude Include="HostServices.h">
       <Filter>Services</Filter>
     </ClInclude>
-    <ClInclude Include="InstructionObserver.h">
-      <Filter>Processor</Filter>
-    </ClInclude>
     <ClInclude Include="InterruptSource.h">
       <Filter>Io</Filter>
     </ClInclude>
@@ -92,9 +89,6 @@
     </ClInclude>
     <ClInclude Include="Pit.h">
       <Filter>Devices</Filter>
-    </ClInclude>
-    <ClInclude Include="Processor.h">
-      <Filter>Processor</Filter>
     </ClInclude>
     <ClInclude Include="PortRouter.h">
       <Filter>Devices</Filter>

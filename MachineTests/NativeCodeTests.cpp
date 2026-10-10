@@ -5,6 +5,7 @@
 #include "PcRig.h"
 
 #include <array>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -16,30 +17,18 @@ namespace MachineTests
 namespace
 {
 
+constexpr std::uint16_t MAIN = 0x0000;
+constexpr std::uint16_t FINISH = 0x0005;
 constexpr std::uint16_t ROUTINE = 0x0010;
-constexpr std::uint16_t HELPER = 0x0030;
 constexpr std::uint16_t HANDLER = 0x0038;
 constexpr std::uint16_t COUNTER = 0x0040;
 constexpr std::uint8_t VECTOR = 0x60;
 constexpr std::uint16_t COUNTER_START = 0x1234;
-constexpr std::uint16_t SPEAKER_PORT = 0x61;
 
-// A program that sets DS to its own segment, calls the routine at 0010h and ends: the routine is what
-// _routine holds, the helper at 0030h sets BX to 7777h, the interrupt handler at 0038h sets BX to 5555h,
-// and the counter word at 0040h starts at 1234h.
-std::vector<std::uint8_t> ProgramAround(std::initializer_list<std::uint8_t> _routine)
+// A program whose counter word at 0040h starts at 1234h. Its code is native, so none of its bytes but the counter's matter.
+std::vector<std::uint8_t> Program()
 {
-  std::vector<std::uint8_t> code = {0x0E,             // push cs
-                                    0x1F,             // pop ds
-                                    0xE8, 0x0B, 0x00, // call 0010h
-                                    0xCD, 0x20};      // int 20h
-  code.resize(ROUTINE, 0x90);
-  code.insert(code.end(), _routine);
-  code.resize(HELPER, 0x90);
-  code.insert(code.end(), {0xBB, 0x77, 0x77, 0xC3}); // mov bx,7777h; ret
-  code.resize(HANDLER, 0x90);
-  code.insert(code.end(), {0xBB, 0x55, 0x55, 0xCF}); // mov bx,5555h; iret
-  code.resize(COUNTER, 0x90);
+  std::vector<std::uint8_t> code(COUNTER, 0x90);
   code.insert(code.end(), {COUNTER_START & 0xFF, COUNTER_START >> 8});
   std::vector<std::uint8_t> file = TinyExe({});
   file.insert(file.end(), code.begin(), code.end());
@@ -49,23 +38,24 @@ std::vector<std::uint8_t> ProgramAround(std::initializer_list<std::uint8_t> _rou
   return file;
 }
 
-// The original routine most tests compare with: the counter goes up by one, AX holds it, DX is 5.
-const std::initializer_list<std::uint8_t> COUNT_UP = {0xA1, 0x40, 0x00, // mov ax,[0040h]
-                                                      0x40,             // inc ax
-                                                      0xA3, 0x40, 0x00, // mov [0040h],ax
-                                                      0xBA, 0x05, 0x00, // mov dx,5
-                                                      0xC3};            // ret
+// The program's entry: PUSH CS; POP DS; CALL 0010h, natively. It calls the routine as the CALL does, the return address
+// FINISH on the stack, and the Dispatcher goes on at the routine.
+void Main(Machine::Pc& _pc)
+{
+  Machine::Registers& regs = _pc.Processor().Regs();
+  regs.ds = regs.cs;
+  regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
+  _pc.Ram().Write16(regs.ss, regs.sp, FINISH);
+  regs.ip = ROUTINE;
+}
 
-// An original routine that waits for the BIOS tick count to change, with interrupts on.
-const std::initializer_list<std::uint8_t> WAIT_FOR_TICK = {0xFB,                         // sti
-                                                           0xB8, 0x40, 0x00,             // mov ax,40h
-                                                           0x8E, 0xC0,                   // mov es,ax
-                                                           0x26, 0x8B, 0x1E, 0x6C, 0x00, // mov bx,es:[6Ch]
-                                                           0x26, 0x3B, 0x1E, 0x6C, 0x00, // wait: cmp bx,es:[6Ch]
-                                                           0x74, 0xF9,                   // je wait
-                                                           0xC3};                        // ret
+// Where the routine returns to: INT 20h, natively, which ends the program.
+void Finish(Machine::Pc& _pc)
+{
+  _pc.CallInterrupt(0x20);
+}
 
-// Its native counterpart, which waits through Pc::Wait.
+// A routine that waits for the BIOS tick count to change, with interrupts on, through Pc::Wait.
 void WaitForTick(Machine::Pc& _pc)
 {
   Machine::Registers& regs = _pc.Processor().Regs();
@@ -78,8 +68,8 @@ void WaitForTick(Machine::Pc& _pc)
   _pc.ReturnNear();
 }
 
-// Its native counterpart ported turn by turn: Pc::LoopTurn where the original's JE jumps back, so paced
-// time sees the same turns it sees in the original.
+// The same wait turn by turn: Pc::LoopTurn where the original's JE jumped back, so paced time sees the same turns it saw in
+// the original's loop (sti; mov ax,40h; mov es,ax; mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch]; je wait; ret).
 void WaitForTickByTurns(Machine::Pc& _pc)
 {
   Machine::Registers& regs = _pc.Processor().Regs();
@@ -92,8 +82,8 @@ void WaitForTickByTurns(Machine::Pc& _pc)
   _pc.ReturnNear();
 }
 
-// Its native counterpart de-assembled (ADR-015): no registers, and a turn signature where the original's JE jumps back,
-// the loop's offset and the tick count it carries in BX.
+// The same wait de-assembled (ADR-015): no registers, and a turn signature where the original's JE jumped back, the
+// loop's offset and the tick count it carries in BX.
 void WaitForTickBySignature(Machine::Pc& _pc)
 {
   constexpr std::uint16_t WAIT_LOOP = ROUTINE + 0x0B; // wait: cmp bx,es:[6Ch]
@@ -108,7 +98,7 @@ void WaitForTickBySignature(Machine::Pc& _pc)
   _pc.ReturnNear();
 }
 
-// A native counterpart of COUNT_UP that adds _step and leaves _dx in DX.
+// A routine that adds _step to the counter, leaves it in AX and _dx in DX.
 Machine::NativeRoutine CountUp(std::uint16_t _step, std::uint16_t _dx)
 {
   return [_step, _dx](Machine::Pc& _pc)
@@ -122,14 +112,17 @@ Machine::NativeRoutine CountUp(std::uint16_t _step, std::uint16_t _dx)
   };
 }
 
+// Program() in paced time, its entry and its end hooked: what a test hooks at ROUTINE runs as the routine the entry calls.
 class NativeRig
 {
 public:
-  NativeRig(std::string_view _name, std::initializer_list<std::uint8_t> _routine)
+  explicit NativeRig(std::string_view _name)
     : m_rig(_name)
   {
-    m_program = m_rig.Load(ProgramAround(_routine));
+    m_program = m_rig.Load(Program());
     m_rig.Host().SetTimeMode(Machine::TimeMode::Paced);
+    m_rig.Host().Hook(m_program.loadSegment, MAIN, "Main", &Main, {});
+    m_rig.Host().Hook(m_program.loadSegment, FINISH, "Finish", &Finish, {});
   }
 
   [[nodiscard]] Machine::Pc& Host() noexcept
@@ -143,16 +136,19 @@ public:
     m_rig.Host().Hook(m_program.loadSegment, ROUTINE, "Routine", std::move(_routine), _contract, Machine::NativeReturn::Near, _wait);
   }
 
-  // Points the vector table's entry for VECTOR at the handler.
+  // Points the vector table's entry for VECTOR at a handler, hooked: MOV BX,5555h; IRET, natively.
   void InstallHandler()
   {
     m_rig.Host().Ram().Write16(VECTOR * 4u, HANDLER);
     m_rig.Host().Ram().Write16(VECTOR * 4u + 2, m_program.loadSegment);
-  }
-
-  [[nodiscard]] std::uint16_t CodeSegment() const noexcept
-  {
-    return m_program.loadSegment;
+    m_rig.Host().Hook(
+      m_program.loadSegment, HANDLER, "Handler",
+      [](Machine::Pc& _pc)
+      {
+        _pc.Processor().Regs().bx = 0x5555;
+        _pc.ReturnInterrupt();
+      },
+      {}, Machine::NativeReturn::Interrupt);
   }
 
   void Run()
@@ -182,155 +178,21 @@ private:
 TEST_CLASS(NativeCodeTests)
 {
 public:
-  // ADR-010: execution that reaches a hooked entry runs the native routine, and the original's code
-  // there never runs.
-  TEST_METHOD(NativeCodeRunsInsteadOfTheOriginal)
+  // ADR-010: execution that reaches a hooked entry runs the native routine, which leaves as the original did.
+  TEST_METHOD(NativeCodeRunsAtAHookedEntry)
   {
-    NativeRig rig("NativeRuns", COUNT_UP);
+    NativeRig rig("NativeRuns");
     rig.Hook(CountUp(100, 5));
     rig.Run();
     Assert::AreEqual(std::uint32_t{COUNTER_START + 100}, std::uint32_t{rig.Counter()});
+    Assert::AreEqual(5u, std::uint32_t{rig.Host().Processor().Regs().dx});
     Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
   }
 
-  // Native code calls the original's code, and gets control back when it returns.
-  TEST_METHOD(NativeCodeCallsTheOriginal)
-  {
-    NativeRig rig("NativeCalls", COUNT_UP);
-    rig.Hook(
-      [](Machine::Pc& _pc)
-      {
-        _pc.CallNear(HELPER);
-        Machine::Registers& regs = _pc.Processor().Regs();
-        regs.ax = static_cast<std::uint16_t>(regs.bx + 1);
-        _pc.ReturnNear();
-      });
-    rig.Run();
-    Assert::AreEqual(0x7778u, std::uint32_t{rig.Host().Processor().Regs().ax});
-    Assert::AreEqual(std::uint32_t{COUNTER_START}, std::uint32_t{rig.Counter()}, L"the original routine did not run");
-  }
-
-  // Compared, a routine that agrees with the original runs once in effect: the original's run is
-  // undone before the native one.
-  TEST_METHOD(AgreeingRoutineIsVerified)
-  {
-    NativeRig rig("NativeAgrees", COUNT_UP);
-    rig.Hook(CountUp(1, 5));
-    rig.Host().Native().SetVerifying(true);
-    rig.Run();
-    Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()});
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().verified);
-    Assert::IsTrue(rig.Host().Native().Mismatches().empty());
-    Assert::IsTrue(rig.Books().executed.Contains(ROUTINE), L"the original's instructions are covered");
-  }
-
-  // A routine that disagrees is reported, and the run carries on from the original's outcome.
-  TEST_METHOD(DisagreeingRoutineIsReportedAndTheOriginalStands)
-  {
-    NativeRig rig("NativeDisagrees", COUNT_UP);
-    rig.Hook(CountUp(2, 5));
-    rig.Host().Native().SetVerifying(true);
-    rig.Run();
-    Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()}, L"the original's outcome");
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().mismatches);
-    Assert::AreEqual(std::size_t{1}, rig.Host().Native().Mismatches().size());
-    const std::string& difference = rig.Host().Native().Mismatches().front().difference;
-    Assert::IsTrue(difference.find("AX 1236, original 1235") != std::string::npos, L"names the register");
-    Assert::IsTrue(difference.find("byte") != std::string::npos, L"names the memory");
-  }
-
-  // A register the contract says the routine clobbers is not compared; any other is. Either way the run
-  // carries on from the original's registers.
-  TEST_METHOD(OnlyClobberedRegistersMayDiffer)
-  {
-    NativeRig clobbered("NativeClobbers", COUNT_UP);
-    clobbered.Hook(CountUp(1, 6), Machine::NativeContract{Machine::REGISTER_DX, 0});
-    clobbered.Host().Native().SetVerifying(true);
-    clobbered.Run();
-    Assert::AreEqual(std::uint64_t{1}, clobbered.Books().verified);
-    Assert::AreEqual(5u, std::uint32_t{clobbered.Host().Processor().Regs().dx}, L"the original's DX");
-
-    NativeRig kept("NativeKeeps", COUNT_UP);
-    kept.Hook(CountUp(1, 6));
-    kept.Host().Native().SetVerifying(true);
-    kept.Run();
-    Assert::AreEqual(std::uint64_t{1}, kept.Books().mismatches);
-  }
-
-  // Poisoning (ADR-012) marks exactly the registers named, each with its own value, and only while it is on.
-  TEST_METHOD(PoisoningMarksTheNamedRegistersWhileOn)
-  {
-    NativeRig rig("NativePoison", COUNT_UP);
-    Machine::NativeCode& native = rig.Host().Native();
-    Machine::Registers regs;
-    const std::uint16_t clear = regs.flags;
-    native.Poison(regs, Machine::REGISTER_DX | Machine::REGISTER_BP, Machine::FLAG_CARRY);
-    Assert::AreEqual(0u, std::uint32_t{regs.dx}, L"off: nothing is marked");
-    Assert::AreEqual(std::uint32_t{clear}, std::uint32_t{regs.flags}, L"off: no flag is marked");
-
-    native.SetPoisoning(true);
-    native.Poison(regs, Machine::REGISTER_DX | Machine::REGISTER_BP, Machine::FLAG_CARRY | Machine::FLAG_DIRECTION);
-    Assert::AreEqual(0xA5A4u, std::uint32_t{regs.dx});
-    Assert::AreEqual(0xA5A7u, std::uint32_t{regs.bp});
-    Assert::AreEqual(0u, std::uint32_t{regs.ax}, L"AX is not named");
-    Assert::AreEqual(std::uint32_t{clear} | Machine::FLAG_CARRY, std::uint32_t{regs.flags}, L"CF set, DF never");
-
-    native.Poison(regs, 0, Machine::FLAG_CARRY | Machine::FLAG_ZERO);
-    Assert::AreEqual(std::uint32_t{clear}, std::uint32_t{regs.flags}, L"the next call clears them");
-  }
-
-  // The native run sees the port reads the original made, and its writes are compared rather than
-  // made a second time.
-  TEST_METHOD(PortAccessesAreReplayed)
-  {
-    const std::initializer_list<std::uint8_t> gateOn = {0xE4, 0x61, // in al,61h
-                                                        0x0C, 0x01, // or al,1
-                                                        0xE6, 0x61, // out 61h,al
-                                                        0xC3};      // ret
-    const auto gate = [](std::uint8_t _bits)
-    {
-      return [_bits](Machine::Pc& _pc)
-      {
-        const auto value = static_cast<std::uint8_t>(_pc.Ports().In8(SPEAKER_PORT) | _bits);
-        _pc.Ports().Out8(SPEAKER_PORT, value);
-        Machine::Registers& regs = _pc.Processor().Regs();
-        regs.ax = static_cast<std::uint16_t>((regs.ax & 0xFF00) | value);
-        _pc.ReturnNear();
-      };
-    };
-    NativeRig agrees("NativePortsAgree", gateOn);
-    agrees.Hook(gate(0x01));
-    agrees.Host().Native().SetVerifying(true);
-    const std::uint64_t writes = agrees.Host().Ports().WriteCount();
-    agrees.Run();
-    Assert::AreEqual(std::uint64_t{1}, agrees.Books().verified);
-    Assert::AreEqual(1u, std::uint32_t{agrees.Host().Ports().In8(SPEAKER_PORT) & 1u}, L"the gate is on");
-    Assert::AreEqual(std::uint64_t{1}, agrees.Host().Ports().WriteCount() - writes, L"paced time counts the original's write, once");
-
-    NativeRig differs("NativePortsDiffer", gateOn);
-    differs.Hook(gate(0x02));
-    differs.Host().Native().SetVerifying(true);
-    differs.Run();
-    Assert::AreEqual(std::uint64_t{1}, differs.Books().mismatches);
-    Assert::IsTrue(differs.Host().Native().Mismatches().front().difference.find("ports") != std::string::npos);
-  }
-
-  // A routine whose original calls the BIOS cannot be undone, so it is not compared, and its outcome
-  // stands.
-  TEST_METHOD(ServiceCallMakesACallUnverifiable)
-  {
-    NativeRig rig("NativeUnverifiable", {0xB4, 0x00, 0xCD, 0x1A, 0xC3}); // mov ah,0; int 1Ah; ret
-    rig.Hook([](Machine::Pc& _pc) { _pc.ReturnNear(); });
-    rig.Host().Native().SetVerifying(true);
-    rig.Run();
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().unverifiable);
-    Assert::AreEqual(std::uint64_t{0}, rig.Books().verified);
-  }
-
-  // Native code makes an INT: the handler the vector table names runs until its IRET.
+  // Native code makes an INT: the handler the vector table names runs until its IRET, natively.
   TEST_METHOD(NativeCodeCallsAnInterruptHandler)
   {
-    NativeRig rig("NativeInterrupts", COUNT_UP);
+    NativeRig rig("NativeInterrupts");
     rig.InstallHandler();
     rig.Hook(
       [](Machine::Pc& _pc)
@@ -344,38 +206,11 @@ public:
     Assert::AreEqual(0x5555u, std::uint32_t{rig.Host().Processor().Regs().ax});
   }
 
-  // An interrupt handler's entry can be hooked: the native routine leaves with IRET, and a comparison
-  // runs the original to its IRET.
-  TEST_METHOD(InterruptHandlerEntryIsHookedAndCompared)
-  {
-    NativeRig rig("NativeHandler", {0xCD, VECTOR, 0xC3}); // int 60h; ret
-    rig.InstallHandler();
-    rig.Host().Hook(
-      rig.CodeSegment(), HANDLER, "Handler",
-      [](Machine::Pc& _pc)
-      {
-        _pc.Processor().Regs().bx = 0x5555;
-        _pc.ReturnInterrupt();
-      },
-      {}, Machine::NativeReturn::Interrupt);
-    rig.Host().Native().SetVerifying(true);
-    rig.Run();
-    const auto& hooks = rig.Host().Native().Hooks();
-    const auto found = hooks.find(Machine::Memory::Linear(rig.CodeSegment(), HANDLER));
-    Assert::IsTrue(found != hooks.end());
-    Assert::AreEqual(std::uint64_t{1}, found->second.verified);
-    Assert::AreEqual(0x5555u, std::uint32_t{rig.Host().Processor().Regs().bx});
-  }
-
-  // ADR-010 item 8: a native routine that waits stops where a run ends and carries on in the next, on
-  // the same cycles as the original: the first timer tick, at cycle 262,144, ends its wait.
+  // ADR-010 item 8: a native routine that waits stops where a run ends and carries on in the next: the first timer tick,
+  // at cycle 262,144, ends its wait, as it ended the original's.
   TEST_METHOD(WaitingRoutineStopsAtTheEndOfARunAndCarriesOn)
   {
-    NativeRig original("NativeWaitOriginal", WAIT_FOR_TICK);
-    original.Run();
-    Assert::AreEqual(std::uint64_t{262'144}, original.Host().Clock());
-
-    NativeRig rig("NativeWaits", WAIT_FOR_TICK);
+    NativeRig rig("NativeWaits");
     rig.Hook(&WaitForTick, {}, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
@@ -388,104 +223,48 @@ public:
   // A machine destroyed while a native routine waits unwinds it, and does not hang.
   TEST_METHOD(MachineDestroyedMidWaitUnwindsTheNativeThread)
   {
-    NativeRig rig("NativeAbandoned", WAIT_FOR_TICK);
+    NativeRig rig("NativeAbandoned");
     rig.Hook(&WaitForTick, {}, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
   }
 
-  // With comparison on, a routine that waits as a rule still runs natively and is not compared: it
-  // could not be undone, and its original might never return.
-  TEST_METHOD(RoutineThatAlwaysWaitsIsNotCompared)
+  // A routine that waits only sometimes runs on the native thread, and a call that does not wait is over when it returns.
+  TEST_METHOD(RoutineThatSometimesWaitsRunsWhenItDoesNotWait)
   {
-    NativeRig rig("NativeWaitCompared", WAIT_FOR_TICK);
-    rig.Hook(&WaitForTick, {}, Machine::NativeWait::Always);
-    rig.Host().Native().SetVerifying(true);
-    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached);
-    rig.Run();
-    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
-    Assert::AreEqual(std::uint64_t{0}, rig.Books().verified + rig.Books().unverifiable);
-  }
-
-  // A routine that waits only sometimes runs on the native thread, and a call whose original returns
-  // without waiting is compared like any other.
-  TEST_METHOD(RoutineThatSometimesWaitsIsComparedWhenItsOriginalDoesNot)
-  {
-    NativeRig rig("NativeSometimesAgrees", COUNT_UP);
+    NativeRig rig("NativeSometimesWork");
     rig.Hook(CountUp(1, 5), {}, Machine::NativeWait::Sometimes);
-    rig.Host().Native().SetVerifying(true);
     rig.Run();
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().verified);
     Assert::AreEqual(std::uint32_t{COUNTER_START + 1}, std::uint32_t{rig.Counter()});
+    Assert::AreEqual(std::uint64_t{1}, rig.Books().calls);
   }
 
-  // When its original does wait, the comparison's original run stops at the end of a run and carries
-  // on in the next, as native code that waits does; the call is then unverifiable, and stands.
-  TEST_METHOD(ComparedOriginalThatWaitsStopsAtTheEndOfARun)
+  // When it does wait, it stops at the end of a run and carries on in the next, as a routine that always waits does.
+  TEST_METHOD(RoutineThatSometimesWaitsStopsAtTheEndOfARun)
   {
-    NativeRig rig("NativeSometimesWaits", WAIT_FOR_TICK);
+    NativeRig rig("NativeSometimesWaits");
     rig.Hook(&WaitForTick, {}, Machine::NativeWait::Sometimes);
-    rig.Host().Native().SetVerifying(true);
-    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the original's wait");
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     rig.Run();
     Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
-    Assert::AreEqual(std::uint64_t{1}, rig.Books().unverifiable);
     Assert::IsTrue(rig.Host().Native().Overran().empty());
   }
 
-  // A routine that drops its own return address returns past its caller, and its comparison ends
-  // there: the routine at 0010h calls one at 0017h that pops the return address 0013h and returns to
-  // the program, so BX is never set.
-  TEST_METHOD(ComparisonEndsWhenTheOriginalReturnsPastItsCaller)
-  {
-    constexpr std::uint16_t DROPS_RETURN = 0x0017;
-    NativeRig rig("NativeReturnsPast", {0xE8, 0x04, 0x00, // call 0017h
-                                        0xBB, 0x01, 0x00, // mov bx,1
-                                        0xC3,             // ret
-                                        0x58,             // pop ax
-                                        0xC3});           // ret
-    rig.Host().Hook(
-      rig.CodeSegment(), DROPS_RETURN, "DropsReturn",
-      [](Machine::Pc& _pc)
-      {
-        Machine::Registers& regs = _pc.Processor().Regs();
-        regs.ax = _pc.Ram().Read16(regs.ss, regs.sp);
-        regs.sp = static_cast<std::uint16_t>(regs.sp + 2);
-        _pc.ReturnNear();
-      },
-      Machine::NativeContract{Machine::REGISTER_AX, 0});
-    rig.Host().Processor().Regs().bx = 0;
-    rig.Host().Native().SetVerifying(true);
-    rig.Run();
-    const auto found = rig.Host().Native().Hooks().find(Machine::Memory::Linear(rig.CodeSegment(), DROPS_RETURN));
-    Assert::IsTrue(found != rig.Host().Native().Hooks().end());
-    Assert::AreEqual(std::uint64_t{1}, found->second.verified);
-    Assert::AreEqual(0u, std::uint32_t{rig.Host().Processor().Regs().bx}, L"the caller's MOV never ran");
-  }
-
-  // A routine that waits but is not hooked as one runs where it is called, which cannot stop at the end
-  // of a run: the run stops there, and names it, rather than wait for input that only comes between
-  // runs. Compared, its original's wait does the same.
+  // A routine that waits but is not hooked as one runs where it is called, which cannot stop at the end of a run: the run
+  // stops there, and names it, rather than wait for input that only comes between runs.
   TEST_METHOD(RoutineThatWaitsUnmarkedStopsTheRun)
   {
-    NativeRig native("NativeOverruns", WAIT_FOR_TICK);
-    native.Hook(&WaitForTick);
-    Assert::IsTrue(native.Host().RunUntil(100'000) == Machine::StopReason::Overran);
-    Assert::IsTrue(native.Host().Native().Overran() == "Routine", L"names the routine");
-
-    NativeRig compared("NativeOverrunsCompared", WAIT_FOR_TICK);
-    compared.Hook(&WaitForTick);
-    compared.Host().Native().SetVerifying(true);
-    Assert::IsTrue(compared.Host().RunUntil(100'000) == Machine::StopReason::Overran);
-    Assert::IsTrue(compared.Host().Native().Overran() == "Routine", L"names the routine");
+    NativeRig rig("NativeOverruns");
+    rig.Hook(&WaitForTick);
+    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Overran);
+    Assert::IsTrue(rig.Host().Native().Overran() == "Routine", L"names the routine");
   }
 
-  // A wait ported turn by turn idles on the turns the original's does: the run ends inside it, and the
-  // first timer tick ends it on the original's cycle.
+  // A wait ported turn by turn idles on the turns the original's did: the run ends inside it, and the first timer tick
+  // ends it on the original's cycle.
   TEST_METHOD(LoopTurnWaitsWhereTheOriginalDoes)
   {
-    NativeRig rig("NativeLoopTurn", WAIT_FOR_TICK);
+    NativeRig rig("NativeLoopTurn");
     rig.Hook(&WaitForTickByTurns, {}, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
@@ -493,11 +272,11 @@ public:
     Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock());
   }
 
-  // The same wait de-assembled, with a turn signature in place of the registers, idles on the same turns: the run
-  // ends inside it, and the first timer tick ends it on the original's cycle.
+  // The same wait de-assembled, with a turn signature in place of the registers, idles on the same turns: the run ends
+  // inside it, and the first timer tick ends it on the original's cycle.
   TEST_METHOD(SignatureTurnWaitsWhereTheOriginalDoes)
   {
-    NativeRig rig("NativeSignatureTurn", WAIT_FOR_TICK);
+    NativeRig rig("NativeSignatureTurn");
     rig.Hook(&WaitForTickBySignature, {}, Machine::NativeWait::Always);
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
@@ -508,7 +287,7 @@ public:
   // A signature that never repeats never idles, and stops the run as the original's would.
   TEST_METHOD(SignatureTurnThatNeverRepeatsSpins)
   {
-    NativeRig rig("NativeSignatureTurnSpins", WAIT_FOR_TICK);
+    NativeRig rig("NativeSignatureTurnSpins");
     rig.Hook(
       [](Machine::Pc& _pc)
       {
@@ -526,7 +305,7 @@ public:
   // A loop whose turns never repeat never idles, and stops the run as the original's would.
   TEST_METHOD(LoopTurnThatNeverRepeatsSpins)
   {
-    NativeRig rig("NativeLoopTurnSpins", WAIT_FOR_TICK);
+    NativeRig rig("NativeLoopTurnSpins");
     rig.Hook(
       [](Machine::Pc& _pc)
       {
@@ -542,89 +321,9 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Machine::StopReason::Spinning);
   }
 
-  // Original code that native code calls and that drops its return address returns past the native
-  // routine: the rest of the routine never runs, and the program carries on where the original went,
-  // after the program's own call.
-  TEST_METHOD(CalleeThatReturnsPastUnwindsTheNativeRoutine)
-  {
-    constexpr std::uint16_t DROPS_RETURN = 0x0017;
-    NativeRig rig("NativeUnwound", {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, // hooked: never runs
-                                    0x58,                                     // 0017: pop ax
-                                    0xC3});                                   //       ret
-    bool resumed = false;
-    rig.Hook(
-      [&resumed](Machine::Pc& _pc)
-      {
-        _pc.CallNear(DROPS_RETURN);
-        resumed = true;
-        _pc.ReturnNear();
-      },
-      {}, Machine::NativeWait::Always);
-    rig.Run();
-    Assert::IsFalse(resumed, L"the native routine is unwound");
-    Assert::AreEqual(0xFFFFu, std::uint32_t{rig.Host().Processor().Regs().ax}, L"the dropped return address was the call's");
-  }
-
-  // Native code that calls native code that returns past it is unwound one routine at a time, and a
-  // routine the program returns to carries on.
-  TEST_METHOD(ReturnPastStopsAtTheRoutineItReturnsTo)
-  {
-    NativeRig rig("NativeReturnsToOuter", COUNT_UP);
-    bool innerResumed = false;
-    rig.Host().Hook(
-      rig.CodeSegment(), HELPER, "Inner",
-      [&innerResumed](Machine::Pc& _pc)
-      {
-        Machine::Registers& regs = _pc.Processor().Regs();
-        regs.sp = static_cast<std::uint16_t>(regs.sp + 2); // drops its own return address
-        _pc.ReturnNear();                                  // and returns from its caller's call
-        innerResumed = true;
-      },
-      {}, Machine::NativeReturn::Near, Machine::NativeWait::Always);
-    bool middleResumed = false;
-    rig.Host().Hook(
-      rig.CodeSegment(), HANDLER, "Middle",
-      [&middleResumed](Machine::Pc& _pc)
-      {
-        _pc.CallNear(HELPER);
-        middleResumed = true;
-        _pc.ReturnNear();
-      },
-      {}, Machine::NativeReturn::Near, Machine::NativeWait::Always);
-    bool outerResumed = false;
-    rig.Hook(
-      [&outerResumed](Machine::Pc& _pc)
-      {
-        _pc.CallNear(HANDLER);
-        outerResumed = true;
-        _pc.ReturnNear();
-      },
-      {}, Machine::NativeWait::Always);
-    rig.Run();
-    Assert::IsTrue(innerResumed, L"the inner routine returns as it likes");
-    Assert::IsFalse(middleResumed, L"the routine it returned past is unwound");
-    Assert::IsTrue(outerResumed, L"the routine it returned to carries on");
-  }
-
-  // A host that calls into the program while a native routine waits at the end of a run, as a test does,
-  // runs the call beside it to its return; the waiting routine then carries on in the next run.
-  TEST_METHOD(HostCallRunsBesideAWaitingRoutine)
-  {
-    NativeRig rig("NativeBeside", WAIT_FOR_TICK);
-    rig.Hook(&WaitForTickByTurns, {}, Machine::NativeWait::Always);
-    Assert::IsTrue(rig.Host().RunUntil(100'000) == Machine::StopReason::Reached, L"the run ends inside the wait");
-    Machine::Registers& regs = rig.Host().Processor().Regs();
-    const Machine::Registers saved = regs;
-    rig.Host().CallNear(HELPER);
-    Assert::AreEqual(0x7777u, std::uint32_t{regs.bx}, L"the call ran");
-    regs = saved;
-    rig.Run();
-    Assert::AreEqual(std::uint64_t{262'144}, rig.Host().Clock(), L"the wait carried on");
-  }
-
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
   {
-    NativeRig rig("NativeTwice", COUNT_UP);
+    NativeRig rig("NativeTwice");
     rig.Hook(CountUp(1, 5));
     Assert::ExpectException<std::logic_error>([&] { rig.Hook(CountUp(1, 5)); });
   }

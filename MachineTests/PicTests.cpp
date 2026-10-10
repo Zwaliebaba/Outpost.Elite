@@ -1,9 +1,11 @@
 #include "pch.h"
 
-#include "Cpu.h"
+#include "Dispatcher.h"
 #include "Memory.h"
 #include "Pic.h"
 #include "PortRouter.h"
+
+#include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -174,25 +176,25 @@ public:
     Assert::AreEqual(0x00u, std::uint32_t{pic.InServiceRegister()});
   }
 
-  // The whole path the game's timer handler takes: IRQ0 vectors through entry 8, the handler sends
-  // EOI with out 20h, and a second IRQ0 can then come in.
-  TEST_METHOD(CpuTakesIrqAndHandlerEndsItWithEoi)
+  // The whole path the game's timer handler takes: IRQ0 vectors through entry 8 to the handler, which the Dispatcher stops
+  // at, as at every hooked entry; the handler sends EOI with out 20h and returns, and a second IRQ0 can then come in. What a
+  // native handler does there, the test does: the OUT, then the IRET, as Pc::ReturnInterrupt makes it.
+  TEST_METHOD(DispatcherTakesIrqAndHandlerEndsItWithEoi)
   {
     Machine::Memory memory;
     Machine::Pic pic;
     Machine::PortRouter ports;
     Assert::IsTrue(ports.Map(0x20, 0x21, pic));
-    Machine::Cpu cpu(memory, ports);
-    cpu.SetInterruptSource(&pic);
+    Machine::Dispatcher dispatcher(memory);
+    dispatcher.SetInterruptSource(&pic);
 
-    // Main program at 1000:0000: nop forever. Handler at 2000:0000: mov al,20h; out 20h,al; iret.
-    const std::uint8_t program[] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
-    const std::uint8_t handler[] = {0xB0, 0x20, 0xE6, 0x20, 0xCF};
-    memory.Load(Machine::Memory::Linear(0x1000, 0), program);
-    memory.Load(Machine::Memory::Linear(0x2000, 0), handler);
+    // The interrupted program at 1000:0000, and the handler, hooked, at 2000:0000.
+    std::vector<std::uint8_t> hooks(Machine::Memory::SIZE_BYTES, 0);
+    hooks[Machine::Memory::Linear(0x2000, 0)] = 1;
+    dispatcher.SetHookMap(&hooks);
     memory.Write16(0x08u * 4, 0x0000);
     memory.Write16(0x08u * 4 + 2, 0x2000);
-    Machine::Registers& regs = cpu.Regs();
+    Machine::Registers& regs = dispatcher.Regs();
     regs.cs = 0x1000;
     regs.ip = 0;
     regs.ss = 0x3000;
@@ -200,17 +202,21 @@ public:
     regs.flags = static_cast<std::uint16_t>(Machine::FLAGS_FIXED_ONES | Machine::FLAG_INTERRUPT);
 
     pic.RaiseIrq(0);
-    (void)cpu.Step(); // entry, and the handler's mov al,20h
+    (void)dispatcher.Step(); // the entry, stopping at the handler
+    Assert::IsTrue(dispatcher.AtHook(), L"at the handler");
     Assert::AreEqual(0x2000u, std::uint32_t{regs.cs});
     Assert::AreEqual(0x01u, std::uint32_t{pic.InServiceRegister()});
     pic.RaiseIrq(0);
-    (void)cpu.Step(); // out 20h,al
+    ports.Out8(0x20, 0x20); // the handler's EOI
     Assert::AreEqual(0x00u, std::uint32_t{pic.InServiceRegister()}, L"the handler's EOI");
-    (void)cpu.Step(); // iret
+    regs.ip = memory.Read16(regs.ss, regs.sp); // its IRET
+    regs.cs = memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 2));
+    regs.flags = memory.Read16(regs.ss, static_cast<std::uint16_t>(regs.sp + 4));
+    regs.sp = static_cast<std::uint16_t>(regs.sp + 6);
     Assert::AreEqual(0x1000u, std::uint32_t{regs.cs});
     Assert::AreEqual(0x0000u, std::uint32_t{regs.ip});
 
-    (void)cpu.Step(); // nothing shadows IRET, so the second IRQ0 comes before the next nop
+    (void)dispatcher.Step(); // the second IRQ0 comes at once
     Assert::AreEqual(0x2000u, std::uint32_t{regs.cs}, L"the second IRQ0 is taken");
     Assert::AreEqual(0x01u, std::uint32_t{pic.InServiceRegister()});
   }
