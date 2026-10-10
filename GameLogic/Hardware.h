@@ -86,14 +86,16 @@ public:
   /// The speaker's tone: OUT 43h,B6h, then _divisor's low and high bytes to the PIT's channel 2 at 42h.
   void SetToneDivisor(std::uint16_t _divisor);
 
-  /// The timer's tick: OUT 43h,_mode, then _divisor's low and high bytes to the PIT's channel 0 at 40h.
+  /// The timer's tick: OUT 43h,_mode, then _divisor's low and high bytes to the PIT's channel 0 at 40h. A control word can raise
+  /// IRQ 0 at once: with interrupts on, it is taken here, as the CPU takes it at the next instruction.
   void SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor);
 
-  /// OUT 20h,20h: the end of an interrupt, to the interrupt controller.
+  /// OUT 20h,20h: the end of an interrupt, to the interrupt controller. With interrupts on, one it held back is taken here.
   void EndOfInterrupt();
 
-  /// STI: interrupts are taken again when they fall due.
-  void EnableInterrupts() noexcept;
+  /// STI: interrupts are taken again when they fall due, and those due now are taken here, as the CPU takes them after the
+  /// instruction that follows STI.
+  void EnableInterrupts();
 
   /// CLI.
   void DisableInterrupts() noexcept;
@@ -215,13 +217,6 @@ public:
 
   /// Int 21h AH=4Fh: the next file of the search the disk transfer area holds, into it.
   [[nodiscard]] DosAnswer FindNextFile();
-
-  // ── Maths, Input, Text and SaveScreenshot (level 5, group A) ──
-
-  /// The interrupts that fell due while they were off, taken now that they are on (Pc::TakeDueInterrupts): what the
-  /// original's CPU does at the instruction after an STI that finds one pending. Reprogramming the PIT raises IRQ 0 at once
-  /// when its output was low, and the original takes it with whichever handler the table names then.
-  void TakeDueInterrupts();
 
   // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
 

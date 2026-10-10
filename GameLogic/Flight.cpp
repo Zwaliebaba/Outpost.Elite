@@ -2673,10 +2673,8 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
       }
     }
     _state.Set(DS.playerSpeed, speed);
-    // ReadSteering fires the stick with AL, the speed's low byte; the interrupts that fall due while the stick's read holds them
-    // off are taken where its hook call took them.
+    // ReadSteering fires the stick with AL, the speed's low byte.
     const Steering read = ReadSteering(_state, _hardware, Low(speed));
-    _hardware.TakeDueInterrupts();
     _state.Set(DS.rollRate, Join(read.pitch, read.roll));
     steering = ApplyReverseControls(_state, read);
   }
